@@ -5,97 +5,100 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**MISSION 2026-06-11 « Evidence Studio v2 TRUST LAYER » — 🟡 ÇA MARCHE (retour user) MAIS PAS ENCORE
-COMME IL VEUT : ajustements NON PRÉCISÉS, à recueillir EN PREMIER à la prochaine session (badge ?
-wording des étapes ? résultat capturé ? drill ? layout ?) AVANT de toucher au code.**
+**1) MISSION « Evidence Studio v2 TRUST LAYER » — 🟡 ÇA MARCHE (retour user) MAIS PAS ENCORE COMME
+IL VEUT : ajustements NON PRÉCISÉS, à recueillir EN PREMIER (badge ? wording ? résultat capturé ?
+drill ? layout ?) AVANT de toucher au code.**
+**2) SALESDRIVE v2 (Code Agent) — ✅ DÉPLOYÉ ET VALIDÉ USER (« tout marche », 2026-06-11)** :
+le sous-agent visuel `agent:rNTZ781a` est porté en **Code Agent déterministe** `agent:MODpGFcC`
+(`salesdrive/salesdrive_agent.py`, à coller dans DSS) piloté par l'**orchestrateur v2.3**
+(`orchestrator/orchestrator_agent.py`). Pipeline UNDERSTAND (1 LLM JSON strict) → RESOLVE (tool
+`aNxeOc4`, routing Python) → COMPOSE (semantic_question par **templates gelés**, jamais LLM) →
+QUERY (tool `v4oqA6R` via `get_agent_tool().run()`, SQL+rows capturés du **retour**, input_key
+auto-détecté) → RENDER (table/montants par code + accroche LLM **vérifiée chiffre par chiffre**).
+Désambiguïsation générique 3 étages (L048) : continuité conversationnelle (`pass_context`) +
+valeur-exacte/priorité-colonne + round-trip « VALEUR (Colonne) ». Visual v1 intact (bascule = 2
+flags `enabled`, une seule capability revenue visible à la fois).
 1. **Panneau preuve en 7 sections** : badge de vérification déterministe (plein=certifié / pointillé=
    partiel / gris=déclaré, JAMAIS vert) → sources → chips (F20 intact) → « Comment ce résultat est
    calculé » (steps métier i18n) → résultat EXACT capturé (mini-table + drill par ligne) → bandeau drill
    → exploration source (table F20) → SQL replié (« Détails techniques »).
-2. **Backend** : `evidence/sql_explain.py` (explication structurée PURE : steps {kind,params} enum gelé,
-   flags, group_keys à lineage NOM-SOURCE) + `evidence/capture.py` (résultat exact opportuniste, caps
-   miroir) ; meta enrichie (`source/queries/verification/explanation/result/drilldown`) ; `/evidence/rows`
-   + `drill` (re-validé serveur, refus >8 clés) ; `SET LOCAL transaction_read_only` ; cap JSON à l'écriture ;
-   `result` projeté HORS de `/conversation`. Niveaux : declared→source_identified→scope_partial→
-   scope_exact→calc_decomposed + result_captured (orthogonal). Spec gelée :
+2. **Backend** : `evidence/sql_explain.py` (explication structurée PURE) + `evidence/capture.py`
+   (résultat exact opportuniste, caps miroir) ; meta enrichie ; `/evidence/rows` + `drill`
+   (re-validé serveur, refus >8 clés) ; `SET LOCAL transaction_read_only` ; cap JSON à l'écriture ;
+   `result` projeté HORS de `/conversation`. Spec gelée :
    `docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md` · doc : `docs/evidence-trust-layer.md`.
-3. **Orchestrateur v2.2** (`orchestrator/orchestrator_agent.py` — à COLLER dans le Code Agent DSS) :
-   tags sql_id/step_index/agent_key + capture result capée dans AGENT_DONE ; fuites corrigées (agentId,
-   str(e), URL intranet→labels métier) ; depth-guards ; audit `orchestrator/AUDIT.md`.
-4. **Timeline** : labels humains du backend (eventData.label whitelisté) prioritaires sur le registre.
+3. **Timeline** : labels humains du backend (eventData.label whitelisté) prioritaires sur le registre.
    Zip prêt : `ready-for-dataiku/owismind-upload.zip` (**74 entrées, `index-DF9WrJFi.js`**).
-   ⚠️ **Backend modifié → REDÉMARRER le backend après upload + coller l'orchestrateur v2.2.**
-   ⚠️ La clé des LIGNES dans outputs du tool semantic-model-query N'EST PAS confirmée sur l'instance →
-   vérifier sur une trace réelle (dataset traces) ; sinon `result_captured:false` partout (dégradé honnête).
+   ⚠️ **Backend modifié → REDÉMARRER le backend après upload.** Orchestrateur/SalesDrive modifiés →
+   **recoller les 2 fichiers** dans leurs Code Agents DSS (repo = source de vérité, L047).
 **Avant (Run 4 2026-06-10)** : layout droite + best-effort + chips ⏳ jamais validés DSS — le zip 74
 entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L037) ; V1+4 lots ✅ DSS ;
-stockage = `webapp_chat_v4` (items generated_sql désormais enrichis sql_id/step_index/agent_key/result).
+stockage = `webapp_chat_v4` (items generated_sql enrichis sql_id/step_index/agent_key/result).
 
-## 🧭 Dernière session — 2026-06-11 (2 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L046**
-- **Run 1 — Trust layer v2** : mission complète (contrat gelé → 6 chantiers → revue adversariale
-  26 agents, **17/17 corrigés** — L044/L045) ; déployé, retour user « ça marche bien mais pas encore
-  comme je veux » → **ajustements à recueillir avant tout code**. Preuves : 304+59 unittest · 97 node:test.
-- **Run 2 — Nettoyage + graphe + git** : `maquette/`, plans, screenshots, pycache supprimés ; refs +
-  13 fichiers source purgés des citations mortes (97/97 node:test, vite OK, zip 74 entrées intact) ;
-  **git init** (main, `3bd804f`→`60bdbcf`) ; knowledge graph `graphify-out/` **2 494 nœuds stables**
-  (18,4× moins de tokens/requête), fraîcheur auto : hook post-commit + `/log-session` + `.graphifyignore` (L046).
+## 🧭 Dernière session — 2026-06-11 (3 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L048**
+- **Run 1-2** : trust layer v2 déployé (revue 26 agents, 17/17 corrigés) ; nettoyage repo + git init +
+  knowledge graph 2 494 nœuds + fraîcheur auto (L044-L046).
+- **Run 3 — SalesDrive v2** : Code Agent complet + orchestrateur v2.3 (AGENT_RESULT structuré, skip
+  Sources sur clarification, `pass_context`) ; incident boucle IPL diagnostiqué sur traces CSV réelles
+  → fix générique (L048) ; capture Evidence désormais déterministe via retour de tool (L047 — la
+  question « clé des ROWS » est RÉSOLUE). Preuves : 55+62 unittest · 97 node:test · validé DSS user.
 
 ## ⚠️ Top gotchas / règles actives
 **Process :**
 - **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
-  `.graphifyignore` versionné (le hook post-commit rescanne TOUT — jamais de filtre manuel) ; découverte
-  = graphe, exhaustivité = grep. Tests front : `node --test test/*.test.js` (jamais la forme `test/`).
+  `.graphifyignore` versionné. Tests front : `node --test test/*.test.js` depuis `Plugin/owismind/frontend/`.
 - **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
   (autorisation user permanente 2026-06-11) ; **JAMAIS de push** (l'user pushe).
+- **P3 — Anti-« règles par bug » (L048, exigence user)** : jamais de valeur métier en dur dans la
+  logique d'un agent. Cas inconnus → compréhension LLM contrainte (liste de candidats) ou refus
+  honnête, pas de patch par valeur.
 
 **Frontend :**
 - **F1 — Validation locale** : compile-check = `./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir` puis `rm -rf` (**jamais** dans `resource/` avant `/build-plugin`). **NO INSTALL** (tests = `node:test` + `unittest`).
 - **F2 — `:global` thème (L022)** : sélecteur **entier** dans `:global(body[data-theme="dark"] .x)`. **Pas de `color-mix`** (L031) : `rgba` + tokens. Texte orange = **`--orange-text`** (AA, L039) ; fond teinté = `--orange-soft-dark`.
 - **F3 — Router HASH** ; **F4 — thème** `body[data-theme]` avant mount ; **F5 — réactivité** version = `reactive()` mutée via `applyEvent`.
 - **F6 — i18n** : interpolation **liste** `t('k',[a])` ; ajouts domaine dans `extra.js` (clé-plate par locale, fr+en) ; `messages.json` pristine.
-- **F8 — Timeline (L029/L039)** : reducer pur `timelineModel.js` inchangé ; l'affichage groupé/ticker = **sélecteurs purs read-only** (`timelineEvents/BodyItems/Segments/activitySummary/stepStampDiff`) → ids stables, `timelineSignature` intacte.
+- **F8 — Timeline (L029/L039)** : reducer pur `timelineModel.js` inchangé ; l'affichage groupé/ticker = **sélecteurs purs read-only** → ids stables, `timelineSignature` intacte.
 - **F10 — Build : recâbler `body.html`** via l'outil **`Write`** (le `cp` est refusé par les permissions, L033). Le `cp -R` du packaging passe.
-- **F11 — Tests front purs** : reducer/clamp/arbre/agentPick/**sélecteurs timeline**/**evidencePick** sans Vue → `node:test`.
-- **F12 — ARBRE (L032)** : éditer/régénérer = échange FRÈRE ; `v-for` keyé `uid` stable ; un changement de version **REMOUNT** MessageAgent (état local réinitialisé — ne jamais compter sur un watch pour les switches de siblings).
-- **F13 — Scroll (L032/L038)** : `ChatThread` ne scrolle que sur `activeSessionId`, `exchanges.length`, signature gated `sending`, et **`evidence.open`** (post-flush, stick-gated — le snap 2↔3 colonnes invalide le bas). **Jamais** de watch sur `turns`.
-- **F19 — Layout Evidence (Run 4, L043)** : grille `sidebar | chat 1fr | Evidence droite (--evidence-w, store `evidenceW`)` ; repli auto sidebar à l'ouverture = **`setSidebarCollapsed(true, false)`** (jamais persisté) ; re-clamp `evidenceW` sur resize ; popover chips au-dessus de la table via `.ev-chips { z-index:5 }` (stacking contexts des animations `ev-rise`).
-- **F20 — Chips (L043)** : TOUS éditables (conversion `=`/`IN`) ; présélection picker SEULEMENT pour `=`/`IN` (anti-inversion des ops négatifs) ; `exclude_id` au distinct ; caps miroir backend (50 valeurs `ev.picker.max`, 20 filtres, page 20 + écho `data.page`) ; reset/remove ferment le popover.
+- **F11 — Tests front purs** : reducer/clamp/arbre/agentPick/sélecteurs timeline/evidencePick sans Vue → `node:test`.
+- **F12 — ARBRE (L032)** : éditer/régénérer = échange FRÈRE ; `v-for` keyé `uid` stable ; un changement de version **REMOUNT** MessageAgent.
+- **F13 — Scroll (L032/L038)** : `ChatThread` ne scrolle que sur `activeSessionId`, `exchanges.length`, signature gated `sending`, et **`evidence.open`**. **Jamais** de watch sur `turns`.
+- **F19 — Layout Evidence (L043)** : grille `sidebar | chat 1fr | Evidence droite` ; repli sidebar = **`setSidebarCollapsed(true, false)`** ; re-clamp `evidenceW` sur resize ; `.ev-chips { z-index:5 }`.
+- **F20 — Chips (L043)** : TOUS éditables ; présélection picker SEULEMENT pour `=`/`IN` ; `exclude_id` au distinct ; caps miroir backend ; reset/remove ferment le popover.
 - **F14 — Feedback (L031)** ; **F15 — Agent persistant (L032)** : inchangés.
-- **F16 — Ticker live (L039)** : `TransitionGroup` avec **`appear`** ; `.tick-leave-active + .tick-leave-active { transition:none; opacity:0 }` (évictions en batch superposées) ; **UN** `.stream` persistant (deux branches v-if = remount + replay d'animation) ; reduced-motion : un pseudo-élément 100 % keyframes → `content:none` (pas `animation:none`).
-- **F17 — Navigation (L040)** : route param-less + `push` même route = **navigation dupliquée invisible** au watcher. L'URL est **stampée** `/chat/<sid>` au 1er échange ; route→store passe par **`chat.ensureSession`** (skip refetch si fil sain : gardes `threadLoading/threadError`) ; un run live **survit** à un aller-retour Settings ; bump sidebar = données **capturées à l'entrée du run** ; `canSend` exige `!threadLoading && !threadError`.
-- **F18 — Chrono étapes (L041)** : durées scellées = **stamps backend** (`stepStampDiff`), horloge cliente = tick live seulement ; interval gaté `activityLive && chat.sending` ; markdown **memoïzé** par item (10 Hz).
-- **F21 — Trust layer (L045)** : nouveaux champs meta TOUS optionnels (meta v1 ⇒ rendu identique) ; badge via `trustLevel(meta)` pur (`evidenceProof.js`) ; steps rendus `t('ev.exp.'+kind, params)` kind inconnu→opaque ; drill = `buildDrillLabels` (abort null si >8 clés ou colonne non mappée — JAMAIS tronquer) ; re-drill préserve le snapshot d'origine ; aucune section nouvelle avec z-index ≥5 (popover chips) ; le drill voyage en `{column, value}` re-validés serveur.
+- **F16 — Ticker live (L039)** : `TransitionGroup` avec **`appear`** ; **UN** `.stream` persistant ; reduced-motion via `content:none`.
+- **F17 — Navigation (L040)** : URL stampée `/chat/<sid>` au 1er échange ; route→store via **`chat.ensureSession`** ; un run live survit à un aller-retour Settings ; `canSend` exige `!threadLoading && !threadError`.
+- **F18 — Chrono étapes (L041)** : durées scellées = stamps backend ; interval gaté `activityLive && chat.sending` ; markdown memoïzé.
+- **F21 — Trust layer (L045)** : meta v1 ⇒ rendu identique ; badge via `trustLevel(meta)` pur ; steps `t('ev.exp.'+kind, params)` kind inconnu→opaque ; drill = `buildDrillLabels` (abort si >8 clés) ; aucune section nouvelle avec z-index ≥5.
 
 **Backend (validé DSS sauf mention) :**
 1. **Whitelist agents** (L017/L018) : front = `{key,label}` ; résolution serveur.
 2. **Streaming = POLLING-via-thread** (L019) : `/chat/start`→`/chat/poll` 500 ms ; stop coopératif (L034).
-3. **Contexte agent** (L032) : chaîne d'ancêtres CTE bornée ; préfixe `[User: Prénom Nom — Date: …]`
-   construit à CHAQUE `/chat/start` (`derive_full_name` + `build_user_prefix`), collé au message COURANT
-   seulement ; historique rejoué brut ; message stocké **brut**.
+3. **Contexte agent** (L032) : préfixe user construit à CHAQUE `/chat/start`, collé au message COURANT seulement ; historique rejoué brut ; message stocké **brut**.
 4. **Feedback** (L031) : UPDATE owner-scopé. 5. **Trace** = dataset Flow append (L027/L028).
 6. **Nommage tables** (L008/L014) : `_vN` jamais d'ALTER ; `rows_to_json_safe` (L013).
 7. **Sûreté** : SQL paramétré + COMMIT + bornes ; pas de Flow/route SQL générique ; **Python 3.9**.
 8. **Ne pas éditer** `resource/owismind-app/` ni `ready-for-dataiku/` (générés).
-9. **Evidence (L035-L037 ✅ DSS / L042 ⏳ / L045 ⏳)** : découverte auto des datasets PostgreSQL du projet ;
-   front n'envoie jamais de SQL. **Parseur BEST-EFFORT (L042)** : scopes SELECT, `tables[]` matchées en
-   ordre, prédicats droppés si non mappables (jamais de blocage) ; fragment avancé = mono-table only ;
-   `statement_timeout 30s` + `transaction_read_only` (L045), guard+throttle communs. **`/evidence/agent-view`
-   SUPPRIMÉ** (Run 4). ⚠️ MULTISELECT ne se rend pas dans les Settings DSS (L037) — utiliser SELECT/STRINGS.
-10. **Trust layer (L045 ⏳)** : `sql_explain` PUR (never-raises, sous-revendique toujours — l'adaptateur
-   `normalize_explain` du service ne peut qu'abaisser le niveau) ; niveaux déterministes, JAMAIS de
-   « vérifié » sans critère mécanique ; drill re-dérivé du SQL stocké (jamais de confiance client, refus
-   >8 clés) ; capture du résultat = enrichissement JSON `generated_sql` (zéro migration), caps au point
-   d'écriture via `capture.cap_sql_list` (JAMAIS `_bounded()` sur du JSON), `result` exclu de `/conversation` ;
-   fusion footer↔relay ONE-SHOT (pop) — jamais de dédup trace↔trace par texte (L045 §6).
+9. **Evidence (L035-L037 ✅ DSS / L042 ⏳ / L045 ⏳)** : découverte auto des datasets PostgreSQL ;
+   parseur BEST-EFFORT (L042) ; `statement_timeout 30s` + `transaction_read_only` (L045).
+   ⚠️ MULTISELECT ne se rend pas dans les Settings DSS (L037).
+10. **Trust layer (L045 ⏳)** : `sql_explain` PUR never-raises ; niveaux déterministes ; drill
+   re-dérivé du SQL stocké ; capture = enrichissement JSON `generated_sql`, caps au point d'écriture ;
+   fusion footer↔relay ONE-SHOT.
+11. **SalesDrive v2 + orchestrateur v2.3 (L047/L048 ✅ DSS)** : repo = source de vérité, coller les
+   2 fichiers ENSEMBLE (le fix désambiguïsation vit des 2 côtés : `pass_context` orchestrateur +
+   UNDERSTAND agent). Tools : resolver `aNxeOc4`, semantic `v4oqA6R` (`get_agent_tool(id).run()`,
+   noms — pas ids — dans les events pour les labels). Span `semantic-model-query` recréé par le code
+   au contrat gelé. `AGENT_RESULT` = statut machine (jamais affiché). UNE seule capability revenue
+   `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
 
 ## 🔜 Prochaines étapes
-1. **RECUEILLIR LES AJUSTEMENTS du user (priorité 1)** : le trust layer déployé « marche bien mais pas
-   encore comme il veut » — faire préciser CE qui ne va pas (badge ? wording « Comment ce résultat est
-   calculé » ? section résultat capturé ? drill ? densité/layout du panneau ?) AVANT toute modification.
-2. **Vérifier la clé des ROWS** dans les outputs du tool semantic-model-query sur une trace réelle
-   (dataset traces) — si différente de rows/records/data/result_rows/values, l'ajouter à
-   `capture._ROW_KEYS` + au walker de l'orchestrateur (append-only).
+1. **RECUEILLIR LES AJUSTEMENTS du user sur le trust layer (priorité 1)** : « marche bien mais pas
+   encore comme je veux » — faire préciser AVANT toute modification.
+2. **SalesDrive v2 — consolidation** : tester un cas de vraie ambiguïté de valeur (ex. « IPL + ») et
+   un plan multi-étapes (agent+tool) ; quand confiance OK → retirer l'entrée visual `salesdrive` du
+   registre ; supprimer le CSV de traces local (`salesdrive/webapp_devtest-…csv`, hors repo).
 3. Re-tester en DSS ce qui ne l'a jamais été : L040 (bouton New conversation) / L041 (chrono étapes).
-4. **Evidence v3 (différé)** : restriction admin des datasets (champ qui SE REND), keyset pagination,
-   drill multi-requêtes, fraîcheur des sources (last build) ; fallback LLM seulement sur cas réel.
-6. **2ᵉ task mentionnée par l'user le 2026-06-09** — toujours à clarifier.
+4. **Evidence v3 (différé)** : restriction admin des datasets, keyset pagination, drill multi-requêtes,
+   fraîcheur des sources ; fallback LLM seulement sur cas réel.
+5. **2ᵉ task mentionnée par l'user le 2026-06-09** — toujours à clarifier.

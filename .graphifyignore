@@ -17,3 +17,6 @@ docs/screenshots/
 *.png
 *.svg
 *.ico
+
+# Transient debug artifacts (raw DSS trace exports — not knowledge)
+salesdrive/*.csv

@@ -1063,4 +1063,39 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   0 nœud pollué après purge ; bench 18,4× moins de tokens/requête (max 39,7×).
 - **Source** : session 2026-06-11 Run 2 (`sessions/2026-06-11.md`). **Date** : 2026-06-11.
 
+## L047 — Code Agent : appeler les tools managés DIRECTEMENT rend la capture Evidence déterministe (✅ validé DSS)
+- **Contexte** : portage SalesDrive v2. La capture du résultat SQL reposait sur la fouille de la
+  trace du sous-agent visuel avec des clés de rows DEVINÉES (`_ROW_KEYS`, ⚠️ ouvert depuis le trust layer).
+- **Ce qui a échoué (avant)** : impossible de confirmer la clé des rows dans les outputs du tool
+  semantic-model-query via les traces → `result_captured:false` en dégradé.
+- **Solution qui marche** : TOUS les tools (managés inclus : semantic-model-query, type
+  `Custom_agent_tool_semantic-models-lab_semantic-model-query`) s'appellent depuis un Code Agent via
+  `project.get_agent_tool(id).run({...})` → SQL + rows lus dans la **valeur de retour** ; le code
+  agent recrée lui-même le span `semantic-model-query` {sql, success, row_count, rows, columns} au
+  contrat gelé de l'orchestrateur. Clé d'entrée auto-détectée du descriptor (`pick_semantic_input_key`).
+  Ids réels : resolver `aNxeOc4`, semantic `v4oqA6R` ; shape_keys observés : artifacts/output/parts/
+  sources/toolValidationRequests/trace ; input_key `question`.
+- **Preuve-vérification** : trace réelle 2026-06-11 12:36 (sql_count=1, row_count=10, headline
+  verified=true) + retour user « tout marche ».
+- **Source** : session 2026-06-11 Run 3 (`sessions/2026-06-11.md`), `salesdrive/salesdrive_agent.py`. **Date** : 2026-06-11.
+
+## L048 — Boucles de clarification = problème de MÉMOIRE CONVERSATIONNELLE, jamais de règles par valeur (✅ validé DSS)
+- **Contexte** : SalesDrive v2, incident « IPL » : clarification → réponse « IPL (Product) » →
+  unresolved → re-clarification, en boucle infinie.
+- **Ce qui a échoué** : (1) le `norm()` du catalogue strippe les symboles → « IPL + » se normalise
+  en « ipl » et pollue les candidats (la règle `exact_offer_priority` du resolver ne s'applique
+  plus) ; (2) le format de réponse enseigné par la clarification n'était parseable par personne ;
+  (3) chaque tour repartait sans la question posée → boucle sans mémoire. Patcher valeur par valeur
+  est un anti-pattern (rejeté explicitement par l'user).
+- **Solution qui marche (3 étages, tous génériques)** : ① continuité conversationnelle — capability
+  flag `pass_context` (orchestrateur v2.3) transmet le message assistant précédent + réponse brute ;
+  l'UNDERSTAND mappe toute formulation sur un candidat DE LA LISTE uniquement (anti-hallu intact, un
+  mauvais pick repasse par le resolver → au pire re-clarification honnête) ; ② politiques
+  déterministes génériques : préférence valeur exacte stricte (évince les collisions de norm), puis
+  auto-pick par priorité de colonne quand valeur unique multi-colonnes ; ③ round-trip parseable :
+  la clarification se termine par un exemple « VALEUR (Colonne) » que `parse_qualified_term` sait lire.
+- **Preuve-vérification** : 55 unittest salesdrive + 62 orchestrateur ; scénario IPL rejoué en DSS
+  par l'user après re-collage des 2 fichiers → « tout marche ».
+- **Source** : session 2026-06-11 Run 3, traces CSV réelles analysées. **Date** : 2026-06-11.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

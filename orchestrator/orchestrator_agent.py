@@ -1,5 +1,5 @@
 # =============================================================================
-# OWIsMind — ORCHESTRATEUR v2.2 "Le Cerveau" (Code Agent Dataiku)
+# OWIsMind — ORCHESTRATEUR v2.3 "Le Cerveau" (Code Agent Dataiku)
 # -----------------------------------------------------------------------------
 # Architecture : PLAN -> EXECUTE -> SYNTHESIZE
 #
@@ -38,6 +38,19 @@
 #     echoing full instructions — 120-char summaries (ORCH-10c); greet flushed
 #     unconditionally before the steps loop (ORCH-10d).
 #   - Registry: dataset_label_fr/en + dataset_ref per agent capability (ORCH-11).
+#
+# v2.3 (SalesDrive v2 collaboration contract):
+#   - CAPABILITIES gains "salesdrive_v2": the Code Agent port of the visual
+#     SalesDrive agent (repo: salesdrive/salesdrive_agent.py). Disabled until
+#     the DSS Code Agent exists; switching = flip the two "enabled" flags
+#     (one revenue capability visible to the planner at a time).
+#   - Structured sub-agent status: a code sub-agent may emit ONE final
+#     AGENT_RESULT event {status, language, intent, resolvedFilters, sqlCount,
+#     rowCount}. It is captured (never relayed to the timeline), exposed in
+#     the step result and in AGENT_DONE eventData ("agentResult"), and the
+#     sources block is skipped when status is need_clarification /
+#     out_of_scope (a question or a refusal cites no dataset). Visual agents
+#     that never emit it are unaffected (agent_result stays None).
 #
 # EVENT KIND CONTRACT (FROZEN as of v2.2) — the webapp timeline keys its logic
 # on these machine identifiers. They are NEVER renamed; new kinds may only be
@@ -175,6 +188,53 @@ CAPABILITIES = {
                                                     "en": "generating and running the SQL query"},
         },
         "enabled": True,
+    },
+    # v2.3 — Code Agent port of SalesDrive (repo: salesdrive/salesdrive_agent.py).
+    # To switch: create the DSS Code Agent, paste the file, put its agent id
+    # below, then set THIS entry enabled=True and "salesdrive" enabled=False
+    # (one revenue capability at a time — the planner must see a single one).
+    "salesdrive_v2": {
+        "kind": "agent",
+        "agent_id": "agent:FILL_ME_SALESDRIVE_V2",
+        "label_fr": "SalesDrive (revenus)",
+        "label_en": "SalesDrive (revenue)",
+        "planner_description": (
+            "Revenue / chiffre d'affaires questions on OWI customers: amounts by "
+            "customer, country, product, period (year, month, range, YTD), "
+            "comparisons between periods or customers, evolutions, top customers. "
+            "Handles multi-period comparisons WITHIN ONE single step. "
+            "Data source: DRIVE_Revenues."
+        ),
+        "dataset_sources": [
+            "https://dataiku-datalab-owi.authidh.itn.intraorange/workspaces/OWISMIND/OWISMIND/DATASET/DRIVE_Revenues",
+        ],
+        "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
+        "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
+        "dataset_ref": {"project_key": "OWISMIND", "dataset_name": "DRIVE_Revenues"},
+        # The code agent only emits these five blockIds (no hidden technical
+        # blocks): same ids as the visual flow, labels reused verbatim.
+        "block_labels": {
+            "resolve":                {"fr": "analyse de la question et identification des filtres",
+                                       "en": "analyzing the question and resolving filters"},
+            "query_revenue_semantic": {"fr": "interrogation de la base de revenus",
+                                       "en": "querying the revenue database"},
+            "format_tool_output":     {"fr": "mise en forme des résultats",
+                                       "en": "formatting the results"},
+            "clarify_user":           {"fr": "demande de précision",
+                                       "en": "asking for clarification"},
+            "out_of_scope_msg":       {"fr": "question hors périmètre",
+                                       "en": "out-of-scope notice"},
+        },
+        "tool_labels": {
+            "Drive_Revenues_resolve_filter_value": {"fr": "résolution des noms (clients, produits…)",
+                                                    "en": "resolving names (customers, products…)"},
+            "revenue_semantic_query":              {"fr": "génération et exécution de la requête SQL",
+                                                    "en": "generating and running the SQL query"},
+        },
+        # v2.3: receive the previous assistant message + raw user answer as a
+        # system message (conversation continuity for disambiguation answers).
+        "pass_context": True,
+        "enabled": False,
     },
     "current_date": {
         "kind": "tool",
@@ -750,6 +810,26 @@ def _sources_block(results, caps, lang):
     return "\n\n**Sources** : " + ", ".join(labels)
 
 
+def build_subagent_context(history, last_q):
+    """v2.3: compact conversation context forwarded to sub-agents that opt in
+    (capability flag "pass_context"). Carries the PREVIOUS assistant message —
+    e.g. a disambiguation question with its candidate list — plus the user's
+    raw answer, so the sub-agent's own LLM can interpret replies like "the
+    first one" / "le produit" against the candidates offered on the previous
+    turn. Generic by design: no per-value logic anywhere."""
+    last_assistant = ""
+    for m in reversed(history or []):
+        if m.get("role") == "assistant" and m.get("content"):
+            last_assistant = m["content"]
+            break
+    if not last_assistant:
+        return ""
+    return ("CONVERSATION CONTEXT (continuity with the previous turn):\n"
+            "PREVIOUS ASSISTANT MESSAGE:\n%s\n\n"
+            "USER'S RAW CURRENT MESSAGE:\n%s"
+            % (last_assistant[:2000], (last_q or "")[:500]))
+
+
 # =============================================================================
 # 7. AGENT
 # =============================================================================
@@ -841,6 +921,11 @@ class MyLLM(BaseLLM):
                 yield {"chunk": {"text": greet}}
                 greet = ""
 
+            # v2.3: conversation continuity for sub-agents that opt in
+            # ("pass_context"): the previous assistant message (e.g. a pending
+            # disambiguation question) + the user's raw answer.
+            sub_context = build_subagent_context(history, last_q)
+
             for idx, step in enumerate(steps, start=1):
                 cfg = caps[step["capability"]]
                 label = cfg.get("label_%s" % lang, step["capability"])
@@ -857,12 +942,14 @@ class MyLLM(BaseLLM):
                         "question": step["instruction"], "stepIndex": idx, "stepCount": step_count},
                         label=label)
                     res = yield from self._execute_agent_step(
-                        project, idx, step, cfg, trace, relay_text=relay_text, lang=lang)
+                        project, idx, step, cfg, trace, relay_text=relay_text, lang=lang,
+                        context_msg=sub_context)
                     _acc_usage(total_usage, res.get("usage"))
                     yield _ev_l("AGENT_DONE", lang, {
                         "agentKey": step["capability"], "stepIndex": idx, "status": res["status"],
                         "durationMs": res["duration_ms"], "usage": res.get("usage"),
-                        "generatedSql": res.get("generated_sql", [])},
+                        "generatedSql": res.get("generated_sql", []),
+                        "agentResult": res.get("agent_result")},
                         label=label)
 
                 else:  # tool
@@ -893,9 +980,13 @@ class MyLLM(BaseLLM):
                 elif not ok_results:
                     yield {"chunk": {"text": ALL_STEPS_FAILED[lang]}}
                 else:
-                    src = _sources_block(results, caps, lang)
-                    if src:
-                        yield {"chunk": {"text": src}}
+                    # v2.3: a clarification or an out-of-scope notice cites no
+                    # dataset — the structured sub-agent status gates the block.
+                    ar = results[0].get("agent_result") or {}
+                    if ar.get("status") not in ("need_clarification", "out_of_scope"):
+                        src = _sources_block(results, caps, lang)
+                        if src:
+                            yield {"chunk": {"text": src}}
             elif not ok_results:
                 yield {"chunk": {"text": ALL_STEPS_FAILED[lang]}}
             else:
@@ -957,19 +1048,25 @@ class MyLLM(BaseLLM):
             yield {"chunk": {"text": _build_capabilities_answer(caps, lang)}}
 
     # ------------------------------------------------------- STEP: sous-agent
-    def _execute_agent_step(self, project, step_index, step, cfg, trace, relay_text, lang="fr"):
+    def _execute_agent_step(self, project, step_index, step, cfg, trace, relay_text,
+                            lang="fr", context_msg=""):
         """Appel streamé d'un sous-agent. Events relayés EN LIVE avec libellé humain
         (eventData['label']) ; les événements techniques sont masqués de la timeline
         (la trace conserve tout). Texte relayé seulement si relay_text (mono-étape)."""
         t0 = time.perf_counter()
         sub_trace, answer_parts, status = None, [], "ok"
+        agent_result = None    # v2.3: structured AGENT_RESULT payload (code agents)
 
         with trace.subspan("step_%d:agent:%s" % (step_index, step["capability"])) as sp:
             sp.attributes["agentId"] = cfg["agent_id"]
             sp.inputs["question"] = step["instruction"]
             try:
-                completion = project.get_llm(cfg["agent_id"]).new_completion() \
-                                    .with_message(step["instruction"])
+                completion = project.get_llm(cfg["agent_id"]).new_completion()
+                # v2.3: opt-in only (visual agents could be confused by an
+                # unexpected system message — code agents read it explicitly).
+                if context_msg and cfg.get("pass_context"):
+                    completion.with_message(context_msg, role="system")
+                completion.with_message(step["instruction"])
                 for chunk in completion.execute_streamed():
                     data = getattr(chunk, "data", {}) or {}
                     if _is_footer(chunk, data):           # ORCH-07
@@ -978,6 +1075,12 @@ class MyLLM(BaseLLM):
                     ctype = data.get("type") or getattr(chunk, "type", None)
 
                     if ctype == "event":
+                        # v2.3: machine-readable status from a code sub-agent —
+                        # captured for the step result, never relayed (the
+                        # timeline shows human labels, not contract payloads).
+                        if (data.get("eventKind") or "") == "AGENT_RESULT":
+                            agent_result = dict(data.get("eventData") or {})
+                            continue
                         sub_kind = "SUB_AGENT_" + (data.get("eventKind") or "UNKNOWN")
                         ed = dict(data.get("eventData") or {})
                         human_label = _sub_event_label(sub_kind, ed, lang, cfg)
@@ -1035,6 +1138,7 @@ class MyLLM(BaseLLM):
             "duration_ms": int((time.perf_counter() - t0) * 1000),
             "usage": _sum_usage(_find_usage_metadata(sub_trace)) if sub_trace else {},
             "generated_sql": generated_sql,
+            "agent_result": agent_result,
         }
 
     # ------------------------------------------------------------ STEP: tool

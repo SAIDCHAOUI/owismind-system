@@ -479,3 +479,28 @@ class MiscHelpersTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBuildSubagentContext(unittest.TestCase):
+    """v2.3 conversation continuity forwarded to opt-in sub-agents."""
+
+    def test_carries_previous_assistant_and_raw_answer(self):
+        history = [
+            {"role": "user", "content": "et en IPL ?"},
+            {"role": "assistant", "content": "Votre question mentionne IPL :\n- IPL (Product)\n- IPL + (sirano_product)"},
+        ]
+        ctx = orc.build_subagent_context(history, "le produit")
+        self.assertIn("PREVIOUS ASSISTANT MESSAGE", ctx)
+        self.assertIn("IPL (Product)", ctx)
+        self.assertIn("USER'S RAW CURRENT MESSAGE", ctx)
+        self.assertIn("le produit", ctx)
+
+    def test_empty_without_assistant_history(self):
+        self.assertEqual(orc.build_subagent_context([], "question"), "")
+        self.assertEqual(orc.build_subagent_context(
+            [{"role": "user", "content": "salut"}], "q"), "")
+
+    def test_caps_long_messages(self):
+        history = [{"role": "assistant", "content": "x" * 5000}]
+        ctx = orc.build_subagent_context(history, "y" * 1000)
+        self.assertLess(len(ctx), 2800)
