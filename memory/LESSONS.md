@@ -1040,4 +1040,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 **Preuve** : 304+59 unittest · 97 node:test · zip 74 entrées `index-DF9WrJFi.js` · captures trust-01..07.
 **Source** : session 2026-06-11 (spec gelée + revue adversariale). **Date** : 2026-06-11.
 
+## L046 — Knowledge graph (graphify) : corpus à exclure EXPLICITEMENT, sinon le graphe ment
+- **Contexte** : pilote graphify (Run 2 2026-06-11) pour réduire les tokens de navigation (repo ~50 k lignes
+  code+docs). Construction par 9 sous-agents + AST, requêtes via `graphify query`.
+- **Ce qui a échoué** :
+  1. `detect()` ingère les artefacts générés (bundles `resource/owismind-app/assets/*.js`, staging
+     `ready-for-dataiku/`) — 67 fuites au 1er run ; seul node_modules est skippé par défaut.
+  2. Le hook git post-commit (`graphify hook install`) **rescanne tout le repo** : un filtrage manuel du
+     manifeste ne survit pas → 1er commit = graphe pollué (1 969 → 3 251 nœuds, JS minifié ingéré).
+  3. `_rebuild_code` PRÉSERVE les nœuds existants absents du nouvel AST → re-runner ne dépollue pas ;
+     et son garde-fou bloque un graphe qui rétrécit (il faut `force=True`).
+  4. `node --test test/` (forme répertoire) → faux échec anonyme ; les `.css` ne sont pas détectés par
+     graphify (citations mortes de tokens.css invisibles du graphe).
+- **Solution qui marche** : **`.graphifyignore`** à la racine (syntaxe gitignore, lu nativement par
+  detect/extract/hook, VERSIONNÉ) : node_modules/, resource/owismind-app/, ready-for-dataiku/,
+  graphify-out/, .claude/, images. Dépollution = purge des nœuds par `source_file` dans `graph.json`
+  puis `_rebuild_code(Path('.'), force=True)`. Sous-agents d'extraction = `general-purpose` qui
+  ÉCRIVENT leur chunk sur disque (jamais `Explore`, read-only). Usage : **découverte = graphe**
+  (`graphify query`), **exhaustivité = grep** (le graphe seul n'a trouvé que 6/13 fichiers à citations
+  mortes). Tests front : `node --test test/*.test.js` (jamais la forme répertoire).
+- **Preuve** : graphe stable **2 494 nœuds / 3 931 arêtes** sur 2 commits successifs (hook auto) ;
+  0 nœud pollué après purge ; bench 18,4× moins de tokens/requête (max 39,7×).
+- **Source** : session 2026-06-11 Run 2 (`sessions/2026-06-11.md`). **Date** : 2026-06-11.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

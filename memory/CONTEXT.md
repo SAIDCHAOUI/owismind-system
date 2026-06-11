@@ -31,25 +31,23 @@ wording des étapes ? résultat capturé ? drill ? layout ?) AVANT de toucher au
 entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L037) ; V1+4 lots ✅ DSS ;
 stockage = `webapp_chat_v4` (items generated_sql désormais enrichis sql_id/step_index/agent_key/result).
 
-## 🧭 Dernière session — 2026-06-10→11 Trust layer → détail `sessions/2026-06-11.md`, leçons **L044-L045**
-- Mission complète : exploration (4 spécialistes) → contrat gelé → implémentation (6 chantiers ;
-  sql_explain écrit EN DIRECT après 2 morts d'agents à 64k output tokens — L044) → revue adversariale
-  (26 agents) : **17 findings confirmés → 17 corrigés** (FP-01/02 high : where_complete divergent du
-  fragment réel, self-join via CTE ; lineage nom-source ; caps drill refus-pas-troncature… — L045).
-- Preuve : **304 unittest** + **59 orchestrateur** + **97 node:test** · compileall + py3.9 ast · vite
-  build · zip 74 entrées · visuel Chrome DevTools light+dark (captures purgées au nettoyage), console 0 erreur.
-- **Retour user post-déploiement : « ça marche bien mais pas encore comme je veux »** — fonctionnel,
-  ajustements attendus non détaillés (à clarifier avant tout code).
-- **Nettoyage repo (2026-06-11)** : `maquette/` (~12 k lignes), `docs/superpowers/plans/`, `.demo-screens/`,
-  `.DS_Store` **supprimés** ; specs gelées conservées ; refs recousues (CLAUDE.md ×2, docs, PROJECT_STATE §9,
-  note LESSONS) ; 13 fichiers source purgés des citations mortes (docs/0X §, assets-v5) — 97/97 node:test, vite OK.
-- **Git + graphe (2026-06-11)** : `git init` + commit initial `3bd804f` (211 fichiers, main) ; knowledge graph
-  `graphify-out/` construit (1 969 nœuds / 3 443 arêtes, **18,4× moins de tokens/requête**, git-ignoré) —
-  l'interroger D'ABORD pour naviguer (`graphify query "…"`). Fraîcheur câblée : hook git **post-commit**
-  (rebuild AST auto, sans LLM) + `/log-session` enrichi (`/graphify --update` + **commit de session** —
-  autorisation user permanente ; JAMAIS de push).
+## 🧭 Dernière session — 2026-06-11 (2 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L046**
+- **Run 1 — Trust layer v2** : mission complète (contrat gelé → 6 chantiers → revue adversariale
+  26 agents, **17/17 corrigés** — L044/L045) ; déployé, retour user « ça marche bien mais pas encore
+  comme je veux » → **ajustements à recueillir avant tout code**. Preuves : 304+59 unittest · 97 node:test.
+- **Run 2 — Nettoyage + graphe + git** : `maquette/`, plans, screenshots, pycache supprimés ; refs +
+  13 fichiers source purgés des citations mortes (97/97 node:test, vite OK, zip 74 entrées intact) ;
+  **git init** (main, `3bd804f`→`60bdbcf`) ; knowledge graph `graphify-out/` **2 494 nœuds stables**
+  (18,4× moins de tokens/requête), fraîcheur auto : hook post-commit + `/log-session` + `.graphifyignore` (L046).
 
 ## ⚠️ Top gotchas / règles actives
+**Process :**
+- **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
+  `.graphifyignore` versionné (le hook post-commit rescanne TOUT — jamais de filtre manuel) ; découverte
+  = graphe, exhaustivité = grep. Tests front : `node --test test/*.test.js` (jamais la forme `test/`).
+- **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
+  (autorisation user permanente 2026-06-11) ; **JAMAIS de push** (l'user pushe).
+
 **Frontend :**
 - **F1 — Validation locale** : compile-check = `./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir` puis `rm -rf` (**jamais** dans `resource/` avant `/build-plugin`). **NO INSTALL** (tests = `node:test` + `unittest`).
 - **F2 — `:global` thème (L022)** : sélecteur **entier** dans `:global(body[data-theme="dark"] .x)`. **Pas de `color-mix`** (L031) : `rgba` + tokens. Texte orange = **`--orange-text`** (AA, L039) ; fond teinté = `--orange-soft-dark`.

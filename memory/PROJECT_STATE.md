@@ -6,6 +6,9 @@
 > Dernière mise à jour : **2026-06-11 — NETTOYAGE REPO** : `maquette/` (~12 k lignes), `docs/superpowers/plans/`
 > et `.demo-screens/` **supprimés** (conversion Vue 3 terminée — voir §9) ; specs gelées conservées
 > (`docs/superpowers/specs/`). Trust layer Evidence v2 déployé 🟡 (fonctionne, ajustements user à recueillir — §11).
+> **GIT** : repo initialisé (main, commit initial `3bd804f`) ; commit de session via `/log-session` ; **jamais de push**.
+> **KNOWLEDGE GRAPH** : `graphify-out/` (git-ignoré, ~2 500 nœuds) — l'interroger D'ABORD pour naviguer ;
+> fraîcheur = hook git post-commit + `/log-session` (--update) ; exclusions corpus = `.graphifyignore` versionné (L046).
 > Antérieur : **2026-06-10 — EVIDENCE STUDIO v1 ✅ VALIDÉ EN DSS** (user : « ça marche très bien »).
 > Panneau « confiance » (3ᵉ colonne) qui **rejoue le SELECT de l'agent en lecture seule** et montre la table
 > source avec les filtres WHERE en **chips éditables** ; auto-open en fin de génération, bouton « Preuves » par
@@ -122,6 +125,8 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 | Package Evidence backend (L035/L045) | `python-lib/owismind/evidence/` (`sql_parse`,`query_builders`,`whitelist`,`service`,`throttle`,**`sql_explain`**,**`capture`**) | repo |
 | Orchestrateur Code Agent (repo, L045) | `orchestrator/orchestrator_agent.py` **v2.2** (+ `AUDIT.md`, tests stub) — à coller dans le Code Agent DSS | repo |
 | Spec trust layer (gelée) | `docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md` · doc `docs/evidence-trust-layer.md` | repo |
+| Repo git (2026-06-11) | branche `main`, commit initial `3bd804f` ; pas de remote (push = user) ; commit de session via `/log-session` | repo |
+| Knowledge graph (L046) | `graphify-out/` (git-ignoré) · exclusions `.graphifyignore` (versionné) · hooks git post-commit/post-checkout (AST auto) · `/log-session` = `--update` + commit | repo |
 | Plateforme | Dataiku DSS 14.4.x | guide build |
 | Python backend observé | **3.9.23** (3.11 NON validé) | guide build |
 
