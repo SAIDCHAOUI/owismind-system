@@ -1,0 +1,3 @@
+/* DSS STANDARD-webapp CSS slot — intentionally empty.
+   All styling ships with the Vite bundle loaded from body.html (scoped to App.vue).
+   Kept as a required, valid (empty) file for the webapp descriptor. */

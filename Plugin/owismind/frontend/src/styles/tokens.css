@@ -1,0 +1,123 @@
+/* =============================================================================
+ * OWIsMind — Design tokens (single source of truth for the theme layer).
+ *
+ * Ported VERBATIM from the validated mockup's theme.css: the brand
+ * Orange palette, spacing, type, radius and motion tokens, plus the light/dark
+ * theme variables switched via `body[data-theme]`.
+ *
+ * NEW tokens added here are NO-OP additions: their
+ * values equal the literals already hard-coded across the maquette, so adding
+ * them changes NOT A SINGLE PIXEL. They exist only to make a future, clean
+ * dark-first pass (and consistent status colors / z-index) feasible without
+ * touching the validated visuals. Nothing references the new tokens yet.
+ *
+ * Theme switch: set `document.body.dataset.theme = 'light' | 'dark'` (the
+ * semantic surface/text/border tokens live ONLY under `body[data-theme=...]`,
+ * so a value MUST be present on <body> — main.js sets it before mount).
+ * ============================================================================= */
+
+:root {
+  /* --- Orange brand (theme-independent) --- */
+  --orange: #ff7900;
+  --orange-deep: #cc6100;
+  --orange-soft: #fff5ec;
+
+  /* --- Spacing (8px-anchored) --- */
+  --s-1: 4px;      /* NO-OP add: sub-8px gaps were hard-coded in the mockup */
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
+  --s-10: 72px;
+  --s-11: 96px;
+  --s-12: 128px;
+
+  /* --- Type --- */
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 36px;
+
+  /* --- Radius --- */
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 12px;    /* NO-OP add: large containers */
+  --r-pill: 100px; /* NO-OP add: pills/badges/progress */
+
+  /* --- Motion --- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 200ms;
+  --dur-slow: 380ms;
+
+  /* --- Z-index scale (NO-OP add) ---
+   * Ordered to PRESERVE the maquette's existing stacking (collisions at 60/200/2100).
+   * menu < overlay < modal < toast. */
+  --z-menu: 60;
+  --z-overlay: 200;
+  --z-modal: 201;
+  --z-toast: 2100;
+
+  /* --- Status colors (NO-OP add) — LIGHT defaults ---
+   * These mirror the hard-coded status hexes scattered in the mockup's CSS.
+   * Note: the Evidence Studio deliberately avoids green (no-green rule); these are for
+   * generic status (toasts, admin, feedback) NOT for Evidence verdicts. */
+  --success: #15803d;
+  --danger: #b91c1c;
+  --warn: #d97706;
+  --info: #2563eb;
+}
+
+/* --- Themes (semantic tokens, swapped on <body>) --- */
+body[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-2: #f5f5f5;
+  --surface-hover: #f0f0f0;
+  --border: #ececec;
+  --border-strong: #d8d8d8;
+  --text: #111111;
+  --text-2: #5e5e5e;
+  --text-3: #9a9a9a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* NO-OP add: light value of the orange tint (used as-is today) */
+  --orange-soft-dark: var(--orange-soft);
+  --orange-on-dark: var(--orange-deep);
+  /* Orange for SMALL TEXT on --bg: darkened to clear WCAG AA 4.5:1 on white
+     (--orange-deep #cc6100 is only 3.98:1 — fine for accents, not body-size text). */
+  --orange-text: #b85700;
+}
+body[data-theme="dark"] {
+  --bg: #0d0d0d;
+  --surface: #161616;
+  --surface-2: #1c1c1c;
+  --surface-hover: #222222;
+  --border: #232323;
+  --border-strong: #2e2e2e;
+  --text: #f0f0f0;
+  --text-2: #a0a0a0;
+  --text-3: #6e6e6e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+  /* NO-OP add: dark replacements that were inlined as raw rgba/hex in the mockup */
+  --orange-soft-dark: rgba(255, 121, 0, 0.10); /* replaced 35 inline dark patches */
+  --orange-on-dark: #ffb066;                   /* replaced 9 ad-hoc --orange-deep dark subs */
+  --orange-text: #ffb066;                      /* small-text orange (10.8:1 on --bg) */
+
+  /* Status colors — dark variants */
+  --success: #4ade80;
+  --danger: #f87171;
+  --warn: #fb923c;
+  --info: #93c5fd;
+}

@@ -1,0 +1,76 @@
+// This file is the descriptor for webapp webapp-owismind-ai-agents
+{
+    "meta": {
+        // label: name of the webapp as displayed, should be short
+        "label": "OWIsMind — AI Agents",
+        // description: longer string to help end users understand what this webapp does
+        "description": "Chat with Dataiku AI agents. Conversations and users are stored via direct SQL in the PostgreSQL connection selected in this webapp's Settings.",
+        // icon: must be one of the FontAwesome 5.15.4 icons, complete list here at https://fontawesome.com/v5/docs/
+        "icon": "fas fa-puzzle-piece"
+    },
+
+    "baseType": "STANDARD", // WARNING: do not change
+    "hasBackend": "true",
+    "noJSSecurity": "false",
+    "standardWebAppLibraries": ["jquery","dataiku"],
+    "hideWebAppConfig": "false",
+
+    /* The field "params" holds a list of all the params
+       for wich the user will be prompted for values in the Settings tab of the webapp.
+
+       The available parameter types include:
+       STRING, STRINGS, INT, DOUBLE, BOOLEAN, SELECT, MULTISELECT, MAP, TEXTAREA, PRESET, DATASET, DATASET_COLUMN, MANAGED_FOLDER
+
+       For the full list and for more details, see the documentation: https://doc.dataiku.com/dss/latest/plugins/reference/params.html
+    */
+    "paramsPythonSetup": "compute_available_connections.py",
+
+    "params": [
+        {
+            "name": "sql_connection",
+            "label": "SQL connection",
+            "type": "SELECT",
+            "getChoicesFromPython": true,
+            "description": "DSS SQL connection (PostgreSQL) where this webapp stores its data. The app reports 'storage not configured' until one is selected.",
+            "mandatory": false
+        },
+        {
+            "name": "table_prefix",
+            "label": "Table name prefix (optional)",
+            "type": "STRING",
+            "description": "Optional prefix inserted after the project key. MAX 16 characters, allowed: letters, digits, _ and -. A longer or invalid prefix is IGNORED (no prefix is used) — the Admin page shows when that happens. The project key and the 'owismind' namespace always stay. Example: prefix 'bidule' -> OWISMIND_DEV_bidule-owismind_webapp_chat_v4.",
+            "mandatory": false
+        },
+        {
+            "name": "traces_dataset",
+            "label": "Agent trace dataset (optional)",
+            "type": "SELECT",
+            "getChoicesFromPython": true,
+            "description": "Optional. Where each agent run's final trace is appended (one row per exchange) for offline analysis. The dropdown lists the project's SQL-backed datasets, plus '(none)'. FIRST create the dataset in the Flow with exactly these 3 columns — exchange_id (string), trace (string), created_at (date); column ORDER does not matter — then select it here. Choose '(none)' to disable trace storage (you can switch back to none at any time). A missing or incompatible dataset never breaks the chat: the trace is simply skipped (and logged).",
+            "mandatory": false
+        },
+        {
+            "name": "log_level",
+            "label": "Log level",
+            "type": "SELECT",
+            "selectChoices": [
+                {"value": "DEBUG", "label": "DEBUG"},
+                {"value": "INFO", "label": "INFO"},
+                {"value": "WARNING", "label": "WARNING"}
+            ],
+            "defaultValue": "INFO",
+            "description": "Backend logging verbosity (visible in the webapp backend log)."
+        }
+    ],
+
+    /* roles define where this webapp will appear in DSS GUI. They are used to pre-fill a macro parameter with context.
+
+       Each role consists of:
+        - type: where the macro will be shown
+            * DATASET, DATASETS, SAVED_MODEL, MANAGED_FOLDER, ANALYSIS (a button to create webapps will be shown in the corresponding "action" menu)
+        - targetParamsKey(s): name of the parameter(s) that will be filled with the selected object
+    */
+    "roles": [
+        /* {"type": "DATASET", "targetParamsKey": "input_dataset"} */
+    ]
+}

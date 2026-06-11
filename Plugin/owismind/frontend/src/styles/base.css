@@ -1,0 +1,54 @@
+/* =============================================================================
+ * OWIsMind — Global reset, scrollbar, selection, shared keyframes, utilities.
+ *
+ * Ported VERBATIM from the validated mockup's theme.css reset block.
+ * Imported once (main.js) AFTER tokens.css. Non-scoped on purpose: these are the
+ * document-level rules every screen relies on (fixed-viewport shell, internal
+ * scroll regions only).
+ * ============================================================================= */
+
+/* --- Reset --- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* app shell is fixed-viewport; scrolling happens in inner regions */
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { background: none; border: none; padding: 0; cursor: pointer; color: inherit; }
+a { color: inherit; }
+
+/* --- Selection / scrollbar --- */
+::selection { background: var(--orange); color: white; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* --- Shared keyframes (every entry below has at least one component consumer) --- */
+@keyframes slide-up { from { transform: translateY(6px); } to { transform: translateY(0); } }
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.5; }
+}
+/* Gradient sweep shared by the live-activity shimmer text (background-clip: text)
+ * and the Evidence loading skeletons — consumers set their own gradient +
+ * `background-size: 200% 100%`, this only slides the position. */
+@keyframes shimmer-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* --- Utilities --- */
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-2); }
+
+/* Reusable rule from L020: children of a scrollable flex column must NOT shrink,
+ * otherwise the browser compresses them instead of scrolling. Apply `u-no-shrink`
+ * to flex items inside any `overflow-y:auto` flex column. */
+.u-no-shrink { flex-shrink: 0; }
