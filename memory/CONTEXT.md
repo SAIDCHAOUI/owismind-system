@@ -41,8 +41,13 @@ stockage = `webapp_chat_v4` (items generated_sql désormais enrichis sql_id/step
 - **Retour user post-déploiement : « ça marche bien mais pas encore comme je veux »** — fonctionnel,
   ajustements attendus non détaillés (à clarifier avant tout code).
 - **Nettoyage repo (2026-06-11)** : `maquette/` (~12 k lignes), `docs/superpowers/plans/`, `.demo-screens/`,
-  `.DS_Store` **supprimés** (suppression directe, décision user — repo toujours pas sous git) ; specs gelées
-  conservées ; refs recousues (CLAUDE.md ×2, docs/README+architecture+frontend, PROJECT_STATE §9, note LESSONS).
+  `.DS_Store` **supprimés** ; specs gelées conservées ; refs recousues (CLAUDE.md ×2, docs, PROJECT_STATE §9,
+  note LESSONS) ; 13 fichiers source purgés des citations mortes (docs/0X §, assets-v5) — 97/97 node:test, vite OK.
+- **Git + graphe (2026-06-11)** : `git init` + commit initial `3bd804f` (211 fichiers, main) ; knowledge graph
+  `graphify-out/` construit (1 969 nœuds / 3 443 arêtes, **18,4× moins de tokens/requête**, git-ignoré) —
+  l'interroger D'ABORD pour naviguer (`graphify query "…"`). Fraîcheur câblée : hook git **post-commit**
+  (rebuild AST auto, sans LLM) + `/log-session` enrichi (`/graphify --update` + **commit de session** —
+  autorisation user permanente ; JAMAIS de push).
 
 ## ⚠️ Top gotchas / règles actives
 **Frontend :**
@@ -93,7 +98,6 @@ stockage = `webapp_chat_v4` (items generated_sql désormais enrichis sql_id/step
    (dataset traces) — si différente de rows/records/data/result_rows/values, l'ajouter à
    `capture._ROW_KEYS` + au walker de l'orchestrateur (append-only).
 3. Re-tester en DSS ce qui ne l'a jamais été : L040 (bouton New conversation) / L041 (chrono étapes).
-4. **`git init`** (user) — repo prêt.
-5. **Evidence v3 (différé)** : restriction admin des datasets (champ qui SE REND), keyset pagination,
+4. **Evidence v3 (différé)** : restriction admin des datasets (champ qui SE REND), keyset pagination,
    drill multi-requêtes, fraîcheur des sources (last build) ; fallback LLM seulement sur cas réel.
 6. **2ᵉ task mentionnée par l'user le 2026-06-09** — toujours à clarifier.

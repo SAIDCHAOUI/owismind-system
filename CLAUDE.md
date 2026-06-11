@@ -31,7 +31,14 @@ convertie, a été supprimée du repo le 2026-06-11).
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
 - `/build-plugin` : `npm run build` (frontend) → `resource/owismind-app/`, puis `index.html` → `body.html`.
 - `/package-plugin` : stage runtime → zip `ready-for-dataiku/owismind-upload.zip` (sans frontend/node_modules).
-- `/log-session` : log de fin de session + refresh mémoire courte.
+- `/log-session` : log de fin de session + refresh mémoire courte + `/graphify --update` + commit de session.
+
+## Graphe de connaissances (`graphify-out/`, git-ignoré)
+- Pour naviguer (« où est géré X ? », « qu'est-ce qui touche Y ? ») : **interroger le graphe d'abord**
+  (`graphify query "…"`) au lieu de relire les docs — ~18× moins de tokens. Visualisation : `graphify-out/graph.html`.
+- Fraîcheur : hook git **post-commit** (rebuild AST auto, sans LLM) + `/log-session` (refresh sémantique
+  incrémental + commit). Graphe périmé vs working tree → `/graphify --update`.
+- Git : commit de session via `/log-session` (autorisation user 2026-06-11) ; **jamais de push** (l'user pushe).
 
 ## Règles NON NÉGOCIABLES
 1. **NO INSTALL** — l'agent n'installe **jamais** de dépendances (`npm install`, `pip install`, `brew`,
