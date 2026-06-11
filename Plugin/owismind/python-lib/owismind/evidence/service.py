@@ -43,7 +43,7 @@ from owismind.evidence.query_builders import (
     render_predicate,
 )
 from owismind.evidence.whitelist import match_whitelist
-from owismind.storage.migrations import CHAT_V4_LOGICAL
+from owismind.storage.migrations import CHAT_V5_LOGICAL
 from owismind.storage.serialization import parse_json_list, rows_to_json_safe
 from owismind.storage.sql_config import (
     PROJECT_KEY,
@@ -496,7 +496,7 @@ def _load_sql_item(user_id, exchange_id):
     (without revealing which); 'no_sql' (409) when it stored no SQL at all.
     """
     query = build_exchange_sql_query(
-        table_ref=full_table(CHAT_V4_LOGICAL),
+        table_ref=full_table(CHAT_V5_LOGICAL),
         user_value_sql=sql_value(user_id),
         exchange_value_sql=sql_value(exchange_id),
     )

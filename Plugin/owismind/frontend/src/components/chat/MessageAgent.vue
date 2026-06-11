@@ -174,6 +174,34 @@ const interruptedEmpty = computed(() => (v.value.status === 'done' || v.value.st
 // reload shows the partial text with no marker — consistent with storing it "as-is").
 const stoppedWithText = computed(() => v.value.status === 'stopped' && hasAnswerText.value)
 
+// Per-message token/cost usage line. Live: filled from the usage_summary event; reloaded:
+// rebuilt from the persisted columns (usageFromRow). Shown only on a terminal version that
+// actually carries usage — an early-stopped run (no footer) or a pre-usage exchange has
+// none, so it shows no line rather than a misleading zero/empty one.
+const usage = computed(() => v.value.usage)
+const showUsage = computed(
+  () =>
+    v.value.status !== 'running' &&
+    !!usage.value &&
+    (usage.value.promptTokens != null ||
+      usage.value.completionTokens != null ||
+      usage.value.estimatedCost != null),
+)
+function fmtTokens(n) {
+  return n == null ? '—' : Number(n).toLocaleString(locale.value)
+}
+function fmtCost(c) {
+  // DSS-estimated cost; the user reasons in dollars. 2–4 decimals keeps the small
+  // per-message amounts readable without collapsing to a misleading "$0.00".
+  return (
+    '$' +
+    Number(c).toLocaleString(locale.value, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    })
+  )
+}
+
 function stepLabel(item) {
   // Prefer the backend-provided human label (orchestrator pass-through) when present.
   const r = resolveTimelineStep(item.eventKind, item.label)
@@ -374,6 +402,18 @@ function nextVersion() {
           <pre class="sql-code mono">{{ q.sql }}</pre>
         </div>
       </div>
+    </div>
+
+    <!-- Per-message token/cost usage (discreet, mono). Live + reloaded; shown to all. -->
+    <div v-if="showUsage" class="usage-line mono">
+      <span class="u-seg" :title="t('msg.usage_in')">↑ {{ fmtTokens(usage.promptTokens) }}</span>
+      <span class="u-sep">·</span>
+      <span class="u-seg" :title="t('msg.usage_out')">↓ {{ fmtTokens(usage.completionTokens) }}</span>
+      <span class="u-unit">{{ t('msg.usage_tokens') }}</span>
+      <template v-if="usage.estimatedCost != null">
+        <span class="u-sep">·</span>
+        <span class="u-seg" :title="t('msg.usage_cost')">~{{ fmtCost(usage.estimatedCost) }}</span>
+      </template>
     </div>
 
     <!-- Actions + version nav -->
@@ -613,6 +653,14 @@ function nextVersion() {
   margin: 6px 0 0; padding: var(--s-3); background: var(--surface-2); border-radius: var(--r-sm);
   font-size: 12.5px; line-height: 1.65; color: var(--text); overflow-x: auto; white-space: pre;
 }
+
+/* Per-message token/cost usage line — discreet, neutral, mono (like the activity meta). */
+.usage-line {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: var(--s-3); font-size: 11px; color: var(--text-3);
+}
+.usage-line .u-sep { opacity: 0.55; }
+.usage-line .u-unit { color: var(--text-3); }
 
 /* Footer actions */
 .msg-foot { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); font-size: var(--fs-xs); color: var(--text-3); }

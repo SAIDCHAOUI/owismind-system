@@ -1,7 +1,7 @@
 """Opportunistic agent-result capture + mirrored persistence caps (trust layer).
 
 PURE module (no dataiku / pandas import) so every bound is unit-testable without a
-DSS runtime, and so ``storage.chat_v4`` can import it without an import cycle.
+DSS runtime, and so ``storage.chat_v5`` can import it without an import cycle.
 
 Three responsibilities, all deterministic and all bounded:
 
@@ -18,7 +18,7 @@ Three responsibilities, all deterministic and all bounded:
   of any item, and never raising (persistence must not fail because of a capture).
 
 All caps are STRUCTURAL (rows dropped, ``truncated`` flag flipped) — never a text
-marker inside the JSON, which would corrupt decoding (the chat_v4 ``_bounded`` marker
+marker inside the JSON, which would corrupt decoding (the chat_v5 ``_bounded`` marker
 must never touch this payload).
 """
 
@@ -38,7 +38,7 @@ MAX_CELL_CHARS = 256
 MAX_RESULT_JSON_CHARS = 100_000
 # Newest-wins bound on the number of persisted generated_sql items.
 MAX_SQL_ITEMS = 20
-# Global budget for the serialized sql_list — mirrors chat_v4.MAX_PERSISTED_TEXT_CHARS
+# Global budget for the serialized sql_list — mirrors chat_v5.MAX_PERSISTED_TEXT_CHARS
 # (duplicated by value to keep this module pure / dataiku-free).
 MAX_PERSISTED_TEXT_CHARS = 262_144
 # Structural per-item bounds (SQL-INST-01): the sql text itself must be capped
@@ -84,7 +84,7 @@ def _normalize_cell(value):
 
 
 def _json_len(obj):
-    """Serialized length used by every budget check (same dumps defaults as chat_v4)."""
+    """Serialized length used by every budget check (same dumps defaults as chat_v5)."""
     return len(json.dumps(obj, default=str))
 
 

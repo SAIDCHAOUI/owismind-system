@@ -1,21 +1,24 @@
-"""Reads/writes for the versioned chat_v4 table (direct SQL, no DSS Flow).
+"""Reads/writes for the versioned chat_v5 table (direct SQL, no DSS Flow).
 
-Owns ``webapp_chat_v4`` = the chat exchanges (with per-message feedback columns) turned
+Owns ``webapp_chat_v5`` = the chat exchanges (with per-message feedback columns) turned
 into a conversation TREE: each exchange carries a ``parent_exchange_id`` linking it to
 the exchange it branched from (NULL for a root / first turn). The agent context of an
 exchange is its ANCESTOR CHAIN (recursive walk up the parents), so a branch never sees
 the messages that came after its branch point — see ``history_messages_for_chain``.
 
 Two-phase write per exchange: the user message is persisted first (with NULL
-assistant reply and NULL generated_sql), then the assistant reply AND any SQL the
-agent generated are filled in by a follow-up UPDATE keyed on the Python-generated
-``exchange_id``. User-supplied values are escaped via ``sql_value``; identifiers
-come from controlled constants via ``full_table``. Every write COMMITs explicitly.
+assistant reply and NULL generated_sql), then the assistant reply, any SQL the
+agent generated AND the run's token/cost usage are filled in by a follow-up UPDATE
+keyed on the Python-generated ``exchange_id``. User-supplied values are escaped via
+``sql_value``; identifiers come from controlled constants via ``full_table``. Every
+write COMMITs explicitly.
 
-Over the abandoned _v3 (which added the per-message feedback columns over _v2, which
-itself added ``generated_sql``, a JSON-encoded list of ``{sql, success, row_count}``,
-NULL when the run produced no SQL), _v4 adds ``parent_exchange_id``. Feedback is filled
-out-of-band by ``save_feedback`` (owner-scoped). The persisted ``agent_key`` is the
+Over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's per-message
+feedback columns, over _v2's ``generated_sql``), _v5 adds the per-exchange USAGE columns
+``input_tokens``/``output_tokens``/``total_tokens``/``estimated_cost`` — the run's footer
+``usage_summary`` totals, written with the reply. They are the AUTHORITATIVE per-exchange
+usage record (the users + monthly aggregates are reconstructible from them). Feedback is
+filled out-of-band by ``save_feedback`` (owner-scoped). The persisted ``agent_key`` is the
 OPAQUE logical key, never the raw agent_id — so a readback never leaks a real agent id
 to the frontend.
 """
@@ -31,7 +34,7 @@ from owismind.security.validation import (
     validate_history_limit,
 )
 from owismind.storage import pagination
-from owismind.storage.migrations import CHAT_V4_LOGICAL
+from owismind.storage.migrations import CHAT_V5_LOGICAL
 from owismind.storage.serialization import parse_json_list, rows_to_json_safe
 from owismind.storage.sql_builders import (
     build_ancestor_chain_query,
@@ -74,12 +77,14 @@ def _bounded(text):
 
 
 # Columns selected for a conversation readback, in a stable order (includes generated_sql,
-# the per-message feedback columns, and parent_exchange_id — which feed /conversation ->
-# frontend coloring and the conversation-tree reconstruction).
+# the per-message feedback columns, parent_exchange_id, and the per-exchange usage columns
+# — which feed /conversation -> frontend coloring, conversation-tree reconstruction, and
+# the per-message tokens/cost line on reload).
 _COLUMNS = (
     "exchange_id, session_id, user_id, user_display_name, user_groups, "
     "user_text, assistant_text, generated_sql, agent_key, created_at, answered_at, "
-    "feedback_rating, feedback_reasons, feedback_comment, parent_exchange_id"
+    "feedback_rating, feedback_reasons, feedback_comment, parent_exchange_id, "
+    "input_tokens, output_tokens, total_tokens, estimated_cost"
 )
 
 
@@ -104,7 +109,7 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
     # Bound the stored body so the INSERT statement text stays small (CRU log safety).
     user_text = _bounded(user_text)
 
-    table = full_table(CHAT_V4_LOGICAL)
+    table = full_table(CHAT_V5_LOGICAL)
     #   columns:  ... agent_key, parent_exchange_id, answered_at
     #   values:   ... {agent_key}, {parent}, NULL
     insert_sql = """
@@ -144,11 +149,33 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
     return exchange_id
 
 
-def save_assistant_message(exchange_id, assistant_text, generated_sql=None):
-    """Fill in the assistant reply (+ any generated SQL) for an existing exchange.
+def _usage_literal(value, is_float=False):
+    """Safe SQL numeric literal for a server-computed usage value, or ``NULL``.
 
-    Phase two: UPDATE assistant_text and generated_sql, then stamp answered_at via
-    SQL now(), matching on the exchange_id produced by ``save_user_message``.
+    Usage values come from the LLM Mesh trace (never user input). They are strictly
+    coerced — a missing/non-numeric/negative value becomes SQL ``NULL`` — and inlined
+    as a bare numeric literal (floats with fixed decimals to avoid scientific notation),
+    which sidesteps any ``Constant(float)`` escaping ambiguity for a fully-controlled,
+    non-user value (mirrors the ``bool_literal`` precedent for server-side scalars).
+    """
+    if value is None:
+        return "NULL"
+    try:
+        if is_float:
+            f = float(value)
+            return "{:.10f}".format(f) if f >= 0 else "NULL"
+        n = int(value)
+        return str(n) if n >= 0 else "NULL"
+    except (TypeError, ValueError):
+        return "NULL"
+
+
+def save_assistant_message(exchange_id, assistant_text, generated_sql=None, usage=None):
+    """Fill in the assistant reply (+ any generated SQL + token/cost usage) for an exchange.
+
+    Phase two: UPDATE assistant_text, generated_sql and the per-exchange usage columns,
+    then stamp answered_at via SQL now(), matching on the exchange_id produced by
+    ``save_user_message``.
 
     ``generated_sql`` is a Python list of ``{sql, success, row_count}`` items, plus
     the optional trust-layer keys ``sql_id``/``step_index``/``agent_key``/``result``
@@ -159,31 +186,55 @@ def save_assistant_message(exchange_id, assistant_text, generated_sql=None):
     empty list stores SQL NULL via ``nullable_value`` so "no SQL" reads back cleanly.
     ``_bounded()`` must NEVER touch this JSON: its text marker would corrupt decoding
     (cap_sql_list trims structurally instead).
+
+    ``usage`` is the run's footer ``usage_summary`` totals
+    (``promptTokens``/``completionTokens``/``totalTokens``/``estimatedCost``) or None
+    (e.g. an early-stopped run with no footer). Each value is coerced to a safe numeric
+    literal — written into the same atomic UPDATE as the reply so the per-exchange usage
+    record (the source of truth for the aggregates) lands together with the answer.
     """
     capped_sql = capture.cap_sql_list(generated_sql) if generated_sql else None
     sql_json = json.dumps(capped_sql) if capped_sql else None
     # Bound the stored reply so the UPDATE statement text stays small (CRU log safety).
     assistant_text = _bounded(assistant_text)
 
-    table = full_table(CHAT_V4_LOGICAL)
+    usage = usage or {}
+    in_sql = _usage_literal(usage.get("promptTokens"))
+    out_sql = _usage_literal(usage.get("completionTokens"))
+    total_sql = _usage_literal(usage.get("totalTokens"))
+    cost_sql = _usage_literal(usage.get("estimatedCost"), is_float=True)
+
+    table = full_table(CHAT_V5_LOGICAL)
     update_sql = """
     UPDATE {table}
     SET assistant_text = {assistant_text},
         generated_sql  = {generated_sql},
+        input_tokens   = {in_t},
+        output_tokens  = {out_t},
+        total_tokens   = {total_t},
+        estimated_cost = {cost},
         answered_at    = now()
     WHERE exchange_id = {exchange_id}
     """.format(
         table=table,
         assistant_text=sql_value(assistant_text),
         generated_sql=nullable_value(sql_json),
+        in_t=in_sql,
+        out_t=out_sql,
+        total_t=total_sql,
+        cost=cost_sql,
         exchange_id=sql_value(exchange_id),
     )
     logger.info(
-        "save_assistant_message — UPDATE %s exchange_id=%s reply_len=%d sql=%s",
+        "save_assistant_message — UPDATE %s exchange_id=%s reply_len=%d sql=%s "
+        "in=%s out=%s cost=%s",
         table,
         exchange_id,
         len(assistant_text or ""),
         bool(generated_sql),
+        in_sql,
+        out_sql,
+        cost_sql,
     )
     # The full UPDATE text is intentionally NOT logged: it inlines the assistant reply.
     new_executor().query_to_df(
@@ -201,7 +252,7 @@ def save_feedback(user_id, exchange_id, rating, reasons, comment):
     is scoped by BOTH exchange_id and user_id, so a user can only rate their own
     messages. No-op (0 rows) if the exchange is not theirs.
     """
-    table = full_table(CHAT_V4_LOGICAL)
+    table = full_table(CHAT_V5_LOGICAL)
     reasons_json = json.dumps(reasons) if reasons else None
     bounded_comment = _bounded(comment) if comment else None
     # Stamp feedback_at only when a rating is set; clearing (rating None) blanks it too.
@@ -257,7 +308,7 @@ def history_messages_for_chain(user_id, parent_exchange_id, max_messages):
         return []
     limit = validate_history_limit(max_messages)
     n_exchanges = exchanges_to_fetch(limit)
-    table = full_table(CHAT_V4_LOGICAL)
+    table = full_table(CHAT_V5_LOGICAL)
     sql = build_ancestor_chain_query(
         table_ref=table,
         columns="user_text, assistant_text, generated_sql, created_at, exchange_id",
@@ -288,7 +339,7 @@ def list_conversations(user_id, cursor_token, limit):
     decoded = pagination.decode_cursor(cursor_token)
     cl = sql_value(decoded[0]) if decoded else None
     cs = sql_value(decoded[1]) if decoded else None
-    table = full_table(CHAT_V4_LOGICAL)
+    table = full_table(CHAT_V5_LOGICAL)
     sql = build_conversation_list_query(
         table_ref=table, user_value_sql=sql_value(user_id),
         cursor_last_at_sql=cl, cursor_session_sql=cs,
@@ -341,7 +392,7 @@ def messages_for_session(user_id, session_id, cap=SESSION_MESSAGES_CAP):
     one ``rowsToMessages`` mapper): user_groups + generated_sql decoded to lists.
     The generated_sql items are projected onto their PUBLIC keys (no stored result).
     """
-    table = full_table(CHAT_V4_LOGICAL)
+    table = full_table(CHAT_V5_LOGICAL)
     sql = build_session_messages_query(
         table_ref=table, columns=_COLUMNS,
         user_value_sql=sql_value(user_id), session_value_sql=sql_value(session_id), cap=cap,

@@ -266,13 +266,15 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   brute avec input utilisateur ; identifiants via `pg_identifier` (regex + double-quotes).
 - Table probe **constatée en base** : `public."OWISMIND_DEV_owismind_webapp_chat_probe"`
   (`id` VARCHAR(64), `created_at` TIMESTAMPTZ, `user_text`, `assistant_text`) — **ABANDONNÉE**, gardée intacte.
-- **Table chat COURANTE = `webapp_chat_v4`** (✅ validée DSS 2026-06-09 — L032 ; module `storage/chat_v4.py`) :
+- **Table chat COURANTE = `webapp_chat_v5`** (⏳ Run 4 2026-06-11, NON validée DSS — L049 ; module `storage/chat_v5.py`,
+  ex-`chat_v4.py` `git mv`) :
   - Colonnes : `exchange_id` PK, `session_id`, `user_id`, `user_display_name`, `user_groups`, `user_text`,
     `assistant_text`, **`generated_sql`** (JSON liste `{sql,success,row_count}`, nullable — L019/v2),
     `agent_key` (**clé logique opaque**), `created_at`, `answered_at`, **`feedback_rating` SMALLINT (0|1|NULL)** +
     **`feedback_reasons` TEXT(JSON)** + **`feedback_comment` TEXT** + **`feedback_at` TIMESTAMP** (L031/v3),
-    **`parent_exchange_id` TEXT** (arbre de conversation — L032/v4). Index `(user_id, created_at DESC)` +
-    `(user_id, session_id, created_at DESC)`.
+    **`parent_exchange_id` TEXT** (arbre de conversation — L032/v4), **`input_tokens`/`output_tokens`/`total_tokens` INT +
+    `estimated_cost` DOUBLE** (usage de l'échange, nullables — L049/v5, écrites dans le MÊME UPDATE que la réponse =
+    **source de vérité** des agrégats). Index `(user_id, created_at DESC)` + `(user_id, session_id, created_at DESC)`.
   - Écriture **2 temps** (INSERT user → UPDATE assistant+SQL), COMMIT. **Feedback** : `save_feedback` =
     `UPDATE … WHERE exchange_id AND user_id` (owner-scopé). **Branches** : `parent_exchange_id` (NULL = racine) ;
     éditer/régénérer = nouvel échange **frère** ; contexte agent = **chaîne d'ancêtres** (`build_ancestor_chain_query`
@@ -294,6 +296,14 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   - `OWISMIND_DEV_owismind_webapp_users_v1` (logique `webapp_users_v1`) : `user_id` PK, `display_name`,
     `user_groups`, `is_admin` BOOL, `first_seen`, `last_seen`. **1er user = admin** (bootstrap guardé).
     `display_name` désormais **auto-rempli** = prénom dérivé du login (L017), backfill NULL via COALESCE.
+    **+ Run 4 (L049, ⏳ NON validé DSS) : `total_input_tokens`/`total_output_tokens` BIGINT + `total_cost` DOUBLE +
+    `last_usage_at`** — cumul lifetime, **seul ALTER autorisé** (`ADD COLUMN IF NOT EXISTS` dans le DDL ET
+    `_ALTERS_BY_LOGICAL`, appliqué par `_ensure_table` sans perdre les rows), incrémenté par `storage/usage.record_usage`.
+  - **`OWISMIND_DEV_owismind_webapp_usage_monthly_v1`** (logique `webapp_usage_monthly_v1`, ⏳ Run 4 NON validé DSS —
+    L049) : PK **`(user_id, period_start DATE)`**, `input_tokens`/`output_tokens` BIGINT, `total_cost` DOUBLE,
+    `request_count` INT, `updated_at`. `period_start = date_trunc('month', now())::date` ; UPSERT **incrémente**
+    (`+ EXCLUDED`, `request_count + 1`). Quota mensuel futur = **1 lecture par clé**, pas de job de reset.
+    `record_usage` fait users + monthly en **UNE transaction**, best-effort (agrégats reconstructibles depuis `chat_v5`).
 - **Table 2026-06-03 (✅ validée EN DSS)** :
   - `OWISMIND_DEV_owismind_webapp_settings_v1` (logique `webapp_settings_v1`) : `setting_key` PK,
     `setting_value` (JSON), `updated_at`, `updated_by`. **Config globale webapp** (clé `enabled_agents` =

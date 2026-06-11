@@ -56,6 +56,53 @@ def build_session_messages_query(table_ref, columns, user_value_sql, session_val
     """.format(columns=columns, table=table_ref, user=user_value_sql, session=session_value_sql, c=c)
 
 
+def build_usage_monthly_upsert(table_ref, user_value_sql,
+                               in_tokens_sql, out_tokens_sql, cost_sql):
+    """UPSERT one user's CURRENT-MONTH usage bucket (calendar month, server clock).
+
+    ``period_start`` is ``date_trunc('month', now())::date`` so every calendar month is
+    its own PRIMARY-KEY row — the future per-user monthly quota is one PK lookup and no
+    reset job is ever needed. ON CONFLICT the counters are INCREMENTED (never
+    overwritten) and one request is tallied. The token/cost fragments are server-computed
+    numeric literals supplied by the caller (storage/usage); the period is a fixed SQL
+    expression — neither is user input. Goes in ``pre_queries`` (a COMMIT must follow).
+    """
+    return """
+    INSERT INTO {table} AS m
+      (user_id, period_start, input_tokens, output_tokens, total_cost, request_count, updated_at)
+    VALUES
+      ({user}, date_trunc('month', now())::date, {in_t}, {out_t}, {cost}, 1, now())
+    ON CONFLICT (user_id, period_start) DO UPDATE
+       SET input_tokens  = m.input_tokens  + EXCLUDED.input_tokens,
+           output_tokens = m.output_tokens + EXCLUDED.output_tokens,
+           total_cost    = m.total_cost    + EXCLUDED.total_cost,
+           request_count = m.request_count + 1,
+           updated_at    = now()
+    """.format(table=table_ref, user=user_value_sql,
+               in_t=in_tokens_sql, out_t=out_tokens_sql, cost=cost_sql)
+
+
+def build_users_usage_increment(table_ref, user_value_sql,
+                                in_tokens_sql, out_tokens_sql, cost_sql):
+    """Increment a user's LIFETIME cumulative usage counters (never overwrite).
+
+    Adds this run's tokens/cost to the registry row and stamps ``last_usage_at``. Scoped
+    to a single ``user_id``; a no-op (0 rows) if the user row does not exist yet — in
+    practice the /me registry upsert always runs first, so the row is present. The
+    token/cost fragments are server-computed numeric literals (storage/usage). Goes in
+    ``pre_queries`` (a COMMIT must follow).
+    """
+    return """
+    UPDATE {table}
+       SET total_input_tokens  = total_input_tokens  + {in_t},
+           total_output_tokens = total_output_tokens + {out_t},
+           total_cost          = total_cost          + {cost},
+           last_usage_at       = now()
+     WHERE user_id = {user}
+    """.format(table=table_ref, user=user_value_sql,
+               in_t=in_tokens_sql, out_t=out_tokens_sql, cost=cost_sql)
+
+
 def build_ancestor_chain_query(table_ref, columns, user_value_sql,
                                start_exchange_sql, max_depth, cap):
     """Walk parent_exchange_id UP from a start exchange to the root (recursive CTE).

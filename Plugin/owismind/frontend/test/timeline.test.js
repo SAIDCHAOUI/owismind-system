@@ -14,6 +14,7 @@ import {
   timelineSegments,
   activitySummary,
   stepStampDiff,
+  usageFromRow,
 } from '../src/composables/timelineModel.js'
 import { resolveTimelineStep, timelineMessages } from '../src/registries/timelineSteps.js'
 
@@ -399,4 +400,55 @@ test('resolveTimelineStep with an empty/non-string label falls back to the regis
 test('humanize strips SUB_AGENT_AGENT_ then SUB_AGENT_ prefixes', () => {
   assert.equal(resolveTimelineStep('SUB_AGENT_AGENT_TOOL_START').fallback, 'Tool start')
   assert.equal(resolveTimelineStep('SUB_AGENT_THINKING').fallback, 'Thinking')
+})
+
+// --- Usage: live path (usage_summary event) + reload path (usageFromRow) --------------
+
+test('usage_summary event populates state.usage (live path)', () => {
+  const s = feed([
+    { type: 'usage_summary', promptTokens: 1662, completionTokens: 806, totalTokens: 2468, estimatedCost: 0.0101375 },
+  ])
+  assert.deepEqual(s.usage, {
+    promptTokens: 1662,
+    completionTokens: 806,
+    totalTokens: 2468,
+    estimatedCost: 0.0101375,
+  })
+})
+
+test('usageFromRow maps the persisted columns (reload path)', () => {
+  assert.deepEqual(
+    usageFromRow({
+      input_tokens: 3383,
+      output_tokens: 3127,
+      total_tokens: 6510,
+      estimated_cost: 0.0354988,
+    }),
+    { promptTokens: 3383, completionTokens: 3127, totalTokens: 6510, estimatedCost: 0.0354988 },
+  )
+})
+
+test('usageFromRow returns null when no usage was stored (early-stopped / legacy row)', () => {
+  assert.equal(usageFromRow({ input_tokens: null, output_tokens: null, total_tokens: null, estimated_cost: null }), null)
+  assert.equal(usageFromRow({}), null)
+  assert.equal(usageFromRow(null), null)
+})
+
+test('usageFromRow keeps present values and nulls the missing ones (partial row)', () => {
+  assert.deepEqual(usageFromRow({ input_tokens: 100, estimated_cost: 0.002 }), {
+    promptTokens: 100,
+    completionTokens: null,
+    totalTokens: null,
+    estimatedCost: 0.002,
+  })
+})
+
+test('usageFromRow surfaces a stored zero (a real run, not "no usage")', () => {
+  // 0 is a legitimate stored value (e.g. cached completion): it must NOT be dropped.
+  assert.deepEqual(usageFromRow({ input_tokens: 0, output_tokens: 0, total_tokens: 0, estimated_cost: 0 }), {
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    estimatedCost: 0,
+  })
 })

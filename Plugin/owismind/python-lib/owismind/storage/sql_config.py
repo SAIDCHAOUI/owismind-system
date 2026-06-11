@@ -264,15 +264,15 @@ def _namespace():
 def physical_table(logical):
     """Physical table name: ``{PROJECT_KEY}_{namespace}_{logical}``.
 
-    e.g. ``webapp_chat_v4`` -> ``OWISMIND_DEV_owismind_webapp_chat_v4`` (no prefix)
-    or ``OWISMIND_DEV_bidule-owismind_webapp_chat_v4`` (prefix "bidule").
+    e.g. ``webapp_chat_v5`` -> ``OWISMIND_DEV_owismind_webapp_chat_v5`` (no prefix)
+    or ``OWISMIND_DEV_bidule-owismind_webapp_chat_v5`` (prefix "bidule").
     """
     return "{}_{}_{}".format(PROJECT_KEY, _namespace(), logical)
 
 
 def full_table(logical):
     """Fully-qualified, safely-quoted table reference, e.g.
-    ``public."OWISMIND_DEV_owismind_webapp_chat_v4"``."""
+    ``public."OWISMIND_DEV_owismind_webapp_chat_v5"``."""
     return "{}.{}".format(SCHEMA_NAME, pg_identifier(physical_table(logical)))
 
 
@@ -295,8 +295,9 @@ def storage_status():
         # to an admin-selected Flow dataset (write-only), so expose its name, not a table.
         "traces_dataset": traces_dataset_name(),
         "tables": {
-            "chat": physical_table("webapp_chat_v4"),
+            "chat": physical_table("webapp_chat_v5"),
             "users": physical_table("webapp_users_v1"),
             "settings": physical_table("webapp_settings_v1"),
+            "usage_monthly": physical_table("webapp_usage_monthly_v1"),
         },
     }

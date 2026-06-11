@@ -34,7 +34,7 @@ import time
 from uuid import uuid4
 
 from owismind.agents import context, streaming
-from owismind.storage import chat_traces, chat_v4
+from owismind.storage import chat_traces, chat_v5, usage
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
-    is the chat_v4 row to fill in once the answer is ready; ``user_id`` scopes the
+    is the chat_v5 row to fill in once the answer is ready; ``user_id`` scopes the
     run so only its owner can poll it. ``parent_exchange_id``/``history_limit``/
     ``user_prefix`` let the worker assemble the multi-turn agent context (the ANCESTOR
     CHAIN of this branch + the current prefixed turn). Raises ``CapacityError`` if the
@@ -250,6 +250,9 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     # is NEVER appended to the live timeline a second time.
     sql_pos_by_index = {}
     trace_raw = None
+    # The run's footer token/cost totals, captured for persistence (chat_v5 columns +
+    # the users/monthly aggregates). Stays None on an early-stopped run (no footer).
+    usage_totals = None
     stop_reason = None
     _append_event_locked_free(run_id, {"type": "run_started", "exchangeId": exchange_id})
     # Assemble the multi-turn payload: the ancestor chain of THIS branch (verbatim) + the
@@ -258,7 +261,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     # Best-effort: if the history read fails, degrade to the current turn alone (never
     # break the chat).
     try:
-        history = chat_v4.history_messages_for_chain(
+        history = chat_v5.history_messages_for_chain(
             user_id, parent_exchange_id, history_limit
         )
     except Exception:
@@ -292,7 +295,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     )
             elif etype == "generated_sql":
                 # Persistence path — the ENRICHED item (correlation tags + captured
-                # result when present). Bounded at the write point: chat_v4 applies
+                # result when present). Bounded at the write point: chat_v5 applies
                 # capture.cap_sql_list right before json.dumps (mirror caps).
                 item = {
                     "sql": event.get("sql"),
@@ -326,6 +329,16 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 # The live, polled copy stays LIGHT: captured result rows are
                 # persistence-only (read back via /evidence/meta, never /chat/poll).
                 event = {k: v for k, v in event.items() if k != "result"}
+            elif etype == "usage_summary":
+                # Capture the run's token/cost totals for persistence. Does NOT
+                # continue: the event still falls through to the live timeline so the
+                # front shows the usage during the run (the reducer already reads it).
+                usage_totals = {
+                    "promptTokens": event.get("promptTokens"),
+                    "completionTokens": event.get("completionTokens"),
+                    "totalTokens": event.get("totalTokens"),
+                    "estimatedCost": event.get("estimatedCost"),
+                }
             elif etype == "trace":
                 # The RAW footer trace is for PERSISTENCE only — capture it but do
                 # NOT add it to the live timeline (it can be large; the front shows
@@ -341,13 +354,28 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
 
         answer = "".join(answer_parts).strip()
         # Phase two: persist whatever we have (full answer on a normal run, partial on an
-        # early stop). A storage failure here must not abort the run — the user already
-        # has the answer on screen.
+        # early stop), including the run's token/cost usage (None on an early stop with no
+        # footer). A storage failure here must not abort the run — the user already has the
+        # answer on screen.
         try:
-            chat_v4.save_assistant_message(exchange_id, answer, sql_list or None)
+            chat_v5.save_assistant_message(
+                exchange_id, answer, sql_list or None, usage=usage_totals
+            )
         except Exception:
             logger.exception(
                 "stream_manager — failed to persist assistant message run_id=%s", run_id
+            )
+
+        # Increment the per-user lifetime + current-month usage aggregates. The per-exchange
+        # usage on chat_v5 (just written) is the source of truth; these denormalised
+        # accelerators power the per-user monthly quota. Best-effort: a failure here is
+        # logged and swallowed — it must never affect the answer, and the aggregates can be
+        # rebuilt from chat_v5. No-op when no usage was captured (early-stopped run).
+        try:
+            usage.record_usage(user_id, usage_totals)
+        except Exception:
+            logger.exception(
+                "stream_manager — failed to record usage aggregates run_id=%s", run_id
             )
 
         # Persist the RAW end-of-stream footer trace for this exchange. Also best-effort:

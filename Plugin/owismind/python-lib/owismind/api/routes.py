@@ -52,8 +52,8 @@ from owismind.security.validation import (
     validate_optional_exchange_id,
     validate_required_exchange_id,
 )
-from owismind.storage import admin, chat_v4, settings, sql_config
-from owismind.storage.migrations import ensure_chat_v4_table
+from owismind.storage import admin, chat_v5, settings, sql_config
+from owismind.storage.migrations import ensure_chat_table
 
 logger = logging.getLogger(__name__)
 
@@ -240,8 +240,8 @@ def chat_start():
     # Phase one: persist the user message. Done in the request thread so a write
     # error surfaces as a clean HTTP error rather than inside the worker.
     try:
-        ensure_chat_v4_table()
-        exchange_id = chat_v4.save_user_message(
+        ensure_chat_table()
+        exchange_id = chat_v5.save_user_message(
             session_id, identity, message, agent_key, parent_exchange_id
         )
     except Exception:
@@ -341,7 +341,7 @@ def chat_feedback():
     """Persist 👍/👎 feedback (+ reasons + comment) on one of the caller's own messages.
 
     Identity comes from the auth headers (never the body); the UPDATE in
-    ``chat_v4.save_feedback`` is owner-scoped (WHERE exchange_id AND user_id), so a
+    ``chat_v5.save_feedback`` is owner-scoped (WHERE exchange_id AND user_id), so a
     caller can only rate their own exchange — an exchange owned by someone else is a
     silent no-op. The payload is validated/bounded server-side (rating 0/1/None,
     whitelisted reasons, bounded comment).
@@ -365,8 +365,8 @@ def chat_feedback():
         return jsonify({"status": "error", "error": exc.code}), 400
 
     try:
-        ensure_chat_v4_table()
-        chat_v4.save_feedback(
+        ensure_chat_table()
+        chat_v5.save_feedback(
             identity["user_id"], exchange_id, rating, reasons, comment
         )
     except Exception:
@@ -408,8 +408,8 @@ def conversations():
     if cursor_token and len(cursor_token) > 512:
         return jsonify({"status": "error", "error": "invalid_cursor"}), 400
     try:
-        ensure_chat_v4_table()
-        page = chat_v4.list_conversations(identity["user_id"], cursor_token, limit)
+        ensure_chat_table()
+        page = chat_v5.list_conversations(identity["user_id"], cursor_token, limit)
     except Exception:
         logger.exception("/conversations — listing failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
@@ -431,7 +431,7 @@ def conversation():
     Fetched lazily when the user clicks a conversation in the sidebar. The session
     is strictly owner-scoped (a session_id owned by another user yields no rows), and
     the read is bounded by an absolute row cap. Rows are shaped like the conversation
-    readback (`chat_v4._COLUMNS`), so the frontend reuses one row->message mapper.
+    readback (`chat_v5._COLUMNS`), so the frontend reuses one row->message mapper.
     """
     try:
         identity = resolve_identity(request.headers)
@@ -448,8 +448,8 @@ def conversation():
         return jsonify({"status": "error", "error": "invalid_session_id"}), 400
 
     try:
-        ensure_chat_v4_table()
-        rows = chat_v4.messages_for_session(identity["user_id"], session_id)
+        ensure_chat_table()
+        rows = chat_v5.messages_for_session(identity["user_id"], session_id)
     except Exception:
         logger.exception("/conversation — load failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
@@ -524,7 +524,7 @@ def _evidence_guard():
         logger.warning("/evidence — storage not configured")
         return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
     try:
-        ensure_chat_v4_table()
+        ensure_chat_table()
     except Exception:
         logger.exception("/evidence — chat table bootstrap failed")
         return None, (jsonify({"status": "error", "error": "storage_unavailable"}), 500)

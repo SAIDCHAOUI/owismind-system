@@ -1098,4 +1098,28 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   par l'user après re-collage des 2 fichiers → « tout marche ».
 - **Source** : session 2026-06-11 Run 3, traces CSV réelles analysées. **Date** : 2026-06-11.
 
+## L049 — Suivi d'usage : `chat_vN` = source de vérité par échange, agrégats denormalisés reconstructibles (⏳ NON validé DSS)
+- **Contexte** : afficher + stocker tokens/coût par réponse, et préparer une limite 50 $/mois/user.
+  Tension : l'user veut « ajouter à chaque fois » sur `users` (cumul) MAIS aussi « savoir la conso par
+  période » (un simple cumul ne sait pas faire le mois courant sans snapshot).
+- **Ce qui aurait échoué** : tout dériver d'un cumul lifetime sur `users` → impossible de borner un mois ;
+  ou SUM à la volée sur `chat_v5` à chaque `/chat/start` → agrégation sur table partagée à chaque envoi.
+- **Solution qui marche** : **3 niveaux**. ① `webapp_chat_v5` (nouvelle `_vN`, schéma v4 + 4 colonnes
+  usage) = **source de vérité par échange**, écrite dans le MÊME UPDATE que la réponse. ② `users` ALTER
+  **exceptionnel** (`ADD COLUMN IF NOT EXISTS` dans le DDL **et** `_ALTERS_BY_LOGICAL`, appliqué par
+  `_ensure_table` sur l'instance existante sans perdre les rows) = cumul lifetime. ③
+  `webapp_usage_monthly_v1` PK `(user_id, date_trunc('month', now())::date)`, UPSERT qui **incrémente**
+  → quota mensuel = **1 lecture par clé**, pas de job de reset (chaque mois = sa ligne). `record_usage`
+  fait ②+③ en UNE transaction, **best-effort** : un échec n'affecte jamais la réponse, et les agrégats
+  sont **reconstructibles** en sommant `chat_v5`. Littéraux numériques serveur inlinés (`%.10f` pour le
+  coût) plutôt que `Constant(float)` (incertain, cf. `bool_literal`).
+- **Détail data** : la trace porte plusieurs `usageMetadata` (orchestrateur + sous-agent) ; les wrappers
+  *streamés* sont vides → `_sum_usage_metadata` somme sans double comptage. `usage_summary` existait
+  déjà : aucun appel LLM ajouté. **Bascule `_vN`** = changer le `*_LOGICAL` actif partout (chat ET
+  **évidence** `service.py`) + `git mv` du module ; les anciennes convs deviennent invisibles (assumé).
+- **Preuve-vérification** : 18 unittest neufs (UPSERT incrémente/scopé, cumul users, littéraux sûrs,
+  1 transaction + no-op run stoppé) ; suite 322 backend + 102 front verte ; Vite build + zip propre.
+  **NON validé DSS** (SQL réel à tester après upload + redémarrage backend).
+- **Source** : session 2026-06-11 Run 4, CSV de traces réel analysé. **Date** : 2026-06-11.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

@@ -56,6 +56,12 @@ export const extraMessages = {
     'msg.more_options': "Plus d'options",
     'msg.give_feedback': 'Donner un retour détaillé',
 
+    // Per-message token/cost usage line (shown under each agent answer).
+    'msg.usage_tokens': 'tokens',
+    'msg.usage_in': "Tokens d'entrée (question + contexte)",
+    'msg.usage_out': 'Tokens de sortie (réponse générée)',
+    'msg.usage_cost': 'Coût estimé de cet échange',
+
     // Feedback — no submit endpoint yet
     'fb.soon_note': "L'envoi de feedback sera bientôt disponible. L'équipe OWI prépare ce service.",
     'fb.empty': "Vous n'avez pas encore de demande.",
@@ -272,6 +278,12 @@ export const extraMessages = {
     'msg.feedback_suggestion_label_positive': 'Tell us what you liked',
     'msg.more_options': 'More options',
     'msg.give_feedback': 'Give detailed feedback',
+
+    // Per-message token/cost usage line (shown under each agent answer).
+    'msg.usage_tokens': 'tokens',
+    'msg.usage_in': 'Input tokens (question + context)',
+    'msg.usage_out': 'Output tokens (generated answer)',
+    'msg.usage_cost': 'Estimated cost of this exchange',
 
     // Feedback — no submit endpoint yet
     'fb.soon_note': 'Feedback submission will be available soon. The OWI team is preparing this service.',

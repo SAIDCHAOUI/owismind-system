@@ -5,6 +5,14 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**0) SUIVI TOKENS & COÛTS (Run 4 2026-06-11) — ⏳ CODÉ + TESTÉ LOCAL, NON validé DSS.** Ligne
+`↑ in · ↓ out tokens · ~$coût` sous chaque réponse (tous users) ; stockage 3 niveaux : `webapp_chat_v5`
+(source de vérité par échange, 4 colonnes usage) + `users` ALTER (cumul lifetime) + `webapp_usage_monthly_v1`
+(PK `(user_id, mois)`, UPSERT incrémental → quota mensuel = 1 lecture par clé). `storage/usage.record_usage`
+(2 incréments en 1 transaction, best-effort). **Limite 50 $/mois PAS implémentée** (juste le stockage prêt :
+hook `/chat/start` avant `start_run`). Détail → L049 + `sessions/2026-06-11.md` Run 4. Zip prêt : **75
+entrées, `index-WWBrb0uj.js`** — upload + **REDÉMARRER backend** (tables/colonnes auto au 1er usage ;
+anciennes convs v4 invisibles, assumé).
 **1) MISSION « Evidence Studio v2 TRUST LAYER » — 🟡 ÇA MARCHE (retour user) MAIS PAS ENCORE COMME
 IL VEUT : ajustements NON PRÉCISÉS, à recueillir EN PREMIER (badge ? wording ? résultat capturé ?
 drill ? layout ?) AVANT de toucher au code.**
@@ -28,20 +36,23 @@ flags `enabled`, une seule capability revenue visible à la fois).
    `result` projeté HORS de `/conversation`. Spec gelée :
    `docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md` · doc : `docs/evidence-trust-layer.md`.
 3. **Timeline** : labels humains du backend (eventData.label whitelisté) prioritaires sur le registre.
-   Zip prêt : `ready-for-dataiku/owismind-upload.zip` (**74 entrées, `index-DF9WrJFi.js`**).
+   Zip prêt : `ready-for-dataiku/owismind-upload.zip` (**75 entrées, `index-WWBrb0uj.js`** — Run 4 usage).
    ⚠️ **Backend modifié → REDÉMARRER le backend après upload.** Orchestrateur/SalesDrive modifiés →
    **recoller les 2 fichiers** dans leurs Code Agents DSS (repo = source de vérité, L047).
 **Avant (Run 4 2026-06-10)** : layout droite + best-effort + chips ⏳ jamais validés DSS — le zip 74
 entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L037) ; V1+4 lots ✅ DSS ;
-stockage = `webapp_chat_v4` (items generated_sql enrichis sql_id/step_index/agent_key/result).
+stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
+4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-11 (3 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L048**
+## 🧭 Dernière session — 2026-06-11 (4 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L049**
 - **Run 1-2** : trust layer v2 déployé (revue 26 agents, 17/17 corrigés) ; nettoyage repo + git init +
   knowledge graph 2 494 nœuds + fraîcheur auto (L044-L046).
 - **Run 3 — SalesDrive v2** : Code Agent complet + orchestrateur v2.3 (AGENT_RESULT structuré, skip
   Sources sur clarification, `pass_context`) ; incident boucle IPL diagnostiqué sur traces CSV réelles
-  → fix générique (L048) ; capture Evidence désormais déterministe via retour de tool (L047 — la
-  question « clé des ROWS » est RÉSOLUE). Preuves : 55+62 unittest · 97 node:test · validé DSS user.
+  → fix générique (L048) ; capture Evidence déterministe via retour de tool (L047). 55+62 unittest · validé DSS.
+- **Run 4 — Suivi tokens & coûts** : `chat_v4`→`chat_v5` (+4 colonnes usage), `users` ALTER cumul,
+  `webapp_usage_monthly_v1` (quota mensuel O(1)), `storage/usage.py`, ligne front `MessageAgent`. 322
+  unittest + 102 node:test + Vite OK ; **non validé DSS** (L049).
 
 ## ⚠️ Top gotchas / règles actives
 **Process :**

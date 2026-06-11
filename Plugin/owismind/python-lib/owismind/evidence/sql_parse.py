@@ -1,6 +1,6 @@
 """Pure SQL analysis for Evidence Studio (NO dataiku import — unit-testable).
 
-Turns the agent-generated SELECT stored in ``webapp_chat_v4.generated_sql`` into
+Turns the agent-generated SELECT stored in ``webapp_chat_v5.generated_sql`` into
 a structured, re-buildable description:
 
     parse_select(sql) -> {

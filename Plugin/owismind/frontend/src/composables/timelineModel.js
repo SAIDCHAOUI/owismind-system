@@ -210,6 +210,32 @@ export function applyEvent(state, evt) {
   return state
 }
 
+/**
+ * Build the `usage` object for a RELOADED exchange from its persisted /conversation
+ * row (the live path fills `usage` from the usage_summary event instead). Returns null
+ * when no usage was stored at all (an early-stopped run, or a pre-usage-feature row) so
+ * the message component shows no usage line rather than an empty/zero one. A partially
+ * stored row (some columns null) keeps the present values and nulls the rest.
+ */
+export function usageFromRow(row) {
+  if (!row) return null
+  const has = (v) => v != null
+  if (
+    !has(row.input_tokens) &&
+    !has(row.output_tokens) &&
+    !has(row.total_tokens) &&
+    !has(row.estimated_cost)
+  ) {
+    return null
+  }
+  return {
+    promptTokens: has(row.input_tokens) ? row.input_tokens : null,
+    completionTokens: has(row.output_tokens) ? row.output_tokens : null,
+    totalTokens: has(row.total_tokens) ? row.total_tokens : null,
+    estimatedCost: has(row.estimated_cost) ? row.estimated_cost : null,
+  }
+}
+
 /** The full answer text = concatenation of the timeline's text blocks (for copy). */
 export function answerText(state) {
   if (!state || !state.timeline) return ''

@@ -23,7 +23,7 @@ import { ref, reactive, computed } from 'vue'
 import { useSessionStore } from './session.js'
 import { useUiStore } from './ui.js'
 import { runChatStream } from '../composables/useChatStream.js'
-import { createAnswerState } from '../composables/timelineModel.js'
+import { createAnswerState, usageFromRow } from '../composables/timelineModel.js'
 import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
@@ -107,6 +107,9 @@ export const useChatStore = defineStore('chat', () => {
         ? [{ id: 'txt-0', seq: 0, kind: 'text', text: r.assistant_text, open: false }]
         : [],
       sql: Array.isArray(r.generated_sql) ? r.generated_sql : [],
+      // Persisted token/cost usage (null when none was stored) — so a reloaded
+      // conversation shows the same per-message usage line as the live run.
+      usage: usageFromRow(r),
       status: 'done',
       exchangeId: r.exchange_id || null,
       feedbackRating: r.feedback_rating === 0 || r.feedback_rating === 1 ? r.feedback_rating : null,
