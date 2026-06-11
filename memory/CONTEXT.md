@@ -5,6 +5,19 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**0★) ORCHESTRATEUR « EXPERT AUTHORITY » v2.4 (Run 5 2026-06-11) — ⏳ CODÉ + TESTÉ LOCAL (86 unittest),
+NON validé DSS.** Corrige le défaut CENTRAL (confirmé sur `docs/questions_asked.md`, 817 q. réelles,
+~10 engueulades même cause) : l'orchestrateur **niait/inventait au lieu de router** (« budget 2026 » →
+« I don't have budget data » sans appeler l'agent). Fix = il **n'émet jamais un fait métier** ; seul
+« non » = « pas d'agent pour ce DOMAINE » (jamais « la donnée n'existe pas ») ; dans le doute → router.
+`CAPABILITY_GAP`/`OUT_OF_SCOPE` = **templates déterministes** ; nouvel intent `CONCEPT` ; **registre =
+manifeste** (`{id,label,description,domain}` + `BUSINESS_DOMAINS`) ; **manifeste revenus pleine-vérité**
+(actuals/budget/forecast/Q3F/HLF) + **test anti-dérive** vs `salesdrive_agent.KNOWN_PHASES`. Coût LLM
+inchangé. **Réconcilié** : registre repo bascule sur le Code Agent v2 `agent:MODpGFcC` (visuel `rNTZ781a`
+désactivé) → **coller `orchestrator/orchestrator_agent.py` en DSS direct**, puis smoke-tests (budget→route,
+tickets→gap honnête jamais 0, météo→hors-sujet, ellipse→route, SS7/LTE→concept). Niveaux 2 (refus→offres)
++ 3 (exploration) + parallélisme = DIFFÉRÉS. Détail → L050 + spec
+`docs/superpowers/specs/2026-06-11-orchestrator-expert-authority-design.md`.
 **0) SUIVI TOKENS & COÛTS (Run 4 2026-06-11) — ⏳ CODÉ + TESTÉ LOCAL, NON validé DSS.** Ligne
 `↑ in · ↓ out tokens · ~$coût` sous chaque réponse (tous users) ; stockage 3 niveaux : `webapp_chat_v5`
 (source de vérité par échange, 4 colonnes usage) + `users` ALTER (cumul lifetime) + `webapp_usage_monthly_v1`
@@ -44,7 +57,7 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-11 (4 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L049**
+## 🧭 Dernière session — 2026-06-11 (5 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L050**
 - **Run 1-2** : trust layer v2 déployé (revue 26 agents, 17/17 corrigés) ; nettoyage repo + git init +
   knowledge graph 2 494 nœuds + fraîcheur auto (L044-L046).
 - **Run 3 — SalesDrive v2** : Code Agent complet + orchestrateur v2.3 (AGENT_RESULT structuré, skip
@@ -53,6 +66,11 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 - **Run 4 — Suivi tokens & coûts** : `chat_v4`→`chat_v5` (+4 colonnes usage), `users` ALTER cumul,
   `webapp_usage_monthly_v1` (quota mensuel O(1)), `storage/usage.py`, ligne front `MessageAgent`. 322
   unittest + 102 node:test + Vite OK ; **non validé DSS** (L049).
+- **Run 5 — Orchestrateur « Expert Authority » v2.4** : pare-feu d'honnêteté (jamais de fait métier ;
+  router pas nier ; `CAPABILITY_GAP`/`OUT_OF_SCOPE` déterministes ; intent `CONCEPT`), registre=manifeste
+  + `BUSINESS_DOMAINS`, manifeste revenus pleine-vérité + test anti-dérive, bascule registre sur v2
+  `agent:MODpGFcC`. 86 unittest verts ; **non validé DSS** (routing LLM) (L050). Feedback : **plans
+  verbeux interdits** (exécuter direct).
 
 ## ⚠️ Top gotchas / règles actives
 **Process :**
@@ -104,7 +122,12 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
 
 ## 🔜 Prochaines étapes
-1. **RECUEILLIR LES AJUSTEMENTS du user sur le trust layer (priorité 1)** : « marche bien mais pas
+0. **ORCHESTRATEUR v2.4 — VALIDER EN DSS (priorité)** : coller `orchestrator/orchestrator_agent.py`
+   (registre déjà basculé sur v2 `agent:MODpGFcC`) → smoke-tests corpus : `budget 2026 Roaming Hub`→
+   route (plus de refus), `tickets 1&1 2025`→gap honnête (jamais 0), `météo`→hors-sujet, `et Virtual
+   Network ?`→route avec contexte, `SS7 vs LTE`→concept. Toute divergence → leçon, et corriger via le
+   PROMPT planner uniquement (jamais de valeur métier en dur, P3). Si OK → **Niveau 2 (refus→offres)**.
+1. **RECUEILLIR LES AJUSTEMENTS du user sur le trust layer** : « marche bien mais pas
    encore comme je veux » — faire préciser AVANT toute modification.
 2. **SalesDrive v2 — consolidation** : tester un cas de vraie ambiguïté de valeur (ex. « IPL + ») et
    un plan multi-étapes (agent+tool) ; quand confiance OK → retirer l'entrée visual `salesdrive` du

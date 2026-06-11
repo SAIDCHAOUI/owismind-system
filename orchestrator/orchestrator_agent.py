@@ -202,7 +202,7 @@ CAPABILITIES = {
             "revenue_semantic_query":              {"fr": "génération et exécution de la requête SQL",
                                                     "en": "generating and running the SQL query"},
         },
-        "enabled": True,
+        "enabled": False,    # v2.4: superseded by the code agent (salesdrive_v2) below
     },
     # v2.3 — Code Agent port of SalesDrive (repo: salesdrive/salesdrive_agent.py).
     # To switch: create the DSS Code Agent, paste the file, put its agent id
@@ -210,7 +210,7 @@ CAPABILITIES = {
     # (one revenue capability at a time — the planner must see a single one).
     "salesdrive_v2": {
         "kind": "agent",
-        "agent_id": "agent:FILL_ME_SALESDRIVE_V2",
+        "agent_id": "agent:MODpGFcC",
         "domain": "revenue",
         "label_fr": "SalesDrive (revenus)",
         "label_en": "SalesDrive (revenue)",
@@ -254,7 +254,7 @@ CAPABILITIES = {
         # v2.3: receive the previous assistant message + raw user answer as a
         # system message (conversation continuity for disambiguation answers).
         "pass_context": True,
-        "enabled": False,
+        "enabled": True,     # v2.4: live revenue expert (agent:MODpGFcC)
     },
     "current_date": {
         "kind": "tool",

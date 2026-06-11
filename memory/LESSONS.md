@@ -1122,4 +1122,32 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   **NON validé DSS** (SQL réel à tester après upload + redémarrage backend).
 - **Source** : session 2026-06-11 Run 4, CSV de traces réel analysé. **Date** : 2026-06-11.
 
+## L050 — L'orchestrateur ne doit JAMAIS affirmer un fait métier : router, pas nier (⏳ codé+testé local, NON validé DSS)
+- **Contexte** : sur « budget 2026 pour Roaming Hub… » l'orchestrateur répond « I don't have budget
+  data » **sans appeler l'agent revenus** — alors que le sous-agent lit la colonne `Phase`
+  (`KNOWN_PHASES = ACTUALS/BUDGET/FORECAST/Q3F/HLF`). `docs/questions_asked.md` (817 lignes réelles)
+  montre ~10 occurrences de la **même cause** (« t'as répondu sans interroger l'agent / t'as inventé /
+  t'as dit 0 »). Cause racine : le planner ne connaît le sous-agent que par sa `planner_description`
+  (« Data source: DRIVE_Revenues », sous-périmétrée) ; les règles d'honnêteté interdisaient de
+  **sur-promettre** mais rien n'empêchait de **sous-promettre** (inventer une limite inexistante).
+- **Ce qui a échoué** : laisser l'orchestrateur classer une question métier en CLARIFY/OUT_OF_SCOPE
+  puis écrire un `direct_answer` libre → il hallucine une frontière (« pas de budget », « 0 tickets »).
+- **Solution qui marche** : (1) **garantie d'honnêteté** — l'orchestrateur n'émet jamais un fait
+  métier ; seul « non » autorisé = « je n'ai pas d'agent pour CE DOMAINE » (auto-connaissance du
+  roster), jamais « la donnée n'existe pas » (ça, c'est l'expert via `out_of_scope`/`no_data`) ; dans
+  le doute, **router**. (2) **Pare-feu structurel** : `CAPABILITY_GAP` + `OUT_OF_SCOPE` = **templates
+  déterministes** (plus de prose libre = plus d'hallucination) ; `render_non_business_text` pur ;
+  `CLARIFY` borné « demande seulement » ; nouvel intent `CONCEPT` (notions générales, étiquetées, zéro
+  chiffre OWI). (3) **Registre = manifeste** : ajout d'un agent = 1 entrée `{id,label,description,
+  domain}` ; `BUSINESS_DOMAINS` distingue domaine-réel-sans-agent (gap honnête) de hors-OWI ;
+  **manifeste revenus réécrit pleine-vérité** + **test anti-dérive** qui importe `salesdrive_agent.
+  KNOWN_PHASES` et casse si la description re-rétrécit (respecte P3 : aucune valeur métier en dur dans
+  la logique, juste un test). Coût LLM inchangé (`1 plan + 0|1 synthèse`). Séquentiel gardé ;
+  parallélisme + offres + exploration = Niveaux 2/3 différés.
+- **Preuve-vérification** : 86 unittest orchestrateur verts (64 + 22 neufs : domaines, templates,
+  pare-feu, intents, anti-dérive, présence des règles d'humilité dans le prompt) ; `py_compile` OK.
+  ⏳ **NON validé DSS** — le routing est une décision LLM, à smoke-tester en réel (budget→route,
+  tickets→gap, météo→hors-sujet, ellipse→route, concept). Réconciliation : besoin du vrai `agent_id` v2.
+- **Source** : session 2026-06-11 Run 5 ; spec `docs/superpowers/specs/2026-06-11-orchestrator-expert-authority-design.md`. **Date** : 2026-06-11.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
