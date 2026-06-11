@@ -1150,4 +1150,45 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   tickets→gap, météo→hors-sujet, ellipse→route, concept). Réconciliation : besoin du vrai `agent_id` v2.
 - **Source** : session 2026-06-11 Run 5 ; spec `docs/superpowers/specs/2026-06-11-orchestrator-expert-authority-design.md`. **Date** : 2026-06-11.
 
+## L051 — Expertise dataset = artefacts du Flow + SQL code-owned, pas un semantic model boîte noire (⏳ codé+110 tests, NON validé DSS)
+- **Contexte** : refonte « système v3 » (`dataiku-agents/`, session déléguée 2026-06-12). Besoin : un
+  sous-agent **expert de n'importe quel dataset** (revenus aujourd'hui, tickets/CSAT demain), qui
+  comprend les données en profondeur et génère le bon SQL — sans configuration à la main par dataset.
+- **Ce qui a échoué / écarté** : (1) le semantic model visuel (tool `v4oqA6R`) est une boîte noire :
+  prompts internes non contrôlables, `success` non observé (hardcodé True côté salesdrive v2), pas de
+  boucle de réparation possible, capture best-effort. (2) Recherche faite : Dataiku 14.4 expose une
+  **API Python du semantic model** (`project.create_semantic_model`, spec JSON entities/metrics/
+  glossary/goldenQueries — developer.dataiku.com/latest/api-reference/python/semantic-models.html) —
+  pilotable par code mais le MOTEUR reste opaque ; écarté au profit du SQL possédé. (3) La SOTA
+  production (dbt 2026, Snowflake Cortex, Uber/Pinterest/LinkedIn) mesure : couche sémantique +
+  **templates déterministes ≫ SQL libre LLM** (98-100 % vs 84-90 %) — l'approche salesdrive v2 était
+  déjà la bonne, il fallait l'étendre, pas la remplacer par du SQL libre.
+- **Solution qui marche (architecture v3)** : l'expertise est FABRIQUÉE dans le Flow et consommée au
+  runtime : **recette profiler** (passe déterministe : schéma/stats/enums verbatim ≤50/formats
+  temporels date|yyyy_mm_dd_str|yyyy_mm_str|yyyymm_int|year_int ; passe LLM Mesh : descriptions/
+  rôles/synonymes/métriques{agg,column,format,unit}/colonne scénario+défauts/display pairs ;
+  **overrides humains** = dataset éditable `{key,field,value}` en 2ᵉ input, appliqués en dernier,
+  jamais écrasés) + **recette value index** (`{column_name,value,value_norm,occurrences}`, norm
+  accents/casse FROZEN partagée avec l'agent). L'agent générique lit le profil (cache TTL) et : prompt
+  UNDERSTAND **généré du profil** (stopwords du resolver DÉRIVÉS du profil → P3 tenu sans dur-codage),
+  grounding par SQL sur l'index (exact IN groupé → LIKE fuzzy+difflib → slice 5000), **9 intents →
+  templates SQL déterministes** (pivots scénarios/périodes par `SUM(CASE WHEN…)`, share_of_total
+  fenêtré, prédicats par format temporel), `custom` → LLM-SQL sous GARDE-FOU (1 SELECT, table
+  whitelistée+CTE, mots-clés interdits, LIMIT forcé) + EXPLAIN + ≤2 réparations avec l'erreur DB,
+  exécution `SQLExecutor2(dataset=…)` + `SET LOCAL statement_timeout/transaction_read_only` (L045)
+  via `query_to_iter` (pas de dépendance pandas dans l'agent). Spans `semantic-model-query` au contrat
+  gelé avec **success VÉRIDIQUE**. Orchestrateur v3 = v2.4 + fan-out parallèle (workers → queue →
+  re-yield live ; spans/usage/tagging post-hoc THREAD PRINCIPAL — SpanBuilder non supposé thread-safe).
+- **Pièges attrapés en route** : `_run_sql` partagé plafonnait le fetch à 51 lignes → le resolver
+  perdait des candidats (param `max_rows`, 5000 pour l'index) ; `from dataiku import recipe` +
+  `get_inputs_as_datasets()` = la bonne API générique des recettes (doc Flow) ; tests pandas
+  conditionnels (`skipUnless`) car pandas absent en local — NO INSTALL.
+- **Preuve-vérification** : 110 unittest verts (golden SQL des 9 intents, garde-fou, grounding,
+  anti-dérive `KNOWN_BLOCK_IDS`↔registre + scan du source, **fan-out parallèle exercé avec de vrais
+  threads et un LLM streamé fake** : ordre résultats = ordre plan, usage accumulé, échec→error sans
+  crash) ; non-régression 86+55. ⏳ **NON validé DSS** : recettes jamais lancées, SQLExecutor2 depuis
+  un Code Agent jamais observé, parallélisme réel à confirmer. Guide : `dataiku-agents/README.md`.
+- **Source** : session 2026-06-12 (workflow de recherche 6 agents : doc Dataiku, SOTA NL2SQL,
+  taxonomie 817 questions, critique repo). **Date** : 2026-06-12.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

@@ -1,0 +1,725 @@
+"""DSS-free unit tests for dataiku-agents/agents/dataset_expert_agent.py.
+
+``dataiku`` is stubbed BEFORE the agent file is loaded via importlib. Only
+PURE functions are tested (profile parsing, understanding validation, SQL
+builders, SQL guard, grounding policy, shaping, formatting, verified
+headline, about-data card). Anything touching LLM Mesh / SQLExecutor2 must
+be validated on the DSS instance.
+
+Run from the repo root:
+    python3 -m unittest discover -s dataiku-agents/tests -v
+"""
+
+import importlib.util
+import os
+import sys
+import types
+import unittest
+
+
+def _install_dataiku_stub():
+    dataiku_mod = types.ModuleType("dataiku")
+    dataiku_mod.api_client = lambda: None
+    dataiku_mod.Dataset = lambda *a, **k: None
+    dataiku_mod.SQLExecutor2 = lambda *a, **k: None
+
+    llm_pkg = types.ModuleType("dataiku.llm")
+    llm_python = types.ModuleType("dataiku.llm.python")
+
+    class BaseLLM(object):
+        pass
+
+    llm_python.BaseLLM = BaseLLM
+    llm_pkg.python = llm_python
+    dataiku_mod.llm = llm_pkg
+
+    sys.modules.setdefault("dataiku", dataiku_mod)
+    sys.modules.setdefault("dataiku.llm", llm_pkg)
+    sys.modules.setdefault("dataiku.llm.python", llm_python)
+
+
+_install_dataiku_stub()
+
+_AGENT_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "agents", "dataset_expert_agent.py"))
+_SPEC = importlib.util.spec_from_file_location("dataset_expert_under_test",
+                                               _AGENT_PATH)
+dx = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(dx)
+
+TABLE = '"public"."SALES_DEMO"'
+NBSP = " "
+
+
+def make_profile():
+    """Synthetic profile fixture (structure identical to the real contract,
+    values invented — no business data in the repo)."""
+    dataset_payload = {
+        "profile_version": 1, "dataset_name": "SALES_DEMO",
+        "row_count": 170000,
+        "description_en": "Demo revenue lines by month, customer and product",
+        "description_fr": "Lignes de revenus démo par mois, client et produit",
+        "grain": "one row = revenue per month/customer/product/phase",
+        "default_metric": "revenue",
+        "metrics": [{"name": "revenue", "agg": "SUM", "column": "amount_eur",
+                     "format": "amount", "unit": "EUR",
+                     "label_fr": "Revenu total", "label_en": "Total revenue",
+                     "description": "Sum of amount_eur"}],
+        "scenario": {"column": "Phase",
+                     "values": ["ACTUALS", "BUDGET", "FORECAST"],
+                     "default_values": ["ACTUALS"]},
+        "time": {"column": "year_month", "format": "yyyy_mm_dd_str",
+                 "min": "2024-01-01", "max": "2026-06-01"},
+        "notes": [],
+    }
+    columns = {
+        "Phase": {"name": "Phase", "dss_type": "string", "role": "scenario",
+                  "groupable": True, "is_enum": True, "distinct_count": 3,
+                  "values": [{"v": "ACTUALS", "n": 100}, {"v": "BUDGET", "n": 50},
+                             {"v": "FORECAST", "n": 20}],
+                  "indexed": False, "synonyms": ["scenario"], "samples": []},
+        "year_month": {"name": "year_month", "dss_type": "string",
+                       "role": "time", "groupable": True, "is_enum": False,
+                       "distinct_count": 30, "indexed": False,
+                       "synonyms": ["mois", "month"], "samples": ["2026-01-01"]},
+        "customer_id": {"name": "customer_id", "dss_type": "string",
+                        "role": "identifier", "groupable": True,
+                        "is_enum": False, "distinct_count": 1200,
+                        "display_column": "customer_name", "indexed": True,
+                        "synonyms": ["client", "customer"], "samples": []},
+        "customer_name": {"name": "customer_name", "dss_type": "string",
+                          "role": "dimension", "groupable": True,
+                          "is_enum": False, "distinct_count": 1190,
+                          "indexed": True, "synonyms": [], "samples": []},
+        "Product": {"name": "Product", "dss_type": "string",
+                    "role": "dimension", "groupable": True, "is_enum": False,
+                    "distinct_count": 80, "indexed": True,
+                    "ambiguity_priority": 1, "synonyms": ["produit"],
+                    "samples": []},
+        "Solution": {"name": "Solution", "dss_type": "string",
+                     "role": "dimension", "groupable": True, "is_enum": False,
+                     "distinct_count": 40, "indexed": True, "synonyms": [],
+                     "samples": []},
+        "amount_eur": {"name": "amount_eur", "dss_type": "double",
+                       "role": "measure", "groupable": False,
+                       "is_enum": False, "distinct_count": 9999,
+                       "indexed": False, "synonyms": ["montant"], "samples": []},
+        "comment": {"name": "comment", "dss_type": "string",
+                    "role": "free_text", "groupable": False, "is_enum": False,
+                    "distinct_count": 5000, "indexed": False, "synonyms": [],
+                    "samples": []},
+    }
+    return dx.Profile(dataset_payload, columns)
+
+
+def make_u(**kw):
+    u = {"scope": "data", "language": "fr", "instruction": "q",
+         "intent": "total", "metric": "revenue", "scenarios": [],
+         "period": {"mode": "all_available"}, "periods": [],
+         "group_by": None, "list_column": None, "top_n": None,
+         "order": "desc", "terms": [], "clarification": ""}
+    u.update(kw)
+    return u
+
+
+P = make_profile()
+
+
+# ==========================================================================
+# Profile parsing + accessors
+# ==========================================================================
+class TestProfile(unittest.TestCase):
+
+    def test_parse_profile_rows(self):
+        import json
+        rows = [{"key": "__dataset__", "payload": json.dumps(P.raw)},
+                {"key": "Phase", "payload": json.dumps(P.columns["Phase"])},
+                {"key": "bad", "payload": "{not json"}]
+        prof = dx.parse_profile_rows(rows)
+        self.assertIsNotNone(prof)
+        self.assertEqual(prof.dataset_name, "SALES_DEMO")
+        self.assertIn("Phase", prof.columns)
+        self.assertNotIn("bad", prof.columns)
+
+    def test_parse_profile_rows_missing_dataset_row(self):
+        self.assertIsNone(dx.parse_profile_rows(
+            [{"key": "Phase", "payload": "{}"}]))
+        self.assertIsNone(dx.parse_profile_rows([]))
+
+    def test_accessors(self):
+        self.assertEqual(P.default_metric["name"], "revenue")
+        self.assertEqual(P.scenario["column"], "Phase")
+        self.assertEqual(P.time["format"], "yyyy_mm_dd_str")
+        self.assertIn("customer_id", P.groupable_columns())
+        self.assertNotIn("amount_eur", P.groupable_columns())
+        self.assertNotIn("comment", P.groupable_columns())
+        self.assertEqual(sorted(P.indexed_columns()),
+                         ["Product", "Solution", "customer_id", "customer_name"])
+
+    def test_match_column(self):
+        self.assertEqual(P.match_column("Product"), "Product")
+        self.assertEqual(P.match_column("produit"), "Product")
+        self.assertEqual(P.match_column("client"), "customer_id")
+        self.assertEqual(P.match_column("CUSTOMER_NAME"), "customer_name")
+        self.assertEqual(P.match_column("customer name"), "customer_name")
+        self.assertIsNone(P.match_column("ghost"))
+        self.assertIsNone(P.match_column(""))
+
+    def test_column_priority_explicit_beats_distinct(self):
+        # Product has ambiguity_priority=1 -> (0, 1) < any (1, -n)
+        self.assertLess(P.column_priority("Product"),
+                        P.column_priority("customer_name"))
+        # Without explicit priority, larger distinct_count (more specific) wins.
+        self.assertLess(P.column_priority("customer_name"),
+                        P.column_priority("Solution"))
+
+
+# ==========================================================================
+# validate_understanding
+# ==========================================================================
+class TestValidateUnderstanding(unittest.TestCase):
+
+    def test_rejects_unusable(self):
+        self.assertIsNone(dx.validate_understanding(None, P, "q"))
+        self.assertIsNone(dx.validate_understanding({"scope": "??"}, P, "q"))
+        self.assertIsNone(dx.validate_understanding({}, P, "q"))
+
+    def test_out_of_scope_short_circuit(self):
+        u = dx.validate_understanding({"scope": "out_of_scope",
+                                       "language": "en"}, P, "q")
+        self.assertEqual(u["scope"], "out_of_scope")
+        self.assertEqual(u["language"], "en")
+
+    def test_defaults_and_degradations(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "alien",
+                                       "metric": "ghost_metric",
+                                       "scenarios": ["GHOST", "BUDGET"],
+                                       "top_n": 999}, P, "q")
+        self.assertEqual(u["intent"], "custom")
+        self.assertEqual(u["metric"], "revenue")        # default metric
+        self.assertEqual(u["scenarios"], ["BUDGET"])    # unknown dropped
+        self.assertIsNone(u["top_n"])                   # out of range
+
+    def test_top_n_defaults_to_10(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "top_n",
+                                       "group_by": "customer_id"}, P, "q")
+        self.assertEqual(u["top_n"], 10)
+        self.assertEqual(u["group_by"], "customer_id")
+
+    def test_group_by_synonym_mapping(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "breakdown",
+                                       "group_by": "produit"}, P, "q")
+        self.assertEqual(u["group_by"], "Product")
+
+    def test_breakdown_without_axis_degrades_to_custom(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "breakdown"}, P, "q")
+        self.assertEqual(u["intent"], "custom")
+
+    def test_compare_scenarios_prepends_default(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "compare_scenarios",
+                                       "scenarios": ["BUDGET"]}, P, "q")
+        self.assertEqual(u["scenarios"], ["ACTUALS", "BUDGET"])
+        self.assertEqual(u["intent"], "compare_scenarios")
+
+    def test_compare_periods_needs_two(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "compare_periods",
+                                       "periods": [{"start": "2025-01-01",
+                                                    "end": "2025-12-31"}]},
+                                      P, "q")
+        self.assertEqual(u["intent"], "custom")
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "compare_periods",
+                                       "periods": [
+                                           {"start": "2025-01-01", "end": "2025-12-31",
+                                            "label": "2025"},
+                                           {"start": "2026-01-01", "end": "2026-12-31",
+                                            "label": "2026"}]}, P, "q")
+        self.assertEqual(len(u["periods"]), 2)
+
+    def test_list_values_falls_back_to_group_by(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "list_values",
+                                       "group_by": "Product"}, P, "q")
+        self.assertEqual(u["list_column"], "Product")
+
+    def test_terms_stopwords_are_profile_driven(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "total",
+                                       "terms": ["ACTUALS", "revenu total",
+                                                 "produit", "HALYS",
+                                                 "montant", "halys"]}, P, "q")
+        # scenario value, metric label, column synonym -> dropped; dedupe norm
+        self.assertEqual(u["terms"], ["HALYS"])
+
+    def test_qualified_term_survives(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "total",
+                                       "terms": ["IPL (Product)"]}, P, "q")
+        self.assertEqual(u["terms"], ["IPL (Product)"])
+
+    def test_invalid_period_degrades(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "period": {"mode": "explicit",
+                                                  "start": "garbage",
+                                                  "end": "2026-12-31"}}, P, "q")
+        self.assertEqual(u["period"], {"mode": "all_available"})
+
+
+# ==========================================================================
+# Grounding: qualified terms, ranking, ambiguity policy, clarifications
+# ==========================================================================
+class TestGrounding(unittest.TestCase):
+
+    def test_parse_qualified_term(self):
+        self.assertEqual(dx.parse_qualified_term("IPL (Product)", P),
+                         ("Product", "IPL"))
+        self.assertEqual(dx.parse_qualified_term("IPL [produit]", P),
+                         ("Product", "IPL"))
+        self.assertIsNone(dx.parse_qualified_term("IPL (Ghost)", P))
+        self.assertIsNone(dx.parse_qualified_term("just a value", P))
+
+    def test_rank_candidates(self):
+        rows = [{"column_name": "customer_name", "value": "HALYS",
+                 "value_norm": "halys", "occurrences": 50},
+                {"column_name": "Product", "value": "Halys Premium",
+                 "value_norm": "halys premium", "occurrences": 10}]
+        cands = dx.rank_candidates("halys", rows)
+        self.assertEqual(cands[0]["target_value"], "HALYS")
+        self.assertGreaterEqual(cands[0]["score"], cands[1]["score"])
+
+    def test_refine_ambiguous_exact_eviction(self):
+        cands = [{"target_column": "Product", "target_value": "IPL",
+                  "display_value": "IPL"},
+                 {"target_column": "Product", "target_value": "IPL +",
+                  "display_value": "IPL +"}]
+        verdict, data = dx.refine_ambiguous(P, "IPL", cands)
+        self.assertEqual(verdict, "resolved")
+        self.assertEqual(data["target_value"], "IPL")
+
+    def test_refine_ambiguous_preferred_column(self):
+        cands = [{"target_column": "Product", "target_value": "IPL",
+                  "display_value": "IPL"},
+                 {"target_column": "Solution", "target_value": "IPL",
+                  "display_value": "IPL"}]
+        verdict, data = dx.refine_ambiguous(P, "ipl", cands,
+                                            preferred_column="Solution")
+        self.assertEqual(verdict, "resolved")
+        self.assertEqual(data["target_column"], "Solution")
+
+    def test_refine_ambiguous_priority_pick_same_value(self):
+        cands = [{"target_column": "Solution", "target_value": "IPL",
+                  "display_value": "IPL"},
+                 {"target_column": "Product", "target_value": "IPL",
+                  "display_value": "IPL"}]
+        verdict, data = dx.refine_ambiguous(P, "ipl", cands)
+        self.assertEqual(verdict, "resolved")
+        self.assertEqual(data["target_column"], "Product")   # explicit priority
+
+    def test_refine_ambiguous_real_business_choice_stays(self):
+        cands = [{"target_column": "Product", "target_value": "IPL",
+                  "display_value": "IPL"},
+                 {"target_column": "Product", "target_value": "IPL +",
+                  "display_value": "IPL +"}]
+        verdict, data = dx.refine_ambiguous(P, "ipl machin", cands)
+        self.assertEqual(verdict, "ambiguous")
+        self.assertEqual(len(data), 2)
+
+    def test_build_filter_clauses_dedup(self):
+        res = [{"status": "resolved", "target_column": "Product",
+                "target_value": "IPL"},
+               {"status": "resolved", "target_column": "Product",
+                "target_value": "IPL"},
+               {"status": "unresolved"}]
+        self.assertEqual(dx.build_filter_clauses(res),
+                         [{"column": "Product", "value": "IPL"}])
+
+    def test_build_clarification_teaches_echo_format(self):
+        res = [{"raw_value": "ipl", "status": "ambiguous", "candidates": [
+            {"target_column": "Product", "target_value": "IPL",
+             "display_value": "IPL"},
+            {"target_column": "Product", "target_value": "IPL +",
+             "display_value": "IPL +"}]}]
+        text = dx.build_clarification(res, "fr")
+        self.assertIn("IPL (Product)", text)
+        self.assertIn("IPL +", text)
+        self.assertIn("Répondez par exemple", text)
+
+    def test_build_clarification_unresolved_hint(self):
+        res = [{"raw_value": "halis", "status": "unresolved",
+                "best_candidate": {"display_value": "HALYS"}}]
+        text = dx.build_clarification(res, "en")
+        self.assertIn("halis", text)
+        self.assertIn("HALYS", text)
+
+
+# ==========================================================================
+# SQL building blocks
+# ==========================================================================
+class TestSqlPrimitives(unittest.TestCase):
+
+    def test_qident(self):
+        self.assertEqual(dx.qident("Product"), '"Product"')
+        self.assertEqual(dx.qident("year_month"), '"year_month"')
+        with self.assertRaises(ValueError):
+            dx.qident('x"; DROP TABLE t; --')
+        with self.assertRaises(ValueError):
+            dx.qident("1starts_with_digit")
+
+    def test_metric_expr(self):
+        self.assertEqual(dx.metric_expr({"agg": "SUM", "column": "amount_eur"}),
+                         'SUM("amount_eur")')
+        self.assertEqual(dx.metric_expr({"agg": "COUNT", "column": None}),
+                         "COUNT(*)")
+        self.assertEqual(dx.metric_expr({"agg": "COUNT_DISTINCT",
+                                         "column": "customer_id"}),
+                         'COUNT(DISTINCT "customer_id")')
+
+    def test_period_predicate_per_format(self):
+        f = dx.period_predicate
+        self.assertEqual(
+            f({"column": "d", "format": "date"}, "2025-01-01", "2025-12-31"),
+            "(\"d\" >= DATE '2025-01-01' AND \"d\" < (DATE '2025-12-31' + INTERVAL '1 day'))")
+        self.assertEqual(
+            f({"column": "ym", "format": "yyyy_mm_dd_str"}, "2025-01-01", "2025-12-31"),
+            "(LEFT(\"ym\", 10) >= '2025-01-01' AND LEFT(\"ym\", 10) <= '2025-12-31')")
+        self.assertEqual(
+            f({"column": "ym", "format": "yyyy_mm_str"}, "2025-01-01", "2025-12-31"),
+            "(\"ym\" >= '2025-01' AND \"ym\" <= '2025-12')")
+        self.assertEqual(
+            f({"column": "ym", "format": "yyyymm_int"}, "2025-01-01", "2025-12-31"),
+            '("ym" >= 202501 AND "ym" <= 202512)')
+        self.assertEqual(
+            f({"column": "y", "format": "year_int"}, "2025-01-01", "2026-12-31"),
+            '("y" >= 2025 AND "y" <= 2026)')
+        with self.assertRaises(ValueError):
+            f({"column": "x", "format": "alien"}, "2025-01-01", "2025-12-31")
+
+    def test_month_bucket_expr(self):
+        self.assertEqual(dx.month_bucket_expr({"column": "d", "format": "date"}),
+                         "TO_CHAR(\"d\", 'YYYY-MM')")
+        self.assertEqual(dx.month_bucket_expr({"column": "ym",
+                                               "format": "yyyy_mm_dd_str"}),
+                         'LEFT("ym", 7)')
+        self.assertEqual(dx.month_bucket_expr({"column": "ym",
+                                               "format": "yyyymm_int"}), '"ym"')
+
+
+class TestBuildSql(unittest.TestCase):
+
+    def test_total_applies_default_scenario(self):
+        sql, meta = dx.build_sql(make_u(), P, [], TABLE)
+        self.assertEqual(sql,
+                         'SELECT SUM("amount_eur") AS "revenue" FROM %s'
+                         ' WHERE "Phase" IN (\'ACTUALS\') LIMIT 500' % TABLE)
+        self.assertEqual(meta["format_map"]["revenue"], "amount")
+        self.assertEqual(meta["unit"], "EUR")
+
+    def test_total_with_period_and_filters(self):
+        u = make_u(period={"mode": "explicit", "start": "2025-01-01",
+                           "end": "2025-12-31", "label": "2025"})
+        sql, _ = dx.build_sql(u, P, [{"column": "customer_name",
+                                      "value": "HALYS"}], TABLE)
+        self.assertIn('"Phase" IN (\'ACTUALS\')', sql)
+        self.assertIn("LEFT(\"year_month\", 10) >= '2025-01-01'", sql)
+        self.assertIn('"customer_name" = \'HALYS\'', sql)
+
+    def test_literal_escaping(self):
+        u = make_u()
+        sql, _ = dx.build_sql(u, P, [{"column": "customer_name",
+                                      "value": "L'Operateur"}], TABLE)
+        self.assertIn("'L''Operateur'", sql)
+
+    def test_top_n_with_display_pair(self):
+        u = make_u(intent="top_n", group_by="customer_id", top_n=5)
+        sql, _ = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('SELECT "customer_id", MAX("customer_name") AS "customer_name"', sql)
+        self.assertIn('GROUP BY "customer_id"', sql)
+        self.assertIn('ORDER BY "revenue" DESC LIMIT 5', sql)
+
+    def test_bottom_ranking_asc(self):
+        u = make_u(intent="top_n", group_by="Product", top_n=3, order="asc")
+        sql, _ = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('ORDER BY "revenue" ASC LIMIT 3', sql)
+
+    def test_share_of_total(self):
+        u = make_u(intent="share_of_total", group_by="Product", top_n=20)
+        sql, meta = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('SUM(SUM("amount_eur")) OVER ()', sql)
+        self.assertIn('AS "share_pct"', sql)
+        self.assertEqual(meta["format_map"]["share_pct"], "percent")
+
+    def test_compare_scenarios_pivot_with_delta(self):
+        u = make_u(intent="compare_scenarios", scenarios=["ACTUALS", "BUDGET"])
+        sql, meta = dx.build_sql(u, P, [], TABLE)
+        self.assertIn("SUM(CASE WHEN \"Phase\" = 'ACTUALS' THEN \"amount_eur\" ELSE 0 END) AS \"ACTUALS\"", sql)
+        self.assertIn('AS "delta"', sql)
+        self.assertIn('AS "delta_pct"', sql)
+        self.assertIn("\"Phase\" IN ('ACTUALS', 'BUDGET')", sql)
+        self.assertEqual(meta["format_map"]["delta_pct"], "percent")
+        self.assertEqual(meta["format_map"]["ACTUALS"], "amount")
+
+    def test_compare_scenarios_grouped(self):
+        u = make_u(intent="compare_scenarios", scenarios=["ACTUALS", "BUDGET"],
+                   group_by="customer_id", top_n=10)
+        sql, _ = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('GROUP BY "customer_id"', sql)
+        self.assertIn('ORDER BY "ACTUALS" DESC LIMIT 10', sql)
+
+    def test_compare_periods_pivot(self):
+        u = make_u(intent="compare_periods",
+                   periods=[{"start": "2025-01-01", "end": "2025-12-31",
+                             "label": "2025"},
+                            {"start": "2026-01-01", "end": "2026-12-31",
+                             "label": "2026"}])
+        sql, meta = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('AS "2025"', sql)
+        self.assertIn('AS "2026"', sql)
+        self.assertIn('AS "delta"', sql)
+        self.assertIn(" OR ", sql)
+        self.assertIn("\"Phase\" IN ('ACTUALS')", sql)
+
+    def test_trend_monthly(self):
+        u = make_u(intent="trend")
+        sql, _ = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('SELECT LEFT("year_month", 7) AS "month"', sql)
+        self.assertIn("GROUP BY 1 ORDER BY 1", sql)
+
+    def test_list_values_ignores_scenario(self):
+        u = make_u(intent="list_values", list_column="Product")
+        sql, _ = dx.build_sql(u, P, [], TABLE)
+        self.assertEqual(sql, 'SELECT DISTINCT "Product" FROM %s'
+                              ' ORDER BY 1 LIMIT 200' % TABLE)
+
+    def test_count_distinct(self):
+        u = make_u(intent="count_distinct", list_column="customer_id")
+        sql, meta = dx.build_sql(u, P, [], TABLE)
+        self.assertIn('COUNT(DISTINCT "customer_id") AS "count"', sql)
+        self.assertEqual(meta["format_map"]["count"], "count")
+
+    def test_compare_scenarios_without_scenario_column_raises(self):
+        no_scen = dx.Profile(dict(P.raw, scenario=None), P.columns)
+        u = make_u(intent="compare_scenarios", scenarios=["A", "B"])
+        with self.assertRaises(ValueError):
+            dx.build_sql(u, no_scen, [], TABLE)
+
+    def test_custom_intent_has_no_builder(self):
+        with self.assertRaises(ValueError):
+            dx.build_sql(make_u(intent="custom"), P, [], TABLE)
+
+
+# ==========================================================================
+# Custom SQL guard
+# ==========================================================================
+class TestGuardCustomSql(unittest.TestCase):
+
+    def test_valid_select_gets_limit(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT "Product", SUM("amount_eur") FROM %s GROUP BY 1' % TABLE,
+            TABLE)
+        self.assertIsNone(reason)
+        self.assertTrue(sql.endswith("LIMIT 500"))
+
+    def test_fences_and_comments_stripped(self):
+        sql, reason = dx.guard_custom_sql(
+            "```sql\nSELECT 1 FROM %s -- comment\n```" % TABLE, TABLE)
+        self.assertIsNone(reason)
+        self.assertNotIn("```", sql)
+        self.assertNotIn("--", sql)
+
+    def test_limit_capped(self):
+        sql, reason = dx.guard_custom_sql(
+            "SELECT 1 FROM %s LIMIT 99999" % TABLE, TABLE)
+        self.assertIsNone(reason)
+        self.assertTrue(sql.endswith("LIMIT 500"))
+
+    def test_existing_small_limit_kept(self):
+        sql, reason = dx.guard_custom_sql(
+            "SELECT 1 FROM %s LIMIT 7" % TABLE, TABLE)
+        self.assertIsNone(reason)
+        self.assertTrue(sql.endswith("LIMIT 7"))
+
+    def test_rejects_dml_and_ddl(self):
+        for bad in ("DELETE FROM %s" % TABLE,
+                    "DROP TABLE %s" % TABLE,
+                    "SELECT 1 FROM %s; DELETE FROM x" % TABLE,
+                    "UPDATE %s SET a=1" % TABLE,
+                    "SELECT * INTO copy FROM %s" % TABLE,
+                    "set lock_timeout='1s'"):
+            sql, reason = dx.guard_custom_sql(bad, TABLE)
+            self.assertIsNone(sql, msg=bad)
+
+    def test_rejects_other_table(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT * FROM "public"."OTHER_TABLE"', TABLE)
+        self.assertIsNone(sql)
+        self.assertTrue(reason.startswith("table_not_allowed"))
+        sql, reason = dx.guard_custom_sql(
+            'SELECT * FROM %s JOIN "secrets" USING (id)' % TABLE, TABLE)
+        self.assertIsNone(sql)
+
+    def test_accepts_table_spelling_variants(self):
+        for spelling in (TABLE, '"SALES_DEMO"', "SALES_DEMO", "sales_demo",
+                         "public.SALES_DEMO"):
+            sql, reason = dx.guard_custom_sql(
+                "SELECT 1 FROM %s" % spelling, TABLE)
+            self.assertIsNotNone(sql, msg=spelling)
+
+    def test_accepts_cte_and_self_join_and_subquery(self):
+        q = ('WITH base AS (SELECT * FROM %s) '
+             "SELECT a.* FROM base a JOIN base b ON a.x = b.x" % TABLE)
+        sql, reason = dx.guard_custom_sql(q, TABLE)
+        self.assertIsNone(reason)
+        q2 = "SELECT * FROM (SELECT 1 FROM %s) sub" % TABLE
+        sql2, reason2 = dx.guard_custom_sql(q2, TABLE)
+        self.assertIsNone(reason2)
+
+    def test_rejects_non_select(self):
+        sql, reason = dx.guard_custom_sql("EXPLAIN SELECT 1", TABLE)
+        self.assertIsNone(sql)
+        sql, reason = dx.guard_custom_sql("", TABLE)
+        self.assertEqual(reason, "empty")
+
+
+# ==========================================================================
+# Result shaping + rendering
+# ==========================================================================
+class TestShapingAndRendering(unittest.TestCase):
+
+    def test_shape_result_caps_rows(self):
+        cols = ["a", "b"]
+        rows = [(i, "x" * 500) for i in range(60)]
+        result = dx.shape_result(cols, rows)
+        self.assertEqual(len(result["rows"]), 50)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(len(result["rows"][0][1]), 256)
+
+    def test_shape_result_small_is_untruncated(self):
+        result = dx.shape_result(["a"], [(1,), (2,)])
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["rows"], [[1], [2]])
+
+    def test_format_number(self):
+        self.assertEqual(dx.format_number(1234567, "amount", "EUR"),
+                         "1" + NBSP + "234" + NBSP + "567" + NBSP + "EUR")
+        self.assertEqual(dx.format_number(12.345, "percent"),
+                         "12.3" + NBSP + "%")
+        self.assertEqual(dx.format_number(42, "count"), "42")
+        self.assertEqual(dx.format_number(3.14159, "number"), "3.14")
+
+    def test_format_cell_uses_fmt_map_then_heuristics(self):
+        self.assertEqual(dx.format_cell(1000, "revenue",
+                                        {"revenue": "amount"}, P, "EUR"),
+                         "1" + NBSP + "000" + NBSP + "EUR")
+        self.assertEqual(dx.format_cell(12.3, "share_pct", {}, P),
+                         "12.3" + NBSP + "%")
+        self.assertEqual(dx.format_cell("HALYS", "customer_name", {}, P),
+                         "HALYS")
+
+    def test_build_table_truncation_notes(self):
+        result = {"columns": ["c"], "rows": [[i] for i in range(15)],
+                  "truncated": True}
+        table = dx.build_table(result, "fr", {}, P)
+        self.assertIn("| c |", table)
+        self.assertIn("3 ligne(s) supplémentaire(s)", table)
+        self.assertIn("Résultat partiel", table)
+
+    def test_fallback_headline_single_value(self):
+        u = make_u(scenarios=["ACTUALS"],
+                   period={"mode": "explicit", "start": "2025-01-01",
+                           "end": "2025-12-31", "label": "2025"})
+        result = {"columns": ["revenue"], "rows": [[1234567]],
+                  "truncated": False}
+        text = dx.build_fallback_headline(u, P, result, "fr",
+                                          {"revenue": "amount"}, "EUR")
+        self.assertIn("Revenu total", text)
+        self.assertIn("ACTUALS, 2025", text)
+        self.assertIn("1" + NBSP + "234" + NBSP + "567", text)
+
+    def test_fallback_headline_multi_row_neutral(self):
+        u = make_u()
+        result = {"columns": ["a", "b"], "rows": [[1, 2], [3, 4]],
+                  "truncated": False}
+        text = dx.build_fallback_headline(u, P, result, "en", {}, None)
+        self.assertIn("Here are the results", text)
+
+    def test_verify_headline(self):
+        result = {"columns": ["revenue"], "rows": [[1234567]],
+                  "truncated": False}
+        allowed = dx.allowed_number_set(result, ["question 2025"])
+        self.assertTrue(dx.verify_headline(
+            "Le revenu 2025 est de 1 234 567 EUR.", allowed))
+        self.assertFalse(dx.verify_headline(
+            "Le revenu 2025 est de 9 999 999 EUR.", allowed))
+        self.assertFalse(dx.verify_headline("", allowed))
+
+
+# ==========================================================================
+# about_data + prompts + dataset card
+# ==========================================================================
+class TestKnowledgeSurfaces(unittest.TestCase):
+
+    def test_about_answer_is_grounded(self):
+        text = dx.build_about_answer(P, "fr")
+        self.assertIn("SALES_DEMO", text)
+        self.assertIn("Revenu total", text)
+        self.assertIn("ACTUALS, BUDGET, FORECAST", text)
+        self.assertIn("2024-01-01", text)
+        self.assertIn("Product", text)
+        self.assertIn("170" + NBSP + "000", text)
+
+    def test_understand_prompt_contains_profile_facts(self):
+        prompt = dx.build_understand_prompt(P, "2026-06-12")
+        for token in ("SALES_DEMO", "revenue", "ACTUALS", "BUDGET",
+                      "customer_id", "produit", "2026-06-12",
+                      "VALUE (Column)", "about_data"):
+            self.assertIn(token, prompt)
+
+    def test_understand_schema_enums(self):
+        schema = dx.build_understand_schema(P)
+        self.assertEqual(schema["properties"]["scenarios"]["items"]["enum"],
+                         ["ACTUALS", "BUDGET", "FORECAST"])
+        self.assertIn("custom", schema["properties"]["intent"]["enum"])
+
+    def test_dataset_card_contains_columns_and_metrics(self):
+        card = dx.build_dataset_card(P, TABLE)
+        self.assertIn(TABLE, card)
+        self.assertIn('"Phase"', card)
+        self.assertIn("'ACTUALS'", card)
+        self.assertIn('revenue = SUM("amount_eur")', card)
+        self.assertIn("yyyy_mm_dd_str", card)
+
+
+# ==========================================================================
+# Events contract
+# ==========================================================================
+class TestEvents(unittest.TestCase):
+
+    def test_agent_result_shape(self):
+        ev = dx._agent_result("ready", make_u(), sql_count=2, row_count=5,
+                              attempts=2)
+        data = ev["chunk"]["eventData"]
+        self.assertEqual(ev["chunk"]["eventKind"], "AGENT_RESULT")
+        self.assertEqual(data["status"], "ready")
+        self.assertEqual(data["sqlCount"], 2)
+        self.assertEqual(data["attempts"], 2)
+
+    def test_block_and_tool_events(self):
+        self.assertEqual(dx._block("run_sql")["chunk"]["eventData"]["blockId"],
+                         "run_sql")
+        self.assertEqual(
+            dx._tool_start("dataset_sql_query")["chunk"]["eventData"]["toolName"],
+            "dataset_sql_query")
+
+    def test_known_ids_declared(self):
+        self.assertIn("about_data", dx.KNOWN_BLOCK_IDS)
+        self.assertIn("dataset_sql_query", dx.KNOWN_TOOL_NAMES)
+
+
+if __name__ == "__main__":
+    unittest.main()

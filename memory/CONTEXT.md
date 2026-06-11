@@ -5,6 +5,19 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**0★★) SYSTÈME D'AGENTS v3 GÉNÉRIQUE « dataiku-agents/ » (2026-06-12, nuit déléguée) — ⏳ CODÉ +
+110 UNITTEST VERTS, RIEN n'est validé DSS.** Remplace le semantic model boîte noire par une chaîne
+100 % possédée : **recette profiler** (profil JSON du dataset : stats déterministes + enrichissement
+LLM + overrides humains éditables) + **recette value index** (catalogue exact des valeurs, norm
+partagée) → **Dataset Expert agent GÉNÉRIQUE** (UNDERSTAND généré du profil → RESOLVE SQL sur
+l'index → **SQL par templates déterministes, 9 intents** + garde-fou LLM-SQL pour `custom` →
+exécution **read-only SQLExecutor2** + EXPLAIN + ≤2 réparations → RENDER vérifiée chiffre par
+chiffre ; `about_data` = 0 SQL) → **orchestrateur v3.0** (= v2.4 + **fan-out PARALLÈLE**
+ThreadPoolExecutor≤3, spans post-hoc thread principal + entrée registre `revenue_expert`
+enabled=False placeholder). Contrats gelés respectés (event kinds, spans `semantic-model-query`
+avec success VÉRIDIQUE, AGENT_RESULT+attempts, sql_id, caps) → webapp/Evidence inchangées. Aucun
+tool DSS requis (resolver+SQL inlinés). **→ DÉROULER `dataiku-agents/README.md`** (pas-à-pas
+complet + 13 smoke tests corpus + modèles par appel). Détail → L051 + `sessions/2026-06-12.md`.
 **0★) ORCHESTRATEUR « EXPERT AUTHORITY » v2.4 (Run 5 2026-06-11) — ⏳ CODÉ + TESTÉ LOCAL (86 unittest),
 NON validé DSS.** Corrige le défaut CENTRAL (confirmé sur `docs/questions_asked.md`, 817 q. réelles,
 ~10 engueulades même cause) : l'orchestrateur **niait/inventait au lieu de router** (« budget 2026 » →
@@ -57,7 +70,13 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-11 (5 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L050**
+## 🧭 Dernière session — 2026-06-12 (nuit déléguée) → détail `sessions/2026-06-12.md`, leçon **L051**
+- **Système v3 générique `dataiku-agents/`** : 2 recettes Flow (profil + index), Dataset Expert
+  générique (SQL code-owned), orchestrateur v3 parallèle, 110 unittest, README d'implémentation.
+- Recherche 6 agents : semantic model 14.4 pilotable par API mais écarté ; SOTA NL2SQL (templates ≫
+  SQL libre) ; taxonomie des 817 questions ; non-régression suites 86+55 vertes. **0 validation DSS.**
+
+## Avant — 2026-06-11 (5 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L050**
 - **Run 1-2** : trust layer v2 déployé (revue 26 agents, 17/17 corrigés) ; nettoyage repo + git init +
   knowledge graph 2 494 nœuds + fraîcheur auto (L044-L046).
 - **Run 3 — SalesDrive v2** : Code Agent complet + orchestrateur v2.3 (AGENT_RESULT structuré, skip
@@ -74,6 +93,11 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 
 ## ⚠️ Top gotchas / règles actives
 **Process :**
+- **P0 — dataiku-agents v3 (L051)** : l'expertise vient des ARTEFACTS du Flow (profil + value index),
+  relus par l'humain (dataset éditable d'overrides, jamais écrasés) — pas de valeur métier dans le
+  repo (fixtures synthétiques). Contrats gelés : `KNOWN_BLOCK_IDS`/`KNOWN_TOOL_NAMES` de l'expert ↔
+  `block_labels`/`tool_labels` du registre (test anti-dérive) ; norm valeurs partagée recettes↔agent.
+  Tests : `python3 -m unittest discover -s dataiku-agents/tests`.
 - **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
   `.graphifyignore` versionné. Tests front : `node --test test/*.test.js` depuis `Plugin/owismind/frontend/`.
 - **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
@@ -122,11 +146,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
 
 ## 🔜 Prochaines étapes
-0. **ORCHESTRATEUR v2.4 — VALIDER EN DSS (priorité)** : coller `orchestrator/orchestrator_agent.py`
-   (registre déjà basculé sur v2 `agent:MODpGFcC`) → smoke-tests corpus : `budget 2026 Roaming Hub`→
-   route (plus de refus), `tickets 1&1 2025`→gap honnête (jamais 0), `météo`→hors-sujet, `et Virtual
-   Network ?`→route avec contexte, `SS7 vs LTE`→concept. Toute divergence → leçon, et corriger via le
-   PROMPT planner uniquement (jamais de valeur métier en dur, P3). Si OK → **Niveau 2 (refus→offres)**.
+0. **SYSTÈME v3 — IMPLÉMENTER EN DSS (priorité, guide = `dataiku-agents/README.md`)** : recette
+   profil + recette index sur `DRIVE_Revenues` → relire le profil (overrides : GCP=interne, phases,
+   display pairs) → Code Agent Dataset Expert (CONFIG : 2 noms de datasets + LLM ids) → orchestrateur
+   v3 : remplir `revenue_expert.agent_id`, flip enabled (expert=True, salesdrive_v2=False), coller
+   dans le Code Agent orchestrateur EXISTANT → 13 smoke tests du README §5. Divergence → corriger via
+   profil/overrides/prompts, jamais de valeur métier en dur (P3). Rollback = re-flip des 2 flags.
+0bis. Si v3 retardé : valider l'orchestrateur v2.4 seul (coller `orchestrator/orchestrator_agent.py`,
+   smoke-tests budget→route / tickets→gap / météo / ellipse / concept).
 1. **RECUEILLIR LES AJUSTEMENTS du user sur le trust layer** : « marche bien mais pas
    encore comme je veux » — faire préciser AVANT toute modification.
 2. **SalesDrive v2 — consolidation** : tester un cas de vraie ambiguïté de valeur (ex. « IPL + ») et

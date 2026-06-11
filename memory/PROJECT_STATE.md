@@ -338,7 +338,16 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   live** mais (L027/L028) **appendée sur le dataset Flow** côté worker (phase 2, best-effort). ⚠️ La **réponse texte** tombe
   en bloc à la fin (agent structuré) — le live exploitable = la **timeline**.
 - Agents métier prévus (cahier) : Orchestrateur OWIsMind (défaut), Revenues, Tickets, CX,
-  Opportunities, Product/Customer Base, Delivery. **Seul `agent:rNTZ781a` (revenue) a un id connu.**
+  Opportunities, Product/Customer Base, Delivery. Ids connus : `agent:rNTZ781a` (visuel, désactivé),
+  `agent:MODpGFcC` (SalesDrive v2 Code Agent, live).
+- **Système v3 générique `dataiku-agents/` (2026-06-12, ⏳ non validé DSS)** : recettes Flow
+  `profile_dataset` + `build_value_index` (expertise fabriquée en design : profil JSON + index de
+  valeurs, overrides humains éditables) → `agents/dataset_expert_agent.py` (sous-agent GÉNÉRIQUE :
+  SQL par templates 9 intents + garde-fou LLM-SQL `custom`, exécution read-only SQLExecutor2 +
+  EXPLAIN + réparations, success véridique dans les spans `semantic-model-query`) →
+  `agents/orchestrator_agent.py` v3.0 (= v2.4 + fan-out parallèle + entrée registre
+  `revenue_expert`, placeholder id). Guide d'implémentation : `dataiku-agents/README.md`.
+  Contrats gelés webapp/Evidence respectés. Détail → L051 + `sessions/2026-06-12.md`.
 
 ---
 
@@ -418,6 +427,7 @@ au nettoyage du 2026-06-11, en même temps que `docs/superpowers/plans/` (journa
 | **Run 4 « Réparer Evidence Studio »** (Evidence à DROITE + repli sidebar non persisté ; parseur BEST-EFFORT JOIN/CTE/sous-requêtes ; « agent saw N rows » supprimé ; chips tous éditables + popover z-index + caps miroir + `exclude_id`) | ⏳ Packagé, NON validé DSS | inclus dans le zip trust layer 74 entrées ; revue 25 agents 19/19 corrigés (L042/L043) |
 | **Trust layer Evidence v2** (badge vérification déterministe 5 niveaux + result_captured ; `sql_explain` steps métier + lineage nom-source ; capture résultat exact opportuniste dans `generated_sql` JSON ; drill-down re-validé serveur ≤8 clés ; meta enrichie ; `transaction_read_only` ; orchestrateur v2.2 corrélé sql_id/step_index/agent_key ; timeline labels backend) | 🟡 Déployé, FONCTIONNE (retour user 2026-06-11 : « ça marche bien ») mais **pas encore comme il veut** — ajustements NON précisés, à recueillir avant tout code | zip **74 entrées `index-DF9WrJFi.js`** ; 304+59 unittest/97 node:test ; revue 26 agents **17/17 corrigés** (L044/L045) ; ~~clé des rows à confirmer~~ → RÉSOLU par SalesDrive v2 (L047 : capture depuis le retour du tool) |
 | **SalesDrive v2 Code Agent + orchestrateur v2.3** (UNDERSTAND JSON strict → resolver → semantic_question templates gelés → semantic tool direct → rendu vérifié ; désambiguïsation 3 étages : `pass_context`/valeur-exacte/priorité-colonne/round-trip « VALEUR (Colonne) » ; `AGENT_RESULT` structuré) | ✅ Validé DSS (2026-06-11, retour user « super tout marche ») ; reste : vraie ambiguïté de valeur (« IPL + ») et plan multi-étapes non re-testés ; bascule définitive (retrait entrée visual) à faire | traces réelles (sql_count=1, row_count=10, headline verified=true) ; 55 unittest salesdrive + 62 orchestrateur ; 97 node:test intacts (L047/L048) |
+| **Système v3 générique `dataiku-agents/`** (profiler + value index + Dataset Expert SQL code-owned + orchestrateur v3 parallèle + README d'implémentation) | ⏳ Codé + 110 unittest verts (anti-dérive + fan-out threads réels fake-LLM), **RIEN validé DSS** : recettes/SQLExecutor2-en-Code-Agent/parallélisme à smoke-tester (README §5, 13 cas corpus) | non-régression 86+55 ; bug fetch resolver corrigé (`max_rows`) ; rollback = 2 flags registre (L051) |
 
 ## 12. Prochaines étapes (à jour 2026-06-09)
 > **TOUT le V1 + les 4 lots du 2026-06-09 (historique multi-tours, sidebar lazy, feedback, arbre/branches, agent persistant) sont VALIDÉS EN DSS.** Reste :
