@@ -52,6 +52,16 @@
 #     out_of_scope (a question or a refusal cites no dataset). Visual agents
 #     that never emit it are unaffected (agent_result stays None).
 #
+# v2.4 (Expert Authority — foundation): the orchestrator NEVER authors a business
+#   fact. Routing is the default; the only "no" it may write is "no agent for this
+#   domain" (CAPABILITY_GAP, deterministic template) — never "the data does not
+#   exist". OUT_OF_SCOPE is templated too; CONCEPT answers general notions with no
+#   OWI figure. Registry is a manifest: add an agent = one entry {key, agent_id,
+#   label, description, domain}. BUSINESS_DOMAINS tells a real-but-unstaffed domain
+#   (honest gap) from non-OWI (out of scope). Anti-drift test keeps the revenue
+#   manifest truthful vs the sub-agent's KNOWN_PHASES. Spec:
+#   docs/superpowers/specs/2026-06-11-orchestrator-expert-authority-design.md
+#
 # EVENT KIND CONTRACT (FROZEN as of v2.2) — the webapp timeline keys its logic
 # on these machine identifiers. They are NEVER renamed; new kinds may only be
 # ADDED to this list:
@@ -144,14 +154,19 @@ CAPABILITIES = {
     "salesdrive": {
         "kind": "agent",
         "agent_id": "agent:rNTZ781a",
+        "domain": "revenue",
         "label_fr": "SalesDrive (revenus)",
         "label_en": "SalesDrive (revenue)",
         "planner_description": (
-            "Revenue / chiffre d'affaires questions on OWI customers: amounts by "
-            "customer, country, product, period (year, month, range, YTD), "
-            "comparisons between periods or customers, evolutions, top customers. "
-            "Handles multi-period comparisons WITHIN ONE single step. "
-            "Data source: DRIVE_Revenues."
+            "Revenue and billing on OWI customers across ALL scenarios/phases — "
+            "actuals, budget, forecast, Q3F, HLF — broken down by customer, "
+            "product, solution, solution line, sirano product, partner, "
+            "distribution type, sales entity, sales zone, parent group, month or "
+            "year; totals, top-N rankings, period comparisons, actuals-vs-budget "
+            "deltas and variance, trends and YTD. Handles multi-period and "
+            "multi-phase comparisons WITHIN ONE single step. Data source: "
+            "DRIVE_Revenues. You do NOT pre-judge what this data contains — route "
+            "the question; only this agent can confirm or deny a specific figure."
         ),
         # ORCH-05: intranet URLs are SERVER-ONLY (kept for ops/debug, never put in
         # answer text). The user-facing sources section uses the business labels.
@@ -196,14 +211,19 @@ CAPABILITIES = {
     "salesdrive_v2": {
         "kind": "agent",
         "agent_id": "agent:FILL_ME_SALESDRIVE_V2",
+        "domain": "revenue",
         "label_fr": "SalesDrive (revenus)",
         "label_en": "SalesDrive (revenue)",
         "planner_description": (
-            "Revenue / chiffre d'affaires questions on OWI customers: amounts by "
-            "customer, country, product, period (year, month, range, YTD), "
-            "comparisons between periods or customers, evolutions, top customers. "
-            "Handles multi-period comparisons WITHIN ONE single step. "
-            "Data source: DRIVE_Revenues."
+            "Revenue and billing on OWI customers across ALL scenarios/phases — "
+            "actuals, budget, forecast, Q3F, HLF — broken down by customer, "
+            "product, solution, solution line, sirano product, partner, "
+            "distribution type, sales entity, sales zone, parent group, month or "
+            "year; totals, top-N rankings, period comparisons, actuals-vs-budget "
+            "deltas and variance, trends and YTD. Handles multi-period and "
+            "multi-phase comparisons WITHIN ONE single step. Data source: "
+            "DRIVE_Revenues. You do NOT pre-judge what this data contains — route "
+            "the question; only this agent can confirm or deny a specific figure."
         ),
         "dataset_sources": [
             "https://dataiku-datalab-owi.authidh.itn.intraorange/workspaces/OWISMIND/OWISMIND/DATASET/DRIVE_Revenues",
@@ -251,6 +271,28 @@ CAPABILITIES = {
 def get_capabilities():
     """Point d'extension unique. v3 : lire OWI_AgentRegistry ici."""
     return {k: v for k, v in CAPABILITIES.items() if v.get("enabled")}
+
+
+# Business domains the product knows about, with display labels. A domain is
+# "staffed" when at least one ENABLED agent capability declares it via "domain".
+# The planner uses this map to tell apart a real-but-unstaffed domain
+# (-> CAPABILITY_GAP, honest) from a clearly non-OWI question (-> OUT_OF_SCOPE).
+# Adding an agent later = give its registry entry the matching "domain"; the gap
+# closes with NO prompt change. Names only — never a business value (rule P3).
+BUSINESS_DOMAINS = {
+    "revenue":       {"fr": "revenus / CA / budget / forecast",   "en": "revenue / billing / budget / forecast"},
+    "tickets":       {"fr": "tickets d'incidents",                "en": "incident tickets"},
+    "satisfaction":  {"fr": "satisfaction / expérience client",   "en": "customer satisfaction / experience"},
+    "opportunities": {"fr": "opportunités / pipeline",            "en": "opportunities / pipeline"},
+    "delivery":      {"fr": "livraison (LD / SOF / déconnexions)", "en": "delivery (LD / SOF / disconnections)"},
+    "billing":       {"fr": "facturation",                        "en": "billing"},
+}
+
+
+def staffed_domains(caps):
+    """Set of business domains covered by at least one enabled agent capability."""
+    return {v["domain"] for v in caps.values()
+            if v.get("kind") == "agent" and v.get("domain")}
 
 
 # =============================================================================
@@ -311,6 +353,26 @@ ALL_STEPS_FAILED = {
     "en": "⚠️ None of the sources could answer this time. Please retry shortly or rephrase your question — I'm here to help.",
 }
 
+# --- Deterministic non-business templates (R1/R2: no business-fact surface) ---
+CAPABILITY_GAP_TEXT = {
+    "fr": "Je n'ai pas encore d'agent pour {domain}, donc je préfère ne rien inventer. "
+          "En revanche, je peux vous aider sur : {available}.",
+    "en": "I don't have an agent for {domain} yet, so I won't make anything up. "
+          "I can however help you with: {available}.",
+}
+CAPABILITY_GAP_GENERIC = {
+    "fr": "Je n'ai pas encore d'agent pour répondre à ça, et je ne vais pas inventer. "
+          "Je peux vous aider sur : {available}.",
+    "en": "I don't have an agent for that yet, and I won't make anything up. "
+          "I can help you with: {available}.",
+}
+OUT_OF_SCOPE_REDIRECT = {
+    "fr": "Ça sort un peu de mon terrain de jeu 🙂 Je suis spécialisé dans les données métier OWI. "
+          "Je peux vous aider sur : {available}.",
+    "en": "That's a bit outside my playground 🙂 I focus on OWI business data. "
+          "I can help you with: {available}.",
+}
+
 # --- Accompagnement utilisateur (templates déterministes — AUCUN appel LLM) ---
 GREETING_PREFIX = {
     "fr": "Bonjour {name} ! ",
@@ -365,7 +427,9 @@ PLANNER_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "intent": {"type": "string",
-                   "enum": ["BUSINESS", "GREETING", "CAPABILITIES", "CLARIFY", "OUT_OF_SCOPE"]},
+                   "enum": ["BUSINESS", "GREETING", "CAPABILITIES", "CLARIFY",
+                            "OUT_OF_SCOPE", "CAPABILITY_GAP", "CONCEPT"]},
+        "domain": {"type": "string"},
         "language": {"type": "string", "enum": ["fr", "en"]},
         "user_first_name": {"type": "string"},
         "direct_answer": {"type": "string"},
@@ -396,6 +460,13 @@ def build_planner_prompt(caps, current_datetime="", user_display_name="", sessio
 
     first_agent = next(iter(agents), None)
     first_tool = next(iter(tools), None)
+
+    staffed = staffed_domains(caps)
+    domain_lines = []
+    for dom, lab in BUSINESS_DOMAINS.items():
+        mark = "HAS an agent" if dom in staffed else "NO agent yet"
+        domain_lines.append('- %s (%s): %s' % (dom, mark, lab["en"]))
+    domains_block = "\n".join(domain_lines)
 
     examples = [
         'User: "Bonjour !" (session context says the user is Said Chaoui) -> '
@@ -432,6 +503,22 @@ def build_planner_prompt(caps, current_datetime="", user_display_name="", sessio
             '{"kind": "agent", "capability": "%s", "instruction": "Quel est le revenu total '
             'réalisé avec algerie telecom en 2025 ?"}], '
             '"synthesis_hint": "donner la date puis le chiffre"}' % (first_tool, first_agent))
+    if first_agent:
+        examples.append(
+            'User: "Give me the budget 2026 for the Roaming Hub" -> the revenue '
+            'agent owns ALL phases, route it (do NOT deny budget): '
+            '{"intent": "BUSINESS", "language": "en", "steps": [{"kind": "agent", '
+            '"capability": "%s", "instruction": "Give me the budget 2026 revenue '
+            'for the Roaming Hub"}]}' % first_agent)
+    examples.append(
+        'User: "combien de tickets d\'incidents avec 1&1 en 2025 ?" and NO agent '
+        'covers the tickets domain -> {"intent": "CAPABILITY_GAP", "language": '
+        '"fr", "domain": "tickets"}')
+    examples.append(
+        'User: "quelle est la différence entre le SS7 et le LTE ?" (general '
+        'concept, no OWI data) -> {"intent": "CONCEPT", "language": "fr", '
+        '"direct_answer": "<short general explanation, framed as general '
+        'knowledge, no OWI figure>"}')
 
     ctx_header = ""
     if current_datetime:
@@ -455,14 +542,29 @@ def build_planner_prompt(caps, current_datetime="", user_display_name="", sessio
         "yourself: business data ONLY comes from the capabilities below.\n\n"
         "AVAILABLE AGENTS (business data):\n" + agents_block + "\n\n"
         "AVAILABLE TOOLS (direct actions):\n" + tools_block + "\n\n"
+        "BUSINESS DOMAINS (the product's known domains; an agent may or may not be "
+        "wired for each):\n" + domains_block + "\n\n"
         "INTENTS (field \"intent\"):\n"
-        "- \"BUSINESS\": the question needs business data or an action -> build \"steps\".\n"
-        "- \"GREETING\": greetings, thanks, small talk, and personal/session questions (the "
-        "user's own name, today's date, who you are) -> \"direct_answer\" using the session "
-        "context. NEVER refuse these coldly.\n"
+        "- \"BUSINESS\": needs business data or an action -> build \"steps\". This is "
+        "the DEFAULT for anything touching a domain that HAS an agent, EVEN IF you "
+        "are unsure the specific figure exists — only the agent can confirm.\n"
+        "- \"CAPABILITY_GAP\": the question is about a real BUSINESS DOMAIN that has "
+        "NO agent yet -> set \"domain\" to that domain key. Do NOT answer; the code "
+        "emits an honest 'no agent for this yet' message.\n"
+        "- \"CONCEPT\": a GENERAL telco/business notion with no OWI-specific data "
+        "(e.g. 'difference between SS7 and LTE'). Put a short, general-knowledge "
+        "answer in \"direct_answer\", explicitly framed as general knowledge, with "
+        "NO OWI figure. If an agent OWNS the methodology (e.g. 'how do you compute "
+        "the forecast' -> the revenue agent), prefer BUSINESS instead.\n"
+        "- \"GREETING\": greetings, thanks, small talk, personal/session questions "
+        "(the user's own name, today's date, who you are) -> \"direct_answer\" using "
+        "the session context. NEVER refuse these coldly.\n"
         "- \"CAPABILITIES\": the user asks what you can do -> no answer needed (handled by code).\n"
-        "- \"CLARIFY\": business-related but too ambiguous to plan -> \"direct_answer\" = ONE short clarification question.\n"
-        "- \"OUT_OF_SCOPE\": anything else -> \"direct_answer\" = polite refusal + what you CAN do.\n\n"
+        "- \"CLARIFY\": business-related but genuinely contentless/ambiguous -> "
+        "\"direct_answer\" = ONE short question. Prefer BUSINESS (the agent's own "
+        "clarification is grounded in real data) whenever an agent could handle it.\n"
+        "- \"OUT_OF_SCOPE\": clearly unrelated to OWI business data (weather, trivia) "
+        "-> handled by code.\n\n"
         "PLANNING RULES (intent BUSINESS):\n"
         "1. Each step = {\"kind\": \"agent\"|\"tool\", \"capability\": <exact key from the lists>, "
         "\"instruction\": <self-contained instruction>}.\n"
@@ -489,7 +591,13 @@ def build_planner_prompt(caps, current_datetime="", user_display_name="", sessio
         "HARD RULES:\n"
         "- Output ONLY the JSON object. No markdown fences, no commentary.\n"
         "- NEVER put figures, amounts or any business data in \"direct_answer\".\n"
-        "- A question about revenues, customers, tickets, products or amounts is NEVER GREETING/OUT_OF_SCOPE.\n"
+        "- You do NOT know what the data contains. You NEVER tell the user that a "
+        "metric, a scenario (budget/forecast/actuals/Q3F/HLF), a figure or a record "
+        "is unavailable, missing, or zero — that is ONLY the agent's call.\n"
+        "- You MAY state you lack an AGENT for a domain (CAPABILITY_GAP). You may "
+        "NEVER state that the DATA does not exist.\n"
+        "- A question about revenues, customers, tickets, products, amounts, budget "
+        "or forecast is NEVER GREETING/OUT_OF_SCOPE.\n"
         "- \"language\" = language of the CURRENT question: \"fr\" or \"en\".\n\n"
         "EXAMPLES:\n" + "\n".join(examples) + "\n"
     )
@@ -505,6 +613,9 @@ SYNTHESIS_PROMPT = (
     "- Use ONLY figures and facts present in the results. NEVER invent or extrapolate.\n"
     "- Keep all figures EXACTLY as provided (amounts, units, currencies).\n"
     "- If a step failed or returned nothing, say so explicitly for that part.\n"
+    "- If a step returned 'no data' / 'out of scope' / a capability gap, report "
+    "that honestly for that part. NEVER replace a missing result with a guessed "
+    "or zero figure.\n"
     "- Lead with the direct answer. No filler openings, no greetings (the user was already greeted).\n"
     "- Warm and human while professional: in French, address the user with 'vous'.\n"
     "- Use thousands separators and currency symbols for figures.\n"
@@ -787,6 +898,53 @@ def _build_capabilities_answer(caps, lang):
     return "\n".join(lines)
 
 
+def _available_domains_phrase(caps, lang):
+    """Comma-joined labels of the staffed business domains (registry-sourced,
+    deterministic). Falls back to the agent capability labels if no domain is
+    declared. Pure — never emits a business value."""
+    labels = []
+    for dom in sorted(staffed_domains(caps)):
+        lab = BUSINESS_DOMAINS.get(dom, {})
+        text = lab.get(lang) or lab.get("fr")
+        if text and text not in labels:
+            labels.append(text)
+    if not labels:
+        for v in caps.values():
+            if v.get("kind") == "agent":
+                text = v.get("label_%s" % lang) or v.get("label_fr")
+                if text and text not in labels:
+                    labels.append(text)
+    return ", ".join(labels)
+
+
+def build_capability_gap_answer(domain, caps, lang):
+    """Honest 'I have no agent for <domain>' message (R2), built from the
+    registry — never an LLM free-text and never a figure."""
+    available = _available_domains_phrase(caps, lang)
+    dom = BUSINESS_DOMAINS.get(domain or "", {})
+    dom_label = dom.get(lang) or dom.get("fr")
+    if not dom_label:
+        return CAPABILITY_GAP_GENERIC[lang].format(available=available)
+    return CAPABILITY_GAP_TEXT[lang].format(domain=dom_label, available=available)
+
+
+def build_out_of_scope_answer(caps, lang):
+    """Deterministic out-of-scope redirect — no business assertion surface."""
+    return OUT_OF_SCOPE_REDIRECT[lang].format(available=_available_domains_phrase(caps, lang))
+
+
+def render_non_business_text(intent, plan, caps, lang):
+    """Pure text for a non-BUSINESS, non-CAPABILITIES intent (CAPABILITIES streams
+    via its own LLM path). CAPABILITY_GAP / OUT_OF_SCOPE -> deterministic registry
+    templates (no business-fact surface, R1/R2). GREETING / CLARIFY / CONCEPT ->
+    the bounded planner direct_answer, or the clarify fallback when empty."""
+    if intent == "CAPABILITY_GAP":
+        return build_capability_gap_answer(plan.get("domain"), caps, lang)
+    if intent == "OUT_OF_SCOPE":
+        return build_out_of_scope_answer(caps, lang)
+    return (plan.get("direct_answer") or "").strip() or PLANNER_FALLBACK_CLARIFY[lang]
+
+
 def _sources_block(results, caps, lang):
     """Sources section generated BY CODE from the registry — never by the LLM.
 
@@ -894,8 +1052,10 @@ class MyLLM(BaseLLM):
                     # Rédaction LLM ancrée sur le registre, fallback déterministe interne.
                     yield from self._answer_capabilities(project, caps, lang, trace, total_usage)
                 else:
-                    answer = (plan.get("direct_answer") or "").strip() or PLANNER_FALLBACK_CLARIFY[lang]
-                    yield {"chunk": {"text": answer}}
+                    # R1/R2 firewall: CAPABILITY_GAP / OUT_OF_SCOPE -> deterministic
+                    # registry templates; GREETING / CLARIFY / CONCEPT -> bounded
+                    # planner direct_answer. No business fact can be authored here.
+                    yield {"chunk": {"text": render_non_business_text(intent, plan, caps, lang)}}
                 yield _ev_l("DONE", lang, {"durationMs": int((time.perf_counter() - t0) * 1000),
                                                 "totalUsage": total_usage})
                 return
@@ -1208,7 +1368,8 @@ class MyLLM(BaseLLM):
         if not isinstance(parsed, dict):
             return None
         intent = parsed.get("intent")
-        if intent not in ("BUSINESS", "GREETING", "CAPABILITIES", "CLARIFY", "OUT_OF_SCOPE"):
+        if intent not in ("BUSINESS", "GREETING", "CAPABILITIES", "CLARIFY",
+                          "OUT_OF_SCOPE", "CAPABILITY_GAP", "CONCEPT"):
             return None
 
         steps, seen = [], set()
@@ -1231,11 +1392,13 @@ class MyLLM(BaseLLM):
         if intent == "BUSINESS" and not steps:
             return None   # plan métier sans étape valide -> retry / fallback
 
+        domain = parsed.get("domain")
         return {"intent": intent,
                 "language": parsed.get("language", "fr"),
                 "user_first_name": (parsed.get("user_first_name") or "").strip()[:40],
                 "direct_answer": parsed.get("direct_answer"),
                 "synthesis_hint": parsed.get("synthesis_hint"),
+                "domain": domain if domain in BUSINESS_DOMAINS else None,
                 "steps": steps}
 
     # ------------------------------------------------------------ SYNTHESIS

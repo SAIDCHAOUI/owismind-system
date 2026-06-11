@@ -65,6 +65,7 @@ CAPS = {
         "dataset_label_fr": "Base des revenus clients",
         "dataset_label_en": "Customer revenue base",
         "dataset_ref": {"project_key": "P", "dataset_name": "DRIVE_Revenues"},
+        "domain": "revenue",
         "enabled": True,
     },
     "clock": {
@@ -172,6 +173,33 @@ class ValidatePlanTests(unittest.TestCase):
         plan = self._validate({"intent": "GREETING", "language": "fr",
                                "user_first_name": "  " + "x" * 100})
         self.assertEqual(plan["user_first_name"], "x" * 40)
+
+    def test_capability_gap_intent_accepted_with_domain(self):
+        plan = self._validate({"intent": "CAPABILITY_GAP", "language": "fr",
+                               "domain": "tickets"})
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["intent"], "CAPABILITY_GAP")
+        self.assertEqual(plan["domain"], "tickets")
+
+    def test_capability_gap_unknown_domain_nulled(self):
+        plan = self._validate({"intent": "CAPABILITY_GAP", "language": "fr",
+                               "domain": "astrology"})
+        self.assertIsNone(plan["domain"])
+
+    def test_concept_intent_accepted(self):
+        plan = self._validate({"intent": "CONCEPT", "language": "en",
+                               "direct_answer": "SS7 vs LTE general explanation."})
+        self.assertEqual(plan["intent"], "CONCEPT")
+
+    def test_capability_gap_purges_steps(self):
+        plan = self._validate({"intent": "CAPABILITY_GAP", "language": "fr",
+                               "domain": "tickets", "steps": [_business_step()]})
+        self.assertEqual(plan["steps"], [])
+
+    def test_business_plan_has_null_domain_by_default(self):
+        plan = self._validate({"intent": "BUSINESS", "language": "fr",
+                               "steps": [_business_step()]})
+        self.assertIsNone(plan["domain"])
 
 
 # ==========================================================================
@@ -475,6 +503,114 @@ class MiscHelpersTests(unittest.TestCase):
         self.assertEqual(orc.MAX_RESULT_ROWS, 50)
         self.assertEqual(orc.MAX_RESULT_COLS, 50)
         self.assertEqual(orc._MAX_TRACE_DEPTH, 200)
+
+
+# ==========================================================================
+# BUSINESS_DOMAINS + staffed_domains
+# ==========================================================================
+class DomainMapTests(unittest.TestCase):
+
+    def test_domain_map_has_core_domains(self):
+        for dom in ("revenue", "tickets", "satisfaction",
+                    "opportunities", "delivery", "billing"):
+            self.assertIn(dom, orc.BUSINESS_DOMAINS)
+            self.assertIn("fr", orc.BUSINESS_DOMAINS[dom])
+            self.assertIn("en", orc.BUSINESS_DOMAINS[dom])
+
+    def test_staffed_domains_from_enabled_agents(self):
+        self.assertEqual(orc.staffed_domains(CAPS), {"revenue"})
+
+    def test_staffed_domains_ignores_tools_and_unstaffed(self):
+        caps = {"clock": CAPS["clock"]}  # tool only, no agent
+        self.assertEqual(orc.staffed_domains(caps), set())
+
+
+# ==========================================================================
+# Deterministic non-business templates (R1/R2 firewall)
+# ==========================================================================
+class DeterministicTemplateTests(unittest.TestCase):
+
+    def test_available_domains_phrase_lists_staffed_labels(self):
+        phrase = orc._available_domains_phrase(CAPS, "fr")
+        self.assertIn("revenus", phrase)
+
+    def test_capability_gap_names_domain_and_offers_alternative(self):
+        text = orc.build_capability_gap_answer("tickets", CAPS, "fr")
+        self.assertIn("tickets d'incidents", text)   # the missing domain, named
+        self.assertIn("revenus", text)               # what I CAN do
+        # R1/R2: a gap message must never assert a figure or a zero.
+        self.assertNotIn("0", text)
+        self.assertFalse(any(ch.isdigit() for ch in text))
+
+    def test_capability_gap_unknown_domain_falls_back_generic(self):
+        text = orc.build_capability_gap_answer(None, CAPS, "en")
+        self.assertIn("revenue", text)
+        self.assertFalse(any(ch.isdigit() for ch in text))
+
+    def test_out_of_scope_redirects_without_business_claim(self):
+        text = orc.build_out_of_scope_answer(CAPS, "en")
+        self.assertIn("revenue", text)
+        self.assertFalse(any(ch.isdigit() for ch in text))
+
+
+# ==========================================================================
+# render_non_business_text — routes each non-BUSINESS intent to safe text
+# ==========================================================================
+class RenderNonBusinessTests(unittest.TestCase):
+
+    def test_capability_gap_uses_template(self):
+        plan = {"domain": "tickets"}
+        text = orc.render_non_business_text("CAPABILITY_GAP", plan, CAPS, "fr")
+        self.assertIn("tickets d'incidents", text)
+        self.assertFalse(any(ch.isdigit() for ch in text))
+
+    def test_out_of_scope_uses_redirect(self):
+        text = orc.render_non_business_text("OUT_OF_SCOPE", {}, CAPS, "en")
+        self.assertIn("playground", text)
+
+    def test_greeting_relays_direct_answer(self):
+        plan = {"direct_answer": "Bonjour Said !"}
+        self.assertEqual(
+            orc.render_non_business_text("GREETING", plan, CAPS, "fr"),
+            "Bonjour Said !")
+
+    def test_concept_relays_direct_answer(self):
+        plan = {"direct_answer": "SS7 is legacy signalling; LTE Diameter is its IP successor."}
+        text = orc.render_non_business_text("CONCEPT", plan, CAPS, "en")
+        self.assertIn("LTE Diameter", text)
+
+    def test_clarify_empty_direct_answer_falls_back(self):
+        text = orc.render_non_business_text("CLARIFY", {}, CAPS, "fr")
+        self.assertEqual(text, orc.PLANNER_FALLBACK_CLARIFY["fr"])
+
+
+# ==========================================================================
+# build_planner_prompt — humility rules + domain map are present
+# ==========================================================================
+class PlannerPromptTests(unittest.TestCase):
+
+    def setUp(self):
+        self.prompt = orc.build_planner_prompt(CAPS)
+
+    def test_lists_the_domain_map(self):
+        self.assertIn("BUSINESS DOMAINS", self.prompt)
+        self.assertIn("tickets", self.prompt)
+        self.assertIn("HAS an agent", self.prompt)
+        self.assertIn("NO agent", self.prompt)
+
+    def test_documents_new_intents(self):
+        self.assertIn("CAPABILITY_GAP", self.prompt)
+        self.assertIn("CONCEPT", self.prompt)
+
+    def test_states_the_humility_rule(self):
+        low = self.prompt.lower()
+        self.assertIn("you do not know what the data contains", low)
+        self.assertIn("never", low)
+        self.assertIn("does not exist", low)
+
+    def test_capability_gap_only_for_unstaffed_domain(self):
+        # 'revenue' is staffed in CAPS -> the prompt must mark it HAS an agent.
+        self.assertRegex(self.prompt, r"revenue \(HAS an agent\)")
 
 
 if __name__ == "__main__":
