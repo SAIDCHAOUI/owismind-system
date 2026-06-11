@@ -1,0 +1,19 @@
+# ── graphify corpus exclusions (gitignore syntax) ────────────────────────────
+# Read natively by graphify's detect/extract — keeps the knowledge graph free
+# of generated, vendored and binary content. Mirror of the manual filter used
+# for the initial 2026-06-11 build; the git post-commit hook respects it too.
+
+# Generated / vendored (never knowledge)
+node_modules/
+Plugin/owismind/resource/owismind-app/
+Plugin/ready-for-dataiku/
+graphify-out/
+
+# Harness meta-config (not project knowledge)
+.claude/
+
+# Binary / image assets (no extractable text knowledge)
+docs/screenshots/
+*.png
+*.svg
+*.ico
