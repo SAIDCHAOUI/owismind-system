@@ -1191,4 +1191,39 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-06-12 (workflow de recherche 6 agents : doc Dataiku, SOTA NL2SQL,
   taxonomie 817 questions, critique repo). **Date** : 2026-06-12.
 
+## L052 — Moteur hybride : le semantic model garde le SQL, nos couches le nourrissent (✅ VALIDÉ DSS 2026-06-12)
+- **Contexte** : v3 livré avec SQL 100 % code-owned (L051). A/B de l'user en DSS : salesdrive_v2
+  (semantic model) « répond et comprend beaucoup mieux » que le SQL direct ; et en playground, le
+  semantic model sur la question BRUTE multi-produits (« budget 2026 for the Roaming Hub, Roaming
+  sponsor, IPX, Services and Signalling ») produit un CASE Product/Solution parfait, une ligne par
+  item. Décision user : **toutes les couches (profil, grounding, désambiguïsation) au service du
+  semantic model**, qui génère le SQL.
+- **Ce qui a échoué** (3 causes distinctes sur la même question, diagnostiquées via logs réels) :
+  (1) le registre collé avait `revenue_expert.enabled=False` → c'est salesdrive_v2 qui répondait
+  (toujours vérifier QUEL agent a répondu avant de débugger le contenu) ; (2) **mode Agent du
+  tool** : la sortie est une transcription multi-messages et l'extracteur prenait le PREMIER champ
+  texte → le préambule (« I'll start by exploring the schema... ») relayé comme réponse finale —
+  salesdrive_v2 avait été validé avec le tool en mode linéaire, l'activation du mode Agent a révélé
+  le bug ; (3) templates COMPOSE → `Product='A' AND Product='B'` impossible sur les énumérations
+  multi-valeurs. Aussi : `LEFT(date,10)` n'existe pas en PG (profil avait classé une colonne `date`
+  comme string) ; et `EXTRACT(YEAR FROM ...)` du semantic model marche car la colonne est date.
+- **Solution qui marche** : (a) `SQL_ENGINE="semantic_tool"` par défaut + `FALLBACK_TO_DIRECT`
+  (panne technique seulement — un résultat vide légitime reste no_data honnête) ; (b) extraction
+  mode-Agent : réponse par **priorité de clés** (`answer`/`output_text` > `completion` > `text` >
+  `result`) et **dernière occurrence gagnante** ; lignes/row_count = **dernier jeu** (les requêtes
+  sondes intermédiaires ne polluent plus) ; (c) `build_semantic_question` : **la question user mène
+  toujours**, puis intent en hint, valeurs exactes groupées **`IN` par colonne** (jamais de AND
+  intra-colonne), règle « énumération → OR, une ligne par item ; contraintes de natures différentes
+  → AND », scénario/période explicites, note de destination (« ta table sera lue par un LLM ») ;
+  (d) prédicats temporels **cast-safe** `LEFT(CAST(col AS text), n)` + auto-fallback déterministe→
+  LLM avec l'erreur DB + profiler durci (dtype date prioritaire, colonne temporelle ≠ enum).
+- **Preuve-vérification** : ✅ user en DSS « ça marche super bien » (recettes + expert + orchestrateur
+  routé) ; 127+86+55 unittest verts (tests mode-Agent dernier-gagnant, IN par colonne, règle
+  énumération). Anomalies du semantic model NOTÉES pour la session dédiée : `Phase='ACTUAL'` (sans S)
+  dans la description d'entité et le filtre « Actual Revenue Only » vs valeurs réelles `ACTUALS` ;
+  synonyme « roaming hub » sur le terme Roaming Sponsor (produit différent). Config scriptable :
+  `project.get_semantic_model("2O2KcHw")` → `get_raw()`/`save()` + versions.
+- **Source** : session 2026-06-12 Run 2 (logs DSS réels + playground + JSON du semantic model
+  extrait par l'user). **Date** : 2026-06-12.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

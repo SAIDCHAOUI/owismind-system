@@ -5,19 +5,21 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**0★★) SYSTÈME D'AGENTS v3 GÉNÉRIQUE « dataiku-agents/ » (2026-06-12, nuit déléguée) — ⏳ CODÉ +
-110 UNITTEST VERTS, RIEN n'est validé DSS.** Remplace le semantic model boîte noire par une chaîne
-100 % possédée : **recette profiler** (profil JSON du dataset : stats déterministes + enrichissement
-LLM + overrides humains éditables) + **recette value index** (catalogue exact des valeurs, norm
-partagée) → **Dataset Expert agent GÉNÉRIQUE** (UNDERSTAND généré du profil → RESOLVE SQL sur
-l'index → **SQL par templates déterministes, 9 intents** + garde-fou LLM-SQL pour `custom` →
-exécution **read-only SQLExecutor2** + EXPLAIN + ≤2 réparations → RENDER vérifiée chiffre par
-chiffre ; `about_data` = 0 SQL) → **orchestrateur v3.0** (= v2.4 + **fan-out PARALLÈLE**
-ThreadPoolExecutor≤3, spans post-hoc thread principal + entrée registre `revenue_expert`
-enabled=False placeholder). Contrats gelés respectés (event kinds, spans `semantic-model-query`
-avec success VÉRIDIQUE, AGENT_RESULT+attempts, sql_id, caps) → webapp/Evidence inchangées. Aucun
-tool DSS requis (resolver+SQL inlinés). **→ DÉROULER `dataiku-agents/README.md`** (pas-à-pas
-complet + 13 smoke tests corpus + modèles par appel). Détail → L051 + `sessions/2026-06-12.md`.
+**0★★) SYSTÈME D'AGENTS v3 « dataiku-agents/ » — ✅ VALIDÉ DSS (2026-06-12, « ça marche super
+bien »).** Architecture HYBRIDE tranchée par A/B user : **le Semantic Model Query tool garde le
+SQL** (`SQL_ENGINE="semantic_tool"`, tool `v4oqA6R`, mode Agent), et le **Dataset Expert générique**
+(`agent:AKQaQ0Am`) est sa tour de contrôle : UNDERSTAND généré du profil (recette Flow + overrides
+humains) → RESOLVE sur `<ds>_value_index` (valeurs exactes) → COMPOSE (« la QUESTION USER MÈNE » +
+intent hint + valeurs groupées `IN` par colonne + règle énumération→OR/une-ligne-par-item +
+scénario/période + note destination) → QUERY (extraction mode-Agent : priorité de clés + DERNIER
+texte/lignes) → RENDER vérifié. Moteur SQL direct (templates 9 intents + LLM gardé + read-only)
+conservé en **fallback technique** (`FALLBACK_TO_DIRECT`). Orchestrateur v3 = v2.4 + fan-out
+parallèle ; registre basculé `revenue_expert=True` / `salesdrive_v2=False`. 127+86+55 tests.
+Résumé du dossier → `dataiku-agents/CLAUDE.md` ; détail → L051-L052 + `sessions/2026-06-12.md`.
+**Prochaine session : le SEMANTIC MODEL lui-même** (id modèle `2O2KcHw`, config scriptable
+`get_raw()`/`save()`) — corriger `Phase='ACTUAL'`→`'ACTUALS'` (description + filtre « Actual
+Revenue Only ») et le synonyme « roaming hub » sur Roaming Sponsor (produit différent), versionner
+le JSON au repo, golden queries depuis le corpus.
 **0★) ORCHESTRATEUR « EXPERT AUTHORITY » v2.4 (Run 5 2026-06-11) — ⏳ CODÉ + TESTÉ LOCAL (86 unittest),
 NON validé DSS.** Corrige le défaut CENTRAL (confirmé sur `docs/questions_asked.md`, 817 q. réelles,
 ~10 engueulades même cause) : l'orchestrateur **niait/inventait au lieu de router** (« budget 2026 » →
@@ -70,11 +72,11 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-12 (nuit déléguée) → détail `sessions/2026-06-12.md`, leçon **L051**
-- **Système v3 générique `dataiku-agents/`** : 2 recettes Flow (profil + index), Dataset Expert
-  générique (SQL code-owned), orchestrateur v3 parallèle, 110 unittest, README d'implémentation.
-- Recherche 6 agents : semantic model 14.4 pilotable par API mais écarté ; SOTA NL2SQL (templates ≫
-  SQL libre) ; taxonomie des 817 questions ; non-régression suites 86+55 vertes. **0 validation DSS.**
+## 🧭 Dernière session — 2026-06-12 (2 runs) → détail `sessions/2026-06-12.md`, leçons **L051-L052**
+- **Run 1 (nuit)** : construction complète du système v3 (2 recettes Flow, Dataset Expert, orchestrateur
+  parallèle, README) après recherche 6 agents (SOTA NL2SQL, semantic model 14.4 scriptable, corpus).
+- **Run 2 (jour)** : validation DSS avec l'user + bascule moteur HYBRIDE semantic-tool (A/B) ; fixes
+  réels : LEFT(date) cast-safe, extraction mode-Agent dernier-gagnant, énumérations IN/OR. ✅ VALIDÉ.
 
 ## Avant — 2026-06-11 (5 runs) → détail `sessions/2026-06-11.md`, leçons **L044-L050**
 - **Run 1-2** : trust layer v2 déployé (revue 26 agents, 17/17 corrigés) ; nettoyage repo + git init +
@@ -93,11 +95,13 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 
 ## ⚠️ Top gotchas / règles actives
 **Process :**
-- **P0 — dataiku-agents v3 (L051)** : l'expertise vient des ARTEFACTS du Flow (profil + value index),
-  relus par l'humain (dataset éditable d'overrides, jamais écrasés) — pas de valeur métier dans le
-  repo (fixtures synthétiques). Contrats gelés : `KNOWN_BLOCK_IDS`/`KNOWN_TOOL_NAMES` de l'expert ↔
-  `block_labels`/`tool_labels` du registre (test anti-dérive) ; norm valeurs partagée recettes↔agent.
-  Tests : `python3 -m unittest discover -s dataiku-agents/tests`.
+- **P0 — dataiku-agents v3 (L051/L052)** : l'expertise vient des ARTEFACTS du Flow (profil + value
+  index, overrides humains jamais écrasés) — pas de valeur métier dans le repo. Le SQL appartient au
+  SEMANTIC MODEL (tool mode Agent) : extraction = priorité de clés + DERNIER texte/lignes (jamais le
+  premier = préambule) ; question sémantique = question user EN TÊTE + `IN` par colonne (jamais AND
+  intra-colonne). UNE capability revenue `enabled` à la fois. Contrats gelés : `KNOWN_BLOCK_IDS`/
+  `KNOWN_TOOL_NAMES` ↔ registre (test anti-dérive) ; norm partagée recettes↔agent. Tests :
+  `python3 -m unittest discover -s dataiku-agents/tests`.
 - **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
   `.graphifyignore` versionné. Tests front : `node --test test/*.test.js` depuis `Plugin/owismind/frontend/`.
 - **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
@@ -146,14 +150,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
 
 ## 🔜 Prochaines étapes
-0. **SYSTÈME v3 — IMPLÉMENTER EN DSS (priorité, guide = `dataiku-agents/README.md`)** : recette
-   profil + recette index sur `DRIVE_Revenues` → relire le profil (overrides : GCP=interne, phases,
-   display pairs) → Code Agent Dataset Expert (CONFIG : 2 noms de datasets + LLM ids) → orchestrateur
-   v3 : remplir `revenue_expert.agent_id`, flip enabled (expert=True, salesdrive_v2=False), coller
-   dans le Code Agent orchestrateur EXISTANT → 13 smoke tests du README §5. Divergence → corriger via
-   profil/overrides/prompts, jamais de valeur métier en dur (P3). Rollback = re-flip des 2 flags.
-0bis. Si v3 retardé : valider l'orchestrateur v2.4 seul (coller `orchestrator/orchestrator_agent.py`,
-   smoke-tests budget→route / tickets→gap / météo / ellipse / concept).
+0. **SESSION SEMANTIC MODEL (priorité, demandée par l'user)** : modèle `2O2KcHw`, config scriptable
+   (`project.get_semantic_model` → `get_raw()`/`save()` + versions). Corriger `Phase='ACTUAL'`→
+   `'ACTUALS'` (description entité + filtre « Actual Revenue Only ») et le synonyme « roaming hub »
+   sur le terme Roaming Sponsor ; versionner le JSON au repo ; enrichir les golden queries depuis
+   `docs/questions_asked.md` ; aligner glossaire ↔ profil.
+0bis. Poursuivre les smoke tests README §5 au fil de l'usage (part du total, YoY, trend, ellipses,
+   « IPL » ambigu) ; toute divergence → profil/overrides/prompts, jamais de valeur en dur (P3).
+0ter. **Agent tickets** (2 recettes + 1 Code Agent + 1 entrée registre) → débloque le 360 parallèle.
 1. **RECUEILLIR LES AJUSTEMENTS du user sur le trust layer** : « marche bien mais pas
    encore comme je veux » — faire préciser AVANT toute modification.
 2. **SalesDrive v2 — consolidation** : tester un cas de vraie ambiguïté de valeur (ex. « IPL + ») et
