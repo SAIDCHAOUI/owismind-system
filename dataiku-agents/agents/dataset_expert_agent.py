@@ -1176,13 +1176,21 @@ SEMANTIC_DESTINATION_NOTE = (
 
 
 def build_semantic_question(u, profile, filters):
-    """Compose the natural-language instruction for the Semantic Model Query
-    tool from the validated understanding + resolved exact filters. Pure and
-    deterministic; the only free text is the user instruction itself (custom
-    intent)."""
+    """Compose the instruction for the Semantic Model Query tool. Pure and
+    deterministic.
+
+    Design (revised after the 2026-06-12 A/B test): the user's ORIGINAL
+    question always LEADS — the semantic model maps enumerations and the
+    offer hierarchy better when it sees the real wording (e.g. '... for the
+    Roaming Hub, Roaming sponsor, IPX, Services and Signalling' -> one CASE
+    row per item across Product/Solution). Our layers then APPEND what they
+    earned: a deterministic intent hint, the grounded EXACT values (grouped
+    by column, IN semantics — never an impossible 'Product = A AND
+    Product = B'), explicit scenario and period, the axis/display rule, and
+    the destination context."""
     intent = u["intent"]
     metric = profile.metric(u["metric"] or "") or profile.default_metric
-    parts = []
+    parts = ['USER QUESTION: "%s"' % u["instruction"]]
 
     metric_part = ""
     if metric is not None:
@@ -1202,82 +1210,112 @@ def build_semantic_question(u, profile, filters):
                   "never group by %s" % (axis, display, display, display))
         return s
 
+    # Deterministic intent hint (guidance, not a replacement of the question).
+    hint = ""
     if intent == "total":
-        parts.append("Compute the total of %s." % metric_part)
+        hint = "One aggregated figure: the total of %s." % metric_part
     elif intent in ("breakdown", "top_n"):
-        parts.append("Compute %s %s." % (metric_part, axis_sentence(u["group_by"])))
         order = "ascending" if u["order"] == "asc" else "descending"
-        if intent == "top_n":
-            parts.append("Order by the metric %s and keep only the top %d."
-                         % (order, u["top_n"]))
-        else:
-            parts.append("Order by the metric %s." % order)
+        hint = ("%s %s, ordered by the metric %s%s."
+                % (metric_part.capitalize(), axis_sentence(u["group_by"]),
+                   order,
+                   ", keeping only the top %d" % u["top_n"]
+                   if intent == "top_n" else ""))
     elif intent == "share_of_total":
-        parts.append("Compute %s %s." % (metric_part, axis_sentence(u["group_by"])))
-        parts.append("For each row also return its share of the grand total "
-                     "as a percentage column named share_pct (1 decimal).")
-        parts.append("Order by the metric descending%s."
-                     % (" and keep only the top %d" % u["top_n"] if u["top_n"] else ""))
+        hint = ("%s %s, with for each row its share of the grand total as a "
+                "percentage column named share_pct (1 decimal), ordered by "
+                "the metric descending%s."
+                % (metric_part.capitalize(), axis_sentence(u["group_by"]),
+                   ", keeping only the top %d" % u["top_n"] if u["top_n"] else ""))
     elif intent == "compare_scenarios":
         a, b = u["scenarios"][0], u["scenarios"][1]
-        parts.append(
-            "Compare %s across the %s values %s: return one column per value, "
-            "plus the delta amount (%s minus %s) and the delta percentage "
-            "versus %s." % (metric_part, (scen or {}).get("column", "scenario"),
-                            " and ".join(u["scenarios"]), a, b, b))
+        hint = ("Compare %s across the %s values %s: one column per value, "
+                "plus the delta amount (%s minus %s) and the delta percentage "
+                "versus %s." % (metric_part, (scen or {}).get("column", "scenario"),
+                                " and ".join(u["scenarios"]), a, b, b))
         if u["group_by"]:
-            parts.append("Break the comparison down %s." % axis_sentence(u["group_by"]))
+            hint += " Break the comparison down %s." % axis_sentence(u["group_by"])
         scen_values = u["scenarios"]
     elif intent == "compare_periods":
         descr = "; ".join("%s: from %s to %s" % (p["label"], p["start"], p["end"])
                           for p in u["periods"])
-        parts.append(
-            "Compare %s across the following periods: %s. Return one column "
-            "per period (aliased with the period label), plus the delta "
-            "amount and the delta percentage between the periods."
-            % (metric_part, descr))
+        hint = ("Compare %s across the following periods: %s. One column per "
+                "period (aliased with the period label), plus the delta "
+                "amount and the delta percentage between the periods."
+                % (metric_part, descr))
     elif intent == "trend":
-        parts.append("Compute the monthly %s grouped by month, ordered "
-                     "chronologically." % metric_part)
+        hint = ("The monthly %s grouped by month, ordered chronologically."
+                % metric_part)
     elif intent == "list_values":
-        parts.append("List the distinct values of %s, ordered alphabetically "
-                     "(at most %d values)." % (u["list_column"], LIST_VALUES_LIMIT))
+        hint = ("The distinct values of %s, ordered alphabetically (at most "
+                "%d values)." % (u["list_column"], LIST_VALUES_LIMIT))
     elif intent == "count_distinct":
-        parts.append("Count the number of distinct values of %s." % u["list_column"])
-    else:   # custom — closest to the user's words, filters still exact
-        parts.append('Answer this question on the data: "%s".' % u["instruction"])
+        hint = "The count of distinct values of %s." % u["list_column"]
+    if hint:
+        parts.append("WHAT IS EXPECTED: " + hint)
+
+    # Grounded exact values, grouped by column (same column -> IN, never AND).
+    if filters:
+        by_col, col_order = {}, []
+        for f in filters:
+            col = f["column"]
+            if col not in by_col:
+                by_col[col] = []
+                col_order.append(col)
+            by_col[col].append(str(f["value"]).replace("'", "''"))
+        lines = []
+        for col in col_order:
+            vals = by_col[col]
+            if len(vals) == 1:
+                lines.append("%s = '%s'" % (col, vals[0]))
+            else:
+                lines.append("%s IN (%s)" % (col, ", ".join("'%s'" % v
+                                                            for v in vals)))
+        parts.append("GROUNDED FILTER VALUES (resolved against the live data "
+                     "catalog — use these EXACT spellings verbatim, never "
+                     "fuzzy-match or substitute them): %s." % "; ".join(lines))
+        if len(filters) > 1:
+            parts.append(
+                "If the question ENUMERATES several of these values as items "
+                "to report (a list of products, solutions, customers...), "
+                "match them independently (OR semantics) and return ONE ROW "
+                "PER ITEM with a clear label; only combine constraints of "
+                "DIFFERENT kinds (e.g. a sales channel + an offer) with AND.")
 
     if scen and intent not in ("list_values",):
-        parts.append("Consider ONLY rows whose %s is in: %s."
+        parts.append("SCENARIO: consider ONLY rows whose %s is in: %s."
                      % (scen["column"], ", ".join(scen_values)))
 
     tm = profile.time
     if tm and intent != "compare_periods":
         if u["period"]["mode"] == "explicit":
-            parts.append("Only include rows with %s between %s and %s."
+            parts.append("PERIOD: only include rows with %s between %s and %s."
                          % (tm["column"], u["period"]["start"], u["period"]["end"]))
         else:
-            parts.append("Do not apply any filter on %s." % tm["column"])
-
-    if filters:
-        clauses = " AND ".join("%s = '%s'" % (f["column"],
-                                              str(f["value"]).replace("'", "''"))
-                               for f in filters)
-        parts.append("Apply ALL of the following filters with the EXACT "
-                     "values given (verbatim): %s." % clauses)
-        parts.append("Use the explicit filter values above. Do not "
-                     "fuzzy-match or substitute them.")
+            parts.append("PERIOD: do not apply any filter on %s." % tm["column"])
 
     parts.append(SEMANTIC_DESTINATION_NOTE)
     return " ".join(parts)
 
 
-# --- tool-output extraction (ported from SalesDrive v2, proven in DSS) --------
+# --- tool-output extraction (ported from SalesDrive v2, hardened for the
+# tool's AGENT MODE) ------------------------------------------------------------
+# Agent mode returns a multi-message transcript (reasoning -> schema
+# exploration -> probe queries -> final answer). Two consequences, both seen
+# live in DSS (2026-06-12: the relayed "answer" was "I'll start by exploring
+# the schema..."):
+#   - the ANSWER must be selected by KEY PRIORITY (answer/output_text beat a
+#     generic text) and, within a priority, the LAST occurrence wins (the
+#     final message), never the first (the reasoning preamble);
+#   - the TABULAR RESULT keeps the LAST occurrence too (probe-query results
+#     come before the final result set).
 
 _SEM_ROW_KEYS = ("rows", "records", "data", "result_rows", "values")
 _SEM_COLUMN_KEYS = ("columns", "column_names", "headers")
 _SEM_SQL_KEYS = ("sql", "query", "generated_sql")
-_SEM_ANSWER_KEYS = ("answer", "text", "output_text", "completion", "result")
+# key -> priority (lower wins); within a priority the LAST occurrence wins.
+_SEM_ANSWER_KEY_PRIORITY = {"answer": 0, "output_text": 0, "completion": 1,
+                            "text": 2, "result": 3}
 _SEM_MAX_WALK_DEPTH = 50
 
 
@@ -1327,7 +1365,9 @@ def extract_semantic_payload(raw_output):
     """Best-effort structured payload from the Semantic Model Query tool
     return value: {"sqls": [str], "result": {...}|None, "answer": str|None,
     "row_count": int|None, "shape_keys": [str]}. Defensive walker — the exact
-    output schema is instance-dependent; absence stays honest (None)."""
+    output schema is instance-dependent; absence stays honest (None).
+    Agent-mode safe: answer by key priority + LAST occurrence; tabular result
+    and row_count = LAST occurrence (final result set, not probe queries)."""
     payload = {"sqls": [], "result": None, "answer": None,
                "row_count": None, "shape_keys": []}
     if not isinstance(raw_output, dict):
@@ -1335,6 +1375,9 @@ def extract_semantic_payload(raw_output):
     root = (raw_output.get("output")
             if isinstance(raw_output.get("output"), dict) else raw_output)
     payload["shape_keys"] = sorted(str(k) for k in root.keys())[:30]
+
+    answer_candidates = []   # (priority, walk_order, text)
+    state = {"order": 0}
 
     def _walk(node, depth):
         if depth > _SEM_MAX_WALK_DEPTH:
@@ -1344,18 +1387,16 @@ def extract_semantic_payload(raw_output):
                 val = node.get(key)
                 if isinstance(val, str) and val.strip() and val not in payload["sqls"]:
                     payload["sqls"].append(val)
-            if payload["result"] is None:
-                found = extract_tabular_node(node)
-                if found is not None:
-                    payload["result"] = found
-            if payload["row_count"] is None and isinstance(node.get("row_count"), int):
-                payload["row_count"] = node["row_count"]
-            if payload["answer"] is None:
-                for key in _SEM_ANSWER_KEYS:
-                    val = node.get(key)
-                    if isinstance(val, str) and val.strip():
-                        payload["answer"] = val.strip()
-                        break
+            found = extract_tabular_node(node)
+            if found is not None:
+                payload["result"] = found          # last occurrence wins
+            if isinstance(node.get("row_count"), int):
+                payload["row_count"] = node["row_count"]   # last wins
+            for key, prio in _SEM_ANSWER_KEY_PRIORITY.items():
+                val = node.get(key)
+                if isinstance(val, str) and val.strip():
+                    state["order"] += 1
+                    answer_candidates.append((prio, state["order"], val.strip()))
             for v in node.values():
                 _walk(v, depth + 1)
         elif isinstance(node, list):
@@ -1363,6 +1404,11 @@ def extract_semantic_payload(raw_output):
                 _walk(item, depth + 1)
 
     _walk(root, 0)
+    if answer_candidates:
+        best_prio = min(c[0] for c in answer_candidates)
+        payload["answer"] = max((c for c in answer_candidates
+                                 if c[0] == best_prio),
+                                key=lambda c: c[1])[2]
     if payload["row_count"] is None and payload["result"] is not None:
         payload["row_count"] = len(payload["result"]["rows"])
     return payload

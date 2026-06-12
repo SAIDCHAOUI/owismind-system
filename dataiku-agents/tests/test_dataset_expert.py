@@ -707,22 +707,42 @@ class TestSemanticEngine(unittest.TestCase):
         self.assertTrue(dx.FALLBACK_TO_DIRECT)
 
     def test_total_question_grounded_and_contextualized(self):
-        u = make_u(scenarios=["ACTUALS"],
+        u = make_u(instruction="CA de HALYS en 2025 ?",
+                   scenarios=["ACTUALS"],
                    period={"mode": "explicit", "start": "2025-01-01",
                            "end": "2025-12-31", "label": "2025"})
         q = dx.build_semantic_question(
             u, P, [{"column": "customer_name", "value": "HALYS"}])
+        self.assertIn('USER QUESTION: "CA de HALYS en 2025 ?"', q)
         self.assertIn('revenue (SUM("amount_eur"))', q)
         self.assertIn("Phase is in: ACTUALS", q)
         self.assertIn("year_month between 2025-01-01 and 2025-12-31", q)
         self.assertIn("customer_name = 'HALYS'", q)
-        self.assertIn("Do not fuzzy-match", q)
+        self.assertIn("never fuzzy-match", q)
         self.assertIn("read by another LLM", q)   # destination context
 
     def test_default_scenario_applied_when_unspecified(self):
         q = dx.build_semantic_question(make_u(), P, [])
         self.assertIn("Phase is in: ACTUALS", q)
-        self.assertIn("Do not apply any filter on year_month", q)
+        self.assertIn("do not apply any filter on year_month", q)
+
+    def test_enumeration_groups_same_column_as_in(self):
+        # 'budget for Roaming Hub, Roaming Sponsor, IPX' shape: 2 values on
+        # one column + 1 on another -> IN per column + OR/one-row-per-item rule
+        filters = [{"column": "Product", "value": "Roaming Hub"},
+                   {"column": "Product", "value": "Roaming Sponsor"},
+                   {"column": "Solution", "value": "IPX"}]
+        q = dx.build_semantic_question(make_u(scenarios=["BUDGET"]), P, filters)
+        self.assertIn("Product IN ('Roaming Hub', 'Roaming Sponsor')", q)
+        self.assertIn("Solution = 'IPX'", q)
+        self.assertNotIn("Product = 'Roaming Hub' AND", q)
+        self.assertIn("ONE ROW PER ITEM", q)
+        self.assertIn("Phase is in: BUDGET", q)
+
+    def test_single_filter_has_no_enumeration_rule(self):
+        q = dx.build_semantic_question(
+            make_u(), P, [{"column": "Product", "value": "EVPL"}])
+        self.assertNotIn("ONE ROW PER ITEM", q)
 
     def test_top_n_question_carries_display_rule(self):
         u = make_u(intent="top_n", group_by="customer_id", top_n=5)
@@ -744,8 +764,9 @@ class TestSemanticEngine(unittest.TestCase):
         self.assertIn("distinct values of Product",
                       dx.build_semantic_question(u, P, []))
         u = make_u(intent="custom", instruction="ratio onnet/offnet ?")
-        self.assertIn('"ratio onnet/offnet ?"',
-                      dx.build_semantic_question(u, P, []))
+        q = dx.build_semantic_question(u, P, [])
+        self.assertIn('USER QUESTION: "ratio onnet/offnet ?"', q)
+        self.assertNotIn("WHAT IS EXPECTED", q)   # custom: the question leads
 
     def test_literal_escaping_in_filters(self):
         q = dx.build_semantic_question(
@@ -773,6 +794,34 @@ class TestSemanticEngine(unittest.TestCase):
         p = dx.extract_semantic_payload({"output": {"weird": True}})
         self.assertIsNone(p["result"])
         self.assertIsNone(p["row_count"])
+
+    def test_agent_mode_answer_is_last_text_not_preamble(self):
+        # Agent-mode transcript: the reasoning preamble must NOT be relayed
+        # (live DSS failure 2026-06-12: "I'll start by exploring the schema...")
+        raw = {"output": {"messages": [
+            {"text": "I'll start by exploring the schema."},
+            {"text": "Running a probe query..."},
+            {"text": "Here is the Budget 2026 breakdown: 12345 EUR total."},
+        ]}}
+        p = dx.extract_semantic_payload(raw)
+        self.assertIn("Budget 2026 breakdown", p["answer"])
+
+    def test_agent_mode_priority_keys_beat_generic_text(self):
+        raw = {"output": {"text": "preamble thinking",
+                          "final": {"answer": "the real answer"}}}
+        p = dx.extract_semantic_payload(raw)
+        self.assertEqual(p["answer"], "the real answer")
+
+    def test_agent_mode_last_tabular_wins(self):
+        # probe-query records first, final result set last -> last wins
+        raw = {"output": {"steps": [
+            {"records": [{"probe": 1}]},
+            {"records": [{"diamond_id": "5373", "total_revenue": 99.0}],
+             "row_count": 1},
+        ]}}
+        p = dx.extract_semantic_payload(raw)
+        self.assertEqual(p["result"]["columns"], ["diamond_id", "total_revenue"])
+        self.assertEqual(p["row_count"], 1)
 
     def test_extract_tabular_node_list_of_lists(self):
         node = {"rows": [[1, "a"], [2, "b"]], "columns": ["n", "s"]}

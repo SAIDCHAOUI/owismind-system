@@ -273,7 +273,7 @@ CAPABILITIES = {
         # v2.3: receive the previous assistant message + raw user answer as a
         # system message (conversation continuity for disambiguation answers).
         "pass_context": True,
-        "enabled": True,     # v2.4: live revenue expert (agent:MODpGFcC)
+        "enabled": False,    # v3: superseded by revenue_expert below (rollback = re-flip)
     },
     # v3 — GENERIC Dataset Expert instance for the revenue dataset (repo:
     # dataiku-agents/agents/dataset_expert_agent.py). It builds and runs its
@@ -283,7 +283,7 @@ CAPABILITIES = {
     # enabled=False (ONE revenue capability visible to the planner at a time).
     "revenue_expert": {
         "kind": "agent",
-        "agent_id": "agent:FILL_ME",     # <- id of the Dataset Expert Code Agent
+        "agent_id": "agent:AKQaQ0Am",    # Dataset Expert Code Agent (DSS, 2026-06-12)
         "domain": "revenue",
         "label_fr": "Expert revenus (Drive)",
         "label_en": "Revenue expert (Drive)",
@@ -328,7 +328,7 @@ CAPABILITIES = {
                                      "en": "generating and running the SQL query"},
         },
         "pass_context": True,
-        "enabled": False,    # v3: flip to True once the DSS Code Agent exists
+        "enabled": True,     # v3: LIVE revenue expert (semantic-tool engine inside)
     },
     "current_date": {
         "kind": "tool",
