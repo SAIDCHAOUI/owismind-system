@@ -82,6 +82,23 @@ UNDERSTAND_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro"
 SQLGEN_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
 HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
 
+# --- SQL engine --------------------------------------------------------------
+# "semantic_tool" (DEFAULT — user decision 2026-06-12 after A/B testing in DSS):
+#   the agent does UNDERSTAND + RESOLVE + COMPOSE, then delegates SQL
+#   generation/execution to the DSS Semantic Model Query tool, feeding it a
+#   maximally grounded question (exact catalog values, explicit scenarios and
+#   periods, axis rules, destination context). The semantic model owns the
+#   SQL; every upstream layer exists to hand it the best possible context.
+# "direct": the agent builds and runs its OWN read-only SQL (deterministic
+#   templates + guarded LLM for the long tail).
+# On a TECHNICAL semantic-tool failure the agent falls back to "direct" when
+# FALLBACK_TO_DIRECT is True (a legit empty result is NOT a failure).
+SQL_ENGINE = "semantic_tool"
+FALLBACK_TO_DIRECT = True
+SEMANTIC_TOOL_ID = "v4oqA6R"        # Semantic Model Query tool id (instance)
+SEMANTIC_TOOL_NAME = "revenue_semantic_query"
+SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
+
 PROFILE_TTL_SECONDS = 600          # in-process profile cache
 MAX_TERMS = 8                      # grounded terms per question
 SQL_MAX_ROWS = 500                 # hard LIMIT on every query
@@ -1141,6 +1158,239 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
 
 
 # =============================================================================
+# 8b. SEMANTIC MODEL QUERY ENGINE — composer + tool-output extraction
+# -----------------------------------------------------------------------------
+# The semantic question is 100% deterministic (frozen templates per intent):
+# the LLM never writes it. It carries everything the upstream layers earned —
+# exact catalog values from the resolver, explicit scenario values, explicit
+# period bounds, the axis + display rule — plus the DESTINATION CONTEXT (the
+# tool must know its SQL feeds a result table that an LLM reads to answer).
+# =============================================================================
+
+SEMANTIC_DESTINATION_NOTE = (
+    "CONTEXT: the SQL you generate will produce a result table that is "
+    "displayed to the user AND read by another LLM to write the final "
+    "answer. Return a clean tabular result with explicit column aliases "
+    "(one column per figure, plus the grouping label columns) — never a "
+    "prose-only answer.")
+
+
+def build_semantic_question(u, profile, filters):
+    """Compose the natural-language instruction for the Semantic Model Query
+    tool from the validated understanding + resolved exact filters. Pure and
+    deterministic; the only free text is the user instruction itself (custom
+    intent)."""
+    intent = u["intent"]
+    metric = profile.metric(u["metric"] or "") or profile.default_metric
+    parts = []
+
+    metric_part = ""
+    if metric is not None:
+        metric_part = "the %s (%s)" % (metric["name"], metric_expr(metric))
+
+    scen = profile.scenario
+    scen_values = []
+    if scen:
+        scen_values = u["scenarios"] or scen.get("default_values") or scen["values"][:1]
+
+    def axis_sentence(axis):
+        col = profile.column(axis) or {}
+        display = col.get("display_column")
+        s = "broken down by %s" % axis
+        if display and display != axis:
+            s += (". Group by %s ONLY and return MAX(%s) AS %s for display; "
+                  "never group by %s" % (axis, display, display, display))
+        return s
+
+    if intent == "total":
+        parts.append("Compute the total of %s." % metric_part)
+    elif intent in ("breakdown", "top_n"):
+        parts.append("Compute %s %s." % (metric_part, axis_sentence(u["group_by"])))
+        order = "ascending" if u["order"] == "asc" else "descending"
+        if intent == "top_n":
+            parts.append("Order by the metric %s and keep only the top %d."
+                         % (order, u["top_n"]))
+        else:
+            parts.append("Order by the metric %s." % order)
+    elif intent == "share_of_total":
+        parts.append("Compute %s %s." % (metric_part, axis_sentence(u["group_by"])))
+        parts.append("For each row also return its share of the grand total "
+                     "as a percentage column named share_pct (1 decimal).")
+        parts.append("Order by the metric descending%s."
+                     % (" and keep only the top %d" % u["top_n"] if u["top_n"] else ""))
+    elif intent == "compare_scenarios":
+        a, b = u["scenarios"][0], u["scenarios"][1]
+        parts.append(
+            "Compare %s across the %s values %s: return one column per value, "
+            "plus the delta amount (%s minus %s) and the delta percentage "
+            "versus %s." % (metric_part, (scen or {}).get("column", "scenario"),
+                            " and ".join(u["scenarios"]), a, b, b))
+        if u["group_by"]:
+            parts.append("Break the comparison down %s." % axis_sentence(u["group_by"]))
+        scen_values = u["scenarios"]
+    elif intent == "compare_periods":
+        descr = "; ".join("%s: from %s to %s" % (p["label"], p["start"], p["end"])
+                          for p in u["periods"])
+        parts.append(
+            "Compare %s across the following periods: %s. Return one column "
+            "per period (aliased with the period label), plus the delta "
+            "amount and the delta percentage between the periods."
+            % (metric_part, descr))
+    elif intent == "trend":
+        parts.append("Compute the monthly %s grouped by month, ordered "
+                     "chronologically." % metric_part)
+    elif intent == "list_values":
+        parts.append("List the distinct values of %s, ordered alphabetically "
+                     "(at most %d values)." % (u["list_column"], LIST_VALUES_LIMIT))
+    elif intent == "count_distinct":
+        parts.append("Count the number of distinct values of %s." % u["list_column"])
+    else:   # custom — closest to the user's words, filters still exact
+        parts.append('Answer this question on the data: "%s".' % u["instruction"])
+
+    if scen and intent not in ("list_values",):
+        parts.append("Consider ONLY rows whose %s is in: %s."
+                     % (scen["column"], ", ".join(scen_values)))
+
+    tm = profile.time
+    if tm and intent != "compare_periods":
+        if u["period"]["mode"] == "explicit":
+            parts.append("Only include rows with %s between %s and %s."
+                         % (tm["column"], u["period"]["start"], u["period"]["end"]))
+        else:
+            parts.append("Do not apply any filter on %s." % tm["column"])
+
+    if filters:
+        clauses = " AND ".join("%s = '%s'" % (f["column"],
+                                              str(f["value"]).replace("'", "''"))
+                               for f in filters)
+        parts.append("Apply ALL of the following filters with the EXACT "
+                     "values given (verbatim): %s." % clauses)
+        parts.append("Use the explicit filter values above. Do not "
+                     "fuzzy-match or substitute them.")
+
+    parts.append(SEMANTIC_DESTINATION_NOTE)
+    return " ".join(parts)
+
+
+# --- tool-output extraction (ported from SalesDrive v2, proven in DSS) --------
+
+_SEM_ROW_KEYS = ("rows", "records", "data", "result_rows", "values")
+_SEM_COLUMN_KEYS = ("columns", "column_names", "headers")
+_SEM_SQL_KEYS = ("sql", "query", "generated_sql")
+_SEM_ANSWER_KEYS = ("answer", "text", "output_text", "completion", "result")
+_SEM_MAX_WALK_DEPTH = 50
+
+
+def extract_tabular_node(outputs):
+    """Capped {columns, rows, truncated} from one dict node, or None.
+    Accepted shapes: list of dicts, or list of lists + a sibling columns key."""
+    for key in _SEM_ROW_KEYS:
+        raw = outputs.get(key)
+        if not isinstance(raw, list) or not raw:
+            continue
+        if all(isinstance(r, dict) for r in raw):
+            first_keys = list(raw[0].keys())
+            columns = [str(c)[:_RESULT_CELL_MAX_CHARS]
+                       for c in first_keys[:MAX_RESULT_COLS]]
+            rows = [[_cap_cell(r.get(c)) for c in first_keys[:MAX_RESULT_COLS]]
+                    for r in raw[:MAX_RESULT_ROWS]]
+            truncated = len(raw) > MAX_RESULT_ROWS or len(first_keys) > MAX_RESULT_COLS
+        elif all(isinstance(r, (list, tuple)) for r in raw):
+            columns, truncated_cols = None, False
+            for col_key in _SEM_COLUMN_KEYS:
+                cand = outputs.get(col_key)
+                if isinstance(cand, list) and cand:
+                    columns = [str(c)[:_RESULT_CELL_MAX_CHARS]
+                               for c in cand[:MAX_RESULT_COLS]]
+                    truncated_cols = len(cand) > MAX_RESULT_COLS
+                    break
+            if columns is None:
+                continue
+            rows = [[_cap_cell(c) for c in list(r)[:MAX_RESULT_COLS]]
+                    for r in raw[:MAX_RESULT_ROWS]]
+            truncated = (len(raw) > MAX_RESULT_ROWS or truncated_cols
+                         or any(len(r) > MAX_RESULT_COLS for r in raw[:MAX_RESULT_ROWS]))
+        else:
+            continue
+        result = {"columns": columns, "rows": rows, "truncated": bool(truncated)}
+        try:
+            serialized = json.dumps(result, ensure_ascii=False, default=str)
+        except Exception:
+            return None
+        if len(serialized) > _RESULT_JSON_MAX_CHARS:
+            return {"columns": columns, "rows": [], "truncated": True}
+        return result
+    return None
+
+
+def extract_semantic_payload(raw_output):
+    """Best-effort structured payload from the Semantic Model Query tool
+    return value: {"sqls": [str], "result": {...}|None, "answer": str|None,
+    "row_count": int|None, "shape_keys": [str]}. Defensive walker — the exact
+    output schema is instance-dependent; absence stays honest (None)."""
+    payload = {"sqls": [], "result": None, "answer": None,
+               "row_count": None, "shape_keys": []}
+    if not isinstance(raw_output, dict):
+        return payload
+    root = (raw_output.get("output")
+            if isinstance(raw_output.get("output"), dict) else raw_output)
+    payload["shape_keys"] = sorted(str(k) for k in root.keys())[:30]
+
+    def _walk(node, depth):
+        if depth > _SEM_MAX_WALK_DEPTH:
+            return
+        if isinstance(node, dict):
+            for key in _SEM_SQL_KEYS:
+                val = node.get(key)
+                if isinstance(val, str) and val.strip() and val not in payload["sqls"]:
+                    payload["sqls"].append(val)
+            if payload["result"] is None:
+                found = extract_tabular_node(node)
+                if found is not None:
+                    payload["result"] = found
+            if payload["row_count"] is None and isinstance(node.get("row_count"), int):
+                payload["row_count"] = node["row_count"]
+            if payload["answer"] is None:
+                for key in _SEM_ANSWER_KEYS:
+                    val = node.get(key)
+                    if isinstance(val, str) and val.strip():
+                        payload["answer"] = val.strip()
+                        break
+            for v in node.values():
+                _walk(v, depth + 1)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item, depth + 1)
+
+    _walk(root, 0)
+    if payload["row_count"] is None and payload["result"] is not None:
+        payload["row_count"] = len(payload["result"]["rows"])
+    return payload
+
+
+_SEMANTIC_KEY_CANDIDATES = ("question", "query", "user_question", "input", "text")
+
+
+def pick_semantic_input_key(descriptor):
+    """Auto-detect the input key of the Semantic Model Query tool from its
+    descriptor's inputSchema. Pure, never raises."""
+    try:
+        props = ((descriptor or {}).get("inputSchema") or {}).get("properties") or {}
+        if not isinstance(props, dict) or not props:
+            return SEMANTIC_QUESTION_KEY
+        for cand in _SEMANTIC_KEY_CANDIDATES:
+            if cand in props:
+                return cand
+        str_props = [k for k, v in props.items()
+                     if isinstance(v, dict) and v.get("type") == "string"]
+        if len(str_props) == 1:
+            return str_props[0]
+    except Exception:
+        pass
+    return SEMANTIC_QUESTION_KEY
+
+
+# =============================================================================
 # 9. RESULT SHAPING (caps mirror the orchestrator/webapp)
 # =============================================================================
 
@@ -1220,6 +1470,18 @@ def _column_format(name, fmt_map, profile):
             return m.get("format", "number")
     if any(tok in low for tok in ("count", "nb_", "num_")):
         return "count"
+    # Semantic-tool result aliases are free-form ("total_revenue", scenario
+    # pivot columns named after the scenario values): when the dataset's
+    # default metric is an amount, recognize those shapes — gated on the
+    # PROFILE (no hardcoded business words beyond generic metric vocabulary).
+    dm = profile.default_metric or {}
+    if dm.get("format") == "amount":
+        scen = profile.scenario or {}
+        scen_words = {str(v).lower() for v in (scen.get("values") or [])}
+        if (low in scen_words
+                or any(tok in low for tok in ("amount", "revenue", "revenu",
+                                              "total", "delta", "eur"))):
+            return "amount"
     return None
 
 
@@ -1447,6 +1709,35 @@ class MyLLM(BaseLLM):
         self._profile = None
         self._profile_loaded_at = 0.0
         self._table = None
+        self._tools = {}
+        self._semantic_key = None    # auto-detected from the tool descriptor
+
+    # ------------------------------------------------------------------ tools
+    def _get_tool(self, project, tool_id, tool_name):
+        """get_agent_tool(tool_id) with a one-shot fallback matching tool_name
+        against list_agent_tools() (covers a recreated tool whose id changed).
+        Proven pattern from SalesDrive v2 (validated in DSS)."""
+        if tool_id in self._tools:
+            return self._tools[tool_id]
+        tool = None
+        try:
+            tool = project.get_agent_tool(tool_id)
+            tool.get_descriptor()      # force a roundtrip to validate the id
+        except Exception:
+            tool = None
+            try:
+                for item in project.list_agent_tools():
+                    raw = item if isinstance(item, dict) else getattr(item, "raw", {})
+                    name = str(raw.get("name") or "")
+                    if tool_name.lower() in name.lower():
+                        tool = project.get_agent_tool(raw.get("id") or name)
+                        break
+            except Exception:
+                logger.exception("Tool lookup failed for %s (%s)", tool_id, tool_name)
+        if tool is None:
+            raise RuntimeError("Agent tool not found: %s (%s)" % (tool_id, tool_name))
+        self._tools[tool_id] = tool
+        return tool
 
     # ------------------------------------------------------------- knowledge
     def _get_profile(self):
@@ -1798,9 +2089,66 @@ class MyLLM(BaseLLM):
             yield _tool_start("dataset_sql_query")
             executed = []     # [{sql, success, row_count, error}]
             result, fmt_map, unit = None, {}, None
+            tool_answer = None
+            tool_row_count = None
             det_failed = None  # (sql, error) of a failed deterministic attempt
+            engine = SQL_ENGINE
 
-            if u["intent"] != "custom":
+            # ---- SEMANTIC TOOL engine (default): the semantic model owns the
+            # SQL; we hand it the grounded, deterministic question. ----------
+            if engine == "semantic_tool":
+                payload = None
+                semantic_question = build_semantic_question(u, profile, filters)
+                with trace.subspan("dataset-expert:semantic-tool") as sp:
+                    sp.inputs["semantic_question"] = semantic_question
+                    try:
+                        tool = self._get_tool(project, SEMANTIC_TOOL_ID,
+                                              SEMANTIC_TOOL_NAME)
+                        if self._semantic_key is None:
+                            try:
+                                self._semantic_key = pick_semantic_input_key(
+                                    tool.get_descriptor())
+                            except Exception:
+                                self._semantic_key = SEMANTIC_QUESTION_KEY
+                        sp.attributes["input_key"] = self._semantic_key
+                        raw = tool.run({self._semantic_key: semantic_question})
+                        payload = extract_semantic_payload(raw)
+                        sp.outputs["shape_keys"] = payload["shape_keys"]
+                        sp.outputs["sql_count"] = len(payload["sqls"])
+                        sp.outputs["row_count"] = payload["row_count"]
+                        result = payload["result"]
+                        tool_answer = payload["answer"]
+                        tool_row_count = payload["row_count"]
+                        unit = (profile.metric(u["metric"] or "")
+                                or profile.default_metric or {}).get("unit")
+                    except Exception as e:
+                        logger.exception(
+                            "Semantic tool failed%s",
+                            " -> direct engine fallback" if FALLBACK_TO_DIRECT else "")
+                        sp.attributes["error"] = str(e)[:500]
+                        if not FALLBACK_TO_DIRECT:
+                            yield {"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}}
+                            yield _agent_result("error", u,
+                                                resolved_filters=resolved_filters)
+                            return
+                        engine = "direct"
+                # Frozen Evidence contract: one "semantic-model-query" span per
+                # generated SQL, with the rows on the first (success observed
+                # = the tool returned them).
+                if engine == "semantic_tool":
+                    for i, sql in enumerate((payload or {}).get("sqls") or []):
+                        with trace.subspan("semantic-model-query") as qsp:
+                            qsp.outputs["sql"] = sql
+                            qsp.outputs["success"] = True
+                            qsp.outputs["row_count"] = tool_row_count
+                            if i == 0 and result is not None:
+                                qsp.outputs["columns"] = result["columns"]
+                                qsp.outputs["rows"] = result["rows"]
+                        executed.append({"sql": sql, "success": True,
+                                         "row_count": tool_row_count})
+
+            # ---- DIRECT engine (explicit config or technical fallback) -----
+            if engine == "direct" and u["intent"] != "custom":
                 try:
                     sql, meta = build_sql(u, profile, filters, table)
                     fmt_map, unit = meta["format_map"], meta.get("unit")
@@ -1834,7 +2182,7 @@ class MyLLM(BaseLLM):
                             fmt_map, unit = {}, None
                             u["intent"] = "custom"
 
-            if u["intent"] == "custom":
+            if engine == "direct" and u["intent"] == "custom":
                 card = build_dataset_card(profile, table)
                 scen = profile.scenario
                 scenario_rule = ("No scenario column." if not scen else
@@ -1908,6 +2256,15 @@ class MyLLM(BaseLLM):
 
             # ============ RENDER ============
             yield _block("format_output")
+            if (not result or not result.get("rows")) and tool_answer:
+                # No tabular rows but the semantic tool produced an answer:
+                # relay it (same trust level as the historical flow).
+                yield {"chunk": {"text": tool_answer}}
+                yield _agent_result("ready", u, resolved_filters=resolved_filters,
+                                    sql_count=len(executed),
+                                    row_count=tool_row_count,
+                                    attempts=len(executed))
+                return
             if not result or not result.get("rows"):
                 hint = ""
                 scen = profile.scenario

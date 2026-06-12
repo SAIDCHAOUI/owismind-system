@@ -1,10 +1,13 @@
 # OWIsMind — Système d'agents Dataiku v3 (Dataset Expert générique)
 
 > **Le but** : un orchestrateur + des sous-agents **experts de n'importe quel dataset**.
-> L'expertise ne vient plus d'un prompt écrit à la main ni d'un semantic model cliqué :
-> elle est **fabriquée dans le Flow** (profil du dataset + index de valeurs), relue par
-> un humain, et consommée au runtime par un agent **qui écrit et exécute son propre SQL
-> read-only**. Ajouter un dataset = lancer 2 recettes + 1 Code Agent + 1 entrée de registre.
+> L'expertise est **fabriquée dans le Flow** (profil du dataset + index de valeurs), relue
+> par un humain, et consommée au runtime par un agent qui comprend, ground les valeurs
+> exactes, puis **délègue le SQL au Semantic Model Query tool** en lui donnant le meilleur
+> contexte possible (moteur par défaut — A/B testé le 2026-06-12 : le semantic model génère
+> le meilleur SQL, nos couches le rendent précis). Un moteur **SQL direct read-only**
+> (templates + LLM gardé) sert de repli technique. Ajouter un dataset = 2 recettes +
+> 1 Code Agent + 1 entrée de registre.
 
 ---
 
@@ -23,12 +26,15 @@ RUNTIME (chat)
             Dataset Expert (Code Agent générique, 1 par dataset)
                 │ 1. UNDERSTAND   1 LLM JSON — prompt GÉNÉRÉ depuis le profil
                 │ 2. RESOLVE      grounding des termes sur value_index (SQL, exact→fuzzy)
-                │ 3. BUILD SQL    9 intents → templates déterministes (zéro LLM)
-                │                 longue traîne "custom" → LLM SQL + GARDE-FOU
-                │ 4. EXECUTE      SQLExecutor2 read-only + timeout + EXPLAIN + 2 réparations
+                │ 3. COMPOSE      question sémantique DÉTERMINISTE par intent : valeurs
+                │                 exactes + scénarios + périodes + règle d'axe + contexte
+                │                 de destination ("ta table sera lue par un LLM")
+                │ 4. QUERY        ► Semantic Model Query tool (MOTEUR PAR DÉFAUT)
+                │                 ► repli technique : SQL direct read-only (templates
+                │                   déterministes + LLM gardé + EXPLAIN + réparations)
                 │ 5. RENDER       table par code + headline LLM vérifiée chiffre par chiffre
                 ▼
-            PostgreSQL (connexion du dataset, transaction READ ONLY)
+            Semantic Model (SQL) → PostgreSQL (transaction READ ONLY en mode direct)
 ```
 
 **Ce qui ne change pas** (contrats gelés — la webapp, la timeline et Evidence Studio
@@ -114,10 +120,14 @@ que c'est versionnable, diffable et testé.
 2. Coller `agents/dataset_expert_agent.py`, puis remplir le bloc CONFIG :
    - `PROFILE_DATASET = "DRIVE_Revenues_profile"`
    - `VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"`
+   - `SQL_ENGINE = "semantic_tool"` (défaut) + `SEMANTIC_TOOL_ID` / `SEMANTIC_TOOL_NAME`
+     (le tool Semantic Model Query du dataset — `v4oqA6R` / `revenue_semantic_query`
+     pour les revenus). `FALLBACK_TO_DIRECT = True` : si le tool tombe en panne
+     technique, l'agent bascule sur son moteur SQL direct au lieu d'échouer.
    - `UNDERSTAND_LLM_ID` : démarre avec le Gemini 2.5 Pro connu ; passe à
      **Gemini 2.5 Flash** une fois validé (2 appels/question, c'est lui le coût).
-   - `SQLGEN_LLM_ID` : le meilleur modèle SQL dispo (Gemini 2.5 Pro, ou Claude
-     Sonnet/Opus si dans le Mesh). Ne sert **que** sur l'intent `custom` (longue traîne).
+   - `SQLGEN_LLM_ID` : le meilleur modèle SQL dispo (Claude Sonnet configuré). Ne sert
+     **que** sur le moteur direct (intent `custom` ou fallback).
 3. Tester direct dans le playground de l'agent (voir §5), noter son id `agent:XXXXXXX`.
 
 ### Étape 4 — L'orchestrateur v3 (≈ 5 min)
@@ -209,9 +219,20 @@ défauts) ou le prompt UNDERSTAND — jamais de valeur métier en dur dans le co
   vérifiée, sinon fallback déterministe) ; 0 ligne → message honnête + scénarios/période
   réellement disponibles (métadonnées du profil) ; terme introuvable → clarification, pas
   de devinette.
+- **Deux moteurs SQL** : `semantic_tool` (défaut — le Semantic Model génère et exécute,
+  nos couches lui fournissent valeurs exactes/scénarios/périodes/contexte de destination)
+  et `direct` (templates déterministes + LLM gardé, exécution read-only). Le repli
+  technique semantic→direct est automatique ; un résultat vide légitime n'est PAS un
+  repli (honnêteté).
 - **Limites v1** : pas encore de jointures cross-datasets dans UNE requête (le 360 passe
-  par l'orchestrateur, un agent par dataset) ; l'intent `custom` dépend du modèle SQL ;
-  la qualité du routage d'ambiguïté dépend de l'index (re-run du scénario après refresh).
-- **Plugin-isation (étape suivante envisagée)** : ce code est déjà 100 % paramétré par
-  les noms de datasets + ids LLM → transformable en plugin avec params no-code
-  (dataset, connexion, modèles) une fois validé en réel.
+  par l'orchestrateur, un agent par dataset) ; la qualité du routage d'ambiguïté dépend
+  de l'index (re-run du scénario après refresh).
+- **Prochaine session — le semantic model lui-même** : sa config est désormais accessible
+  par code (`project.get_semantic_model(id)` → versions → `get_settings().get_raw()` →
+  JSON complet entities/metrics/filters/goldenQueries/glossary → `save()` + nouvelle
+  version active). Pistes : versionner ce JSON dans le repo, enrichir les golden queries
+  depuis le corpus, aligner son glossaire avec le profil, corriger `Phase = 'ACTUAL'`
+  (la valeur réelle est `ACTUALS`) dans les descriptions/filtres.
+- **Plugin-isation (ensuite)** : ce code est déjà 100 % paramétré par les noms de
+  datasets + ids tools/LLM → transformable en plugin avec params no-code une fois
+  validé en réel.

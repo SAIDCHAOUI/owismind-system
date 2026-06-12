@@ -698,6 +698,110 @@ class TestKnowledgeSurfaces(unittest.TestCase):
 
 
 # ==========================================================================
+# Semantic-tool engine: question composer + tool-output extraction
+# ==========================================================================
+class TestSemanticEngine(unittest.TestCase):
+
+    def test_default_engine_is_semantic_tool(self):
+        self.assertEqual(dx.SQL_ENGINE, "semantic_tool")
+        self.assertTrue(dx.FALLBACK_TO_DIRECT)
+
+    def test_total_question_grounded_and_contextualized(self):
+        u = make_u(scenarios=["ACTUALS"],
+                   period={"mode": "explicit", "start": "2025-01-01",
+                           "end": "2025-12-31", "label": "2025"})
+        q = dx.build_semantic_question(
+            u, P, [{"column": "customer_name", "value": "HALYS"}])
+        self.assertIn('revenue (SUM("amount_eur"))', q)
+        self.assertIn("Phase is in: ACTUALS", q)
+        self.assertIn("year_month between 2025-01-01 and 2025-12-31", q)
+        self.assertIn("customer_name = 'HALYS'", q)
+        self.assertIn("Do not fuzzy-match", q)
+        self.assertIn("read by another LLM", q)   # destination context
+
+    def test_default_scenario_applied_when_unspecified(self):
+        q = dx.build_semantic_question(make_u(), P, [])
+        self.assertIn("Phase is in: ACTUALS", q)
+        self.assertIn("Do not apply any filter on year_month", q)
+
+    def test_top_n_question_carries_display_rule(self):
+        u = make_u(intent="top_n", group_by="customer_id", top_n=5)
+        q = dx.build_semantic_question(u, P, [])
+        self.assertIn("broken down by customer_id", q)
+        self.assertIn("Group by customer_id ONLY", q)
+        self.assertIn("MAX(customer_name)", q)
+        self.assertIn("top 5", q)
+
+    def test_compare_scenarios_question(self):
+        u = make_u(intent="compare_scenarios", scenarios=["ACTUALS", "BUDGET"])
+        q = dx.build_semantic_question(u, P, [])
+        self.assertIn("ACTUALS and BUDGET", q)
+        self.assertIn("delta", q)
+        self.assertIn("Phase is in: ACTUALS, BUDGET", q)
+
+    def test_list_values_and_custom_questions(self):
+        u = make_u(intent="list_values", list_column="Product")
+        self.assertIn("distinct values of Product",
+                      dx.build_semantic_question(u, P, []))
+        u = make_u(intent="custom", instruction="ratio onnet/offnet ?")
+        self.assertIn('"ratio onnet/offnet ?"',
+                      dx.build_semantic_question(u, P, []))
+
+    def test_literal_escaping_in_filters(self):
+        q = dx.build_semantic_question(
+            make_u(), P, [{"column": "customer_name", "value": "L'Op"}])
+        self.assertIn("customer_name = 'L''Op'", q)
+
+    def test_extract_semantic_payload(self):
+        raw = {"output": {
+            "sql": "SELECT 1",
+            "row_count": 2,
+            "records": [{"diamond_id": "5373", "total_revenue": 1234.5},
+                        {"diamond_id": "9999", "total_revenue": 10.0}],
+            "answer": "Voici le résultat.",
+            "nested": {"generated_sql": "SELECT 2"},
+        }}
+        p = dx.extract_semantic_payload(raw)
+        self.assertEqual(p["sqls"], ["SELECT 1", "SELECT 2"])
+        self.assertEqual(p["row_count"], 2)
+        self.assertEqual(p["result"]["columns"], ["diamond_id", "total_revenue"])
+        self.assertEqual(p["answer"], "Voici le résultat.")
+        self.assertIn("sql", p["shape_keys"])
+
+    def test_extract_semantic_payload_defensive(self):
+        self.assertEqual(dx.extract_semantic_payload("nope")["sqls"], [])
+        p = dx.extract_semantic_payload({"output": {"weird": True}})
+        self.assertIsNone(p["result"])
+        self.assertIsNone(p["row_count"])
+
+    def test_extract_tabular_node_list_of_lists(self):
+        node = {"rows": [[1, "a"], [2, "b"]], "columns": ["n", "s"]}
+        r = dx.extract_tabular_node(node)
+        self.assertEqual(r["columns"], ["n", "s"])
+        self.assertEqual(r["rows"], [[1, "a"], [2, "b"]])
+
+    def test_pick_semantic_input_key(self):
+        self.assertEqual(dx.pick_semantic_input_key(
+            {"inputSchema": {"properties": {"question": {"type": "string"}}}}),
+            "question")
+        self.assertEqual(dx.pick_semantic_input_key(
+            {"inputSchema": {"properties": {"nl_request": {"type": "string"}}}}),
+            "nl_request")
+        self.assertEqual(dx.pick_semantic_input_key({}), "question")
+        self.assertEqual(dx.pick_semantic_input_key(None), "question")
+
+    def test_semantic_alias_formats(self):
+        # free-form aliases from the semantic tool get amount formatting when
+        # the profile default metric is an amount
+        self.assertEqual(dx.format_cell(1234567, "total_revenue", {}, P, "EUR"),
+                         "1" + NBSP + "234" + NBSP + "567" + NBSP + "EUR")
+        self.assertEqual(dx.format_cell(100, "ACTUALS", {}, P, "EUR"),
+                         "100" + NBSP + "EUR")
+        self.assertEqual(dx.format_cell(12.3, "share_pct", {}, P),
+                         "12.3" + NBSP + "%")
+
+
+# ==========================================================================
 # Events contract
 # ==========================================================================
 class TestEvents(unittest.TestCase):
