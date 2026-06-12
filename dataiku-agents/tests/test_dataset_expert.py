@@ -387,10 +387,12 @@ class TestSqlPrimitives(unittest.TestCase):
             "(\"d\" >= DATE '2025-01-01' AND \"d\" < (DATE '2025-12-31' + INTERVAL '1 day'))")
         self.assertEqual(
             f({"column": "ym", "format": "yyyy_mm_dd_str"}, "2025-01-01", "2025-12-31"),
-            "(LEFT(\"ym\", 10) >= '2025-01-01' AND LEFT(\"ym\", 10) <= '2025-12-31')")
+            "(LEFT(CAST(\"ym\" AS text), 10) >= '2025-01-01'"
+            " AND LEFT(CAST(\"ym\" AS text), 10) <= '2025-12-31')")
         self.assertEqual(
             f({"column": "ym", "format": "yyyy_mm_str"}, "2025-01-01", "2025-12-31"),
-            "(\"ym\" >= '2025-01' AND \"ym\" <= '2025-12')")
+            "(LEFT(CAST(\"ym\" AS text), 7) >= '2025-01'"
+            " AND LEFT(CAST(\"ym\" AS text), 7) <= '2025-12')")
         self.assertEqual(
             f({"column": "ym", "format": "yyyymm_int"}, "2025-01-01", "2025-12-31"),
             '("ym" >= 202501 AND "ym" <= 202512)')
@@ -405,7 +407,7 @@ class TestSqlPrimitives(unittest.TestCase):
                          "TO_CHAR(\"d\", 'YYYY-MM')")
         self.assertEqual(dx.month_bucket_expr({"column": "ym",
                                                "format": "yyyy_mm_dd_str"}),
-                         'LEFT("ym", 7)')
+                         'LEFT(CAST("ym" AS text), 7)')
         self.assertEqual(dx.month_bucket_expr({"column": "ym",
                                                "format": "yyyymm_int"}), '"ym"')
 
@@ -426,7 +428,7 @@ class TestBuildSql(unittest.TestCase):
         sql, _ = dx.build_sql(u, P, [{"column": "customer_name",
                                       "value": "HALYS"}], TABLE)
         self.assertIn('"Phase" IN (\'ACTUALS\')', sql)
-        self.assertIn("LEFT(\"year_month\", 10) >= '2025-01-01'", sql)
+        self.assertIn("LEFT(CAST(\"year_month\" AS text), 10) >= '2025-01-01'", sql)
         self.assertIn('"customer_name" = \'HALYS\'', sql)
 
     def test_literal_escaping(self):
@@ -487,7 +489,7 @@ class TestBuildSql(unittest.TestCase):
     def test_trend_monthly(self):
         u = make_u(intent="trend")
         sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('SELECT LEFT("year_month", 7) AS "month"', sql)
+        self.assertIn('SELECT LEFT(CAST("year_month" AS text), 7) AS "month"', sql)
         self.assertIn("GROUP BY 1 ORDER BY 1", sql)
 
     def test_list_values_ignores_scenario(self):

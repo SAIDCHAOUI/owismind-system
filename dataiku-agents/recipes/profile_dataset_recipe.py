@@ -370,7 +370,25 @@ def profile_dataframe(df, schema_columns):
             except Exception:
                 avg_len = 0.0
 
-        tfmt = detect_time_format(dss_type, sample_values)
+        # PHYSICAL date detection first: a real date/timestamp column must be
+        # profiled as format "date" even when the DSS schema type or the
+        # string samples say otherwise — the agent's SQL templates depend on
+        # it (seen in DSS: a PostgreSQL `date` profiled as string broke
+        # LEFT(col, 10); the agent is cast-safe now, but the profile should
+        # still tell the truth).
+        tfmt = None
+        try:
+            import pandas as _pd
+            if _pd.api.types.is_datetime64_any_dtype(series):
+                tfmt = "date"
+            elif len(non_null):
+                first = non_null.iloc[0]
+                if hasattr(first, "year") and not isinstance(first, (int, float)):
+                    tfmt = "date"   # datetime.date / Timestamp objects
+        except Exception:
+            pass
+        if tfmt is None:
+            tfmt = detect_time_format(dss_type, sample_values)
         if tfmt and not looks_like_time_name(name) and dss_type not in _DATE_DSS_TYPES:
             # Plausible-but-unnamed time column: keep as low-priority candidate.
             time_candidates.append((1, name, tfmt))
@@ -396,7 +414,9 @@ def profile_dataframe(df, schema_columns):
             except Exception:
                 payload["stats"] = {}
 
-        if 0 < distinct <= ENUM_MAX_VALUES:
+        # Time columns are never enums: listing 30 month values as "allowed
+        # values" pollutes the UNDERSTAND prompt and the SQL card for nothing.
+        if 0 < distinct <= ENUM_MAX_VALUES and not tfmt:
             payload["is_enum"] = True
             try:
                 counts = non_null.value_counts()

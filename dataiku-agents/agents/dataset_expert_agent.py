@@ -78,7 +78,8 @@ TARGET_DATASET = ""
 # good at strict JSON (e.g. gemini-2.5-flash). SQLGEN only runs on the
 # long-tail "custom" intent -> pick the strongest SQL model available.
 UNDERSTAND_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro"
-SQLGEN_LLM_ID = None               # None -> UNDERSTAND_LLM_ID
+# User-confirmed id on the instance (set in DSS on 2026-06-12):
+SQLGEN_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
 HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
 
 PROFILE_TTL_SECONDS = 600          # in-process profile cache
@@ -813,18 +814,27 @@ def _metric_inner(metric):
 
 
 def period_predicate(time_info, start, end):
-    """Time-format-aware period predicate (start/end = YYYY-MM-DD strings)."""
+    """Time-format-aware period predicate (start/end = YYYY-MM-DD strings).
+
+    String-format predicates compare on LEFT(CAST(col AS text), n): ISO text
+    sorts lexicographically, and the CAST makes the SQL valid whether the
+    physical column is text, date or timestamp — profile format detection can
+    be wrong about the PHYSICAL type (seen in DSS: a real PostgreSQL `date`
+    profiled as yyyy_mm_dd_str -> LEFT(date, 10) does not exist)."""
     col = qident(time_info["column"])
     fmt = time_info["format"]
     if fmt in ("date",):
         return ("(%s >= DATE %s AND %s < (DATE %s + INTERVAL '1 day'))"
                 % (col, _sql_quote_literal(start), col, _sql_quote_literal(end)))
     if fmt == "yyyy_mm_dd_str":
-        return ("(LEFT(%s, 10) >= %s AND LEFT(%s, 10) <= %s)"
-                % (col, _sql_quote_literal(start), col, _sql_quote_literal(end)))
-    if fmt == "yyyy_mm_str":
+        expr = "LEFT(CAST(%s AS text), 10)" % col
         return ("(%s >= %s AND %s <= %s)"
-                % (col, _sql_quote_literal(start[:7]), col, _sql_quote_literal(end[:7])))
+                % (expr, _sql_quote_literal(start), expr, _sql_quote_literal(end)))
+    if fmt == "yyyy_mm_str":
+        expr = "LEFT(CAST(%s AS text), 7)" % col
+        return ("(%s >= %s AND %s <= %s)"
+                % (expr, _sql_quote_literal(start[:7]), expr,
+                   _sql_quote_literal(end[:7])))
     if fmt == "yyyymm_int":
         return ("(%s >= %d AND %s <= %d)"
                 % (col, int(start[:4]) * 100 + int(start[5:7]),
@@ -835,13 +845,14 @@ def period_predicate(time_info, start, end):
 
 
 def month_bucket_expr(time_info):
+    """Monthly bucket expression, cast-safe like period_predicate."""
     col = qident(time_info["column"])
     fmt = time_info["format"]
     if fmt == "date":
         return "TO_CHAR(%s, 'YYYY-MM')" % col
-    if fmt == "yyyy_mm_dd_str":
-        return "LEFT(%s, 7)" % col
-    if fmt in ("yyyy_mm_str", "yyyymm_int", "year_int"):
+    if fmt in ("yyyy_mm_dd_str", "yyyy_mm_str"):
+        return "LEFT(CAST(%s AS text), 7)" % col
+    if fmt in ("yyyymm_int", "year_int"):
         return col
     raise ValueError("unknown time format: %r" % fmt)
 
@@ -1787,6 +1798,7 @@ class MyLLM(BaseLLM):
             yield _tool_start("dataset_sql_query")
             executed = []     # [{sql, success, row_count, error}]
             result, fmt_map, unit = None, {}, None
+            det_failed = None  # (sql, error) of a failed deterministic attempt
 
             if u["intent"] != "custom":
                 try:
@@ -1808,16 +1820,19 @@ class MyLLM(BaseLLM):
                             executed.append({"sql": sql, "success": True,
                                              "row_count": len(result["rows"])})
                         except Exception as e:
-                            logger.exception("Deterministic SQL failed")
+                            # Self-repair: a deterministic template can clash
+                            # with the PHYSICAL column types (profile drift).
+                            # Fall through to the guarded LLM path with the
+                            # database error as context instead of giving up.
+                            logger.exception("Deterministic SQL failed -> "
+                                             "falling back to custom path")
                             sp.outputs["success"] = False
                             sp.attributes["error"] = str(e)[:500]
                             executed.append({"sql": sql, "success": False,
                                              "error": str(e)[:200]})
-                            yield {"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}}
-                            yield _agent_result("error", u,
-                                                resolved_filters=resolved_filters,
-                                                sql_count=1, attempts=1)
-                            return
+                            det_failed = (sql, str(e)[:500])
+                            fmt_map, unit = {}, None
+                            u["intent"] = "custom"
 
             if u["intent"] == "custom":
                 card = build_dataset_card(profile, table)
@@ -1836,6 +1851,10 @@ class MyLLM(BaseLLM):
                              "; ".join("%s = '%s'" % (f["column"], f["value"])
                                        for f in filters)) if filters else ""
                 user_block = "%s\n\n%s\nQUESTION: %s" % (card, filt_text, instruction)
+                if det_failed:
+                    user_block += ("\n\nA PREVIOUS ATTEMPT FAILED — avoid this "
+                                   "mistake.\nFAILED SQL:\n%s\nDATABASE ERROR:\n%s"
+                                   % det_failed)
 
                 sql, last_error = None, None
                 for attempt in range(1, MAX_CUSTOM_SQL_ATTEMPTS + 1):
