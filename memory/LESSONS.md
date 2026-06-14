@@ -1226,4 +1226,35 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-06-12 Run 2 (logs DSS réels + playground + JSON du semantic model
   extrait par l'user). **Date** : 2026-06-12.
 
+## L053 — Skill de référence par fan-out multi-agents : les rédacteurs recopient les noms de la SOURCE, pas tes slugs réels (✅ corrigé + validé local)
+
+- **Contexte** : création du skill `agentique-python-dataiku` (15 fichiers `references/`) via workflows
+  (recherche → fabrication draft/revue/fix → validation). Les slugs réels étaient fixés par l'orchestrateur ;
+  la source ChatGPT proposait d'AUTRES noms de fichiers.
+- **Ce qui a échoué** : les agents-rédacteurs ont cross-référencé les fichiers frères avec les noms
+  **proposés dans la source** (`dataiku-llm-mesh-et-agents.md`, `guardrails-tracing-evaluation.md`,
+  `orchestration-supervisor-subagents.md`, `anti-patterns-et-deprecations.md`, `patterns-de-code.md`)
+  → 5 noms de liens `references/*.md` **morts**. Chaque agent ignore les fichiers écrits par les autres.
+- **Solution qui marche** : (a) donner aux agents la **liste exacte des slugs frères** dans le prompt
+  (préventif) ; (b) après tout fan-out qui écrit des fichiers liés, **GREP les cross-références**
+  (`grep -rhoE 'references/[a-z0-9-]+\.md'`) vs `ls`, remplacer littéralement (`perl -pi -e 's/\Qfaux\E/vrai/g'`).
+  Garder les citations de PROVENANCE (corpus) distinctes des liens frères.
+- **Preuve-vérification** : grep avant (5 cassés) / après (13 liens, tous OK) ; validation 6/6 scénarios +
+  critique « navigationOk: true, all 15 references exist, cross-references resolve ».
+- **Source** : session 2026-06-14. **Date** : 2026-06-14.
+
+## L054 — Dataiku : DEUX code envs (Python 3.9 ET 3.11) ; backend webapp = 3.9.23 (affine la règle #8)
+
+- **Contexte** : construction du skill agentique ; choix du runtime pour un code agent (LangChain v1 exige ≥ 3.10).
+- **Ce qui était flou** : la règle #8 du `CLAUDE.md` interdit d'affirmer que 3.11 marche « sans preuve »
+  (backend observé = 3.9.23). Risque : conclure à tort « tout est 3.9 → jamais de langchain ».
+- **Solution qui marche** : l'user a confirmé (autorité, 2026-06-14) que l'instance a **3.9 ET 3.11**. Double
+  chemin : **3.11** → Code Agent/recette peut importer langchain/langgraph v1 ; **3.9** (backend webapp, ou
+  tout code env 3.9) → **stdlib-only, AUCUN import langchain**, appeler LLM Mesh / agents / tools via les APIs
+  Dataiku natives (`get_agent_tool().run()`). Ne jamais confondre : 3.11 existe **et** le backend reste 3.9.23.
+- **Preuve-vérification** : affirmation user ; encart central du skill ; mémoire auto
+  `dataiku-python-39-311-dual-path.md`. Import `DKUChatModel` lui-même = `UNVERIFIED` (préférer
+  `as_langchain_chat_model()`), à confirmer sur l'instance.
+- **Source** : user, session 2026-06-14. **Date** : 2026-06-14.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

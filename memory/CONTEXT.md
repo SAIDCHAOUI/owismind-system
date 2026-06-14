@@ -5,6 +5,13 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**📚 SKILL AGENTIQUE (2026-06-14) — ✅ CRÉÉ + VALIDÉ LOCAL.** Référence d'ingénierie réutilisable
+`.claude/skills/agentique-python-dataiku/` (`SKILL.md` + 15 références, ~70k mots) sur LangChain /
+LangGraph / Dataiku : choix d'abstraction, orchestration superviseur+sous-agents, design de tools,
+mémoire/persistance, RAG, MCP, éval/gouvernance, anti-patterns. **Encart central = double chemin
+Python 3.9/3.11** (L054). Construit par 3 workflows (recherche → fabrication → validation 6/6).
+Claims DSS-réels marqués `UNVERIFIED` (import `DKUChatModel`, API semantic model) → à lever sur
+l'instance. Corpus `agentic-research/` gitignoré (provenance). Détail → `sessions/2026-06-14.md`, L053-L054.
 **0★★) SYSTÈME D'AGENTS v3 « dataiku-agents/ » — ✅ VALIDÉ DSS (2026-06-12, « ça marche super
 bien »).** Architecture HYBRIDE tranchée par A/B user : **le Semantic Model Query tool garde le
 SQL** (`SQL_ENGINE="semantic_tool"`, tool `v4oqA6R`, mode Agent), et le **Dataset Expert générique**
@@ -72,7 +79,16 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-12 (2 runs) → détail `sessions/2026-06-12.md`, leçons **L051-L052**
+## 🧭 Dernière session — 2026-06-14 → détail `sessions/2026-06-14.md`, leçons **L053-L054**
+- **Skill d'agentique créé** : `.claude/skills/agentique-python-dataiku/` (`SKILL.md` + 15 références)
+  via 3 workflows (recherche 24 agents → corpus 23 briefs `agentic-research/` ; fabrication 36 agents
+  draft→revue→fix ; validation 13 agents **6/6, 0 piège**). Réconciliation corpus + source ChatGPT.
+- **Double chemin Python 3.9/3.11** (correction autorité user, L054) = encart central ; vérité des versions
+  (`create_agent` pas `create_react_agent`, `recursion_limit=25`, `astream_events` v2…) intégrée.
+- 5 cross-références frères cassées (noms ChatGPT vs slugs réels) → corrigées + vérifiées (L053).
+  ⏳ Skill = **référence**, pas du code déployé ; claims DSS marqués `UNVERIFIED`.
+
+## Avant — 2026-06-12 (2 runs) → détail `sessions/2026-06-12.md`, leçons **L051-L052**
 - **Run 1 (nuit)** : construction complète du système v3 (2 recettes Flow, Dataset Expert, orchestrateur
   parallèle, README) après recherche 6 agents (SOTA NL2SQL, semantic model 14.4 scriptable, corpus).
 - **Run 2 (jour)** : validation DSS avec l'user + bascule moteur HYBRIDE semantic-tool (A/B) ; fixes
@@ -150,6 +166,9 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
 
 ## 🔜 Prochaines étapes
+0skill. **Skill agentique** : lever les `UNVERIFIED` en confirmant sur l'instance (import `DKUChatModel` vs
+   `as_langchain_chat_model()`, API `project.get_semantic_model`, ids de modèles non-Anthropic) ; promotion
+   en global (`~/.claude/skills/`) si réutilisation cross-projets souhaitée (simple copie).
 0. **SESSION SEMANTIC MODEL (priorité, demandée par l'user)** : modèle `2O2KcHw`, config scriptable
    (`project.get_semantic_model` → `get_raw()`/`save()` + versions). Corriger `Phase='ACTUAL'`→
    `'ACTUALS'` (description entité + filtre « Actual Revenue Only ») et le synonyme « roaming hub »

@@ -47,3 +47,6 @@ graphify-out/
 
 # ── Raw DSS trace exports (debug artifacts, may contain customer data) ──────
 salesdrive/*.csv
+
+# ── Temp research corpus for the agentique skill (provenance, kept on disk) ──
+agentic-research/

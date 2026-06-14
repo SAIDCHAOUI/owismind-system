@@ -3,7 +3,13 @@
 > Référence canonique de l'état du projet. Mise à jour à la demande / en fin de session.
 > En cas de conflit avec les guides de `cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
-> Dernière mise à jour : **2026-06-11 — NETTOYAGE REPO** : `maquette/` (~12 k lignes), `docs/superpowers/plans/`
+> Dernière mise à jour : **2026-06-14 — SKILL AGENTIQUE** : skill projet `.claude/skills/agentique-python-dataiku/`
+> (`SKILL.md` + **15 références**, ~70k mots) créé/réconcilié (corpus recherche multi-agents + source ChatGPT) /
+> validé local (6/6 scénarios, 0 piège) — **référence d'ingénierie, pas du code déployé** (claims DSS-réels marqués
+> `UNVERIFIED`). Corpus `agentic-research/` **gitignoré** (provenance, hors git). **Python : DEUX code envs
+> 3.9 ET 3.11** (user, autorité, L054) ; backend webapp = 3.9.23 → jamais d'import langchain en 3.9 ; LangChain/
+> LangGraph v1 (≥ 3.10) seulement en code env 3.11. Détail `sessions/2026-06-14.md`, leçons **L053-L054**.
+> Antérieur : **2026-06-11 — NETTOYAGE REPO** : `maquette/` (~12 k lignes), `docs/superpowers/plans/`
 > et `.demo-screens/` **supprimés** (conversion Vue 3 terminée — voir §9) ; specs gelées conservées
 > (`docs/superpowers/specs/`). Trust layer Evidence v2 déployé 🟡 (fonctionne, ajustements user à recueillir — §11).
 > **GIT** : repo initialisé (main, commit initial `3bd804f`) ; commit de session via `/log-session` ; **jamais de push**.

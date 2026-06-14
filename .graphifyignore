@@ -20,3 +20,6 @@ docs/screenshots/
 
 # Transient debug artifacts (raw DSS trace exports — not knowledge)
 salesdrive/*.csv
+
+# Temp research corpus for the agentique skill (provenance, not project knowledge)
+agentic-research/
