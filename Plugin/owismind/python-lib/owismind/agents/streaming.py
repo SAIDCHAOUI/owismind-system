@@ -161,7 +161,11 @@ def _normalized_artifact_event(event_data):
         y = [str(c)[:128] for c in y if isinstance(c, str) and c][:8]
         if not y:
             return None
-        out["chart"] = {"type": ctype, "x": x[:128], "y": y}
+        chart_out = {"type": ctype, "x": x[:128], "y": y}
+        style = chart.get("style")
+        if isinstance(style, str) and style.strip():
+            chart_out["style"] = style.strip()[:24]
+        out["chart"] = chart_out
     else:
         out["chart"] = None
     return out

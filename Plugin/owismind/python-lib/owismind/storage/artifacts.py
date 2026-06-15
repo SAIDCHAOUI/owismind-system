@@ -71,7 +71,11 @@ def _sanitize(artifacts):
             y = [str(c)[:128] for c in y if isinstance(c, str) and c][:MAX_Y_SERIES]
             if not y:
                 continue
-            spec["chart"] = {"type": ctype, "x": x[:128], "y": y}
+            chart_spec = {"type": ctype, "x": x[:128], "y": y}
+            style = chart.get("style")
+            if isinstance(style, str) and style.strip():
+                chart_spec["style"] = style.strip()[:24]
+            spec["chart"] = chart_spec
         else:
             spec["chart"] = None
         out.append(spec)

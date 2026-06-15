@@ -37,6 +37,7 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 from owismind.agents import context, discovery, stream_manager
+from owismind.evidence import chart_payload
 from owismind.evidence import service as evidence_service
 from owismind.evidence import throttle as evidence_throttle
 from owismind.storage import artifacts as artifacts_storage
@@ -569,7 +570,16 @@ def evidence_meta():
     # asked for). Owner-scoped, best-effort: a read failure degrades to no artifacts,
     # never a 500 — the rest of the evidence panel stays usable.
     try:
-        meta["artifacts"] = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
+        arts = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
+        # Server-side chart shaping: build the Chart.js-ready {labels, datasets}
+        # for each chart artifact from the captured result, so the agent only
+        # had to pick x / y / type. Pure + bounded; an unbuildable chart yields
+        # an honest {ok: false} the frontend renders as an empty state.
+        result_block = meta.get("result")
+        for a in arts:
+            if a.get("kind") == "chart":
+                a["data"] = chart_payload.build_chart_payload(result_block, a.get("chart"))
+        meta["artifacts"] = arts
     except Exception:
         logger.exception("/evidence/meta — artifacts read failed (non-fatal)")
         meta["artifacts"] = []

@@ -240,6 +240,10 @@ def build_tool_specs(caps):
                           "description": "Column for the x-axis / categories."},
                     "y": {"type": "array", "items": {"type": "string"},
                           "description": "One or more numeric value columns."},
+                    "style": {"type": "string",
+                              "description": "Optional visual style hint: line -> "
+                                             "'area' / 'smooth' / 'stepped'; bar -> "
+                                             "'horizontal'; pie -> 'donut'."},
                 },
                 "required": ["chart_type", "x", "y"],
             },
@@ -763,8 +767,11 @@ class MyLLM(BaseLLM):
             return (None, "Unknown column(s). Use exact columns of the latest "
                           "result: %s." % ", ".join(columns))
         title = str(args.get("title") or "")[:200]
-        return ({"kind": "chart", "title": title,
-                 "chart": {"type": ctype, "x": x, "y": y}},
+        chart = {"type": ctype, "x": x, "y": y}
+        style = args.get("style")
+        if isinstance(style, str) and style.strip():
+            chart["style"] = style.strip()[:24]
+        return ({"kind": "chart", "title": title, "chart": chart},
                 "A %s chart of the latest result is now shown in the side "
                 "panel. Comment on what it reveals; do not repeat the rows."
                 % ctype)
