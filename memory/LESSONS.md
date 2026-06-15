@@ -1257,4 +1257,60 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `as_langchain_chat_model()`), à confirmer sur l'instance.
 - **Source** : user, session 2026-06-14. **Date** : 2026-06-14.
 
+## L055 — LangGraph tourne sur un Code Agent DSS 14 (env 3.11) : get_stream_writer en nœud SYNC + graph.stream(custom) + appels Mesh NATIFS (✅ VALIDÉ DSS 2026-06-15)
+
+- **Contexte** : orchestrateur + sous-agent refondus en LangGraph (Code Agent, code env 3.11).
+- **Ce qui marche** : `process_stream` pilote `graph.stream(initial, stream_mode="custom")` et
+  re-yield chaque `{"chunk": …}` émis par `get_stream_writer()` DANS des nœuds **synchrones** ;
+  les appels LLM/sous-agents/tools se font en **natif Mesh** (`new_completion()` /
+  `execute_streamed()`) DANS les nœuds — PAS via `as_langchain_chat_model` — ce qui préserve le
+  reasoning ET le tool-calling. Sorties anticipées = drapeau `done` + `add_conditional_edges(src,
+  route, {label: node, END: END})`. Graphe construit+compilé **par requête** (closures bindant
+  project/trace/chat) : coût négligeable à l'échelle d'un appel LLM, pas de fuite mémoire.
+- **Preuve-vérification** : log DSS du test sous-agent — `get_stream_writer` a émis 3 chunks, le
+  graphe s'est exécuté (le caveat « get_stream_writer cassé » ne vaut QUE pour async < 3.11, pas en
+  sync 3.11). Orchestrateur tool-calling natif (`chat.settings["tools"]` → `resp.tool_calls` →
+  `with_tool_calls`/`with_tool_output`) validé par l'usage. Lève les 2 UNVERIFIED de la revue.
+- **Prérequis** : code env 3.11 avec langchain/langgraph installés (l'user installe) ;
+  reasoning effort=high réglé à la main sur le modèle de la connexion Mesh (non pilotable par code).
+- **Source** : session 2026-06-15, log DSS Code Agent. **Date** : 2026-06-15.
+
+## L056 — Reasoning + extraction JSON déterministe = piège : forcer with_json_output sur les extractions, garder le reasoning pour routing/prose (✅ VALIDÉ DSS 2026-06-15)
+
+- **Contexte** : sous-agent UNDERSTAND (extraction scope/intent/terms) passé en gpt-5.4-mini +
+  reasoning=high, SANS `with_json_output` (croyance « préserver le reasoning partout »).
+- **Ce qui a échoué** : ~15 s de « réflexion » puis un texte que `_safe_json_parse` ne sait pas lire
+  → `validate_understanding` renvoie None → message d'erreur interne, AVANT tout SQL (log DSS : 1
+  appel LLM de 15 s, emitted_chunks=3 = chemin d'erreur de `n_understand`).
+- **Solution qui marche** : restaurer `with_json_output(schema=…)` en tentative 1 (JSON propre,
+  parse fiable ; en DSS 14 ça désactive le reasoning pour CET appel — voulu : l'extraction
+  déterministe n'a pas besoin de réfléchir, c'est plus rapide ET fiable). Tentative 2 = prompt-only
+  en secours. Reasoning gardé là où il sert : orchestrateur (tool-calling) + headline vérifiée.
+  Fallback : `UNDERSTAND_LLM_ID = vertex_ai/claude-sonnet-4-6` (config prouvée), une ligne.
+- **Preuve-vérification** : sous-agent re-collé → « tout fonctionne ». Affine le handoff « JSON +
+  reasoning » : la vraie règle = with_json_output pour TOUTE sortie consommée par du code ; reasoning
+  réservé aux vraies décisions (router) et à la prose vérifiée.
+- **Source** : session 2026-06-15. **Date** : 2026-06-15.
+
+## L057 — Artefacts webapp pilotés par l'agent : tool show_chart/show_table → event ARTIFACT → payload Chart.js construit en Python → onglets (✅ VALIDÉ DSS 2026-06-15)
+
+- **Contexte** : l'orchestrateur doit afficher un graphique/tableau dans le panneau de droite et
+  **commenter** au lieu de reproduire un gros tableau Markdown.
+- **Mécanisme (bout en bout)** : tools LLM `show_chart(chart_type,x,y,style?)` / `show_table` →
+  validation des colonnes x/y contre le **résultat déjà capturé** → event GELÉ **ARTIFACT**
+  (eventData {kind,title,chart}) → `streaming._normalized_artifact_event` (event `artifact` dédié,
+  sinon le whitelist de la timeline droppe les champs) → `stream_manager` accumule + persiste
+  best-effort dans **webapp_artifacts_v1** (table neuve, UPSERT owner-stamped, lecture
+  **read-only + statement_timeout**) → `/evidence/meta` renvoie `artifacts` + pour chaque chart un
+  **data** (payload Chart.js construit côté **Python** `evidence/chart_payload.py` : résout colonnes
+  insensible casse, parse nombres formatés, %, cap 200 pts/12 parts) → front `ArtifactChart.vue`
+  (Chart.js interactif) / `ArtifactTable.vue` + onglets via `Tabs.vue` dans `EvidencePanel.vue`. La
+  DONNÉE reste celle déjà capturée (generated_sql[].result) ; l'agent ne fournit que x/y/type/style
+  → zéro risque d'erreur de données.
+- **Décisions** : le rendu interactif est forcément côté navigateur (JS) — Python ne sort qu'une
+  image figée ou un spec ; donc Python construit le payload **blindé**, Chart.js rend. Chart.js
+  bundlé (offline, ~111 Ko gz) > SVG fait main. NO INSTALL → l'user a fait `npm install chart.js`.
+- **Preuve-vérification** : validé DSS (« comme sur des roulettes ») ; revue sécurité sans bloqueur.
+- **Source** : session 2026-06-15. **Date** : 2026-06-15.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

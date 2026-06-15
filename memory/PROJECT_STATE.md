@@ -354,6 +354,16 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   `agents/orchestrator_agent.py` v3.0 (= v2.4 + fan-out parallèle + entrée registre
   `revenue_expert`, placeholder id). Guide d'implémentation : `dataiku-agents/README.md`.
   Contrats gelés webapp/Evidence respectés. Détail → L051 + `sessions/2026-06-12.md`.
+- **Refonte LangGraph + artefacts webapp (2026-06-15, ✅ VALIDÉ DSS — L055-L057)** : orchestrateur et
+  sous-agent portés en **LangGraph** (Code Agents, env **3.11**) — fichiers NOUVEAUX
+  `agents/orchestrator_langgraph.py` (boucle agentique sous-agents-comme-outils + tools
+  `ask_revenue_expert`/`show_chart`/`show_table`/`current_date`, appels **natifs Mesh**, reasoning,
+  réponse dans la langue user, fan-out parallèle) et `agents/dataset_expert_langgraph.py` (StateGraph,
+  **moteur SQL byte-identique**, UNDERSTAND force `with_json_output`). gpt-5.4-mini partout
+  (reasoning=high sur le modèle Mesh). Originaux `*_agent.py` = rollback intact. Artefacts : tool
+  → event gelé `ARTIFACT` → table `webapp_artifacts_v1` (read-only+timeout) → `/evidence/meta` →
+  onglets Evidence/Chart/Table, **Chart.js** (payload Python `evidence/chart_payload.py`). `chart.js`
+  ajouté au front (bundlé). Détail → `sessions/2026-06-15.md`.
 
 ---
 
@@ -434,6 +444,7 @@ au nettoyage du 2026-06-11, en même temps que `docs/superpowers/plans/` (journa
 | **Trust layer Evidence v2** (badge vérification déterministe 5 niveaux + result_captured ; `sql_explain` steps métier + lineage nom-source ; capture résultat exact opportuniste dans `generated_sql` JSON ; drill-down re-validé serveur ≤8 clés ; meta enrichie ; `transaction_read_only` ; orchestrateur v2.2 corrélé sql_id/step_index/agent_key ; timeline labels backend) | 🟡 Déployé, FONCTIONNE (retour user 2026-06-11 : « ça marche bien ») mais **pas encore comme il veut** — ajustements NON précisés, à recueillir avant tout code | zip **74 entrées `index-DF9WrJFi.js`** ; 304+59 unittest/97 node:test ; revue 26 agents **17/17 corrigés** (L044/L045) ; ~~clé des rows à confirmer~~ → RÉSOLU par SalesDrive v2 (L047 : capture depuis le retour du tool) |
 | **SalesDrive v2 Code Agent + orchestrateur v2.3** (UNDERSTAND JSON strict → resolver → semantic_question templates gelés → semantic tool direct → rendu vérifié ; désambiguïsation 3 étages : `pass_context`/valeur-exacte/priorité-colonne/round-trip « VALEUR (Colonne) » ; `AGENT_RESULT` structuré) | ✅ Validé DSS (2026-06-11, retour user « super tout marche ») ; reste : vraie ambiguïté de valeur (« IPL + ») et plan multi-étapes non re-testés ; bascule définitive (retrait entrée visual) à faire | traces réelles (sql_count=1, row_count=10, headline verified=true) ; 55 unittest salesdrive + 62 orchestrateur ; 97 node:test intacts (L047/L048) |
 | **Système v3 générique `dataiku-agents/`** (profiler + value index + Dataset Expert + orchestrateur v3 parallèle, moteur HYBRIDE : Semantic Model Query tool par défaut + SQL direct en fallback technique) | ✅ **VALIDÉ DSS (2026-06-12, user « ça marche super bien »)** : recettes exécutées, expert `agent:AKQaQ0Am` live (semantic_tool, mode Agent), orchestrateur routé (`revenue_expert=True`/`salesdrive_v2=False`). ⏳ fan-out parallèle réel (attend un 2ᵉ domaine) ; fallback direct jamais déclenché en réel | 127+86+55 unittest ; fixes réels : cast-safe dates, extraction mode-Agent dernier-gagnant, énumérations IN/OR (L051/L052) ; anomalies semantic model notées (ACTUAL vs ACTUALS, synonyme roaming hub) |
+| **Agents LangGraph + artefacts webapp** (orchestrateur agentique sous-agents-comme-outils + sous-agent StateGraph, gpt-5.4-mini reasoning ; `show_chart`/`show_table` → event `ARTIFACT` → `webapp_artifacts_v1` → onglets Chart.js, payload Python) | ✅ **VALIDÉ DSS (2026-06-15, user « tout fonctionne comme sur des roulettes »)** : LangGraph tourne sur Code Agent 3.11 (`get_stream_writer` sync + `graph.stream(custom)` + Mesh natif) ; fix UNDERSTAND = `with_json_output` ; Chart.js bundlé (installé par l'user) | 151 agents + 348 backend + 130 node verts ; revue sécurité Opus sans bloqueur ; L055-L057 |
 
 ## 12. Prochaines étapes (à jour 2026-06-09)
 > **TOUT le V1 + les 4 lots du 2026-06-09 (historique multi-tours, sidebar lazy, feedback, arbre/branches, agent persistant) sont VALIDÉS EN DSS.** Reste :

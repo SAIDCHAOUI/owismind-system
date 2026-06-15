@@ -5,6 +5,22 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🤖 AGENTS LANGGRAPH + ARTEFACTS WEBAPP (2026-06-15) — ✅ VALIDÉ DSS (« tout fonctionne comme sur
+des roulettes »).** Orchestrateur + sous-agent refondus en **LangGraph** (Code Agents, code env
+**3.11**), gpt-5.4-mini (reasoning=high réglé à la main sur le modèle Mesh), appels **natifs Mesh**
+dans les nœuds (reasoning + tool-calling préservés ; jamais `as_langchain_chat_model`). Nouveaux
+fichiers (à côté des originaux = rollback intact) : `dataiku-agents/agents/orchestrator_langgraph.py`
+(boucle agentique **sous-agents-comme-outils** : tools `ask_revenue_expert` + `show_chart` +
+`show_table` + `current_date` ; pare-feu d'honnêteté ; réponse dans la langue du dernier message ;
+fan-out parallèle) et `dataiku-agents/agents/dataset_expert_langgraph.py` (pipeline en StateGraph,
+**moteur SQL byte-identique**, UNDERSTAND force `with_json_output` = fiable, L056). **Feature
+artefacts** : l'agent appelle `show_chart`/`show_table` → event gelé `ARTIFACT` → table
+`webapp_artifacts_v1` → `/evidence/meta` → onglets **Evidence / Chart / Table** dans le panneau de
+droite ; **graphiques Chart.js interactifs** (payload blindé construit côté **Python**
+`evidence/chart_payload.py` ; `chart.js` bundlé, installé par l'user). L'agent **commente** au lieu
+de reproduire le tableau. Détail → `sessions/2026-06-15.md`, **L055-L057**. Zip : **77 entrées,
+`index-Bco4_3i5.js`** — upload + **REDÉMARRER backend** ; coller les 2 Code Agents en **env 3.11** ;
+`reasoning=high` sur gpt-5.4-mini dans la connexion Mesh.
 **📚 SKILL AGENTIQUE (2026-06-14) — ✅ CRÉÉ + VALIDÉ LOCAL.** Référence d'ingénierie réutilisable
 `.claude/skills/agentique-python-dataiku/` (`SKILL.md` + 15 références, ~70k mots) sur LangChain /
 LangGraph / Dataiku : choix d'abstraction, orchestration superviseur+sous-agents, design de tools,
@@ -79,7 +95,18 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-14 → détail `sessions/2026-06-14.md`, leçons **L053-L054**
+## 🧭 Dernière session — 2026-06-15 → détail `sessions/2026-06-15.md`, leçons **L055-L057**
+- **Agents en LangGraph (orchestrateur + sous-agent) ✅ VALIDÉ DSS** : nœuds **sync** +
+  `get_stream_writer` + `graph.stream(custom)` + appels **natifs Mesh** ; le log DSS prouve que
+  LangGraph tourne sur le Code Agent 3.11 (lève les 2 `UNVERIFIED` de la revue) (L055).
+- **Bug clé corrigé** : reasoning=high + extraction JSON sans `with_json_output` → ~15 s puis parse
+  cassé → erreur interne. Fix = **forcer le JSON sur UNDERSTAND**, garder le reasoning pour
+  routing/headline (L056). Fallback UNDERSTAND : claude-sonnet-4-6.
+- **Artefacts webapp** : tool `show_chart`/`show_table` → event `ARTIFACT` → `webapp_artifacts_v1` →
+  `/evidence/meta` → onglets + **Chart.js** (payload Python blindé `chart_payload.py`) ; l'agent
+  commente (L057). Build+zip refaits (Chart.js bundlé) ; revue sécurité Opus sans bloqueur.
+
+## Avant — 2026-06-14 → détail `sessions/2026-06-14.md`, leçons **L053-L054**
 - **Skill d'agentique créé** : `.claude/skills/agentique-python-dataiku/` (`SKILL.md` + 15 références)
   via 3 workflows (recherche 24 agents → corpus 23 briefs `agentic-research/` ; fabrication 36 agents
   draft→revue→fix ; validation 13 agents **6/6, 0 piège**). Réconciliation corpus + source ChatGPT.
@@ -118,6 +145,12 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
   intra-colonne). UNE capability revenue `enabled` à la fois. Contrats gelés : `KNOWN_BLOCK_IDS`/
   `KNOWN_TOOL_NAMES` ↔ registre (test anti-dérive) ; norm partagée recettes↔agent. Tests :
   `python3 -m unittest discover -s dataiku-agents/tests`.
+- **P0★ — Agents LangGraph (L055/L056, ✅ DSS)** : les Code Agents `*_langgraph.py` tournent en env
+  **3.11** (langchain/langgraph installés). Appels LLM **natifs Mesh** dans les nœuds (jamais
+  `as_langchain_chat_model`) ; `get_stream_writer()` en nœud SYNC OK ; `reasoning=high` réglé à la
+  main sur le modèle Mesh. **`with_json_output` OBLIGATOIRE sur les extractions déterministes**
+  (UNDERSTAND) — sinon le reasoning brûle le budget et casse le parse ; reasoning réservé au routing
+  (orchestrateur tool-calling) et à la headline vérifiée. Originaux `*_agent.py` = rollback intact.
 - **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
   `.graphifyignore` versionné. Tests front : `node --test test/*.test.js` depuis `Plugin/owismind/frontend/`.
 - **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
@@ -143,6 +176,7 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 - **F17 — Navigation (L040)** : URL stampée `/chat/<sid>` au 1er échange ; route→store via **`chat.ensureSession`** ; un run live survit à un aller-retour Settings ; `canSend` exige `!threadLoading && !threadError`.
 - **F18 — Chrono étapes (L041)** : durées scellées = stamps backend ; interval gaté `activityLive && chat.sending` ; markdown memoïzé.
 - **F21 — Trust layer (L045)** : meta v1 ⇒ rendu identique ; badge via `trustLevel(meta)` pur ; steps `t('ev.exp.'+kind, params)` kind inconnu→opaque ; drill = `buildDrillLabels` (abort si >8 clés) ; aucune section nouvelle avec z-index ≥5.
+- **F22 — Artefacts (L057, ✅ DSS)** : onglets Evidence/Chart/Table via `Tabs.vue` dans `EvidencePanel` ; `ArtifactChart.vue` = **Chart.js** (`chart.js/auto`, dep bundlée), couleurs résolues du thème + re-render au changement de thème ; `ArtifactTable.vue` = résultat capturé. Changer d'onglet ne touche PAS `evidence.open` (F13). Payload chart fourni par le backend (`data`).
 
 **Backend (validé DSS sauf mention) :**
 1. **Whitelist agents** (L017/L018) : front = `{key,label}` ; résolution serveur.
@@ -164,8 +198,17 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    noms — pas ids — dans les events pour les labels). Span `semantic-model-query` recréé par le code
    au contrat gelé. `AGENT_RESULT` = statut machine (jamais affiché). UNE seule capability revenue
    `enabled` à la fois. Tests : `python3 -m unittest discover -s salesdrive/tests` (+ orchestrator/tests).
+12. **Artefacts (L057 ✅ DSS)** : event gelé `ARTIFACT` (le whitelist timeline droppe les champs →
+   event `artifact` normalisé dans `agents/streaming.py`) ; specs persistés dans **`webapp_artifacts_v1`**
+   (table neuve `_v1`, UPSERT owner-stamped, lecture **read-only + statement_timeout**) ;
+   `/evidence/meta` renvoie `artifacts` + pour chaque chart un `data` (payload Chart.js construit en
+   **Python** `evidence/chart_payload.py`). Donnée = `generated_sql[].result` déjà capturé ; l'agent
+   ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0★. **Agents LangGraph + artefacts ✅ FAITS & validés DSS** (L055-L057) — surveiller le fan-out
+   parallèle réel au 2ᵉ sous-agent ; affiner le prompt orchestrateur s'il recopie un tableau au lieu
+   d'appeler `show_table` ; envisager d'autres types de graph (style) au fil de l'usage.
 0skill. **Skill agentique** : lever les `UNVERIFIED` en confirmant sur l'instance (import `DKUChatModel` vs
    `as_langchain_chat_model()`, API `project.get_semantic_model`, ids de modèles non-Anthropic) ; promotion
    en global (`~/.claude/skills/`) si réutilisation cross-projets souhaitée (simple copie).
