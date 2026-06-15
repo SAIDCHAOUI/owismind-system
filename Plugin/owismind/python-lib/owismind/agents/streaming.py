@@ -56,6 +56,12 @@ _MAX_TRACE_DEPTH = 200
 # post-loop) means a run the user stops afterwards still persists its SQL (ORCH-08).
 _AGENT_DONE_KIND = "AGENT_DONE"
 
+# Orchestrator event asking the UI to render the latest data result as an artifact
+# (chart / table). Its eventData carries {kind, title, chart} — NOT covered by the
+# timeline whitelist, so it is surfaced as a dedicated normalized ``artifact`` event.
+_ARTIFACT_KIND = "ARTIFACT"
+_ARTIFACT_CHART_TYPES = ("line", "bar", "pie")
+
 # eventData keys relayed verbatim onto the live ``agent_event`` (trust-layer context
 # for the timeline). This is a strict WHITELIST pass-through — never the whole dict:
 # orchestrator payloads also carry agentId / message / instruction / steps /
@@ -123,6 +129,42 @@ def _normalized_sql_event(item, sql_index):
     if isinstance(result, dict):
         event["result"] = result
     return event
+
+
+def _normalized_artifact_event(event_data):
+    """Build ONE normalized ``artifact`` event from an ARTIFACT eventData, or None.
+
+    Strict shape: kind in {chart, table}, bounded title, and for a chart a
+    {type, x, y[]} block (x a column name, y a list of column names). The DATA is
+    NOT here — the frontend reuses the captured generated_sql result via
+    /evidence/meta; only the SPEC travels. Pure, never raises."""
+    if not isinstance(event_data, dict):
+        return None
+    kind = event_data.get("kind")
+    if kind not in ("chart", "table"):
+        return None
+    out = {"type": "artifact", "kind": kind,
+           "title": str(event_data.get("title") or "")[:200]}
+    if kind == "chart":
+        chart = event_data.get("chart")
+        if not isinstance(chart, dict):
+            return None
+        ctype = chart.get("type")
+        x = chart.get("x")
+        y = chart.get("y")
+        if ctype not in _ARTIFACT_CHART_TYPES or not isinstance(x, str):
+            return None
+        if isinstance(y, str):
+            y = [y]
+        if not isinstance(y, list):
+            return None
+        y = [str(c)[:128] for c in y if isinstance(c, str) and c][:8]
+        if not y:
+            return None
+        out["chart"] = {"type": ctype, "x": x[:128], "y": y}
+    else:
+        out["chart"] = None
+    return out
 
 
 def _is_footer_chunk(chunk, data):
@@ -320,6 +362,12 @@ def run_agent_streamed(project_key, agent_id, messages):
                         sql_event = _normalized_sql_event(item, sql_index)
                         emitted_by_sql[sql] = sql_event
                         yield sql_event
+            # ARTIFACT: surface the chart/table spec on its own normalized event so
+            # the worker can persist it (the timeline already showed the label).
+            elif data.get("eventKind") == _ARTIFACT_KIND:
+                artifact_event = _normalized_artifact_event(event_data)
+                if artifact_event is not None:
+                    yield artifact_event
         elif chunk_type in _TEXT_CHUNK_TYPES:
             text = data.get("text", "") or ""
             if text:

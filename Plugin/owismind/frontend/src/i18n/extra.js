@@ -189,6 +189,16 @@ export const extraMessages = {
     'ev.proof.drill.exit': 'Revenir au résultat',
     'ev.proof.explore': 'Explorer les données sources',
 
+    // Evidence Studio — artifact tabs (chart / table)
+    'art.tab.evidence': 'Preuves',
+    'art.tab.chart': 'Graphique',
+    'art.tab.table': 'Tableau',
+    'art.chart.empty': 'Impossible de tracer le graphique pour ces données.',
+    'art.chart.truncated': 'Données tronquées — premières valeurs seulement.',
+    'art.chart.title_fallback': 'Graphique',
+    'art.table.empty': "Le résultat exact utilisé par l'agent n'a pas été conservé.",
+    'art.table.truncated': 'Résultat tronqué — premières lignes seulement.',
+
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
     'ev.exp.source': 'Source : {0}',
@@ -410,6 +420,16 @@ export const extraMessages = {
     'ev.proof.drill.banner': 'Source rows: {0}',
     'ev.proof.drill.exit': 'Back to the result',
     'ev.proof.explore': 'Explore the source data',
+
+    // Evidence Studio — artifact tabs (chart / table)
+    'art.tab.evidence': 'Evidence',
+    'art.tab.chart': 'Chart',
+    'art.tab.table': 'Table',
+    'art.chart.empty': 'Cannot render the chart for this data.',
+    'art.chart.truncated': 'Data truncated — first values only.',
+    'art.chart.title_fallback': 'Chart',
+    'art.table.empty': 'The exact result the agent used was not kept for this answer.',
+    'art.table.truncated': 'Result truncated — first rows only.',
 
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.

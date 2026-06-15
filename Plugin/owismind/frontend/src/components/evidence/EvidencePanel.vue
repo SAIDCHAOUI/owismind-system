@@ -4,10 +4,15 @@
 // captured agent result + live rows of the matched source table + the agent's
 // raw SQL). All data lives in the evidence store; this component only renders
 // its states (loading / error / degraded / interactive).
+//
+// TABS: when meta.artifacts contains chart/table artifacts, a tab bar is shown
+// at the top of the body. Switching tabs ONLY updates evidence.activeTab — it
+// MUST NOT change evidence.open (the ChatThread scroll gate checks open, F13).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon } from '../ui'
+import Tabs from '../ui/Tabs.vue'
 import EvidenceTrust from './EvidenceTrust.vue'
 import EvidenceSources from './EvidenceSources.vue'
 import EvidenceChips from './EvidenceChips.vue'
@@ -15,6 +20,8 @@ import EvidenceCalc from './EvidenceCalc.vue'
 import EvidenceResult from './EvidenceResult.vue'
 import EvidenceTable from './EvidenceTable.vue'
 import EvidenceSql from './EvidenceSql.vue'
+import ArtifactChart from './ArtifactChart.vue'
+import ArtifactTable from './ArtifactTable.vue'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
@@ -53,6 +60,41 @@ const degradedMessage = computed(() => {
   const key = DEGRADED_KEYS[reason]
   return key ? t(key) : t('ev.degraded')
 })
+
+// ── Artifact tab logic ────────────────────────────────────────────────────────
+// Derive the visible tab list from meta.artifacts. 'evidence' is always present.
+// 'chart' / 'table' tabs are added only when the corresponding artifact kind exists.
+// Switching tabs MUST NOT touch `evidence.open` (F13: scroll gate).
+const artifacts = computed(() => {
+  const arts = meta.value && Array.isArray(meta.value.artifacts) ? meta.value.artifacts : []
+  return arts
+})
+
+const tabItems = computed(() => {
+  const items = [{ key: 'evidence', label: t('art.tab.evidence') }]
+  const seen = new Set()
+  for (const art of artifacts.value) {
+    if ((art.kind === 'chart' || art.kind === 'table') && !seen.has(art.kind)) {
+      seen.add(art.kind)
+      items.push({ key: art.kind, label: t('art.tab.' + art.kind) })
+    }
+  }
+  return items
+})
+
+// Show the tab bar only when there are extra tabs beyond 'evidence'.
+const showTabs = computed(() => tabItems.value.length > 1)
+
+// The active chart artifact spec (for the 'chart' tab): first chart artifact.
+const chartArtifact = computed(() =>
+  artifacts.value.find((a) => a.kind === 'chart') || null,
+)
+
+// Active tab model — bound to the store so it resets correctly on exchange change.
+const activeTab = computed({
+  get: () => evidence.activeTab || 'evidence',
+  set: (key) => evidence.setActiveTab(key),
+})
 </script>
 
 <template>
@@ -69,6 +111,16 @@ const degradedMessage = computed(() => {
         </button>
       </div>
     </header>
+
+    <!-- Tab bar — shown only when the backend returned chart / table artifacts.
+         Switching tabs MUST NOT change `evidence.open` (F13 scroll gate):
+         v-model is wired to evidence.activeTab via the computed setter above. -->
+    <Tabs
+      v-if="showTabs && meta && !evidence.loading && !evidence.error"
+      v-model="activeTab"
+      :items="tabItems"
+      class="ev-tabs"
+    />
 
     <div class="ev-body">
       <!-- Meta loading: shimmer skeleton shaped like the upcoming content
@@ -88,24 +140,41 @@ const degradedMessage = computed(() => {
         <div class="ev-state">{{ degradedMessage }}</div>
       </template>
       <template v-else-if="meta">
+        <!-- ── CHART TAB ──────────────────────────────────────────────────── -->
+        <template v-if="activeTab === 'chart' && chartArtifact">
+          <ArtifactChart
+            :chart="chartArtifact.chart"
+            :result="meta.result || null"
+            :title="chartArtifact.title || ''"
+          />
+        </template>
+
+        <!-- ── TABLE TAB ──────────────────────────────────────────────────── -->
+        <template v-else-if="activeTab === 'table'">
+          <ArtifactTable :result="meta.result || null" />
+        </template>
+
+        <!-- ── EVIDENCE TAB (default) ────────────────────────────────────── -->
         <!-- Proof sections, most business-readable first (spec §6). Each new
              section gates itself on its own OPTIONAL meta field, so a v1 meta
              renders exactly the v1 panel (chips + table only). -->
-        <EvidenceTrust v-if="enriched" />
-        <EvidenceSources />
-        <EvidenceChips />
-        <EvidenceCalc />
-        <EvidenceResult />
-        <!-- Drill banner: the rows table below is scoped to ONE result row. -->
-        <div v-if="drill" class="ev-drill-band">
-          <Icon name="filter" />
-          <span class="ev-drill-text">{{ t('ev.proof.drill.banner', [drillLabels]) }}</span>
-          <button class="ev-drill-exit" :title="t('ev.proof.drill.exit')" @click="onExitDrill">
-            <Icon name="x" />
-          </button>
-        </div>
-        <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
-        <EvidenceTable />
+        <template v-else>
+          <EvidenceTrust v-if="enriched" />
+          <EvidenceSources />
+          <EvidenceChips />
+          <EvidenceCalc />
+          <EvidenceResult />
+          <!-- Drill banner: the rows table below is scoped to ONE result row. -->
+          <div v-if="drill" class="ev-drill-band">
+            <Icon name="filter" />
+            <span class="ev-drill-text">{{ t('ev.proof.drill.banner', [drillLabels]) }}</span>
+            <button class="ev-drill-exit" :title="t('ev.proof.drill.exit')" @click="onExitDrill">
+              <Icon name="x" />
+            </button>
+          </div>
+          <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
+          <EvidenceTable />
+        </template>
       </template>
     </div>
 
@@ -130,6 +199,12 @@ const degradedMessage = computed(() => {
 /* Staggered content reveal: the header rises first, then each body block (the
    skeleton while loading, then chips and table when the meta lands — the v-if
    swap re-runs the animation, so loaded content fades in over the skeleton). */
+/* Tab bar — flush to the header border, inheriting the panel's horizontal padding.
+   The Tabs primitive draws its own border-bottom; no extra border here. */
+.ev-tabs {
+  padding: 0 var(--s-5);
+  flex: none;
+}
 .ev-head { animation: ev-rise var(--dur-slow) var(--ease) both; }
 .ev-body > * { animation: ev-rise var(--dur-slow) var(--ease) both; }
 .ev-body > * + * { animation-delay: 90ms; }

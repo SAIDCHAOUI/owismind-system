@@ -39,6 +39,7 @@ from flask import Blueprint, g, jsonify, request
 from owismind.agents import context, discovery, stream_manager
 from owismind.evidence import service as evidence_service
 from owismind.evidence import throttle as evidence_throttle
+from owismind.storage import artifacts as artifacts_storage
 from owismind.security.identity import IdentityError, derive_full_name, resolve_identity
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
@@ -564,12 +565,20 @@ def evidence_meta():
     # layer's whole point, so it must be greppable next to available/reason.
     verification = meta.get("verification") or {}
     drilldown = meta.get("drilldown") or {}
+    # Attach this exchange's rendered-artifact specs (chart / table the orchestrator
+    # asked for). Owner-scoped, best-effort: a read failure degrades to no artifacts,
+    # never a 500 — the rest of the evidence panel stays usable.
+    try:
+        meta["artifacts"] = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
+    except Exception:
+        logger.exception("/evidence/meta — artifacts read failed (non-fatal)")
+        meta["artifacts"] = []
     logger.info(
         "/evidence/meta — user_id=%s exchange_id=%s available=%s reason=%s "
-        "level=%s result_captured=%s drill_available=%s",
+        "level=%s result_captured=%s drill_available=%s artifacts=%d",
         identity["user_id"], exchange_id, meta.get("available"), meta.get("reason"),
         verification.get("level"), verification.get("result_captured"),
-        drilldown.get("available"),
+        drilldown.get("available"), len(meta.get("artifacts") or []),
     )
     return jsonify({"status": "ok", **meta})
 

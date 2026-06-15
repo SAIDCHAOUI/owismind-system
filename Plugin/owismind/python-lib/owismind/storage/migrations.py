@@ -35,6 +35,11 @@ SETTINGS_V1_LOGICAL = "webapp_settings_v1"
 # planned per-user monthly quota is a single PK lookup and needs no reset job (each
 # month is naturally its own row). chat_v5 stays the source of truth (rebuildable).
 USAGE_MONTHLY_V1_LOGICAL = "webapp_usage_monthly_v1"
+# One row per chat exchange whose orchestrator asked the UI to render an artifact
+# (chart / table spec). Only the small SPEC lives here — the chart/table DATA is
+# reused from the captured generated_sql result, surfaced via /evidence/meta. New
+# _v1 table (no ALTER of chat_v5), owner-scoped on read.
+ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
 # Note: raw agent traces are NO LONGER stored in a backend-managed SQL table. They are
 # appended to an admin-selected Flow dataset via the Dataset API (see storage/chat_traces.py),
 # which keeps the large JSON out of any SQL statement text (and out of DSS CRU logs).
@@ -137,6 +142,19 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# One row per exchange carrying the orchestrator's rendered-artifact specs (chart /
+# table). ``artifacts`` is a JSON-encoded list of small spec dicts; the actual rows
+# are NOT duplicated here (read back from the captured generated_sql result). Bound
+# in storage/artifacts.py before write.
+_ARTIFACTS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    exchange_id  TEXT       PRIMARY KEY,
+    user_id      TEXT,
+    artifacts    TEXT,
+    created_at   TIMESTAMP  NOT NULL DEFAULT now()
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -144,6 +162,7 @@ _DDL_BY_LOGICAL = {
     USERS_V1_LOGICAL: _USERS_V1_DDL,
     SETTINGS_V1_LOGICAL: _SETTINGS_V1_DDL,
     USAGE_MONTHLY_V1_LOGICAL: _USAGE_MONTHLY_V1_DDL,
+    ARTIFACTS_V1_LOGICAL: _ARTIFACTS_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -245,3 +264,8 @@ def ensure_settings_table():
 def ensure_usage_monthly_table():
     """Ensure the per-(user, month) usage bucket exists (create-if-missing), once per process."""
     _ensure_table(USAGE_MONTHLY_V1_LOGICAL)
+
+
+def ensure_artifacts_table():
+    """Ensure the per-exchange artifacts table exists (create-if-missing), once per process."""
+    _ensure_table(ARTIFACTS_V1_LOGICAL)

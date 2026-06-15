@@ -26,6 +26,10 @@ export const useEvidenceStore = defineStore('evidence', () => {
   const open = ref(false)
   const exchangeId = ref(null)
   const meta = ref(null) // last /evidence/meta response (null while loading)
+  // Active tab in the Evidence Studio panel: 'evidence' | 'chart' | 'table'.
+  // Computed from the artifacts on each exchange load; switching tabs MUST NOT
+  // toggle `open` (the ChatThread scroll gate gates only on `open`, not this ref).
+  const activeTab = ref('evidence')
   const chips = ref([]) // local editable working state (evidenceModel shape)
   const includeAdvanced = ref(false)
   const rows = ref([])
@@ -54,6 +58,16 @@ export const useEvidenceStore = defineStore('evidence', () => {
     () => available.value && isModified(meta.value, chips.value, includeAdvanced.value),
   )
 
+  // Compute the default tab key for a given meta object: 'evidence' unless
+  // there are artifacts, in which case the first artifact's kind wins.
+  // 'evidence' is always valid (the base panel).
+  function _defaultTab(m) {
+    const arts = m && Array.isArray(m.artifacts) ? m.artifacts : []
+    const first = arts[0]
+    if (first && (first.kind === 'chart' || first.kind === 'table')) return first.kind
+    return 'evidence'
+  }
+
   function _resetData() {
     meta.value = null
     chips.value = []
@@ -67,6 +81,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     rowsError.value = ''
     loading.value = false
     rowsLoading.value = false
+    activeTab.value = 'evidence' // reset to base tab; will be re-computed after meta loads
   }
 
   // Open the panel for one exchange. `auto` (the end-of-generation reveal) only
@@ -95,6 +110,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       meta.value = m
       chips.value = chipsFromMeta(m)
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
+      activeTab.value = _defaultTab(m)
       open.value = true
       await _loadRows(mySeq)
       return
@@ -111,6 +127,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       meta.value = m
       chips.value = chipsFromMeta(m)
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
+      activeTab.value = _defaultTab(m)
       if (m.available) await _loadRows(mySeq)
     } catch (e) {
       if (mySeq !== seq) return
@@ -299,9 +316,16 @@ export const useEvidenceStore = defineStore('evidence', () => {
     return fetchEvidenceDistinct(exchangeId.value, column, excludeId)
   }
 
+  // Switch the active tab. Switching MUST NOT touch `open` (the ChatThread scroll
+  // gate is gated on `evidence.open`, not on `activeTab` — F13 rule).
+  function setActiveTab(key) {
+    activeTab.value = key
+  }
+
   return {
     open, exchangeId, meta, chips, includeAdvanced, rows, page, hasMore, sort, drill,
     loading, rowsLoading, error, rowsError, available, modified,
+    activeTab, setActiveTab,
     openForExchange, close, refreshRows,
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,
     drillIntoResultRow, exitDrill,

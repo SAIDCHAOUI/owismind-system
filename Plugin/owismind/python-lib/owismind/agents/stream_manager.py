@@ -34,6 +34,7 @@ import time
 from uuid import uuid4
 
 from owismind.agents import context, streaming
+from owismind.storage import artifacts as artifacts_storage
 from owismind.storage import chat_traces, chat_v5, usage
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,9 @@ HARD_TTL_SECONDS = 600.0
 # dropped, only the live timeline / accumulated answer are capped.
 MAX_LIVE_EVENTS = 5000
 MAX_ANSWER_CHARS = 1_000_000
+# A turn renders at most a handful of artifacts (chart/table specs); bound the
+# accumulator so a buggy agent cannot grow it without limit.
+MAX_ARTIFACTS_ACCUM = 8
 
 # Cooperative run-time bounds (checked between streamed chunks):
 #   - MAX_RUN_SECONDS: a hard wall-clock deadline so one run cannot occupy a worker
@@ -244,6 +248,9 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     answer_truncated = False
     live_events = 0
     sql_list = []
+    # Chart/table specs the orchestrator asked the UI to render (persistence-only:
+    # surfaced after the run via /evidence/meta, never on the live polled timeline).
+    artifacts = []
     # sqlIndex -> position in sql_list. A generated_sql event re-using an already-seen
     # sqlIndex is streaming's post-loop ENRICHMENT (trace authority merged into an item
     # first relayed mid-stream by AGENT_DONE): it updates the stored item in place and
@@ -339,6 +346,18 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     "totalTokens": event.get("totalTokens"),
                     "estimatedCost": event.get("estimatedCost"),
                 }
+            elif etype == "artifact":
+                # Chart/table SPEC (kind/title/chart) the orchestrator emitted. The
+                # ARTIFACT agent_event already gave the live timeline label; here we
+                # only capture the spec for persistence (the rows are surfaced via
+                # /evidence/meta after the run). Bounded; not added to the live list.
+                if len(artifacts) < MAX_ARTIFACTS_ACCUM:
+                    artifacts.append({
+                        "kind": event.get("kind"),
+                        "title": event.get("title"),
+                        "chart": event.get("chart"),
+                    })
+                continue
             elif etype == "trace":
                 # The RAW footer trace is for PERSISTENCE only — capture it but do
                 # NOT add it to the live timeline (it can be large; the front shows
@@ -386,6 +405,17 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
         except Exception:
             logger.exception(
                 "stream_manager — failed to persist trace (trace lost) run_id=%s", run_id
+            )
+
+        # Persist this exchange's rendered-artifact specs (chart/table) so the panel
+        # can show them on reload via /evidence/meta. Best-effort: a failure here must
+        # never affect the answer on screen. No-op when the run emitted no artifact.
+        try:
+            if artifacts:
+                artifacts_storage.save_artifacts(exchange_id, user_id, artifacts)
+        except Exception:
+            logger.exception(
+                "stream_manager — failed to persist artifacts run_id=%s", run_id
             )
 
         _append_event_locked_free(
