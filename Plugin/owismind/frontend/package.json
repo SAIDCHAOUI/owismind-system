@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "chart.js": "^4.5.1",
     "dompurify": "^3.4.8",
     "markdown-it": "^14.2.0",
     "pinia": "^3.0.4",

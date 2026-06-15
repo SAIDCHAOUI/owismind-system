@@ -144,7 +144,7 @@ const activeTab = computed({
         <template v-if="activeTab === 'chart' && chartArtifact">
           <ArtifactChart
             :chart="chartArtifact.chart"
-            :result="meta.result || null"
+            :data="chartArtifact.data || null"
             :title="chartArtifact.title || ''"
           />
         </template>

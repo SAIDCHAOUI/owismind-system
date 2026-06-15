@@ -1,295 +1,190 @@
 <script setup>
-// ArtifactChart.vue — hand-rolled SVG chart renderer for Evidence Studio artifact charts.
-// No charting library dependency. Reads geometry from chartGeometry.js (pure module).
-// Supports line, bar, and pie charts. Theme-aware via CSS custom properties.
-import { computed } from 'vue'
+// ArtifactChart.vue — interactive chart for an Evidence Studio artifact, rendered
+// with Chart.js. The DATA is built server-side in Python (chart_payload.py) and
+// arrives ready as { labels, datasets } in `data`; this component only chooses the
+// visual style/options and draws. Chart.js gives real interactivity: hover
+// tooltips, clickable legend (toggle series), animated draw-in, responsive resize.
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { buildChartGeometry } from './chartGeometry.js'
+import Chart from 'chart.js/auto'
 
 const { t } = useI18n()
 
 const props = defineProps({
-  // Artifact spec from meta.artifacts[n].chart: { type, x, y }
+  // Artifact chart spec: { type: 'line'|'bar'|'pie', x, y[], style? }
   chart: { type: Object, required: true },
-  // meta.result: { captured, columns, rows, row_count, truncated }
-  result: { type: Object, default: null },
-  // Display title for aria-label and legend header
+  // Server-built Chart.js payload: { ok, labels, datasets, truncated, reason }
+  data: { type: Object, default: null },
+  // Title for the chart + aria-label
   title: { type: String, default: '' },
 })
 
-// A small palette using existing orange tokens + safe grays / blues from CSS custom properties.
-// Defined as CSS var references so they follow the active theme without extra logic.
-// Index 0 = primary (orange accent), then neutral complements.
-const SERIES_COLORS = [
-  'var(--orange)',
-  'var(--orange-text)',
-  '#5b8dee',
-  '#40c9a2',
-  '#e87d5e',
-  '#a78bfa',
-  '#f59e0b',
-  '#10b981',
-]
+const canvasEl = ref(null)
+let instance = null
+let themeObserver = null
 
-function seriesColor(i) {
-  return SERIES_COLORS[i % SERIES_COLORS.length]
+// Canvas cannot use CSS var() — resolve the active theme's colors at draw time.
+function cssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    return v || fallback
+  } catch (e) {
+    return fallback
+  }
 }
 
-const geometry = computed(() => {
-  const r = props.result
-  if (!r || !r.captured || !Array.isArray(r.columns) || !Array.isArray(r.rows)) {
-    return { ok: false, reason: 'no_data' }
+// Series palette: the brand orange first, then distinct, color-blind-friendly hues.
+function palette() {
+  return [
+    cssVar('--orange', '#ff7a00'),
+    '#5b8dee', '#40c9a2', '#e87d5e', '#a78bfa', '#f59e0b', '#10b981', '#ef4444',
+  ]
+}
+
+function withAlpha(color, a) {
+  const m = /^#([0-9a-f]{6})$/i.exec(color)
+  if (m) {
+    const n = parseInt(m[1], 16)
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
   }
-  const { type, x, y } = props.chart
-  if (!type || !Array.isArray(y) || y.length === 0) {
-    return { ok: false, reason: 'invalid_spec' }
+  return color
+}
+
+function isOk() {
+  return !!(props.data && props.data.ok && Array.isArray(props.data.datasets))
+}
+
+function buildConfig() {
+  const spec = props.chart || {}
+  const style = String(spec.style || '').toLowerCase()
+  const pal = palette()
+  const text2 = cssVar('--text-2', '#333')
+  const text3 = cssVar('--text-3', '#888')
+  const grid = cssVar('--border', 'rgba(0,0,0,0.1)')
+  const surface = cssVar('--surface', '#ffffff')
+
+  const isPie = spec.type === 'pie'
+  const chartType = isPie
+    ? (style === 'donut' || style === 'doughnut' ? 'doughnut' : 'pie')
+    : (spec.type === 'bar' ? 'bar' : 'line')
+  const horizontal = chartType === 'bar' && style === 'horizontal'
+
+  const datasets = props.data.datasets.map((ds, i) => {
+    if (isPie) {
+      return {
+        label: ds.label,
+        data: ds.data,
+        backgroundColor: ds.data.map((_, j) => pal[j % pal.length]),
+        borderColor: surface,
+        borderWidth: 2,
+        hoverOffset: 6,
+      }
+    }
+    const c = pal[i % pal.length]
+    const base = {
+      label: ds.label,
+      data: ds.data,
+      borderColor: c,
+      backgroundColor: chartType === 'bar' ? c : withAlpha(c, 0.18),
+      borderWidth: 2,
+      borderRadius: chartType === 'bar' ? 3 : 0,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      pointBackgroundColor: c,
+      spanGaps: true,
+    }
+    if (chartType === 'line') {
+      base.tension = style === 'smooth' ? 0.4 : 0
+      base.stepped = style === 'stepped'
+      base.fill = style === 'area'
+    }
+    return base
+  })
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 500 },
+    interaction: { mode: isPie ? 'nearest' : 'index', intersect: false },
+    indexAxis: horizontal ? 'y' : 'x',
+    plugins: {
+      legend: {
+        display: isPie || datasets.length > 1,
+        position: isPie ? 'right' : 'top',
+        labels: { color: text2, usePointStyle: true, boxWidth: 8 },
+      },
+      title: { display: !!props.title, text: props.title, color: text2 },
+      tooltip: isPie
+        ? {
+            callbacks: {
+              label(ctx) {
+                const arr = ctx.dataset.data || []
+                const total = arr.reduce((s, v) => s + (Number(v) || 0), 0) || 1
+                const v = Number(ctx.parsed) || 0
+                return ` ${ctx.label}: ${v.toLocaleString()} (${((100 * v) / total).toFixed(1)}%)`
+              },
+            },
+          }
+        : {},
+    },
+    scales: isPie
+      ? {}
+      : {
+          x: { ticks: { color: text3 }, grid: { color: grid } },
+          y: { ticks: { color: text3 }, grid: { color: grid }, beginAtZero: true },
+        },
   }
-  return buildChartGeometry({ type, columns: r.columns, rows: r.rows, x, y })
+
+  return { type: chartType, data: { labels: props.data.labels, datasets }, options }
+}
+
+function render() {
+  if (instance) {
+    instance.destroy()
+    instance = null
+  }
+  if (!isOk() || !canvasEl.value) return
+  instance = new Chart(canvasEl.value, buildConfig())
+}
+
+onMounted(() => {
+  render()
+  // Canvas colors are baked at draw time, so re-render when the theme flips.
+  try {
+    themeObserver = new MutationObserver(() => render())
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] })
+  } catch (e) {
+    /* MutationObserver unavailable: charts simply keep their initial theme. */
+  }
 })
 
-const ariaLabel = computed(() => {
-  const title = props.title || t('art.chart.title_fallback')
-  return title + (geometry.value.ok ? '' : ' — ' + t('art.chart.empty'))
-})
+watch(() => [props.data, props.chart], () => nextTick(render), { deep: true })
 
-// Whether multiple series need a legend (single series pie already uses wedge labels)
-const showLegend = computed(() => {
-  const g = geometry.value
-  if (!g.ok) return false
-  if (g.type === 'pie') return false // pie labels are on the wedges
-  return g.series && g.series.length > 1
+onBeforeUnmount(() => {
+  if (instance) {
+    instance.destroy()
+    instance = null
+  }
+  if (themeObserver) {
+    themeObserver.disconnect()
+    themeObserver = null
+  }
 })
 </script>
 
 <template>
-  <div class="art-chart" role="img" :aria-label="ariaLabel">
-    <!-- Empty state: geometry could not be built (no numeric data, column not found, etc.) -->
-    <div v-if="!geometry.ok" class="art-empty">
-      <span class="art-empty-icon">&#9636;</span>
+  <div class="art-chart">
+    <!-- Honest empty state: the server could not build a chart (no data, unknown
+         column, no numeric series). -->
+    <div v-if="!isOk()" class="art-empty">
+      <span class="art-empty-icon">&#9649;</span>
       <span>{{ t('art.chart.empty') }}</span>
-      <span v-if="geometry.reason" class="art-empty-reason">{{ geometry.reason }}</span>
     </div>
-
     <template v-else>
-      <!-- Multi-series legend (line / grouped-bar) -->
-      <div v-if="showLegend" class="art-legend">
-        <span v-for="(key, i) in geometry.series" :key="key" class="art-legend-item">
-          <span class="art-legend-dot" :style="{ background: seriesColor(i) }" />
-          {{ key }}
-        </span>
+      <div class="art-canvas-wrap">
+        <canvas ref="canvasEl" role="img" :aria-label="title || t('art.chart.title_fallback')" />
       </div>
-
-      <!-- LINE CHART -->
-      <svg
-        v-if="geometry.type === 'line'"
-        class="art-svg"
-        :viewBox="geometry.viewBox"
-        aria-hidden="true"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <!-- Y-axis gridlines and labels -->
-        <g class="art-grid">
-          <line
-            v-for="tick in geometry.yTicks"
-            :key="tick.v"
-            :x1="geometry.pad.left"
-            :y1="tick.y"
-            :x2="geometry.pad.left + geometry.plotW"
-            :y2="tick.y"
-            class="art-gridline"
-          />
-          <text
-            v-for="tick in geometry.yTicks"
-            :key="'yl-' + tick.v"
-            :x="geometry.pad.left - 6"
-            :y="tick.y"
-            class="art-axis-label"
-            text-anchor="end"
-            dominant-baseline="middle"
-          >{{ tick.label }}</text>
-        </g>
-
-        <!-- Zero line (only when chart crosses zero) -->
-        <line
-          v-if="geometry.zeroY != null"
-          :x1="geometry.pad.left"
-          :y1="geometry.zeroY"
-          :x2="geometry.pad.left + geometry.plotW"
-          :y2="geometry.zeroY"
-          class="art-zero-line"
-        />
-
-        <!-- X-axis labels -->
-        <g class="art-xaxis">
-          <text
-            v-for="tick in geometry.xTicks"
-            :key="'xl-' + tick.i"
-            :x="tick.x"
-            :y="geometry.pad.top + geometry.plotH + 16"
-            class="art-axis-label"
-            text-anchor="middle"
-          >{{ tick.label }}</text>
-        </g>
-
-        <!-- Polylines per series -->
-        <g v-for="(pl, i) in geometry.polylines" :key="pl.key" class="art-series">
-          <polyline
-            :points="pl.points"
-            :stroke="seriesColor(i)"
-            fill="none"
-            stroke-width="2"
-            stroke-linejoin="round"
-            stroke-linecap="round"
-          />
-          <!-- Data dots -->
-          <circle
-            v-for="(dot, di) in pl.dots"
-            :key="di"
-            :cx="dot.cx"
-            :cy="dot.cy"
-            r="3"
-            :fill="seriesColor(i)"
-            class="art-dot"
-          >
-            <title>{{ pl.key }}: {{ dot.value }}</title>
-          </circle>
-        </g>
-
-        <!-- Axis borders -->
-        <line
-          :x1="geometry.pad.left" :y1="geometry.pad.top"
-          :x2="geometry.pad.left" :y2="geometry.pad.top + geometry.plotH"
-          class="art-axis-border"
-        />
-        <line
-          :x1="geometry.pad.left" :y1="geometry.pad.top + geometry.plotH"
-          :x2="geometry.pad.left + geometry.plotW" :y2="geometry.pad.top + geometry.plotH"
-          class="art-axis-border"
-        />
-      </svg>
-
-      <!-- BAR CHART -->
-      <svg
-        v-else-if="geometry.type === 'bar'"
-        class="art-svg"
-        :viewBox="geometry.viewBox"
-        aria-hidden="true"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <!-- Y-axis gridlines -->
-        <g class="art-grid">
-          <line
-            v-for="tick in geometry.yTicks"
-            :key="tick.v"
-            :x1="geometry.pad.left"
-            :y1="tick.y"
-            :x2="geometry.pad.left + geometry.plotW"
-            :y2="tick.y"
-            class="art-gridline"
-          />
-          <text
-            v-for="tick in geometry.yTicks"
-            :key="'yl-' + tick.v"
-            :x="geometry.pad.left - 6"
-            :y="tick.y"
-            class="art-axis-label"
-            text-anchor="end"
-            dominant-baseline="middle"
-          >{{ tick.label }}</text>
-        </g>
-
-        <!-- Zero line -->
-        <line
-          v-if="geometry.zeroY != null"
-          :x1="geometry.pad.left"
-          :y1="geometry.zeroY"
-          :x2="geometry.pad.left + geometry.plotW"
-          :y2="geometry.zeroY"
-          class="art-zero-line"
-        />
-
-        <!-- X-axis labels -->
-        <g class="art-xaxis">
-          <text
-            v-for="tick in geometry.xTicks"
-            :key="'xl-' + tick.i"
-            :x="tick.x"
-            :y="geometry.pad.top + geometry.plotH + 16"
-            class="art-axis-label"
-            text-anchor="middle"
-          >{{ tick.label }}</text>
-        </g>
-
-        <!-- Bars grouped per series -->
-        <g v-for="(bars, i) in geometry.bars" :key="bars.key" class="art-bar-series">
-          <rect
-            v-for="(rect, ri) in bars.rects"
-            :key="ri"
-            :x="rect.x"
-            :y="rect.y"
-            :width="rect.width"
-            :height="rect.height"
-            :fill="seriesColor(i)"
-            rx="1"
-            class="art-bar"
-          >
-            <title>{{ bars.key }}: {{ rect.value }}</title>
-          </rect>
-        </g>
-
-        <!-- Axis borders -->
-        <line
-          :x1="geometry.pad.left" :y1="geometry.pad.top"
-          :x2="geometry.pad.left" :y2="geometry.pad.top + geometry.plotH"
-          class="art-axis-border"
-        />
-        <line
-          :x1="geometry.pad.left" :y1="geometry.pad.top + geometry.plotH"
-          :x2="geometry.pad.left + geometry.plotW" :y2="geometry.pad.top + geometry.plotH"
-          class="art-axis-border"
-        />
-      </svg>
-
-      <!-- PIE CHART -->
-      <svg
-        v-else-if="geometry.type === 'pie'"
-        class="art-svg"
-        :viewBox="geometry.viewBox"
-        aria-hidden="true"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <g class="art-pie">
-          <path
-            v-for="(wedge, i) in geometry.wedges"
-            :key="i"
-            :d="wedge.path"
-            :fill="seriesColor(i)"
-            stroke="var(--bg)"
-            stroke-width="1.5"
-            class="art-wedge"
-          >
-            <title>{{ wedge.label }}: {{ wedge.value }} ({{ wedge.pct.toFixed(1) }}%)</title>
-          </path>
-        </g>
-        <!-- Pie legend (since labels inside the SVG can overlap for small slices) -->
-        <g class="art-pie-legend">
-          <g
-            v-for="(wedge, i) in geometry.wedges"
-            :key="'leg-' + i"
-            :transform="`translate(${geometry.pad.left - 8}, ${geometry.pad.top + i * 22})`"
-          >
-            <rect width="12" height="12" :fill="seriesColor(i)" rx="2" />
-            <text x="16" y="10" class="art-axis-label" text-anchor="start">
-              {{ wedge.label }} ({{ wedge.pct.toFixed(1) }}%)
-            </text>
-          </g>
-        </g>
-      </svg>
-
-      <!-- Truncation notice -->
-      <div v-if="geometry.truncated" class="art-trunc">
-        {{ t('art.chart.truncated') }}
-      </div>
+      <div v-if="data.truncated" class="art-trunc">{{ t('art.chart.truncated') }}</div>
     </template>
   </div>
 </template>
@@ -301,77 +196,16 @@ const showLegend = computed(() => {
   gap: var(--s-3);
   min-height: 0;
 }
-
-/* Legend row for multi-series line/bar */
-.art-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2) var(--s-4);
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-}
-.art-legend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-1);
-}
-.art-legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: none;
-}
-
-/* The SVG fills the container width, height auto from aspect ratio. */
-.art-svg {
+/* Fixed-height canvas wrapper: Chart.js fills it (maintainAspectRatio: false). */
+.art-canvas-wrap {
+  position: relative;
   width: 100%;
-  height: auto;
-  display: block;
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  height: 340px;
 }
-
-/* SVG text elements */
-.art-axis-label {
-  font-size: 10px;
-  fill: var(--text-3);
-  font-family: var(--font-sans);
-}
-.art-gridline {
-  stroke: var(--border);
-  stroke-width: 1;
-}
-.art-zero-line {
-  stroke: var(--text-3);
-  stroke-width: 1;
-  stroke-dasharray: none;
-}
-.art-axis-border {
-  stroke: var(--border);
-  stroke-width: 1.5;
-}
-.art-dot {
-  /* Dots render by fill=seriesColor(i) inline; no override needed. */
-}
-.art-bar {
-  opacity: 0.88;
-  transition: opacity var(--dur) var(--ease);
-}
-.art-bar:hover { opacity: 1; }
-.art-wedge {
-  opacity: 0.9;
-  transition: opacity var(--dur) var(--ease);
-}
-.art-wedge:hover { opacity: 1; }
-
-/* Truncation note */
 .art-trunc {
   font-size: var(--fs-xs);
   color: var(--orange-text);
 }
-
-/* Empty state */
 .art-empty {
   display: flex;
   flex-direction: column;
@@ -388,16 +222,5 @@ const showLegend = computed(() => {
 .art-empty-icon {
   font-size: 28px;
   opacity: 0.4;
-}
-.art-empty-reason {
-  font-size: var(--fs-xs);
-  font-family: var(--font-mono);
-  opacity: 0.6;
-}
-
-/* Dark mode: SVG background matches the panel surface */
-:global(body[data-theme="dark"] .art-svg) {
-  background: var(--surface);
-  border-color: var(--border);
 }
 </style>
