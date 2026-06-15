@@ -87,8 +87,11 @@ TARGET_DATASET = ""
 # good at strict JSON (e.g. gemini-2.5-flash). SQLGEN only runs on the
 # long-tail "custom" intent -> pick the strongest SQL model available.
 # gpt-5.4-mini everywhere (user decision). Reasoning is configured ON THE MODEL
-# in the LLM Mesh connection (effort = high); per-call reasoning is ignored in
-# DSS 14. We never force native JSON output here (it would disable reasoning).
+# in the LLM Mesh connection (effort = high). UNDERSTAND forces native JSON
+# output (deterministic extraction -> reliable parse; reasoning not needed
+# there); the headline/SQLGEN calls keep reasoning. Fallback if UNDERSTAND ever
+# misbehaves with gpt-5.4-mini: set UNDERSTAND_LLM_ID to the proven
+# vertex_ai/claude-sonnet-4-6.
 UNDERSTAND_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 SQLGEN_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
@@ -529,6 +532,35 @@ def _term_stopwords(profile):
 # =============================================================================
 # 5. UNDERSTAND — prompt generated from the profile
 # =============================================================================
+
+def build_understand_schema(profile):
+    """JSON schema for with_json_output, with enums anchored on the profile."""
+    scen = profile.scenario
+    props = {
+        "scope": {"type": "string", "enum": ["data", "out_of_scope"]},
+        "language": {"type": "string", "enum": ["fr", "en"]},
+        "intent": {"type": "string", "enum": list(KNOWN_INTENTS)},
+        "metric": {"type": "string"},
+        "period": {"type": "object", "properties": {
+            "mode": {"type": "string", "enum": ["explicit", "all_available"]},
+            "start": {"type": "string"}, "end": {"type": "string"},
+            "label": {"type": "string"}}, "required": ["mode"]},
+        "periods": {"type": "array", "items": {"type": "object", "properties": {
+            "start": {"type": "string"}, "end": {"type": "string"},
+            "label": {"type": "string"}}, "required": ["start", "end"]}},
+        "group_by": {"type": "string"},
+        "list_column": {"type": "string"},
+        "top_n": {"type": "integer"},
+        "order": {"type": "string", "enum": ["asc", "desc"]},
+        "terms": {"type": "array", "items": {"type": "string"}},
+        "clarification": {"type": "string"},
+    }
+    if scen:
+        props["scenarios"] = {"type": "array",
+                              "items": {"type": "string", "enum": list(scen["values"])}}
+    return {"type": "object", "properties": props,
+            "required": ["scope", "language"]}
+
 
 def build_understand_prompt(profile, current_date, lang_hint="fr"):
     """System prompt of the UNDERSTAND call, GENERATED from the profile."""
@@ -1962,20 +1994,28 @@ class MyLLM(BaseLLM):
         return resolutions
 
     # ------------------------------------------------------------------- LLM
-    def _call_json_llm(self, project, system_prompt, user_msg, span):
-        """2 prompt-only attempts -> parsed dict|None. We deliberately do NOT
-        use native JSON output (with_json_output): in DSS 14 forcing structured
-        output disables the model's reasoning (gpt-5.4-mini), which we keep ON.
-        The prompt asks for JSON and we parse tolerantly."""
+    def _call_json_llm(self, project, system_prompt, user_msg, schema, span):
+        """2 attempts: native JSON mode (with_json_output) then prompt-only.
+
+        UNDERSTAND is a DETERMINISTIC extraction (scope / intent / terms), NOT a
+        reasoning task — forcing the JSON schema is what makes it reliable (the
+        proven behavior of the original agent). In DSS 14 forced JSON disables
+        the model's reasoning for THIS call only, which is what we want here: a
+        clean, fast parse instead of a long 'thinking' pass that returns prose
+        the parser cannot read. Reasoning stays ON where it helps (the
+        orchestrator's routing, the verified headline). If the model/connection
+        rejects json mode, the guarded attempt 1 still runs as a plain
+        completion and attempt 2 is prompt-only."""
         llm = project.get_llm(UNDERSTAND_LLM_ID)
-        for attempt in (1, 2):
+        for attempt, use_json_mode in ((1, True), (2, False)):
             try:
-                sys_p = system_prompt
-                if attempt == 2:                 # stronger nudge on the retry
-                    sys_p += ("\n\nReturn ONLY the JSON object — no prose, no "
-                              "explanation, no markdown code fences.")
                 completion = llm.new_completion()
-                completion.with_message(sys_p, role="system")
+                if use_json_mode:
+                    try:
+                        completion.with_json_output(schema=schema)
+                    except Exception:
+                        pass
+                completion.with_message(system_prompt, role="system")
                 completion.with_message(user_msg, role="user")
                 resp = completion.execute()
                 try:
@@ -2064,7 +2104,7 @@ class MyLLM(BaseLLM):
                     project,
                     build_understand_prompt(profile,
                                             datetime.now().strftime("%Y-%m-%d")),
-                    user_msg, sp)
+                    user_msg, build_understand_schema(profile), sp)
                 u = validate_understanding(parsed, profile, instruction)
                 sp.outputs["understanding"] = u
             if u is None:

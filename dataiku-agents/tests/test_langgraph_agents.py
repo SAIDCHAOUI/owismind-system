@@ -101,11 +101,11 @@ class TestModelIds(unittest.TestCase):
         self.assertIn("gpt-5.4-mini", dx.UNDERSTAND_LLM_ID)
         self.assertIn("gpt-5.4-mini", dx.SQLGEN_LLM_ID)
 
-    def test_subagent_json_call_drops_native_json_mode(self):
-        # Reasoning must stay on -> the native JSON-mode CALL must be gone (the
-        # docstring may still mention the name to explain WHY it was removed).
+    def test_subagent_understand_forces_json(self):
+        # UNDERSTAND is a deterministic extraction -> forces native JSON for a
+        # reliable parse (reasoning is not needed there; it stays on elsewhere).
         src = inspect.getsource(dx.MyLLM._call_json_llm)
-        self.assertNotIn(".with_json_output(", src)
+        self.assertIn(".with_json_output(", src)
 
 
 class TestRegistryAndTools(unittest.TestCase):
@@ -277,7 +277,7 @@ class TestSubAgentEngineIntact(unittest.TestCase):
         self.assertTrue(hasattr(dx, "ExpertState"))
         self.assertFalse(hasattr(dx.MyLLM, "_legacy_process_stream"))
         self.assertFalse(hasattr(dx, "USE_LANGGRAPH"))
-        self.assertFalse(hasattr(dx, "build_understand_schema"))
+        self.assertTrue(hasattr(dx, "build_understand_schema"))
 
     def test_extract_semantic_payload_last_occurrence(self):
         raw = {"messages": [
