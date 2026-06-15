@@ -1313,4 +1313,53 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : validé DSS (« comme sur des roulettes ») ; revue sécurité sans bloqueur.
 - **Source** : session 2026-06-15. **Date** : 2026-06-15.
 
+## L058 — Le sous-agent ASSISTE, il ne DICTE pas : ne jamais épingler une colonne pour un terme d'offre ambigu (⏳ codé+157 tests, NON re-validé DSS)
+
+- **Contexte** : modèle sémantique aligné déployé (Sonnet 4.6). Question « revenus YTD en EVPL,
+  compare actuals et budget ». EVPL existe en `Product` ET `Solution` ET `sirano_product`.
+- **Ce qui a échoué** : via l'orchestrateur+sous-agent, SQL généré sur `sirano_product = 'EVPL'` →
+  **budget = 0** (les lignes BUDGET n'ont pas de `sirano_product` → exclues). Cause RACINE = code
+  déterministe, pas le LLM : `column_priority` retombe sur `-distinct_count` quand aucun
+  `ambiguity_priority` n'est posé → **sirano_product (153 distincts) bat Product (42)**. Le petit
+  sous-agent a donc ÉPINGLÉ la mauvaise colonne et l'a imposée à Sonnet (`GROUNDED FILTER VALUES …`).
+  Le **Playground** (modèle seul, sans sous-agent) résout `Product='EVPL'` parfaitement.
+- **Solution qui marche** : (1) `build_semantic_question` refondu **ASSISTIF** — « HINTS to ASSIST
+  you, NOT orders ; you keep the final say », question user = source de vérité ; (2) **un terme
+  d'offre ambigu (valeur dans ≥2 colonnes, `alt_columns` non vide) n'est PLUS épinglé** : on émet
+  `AMBIGUOUS OFFER TERM — "EVPL" present in (Product, Solution, sirano_product) ; YOU resolve it` et
+  le **modèle (Sonnet + layer + instructions)** tranche ; (3) les valeurs **mono-colonne** (noms
+  clients) restent suggérées (anti-typo) ; (4) instructions du modèle : **« never default an offer
+  term to sirano_product »**. **Le thinking N'est PAS la solution** : UNDERSTAND est une extraction
+  (JSON forcé OK, L056) ; le raisonnement vit dans Sonnet, pas dans le petit sous-agent → garder
+  gpt-5.4-mini sur orchestrateur+sous-agent, Sonnet **uniquement** sur le modèle (pas besoin de payer
+  plus). Affine L052 : le modèle ne se contente pas du SQL, il **décide aussi la colonne** sur les
+  termes d'offre ambigus ; nos couches ne fournissent que des indices.
+- **Preuve-vérification** : 157 tests unittest verts (`test_langgraph_agents.py` : terme ambigu non
+  épinglé, valeur sûre suggérée, multi-affichage, `alt_columns`, note neutre) ; rendu COMPOSE vérifié
+  à la main (le message ne contient plus `sirano_product = 'EVPL'`). **⏳ Reste à recoller
+  `dataset_expert_langgraph.py` en DSS et re-tester EVPL via l'orchestrateur.**
+- **Source** : session 2026-06-15 Run 2. **Date** : 2026-06-15.
+
+## L059 — Modèle sémantique Dataiku scriptable : `create_semantic_model` + workflow versions, jamais instancier les classes (✅ API confirmée)
+
+- **Contexte** : aligner le modèle sémantique au repo, sans toucher l'ancien, via notebook Python.
+- **Ce qui a échoué / piège** : le WebFetch de la branche master GitHub (`dataikuapi/dss/project.py`)
+  ne montrait QUE `get_semantic_model` + `list_semantic_models` (pas de création) → j'ai d'abord cru
+  qu'il fallait passer par une nouvelle VERSION. **La doc publiée fait foi** : `create_semantic_model(name)`
+  existe bien (confirmé par l'user qui a créé un modèle).
+- **Solution qui marche** : `project.create_semantic_model(name)` → `sm.new_version(id, duplicate_of=None)`
+  / `sm.get_version(id).get_settings()` → `settings.get_raw()` (dict) → muter → `settings.save()` →
+  `sm.set_active_version_id(id)` → `sm.get_version(id).start_update_distinct_values()` (DSSFuture). **Ne
+  JAMAIS instancier `DSSSemanticModel`/`DSSSemanticModelVersion`/`…VersionSettings` directement** (la
+  doc l'interdit). Lecture seule de l'ancien modèle = `get_raw()` sur une deep-copy, **jamais** `save()`
+  dessus. **Itérer le prompt = update EN PLACE** (`get_settings().save()`) — les changements
+  instructions/golden-queries **ne nécessitent PAS de ré-indexation** (l'index ne porte que sur les
+  valeurs distinctes). Le tool « Semantic Model Query » pointe un modèle précis → **repointer le tool**
+  après création d'un nouveau modèle (le code du sous-agent ne change pas). Fichiers :
+  `dataiku-agents/semantic_model/{build,update}_aligned_semantic_model.py` (canonical config dupliqué
+  byte-identique entre les deux — éditer `update_…` désormais).
+- **Preuve-vérification** : l'user a créé + indexé + repointé le tool sur le nouveau modèle (« ça a
+  très bien marché ») ; Playground OK. Doc : developer.dataiku.com/latest/api-reference/python/semantic-models.html.
+- **Source** : session 2026-06-15 Run 2. **Date** : 2026-06-15.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

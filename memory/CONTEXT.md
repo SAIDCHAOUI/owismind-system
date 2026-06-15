@@ -5,6 +5,25 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧠 MODÈLE SÉMANTIQUE ALIGNÉ + SOUS-AGENT ASSISTIF (2026-06-15 Run 2) — ✅ NOUVEAU MODÈLE CRÉÉ
+(Sonnet 4.6, Playground OK) ; ⏳ FIX SOUS-AGENT codé+157 tests, à RE-COLLER + re-tester DSS.** On a
+créé un **nouveau** modèle sémantique aligné (l'ancien `2O2KcHw` intact) via script notebook
+doc-strict (`dataiku-agents/semantic_model/build_aligned_semantic_model.py` = create+index ;
+`update_aligned_semantic_model.py` = modif en place instructions+golden queries, sans re-index ;
+`README.md`). Corrigé : `Phase 'ACTUAL'→'ACTUALS'` (dont le filtre « Actual Revenue Only » qui
+matchait **0 ligne**) ; glossaire `diamond_id` bidon retiré ; « roaming hub » retiré de Roaming
+Sponsor ; hiérarchie offre **Product › Solution › SolutionLine › sirano_product** + **« never default
+to sirano_product »** + transparence ; affichage client **nom+carrier_code, diamond_id dernier** ;
+Parent_Group sobre ; Account_partner (revendeur indirect, Airbus→Maroc Telecom) ; **une table, jamais
+de JOIN** ; 9 golden queries. **Décision clé (L058)** : le sous-agent **AIDE, ne DICTE pas** — il
+n'épingle **plus** la colonne d'un terme d'offre **ambigu** (`AMBIGUOUS OFFER TERM` → Sonnet tranche) ;
+les valeurs mono-colonne (noms clients) restent suggérées. **Pas de thinking au sous-agent** (raisonnement
+dans Sonnet) ; gpt-5.4-mini garde orchestrateur+sous-agent, Sonnet **seulement** sur le modèle → pas
+besoin de payer plus. **Bug AVANT fix** : `column_priority` (fallback `-distinct_count`) épinglait
+`sirano_product='EVPL'` → **budget=0**. **À FAIRE : recoller `dataset_expert_langgraph.py` (Code Agent
+`agent:AKQaQ0Am`, env 3.11) + re-tester EVPL via l'orchestrateur** (doit matcher le Playground).
+Détail → `sessions/2026-06-15.md` Run 2, **L058-L059**.
+
 **🤖 AGENTS LANGGRAPH + ARTEFACTS WEBAPP (2026-06-15) — ✅ VALIDÉ DSS (« tout fonctionne comme sur
 des roulettes »).** Orchestrateur + sous-agent refondus en **LangGraph** (Code Agents, code env
 **3.11**), gpt-5.4-mini (reasoning=high réglé à la main sur le modèle Mesh), appels **natifs Mesh**
@@ -95,7 +114,17 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-15 → détail `sessions/2026-06-15.md`, leçons **L055-L057**
+## 🧭 Dernière session — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
+- **Modèle sémantique aligné (nouveau modèle, Sonnet 4.6) + sous-agent ASSISTIF** : le sous-agent
+  n'épingle plus la colonne d'un terme d'offre **ambigu** (`AMBIGUOUS OFFER TERM` → Sonnet tranche) ;
+  question user = source de vérité, indices = aide non contraignante. Codé + 157 tests, **à recoller +
+  re-tester DSS** (L058). Pas de thinking au sous-agent ; pas besoin de payer plus.
+- **API modèle sémantique scriptable** : `create_semantic_model` + workflow versions, **update en place
+  sans re-index**, jamais instancier les classes ; **repointer le tool `v4oqA6R`** sur le nouveau modèle (L059).
+- **Bug réglé** : pin déterministe `sirano_product='EVPL'` → **budget=0** (cause `column_priority`
+  fallback `-distinct_count` ; les lignes BUDGET n'ont pas de sirano_product).
+
+## Avant — 2026-06-15 (Run 1) → leçons **L055-L057**
 - **Agents en LangGraph (orchestrateur + sous-agent) ✅ VALIDÉ DSS** : nœuds **sync** +
   `get_stream_writer` + `graph.stream(custom)` + appels **natifs Mesh** ; le log DSS prouve que
   LangGraph tourne sur le Code Agent 3.11 (lève les 2 `UNVERIFIED` de la revue) (L055).
@@ -151,6 +180,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
   main sur le modèle Mesh. **`with_json_output` OBLIGATOIRE sur les extractions déterministes**
   (UNDERSTAND) — sinon le reasoning brûle le budget et casse le parse ; reasoning réservé au routing
   (orchestrateur tool-calling) et à la headline vérifiée. Originaux `*_agent.py` = rollback intact.
+- **P0★★ — Sous-agent ASSISTE, ne DICTE pas (L058)** : `build_semantic_question` envoie au tool la
+  **question user (source de vérité) + des HINTS** ; il **n'épingle PLUS de colonne pour un terme
+  d'offre ambigu** (`alt_columns` non vide → `AMBIGUOUS OFFER TERM`, le **modèle Sonnet** tranche via
+  ses instructions). Seules les valeurs **mono-colonne** (noms clients) sont suggérées (anti-typo).
+  Le modèle (Sonnet+layer) résout mieux que le petit sous-agent. **Ne pas remettre le thinking au
+  sous-agent** ; **ne pas hardcoder la hiérarchie d'offre dans le code** (elle vit dans les instructions
+  du modèle, P3). Le tool « Semantic Model Query » pointe un modèle précis → **repointer après création
+  d'un nouveau modèle** ; itérer le prompt = `update_aligned_semantic_model.py` (en place, sans re-index).
 - **P1 — Graphe (L046)** : naviguer = `graphify query` D'ABORD (sous-agents aussi) ; exclusions corpus =
   `.graphifyignore` versionné. Tests front : `node --test test/*.test.js` depuis `Plugin/owismind/frontend/`.
 - **P2 — Fin de session** : `/log-session` = mémoire + `/graphify --update` + **commit de session**
@@ -206,17 +243,23 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0★★. **FINALISER le fix sous-agent assistif (L058)** : recoller `dataset_expert_langgraph.py` dans le
+   Code Agent `agent:AKQaQ0Am` (env 3.11), puis **re-tester EVPL via l'orchestrateur** (« revenus YTD
+   EVPL, actuals vs budget ») → doit matcher le Playground (Product, budget ≠ 0, note de transparence).
+   (Optionnel) lancer `update_aligned_semantic_model.py` pour le renfort « never default sirano_product ».
+   Consigner l'id du nouveau modèle dans `PROJECT_STATE.md`. Smoke-tests : « IP » (SolutionLine), top
+   clients (nom+carrier, diamond_id dernier), indirects/par partenaire, nom client mal orthographié.
 0★. **Agents LangGraph + artefacts ✅ FAITS & validés DSS** (L055-L057) — surveiller le fan-out
    parallèle réel au 2ᵉ sous-agent ; affiner le prompt orchestrateur s'il recopie un tableau au lieu
    d'appeler `show_table` ; envisager d'autres types de graph (style) au fil de l'usage.
 0skill. **Skill agentique** : lever les `UNVERIFIED` en confirmant sur l'instance (import `DKUChatModel` vs
    `as_langchain_chat_model()`, API `project.get_semantic_model`, ids de modèles non-Anthropic) ; promotion
    en global (`~/.claude/skills/`) si réutilisation cross-projets souhaitée (simple copie).
-0. **SESSION SEMANTIC MODEL (priorité, demandée par l'user)** : modèle `2O2KcHw`, config scriptable
-   (`project.get_semantic_model` → `get_raw()`/`save()` + versions). Corriger `Phase='ACTUAL'`→
-   `'ACTUALS'` (description entité + filtre « Actual Revenue Only ») et le synonyme « roaming hub »
-   sur le terme Roaming Sponsor ; versionner le JSON au repo ; enrichir les golden queries depuis
-   `docs/questions_asked.md` ; aligner glossaire ↔ profil.
+0. **SESSION SEMANTIC MODEL — ✅ FAIT (2026-06-15 Run 2, L058-L059)** : nouveau modèle aligné créé
+   (l'ancien `2O2KcHw` intact), Phase 'ACTUAL'→'ACTUALS' (dont filtre « Actual Revenue Only »),
+   glossaire `diamond_id` bidon + synonyme « roaming hub » retirés, hiérarchie offre + transparence,
+   affichage nom+carrier (diamond_id discret), Account_partner, 9 golden queries, instructions
+   versionnées au repo (`dataiku-agents/semantic_model/`). Reste = 0★★ (recoller le sous-agent + valider).
 0bis. Poursuivre les smoke tests README §5 au fil de l'usage (part du total, YoY, trend, ellipses,
    « IPL » ambigu) ; toute divergence → profil/overrides/prompts, jamais de valeur en dur (P3).
 0ter. **Agent tickets** (2 recettes + 1 Code Agent + 1 entrée registre) → débloque le 360 parallèle.
