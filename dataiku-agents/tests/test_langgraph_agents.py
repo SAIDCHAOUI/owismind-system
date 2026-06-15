@@ -394,6 +394,27 @@ class TestSemanticAlignment(unittest.TestCase):
         self.assertIn("keep diamond_id as the LAST", q)
         self.assertIn("never group by Account_name or carrier_code", q)
 
+    def test_semantic_question_ambiguous_term_not_pinned(self):
+        # An ambiguous offer term must NOT be pinned to a column (defer to the
+        # smart model) — even if the helper's best guess was sirano_product.
+        u = _align_u(intent="total", instruction="revenus EVPL")
+        q = dx.build_semantic_question(u, self.P, [
+            {"column": "sirano_product", "value": "EVPL",
+             "alt_columns": ["Product", "Solution"]}])
+        self.assertIn("AMBIGUOUS OFFER TERM", q)
+        self.assertIn("EVPL", q)
+        self.assertIn("Product", q)
+        self.assertNotIn("sirano_product = 'EVPL'", q)   # never a hard pin
+
+    def test_semantic_question_confident_value_suggested(self):
+        # A single-column value (e.g. a customer name) is suggested directly.
+        u = _align_u(intent="total", instruction="revenue HALYS")
+        q = dx.build_semantic_question(u, self.P, [
+            {"column": "Account_name", "value": "HALYS"}])
+        self.assertIn("HELPER FINDINGS", q)
+        self.assertIn("Account_name = 'HALYS'", q)
+        self.assertNotIn("AMBIGUOUS OFFER TERM", q)
+
 
 if __name__ == "__main__":
     unittest.main()

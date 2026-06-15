@@ -23,13 +23,18 @@ instructions (the tool enforces them) and as supportive hints from the sub-agent
 1. **Offer hierarchy priority + transparency.** A term is resolved to the most granular level
    that contains it: **Product › Solution › SolutionLine › sirano_product**. "IP" is a
    SolutionLine; "IPL"/"Roaming Sponsor" are Products. When a value exists at several levels
-   (e.g. *IP Transit* is both a Product and a Solution) we filter the most granular (Product)
-   **and disclose it** ("…also exists as a Solution — tell me if you meant that level").
-   - Model: `sqlGenerationConfig.instructions` + `commercial_offer` description.
-   - Sub-agent: `column_priority` (driven by the `ambiguity_priority` profile overrides
-     below — sirano_product has the most distinct values, so the default `distinct_count`
-     heuristic would wrongly prefer it) + a deterministic disclosure note in RENDER
-     (`build_disclosure_notes`, `refine_ambiguous` now records `alt_columns`).
+   (e.g. *IP Transit*/*EVPL* are both a Product and a Solution) the most granular (Product) is
+   used **and disclosed** ("…also exists as a Solution — tell me if you meant that level").
+   - **The semantic model owns this decision** (it has the layer + the hierarchy rules in
+     `sqlGenerationConfig.instructions` + `commercial_offer` description, incl. *never default
+     to sirano_product*). The Playground proved Sonnet resolves these correctly on its own.
+   - **The sub-agent does NOT pin a column for an ambiguous offer term** — it only flags
+     `AMBIGUOUS OFFER TERM — "EVPL" is present in (Product, Solution, sirano_product); YOU
+     resolve it`, and leaves the choice to the model. (Regression that motivated this: the
+     sub-agent's `column_priority` fell back to `-distinct_count`, so it pinned
+     `sirano_product = 'EVPL'` — and BUDGET rows have no sirano_product → budget = 0.)
+     Confident single-column values (e.g. a customer name) are still suggested as typo-free
+     hints. A neutral disclosure note (`build_disclosure_notes`) lists the ambiguity.
 
 2. **Customer identity: display name + carrier_code, diamond_id discreet.** `diamond_id` is
    the master key (kept in `GROUP BY` for exactness) but means nothing to the business — we
@@ -77,16 +82,20 @@ instructions (the tool enforces them) and as supportive hints from the sub-agent
    dataset** (INPUT 2 of the profile recipe, columns `key,field,value`) then **re-run the
    profile recipe** (`profile_dataset_recipe.py`, design-time, small/safe):
 
-   | key            | field              | value                              |
-   |----------------|--------------------|------------------------------------|
-   | diamond_id     | display_columns    | `["Account_name","carrier_code"]`  |
-   | Product        | ambiguity_priority | `0`                                |
-   | Solution       | ambiguity_priority | `1`                                |
-   | SolutionLine   | ambiguity_priority | `2`                                |
-   | sirano_product | ambiguity_priority | `3`                                |
+   | key            | field              | value                              | needed? |
+   |----------------|--------------------|------------------------------------|---------|
+   | diamond_id     | display_columns    | `["Account_name","carrier_code"]`  | recommended (reinforces name+carrier display) |
+   | Product        | ambiguity_priority | `0`                                | optional now |
+   | Solution       | ambiguity_priority | `1`                                | optional now |
+   | SolutionLine   | ambiguity_priority | `2`                                | optional now |
+   | sirano_product | ambiguity_priority | `3`                                | optional now |
 
    (`value` is JSON-parsed when possible; the recipe flags these `human_override` and they
-   survive re-runs.)
+   survive re-runs.) The `ambiguity_priority` rows are now **optional**: ambiguous offer terms
+   are resolved by the semantic model, not by the sub-agent's `column_priority`. The
+   `display_columns` row is a useful reinforcement of the name+carrier display, but the model
+   instructions already enforce it. **The model instructions are the source of truth for all
+   these rules** — re-running the recipe is no longer on the critical path.
 
 4. **Point the tool at the new model.** The Semantic Model Query tool **`v4oqA6R`**
    (`revenue_semantic_query`, used by the sub-agent constant `SEMANTIC_TOOL_ID`) still targets

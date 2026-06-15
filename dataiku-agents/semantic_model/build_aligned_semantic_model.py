@@ -105,6 +105,15 @@ So: filter on Product if the term is a Product value; else Solution; else Soluti
 sirano_product. Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL" and
 "Roaming Sponsor" are Products → filter on Product.
 
+sirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use
+sirano_product ONLY if the user explicitly gives a sirano code. In particular, BUDGET rows
+may not carry a sirano_product, so resolving an offer term to sirano_product can wrongly drop
+the budget (returning budget = 0) — always prefer Product.
+
+When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in several offer
+columns), YOU resolve it — pick the level from this hierarchy and the user's intent; do not
+assume the helper's column.
+
 TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g.
 "IP Transit" is both a Product AND a Solution), filter on the most granular level (Product)
 AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: IP Transit

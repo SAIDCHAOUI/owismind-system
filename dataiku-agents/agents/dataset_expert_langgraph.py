@@ -1213,29 +1213,30 @@ def _pretty_col(name):
 
 
 DISCLOSE_NOTE = {
-    "fr": ("ℹ️ « {value} » existe à la fois en **{chosen}** et en {alts} ; par "
-           "défaut le niveau le plus précis ({chosen}) est privilégié — dites-le "
-           "si vous vouliez plutôt {alts}."),
-    "en": ("ℹ️ \"{value}\" exists both as **{chosen}** and {alts}; by default the "
-           "most granular level ({chosen}) is used — tell me if you meant {alts} "
-           "instead."),
+    "fr": ("ℹ️ « {value} » existe à plusieurs niveaux de l'offre ({cols}) ; le "
+           "niveau le plus précis est privilégié par défaut — précisez si vous "
+           "vouliez un autre niveau."),
+    "en": ("ℹ️ \"{value}\" exists at several offer levels ({cols}); the most "
+           "granular level is used by default — tell me if you meant another "
+           "level."),
 }
 
 
 def build_disclosure_notes(filters, lang):
-    """Deterministic transparency lines: when a resolved value ALSO exists in
-    other columns (e.g. an offer name that is both a Product and a Solution),
-    disclose which level we used. Pure; carries no figures, so it never affects
-    the verified headline."""
+    """Deterministic transparency lines: when a resolved value exists in several
+    columns (an offer term that is also a Solution/SolutionLine/sirano code),
+    disclose the ambiguity and the default policy WITHOUT asserting which level
+    the semantic model picked (it decides). Pure; carries no figures, so it
+    never affects the verified headline."""
     lines = []
     for f in filters or []:
         alts = f.get("alt_columns") or []
         if not alts:
             continue
+        cols = [f.get("column", "")] + list(alts)
         lines.append(DISCLOSE_NOTE.get(lang, DISCLOSE_NOTE["en"]).format(
             value=f.get("value", ""),
-            chosen=_pretty_col(f.get("column", "")),
-            alts=" / ".join(_pretty_col(c) for c in alts)))
+            cols=" / ".join(_pretty_col(c) for c in cols if c)))
     return "\n\n".join(lines)
 
 
@@ -1329,48 +1330,50 @@ def build_semantic_question(u, profile, filters):
     if hint:
         parts.append("EXPECTED SHAPE (guidance, use your judgment): " + hint)
 
-    # Helper findings: values/columns the grounding assistant matched in the
-    # live catalog. Presented as HINTS (not orders); same column -> IN, never
-    # AND; alternatives across offer levels flagged inline for the smart model.
+    # Helper findings, presented as HINTS (not orders). A value matched to a
+    # SINGLE column is a confident, catalog-exact spelling (e.g. a customer
+    # name) -> suggested directly. A value that exists in SEVERAL columns (an
+    # ambiguous offer term like 'EVPL', both a Product and a Solution) is NOT
+    # pinned to a column: the smart semantic model resolves it with its own
+    # hierarchy rules + the user's intent (proven more reliable than our small
+    # helper, whose column pick can be wrong — e.g. defaulting to sirano_product).
     if filters:
-        by_col, col_order, alt_by_col = {}, [], {}
-        for f in filters:
-            col = f["column"]
-            if col not in by_col:
-                by_col[col] = []
-                col_order.append(col)
-            by_col[col].append(str(f["value"]).replace("'", "''"))
-            for a in (f.get("alt_columns") or []):
-                alt_by_col.setdefault(col, [])
-                if a not in alt_by_col[col]:
-                    alt_by_col[col].append(a)
-        lines = []
-        for col in col_order:
-            vals = by_col[col]
-            if len(vals) == 1:
-                line = "%s = '%s'" % (col, vals[0])
-            else:
-                line = "%s IN (%s)" % (col, ", ".join("'%s'" % v for v in vals))
-            if alt_by_col.get(col):
-                line += (" [this value also exists in %s; per the offer "
-                         "hierarchy the most granular level (%s) is suggested — "
-                         "use it unless the user meant another level, and say so]"
-                         % (" / ".join(alt_by_col[col]), col))
-            lines.append(line)
-        parts.append(
-            "HELPER FINDINGS — a smaller grounding assistant matched the "
-            "question against the live data catalog and SUGGESTS the values / "
-            "columns below. These are HINTS to ASSIST you, NOT orders: you have "
-            "the semantic model and the final say. Prefer them when consistent "
-            "with the data (their spellings are catalog-sourced and typo-free); "
-            "if your understanding disagrees, follow the data. Suggested: %s."
-            % "; ".join(lines))
-        if len(filters) > 1:
+        confident = [f for f in filters if not f.get("alt_columns")]
+        ambiguous = [f for f in filters if f.get("alt_columns")]
+        if confident:
+            by_col, col_order = {}, []
+            for f in confident:
+                col = f["column"]
+                if col not in by_col:
+                    by_col[col] = []
+                    col_order.append(col)
+                by_col[col].append(str(f["value"]).replace("'", "''"))
+            lines = []
+            for col in col_order:
+                vals = by_col[col]
+                if len(vals) == 1:
+                    lines.append("%s = '%s'" % (col, vals[0]))
+                else:
+                    lines.append("%s IN (%s)" % (col, ", ".join("'%s'" % v
+                                                                for v in vals)))
             parts.append(
-                "If the question ENUMERATES several of these as items to report "
-                "(a list of products, solutions, customers...), treat them "
-                "independently (OR) and return ONE ROW PER ITEM with a clear "
-                "label; only combine constraints of DIFFERENT kinds (e.g. a "
+                "HELPER FINDINGS — a grounding assistant matched these values in "
+                "the live catalog (exact, typo-free spellings). They are HINTS to "
+                "ASSIST you, NOT orders — prefer them when consistent with the "
+                "data; you keep the final say. Suggested: %s." % "; ".join(lines))
+        for f in ambiguous:
+            cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])]
+            parts.append(
+                "AMBIGUOUS OFFER TERM — \"%s\" is a real data value present in "
+                "SEVERAL columns (%s). Do NOT take a pinned column from the "
+                "helper here: YOU resolve it, using your offer-hierarchy rules "
+                "and the user's intent, then disclose the level you picked."
+                % (f["value"], ", ".join(cols)))
+        if len(confident) > 1:
+            parts.append(
+                "If the question ENUMERATES several of these as items to report, "
+                "treat them independently (OR) and return ONE ROW PER ITEM with a "
+                "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
                 "sales channel + an offer) with AND. (Guidance — your judgment.)")
 
     if scen and intent not in ("list_values",):
