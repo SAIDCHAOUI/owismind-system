@@ -748,7 +748,19 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
     if len(values) == 1:
         cands = sorted(cands, key=lambda c: profile.column_priority(
             c.get("target_column") or ""))
-        return ("resolved", cands[0])
+        chosen = cands[0]
+        # Transparency: the SAME value also lives in other columns (e.g. an
+        # offer name that is both a Product and a Solution). Record them so
+        # RENDER can disclose the pick — we still keep the priority column.
+        alts, seen = [], {chosen.get("target_column")}
+        for c in cands[1:]:
+            col = c.get("target_column") or ""
+            if col and col not in seen:
+                seen.add(col)
+                alts.append(col)
+        if alts:
+            chosen = dict(chosen, alt_columns=alts)
+        return ("resolved", chosen)
     return ("ambiguous", cands)
 
 
@@ -766,7 +778,11 @@ def build_filter_clauses(resolutions):
         key = (column, value)
         if key not in seen:
             seen.add(key)
-            out.append({"column": column, "value": value})
+            clause = {"column": column, "value": value}
+            alts = [c for c in (r.get("alt_columns") or []) if c and c != column]
+            if alts:
+                clause["alt_columns"] = alts
+            out.append(clause)
     return out
 
 
@@ -1189,22 +1205,57 @@ SEMANTIC_DESTINATION_NOTE = (
     "prose-only answer.")
 
 
+# --- transparency disclosure (offer-hierarchy / multi-column value) ----------
+def _pretty_col(name):
+    """'SolutionLine' -> 'Solution Line', 'sirano_product' -> 'sirano product'."""
+    s = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(name or ""))
+    return s.replace("_", " ")
+
+
+DISCLOSE_NOTE = {
+    "fr": ("ℹ️ « {value} » existe à la fois en **{chosen}** et en {alts} ; par "
+           "défaut le niveau le plus précis ({chosen}) est privilégié — dites-le "
+           "si vous vouliez plutôt {alts}."),
+    "en": ("ℹ️ \"{value}\" exists both as **{chosen}** and {alts}; by default the "
+           "most granular level ({chosen}) is used — tell me if you meant {alts} "
+           "instead."),
+}
+
+
+def build_disclosure_notes(filters, lang):
+    """Deterministic transparency lines: when a resolved value ALSO exists in
+    other columns (e.g. an offer name that is both a Product and a Solution),
+    disclose which level we used. Pure; carries no figures, so it never affects
+    the verified headline."""
+    lines = []
+    for f in filters or []:
+        alts = f.get("alt_columns") or []
+        if not alts:
+            continue
+        lines.append(DISCLOSE_NOTE.get(lang, DISCLOSE_NOTE["en"]).format(
+            value=f.get("value", ""),
+            chosen=_pretty_col(f.get("column", "")),
+            alts=" / ".join(_pretty_col(c) for c in alts)))
+    return "\n\n".join(lines)
+
+
 def build_semantic_question(u, profile, filters):
-    """Compose the instruction for the Semantic Model Query tool. Pure and
+    """Compose the message for the Semantic Model Query tool. Pure and
     deterministic.
 
-    Design (revised after the 2026-06-12 A/B test): the user's ORIGINAL
-    question always LEADS — the semantic model maps enumerations and the
-    offer hierarchy better when it sees the real wording (e.g. '... for the
-    Roaming Hub, Roaming sponsor, IPX, Services and Signalling' -> one CASE
-    row per item across Product/Solution). Our layers then APPEND what they
-    earned: a deterministic intent hint, the grounded EXACT values (grouped
-    by column, IN semantics — never an impossible 'Product = A AND
-    Product = B'), explicit scenario and period, the axis/display rule, and
-    the destination context."""
+    Philosophy (revised 2026-06-15): the Semantic Model Query tool runs on a
+    SMART model (Sonnet) WITH the semantic layer — it understands the dataset
+    far better than our small UNDERSTAND model. So this message gives it the
+    user's REAL question as the source of truth, then our layers ASSIST it with
+    HINTS (a deterministic intent shape, the values/columns the grounding helper
+    matched in the live catalog, the preferred presentation, scenario, period).
+    Hints are help, NOT orders: the tool keeps the final say. We never force a
+    column choice — when a value spans offer levels we SUGGEST the most granular
+    and flag the alternative for the tool (and the user)."""
     intent = u["intent"]
     metric = profile.metric(u["metric"] or "") or profile.default_metric
-    parts = ['USER QUESTION: "%s"' % u["instruction"]]
+    parts = ['USER QUESTION (this is the source of truth — answer THIS): "%s"'
+             % u["instruction"]]
 
     metric_part = ""
     if metric is not None:
@@ -1217,11 +1268,21 @@ def build_semantic_question(u, profile, filters):
 
     def axis_sentence(axis):
         col = profile.column(axis) or {}
-        display = col.get("display_column")
+        # display_columns (list) takes precedence; fall back to display_column.
+        displays = [d for d in (col.get("display_columns")
+                                or ([col.get("display_column")]
+                                    if col.get("display_column") else []))
+                    if d and d != axis]
         s = "broken down by %s" % axis
-        if display and display != axis:
-            s += (". Group by %s ONLY and return MAX(%s) AS %s for display; "
-                  "never group by %s" % (axis, display, display, display))
+        if displays:
+            maxes = " and ".join("MAX(%s) AS %s" % (d, d) for d in displays)
+            nevers = " or ".join(displays)
+            # Identifier axis with human labels (e.g. diamond_id -> Account_name
+            # + carrier_code): keep the id but as the LAST, least-emphasized col.
+            tail = (", and keep %s as the LAST, least-emphasized column" % axis
+                    if len(displays) > 1 else "")
+            s += (". Group by %s ONLY and return %s for display%s; "
+                  "never group by %s" % (axis, maxes, tail, nevers))
         return s
 
     # Deterministic intent hint (guidance, not a replacement of the question).
@@ -1266,38 +1327,55 @@ def build_semantic_question(u, profile, filters):
     elif intent == "count_distinct":
         hint = "The count of distinct values of %s." % u["list_column"]
     if hint:
-        parts.append("WHAT IS EXPECTED: " + hint)
+        parts.append("EXPECTED SHAPE (guidance, use your judgment): " + hint)
 
-    # Grounded exact values, grouped by column (same column -> IN, never AND).
+    # Helper findings: values/columns the grounding assistant matched in the
+    # live catalog. Presented as HINTS (not orders); same column -> IN, never
+    # AND; alternatives across offer levels flagged inline for the smart model.
     if filters:
-        by_col, col_order = {}, []
+        by_col, col_order, alt_by_col = {}, [], {}
         for f in filters:
             col = f["column"]
             if col not in by_col:
                 by_col[col] = []
                 col_order.append(col)
             by_col[col].append(str(f["value"]).replace("'", "''"))
+            for a in (f.get("alt_columns") or []):
+                alt_by_col.setdefault(col, [])
+                if a not in alt_by_col[col]:
+                    alt_by_col[col].append(a)
         lines = []
         for col in col_order:
             vals = by_col[col]
             if len(vals) == 1:
-                lines.append("%s = '%s'" % (col, vals[0]))
+                line = "%s = '%s'" % (col, vals[0])
             else:
-                lines.append("%s IN (%s)" % (col, ", ".join("'%s'" % v
-                                                            for v in vals)))
-        parts.append("GROUNDED FILTER VALUES (resolved against the live data "
-                     "catalog — use these EXACT spellings verbatim, never "
-                     "fuzzy-match or substitute them): %s." % "; ".join(lines))
+                line = "%s IN (%s)" % (col, ", ".join("'%s'" % v for v in vals))
+            if alt_by_col.get(col):
+                line += (" [this value also exists in %s; per the offer "
+                         "hierarchy the most granular level (%s) is suggested — "
+                         "use it unless the user meant another level, and say so]"
+                         % (" / ".join(alt_by_col[col]), col))
+            lines.append(line)
+        parts.append(
+            "HELPER FINDINGS — a smaller grounding assistant matched the "
+            "question against the live data catalog and SUGGESTS the values / "
+            "columns below. These are HINTS to ASSIST you, NOT orders: you have "
+            "the semantic model and the final say. Prefer them when consistent "
+            "with the data (their spellings are catalog-sourced and typo-free); "
+            "if your understanding disagrees, follow the data. Suggested: %s."
+            % "; ".join(lines))
         if len(filters) > 1:
             parts.append(
-                "If the question ENUMERATES several of these values as items "
-                "to report (a list of products, solutions, customers...), "
-                "match them independently (OR semantics) and return ONE ROW "
-                "PER ITEM with a clear label; only combine constraints of "
-                "DIFFERENT kinds (e.g. a sales channel + an offer) with AND.")
+                "If the question ENUMERATES several of these as items to report "
+                "(a list of products, solutions, customers...), treat them "
+                "independently (OR) and return ONE ROW PER ITEM with a clear "
+                "label; only combine constraints of DIFFERENT kinds (e.g. a "
+                "sales channel + an offer) with AND. (Guidance — your judgment.)")
 
     if scen and intent not in ("list_values",):
-        parts.append("SCENARIO: consider ONLY rows whose %s is in: %s."
+        parts.append("SCENARIO (guidance): unless the question implies "
+                     "otherwise, consider rows whose %s is in: %s."
                      % (scen["column"], ", ".join(scen_values)))
 
     tm = profile.time
@@ -2169,6 +2247,7 @@ class MyLLM(BaseLLM):
                                     "target_value": data.get("target_value", ""),
                                     "display_value": data.get("display_value", "")
                                                      or data.get("target_value", ""),
+                                    "alt_columns": data.get("alt_columns") or [],
                                     "method": "ambiguity_policy", "confidence": 100})
                                 continue
                             r = dict(r, candidates=data)
@@ -2370,9 +2449,11 @@ class MyLLM(BaseLLM):
             executed = state.get("executed") or []
             resolved_filters = state.get("resolved_filters") or []
             instruction = state["instruction"]
+            disclosure = build_disclosure_notes(state.get("filters") or [], lang)
             writer(_block("format_output"))
             if (not result or not result.get("rows")) and tool_answer:
-                writer({"chunk": {"text": tool_answer}})
+                writer({"chunk": {"text": tool_answer
+                        + (("\n\n" + disclosure) if disclosure else "")}})
                 writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                        sql_count=len(executed), row_count=tool_row_count,
                        attempts=len(executed)))
@@ -2412,7 +2493,8 @@ class MyLLM(BaseLLM):
                     sp.outputs["verified"] = True
                 else:
                     sp.outputs["verified"] = False
-            writer({"chunk": {"text": headline + "\n\n" + table_md}})
+            writer({"chunk": {"text": headline + "\n\n" + table_md
+                    + (("\n\n" + disclosure) if disclosure else "")}})
             writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                    sql_count=len(executed), row_count=len(result["rows"]),
                    attempts=len(executed)))

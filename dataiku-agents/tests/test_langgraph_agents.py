@@ -294,5 +294,106 @@ class TestSubAgentEngineIntact(unittest.TestCase):
         self.assertFalse(dx.verify_headline("The value is 999.", allowed))
 
 
+# ==========================================================================
+# Alignment with the semantic model (2026-06-15): commercial-hierarchy
+# priority + transparency, and multi-column customer display.
+# ==========================================================================
+def _align_profile():
+    """Minimal profile fixture exercising the offer hierarchy + diamond_id
+    display (values invented — no business data in the repo)."""
+    dataset_payload = {
+        "profile_version": 1, "dataset_name": "DEMO", "row_count": 100,
+        "description_en": "demo", "description_fr": "demo",
+        "grain": "row", "default_metric": "revenue",
+        "metrics": [{"name": "revenue", "agg": "SUM", "column": "amount_eur",
+                     "format": "amount", "unit": "EUR",
+                     "label_fr": "Revenu", "label_en": "Revenue",
+                     "description": "Sum of amount_eur"}],
+        "scenario": {"column": "Phase", "values": ["ACTUALS", "BUDGET"],
+                     "default_values": ["ACTUALS"]},
+        "time": {"column": "year_month", "format": "yyyy_mm_dd_str",
+                 "min": "2024-01-01", "max": "2026-06-01"},
+        "notes": [],
+    }
+    columns = {
+        # Offer hierarchy with explicit priority Product<Solution<...<sirano.
+        "Product": {"name": "Product", "role": "dimension", "groupable": True,
+                    "indexed": True, "distinct_count": 42,
+                    "ambiguity_priority": 0, "synonyms": [], "samples": []},
+        "Solution": {"name": "Solution", "role": "dimension", "groupable": True,
+                     "indexed": True, "distinct_count": 14,
+                     "ambiguity_priority": 1, "synonyms": [], "samples": []},
+        "sirano_product": {"name": "sirano_product", "role": "dimension",
+                           "groupable": True, "indexed": True,
+                           "distinct_count": 153, "ambiguity_priority": 3,
+                           "synonyms": [], "samples": []},
+        # Identifier with TWO human display columns; id must stay last.
+        "diamond_id": {"name": "diamond_id", "role": "identifier",
+                       "groupable": True, "indexed": True,
+                       "distinct_count": 1200,
+                       "display_columns": ["Account_name", "carrier_code"],
+                       "synonyms": ["client"], "samples": []},
+        "amount_eur": {"name": "amount_eur", "role": "measure",
+                       "groupable": False, "indexed": False,
+                       "distinct_count": 99, "synonyms": [], "samples": []},
+    }
+    return dx.Profile(dataset_payload, columns)
+
+
+def _align_u(**kw):
+    u = {"scope": "data", "language": "en", "instruction": "q",
+         "intent": "total", "metric": "revenue", "scenarios": [],
+         "period": {"mode": "all_available"}, "periods": [],
+         "group_by": None, "list_column": None, "top_n": None,
+         "order": "desc", "terms": [], "clarification": ""}
+    u.update(kw)
+    return u
+
+
+class TestSemanticAlignment(unittest.TestCase):
+    P = _align_profile()
+
+    def test_priority_picks_product_over_sirano(self):
+        # sirano_product has the MOST distinct values; explicit priority must
+        # still pick Product (distinct_count heuristic would pick sirano).
+        self.assertLess(self.P.column_priority("Product"),
+                        self.P.column_priority("sirano_product"))
+        self.assertLess(self.P.column_priority("Product"),
+                        self.P.column_priority("Solution"))
+
+    def test_refine_ambiguous_records_alt_columns(self):
+        cands = [{"target_column": "Solution", "target_value": "IP Transit",
+                  "display_value": "IP Transit", "score": 1.0},
+                 {"target_column": "Product", "target_value": "IP Transit",
+                  "display_value": "IP Transit", "score": 1.0}]
+        verdict, data = dx.refine_ambiguous(self.P, "IP Transit", cands)
+        self.assertEqual(verdict, "resolved")
+        self.assertEqual(data["target_column"], "Product")   # most granular
+        self.assertEqual(data.get("alt_columns"), ["Solution"])
+
+    def test_filter_clauses_and_disclosure_note(self):
+        res = [{"status": "resolved", "target_column": "Product",
+                "target_value": "IP Transit", "alt_columns": ["Solution"]}]
+        filters = dx.build_filter_clauses(res)
+        self.assertEqual(filters[0]["column"], "Product")
+        self.assertEqual(filters[0]["alt_columns"], ["Solution"])
+        note_en = dx.build_disclosure_notes(filters, "en")
+        self.assertIn("IP Transit", note_en)
+        self.assertIn("Product", note_en)
+        self.assertIn("Solution", note_en)
+        # No disclosure when the value is unique to one column.
+        self.assertEqual(dx.build_disclosure_notes(
+            [{"column": "Product", "value": "EVPL"}], "fr"), "")
+
+    def test_semantic_question_multi_display_keeps_id_last(self):
+        u = _align_u(intent="breakdown", group_by="diamond_id")
+        q = dx.build_semantic_question(u, self.P, [])
+        self.assertIn("Group by diamond_id ONLY", q)
+        self.assertIn("MAX(Account_name) AS Account_name", q)
+        self.assertIn("MAX(carrier_code) AS carrier_code", q)
+        self.assertIn("keep diamond_id as the LAST", q)
+        self.assertIn("never group by Account_name or carrier_code", q)
+
+
 if __name__ == "__main__":
     unittest.main()
