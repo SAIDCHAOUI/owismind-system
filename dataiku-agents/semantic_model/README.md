@@ -65,6 +65,16 @@ instructions (the tool enforces them) and as supportive hints from the sub-agent
 - YTD aligned to "latest available reporting month" (no hardcoded "today" → no partial month).
 - Instructions now state **one physical table, never JOIN**.
 
+## Two scripts
+
+- `build_aligned_semantic_model.py` — **one-time CREATE** of the new model (reads the old
+  model read-only, applies all corrections, creates the new model + version, indexes).
+- `update_aligned_semantic_model.py` — **MODIFY in place** an existing aligned model: refreshes
+  the SQL-generation instructions + golden queries on its active version (no create, no
+  re-index). Use this for every prompt / golden-query iteration once the model exists. Set
+  `NEW_MODEL_ID` first. (`NEW_INSTRUCTIONS` / `GOLDEN_QUERIES` are kept byte-identical in both
+  files — edit them in `update_…` going forward.)
+
 ## Deployment — do it in this order
 
 1. **Build the new model.** Open `build_aligned_semantic_model.py` in a **Dataiku notebook**
