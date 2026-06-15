@@ -56,7 +56,7 @@ export function fetchMe() {
 // agent_not_enabled, busy). `parentExchangeId` (optional) links the new exchange into
 // the conversation tree: it becomes the new exchange's parent and bounds the agent's
 // context to that branch's ancestor chain (null = a new branch at the conversation root).
-export function startChat(sessionId, message, agentKey, historyLimit, parentExchangeId) {
+export function startChat(sessionId, message, agentKey, historyLimit, parentExchangeId, mode) {
   return request('/owismind-api/chat/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -66,6 +66,8 @@ export function startChat(sessionId, message, agentKey, historyLimit, parentExch
       agent_key: agentKey,
       history_limit: historyLimit,
       parent_exchange_id: parentExchangeId || null,
+      // Model mode (eco / medium / high). Unknown/absent -> medium server-side.
+      mode: mode || undefined,
     }),
   });
 }

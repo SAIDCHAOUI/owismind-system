@@ -15,6 +15,14 @@ const COLLAPSE_KEY = 'owismind.sidebarCollapsed'
 const SIDEBAR_W_KEY = 'owi.sidebarW' // maquette key
 const EVIDENCE_W_KEY = 'owi.evidenceW'
 const CTXMSG_KEY = 'owismind.contextMessages'
+const MODELMODE_KEY = 'owismind.modelMode'
+
+// Model mode the chat sends with each turn. The backend defaults unknown values
+// to "medium", so this is purely a UX preference (cheap by default; the strong
+// model is opt-in). Eco = mini only; Medium = mini + conservative auto-escalation;
+// High = strong model.
+export const MODEL_MODES = ['eco', 'medium', 'high']
+const MODELMODE_DEFAULT = 'medium'
 
 // Sidebar width clamp (maquette default 260; keep a sane drag range).
 const SIDEBAR_MIN = 200
@@ -65,6 +73,16 @@ export const useUiStore = defineStore('ui', () => {
   const contextMessages = ref(
     clampContextMessages(readNum(CTXMSG_KEY, CONTEXT_MESSAGES_DEFAULT)),
   )
+  // Model mode (eco / medium / high) sent with each chat turn.
+  const modelMode = ref((() => {
+    try {
+      const v = localStorage.getItem(MODELMODE_KEY)
+      if (MODEL_MODES.includes(v)) return v
+    } catch (e) {
+      /* ignore */
+    }
+    return MODELMODE_DEFAULT
+  })())
 
   function clampSidebar(px) {
     return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px))
@@ -111,6 +129,11 @@ export const useUiStore = defineStore('ui', () => {
     contextMessages.value = n
     persist(CTXMSG_KEY, n)
   }
+  function setModelMode(m) {
+    if (!MODEL_MODES.includes(m)) return
+    modelMode.value = m
+    persist(MODELMODE_KEY, m)
+  }
   // `persistChoice: false` = an AUTOMATIC collapse (e.g. Evidence opening):
   // it must never overwrite the USER's stored preference — only an explicit
   // toggle decides what the next session starts with.
@@ -134,6 +157,7 @@ export const useUiStore = defineStore('ui', () => {
     theme,
     lang,
     contextMessages,
+    modelMode,
     sidebarCollapsed,
     sidebarW,
     evidenceW,
@@ -141,6 +165,7 @@ export const useUiStore = defineStore('ui', () => {
     toggleTheme,
     setLang,
     setContextMessages,
+    setModelMode,
     setSidebarCollapsed,
     toggleSidebar,
     setSidebarWidth,

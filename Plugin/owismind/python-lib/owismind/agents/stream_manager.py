@@ -352,11 +352,14 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 # only capture the spec for persistence (the rows are surfaced via
                 # /evidence/meta after the run). Bounded; not added to the live list.
                 if len(artifacts) < MAX_ARTIFACTS_ACCUM:
-                    artifacts.append({
+                    spec = {
                         "kind": event.get("kind"),
                         "title": event.get("title"),
                         "chart": event.get("chart"),
-                    })
+                    }
+                    if event.get("kpi") is not None:
+                        spec["kpi"] = event.get("kpi")
+                    artifacts.append(spec)
                 continue
             elif etype == "trace":
                 # The RAW footer trace is for PERSISTENCE only — capture it but do

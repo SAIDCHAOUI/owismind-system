@@ -104,5 +104,30 @@ class TestNormalizedArtifactEvent(unittest.TestCase):
         self.assertIsNone(streaming._normalized_artifact_event(None))
 
 
+class TestKpiArtifact(unittest.TestCase):
+    def test_sanitize_keeps_kpi(self):
+        out = artifacts._sanitize([
+            {"kind": "kpi", "title": "Revenue",
+             "kpi": {"label": "Revenue YTD", "value": "Revenue_EUR", "delta_pct": "delta_pct"}}])
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["kind"], "kpi")
+        self.assertEqual(out[0]["kpi"]["value"], "Revenue_EUR")
+        self.assertEqual(out[0]["kpi"]["delta_pct"], "delta_pct")
+
+    def test_sanitize_rejects_kpi_without_value(self):
+        self.assertEqual(artifacts._sanitize([{"kind": "kpi", "kpi": {"label": "x"}}]), [])
+
+    def test_normalized_kpi_event(self):
+        ev = streaming._normalized_artifact_event(
+            {"kind": "kpi", "title": "T", "kpi": {"label": "L", "value": "V"}})
+        self.assertIsNotNone(ev)
+        self.assertEqual(ev["kind"], "kpi")
+        self.assertEqual(ev["kpi"]["value"], "V")
+
+    def test_normalized_kpi_rejected_without_value(self):
+        self.assertIsNone(streaming._normalized_artifact_event(
+            {"kind": "kpi", "kpi": {"label": "L"}}))
+
+
 if __name__ == "__main__":
     unittest.main()

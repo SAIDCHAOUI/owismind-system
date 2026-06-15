@@ -10,6 +10,7 @@ import { useSessionStore } from '../../stores/session.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { Icon } from '../ui'
 import AgentPicker from './AgentPicker.vue'
+import ModelModePicker from './ModelModePicker.vue'
 
 const { t } = useI18n()
 const chat = useChatStore()
@@ -71,6 +72,7 @@ const placeholder = () =>
         <button class="p-icon" type="button" :title="t('prompt.mic')" @click="micClick">
           <Icon name="mic" />
         </button>
+        <ModelModePicker />
       </div>
       <div class="prompt-right">
         <!-- While a run is in flight, the send button becomes a STOP button (cuts the

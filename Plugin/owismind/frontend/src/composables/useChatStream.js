@@ -40,8 +40,8 @@ export function handleEvent(target, evt) {
 // point). `onExchangeId` (optional) is invoked once with the real exchange id returned by
 // /chat/start, so the store can reconcile the temporary (null) tree key to the backend id
 // before this exchange can become the parent of a follow-up.
-export async function runChatStream({ sessionId, message, agentKey, historyLimit, parentExchangeId, target, token, onExchangeId, onRunId }) {
-  const { run_id: runId, exchange_id } = await startChat(sessionId, message, agentKey, historyLimit, parentExchangeId)
+export async function runChatStream({ sessionId, message, agentKey, historyLimit, parentExchangeId, mode, target, token, onExchangeId, onRunId }) {
+  const { run_id: runId, exchange_id } = await startChat(sessionId, message, agentKey, historyLimit, parentExchangeId, mode)
   // Surface the run id so the store can request a user stop (POST /chat/stop) on THIS run.
   if (onRunId && runId) onRunId(runId)
   if (onExchangeId && exchange_id) onExchangeId(exchange_id)

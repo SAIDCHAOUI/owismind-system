@@ -22,6 +22,7 @@ import EvidenceTable from './EvidenceTable.vue'
 import EvidenceSql from './EvidenceSql.vue'
 import ArtifactChart from './ArtifactChart.vue'
 import ArtifactTable from './ArtifactTable.vue'
+import ArtifactKpi from './ArtifactKpi.vue'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
@@ -74,7 +75,7 @@ const tabItems = computed(() => {
   const items = [{ key: 'evidence', label: t('art.tab.evidence') }]
   const seen = new Set()
   for (const art of artifacts.value) {
-    if ((art.kind === 'chart' || art.kind === 'table') && !seen.has(art.kind)) {
+    if ((art.kind === 'kpi' || art.kind === 'chart' || art.kind === 'table') && !seen.has(art.kind)) {
       seen.add(art.kind)
       items.push({ key: art.kind, label: t('art.tab.' + art.kind) })
     }
@@ -88,6 +89,11 @@ const showTabs = computed(() => tabItems.value.length > 1)
 // The active chart artifact spec (for the 'chart' tab): first chart artifact.
 const chartArtifact = computed(() =>
   artifacts.value.find((a) => a.kind === 'chart') || null,
+)
+
+// The active KPI artifact spec (for the 'kpi' tab): first kpi artifact.
+const kpiArtifact = computed(() =>
+  artifacts.value.find((a) => a.kind === 'kpi') || null,
 )
 
 // Active tab model — bound to the store so it resets correctly on exchange change.
@@ -140,8 +146,16 @@ const activeTab = computed({
         <div class="ev-state">{{ degradedMessage }}</div>
       </template>
       <template v-else-if="meta">
+        <!-- ── KPI TAB ────────────────────────────────────────────────────── -->
+        <template v-if="activeTab === 'kpi' && kpiArtifact">
+          <ArtifactKpi
+            :data="kpiArtifact.data || null"
+            :title="kpiArtifact.title || ''"
+          />
+        </template>
+
         <!-- ── CHART TAB ──────────────────────────────────────────────────── -->
-        <template v-if="activeTab === 'chart' && chartArtifact">
+        <template v-else-if="activeTab === 'chart' && chartArtifact">
           <ArtifactChart
             :chart="chartArtifact.chart"
             :data="chartArtifact.data || null"

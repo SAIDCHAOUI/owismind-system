@@ -1362,4 +1362,54 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   très bien marché ») ; Playground OK. Doc : developer.dataiku.com/latest/api-reference/python/semantic-models.html.
 - **Source** : session 2026-06-15 Run 2. **Date** : 2026-06-15.
 
+## L060 — Tool use NATIF sur petit modèle = problème d'ARCHITECTURE, pas de prompt : ne jamais hander une table markdown prête au modèle (⏳ codé+639 tests, NON validé DSS)
+- **Contexte** : avec gpt-5.4-mini, l'orchestrateur **recopiait des tables markdown** dans le chat au
+  lieu d'appeler `show_chart/show_table`. Cause racine : le sous-agent renvoyait `headline + table_md` ;
+  l'orchestrateur recevait cette table TOUTE FAITE comme tool-output → un petit modèle la recopie (chemin
+  de moindre résistance). Le prompt seul (« n'écris pas de table ») est insuffisant (recherche confirmée).
+- **Ce qui a échoué (à éviter)** : compter sur `tool_choice:"required"`/`strict` côté Mesh (non vérifié,
+  voir L061) ou sur un prompt prohibitif seul.
+- **Solution qui marche** : nativité **par l'architecture**. L'orchestrateur ne montre PLUS de table au
+  modèle : `_subagent_tool_output` hand `headline (table strippée) + DATA compacte JSON (« déjà affichée,
+  ne pas réimprimer ») + RENDERING HINT` (tool exact + chart_type + colonnes, dérivé de l'`intent` du
+  sous-agent via `_rendering_hint`). Renforts : prompt OUTPUT CONTRACT dual-rule + few-shot dans les
+  descriptions de tools + **filet déterministe** (données ≥2 lignes récoltées, aucun artefact rendu →
+  `node_finish` émet un ARTIFACT table auto). La donnée structurée file toujours à Evidence par le span de
+  trace (inchangé). **P3 respecté** : aucune valeur métier en dur, l'`intent` vient du sous-agent.
+- **Preuve-vérification** : 13 tests (strip table, hint par intent, passthrough clarification, KPI) ; 639
+  tests verts ; revue Opus « control-flow correct ».
+- **Source** : session 2026-06-16, recherche web small-model tool-use. **Date** : 2026-06-16.
+
+## L061 — `strict:True` sur les tool specs = BLOCKER si le modèle de boucle est OpenAI : exige TOUTES les propriétés en `required` (✅ revue, retiré)
+- **Contexte** : ajout de `"strict": True` + `additionalProperties:False` aux tool specs (issu de la
+  recherche). La boucle tourne sur `openai/gpt-5.4-mini`.
+- **Ce qui a échoué** : OpenAI strict-mode exige que **`required` contienne TOUTES les clés de
+  `properties`** (optionnelles `type:["string","null"]`). Mes specs avaient `title/style` (show_chart),
+  `title` (show_table), `delta/delta_pct` (show_kpi) **optionnels hors `required`** → si Mesh forwarde
+  `strict`, **400 à chaque tour** → orchestrateur mort. Les tests unitaires ne le voyaient pas (vérifient
+  la présence dans `required`, pas la complétude strict). Réf interne :
+  `.claude/skills/agentique-python-dataiku/references/tools-et-tool-design.md` L288.
+- **Solution qui marche** : **retirer `strict`/`additionalProperties`** → pattern exact des agents validés
+  (qui n'en ont jamais eu). La nativité ne dépend pas de `strict` (cf. L060). `_record_artifact`
+  valide/coerce déjà chaque arg. Si on veut `strict` un jour : **toutes** les props en `required` +
+  optionnelles nullable, et **confirmer sur la connexion Mesh** d'abord (forward non garanti).
+- **Preuve-vérification** : `grep -c strict` → 0 ; 170 tests agents verts ; revue Opus (seul blocker).
+- **Source** : session 2026-06-16, revue adversariale. **Date** : 2026-06-16.
+
+## L062 — Streaming sans parier sur l'API : streamer le préambule + la SYNTHÈSE finale (nœud dédié sans tools), pas la décision d'outils (⏳ codé, NON validé DSS)
+- **Contexte** : l'user voyait « j'attends, j'attends, et boom tout d'un coup ». L'infra de transport
+  supporte DÉJÀ les `answer_delta` incrémentaux (poll 500ms → reducer `timelineModel` interleave) ; le
+  goulot = l'agent poussait toute la réponse en **un seul** `writer(_txt)`.
+- **Ce qui a échoué (écarté)** : streamer la boucle via `execute_streamed()` et lire les `tool_calls` dans
+  le footer — **non prouvé** par le SDK Mesh ; régression catastrophique si le footer n'expose pas les
+  tool_calls. Décision : ne pas parier la fiabilité du tool-calling sur une API non testable en local.
+- **Solution qui marche** : (1) garder `execute()` (tool_calls fiables) pour la décision d'outils +
+  streamer le **texte de préambule** du modèle (jusqu'ici jeté) = narration live gratuite ; (2) composer
+  la réponse finale dans un **nœud dédié** (`_run_synthesis_call`), completion fraîche **SANS tools** →
+  `execute_streamed()` rend des deltas texte fiables (pattern `orchestrator_agent._synthesize` validé
+  DSS). La synthèse lit un briefing (question + données + artefacts + nudge). Coût : ~1 appel composeur
+  par tour de données. Usage compté via span `orchestrator:synthesis` (trace footer, pas de double-compte).
+- **Preuve-vérification** : revue Opus « no double-stream/write, usage non doublé » ; 170 tests.
+- **Source** : session 2026-06-16. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

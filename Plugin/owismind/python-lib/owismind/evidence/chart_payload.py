@@ -160,3 +160,43 @@ def build_chart_payload(result, chart_spec):
         return {"ok": False, "reason": "no_numeric"}
     return {"ok": True, "labels": labels, "datasets": datasets,
             "truncated": truncated}
+
+
+def build_kpi_payload(result, kpi_spec):
+    """Return a KPI card payload from the captured result + a kpi spec, or an
+    honest empty shape. The agent only names the value column (and optional delta
+    columns); the figures are read from the FIRST result row by trusted code.
+
+    Output: {"ok": True, "label", "value"[, "delta", "delta_pct"]} or
+    {"ok": False, "reason": "no_data" | "bad_spec" | "value_not_found" |
+        "no_numeric"}.
+    """
+    if not isinstance(result, dict) or not result.get("captured"):
+        return {"ok": False, "reason": "no_data"}
+    columns = result.get("columns") or []
+    rows = result.get("rows") or []
+    if not columns or not rows:
+        return {"ok": False, "reason": "no_data"}
+    spec = kpi_spec or {}
+    value_col = spec.get("value")
+    if not value_col:
+        return {"ok": False, "reason": "bad_spec"}
+    vi = _resolve(columns, value_col)
+    if vi is None:
+        return {"ok": False, "reason": "value_not_found"}
+    row0 = rows[0]
+    value = _to_number(row0[vi]) if vi < len(row0) else None
+    if value is None:
+        return {"ok": False, "reason": "no_numeric"}
+    out = {"ok": True, "label": _label(spec.get("label") or value_col),
+           "value": value}
+    for key in ("delta", "delta_pct"):
+        col = spec.get(key)
+        if not col:
+            continue
+        ci = _resolve(columns, col)
+        if ci is not None and ci < len(row0):
+            num = _to_number(row0[ci])
+            if num is not None:
+                out[key] = num
+    return out

@@ -5,6 +5,25 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🚀 OPTIMISATION MODÈLE-AGNOSTIQUE (2026-06-16, session nuit autonome) — ⏳ CODÉ + 639 TESTS LOCAUX +
+BUILD + ZIP, NON validé DSS.** But : performant **même sur petit modèle** (gpt-5.4-mini), indépendant
+d'un gros modèle. **4 chantiers livrés** : (1) **Nativité des artefacts par ARCHITECTURE** (L060) —
+l'orchestrateur ne hand plus de table markdown au modèle : `headline strippé + DATA compacte JSON +
+RENDERING HINT` (tool+chart_type+colonnes dérivés de l'intent) → même un petit modèle appelle
+`show_chart/show_table/show_kpi` ; **filet déterministe** (données ≥2 lignes non rendues → auto-tableau).
+(2) **Streaming** (L062) — narration de préambule live (texte du modèle avant tool-call, gratuit) +
+**synthèse finale streamée** dans un nœud dédié `execute_streamed()` **sans tools** (fiable, pattern
+validé) ; on ne parie PAS sur les tool_calls streamés. (3) **Escalade conservatrice 3 modes** (réponse
+user) : `Éco`=mini seul / `Medium`=mini + escalade auto de la **synthèse** vers Sonnet sur complexité ou
+échec / `High`=Sonnet ; sélecteur dans la barre de saisie ; token `⟦owi:mode=…⟧` (prefix→parse+strip).
+(4) **KPI** (nouvel outil `show_kpi` + carte + onglet) + styles graphiques (stacked ajouté) + **Evidence
+SQL coloré/formaté** (`sqlPretty.js`). **Revue adversariale 3 sous-agents** : 1 blocker (`strict:True`
+sur tool specs → 400 OpenAI, L061) **corrigé** + MEDIUM/LOW/NIT traités. **Orchestrateur seul à recoller**
+(`orchestrator_langgraph.py`, env 3.11) — **le sous-agent `dataset_expert_langgraph.py` est INCHANGÉ**
+(rollback intact). Zip : **77 entrées, `index-B015Ius_.js`** — upload + **REDÉMARRER backend** ; confirmer
+l'id Mesh Sonnet `…vertex_ai/claude-sonnet-4-6` (sinon éditer `ESCALATION_LLM_ID`). Détail →
+`sessions/2026-06-16.md`, **L060-L062**.
+
 **🧠 MODÈLE SÉMANTIQUE ALIGNÉ + SOUS-AGENT ASSISTIF (2026-06-15 Run 2) — ✅ NOUVEAU MODÈLE CRÉÉ
 (Sonnet 4.6, Playground OK) ; ⏳ FIX SOUS-AGENT codé+157 tests, à RE-COLLER + re-tester DSS.** On a
 créé un **nouveau** modèle sémantique aligné (l'ancien `2O2KcHw` intact) via script notebook
@@ -114,7 +133,15 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
+## 🧭 Dernière session — 2026-06-16 (nuit autonome) → détail `sessions/2026-06-16.md`, leçons **L060-L062**
+- **Système rendu modèle-agnostique** : nativité artefacts par architecture (table strippée + DATA +
+  hint, L060), streaming (préambule + synthèse streamée sans tools, L062), escalade 3 modes
+  (Éco/Medium/High) + sélecteur UI, artefact KPI + Evidence SQL coloré. 639 tests + build + zip.
+- **Blocker revue corrigé** : `strict:True` retiré des tool specs (400 OpenAI si Mesh forwarde, L061).
+- **À recoller en DSS** : `orchestrator_langgraph.py` seulement (sous-agent inchangé) + upload zip +
+  redémarrer backend. Smoke-tests streaming/nativité/escalade au matin.
+
+## Avant — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
 - **Modèle sémantique aligné (nouveau modèle, Sonnet 4.6) + sous-agent ASSISTIF** : le sous-agent
   n'épingle plus la colonne d'un terme d'offre **ambigu** (`AMBIGUOUS OFFER TERM` → Sonnet tranche) ;
   question user = source de vérité, indices = aide non contraignante. Codé + 157 tests, **à recoller +
@@ -243,6 +270,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🚀. **VALIDER DSS l'optimisation modèle-agnostique (L060-L062)** : coller `orchestrator_langgraph.py`
+   (Code Agent env 3.11) + uploader le zip (`index-B015Ius_.js`) + **redémarrer backend**. Smoke-tests :
+   (a) « revenus YTD EVPL actuals vs budget » → narration live + KPI/chart dans le panneau, **pas** de
+   table markdown dans le chat, réponse **streamée** ; (b) top clients → tableau natif ; (c) question
+   complexe en **Medium** → vérifier l'escalade Sonnet ; (d) toggle **High/Éco**. Confirmer l'id Mesh
+   Sonnet (`ESCALATION_LLM_ID = …vertex_ai/claude-sonnet-4-6`). Si recopie de table persiste → durcir
+   prompt/filet (déjà déterministe). **Le sous-agent `dataset_expert_langgraph.py` est inchangé** (ne
+   rien recoller de ce côté).
 0★★. **FINALISER le fix sous-agent assistif (L058)** : recoller `dataset_expert_langgraph.py` dans le
    Code Agent `agent:AKQaQ0Am` (env 3.11), puis **re-tester EVPL via l'orchestrateur** (« revenus YTD
    EVPL, actuals vs budget ») → doit matcher le Playground (Product, budget ≠ 0, note de transparence).

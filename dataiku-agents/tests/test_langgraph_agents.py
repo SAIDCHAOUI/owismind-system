@@ -416,5 +416,102 @@ class TestSemanticAlignment(unittest.TestCase):
         self.assertNotIn("AMBIGUOUS OFFER TERM", q)
 
 
+class TestNativeArtifactFormatting(unittest.TestCase):
+    """The orchestrator hands the model a NON-table view of a specialist result
+    (headline + data block + rendering hint), so a weak model renders natively."""
+
+    def test_strip_markdown_tables(self):
+        text = ("Top clients:\n\n| Client | Revenue |\n|---|---|\n"
+                "| A | 10 |\n| B | 5 |\n\nB performed worst.")
+        out = orch._strip_markdown_tables(text)
+        self.assertNotIn("|", out)
+        self.assertIn("Top clients:", out)
+        self.assertIn("B performed worst.", out)
+
+    def test_rendering_hint_by_intent(self):
+        cols = ["month", "Revenue_EUR"]
+        self.assertIn("show_chart", orch._rendering_hint("trend", cols))
+        self.assertIn("line", orch._rendering_hint("trend", cols))
+        self.assertIn("show_table", orch._rendering_hint("list_values", ["Client"]))
+        self.assertIn("show_kpi", orch._rendering_hint("total", ["Revenue_EUR"]))
+        # Unknown intent / no columns -> safe table default.
+        self.assertIn("show_table", orch._rendering_hint("???", []))
+
+    def test_subagent_tool_output_strips_table_and_hints(self):
+        answer = "Total: 10.\n\n| Client | Revenue |\n|---|---|\n| A | 10 |"
+        result = {"columns": ["Client", "Revenue"], "rows": [["A", 10]]}
+        out = orch._subagent_tool_output(answer, result, "breakdown")
+        self.assertNotIn("|", out.split("DATA")[0])  # headline carries no table
+        self.assertIn("DATA", out)
+        self.assertIn("RENDERING HINT", out)
+        self.assertIn("show_chart", out)
+
+    def test_subagent_tool_output_passthrough_when_no_rows(self):
+        # A clarification / out-of-scope reply (no rows) is passed through.
+        out = orch._subagent_tool_output("Which EVPL did you mean?", None, None)
+        self.assertEqual(out, "Which EVPL did you mean?")
+
+
+class TestModelModeAndEscalation(unittest.TestCase):
+    def test_parse_mode_extracts_and_strips(self):
+        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=high⟧")
+        self.assertEqual(mode, "high")
+        self.assertEqual(clean, "revenus EVPL")
+
+    def test_parse_mode_defaults_medium(self):
+        mode, clean = orch.parse_mode("plain question")
+        self.assertEqual(mode, "medium")
+        self.assertEqual(clean, "plain question")
+
+    def test_parse_mode_unknown_token_ignored(self):
+        mode, _clean = orch.parse_mode("q ⟦owi:mode=turbo⟧")
+        self.assertEqual(mode, "medium")
+
+    def test_loop_llm_id_policy(self):
+        self.assertIn("gpt-5.4-mini", orch.loop_llm_id("eco"))
+        self.assertIn("gpt-5.4-mini", orch.loop_llm_id("medium"))
+        self.assertEqual(orch.loop_llm_id("high"), orch.ESCALATION_LLM_ID)
+
+    def test_synth_llm_id_conservative(self):
+        # Eco never escalates; medium only on a complex turn; high always.
+        self.assertEqual(orch.synth_llm_id("eco", True), orch.ORCH_LLM_ID)
+        self.assertEqual(orch.synth_llm_id("medium", False), orch.ORCH_LLM_ID)
+        self.assertEqual(orch.synth_llm_id("medium", True), orch.ESCALATION_LLM_ID)
+        self.assertEqual(orch.synth_llm_id("high", False), orch.ESCALATION_LLM_ID)
+
+    def test_complexity_heuristic_conservative(self):
+        # A short single-domain lookup is NOT complex.
+        self.assertFalse(orch.complexity_is_high("revenus EVPL 2026", ["revenue_expert"]))
+        # Fan-out (2 agents) + a comparison keyword -> complex.
+        self.assertTrue(orch.complexity_is_high(
+            "compare EVPL revenue vs budget and tickets",
+            ["revenue_expert", "tickets_expert"]))
+
+
+class TestKpiArtifact(unittest.TestCase):
+    def test_show_kpi_records_value_column(self):
+        llm = orch.MyLLM()
+        state = {"latest": {"columns": ["Revenue_EUR", "delta_pct"],
+                            "rows": [[1234, 5.2]]}}
+        art, _msg = llm._record_artifact(
+            "show_kpi", {"label": "Revenue YTD", "value": "Revenue_EUR",
+                         "delta_pct": "delta_pct"}, state)
+        self.assertIsNotNone(art)
+        self.assertEqual(art["kind"], "kpi")
+        self.assertEqual(art["kpi"]["value"], "Revenue_EUR")
+        self.assertEqual(art["kpi"]["delta_pct"], "delta_pct")
+
+    def test_show_kpi_unknown_column_rejected(self):
+        llm = orch.MyLLM()
+        state = {"latest": {"columns": ["Revenue_EUR"], "rows": [[1]]}}
+        art, _msg = llm._record_artifact("show_kpi", {"value": "nope"}, state)
+        self.assertIsNone(art)
+
+    def test_show_kpi_tool_in_specs(self):
+        specs, _t2c = orch.build_tool_specs(orch.get_capabilities())
+        names = {s["function"]["name"] for s in specs}
+        self.assertIn("show_kpi", names)
+
+
 if __name__ == "__main__":
     unittest.main()

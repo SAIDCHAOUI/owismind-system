@@ -21,6 +21,19 @@ class PrefixTests(unittest.TestCase):
         p = build_user_prefix(None, datetime(2026, 6, 9, 14, 30))
         self.assertIn("2026", p)  # still emits the date, no crash
 
+    def test_prefix_adds_valid_mode_token(self):
+        p = build_user_prefix("X", datetime(2026, 6, 9, 14, 30), mode="high")
+        self.assertIn("⟦owi:mode=high⟧", p)
+        self.assertTrue(p.endswith(" "))
+
+    def test_prefix_ignores_unknown_mode(self):
+        p = build_user_prefix("X", datetime(2026, 6, 9, 14, 30), mode="turbo")
+        self.assertNotIn("owi:mode", p)
+
+    def test_prefix_no_mode_token_by_default(self):
+        p = build_user_prefix("X", datetime(2026, 6, 9, 14, 30))
+        self.assertNotIn("owi:mode", p)
+
 
 class FlattenTests(unittest.TestCase):
     def _rows(self):

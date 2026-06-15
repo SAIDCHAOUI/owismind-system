@@ -258,6 +258,7 @@ export const useChatStore = defineStore('chat', () => {
         message: userText,
         agentKey: session.selectedAgentKey,
         historyLimit: ui.contextMessages,
+        mode: ui.modelMode,
         parentExchangeId: parentId || null,
         target: version,
         token,

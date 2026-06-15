@@ -134,14 +134,14 @@ def _normalized_sql_event(item, sql_index):
 def _normalized_artifact_event(event_data):
     """Build ONE normalized ``artifact`` event from an ARTIFACT eventData, or None.
 
-    Strict shape: kind in {chart, table}, bounded title, and for a chart a
-    {type, x, y[]} block (x a column name, y a list of column names). The DATA is
+    Strict shape: kind in {chart, table, kpi}, bounded title; a chart carries a
+    {type, x, y[]} block, a KPI a {value[,delta,delta_pct]} block. The DATA is
     NOT here — the frontend reuses the captured generated_sql result via
     /evidence/meta; only the SPEC travels. Pure, never raises."""
     if not isinstance(event_data, dict):
         return None
     kind = event_data.get("kind")
-    if kind not in ("chart", "table"):
+    if kind not in ("chart", "table", "kpi"):
         return None
     out = {"type": "artifact", "kind": kind,
            "title": str(event_data.get("title") or "")[:200]}
@@ -166,6 +166,18 @@ def _normalized_artifact_event(event_data):
         if isinstance(style, str) and style.strip():
             chart_out["style"] = style.strip()[:24]
         out["chart"] = chart_out
+    elif kind == "kpi":
+        kpi = event_data.get("kpi")
+        if not isinstance(kpi, dict) or not isinstance(kpi.get("value"), str):
+            return None
+        kpi_out = {"label": str(kpi.get("label") or "")[:120],
+                   "value": kpi["value"][:128]}
+        for key in ("delta", "delta_pct"):
+            v = kpi.get(key)
+            if isinstance(v, str) and v:
+                kpi_out[key] = v[:128]
+        out["chart"] = None
+        out["kpi"] = kpi_out
     else:
         out["chart"] = None
     return out

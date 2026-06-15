@@ -105,5 +105,36 @@ class TestDegrade(unittest.TestCase):
         self.assertTrue(out["truncated"])
 
 
+class TestKpiPayload(unittest.TestCase):
+    def test_value_and_delta(self):
+        out = cp.build_kpi_payload(
+            _result(["Revenue_EUR", "delta_pct"], [[1234567, 5.2]]),
+            {"label": "Revenue YTD", "value": "Revenue_EUR", "delta_pct": "delta_pct"})
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["value"], 1234567.0)
+        self.assertEqual(out["delta_pct"], 5.2)
+        self.assertEqual(out["label"], "Revenue YTD")
+
+    def test_value_only(self):
+        out = cp.build_kpi_payload(_result(["n"], [[42]]), {"value": "n"})
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["value"], 42.0)
+        self.assertNotIn("delta", out)
+
+    def test_missing_column(self):
+        out = cp.build_kpi_payload(_result(["n"], [[42]]), {"value": "missing"})
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["reason"], "value_not_found")
+
+    def test_no_data(self):
+        out = cp.build_kpi_payload({"captured": False}, {"value": "n"})
+        self.assertFalse(out["ok"])
+
+    def test_non_numeric(self):
+        out = cp.build_kpi_payload(_result(["n"], [["abc"]]), {"value": "n"})
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["reason"], "no_numeric")
+
+
 if __name__ == "__main__":
     unittest.main()

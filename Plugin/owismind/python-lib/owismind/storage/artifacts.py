@@ -28,6 +28,7 @@ MAX_ARTIFACTS = 8
 MAX_ARTIFACTS_JSON_CHARS = 16_000
 MAX_Y_SERIES = 8
 _CHART_TYPES = ("line", "bar", "pie")
+_ARTIFACT_KINDS = ("chart", "table", "kpi")
 
 # Instance-safety guards (mirror the Evidence reads). The read runs in a
 # transaction-scoped READ-ONLY transaction with a statement_timeout, so the
@@ -46,13 +47,14 @@ def _sanitize(artifacts):
 
     Applied on BOTH write and read (defense in depth): drops anything unrecognized,
     bounds strings, and keeps at most ``MAX_ARTIFACTS`` well-formed specs. A chart
-    keeps {type, x, y[]}; a table keeps no chart block. Pure, never raises."""
+    keeps {type, x, y[]}; a table keeps no chart block; a KPI keeps {value[,delta,
+    delta_pct]}. Pure, never raises."""
     out = []
     for a in artifacts or []:
         if not isinstance(a, dict):
             continue
         kind = a.get("kind")
-        if kind not in ("chart", "table"):
+        if kind not in _ARTIFACT_KINDS:
             continue
         spec = {"kind": kind, "title": str(a.get("title") or "")[:200]}
         if kind == "chart":
@@ -76,6 +78,18 @@ def _sanitize(artifacts):
             if isinstance(style, str) and style.strip():
                 chart_spec["style"] = style.strip()[:24]
             spec["chart"] = chart_spec
+        elif kind == "kpi":
+            kpi = a.get("kpi")
+            if not isinstance(kpi, dict) or not isinstance(kpi.get("value"), str):
+                continue
+            kpi_spec = {"label": str(kpi.get("label") or "")[:120],
+                        "value": kpi["value"][:128]}
+            for key in ("delta", "delta_pct"):
+                v = kpi.get(key)
+                if isinstance(v, str) and v:
+                    kpi_spec[key] = v[:128]
+            spec["chart"] = None
+            spec["kpi"] = kpi_spec
         else:
             spec["chart"] = None
         out.append(spec)

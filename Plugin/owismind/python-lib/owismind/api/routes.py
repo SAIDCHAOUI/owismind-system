@@ -250,10 +250,17 @@ def chat_start():
         logger.exception("/chat/start — failed to persist user message")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
+    # Optional model mode (eco / medium / high) chosen in the web app. Unknown or
+    # absent -> medium (the conservative default). Relayed to the orchestrator via
+    # the per-turn prefix token; it never picks a raw model id from the front.
+    mode = body.get("mode")
+    if mode not in context.MODEL_MODES:
+        mode = "medium"
+
     # Per-turn context prefix (re-states who is asking + the server-side date) prepended
     # to the current user message — the agent is stateless between calls.
     user_prefix = context.build_user_prefix(
-        derive_full_name(identity["user_id"]), datetime.now()
+        derive_full_name(identity["user_id"]), datetime.now(), mode=mode
     )
 
     # Spawn the bounded background worker. The agent_id stays server-side; the front
@@ -579,6 +586,8 @@ def evidence_meta():
         for a in arts:
             if a.get("kind") == "chart":
                 a["data"] = chart_payload.build_chart_payload(result_block, a.get("chart"))
+            elif a.get("kind") == "kpi":
+                a["data"] = chart_payload.build_kpi_payload(result_block, a.get("kpi"))
         meta["artifacts"] = arts
     except Exception:
         logger.exception("/evidence/meta — artifacts read failed (non-fatal)")

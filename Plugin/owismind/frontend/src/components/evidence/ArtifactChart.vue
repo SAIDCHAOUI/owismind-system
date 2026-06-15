@@ -68,6 +68,8 @@ function buildConfig() {
     ? (style === 'donut' || style === 'doughnut' ? 'doughnut' : 'pie')
     : (spec.type === 'bar' ? 'bar' : 'line')
   const horizontal = chartType === 'bar' && style === 'horizontal'
+  // 'grouped' (default for several series) vs 'stacked' bars / area.
+  const stacked = style === 'stacked'
 
   const datasets = props.data.datasets.map((ds, i) => {
     if (isPie) {
@@ -130,8 +132,8 @@ function buildConfig() {
     scales: isPie
       ? {}
       : {
-          x: { ticks: { color: text3 }, grid: { color: grid } },
-          y: { ticks: { color: text3 }, grid: { color: grid }, beginAtZero: true },
+          x: { stacked, ticks: { color: text3 }, grid: { color: grid } },
+          y: { stacked, ticks: { color: text3 }, grid: { color: grid }, beginAtZero: true },
         },
   }
 

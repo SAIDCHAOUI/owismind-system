@@ -12,14 +12,26 @@ import math
 _DATE_FMT = "%A, %B %d, %Y at %H:%M"
 
 
-def build_user_prefix(full_name, now_dt):
+# Model modes the front can request (Eco / Medium / High). Relayed to the agent
+# as a compact control token APPENDED to the current turn (the orchestrator parses
+# and strips it, so it never reaches the model as part of the question). Unknown /
+# absent -> the orchestrator defaults to "medium".
+MODEL_MODES = ("eco", "medium", "high")
+
+
+def build_user_prefix(full_name, now_dt, mode=None):
     """Compact context prefix prepended to the CURRENT user message every turn.
 
     The agent is stateless between calls, so we re-state who is asking and the
     current date on each send (mirrors the validated Dash production pattern).
+    A valid ``mode`` adds a ``⟦owi:mode=…⟧`` control token the orchestrator reads
+    to pick its model policy (cheap by default; the strong model is the exception).
     """
     name = full_name or "Unknown user"
-    return "[User: {name} — Date: {date}] ".format(name=name, date=now_dt.strftime(_DATE_FMT))
+    prefix = "[User: {name} — Date: {date}] ".format(name=name, date=now_dt.strftime(_DATE_FMT))
+    if mode in MODEL_MODES:
+        prefix += "⟦owi:mode={0}⟧ ".format(mode)
+    return prefix
 
 
 # Upper bound on the generated-SQL block appended to a prior assistant turn (keeps
