@@ -5,11 +5,17 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🧭 MODEL-AGNOSTIC : FIN DE L'ESCALADE + DATASET LOOKUP + STOP OPTIMISTE + HIÉRARCHIE TIMELINE
-— Run 5 (2026-06-16, session salle) — ⏳ CODÉ + 193 tests agents + 114 frontend + build + zip, À VALIDER DSS (L071-L074).**
-Test DSS du Run 4 = ÉCHEC sur gpt-5.4-mini (escalade **systématique** + message hardcodé ; sinon
-**narre puis s'arrête**). User : abandonner gpt-5.4-mini, passer Gemini 2.5 Flash, **arrêter les hacks
-mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 chantiers :
+**🧭 MODEL-AGNOSTIC (fin escalade + Dataset Lookup + stop + popup mode) PUIS 3 AUDITS À L'AVEUGLE
+— Run 5/5b/5c (2026-06-16) — ⏳ CODÉ + 217 tests agents + 116 frontend + build + zip, À VALIDER DSS (L071-L078).**
+**🔒 État : audité à l'aveugle 3× (sous-agent « architecte » + skill agentique, copies /tmp, zéro contexte),
+durci à chaque passe → 3ᵉ passe = VERDICT « production-ready côté archi agentique », 0 Critical / 0 High.**
+À DÉPLOYER : **recoller les 2 Code Agents** (env 3.11) + **vérifier `GEMINI_FLASH_ID`** (2 fichiers) + upload zip
+(**77 entrées `index-3FmqVbc1.js`**, backend python-lib inchangé → pas de redémarrage). Les audits n'ont
+touché QUE les Code Agents (zip inchangé depuis Run 5b). **NON validé DSS** (comportement modèles + Dataset
+Lookup réel + rendu = intestables hors instance).
+Genèse — Test DSS du Run 4 = ÉCHEC sur gpt-5.4-mini (escalade **systématique** + message hardcodé ; sinon
+**narre puis s'arrête**). User : abandonner gpt-5.4-mini en défaut, passer Gemini 2.5 Flash, **arrêter les
+hacks mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 chantiers :
 - **Modèles par mode (L071 + ajustés L075)** : **escalade SUPPRIMÉE en entier**. `LOOP_LLM_BY_MODE` =
   **{eco:gpt-5.4-mini, medium:Gemini Flash, high:Sonnet}** (gpt-5.4-mini GARDÉ en Éco — marche bien, ~gratuit).
   **1 modèle pilote tout le tour**. Le mode se **propage au sous-agent** (`MODE:` dans context → `forced_mode`
@@ -29,8 +35,13 @@ mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 c
 - **Popup de mode (L075)** : `ModelModePicker` réécrit = pilule → `Modal` (3 cartes : libellé, description,
   jauge coût €/€€/€€€, badge « Recommandé » Medium) + encart **enveloppe 50 €/mois**. Medium par défaut.
 - **Hiérarchie timeline (L074)** : steps `SUB_AGENT_*` **indentés** (CSS `.sub-step`). Persistance events = différé.
+- **Audit (L076-L078)** : 3 passes à l'aveugle → durci. Corrigés notamment : caches keyés stable (#1),
+  appariement tool_call↔output garanti (#2), **bypass garde SQL `FROM"table"` fermé** + littéraux blanchis +
+  rejet tables système (sécu), lookup OR sur `alt_columns` + fallback SQL si vide, repli honnête sur cap de
+  boucle, nudge 1×/run, `WITH RECURSIVE` plus faux-rejeté, `u` non muté en place. `run_parallel` (borné) =
+  helper pour futurs tools ; résolution fuzzy **séquentielle** (sécurité instance). Verdict 3ᵉ passe = prêt prod.
 - **À RECOLLER LES 2 Code Agents** (env 3.11) + upload zip (**77 entrées, `index-3FmqVbc1.js`**). Backend
-  python-lib **inchangé** → **pas de redémarrage**. Détail → `sessions/2026-06-16.md` Run 5, **L071-L075**.
+  python-lib **inchangé** → **pas de redémarrage**. Détail → `sessions/2026-06-16.md` Run 5/5b/5c, **L071-L078**.
 
 **Avant — 🔬 AUDIT AGENTS Run 4 (2026-06-16 soir) — ⏳ codé mais escalade/auto-escalade REMPLACÉES par L071
 (échec DSS gpt-5.4-mini).** Restent valides de Run 4 : langue (L066, fin-de-prompt + word-boundary + token
@@ -186,16 +197,18 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-16 (Run 5/5b/5c) → détail `sessions/2026-06-16.md`, leçons **L071-L076**
-- **Run 5c (audit à l'aveugle)** : un sous-agent « architecte » (skill agentique, **copies isolées /tmp,
-  zéro contexte**) a audité les 2 Code Agents → 10 correctifs implémentés (**L076**) : état partagé keyé stable
-  (#1), appariement tool_call↔output garanti (#2), repli honnête sur cap de boucle (#3), id modèle lisible en
-  erreur (#4), garde SQL multi-table/virgule (#7), scan value-index « last chance » mis en cache 1×/req (#10),
-  `original_intent` + note de comparaison dégradée (#14), parité `_cap_cell` NaN/inf (#8), etc. **Parallélisme** :
-  orchestrateur OK (fan-out sous-agents) ; sous-agent → helper `run_parallel` (borné, ordre préservé) sur les
-  fetchs fuzzy + mécanisme drop-in pour futurs tools. **209 tests agents verts**. Zip **inchangé** (seuls les
-  Code Agents ont bougé → recoller les 2, pas de rebuild). NON faits : #15 rename MyLLM (risque contrat DSS),
-  #5 découpe `n_query` (différée). Audit relancé à l'aveugle pour 2ᵉ passe.
+## 🧭 Dernière session — 2026-06-16 (Run 5/5b/5c) → détail `sessions/2026-06-16.md`, leçons **L071-L078**
+- **Run 5/5b** : model-agnostic (fin escalade, 1 modèle/mode eco=mini/medium=Gemini/high=Sonnet propagé au
+  sous-agent, narration off en eco, Dataset Lookup + intent `lookup` + schéma live, stop « Stopping… »,
+  popup de mode coût/enveloppe 50 €). **Run 5c = 3 AUDITS À L'AVEUGLE** (sous-agent « architecte » + skill
+  agentique, copies isolées /tmp, zéro contexte) → durci à chaque passe : P1 (2 Critical) → P2 (1 Critical
+  = **bypass garde SQL `FROM"table"`** que j'avais laissé, fermé) → **P3 = 0 Critical/0 High, verdict
+  « production-ready »**. Corrigés (L076-L078) : caches stables, appariement tool↔output, garde SQL
+  (espace-less/littéraux/tables système/`WITH RECURSIVE`), lookup OR `alt_columns`+fallback, cap de boucle,
+  nudge 1×/run, `original_intent`, `_cap_cell` NaN/inf, `u` non muté en place. `run_parallel` borné = helper
+  futurs tools ; résolution fuzzy **séquentielle** (sécu instance). **217 tests agents + 116 frontend verts**.
+  Zip **inchangé** depuis 5b → recoller les 2 Code Agents, pas de rebuild. NON faits (assumés) : rename
+  `MyLLM` (contrat DSS), découpe `n_query` (différée), sonde id modèle (polish). **NON validé DSS.**
 - **Déclencheur** : test DSS du Run 4 = gpt-5.4-mini **escalade systématiquement** (+ message hardcodé) ou
   **narre puis s'arrête**. User : abandonner gpt-5.4-mini → Gemini 2.5 Flash + Sonnet, **stop les hacks
   mono-modèle**, archi qui marche **même sur petits modèles**.
