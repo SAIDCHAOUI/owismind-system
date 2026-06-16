@@ -820,6 +820,14 @@ def build_system_prompt(caps, lang_hint):
             "data is missing:\n" + "\n".join(gap_lines))
     parts.append(
         "\n# HOW TO WORK\n"
+        "0. KEEP THE USER IN THE LOOP. On a turn where you call a tool, you MAY "
+        "open with ONE short sentence (in the user's language) telling them what "
+        "you're about to check — e.g. 'Je regarde l'évolution actuals vs budget…' "
+        "or 'Let me pull EVPL revenue.'. It streams live so the wait feels alive. "
+        "HARD RULE: this lead-in is OPTIONAL and must be on the SAME turn as the "
+        "tool call — NEVER end your turn with only the sentence and no tool call "
+        "(that would leave the user with an empty promise). When in doubt, just "
+        "call the tool.\n"
         "1. ROUTE. If the question touches a domain you have a specialist for, "
         "CALL that specialist immediately (in doubt, route — never deny). Write "
         "each task SELF-CONTAINED (entity, scenario/phase, exact period); the "
@@ -853,6 +861,7 @@ class OrchState(TypedDict, total=False):
     statuses: Annotated[list, operator.add]        # sub-agent AGENT_RESULT statuses
     used_caps: Annotated[list, _add_unique]        # capability keys consulted
     latest: dict                                   # {columns, rows} last result w/ rows
+    preamble: str                                  # model's own lead-in for this turn's tools
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
@@ -1062,11 +1071,15 @@ class MyLLM(BaseLLM):
                 except Exception:
                     pass
             usage = _usage_from_resp(resp)
+            text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
             if tcs and state.get("step", 0) < MAX_TOOL_LOOPS:
+                # `text` here is the model's OWN lead-in written alongside the tool
+                # call ("Let me pull EVPL revenue…") — streamed live as narration
+                # by node_tools (real model-generated narration, like ChatGPT).
                 return {"pending_tool_calls": tcs, "usage": usage,
-                        "step": state.get("step", 0) + 1, "started": True}
-            text = (getattr(resp, "text", None) or "").strip()
+                        "preamble": text, "step": state.get("step", 0) + 1,
+                        "started": True}
             return {"pending_tool_calls": [], "final_text": text,
                     "usage": usage, "started": True}
 
@@ -1077,6 +1090,15 @@ class MyLLM(BaseLLM):
             writer = get_stream_writer()
             tcs = state["pending_tool_calls"]
             chat.with_tool_calls(tcs, role="assistant")
+
+            # If the model wrote its OWN lead-in this turn, stream THAT (real
+            # model-generated narration) and skip the deterministic fallbacks for
+            # this turn — the deterministic narration only fills the silence when
+            # the model said nothing (small models often keep their plan hidden).
+            preamble = (state.get("preamble") or "").strip()
+            model_narrated = bool(preamble)
+            if model_narrated:
+                writer(_narr(preamble))
 
             sub_calls, local_calls = [], []
             for tc in tcs:
@@ -1095,7 +1117,8 @@ class MyLLM(BaseLLM):
             # --- specialists (parallel when more than one) ---
             if sub_calls:
                 results = self._run_subagents(project, trace, sub_calls,
-                                              context_msg, lang, base_step, writer)
+                                              context_msg, lang, base_step, writer,
+                                              model_narrated)
                 for (tc, name, args), res in zip(sub_calls, results):
                     cap_key = self._tool_to_cap[name]
                     answer = res.get("answer") or ""
@@ -1122,7 +1145,8 @@ class MyLLM(BaseLLM):
                                  "show_kpi": "tool_kpi"}[name]
                     narr_key = {"show_chart": "chart", "show_table": "table",
                                 "show_kpi": "kpi"}[name]
-                    writer(_narr(_NARR[narr_key][lang]))   # live: "preparing the chart…"
+                    if not model_narrated:                 # else the model's own lead-in covers it
+                        writer(_narr(_NARR[narr_key][lang]))
                     writer(_ev("RUNNING_TOOL", {
                         "toolKey": name, "stepIndex": base_step,
                         "label": _L[label_key][lang]}))
@@ -1209,20 +1233,24 @@ class MyLLM(BaseLLM):
         return g.compile()
 
     def _run_subagents(self, project, trace, sub_calls, context_msg, lang,
-                       base_step, writer):
+                       base_step, writer, model_narrated=False):
         """Run one or several specialist calls; relay events on THIS thread
         (workers push to a queue, we drain + write). Returns results aligned
-        with sub_calls."""
+        with sub_calls. ``model_narrated`` True = the model already streamed its
+        own lead-in this turn, so we skip the deterministic 'calling' fallback."""
         n = len(sub_calls)
         step_count = n            # number of specialists invoked this turn
-        # announce all (live narration uses the model's OWN task, so it is
-        # specific to the request — never a canned, repeated event kind).
+        # announce all. The deterministic 'calling' line is only a FALLBACK — used
+        # when the model wrote no lead-in of its own (it stays specific: the model's
+        # actual task is interpolated, never a canned repeated event kind).
         for i, (tc, name, args) in enumerate(sub_calls):
             cap_key = self._tool_to_cap[name]
             cap = CAPABILITIES[cap_key]
             label = cap.get("label_%s" % lang) or cap.get("label_en")
             task = str(args.get("task") or "").strip()
-            if task:
+            if model_narrated:
+                pass                      # the model's own lead-in already covers it
+            elif task:
                 writer(_narr(_NARR["calling"][lang] % (label, task[:160])))
             else:
                 writer(_narr(_NARR["calling_plain"][lang] % label))

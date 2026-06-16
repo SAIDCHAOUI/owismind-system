@@ -470,6 +470,19 @@ class TestLiveNarration(unittest.TestCase):
         # Sub-agent phase blockIds map to a narration key.
         self.assertEqual(orch._BLOCK_NARR["run_sql"], "run_sql")
 
+    def test_prompt_invites_model_lead_in_safely(self):
+        # The model is INVITED to write its own lead-in (so narration is the
+        # model's own words, ChatGPT-style) but the tool call stays mandatory —
+        # the wording must forbid ending a turn with only the sentence (anti
+        # narrate-and-stop, L063).
+        p = orch.build_system_prompt(orch.get_capabilities(), "fr")
+        self.assertIn("SAME turn as the tool call", p)
+        self.assertIn("NEVER end your turn with only the sentence", p)
+
+    def test_preamble_is_a_state_channel(self):
+        # node_agent stores the model's lead-in on state['preamble'] for node_tools.
+        self.assertIn("preamble", orch.OrchState.__annotations__)
+
 
 class TestModelModeAndEscalation(unittest.TestCase):
     def test_parse_mode_extracts_and_strips(self):

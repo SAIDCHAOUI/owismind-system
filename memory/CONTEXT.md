@@ -7,11 +7,12 @@
 ## 🎯 Focus courant
 **🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ⏳ CODÉ + 633 TESTS +
 ZIP, NON re-validé DSS.** Run 2 validé par l'user (« beaucoup mieux »). Run 3 répond à 6 demandes :
-- **Narration live (L065)** : events `NARRATION` émis par le CODE (jamais par le modèle → pas de
-  narrate-and-stop), **transients** (live only, non persistés), rendus en flux par `MessageAgent`. Le
-  code narre : avant l'appel sous-agent (avec la `task` réelle), à chaque phase (resolve/run_sql/format),
-  avant chaque rendu, avant rédaction. Marche sur **tout modèle**, 0 appel LLM en plus. (Oui, possible en
-  LangGraph.)
+- **Narration live (L065)** : events `NARRATION` **transients** (live only, non persistés), rendus en
+  flux par `MessageAgent` (nettoyés en vue terminale). **C'est le MODÈLE qui narre** (retour user) : on
+  streame son préambule (`resp.text` du tour avec tool-calls → `state.preamble`), le prompt l'invite
+  doucement (étape 0, tool-call obligatoire même tour → pas de narrate-and-stop) ; texte déterministe
+  `_NARR` = **filet** si le modèle se tait ; phases internes du sous-agent restent déterministes. 0 appel
+  LLM en plus, marche sur tout modèle. (Oui, possible en LangGraph.)
 - **Evidence « Explore source data »** (fait par sous-agent **Opus**) : « 2 lignes » corrigé (collapse
   flex → conteneur scroll borné) ; **lazy/infinite loading** (cap 500) ; toutes colonnes + scroll H/V +
   en-tête collant ; **sélecteur multi-tables** (`/evidence/meta.sources` + param `table`).

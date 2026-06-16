@@ -1458,17 +1458,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   l'attente (le modèle sémantique prend ~1 min). Hypothèse user : « peut-être pas possible en LangGraph ».
   C'EST possible. Le piège (L063) : demander au MODÈLE de narrer avant d'appeler → le petit modèle prend
   la narration pour sa réponse et s'arrête. Donc la narration ne doit PAS venir d'une instruction au modèle.
-- **Solution qui marche** : le **CODE** émet des events `NARRATION` (via `get_stream_writer`) aux moments
-  clés — avant chaque appel sous-agent (texte SPÉCIFIQUE : la `task` réelle du modèle, jamais canné), à
-  chaque phase du sous-agent relayée (`resolve`/`run_sql`/`format` → message naturel), avant chaque rendu
-  (chart/table/kpi), et avant la rédaction. `_narr(text)` = `_ev("NARRATION", {"text": …})`. Le backend
-  (`streaming._normalized_artifact_event` voisin) normalise `NARRATION` → event `{type:"narration", text}`
-  qui (1) est rendu **en flux** mais (2) n'est **JAMAIS** accumulé dans la réponse stockée (le worker ne
-  met dans `answer_parts` que `answer_delta`) → **transient** (live only ; absent au reload). Frontend :
-  `timelineModel` gère `narration` (kind 'narration', hors `answerText`), `MessageAgent` le rend en LIVE
-  comme ligne discrète à point pulsé ; en vue TERMINALE les items narration ne sont pas rendus (nettoyés).
-  **0 appel LLM en plus, 0 latence, marche sur n'importe quel modèle, jamais de narrate-and-stop.**
-- **Preuve-vérification** : 633 tests (dont reducer narration + `_narr`/`_NARR` bilingues) ; vite OK.
-- **Source** : retour DSS user + session 2026-06-16 Run 3. **Date** : 2026-06-16.
+- **Solution qui marche (transport)** : le mécanisme est un event `NARRATION` (`_narr(text)` =
+  `_ev("NARRATION", {text})`) → backend `streaming.py` le normalise en event `{type:"narration", text}`
+  **transient** : rendu **en flux** mais JAMAIS mis dans `answer_parts` (le worker n'accumule que
+  `answer_delta`) → live only, absent au reload. Frontend : `timelineModel` kind `narration` (hors
+  `answerText`), `MessageAgent` le rend en LIVE (ligne discrète, point pulsé) et le **droppe en vue
+  terminale**. ChatThread re-scrolle (la `timelineSignature` change avec `timeline.length`).
+- **QUI écrit la narration (raffiné Run 3 bis, retour user)** : l'user veut que ce soit le MODÈLE qui
+  narre (comme ChatGPT « Je vais comparer… »), pas du texte codé en dur. Donc : **on streame le préambule
+  que le modèle écrit LUI-MÊME** — `node_agent` capture `resp.text` du tour quand il y a des `tool_calls`
+  (= le lead-in écrit en même temps que l'appel d'outil) → `state.preamble` → `node_tools` le streame en
+  `NARRATION`. Le prompt l'**invite doucement** (étape 0 : « tu PEUX ouvrir par une phrase, mais
+  OBLIGATOIREMENT sur le même tour que le tool-call ; ne JAMAIS finir le tour avec seulement la phrase »)
+  — formulation qui **n'imite PAS** le « narrate-FIRST » de L063 qui faisait stopper le mini. Le texte
+  **déterministe** (`_NARR`) ne sert plus que de **FILET** : émis seulement si le modèle n'a rien écrit
+  (`model_narrated=False`). Les **phases internes du sous-agent** (resolve/run_sql/format) restent
+  narrées en déterministe (le modèle orchestrateur ne les voit pas — elles arrivent pendant l'attente,
+  dans le sous-agent). Résultat : narration **du modèle** sur Sonnet/High (et mini quand il coopère),
+  filet déterministe sinon → jamais silencieux, 0 appel LLM en plus. Risque résiduel de stop minimisé
+  par la règle « jamais finir sans tool-call » (si le mini stoppe quand même = cas « mini pas capable »
+  accepté par l'user — on ne régresse pas le tool-calling, juste l'élégance de la narration).
+- **Preuve-vérification** : 634 tests (reducer narration + `_narr`/`_NARR` bilingues + nudge présent) ; vite OK.
+- **Source** : retour DSS user (capture ChatGPT 5.5 High narrant) + session 2026-06-16 Run 3. **Date** : 2026-06-16.
 
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
