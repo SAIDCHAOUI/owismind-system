@@ -1761,4 +1761,21 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   total_customers≠amount). Zip inchangé. ⏳ NON validé DSS.
 - **Source** : 2ᵉ audit à l'aveugle + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
 
+## L078 — 3ᵉ passe d'audit à l'aveugle : VERDICT production-ready (0 Critical/0 High) + 2 derniers Medium (⏳ codé+testé, à valider DSS)
+- **Contexte** : 3ᵉ audit à l'aveugle sur la version corrigée (L076+L077). **Verdict : prêt pour la prod
+  côté archi agentique** — aucune faille de sécu, aucun crash en chemin courant. Rendement décroissant : on s'arrête là.
+- **2 derniers Medium corrigés** :
+  - **`WITH RECURSIVE` faux rejet** : le regex CTE de `guard_custom_sql` ne tolérait pas le mot-clé
+    `recursive` → le nom de CTE manqué → `FROM <cte>` rejeté `table_not_allowed`. Fix :
+    `(?:\bwith\b(?:\s+recursive)?|,)…`. (Read-only de toute façon, donc bug de dispo, pas de sécu.)
+  - **Mutation en place de `u["intent"]` dans `n_query`** : remplacée par une **copie** (`u = dict(state["u"])`)
+    + retour explicite `"u": u` via l'état → contrat « les nœuds communiquent par état retourné » respecté,
+    future-proof si un nœud est réordonné. (Correct aujourd'hui car pipeline linéaire.)
+- **Restant = polish optionnel** (laissé tel quel) : sonde de validation des ids modèle au démarrage (déjà
+  bien diagnostiqué via event ERROR nommé) ; token structuré au lieu du regex `MODE:`/`USER LANGUAGE:` ;
+  `+1` over-fetch de `_run_sql` (inoffensif, capé par `shape_result`) ; sémantique de shutdown du fan-out
+  (borné de fait par les timeouts des sous-agents).
+- **Preuve-vérification** : 217 tests agents verts (WITH RECURSIVE accepté, CTE simple OK, non-régression lookup/intent). Zip inchangé. ⏳ NON validé DSS.
+- **Source** : 3ᵉ audit à l'aveugle + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

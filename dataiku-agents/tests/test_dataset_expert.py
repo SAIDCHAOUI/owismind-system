@@ -1151,6 +1151,18 @@ class TestGuardSubqueryAndCommaJoin(unittest.TestCase):
         self.assertIsNotNone(sql)
         self.assertIsNone(reason)
 
+    def test_with_recursive_cte_not_falsely_rejected(self):
+        # `WITH RECURSIVE t AS (...)` must register `t` as a CTE so `FROM t` passes.
+        sql, reason = dx.guard_custom_sql(
+            'WITH RECURSIVE t AS (SELECT 1 AS n) SELECT * FROM t', TABLE)
+        self.assertIsNotNone(sql, reason)
+        self.assertIsNone(reason)
+
+    def test_plain_cte_still_ok(self):
+        sql, reason = dx.guard_custom_sql(
+            'WITH t AS (SELECT * FROM "SALES_DEMO") SELECT * FROM t', TABLE)
+        self.assertIsNotNone(sql, reason)
+
 
 class TestLookupFilterAmbiguousColumns(unittest.TestCase):
     def test_alt_columns_become_or_over_columns(self):

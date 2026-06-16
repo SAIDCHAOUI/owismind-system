@@ -1463,8 +1463,12 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
 
     allowed = _allowed_table_names(table)
     cte_names = set()
-    for m in re.finditer(r"(?:\bwith\b|,)\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\s+as\s*\(",
-                         scan, re.IGNORECASE):
+    # `WITH [RECURSIVE] name AS (`, and chained `, name AS (`. The optional
+    # RECURSIVE keyword must be tolerated or the CTE name is missed and its own
+    # `FROM name` is then wrongly rejected as a non-whitelisted table.
+    for m in re.finditer(
+            r"(?:\bwith\b(?:\s+recursive)?|,)\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\s+as\s*\(",
+            scan, re.IGNORECASE):
         cte_names.add(m.group(1).lower())
     # Validate EVERY table source: each identifier after FROM/JOIN, AND each table
     # in a comma-separated list (old-style joins `FROM a, b`). `\s*` (not `\s+`) so a
@@ -2674,7 +2678,11 @@ class MyLLM(BaseLLM):
 
         def n_query(state):
             writer = get_stream_writer()
-            u, lang = state["u"], state["lang"]
+            # Work on a COPY of the understanding: this node demotes the intent
+            # (lookup/structured -> custom) on several fallback paths. Mutating a copy
+            # and returning it via state (rather than the shared dict) keeps the
+            # "nodes communicate by returned state" contract honest and future-proof.
+            u, lang = dict(state["u"]), state["lang"]
             filters = state.get("filters") or []
             resolved_filters = state.get("resolved_filters") or []
             instruction = state["instruction"]
@@ -2725,7 +2733,7 @@ class MyLLM(BaseLLM):
                             qsp.outputs["rows"] = result["rows"]
                         executed.append({"sql": note, "success": True,
                                          "row_count": len(result["rows"])})
-                        return {"result": result, "fmt_map": {}, "unit": None,
+                        return {"u": u, "result": result, "fmt_map": {}, "unit": None,
                                 "tool_answer": None,
                                 "tool_row_count": len(result["rows"]),
                                 "executed": executed, "done": False}
@@ -2894,7 +2902,7 @@ class MyLLM(BaseLLM):
                            sql_count=len(executed), attempts=len(executed)))
                     return {"done": True}
 
-            return {"result": result, "fmt_map": fmt_map, "unit": unit,
+            return {"u": u, "result": result, "fmt_map": fmt_map, "unit": unit,
                     "tool_answer": tool_answer, "tool_row_count": tool_row_count,
                     "executed": executed, "done": False}
 
