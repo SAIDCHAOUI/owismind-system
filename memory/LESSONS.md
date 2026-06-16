@@ -1412,7 +1412,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : revue Opus « no double-stream/write, usage non doublé » ; 170 tests.
 - **Source** : session 2026-06-16. **Date** : 2026-06-16.
 
-## L063 — « Narrate FIRST » casse les petits modèles : ils écrivent la narration et S'ARRÊTENT (régression DSS, corrigée)
+## L063 — « Narrate FIRST » casse les petits modèles : ils écrivent la narration et S'ARRÊTENT (✅ corrigé + VALIDÉ DSS 2026-06-16)
 - **Contexte** : pour donner du « vivant » pendant l'attente, j'avais mis dans le prompt « NARRATE FIRST :
   avant chaque appel d'outil, écris une phrase de ce que tu vas faire ». Test DSS : en Éco/Medium
   (gpt-5.4-mini), le modèle écrivait « Je consulte l'expert revenus… » **et s'arrêtait là** (réponse =
@@ -1434,7 +1434,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   correct, zéro symbole orphelin ». ⏳ à re-tester DSS.
 - **Source** : retour DSS user + session 2026-06-16 Run 2. **Date** : 2026-06-16.
 
-## L064 — Graphique vide en multi-SQL : le résultat était attaché au PREMIER span, Evidence prend le DERNIER (corrigé) + headline LLM redondant retiré (perf)
+## L064 — Graphique vide en multi-SQL : le résultat était attaché au PREMIER span, Evidence prend le DERNIER (✅ corrigé + VALIDÉ DSS 2026-06-16) + headline LLM redondant retiré (perf)
 - **Contexte** : test DSS, graphique « Cannot render the chart » + Evidence « Result used by the agent —
   not kept », alors que le SQL renvoyait bien 18 lignes. Le tool sémantique avait généré **2 SQL**
   (original + réparation `::numeric`).
@@ -1453,7 +1453,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   360 tests backend verts. ⏳ à re-tester DSS.
 - **Source** : retour DSS user + session 2026-06-16 Run 2. **Date** : 2026-06-16.
 
-## L065 — Narration live SANS faire stopper le petit modèle : events `NARRATION` émis par le CODE (pas par le modèle), transients, rendus comme messages de flux (⏳ codé+633 tests, NON validé DSS)
+## L065 — Narration live SANS faire stopper le petit modèle : préambule écrit par le MODÈLE streamé (event `NARRATION` transient), déterministe en filet (✅ VALIDÉ DSS 2026-06-16, « ça marche pas mal »)
 - **Contexte** : l'user voulait « qu'il explique au fur et à mesure ce qu'il fait, comme toi » pendant
   l'attente (le modèle sémantique prend ~1 min). Hypothèse user : « peut-être pas possible en LangGraph ».
   C'EST possible. Le piège (L063) : demander au MODÈLE de narrer avant d'appeler → le petit modèle prend

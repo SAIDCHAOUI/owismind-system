@@ -5,8 +5,9 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ⏳ CODÉ + 633 TESTS +
-ZIP, NON re-validé DSS.** Run 2 validé par l'user (« beaucoup mieux »). Run 3 répond à 6 demandes :
+**🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ✅ VALIDÉ DSS
+(user : « super all good ça marche pas mal »).** Tout l'arc 2026-06-16 (Run 2 + Run 3, L063-L065) est
+validé en DSS. Synthèse :
 - **Narration live (L065)** : events `NARRATION` **transients** (live only, non persistés), rendus en
   flux par `MessageAgent` (nettoyés en vue terminale). **C'est le MODÈLE qui narre** (retour user) : on
   streame son préambule (`resp.text` du tour avec tool-calls → `state.preamble`), le prompt l'invite
@@ -290,14 +291,11 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🗣️. **VALIDER DSS le Run 3** : recoller **LES 2 Code Agents** (env 3.11) — **OWIsMind_orchestrator**
-   (`agents/OWIsMind_orchestrator.py`) ET **SalesDrive_revenue_expert** (`agents/SalesDrive_revenue_expert.py`,
-   `agent:bHrWLyOL`) — + uploader le zip (`index-BM3sFZCq.js`) + **redémarrer backend**. Smoke-tests :
-   (a) question revenus en **Éco/Medium** → **messages de narration au fil de l'eau** pendant l'attente
-   (« Je consulte l'expert revenus : … », « Je génère le SQL… », « Je trace le graphique… ») + réponse +
-   graphique ; (b) Evidence → « Explore source data » montre ≥20 lignes, toutes colonnes, scroll, charge en
-   défilant ; sélecteur de table si plusieurs ; (c) escalade High. Confirmer l'id Mesh Sonnet
-   (`ESCALATION_LLM_ID`).
+0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16)** — narration live (modèle), Evidence lazy, modes, renommage,
+   nettoyage. **Process permanent** : à chaque modif repo des agents, **recoller LES 2 Code Agents** (env
+   3.11) — **OWIsMind_orchestrator** + **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) — et si le backend
+   change, uploader le zip + redémarrer. **Reste optionnel (non urgent)** : sélecteur SQL multi-résultats
+   dans Evidence ; durcir l'invite de narration sur le mini (ou mini-appel dédié) s'il narre trop peu.
 0★★. **FINALISER le fix sous-agent assistif (L058)** : recoller `dataset_expert_langgraph.py` dans le
    Code Agent `agent:AKQaQ0Am` (env 3.11), puis **re-tester EVPL via l'orchestrateur** (« revenus YTD
    EVPL, actuals vs budget ») → doit matcher le Playground (Product, budget ≠ 0, note de transparence).
