@@ -301,11 +301,19 @@ export function timelineBodyItems(state) {
  * orchestrator that answers mid-run shows its partial answer BETWEEN two event
  * phases, with the next phase ticking below it. Keys are derived from the stable
  * item ids, so v-for/TransitionGroup diffing never remounts existing rows.
+ *
+ * Transient NARRATION is intentionally SKIPPED here: it duplicated the step labels
+ * (one grey line per phase on top of one orange step) AND, by breaking the event
+ * run into many tiny groups, it defeated the bounded LIVE_WINDOW (every group was
+ * < 5 so nothing scrolled). Skipping it lets consecutive events MERGE into one
+ * group so the max-5 rolling window works, and removes the redundant noise. The
+ * model's own lead-in still shows — it streams as 'text', not narration.
  */
 export function timelineSegments(state) {
   if (!state || !state.timeline) return []
   const segments = []
   for (const it of state.timeline) {
+    if (it.kind === 'narration') continue
     if (it.kind === 'event') {
       const last = segments[segments.length - 1]
       if (last && last.kind === 'events') last.items.push(it)

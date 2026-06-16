@@ -328,13 +328,9 @@ function nextVersion() {
               </div>
             </TransitionGroup>
           </div>
-          <!-- Live "what I'm doing now" narration (transient — only shown during
-               the run; hidden in the terminal view below, never persisted). -->
-          <div v-else-if="seg.kind === 'narration'" class="narration">
-            <span class="narr-dot" aria-hidden="true" />
-            <span class="narr-text">{{ seg.item.text }}</span>
-          </div>
-          <!-- Intermediate agent answer, exactly where it arrived (sanitized markdown) -->
+          <!-- Intermediate agent answer, exactly where it arrived (sanitized markdown).
+               The model's own lead-in streams as 'text' and renders as a real message
+               BETWEEN phases; the redundant deterministic narration is no longer shown. -->
           <div v-else-if="seg.kind === 'text'" class="body" v-html="renderItem(seg.item)" />
           <div v-else-if="seg.kind === 'error'" class="body error">— {{ seg.item.message }} —</div>
         </template>
@@ -481,20 +477,6 @@ function nextVersion() {
 
 /* Body — typography for sanitized markdown (children are not scoped → :deep). */
 .body { font-size: var(--fs-md); line-height: 1.7; color: var(--text); overflow-wrap: anywhere; }
-/* Live narration — a muted "what I'm doing now" status line in the flow. Shown
-   only during the run (the terminal view drops narration items entirely). */
-.narration {
-  display: flex; align-items: baseline; gap: 8px;
-  font-size: var(--fs-sm); color: var(--text-3); line-height: 1.5;
-  padding: 1px 0;
-}
-.narr-dot {
-  flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
-  background: var(--orange); animation: narr-pulse 1.1s ease-in-out infinite;
-}
-.narr-text { overflow-wrap: anywhere; }
-@keyframes narr-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .narr-dot { animation: none; opacity: 0.7; } }
 /* Waiting placeholder — same shimmer sweep as the live activity title. */
 .body.thinking {
   color: var(--text-3);
@@ -642,6 +624,11 @@ function nextVersion() {
    the state) so a long expanded list stays readable. */
 .ticker .step.done .label .title { color: var(--orange-text); }
 .act-steps .step.done .label .title { color: var(--text-2); }
+/* Hierarchy: completed steps recede into a calm trail so the eye lands on the ONE
+   running step (full strength + shimmer). Avoids the "everything looks important"
+   wall — the past is quiet, the present is loud. */
+.ticker .step.done { opacity: 0.68; }
+.ticker .step.running { opacity: 1; }
 .step .label .sub { color: var(--text-3); font-family: var(--font-mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .step .dur { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 

@@ -470,14 +470,15 @@ class TestLiveNarration(unittest.TestCase):
         # Sub-agent phase blockIds map to a narration key.
         self.assertEqual(orch._BLOCK_NARR["run_sql"], "run_sql")
 
-    def test_prompt_invites_model_lead_in_safely(self):
-        # The model is INVITED to write its own lead-in (so narration is the
-        # model's own words, ChatGPT-style) but the tool call stays mandatory —
-        # the wording must forbid ending a turn with only the sentence (anti
-        # narrate-and-stop, L063).
+    def test_prompt_puts_tool_call_first_lead_in_optional(self):
+        # ACT-FIRST: the tool call is the PRIMARY instruction; the lead-in is an
+        # explicitly OPTIONAL/secondary nicety. The wording must forbid promising an
+        # action without a tool call in the same turn (anti narrate-and-stop, L063).
         p = orch.build_system_prompt(orch.get_capabilities(), "fr")
-        self.assertIn("SAME turn as the tool call", p)
-        self.assertIn("NEVER end your turn with only the sentence", p)
+        self.assertIn("ACT — NEVER JUST PROMISE", p)
+        self.assertIn("in the SAME turn", p)
+        self.assertIn("FAILURE, not an answer", p)
+        self.assertIn("OPTIONAL, secondary", p)
 
     def test_preamble_is_a_state_channel(self):
         # node_agent stores the model's lead-in on state['preamble'] for node_tools.
@@ -703,6 +704,21 @@ class TestLoopChat(unittest.TestCase):
         for i in range(1, len(roles)):
             self.assertNotEqual(roles[i], roles[i - 1],
                                 "two consecutive %s turns (Mesh 400 risk)" % roles[i])
+
+    def test_auto_escalation_after_failed_nudge_alternates_roles(self):
+        # The node_agent auto-escalation path appends, in order: assistant(premature
+        # lead-in), user(nudge), assistant(transparency), user(handover). With the
+        # current user question as the last replayed turn, all roles must alternate.
+        c = self._chat()
+        c.add_message("revenus EVPL ?", role="user")          # replayed current question
+        c.add_message("Je récupère le chiffre…", role="assistant")  # premature lead-in
+        c.add_message(orch._NUDGE_MSG["fr"], role="user")     # nudge
+        c.add_message(orch._ESCALATE_MSG["fr"], role="assistant")   # transparency
+        c.add_message(orch._ESCALATE_HANDOVER["fr"], role="user")   # handover
+        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
+        roles = [op[2] for op in c._completion.ops
+                 if op[0] == "msg" and op[2] != "system"]
+        self.assertEqual(roles, ["user", "assistant", "user", "assistant", "user"])
 
 
 class TestKpiArtifact(unittest.TestCase):

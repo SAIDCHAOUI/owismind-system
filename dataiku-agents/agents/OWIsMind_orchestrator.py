@@ -949,34 +949,32 @@ def build_system_prompt(caps, lang_hint, can_escalate=False):
             "data is missing:\n" + "\n".join(gap_lines))
     parts.append(
         "\n# HOW TO WORK\n"
-        "0. TALK TO THE USER WHILE YOU WORK (like ChatGPT/Claude). On a turn where "
-        "you call a tool, open with a sentence or two — in the user's language — "
-        "saying what you're about to check, e.g. 'Je regarde l'évolution actuals vs "
-        "budget…' or 'Let me pull EVPL revenue and add the forecast.'. This is a "
-        "REAL message to the user (it streams live and stays in the transcript), so "
-        "write it naturally, not as a status code. HARD RULE: this lead-in must be on "
-        "the SAME turn as the tool call(s) — NEVER end your turn with only the "
-        "sentence and no tool call (that leaves the user an empty promise and looks "
-        "like you stopped). If you say you'll do something, CALL the tool to do it on "
-        "the same turn. When in doubt, just call the tool. Your lead-in is already "
-        "shown to the user — in your FINAL answer, CONTINUE from it (give the insight), "
-        "do not repeat the same opening sentence.\n"
-        "1. ROUTE. If the question touches a domain you have a specialist for, "
-        "CALL that specialist immediately (in doubt, route — never deny). Write "
-        "each task SELF-CONTAINED (entity, scenario/phase, exact period); the "
-        "specialist does not see the conversation.\n"
-        "2. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW (it runs SQL). "
+        "1. ACT — NEVER JUST PROMISE. The instant the question needs business data "
+        "(revenue, billing, budget, forecast, customers, products, amounts…), you MUST "
+        "CALL the specialist tool on THIS turn. You hold NO data yourself, so CALLING "
+        "the tool IS how you 'check' / 'pull' / 'look it up'. NEVER answer 'I'll check', "
+        "'I'm pulling it', 'on it' WITHOUT the tool call in the SAME turn — a turn that "
+        "promises an action but emits no tool call is a FAILURE, not an answer (the user "
+        "gets nothing). When in any doubt, CALL the tool. (OPTIONAL, secondary: you may "
+        "put ONE short sentence in the user's language right BEFORE the tool call, e.g. "
+        "'On it — pulling EVPL revenue.'. It's a nice touch, but the TOOL CALL is what "
+        "matters — never the sentence alone. In your final answer, continue from that "
+        "lead-in, don't repeat it.)\n"
+        "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
+        "never deny). Write each task SELF-CONTAINED (entity, scenario/phase, exact "
+        "period); the specialist does not see the conversation.\n"
+        "3. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW (it runs SQL). "
         "Put the whole need into ONE task when you can — one query can return "
         "actuals AND budget AND the delta together. When the question genuinely "
         "needs SEVERAL independent answers, emit ALL the specialist calls in the "
         "SAME turn so they run IN PARALLEL — NEVER call one, wait for it, then "
         "call the next (that is twice as slow).\n"
-        "3. PRESENT. When a specialist returns data, render it in the panel with "
+        "4. PRESENT. When a specialist returns data, render it in the panel with "
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
         "figure EXACT, in the user's language — comment on the artifact and give "
         "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
-        "4. If a specialist asks for clarification or says it's out of scope, "
+        "5. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user — do not invent an answer.\n")
     if can_escalate:
         parts.append(
@@ -1279,7 +1277,7 @@ class MyLLM(BaseLLM):
                 % ctype)
 
     # ---- graph nodes (closures built per request bind chat/project/trace) --
-    def _build_graph(self, project, trace, chat, context_msg, lang):
+    def _build_graph(self, project, trace, chat, context_msg, lang, escalatable):
 
         def _run_llm():
             with trace.subspan("orchestrator:llm") as sp:
@@ -1290,6 +1288,13 @@ class MyLLM(BaseLLM):
                 except Exception:
                     pass
             return r
+
+        def _switch_to_expert():
+            """Rebuild the loop completion on the strong model (one shared path for
+            model-driven and auto escalation): same system minus the escalate tool."""
+            chat.switch_model(
+                ESCALATION_LLM_ID, self._tool_specs,
+                new_system=build_system_prompt(self._caps, lang, can_escalate=False))
 
         def node_agent(state):
             # ONE agentic loop on the reliable blocking completion: the model calls
@@ -1304,6 +1309,7 @@ class MyLLM(BaseLLM):
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
+            escalated = state.get("escalated")
             # Narrate-and-stop guard (single shot, in-node): the model wrote a forward-
             # looking lead-in that PROMISES a data action ("je rajoute le forecast…")
             # but emitted NO tool call, before any specialist ran. That is a premature
@@ -1320,15 +1326,34 @@ class MyLLM(BaseLLM):
                 usage = _sum_usage(usage, _usage_from_resp(resp))
                 text = (getattr(resp, "text", None) or "").strip()
                 tcs = list(getattr(resp, "tool_calls", None) or [])
+                # Still narrating, still no tool call: the cheap model is failing this
+                # data turn. AUTO-escalate to the strong model (eco-first safety net) so
+                # the user gets a real answer instead of an empty promise. Transparent;
+                # one-way (we're on the cheap model and haven't escalated yet).
+                if (not tcs and escalatable and not escalated
+                        and chat.llm_id == ORCH_LLM_ID):
+                    writer(_ev("ESCALATING", {"label": _L["escalating"][lang]}))
+                    writer(_txt(_ESCALATE_MSG[lang] + "\n\n"))
+                    # Roles must alternate (last op is the user nudge): add an assistant
+                    # turn (the transparency line) before the user handover.
+                    chat.add_message(_ESCALATE_MSG[lang], role="assistant")
+                    chat.add_message(_ESCALATE_HANDOVER[lang], role="user")
+                    _switch_to_expert()
+                    writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
+                    resp = _run_llm()
+                    usage = _sum_usage(usage, _usage_from_resp(resp))
+                    text = (getattr(resp, "text", None) or "").strip()
+                    tcs = list(getattr(resp, "tool_calls", None) or [])
+                    escalated = True
             if tcs and state.get("step", 0) < MAX_TOOL_LOOPS:
                 # `text` here is the model's OWN lead-in written alongside the tool
                 # call ("Let me pull EVPL revenue…") — streamed live as REAL message
                 # text by node_tools (persisted, ChatGPT-style), not a transient ticker.
                 return {"pending_tool_calls": tcs, "usage": usage,
                         "preamble": text, "step": state.get("step", 0) + 1,
-                        "started": True}
+                        "started": True, "escalated": escalated}
             return {"pending_tool_calls": [], "final_text": text,
-                    "usage": usage, "started": True}
+                    "usage": usage, "started": True, "escalated": escalated}
 
         def route_agent(state):
             return "tools" if state.get("pending_tool_calls") else "finish"
@@ -1363,9 +1388,7 @@ class MyLLM(BaseLLM):
                 lead = ((preamble + "\n\n") if preamble else "") + msg
                 chat.add_message(lead, role="assistant")
                 chat.add_message(_ESCALATE_HANDOVER[lang], role="user")
-                chat.switch_model(
-                    ESCALATION_LLM_ID, self._tool_specs,
-                    new_system=build_system_prompt(self._caps, lang, can_escalate=False))
+                _switch_to_expert()
                 # tools -> agent edge re-runs node_agent on the strong model.
                 return {"escalated": True, "pending_tool_calls": [], "preamble": ""}
 
@@ -1647,7 +1670,7 @@ class MyLLM(BaseLLM):
                     "PREVIOUS ASSISTANT MESSAGE:\n%s\n\nUSER'S RAW CURRENT "
                     "MESSAGE:\n%s" % (prev_assistant[:2000], last_user[:500]))
 
-            graph = self._build_graph(project, trace, chat, context_msg, lang)
+            graph = self._build_graph(project, trace, chat, context_msg, lang, escalatable)
             initial = {"pending_tool_calls": [], "captured": [], "usage": {},
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",

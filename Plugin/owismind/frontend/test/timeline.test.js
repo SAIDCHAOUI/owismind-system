@@ -478,9 +478,11 @@ test('narration: live transient messages appear in the flow but never in answerT
   assert.match(narrs[0].text, /EVPL/)
   // Narration is transient: NOT part of the copied/stored answer.
   assert.equal(answerText(s), 'EVPL a généré 1,2 M€.')
-  // It DOES interleave as its own segment in the live flow.
+  // It is NOT rendered as a live segment (it duplicated the step labels and broke
+  // the bounded window); only events + text/error reach the live flow.
   const segKinds = timelineSegments(s).map((x) => x.kind)
-  assert.ok(segKinds.includes('narration'))
+  assert.ok(!segKinds.includes('narration'))
+  assert.deepEqual(segKinds, ['events', 'text'])
 })
 
 test('narration: empty text is ignored (no empty bubble)', () => {
