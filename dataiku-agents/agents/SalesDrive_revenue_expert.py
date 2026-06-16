@@ -975,36 +975,47 @@ def build_filter_clauses(resolutions):
 
 
 def build_lookup_filter(filters):
-    """Build a Dataiku Dataset Lookup filter tree from resolved [{column, value}]
-    clauses. One clause -> EQUALS; several values on the SAME column -> OR; several
-    columns -> AND of the per-column groups. Returns None when there is nothing to
-    filter on (caller then falls back to SQL). Operators match the tool's schema
-    (EQUALS / AND / OR), which is auto-discovered from its descriptor at call time."""
+    """Build a Dataiku Dataset Lookup filter tree from resolved
+    [{column, value, alt_columns?}] clauses. Operators match the tool's schema
+    (EQUALS / AND / OR, auto-discovered from its descriptor). Returns None when
+    there is nothing to filter on (caller then falls back to SQL). Rules:
+      - a value with alt_columns (AMBIGUOUS offer term) -> OR over its candidate
+        columns, so a wrong single-column auto-pick can't make the lookup miss;
+      - several values on the SAME primary column -> OR (enumerations);
+      - several distinct primary columns -> AND."""
     clauses = [f for f in (filters or [])
                if f.get("column") and f.get("value") is not None]
     if not clauses:
         return None
-    by_col = {}
-    order = []
-    for f in clauses:
-        col = f["column"]
-        if col not in by_col:
-            by_col[col] = []
-            order.append(col)
-        if f["value"] not in by_col[col]:
-            by_col[col].append(f["value"])
 
     def eq(col, val):
         return {"operator": "EQUALS", "column": col, "value": val}
 
+    def one(f):
+        cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])
+                                if c and c != f["column"]]
+        if len(cols) == 1:
+            return eq(cols[0], f["value"])
+        return {"operator": "OR", "clauses": [eq(c, f["value"]) for c in cols]}
+
+    by_col, order = {}, []
+    for f in clauses:
+        if f["column"] not in by_col:
+            by_col[f["column"]] = []
+            order.append(f["column"])
+        by_col[f["column"]].append(f)
+
     groups = []
     for col in order:
-        vals = by_col[col]
-        if len(vals) == 1:
-            groups.append(eq(col, vals[0]))
-        else:
-            groups.append({"operator": "OR",
-                           "clauses": [eq(col, v) for v in vals]})
+        seen, uniq = set(), []
+        for f in by_col[col]:
+            c = one(f)
+            key = json.dumps(c, sort_keys=True)
+            if key not in seen:
+                seen.add(key)
+                uniq.append(c)
+        groups.append(uniq[0] if len(uniq) == 1
+                      else {"operator": "OR", "clauses": uniq})
     if len(groups) == 1:
         return groups[0]
     return {"operator": "AND", "clauses": groups}
@@ -1392,11 +1403,23 @@ def build_dataset_card(profile, table):
 
 ENUM_VALUES_IN_CARD = 30
 
+# DML/DDL/write verbs. NOTE: words that are ALSO common column identifiers
+# (set, comment, lock) are deliberately NOT here — they can't be a leading
+# statement (the head must be SELECT/WITH, single-statement), writes are blocked
+# by the read-only transaction, and blacklisting them rejected legitimate columns
+# (e.g. a "comment" column). Literals are blanked before this scan (see caller).
 _FORBIDDEN_SQL = re.compile(
     r"\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|"
-    r"vacuum|call|do|execute|reset|listen|notify|refresh|lock|comment|merge|"
-    r"into|set)\b", re.IGNORECASE)
+    r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into)\b",
+    re.IGNORECASE)
 _LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
+# Single-quoted string literals ('' = escaped quote). Blanked before keyword/table
+# scanning so a literal like 'a set of products' never triggers a false rejection
+# and never hides a table-name scan.
+_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+# System catalogs an analytics query never legitimately touches (defense in depth).
+_SYSTEM_TABLE_RE = re.compile(r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b",
+                              re.IGNORECASE)
 
 
 def _strip_sql_noise(sql):
@@ -1430,21 +1453,26 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
     head = s.lstrip().lower()
     if not (head.startswith("select") or head.startswith("with")):
         return (None, "not_a_select")
-    if _FORBIDDEN_SQL.search(s):
+    # Scan keywords/tables on a copy with string LITERALS blanked, so a word inside
+    # a literal ('a set of') is never mistaken for a keyword/table.
+    scan = _STRING_LITERAL_RE.sub("''", s)
+    if _FORBIDDEN_SQL.search(scan):
         return (None, "forbidden_keyword")
+    if _SYSTEM_TABLE_RE.search(scan):
+        return (None, "system_table")
 
     allowed = _allowed_table_names(table)
     cte_names = set()
     for m in re.finditer(r"(?:\bwith\b|,)\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\s+as\s*\(",
-                         s, re.IGNORECASE):
+                         scan, re.IGNORECASE):
         cte_names.add(m.group(1).lower())
     # Validate EVERY table source: each identifier after FROM/JOIN, AND each table
-    # in a comma-separated list (old-style joins `FROM a, b`). Subqueries `FROM (`
-    # are skipped here but their inner FROM/JOIN tables are matched by this same
-    # whole-string scan, so nested sources are validated too. A source that is
-    # neither whitelisted nor a CTE is rejected (defense in depth over read-only).
-    for m in re.finditer(r"\b(?:from|join)\s+(\(|[\"A-Za-z0-9_.]+(?:\s*,\s*[\"A-Za-z0-9_.]+)*)",
-                         s, re.IGNORECASE):
+    # in a comma-separated list (old-style joins `FROM a, b`). `\s*` (not `\s+`) so a
+    # space-less quoted name `FROM"x"` (valid Postgres) can't escape the scan.
+    # Subqueries `FROM (` are skipped here but their inner FROM/JOIN tables are
+    # matched by this same whole-string scan, so nested sources are validated too.
+    for m in re.finditer(r"\b(?:from|join)\s*(\(|[\"A-Za-z0-9_.]+(?:\s*,\s*[\"A-Za-z0-9_.]+)*)",
+                         scan, re.IGNORECASE):
         if m.group(1) == "(":
             continue                     # subquery start; its inner FROM/JOIN is scanned too
         for raw_tok in m.group(1).split(","):
@@ -1894,11 +1922,17 @@ def _column_format(name, fmt_map, profile):
     # pivot columns named after the scenario values): when the dataset's
     # default metric is an amount, recognize those shapes — gated on the
     # PROFILE (no hardcoded business words beyond generic metric vocabulary).
+    # Guard against count entities ("total_customers" is a COUNT, not EUR): an
+    # entity/count word vetoes the amount shape (a wrong unit on a count is worse
+    # than a missing unit on an amount).
     dm = profile.default_metric or {}
     if dm.get("format") == "amount":
         scen = profile.scenario or {}
         scen_words = {str(v).lower() for v in (scen.get("values") or [])}
-        if (low in scen_words
+        count_like = any(tok in low for tok in ("count", "customer", "client",
+                                                "nb_", "num_", "qty", "quantity",
+                                                "nombre"))
+        if not count_like and (low in scen_words
                 or any(tok in low for tok in ("amount", "revenue", "revenu",
                                               "total", "delta", "eur"))):
             return "amount"
@@ -2336,9 +2370,11 @@ class MyLLM(BaseLLM):
                      "value_norm": t[idx.get("value_norm", 2)],
                      "occurrences": t[idx.get("occurrences", 3)]} for t in raw]
 
-        # Pass 2 (substring/fuzzy) for the terms pass 1 missed — INDEPENDENT per term,
-        # so run them IN PARALLEL (bounded). Order is irrelevant here (results keyed
-        # by term); the resolution loop below stays sequential + order-preserving.
+        # Pass 2 (substring/fuzzy) for the terms pass 1 missed. Kept SEQUENTIAL: the
+        # DB thread-safety of concurrent SQLExecutor2 is unproven and the win is
+        # marginal (usually 0-2 unmatched terms after the batched exact pass) — the
+        # project's instance-safety rule wins. (run_parallel is reserved for genuinely
+        # independent TOOL calls, where the gain is real and the calls are isolated.)
         unmatched = [t for t in base_terms if not exact_rows.get(norms[t])]
 
         def _fuzzy_fetch(term):
@@ -2355,11 +2391,7 @@ class MyLLM(BaseLLM):
                 logger.exception("Fuzzy index lookup failed for %r", term)
                 return []
 
-        fuzzy_rows = {}
-        if unmatched:
-            for term, rows in zip(unmatched, run_parallel(
-                    [(lambda tm=tm: _fuzzy_fetch(tm)) for tm in unmatched])):
-                fuzzy_rows[term] = rows or []
+        fuzzy_rows = {term: _fuzzy_fetch(term) for term in unmatched}
 
         # The "last chance" slice is TERM-INDEPENDENT (same ORDER BY occurrences
         # slice for every term) -> fetch it AT MOST ONCE and reuse, instead of the
@@ -2444,8 +2476,13 @@ class MyLLM(BaseLLM):
                 if use_json_mode:
                     try:
                         completion.with_json_output(schema=schema)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Native JSON mode unavailable on this model/connection -> we
+                        # fall back to a prompt-only parse (least reliable on small
+                        # models). Surface it instead of degrading silently.
+                        span.attributes["json_mode_unavailable"] = str(e)[:200]
+                        logger.warning("with_json_output unavailable (%s) -> "
+                                       "prompt-only JSON parse", e)
                 completion.with_message(system_prompt, role="system")
                 completion.with_message(user_msg, role="user")
                 resp = completion.execute()
@@ -2671,25 +2708,30 @@ class MyLLM(BaseLLM):
                             logger.exception("Dataset lookup failed -> SQL fallback")
                             sp.attributes["error"] = str(e)[:500]
                             result, u["intent"] = None, "custom"
-                    if u["intent"] == "lookup":      # lookup ran (rows or empty)
+                    # Keep the lookup result ONLY when it actually returned rows. An
+                    # EMPTY lookup is NOT authoritative "no data": the tool may point
+                    # at a different/filtered dataset than the SQL engine — so demote
+                    # to "custom" and fall through to SQL before concluding no_data.
+                    if u["intent"] == "lookup" and result and result.get("rows"):
                         note = lookup_note(lookup_filter, u.get("attributes"))
-                        if result is not None and result.get("rows"):
-                            # Frozen 'semantic-model-query' span so Evidence + the
-                            # orchestrator capture the rows (the 'sql' is an honest
-                            # note: it was a direct lookup, not a generated query).
-                            with trace.subspan("semantic-model-query") as qsp:
-                                qsp.outputs["sql"] = note
-                                qsp.outputs["success"] = True
-                                qsp.outputs["row_count"] = len(result["rows"])
-                                qsp.outputs["columns"] = result["columns"]
-                                qsp.outputs["rows"] = result["rows"]
-                            executed.append({"sql": note, "success": True,
-                                             "row_count": len(result["rows"])})
+                        # Frozen 'semantic-model-query' span so Evidence + the
+                        # orchestrator capture the rows (the 'sql' is an honest note:
+                        # it was a direct lookup, not a generated query).
+                        with trace.subspan("semantic-model-query") as qsp:
+                            qsp.outputs["sql"] = note
+                            qsp.outputs["success"] = True
+                            qsp.outputs["row_count"] = len(result["rows"])
+                            qsp.outputs["columns"] = result["columns"]
+                            qsp.outputs["rows"] = result["rows"]
+                        executed.append({"sql": note, "success": True,
+                                         "row_count": len(result["rows"])})
                         return {"result": result, "fmt_map": {}, "unit": None,
                                 "tool_answer": None,
-                                "tool_row_count": (len(result["rows"])
-                                                   if result else 0),
+                                "tool_row_count": len(result["rows"]),
                                 "executed": executed, "done": False}
+                    if u["intent"] == "lookup":       # ran but EMPTY -> try SQL next
+                        u["intent"] = "custom"
+                        result = None
 
             writer(_block("run_sql"))
             writer(_tool_start("dataset_sql_query"))

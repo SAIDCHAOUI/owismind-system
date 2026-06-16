@@ -990,6 +990,7 @@ class OrchState(TypedDict, total=False):
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
+    nudged: bool                                   # narrate-and-stop nudge spent (once/run)
 
 
 # =============================================================================
@@ -1262,18 +1263,19 @@ class MyLLM(BaseLLM):
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
-            # Narrate-and-stop guard (single shot, in-node, model-agnostic): the model
-            # wrote a forward-looking lead-in that PROMISES a data action ("je rajoute le
-            # forecast…") but emitted NO tool call, before any specialist ran. That is a
-            # premature stop, not an answer — nudge ONCE and re-ask so the promise
-            # actually triggers the fetch. Bounded to exactly one extra call (no loop
-            # risk); the recovered lead-in still streams as real text on the retry's tool
-            # turn. (Most models call the tool directly; this only catches the rare slip.)
-            if (not tcs and not state.get("used_caps")
-                    and _looks_like_premature_stop(text)):
+            # Narrate-and-stop guard (ONCE per RUN, model-agnostic): the model wrote a
+            # forward-looking lead-in that PROMISES a data action ("je rajoute le
+            # forecast…") but emitted NO tool call. That is a premature stop, not an
+            # answer — nudge once and re-ask so the promise actually triggers the fetch.
+            # Gated by a per-run `nudged` flag (not "before any specialist"), so it also
+            # catches a narrate-and-stop on a FOLLOW-UP turn after a sub-agent already
+            # ran. Bounded to one extra call total (no loop risk).
+            nudged = bool(state.get("nudged"))
+            if not tcs and not nudged and _looks_like_premature_stop(text):
                 if text:
                     chat.add_message(text, role="assistant")
                 chat.add_message(_NUDGE_MSG.get(lang, _NUDGE_MSG["en"]), role="user")
+                nudged = True
                 writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
                 resp = _run_llm()
                 usage = _sum_usage(usage, _usage_from_resp(resp))
@@ -1283,16 +1285,17 @@ class MyLLM(BaseLLM):
                 # `text` here is the model's OWN lead-in written alongside the tool
                 # call ("Let me pull EVPL revenue…") — streamed live as REAL message
                 # text by node_tools (persisted, ChatGPT-style), not a transient ticker.
-                return {"pending_tool_calls": tcs, "usage": usage,
+                return {"pending_tool_calls": tcs, "usage": usage, "nudged": nudged,
                         "preamble": text, "step": state.get("step", 0) + 1,
                         "started": True}
             # Reaching here with tcs STILL set means the loop cap was hit while the
-            # model wanted more tools — `text` is then just a lead-in, NOT an answer.
-            # Drop it so node_finish emits the honest "data is in the panel" / "couldn't
-            # finalize" fallback instead of shipping a half-sentence fragment.
+            # model wanted more tools. Keep `text` only if it's a REAL answer; drop it
+            # when it's a mere lead-in, so node_finish emits the honest "data is in the
+            # panel" fallback instead of shipping a half-sentence fragment.
             loop_capped = bool(tcs)
+            final_text = "" if (loop_capped and _looks_like_premature_stop(text)) else text
             return {"pending_tool_calls": [], "started": True, "usage": usage,
-                    "final_text": "" if loop_capped else text}
+                    "nudged": nudged, "final_text": final_text}
 
         def route_agent(state):
             return "tools" if state.get("pending_tool_calls") else "finish"

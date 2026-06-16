@@ -1731,4 +1731,34 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   original_intent, parité `_cap_cell` dont NaN/inf). Zip **inchangé** (seuls les Code Agents ont bougé). ⏳ NON validé DSS.
 - **Source** : audit à l'aveugle (sous-agent + skill agentique) + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
 
+## L077 — 2ᵉ passe d'audit à l'aveugle : bypass garde SQL fermé + faux positifs + revert du parallélisme spéculatif (⏳ codé+testé, à valider DSS)
+- **Contexte** : 2ᵉ audit à l'aveugle (sur les fichiers corrigés L076) → trouve du NEUF, dont un vrai bug
+  laissé par moi et une critique juste de mon propre ajout.
+- **Solutions** :
+  - **Bypass garde SQL (Critical, sécu)** : `guard_custom_sql` exigeait `\bfrom\b\s+` → `FROM"table"`
+    (sans espace, **valide en Postgres**) **échappait** au scan de tables → lecture cross-table (le read-only
+    ne bloque que les écritures). Fix : `\s*` (au lieu de `\s+`) + neutralisation des **littéraux**
+    (`_STRING_LITERAL_RE`) avant scan + rejet explicite des **tables système** (`information_schema`, `pg_*`).
+  - **Faux positifs blacklist (#5)** : `_FORBIDDEN_SQL` matchait `set`/`comment`/`lock` — or `comment` est
+    une COLONNE du dataset → SQL légitime rejeté. Retirés (ce ne sont pas des verbes d'écriture en tête ;
+    head-check SELECT/WITH + single-statement + read-only couvrent). Littéraux blanchis aussi.
+  - **Revert parallélisme résolution (#3, instance safety)** : l'auditeur a raison — la résolution fuzzy
+    repassée **séquentielle** (thread-safety de `SQLExecutor2` concurrent non prouvée, gain marginal 0-2
+    termes). **Gardé** : le cache « last chance » 1×/req (L076 #10) + le helper `run_parallel` réservé aux
+    **futurs tools indépendants** (gain réel + appels isolés), PAS au SQL interne.
+  - **Lookup ambigu (#4)** : `build_lookup_filter` fait un **OR sur les `alt_columns`** d'un terme ambigu
+    (au lieu de figer une colonne auto-pickée → cf. bug L058 budget=0). Lookup vide → **fallback SQL** (#8,
+    le tool peut pointer un dataset filtré ≠ SQL) au lieu de no_data direct.
+  - **Cap de boucle (#6)** : garder `text` si c'est une vraie réponse (drop seulement si lead-in).
+  - **Nudge (#9)** : déclenchable **1×/run** via flag `nudged` (pas seulement avant le 1ᵉʳ sous-agent →
+    catch aussi un narrate-and-stop sur un tour de suivi).
+  - **Observabilité (#10)** : `json_mode_unavailable` loggé/span quand `with_json_output` échoue.
+    **Format (#11)** : `total_customers` ne devient plus « EUR » (veto mots d'entité comptable).
+  - **DÉCLINÉS (assumés)** : **#7** re-`execute()` du même completion à chaque tour = **validé DSS**
+    (multi-tours marchent) → on ne reconstruit pas via `_fresh` (resend coûteux) ; **#12** timeout par-tool
+    (backend cap 300s) ; **#15** rename `MyLLM` (contrat DSS) ; **#5 découpe `n_query`** différée.
+- **Preuve-vérification** : 215 tests agents verts (bypass espace-less, table système, littéral, alt_columns OR,
+  total_customers≠amount). Zip inchangé. ⏳ NON validé DSS.
+- **Source** : 2ᵉ audit à l'aveugle + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

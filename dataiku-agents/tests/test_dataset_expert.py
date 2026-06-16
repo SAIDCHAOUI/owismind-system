@@ -1130,6 +1130,47 @@ class TestGuardSubqueryAndCommaJoin(unittest.TestCase):
         self.assertIsNotNone(sql)
         self.assertIsNone(reason)
 
+    def test_spaceless_quoted_table_cannot_bypass(self):
+        # `FROM"x"` (valid Postgres, no space) must NOT escape the table scan.
+        sql, reason = dx.guard_custom_sql('SELECT * FROM"other_t"', TABLE)
+        self.assertIsNone(sql)
+        sql2, reason2 = dx.guard_custom_sql('SELECT * FROM"pg_user"', TABLE)
+        self.assertIsNone(sql2)
+
+    def test_system_catalogs_rejected(self):
+        for q in ('SELECT * FROM information_schema.columns',
+                  'SELECT * FROM pg_catalog.pg_tables',
+                  'SELECT * FROM pg_user'):
+            sql, reason = dx.guard_custom_sql(q, TABLE)
+            self.assertIsNone(sql, q)
+
+    def test_keyword_inside_string_literal_not_rejected(self):
+        # 'a set of' contains the word "set" only INSIDE a literal -> must be allowed.
+        sql, reason = dx.guard_custom_sql(
+            "SELECT * FROM \"SALES_DEMO\" WHERE comment = 'a set of items'", TABLE)
+        self.assertIsNotNone(sql)
+        self.assertIsNone(reason)
+
+
+class TestLookupFilterAmbiguousColumns(unittest.TestCase):
+    def test_alt_columns_become_or_over_columns(self):
+        f = dx.build_lookup_filter([
+            {"column": "Product", "value": "IP", "alt_columns": ["Solution"]}])
+        self.assertEqual(f["operator"], "OR")
+        cols = {c["column"] for c in f["clauses"]}
+        self.assertEqual(cols, {"Product", "Solution"})
+        self.assertTrue(all(c["value"] == "IP" for c in f["clauses"]))
+
+
+class TestColumnFormatCountGuard(unittest.TestCase):
+    def test_total_customers_is_not_amount(self):
+        p = make_profile()           # default metric is an amount
+        self.assertNotEqual(dx._column_format("total_customers", {}, p), "amount")
+
+    def test_total_revenue_still_amount(self):
+        p = make_profile()
+        self.assertEqual(dx._column_format("total_revenue", {}, p), "amount")
+
 
 class TestIntentDegradationVisibility(unittest.TestCase):
     """A demoted intent must stay observable (original_intent) — not silently lost."""
