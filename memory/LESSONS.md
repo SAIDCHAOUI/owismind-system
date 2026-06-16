@@ -1778,4 +1778,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : 217 tests agents verts (WITH RECURSIVE accepté, CTE simple OK, non-régression lookup/intent). Zip inchangé. ⏳ NON validé DSS.
 - **Source** : 3ᵉ audit à l'aveugle + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
 
+## L079 — Désambiguïsation client : préférer la colonne dominante (account_name prime) + divulguer, au lieu de demander (⏳ codé+tests, à valider DSS)
+- **Contexte** : test DSS Run 5 — en **Éco**, « Algerie Telecom » → le sous-agent a **demandé** « Parent_Group ou account_name ? » au lieu de prendre account_name et de signaler l'alternative. User : *account_name prime sur account_group/Parent_Group, et on prévient le user qu'il existe aussi ailleurs.*
+- **Vérif (rien retiré)** : la hiérarchie d'offre (`Product › Solution › sirano`, « never default to sirano »), le marqueur `AMBIGUOUS OFFER TERM`, `build_disclosure_notes`, `column_priority`, `refine_ambiguous` sont **intacts** — l'arc d'audit n'y a pas touché. La hiérarchie d'OFFRE vit dans le **modèle sémantique** (L058), pas le code (le modèle tranche un terme d'offre ambigu).
+- **Ce qui se passait** : `refine_ambiguous` ne tranchait+divulguait que si **une seule** valeur restait (cross-colonne même valeur, ex. EVPL) ; dès **plusieurs valeurs distinctes** (account « Algerie Telecom » vs parent « Algerie Telecom Holding »), il rendait `ambiguous` → `build_clarification` → **question**.
+- **Solution qui marche** : nouveau cas dans `refine_ambiguous` — si une colonne **domine strictement** par `column_priority` (account_name a bien plus de distinct → bat Parent_Group via le fallback `-distinct_count`, ou via un `ambiguity_priority` explicite) **et** s'y résout à une seule valeur → **résout** sur cette colonne + `alt_columns` (les autres) pour la **transparence** (`build_disclosure_notes` + marqueur au modèle), **au lieu de demander**. Une vraie ambiguïté **intra-colonne** (2 entités distinctes même colonne) **demande encore**. Générique, P3-safe (aucune colonne en dur — c'est `column_priority`).
+- **Lever déterministe (DSS)** : pour **garantir** qu'account_name gagne toujours, poser son `ambiguity_priority` au-dessus de Parent_Group dans le **profil** (recette/overrides) — le code le pinne alors directement. Idem hiérarchie d'offre = `ambiguity_priority` + instructions du modèle.
+- **Preuve-vérification** : 219 tests agents verts (colonne dominante résout+divulgue ; tie intra-colonne demande encore). Changement **agent seul** → zip inchangé. ⏳ NON validé DSS.
+- **Source** : retour user (test DSS Éco « Algerie Telecom ») + session 2026-06-16. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

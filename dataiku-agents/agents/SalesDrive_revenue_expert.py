@@ -949,6 +949,27 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
         if alts:
             chosen = dict(chosen, alt_columns=alts)
         return ("resolved", chosen)
+    # Several DISTINCT values remain (different value per column). Before asking the
+    # user, prefer the column that STRICTLY dominates by priority when it resolves to
+    # a single value — e.g. an account NAME primes over its parent GROUP (account_name
+    # has far more distinct values, so column_priority ranks it first). Pin that column
+    # and DISCLOSE the others (transparency) instead of forcing a clarification. A true
+    # tie WITHIN the top column (two real distinct entities) still asks. (Same-value
+    # offer terms took the branch above; the offer hierarchy itself is the semantic
+    # model's call via the AMBIGUOUS-OFFER marker — unchanged.)
+    by_col = {}
+    for c in cands:
+        by_col.setdefault(c.get("target_column") or "", []).append(c)
+    ranked = sorted((col for col in by_col if col),
+                    key=lambda col: profile.column_priority(col))
+    if len(ranked) >= 2:
+        top = ranked[0]
+        top_vals = {str(c["target_value"]).strip().lower() for c in by_col[top]}
+        if (len(top_vals) == 1
+                and profile.column_priority(top) < profile.column_priority(ranked[1])):
+            chosen = sorted(by_col[top], key=lambda c: (-(c.get("score") or 0),
+                                                        -(c.get("occurrences") or 0)))[0]
+            return ("resolved", dict(chosen, alt_columns=list(ranked[1:])))
     return ("ambiguous", cands)
 
 

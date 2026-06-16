@@ -1174,6 +1174,35 @@ class TestLookupFilterAmbiguousColumns(unittest.TestCase):
         self.assertTrue(all(c["value"] == "IP" for c in f["clauses"]))
 
 
+class TestAmbiguityColumnPriority(unittest.TestCase):
+    """A value spread across columns of different priority resolves to the dominant
+    column (e.g. an account NAME over a group) + discloses the rest, rather than asking."""
+
+    def test_dominant_column_resolves_and_discloses(self):
+        p = make_profile()   # customer_name (1190 distinct) >> Solution (40)
+        cands = [
+            {"target_column": "customer_name", "target_value": "Algerie Telecom",
+             "display_value": "Algerie Telecom", "score": 0.80, "occurrences": 50},
+            {"target_column": "Solution", "target_value": "Algerie Sat",
+             "display_value": "Algerie Sat", "score": 0.66, "occurrences": 9},
+        ]
+        verdict, data = dx.refine_ambiguous(p, "algerie", cands)
+        self.assertEqual(verdict, "resolved")
+        self.assertEqual(data["target_column"], "customer_name")   # name primes
+        self.assertIn("Solution", data.get("alt_columns", []))      # alternative disclosed
+
+    def test_true_within_column_tie_still_asks(self):
+        p = make_profile()
+        cands = [
+            {"target_column": "customer_name", "target_value": "Orange France",
+             "display_value": "Orange France", "score": 0.7, "occurrences": 5},
+            {"target_column": "customer_name", "target_value": "Orange Spain",
+             "display_value": "Orange Spain", "score": 0.7, "occurrences": 5},
+        ]
+        verdict, _ = dx.refine_ambiguous(p, "orange", cands)
+        self.assertEqual(verdict, "ambiguous")
+
+
 class TestColumnFormatCountGuard(unittest.TestCase):
     def test_total_customers_is_not_amount(self):
         p = make_profile()           # default metric is an amount
