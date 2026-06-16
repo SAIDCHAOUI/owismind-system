@@ -186,7 +186,16 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-16 (Run 5, salle) → détail `sessions/2026-06-16.md`, leçons **L071-L074**
+## 🧭 Dernière session — 2026-06-16 (Run 5/5b/5c) → détail `sessions/2026-06-16.md`, leçons **L071-L076**
+- **Run 5c (audit à l'aveugle)** : un sous-agent « architecte » (skill agentique, **copies isolées /tmp,
+  zéro contexte**) a audité les 2 Code Agents → 10 correctifs implémentés (**L076**) : état partagé keyé stable
+  (#1), appariement tool_call↔output garanti (#2), repli honnête sur cap de boucle (#3), id modèle lisible en
+  erreur (#4), garde SQL multi-table/virgule (#7), scan value-index « last chance » mis en cache 1×/req (#10),
+  `original_intent` + note de comparaison dégradée (#14), parité `_cap_cell` NaN/inf (#8), etc. **Parallélisme** :
+  orchestrateur OK (fan-out sous-agents) ; sous-agent → helper `run_parallel` (borné, ordre préservé) sur les
+  fetchs fuzzy + mécanisme drop-in pour futurs tools. **209 tests agents verts**. Zip **inchangé** (seuls les
+  Code Agents ont bougé → recoller les 2, pas de rebuild). NON faits : #15 rename MyLLM (risque contrat DSS),
+  #5 découpe `n_query` (différée). Audit relancé à l'aveugle pour 2ᵉ passe.
 - **Déclencheur** : test DSS du Run 4 = gpt-5.4-mini **escalade systématiquement** (+ message hardcodé) ou
   **narre puis s'arrête**. User : abandonner gpt-5.4-mini → Gemini 2.5 Flash + Sonnet, **stop les hacks
   mono-modèle**, archi qui marche **même sur petits modèles**.

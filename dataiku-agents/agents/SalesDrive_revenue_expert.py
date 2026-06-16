@@ -61,6 +61,7 @@ import math
 import re
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import dataiku
@@ -161,6 +162,11 @@ HEADLINE_MAX_CHARS = 400
 MAX_CUSTOM_SQL_ATTEMPTS = 3        # 1 generation + up to 2 repairs
 FUZZY_CANDIDATES_LIMIT = 40
 FUZZY_MIN_RATIO = 0.62             # below -> unresolved (no best candidate)
+LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo terms
+# Max concurrent INDEPENDENT operations the sub-agent runs at once (bounded for
+# Dataiku instance safety). Used by run_parallel() — today for the per-term value
+# lookups, and the drop-in mechanism for future parallel tool calls.
+SUBAGENT_MAX_PARALLEL = 4
 
 # Read-only execution (pattern validated in DSS — evidence backend, L045).
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
@@ -254,6 +260,15 @@ HEADLINE_LOOKUP = {
     "fr": "Voici les informations demandées :",
     "en": "Here are the details you asked for:",
 }
+# Transparency note when a requested COMPARISON could not be built (only one
+# scenario/period resolved) and the agent fell back to a single figure — so the
+# user is never silently given a total when they asked for a delta.
+DEGRADED_COMPARISON_NOTE = {
+    "fr": "_Note : je n'ai pas pu construire la comparaison demandée (un seul "
+          "élément à comparer a été identifié) — voici le chiffre correspondant._",
+    "en": "_Note: I couldn't build the requested comparison (only one item to "
+          "compare was identified) — here is the corresponding figure._",
+}
 HEADLINE_SINGLE = {
     "fr": "{metric} ({scope}) : {value}.",
     "en": "{metric} ({scope}): {value}.",
@@ -276,6 +291,35 @@ ABOUT_ROWS = {"fr": "**Volume**", "en": "**Volume**"}
 # =============================================================================
 # 3. PROFILE — loading + typed accessors (the agent's knowledge)
 # =============================================================================
+
+def run_parallel(tasks, max_workers=SUBAGENT_MAX_PARALLEL):
+    """Run independent thunks CONCURRENTLY (bounded) and return their results in
+    INPUT order. A thunk that raises -> its slot is None (the caller filters/handles).
+    Bounded by max_workers for Dataiku instance safety. This is the sub-agent's
+    drop-in mechanism for calling several INDEPENDENT tools/queries in parallel —
+    use it whenever the work items don't depend on each other (today: per-term value
+    lookups; tomorrow: multiple data tools whose calls are mutually independent).
+    Sequential, no thread, for 0/1 task (cheaper + keeps simple cases simple)."""
+    if not tasks:
+        return []
+    if len(tasks) == 1:
+        try:
+            return [tasks[0]()]
+        except Exception:
+            logger.exception("parallel task failed")
+            return [None]
+    results = [None] * len(tasks)
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(tasks))) as ex:
+        fut_to_i = {ex.submit(t): i for i, t in enumerate(tasks)}
+        for fut in as_completed(fut_to_i):
+            i = fut_to_i[fut]
+            try:
+                results[i] = fut.result()
+            except Exception:
+                logger.exception("parallel task %d failed", i)
+                results[i] = None
+    return results
+
 
 class Profile(object):
     """In-memory view of the profile dataset (contract v1, see profiler)."""
@@ -525,8 +569,8 @@ def validate_understanding(parsed, profile, instruction):
     language = parsed.get("language") if parsed.get("language") in ("fr", "en") else "fr"
 
     out = {"scope": scope, "language": language, "instruction": instruction,
-           "intent": "custom", "metric": None, "scenarios": [],
-           "period": {"mode": "all_available"}, "periods": [],
+           "intent": "custom", "original_intent": "custom", "metric": None,
+           "scenarios": [], "period": {"mode": "all_available"}, "periods": [],
            "group_by": None, "list_column": None, "top_n": None,
            "order": "desc", "terms": [], "attributes": [], "clarification": ""}
     if scope == "out_of_scope":
@@ -534,6 +578,10 @@ def validate_understanding(parsed, profile, instruction):
 
     intent = parsed.get("intent")
     out["intent"] = intent if intent in KNOWN_INTENTS else "custom"
+    # The intent the model FIRST classified, before any deterministic degradation
+    # below (or the in-place demotions in n_query). Kept for observability + a
+    # transparency note when a requested comparison can't be built.
+    out["original_intent"] = out["intent"]
 
     metric = profile.metric(str(parsed.get("metric") or ""))
     out["metric"] = (metric or profile.default_metric or {}).get("name")
@@ -1390,15 +1438,24 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
     for m in re.finditer(r"(?:\bwith\b|,)\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\s+as\s*\(",
                          s, re.IGNORECASE):
         cte_names.add(m.group(1).lower())
-    for m in re.finditer(r"\b(?:from|join)\s+([\"A-Za-z0-9_.]+|\()", s, re.IGNORECASE):
-        token = m.group(1)
-        if token == "(":
-            continue
-        norm = token.replace('"', "").lower()
-        short = norm.split(".")[-1]
-        if norm in allowed or short in allowed or norm in cte_names or short in cte_names:
-            continue
-        return (None, "table_not_allowed:%s" % token[:60])
+    # Validate EVERY table source: each identifier after FROM/JOIN, AND each table
+    # in a comma-separated list (old-style joins `FROM a, b`). Subqueries `FROM (`
+    # are skipped here but their inner FROM/JOIN tables are matched by this same
+    # whole-string scan, so nested sources are validated too. A source that is
+    # neither whitelisted nor a CTE is rejected (defense in depth over read-only).
+    for m in re.finditer(r"\b(?:from|join)\s+(\(|[\"A-Za-z0-9_.]+(?:\s*,\s*[\"A-Za-z0-9_.]+)*)",
+                         s, re.IGNORECASE):
+        if m.group(1) == "(":
+            continue                     # subquery start; its inner FROM/JOIN is scanned too
+        for raw_tok in m.group(1).split(","):
+            token = raw_tok.strip()
+            if not token:
+                continue
+            norm = token.replace('"', "").lower()
+            short = norm.split(".")[-1]
+            if norm in allowed or short in allowed or norm in cte_names or short in cte_names:
+                continue
+            return (None, "table_not_allowed:%s" % token[:60])
 
     lm = _LIMIT_RE.search(s)
     if lm:
@@ -1813,11 +1870,11 @@ def format_number(value, fmt, unit=None):
         txt = ("%.1f" % v).rstrip("0").rstrip(".")
         return (txt or "0") + NBSP + "%"
     if fmt in ("amount", "count", "number"):
+        if fmt == "number" and not float(v).is_integer():
+            return "%.2f" % v        # non-integer "number" -> 2 decimals (no rounding)
         text = format_int_thousands(int(round(v)))
         if fmt == "amount" and unit:
             return text + NBSP + str(unit)
-        if fmt == "number" and not float(v).is_integer():
-            return ("%.2f" % v)
         return text
     return str(value)
 
@@ -1829,7 +1886,7 @@ def _column_format(name, fmt_map, profile):
     if any(tok in low for tok in ("pct", "percent", "%", "share", "ratio")):
         return "percent"
     for m in profile.metrics:
-        if m.get("column") and m["column"].lower() in low or m["name"] in low:
+        if (m.get("column") and m["column"].lower() in low) or m["name"] in low:
             return m.get("format", "number")
     if any(tok in low for tok in ("count", "nb_", "num_")):
         return "count"
@@ -2057,6 +2114,7 @@ def _agent_result(status, u, resolved_filters=None, sql_count=0,
         "status": status,
         "language": (u or {}).get("language", "fr"),
         "intent": (u or {}).get("intent", ""),
+        "originalIntent": (u or {}).get("original_intent", ""),
         "resolvedFilters": resolved_filters or [],
         "sqlCount": sql_count,
         "rowCount": row_count,
@@ -2092,11 +2150,16 @@ class ExpertState(TypedDict, total=False):
 class MyLLM(BaseLLM):
 
     def __init__(self):
+        # A DSS Code Agent instantiates this class ONCE per process and may invoke
+        # process_stream CONCURRENTLY. So every cache here MUST be keyed by a STABLE
+        # identifier (dataset name / tool id) — never per-request state, and never
+        # reset from another request's path. Per-request values (mode-resolved model,
+        # semantic tool id) travel through the graph STATE, not through self.
         self._profile = None
         self._profile_loaded_at = 0.0
-        self._table = None
-        self._tools = {}
-        self._semantic_key = None    # auto-detected from the tool descriptor
+        self._tables = {}            # dataset_name -> quoted SQL table (stable)
+        self._tools = {}             # tool_id -> tool handle (stable)
+        self._semantic_keys = {}     # tool_id -> detected input key (stable)
 
     # ------------------------------------------------------------------ tools
     def _get_tool(self, project, tool_id, tool_name):
@@ -2145,13 +2208,14 @@ class MyLLM(BaseLLM):
             profile.live_columns = []
         self._profile = profile
         self._profile_loaded_at = now
-        self._table = None    # re-resolve with the fresh profile
         return profile
 
     def _get_table(self, dataset_name):
-        """Fully-qualified quoted table name of the target dataset."""
-        if self._table:
-            return self._table
+        """Fully-qualified quoted table name of the target dataset. Cached by
+        dataset name (stable) — never reset by another request's profile reload."""
+        cached = self._tables.get(dataset_name)
+        if cached:
+            return cached
         info = dataiku.Dataset(dataset_name).get_location_info().get("info", {})
         table = info.get("quotedResolvedTableName")
         if not table:
@@ -2160,7 +2224,7 @@ class MyLLM(BaseLLM):
                 raise RuntimeError("cannot resolve SQL table for %s" % dataset_name)
             table = ('"%s"."%s"' % (schema_name, table_name) if schema_name
                      else '"%s"' % table_name)
-        self._table = table
+        self._tables[dataset_name] = table
         return table
 
     # ------------------------------------------------------------------ SQL
@@ -2233,6 +2297,12 @@ class MyLLM(BaseLLM):
         if not index_table:
             raise RuntimeError("value index dataset is not SQL: %s" % VALUE_INDEX_DATASET)
         indexed_cols = set(profile.indexed_columns())
+        if not indexed_cols:
+            # No `indexed` flags in the profile -> candidate filtering silently
+            # disables itself (every column's values become candidates). Surface it:
+            # it degrades resolution quality and usually means a misconfigured profile.
+            logger.warning("value resolution: profile has NO indexed columns; "
+                           "candidate filtering disabled for %s", profile.dataset_name)
 
         norms = {t: _norm(t) for t in base_terms}
         resolutions = []
@@ -2259,48 +2329,63 @@ class MyLLM(BaseLLM):
                     "occurrences": t[idx.get("occurrences", 3)],
                 })
 
+        def _rows_from(columns, raw):
+            idx = {c: i for i, c in enumerate(columns)}
+            return [{"column_name": t[idx.get("column_name", 0)],
+                     "value": t[idx.get("value", 1)],
+                     "value_norm": t[idx.get("value_norm", 2)],
+                     "occurrences": t[idx.get("occurrences", 3)]} for t in raw]
+
+        # Pass 2 (substring/fuzzy) for the terms pass 1 missed — INDEPENDENT per term,
+        # so run them IN PARALLEL (bounded). Order is irrelevant here (results keyed
+        # by term); the resolution loop below stays sequential + order-preserving.
+        unmatched = [t for t in base_terms if not exact_rows.get(norms[t])]
+
+        def _fuzzy_fetch(term):
+            like = "%" + _like_escape(norms[term]) + "%"
+            sql = ("SELECT column_name, value, value_norm, occurrences FROM %s "
+                   "WHERE value_norm LIKE %s ESCAPE '\\' "
+                   "ORDER BY occurrences DESC LIMIT %d"
+                   % (index_table, _sql_quote_literal(like), FUZZY_CANDIDATES_LIMIT))
+            try:
+                columns, raw = self._run_sql(VALUE_INDEX_DATASET, sql,
+                                             max_rows=FUZZY_CANDIDATES_LIMIT)
+                return _rows_from(columns, raw)
+            except Exception:
+                logger.exception("Fuzzy index lookup failed for %r", term)
+                return []
+
+        fuzzy_rows = {}
+        if unmatched:
+            for term, rows in zip(unmatched, run_parallel(
+                    [(lambda tm=tm: _fuzzy_fetch(tm)) for tm in unmatched])):
+                fuzzy_rows[term] = rows or []
+
+        # The "last chance" slice is TERM-INDEPENDENT (same ORDER BY occurrences
+        # slice for every term) -> fetch it AT MOST ONCE and reuse, instead of the
+        # old per-term N×5000-row scan (instance-safety).
+        _last_chance = {"rows": None}
+
+        def _last_chance_rows():
+            if _last_chance["rows"] is None:
+                sql = ("SELECT column_name, value, value_norm, occurrences FROM %s "
+                       "ORDER BY occurrences DESC LIMIT %d"
+                       % (index_table, LAST_CHANCE_SCAN_LIMIT))
+                try:
+                    columns, raw = self._run_sql(VALUE_INDEX_DATASET, sql,
+                                                 max_rows=LAST_CHANCE_SCAN_LIMIT)
+                    _last_chance["rows"] = _rows_from(columns, raw)
+                except Exception:
+                    _last_chance["rows"] = []
+            return _last_chance["rows"]
+
         for term in base_terms:
             tn = norms[term]
             rows = exact_rows.get(tn) or []
             if not rows:
-                # Pass 2 (per unmatched term): substring + fuzzy ranking.
-                like = "%" + _like_escape(tn) + "%"
-                sql = ("SELECT column_name, value, value_norm, occurrences FROM %s "
-                       "WHERE value_norm LIKE %s ESCAPE '\\' "
-                       "ORDER BY occurrences DESC LIMIT %d"
-                       % (index_table, _sql_quote_literal(like),
-                          FUZZY_CANDIDATES_LIMIT))
-                try:
-                    columns, raw = self._run_sql(VALUE_INDEX_DATASET, sql,
-                                                 max_rows=FUZZY_CANDIDATES_LIMIT)
-                    idx = {c: i for i, c in enumerate(columns)}
-                    rows = [{"column_name": t[idx.get("column_name", 0)],
-                             "value": t[idx.get("value", 1)],
-                             "value_norm": t[idx.get("value_norm", 2)],
-                             "occurrences": t[idx.get("occurrences", 3)]}
-                            for t in raw]
-                except Exception:
-                    logger.exception("Fuzzy index lookup failed for %r", term)
-                    rows = []
-                if not rows:
-                    # Last chance: fetch a bounded slice and fuzzy-rank in
-                    # Python (typo like 'halys' -> 'HALYS' already matched by
-                    # norm; this covers heavier typos on short catalogs).
-                    sql = ("SELECT column_name, value, value_norm, occurrences "
-                           "FROM %s ORDER BY occurrences DESC LIMIT 5000"
-                           % index_table)
-                    try:
-                        columns, raw = self._run_sql(VALUE_INDEX_DATASET, sql,
-                                                     max_rows=5000)
-                        idx = {c: i for i, c in enumerate(columns)}
-                        rows = [{"column_name": t[idx.get("column_name", 0)],
-                                 "value": t[idx.get("value", 1)],
-                                 "value_norm": t[idx.get("value_norm", 2)],
-                                 "occurrences": t[idx.get("occurrences", 3)]}
-                                for t in raw]
-                    except Exception:
-                        rows = []
-
+                rows = fuzzy_rows.get(term) or []
+            if not rows:
+                rows = _last_chance_rows()      # bounded, fetched once per request
             rows = [r for r in rows if str(r.get("column_name") or "") in indexed_cols
                     or not indexed_cols]
             candidates = rank_candidates(tn, rows)
@@ -2615,17 +2700,18 @@ class MyLLM(BaseLLM):
                 with trace.subspan("dataset-expert:semantic-tool") as sp:
                     sp.inputs["semantic_question"] = semantic_question
                     try:
-                        tool = sa._get_tool(project,
-                                            state.get("semantic_tool_id") or SEMANTIC_TOOL_ID,
-                                            SEMANTIC_TOOL_NAME)
-                        if sa._semantic_key is None:
+                        tool_id = state.get("semantic_tool_id") or SEMANTIC_TOOL_ID
+                        tool = sa._get_tool(project, tool_id, SEMANTIC_TOOL_NAME)
+                        # Input key cached PER TOOL ID (a per-mode tool may differ).
+                        sem_key = sa._semantic_keys.get(tool_id)
+                        if sem_key is None:
                             try:
-                                sa._semantic_key = pick_semantic_input_key(
-                                    tool.get_descriptor())
+                                sem_key = pick_semantic_input_key(tool.get_descriptor())
                             except Exception:
-                                sa._semantic_key = SEMANTIC_QUESTION_KEY
-                        sp.attributes["input_key"] = sa._semantic_key
-                        raw = tool.run({sa._semantic_key: semantic_question})
+                                sem_key = SEMANTIC_QUESTION_KEY
+                            sa._semantic_keys[tool_id] = sem_key
+                        sp.attributes["input_key"] = sem_key
+                        raw = tool.run({sem_key: semantic_question})
                         payload = extract_semantic_payload(raw)
                         sp.outputs["shape_keys"] = payload["shape_keys"]
                         sp.outputs["sql_count"] = len(payload["sqls"])
@@ -2833,8 +2919,15 @@ class MyLLM(BaseLLM):
                         sp.outputs["verified"] = True
                     else:
                         sp.outputs["verified"] = False
+            # Transparency: if the user asked for a comparison we couldn't build
+            # (only one scenario/period resolved -> demoted to a single figure),
+            # say so instead of silently returning a total as if it were the delta.
+            degraded = ""
+            if (u.get("original_intent") in ("compare_scenarios", "compare_periods")
+                    and u["intent"] not in ("compare_scenarios", "compare_periods")):
+                degraded = "\n\n" + DEGRADED_COMPARISON_NOTE[lang]
             writer({"chunk": {"text": headline + "\n\n" + table_md
-                    + (("\n\n" + disclosure) if disclosure else "")}})
+                    + (("\n\n" + disclosure) if disclosure else "") + degraded}})
             writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                    sql_count=len(executed), row_count=len(result["rows"]),
                    attempts=len(executed)))

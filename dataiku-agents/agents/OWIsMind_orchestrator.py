@@ -486,8 +486,12 @@ def _is_footer(chunk, data):
 
 
 def _cap_cell(value):
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, (bool, int)):
         return value
+    # Keep only FINITE floats — NaN / ±inf are not valid JSON and must be stringified
+    # (mirror of the sub-agent's _cap_cell so capture is byte-consistent across files).
+    if isinstance(value, float):
+        return value if (value == value and value not in (float("inf"), float("-inf"))) else str(value)
     return str(value)[:_RESULT_CELL_MAX_CHARS]
 
 
@@ -1282,8 +1286,13 @@ class MyLLM(BaseLLM):
                 return {"pending_tool_calls": tcs, "usage": usage,
                         "preamble": text, "step": state.get("step", 0) + 1,
                         "started": True}
-            return {"pending_tool_calls": [], "final_text": text,
-                    "usage": usage, "started": True}
+            # Reaching here with tcs STILL set means the loop cap was hit while the
+            # model wanted more tools — `text` is then just a lead-in, NOT an answer.
+            # Drop it so node_finish emits the honest "data is in the panel" / "couldn't
+            # finalize" fallback instead of shipping a half-sentence fragment.
+            loop_capped = bool(tcs)
+            return {"pending_tool_calls": [], "started": True, "usage": usage,
+                    "final_text": "" if loop_capped else text}
 
         def route_agent(state):
             return "tools" if state.get("pending_tool_calls") else "finish"
@@ -1294,6 +1303,15 @@ class MyLLM(BaseLLM):
             preamble = (state.get("preamble") or "").strip()
 
             chat.add_tool_calls(tcs)
+            # Mesh-400 guard: EVERY tool_call MUST get a matching tool_output in the
+            # transcript. node_tools is the SOLE writer of outputs; `_pair` tracks the
+            # ids paired so a leftover net at the end can never let a missing pair
+            # reach the next model turn (an unpaired call is a hard 400 on Claude/Vertex).
+            paired = set()
+
+            def _pair(output, tc_id):
+                paired.add(tc_id)
+                chat.add_tool_output(output, tool_call_id=tc_id)
 
             # If the model wrote its OWN lead-in this turn, stream THAT as REAL answer
             # text (a persisted message block, ChatGPT-style: "Let me pull EVPL
@@ -1336,7 +1354,7 @@ class MyLLM(BaseLLM):
                     # a markdown table — but it freely picks the chart/columns. The
                     # raw result still flows to Evidence via the trace span.
                     tool_output = _subagent_tool_output(answer, result, res.get("intent"))
-                    chat.add_tool_output(tool_output, tool_call_id=tc.get("id"))
+                    _pair(tool_output, tc.get("id"))
                     updates["captured"] += res.get("sql_items") or []
                     updates["usage"] = _sum_usage(updates["usage"], res.get("usage") or {})
                     updates["statuses"].append(res.get("status") or "ready")
@@ -1370,16 +1388,21 @@ class MyLLM(BaseLLM):
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok" if artifact else "skipped",
                                              "label": _L["tool_done"][lang]}))
-                    chat.add_tool_output(msg, tool_call_id=tc.get("id"))
+                    _pair(msg, tc.get("id"))
                 elif name == "current_date":
                     writer(_ev("RUNNING_TOOL", {"toolKey": name, "stepIndex": base_step,
                                                 "label": _L["tool_date"][lang]}))
                     today = datetime.now().strftime("%Y-%m-%d")
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok", "label": _L["tool_done"][lang]}))
-                    chat.add_tool_output(today, tool_call_id=tc.get("id"))
+                    _pair(today, tc.get("id"))
                 else:
-                    chat.add_tool_output("[unknown tool]", tool_call_id=tc.get("id"))
+                    _pair("[unknown tool]", tc.get("id"))
+            # Leftover net: pair any tool_call no branch handled (must never happen,
+            # but guarantees the transcript invariant regardless of future edits).
+            for tc in tcs:
+                if tc.get("id") not in paired:
+                    _pair("[no output produced]", tc.get("id"))
             return updates
 
         def node_finish(state):
@@ -1530,6 +1553,7 @@ class MyLLM(BaseLLM):
 
     # ---- main entrypoints --------------------------------------------------
     def process_stream(self, query, settings, trace):
+        loop_llm = None    # in scope for the except (which model failed, if any)
         try:
             self._ensure_specs()
             project = dataiku.api_client().get_default_project()
@@ -1580,12 +1604,22 @@ class MyLLM(BaseLLM):
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",
                        "started": False}
+            # NON-DURABLE by design: no checkpointer, ephemeral per-request run. The
+            # nodes are NOT idempotent (they stream real text, append trace, run
+            # sub-agents and mutate `chat`), so a checkpointer must NOT be added
+            # without first moving those side effects out of the nodes — a replay
+            # would double-emit. recursion_limit is a loose backstop ABOVE the real
+            # bound (MAX_TOOL_LOOPS, enforced in node_agent): keep them consistent.
             for chunk in graph.stream(initial, stream_mode="custom",
                                       config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 8}):
                 yield chunk
         except Exception:
-            logger.exception("Orchestrator failure")
-            yield _ev("ERROR", {"stage": "orchestrator", "message": "internal_error"})
+            # Name the model in logs + the ERROR event: the #1 deploy failure is a
+            # wrong/unconfigured LLM Mesh id (the GEMINI_FLASH_ID `# <-- VERIFY`
+            # placeholder), which otherwise surfaces as an opaque mid-loop crash.
+            logger.exception("Orchestrator failure (model=%s)", loop_llm)
+            yield _ev("ERROR", {"stage": "orchestrator", "message": "internal_error",
+                                "model": loop_llm})
             yield _txt("⚠️ Un incident technique m'a empêché de répondre. "
                        "Réessayez dans un instant.")
             yield _ev("DONE", {"totalUsage": {}})

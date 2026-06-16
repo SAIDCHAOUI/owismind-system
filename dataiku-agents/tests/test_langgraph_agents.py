@@ -154,6 +154,25 @@ class TestAntiDrift(unittest.TestCase):
         labels = orch.CAPABILITIES["revenue_expert"]["tool_labels"]
         self.assertEqual(set(labels.keys()), set(dx.KNOWN_TOOL_NAMES))
 
+    def test_result_caps_agree_across_files(self):
+        # The two STANDALONE files duplicate the result caps (no shared module). They
+        # MUST stay identical or Evidence/orchestrator capture diverges silently.
+        self.assertEqual(orch.MAX_RESULT_ROWS, dx.MAX_RESULT_ROWS)
+        self.assertEqual(orch.MAX_RESULT_COLS, dx.MAX_RESULT_COLS)
+        self.assertEqual(orch._RESULT_CELL_MAX_CHARS, dx._RESULT_CELL_MAX_CHARS)
+        self.assertEqual(orch._RESULT_JSON_MAX_CHARS, dx._RESULT_JSON_MAX_CHARS)
+
+    def test_cap_cell_parity_across_files(self):
+        # _cap_cell must behave the same in both files for the shared shapes,
+        # INCLUDING non-finite floats (NaN/inf are invalid JSON -> both stringify).
+        for v in (42, True, 3.5, "x" * 999, None, [1, 2],
+                  float("inf"), float("-inf")):
+            self.assertEqual(orch._cap_cell(v), dx._cap_cell(v),
+                             "cap_cell diverged for %r" % (v,))
+        # NaN compares unequal to itself, so assert both stringify it.
+        self.assertEqual(orch._cap_cell(float("nan")), dx._cap_cell(float("nan")))
+        self.assertIsInstance(orch._cap_cell(float("nan")), str)
+
 
 class TestSourcesBlock(unittest.TestCase):
     def test_sources_emitted_only_when_data_consulted(self):

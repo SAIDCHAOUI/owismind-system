@@ -1092,5 +1092,65 @@ class TestModePropagation(unittest.TestCase):
         self.assertEqual(dx.pick_semantic_tool_id("high"), dx.SEMANTIC_TOOL_ID)
 
 
+class TestRunParallel(unittest.TestCase):
+    """Bounded parallel helper for independent tool/query calls (instance-safe)."""
+
+    def test_preserves_input_order(self):
+        tasks = [(lambda n=n: n * 10) for n in range(6)]
+        self.assertEqual(dx.run_parallel(tasks), [0, 10, 20, 30, 40, 50])
+
+    def test_failure_becomes_none(self):
+        def boom():
+            raise ValueError("x")
+        self.assertEqual(dx.run_parallel([lambda: 1, boom, lambda: 3]), [1, None, 3])
+
+    def test_empty_and_single(self):
+        self.assertEqual(dx.run_parallel([]), [])
+        self.assertEqual(dx.run_parallel([lambda: 42]), [42])
+
+
+class TestGuardSubqueryAndCommaJoin(unittest.TestCase):
+    """The SQL guard must validate EVERY table source, not just the first."""
+
+    def test_comma_join_unknown_table_rejected(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT * FROM "SALES_DEMO", secret_table', TABLE)
+        self.assertIsNone(sql)
+        self.assertIn("table_not_allowed", reason)
+
+    def test_subquery_inner_unknown_table_rejected(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT * FROM (SELECT x FROM secret_t) s', TABLE)
+        self.assertIsNone(sql)
+        self.assertIn("table_not_allowed", reason)
+
+    def test_legit_subquery_on_allowed_table_ok(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT * FROM (SELECT * FROM "SALES_DEMO") s', TABLE)
+        self.assertIsNotNone(sql)
+        self.assertIsNone(reason)
+
+
+class TestIntentDegradationVisibility(unittest.TestCase):
+    """A demoted intent must stay observable (original_intent) — not silently lost."""
+
+    def test_original_intent_preserved_on_comparison_demotion(self):
+        p = make_profile()
+        # "compare" but only one scenario resolvable -> demoted to total, yet the
+        # ORIGINAL classification is retained for transparency.
+        parsed = {"scope": "data", "language": "fr", "intent": "compare_scenarios",
+                  "scenarios": [], "terms": []}
+        u = dx.validate_understanding(parsed, p, "compare X")
+        self.assertEqual(u["original_intent"], "compare_scenarios")
+        self.assertNotEqual(u["intent"], "compare_scenarios")  # demoted
+
+    def test_original_intent_equals_intent_when_not_degraded(self):
+        p = make_profile()
+        parsed = {"scope": "data", "language": "fr", "intent": "total"}
+        u = dx.validate_understanding(parsed, p, "total")
+        self.assertEqual(u["original_intent"], "total")
+        self.assertEqual(u["intent"], "total")
+
+
 if __name__ == "__main__":
     unittest.main()

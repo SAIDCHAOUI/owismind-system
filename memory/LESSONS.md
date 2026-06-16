@@ -1696,4 +1696,39 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `index-3FmqVbc1.js`**. ⏳ NON validé DSS.
 - **Source** : retour user (Run 5b) + session 2026-06-16. **Date** : 2026-06-16.
 
+## L076 — Correctifs issus de l'audit à l'aveugle + parallélisme sous-agent (Run 5c) (⏳ codé+testé, à valider DSS)
+- **Contexte** : un sous-agent « architecte agentique » lancé **à l'aveugle** (skill agentique, copies isolées
+  dans `/tmp`, zéro contexte projet) a audité les 2 Code Agents. Findings corrigés (les légitimes) :
+- **Solutions** :
+  - **#1 état partagé (Critical)** : `MyLLM` du sous-agent est instancié 1×/process et ré-entrant en
+    concurrence → caches keyés par identifiant STABLE : `self._tables[dataset_name]`, `self._semantic_keys[tool_id]`
+    (plus de `self._table=None` reset dans `_get_profile`). Le per-requête (modèle, tool id) voyage dans l'ÉTAT du graphe.
+  - **#2 appariement tool_call↔output (Critical)** : `node_tools` = seul writer ; helper `_pair()` + **filet**
+    final appariant tout `tc.id` oublié (un appel non appairé = 400 Vertex/Claude).
+  - **#3 cap de boucle (High)** : si `MAX_TOOL_LOOPS` atteint avec des tool-calls en attente, on **droppe le
+    lead-in** (`final_text=""`) → `node_finish` émet le repli honnête « données dans le panneau », jamais un fragment.
+  - **#4 id modèle (High)** : `loop_llm` nommé dans le log + l'event ERROR (`model`) — le placeholder
+    `GEMINI_FLASH_ID # VERIFY` faux devient une erreur lisible au lieu d'un crash opaque en plein nœud.
+  - **#7 garde SQL (High, sécu)** : `guard_custom_sql` valide **chaque** table (FROM/JOIN + listes virgule
+    `FROM a, b` ; sous-`SELECT` déjà couverts par le scan global). Bypass jointure-virgule fermé.
+  - **#10 scan value-index (Med)** : la requête « last chance » (5000 lignes) est **indépendante du terme**
+    → fetchée **1× par requête** (cache) au lieu de N×. Constante `LAST_CHANCE_SCAN_LIMIT`.
+  - **#14 dégradation d'intent (Med)** : `u["original_intent"]` conservé + champ `originalIntent` dans
+    AGENT_RESULT + **note de transparence** en render quand une comparaison demandée n'a pu être construite
+    (plus de total renvoyé en douce comme si c'était un delta).
+  - **#8 anti-drift caps (Med)** : `_cap_cell` orch aligné sur le sous-agent (NaN/±inf stringifiés = JSON
+    valide) + **test cross-fichiers** (caps + `_cap_cell` identiques).
+  - **#9** : warning si profil sans colonnes indexées. **#13** : graphes documentés non-durables/non-idempotents
+    (pas de checkpointer sans sortir les effets de bord des nœuds). **#17/#19** : nettoyages mineurs (format_number, parenthèses).
+  - **NON faits (assumés)** : **#15** renommer `MyLLM` → SKIP (le nom de classe peut faire partie du contrat
+    Code Agent DSS, non vérifiable hors instance) ; **#12** timeout par-tool → le backend a déjà
+    `MAX_RUN_SECONDS=300` comme backstop ; **#5** découpe complète de `n_query` → différée (refactor pur, risqué sur du validé).
+  - **PARALLÉLISME (demande user)** : l'orchestrateur parallélise DÉJÀ les sous-agents (fan-out borné
+    `ThreadPoolExecutor`, cap 3). **Sous-agent** : helper réutilisable `run_parallel(tasks, max_workers=4)`
+    (ordre préservé, erreur→None, borné instance-safe) = mécanisme drop-in pour les futurs tools indépendants ;
+    appliqué aux fetchs fuzzy **par-terme** du resolver (indépendants). Le pipeline principal reste séquentiel (dépendance de données resolve→query).
+- **Preuve-vérification** : 209 tests agents verts (run_parallel ordre/erreur, garde virgule+sous-requête,
+  original_intent, parité `_cap_cell` dont NaN/inf). Zip **inchangé** (seuls les Code Agents ont bougé). ⏳ NON validé DSS.
+- **Source** : audit à l'aveugle (sous-agent + skill agentique) + session 2026-06-16 Run 5c. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
