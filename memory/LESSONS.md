@@ -1481,4 +1481,102 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : 634 tests (reducer narration + `_narr`/`_NARR` bilingues + nudge présent) ; vite OK.
 - **Source** : retour DSS user (capture ChatGPT 5.5 High narrant) + session 2026-06-16 Run 3. **Date** : 2026-06-16.
 
+## L066 — Langue de réponse : bloc contexte en FIN de message (recency) + détection déterministe word-boundary + token autoritaire lu en DERNIER (anti-spoof) + sous-agent forcé (⏳ codé+testé, à valider DSS)
+- **Contexte** : tout est en anglais mais le mini ET Sonnet répondent parfois FR parfois EN. La détection
+  (`_detect_lang`) existait mais était **jetée** : jamais donnée au modèle, jamais en fin de prompt,
+  calculée sur du texte pollué par le tampon date anglais, et le sous-agent redevinait sa propre langue.
+- **Ce qui a échoué** : (a) règle langue noyée au MILIEU du persona → le petit modèle l'oublie ;
+  (b) le frontend n'envoyait pas la locale ; (c) `'revenu'` (FR) matchait DANS `'revenue'` (EN) en
+  sous-chaîne → questions EN courtes mal classées FR ; (d) `parse_mode`/`parse_lang` lisaient la PREMIÈRE
+  occurrence du token → un user tapant `⟦owi:mode=high⟧` forçait Sonnet (abus de coût).
+- **Solution qui marche** : backend `context.detect_prompt_language(message)` (3.9 stdlib, **word-boundary**
+  `\b…\b` → plus de collision revenu/revenue, add/address) sur le message BRUT dans `routes.py` AVANT
+  préfixage ; `build_user_suffix(name, date, webapp_lang, prompt_lang, mode)` **APPENDÉ en fin** de message
+  (`build_completion_messages` concatène), impératif « réponds dans la langue de CE message, qui prime
+  toujours » en **dernière ligne** (slot de recency) ; tokens machine `⟦owi:mode⟧⟦owi:lang⟧` lus par
+  l'orchestrateur (`parse_mode`/`parse_lang` = **dernière occurrence** = le token backend = autoritaire,
+  anti-spoof) et **strippés** de chaque message rejoué (`_CTRL_TOKEN_RE`) ; `_strip_context_block` retire
+  les blocs `[ON SCREEN NOW]`/`[Context —]` pour les usages dérivés (sous-agent) mais le MODÈLE les voit ;
+  frontend envoie `webapp_lang: ui.lang` ; sous-agent `forced_language(context)` override sa devinette
+  depuis `USER LANGUAGE: <lang>` injecté par l'orchestrateur. Re-énoncé aussi en fin de prompt système.
+- **Preuve-vérification** : 29 tests context (suffix/détection/anti-collision) + tests orchestrateur
+  (parse_lang, anti-spoof, strip, REPLY LANGUAGE en fin). Revue sécu « safe-to-ship ». ⏳ à valider DSS.
+- **Source** : retour user (captures dérive FR/EN) + articles « langue de réponse en fin de prompt » +
+  session 2026-06-16 Run 4. **Date** : 2026-06-16.
+
+## L067 — Réponses live = VRAIS messages (answer_delta, pas NARRATION) + narrate-and-stop : ACT-FIRST (régression L063 réintroduite par erreur) + nudge + AUTO-escalade (⏳ codé+testé, à valider DSS)
+- **Contexte** : l'user veut voir le modèle parler DANS la foulée des appels d'outils (ChatGPT-style),
+  en **vrais messages**, pas en lignes « event kind » grises. Et le mini « ne marche pas du tout » : il
+  dit « I'm checking… now » puis s'arrête sans appeler l'outil (narrate-and-stop), alors que Sonnet/Gemini
+  marchent du premier coup.
+- **Ce qui a échoué** : (a) le préambule du modèle partait par `_narr()` → event `NARRATION` (ticker
+  transient, perdu au reload) au lieu de `_txt()` → `answer_delta` (vrai bloc persisté) ; (b) ma propre
+  modif « narration live » avait remis « TALK TO THE USER WHILE YOU WORK » trop en avant → **réintroduit
+  exactement le narrate-and-stop de L063** sur le mini ; (c) l'escalade pilotée-par-le-modèle ne sauve PAS
+  un mini qui narre-et-stoppe (il n'appelle pas non plus `escalate_to_expert`).
+- **Solution qui marche** : (1) le préambule du modèle (`resp.text` du tour avec tool-calls) est streamé
+  via `_txt` → `answer_delta` → **vrai message persisté**, interleavé entre les phases (le frontend savait
+  déjà le faire : `seg.kind==='text'`). (2) Prompt **« ACT FIRST »** : l'appel d'outil est l'instruction
+  PRIMAIRE/obligatoire ; le lead-in redevient explicitement OPTIONNEL/secondaire (« promettre sans appeler
+  = ÉCHEC, pas une réponse »). (3) Garde `_looks_like_premature_stop` (regex de promesses de fetch, pas
+  d'ellipse nue) → **nudge unique** in-node ; si le mini échoue ENCORE → **AUTO-escalade vers Sonnet**
+  (filet éco-first, transparence event `ESCALATING` + vrai message). C'est l'auto-escalade (déclenchée par
+  le CODE sur échec détecté), pas la model-driven, qui rescue le mini faible.
+- **Preuve-vérification** : 114 tests frontend (whitelist body, narration hors segments) + tests
+  orchestrateur (ACT-FIRST, premature-stop, alternance auto-escalade). ⏳ à valider DSS (le mini peut
+  encore échouer ; l'auto-escalade garantit alors une réponse via Sonnet).
+- **Source** : retour user (captures mini narrate-and-stop, « marche avec Sonnet/Gemini ») + L063 +
+  session 2026-06-16 Run 4. **Date** : 2026-06-16.
+
+## L068 — Escalade pilotée par le modèle (hand-over Sonnet) : LoopChat transcript-replay + appariement tool_call↔output + RÔLES ALTERNÉS obligatoires (sinon 400 Vertex) + verrou one-way (⏳ codé+testé, à valider DSS)
+- **Contexte** : approche éco-first — le mini tourne par défaut, et quand il doute il passe le **relai** à
+  Sonnet AVEC le contexte déjà rassemblé (choix user : « synthèse depuis les données », pas re-run), en
+  transparence. Éco a le droit d'escalader (choix user).
+- **Ce qui a échoué (revue adversariale, intestable en local)** : escalader **sans préambule** n'ajoutait
+  que `user(handover)` après `user(question)` → **deux tours `user` consécutifs** → Vertex/Anthropic Claude
+  rejette (400, rôles non-alternés). Bloqueur réel.
+- **Solution qui marche** : `LoopChat` mémorise tout le transcript en **liste d'ops** ; `switch_model`
+  reconstruit la complétion sur `ESCALATION_LLM_ID` en **rejouant l'ordre exact** (system d'abord, paires
+  tool_call→tool_output préservées, cf. L061). L'outil `escalate_to_expert` exposé **seulement** sur le
+  mini en éco/medium (`build_tool_specs(include_escalate)`), retiré après hand-over → verrou one-way
+  (+ flag `escalated` + garde `chat.llm_id == ORCH_LLM_ID`, triple). **TOUJOURS insérer un tour `assistant`
+  (ligne de transparence) avant le `user(handover)`** → rôles alternés quel que soit le préambule. Helper
+  partagé `_switch_to_expert()` (model-driven dans `node_tools` + auto dans `node_agent`). `pick_loop_llm`
+  simplifié (high=Sonnet, sinon mini ; `complexity_is_high` supprimé — le modèle décide).
+- **Preuve-vérification** : tests `TestLoopChat` (rebuild en ordre, pairing, alternance model-driven ET
+  auto-escalade) + revue sécu « safe-to-ship ». ⏳ à valider DSS (risque 400 levé par les tests d'alternance).
+- **Source** : revue adversariale Opus + session 2026-06-16 Run 4. **Date** : 2026-06-16.
+
+## L069 — Conscience de l'écran : bloc `[ON SCREEN NOW]` reconstruit backend (artefacts owner-scopés) gaté sur panneau ouvert (pointeur frontend) — hybride (⏳ codé+testé, à valider DSS)
+- **Contexte** : l'user demande souvent d'expliquer/modifier ce qui est AFFICHÉ (« explique ce graphique »,
+  « ajoute le forecast »). Sans conscience, l'agent répond à côté. Choix user : hybride backend + frontend.
+- **Solution qui marche** : `context.build_screen_state(artifacts, last_answer, active_tab)` rend un bloc
+  borné (MAX 4 artefacts, colonnes, extrait réponse) ; `stream_manager._build_screen_block` lit les artefacts
+  de l'échange **visionné** via `artifacts.read_artifacts(user_id, exchange_id)` (paramétré `Constant/toSQL`
+  + **owner-scopé** `user_id` dans le WHERE + read-only + `statement_timeout 30s` + O(1) clé primaire +
+  best-effort never-raises). Frontend envoie `screen_context {open, exchange_id, active_tab}` (sanitizé
+  `_sanitize_screen_context`, bool exclu, cap 128, tab whitelisté) ; **gaté sur `open`** (pas de lecture
+  quand le panneau est fermé = rien n'est à l'écran). Bloc placé AVANT le suffixe langue → l'impératif
+  langue reste la dernière ligne. Note honnêteté préservée (« tout NOUVEAU chiffre = appeler le spécialiste »).
+- **Preuve-vérification** : tests `build_screen_state` (chart/kpi/colonnes/cap) ; revue sécu « aucune fuite
+  cross-user, aucun risque instance, 1 SELECT O(1)/tour gaté ». ⏳ à valider DSS.
+- **Source** : retour user (« ultra important ») + revue sécu + session 2026-06-16 Run 4. **Date** : 2026-06-16.
+
+## L070 — Timeline UX : la fenêtre max-5 + gris/orange existait mais était PAR SEGMENT, cassée par la narration grise → `timelineSegments` ignore la narration → events fusionnés → fenêtre globale OK (⏳ codé+testé, à valider DSS)
+- **Contexte** : l'user : « trop d'event kind, tout a l'air important, c'est moche ; j'avais une fenêtre
+  max-5 qui défile, gris=en cours / orange=terminé, tu l'as enlevée ». En fait elle était **dans le code**
+  (commit narration live) mais ne marchait plus.
+- **Ce qui a échoué** : le windowing s'appliquait `seg.items.length > LIVE_WINDOW` **par segment** ; la
+  narration grise (`_NARR`) interleavée cassait les events en plein de petits segments (< 5) → rien windowé
+  → TOUT s'affichait. + la narration grise **dupliquait** les steps orange (double des lignes, redondance).
+- **Solution qui marche** : `timelineSegments` **ignore les items `narration`** → les events consécutifs
+  **fusionnent** en un seul groupe → `windowed()`/`masked` (max-5, fondu haut) fonctionnent globalement ;
+  narration grise **supprimée** de la vue live (le préambule du modèle reste en vrai message `text`) ;
+  `timelineBodyItems` whitelist `text`/`error` ; hiérarchie CSS : steps `done` en recul (opacité 0.68),
+  `running` dominant (shimmer). Gris (running) / orange (done) + scroll **restaurés**.
+- **Preuve-vérification** : 114 tests frontend (narration hors segments, whitelist body) + build Vite OK.
+  ⏳ rendu visuel à valider de visu en DSS (intestable hors webapp).
+- **Source** : retour user (captures timeline surchargée, « super moche !!! ») + skill frontend-design +
+  session 2026-06-16 Run 4. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

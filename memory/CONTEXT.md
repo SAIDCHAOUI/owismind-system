@@ -5,7 +5,30 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ✅ VALIDÉ DSS
+**🔬 AUDIT AGENTS + LANGUE / MESSAGES LIVE / CONSCIENCE ÉCRAN / ESCALADE PILOTÉE + TIMELINE UX + FIX MINI
+— Run 4 (2026-06-16 soir) — ⏳ CODÉ + 674 tests + revues (sécu « safe-to-ship »), À VALIDER DSS (L066-L070).**
+Audit multi-agents (7 dim) + 2 revues (adversariale, sécurité Dataiku). 6 priorités user implémentées :
+- **Langue (L066)** : détection déterministe du DERNIER prompt (word-boundary, anti revenu/revenue), bloc
+  contexte (nom·date·langue webapp·impératif) **APPENDÉ EN FIN** de message (recency), token `⟦owi:lang⟧`
+  **autoritaire lu en dernier** (anti-spoof user qui taperait `⟦owi:mode=high⟧`), sous-agent **forcé**.
+- **Messages live + vrais messages (L067)** : préambule du modèle via `_txt`/answer_delta (**vrai message
+  persisté**, interleavé) au lieu du ticker NARRATION transient.
+- **Narrate-and-stop / mini « marche pas du tout » (L067)** : prompt **ACT-FIRST** (= revert de l'emphase
+  narration que j'avais remise = régression L063) + **nudge** + **AUTO-escalade Sonnet** si le mini échoue
+  encore (filet éco-first ; la model-driven ne sauve pas un mini qui n'appelle même pas escalate).
+- **Escalade pilotée par le modèle (L068)** : `LoopChat` (transcript-replay, pairing tool_call↔output) +
+  outil `escalate_to_expert` (mini éco/medium) → hand-over Sonnet **avec contexte**, transparent (event
+  `ESCALATING` + vrai message), **rôles alternés** (bloqueur 400 Vertex corrigé), verrou one-way.
+- **Conscience écran (L069)** : bloc `[ON SCREEN NOW]` reconstruit backend (artefacts **owner-scopés**,
+  O(1), best-effort), **gaté sur panneau ouvert** (pointeur frontend `screen_context` sanitizé) = hybride.
+- **Timeline UX (L070)** : fenêtre max-5 + gris/orange existait mais **par segment** cassée par la narration
+  grise → `timelineSegments` **ignore la narration** → events fusionnés → **max-5 globale OK** ; narration
+  grise redondante **supprimée** ; hiérarchie (done en recul, running dominant).
+- **À RECOLLER LES 2 Code Agents** + upload zip (**77 entrées, `index-CT0YQv_u.js`**) + **REDÉMARRER
+  backend**. Décisions user : escalade=synthèse, Éco peut escalader, écran=hybride. Différé : robustesse
+  multi-spécialistes. Détail → `sessions/2026-06-16.md` Run 4, **L066-L070**.
+
+**Avant — 🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ✅ VALIDÉ DSS
 (user : « super all good ça marche pas mal »).** Tout l'arc 2026-06-16 (Run 2 + Run 3, L063-L065) est
 validé en DSS. Synthèse :
 - **Narration live (L065)** : events `NARRATION` **transients** (live only, non persistés), rendus en
@@ -154,13 +177,16 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-16 (nuit autonome) → détail `sessions/2026-06-16.md`, leçons **L060-L062**
-- **Système rendu modèle-agnostique** : nativité artefacts par architecture (table strippée + DATA +
-  hint, L060), streaming (préambule + synthèse streamée sans tools, L062), escalade 3 modes
-  (Éco/Medium/High) + sélecteur UI, artefact KPI + Evidence SQL coloré. 639 tests + build + zip.
-- **Blocker revue corrigé** : `strict:True` retiré des tool specs (400 OpenAI si Mesh forwarde, L061).
-- **À recoller en DSS** : `orchestrator_langgraph.py` seulement (sous-agent inchangé) + upload zip +
-  redémarrer backend. Smoke-tests streaming/nativité/escalade au matin.
+## 🧭 Dernière session — 2026-06-16 (Run 4, soir) → détail `sessions/2026-06-16.md`, leçons **L066-L070**
+- **Audit agents (2 workflows) + 6 priorités** : langue (fin de prompt + détection word-boundary + token
+  autoritaire anti-spoof + sous-agent forcé, L066) ; messages live = vrais (answer_delta, L067) ;
+  narrate-and-stop / **fix mini** (ACT-FIRST + nudge + AUTO-escalade Sonnet, L067) ; escalade pilotée
+  (`LoopChat`/`switch_model`, rôles alternés, verrou one-way, L068) ; conscience écran hybride owner-scopé
+  (L069) ; **timeline UX** (max-5 globale + narration grise supprimée + hiérarchie, L070).
+- **Revues** : adversariale (1 bloqueur 400 Vertex corrigé + 4 should-fix) ; sécurité Dataiku **« safe-to-ship »**
+  (+ anti-spoof proactif). **674 tests verts** + build + zip.
+- **À recoller en DSS** : **LES 2 Code Agents** (orchestrateur surtout) + upload zip (**77 entrées,
+  `index-CT0YQv_u.js`**) + **redémarrer backend**. **NON validé DSS** (rendu timeline + mini intestables hors instance).
 
 ## Avant — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
 - **Modèle sémantique aligné (nouveau modèle, Sonnet 4.6) + sous-agent ASSISTIF** : le sous-agent
@@ -291,7 +317,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16)** — narration live (modèle), Evidence lazy, modes, renommage,
+0🔬. **VALIDER EN DSS le Run 4 (L066-L070)** — recoller **LES 2 Code Agents** (env 3.11) + upload zip
+   (**77 entrées, `index-CT0YQv_u.js`**) + redémarrer backend. Smoke-tests : (a) EN puis FR → 2ᵉ réponse
+   en FR ; (b) mini sur question revenus → doit **appeler l'outil** (ACT-FIRST) ou **auto-escalader** vers
+   Sonnet (event `ESCALATING` + vrai message), jamais s'arrêter sur « I'm checking… » ; (c) « explique ce
+   graphique » / « ajoute le forecast » → ancré ; (d) timeline = **max-5 qui défile**, gris(running)/orange(done),
+   pas de doublon gris ; (e) escalade = vrai message persisté. Si le mini narre encore trop → durcir le prompt
+   ou option « auto-escalade par mode ». Si visuel timeline à ajuster → itérer (intestable hors DSS).
+0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16 Run 3)** — narration live (modèle), Evidence lazy, modes, renommage,
    nettoyage. **Process permanent** : à chaque modif repo des agents, **recoller LES 2 Code Agents** (env
    3.11) — **OWIsMind_orchestrator** + **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) — et si le backend
    change, uploader le zip + redémarrer. **Reste optionnel (non urgent)** : sélecteur SQL multi-résultats
