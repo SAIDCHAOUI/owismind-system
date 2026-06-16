@@ -104,7 +104,18 @@ ESCALATION_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
 #   high   : Sonnet drives the orchestration AND the synthesis (max quality).
 ORCH_MODES = ("eco", "medium", "high")
 DEFAULT_MODE = "medium"
+# Machine-only control tokens the backend appends to the END of the current turn
+# (model mode + the authoritative reply language). Parsed for our logic, then
+# STRIPPED from every replayed message so the model never sees them as text.
 _MODE_TOKEN_RE = re.compile(r"⟦owi:mode=([a-z]+)⟧")
+_LANG_TOKEN_RE = re.compile(r"⟦owi:lang=([a-z]+)⟧")
+_CTRL_TOKEN_RE = re.compile(r"⟦owi:[a-z_]+=[^⟧]*⟧")
+# The human-readable end-of-prompt blocks the backend appends (the optional
+# "[ON SCREEN NOW …]" screen-state block, then the "[Context — …]" name/date/language
+# block). The MODEL must see them (recency-anchored language rule + screen awareness),
+# but our own derived uses — sub-agent continuity, fallback detection — want the raw
+# question, so we strip from the FIRST appended block to the end.
+_CTX_BLOCK_RE = re.compile(r"\n\n\[(?:ON SCREEN NOW|Context —).*\Z", re.DOTALL)
 
 MAX_TOOL_LOOPS = 8                 # hard bound on agent<->tools cycles per turn
 MAX_PARALLEL_AGENTS = 3            # bounded fan-out (instance safety)
@@ -204,9 +215,10 @@ def staffed_domains():
 # 3. TOOL SPECS (OpenAI-style function schemas) — generated from the registry
 # =============================================================================
 
-def build_tool_specs(caps):
+def build_tool_specs(caps, include_escalate=False):
     """Return (tool_specs, tool_to_cap). One tool per enabled AGENT capability,
-    plus the built-in presentation/utility tools."""
+    plus the built-in presentation/utility tools. When ``include_escalate`` is set
+    (cheap model in eco/medium), expose the model-driven hand-over tool too."""
     specs, tool_to_cap = [], {}
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -328,6 +340,35 @@ def build_tool_specs(caps):
             "parameters": {"type": "object", "properties": {}},
         },
     })
+    if include_escalate:
+        specs.append({
+            "type": "function",
+            "function": {
+                "name": "escalate_to_expert",
+                "description": (
+                    "Hand THIS turn over to a more powerful model. Use it ONLY when "
+                    "the task is genuinely complex or ambiguous and you are NOT "
+                    "confident you can answer it well on your own (tricky multi-step "
+                    "analysis, unclear intent, conflicting constraints). Use it "
+                    "SPARINGLY — you handle the vast majority yourself. When you call "
+                    "it, a stronger model takes over WITH everything gathered so far "
+                    "and finishes the answer; you do nothing else this turn. Provide "
+                    "a short 'reason' (for logs) and a one-sentence 'user_message' in "
+                    "the USER'S language telling them you're switching to a more "
+                    "powerful model because the request is more complex."),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {"type": "string",
+                                   "description": "Why you are escalating (internal/logs)."},
+                        "user_message": {"type": "string",
+                                         "description": "One transparent sentence to the "
+                                                        "user, in their language."},
+                    },
+                    "required": ["reason"],
+                },
+            },
+        })
     return specs, tool_to_cap
 
 
@@ -392,25 +433,39 @@ _L = {
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
     "artifact_kpi": {"fr": "Indicateur prêt", "en": "KPI ready"},
     "writing": {"fr": "Rédaction de la réponse", "en": "Writing the answer"},
+    "escalating": {"fr": "Passage à un modèle plus puissant",
+                   "en": "Switching to a more powerful model"},
     "done": {"fr": "Terminé", "en": "Done"},
 }
 
 
+# Whole-word language markers (word-boundary matched, NOT substrings) so the FR
+# "revenu" never matches inside the EN "revenue", and "add" never matches "address".
+# Mirror of the backend context.detect_prompt_language — kept in sync. This is only
+# the FALLBACK; the authoritative reply language comes from the ⟦owi:lang⟧ token.
+_FR_WORDS = (
+    "le", "la", "les", "des", "du", "une", "un", "quel", "quels", "quelle",
+    "quelles", "combien", "revenu", "revenus", "évolution", "evolution",
+    "client", "clients", "montre", "montrez", "donne", "donnez", "pour",
+    "bonjour", "salut", "merci", "ajoute", "ajouter", "rajoute", "rajouter",
+    "explique", "expliquer", "affiche", "afficher",
+)
+_EN_WORDS = (
+    "the", "a", "an", "of", "what", "how", "show", "give", "revenue", "which",
+    "trend", "compare", "hello", "please", "thanks", "add", "explain", "display",
+)
+_FR_LANG_RE = re.compile(r"\b(?:" + "|".join(_FR_WORDS) + r")\b")
+_EN_LANG_RE = re.compile(r"\b(?:" + "|".join(_EN_WORDS) + r")\b")
+
+
 def _detect_lang(text):
-    """Lightweight language guess for timeline labels only (the ANSWER language
-    is enforced by the system prompt). Defaults to French (OWI context)."""
+    """Lightweight language guess (FALLBACK when the backend ⟦owi:lang⟧ token is
+    absent — batch/eval — and for timeline labels). Defaults to French (OWI context)."""
     t = (text or "").lower()
     if re.search(r"[éèêàùçâîôœ]", t):
         return "fr"
-    fr_markers = (" le ", " la ", " les ", " des ", " du ", " une ", " un ",
-                  "quel", "combien", "revenu", "évolution", "evolution",
-                  "client", "montre", "donne", "quels", "quelle", "pour ",
-                  "bonjour", "salut", "merci")
-    en_markers = (" the ", " a ", " an ", " of ", "what", "how", "show",
-                  "give", "revenue", "which", "trend", "compare", "hello",
-                  "please", "thanks")
-    fr = sum(1 for m in fr_markers if m in (" " + t + " "))
-    en = sum(1 for m in en_markers if m in (" " + t + " "))
+    fr = len(_FR_LANG_RE.findall(t))
+    en = len(_EN_LANG_RE.findall(t))
     return "en" if en > fr else "fr"
 
 
@@ -665,55 +720,117 @@ def _subagent_tool_output(answer, result, intent=None):
 
 def parse_mode(text):
     """(mode, clean_text): extract the ⟦owi:mode=…⟧ control token the backend
-    appends to the current turn, strip it from the text. Defaults to 'medium'."""
+    appends to the current turn, strip EVERY ⟦owi:…⟧ control token from the text.
+    Defaults to 'medium'. (The human [Context —…] block is left in place.)
+
+    SECURITY: read the LAST valid token, not the first. The backend ALWAYS appends
+    its authoritative token at the END of the message; reading the last occurrence
+    means a user who TYPES a fake ⟦owi:mode=high⟧ earlier in their message cannot
+    force a more expensive model (the backend's appended token wins)."""
     mode = DEFAULT_MODE
     if not text:
         return mode, text or ""
-    m = _MODE_TOKEN_RE.search(text)
-    if m and m.group(1) in ORCH_MODES:
-        mode = m.group(1)
-    clean = _MODE_TOKEN_RE.sub("", text).strip() if m else text
+    for candidate in reversed(_MODE_TOKEN_RE.findall(text)):
+        if candidate in ORCH_MODES:
+            mode = candidate
+            break
+    clean = _CTRL_TOKEN_RE.sub("", text).strip()
     return mode, clean
 
 
-# Complexity signals that justify escalating the WHOLE turn to the strong model
-# in 'medium' mode. Conservative: escalation is the exception (>=2 signals), and
-# it is decided PRE-TURN from the question alone (no extra LLM pass).
-_COMPLEX_KEYWORDS = (
-    "compare", "comparaison", "comparer", "versus", " vs ", "analyse", "analyze",
-    "analysis", "pourquoi", "why", "explain", "explique", "recommand", "insight",
-    "corrél", "correlat", "par rapport", "evolution croisée", "ventil",
-)
+def parse_lang(text):
+    """The authoritative reply language from the backend's ⟦owi:lang=…⟧ token, or
+    None when absent (batch / eval path) — caller then falls back to _detect_lang.
+
+    SECURITY: read the LAST valid token (the backend appends its authoritative one at
+    the end), so a user typing a fake ⟦owi:lang=…⟧ cannot override it."""
+    if not text:
+        return None
+    for candidate in reversed(_LANG_TOKEN_RE.findall(text)):
+        if candidate in ("fr", "en"):
+            return candidate
+    return None
 
 
-def complexity_is_high(last_user):
-    """Cheap pre-turn heuristic on the QUESTION alone. True when the turn looks
-    genuinely complex (long / multi-part / analytical) — so in Medium the cheap
-    model handles the vast majority and Sonnet only drives the hard ones."""
-    t = (last_user or "").lower()
-    signals = 0
-    if len(t.split()) > 40:
-        signals += 1
-    if t.count("?") >= 2:
-        signals += 1
-    if (" et " in t or " and " in t) and any(k in t for k in (
-            "budget", "forecast", "actual", "vs", "versus", "compare")):
-        signals += 1                      # multi-part comparison
-    if any(kw in t for kw in _COMPLEX_KEYWORDS):
-        signals += 1
-    return signals >= 2
+def _strip_context_block(text):
+    """Remove the backend's end-of-prompt human [Context —…] block. Used for our
+    OWN derived text (sub-agent continuity, fallback detection); the MODEL still
+    sees the block via the replayed history (the language rule lives there)."""
+    return _CTX_BLOCK_RE.sub("", text or "").rstrip()
 
 
-def pick_loop_llm(mode, last_user):
-    """The model that drives the WHOLE turn (routing + tool decisions + the
-    answer, all in one agentic loop — no separate synthesis pass, for speed).
-    Eco/Medium = the cheap model; High = the strong model; Medium escalates the
-    whole turn to the strong model ONLY when the question is clearly complex."""
-    if mode == "high":
-        return ESCALATION_LLM_ID
-    if mode == "medium" and complexity_is_high(last_user):
-        return ESCALATION_LLM_ID
-    return ORCH_LLM_ID
+# Narrate-and-stop guard. A premature stop is a SHORT, forward-looking lead-in that
+# PROMISES a data action but carries no tool call. We match concrete data-fetch
+# promises (not generic "let me help") so greetings / capability-gap / concept /
+# screen-explanation answers are never forced to call a tool.
+_LEADIN_RE = re.compile(
+    r"(?i)("
+    r"\bje (vais|récupère|recupere|rajoute|regarde|consulte|cherche|prépare|prepare|extrais|sors|charge)\b|"
+    r"\bj'(ajoute|extrais)\b|"
+    r"\blet me (pull|get|fetch|check|look|add|compute|grab|see|run)\b|"
+    r"\bi'?ll (pull|get|fetch|check|look|add|compute|grab|run)\b|"
+    r"\bi'?m going to (pull|get|fetch|check|look|add|run)\b|"
+    r"\blet'?s (look|check|pull|see|run)\b|"
+    r"\b(fetching|pulling|loading|retrieving|gathering|querying|checking)\b|"
+    r"\bone moment\b|\bun instant\b"
+    r")")
+# Nudge injected once when a premature stop is detected (instruction to the model;
+# kept bilingual so it never bleeds a stray language into the model's context).
+_NUDGE_MSG = {
+    "fr": ("Tu as terminé ton tour sans appeler de spécialiste, alors que ta phrase "
+           "promet une action sur les données. Appelle MAINTENANT l'outil spécialiste "
+           "adéquat (ne te contente pas de dire que tu vas le faire), puis réponds "
+           "dans la langue de l'utilisateur."),
+    "en": ("You ended your turn without calling a specialist, yet your sentence "
+           "promises a data action. Call the appropriate specialist tool NOW (do not "
+           "just say you will), then answer in the user's language."),
+}
+
+
+def _looks_like_premature_stop(text):
+    """True when ``text`` is a short data-fetch promise with no tool call — a
+    narrate-and-stop. Conservative: requires a staffed specialist to exist AND a
+    concrete fetch/progress promise (the _LEADIN_RE cues). A bare trailing ellipsis
+    is NOT enough on its own (a stylistic '…' must not trigger a nudge), and long
+    declarative answers (a real on-screen explanation) are never premature."""
+    t = (text or "").strip()
+    if not t or len(t) > 240:
+        return False
+    if not staffed_domains():
+        return False
+    return bool(_LEADIN_RE.search(t))
+
+
+# Transparent user-facing fallback when the model escalates without its own message,
+# and the steering message handed to the strong model on hand-over.
+_ESCALATE_MSG = {
+    "fr": "Cette demande est plus complexe — je passe sur un modèle plus puissant "
+          "pour vous répondre.",
+    "en": "This request is more complex — I'm switching to a more powerful model to "
+          "answer it.",
+}
+_ESCALATE_HANDOVER = {
+    "fr": ("Tu es maintenant l'analyste senior (modèle plus puissant). Reprends ce "
+           "tour avec TOUT ce qui a déjà été rassemblé, termine l'analyse et réponds "
+           "à l'utilisateur dans sa langue. Appelle les spécialistes si besoin."),
+    "en": ("You are now the senior analyst (a more powerful model). Take over this "
+           "turn with EVERYTHING gathered so far, finish the analysis and answer the "
+           "user in their language. Call the specialists if you still need data."),
+}
+
+
+def pick_loop_llm(mode):
+    """The model that STARTS the turn. Eco-first + model-driven escalation: Eco and
+    Medium start on the cheap model and the model itself hands the turn over to the
+    strong model (escalate_to_expert) ONLY when it has real doubts. High starts on
+    the strong model directly (max quality up front, no escalate tool needed)."""
+    return ESCALATION_LLM_ID if mode == "high" else ORCH_LLM_ID
+
+
+def can_escalate(mode, loop_llm_id):
+    """True when the model-driven hand-over tool should be exposed: we are on the
+    cheap model in an escalatable mode (Eco or Medium). High already runs strong."""
+    return mode in ("eco", "medium") and loop_llm_id == ORCH_LLM_ID
 
 
 # =============================================================================
@@ -761,8 +878,12 @@ PERSONA = (
     "truly adds something. Never sound like an AI; no meta-commentary about "
     "yourself.\n\n"
     "# LANGUAGE (NON-NEGOTIABLE)\n"
-    "Always write your final answer in the SAME language as the user's LAST "
-    "message. If they switch language, you switch.\n\n"
+    "Always write your WHOLE reply in the SAME language as the user's CURRENT "
+    "(latest) message — including any lead-in sentence and the analysis. The exact "
+    "reply language is re-stated at the very end of this prompt and at the end of "
+    "the user's message; obey it. If the user switches language between turns, you "
+    "switch with them (their previous turn in English + this one in French -> reply "
+    "in French now). Never mix two languages in one answer.\n\n"
     "# YOUR HONESTY (NON-NEGOTIABLE)\n"
     "- You do NOT hold any business data yourself. Every figure must come from "
     "a specialist sub-agent you call. You NEVER invent a figure, a source or a "
@@ -792,11 +913,19 @@ PERSONA = (
     "- Your prose REFERENCES the artifact ('the chart shows…') and gives the "
     "INSIGHT — the trend, the outlier, the key figure, the 'so what'. Spend your "
     "effort on the ANALYSIS, not on repeating numbers. A single figure / one-line "
-    "answer needs no artifact: just state it.\n"
+    "answer needs no artifact: just state it.\n\n"
+    "# WHAT'S ON THE USER'S SCREEN\n"
+    "The user can SEE the Evidence panel (the chart/table/KPI from earlier turns). "
+    "When an [ON SCREEN NOW …] note is appended to their message, it tells you "
+    "exactly what is displayed. USE it: when they say 'this', 'the chart', 'it', or "
+    "ask to explain or change what's shown, they mean THAT. You may explain what's "
+    "on screen directly. To CHANGE it or add ANY new figure (e.g. 'add the "
+    "forecast'), CALL the specialist to fetch the data, then re-render — never just "
+    "say you did it, and never invent a number.\n"
 )
 
 
-def build_system_prompt(caps, lang_hint):
+def build_system_prompt(caps, lang_hint, can_escalate=False):
     cap_lines = []
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -820,14 +949,18 @@ def build_system_prompt(caps, lang_hint):
             "data is missing:\n" + "\n".join(gap_lines))
     parts.append(
         "\n# HOW TO WORK\n"
-        "0. KEEP THE USER IN THE LOOP. On a turn where you call a tool, you MAY "
-        "open with ONE short sentence (in the user's language) telling them what "
-        "you're about to check — e.g. 'Je regarde l'évolution actuals vs budget…' "
-        "or 'Let me pull EVPL revenue.'. It streams live so the wait feels alive. "
-        "HARD RULE: this lead-in is OPTIONAL and must be on the SAME turn as the "
-        "tool call — NEVER end your turn with only the sentence and no tool call "
-        "(that would leave the user with an empty promise). When in doubt, just "
-        "call the tool.\n"
+        "0. TALK TO THE USER WHILE YOU WORK (like ChatGPT/Claude). On a turn where "
+        "you call a tool, open with a sentence or two — in the user's language — "
+        "saying what you're about to check, e.g. 'Je regarde l'évolution actuals vs "
+        "budget…' or 'Let me pull EVPL revenue and add the forecast.'. This is a "
+        "REAL message to the user (it streams live and stays in the transcript), so "
+        "write it naturally, not as a status code. HARD RULE: this lead-in must be on "
+        "the SAME turn as the tool call(s) — NEVER end your turn with only the "
+        "sentence and no tool call (that leaves the user an empty promise and looks "
+        "like you stopped). If you say you'll do something, CALL the tool to do it on "
+        "the same turn. When in doubt, just call the tool. Your lead-in is already "
+        "shown to the user — in your FINAL answer, CONTINUE from it (give the insight), "
+        "do not repeat the same opening sentence.\n"
         "1. ROUTE. If the question touches a domain you have a specialist for, "
         "CALL that specialist immediately (in doubt, route — never deny). Write "
         "each task SELF-CONTAINED (entity, scenario/phase, exact period); the "
@@ -845,6 +978,28 @@ def build_system_prompt(caps, lang_hint):
         "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
         "4. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user — do not invent an answer.\n")
+    if can_escalate:
+        parts.append(
+            "\n# WHEN YOU'RE OUT OF YOUR DEPTH (escalation)\n"
+            "You are the fast, economical model and you handle the vast majority of "
+            "turns yourself — that is the default. But you have a tool, "
+            "`escalate_to_expert`, that hands this turn to a more powerful model. "
+            "Use it SPARINGLY and only when you genuinely have DOUBTS you can answer "
+            "well: a tricky multi-step analysis, an ambiguous request you can't "
+            "confidently disambiguate, conflicting constraints, or a 'why / explain' "
+            "that needs real reasoning. Prefer to escalate EARLY (before heavy work) "
+            "when you can tell up front it's hard. When you escalate, write the "
+            "one-sentence user_message in the user's language; the stronger model "
+            "then continues with everything already gathered. Do NOT escalate simple "
+            "lookups, greetings, or capability-gap answers.\n")
+    # Re-state the reply language LAST (recency slot of the system message). The
+    # backend also appends it at the end of the user's message; both anchor it.
+    lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
+    parts.append(
+        "\n# REPLY LANGUAGE (re-stated last on purpose)\n"
+        "The user's current message is in %s. Write your ENTIRE reply in %s. "
+        "Match the user's LATEST message every turn — it overrides earlier turns "
+        "and the web-app default." % (lang_label, lang_label))
     return "\n".join(parts)
 
 
@@ -865,6 +1020,76 @@ class OrchState(TypedDict, total=False):
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
+    escalated: bool                                # True once handed over to the strong model
+
+
+# =============================================================================
+# 8b. MODEL-SWITCHABLE CHAT — explicit transcript so the loop can hand a turn over
+# -----------------------------------------------------------------------------
+# The whole conversation is mirrored into an ordered op list so the completion can
+# be REBUILT on a stronger model mid-turn (escalation), replaying the EXACT
+# tool_call -> tool_output pairing (a mismatch is a Mesh 400, cf. L061). Same path
+# builds the initial chat and the escalated one — one source of truth.
+# =============================================================================
+
+class LoopChat(object):
+
+    def __init__(self, project, system_prompt, llm_id, tool_specs):
+        self._project = project
+        self._system = system_prompt
+        self._llm_id = llm_id
+        self._tool_specs = tool_specs
+        self._ops = []                 # ("msg", content, role) | ("calls", tcs) | ("out", output, id)
+        self._completion = self._fresh()
+
+    @property
+    def llm_id(self):
+        return self._llm_id
+
+    def _fresh(self):
+        c = self._project.get_llm(self._llm_id).new_completion()
+        if self._tool_specs is not None:
+            c.settings["tools"] = self._tool_specs
+        c.with_message(self._system, role="system")
+        for op in self._ops:
+            self._apply(c, op)
+        return c
+
+    @staticmethod
+    def _apply(c, op):
+        if op[0] == "msg":
+            c.with_message(op[1], role=op[2])
+        elif op[0] == "calls":
+            c.with_tool_calls(op[1], role="assistant")
+        elif op[0] == "out":
+            c.with_tool_output(op[1], tool_call_id=op[2])
+
+    def add_message(self, content, role="user"):
+        op = ("msg", content, role)
+        self._ops.append(op)
+        self._apply(self._completion, op)
+
+    def add_tool_calls(self, tcs):
+        op = ("calls", tcs)
+        self._ops.append(op)
+        self._apply(self._completion, op)
+
+    def add_tool_output(self, output, tool_call_id):
+        op = ("out", output, tool_call_id)
+        self._ops.append(op)
+        self._apply(self._completion, op)
+
+    def execute(self):
+        return self._completion.execute()
+
+    def switch_model(self, new_llm_id, new_tool_specs, new_system=None):
+        """Hand the turn to another model: rebuild the completion from the recorded
+        transcript on ``new_llm_id`` (optionally with a new system prompt / tools)."""
+        self._llm_id = new_llm_id
+        self._tool_specs = new_tool_specs
+        if new_system is not None:
+            self._system = new_system
+        self._completion = self._fresh()
 
 
 # =============================================================================
@@ -875,13 +1100,15 @@ class MyLLM(BaseLLM):
 
     def __init__(self):
         self._caps = None
-        self._tool_specs = None
+        self._tool_specs = None         # without the escalate tool (strong model / post-handover)
+        self._tool_specs_esc = None     # with the escalate tool (cheap model, eco/medium)
         self._tool_to_cap = None
 
     # ---- registry / specs (cheap; rebuilt to honor live enabled flags) ----
     def _ensure_specs(self):
         self._caps = get_capabilities()
         self._tool_specs, self._tool_to_cap = build_tool_specs(self._caps)
+        self._tool_specs_esc, _ = build_tool_specs(self._caps, include_escalate=True)
 
     # ---- input ------------------------------------------------------------
     @staticmethod
@@ -902,16 +1129,16 @@ class MyLLM(BaseLLM):
         return history, last_user, prev_assistant
 
     # ---- native chat helpers ----------------------------------------------
-    def _new_chat(self, project, system_prompt, history, llm_id):
-        chat = project.get_llm(llm_id).new_completion()
-        chat.settings["tools"] = self._tool_specs
-        chat.with_message(system_prompt, role="system")
+    def _new_chat(self, project, system_prompt, history, llm_id, tool_specs):
+        chat = LoopChat(project, system_prompt, llm_id, tool_specs)
         for m in history:
-            # Defensive: strip the ⟦owi:mode=…⟧ control token from EVERY replayed
-            # turn (not just the current one), so it can never leak to the model
-            # as visible text even if a future backend persists it with a message.
-            chat.with_message(_MODE_TOKEN_RE.sub("", m["content"]).rstrip(),
-                              role=m["role"])
+            # Defensive: strip EVERY ⟦owi:…⟧ control token (mode + lang) from EVERY
+            # replayed turn (not just the current one), so they can never leak to the
+            # model as visible text even if a future backend persists them. The human
+            # [Context —…] block is intentionally KEPT — it carries the recency-anchored
+            # reply-language rule the model must obey.
+            chat.add_message(_CTRL_TOKEN_RE.sub("", m["content"]).rstrip(),
+                             role=m["role"])
         return chat
 
     # ---- sub-agent invocation (native streamed) ---------------------------
@@ -1054,6 +1281,16 @@ class MyLLM(BaseLLM):
     # ---- graph nodes (closures built per request bind chat/project/trace) --
     def _build_graph(self, project, trace, chat, context_msg, lang):
 
+        def _run_llm():
+            with trace.subspan("orchestrator:llm") as sp:
+                r = chat.execute()
+                try:
+                    if getattr(r, "trace", None):
+                        sp.append_trace(r.trace)
+                except Exception:
+                    pass
+            return r
+
         def node_agent(state):
             # ONE agentic loop on the reliable blocking completion: the model calls
             # tools (sub-agents + show_* render tools), then writes the final answer
@@ -1063,20 +1300,30 @@ class MyLLM(BaseLLM):
             if not state.get("started"):
                 writer(_ev("START", {"label": _L["start"][lang]}))
             writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
-            with trace.subspan("orchestrator:llm") as sp:
-                resp = chat.execute()
-                try:
-                    if getattr(resp, "trace", None):
-                        sp.append_trace(resp.trace)
-                except Exception:
-                    pass
+            resp = _run_llm()
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
+            # Narrate-and-stop guard (single shot, in-node): the model wrote a forward-
+            # looking lead-in that PROMISES a data action ("je rajoute le forecast…")
+            # but emitted NO tool call, before any specialist ran. That is a premature
+            # stop, not an answer — nudge ONCE and re-ask so the promise actually
+            # triggers the fetch. Bounded to exactly one extra call (no loop risk); the
+            # recovered lead-in still streams as real text on the retry's tool turn.
+            if (not tcs and not state.get("used_caps")
+                    and _looks_like_premature_stop(text)):
+                if text:
+                    chat.add_message(text, role="assistant")
+                chat.add_message(_NUDGE_MSG.get(lang, _NUDGE_MSG["en"]), role="user")
+                writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
+                resp = _run_llm()
+                usage = _sum_usage(usage, _usage_from_resp(resp))
+                text = (getattr(resp, "text", None) or "").strip()
+                tcs = list(getattr(resp, "tool_calls", None) or [])
             if tcs and state.get("step", 0) < MAX_TOOL_LOOPS:
                 # `text` here is the model's OWN lead-in written alongside the tool
-                # call ("Let me pull EVPL revenue…") — streamed live as narration
-                # by node_tools (real model-generated narration, like ChatGPT).
+                # call ("Let me pull EVPL revenue…") — streamed live as REAL message
+                # text by node_tools (persisted, ChatGPT-style), not a transient ticker.
                 return {"pending_tool_calls": tcs, "usage": usage,
                         "preamble": text, "step": state.get("step", 0) + 1,
                         "started": True}
@@ -1089,16 +1336,51 @@ class MyLLM(BaseLLM):
         def node_tools(state):
             writer = get_stream_writer()
             tcs = state["pending_tool_calls"]
-            chat.with_tool_calls(tcs, role="assistant")
-
-            # If the model wrote its OWN lead-in this turn, stream THAT (real
-            # model-generated narration) and skip the deterministic fallbacks for
-            # this turn — the deterministic narration only fills the silence when
-            # the model said nothing (small models often keep their plan hidden).
             preamble = (state.get("preamble") or "").strip()
+
+            # --- model-driven escalation hand-over (eco-first) ---
+            # If the cheap model asked to escalate, DON'T thread the escalate tool-call
+            # into the transcript (keep it clean); be transparent (a real message + an
+            # ESCALATING event), then switch the loop to the strong model and let IT
+            # continue from everything gathered. One-way: the rebuilt spec drops the
+            # tool, so it can't escalate again.
+            esc = next((tc for tc in tcs
+                        if (tc.get("function") or {}).get("name") == "escalate_to_expert"),
+                       None)
+            if esc and not state.get("escalated") and chat.llm_id == ORCH_LLM_ID:
+                eargs = _parse_args((esc.get("function") or {}).get("arguments"))
+                if preamble:
+                    writer(_txt(preamble + "\n\n"))
+                writer(_ev("ESCALATING", {"label": _L["escalating"][lang]}))
+                msg = (eargs.get("user_message") or "").strip() or _ESCALATE_MSG[lang]
+                writer(_txt(msg + "\n\n"))           # REAL, persisted transparency message
+                # Record an ASSISTANT turn (the lead-in + transparency line the user
+                # just saw) BEFORE the user handover. The last replayed history turn is
+                # the current user question; a bare user handover after it would be TWO
+                # consecutive user turns, which Vertex/Anthropic Claude rejects with a
+                # 400 (roles must alternate). The assistant turn keeps them alternating
+                # regardless of whether the model wrote a preamble.
+                lead = ((preamble + "\n\n") if preamble else "") + msg
+                chat.add_message(lead, role="assistant")
+                chat.add_message(_ESCALATE_HANDOVER[lang], role="user")
+                chat.switch_model(
+                    ESCALATION_LLM_ID, self._tool_specs,
+                    new_system=build_system_prompt(self._caps, lang, can_escalate=False))
+                # tools -> agent edge re-runs node_agent on the strong model.
+                return {"escalated": True, "pending_tool_calls": [], "preamble": ""}
+
+            chat.add_tool_calls(tcs)
+
+            # If the model wrote its OWN lead-in this turn, stream THAT as REAL answer
+            # text (a persisted message block, ChatGPT-style: "Let me pull EVPL
+            # revenue…" appears as a real bubble BEFORE the tool runs, and the final
+            # answer continues the same message after). Routing it through _txt (vs the
+            # transient _narr ticker) is what makes it a real, persisted message. The
+            # deterministic _narr fillers below only cover the SILENCE when the model
+            # said nothing (small models often keep their plan hidden).
             model_narrated = bool(preamble)
             if model_narrated:
-                writer(_narr(preamble))
+                writer(_txt(preamble + "\n\n"))
 
             sub_calls, local_calls = [], []
             for tc in tcs:
@@ -1130,7 +1412,7 @@ class MyLLM(BaseLLM):
                     # a markdown table — but it freely picks the chart/columns. The
                     # raw result still flows to Evidence via the trace span.
                     tool_output = _subagent_tool_output(answer, result, res.get("intent"))
-                    chat.with_tool_output(tool_output, tool_call_id=tc.get("id"))
+                    chat.add_tool_output(tool_output, tool_call_id=tc.get("id"))
                     updates["captured"] += res.get("sql_items") or []
                     updates["usage"] = _sum_usage(updates["usage"], res.get("usage") or {})
                     updates["statuses"].append(res.get("status") or "ready")
@@ -1164,16 +1446,16 @@ class MyLLM(BaseLLM):
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok" if artifact else "skipped",
                                              "label": _L["tool_done"][lang]}))
-                    chat.with_tool_output(msg, tool_call_id=tc.get("id"))
+                    chat.add_tool_output(msg, tool_call_id=tc.get("id"))
                 elif name == "current_date":
                     writer(_ev("RUNNING_TOOL", {"toolKey": name, "stepIndex": base_step,
                                                 "label": _L["tool_date"][lang]}))
                     today = datetime.now().strftime("%Y-%m-%d")
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok", "label": _L["tool_done"][lang]}))
-                    chat.with_tool_output(today, tool_call_id=tc.get("id"))
+                    chat.add_tool_output(today, tool_call_id=tc.get("id"))
                 else:
-                    chat.with_tool_output("[unknown tool]", tool_call_id=tc.get("id"))
+                    chat.add_tool_output("[unknown tool]", tool_call_id=tc.get("id"))
             return updates
 
         def node_finish(state):
@@ -1328,27 +1610,40 @@ class MyLLM(BaseLLM):
             self._ensure_specs()
             project = dataiku.api_client().get_default_project()
             history, last_user, prev_assistant = self._conversation(query)
-            # Model mode (eco/medium/high) is a control token the backend appends
-            # to the current turn; read it from last_user, then strip it. _new_chat
-            # strips the token from EVERY replayed message defensively.
+            # Control tokens the backend appends to the current turn: model mode
+            # (eco/medium/high) + the AUTHORITATIVE reply language (detected on the
+            # clean raw message server-side). Read both, then strip every ⟦owi:…⟧
+            # token. The reply language comes from the token when present (fallback:
+            # local detection); the model also sees the human [Context —…] block in
+            # the replayed history, which re-states the rule in the recency slot.
+            token_lang = parse_lang(last_user)
             mode, last_user = parse_mode(last_user)
+            last_user = _strip_context_block(last_user)   # raw question for OUR uses
             if not last_user:
                 yield _txt("Je n'ai pas reçu de question." )
                 yield _ev("DONE", {"totalUsage": {}})
                 return
-            lang = _detect_lang(last_user)
-            system_prompt = build_system_prompt(self._caps, lang)
-            # Model = the mode policy (Eco/Medium = cheap; High = strong; Medium
-            # escalates the WHOLE turn to the strong model only when the question
-            # is clearly complex). One loop drives everything — no synthesis pass.
-            chat = self._new_chat(project, system_prompt, history,
-                                  pick_loop_llm(mode, last_user))
-            # conversational continuity for the sub-agent (disambiguation): the
-            # specialist is stateless, so we hand it the previous turn too.
-            context_msg = ""
+            lang = token_lang or _detect_lang(last_user)
+            # Eco-first model policy: Eco/Medium START on the cheap model and the
+            # model itself hands the turn over (escalate_to_expert) when it has real
+            # doubts; High starts on the strong model. The escalate tool is exposed
+            # only while we're on the cheap model in an escalatable mode.
+            loop_llm = pick_loop_llm(mode)
+            escalatable = can_escalate(mode, loop_llm)
+            system_prompt = build_system_prompt(self._caps, lang, can_escalate=escalatable)
+            tool_specs = self._tool_specs_esc if escalatable else self._tool_specs
+            chat = self._new_chat(project, system_prompt, history, loop_llm, tool_specs)
+            # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
+            # authoritative reply language so the specialist writes any clarification /
+            # no-data / out-of-scope message in the user's language (it no longer
+            # self-guesses). Plus conversational continuity (the specialist is stateless,
+            # so we hand it the previous turn too for disambiguation).
+            context_msg = (
+                "USER LANGUAGE: %s — write any message addressed to the user "
+                "(clarification, no-data, out-of-scope) in THIS language.\n" % lang)
             if prev_assistant:
-                context_msg = (
-                    "CONVERSATION CONTEXT (continuity with the previous turn):\n"
+                context_msg += (
+                    "\nCONVERSATION CONTEXT (continuity with the previous turn):\n"
                     "PREVIOUS ASSISTANT MESSAGE:\n%s\n\nUSER'S RAW CURRENT "
                     "MESSAGE:\n%s" % (prev_assistant[:2000], last_user[:500]))
 
@@ -1356,9 +1651,9 @@ class MyLLM(BaseLLM):
             initial = {"pending_tool_calls": [], "captured": [], "usage": {},
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",
-                       "started": False}
+                       "started": False, "escalated": False}
             for chunk in graph.stream(initial, stream_mode="custom",
-                                      config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 5}):
+                                      config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 8}):
                 yield chunk
         except Exception:
             logger.exception("Orchestrator failure")

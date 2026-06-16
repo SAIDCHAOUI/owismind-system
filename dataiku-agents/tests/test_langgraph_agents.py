@@ -500,21 +500,209 @@ class TestModelModeAndEscalation(unittest.TestCase):
         self.assertEqual(mode, "medium")
 
     def test_pick_loop_llm_policy(self):
-        # Eco / Medium (simple) -> cheap; High -> strong; Medium + complex -> strong.
-        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("eco", "revenus EVPL 2026"))
-        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("medium", "revenus EVPL 2026"))
-        self.assertEqual(orch.pick_loop_llm("high", "x"), orch.ESCALATION_LLM_ID)
-        self.assertEqual(
-            orch.pick_loop_llm("medium",
-                               "compare EVPL revenue actuals vs budget and explain why"),
-            orch.ESCALATION_LLM_ID)
+        # Eco-first: Eco/Medium START cheap (the model self-escalates); High = strong.
+        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("eco"))
+        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("medium"))
+        self.assertEqual(orch.pick_loop_llm("high"), orch.ESCALATION_LLM_ID)
 
-    def test_complexity_heuristic_conservative(self):
-        # A short single-domain lookup is NOT complex.
-        self.assertFalse(orch.complexity_is_high("revenus EVPL 2026"))
-        # A comparison/analysis question with several parts IS complex.
-        self.assertTrue(orch.complexity_is_high(
-            "compare EVPL revenue actuals vs budget and explain why it diverged"))
+    def test_can_escalate_policy(self):
+        # The escalate tool is exposed only on the cheap model in eco/medium.
+        self.assertTrue(orch.can_escalate("eco", orch.ORCH_LLM_ID))
+        self.assertTrue(orch.can_escalate("medium", orch.ORCH_LLM_ID))
+        self.assertFalse(orch.can_escalate("high", orch.ESCALATION_LLM_ID))
+        # Already on the strong model -> never expose it again (one-way latch).
+        self.assertFalse(orch.can_escalate("medium", orch.ESCALATION_LLM_ID))
+
+
+class TestLanguageControl(unittest.TestCase):
+    def test_parse_mode_strips_lang_token_too(self):
+        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=high⟧⟦owi:lang=fr⟧")
+        self.assertEqual(mode, "high")
+        self.assertEqual(clean, "revenus EVPL")
+
+    def test_parse_lang_reads_token(self):
+        self.assertEqual(orch.parse_lang("q ⟦owi:lang=fr⟧"), "fr")
+        self.assertEqual(orch.parse_lang("q ⟦owi:lang=en⟧"), "en")
+
+    def test_parse_lang_absent_is_none(self):
+        self.assertIsNone(orch.parse_lang("plain question"))
+        self.assertIsNone(orch.parse_lang("q ⟦owi:lang=zz⟧"))
+
+    def test_user_cannot_forge_mode_token(self):
+        # A user typing a fake high token cannot beat the backend's appended eco token.
+        mode, _ = orch.parse_mode("⟦owi:mode=high⟧ revenus EVPL ⟦owi:mode=eco⟧")
+        self.assertEqual(mode, "eco")
+
+    def test_user_cannot_forge_lang_token(self):
+        # The authoritative (last) lang token wins over a user-typed one.
+        self.assertEqual(orch.parse_lang("⟦owi:lang=en⟧ bonjour ⟦owi:lang=fr⟧"), "fr")
+
+    def test_strip_context_block_removes_suffix(self):
+        msg = ("tu peux rajouter le forecast ?\n\n[Context — User: X · Today: Y"
+               " · Web app language: English]\nIMPORTANT — reply in French...")
+        self.assertEqual(orch._strip_context_block(msg),
+                         "tu peux rajouter le forecast ?")
+
+    def test_strip_context_block_noop_without_block(self):
+        self.assertEqual(orch._strip_context_block("plain"), "plain")
+
+    def test_strip_context_block_removes_screen_and_context(self):
+        msg = ("explique le graphique\n\n[ON SCREEN NOW — a line chart …]\n\n"
+               "[Context — User: X · Today: Y]\nIMPORTANT — reply in French...")
+        self.assertEqual(orch._strip_context_block(msg), "explique le graphique")
+
+    def test_reply_language_section_at_end_of_system_prompt(self):
+        sp_fr = orch.build_system_prompt(orch.get_capabilities(), "fr")
+        self.assertIn("REPLY LANGUAGE", sp_fr)
+        # The language directive is re-stated in the final third (recency slot).
+        self.assertGreater(sp_fr.rindex("REPLY LANGUAGE"), len(sp_fr) * 0.6)
+        self.assertIn("French", sp_fr.rsplit("REPLY LANGUAGE", 1)[1])
+        sp_en = orch.build_system_prompt(orch.get_capabilities(), "en")
+        self.assertIn("English", sp_en.rsplit("REPLY LANGUAGE", 1)[1])
+
+    def test_subagent_forced_language_override(self):
+        self.assertEqual(dx.forced_language("USER LANGUAGE: fr — write..."), "fr")
+        self.assertEqual(dx.forced_language("USER LANGUAGE: EN\nmore"), "en")
+        self.assertIsNone(dx.forced_language("no directive here"))
+
+    def test_detect_lang_word_boundary(self):
+        # 'revenu' (FR) must not match inside 'revenue' (EN) in the fallback detector.
+        self.assertEqual(orch._detect_lang("revenue EVPL 2026"), "en")
+        self.assertEqual(orch._detect_lang("revenus EVPL 2026"), "fr")
+
+
+class TestNarrateAndStopGuard(unittest.TestCase):
+    def test_data_promise_without_tool_is_premature(self):
+        self.assertTrue(orch._looks_like_premature_stop("Je rajoute le forecast sur la même vue."))
+        self.assertTrue(orch._looks_like_premature_stop("Let me pull EVPL revenue."))
+        self.assertTrue(orch._looks_like_premature_stop("Je récupère les données avec le forecast inclus !"))
+        self.assertTrue(orch._looks_like_premature_stop("One moment, fetching the data…"))
+
+    def test_declarative_or_greeting_is_not_premature(self):
+        # A real answer / greeting / capability-gap reply must NOT be nudged.
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Bonjour ! Comment puis-je vous aider aujourd'hui ?"))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Je n'ai pas encore d'agent pour les tickets, mais je peux vous aider sur les revenus."))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Le graphique montre que les revenus ont culminé en mars."))
+        self.assertFalse(orch._looks_like_premature_stop(""))
+
+    def test_bare_ellipsis_without_promise_is_not_premature(self):
+        # A stylistic trailing ellipsis with NO fetch/progress cue must not nudge.
+        self.assertFalse(orch._looks_like_premature_stop("Voici un aperçu rapide…"))
+        self.assertFalse(orch._looks_like_premature_stop("Hmm, intéressant…"))
+
+    def test_long_text_is_not_premature(self):
+        long_answer = "Let me explain. " + ("revenue analysis " * 40)
+        self.assertFalse(orch._looks_like_premature_stop(long_answer))
+
+
+# --- Fakes for the model-switchable chat (no DSS needed) -------------------
+class _FakeCompletion(object):
+    """Records every op so a test can assert the replayed transcript ordering."""
+    def __init__(self, llm_id):
+        self.llm_id = llm_id
+        self.settings = {}
+        self.ops = []
+
+    def with_message(self, content, role="user"):
+        self.ops.append(("msg", content, role)); return self
+
+    def with_tool_calls(self, tcs, role="assistant"):
+        self.ops.append(("calls", tcs)); return self
+
+    def with_tool_output(self, output, tool_call_id=None):
+        self.ops.append(("out", output, tool_call_id)); return self
+
+    def execute(self):
+        return None
+
+
+class _FakeLLM(object):
+    def __init__(self, llm_id):
+        self._llm_id = llm_id
+
+    def new_completion(self):
+        return _FakeCompletion(self._llm_id)
+
+
+class _FakeProject(object):
+    def get_llm(self, llm_id):
+        return _FakeLLM(llm_id)
+
+
+class TestEscalationToolSpecs(unittest.TestCase):
+    def test_escalate_tool_absent_by_default(self):
+        specs, _ = orch.build_tool_specs(orch.get_capabilities())
+        names = {s["function"]["name"] for s in specs}
+        self.assertNotIn("escalate_to_expert", names)
+
+    def test_escalate_tool_present_when_requested(self):
+        specs, _ = orch.build_tool_specs(orch.get_capabilities(), include_escalate=True)
+        names = {s["function"]["name"] for s in specs}
+        self.assertIn("escalate_to_expert", names)
+
+    def test_escalation_section_only_when_can_escalate(self):
+        with_esc = orch.build_system_prompt(orch.get_capabilities(), "fr", can_escalate=True)
+        without = orch.build_system_prompt(orch.get_capabilities(), "fr", can_escalate=False)
+        self.assertIn("escalate_to_expert", with_esc)
+        self.assertNotIn("escalate_to_expert", without)
+
+
+class TestLoopChat(unittest.TestCase):
+    def _chat(self):
+        return orch.LoopChat(_FakeProject(), "SYSTEM", orch.ORCH_LLM_ID, ["spec"])
+
+    def test_initial_transcript_has_system_first(self):
+        c = self._chat()
+        self.assertEqual(c.llm_id, orch.ORCH_LLM_ID)
+        self.assertEqual(c._completion.ops[0], ("msg", "SYSTEM", "system"))
+        self.assertEqual(c._completion.settings["tools"], ["spec"])
+
+    def test_switch_model_rebuilds_transcript_in_order(self):
+        c = self._chat()
+        c.add_message("hello", role="user")
+        tcs = [{"id": "call_1", "function": {"name": "ask_revenue_expert"}}]
+        c.add_tool_calls(tcs)
+        c.add_tool_output("result rows", "call_1")
+        # Hand over to the strong model with a different system + tool set.
+        c.switch_model(orch.ESCALATION_LLM_ID, ["spec2"], new_system="SYSTEM2")
+        self.assertEqual(c.llm_id, orch.ESCALATION_LLM_ID)
+        ops = c._completion.ops
+        # System first, then the full transcript replayed IN ORDER, pairing intact.
+        self.assertEqual(ops[0], ("msg", "SYSTEM2", "system"))
+        self.assertEqual(ops[1], ("msg", "hello", "user"))
+        self.assertEqual(ops[2], ("calls", tcs))
+        self.assertEqual(ops[3], ("out", "result rows", "call_1"))
+        self.assertEqual(c._completion.settings["tools"], ["spec2"])
+
+    def test_tool_call_output_pairing_preserved_on_rebuild(self):
+        # Every tool_call must keep a matching tool_output across a rebuild (Mesh 400).
+        c = self._chat()
+        c.add_tool_calls([{"id": "a"}, {"id": "b"}])
+        c.add_tool_output("ra", "a")
+        c.add_tool_output("rb", "b")
+        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
+        outs = [o for o in c._completion.ops if o[0] == "out"]
+        self.assertEqual({o[2] for o in outs}, {"a", "b"})
+
+    def test_escalation_handover_keeps_roles_alternating(self):
+        # Blocker regression: escalating with NO preamble must not thread two
+        # consecutive user turns (the question + the handover) — Vertex/Anthropic
+        # Claude rejects non-alternating roles with a 400. An assistant turn (the
+        # transparency line) MUST sit between them.
+        c = self._chat()
+        c.add_message("revenus EVPL ?", role="user")          # replayed current question
+        lead = orch._ESCALATE_MSG["fr"]                        # preamble='' -> transparency only
+        c.add_message(lead, role="assistant")
+        c.add_message(orch._ESCALATE_HANDOVER["fr"], role="user")
+        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
+        roles = [op[2] for op in c._completion.ops
+                 if op[0] == "msg" and op[2] != "system"]
+        for i in range(1, len(roles)):
+            self.assertNotEqual(roles[i], roles[i - 1],
+                                "two consecutive %s turns (Mesh 400 risk)" % roles[i])
 
 
 class TestKpiArtifact(unittest.TestCase):

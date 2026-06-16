@@ -288,7 +288,10 @@ export function timelineEvents(state) {
 /** The non-event items (text blocks + errors) in arrival order — the rendered answer. */
 export function timelineBodyItems(state) {
   if (!state || !state.timeline) return []
-  return state.timeline.filter((it) => it.kind !== 'event')
+  // Whitelist the persisted body kinds: real answer text and errors. Transient
+  // narration (kind 'narration') is live-only and must NEVER show in the terminal
+  // body — the model's own lead-in is streamed as 'text' (answer_delta), not narration.
+  return state.timeline.filter((it) => it.kind === 'text' || it.kind === 'error')
 }
 
 /**

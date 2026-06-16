@@ -405,6 +405,21 @@ def _validate_period(raw):
     return {"mode": "all_available"}
 
 
+# The orchestrator pins the reply language via the injected system context
+# ("USER LANGUAGE: fr"). It is AUTHORITATIVE — it reflects the language of the
+# USER's actual message, which the orchestrator knows; the sub-agent only sees the
+# (possibly English) self-contained task, so its own guess is unreliable.
+_FORCED_LANG_RE = re.compile(r"USER LANGUAGE:\s*(fr|en)\b", re.IGNORECASE)
+
+
+def forced_language(context):
+    """Reply language pinned by the orchestrator in the injected context, or None."""
+    if not context:
+        return None
+    m = _FORCED_LANG_RE.search(context)
+    return m.group(1).lower() if m else None
+
+
 def validate_understanding(parsed, profile, instruction):
     """Deterministic validation/degradation of the UNDERSTAND output against
     the PROFILE (never against hardcoded business values). Never raises;
@@ -2192,6 +2207,11 @@ class MyLLM(BaseLLM):
                                             datetime.now().strftime("%Y-%m-%d")),
                     user_msg, build_understand_schema(profile), sp)
                 u = validate_understanding(parsed, profile, instruction)
+                # The orchestrator's pinned language (the USER's real language) wins
+                # over the sub-agent's own guess on the English-ish self-contained task.
+                pinned = forced_language(context)
+                if u is not None and pinned:
+                    u["language"] = pinned
                 sp.outputs["understanding"] = u
             if u is None:
                 writer({"chunk": {"text": INTERNAL_ERROR_TEXT["fr"]}})

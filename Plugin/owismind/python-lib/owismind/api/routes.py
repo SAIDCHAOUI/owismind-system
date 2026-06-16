@@ -166,6 +166,27 @@ def me():
     )
 
 
+_SCREEN_TABS = ("evidence", "chart", "table")
+
+
+def _sanitize_screen_context(raw):
+    """Tiny bounded view of what the user is looking at: which exchange (the one
+    rendered in the Evidence panel) and which tab. Untrusted input -> None unless it
+    is a dict with the panel open; the exchange's artifacts are read OWNER-SCOPED in
+    the worker, so a forged exchange_id can only ever reveal the caller's own data."""
+    if not isinstance(raw, dict) or not raw.get("open"):
+        return None
+    exch = raw.get("exchange_id")
+    if not isinstance(exch, (str, int)) or isinstance(exch, bool):
+        return None
+    tab = raw.get("active_tab")
+    return {
+        "open": True,
+        "exchange_id": str(exch)[:128],
+        "active_tab": tab if tab in _SCREEN_TABS else None,
+    }
+
+
 @api.route("/chat/start", methods=["POST"])
 def chat_start():
     """Start a real agent run for one message in a background worker; return a run_id.
@@ -252,23 +273,40 @@ def chat_start():
 
     # Optional model mode (eco / medium / high) chosen in the web app. Unknown or
     # absent -> medium (the conservative default). Relayed to the orchestrator via
-    # the per-turn prefix token; it never picks a raw model id from the front.
+    # the per-turn suffix token; it never picks a raw model id from the front.
     mode = body.get("mode")
     if mode not in context.MODEL_MODES:
         mode = "medium"
 
-    # Per-turn context prefix (re-states who is asking + the server-side date) prepended
-    # to the current user message — the agent is stateless between calls.
-    user_prefix = context.build_user_prefix(
-        derive_full_name(identity["user_id"]), datetime.now(), mode=mode
+    # Web-app configured language (fr / en) the user is currently running the UI in.
+    # Validated like the mode; absent/unknown -> None. The reply language of THIS turn
+    # is detected from the RAW message HERE (clean, before the date stamp would pollute
+    # the heuristic), with the web-app language as the tie-break for a neutral message.
+    webapp_lang = body.get("webapp_lang")
+    if webapp_lang not in context._LANG_LABEL:
+        webapp_lang = None
+    prompt_lang = context.detect_prompt_language(message, default=webapp_lang or "fr")
+
+    # Per-turn context block (who is asking + server-side date + web-app language + the
+    # "answer in THIS message's language" rule) APPENDED to the END of the current user
+    # message — the agent is stateless between calls and honors end-of-prompt best.
+    user_suffix = context.build_user_suffix(
+        derive_full_name(identity["user_id"]), datetime.now(),
+        webapp_lang=webapp_lang, prompt_lang=prompt_lang, mode=mode,
     )
+
+    # Optional screen-awareness pointer (the exchange + tab the user is currently
+    # viewing in the Evidence panel). Sanitized to a tiny bounded dict; the worker
+    # reads that exchange's artifacts OWNER-SCOPED, so a forged id reveals nothing.
+    screen_context = _sanitize_screen_context(body.get("screen_context"))
 
     # Spawn the bounded background worker. The agent_id stays server-side; the front
     # only ever receives the opaque run_id.
     try:
         run_id = stream_manager.start_run(
             project_key, agent_id, message, exchange_id,
-            identity["user_id"], parent_exchange_id, history_limit, user_prefix,
+            identity["user_id"], parent_exchange_id, history_limit, user_suffix,
+            screen_context=screen_context,
         )
     except stream_manager.CapacityError:
         logger.warning("/chat/start — concurrency cap reached, rejected")

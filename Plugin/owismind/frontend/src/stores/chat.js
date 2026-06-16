@@ -252,6 +252,12 @@ export const useChatStore = defineStore('chat', () => {
     activeToken = token
     errorMsg.value = ''
     sending.value = true
+    // Screen awareness: tell the backend which exchange + tab the user is currently
+    // viewing in the Evidence panel, so the agent knows what's on screen ("explain
+    // this chart", "add the forecast"). Only when the panel is actually open.
+    const screenContext = (evidence.open && evidence.exchangeId)
+      ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab }
+      : undefined
     try {
       await runChatStream({
         sessionId: activeSessionId.value,
@@ -259,6 +265,8 @@ export const useChatStore = defineStore('chat', () => {
         agentKey: session.selectedAgentKey,
         historyLimit: ui.contextMessages,
         mode: ui.modelMode,
+        webappLang: ui.lang,
+        screenContext,
         parentExchangeId: parentId || null,
         target: version,
         token,

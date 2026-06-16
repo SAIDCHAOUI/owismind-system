@@ -29,6 +29,7 @@ const KNOWN = {
   RUNNING_TOOL: { key: 'tl.kind.running_tool', icon: 'route' },
   TOOL_DONE: { key: 'tl.kind.tool_end', icon: 'check' },
   WRITING_ANSWER: { key: 'tl.kind.writing_answer', icon: 'sparkle' },
+  ESCALATING: { key: 'tl.kind.escalating', icon: 'sparkles' },
   DONE: { key: 'tl.kind.done', icon: 'check' },
 }
 
@@ -51,6 +52,7 @@ export const timelineMessages = {
     'tl.kind.agent_done': 'Agent terminé',
     'tl.kind.running_tool': "Exécution d'un outil",
     'tl.kind.writing_answer': 'Rédaction de la réponse',
+    'tl.kind.escalating': 'Passage à un modèle plus puissant',
     'tl.kind.done': 'Terminé',
   },
   en: {
@@ -70,6 +72,7 @@ export const timelineMessages = {
     'tl.kind.agent_done': 'Agent complete',
     'tl.kind.running_tool': 'Running a tool',
     'tl.kind.writing_answer': 'Writing the answer',
+    'tl.kind.escalating': 'Switching to a more powerful model',
     'tl.kind.done': 'Done',
   },
 }

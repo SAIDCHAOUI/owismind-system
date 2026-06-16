@@ -176,15 +176,15 @@ def _append_event_locked_free(run_id, event):
             state["events"].append(event)
 
 
-def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_prefix):
+def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None):
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
     is the chat_v5 row to fill in once the answer is ready; ``user_id`` scopes the
     run so only its owner can poll it. ``parent_exchange_id``/``history_limit``/
-    ``user_prefix`` let the worker assemble the multi-turn agent context (the ANCESTOR
-    CHAIN of this branch + the current prefixed turn). Raises ``CapacityError`` if the
-    global concurrency cap is already reached.
+    ``user_suffix`` let the worker assemble the multi-turn agent context (the ANCESTOR
+    CHAIN of this branch + the current turn with its end-of-prompt context block).
+    Raises ``CapacityError`` if the global concurrency cap is already reached.
     """
     now = time.monotonic()
     run_id = uuid4().hex
@@ -214,7 +214,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
         # Pass started_at explicitly so the wall-clock deadline is anchored at
         # registration and never reset by re-reading possibly-evicted run state.
         args=(run_id, project_key, agent_id, message, exchange_id, now,
-              user_id, parent_exchange_id, history_limit, user_prefix),
+              user_id, parent_exchange_id, history_limit, user_suffix, screen_context),
         name="owi-agent-run-{}".format(run_id[:8]),
         daemon=True,
     )
@@ -229,8 +229,35 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     return run_id
 
 
+def _build_screen_block(user_id, history, screen_context):
+    """The ON-SCREEN context block (best-effort, never raises). Gated on the
+    frontend's live pointer: we only describe what is ACTUALLY on screen — the
+    exchange + tab the user is viewing with the Evidence panel OPEN. No read (and no
+    block) when the panel is closed: nothing is on screen then, and the prior answer
+    is already in the replayed history. Owner-scoped artifact read only. Returns ''
+    when there is nothing to surface."""
+    try:
+        if not (isinstance(screen_context, dict) and screen_context.get("open")):
+            return ""
+        exchange_id = screen_context.get("exchange_id")
+        if exchange_id is None:
+            return ""
+        arts = artifacts_storage.read_artifacts(user_id, exchange_id)
+        if not arts:
+            return ""
+        last_answer = ""
+        for m in reversed(history or []):
+            if m.get("role") == "assistant" and m.get("content"):
+                last_answer = m["content"].split("\n\n[SQL", 1)[0]
+                break
+        return context.build_screen_state(arts, last_answer, screen_context.get("active_tab"))
+    except Exception:
+        logger.exception("screen-state assembly failed (non-fatal)")
+        return ""
+
+
 def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
-            user_id, parent_exchange_id, history_limit, user_prefix):
+            user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None):
     """Run one agent completion, stream its events into the run, then persist.
 
     Mirrors the old SSE generator's body but writes into the shared run state
@@ -263,8 +290,9 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     stop_reason = None
     _append_event_locked_free(run_id, {"type": "run_started", "exchangeId": exchange_id})
     # Assemble the multi-turn payload: the ancestor chain of THIS branch (verbatim) + the
-    # current user turn carrying the name/date prefix. The chain walks up from the parent
-    # exchange, so messages after the branch point (or in other branches) are excluded.
+    # current user turn with its end-of-prompt context block (name/date/language). The
+    # chain walks up from the parent exchange, so messages after the branch point (or in
+    # other branches) are excluded.
     # Best-effort: if the history read fails, degrade to the current turn alone (never
     # break the chat).
     try:
@@ -274,7 +302,14 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     except Exception:
         logger.exception("history assembly failed; sending current turn only")
         history = []
-    agent_messages = context.build_completion_messages(history, message, user_prefix)
+    # Screen awareness: a bounded "ON SCREEN NOW" block (the artifacts the user is
+    # viewing + the gist of the last answer) so follow-ups like "explain the chart" /
+    # "add the forecast" are grounded. Only when the Evidence panel is actually open
+    # (one owner-scoped O(1) read, skipped otherwise). Placed BEFORE the language
+    # suffix so the reply-language imperative stays the last line of the turn (recency).
+    screen_block = _build_screen_block(user_id, history, screen_context)
+    agent_messages = context.build_completion_messages(
+        history, message, screen_block + (user_suffix or ""))
     try:
         for event in streaming.run_agent_streamed(project_key, agent_id, agent_messages):
             # Cooperative stop between chunks: hard deadline reached, or the browser

@@ -224,6 +224,18 @@ test('timelineEvents / timelineBodyItems split the timeline without reordering',
   assert.equal(events.length + body.length, s.timeline.length)
 })
 
+test('timelineBodyItems whitelists text/error and drops transient narration', () => {
+  const s = feed([
+    { type: 'narration', text: 'Consulting the revenue expert…' },
+    { type: 'answer_delta', text: 'Here is the analysis.' },
+    { type: 'narration', text: 'Writing the answer…' },
+  ])
+  const body = timelineBodyItems(s)
+  // Narration is live-only: it must never surface as a persisted body item.
+  assert.deepEqual(body.map((i) => i.kind), ['text'])
+  assert.equal(body[0].text, 'Here is the analysis.')
+})
+
 test('selectors tolerate a null/empty state', () => {
   assert.deepEqual(timelineEvents(null), [])
   assert.deepEqual(timelineBodyItems(undefined), [])
