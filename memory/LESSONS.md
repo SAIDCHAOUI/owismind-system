@@ -1579,4 +1579,91 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : retour user (captures timeline surchargée, « super moche !!! ») + skill frontend-design +
   session 2026-06-16 Run 4. **Date** : 2026-06-16.
 
+## L071 — Architecture MODEL-AGNOSTIC : abandon de l'escalade en cours de tour (1 modèle par mode), gpt-5.4-mini retiré au profit de Gemini 2.5 Flash + Sonnet (⏳ codé+testé, à valider DSS)
+- **Contexte** : test DSS de l'escalade pilotée (L068) = échec sur gpt-5.4-mini : il **escalade quasi
+  systématiquement** (même « combien avec le client X » → bascule + message hardcodé « je passe sur un
+  modèle plus puissant »), et **quand il n'escalade pas il narre puis s'arrête** (« je vais obtenir ça »
+  = fin du tour, pas de réponse). User : « on ne peut pas aller plus loin sur GPT-5.4-mini » ; Gemini 2.5
+  Flash renvoie bien les étapes intermédiaires, Sonnet excellent. **Exigence centrale** : arrêter les
+  hacks spécifiques à UN modèle ; architecture optimale qui tourne **même sur les petits modèles** (et
+  donc exceptionnelle sur les gros), jamais l'inverse.
+- **Ce qui a échoué** : toute la machinerie d'escalade (L067 auto-escalade + L068 `escalate_to_expert` /
+  `switch_model` / rôles alternés / verrou one-way) = band-aid gpt-5.4-mini qui **causait** le bug n°1.
+- **Solution qui marche** : **suppression totale de l'escalade**. `LOOP_LLM_BY_MODE = {eco:Flash,
+  medium:Flash, high:Sonnet}` ; `pick_loop_llm(mode)` rend UN modèle qui pilote **tout** le tour (routing
+  + tools + rédaction). Retirés : `escalate_to_expert` (tool + spec), `can_escalate`, `ESCALATION_LLM_ID`,
+  `_ESCALATE_MSG`/`_HANDOVER`, `LoopChat.switch_model`, `_tool_specs_esc`, l'auto-escalade de `node_agent`,
+  le hand-over de `node_tools`, l'event `ESCALATING`, le label `_L["escalating"]`. **Gardés** (model-agnostic,
+  sains) : le nudge narrate-and-stop (`_looks_like_premature_stop` + 1 re-ask), la détection de langue, les
+  tokens `⟦owi:mode⟧`/`⟦owi:lang⟧`. Prompt : ACT-FIRST conservé **+ « NARRATE AS YOU GO »** (invite à une
+  phrase de progrès naturelle, streamée comme vrai message `text` persisté — ce que Flash fait bien). Sous-agent
+  basculé sur Gemini Flash aussi (`UNDERSTAND_LLM_ID`/`SQLGEN_LLM_ID = GEMINI_FLASH_ID`). **⚠️ ACTION DSS** :
+  les ids `GEMINI_FLASH_ID` (orchestrateur ET sous-agent) sont des best-guess au format observé
+  (`openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash`) → **vérifier l'id exact** dans la connexion Mesh
+  (1 ligne par fichier). `SONNET_ID`/`GPT_MINI_ID` gardés comme options nommées.
+- **Preuve-vérification** : 193 tests agents verts (TestNoEscalation : tool/section/symboles absents ;
+  pick_loop_llm par mode ; LoopChat appariement conservé). ⏳ comportement live à valider DSS (intestable hors instance).
+- **Source** : retour user (test DSS escalade systématique + narrate-and-stop) + session 2026-06-16 Run 5. **Date** : 2026-06-16.
+
+## L072 — Dataset Lookup tool (Dataiku) pour les recherches simples : intent `lookup` + conscience du schéma LIVE, SQL réservé aux calculs (⏳ codé+testé, à valider DSS)
+- **Contexte** : « account manager des 3 premiers clients » → l'agent a généré un **SQL énorme** (SELECT
+  DISTINCT de 6 colonnes) qui **omettait justement `account_manager`** et échouait, alors qu'il suffisait de
+  filtrer par nom et lire la colonne. User a trouvé le tool Dataiku **Dataset Lookup** (id `9FEzVZk`) :
+  filtre `column/operator/value`, idéal pour récupérer 1+ valeurs sans calcul. Réserver le SQL aux
+  agrégations/rankings/comparaisons. (Note : le profil/value-index peut être **périmé** après un changement
+  de dataset → l'agent ne « voyait » pas les nouvelles colonnes.)
+- **Ce qui a échoué (avant)** : tout passait par le Semantic Model Query (SQL) ; une simple lecture
+  d'attribut = SQL complexe et fragile. Le schéma connu de l'agent venait du profil (potentiellement périmé).
+- **Solution qui marche** : nouvel **intent `lookup`** (UNDERSTAND) = récupération d'attribut(s) d'entités
+  NOMMÉES, sans maths → champ `attributes` (colonnes à retourner, résolues sur le schéma) + `terms` (entités
+  à filtrer). `n_query` branche lookup : `build_lookup_filter` (EQUALS / OR même colonne / AND colonnes
+  différentes) → `tool.run({"filter": …})` → `extract_lookup_rows` (tolérant `output.rows` dicts OU
+  `{columns,rows}` listes) → projection (cols filtre + attributs) + dédup + cap. **Conscience du schéma
+  LIVE** : `_read_live_columns` (lecture `read_schema`, O(1) métadonnée) attachée à `Profile.live_columns` ;
+  `match_attribute`/`attribute_columns` résolvent une colonne **absente du profil** (ex. `account_manager`
+  fraîchement ajoutée). **Robustesse** : sur erreur tool OU pas de filtre → démotion `intent="custom"` →
+  **fallback SQL**. Le résultat ride un span gelé **`semantic-model-query`** (sql = note honnête
+  « /* Dataset Lookup (no SQL) */ … ») → Evidence + orchestrateur capturent les lignes sans changement.
+  Le tool **auto-découvre son schéma** d'entrée (descriptor) → on n'a besoin que de l'**id**. Sync anti-drift :
+  `lookup` ∈ `KNOWN_BLOCK_IDS`, `dataset_lookup` ∈ `KNOWN_TOOL_NAMES` ↔ registre orchestrateur.
+- **Preuve-vérification** : 193 tests agents (filtre EQUALS/OR/AND+dédup, extraction 2 formes, projection+dédup,
+  intent lookup + démotions, headline dédié, schéma live). ⏳ à valider DSS (tool réel `9FEzVZk` sur le bon dataset).
+- **Source** : retour user (échec account_manager + découverte du tool) + doc Dataiku (Dataset Lookup, ≤10
+  lignes, AND/OR ; appel `tool.run(payload)`, schéma auto via descriptor) + session 2026-06-16 Run 5. **Date** : 2026-06-16.
+
+## L073 — Bouton STOP qui « ne répond pas » : arrêt OPTIMISTE côté frontend (le stop coopératif backend ne peut couper qu'entre 2 chunks) (⏳ codé, à valider DSS)
+- **Contexte** : user : « le bouton stop ne fonctionne pas tout de suite, 5-6 s de latence, on dirait qu'il
+  ne marche pas ». Cause : le worker backend ne teste le flag stop qu'**entre deux chunks streamés**
+  (`_stop_reason` dans `stream_manager._worker`) ; pendant un appel LLM bloquant (~5-6 s) ou un SQL
+  sous-agent (~30 s) **aucun chunk ne circule** → le stop n'est observé qu'à la fin de l'appel en cours.
+  Le frontend, lui, **continuait à poller** jusqu'à l'event terminal `stopped` → spinner figé.
+- **Ce qui a échoué** : design « on ne coupe pas le poll, on attend le `stopped` du backend » → latence
+  perçue = durée de l'appel bloquant en cours. (Le stream LLM Mesh n'expose **aucune API d'annulation**.)
+- **Solution qui marche** : **arrêt optimiste**. `chat.stopGeneration()` : (1) POST `/chat/stop`
+  best-effort (le backend coupe au prochain chunk + persiste le partiel + libère le worker), (2) applique
+  **tout de suite** `applyEvent(activeVersion, {type:'stopped'})` (scelle events, ferme texte, status
+  `stopped` = marqueur discret, pas une erreur), annule le token de poll, `sending=false`. Ressenti =
+  instantané ; le backend finit en arrière-plan et **persiste son propre partiel** (rechargement = partiel
+  backend, écart mineur assumé). `MAX_CONCURRENT_RUNS=8` + min 1 s/start → pas de « busy » si l'user
+  re-envoie juste après. Suivi `activeVersion` ajouté (module-scope, nettoyé dans `finally`/`cancelActive`).
+- **Preuve-vérification** : 114 tests frontend (le chemin reducer `stopped` partiel-conservé est déjà couvert)
+  + build Vite OK. ⏳ ressenti à valider DSS.
+- **Source** : retour user + session 2026-06-16 Run 5. **Date** : 2026-06-16.
+
+## L074 — Hiérarchie sous-agent dans la timeline : indentation CSS additive des steps `SUB_AGENT_*` (⏳ codé, à valider DSS)
+- **Contexte** : user veut « voir qu'on est descendu d'un niveau vers le sous-agent » dans la chaîne
+  d'events (orchestrateur → sous-agent qui répond étape par étape).
+- **Solution qui marche** : les items de timeline portent déjà `eventKind` (`SUB_AGENT_*`). Helper pur
+  `isSubStep(item)` (eventKind commence par `SUB_AGENT`) → classe CSS `.sub-step` (indent + bordure gauche
+  `var(--border)` theme-aware) sur les deux rendus (ticker live + activité terminale). **Additif** : ne
+  touche ni le reducer, ni les ids/seq, ni `timelineSignature` (auto-scroll F8/F13 intact). Pas d'override
+  dark (`--border` est déjà theme-aware → évite le piège F2/`:global`). La narration **persistée** vient du
+  modèle (Flash, prompt « NARRATE AS YOU GO ») ; les micro-phases déterministes restent transient (live).
+- **Limite / différé** : les **events ne sont pas persistés** (rechargement = `assistant_text` seul). La
+  chaîne d'events visible au rechargement nécessiterait de persister la timeline (colonne JSON + replay au
+  load) — **différé** (risque/scope ; touche persistance+reload). Au rechargement on a donc : narration du
+  modèle + réponse finale (propre), pas la chaîne d'events.
+- **Preuve-vérification** : 114 tests frontend + build Vite OK. ⏳ rendu à valider DSS.
+- **Source** : retour user + session 2026-06-16 Run 5. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

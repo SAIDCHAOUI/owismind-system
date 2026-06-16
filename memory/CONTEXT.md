@@ -5,28 +5,34 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🔬 AUDIT AGENTS + LANGUE / MESSAGES LIVE / CONSCIENCE ÉCRAN / ESCALADE PILOTÉE + TIMELINE UX + FIX MINI
-— Run 4 (2026-06-16 soir) — ⏳ CODÉ + 674 tests + revues (sécu « safe-to-ship »), À VALIDER DSS (L066-L070).**
-Audit multi-agents (7 dim) + 2 revues (adversariale, sécurité Dataiku). 6 priorités user implémentées :
-- **Langue (L066)** : détection déterministe du DERNIER prompt (word-boundary, anti revenu/revenue), bloc
-  contexte (nom·date·langue webapp·impératif) **APPENDÉ EN FIN** de message (recency), token `⟦owi:lang⟧`
-  **autoritaire lu en dernier** (anti-spoof user qui taperait `⟦owi:mode=high⟧`), sous-agent **forcé**.
-- **Messages live + vrais messages (L067)** : préambule du modèle via `_txt`/answer_delta (**vrai message
-  persisté**, interleavé) au lieu du ticker NARRATION transient.
-- **Narrate-and-stop / mini « marche pas du tout » (L067)** : prompt **ACT-FIRST** (= revert de l'emphase
-  narration que j'avais remise = régression L063) + **nudge** + **AUTO-escalade Sonnet** si le mini échoue
-  encore (filet éco-first ; la model-driven ne sauve pas un mini qui n'appelle même pas escalate).
-- **Escalade pilotée par le modèle (L068)** : `LoopChat` (transcript-replay, pairing tool_call↔output) +
-  outil `escalate_to_expert` (mini éco/medium) → hand-over Sonnet **avec contexte**, transparent (event
-  `ESCALATING` + vrai message), **rôles alternés** (bloqueur 400 Vertex corrigé), verrou one-way.
-- **Conscience écran (L069)** : bloc `[ON SCREEN NOW]` reconstruit backend (artefacts **owner-scopés**,
-  O(1), best-effort), **gaté sur panneau ouvert** (pointeur frontend `screen_context` sanitizé) = hybride.
-- **Timeline UX (L070)** : fenêtre max-5 + gris/orange existait mais **par segment** cassée par la narration
-  grise → `timelineSegments` **ignore la narration** → events fusionnés → **max-5 globale OK** ; narration
-  grise redondante **supprimée** ; hiérarchie (done en recul, running dominant).
-- **À RECOLLER LES 2 Code Agents** + upload zip (**77 entrées, `index-CT0YQv_u.js`**) + **REDÉMARRER
-  backend**. Décisions user : escalade=synthèse, Éco peut escalader, écran=hybride. Différé : robustesse
-  multi-spécialistes. Détail → `sessions/2026-06-16.md` Run 4, **L066-L070**.
+**🧭 MODEL-AGNOSTIC : FIN DE L'ESCALADE + DATASET LOOKUP + STOP OPTIMISTE + HIÉRARCHIE TIMELINE
+— Run 5 (2026-06-16, session salle) — ⏳ CODÉ + 193 tests agents + 114 frontend + build + zip, À VALIDER DSS (L071-L074).**
+Test DSS du Run 4 = ÉCHEC sur gpt-5.4-mini (escalade **systématique** + message hardcodé ; sinon
+**narre puis s'arrête**). User : abandonner gpt-5.4-mini, passer Gemini 2.5 Flash, **arrêter les hacks
+mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 chantiers :
+- **Modèle (L071)** : **escalade SUPPRIMÉE en entier** (tool `escalate_to_expert`, `can_escalate`,
+  `switch_model`, `ESCALATION_LLM_ID`, `_ESCALATE_*`, auto-escalade, event `ESCALATING`). `LOOP_LLM_BY_MODE`
+  = {eco:Flash, medium:Flash, high:Sonnet}, **1 modèle pilote tout le tour**. Sous-agent aussi sur Flash.
+  Prompt ACT-FIRST **+ « NARRATE AS YOU GO »** (narration naturelle = vrai message persisté). Nudge gardé.
+  **⚠️ VÉRIFIER `GEMINI_FLASH_ID`** (orchestrateur + sous-agent) = best-guess
+  `openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash` → corriger l'id exact (1 ligne/fichier).
+- **Dataset Lookup (L072)** : tool Dataiku `9FEzVZk` ajouté au sous-agent ; intent **`lookup`** (récup
+  d'attribut sans SQL, ex. account_manager de X) + champ `attributes` + **conscience schéma LIVE**
+  (`Profile.live_columns`/`match_attribute`, colonnes hors profil périmé). Fallback SQL si échec/aucun filtre.
+  Span gelé `semantic-model-query` (sql = note) → Evidence/orchestrateur capturent. Schéma auto-découvert (id seul).
+- **Stop optimiste (L073)** : le stop backend ne coupe qu'**entre 2 chunks** (latence 5-6 s perçue) →
+  `stopGeneration` applique `{type:'stopped'}` **tout de suite** (partiel figé + spinner off + poll annulé),
+  POST `/chat/stop` best-effort en fond. Ressenti instantané.
+- **Hiérarchie timeline (L074)** : steps `SUB_AGENT_*` **indentés** (CSS additif `.sub-step`, `var(--border)`)
+  → on voit la descente vers le sous-agent. Persistance des events = **différé** (reload = `assistant_text` seul).
+- **À RECOLLER LES 2 Code Agents** (env 3.11) + upload zip (**77 entrées, `index-CZu1PIfv.js`**). Backend
+  python-lib **inchangé** → **pas besoin de redémarrer le backend** (re-paste agents + re-upload zip suffisent).
+  Détail → `sessions/2026-06-16.md` Run 5, **L071-L074**. Différé : persistance de la chaîne d'events au reload.
+
+**Avant — 🔬 AUDIT AGENTS Run 4 (2026-06-16 soir) — ⏳ codé mais escalade/auto-escalade REMPLACÉES par L071
+(échec DSS gpt-5.4-mini).** Restent valides de Run 4 : langue (L066, fin-de-prompt + word-boundary + token
+autoritaire), messages live = vrais (L067 answer_delta), conscience écran (L069 backend gaté panneau ouvert),
+timeline max-5 (L070). **Obsolètes (retirés Run 5)** : escalade pilotée L068 + auto-escalade L067.
 
 **Avant — 🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ✅ VALIDÉ DSS
 (user : « super all good ça marche pas mal »).** Tout l'arc 2026-06-16 (Run 2 + Run 3, L063-L065) est
@@ -177,16 +183,17 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-16 (Run 4, soir) → détail `sessions/2026-06-16.md`, leçons **L066-L070**
-- **Audit agents (2 workflows) + 6 priorités** : langue (fin de prompt + détection word-boundary + token
-  autoritaire anti-spoof + sous-agent forcé, L066) ; messages live = vrais (answer_delta, L067) ;
-  narrate-and-stop / **fix mini** (ACT-FIRST + nudge + AUTO-escalade Sonnet, L067) ; escalade pilotée
-  (`LoopChat`/`switch_model`, rôles alternés, verrou one-way, L068) ; conscience écran hybride owner-scopé
-  (L069) ; **timeline UX** (max-5 globale + narration grise supprimée + hiérarchie, L070).
-- **Revues** : adversariale (1 bloqueur 400 Vertex corrigé + 4 should-fix) ; sécurité Dataiku **« safe-to-ship »**
-  (+ anti-spoof proactif). **674 tests verts** + build + zip.
-- **À recoller en DSS** : **LES 2 Code Agents** (orchestrateur surtout) + upload zip (**77 entrées,
-  `index-CT0YQv_u.js`**) + **redémarrer backend**. **NON validé DSS** (rendu timeline + mini intestables hors instance).
+## 🧭 Dernière session — 2026-06-16 (Run 5, salle) → détail `sessions/2026-06-16.md`, leçons **L071-L074**
+- **Déclencheur** : test DSS du Run 4 = gpt-5.4-mini **escalade systématiquement** (+ message hardcodé) ou
+  **narre puis s'arrête**. User : abandonner gpt-5.4-mini → Gemini 2.5 Flash + Sonnet, **stop les hacks
+  mono-modèle**, archi qui marche **même sur petits modèles**.
+- **4 chantiers** : escalade **supprimée** (1 modèle/mode `LOOP_LLM_BY_MODE`, prompt ACT-FIRST + NARRATE-AS-
+  YOU-GO, L071) ; **Dataset Lookup** `9FEzVZk` + intent `lookup` + schéma live (account_manager sans SQL, L072) ;
+  **stop optimiste** frontend (L073) ; **hiérarchie timeline** (steps `SUB_AGENT_*` indentés, L074).
+- **Vérifs** : **193 tests agents + 114 frontend** verts + build Vite + zip (**77 entrées, `index-CZu1PIfv.js`**).
+  Revue adversariale du diff agents lancée. Backend python-lib **inchangé**.
+- **À faire DSS** : **VÉRIFIER l'id Gemini Flash** (orchestrateur + sous-agent) ; **recoller LES 2 Code Agents**
+  (env 3.11) ; **upload zip** (pas besoin de redémarrer le backend, python-lib inchangé). **NON validé DSS**.
 
 ## Avant — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
 - **Modèle sémantique aligné (nouveau modèle, Sonnet 4.6) + sous-agent ASSISTIF** : le sous-agent
@@ -317,13 +324,16 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🔬. **VALIDER EN DSS le Run 4 (L066-L070)** — recoller **LES 2 Code Agents** (env 3.11) + upload zip
-   (**77 entrées, `index-CT0YQv_u.js`**) + redémarrer backend. Smoke-tests : (a) EN puis FR → 2ᵉ réponse
-   en FR ; (b) mini sur question revenus → doit **appeler l'outil** (ACT-FIRST) ou **auto-escalader** vers
-   Sonnet (event `ESCALATING` + vrai message), jamais s'arrêter sur « I'm checking… » ; (c) « explique ce
-   graphique » / « ajoute le forecast » → ancré ; (d) timeline = **max-5 qui défile**, gris(running)/orange(done),
-   pas de doublon gris ; (e) escalade = vrai message persisté. Si le mini narre encore trop → durcir le prompt
-   ou option « auto-escalade par mode ». Si visuel timeline à ajuster → itérer (intestable hors DSS).
+0🧭. **VALIDER EN DSS le Run 5 (L071-L074)** — (0) **VÉRIFIER `GEMINI_FLASH_ID`** dans les 2 fichiers
+   (orchestrateur + sous-agent) = id exact de la connexion Mesh (le best-guess
+   `…:vertex_ai/gemini-2.5-flash` est à confirmer) ; (1) **recoller LES 2 Code Agents** (env 3.11) ;
+   (2) **upload zip** (**77 entrées, `index-CZu1PIfv.js`** ; backend python-lib inchangé → **pas besoin de
+   redémarrer**). Smoke-tests : (a) « combien avec le client X » en Éco/Medium (Flash) → **appelle l'outil**,
+   renvoie des étapes intermédiaires, **jamais d'escalade ni de message hardcodé**, ne s'arrête pas sur
+   « je vais obtenir… » ; (b) « account manager des 3 premiers clients » → **Dataset Lookup** (pas de SQL
+   monstrueux), renvoie account_manager ; (c) EN→FR ; (d) **bouton stop instantané** ; (e) timeline = steps
+   sous-agent **indentés** + max-5. Si l'id Gemini est faux → l'agent ne répond pas (corriger 1 ligne).
+   Différé : persistance de la chaîne d'events au reload ; durcir le prompt si Flash narre trop/pas assez.
 0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16 Run 3)** — narration live (modèle), Evidence lazy, modes, renommage,
    nettoyage. **Process permanent** : à chaque modif repo des agents, **recoller LES 2 Code Agents** (env
    3.11) — **OWIsMind_orchestrator** + **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) — et si le backend

@@ -83,17 +83,17 @@ VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"
 # Optional override of the queried dataset (default: profile's dataset_name).
 TARGET_DATASET = ""
 
-# LLM Mesh ids. UNDERSTAND runs on every question -> pick a fast, cheap model
-# good at strict JSON (e.g. gemini-2.5-flash). SQLGEN only runs on the
-# long-tail "custom" intent -> pick the strongest SQL model available.
-# gpt-5.4-mini everywhere (user decision). Reasoning is configured ON THE MODEL
-# in the LLM Mesh connection (effort = high). UNDERSTAND forces native JSON
-# output (deterministic extraction -> reliable parse; reasoning not needed
-# there); the headline/SQLGEN calls keep reasoning. Fallback if UNDERSTAND ever
-# misbehaves with gpt-5.4-mini: set UNDERSTAND_LLM_ID to the proven
-# vertex_ai/claude-sonnet-4-6.
-UNDERSTAND_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
-SQLGEN_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
+# LLM Mesh ids. UNDERSTAND runs on every question -> a fast, cheap model good at
+# strict JSON. SQLGEN only runs on the long-tail "custom" intent. MODEL-AGNOSTIC:
+# UNDERSTAND forces native JSON output (deterministic extraction -> reliable parse
+# on any model). Default = Gemini 2.5 Flash (matches the orchestrator's fast tier).
+# ⚠️ VERIFY this id matches your LLM Mesh connection (same note as the orchestrator).
+# Fallbacks kept as named options: SONNET_ID (strongest), GPT_MINI_ID (cheapest).
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash"  # <-- VERIFY
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
+GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
+UNDERSTAND_LLM_ID = GEMINI_FLASH_ID
+SQLGEN_LLM_ID = GEMINI_FLASH_ID
 HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
 # The orchestrator now writes the user-facing analysis, so the sub-agent's own
 # LLM headline is redundant overhead (a slow extra reasoning call per query).
@@ -118,6 +118,18 @@ SEMANTIC_TOOL_ID = "v4oqA6R"        # Semantic Model Query tool id (instance)
 SEMANTIC_TOOL_NAME = "revenue_semantic_query"
 SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
 
+# --- Dataset Lookup tool (simple value retrieval, NO SQL) --------------------
+# Dataiku managed "Dataset Lookup" tool: returns up to a few rows matching a
+# column/operator/value filter — perfect for "who is the account manager of X?",
+# "what's the carrier code of Y?". Reserve SQL (semantic tool) for aggregations,
+# rankings, comparisons and calculations; use this for plain attribute lookups.
+# The tool's input schema is auto-discovered from its descriptor (we only need
+# the id). Set DATASET_LOOKUP_ENABLED = False to disable the lookup path entirely.
+DATASET_LOOKUP_ENABLED = True
+DATASET_LOOKUP_TOOL_ID = "9FEzVZk"          # instance id (points at the revenue dataset)
+DATASET_LOOKUP_TOOL_NAME = "dataset_lookup"
+DATASET_LOOKUP_MAX_ROWS = 10                # the tool caps at ~10 rows; mirror it
+
 PROFILE_TTL_SECONDS = 600          # in-process profile cache
 MAX_TERMS = 8                      # grounded terms per question
 SQL_MAX_ROWS = 500                 # hard LIMIT on every query
@@ -141,7 +153,7 @@ _RESULT_JSON_MAX_CHARS = 64000
 
 KNOWN_INTENTS = ("total", "breakdown", "top_n", "share_of_total",
                  "compare_scenarios", "compare_periods", "trend",
-                 "list_values", "count_distinct", "about_data", "custom")
+                 "list_values", "count_distinct", "about_data", "lookup", "custom")
 
 NBSP = " "
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -216,6 +228,10 @@ HEADLINE_FALLBACK = {
     "fr": "Voici les résultats pour votre question ({scope}) :",
     "en": "Here are the results for your question ({scope}):",
 }
+HEADLINE_LOOKUP = {
+    "fr": "Voici les informations demandées :",
+    "en": "Here are the details you asked for:",
+}
 HEADLINE_SINGLE = {
     "fr": "{metric} ({scope}) : {value}.",
     "en": "{metric} ({scope}): {value}.",
@@ -245,6 +261,11 @@ class Profile(object):
     def __init__(self, dataset_payload, columns):
         self.raw = dataset_payload or {}
         self.columns = columns or {}
+        # Live schema column names (attached at load time from the dataset's
+        # current schema). Lets lookups reach attribute columns — e.g. an account
+        # manager — even when the profile recipe hasn't re-run after a schema
+        # change (the profile can be stale; the live schema never is).
+        self.live_columns = []
 
     # ---- table-level -------------------------------------------------------
     @property
@@ -326,6 +347,33 @@ class Profile(object):
             return (0, c["ambiguity_priority"])
         return (1, -(c.get("distinct_count") or 0))
 
+    def attribute_columns(self):
+        """All real column names available for a plain lookup (live schema first,
+        union with the profiled columns). These are the columns a `lookup` intent
+        may RETURN (e.g. account_manager) — not necessarily groupable axes."""
+        names, seen = [], set()
+        for name in list(self.live_columns) + list(self.columns.keys()):
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+        return names
+
+    def match_attribute(self, raw):
+        """User/LLM attribute designation -> a real column name (lookup output).
+        Like match_column but also scans the LIVE schema, so attributes outside
+        the profile (a freshly added column) still resolve. None when unknown."""
+        if not raw:
+            return None
+        canonical = self.match_column(raw)
+        if canonical:
+            return canonical
+        key = _norm(raw)
+        flat = re.sub(r"[\s_]+", "", key)
+        for name in self.live_columns:
+            if _norm(name) == key or re.sub(r"[\s_]+", "", _norm(name)) == flat:
+                return name
+        return None
+
 
 def parse_profile_rows(rows):
     """[{key, payload}, ...] -> Profile. Tolerant: bad JSON rows are skipped;
@@ -362,6 +410,19 @@ def _read_dataset_rows(name, wanted_columns):
     except Exception:
         df = ds.get_dataframe()
         return df.to_dict("records")
+
+
+def _read_live_columns(name):
+    """Current column names of a dataset, straight from its schema (cheap
+    metadata read — no scan, instance-safe). Used to ground lookups on the
+    real, current columns regardless of profile freshness."""
+    schema = dataiku.Dataset(name).read_schema()
+    out = []
+    for c in schema:
+        col = c.get("name") if isinstance(c, dict) else getattr(c, "name", None)
+        if col:
+            out.append(col)
+    return out
 
 
 # =============================================================================
@@ -435,7 +496,7 @@ def validate_understanding(parsed, profile, instruction):
            "intent": "custom", "metric": None, "scenarios": [],
            "period": {"mode": "all_available"}, "periods": [],
            "group_by": None, "list_column": None, "top_n": None,
-           "order": "desc", "terms": [], "clarification": ""}
+           "order": "desc", "terms": [], "attributes": [], "clarification": ""}
     if scope == "out_of_scope":
         return out
 
@@ -519,6 +580,22 @@ def validate_understanding(parsed, profile, instruction):
             break
     out["terms"] = terms
 
+    # Attribute columns to RETURN for a `lookup` (account_manager, carrier_code…).
+    # Resolved against the LIVE schema + profile so a freshly added column works.
+    attrs, seen_a = [], set()
+    for raw in parsed.get("attributes") or []:
+        col = profile.match_attribute(raw)
+        if col and col not in seen_a:
+            seen_a.add(col)
+            attrs.append(col)
+    out["attributes"] = attrs
+
+    # `lookup` is a plain value retrieval (no aggregation). It needs an entity to
+    # filter on AND the lookup path enabled; otherwise fall back to the SQL paths
+    # (e.g. "list all account managers" is list_values/custom, not a lookup).
+    if out["intent"] == "lookup" and (not terms or not DATASET_LOOKUP_ENABLED):
+        out["intent"] = "custom"
+
     out["clarification"] = str(parsed.get("clarification") or "").strip()[:500]
     return out
 
@@ -573,6 +650,7 @@ def build_understand_schema(profile):
         "top_n": {"type": "integer"},
         "order": {"type": "string", "enum": ["asc", "desc"]},
         "terms": {"type": "array", "items": {"type": "string"}},
+        "attributes": {"type": "array", "items": {"type": "string"}},
         "clarification": {"type": "string"},
     }
     if scen:
@@ -629,6 +707,8 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
     axes_block = "\n".join(axes_lines) or "(none)"
 
     indexed = ", ".join(profile.indexed_columns()) or "(none)"
+    attr_cols = profile.attribute_columns()
+    attr_block = ", ".join(attr_cols[:60]) or "(none)"
 
     return (
         "You are the understanding module of a data agent for the dataset "
@@ -640,6 +720,8 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
         "TIME:\n%s\n\n"
         "ANALYSIS AXES (for group_by / list_column — output the exact column "
         "name):\n%s\n\n"
+        "ALL COLUMNS (for \"attributes\" on a lookup — output the EXACT name):\n"
+        "%s\n\n"
         "INTENTS (field \"intent\"):\n"
         "- \"total\": one aggregated figure.\n"
         "- \"breakdown\": the metric split along ONE axis -> set group_by.\n"
@@ -654,6 +736,12 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
         "- \"list_values\": the user asks WHICH values exist for an axis "
         "(\"quels clients ?\", \"liste des produits\") -> set list_column.\n"
         "- \"count_distinct\": how many distinct values of an axis -> list_column.\n"
+        "- \"lookup\": retrieve an ATTRIBUTE of one or more NAMED entities — NO "
+        "maths, no totals, no ranking. \"who is the account manager of X?\", "
+        "\"the carrier code and sales zone of Y\". Put the named entit(ies) in "
+        "\"terms\" and the column(s) to return in \"attributes\" (exact names "
+        "from ALL COLUMNS). This is a fast direct read — PREFER it over a SQL "
+        "intent whenever the user just wants a field of a known entity.\n"
         "- \"about_data\": the user asks what this dataset is / what you can "
         "answer / which columns or indicators exist.\n"
         "- \"custom\": a real data question that fits none of the above "
@@ -695,7 +783,7 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
         % (profile.dataset_name, profile.description("en")[:300],
            profile.raw.get("grain") or "one record",
            current_date, default_metric, metrics_block, scen_block,
-           time_block, axes_block, indexed))
+           time_block, axes_block, attr_block, indexed))
 
 
 # =============================================================================
@@ -804,6 +892,88 @@ def build_filter_clauses(resolutions):
                 clause["alt_columns"] = alts
             out.append(clause)
     return out
+
+
+def build_lookup_filter(filters):
+    """Build a Dataiku Dataset Lookup filter tree from resolved [{column, value}]
+    clauses. One clause -> EQUALS; several values on the SAME column -> OR; several
+    columns -> AND of the per-column groups. Returns None when there is nothing to
+    filter on (caller then falls back to SQL). Operators match the tool's schema
+    (EQUALS / AND / OR), which is auto-discovered from its descriptor at call time."""
+    clauses = [f for f in (filters or [])
+               if f.get("column") and f.get("value") is not None]
+    if not clauses:
+        return None
+    by_col = {}
+    order = []
+    for f in clauses:
+        col = f["column"]
+        if col not in by_col:
+            by_col[col] = []
+            order.append(col)
+        if f["value"] not in by_col[col]:
+            by_col[col].append(f["value"])
+
+    def eq(col, val):
+        return {"operator": "EQUALS", "column": col, "value": val}
+
+    groups = []
+    for col in order:
+        vals = by_col[col]
+        if len(vals) == 1:
+            groups.append(eq(col, vals[0]))
+        else:
+            groups.append({"operator": "OR",
+                           "clauses": [eq(col, v) for v in vals]})
+    if len(groups) == 1:
+        return groups[0]
+    return {"operator": "AND", "clauses": groups}
+
+
+def extract_lookup_rows(raw):
+    """Pull the list of row dicts out of a Dataset Lookup tool result, tolerant to
+    the envelope shape: rows live at result['output']['rows'] (dict rows) or a
+    {columns, rows} pair (list rows). Returns [] when nothing matched."""
+    def walk(node, depth=0):
+        if depth > 6 or node is None:
+            return None
+        if isinstance(node, dict):
+            rows = node.get("rows")
+            if isinstance(rows, list):
+                if not rows:
+                    return []
+                if isinstance(rows[0], dict):
+                    return rows
+                cols = node.get("columns")
+                if isinstance(cols, list) and cols:
+                    names = [c.get("name") if isinstance(c, dict) else str(c)
+                             for c in cols]
+                    return [dict(zip(names, r)) for r in rows
+                            if isinstance(r, (list, tuple))]
+            for key in ("output", "result", "data", "records"):
+                if key in node:
+                    got = walk(node[key], depth + 1)
+                    if got is not None:
+                        return got
+        elif isinstance(node, list):
+            if not node or isinstance(node[0], dict):
+                return node
+        return None
+    return walk(raw) or []
+
+
+def lookup_note(lookup_filter, attributes):
+    """A short, human-readable note describing a Dataset Lookup (shown as the
+    'SQL' in Evidence technical details — honest: it states it was a direct
+    lookup, not a generated query)."""
+    def describe(node):
+        op = node.get("operator")
+        if op in ("AND", "OR"):
+            return (" %s " % op).join("(%s)" % describe(c)
+                                      for c in node.get("clauses") or [])
+        return "%s = %s" % (node.get("column"), node.get("value"))
+    cols = ", ".join(attributes or []) or "*"
+    return "/* Dataset Lookup (no SQL) */ %s WHERE %s" % (cols, describe(lookup_filter))
 
 
 def build_clarification(resolutions, lang):
@@ -1697,6 +1867,8 @@ def _scope_label(u, profile, lang):
 
 def build_fallback_headline(u, profile, result, lang, fmt_map, unit=None):
     scope = _scope_label(u, profile, lang)
+    if u["intent"] == "lookup":
+        return HEADLINE_LOOKUP[lang]
     if result and len(result.get("rows") or []) == 1:
         row = result["rows"][0]
         columns = result.get("columns") or []
@@ -1830,9 +2002,9 @@ def build_about_answer(profile, lang):
 # Declared event contract (FROZEN): every blockId / toolName this agent can
 # emit. The orchestrator registry MUST label exactly these ids — the
 # anti-drift test (dataiku-agents/tests/test_orchestrator_v3.py) enforces it.
-KNOWN_BLOCK_IDS = ("resolve", "run_sql", "format_output", "clarify_user",
+KNOWN_BLOCK_IDS = ("resolve", "run_sql", "lookup", "format_output", "clarify_user",
                    "out_of_scope_msg", "about_data")
-KNOWN_TOOL_NAMES = ("resolve_filter_value", "dataset_sql_query")
+KNOWN_TOOL_NAMES = ("resolve_filter_value", "dataset_sql_query", "dataset_lookup")
 
 
 def _ev(kind, data=None):
@@ -1930,6 +2102,13 @@ class MyLLM(BaseLLM):
         profile = parse_profile_rows(rows)
         if profile is None or not profile.dataset_name:
             raise RuntimeError("profile dataset unusable: %s" % PROFILE_DATASET)
+        # Attach the live schema column names (best-effort, never breaks loading):
+        # lookups can then reach attribute columns absent from a stale profile.
+        try:
+            profile.live_columns = _read_live_columns(profile.dataset_name)
+        except Exception:
+            logger.warning("could not read live schema for %s", profile.dataset_name)
+            profile.live_columns = []
         self._profile = profile
         self._profile_loaded_at = now
         self._table = None    # re-resolve with the fresh profile
@@ -1980,6 +2159,37 @@ class MyLLM(BaseLLM):
     def _explain(self, dataset_name, sql):
         executor = dataiku.SQLExecutor2(dataset=dataiku.Dataset(dataset_name))
         executor.query_to_df("EXPLAIN " + sql, pre_queries=list(SQL_PRE_QUERIES))
+
+    # ----------------------------------------------------------- dataset lookup
+    def _lookup_rows(self, project, lookup_filter, filters, attributes):
+        """Run the Dataiku Dataset Lookup tool for a plain attribute retrieval and
+        return a shaped {columns, rows} result (or None when no row matched). The
+        returned columns = the filter columns (entity context) + the requested
+        attributes; rows are deduplicated (the fact table has many rows per entity)
+        and capped. Raises on a tool error so the caller can fall back to SQL."""
+        tool = self._get_tool(project, DATASET_LOOKUP_TOOL_ID,
+                              DATASET_LOOKUP_TOOL_NAME)
+        raw = tool.run({"filter": lookup_filter})
+        rows = extract_lookup_rows(raw)
+        if not rows:
+            return None
+        # Projection: filter columns first (which entity), then the attributes.
+        cols = []
+        for c in [f.get("column") for f in (filters or [])] + list(attributes or []):
+            if c and c not in cols:
+                cols.append(c)
+        if not cols:                       # nothing requested -> surface all columns
+            cols = list(rows[0].keys())[:MAX_RESULT_COLS]
+        seen, tuples = set(), []
+        for r in rows:
+            t = tuple(r.get(c) for c in cols)
+            if t in seen:
+                continue
+            seen.add(t)
+            tuples.append(t)
+            if len(tuples) >= MAX_RESULT_ROWS:
+                break
+        return shape_result(cols, tuples)
 
     def _resolve_terms(self, profile, base_terms, trace):
         """Ground terms on the value index (exact-norm pass + per-term fuzzy
@@ -2305,14 +2515,57 @@ class MyLLM(BaseLLM):
             resolved_filters = state.get("resolved_filters") or []
             instruction = state["instruction"]
             table = sa._get_table(profile.dataset_name)
-            writer(_block("run_sql"))
-            writer(_tool_start("dataset_sql_query"))
             executed = []
             result, fmt_map, unit = None, {}, None
             tool_answer = None
             tool_row_count = None
             det_failed = None
             engine = SQL_ENGINE
+
+            # --- LOOKUP path (no SQL): a plain attribute retrieval of named
+            # entities goes straight to the Dataset Lookup tool. On a tool error or
+            # no resolvable filter, demote to "custom" and fall through to SQL. ---
+            if u["intent"] == "lookup" and DATASET_LOOKUP_ENABLED:
+                lookup_filter = build_lookup_filter(filters)
+                if lookup_filter is None:
+                    u["intent"] = "custom"          # nothing to look up -> SQL path
+                else:
+                    writer(_block("lookup"))
+                    writer(_tool_start("dataset_lookup"))
+                    with trace.subspan("dataset-expert:lookup") as sp:
+                        sp.inputs["filter"] = lookup_filter
+                        sp.inputs["attributes"] = u.get("attributes")
+                        try:
+                            result = sa._lookup_rows(project, lookup_filter,
+                                                     filters, u.get("attributes"))
+                            sp.outputs["row_count"] = (len(result["rows"])
+                                                       if result else 0)
+                        except Exception as e:
+                            logger.exception("Dataset lookup failed -> SQL fallback")
+                            sp.attributes["error"] = str(e)[:500]
+                            result, u["intent"] = None, "custom"
+                    if u["intent"] == "lookup":      # lookup ran (rows or empty)
+                        note = lookup_note(lookup_filter, u.get("attributes"))
+                        if result is not None and result.get("rows"):
+                            # Frozen 'semantic-model-query' span so Evidence + the
+                            # orchestrator capture the rows (the 'sql' is an honest
+                            # note: it was a direct lookup, not a generated query).
+                            with trace.subspan("semantic-model-query") as qsp:
+                                qsp.outputs["sql"] = note
+                                qsp.outputs["success"] = True
+                                qsp.outputs["row_count"] = len(result["rows"])
+                                qsp.outputs["columns"] = result["columns"]
+                                qsp.outputs["rows"] = result["rows"]
+                            executed.append({"sql": note, "success": True,
+                                             "row_count": len(result["rows"])})
+                        return {"result": result, "fmt_map": {}, "unit": None,
+                                "tool_answer": None,
+                                "tool_row_count": (len(result["rows"])
+                                                   if result else 0),
+                                "executed": executed, "done": False}
+
+            writer(_block("run_sql"))
+            writer(_tool_start("dataset_sql_query"))
 
             if engine == "semantic_tool":
                 payload = None

@@ -94,12 +94,16 @@ dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
 
 
 class TestModelIds(unittest.TestCase):
-    def test_orchestrator_uses_gpt54mini(self):
-        self.assertIn("gpt-5.4-mini", orch.ORCH_LLM_ID)
+    def test_orchestrator_model_per_mode(self):
+        # Model-agnostic: each mode maps to ONE model for the whole turn, no
+        # escalation. Default fast tier = Gemini Flash, high = Sonnet.
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["medium"], orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["high"], orch.SONNET_ID)
 
-    def test_subagent_switched_to_gpt54mini(self):
-        self.assertIn("gpt-5.4-mini", dx.UNDERSTAND_LLM_ID)
-        self.assertIn("gpt-5.4-mini", dx.SQLGEN_LLM_ID)
+    def test_subagent_uses_gemini_flash(self):
+        self.assertEqual(dx.UNDERSTAND_LLM_ID, dx.GEMINI_FLASH_ID)
+        self.assertEqual(dx.SQLGEN_LLM_ID, dx.GEMINI_FLASH_ID)
 
     def test_subagent_understand_forces_json(self):
         # UNDERSTAND is a deterministic extraction -> forces native JSON for a
@@ -463,29 +467,29 @@ class TestLiveNarration(unittest.TestCase):
         self.assertLessEqual(len(ev["chunk"]["eventData"]["text"]), 280)
 
     def test_narration_phrasings_bilingual(self):
-        for key in ("calling", "resolve", "run_sql", "format", "chart", "table",
-                    "kpi", "writing"):
+        for key in ("calling", "resolve", "run_sql", "lookup", "format", "chart",
+                    "table", "kpi", "writing"):
             self.assertIn("fr", orch._NARR[key])
             self.assertIn("en", orch._NARR[key])
         # Sub-agent phase blockIds map to a narration key.
         self.assertEqual(orch._BLOCK_NARR["run_sql"], "run_sql")
+        self.assertEqual(orch._BLOCK_NARR["lookup"], "lookup")
 
-    def test_prompt_puts_tool_call_first_lead_in_optional(self):
-        # ACT-FIRST: the tool call is the PRIMARY instruction; the lead-in is an
-        # explicitly OPTIONAL/secondary nicety. The wording must forbid promising an
-        # action without a tool call in the same turn (anti narrate-and-stop, L063).
+    def test_prompt_acts_first_and_invites_narration(self):
+        # ACT-FIRST (model-agnostic, anti narrate-and-stop) AND an explicit invite
+        # to narrate progress as real, saved text (the live UX the user wants).
         p = orch.build_system_prompt(orch.get_capabilities(), "fr")
         self.assertIn("ACT — NEVER JUST PROMISE", p)
-        self.assertIn("in the SAME turn", p)
         self.assertIn("FAILURE, not an answer", p)
-        self.assertIn("OPTIONAL, secondary", p)
+        self.assertIn("NARRATE AS YOU GO", p)
+        self.assertIn("SAME turn", p)
 
     def test_preamble_is_a_state_channel(self):
         # node_agent stores the model's lead-in on state['preamble'] for node_tools.
         self.assertIn("preamble", orch.OrchState.__annotations__)
 
 
-class TestModelModeAndEscalation(unittest.TestCase):
+class TestModelMode(unittest.TestCase):
     def test_parse_mode_extracts_and_strips(self):
         mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=high⟧")
         self.assertEqual(mode, "high")
@@ -501,18 +505,13 @@ class TestModelModeAndEscalation(unittest.TestCase):
         self.assertEqual(mode, "medium")
 
     def test_pick_loop_llm_policy(self):
-        # Eco-first: Eco/Medium START cheap (the model self-escalates); High = strong.
-        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("eco"))
-        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("medium"))
-        self.assertEqual(orch.pick_loop_llm("high"), orch.ESCALATION_LLM_ID)
-
-    def test_can_escalate_policy(self):
-        # The escalate tool is exposed only on the cheap model in eco/medium.
-        self.assertTrue(orch.can_escalate("eco", orch.ORCH_LLM_ID))
-        self.assertTrue(orch.can_escalate("medium", orch.ORCH_LLM_ID))
-        self.assertFalse(orch.can_escalate("high", orch.ESCALATION_LLM_ID))
-        # Already on the strong model -> never expose it again (one-way latch).
-        self.assertFalse(orch.can_escalate("medium", orch.ESCALATION_LLM_ID))
+        # Each mode picks ONE model for the whole turn (no escalation).
+        self.assertEqual(orch.pick_loop_llm("eco"), orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.pick_loop_llm("medium"), orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.pick_loop_llm("high"), orch.SONNET_ID)
+        # Unknown mode falls back to the default mode's model (never crashes).
+        self.assertEqual(orch.pick_loop_llm("turbo"),
+                         orch.LOOP_LLM_BY_MODE[orch.DEFAULT_MODE])
 
 
 class TestLanguageControl(unittest.TestCase):
@@ -633,92 +632,60 @@ class _FakeProject(object):
         return _FakeLLM(llm_id)
 
 
-class TestEscalationToolSpecs(unittest.TestCase):
-    def test_escalate_tool_absent_by_default(self):
+class TestNoEscalation(unittest.TestCase):
+    """Escalation / mid-turn model switching was removed (it caused systematic
+    escalation on small models). The tool and prompt section must be GONE."""
+
+    def test_escalate_tool_never_present(self):
         specs, _ = orch.build_tool_specs(orch.get_capabilities())
         names = {s["function"]["name"] for s in specs}
         self.assertNotIn("escalate_to_expert", names)
 
-    def test_escalate_tool_present_when_requested(self):
-        specs, _ = orch.build_tool_specs(orch.get_capabilities(), include_escalate=True)
-        names = {s["function"]["name"] for s in specs}
-        self.assertIn("escalate_to_expert", names)
+    def test_no_escalation_section_in_prompt(self):
+        p = orch.build_system_prompt(orch.get_capabilities(), "fr")
+        self.assertNotIn("escalate_to_expert", p)
+        self.assertNotIn("more powerful model", p)
 
-    def test_escalation_section_only_when_can_escalate(self):
-        with_esc = orch.build_system_prompt(orch.get_capabilities(), "fr", can_escalate=True)
-        without = orch.build_system_prompt(orch.get_capabilities(), "fr", can_escalate=False)
-        self.assertIn("escalate_to_expert", with_esc)
-        self.assertNotIn("escalate_to_expert", without)
+    def test_no_escalation_symbols(self):
+        for gone in ("can_escalate", "ESCALATION_LLM_ID", "_ESCALATE_MSG",
+                     "_ESCALATE_HANDOVER"):
+            self.assertFalse(hasattr(orch, gone),
+                             "%s should have been removed" % gone)
 
 
 class TestLoopChat(unittest.TestCase):
     def _chat(self):
-        return orch.LoopChat(_FakeProject(), "SYSTEM", orch.ORCH_LLM_ID, ["spec"])
+        return orch.LoopChat(_FakeProject(), "SYSTEM",
+                             orch.LOOP_LLM_BY_MODE["medium"], ["spec"])
 
     def test_initial_transcript_has_system_first(self):
         c = self._chat()
-        self.assertEqual(c.llm_id, orch.ORCH_LLM_ID)
+        self.assertEqual(c.llm_id, orch.LOOP_LLM_BY_MODE["medium"])
         self.assertEqual(c._completion.ops[0], ("msg", "SYSTEM", "system"))
         self.assertEqual(c._completion.settings["tools"], ["spec"])
 
-    def test_switch_model_rebuilds_transcript_in_order(self):
+    def test_transcript_built_in_order_with_pairing(self):
+        # The transcript replays system-first then every op IN ORDER, with each
+        # tool_call keeping a matching tool_output (a mismatch is a Mesh 400).
         c = self._chat()
         c.add_message("hello", role="user")
         tcs = [{"id": "call_1", "function": {"name": "ask_revenue_expert"}}]
         c.add_tool_calls(tcs)
         c.add_tool_output("result rows", "call_1")
-        # Hand over to the strong model with a different system + tool set.
-        c.switch_model(orch.ESCALATION_LLM_ID, ["spec2"], new_system="SYSTEM2")
-        self.assertEqual(c.llm_id, orch.ESCALATION_LLM_ID)
         ops = c._completion.ops
-        # System first, then the full transcript replayed IN ORDER, pairing intact.
-        self.assertEqual(ops[0], ("msg", "SYSTEM2", "system"))
+        self.assertEqual(ops[0], ("msg", "SYSTEM", "system"))
         self.assertEqual(ops[1], ("msg", "hello", "user"))
         self.assertEqual(ops[2], ("calls", tcs))
         self.assertEqual(ops[3], ("out", "result rows", "call_1"))
-        self.assertEqual(c._completion.settings["tools"], ["spec2"])
 
-    def test_tool_call_output_pairing_preserved_on_rebuild(self):
-        # Every tool_call must keep a matching tool_output across a rebuild (Mesh 400).
+    def test_history_replay_preserves_call_output_pairing(self):
+        # A fresh chat seeded from history replays calls/outputs paired (Mesh 400).
         c = self._chat()
         c.add_tool_calls([{"id": "a"}, {"id": "b"}])
         c.add_tool_output("ra", "a")
         c.add_tool_output("rb", "b")
-        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
         outs = [o for o in c._completion.ops if o[0] == "out"]
         self.assertEqual({o[2] for o in outs}, {"a", "b"})
-
-    def test_escalation_handover_keeps_roles_alternating(self):
-        # Blocker regression: escalating with NO preamble must not thread two
-        # consecutive user turns (the question + the handover) — Vertex/Anthropic
-        # Claude rejects non-alternating roles with a 400. An assistant turn (the
-        # transparency line) MUST sit between them.
-        c = self._chat()
-        c.add_message("revenus EVPL ?", role="user")          # replayed current question
-        lead = orch._ESCALATE_MSG["fr"]                        # preamble='' -> transparency only
-        c.add_message(lead, role="assistant")
-        c.add_message(orch._ESCALATE_HANDOVER["fr"], role="user")
-        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
-        roles = [op[2] for op in c._completion.ops
-                 if op[0] == "msg" and op[2] != "system"]
-        for i in range(1, len(roles)):
-            self.assertNotEqual(roles[i], roles[i - 1],
-                                "two consecutive %s turns (Mesh 400 risk)" % roles[i])
-
-    def test_auto_escalation_after_failed_nudge_alternates_roles(self):
-        # The node_agent auto-escalation path appends, in order: assistant(premature
-        # lead-in), user(nudge), assistant(transparency), user(handover). With the
-        # current user question as the last replayed turn, all roles must alternate.
-        c = self._chat()
-        c.add_message("revenus EVPL ?", role="user")          # replayed current question
-        c.add_message("Je récupère le chiffre…", role="assistant")  # premature lead-in
-        c.add_message(orch._NUDGE_MSG["fr"], role="user")     # nudge
-        c.add_message(orch._ESCALATE_MSG["fr"], role="assistant")   # transparency
-        c.add_message(orch._ESCALATE_HANDOVER["fr"], role="user")   # handover
-        c.switch_model(orch.ESCALATION_LLM_ID, ["s"])
-        roles = [op[2] for op in c._completion.ops
-                 if op[0] == "msg" and op[2] != "system"]
-        self.assertEqual(roles, ["user", "assistant", "user", "assistant", "user"])
 
 
 class TestKpiArtifact(unittest.TestCase):

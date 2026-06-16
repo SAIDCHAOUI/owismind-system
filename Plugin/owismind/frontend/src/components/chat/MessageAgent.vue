@@ -210,6 +210,11 @@ function stepLabel(item) {
 function stepSub(item) {
   return item.toolName || item.blockId || ''
 }
+// A specialist sub-agent step (eventKind SUB_AGENT_*): rendered indented so the
+// timeline visibly shows the orchestrator descending one level into the sub-agent.
+function isSubStep(item) {
+  return typeof item.eventKind === 'string' && item.eventKind.indexOf('SUB_AGENT') === 0
+}
 
 async function copy() {
   const text = answerText(v.value)
@@ -318,7 +323,7 @@ function nextVersion() {
           >
             <!-- `appear` so the FIRST line of a freshly mounted phase fades in too -->
             <TransitionGroup name="tick" appear>
-              <div v-for="item in windowed(seg.items)" :key="item.id" class="step" :class="item.status">
+              <div v-for="item in windowed(seg.items)" :key="item.id" class="step" :class="[item.status, { 'sub-step': isSubStep(item) }]">
                 <span class="ind" />
                 <span class="label">
                   <span class="title">{{ stepLabel(item) }}</span>
@@ -354,7 +359,7 @@ function nextVersion() {
              which never removes the rows from the accessibility tree by itself. -->
         <div class="act-steps-wrap" :aria-hidden="!activityOpen">
           <div class="act-steps">
-            <div v-for="item in steps" :key="item.id" class="step" :class="item.status">
+            <div v-for="item in steps" :key="item.id" class="step" :class="[item.status, { 'sub-step': isSubStep(item) }]">
               <span class="ind" />
               <span class="label">
                 <span class="title">{{ stepLabel(item) }}</span>
@@ -589,6 +594,10 @@ function nextVersion() {
   to { opacity: 1; transform: none; }
 }
 .step .ind { width: 12px; height: 12px; position: relative; flex-shrink: 0; display: grid; place-items: center; }
+/* Sub-agent step: indented with a left connector so the timeline visibly shows the
+   orchestrator descending one level into a specialist (hierarchy, not a flat list).
+   --border is theme-aware (light/dark), so no separate dark override is needed. */
+.step.sub-step { margin-left: 14px; padding-left: 12px; border-left: 1.5px solid var(--border); }
 /* --text-2 (not --text-3): the grey dot/ring must clear the 3:1 non-text contrast
    guideline on a white background in light theme. */
 .step.running .ind::before {

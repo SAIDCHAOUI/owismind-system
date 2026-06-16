@@ -23,11 +23,15 @@
 #   - This file imports langchain/langgraph -> it MUST run on a Python >= 3.11
 #     code env. Assign the 3.11 code env to this Code Agent in DSS Settings.
 #   - The LLM is called via the NATIVE LLM Mesh completion API (new_completion)
-#     so that the model's REASONING is honored (set "Reasoning effort = high"
-#     on the gpt-5.4-mini model in the LLM Mesh connection). We NEVER force a
-#     native JSON output (with_json_output) on the orchestrator — in DSS 14 that
+#     so that the model's REASONING is honored (configure reasoning effort ON the
+#     model in the LLM Mesh connection when the model supports it). We NEVER force
+#     a native JSON output (with_json_output) on the orchestrator — in DSS 14 that
 #     silently disables reasoning. The model emits tool calls (function calling)
 #     and free text; reasoning stays on.
+#   - MODEL-AGNOSTIC BY DESIGN: each user mode (eco/medium/high) maps to ONE model
+#     for the WHOLE turn — no mid-turn model switching, no escalation. The system
+#     must shine on a small/fast model and excel on a large one; it never depends
+#     on a single model's quirks. Pick the model per mode in LOOP_LLM_BY_MODE below.
 #   - Live UX = events (the DSS proxy buffers long streams). Nodes emit fine
 #     timeline events through LangGraph's custom stream writer; the final answer
 #     arrives as text chunks at the end.
@@ -80,30 +84,39 @@ except Exception:                               # pragma: no cover
 # 1. CONFIGURATION
 # =============================================================================
 
-# gpt-5.4-mini via the LLM Mesh connection. Reasoning effort is configured ON
-# THE MODEL in the connection UI (not in code — per-call reasoning is ignored
-# in DSS 14). Benchmark winner for orchestration (routing, task drafting, viz
-# piloting, injection resistance) at a fraction of the cost of larger models.
-ORCH_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
-
-# Escalation target — the strong model the orchestrator falls back to. Same
-# connection, proven id (the dataset expert's SQLGEN fallback). The cheap model
-# does the bulk; this one is the EXCEPTION (conservative escalation), reached
-# either by user mode (High) or by the medium-mode heuristics below. Edit this
-# constant if the Mesh connection exposes Sonnet under a different id.
-ESCALATION_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
+# --- LLM Mesh model ids (edit these to match your connection) ----------------
+# OWIsMind is MODEL-AGNOSTIC: the architecture must work well on a small/fast
+# model and excel on a large one. The ONE knob is which model drives each mode.
+#
+#   Gemini 2.5 Flash  -> streams intermediate progress naturally, reliable tool
+#                        calling, fast. Recommended default for eco/medium.
+#   Claude Sonnet 4.6 -> top reasoning/quality. Used for high.
+#   gpt-5.4-mini      -> cheapest, but tends to "narrate then stop" and is kept
+#                        only as an option (NOT a default).
+#
+# ⚠️ ACTION REQUIRED: set GEMINI_FLASH_ID to the EXACT id shown in your LLM Mesh
+# connection (DSS > Administration > Connections > LLM-7064-revforecast > the
+# Gemini 2.5 Flash model). The id below is a best-guess in the observed format
+# ("<connection-prefix>:<provider>/<model>") and MUST be verified once.
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash"  # <-- VERIFY
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
+GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 
 # Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
-# token on the current turn; default "medium" when absent). The whole point is
-# software-first quality: the system must be excellent on the cheap model, with
-# the strong model as a tunable bonus — never a dependency.
-#   eco    : gpt-5.4-mini everywhere, NO escalation (cheapest).
-#   medium : gpt-5.4-mini drives; the FINAL SYNTHESIS (the quality-critical step)
-#            escalates to Sonnet only on a complexity signal or on a mini failure
-#            (escalate is the exception, conservative — routing/tools stay cheap).
-#   high   : Sonnet drives the orchestration AND the synthesis (max quality).
+# token on the current turn; default "medium" when absent). Each mode picks ONE
+# model that drives the ENTIRE turn — no escalation, no mid-turn switching. The
+# quality difference between modes is purely the model tier; the orchestration
+# logic is identical for all of them.
+#   eco    : fast model everywhere (cheapest).
+#   medium : fast model everywhere (the everyday default).
+#   high   : strong model everywhere (max quality).
 ORCH_MODES = ("eco", "medium", "high")
 DEFAULT_MODE = "medium"
+LOOP_LLM_BY_MODE = {
+    "eco": GEMINI_FLASH_ID,
+    "medium": GEMINI_FLASH_ID,
+    "high": SONNET_ID,
+}
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -170,6 +183,7 @@ CAPABILITIES = {
         "block_labels": {
             "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
             "run_sql": {"fr": "interrogation des données", "en": "querying the data"},
+            "lookup": {"fr": "recherche dans les données", "en": "looking up the data"},
             "format_output": {"fr": "mise en forme du résultat", "en": "formatting the result"},
             "clarify_user": {"fr": "demande de précision", "en": "asking for clarification"},
             "out_of_scope_msg": None,
@@ -178,6 +192,7 @@ CAPABILITIES = {
         "tool_labels": {
             "resolve_filter_value": {"fr": "résolution des noms exacts", "en": "resolving exact names"},
             "dataset_sql_query": {"fr": "génération et exécution du SQL", "en": "generating and running SQL"},
+            "dataset_lookup": {"fr": "recherche directe d'une valeur", "en": "direct value lookup"},
         },
         "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
         "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
@@ -215,10 +230,10 @@ def staffed_domains():
 # 3. TOOL SPECS (OpenAI-style function schemas) — generated from the registry
 # =============================================================================
 
-def build_tool_specs(caps, include_escalate=False):
+def build_tool_specs(caps):
     """Return (tool_specs, tool_to_cap). One tool per enabled AGENT capability,
-    plus the built-in presentation/utility tools. When ``include_escalate`` is set
-    (cheap model in eco/medium), expose the model-driven hand-over tool too."""
+    plus the built-in presentation/utility tools. The SAME tool set is exposed in
+    every mode (no escalation tool) — modes only change which model drives."""
     specs, tool_to_cap = [], {}
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -340,35 +355,6 @@ def build_tool_specs(caps, include_escalate=False):
             "parameters": {"type": "object", "properties": {}},
         },
     })
-    if include_escalate:
-        specs.append({
-            "type": "function",
-            "function": {
-                "name": "escalate_to_expert",
-                "description": (
-                    "Hand THIS turn over to a more powerful model. Use it ONLY when "
-                    "the task is genuinely complex or ambiguous and you are NOT "
-                    "confident you can answer it well on your own (tricky multi-step "
-                    "analysis, unclear intent, conflicting constraints). Use it "
-                    "SPARINGLY — you handle the vast majority yourself. When you call "
-                    "it, a stronger model takes over WITH everything gathered so far "
-                    "and finishes the answer; you do nothing else this turn. Provide "
-                    "a short 'reason' (for logs) and a one-sentence 'user_message' in "
-                    "the USER'S language telling them you're switching to a more "
-                    "powerful model because the request is more complex."),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "reason": {"type": "string",
-                                   "description": "Why you are escalating (internal/logs)."},
-                        "user_message": {"type": "string",
-                                         "description": "One transparent sentence to the "
-                                                        "user, in their language."},
-                    },
-                    "required": ["reason"],
-                },
-            },
-        })
     return specs, tool_to_cap
 
 
@@ -404,6 +390,8 @@ _NARR = {
                       "c'est l'étape la plus longue, un instant…",
                 "en": "Generating and running the SQL on the data — this is the "
                       "longest step, one moment…"},
+    "lookup": {"fr": "Je recherche directement la valeur dans les données…",
+               "en": "Looking the value up directly in the data…"},
     "format": {"fr": "Je mets en forme les résultats…",
                "en": "Shaping the results…"},
     "chart": {"fr": "Je prépare le graphique…", "en": "Preparing the chart…"},
@@ -415,7 +403,8 @@ _NARR = {
                 "en": "Reading the figures and writing the answer…"},
 }
 # sub-agent blockId -> narration key (only the phases worth narrating).
-_BLOCK_NARR = {"resolve": "resolve", "run_sql": "run_sql", "format_output": "format"}
+_BLOCK_NARR = {"resolve": "resolve", "run_sql": "run_sql", "lookup": "lookup",
+               "format_output": "format"}
 
 
 # Bilingual human labels for the timeline (the live language of the user).
@@ -433,8 +422,6 @@ _L = {
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
     "artifact_kpi": {"fr": "Indicateur prêt", "en": "KPI ready"},
     "writing": {"fr": "Rédaction de la réponse", "en": "Writing the answer"},
-    "escalating": {"fr": "Passage à un modèle plus puissant",
-                   "en": "Switching to a more powerful model"},
     "done": {"fr": "Terminé", "en": "Done"},
 }
 
@@ -715,7 +702,7 @@ def _subagent_tool_output(answer, result, intent=None):
 
 
 # =============================================================================
-# 5c. MODEL MODE + CONSERVATIVE ESCALATION (software-first, cheap by default)
+# 5c. MODEL MODE — one model per mode (model-agnostic, no escalation)
 # =============================================================================
 
 def parse_mode(text):
@@ -801,36 +788,11 @@ def _looks_like_premature_stop(text):
     return bool(_LEADIN_RE.search(t))
 
 
-# Transparent user-facing fallback when the model escalates without its own message,
-# and the steering message handed to the strong model on hand-over.
-_ESCALATE_MSG = {
-    "fr": "Cette demande est plus complexe — je passe sur un modèle plus puissant "
-          "pour vous répondre.",
-    "en": "This request is more complex — I'm switching to a more powerful model to "
-          "answer it.",
-}
-_ESCALATE_HANDOVER = {
-    "fr": ("Tu es maintenant l'analyste senior (modèle plus puissant). Reprends ce "
-           "tour avec TOUT ce qui a déjà été rassemblé, termine l'analyse et réponds "
-           "à l'utilisateur dans sa langue. Appelle les spécialistes si besoin."),
-    "en": ("You are now the senior analyst (a more powerful model). Take over this "
-           "turn with EVERYTHING gathered so far, finish the analysis and answer the "
-           "user in their language. Call the specialists if you still need data."),
-}
-
-
 def pick_loop_llm(mode):
-    """The model that STARTS the turn. Eco-first + model-driven escalation: Eco and
-    Medium start on the cheap model and the model itself hands the turn over to the
-    strong model (escalate_to_expert) ONLY when it has real doubts. High starts on
-    the strong model directly (max quality up front, no escalate tool needed)."""
-    return ESCALATION_LLM_ID if mode == "high" else ORCH_LLM_ID
-
-
-def can_escalate(mode, loop_llm_id):
-    """True when the model-driven hand-over tool should be exposed: we are on the
-    cheap model in an escalatable mode (Eco or Medium). High already runs strong."""
-    return mode in ("eco", "medium") and loop_llm_id == ORCH_LLM_ID
+    """The single model that drives the WHOLE turn for this mode. No escalation,
+    no mid-turn switching — the chosen model handles routing, tool calls and the
+    final answer end to end (see LOOP_LLM_BY_MODE)."""
+    return LOOP_LLM_BY_MODE.get(mode, LOOP_LLM_BY_MODE[DEFAULT_MODE])
 
 
 # =============================================================================
@@ -925,7 +887,7 @@ PERSONA = (
 )
 
 
-def build_system_prompt(caps, lang_hint, can_escalate=False):
+def build_system_prompt(caps, lang_hint):
     cap_lines = []
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -950,46 +912,33 @@ def build_system_prompt(caps, lang_hint, can_escalate=False):
     parts.append(
         "\n# HOW TO WORK\n"
         "1. ACT — NEVER JUST PROMISE. The instant the question needs business data "
-        "(revenue, billing, budget, forecast, customers, products, amounts…), you MUST "
-        "CALL the specialist tool on THIS turn. You hold NO data yourself, so CALLING "
-        "the tool IS how you 'check' / 'pull' / 'look it up'. NEVER answer 'I'll check', "
-        "'I'm pulling it', 'on it' WITHOUT the tool call in the SAME turn — a turn that "
-        "promises an action but emits no tool call is a FAILURE, not an answer (the user "
-        "gets nothing). When in any doubt, CALL the tool. (OPTIONAL, secondary: you may "
-        "put ONE short sentence in the user's language right BEFORE the tool call, e.g. "
-        "'On it — pulling EVPL revenue.'. It's a nice touch, but the TOOL CALL is what "
-        "matters — never the sentence alone. In your final answer, continue from that "
-        "lead-in, don't repeat it.)\n"
-        "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
+        "(revenue, billing, budget, forecast, customers, products, amounts…), CALL the "
+        "specialist tool on THIS turn. You hold NO data yourself, so CALLING the tool IS "
+        "how you 'check' / 'pull' / 'look it up'. A turn that promises an action ('I'll "
+        "check', 'on it') but emits NO tool call is a FAILURE, not an answer — the user "
+        "gets nothing. When in any doubt, CALL the tool.\n"
+        "2. NARRATE AS YOU GO (this is what the user sees live, and it is SAVED as part "
+        "of your reply). Right before you call a tool, write ONE short, natural sentence "
+        "in the user's language saying what you're about to do ('Let me pull EVPL "
+        "revenue, actuals vs budget…'). It must come TOGETHER WITH the tool call on the "
+        "SAME turn — never the sentence alone. Keep these progress lines brief and human; "
+        "don't narrate trivial steps. When the data comes back, continue the SAME message "
+        "into your analysis — do not repeat the lead-in.\n"
+        "3. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
         "never deny). Write each task SELF-CONTAINED (entity, scenario/phase, exact "
         "period); the specialist does not see the conversation.\n"
-        "3. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW (it runs SQL). "
-        "Put the whole need into ONE task when you can — one query can return "
-        "actuals AND budget AND the delta together. When the question genuinely "
-        "needs SEVERAL independent answers, emit ALL the specialist calls in the "
-        "SAME turn so they run IN PARALLEL — NEVER call one, wait for it, then "
-        "call the next (that is twice as slow).\n"
-        "4. PRESENT. When a specialist returns data, render it in the panel with "
+        "4. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW. Put the whole need "
+        "into ONE task when you can — one call can return actuals AND budget AND the "
+        "delta together. When the question genuinely needs SEVERAL independent answers, "
+        "emit ALL the specialist calls in the SAME turn so they run IN PARALLEL — NEVER "
+        "call one, wait for it, then call the next (that is twice as slow).\n"
+        "5. PRESENT. When a specialist returns data, render it in the panel with "
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
         "figure EXACT, in the user's language — comment on the artifact and give "
         "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
-        "5. If a specialist asks for clarification or says it's out of scope, "
+        "6. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user — do not invent an answer.\n")
-    if can_escalate:
-        parts.append(
-            "\n# WHEN YOU'RE OUT OF YOUR DEPTH (escalation)\n"
-            "You are the fast, economical model and you handle the vast majority of "
-            "turns yourself — that is the default. But you have a tool, "
-            "`escalate_to_expert`, that hands this turn to a more powerful model. "
-            "Use it SPARINGLY and only when you genuinely have DOUBTS you can answer "
-            "well: a tricky multi-step analysis, an ambiguous request you can't "
-            "confidently disambiguate, conflicting constraints, or a 'why / explain' "
-            "that needs real reasoning. Prefer to escalate EARLY (before heavy work) "
-            "when you can tell up front it's hard. When you escalate, write the "
-            "one-sentence user_message in the user's language; the stronger model "
-            "then continues with everything already gathered. Do NOT escalate simple "
-            "lookups, greetings, or capability-gap answers.\n")
     # Re-state the reply language LAST (recency slot of the system message). The
     # backend also appends it at the end of the user's message; both anchor it.
     lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
@@ -1018,16 +967,14 @@ class OrchState(TypedDict, total=False):
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
-    escalated: bool                                # True once handed over to the strong model
 
 
 # =============================================================================
-# 8b. MODEL-SWITCHABLE CHAT — explicit transcript so the loop can hand a turn over
+# 8b. AGENTIC CHAT — explicit transcript with strict tool_call -> tool_output
 # -----------------------------------------------------------------------------
-# The whole conversation is mirrored into an ordered op list so the completion can
-# be REBUILT on a stronger model mid-turn (escalation), replaying the EXACT
-# tool_call -> tool_output pairing (a mismatch is a Mesh 400, cf. L061). Same path
-# builds the initial chat and the escalated one — one source of truth.
+# The whole conversation is mirrored into an ordered op list and replayed on a
+# fresh completion, preserving the EXACT tool_call -> tool_output pairing (a
+# mismatch is a Mesh 400, cf. L061). One model drives the whole turn.
 # =============================================================================
 
 class LoopChat(object):
@@ -1080,15 +1027,6 @@ class LoopChat(object):
     def execute(self):
         return self._completion.execute()
 
-    def switch_model(self, new_llm_id, new_tool_specs, new_system=None):
-        """Hand the turn to another model: rebuild the completion from the recorded
-        transcript on ``new_llm_id`` (optionally with a new system prompt / tools)."""
-        self._llm_id = new_llm_id
-        self._tool_specs = new_tool_specs
-        if new_system is not None:
-            self._system = new_system
-        self._completion = self._fresh()
-
 
 # =============================================================================
 # 9. AGENT
@@ -1098,15 +1036,13 @@ class MyLLM(BaseLLM):
 
     def __init__(self):
         self._caps = None
-        self._tool_specs = None         # without the escalate tool (strong model / post-handover)
-        self._tool_specs_esc = None     # with the escalate tool (cheap model, eco/medium)
+        self._tool_specs = None
         self._tool_to_cap = None
 
     # ---- registry / specs (cheap; rebuilt to honor live enabled flags) ----
     def _ensure_specs(self):
         self._caps = get_capabilities()
         self._tool_specs, self._tool_to_cap = build_tool_specs(self._caps)
-        self._tool_specs_esc, _ = build_tool_specs(self._caps, include_escalate=True)
 
     # ---- input ------------------------------------------------------------
     @staticmethod
@@ -1277,7 +1213,7 @@ class MyLLM(BaseLLM):
                 % ctype)
 
     # ---- graph nodes (closures built per request bind chat/project/trace) --
-    def _build_graph(self, project, trace, chat, context_msg, lang, escalatable):
+    def _build_graph(self, project, trace, chat, context_msg, lang):
 
         def _run_llm():
             with trace.subspan("orchestrator:llm") as sp:
@@ -1289,18 +1225,12 @@ class MyLLM(BaseLLM):
                     pass
             return r
 
-        def _switch_to_expert():
-            """Rebuild the loop completion on the strong model (one shared path for
-            model-driven and auto escalation): same system minus the escalate tool."""
-            chat.switch_model(
-                ESCALATION_LLM_ID, self._tool_specs,
-                new_system=build_system_prompt(self._caps, lang, can_escalate=False))
-
         def node_agent(state):
             # ONE agentic loop on the reliable blocking completion: the model calls
             # tools (sub-agents + show_* render tools), then writes the final answer
             # itself in its last turn (no separate synthesis pass — fewer slow LLM
-            # round-trips, which is what keeps the orchestrator fast).
+            # round-trips, which is what keeps the orchestrator fast). The SAME single
+            # model drives every turn (the mode picked it) — no escalation.
             writer = get_stream_writer()
             if not state.get("started"):
                 writer(_ev("START", {"label": _L["start"][lang]}))
@@ -1309,13 +1239,13 @@ class MyLLM(BaseLLM):
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
-            escalated = state.get("escalated")
-            # Narrate-and-stop guard (single shot, in-node): the model wrote a forward-
-            # looking lead-in that PROMISES a data action ("je rajoute le forecast…")
-            # but emitted NO tool call, before any specialist ran. That is a premature
-            # stop, not an answer — nudge ONCE and re-ask so the promise actually
-            # triggers the fetch. Bounded to exactly one extra call (no loop risk); the
-            # recovered lead-in still streams as real text on the retry's tool turn.
+            # Narrate-and-stop guard (single shot, in-node, model-agnostic): the model
+            # wrote a forward-looking lead-in that PROMISES a data action ("je rajoute le
+            # forecast…") but emitted NO tool call, before any specialist ran. That is a
+            # premature stop, not an answer — nudge ONCE and re-ask so the promise
+            # actually triggers the fetch. Bounded to exactly one extra call (no loop
+            # risk); the recovered lead-in still streams as real text on the retry's tool
+            # turn. (Most models call the tool directly; this only catches the rare slip.)
             if (not tcs and not state.get("used_caps")
                     and _looks_like_premature_stop(text)):
                 if text:
@@ -1326,34 +1256,15 @@ class MyLLM(BaseLLM):
                 usage = _sum_usage(usage, _usage_from_resp(resp))
                 text = (getattr(resp, "text", None) or "").strip()
                 tcs = list(getattr(resp, "tool_calls", None) or [])
-                # Still narrating, still no tool call: the cheap model is failing this
-                # data turn. AUTO-escalate to the strong model (eco-first safety net) so
-                # the user gets a real answer instead of an empty promise. Transparent;
-                # one-way (we're on the cheap model and haven't escalated yet).
-                if (not tcs and escalatable and not escalated
-                        and chat.llm_id == ORCH_LLM_ID):
-                    writer(_ev("ESCALATING", {"label": _L["escalating"][lang]}))
-                    writer(_txt(_ESCALATE_MSG[lang] + "\n\n"))
-                    # Roles must alternate (last op is the user nudge): add an assistant
-                    # turn (the transparency line) before the user handover.
-                    chat.add_message(_ESCALATE_MSG[lang], role="assistant")
-                    chat.add_message(_ESCALATE_HANDOVER[lang], role="user")
-                    _switch_to_expert()
-                    writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
-                    resp = _run_llm()
-                    usage = _sum_usage(usage, _usage_from_resp(resp))
-                    text = (getattr(resp, "text", None) or "").strip()
-                    tcs = list(getattr(resp, "tool_calls", None) or [])
-                    escalated = True
             if tcs and state.get("step", 0) < MAX_TOOL_LOOPS:
                 # `text` here is the model's OWN lead-in written alongside the tool
                 # call ("Let me pull EVPL revenue…") — streamed live as REAL message
                 # text by node_tools (persisted, ChatGPT-style), not a transient ticker.
                 return {"pending_tool_calls": tcs, "usage": usage,
                         "preamble": text, "step": state.get("step", 0) + 1,
-                        "started": True, "escalated": escalated}
+                        "started": True}
             return {"pending_tool_calls": [], "final_text": text,
-                    "usage": usage, "started": True, "escalated": escalated}
+                    "usage": usage, "started": True}
 
         def route_agent(state):
             return "tools" if state.get("pending_tool_calls") else "finish"
@@ -1362,35 +1273,6 @@ class MyLLM(BaseLLM):
             writer = get_stream_writer()
             tcs = state["pending_tool_calls"]
             preamble = (state.get("preamble") or "").strip()
-
-            # --- model-driven escalation hand-over (eco-first) ---
-            # If the cheap model asked to escalate, DON'T thread the escalate tool-call
-            # into the transcript (keep it clean); be transparent (a real message + an
-            # ESCALATING event), then switch the loop to the strong model and let IT
-            # continue from everything gathered. One-way: the rebuilt spec drops the
-            # tool, so it can't escalate again.
-            esc = next((tc for tc in tcs
-                        if (tc.get("function") or {}).get("name") == "escalate_to_expert"),
-                       None)
-            if esc and not state.get("escalated") and chat.llm_id == ORCH_LLM_ID:
-                eargs = _parse_args((esc.get("function") or {}).get("arguments"))
-                if preamble:
-                    writer(_txt(preamble + "\n\n"))
-                writer(_ev("ESCALATING", {"label": _L["escalating"][lang]}))
-                msg = (eargs.get("user_message") or "").strip() or _ESCALATE_MSG[lang]
-                writer(_txt(msg + "\n\n"))           # REAL, persisted transparency message
-                # Record an ASSISTANT turn (the lead-in + transparency line the user
-                # just saw) BEFORE the user handover. The last replayed history turn is
-                # the current user question; a bare user handover after it would be TWO
-                # consecutive user turns, which Vertex/Anthropic Claude rejects with a
-                # 400 (roles must alternate). The assistant turn keeps them alternating
-                # regardless of whether the model wrote a preamble.
-                lead = ((preamble + "\n\n") if preamble else "") + msg
-                chat.add_message(lead, role="assistant")
-                chat.add_message(_ESCALATE_HANDOVER[lang], role="user")
-                _switch_to_expert()
-                # tools -> agent edge re-runs node_agent on the strong model.
-                return {"escalated": True, "pending_tool_calls": [], "preamble": ""}
 
             chat.add_tool_calls(tcs)
 
@@ -1647,15 +1529,13 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # Eco-first model policy: Eco/Medium START on the cheap model and the
-            # model itself hands the turn over (escalate_to_expert) when it has real
-            # doubts; High starts on the strong model. The escalate tool is exposed
-            # only while we're on the cheap model in an escalatable mode.
+            # One model drives the WHOLE turn — the mode picks it (eco/medium = fast
+            # model, high = strong model). No escalation, no mid-turn switching: the
+            # same model routes, calls tools and writes the final answer.
             loop_llm = pick_loop_llm(mode)
-            escalatable = can_escalate(mode, loop_llm)
-            system_prompt = build_system_prompt(self._caps, lang, can_escalate=escalatable)
-            tool_specs = self._tool_specs_esc if escalatable else self._tool_specs
-            chat = self._new_chat(project, system_prompt, history, loop_llm, tool_specs)
+            system_prompt = build_system_prompt(self._caps, lang)
+            chat = self._new_chat(project, system_prompt, history, loop_llm,
+                                  self._tool_specs)
             # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
             # authoritative reply language so the specialist writes any clarification /
             # no-data / out-of-scope message in the user's language (it no longer
@@ -1670,11 +1550,11 @@ class MyLLM(BaseLLM):
                     "PREVIOUS ASSISTANT MESSAGE:\n%s\n\nUSER'S RAW CURRENT "
                     "MESSAGE:\n%s" % (prev_assistant[:2000], last_user[:500]))
 
-            graph = self._build_graph(project, trace, chat, context_msg, lang, escalatable)
+            graph = self._build_graph(project, trace, chat, context_msg, lang)
             initial = {"pending_tool_calls": [], "captured": [], "usage": {},
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",
-                       "started": False, "escalated": False}
+                       "started": False}
             for chunk in graph.stream(initial, stream_mode="custom",
                                       config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 8}):
                 yield chunk
