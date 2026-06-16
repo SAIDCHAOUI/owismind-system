@@ -33,7 +33,7 @@ export function normalizeEditableOp(values) {
   return values.length > 1 ? 'IN' : '='
 }
 
-export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort, drill) {
+export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort, drill, table) {
   const filters = []
   const keptIds = []
   for (const c of chips) {
@@ -57,6 +57,13 @@ export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort,
   // else, so this list is a request, never an authority.
   if (Array.isArray(drill) && drill.length) {
     payload.drill = drill.map((d) => ({ column: d.column, value: d.value }))
+  }
+  // Source-table selector (multi-table SQL): OPTIONAL trailing argument. Only a
+  // dataset NAME travels — the server matches it against the SQL's own set of
+  // matched tables and falls back to the first when unknown, so it is a request,
+  // never an authority. Absent / empty -> default (first matched) table.
+  if (typeof table === 'string' && table) {
+    payload.table = table
   }
   return payload
 }

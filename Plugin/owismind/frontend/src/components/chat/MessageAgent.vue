@@ -328,6 +328,12 @@ function nextVersion() {
               </div>
             </TransitionGroup>
           </div>
+          <!-- Live "what I'm doing now" narration (transient — only shown during
+               the run; hidden in the terminal view below, never persisted). -->
+          <div v-else-if="seg.kind === 'narration'" class="narration">
+            <span class="narr-dot" aria-hidden="true" />
+            <span class="narr-text">{{ seg.item.text }}</span>
+          </div>
           <!-- Intermediate agent answer, exactly where it arrived (sanitized markdown) -->
           <div v-else-if="seg.kind === 'text'" class="body" v-html="renderItem(seg.item)" />
           <div v-else-if="seg.kind === 'error'" class="body error">— {{ seg.item.message }} —</div>
@@ -475,6 +481,20 @@ function nextVersion() {
 
 /* Body — typography for sanitized markdown (children are not scoped → :deep). */
 .body { font-size: var(--fs-md); line-height: 1.7; color: var(--text); overflow-wrap: anywhere; }
+/* Live narration — a muted "what I'm doing now" status line in the flow. Shown
+   only during the run (the terminal view drops narration items entirely). */
+.narration {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: var(--fs-sm); color: var(--text-3); line-height: 1.5;
+  padding: 1px 0;
+}
+.narr-dot {
+  flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%;
+  background: var(--orange); animation: narr-pulse 1.1s ease-in-out infinite;
+}
+.narr-text { overflow-wrap: anywhere; }
+@keyframes narr-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .narr-dot { animation: none; opacity: 0.7; } }
 /* Waiting placeholder — same shimmer sweep as the live activity title. */
 .body.thinking {
   color: var(--text-3);

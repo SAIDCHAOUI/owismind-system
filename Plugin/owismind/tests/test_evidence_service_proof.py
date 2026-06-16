@@ -63,6 +63,7 @@ from owismind.evidence.service import (  # noqa: E402
     effective_where_complete,
     has_captured_result,
     item_matches_candidates,
+    matched_source_tables,
     normalize_explain,
     predicate_display,
     summarize_queries,
@@ -310,6 +311,47 @@ class ItemMatchTests(unittest.TestCase):
     def test_invalid_sql_never_matches_never_raises(self):
         self.assertFalse(item_matches_candidates("DELETE FROM x", self.CANDIDATES))
         self.assertFalse(item_matches_candidates(None, self.CANDIDATES))
+
+
+class MatchedSourceTablesTests(unittest.TestCase):
+    """The DISTINCT matched-source list driving the multi-table selector (pure)."""
+
+    CANDIDATES = [
+        {"name": "DRIVE_Revenues", "table": "drive_revenues", "schema": "public"},
+        {"name": "Tickets", "table": "tickets", "schema": "public"},
+    ]
+
+    def test_single_source_one_entry(self):
+        parsed = [{"table": "drive_revenues", "schema": "public"}]
+        out = matched_source_tables(parsed, self.CANDIDATES)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["dataset"], "DRIVE_Revenues")
+        self.assertEqual(out[0]["table"], "drive_revenues")
+        self.assertEqual(out[0]["label"], "DRIVE_Revenues")
+
+    def test_two_distinct_sources_first_seen_order(self):
+        parsed = [{"table": "tickets", "schema": "public"},
+                  {"table": "drive_revenues", "schema": "public"}]
+        out = matched_source_tables(parsed, self.CANDIDATES)
+        self.assertEqual([e["dataset"] for e in out], ["Tickets", "DRIVE_Revenues"])
+
+    def test_duplicate_table_collapses(self):
+        # The SAME dataset referenced twice (e.g. a self-join) yields ONE entry.
+        parsed = [{"table": "drive_revenues", "schema": "public"},
+                  {"table": "drive_revenues", "schema": None}]
+        out = matched_source_tables(parsed, self.CANDIDATES)
+        self.assertEqual(len(out), 1)
+
+    def test_unmatched_tables_excluded(self):
+        parsed = [{"table": "elsewhere", "schema": "public"},
+                  {"table": "tickets", "schema": "public"}]
+        out = matched_source_tables(parsed, self.CANDIDATES)
+        self.assertEqual([e["dataset"] for e in out], ["Tickets"])
+
+    def test_malformed_input_never_raises(self):
+        self.assertEqual(matched_source_tables(None, self.CANDIDATES), [])
+        self.assertEqual(matched_source_tables(["not a dict"], self.CANDIDATES), [])
+        self.assertEqual(matched_source_tables([{"table": "tickets"}], None), [])
 
 
 class ResultBlockTests(unittest.TestCase):

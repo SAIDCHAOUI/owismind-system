@@ -21,6 +21,11 @@ import {
 // Deepest browsable page index — mirrors the backend's MAX_EVIDENCE_PAGE
 // (security/validation.py): the server silently clamps anything deeper.
 const MAX_PAGE = 20
+// Defensive client-side cap on the ACCUMULATED (lazily appended) rows: infinite
+// scroll appends page after page, so a huge source table must never grow the
+// in-memory array without bound. 10 pages x 50 rows = 500 rows max on screen;
+// past that the "load more" sentinel stops fetching (the user filters to narrow).
+const MAX_ROWS = 500
 
 export const useEvidenceStore = defineStore('evidence', () => {
   const open = ref(false)
@@ -32,10 +37,18 @@ export const useEvidenceStore = defineStore('evidence', () => {
   const activeTab = ref('evidence')
   const chips = ref([]) // local editable working state (evidenceModel shape)
   const includeAdvanced = ref(false)
+  // Lazily ACCUMULATED rows: page 0 resets this array, every "load more" appends
+  // the next page (infinite scroll). Bounded by MAX_ROWS so a huge table can
+  // never blow memory. `page` is the index of the LAST loaded page.
   const rows = ref([])
   const page = ref(0)
   const hasMore = ref(false)
   const sort = ref(null) // { column, dir: 'asc' | 'desc' } | null
+  // Source-table selector (multi-table SQL): the dataset name the live rows
+  // table is currently re-querying. null = the backend's default (first matched
+  // table). Reset on every exchange/close; a selector is shown only when the
+  // meta carries more than one matched source.
+  const selectedTable = ref(null)
   // Drill-down into ONE captured-result row (trust layer v2): non-null while
   // the table shows the source rows behind a result row. Carries the labels
   // sent with /evidence/rows plus a snapshot of the pre-drill view (restored
@@ -57,6 +70,13 @@ export const useEvidenceStore = defineStore('evidence', () => {
   const modified = computed(
     () => available.value && isModified(meta.value, chips.value, includeAdvanced.value),
   )
+  // The DISTINCT matched source tables the agent's SQL reads (backend meta.sources).
+  // A selector is offered only when there is more than one (single-table = no UI).
+  const sources = computed(() => {
+    const s = meta.value && Array.isArray(meta.value.sources) ? meta.value.sources : []
+    return s
+  })
+  const hasMultipleSources = computed(() => sources.value.length > 1)
 
   // Compute the default tab key for a given meta object: 'evidence' unless
   // there are artifacts, in which case the first artifact's kind wins.
@@ -76,6 +96,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     page.value = 0
     hasMore.value = false
     sort.value = null
+    selectedTable.value = null // close / new exchange = default (first matched) table
     drill.value = null // close / new exchange = no drill (and nothing to restore)
     error.value = ''
     rowsError.value = ''
@@ -137,25 +158,40 @@ export const useEvidenceStore = defineStore('evidence', () => {
     }
   }
 
+  // Lazily load ONE page of rows. `append` selects the mode:
+  //   - false (default): a FRESH load of page 0 — replaces the accumulated rows
+  //     (used on open / filter / sort / drill / table change).
+  //   - true: load the NEXT page (page + 1) and APPEND to the accumulated rows
+  //     (the infinite-scroll sentinel). The accumulated array is capped at
+  //     MAX_ROWS so a huge source table can never grow it without bound.
   // Tri-state result: true = latest request succeeded, false = latest request
-  // FAILED (pagination rolls back on this), null = superseded by a newer
+  // FAILED (no append/reset committed), null = superseded by a newer
   // request/close (no rollback — something else owns the state now).
-  async function _loadRows(mySeq) {
+  async function _loadRows(mySeq, opts) {
+    const append = !!(opts && opts.append)
+    const targetPage = append ? page.value + 1 : 0
     const myRows = ++rowsSeq
     rowsLoading.value = true
     try {
       const payload = buildRowsPayload(
-        exchangeId.value, chips.value, includeAdvanced.value, page.value, sort.value,
-        drill.value ? drill.value.labels : null,
+        exchangeId.value, chips.value, includeAdvanced.value, targetPage, sort.value,
+        drill.value ? drill.value.labels : null, selectedTable.value,
       )
       const data = await fetchEvidenceRows(payload)
       if (mySeq !== seq || myRows !== rowsSeq) return null
-      rows.value = data.rows || []
-      hasMore.value = !!data.has_more
+      const newRows = data.rows || []
       // Adopt the server-echoed page: the backend silently CLAMPS deep pages
-      // (MAX_EVIDENCE_PAGE), and a counter that keeps incrementing past the
-      // clamp would page forever over the same rows.
-      if (typeof data.page === 'number' && data.page >= 0) page.value = data.page
+      // (MAX_EVIDENCE_PAGE); a counter racing past the clamp would page forever
+      // over the same rows. Append guards against that double-counting too.
+      const echoed = typeof data.page === 'number' && data.page >= 0 ? data.page : targetPage
+      if (append && echoed > page.value) {
+        rows.value = rows.value.concat(newRows).slice(0, MAX_ROWS)
+      } else if (!append) {
+        rows.value = newRows.slice(0, MAX_ROWS)
+      }
+      page.value = echoed
+      // Stop paging once the server has no more rows OR the client cap is hit.
+      hasMore.value = !!data.has_more && rows.value.length < MAX_ROWS
       return true
     } catch (e) {
       if (mySeq !== seq || myRows !== rowsSeq) return null
@@ -166,10 +202,20 @@ export const useEvidenceStore = defineStore('evidence', () => {
     }
   }
 
+  // Fresh reload (page 0): used by every filter / sort / drill / table change.
   function refreshRows() {
     error.value = ''
     rowsError.value = ''
     return _loadRows(seq)
+  }
+
+  // Infinite-scroll: append the next page when the sentinel scrolls into view.
+  // Bounded by hasMore (server) and MAX_ROWS (client); never fetches everything.
+  function loadMoreRows() {
+    if (!hasMore.value || rowsLoading.value) return Promise.resolve(null)
+    if (page.value >= MAX_PAGE) return Promise.resolve(null) // mirrors backend clamp
+    if (rows.value.length >= MAX_ROWS) return Promise.resolve(null)
+    return _loadRows(seq, { append: true })
   }
 
   function close() {
@@ -287,23 +333,23 @@ export const useEvidenceStore = defineStore('evidence', () => {
     page.value = 0
     refreshRows()
   }
-  // Rollback ONLY on a genuine failure of the latest request (ok === false):
-  // a superseded request (null) means another action owns `page` now, so a
-  // rollback would fight it (e.g. prevPage from page 1 racing a filter reset).
-  async function nextPage() {
-    if (!hasMore.value || rowsLoading.value) return
-    if (page.value >= MAX_PAGE) return // mirrors backend MAX_EVIDENCE_PAGE
-    const previous = page.value
-    page.value += 1
-    const ok = await refreshRows()
-    if (ok === false) page.value = previous
-  }
-  async function prevPage() {
-    if (page.value === 0 || rowsLoading.value) return
-    const previous = page.value
-    page.value -= 1
-    const ok = await refreshRows()
-    if (ok === false) page.value = previous
+  // Switch the live rows table to another matched source dataset (multi-table
+  // SQL). Resets the lazy state and re-queries page 0 of THAT table. A drill is
+  // dropped (its group keys are scoped to the previous table). No-op when the
+  // name is the current one or not among the matched sources.
+  function setTable(name) {
+    if (name === selectedTable.value) return
+    if (name != null && !sources.value.some((s) => s.dataset === name)) return
+    selectedTable.value = name || null
+    // A different table = a different schema: the agent's filters no longer
+    // resolve there, so drop them back to the table's own scope (page 0, no
+    // drill). Chips for the new table are NOT in this meta, so show all rows.
+    chips.value = []
+    includeAdvanced.value = false
+    sort.value = null
+    drill.value = null
+    page.value = 0
+    refreshRows()
   }
 
   // Distinct values for the picker — returned to the caller (the popover owns
@@ -325,10 +371,11 @@ export const useEvidenceStore = defineStore('evidence', () => {
   return {
     open, exchangeId, meta, chips, includeAdvanced, rows, page, hasMore, sort, drill,
     loading, rowsLoading, error, rowsError, available, modified,
+    sources, hasMultipleSources, selectedTable,
     activeTab, setActiveTab,
-    openForExchange, close, refreshRows,
+    openForExchange, close, refreshRows, loadMoreRows,
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,
     drillIntoResultRow, exitDrill,
-    setSort, nextPage, prevPage, loadDistinct,
+    setSort, setTable, loadDistinct,
   }
 })

@@ -1453,4 +1453,22 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   360 tests backend verts. ⏳ à re-tester DSS.
 - **Source** : retour DSS user + session 2026-06-16 Run 2. **Date** : 2026-06-16.
 
+## L065 — Narration live SANS faire stopper le petit modèle : events `NARRATION` émis par le CODE (pas par le modèle), transients, rendus comme messages de flux (⏳ codé+633 tests, NON validé DSS)
+- **Contexte** : l'user voulait « qu'il explique au fur et à mesure ce qu'il fait, comme toi » pendant
+  l'attente (le modèle sémantique prend ~1 min). Hypothèse user : « peut-être pas possible en LangGraph ».
+  C'EST possible. Le piège (L063) : demander au MODÈLE de narrer avant d'appeler → le petit modèle prend
+  la narration pour sa réponse et s'arrête. Donc la narration ne doit PAS venir d'une instruction au modèle.
+- **Solution qui marche** : le **CODE** émet des events `NARRATION` (via `get_stream_writer`) aux moments
+  clés — avant chaque appel sous-agent (texte SPÉCIFIQUE : la `task` réelle du modèle, jamais canné), à
+  chaque phase du sous-agent relayée (`resolve`/`run_sql`/`format` → message naturel), avant chaque rendu
+  (chart/table/kpi), et avant la rédaction. `_narr(text)` = `_ev("NARRATION", {"text": …})`. Le backend
+  (`streaming._normalized_artifact_event` voisin) normalise `NARRATION` → event `{type:"narration", text}`
+  qui (1) est rendu **en flux** mais (2) n'est **JAMAIS** accumulé dans la réponse stockée (le worker ne
+  met dans `answer_parts` que `answer_delta`) → **transient** (live only ; absent au reload). Frontend :
+  `timelineModel` gère `narration` (kind 'narration', hors `answerText`), `MessageAgent` le rend en LIVE
+  comme ligne discrète à point pulsé ; en vue TERMINALE les items narration ne sont pas rendus (nettoyés).
+  **0 appel LLM en plus, 0 latence, marche sur n'importe quel modèle, jamais de narrate-and-stop.**
+- **Preuve-vérification** : 633 tests (dont reducer narration + `_narr`/`_NARR` bilingues) ; vite OK.
+- **Source** : retour DSS user + session 2026-06-16 Run 3. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

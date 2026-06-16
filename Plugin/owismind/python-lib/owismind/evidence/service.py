@@ -366,6 +366,37 @@ def item_matches_candidates(sql, candidates):
     return False
 
 
+def matched_source_tables(parsed_tables, candidates):
+    """The DISTINCT discovered datasets the SQL's FROM/JOIN tables map to. Pure.
+
+    Walks the parsed tables in order, matches each against the discovered project
+    datasets (same matcher as the main pipeline) and returns one entry per
+    DISTINCT matched dataset, in first-seen order:
+        [{"dataset": name, "schema": s|None, "table": physical, "label": name}]
+    The 1-source case yields a single-entry list; the frontend renders a table
+    selector ONLY when this list has more than one entry. Never raises.
+    """
+    out = []
+    seen = set()
+    for ref in parsed_tables or []:
+        if not isinstance(ref, dict):
+            continue
+        match = match_whitelist(ref.get("table"), ref.get("schema"), candidates)
+        if match is None:
+            continue
+        name = match.get("name")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        out.append({
+            "dataset": name,
+            "schema": match.get("schema"),
+            "table": match.get("table"),
+            "label": name,
+        })
+    return out
+
+
 def summarize_queries(items, matched_flags):
     """The ``queries`` block of /evidence/meta: one summary per stored item. Pure.
 
@@ -718,16 +749,21 @@ def _evidence_executor(dataset_name):
     return SQLExecutor2(dataset=dataiku.Dataset(dataset_name))
 
 
-def _context(user_id, exchange_id):
+def _context(user_id, exchange_id, preferred_table=None):
     """Everything the interactive view needs; raises EvidenceError otherwise.
 
-    Best-effort mapping (user decision): the FIRST parsed source table that
-    matches a discovered project dataset wins, and only the predicates that
-    BOTH apply to that table (sql_parse.predicates_for_table) AND resolve on
-    its live schema are kept — anything unmappable (join plumbing, other
-    tables' filters, renamed columns) is dropped instead of degrading the view.
-    The drop counts are kept on the context so the trust layer can surface them
-    honestly (verification / drill-down gates).
+    Best-effort mapping (user decision): a parsed source table that matches a
+    discovered project dataset wins, and only the predicates that BOTH apply to
+    that table (sql_parse.predicates_for_table) AND resolve on its live schema
+    are kept — anything unmappable (join plumbing, other tables' filters,
+    renamed columns) is dropped instead of degrading the view. The drop counts
+    are kept on the context so the trust layer can surface them honestly
+    (verification / drill-down gates).
+
+    ``preferred_table`` (optional, multi-table SQL): the dataset NAME the caller
+    wants re-queried. When it matches one of the SQL's own matched datasets, that
+    one is used; otherwise (None / unknown) the FIRST matched table wins — so the
+    single-table path is byte-identical to before.
     """
     item, items, active_index = _load_sql_item(user_id, exchange_id)
     if item is None:
@@ -738,11 +774,17 @@ def _context(user_id, exchange_id):
     candidates = _dataset_candidates()
     # match_whitelist resolves an agent FROM/JOIN table to a discovered project
     # dataset (the executed reference is rebuilt from the RESOLVED candidate).
+    # First-match wins, UNLESS the caller asked for a specific matched dataset
+    # (multi-table selector) — then the ref mapping to that dataset is preferred.
     match, matched_ref = None, None
     for ref in parsed["tables"]:
-        match = match_whitelist(ref["table"], ref["schema"], candidates)
-        if match is not None:
-            matched_ref = ref
+        candidate = match_whitelist(ref["table"], ref["schema"], candidates)
+        if candidate is None:
+            continue
+        if match is None:  # remember the first match as the default
+            match, matched_ref = candidate, ref
+        if preferred_table and candidate.get("name") == preferred_table:
+            match, matched_ref = candidate, ref
             break
     if match is None:
         # Diagnostic: show the agent's tables vs the discovered candidates so the
@@ -798,6 +840,9 @@ def _context(user_id, exchange_id):
         "items": items,                  # every stored item, storage order
         "active_index": active_index,    # 0-based position of the active item
         "candidates": candidates,        # discovered datasets (for queries[].matched)
+        # Every DISTINCT discovered dataset the SQL reads, first-seen order; the
+        # frontend offers a table selector only when there is more than one.
+        "matched_sources": matched_source_tables(parsed["tables"], candidates),
         "source_schema": match.get("schema"),
         "source_table": match["table"],
         "parsed_predicates": parsed["predicates"],
@@ -939,6 +984,10 @@ def evidence_meta(user_id, exchange_id):
             "schema": ctx["source_schema"],
             "table": ctx["source_table"],
         },
+        # Every DISTINCT source dataset the SQL reads (the live rows table can be
+        # re-queried against any of them via /evidence/rows `table`). The frontend
+        # renders a selector ONLY when this list has more than one entry.
+        "sources": ctx["matched_sources"],
         "queries": summarize_queries(ctx["items"], matched_flags),
         "verification": verification,
         "explanation": build_explanation(explain),
@@ -948,15 +997,18 @@ def evidence_meta(user_id, exchange_id):
 
 
 def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
-                  page, sort, drill=None):
+                  page, sort, drill=None, table=None):
     """One bounded page of the (re-)filtered evidence table. Read-only.
 
     ``drill`` (optional, validated upstream) narrows the page to ONE result
     group: every drill column is re-derived from the STORED SQL server-side
     (never trusted from the client) and rendered as an equality / IS NULL
     condition ADDED to the standard ones. Everything else is unchanged.
+    ``table`` (optional, multi-table SQL) selects WHICH matched source dataset to
+    re-query; it is matched server-side against the SQL's own set (the client
+    never picks an arbitrary table). Unknown / None -> the first matched table.
     """
-    ctx = _context(user_id, exchange_id)
+    ctx = _context(user_id, exchange_id, preferred_table=table)
     conditions = []
     kept = set(kept_ids)
     for pred in ctx["predicates"]:
@@ -1004,8 +1056,10 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     rows = _run_evidence_query(ctx, query, "evidence_rows")
     has_more = len(rows) > PAGE_SIZE
     logger.info(
-        "evidence_rows — user_id=%s exchange_id=%s dataset=%s page=%d conditions=%d returned=%d",
-        user_id, exchange_id, ctx["dataset"], page, len(conditions), min(len(rows), PAGE_SIZE),
+        "evidence_rows — user_id=%s exchange_id=%s dataset=%s requested_table=%s "
+        "page=%d conditions=%d returned=%d",
+        user_id, exchange_id, ctx["dataset"], table, page, len(conditions),
+        min(len(rows), PAGE_SIZE),
     )
     return {"rows": rows[:PAGE_SIZE], "has_more": has_more, "page": page}
 

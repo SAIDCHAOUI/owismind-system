@@ -452,3 +452,26 @@ test('usageFromRow surfaces a stored zero (a real run, not "no usage")', () => {
     estimatedCost: 0,
   })
 })
+
+test('narration: live transient messages appear in the flow but never in answerText', () => {
+  const s = feed([
+    { type: 'run_started', exchangeId: 7 },
+    { type: 'agent_event', eventKind: 'CALLING_AGENT', label: 'Calling X' },
+    { type: 'narration', text: 'Je consulte l’expert revenus : YTD EVPL…' },
+    { type: 'answer_delta', text: 'EVPL a généré 1,2 M€.' },
+    { type: 'run_done' },
+  ])
+  const narrs = s.timeline.filter((it) => it.kind === 'narration')
+  assert.equal(narrs.length, 1)
+  assert.match(narrs[0].text, /EVPL/)
+  // Narration is transient: NOT part of the copied/stored answer.
+  assert.equal(answerText(s), 'EVPL a généré 1,2 M€.')
+  // It DOES interleave as its own segment in the live flow.
+  const segKinds = timelineSegments(s).map((x) => x.kind)
+  assert.ok(segKinds.includes('narration'))
+})
+
+test('narration: empty text is ignored (no empty bubble)', () => {
+  const s = feed([{ type: 'narration', text: '' }])
+  assert.equal(s.timeline.filter((it) => it.kind === 'narration').length, 0)
+})

@@ -1,10 +1,12 @@
-"""DSS-free unit tests for dataiku-agents/agents/dataset_expert_agent.py.
+"""DSS-free unit tests for the revenue Dataset Expert (now the LangGraph agent
+``dataiku-agents/agents/SalesDrive_revenue_expert.py``).
 
-``dataiku`` is stubbed BEFORE the agent file is loaded via importlib. Only
-PURE functions are tested (profile parsing, understanding validation, SQL
-builders, SQL guard, grounding policy, shaping, formatting, verified
-headline, about-data card). Anything touching LLM Mesh / SQLExecutor2 must
-be validated on the DSS instance.
+``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent file is loaded via
+importlib. Only PURE functions are tested (profile parsing, understanding
+validation, SQL builders, SQL guard, grounding policy, shaping, formatting,
+verified headline, about-data card) — these are byte-identical to the retired
+linear ``dataset_expert_agent.py``, so coverage is preserved on the ACTIVE file.
+Anything touching LLM Mesh / SQLExecutor2 must be validated on the DSS instance.
 
 Run from the repo root:
     python3 -m unittest discover -s dataiku-agents/tests -v
@@ -17,7 +19,7 @@ import types
 import unittest
 
 
-def _install_dataiku_stub():
+def _install_stubs():
     dataiku_mod = types.ModuleType("dataiku")
     dataiku_mod.api_client = lambda: None
     dataiku_mod.Dataset = lambda *a, **k: None
@@ -37,11 +39,49 @@ def _install_dataiku_stub():
     sys.modules.setdefault("dataiku.llm", llm_pkg)
     sys.modules.setdefault("dataiku.llm.python", llm_python)
 
+    # langgraph stub (import surface only; the graph is never run in these tests).
+    lg = types.ModuleType("langgraph")
+    lg_graph = types.ModuleType("langgraph.graph")
 
-_install_dataiku_stub()
+    class _Sentinel(str):
+        pass
+
+    lg_graph.START = _Sentinel("__start__")
+    lg_graph.END = _Sentinel("__end__")
+
+    class _StateGraph(object):
+        def __init__(self, *a, **k):
+            pass
+
+        def add_node(self, *a, **k):
+            pass
+
+        def add_edge(self, *a, **k):
+            pass
+
+        def add_conditional_edges(self, *a, **k):
+            pass
+
+        def compile(self, *a, **k):
+            return self
+
+        def stream(self, *a, **k):
+            return iter(())
+
+    lg_graph.StateGraph = _StateGraph
+    lg_config = types.ModuleType("langgraph.config")
+    lg_config.get_stream_writer = lambda: (lambda *a, **k: None)
+    lg.graph = lg_graph
+    lg.config = lg_config
+    sys.modules.setdefault("langgraph", lg)
+    sys.modules.setdefault("langgraph.graph", lg_graph)
+    sys.modules.setdefault("langgraph.config", lg_config)
+
+
+_install_stubs()
 
 _AGENT_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "agents", "dataset_expert_agent.py"))
+    os.path.dirname(__file__), "..", "agents", "SalesDrive_revenue_expert.py"))
 _SPEC = importlib.util.spec_from_file_location("dataset_expert_under_test",
                                                _AGENT_PATH)
 dx = importlib.util.module_from_spec(_SPEC)
@@ -713,12 +753,12 @@ class TestSemanticEngine(unittest.TestCase):
                            "end": "2025-12-31", "label": "2025"})
         q = dx.build_semantic_question(
             u, P, [{"column": "customer_name", "value": "HALYS"}])
-        self.assertIn('USER QUESTION: "CA de HALYS en 2025 ?"', q)
+        self.assertIn('"CA de HALYS en 2025 ?"', q)        # the user question leads
         self.assertIn('revenue (SUM("amount_eur"))', q)
         self.assertIn("Phase is in: ACTUALS", q)
         self.assertIn("year_month between 2025-01-01 and 2025-12-31", q)
         self.assertIn("customer_name = 'HALYS'", q)
-        self.assertIn("never fuzzy-match", q)
+        self.assertIn("HELPER FINDINGS", q)        # grounded values are HINTS (L058)
         self.assertIn("read by another LLM", q)   # destination context
 
     def test_default_scenario_applied_when_unspecified(self):
@@ -765,8 +805,8 @@ class TestSemanticEngine(unittest.TestCase):
                       dx.build_semantic_question(u, P, []))
         u = make_u(intent="custom", instruction="ratio onnet/offnet ?")
         q = dx.build_semantic_question(u, P, [])
-        self.assertIn('USER QUESTION: "ratio onnet/offnet ?"', q)
-        self.assertNotIn("WHAT IS EXPECTED", q)   # custom: the question leads
+        self.assertIn('"ratio onnet/offnet ?"', q)   # custom: the question leads
+        self.assertNotIn("WHAT IS EXPECTED", q)
 
     def test_literal_escaping_in_filters(self):
         q = dx.build_semantic_question(

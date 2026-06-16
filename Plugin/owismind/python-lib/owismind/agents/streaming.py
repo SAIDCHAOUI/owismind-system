@@ -62,6 +62,11 @@ _AGENT_DONE_KIND = "AGENT_DONE"
 _ARTIFACT_KIND = "ARTIFACT"
 _ARTIFACT_CHART_TYPES = ("line", "bar", "pie")
 
+# Live "what I'm doing now" narration: surfaced as a dedicated normalized event,
+# shown in the flow but NEVER persisted as the answer (transient progress).
+_NARRATION_KIND = "NARRATION"
+_NARRATION_MAX_CHARS = 280
+
 # eventData keys relayed verbatim onto the live ``agent_event`` (trust-layer context
 # for the timeline). This is a strict WHITELIST pass-through — never the whole dict:
 # orchestrator payloads also carry agentId / message / instruction / steps /
@@ -345,6 +350,15 @@ def run_agent_streamed(project_key, agent_id, messages):
         if chunk_type == "event":
             event_data = data.get("eventData", {}) or {}
             seen_event_data.append(event_data)
+            # NARRATION: a short live "what I'm doing now" message. Surfaced as its
+            # own normalized event so the front renders it as a flowing message —
+            # NOT as a timeline step and NEVER accumulated into the stored answer
+            # (it is transient; the worker only appends it to the live timeline).
+            if data.get("eventKind") == _NARRATION_KIND:
+                text = event_data.get("text")
+                if isinstance(text, str) and text.strip():
+                    yield {"type": "narration", "text": text[:_NARRATION_MAX_CHARS]}
+                continue
             agent_event = {
                 "type": "agent_event",
                 "eventKind": data.get("eventKind"),

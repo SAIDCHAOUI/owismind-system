@@ -216,6 +216,11 @@ MAX_EVIDENCE_VALUE_CHARS = 500
 MAX_EVIDENCE_PAGE = 20
 MAX_EVIDENCE_KEPT_IDS = 100
 MAX_EVIDENCE_COLUMN_CHARS = 128
+# Optional source-table selector (multi-table SQL): the client may ask Evidence
+# to re-query a SPECIFIC matched source table instead of the first one. Only a
+# bounded identifier string travels; the service re-validates it against the SQL's
+# own set of matched tables, so this is a request, never an authority.
+MAX_EVIDENCE_TABLE_CHARS = 256
 EVIDENCE_FILTER_OPS = ("=", "IN")
 # Drill-down labels (one per drillable group key): the server re-derives the
 # drillable column set from the STORED SQL, so only shape/bounds are checked
@@ -264,12 +269,15 @@ def validate_evidence_rows_request(payload):
     """Validate a /evidence/rows payload.
 
     Returns ``(exchange_id, filters, kept_ids, include_advanced, page, sort,
-    drill)``. Raises ValidationError (stable code) on structurally invalid
-    input; the page is CLAMPED (never raises), mirroring the other limit
+    drill, table)``. Raises ValidationError (stable code) on structurally
+    invalid input; the page is CLAMPED (never raises), mirroring the other limit
     helpers. ``drill`` is the optional drill-down label list (<= 8 entries of
     ``{column, value}``; value may be None — it renders an IS NULL test); the
     drillable column SET is re-derived server-side from the stored SQL, so only
     shape and bounds are validated here (single stable code: 'invalid_drill').
+    ``table`` is the OPTIONAL source-table selector (multi-table SQL): a bounded
+    identifier string or None; the service matches it against the SQL's own set
+    of matched tables (the client never picks an arbitrary table).
     """
     if not isinstance(payload, dict):
         raise ValidationError("invalid_payload")
@@ -344,4 +352,13 @@ def validate_evidence_rows_request(payload):
             raise ValidationError("invalid_drill")
         drill.append({"column": column, "value": value})
 
-    return exchange_id, filters, kept_ids, include_advanced, page, sort, drill
+    # Optional source-table selector (multi-table SQL). A malformed value
+    # degrades to None (default = first matched table); the service rejects an
+    # unknown table against the SQL's matched set, so only shape/bounds here.
+    table = None
+    raw_table = payload.get("table")
+    if (isinstance(raw_table, str) and raw_table
+            and len(raw_table) <= MAX_EVIDENCE_TABLE_CHARS):
+        table = raw_table
+
+    return exchange_id, filters, kept_ids, include_advanced, page, sort, drill, table

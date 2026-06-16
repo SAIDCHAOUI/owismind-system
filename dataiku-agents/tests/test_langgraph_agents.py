@@ -1,6 +1,6 @@
 """DSS-free unit tests for the LangGraph agents:
-  - agents/orchestrator_langgraph.py   (new agentic tool-calling orchestrator)
-  - agents/dataset_expert_langgraph.py (sub-agent: LangGraph wrapper, same engine)
+  - agents/OWIsMind_orchestrator.py       (agentic tool-calling orchestrator)
+  - agents/SalesDrive_revenue_expert.py   (sub-agent: LangGraph wrapper, same engine)
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent files load (importlib),
 so only PURE logic is exercised — registry/tool specs, the honesty sources block,
@@ -89,8 +89,8 @@ def _load(mod_name, filename):
     return mod
 
 
-orch = _load("orchestrator_under_test", "orchestrator_langgraph.py")
-dx = _load("dataset_expert_lg_under_test", "dataset_expert_langgraph.py")
+orch = _load("orchestrator_under_test", "OWIsMind_orchestrator.py")
+dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
 
 
 class TestModelIds(unittest.TestCase):
@@ -113,7 +113,7 @@ class TestRegistryAndTools(unittest.TestCase):
         caps = orch.get_capabilities()
         self.assertIn("revenue_expert", caps)
         self.assertTrue(caps["revenue_expert"]["enabled"])
-        self.assertEqual(caps["revenue_expert"]["agent_id"], "agent:AKQaQ0Am")
+        self.assertEqual(caps["revenue_expert"]["agent_id"], "agent:bHrWLyOL")
         # Exactly one enabled revenue agent (rollback invariant).
         revenue = [k for k, v in caps.items()
                    if v.get("kind") == "agent" and v.get("domain") == "revenue"]
@@ -445,6 +445,30 @@ class TestNativeArtifactFormatting(unittest.TestCase):
         # A clarification / out-of-scope reply (no rows) is passed through.
         out = orch._subagent_tool_output("Which EVPL did you mean?", None, None)
         self.assertEqual(out, "Which EVPL did you mean?")
+
+
+class TestLiveNarration(unittest.TestCase):
+    """Live narration is emitted as transient NARRATION events (shown live, never
+    persisted), so the wait feels alive on ANY model without an extra LLM call."""
+
+    def test_narr_event_shape(self):
+        ev = orch._narr("Je consulte l'expert…")
+        chunk = ev["chunk"]
+        self.assertEqual(chunk["type"], "event")
+        self.assertEqual(chunk["eventKind"], "NARRATION")
+        self.assertEqual(chunk["eventData"]["text"], "Je consulte l'expert…")
+
+    def test_narr_caps_text(self):
+        ev = orch._narr("x" * 500)
+        self.assertLessEqual(len(ev["chunk"]["eventData"]["text"]), 280)
+
+    def test_narration_phrasings_bilingual(self):
+        for key in ("calling", "resolve", "run_sql", "format", "chart", "table",
+                    "kpi", "writing"):
+            self.assertIn("fr", orch._NARR[key])
+            self.assertIn("en", orch._NARR[key])
+        # Sub-agent phase blockIds map to a narration key.
+        self.assertEqual(orch._BLOCK_NARR["run_sql"], "run_sql")
 
 
 class TestModelModeAndEscalation(unittest.TestCase):

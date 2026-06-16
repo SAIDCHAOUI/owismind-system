@@ -14,7 +14,7 @@
 #
 # Tools exposed to the model (generated from the registry + built-ins):
 #   - ask_<capability>  : delegate a self-contained task to a specialist
-#                         sub-agent (e.g. ask_revenue_expert -> agent:AKQaQ0Am).
+#                         sub-agent (e.g. ask_revenue_expert -> agent:bHrWLyOL).
 #   - show_chart        : render the latest data result as a line/bar/pie chart.
 #   - show_table        : render the latest data result as a full table.
 #   - current_date      : return today's date.
@@ -140,7 +140,7 @@ CAPABILITIES = {
     # --- Revenue / billing / budget / forecast (the live revenue expert) ----
     "revenue_expert": {
         "kind": "agent",
-        "agent_id": "agent:AKQaQ0Am",          # Dataset Expert (DRIVE_Revenues)
+        "agent_id": "agent:bHrWLyOL",          # SalesDrive_revenue_expert (DRIVE_Revenues)
         "domain": "revenue",
         "label_fr": "Expert revenus (Drive)",
         "label_en": "Revenue expert (Drive)",
@@ -173,16 +173,8 @@ CAPABILITIES = {
         "pass_context": True,
         "enabled": True,
     },
-    # --- Dormant predecessors (kept for rollback; enabled=False) ------------
-    "salesdrive_v2": {
-        "kind": "agent", "agent_id": "agent:MODpGFcC", "domain": "revenue",
-        "label_fr": "SalesDrive (revenus)", "label_en": "SalesDrive (revenue)",
-        "tool_name": "ask_salesdrive", "planner_description": "Revenue expert (v2).",
-        "block_labels": {}, "tool_labels": {},
-        "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
-        "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
-        "pass_context": True, "enabled": False,
-    },
+    # Adding a sub-agent (e.g. a tickets expert) = one more entry here. Older
+    # predecessors live in git history; we keep the registry to the live agents.
 }
 
 # Business domains OWI cares about. A domain is "staffed" when an enabled agent
@@ -349,6 +341,40 @@ def _ev(kind, data=None):
 
 def _txt(text):
     return {"chunk": {"text": text}}
+
+
+def _narr(text):
+    """A NARRATION event: a short, live, natural-language 'what I'm doing now'
+    message streamed to the user as the work happens. It is TRANSIENT (shown live
+    only, never persisted as the answer), so the waiting feels alive on ANY model
+    without an extra LLM call and without ever making the model narrate-and-stop."""
+    return {"chunk": {"type": "event", "eventKind": "NARRATION",
+                      "eventData": {"text": str(text)[:280]}}}
+
+
+# Live-narration phrasings (fr/en). Specific where possible (the task/labels are
+# interpolated), so it never reads like a canned, repeated event kind.
+_NARR = {
+    "calling": {"fr": "Je consulte %s : %s", "en": "Consulting %s: %s"},
+    "calling_plain": {"fr": "Je consulte %s…", "en": "Consulting %s…"},
+    "resolve": {"fr": "J'analyse votre demande et je repère les bons filtres…",
+                "en": "Reading your request and pinpointing the right filters…"},
+    "run_sql": {"fr": "Je génère et j'exécute la requête SQL sur les données — "
+                      "c'est l'étape la plus longue, un instant…",
+                "en": "Generating and running the SQL on the data — this is the "
+                      "longest step, one moment…"},
+    "format": {"fr": "Je mets en forme les résultats…",
+               "en": "Shaping the results…"},
+    "chart": {"fr": "Je prépare le graphique…", "en": "Preparing the chart…"},
+    "table": {"fr": "J'affiche le tableau détaillé…",
+              "en": "Laying out the detailed table…"},
+    "kpi": {"fr": "Je mets en avant le chiffre clé…",
+            "en": "Highlighting the key figure…"},
+    "writing": {"fr": "J'analyse les chiffres et je rédige la réponse…",
+                "en": "Reading the figures and writing the answer…"},
+}
+# sub-agent blockId -> narration key (only the phases worth narrating).
+_BLOCK_NARR = {"resolve": "resolve", "run_sql": "run_sql", "format_output": "format"}
 
 
 # Bilingual human labels for the timeline (the live language of the user).
@@ -907,6 +933,12 @@ class MyLLM(BaseLLM):
                         status = ed.get("status")
                         intent = ed.get("intent")        # drives the rendering hint
                         continue
+                    # Live narration of the sub-agent's phases, so the long SQL wait
+                    # reads as natural-language progress (not just repeated steps).
+                    if ek == "AGENT_BLOCK_START":
+                        nk = _BLOCK_NARR.get(ed.get("blockId"))
+                        if nk:
+                            emit(_narr(_NARR[nk][lang]))
                     payload = self._sub_event(ek, ed, cap_key, step_index, lang)
                     if payload:
                         emit(payload)
@@ -1088,6 +1120,9 @@ class MyLLM(BaseLLM):
                 if name in ("show_chart", "show_table", "show_kpi"):
                     label_key = {"show_chart": "tool_chart", "show_table": "tool_table",
                                  "show_kpi": "tool_kpi"}[name]
+                    narr_key = {"show_chart": "chart", "show_table": "table",
+                                "show_kpi": "kpi"}[name]
+                    writer(_narr(_NARR[narr_key][lang]))   # live: "preparing the chart…"
                     writer(_ev("RUNNING_TOOL", {
                         "toolKey": name, "stepIndex": base_step,
                         "label": _L[label_key][lang]}))
@@ -1133,6 +1168,8 @@ class MyLLM(BaseLLM):
                 writer(_ev("ARTIFACT", {"kind": "table", "title": "", "chart": None,
                                         "label": _L["artifact_table"][lang]}))
                 rendered.append("table")
+            if state.get("used_caps"):
+                writer(_narr(_NARR["writing"][lang]))   # live: "writing the answer…"
             writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
             text = (state.get("final_text") or "").strip()
             # When the data is in the panel, drop any table the model still typed
@@ -1178,16 +1215,22 @@ class MyLLM(BaseLLM):
         with sub_calls."""
         n = len(sub_calls)
         step_count = n            # number of specialists invoked this turn
-        # announce all
+        # announce all (live narration uses the model's OWN task, so it is
+        # specific to the request — never a canned, repeated event kind).
         for i, (tc, name, args) in enumerate(sub_calls):
             cap_key = self._tool_to_cap[name]
             cap = CAPABILITIES[cap_key]
+            label = cap.get("label_%s" % lang) or cap.get("label_en")
+            task = str(args.get("task") or "").strip()
+            if task:
+                writer(_narr(_NARR["calling"][lang] % (label, task[:160])))
+            else:
+                writer(_narr(_NARR["calling_plain"][lang] % label))
             writer(_ev("CALLING_AGENT", {
                 "agentKey": cap_key,
-                "question": str(args.get("task") or "")[:400],
+                "question": task[:400],
                 "stepIndex": base_step + i, "stepCount": step_count,
-                "label": (_L["calling"][lang] % (cap.get("label_%s" % lang)
-                                                 or cap.get("label_en")))}))
+                "label": (_L["calling"][lang] % label)}))
 
         if n == 1:
             tc, name, args = sub_calls[0]

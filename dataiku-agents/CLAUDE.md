@@ -14,7 +14,12 @@ runtime. Décision clé (A/B testé en DSS le 2026-06-12) : **le Semantic Model 
 tool génère le meilleur SQL** — toutes nos couches (compréhension, grounding,
 désambiguïsation) existent pour lui fournir le meilleur contexte possible.
 
-## Pipeline du Dataset Expert (`agents/dataset_expert_agent.py`)
+> **Fichiers ACTIFS (Code Agents LangGraph, env 3.11)** : orchestrateur
+> `agents/OWIsMind_orchestrator.py` · sous-agent revenus `agents/SalesDrive_revenue_expert.py`
+> (`agent:bHrWLyOL`). Les anciennes versions linéaires (`*_agent.py`) et v2 (`orchestrator/`,
+> `salesdrive/`) ont été retirées du repo (préservées dans l'historique git).
+
+## Pipeline du Dataset Expert (`agents/SalesDrive_revenue_expert.py`)
 
 ```
 UNDERSTAND  1 LLM JSON — prompt GÉNÉRÉ du profil (métriques, scénarios, axes, synonymes)
@@ -32,19 +37,21 @@ RENDER      table par code + headline LLM vérifiée chiffre par chiffre ;
             about_data = carte du profil, 0 SQL
 ```
 
-Orchestrateur (`agents/orchestrator_agent.py`) = v2.4 Expert Authority (pare-feu
-d'honnêteté intact) + **fan-out parallèle** des étapes multi-agents (pool ≤3, events
-live via queue, spans/usage post-hoc thread principal) + registre `revenue_expert`.
+Orchestrateur (`agents/OWIsMind_orchestrator.py`) = boucle agentique LangGraph
+(le modèle appelle les outils PUIS rédige la réponse — pas de passe de synthèse
+séparée) + pare-feu d'honnêteté + **fan-out parallèle** des sous-agents (pool ≤3,
+events live via queue) + narration live (events `NARRATION`) + modes Éco/Medium/High
+(`pick_loop_llm`) + registre `revenue_expert`.
 
 ## État (2026-06-12)
 
 | Brique | État |
 |---|---|
 | Recettes profil + value index (Flow) | ✅ Exécutées en DSS sur DRIVE_Revenues |
-| Dataset Expert revenus (`agent:AKQaQ0Am`, moteur semantic_tool) | ✅ Validé DSS (« ça marche super bien ») |
-| Orchestrateur v3 (registre basculé : `revenue_expert=True`, `salesdrive_v2=False`) | ✅ Validé DSS |
+| Sous-agent revenus `SalesDrive_revenue_expert` (`agent:bHrWLyOL`, moteur semantic_tool) | ✅ Validé DSS (« ça marche beaucoup mieux ») |
+| Orchestrateur `OWIsMind_orchestrator` (LangGraph, narration live + modes) | ⏳ codé, en cours de validation DSS |
 | Fan-out parallèle réel (≥2 domaines) | ⏳ Testable quand un 2ᵉ agent existera |
-| Tests | 127 + 86 + 55 unittest (`python3 -m unittest discover -s dataiku-agents/tests`) |
+| Tests | `python3 -m unittest discover -s dataiku-agents/tests` (langgraph + dataset-expert + profiler) |
 
 Bugs réels corrigés en route : `LEFT(date,10)` (profil string vs colonne date → prédicats
 cast-safe + auto-fallback), préambule mode-Agent relayé comme réponse, AND impossible

@@ -139,6 +139,24 @@ test('buildRowsPayload: empty or null drill list adds no drill key', () => {
   assert.ok(!('drill' in buildRowsPayload('ex1', [], false, 0, null, null)))
 })
 
+// --- buildRowsPayload table selector (multi-table SQL) -------------------------------
+
+test('buildRowsPayload adds the table key only for a non-empty string', () => {
+  const withTable = buildRowsPayload('ex1', [], false, 0, null, null, 'Tickets')
+  assert.equal(withTable.table, 'Tickets')
+  // Absent / empty / non-string -> no table key (server defaults to first matched).
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null)))
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null, '')))
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null, 123)))
+})
+
+test('buildRowsPayload table is independent of the drill key', () => {
+  const drill = [{ column: 'phase', value: null }]
+  const p = buildRowsPayload('ex1', [], false, 0, null, drill, 'DRIVE_Revenues')
+  assert.deepEqual(p.drill, [{ column: 'phase', value: null }])
+  assert.equal(p.table, 'DRIVE_Revenues')
+})
+
 // --- buildDrillLabels (captured-result row → drill labels) ---------------------------
 
 const RESULT_COLS = ['Customer', 'total']

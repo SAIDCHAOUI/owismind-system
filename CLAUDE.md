@@ -25,7 +25,10 @@ convertie, a été supprimée du repo le 2026-06-11).
 - Racine plugin sur disque : `Plugin/owismind/` · staging zip : `Plugin/ready-for-dataiku/owismind-upload/`
 - Vite `base` `/plugins/owismind/resource/owismind-app/` → `outDir ../resource/owismind-app`
 - SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key `OWISMIND_DEV` (via `default_project_key()`)
-- Agent revenue `agent:rNTZ781a` · API `/owismind-api/*` (santé `/owismind-api/ping`)
+- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) :
+  orchestrateur **OWIsMind_orchestrator** (`dataiku-agents/agents/OWIsMind_orchestrator.py`) →
+  sous-agent revenus **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, fichier `…/SalesDrive_revenue_expert.py`).
+- API `/owismind-api/*` (santé `/owismind-api/ping`)
 - ⚠️ Les guides de `cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) — **ne pas les recopier**.
 
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)

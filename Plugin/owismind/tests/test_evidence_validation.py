@@ -26,7 +26,7 @@ def _payload(**over):
 
 class RowsRequestTests(unittest.TestCase):
     def test_valid_payload_roundtrip(self):
-        ex, filters, kept, adv, page, sort, drill = validate_evidence_rows_request(_payload())
+        ex, filters, kept, adv, page, sort, drill, table = validate_evidence_rows_request(_payload())
         self.assertEqual(ex, "ex1")
         self.assertEqual(filters, [{"column": "solution", "op": "IN", "values": ["OBS", "OCD"]}])
         self.assertEqual(kept, [1, 3])
@@ -34,10 +34,20 @@ class RowsRequestTests(unittest.TestCase):
         self.assertEqual(page, 2)
         self.assertEqual(sort, {"column": "period", "dir": "desc"})
         self.assertEqual(drill, [])
+        self.assertIsNone(table)
 
     def test_defaults(self):
-        ex, filters, kept, adv, page, sort, drill = validate_evidence_rows_request({"exchange_id": "e"})
-        self.assertEqual((filters, kept, adv, page, sort, drill), ([], [], False, 0, None, []))
+        ex, filters, kept, adv, page, sort, drill, table = validate_evidence_rows_request({"exchange_id": "e"})
+        self.assertEqual((filters, kept, adv, page, sort, drill, table),
+                         ([], [], False, 0, None, [], None))
+
+    def test_table_selector(self):
+        # A bounded string table name travels; anything else degrades to None.
+        self.assertEqual(validate_evidence_rows_request(_payload(table="my_dataset"))[7],
+                         "my_dataset")
+        self.assertIsNone(validate_evidence_rows_request(_payload(table=""))[7])
+        self.assertIsNone(validate_evidence_rows_request(_payload(table=123))[7])
+        self.assertIsNone(validate_evidence_rows_request(_payload(table="x" * 257))[7])
 
     def test_page_clamped_never_raises(self):
         self.assertEqual(validate_evidence_rows_request(_payload(page=-3))[4], 0)

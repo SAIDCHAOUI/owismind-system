@@ -149,6 +149,22 @@ function pushError(state, message) {
   })
 }
 
+// A live "what I'm doing now" narration message (transient — backend never
+// persists it as the answer, so it only ever appears during a live run). It
+// interleaves in arrival order like text, but is rendered as a muted status
+// line and is NEVER part of answerText (copy) or the stored answer.
+function pushNarration(state, text) {
+  if (!text) return
+  sealEvents(state)
+  closeText(state)
+  state.timeline.push({
+    id: 'narr-' + nextSeq(state),
+    seq: state._seq,
+    kind: 'narration',
+    text,
+  })
+}
+
 /**
  * Apply ONE normalized backend event to the answer state, in place.
  *
@@ -168,6 +184,10 @@ export function applyEvent(state, evt) {
       break
     case 'answer_delta':
       appendText(state, evt.text || '')
+      break
+    case 'narration':
+      // Live progress message (transient): shown in the flow, never persisted.
+      pushNarration(state, evt.text || '')
       break
     case 'generated_sql':
       // Evidence, not trace: kept out of the timeline, shown in its own SQL panel.

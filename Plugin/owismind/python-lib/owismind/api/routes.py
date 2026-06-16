@@ -615,16 +615,15 @@ def evidence_rows():
     if err:
         return err
     try:
-        (exchange_id, filters, kept_ids, include_advanced, page, sort, drill) = (
-            validate_evidence_rows_request(request.get_json(silent=True))
-        )
+        (exchange_id, filters, kept_ids, include_advanced, page, sort, drill,
+         table) = validate_evidence_rows_request(request.get_json(silent=True))
     except ValidationError as exc:
         logger.warning("/evidence/rows — invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
         result = evidence_service.evidence_rows(
             identity["user_id"], exchange_id, filters, kept_ids,
-            include_advanced, page, sort, drill,
+            include_advanced, page, sort, drill, table,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status

@@ -50,8 +50,8 @@
 #   - STANDALONE file: stdlib + dataiku + langgraph. Runs on the Python 3.11
 #     code env (LangGraph needs >= 3.10). Pasted into a DSS Code Agent.
 #   - LangGraph StateGraph (UNDERSTAND -> RESOLVE -> QUERY -> RENDER) on top of
-#     the SAME engine functions; the validated linear original is preserved as
-#     dataset_expert_agent.py for instant rollback.
+#     the SAME engine functions; the validated linear original lives in git
+#     history (commit before the LangGraph rework) for instant rollback.
 # =============================================================================
 
 import difflib
@@ -2142,10 +2142,10 @@ class MyLLM(BaseLLM):
         """LangGraph entrypoint. Drives a StateGraph
         UNDERSTAND -> RESOLVE -> QUERY -> RENDER (with out-of-scope / clarify /
         about / no-data gates as conditional edges to END). Every stage calls
-        the SAME engine functions as the validated linear original (preserved as
-        dataset_expert_agent.py for rollback) — only the control flow is a
-        graph; behavior is identical. Live timeline events are emitted
-        through LangGraph's custom stream writer."""
+        the SAME engine functions as the validated linear original (in git
+        history for rollback) — only the control flow is a graph; behavior is
+        identical. Live timeline events are emitted through LangGraph's custom
+        stream writer."""
         try:
             project = dataiku.api_client().get_default_project()
             instruction, conversation_context = self._extract_input(query)

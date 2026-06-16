@@ -5,8 +5,25 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🚀 OPTIMISATION MODÈLE-AGNOSTIQUE — Run 2 (2026-06-16) = CORRECTION après retour DSS — ⏳ CODÉ +
-637 TESTS + ZIP, NON re-validé DSS.** Le **Run 1 (nuit) a CASSÉ le comportement DSS** (Éco/Medium :
+**🗣️ NARRATION LIVE + EVIDENCE LAZY + RENOMMAGE/NETTOYAGE — Run 3 (2026-06-16) — ⏳ CODÉ + 633 TESTS +
+ZIP, NON re-validé DSS.** Run 2 validé par l'user (« beaucoup mieux »). Run 3 répond à 6 demandes :
+- **Narration live (L065)** : events `NARRATION` émis par le CODE (jamais par le modèle → pas de
+  narrate-and-stop), **transients** (live only, non persistés), rendus en flux par `MessageAgent`. Le
+  code narre : avant l'appel sous-agent (avec la `task` réelle), à chaque phase (resolve/run_sql/format),
+  avant chaque rendu, avant rédaction. Marche sur **tout modèle**, 0 appel LLM en plus. (Oui, possible en
+  LangGraph.)
+- **Evidence « Explore source data »** (fait par sous-agent **Opus**) : « 2 lignes » corrigé (collapse
+  flex → conteneur scroll borné) ; **lazy/infinite loading** (cap 500) ; toutes colonnes + scroll H/V +
+  en-tête collant ; **sélecteur multi-tables** (`/evidence/meta.sources` + param `table`).
+- **Renommage** Code Agents : `OWIsMind_orchestrator.py` + `SalesDrive_revenue_expert.py`
+  (`agent:bHrWLyOL`). **Nettoyage** : `orchestrator/` + `salesdrive/` (v2) et `*_agent.py` (v3 linéaire) +
+  `test_orchestrator_v3` supprimés (git history), entrée registre `salesdrive_v2` retirée.
+- **À RECOLLER LES 2 Code Agents** + upload zip (**77 entrées, `index-BM3sFZCq.js`**) + **REDÉMARRER
+  backend**. Note multi-SQL : « Result used by the agent » = résultat du DERNIER SQL (le 1er SQL est une
+  forme intermédiaire ; la capture L064 attache le résultat au dernier). Détail → `sessions/2026-06-16.md`
+  Run 3, **L065** (+ L063-L064 Run 2).
+
+**Avant — Run 2 (2026-06-16) = correction du Run 1 cassé — ⏳ CODÉ + ZIP, validé « beaucoup mieux ».** Le **Run 1 (nuit) a CASSÉ le comportement DSS** (Éco/Medium :
 le modèle narrait puis s'arrêtait ; bridé ; lent ; graphique vide). Run 2 = retour à une **boucle
 agentique simple qui marche** + correction des vrais bugs :
 - **Narration-first + synthèse séparée + indice forcé = SUPPRIMÉS** (L063) : c'était la cause du
@@ -272,14 +289,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🚀. **VALIDER DSS le Run 2 (L063-L064)** : recoller **LES 2 Code Agents** (env 3.11) —
-   `orchestrator_langgraph.py` ET `dataset_expert_langgraph.py` (capture `i==last_i` + headline coupé) —
-   + uploader le zip (`index-B015Ius_.js`, Evidence) + **redémarrer backend**. Smoke-tests : (a) « montre
-   l'évolution actuals vs budget depuis janv 2025 » en **Éco** → doit APPELER le sous-agent (plus de
-   narrate-and-stop), afficher un **graphique** dans le panneau (plus vide), répondre avec analyse ; (b)
-   idem en **Medium**/**High** ; (c) top clients → tableau ; (d) vérifier que c'est **plus rapide** (~‑44 s :
-   synthèse + headline retirés). Confirmer l'id Mesh Sonnet (`ESCALATION_LLM_ID`). **Différé** : sélecteur
-   SQL multi-SQL dans Evidence (la capture corrigée règle déjà « Result not kept »).
+0🗣️. **VALIDER DSS le Run 3** : recoller **LES 2 Code Agents** (env 3.11) — **OWIsMind_orchestrator**
+   (`agents/OWIsMind_orchestrator.py`) ET **SalesDrive_revenue_expert** (`agents/SalesDrive_revenue_expert.py`,
+   `agent:bHrWLyOL`) — + uploader le zip (`index-BM3sFZCq.js`) + **redémarrer backend**. Smoke-tests :
+   (a) question revenus en **Éco/Medium** → **messages de narration au fil de l'eau** pendant l'attente
+   (« Je consulte l'expert revenus : … », « Je génère le SQL… », « Je trace le graphique… ») + réponse +
+   graphique ; (b) Evidence → « Explore source data » montre ≥20 lignes, toutes colonnes, scroll, charge en
+   défilant ; sélecteur de table si plusieurs ; (c) escalade High. Confirmer l'id Mesh Sonnet
+   (`ESCALATION_LLM_ID`).
 0★★. **FINALISER le fix sous-agent assistif (L058)** : recoller `dataset_expert_langgraph.py` dans le
    Code Agent `agent:AKQaQ0Am` (env 3.11), puis **re-tester EVPL via l'orchestrateur** (« revenus YTD
    EVPL, actuals vs budget ») → doit matcher le Playground (Product, budget ≠ 0, note de transparence).

@@ -50,13 +50,12 @@ enfin **véridique**), event `AGENT_RESULT`, format `sql_id`, caps 50×50×256×
 |---|---|---|
 | `recipes/profile_dataset_recipe.py` | Profil du dataset : stats déterministes + enrichissement LLM (descriptions, rôles, métriques, scénarios, synonymes) | Recette Python dans le Flow |
 | `recipes/build_value_index_recipe.py` | Index de toutes les valeurs distinctes des colonnes "groundables" (+ forme normalisée) | Recette Python dans le Flow |
-| `agents/dataset_expert_agent.py` | Le sous-agent générique (UNDERSTAND→RESOLVE→SQL→EXECUTE→RENDER) | Code Agent (1 par dataset) |
-| `agents/orchestrator_agent.py` | Orchestrateur v3 = v2.4 (Expert Authority) + fan-out parallèle + entrée registre du Dataset Expert | À coller dans le Code Agent orchestrateur EXISTANT |
-| `tests/` | 110 tests unitaires DSS-free (`python3 -m unittest discover -s dataiku-agents/tests`) | Repo uniquement |
+| `agents/SalesDrive_revenue_expert.py` | Le sous-agent générique LangGraph (UNDERSTAND→RESOLVE→SQL→EXECUTE→RENDER), `agent:bHrWLyOL` | Code Agent **SalesDrive_revenue_expert** (env 3.11) |
+| `agents/OWIsMind_orchestrator.py` | Orchestrateur LangGraph (boucle agentique + narration live + modes Éco/Medium/High + fan-out parallèle) | Code Agent **OWIsMind_orchestrator** (env 3.11) |
+| `tests/` | Tests unitaires DSS-free (`python3 -m unittest discover -s dataiku-agents/tests`) | Repo uniquement |
 
-**Rollback** à tout moment : remettre `salesdrive_v2.enabled=True` / `revenue_expert.enabled=False`
-dans le registre de l'orchestrateur et recoller. Le système actuel (salesdrive v2 + orchestrateur
-v2.4) reste intact dans `orchestrator/` et `salesdrive/`.
+**Rollback** : les versions linéaires (`*_agent.py`) et v2 (`orchestrator/`, `salesdrive/`) ont
+été retirées du repo mais restent dans l'historique git (`git show <commit>:<path>`).
 
 ---
 
@@ -115,9 +114,9 @@ que c'est versionnable, diffable et testé.
 
 ### Étape 3 — Le Code Agent « Dataset Expert » (≈ 10 min)
 
-1. GenAI → Agents → **New → Code agent** (env Python ≥ 3.10, le même que les agents
-   actuels). Nom suggéré : `OWI Dataset Expert — Revenue`.
-2. Coller `agents/dataset_expert_agent.py`, puis remplir le bloc CONFIG :
+1. GenAI → Agents → **New → Code agent** (env Python 3.11, langchain/langgraph
+   installés). Nom du Code Agent : **`SalesDrive_revenue_expert`** (`agent:bHrWLyOL`).
+2. Coller `agents/SalesDrive_revenue_expert.py`, puis remplir le bloc CONFIG :
    - `PROFILE_DATASET = "DRIVE_Revenues_profile"`
    - `VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"`
    - `SQL_ENGINE = "semantic_tool"` (défaut) + `SEMANTIC_TOOL_ID` / `SEMANTIC_TOOL_NAME`
@@ -130,15 +129,13 @@ que c'est versionnable, diffable et testé.
      **que** sur le moteur direct (intent `custom` ou fallback).
 3. Tester direct dans le playground de l'agent (voir §5), noter son id `agent:XXXXXXX`.
 
-### Étape 4 — L'orchestrateur v3 (≈ 5 min)
+### Étape 4 — L'orchestrateur (≈ 5 min)
 
-1. Dans `agents/orchestrator_agent.py` (repo), renseigner l'id : entrée
-   `revenue_expert` → `"agent_id": "agent:XXXXXXX"`.
-2. Basculer les flags : `revenue_expert.enabled = True`, `salesdrive_v2.enabled = False`
-   (**une seule** capability revenue visible du planner à la fois).
-3. Coller le fichier dans le Code Agent **orchestrateur existant** (même id → la
-   webapp ne change pas, zéro redéploiement du plugin).
-4. Commit côté repo : le repo reste la source de vérité (toute modif DSS directe sera
+1. Dans `agents/OWIsMind_orchestrator.py` (repo), l'entrée `revenue_expert` pointe
+   déjà `"agent_id": "agent:bHrWLyOL"` — mettre à jour si l'id du sous-agent change.
+2. Coller le fichier dans le Code Agent **OWIsMind_orchestrator** (env 3.11). La
+   webapp le résout par whitelist → zéro redéploiement du plugin.
+3. Commit côté repo : le repo reste la source de vérité (toute modif DSS directe sera
    écrasée au prochain collage).
 
 ### Étape 5 — Rien d'autre
