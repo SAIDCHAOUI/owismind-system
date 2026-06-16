@@ -35,6 +35,10 @@ export function createAnswerState(over) {
     sql: [],
     usage: null,
     status: 'running',
+    // True while a user stop has been requested but the backend run hasn't ended yet
+    // (the LLM Mesh stream has no cancel API, so the worker only cuts BETWEEN chunks).
+    // Drives the "Stopping…" indicator; cleared by any terminal event.
+    stopping: false,
     error: '',
     showSql: false,
     exchangeId: null,
@@ -207,6 +211,7 @@ export function applyEvent(state, evt) {
     case 'run_done':
       sealEvents(state)
       closeText(state)
+      state.stopping = false
       if (state.status === 'running') state.status = 'done'
       break
     case 'stopped':
@@ -216,10 +221,12 @@ export function applyEvent(state, evt) {
       // only flips a still-running version, so a late/duplicate stop is a no-op.
       sealEvents(state)
       closeText(state)
+      state.stopping = false
       if (state.status === 'running') state.status = 'stopped'
       break
     case 'error':
       state.status = 'error'
+      state.stopping = false
       state.error = evt.message || 'inconnue'
       pushError(state, state.error)
       break

@@ -10,24 +10,27 @@
 Test DSS du Run 4 = ÉCHEC sur gpt-5.4-mini (escalade **systématique** + message hardcodé ; sinon
 **narre puis s'arrête**). User : abandonner gpt-5.4-mini, passer Gemini 2.5 Flash, **arrêter les hacks
 mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 chantiers :
-- **Modèle (L071)** : **escalade SUPPRIMÉE en entier** (tool `escalate_to_expert`, `can_escalate`,
-  `switch_model`, `ESCALATION_LLM_ID`, `_ESCALATE_*`, auto-escalade, event `ESCALATING`). `LOOP_LLM_BY_MODE`
-  = {eco:Flash, medium:Flash, high:Sonnet}, **1 modèle pilote tout le tour**. Sous-agent aussi sur Flash.
-  Prompt ACT-FIRST **+ « NARRATE AS YOU GO »** (narration naturelle = vrai message persisté). Nudge gardé.
+- **Modèles par mode (L071 + ajustés L075)** : **escalade SUPPRIMÉE en entier**. `LOOP_LLM_BY_MODE` =
+  **{eco:gpt-5.4-mini, medium:Gemini Flash, high:Sonnet}** (gpt-5.4-mini GARDÉ en Éco — marche bien, ~gratuit).
+  **1 modèle pilote tout le tour**. Le mode se **propage au sous-agent** (`MODE:` dans context → `forced_mode`
+  → `pick_subagent_llm`, threadé dans l'état) : Éco=mini, Medium=Gemini, High=Sonnet (→ **High = Sonnet partout**).
+  Hook `SEMANTIC_TOOL_ID_BY_MODE` pour le modèle sémantique (config DSS).
+- **Narration séparée + conditionnelle (L075)** : section « NARRATE AS YOU GO » du prompt **détachée**,
+  ajoutée **seulement si `narration_enabled(mode)` (≠ eco)**. En Éco (mini) : pas de demande de parler pendant
+  le tool-call (anti narrate-and-stop) → ticker déterministe. ACT-FIRST dans tous les modes.
   **⚠️ VÉRIFIER `GEMINI_FLASH_ID`** (orchestrateur + sous-agent) = best-guess
-  `openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash` → corriger l'id exact (1 ligne/fichier).
+  `…vertex_ai/gemini-2.5-flash` → corriger l'id exact (1 ligne/fichier).
 - **Dataset Lookup (L072)** : tool Dataiku `9FEzVZk` ajouté au sous-agent ; intent **`lookup`** (récup
   d'attribut sans SQL, ex. account_manager de X) + champ `attributes` + **conscience schéma LIVE**
-  (`Profile.live_columns`/`match_attribute`, colonnes hors profil périmé). Fallback SQL si échec/aucun filtre.
-  Span gelé `semantic-model-query` (sql = note) → Evidence/orchestrateur capturent. Schéma auto-découvert (id seul).
-- **Stop optimiste (L073)** : le stop backend ne coupe qu'**entre 2 chunks** (latence 5-6 s perçue) →
-  `stopGeneration` applique `{type:'stopped'}` **tout de suite** (partiel figé + spinner off + poll annulé),
-  POST `/chat/stop` best-effort en fond. Ressenti instantané.
-- **Hiérarchie timeline (L074)** : steps `SUB_AGENT_*` **indentés** (CSS additif `.sub-step`, `var(--border)`)
-  → on voit la descente vers le sous-agent. Persistance des events = **différé** (reload = `assistant_text` seul).
-- **À RECOLLER LES 2 Code Agents** (env 3.11) + upload zip (**77 entrées, `index-CZu1PIfv.js`**). Backend
-  python-lib **inchangé** → **pas besoin de redémarrer le backend** (re-paste agents + re-upload zip suffisent).
-  Détail → `sessions/2026-06-16.md` Run 5, **L071-L074**. Différé : persistance de la chaîne d'events au reload.
+  (`Profile.live_columns`/`match_attribute`). Fallback SQL si échec/aucun filtre. Span gelé `semantic-model-query`.
+- **Stop = attente + « Stopping… » (L073→ajusté L075)** : revert de l'optimiste. `stopGeneration` pose
+  `activeVersion.stopping=true`, POST `/chat/stop`, **garde le polling** ; `MessageAgent` affiche un spinner +
+  « Stopping… » clignotant jusqu'à l'event terminal. Flag `stopping` nettoyé sur tout terminal.
+- **Popup de mode (L075)** : `ModelModePicker` réécrit = pilule → `Modal` (3 cartes : libellé, description,
+  jauge coût €/€€/€€€, badge « Recommandé » Medium) + encart **enveloppe 50 €/mois**. Medium par défaut.
+- **Hiérarchie timeline (L074)** : steps `SUB_AGENT_*` **indentés** (CSS `.sub-step`). Persistance events = différé.
+- **À RECOLLER LES 2 Code Agents** (env 3.11) + upload zip (**77 entrées, `index-3FmqVbc1.js`**). Backend
+  python-lib **inchangé** → **pas de redémarrage**. Détail → `sessions/2026-06-16.md` Run 5, **L071-L075**.
 
 **Avant — 🔬 AUDIT AGENTS Run 4 (2026-06-16 soir) — ⏳ codé mais escalade/auto-escalade REMPLACÉES par L071
 (échec DSS gpt-5.4-mini).** Restent valides de Run 4 : langue (L066, fin-de-prompt + word-boundary + token
@@ -187,13 +190,15 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 - **Déclencheur** : test DSS du Run 4 = gpt-5.4-mini **escalade systématiquement** (+ message hardcodé) ou
   **narre puis s'arrête**. User : abandonner gpt-5.4-mini → Gemini 2.5 Flash + Sonnet, **stop les hacks
   mono-modèle**, archi qui marche **même sur petits modèles**.
-- **4 chantiers** : escalade **supprimée** (1 modèle/mode `LOOP_LLM_BY_MODE`, prompt ACT-FIRST + NARRATE-AS-
-  YOU-GO, L071) ; **Dataset Lookup** `9FEzVZk` + intent `lookup` + schéma live (account_manager sans SQL, L072) ;
-  **stop optimiste** frontend (L073) ; **hiérarchie timeline** (steps `SUB_AGENT_*` indentés, L074).
-- **Vérifs** : **193 tests agents + 114 frontend** verts + build Vite + zip (**77 entrées, `index-CZu1PIfv.js`**).
-  Revue adversariale du diff agents lancée. Backend python-lib **inchangé**.
+- **Chantiers (L071-L075)** : escalade **supprimée** (1 modèle/mode) ; **eco=gpt-5.4-mini gardé**, medium=Gemini,
+  high=Sonnet ; narration « parle pendant le tool-call » **séparée et OFF en eco** ; **mode propagé au sous-agent**
+  (high=Sonnet partout) ; **Dataset Lookup** `9FEzVZk` + intent `lookup` + schéma live (L072) ; **stop = attente +
+  « Stopping… »** clignotant (L075, revert de l'optimiste) ; **popup de mode** (coût + enveloppe 50 €) ;
+  hiérarchie timeline (steps `SUB_AGENT_*` indentés, L074).
+- **Vérifs** : **199 tests agents + 116 frontend** verts + build Vite + zip (**77 entrées, `index-3FmqVbc1.js`**).
+  Backend python-lib **inchangé**.
 - **À faire DSS** : **VÉRIFIER l'id Gemini Flash** (orchestrateur + sous-agent) ; **recoller LES 2 Code Agents**
-  (env 3.11) ; **upload zip** (pas besoin de redémarrer le backend, python-lib inchangé). **NON validé DSS**.
+  (env 3.11) ; **upload zip** (pas de redémarrage backend, python-lib inchangé). **NON validé DSS**.
 
 ## Avant — 2026-06-15 (Run 2) → détail `sessions/2026-06-15.md`, leçons **L058-L059**
 - **Modèle sémantique aligné (nouveau modèle, Sonnet 4.6) + sous-agent ASSISTIF** : le sous-agent
@@ -327,13 +332,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 0🧭. **VALIDER EN DSS le Run 5 (L071-L074)** — (0) **VÉRIFIER `GEMINI_FLASH_ID`** dans les 2 fichiers
    (orchestrateur + sous-agent) = id exact de la connexion Mesh (le best-guess
    `…:vertex_ai/gemini-2.5-flash` est à confirmer) ; (1) **recoller LES 2 Code Agents** (env 3.11) ;
-   (2) **upload zip** (**77 entrées, `index-CZu1PIfv.js`** ; backend python-lib inchangé → **pas besoin de
-   redémarrer**). Smoke-tests : (a) « combien avec le client X » en Éco/Medium (Flash) → **appelle l'outil**,
-   renvoie des étapes intermédiaires, **jamais d'escalade ni de message hardcodé**, ne s'arrête pas sur
-   « je vais obtenir… » ; (b) « account manager des 3 premiers clients » → **Dataset Lookup** (pas de SQL
-   monstrueux), renvoie account_manager ; (c) EN→FR ; (d) **bouton stop instantané** ; (e) timeline = steps
-   sous-agent **indentés** + max-5. Si l'id Gemini est faux → l'agent ne répond pas (corriger 1 ligne).
-   Différé : persistance de la chaîne d'events au reload ; durcir le prompt si Flash narre trop/pas assez.
+   (2) **upload zip** (**77 entrées, `index-3FmqVbc1.js`** ; backend python-lib inchangé → **pas besoin de
+   redémarrer**). Smoke-tests : (a) « combien avec le client X » en **Éco (mini)** → appelle l'outil sans
+   escalade ni message hardcodé, ne narre PAS pendant le tool-call (ticker déterministe), ne s'arrête pas ;
+   (b) la **même** en Medium (Gemini) → doit narrer naturellement ; (c) « account manager des 3 premiers
+   clients » → **Dataset Lookup** (pas de SQL monstrueux) ; (d) **High** → Sonnet partout (orchestrateur +
+   sous-agent) ; (e) **bouton stop** → « Stopping… » clignotant puis arrêt ; (f) **popup de mode** (coût +
+   enveloppe 50 €) ; (g) steps sous-agent **indentés**. Si l'id Gemini est faux → Medium/High ne répondent pas.
+   Différé : persistance de la chaîne d'events au reload ; modèle sémantique Sonnet en High (tool DSS dédié).
 0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16 Run 3)** — narration live (modèle), Evidence lazy, modes, renommage,
    nettoyage. **Process permanent** : à chaque modif repo des agents, **recoller LES 2 Code Agents** (env
    3.11) — **OWIsMind_orchestrator** + **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) — et si le backend

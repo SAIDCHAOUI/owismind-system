@@ -92,9 +92,21 @@ TARGET_DATASET = ""
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash"  # <-- VERIFY
 SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
 GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
-UNDERSTAND_LLM_ID = GEMINI_FLASH_ID
-SQLGEN_LLM_ID = GEMINI_FLASH_ID
-HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
+# Model tier per MODE (propagated by the orchestrator via the injected context).
+# Mirrors the orchestrator: eco=mini (near-free), medium=Gemini Flash, high=Sonnet.
+# So in HIGH mode the WHOLE stack is Sonnet: orchestrator + this sub-agent + (when a
+# Sonnet-backed semantic tool id is set below) the semantic model.
+LLM_BY_MODE = {"eco": GPT_MINI_ID, "medium": GEMINI_FLASH_ID, "high": SONNET_ID}
+DEFAULT_MODE = "medium"
+# Fallback ids when no mode is injected (batch / stand-alone use).
+UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
+SQLGEN_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
+HEADLINE_LLM_ID = None             # None -> the run's mode-resolved model
+
+
+def pick_subagent_llm(mode):
+    """The sub-agent's own LLM (UNDERSTAND / SQLGEN / headline) for this mode."""
+    return LLM_BY_MODE.get(mode, LLM_BY_MODE[DEFAULT_MODE])
 # The orchestrator now writes the user-facing analysis, so the sub-agent's own
 # LLM headline is redundant overhead (a slow extra reasoning call per query).
 # Default OFF: return the deterministic fallback headline + data, and let the
@@ -117,6 +129,16 @@ FALLBACK_TO_DIRECT = True
 SEMANTIC_TOOL_ID = "v4oqA6R"        # Semantic Model Query tool id (instance)
 SEMANTIC_TOOL_NAME = "revenue_semantic_query"
 SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
+# Semantic Model Query tool id PER MODE. The tool's underlying LLM is configured in
+# DSS (not from code), so to get Sonnet on the semantic model in HIGH mode you create
+# a second semantic-model tool backed by Sonnet and put its id under "high" below.
+# Until then all modes share the one tool (the upstream grounding is identical).
+SEMANTIC_TOOL_ID_BY_MODE = {"eco": SEMANTIC_TOOL_ID, "medium": SEMANTIC_TOOL_ID,
+                            "high": SEMANTIC_TOOL_ID}  # <-- set a Sonnet-backed id for "high" if available
+
+
+def pick_semantic_tool_id(mode):
+    return SEMANTIC_TOOL_ID_BY_MODE.get(mode, SEMANTIC_TOOL_ID)
 
 # --- Dataset Lookup tool (simple value retrieval, NO SQL) --------------------
 # Dataiku managed "Dataset Lookup" tool: returns up to a few rows matching a
@@ -471,6 +493,7 @@ def _validate_period(raw):
 # USER's actual message, which the orchestrator knows; the sub-agent only sees the
 # (possibly English) self-contained task, so its own guess is unreliable.
 _FORCED_LANG_RE = re.compile(r"USER LANGUAGE:\s*(fr|en)\b", re.IGNORECASE)
+_MODE_RE = re.compile(r"\bMODE:\s*(eco|medium|high)\b", re.IGNORECASE)
 
 
 def forced_language(context):
@@ -478,6 +501,15 @@ def forced_language(context):
     if not context:
         return None
     m = _FORCED_LANG_RE.search(context)
+    return m.group(1).lower() if m else None
+
+
+def forced_mode(context):
+    """Model tier (eco/medium/high) the orchestrator pinned in the injected context,
+    or None when absent (batch / stand-alone -> DEFAULT_MODE)."""
+    if not context:
+        return None
+    m = _MODE_RE.search(context)
     return m.group(1).lower() if m else None
 
 
@@ -2041,6 +2073,8 @@ class ExpertState(TypedDict, total=False):
     reducers are needed — every channel is last-write."""
     instruction: str
     context: str
+    llm_id: str                 # mode-resolved model for this run (eco/medium/high)
+    semantic_tool_id: str       # mode-resolved semantic-model tool id
     lang: str
     u: dict
     resolutions: list
@@ -2305,7 +2339,8 @@ class MyLLM(BaseLLM):
         return resolutions
 
     # ------------------------------------------------------------------- LLM
-    def _call_json_llm(self, project, system_prompt, user_msg, schema, span):
+    def _call_json_llm(self, project, system_prompt, user_msg, schema, span,
+                       llm_id=None):
         """2 attempts: native JSON mode (with_json_output) then prompt-only.
 
         UNDERSTAND is a DETERMINISTIC extraction (scope / intent / terms), NOT a
@@ -2317,7 +2352,7 @@ class MyLLM(BaseLLM):
         orchestrator's routing, the verified headline). If the model/connection
         rejects json mode, the guarded attempt 1 still runs as a plain
         completion and attempt 2 is prompt-only."""
-        llm = project.get_llm(UNDERSTAND_LLM_ID)
+        llm = project.get_llm(llm_id or UNDERSTAND_LLM_ID)
         for attempt, use_json_mode in ((1, True), (2, False)):
             try:
                 completion = llm.new_completion()
@@ -2385,9 +2420,15 @@ class MyLLM(BaseLLM):
                 yield {"chunk": {"text": PROFILE_MISSING_TEXT["fr"]}}
                 yield _agent_result("error", None)
                 return
+            # Model tier for THIS run, propagated by the orchestrator (eco=mini,
+            # medium=Gemini Flash, high=Sonnet). Threaded through the graph state so
+            # node closures never read per-request state off `self` (concurrency-safe).
+            mode = forced_mode(conversation_context) or DEFAULT_MODE
             graph = self._build_graph(project, profile, trace)
             initial = {"instruction": instruction,
-                       "context": conversation_context, "done": False}
+                       "context": conversation_context, "done": False,
+                       "llm_id": pick_subagent_llm(mode),
+                       "semantic_tool_id": pick_semantic_tool_id(mode)}
             for chunk in graph.stream(initial, stream_mode="custom",
                                       config={"recursion_limit": 12}):
                 yield chunk
@@ -2415,7 +2456,8 @@ class MyLLM(BaseLLM):
                     project,
                     build_understand_prompt(profile,
                                             datetime.now().strftime("%Y-%m-%d")),
-                    user_msg, build_understand_schema(profile), sp)
+                    user_msg, build_understand_schema(profile), sp,
+                    llm_id=state.get("llm_id"))
                 u = validate_understanding(parsed, profile, instruction)
                 # The orchestrator's pinned language (the USER's real language) wins
                 # over the sub-agent's own guess on the English-ish self-contained task.
@@ -2573,7 +2615,8 @@ class MyLLM(BaseLLM):
                 with trace.subspan("dataset-expert:semantic-tool") as sp:
                     sp.inputs["semantic_question"] = semantic_question
                     try:
-                        tool = sa._get_tool(project, SEMANTIC_TOOL_ID,
+                        tool = sa._get_tool(project,
+                                            state.get("semantic_tool_id") or SEMANTIC_TOOL_ID,
                                             SEMANTIC_TOOL_NAME)
                         if sa._semantic_key is None:
                             try:
@@ -2675,16 +2718,16 @@ class MyLLM(BaseLLM):
                                    "mistake.\nFAILED SQL:\n%s\nDATABASE ERROR:\n%s"
                                    % det_failed)
                 sql, last_error = None, None
+                sqlgen_llm = state.get("llm_id") or SQLGEN_LLM_ID or UNDERSTAND_LLM_ID
                 for attempt in range(1, MAX_CUSTOM_SQL_ATTEMPTS + 1):
                     with trace.subspan("dataset-expert:sqlgen") as sp:
                         sp.attributes["attempt"] = attempt
                         if attempt == 1:
-                            raw_sql = sa._llm_text(project,
-                                                   SQLGEN_LLM_ID or UNDERSTAND_LLM_ID,
+                            raw_sql = sa._llm_text(project, sqlgen_llm,
                                                    system, user_block, sp, 4000)
                         else:
                             raw_sql = sa._llm_text(
-                                project, SQLGEN_LLM_ID or UNDERSTAND_LLM_ID,
+                                project, sqlgen_llm,
                                 system,
                                 user_block + "\n\n" + SQLGEN_REPAIR_PROMPT.format(
                                     error=last_error or "", sql=sql or ""), sp, 4000)
@@ -2779,7 +2822,8 @@ class MyLLM(BaseLLM):
                              " ".join(p.get("label", "") for p in u["periods"])])
                 with trace.subspan("dataset-expert:headline") as sp:
                     candidate = sa._llm_text(
-                        project, HEADLINE_LLM_ID or UNDERSTAND_LLM_ID,
+                        project,
+                        HEADLINE_LLM_ID or state.get("llm_id") or UNDERSTAND_LLM_ID,
                         HEADLINE_PROMPT.replace("{language}", lang),
                         "USER QUESTION: %s\n\nRESULT TABLE:\n%s" % (instruction,
                                                                     table_md),

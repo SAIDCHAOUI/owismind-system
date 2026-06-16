@@ -96,14 +96,18 @@ dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
 class TestModelIds(unittest.TestCase):
     def test_orchestrator_model_per_mode(self):
         # Model-agnostic: each mode maps to ONE model for the whole turn, no
-        # escalation. Default fast tier = Gemini Flash, high = Sonnet.
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GEMINI_FLASH_ID)
+        # escalation. eco=mini (near-free, kept), medium=Gemini Flash, high=Sonnet.
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GPT_MINI_ID)
         self.assertEqual(orch.LOOP_LLM_BY_MODE["medium"], orch.GEMINI_FLASH_ID)
         self.assertEqual(orch.LOOP_LLM_BY_MODE["high"], orch.SONNET_ID)
 
-    def test_subagent_uses_gemini_flash(self):
-        self.assertEqual(dx.UNDERSTAND_LLM_ID, dx.GEMINI_FLASH_ID)
-        self.assertEqual(dx.SQLGEN_LLM_ID, dx.GEMINI_FLASH_ID)
+    def test_subagent_model_per_mode_mirrors_orchestrator(self):
+        # The sub-agent follows the SAME tier as the orchestrator for this mode.
+        self.assertEqual(dx.LLM_BY_MODE["eco"], dx.GPT_MINI_ID)
+        self.assertEqual(dx.LLM_BY_MODE["medium"], dx.GEMINI_FLASH_ID)
+        self.assertEqual(dx.LLM_BY_MODE["high"], dx.SONNET_ID)
+        self.assertEqual(dx.pick_subagent_llm("high"), dx.SONNET_ID)
+        self.assertEqual(dx.pick_subagent_llm("turbo"), dx.LLM_BY_MODE[dx.DEFAULT_MODE])
 
     def test_subagent_understand_forces_json(self):
         # UNDERSTAND is a deterministic extraction -> forces native JSON for a
@@ -506,12 +510,28 @@ class TestModelMode(unittest.TestCase):
 
     def test_pick_loop_llm_policy(self):
         # Each mode picks ONE model for the whole turn (no escalation).
-        self.assertEqual(orch.pick_loop_llm("eco"), orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.pick_loop_llm("eco"), orch.GPT_MINI_ID)
         self.assertEqual(orch.pick_loop_llm("medium"), orch.GEMINI_FLASH_ID)
         self.assertEqual(orch.pick_loop_llm("high"), orch.SONNET_ID)
         # Unknown mode falls back to the default mode's model (never crashes).
         self.assertEqual(orch.pick_loop_llm("turbo"),
                          orch.LOOP_LLM_BY_MODE[orch.DEFAULT_MODE])
+
+    def test_narration_enabled_only_for_capable_models(self):
+        # The mini (eco) is NOT asked to narrate alongside tool calls (narrate-then-
+        # stop risk); medium/high are.
+        self.assertFalse(orch.narration_enabled("eco"))
+        self.assertTrue(orch.narration_enabled("medium"))
+        self.assertTrue(orch.narration_enabled("high"))
+
+    def test_narration_section_gated_by_narrate_flag(self):
+        with_narr = orch.build_system_prompt(orch.get_capabilities(), "fr", narrate=True)
+        without = orch.build_system_prompt(orch.get_capabilities(), "fr", narrate=False)
+        self.assertIn("NARRATE AS YOU GO", with_narr)
+        self.assertNotIn("NARRATE AS YOU GO", without)
+        # ACT-FIRST stays in BOTH (it is the non-negotiable rule, not the narration).
+        self.assertIn("ACT — NEVER JUST PROMISE", with_narr)
+        self.assertIn("ACT — NEVER JUST PROMISE", without)
 
 
 class TestLanguageControl(unittest.TestCase):

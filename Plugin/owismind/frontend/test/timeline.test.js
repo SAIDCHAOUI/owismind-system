@@ -127,6 +127,28 @@ test('user stop before any text: status stopped, no text block', () => {
   assert.equal(texts(s).length, 0)
 })
 
+// The "Stopping…" flag is set by the store on the live version and MUST be cleared by
+// any terminal event (so the spinner/blink never lingers once the run actually ends).
+test('stopping flag is cleared on the terminal event', () => {
+  const s = createAnswerState()
+  applyEvent(s, { type: 'answer_delta', text: 'partial' })
+  s.stopping = true // store sets this when the user presses ■ (cooperative backend stop)
+  applyEvent(s, { type: 'stopped', exchangeId: 'x9' })
+  assert.equal(s.status, 'stopped')
+  assert.equal(s.stopping, false)
+})
+
+test('stopping flag is cleared on run_done and on error too', () => {
+  const done = createAnswerState()
+  done.stopping = true
+  applyEvent(done, { type: 'run_done' })
+  assert.equal(done.stopping, false)
+  const err = createAnswerState()
+  err.stopping = true
+  applyEvent(err, { type: 'error', message: 'boom' })
+  assert.equal(err.stopping, false)
+})
+
 // A late `stopped` never overrides an already-terminal status (mirrors run_done's guard).
 test('stopped does not override a prior terminal status', () => {
   const s = feed([

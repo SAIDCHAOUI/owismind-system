@@ -107,16 +107,27 @@ GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 # model that drives the ENTIRE turn — no escalation, no mid-turn switching. The
 # quality difference between modes is purely the model tier; the orchestration
 # logic is identical for all of them.
-#   eco    : fast model everywhere (cheapest).
-#   medium : fast model everywhere (the everyday default).
-#   high   : strong model everywhere (max quality).
+#   eco    : gpt-5.4-mini everywhere (cheapest, near-free — the default for
+#            everyday lookups). The mini does NOT narrate alongside tool calls
+#            (it tends to narrate-then-stop), so that prompt section is OFF here.
+#   medium : Gemini 2.5 Flash everywhere (the everyday default; narrates well).
+#   high   : Sonnet everywhere — orchestrator AND sub-agent AND (when configured)
+#            the semantic model. Max quality; the most expensive.
+# The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
 ORCH_MODES = ("eco", "medium", "high")
 DEFAULT_MODE = "medium"
 LOOP_LLM_BY_MODE = {
-    "eco": GEMINI_FLASH_ID,
+    "eco": GPT_MINI_ID,
     "medium": GEMINI_FLASH_ID,
     "high": SONNET_ID,
 }
+
+# Whether the orchestrator model is asked to write a one-sentence lead-in ALONGSIDE
+# its tool call (ChatGPT-style live narration). ON for capable models (medium/high);
+# OFF for the mini (eco) — the mini tends to narrate then STOP without calling the
+# tool, so we keep eco strictly act-first and let the deterministic ticker narrate.
+def narration_enabled(mode):
+    return mode != "eco"
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -887,7 +898,7 @@ PERSONA = (
 )
 
 
-def build_system_prompt(caps, lang_hint):
+def build_system_prompt(caps, lang_hint, narrate=True):
     cap_lines = []
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -917,28 +928,36 @@ def build_system_prompt(caps, lang_hint):
         "how you 'check' / 'pull' / 'look it up'. A turn that promises an action ('I'll "
         "check', 'on it') but emits NO tool call is a FAILURE, not an answer — the user "
         "gets nothing. When in any doubt, CALL the tool.\n"
-        "2. NARRATE AS YOU GO (this is what the user sees live, and it is SAVED as part "
-        "of your reply). Right before you call a tool, write ONE short, natural sentence "
-        "in the user's language saying what you're about to do ('Let me pull EVPL "
-        "revenue, actuals vs budget…'). It must come TOGETHER WITH the tool call on the "
-        "SAME turn — never the sentence alone. Keep these progress lines brief and human; "
-        "don't narrate trivial steps. When the data comes back, continue the SAME message "
-        "into your analysis — do not repeat the lead-in.\n"
-        "3. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
+        "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
         "never deny). Write each task SELF-CONTAINED (entity, scenario/phase, exact "
         "period); the specialist does not see the conversation.\n"
-        "4. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW. Put the whole need "
+        "3. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW. Put the whole need "
         "into ONE task when you can — one call can return actuals AND budget AND the "
         "delta together. When the question genuinely needs SEVERAL independent answers, "
         "emit ALL the specialist calls in the SAME turn so they run IN PARALLEL — NEVER "
         "call one, wait for it, then call the next (that is twice as slow).\n"
-        "5. PRESENT. When a specialist returns data, render it in the panel with "
+        "4. PRESENT. When a specialist returns data, render it in the panel with "
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
         "figure EXACT, in the user's language — comment on the artifact and give "
         "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
-        "6. If a specialist asks for clarification or says it's out of scope, "
+        "5. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user — do not invent an answer.\n")
+    # Live narration is a SEPARATE instruction, enabled only for capable models
+    # (medium/high). The mini (eco) skips it: it tends to write the lead-in then
+    # STOP without the tool call, so eco stays strictly act-first (the deterministic
+    # ticker narrates instead). This block is the ONLY place that asks the model to
+    # speak alongside its tool call.
+    if narrate:
+        parts.append(
+            "\n# NARRATE AS YOU GO (live progress, SAVED as part of your reply)\n"
+            "Right before you call a tool, write ONE short, natural sentence in the "
+            "user's language saying what you're about to do ('Let me pull EVPL revenue, "
+            "actuals vs budget…'). It MUST come TOGETHER WITH the tool call on the SAME "
+            "turn — NEVER the sentence alone (a sentence with no tool call is the FAILURE "
+            "from rule 1). Keep these progress lines brief and human; don't narrate "
+            "trivial steps. When the data comes back, continue the SAME message into "
+            "your analysis — do not repeat the lead-in.\n")
     # Re-state the reply language LAST (recency slot of the system message). The
     # backend also appends it at the end of the user's message; both anchor it.
     lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
@@ -1529,11 +1548,13 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # One model drives the WHOLE turn — the mode picks it (eco/medium = fast
-            # model, high = strong model). No escalation, no mid-turn switching: the
-            # same model routes, calls tools and writes the final answer.
+            # One model drives the WHOLE turn — the mode picks it (eco=mini, medium=
+            # Gemini Flash, high=Sonnet). No escalation, no mid-turn switching: the
+            # same model routes, calls tools and writes the final answer. Narration
+            # alongside tool calls is enabled only for capable models (not the mini).
             loop_llm = pick_loop_llm(mode)
-            system_prompt = build_system_prompt(self._caps, lang)
+            system_prompt = build_system_prompt(self._caps, lang,
+                                                narrate=narration_enabled(mode))
             chat = self._new_chat(project, system_prompt, history, loop_llm,
                                   self._tool_specs)
             # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
@@ -1541,9 +1562,13 @@ class MyLLM(BaseLLM):
             # no-data / out-of-scope message in the user's language (it no longer
             # self-guesses). Plus conversational continuity (the specialist is stateless,
             # so we hand it the previous turn too for disambiguation).
+            # MODE is propagated so the sub-agent uses the SAME tier (eco=mini,
+            # medium=Gemini Flash, high=Sonnet) for its own LLM calls + semantic model.
             context_msg = (
+                "MODE: %s\n"
                 "USER LANGUAGE: %s — write any message addressed to the user "
-                "(clarification, no-data, out-of-scope) in THIS language.\n" % lang)
+                "(clarification, no-data, out-of-scope) in THIS language.\n"
+                % (mode, lang))
             if prev_assistant:
                 context_msg += (
                     "\nCONVERSATION CONTEXT (continuity with the previous turn):\n"

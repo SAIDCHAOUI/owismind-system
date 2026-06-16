@@ -39,6 +39,7 @@ export const extraMessages = {
     // Chat — stop generation (the ■ button + interrupted-answer markers)
     'prompt.stop': 'Arrêter la génération',
     'chat.stopped': 'Génération arrêtée',
+    'chat.stopping': 'Arrêt en cours…',
     'chat.interrupted_empty': 'Réponse interrompue',
 
     // Chat — the collapsed activity block (agent steps header line)
@@ -210,11 +211,26 @@ export const extraMessages = {
     'mode.eco': 'Éco',
     'mode.medium': 'Medium',
     'mode.high': 'High',
-    'mode.eco_hint': 'Éco — modèle léger uniquement (le moins cher, rapide).',
-    'mode.medium_hint':
-      'Medium — modèle léger, avec escalade automatique vers le modèle puissant sur les questions complexes (recommandé).',
-    'mode.high_hint':
-      'High — modèle puissant (Claude Sonnet) pour une qualité maximale (plus coûteux).',
+    'mode.eco_hint': 'Éco — modèle rapide et économique. Cliquez pour changer de mode.',
+    'mode.medium_hint': 'Medium — équilibré (recommandé). Cliquez pour changer de mode.',
+    'mode.high_hint': 'High — qualité maximale, plus coûteux. Cliquez pour changer de mode.',
+    // Mode-explanation popup
+    'mode.modal_title': 'Choisir le mode de génération',
+    'mode.modal_intro':
+      'Le mode règle la puissance des modèles utilisés. Plus c\'est puissant, meilleures sont la compréhension et l\'analyse — mais plus ça coûte cher.',
+    'mode.current': 'Mode actuel',
+    'mode.recommended': 'Recommandé',
+    'mode.eco_desc':
+      'Le plus rapide et le moins cher. Idéal pour les recherches simples et les questions du quotidien.',
+    'mode.medium_desc':
+      'Bon équilibre qualité / coût. Le choix par défaut pour la plupart des questions.',
+    'mode.high_desc':
+      'Raisonnement et analyse maximum (meilleure compréhension, réponses plus fines). À réserver aux questions complexes.',
+    'mode.eco_cost': 'Coût minimal',
+    'mode.medium_cost': 'Coût modéré',
+    'mode.high_cost': 'Coût élevé',
+    'mode.envelope_note':
+      '⚠️ Les modes plus puissants consomment plus vite votre enveloppe de 50 €/mois. Réservez High aux requêtes complexes qui nécessitent vraiment plus de réflexion.',
 
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
@@ -289,6 +305,7 @@ export const extraMessages = {
     // Chat — stop generation (the ■ button + interrupted-answer markers)
     'prompt.stop': 'Stop generating',
     'chat.stopped': 'Generation stopped',
+    'chat.stopping': 'Stopping…',
     'chat.interrupted_empty': 'Response interrupted',
 
     // Chat — the collapsed activity block (agent steps header line)
@@ -459,11 +476,26 @@ export const extraMessages = {
     'mode.eco': 'Eco',
     'mode.medium': 'Medium',
     'mode.high': 'High',
-    'mode.eco_hint': 'Eco — lightweight model only (cheapest, fast).',
-    'mode.medium_hint':
-      'Medium — lightweight model, with automatic escalation to the strong model on complex questions (recommended).',
-    'mode.high_hint':
-      'High — strong model (Claude Sonnet) for maximum quality (more expensive).',
+    'mode.eco_hint': 'Eco — fast, economical model. Click to change mode.',
+    'mode.medium_hint': 'Medium — balanced (recommended). Click to change mode.',
+    'mode.high_hint': 'High — maximum quality, more expensive. Click to change mode.',
+    // Mode-explanation popup
+    'mode.modal_title': 'Choose the generation mode',
+    'mode.modal_intro':
+      'The mode sets how powerful the models are. More power means better understanding and analysis — but it costs more.',
+    'mode.current': 'Current mode',
+    'mode.recommended': 'Recommended',
+    'mode.eco_desc':
+      'The fastest and cheapest. Best for simple lookups and everyday questions.',
+    'mode.medium_desc':
+      'A good quality / cost balance. The default choice for most questions.',
+    'mode.high_desc':
+      'Maximum reasoning and analysis (better understanding, sharper answers). Reserve it for complex questions.',
+    'mode.eco_cost': 'Minimal cost',
+    'mode.medium_cost': 'Moderate cost',
+    'mode.high_cost': 'High cost',
+    'mode.envelope_note':
+      '⚠️ More powerful modes burn through your €50/month envelope faster. Reserve High for complex queries that genuinely need more reasoning.',
 
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.

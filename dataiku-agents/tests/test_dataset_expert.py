@@ -1068,5 +1068,29 @@ class TestLookupUnderstanding(unittest.TestCase):
         self.assertEqual(headline, dx.HEADLINE_LOOKUP["fr"])
 
 
+class TestModePropagation(unittest.TestCase):
+    """The sub-agent mirrors the orchestrator's mode (eco=mini, medium=Gemini,
+    high=Sonnet), read from the injected context the orchestrator builds."""
+
+    def test_forced_mode_parses_injected_context(self):
+        ctx = "MODE: high\nUSER LANGUAGE: fr — write any message…"
+        self.assertEqual(dx.forced_mode(ctx), "high")
+        self.assertEqual(dx.forced_mode("MODE: eco\n…"), "eco")
+
+    def test_forced_mode_absent_is_none(self):
+        self.assertIsNone(dx.forced_mode("USER LANGUAGE: fr — …"))
+        self.assertIsNone(dx.forced_mode(""))
+
+    def test_pick_subagent_llm_per_mode(self):
+        self.assertEqual(dx.pick_subagent_llm("eco"), dx.GPT_MINI_ID)
+        self.assertEqual(dx.pick_subagent_llm("medium"), dx.GEMINI_FLASH_ID)
+        self.assertEqual(dx.pick_subagent_llm("high"), dx.SONNET_ID)
+
+    def test_semantic_tool_id_per_mode_defaults_shared(self):
+        # All modes share the one tool id until a Sonnet-backed tool exists for high.
+        self.assertEqual(dx.pick_semantic_tool_id("eco"), dx.SEMANTIC_TOOL_ID)
+        self.assertEqual(dx.pick_semantic_tool_id("high"), dx.SEMANTIC_TOOL_ID)
+
+
 if __name__ == "__main__":
     unittest.main()

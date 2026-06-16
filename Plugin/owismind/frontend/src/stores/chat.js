@@ -23,7 +23,7 @@ import { ref, reactive, computed } from 'vue'
 import { useSessionStore } from './session.js'
 import { useUiStore } from './ui.js'
 import { runChatStream } from '../composables/useChatStream.js'
-import { createAnswerState, usageFromRow, applyEvent } from '../composables/timelineModel.js'
+import { createAnswerState, usageFromRow } from '../composables/timelineModel.js'
 import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
@@ -348,27 +348,23 @@ export const useChatStore = defineStore('chat', () => {
     overrides.value = { ...overrides.value, [turn.exchange.parentId || '__root__']: sib.id }
   }
 
-  // Explicit user stop of the in-flight run (the ■ button). The ■ must feel INSTANT:
-  // the backend stop is cooperative (it can only cut BETWEEN streamed chunks, so an
-  // in-flight LLM call or SQL keeps it busy for a few seconds), which used to make the
-  // button feel dead. So we stop OPTIMISTICALLY: finalize the partial already on screen
-  // as a `stopped` version right now and stop polling, while the backend tears the run
-  // down + persists its partial in the background (fire-and-forget). On reload the
-  // backend's persisted partial is shown. If the run id isn't known yet (stop pressed
-  // before /chat/start resolved), defer the backend stop via `stopPending`.
+  // Explicit user stop of the in-flight run (the ■ button). The backend stop is
+  // cooperative — the LLM Mesh stream has NO cancel API, so the worker can only cut
+  // BETWEEN streamed chunks (an in-flight LLM call / SQL keeps it busy a few seconds).
+  // Rather than fake an instant stop, we KEEP polling and show a clear "Stopping…"
+  // indicator until the backend's terminal `stopped` event arrives and finalizes the
+  // partial. If the run id isn't known yet (stop pressed before /chat/start resolved),
+  // defer the backend stop via `stopPending` (onRunId fires it once the id arrives).
   function stopGeneration() {
     if (!sending.value) return
-    // 1) Tell the backend to cut the run (frees the worker / LLM connection, persists
-    //    the partial). Best-effort: a race where the run already finished is a no-op.
+    // Ask the backend to cut the run (it persists the partial + frees the worker).
     if (activeRunId) stopChat(activeRunId).catch(() => {})
     else stopPending = true
-    // 2) Optimistically end the live UI: mark the partial as stopped (a discreet
-    //    "generation stopped" marker, never an error) and stop the spinner + polling.
+    // Show the "Stopping…" state on the live version (spinner + blinking label). We do
+    // NOT cancel polling and do NOT finalize here — the terminal `stopped` event will.
     if (activeVersion && activeVersion.status === 'running') {
-      applyEvent(activeVersion, { type: 'stopped' })
+      activeVersion.stopping = true
     }
-    if (activeToken) activeToken.cancelled = true
-    sending.value = false
   }
 
   return {

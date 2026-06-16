@@ -1666,4 +1666,34 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : 114 tests frontend + build Vite OK. ⏳ rendu à valider DSS.
 - **Source** : retour user + session 2026-06-16 Run 5. **Date** : 2026-06-16.
 
+## L075 — Ajustements modèle/UX (Run 5b) : eco=gpt-5.4-mini gardé, narration séparée et OFF en eco, mode propagé au sous-agent, stop = attente + « Stopping… », popup de mode (⏳ codé+testé, à valider DSS)
+- **Contexte** : retour user sur L071-L073. gpt-5.4-mini **marchait bien et coûte quasi rien** → le garder en
+  **Éco** (ne pas l'abandonner). Le souci n'était PAS le mini en soi mais (a) l'escalade systématique [réglé
+  L071] et (b) la demande de **parler en même temps que le tool-call** (il narrait puis s'arrêtait). Le mode
+  doit aussi piloter le **sous-agent** (Éco=mini, Medium=Gemini, High=Sonnet → en High, Sonnet partout). Le
+  choix de mode doit passer par une **popup** qui explique le coût (enveloppe 50 €/mois). Et le **stop** : ne
+  pas faire semblant d'arrêter en front pendant que ça tourne — **attendre** le backend mais afficher un
+  spinner + « Stopping… » clignotant.
+- **Solution qui marche** :
+  - **Modèles par mode** : `LOOP_LLM_BY_MODE = {eco:GPT_MINI, medium:GEMINI_FLASH, high:SONNET}` (orchestrateur)
+    + `LLM_BY_MODE` identique dans le sous-agent. Le sous-agent reçoit le mode via le `context_msg`
+    (`MODE: <mode>`, parsé par `forced_mode`), résout son modèle (`pick_subagent_llm`) **threadé dans l'état
+    du graphe** (`state["llm_id"]`, concurrency-safe — JAMAIS sur `self`). `_call_json_llm` prend un param
+    `llm_id` ; SQLGEN/HEADLINE lisent `state["llm_id"]`. Modèle sémantique : `SEMANTIC_TOOL_ID_BY_MODE` (hook,
+    tous = même id par défaut ; mettre un tool Sonnet-backed sous `high` si créé en DSS — son LLM est config DSS).
+  - **Narration SÉPARÉE et conditionnelle** : la section « NARRATE AS YOU GO » du prompt est extraite et
+    n'est ajoutée que si `narrate=True` ; `narration_enabled(mode) = mode != "eco"`. En Éco (mini) : pas de
+    demande de parler pendant le tool-call (anti narrate-and-stop) → le ticker déterministe narre. ACT-FIRST
+    reste dans TOUS les modes.
+  - **Stop = attente + feedback** (revert de l'optimiste L073) : `createAnswerState` a un flag `stopping`
+    (nettoyé sur tout event terminal) ; `stopGeneration` pose `activeVersion.stopping=true`, POST `/chat/stop`,
+    **garde le polling** (pas de `token.cancelled`, pas de finalisation). `MessageAgent` affiche une bannière
+    « Stopping… » (spinner CSS + clignotement, reduced-motion respecté) tant que `running && stopping`.
+  - **Popup de mode** (`ModelModePicker.vue` réécrit) : pilule = mode courant → ouvre un `Modal` (3 cartes
+    sélectionnables avec libellé, description, jauge de coût €/€€/€€€, badge « Recommandé » sur Medium) +
+    encart enveloppe 50 €/mois. Clés i18n `mode.*` (fr+en) enrichies ; hints « escalade auto » corrigés. Medium par défaut.
+- **Preuve-vérification** : 199 tests agents + 116 frontend verts + build Vite + zip **77 entrées
+  `index-3FmqVbc1.js`**. ⏳ NON validé DSS.
+- **Source** : retour user (Run 5b) + session 2026-06-16. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

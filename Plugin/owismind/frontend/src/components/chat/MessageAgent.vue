@@ -380,8 +380,16 @@ function nextVersion() {
     </div>
 
     <!-- Running with nothing emitted yet -->
-    <div v-if="v.status === 'running' && !v.timeline.length" class="body thinking">
+    <div v-if="v.status === 'running' && !v.timeline.length && !v.stopping" class="body thinking">
       {{ t('msg.executing') }}…
+    </div>
+
+    <!-- User pressed stop: the backend cuts COOPERATIVELY (between streamed chunks),
+         so we show a clear blinking "Stopping…" with a spinner until the terminal
+         `stopped` event lands and finalizes the partial. -->
+    <div v-if="v.status === 'running' && v.stopping" class="stopping-banner">
+      <span class="spin" aria-hidden="true" />
+      <span class="blink">{{ t('chat.stopping') }}</span>
     </div>
 
     <!-- Stopped before any text: honest placeholder rather than an empty bubble (also
@@ -497,6 +505,16 @@ function nextVersion() {
 /* Discreet "generation stopped" marker under a partial answer. */
 .stopped-marker { display: flex; align-items: center; gap: 6px; margin-top: var(--s-2); font-size: var(--fs-xs); color: var(--text-3); }
 .stopped-marker :deep(.ui-icon) { width: 12px; height: 12px; }
+/* "Stopping…" — shown while the backend cuts the run cooperatively (spinner + blink). */
+.stopping-banner { display: flex; align-items: center; gap: 8px; margin-top: var(--s-2); font-size: var(--fs-sm); color: var(--text-2); }
+.stopping-banner .spin {
+  width: 13px; height: 13px; flex-shrink: 0; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--orange);
+  animation: stopping-spin 0.7s linear infinite;
+}
+.stopping-banner .blink { animation: stopping-blink 1.1s ease-in-out infinite; }
+@keyframes stopping-spin { to { transform: rotate(360deg); } }
+@keyframes stopping-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .body :deep(h1), .body :deep(h2), .body :deep(h3) {
   font-size: var(--fs-lg); font-weight: 600; letter-spacing: -0.01em; margin: 0 0 var(--s-3);
 }
@@ -646,6 +664,7 @@ function nextVersion() {
   .step.running .ind::before,
   .step.running .label .title,
   .body.thinking,
+  .stopping-banner .spin, .stopping-banner .blink,
   .step { animation: none; }
   /* The ripple ring has NO resting state (its whole look lives in the keyframes):
      animation:none would freeze it as a permanent opaque ring — remove it instead. */
