@@ -508,11 +508,20 @@ def _load_sql_item(user_id, exchange_id):
              if isinstance(it, dict) and it.get("sql")]
     if not items:
         raise EvidenceError("no_sql")
+    # The ACTIVE item is the agent's final refined query. Prefer the LAST
+    # successful item that ALSO carries a captured result, so the result block
+    # and the chart have data even when several SQL ran and only one captured
+    # rows (multi-SQL / repair case); fall back to the last successful item.
     active_index = None
     for i in range(len(items) - 1, -1, -1):
-        if items[i].get("success"):
+        if items[i].get("success") and has_captured_result(items[i]):
             active_index = i
             break
+    if active_index is None:
+        for i in range(len(items) - 1, -1, -1):
+            if items[i].get("success"):
+                active_index = i
+                break
     active = items[active_index] if active_index is not None else None
     return active, items, active_index
 

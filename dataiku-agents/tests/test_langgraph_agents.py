@@ -418,7 +418,8 @@ class TestSemanticAlignment(unittest.TestCase):
 
 class TestNativeArtifactFormatting(unittest.TestCase):
     """The orchestrator hands the model a NON-table view of a specialist result
-    (headline + data block + rendering hint), so a weak model renders natively."""
+    (headline + data + a LIGHT non-prescriptive render nudge), so it renders
+    natively but freely picks the chart/columns (no forced type)."""
 
     def test_strip_markdown_tables(self):
         text = ("Top clients:\n\n| Client | Revenue |\n|---|---|\n"
@@ -428,23 +429,17 @@ class TestNativeArtifactFormatting(unittest.TestCase):
         self.assertIn("Top clients:", out)
         self.assertIn("B performed worst.", out)
 
-    def test_rendering_hint_by_intent(self):
-        cols = ["month", "Revenue_EUR"]
-        self.assertIn("show_chart", orch._rendering_hint("trend", cols))
-        self.assertIn("line", orch._rendering_hint("trend", cols))
-        self.assertIn("show_table", orch._rendering_hint("list_values", ["Client"]))
-        self.assertIn("show_kpi", orch._rendering_hint("total", ["Revenue_EUR"]))
-        # Unknown intent / no columns -> safe table default.
-        self.assertIn("show_table", orch._rendering_hint("???", []))
-
-    def test_subagent_tool_output_strips_table_and_hints(self):
+    def test_subagent_tool_output_strips_table_and_nudges(self):
         answer = "Total: 10.\n\n| Client | Revenue |\n|---|---|\n| A | 10 |"
         result = {"columns": ["Client", "Revenue"], "rows": [["A", 10]]}
         out = orch._subagent_tool_output(answer, result, "breakdown")
-        self.assertNotIn("|", out.split("DATA")[0])  # headline carries no table
+        self.assertNotIn("|", out.split("DATA")[0])   # headline carries no table
         self.assertIn("DATA", out)
-        self.assertIn("RENDERING HINT", out)
+        self.assertIn("DISPLAY", out)                 # light render nudge
         self.assertIn("show_chart", out)
+        self.assertIn("Client, Revenue", out)         # exact columns offered
+        # NON-prescriptive: it does NOT force a specific chart type / hint.
+        self.assertNotIn("RENDERING HINT", out)
 
     def test_subagent_tool_output_passthrough_when_no_rows(self):
         # A clarification / out-of-scope reply (no rows) is passed through.
@@ -467,25 +462,22 @@ class TestModelModeAndEscalation(unittest.TestCase):
         mode, _clean = orch.parse_mode("q ⟦owi:mode=turbo⟧")
         self.assertEqual(mode, "medium")
 
-    def test_loop_llm_id_policy(self):
-        self.assertIn("gpt-5.4-mini", orch.loop_llm_id("eco"))
-        self.assertIn("gpt-5.4-mini", orch.loop_llm_id("medium"))
-        self.assertEqual(orch.loop_llm_id("high"), orch.ESCALATION_LLM_ID)
-
-    def test_synth_llm_id_conservative(self):
-        # Eco never escalates; medium only on a complex turn; high always.
-        self.assertEqual(orch.synth_llm_id("eco", True), orch.ORCH_LLM_ID)
-        self.assertEqual(orch.synth_llm_id("medium", False), orch.ORCH_LLM_ID)
-        self.assertEqual(orch.synth_llm_id("medium", True), orch.ESCALATION_LLM_ID)
-        self.assertEqual(orch.synth_llm_id("high", False), orch.ESCALATION_LLM_ID)
+    def test_pick_loop_llm_policy(self):
+        # Eco / Medium (simple) -> cheap; High -> strong; Medium + complex -> strong.
+        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("eco", "revenus EVPL 2026"))
+        self.assertIn("gpt-5.4-mini", orch.pick_loop_llm("medium", "revenus EVPL 2026"))
+        self.assertEqual(orch.pick_loop_llm("high", "x"), orch.ESCALATION_LLM_ID)
+        self.assertEqual(
+            orch.pick_loop_llm("medium",
+                               "compare EVPL revenue actuals vs budget and explain why"),
+            orch.ESCALATION_LLM_ID)
 
     def test_complexity_heuristic_conservative(self):
         # A short single-domain lookup is NOT complex.
-        self.assertFalse(orch.complexity_is_high("revenus EVPL 2026", ["revenue_expert"]))
-        # Fan-out (2 agents) + a comparison keyword -> complex.
+        self.assertFalse(orch.complexity_is_high("revenus EVPL 2026"))
+        # A comparison/analysis question with several parts IS complex.
         self.assertTrue(orch.complexity_is_high(
-            "compare EVPL revenue vs budget and tickets",
-            ["revenue_expert", "tickets_expert"]))
+            "compare EVPL revenue actuals vs budget and explain why it diverged"))
 
 
 class TestKpiArtifact(unittest.TestCase):

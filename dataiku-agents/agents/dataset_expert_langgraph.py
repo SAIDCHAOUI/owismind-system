@@ -95,6 +95,11 @@ TARGET_DATASET = ""
 UNDERSTAND_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 SQLGEN_LLM_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
 HEADLINE_LLM_ID = None             # None -> UNDERSTAND_LLM_ID
+# The orchestrator now writes the user-facing analysis, so the sub-agent's own
+# LLM headline is redundant overhead (a slow extra reasoning call per query).
+# Default OFF: return the deterministic fallback headline + data, and let the
+# orchestrator comment. Set True only for stand-alone (no-orchestrator) use.
+SUBAGENT_LLM_HEADLINE = False
 
 # --- SQL engine --------------------------------------------------------------
 # "semantic_tool" (DEFAULT — user decision 2026-06-12 after A/B testing in DSS):
@@ -2326,12 +2331,20 @@ class MyLLM(BaseLLM):
                             return {"done": True}
                         engine = "direct"
                 if engine == "semantic_tool":
-                    for i, sql in enumerate((payload or {}).get("sqls") or []):
+                    sqls = (payload or {}).get("sqls") or []
+                    # The tool's RESULT belongs to the FINAL query it ran (when it
+                    # generates several — e.g. a query then a repaired variant). The
+                    # webapp's Evidence/chart pick the LAST successful SQL, so the
+                    # captured rows/columns MUST ride the LAST span, not the first —
+                    # otherwise the active item carries no result ("not kept") and
+                    # the chart cannot render (fix for the multi-SQL case).
+                    last_i = len(sqls) - 1
+                    for i, sql in enumerate(sqls):
                         with trace.subspan("semantic-model-query") as qsp:
                             qsp.outputs["sql"] = sql
                             qsp.outputs["success"] = True
                             qsp.outputs["row_count"] = tool_row_count
-                            if i == 0 and result is not None:
+                            if i == last_i and result is not None:
                                 qsp.outputs["columns"] = result["columns"]
                                 qsp.outputs["rows"] = result["rows"]
                         executed.append({"sql": sql, "success": True,
@@ -2481,21 +2494,28 @@ class MyLLM(BaseLLM):
             table_md = build_table(result, lang, fmt_map, profile, unit)
             headline = build_fallback_headline(u, profile, result, lang,
                                                fmt_map, unit)
-            allowed = allowed_number_set(
-                result, [instruction, u["period"].get("label", ""),
-                         " ".join(p.get("label", "") for p in u["periods"])])
-            with trace.subspan("dataset-expert:headline") as sp:
-                candidate = sa._llm_text(
-                    project, HEADLINE_LLM_ID or UNDERSTAND_LLM_ID,
-                    HEADLINE_PROMPT.replace("{language}", lang),
-                    "USER QUESTION: %s\n\nRESULT TABLE:\n%s" % (instruction,
-                                                                table_md),
-                    sp, HEADLINE_MAX_CHARS)
-                if candidate and verify_headline(candidate, allowed):
-                    headline = candidate
-                    sp.outputs["verified"] = True
-                else:
-                    sp.outputs["verified"] = False
+            # The LLM headline is now REDUNDANT: the orchestrator writes the
+            # user-facing analysis from this result, so a slow extra reasoning call
+            # here (often ~tens of seconds) only adds latency. Default OFF -> use
+            # the deterministic, hallucination-proof fallback headline (the
+            # orchestrator comments on top). Flip SUBAGENT_LLM_HEADLINE on only if
+            # the sub-agent is ever used stand-alone (no orchestrator wrapper).
+            if SUBAGENT_LLM_HEADLINE:
+                allowed = allowed_number_set(
+                    result, [instruction, u["period"].get("label", ""),
+                             " ".join(p.get("label", "") for p in u["periods"])])
+                with trace.subspan("dataset-expert:headline") as sp:
+                    candidate = sa._llm_text(
+                        project, HEADLINE_LLM_ID or UNDERSTAND_LLM_ID,
+                        HEADLINE_PROMPT.replace("{language}", lang),
+                        "USER QUESTION: %s\n\nRESULT TABLE:\n%s" % (instruction,
+                                                                    table_md),
+                        sp, HEADLINE_MAX_CHARS)
+                    if candidate and verify_headline(candidate, allowed):
+                        headline = candidate
+                        sp.outputs["verified"] = True
+                    else:
+                        sp.outputs["verified"] = False
             writer({"chunk": {"text": headline + "\n\n" + table_md
                     + (("\n\n" + disclosure) if disclosure else "")}})
             writer(_agent_result("ready", u, resolved_filters=resolved_filters,

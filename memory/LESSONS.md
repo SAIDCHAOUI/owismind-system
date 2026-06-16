@@ -1412,4 +1412,45 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : revue Opus « no double-stream/write, usage non doublé » ; 170 tests.
 - **Source** : session 2026-06-16. **Date** : 2026-06-16.
 
+## L063 — « Narrate FIRST » casse les petits modèles : ils écrivent la narration et S'ARRÊTENT (régression DSS, corrigée)
+- **Contexte** : pour donner du « vivant » pendant l'attente, j'avais mis dans le prompt « NARRATE FIRST :
+  avant chaque appel d'outil, écris une phrase de ce que tu vas faire ». Test DSS : en Éco/Medium
+  (gpt-5.4-mini), le modèle écrivait « Je consulte l'expert revenus… » **et s'arrêtait là** (réponse =
+  la narration, aucun tool-call émis, sous-agent jamais appelé). Seul High (Sonnet) enchaînait. L'user :
+  « absolument rien ne marche ; la première réponse c'est la fin ».
+- **Ce qui a échoué** : (1) l'instruction « narre avant d'appeler » → le petit modèle traite la narration
+  comme sa réponse finale et n'appelle pas l'outil ; (2) le **nœud de synthèse séparé** (L062) ajoutait
+  une passe LLM lente (~15 s) ; (3) l'**indice de rendu forcé** (L060) bridait le modèle. L'user : «
+  l'orchestrateur précédent marche bien mieux ; le hard-code du graphique bride ».
+- **Solution qui marche** : revenir à la **boucle agentique simple** = le modèle appelle les outils PUIS
+  rédige lui-même la réponse dans son dernier tour (pas de synthèse séparée, pas de narration-first).
+  L'indice forcé devient une **invite légère** non prescriptive (« rends avec show_chart/table/kpi de ton
+  choix, colonnes exactes : … »). Modes = **choix du modèle de boucle** (Éco/Medium=mini ; High ou
+  Medium+complexe=Sonnet via heuristique sur la question), zéro passe en plus. Filet de sécurité
+  (auto-tableau) conservé. **Règle** : ne JAMAIS demander à un petit modèle de « narrer avant d'agir » ;
+  ne pas forcer la viz (ça bride un modèle capable) ; minimiser les passes LLM (chacune ~10-15 s en
+  reasoning=high).
+- **Preuve-vérification** : 637 tests verts ; revue Opus « narrate-and-stop structurellement retiré, flux
+  correct, zéro symbole orphelin ». ⏳ à re-tester DSS.
+- **Source** : retour DSS user + session 2026-06-16 Run 2. **Date** : 2026-06-16.
+
+## L064 — Graphique vide en multi-SQL : le résultat était attaché au PREMIER span, Evidence prend le DERNIER (corrigé) + headline LLM redondant retiré (perf)
+- **Contexte** : test DSS, graphique « Cannot render the chart » + Evidence « Result used by the agent —
+  not kept », alors que le SQL renvoyait bien 18 lignes. Le tool sémantique avait généré **2 SQL**
+  (original + réparation `::numeric`).
+- **Ce qui a échoué** : dans le sous-agent (`n_query`, chemin semantic_tool), les colonnes/lignes du
+  résultat n'étaient attachées qu'au **premier** span `semantic-model-query` (`if i == 0`). Mais
+  `evidence/service._load_sql_item` choisit le **dernier** SQL réussi → item sans résultat → pas de
+  capture → `build_chart_payload` reçoit un résultat vide → graphique vide.
+- **Solution qui marche** : attacher le résultat au **DERNIER** span (`i == last_i`) — le résultat
+  appartient à la requête finale (cohérent avec `extract_semantic_payload` « last occurrence wins »). +
+  défense Evidence : `_load_sql_item` préfère le dernier item réussi **qui a un résultat capturé**, sinon
+  le dernier réussi. **Bonus perf** : l'appel LLM « headline » du sous-agent (~29 s en reasoning=high) est
+  désormais **redondant** (l'orchestrateur rédige l'analyse) → coupé par `SUBAGENT_LLM_HEADLINE=False`
+  (fallback déterministe). Avec la suppression de la synthèse, ~44 s gagnés/requête (le tool sémantique DSS
+  ~52 s reste incompressible côté plugin).
+- **Preuve-vérification** : revue Opus « i==last_i cohérent, evidence ne lève jamais, fixes convergents » ;
+  360 tests backend verts. ⏳ à re-tester DSS.
+- **Source** : retour DSS user + session 2026-06-16 Run 2. **Date** : 2026-06-16.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
