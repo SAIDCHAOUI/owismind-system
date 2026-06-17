@@ -95,19 +95,24 @@ dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
 
 class TestModelIds(unittest.TestCase):
     def test_orchestrator_model_per_mode(self):
-        # Model-agnostic: each mode maps to ONE model for the whole turn, no
-        # escalation. eco=mini (near-free, kept), medium=Gemini Flash, high=Sonnet.
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GPT_MINI_ID)
+        # One model per mode for the whole turn (no escalation): eco=Gemini 3.1
+        # Flash-Lite (default), medium=Gemini 3.5 Flash, high=Sonnet.
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GEMINI_FLASH_LITE_ID)
         self.assertEqual(orch.LOOP_LLM_BY_MODE["medium"], orch.GEMINI_FLASH_ID)
         self.assertEqual(orch.LOOP_LLM_BY_MODE["high"], orch.SONNET_ID)
+        self.assertEqual(orch.DEFAULT_MODE, "eco")
 
     def test_subagent_model_per_mode_mirrors_orchestrator(self):
         # The sub-agent follows the SAME tier as the orchestrator for this mode.
-        self.assertEqual(dx.LLM_BY_MODE["eco"], dx.GPT_MINI_ID)
+        self.assertEqual(dx.LLM_BY_MODE["eco"], dx.GEMINI_FLASH_LITE_ID)
         self.assertEqual(dx.LLM_BY_MODE["medium"], dx.GEMINI_FLASH_ID)
         self.assertEqual(dx.LLM_BY_MODE["high"], dx.SONNET_ID)
         self.assertEqual(dx.pick_subagent_llm("high"), dx.SONNET_ID)
         self.assertEqual(dx.pick_subagent_llm("turbo"), dx.LLM_BY_MODE[dx.DEFAULT_MODE])
+        self.assertEqual(dx.DEFAULT_MODE, "eco")
+        # Both files agree on the eco/medium/high ids (same Mesh connection).
+        self.assertEqual(dx.GEMINI_FLASH_LITE_ID, orch.GEMINI_FLASH_LITE_ID)
+        self.assertEqual(dx.GEMINI_FLASH_ID, orch.GEMINI_FLASH_ID)
 
     def test_subagent_understand_forces_json(self):
         # UNDERSTAND is a deterministic extraction -> forces native JSON for a
@@ -174,13 +179,11 @@ class TestAntiDrift(unittest.TestCase):
         self.assertIsInstance(orch._cap_cell(float("nan")), str)
 
 
-class TestSourcesBlock(unittest.TestCase):
-    def test_sources_emitted_only_when_data_consulted(self):
-        ready = orch.sources_block(["revenue_expert"], ["ready"], "fr")
-        self.assertIn("DRIVE_Revenues", ready)
-        # A clarification / out-of-scope reply cites no dataset.
-        self.assertEqual(orch.sources_block(["revenue_expert"], ["need_clarification"], "fr"), "")
-        self.assertEqual(orch.sources_block([], [], "en"), "")
+class TestNoSourcesBlock(unittest.TestCase):
+    def test_sources_block_removed(self):
+        # The chat answer no longer prints a "**Sources**" block — the dataset
+        # source lives in the Evidence side panel. The function is gone entirely.
+        self.assertFalse(hasattr(orch, "sources_block"))
 
 
 class TestTraceExtraction(unittest.TestCase):
@@ -209,6 +212,21 @@ class TestTraceExtraction(unittest.TestCase):
         self.assertEqual(it["agent_key"], "revenue_expert")
         self.assertEqual(it["result"]["columns"], ["year", "revenue"])
         self.assertEqual(len(it["result"]["rows"]), 2)
+
+    def test_find_generated_sql_stamps_source_url(self):
+        # Default config has no source_url -> items carry none.
+        items = orch._find_generated_sql(self._sub_trace(), 1, "revenue_expert")
+        self.assertNotIn("source_url", items[0])
+        # When the capability configures a link, every SQL item carries it, so it
+        # reaches the backend Evidence meta as a clickable source.
+        cap = orch.CAPABILITIES["revenue_expert"]
+        saved = cap.get("source_url")
+        cap["source_url"] = "https://dss/projects/OWISMIND_DEV/datasets/DRIVE_Revenues"
+        try:
+            items = orch._find_generated_sql(self._sub_trace(), 1, "revenue_expert")
+            self.assertEqual(items[0]["source_url"], cap["source_url"])
+        finally:
+            cap["source_url"] = saved
 
     def test_find_usage_sums(self):
         usage = orch._find_usage(self._sub_trace())
@@ -443,6 +461,96 @@ class TestSemanticAlignment(unittest.TestCase):
         self.assertNotIn("AMBIGUOUS OFFER TERM", q)
 
 
+class TestDeferOfferTerms(unittest.TestCase):
+    """Disambiguation (2026-06-17): an offer term ambiguous across >=2 columns is
+    DEFERRED to the semantic model, never asked of the user (the 'Roaming Hub' bug);
+    a mono-column ambiguity still asks."""
+
+    def setUp(self):
+        self.P = _align_profile()
+
+    def test_multicolumn_ambiguity_is_deferred(self):
+        res = [{"status": "ambiguous", "raw_value": "Roaming Hub", "candidates": [
+            {"target_column": "Product", "target_value": "Open Roaming Hub",
+             "display_value": "Open Roaming Hub", "score": 0.8},
+            {"target_column": "sirano_product", "target_value": "ROAMING HUB IOT",
+             "display_value": "ROAMING HUB IOT", "score": 0.75},
+            {"target_column": "sirano_product", "target_value": "ROAMING HUB FEES",
+             "display_value": "ROAMING HUB FEES", "score": 0.7}]}]
+        out, deferred = dx.defer_multicolumn_offer_terms(res)
+        self.assertEqual(out[0]["status"], "deferred")          # no clarification
+        self.assertEqual(len(deferred), 1)
+        self.assertEqual(deferred[0]["raw"], "Roaming Hub")
+        self.assertEqual(set(deferred[0]["columns"]), {"Product", "sirano_product"})
+
+    def test_monocolumn_ambiguity_still_asks(self):
+        res = [{"status": "ambiguous", "raw_value": "orange", "candidates": [
+            {"target_column": "Account_name", "target_value": "ORANGE FR",
+             "display_value": "ORANGE FR", "score": 0.9},
+            {"target_column": "Account_name", "target_value": "ORANGE SA",
+             "display_value": "ORANGE SA", "score": 0.9}]}]
+        out, deferred = dx.defer_multicolumn_offer_terms(res)
+        self.assertEqual(out[0]["status"], "ambiguous")          # genuine question
+        self.assertEqual(deferred, [])
+
+    def test_semantic_question_consumes_deferred_term(self):
+        u = _align_u(intent="total", instruction="budget 2026 Roaming Hub",
+                     offer_terms_for_model=[{"raw": "Roaming Hub",
+                         "columns": ["Product", "sirano_product"],
+                         "samples": [{"column": "Product",
+                                      "value": "Open Roaming Hub"}]}])
+        q = dx.build_semantic_question(u, self.P, [])
+        self.assertIn("AMBIGUOUS OFFER TERM", q)
+        self.assertIn("Roaming Hub", q)
+        self.assertIn("NEVER default to sirano_product", q)
+        self.assertIn("Open Roaming Hub", q)                     # partial hit = context
+        self.assertNotIn("= 'Roaming Hub'", q)                   # never a hard pin
+
+    def test_disclosure_for_deferred_term(self):
+        note = dx.build_disclosure_notes([], "en", [
+            {"raw": "Roaming Hub", "columns": ["Product", "Solution"]}])
+        self.assertIn("Roaming Hub", note)
+        self.assertIn("Product", note)
+        self.assertIn("Solution", note)
+        self.assertEqual(dx.build_disclosure_notes([], "fr", []), "")
+
+
+class TestScopeNote(unittest.TestCase):
+    """Transparency (2026-06-17): the sub-agent prepends a '[Scope]' line stating
+    exactly scenario / period / entity / currency, relayed by the orchestrator."""
+
+    def setUp(self):
+        self.P = _align_profile()
+
+    def test_scope_states_default_scenario_period_currency(self):
+        u = _align_u()                                          # no scenario/period
+        note = dx.build_scope_note(u, self.P,
+                                   [{"column": "Account_name", "value": "HSBC"}], "fr")
+        self.assertIn("Périmètre", note)
+        self.assertIn("ACTUALS", note)                         # default surfaced
+        self.assertIn("par défaut", note)
+        self.assertIn("aucun filtre d'année", note)
+        self.assertIn("HSBC", note)
+        self.assertIn("EUR", note)                             # currency from unit
+
+    def test_scope_explicit_period_no_default_flag(self):
+        u = _align_u(scenarios=["BUDGET"],
+                     period={"mode": "explicit", "start": "2026-01-01",
+                             "end": "2026-12-31", "label": "2026"})
+        note = dx.build_scope_note(u, self.P, [], "en")
+        self.assertIn("BUDGET", note)
+        self.assertNotIn("(default)", note)                    # scenario was explicit
+        self.assertIn("2026", note)
+
+    def test_currency_derived_from_amount_column(self):
+        # No profile unit configured -> currency comes from the column name.
+        self.assertEqual(dx.metric_unit({"agg": "SUM", "column": "amount_eur"}), "€")
+        self.assertEqual(dx.metric_unit({"agg": "SUM", "column": "revenue_usd"}), "$")
+        self.assertIsNone(dx.metric_unit({"agg": "COUNT", "column": ""}))
+        # An explicit profile unit always wins over the inferred one.
+        self.assertEqual(dx.metric_unit({"column": "amount_eur", "unit": "EUR"}), "EUR")
+
+
 class TestNativeArtifactFormatting(unittest.TestCase):
     """The orchestrator hands the model a NON-table view of a specialist result
     (headline + data + a LIGHT non-prescriptive render nudge), so it renders
@@ -518,18 +626,18 @@ class TestModelMode(unittest.TestCase):
         self.assertEqual(mode, "high")
         self.assertEqual(clean, "revenus EVPL")
 
-    def test_parse_mode_defaults_medium(self):
+    def test_parse_mode_defaults_eco(self):
         mode, clean = orch.parse_mode("plain question")
-        self.assertEqual(mode, "medium")
+        self.assertEqual(mode, "eco")
         self.assertEqual(clean, "plain question")
 
     def test_parse_mode_unknown_token_ignored(self):
         mode, _clean = orch.parse_mode("q ⟦owi:mode=turbo⟧")
-        self.assertEqual(mode, "medium")
+        self.assertEqual(mode, "eco")
 
     def test_pick_loop_llm_policy(self):
         # Each mode picks ONE model for the whole turn (no escalation).
-        self.assertEqual(orch.pick_loop_llm("eco"), orch.GPT_MINI_ID)
+        self.assertEqual(orch.pick_loop_llm("eco"), orch.GEMINI_FLASH_LITE_ID)
         self.assertEqual(orch.pick_loop_llm("medium"), orch.GEMINI_FLASH_ID)
         self.assertEqual(orch.pick_loop_llm("high"), orch.SONNET_ID)
         # Unknown mode falls back to the default mode's model (never crashes).
@@ -537,8 +645,7 @@ class TestModelMode(unittest.TestCase):
                          orch.LOOP_LLM_BY_MODE[orch.DEFAULT_MODE])
 
     def test_narration_enabled_only_for_capable_models(self):
-        # The mini (eco) is NOT asked to narrate alongside tool calls (narrate-then-
-        # stop risk); medium/high are.
+        # eco stays act-first (no lead-in narration); medium/high narrate.
         self.assertFalse(orch.narration_enabled("eco"))
         self.assertTrue(orch.narration_enabled("medium"))
         self.assertTrue(orch.narration_enabled("high"))

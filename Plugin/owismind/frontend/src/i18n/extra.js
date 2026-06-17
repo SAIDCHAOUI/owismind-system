@@ -183,6 +183,7 @@ export const extraMessages = {
       "Affirmation de l'agent : cette requête n'a pas pu être vérifiée automatiquement.",
     'ev.proof.sources': 'Source des données',
     'ev.proof.sources.more': '+{0} autre(s) requête(s) exécutée(s)',
+    'ev.proof.sources.open': 'Ouvrir le jeu de données dans Dataiku',
     'ev.proof.calc': 'Comment ce résultat est calculé',
     'ev.proof.result': "Résultat utilisé par l'agent",
     'ev.proof.result.rows': '{0} ligne(s)',
@@ -211,8 +212,8 @@ export const extraMessages = {
     'mode.eco': 'Éco',
     'mode.medium': 'Medium',
     'mode.high': 'High',
-    'mode.eco_hint': 'Éco — modèle rapide et économique. Cliquez pour changer de mode.',
-    'mode.medium_hint': 'Medium — équilibré (recommandé). Cliquez pour changer de mode.',
+    'mode.eco_hint': 'Éco — rapide, économique et recommandé par défaut. Cliquez pour changer de mode.',
+    'mode.medium_hint': 'Medium — équilibré, qualité supérieure. Cliquez pour changer de mode.',
     'mode.high_hint': 'High — qualité maximale, plus coûteux. Cliquez pour changer de mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Choisir le mode de génération',
@@ -221,9 +222,9 @@ export const extraMessages = {
     'mode.current': 'Mode actuel',
     'mode.recommended': 'Recommandé',
     'mode.eco_desc':
-      'Le plus rapide et le moins cher. Idéal pour les recherches simples et les questions du quotidien.',
+      'Le plus rapide et le moins cher — le choix par défaut, idéal pour les recherches simples et les questions du quotidien.',
     'mode.medium_desc':
-      'Bon équilibre qualité / coût. Le choix par défaut pour la plupart des questions.',
+      'Bon équilibre qualité / coût, pour les analyses qui demandent un peu plus de finesse.',
     'mode.high_desc':
       'Raisonnement et analyse maximum (meilleure compréhension, réponses plus fines). À réserver aux questions complexes.',
     'mode.eco_cost': 'Coût minimal',
@@ -449,6 +450,7 @@ export const extraMessages = {
       'Agent claim: this query could not be verified automatically.',
     'ev.proof.sources': 'Data source',
     'ev.proof.sources.more': '+{0} more quer(y/ies) run',
+    'ev.proof.sources.open': 'Open the dataset in Dataiku',
     'ev.proof.calc': 'How this result is computed',
     'ev.proof.result': 'Result used by the agent',
     'ev.proof.result.rows': '{0} row(s)',
@@ -476,8 +478,8 @@ export const extraMessages = {
     'mode.eco': 'Eco',
     'mode.medium': 'Medium',
     'mode.high': 'High',
-    'mode.eco_hint': 'Eco — fast, economical model. Click to change mode.',
-    'mode.medium_hint': 'Medium — balanced (recommended). Click to change mode.',
+    'mode.eco_hint': 'Eco — fast, economical and recommended by default. Click to change mode.',
+    'mode.medium_hint': 'Medium — balanced, higher quality. Click to change mode.',
     'mode.high_hint': 'High — maximum quality, more expensive. Click to change mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Choose the generation mode',
@@ -486,9 +488,9 @@ export const extraMessages = {
     'mode.current': 'Current mode',
     'mode.recommended': 'Recommended',
     'mode.eco_desc':
-      'The fastest and cheapest. Best for simple lookups and everyday questions.',
+      'The fastest and cheapest — the default choice, best for simple lookups and everyday questions.',
     'mode.medium_desc':
-      'A good quality / cost balance. The default choice for most questions.',
+      'A good quality / cost balance, for questions that need a bit more finesse.',
     'mode.high_desc':
       'Maximum reasoning and analysis (better understanding, sharper answers). Reserve it for complex questions.',
     'mode.eco_cost': 'Minimal cost',

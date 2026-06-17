@@ -22,6 +22,9 @@ const extraQueries = computed(() => {
   const q = evidence.meta && evidence.meta.queries
   return Array.isArray(q) && q.length > 1 ? q.length - 1 : 0
 })
+// Optional link to the source dataset in Dataiku (configured on the agent). When
+// present, the dataset name opens the dataset in a new tab.
+const sourceUrl = computed(() => (source.value && source.value.url) || '')
 </script>
 
 <template>
@@ -29,7 +32,15 @@ const extraQueries = computed(() => {
     <span class="ev-sec-title">{{ t('ev.proof.sources') }}</span>
     <div class="ev-source-line">
       <Icon name="database" />
-      <span class="ev-source-name">{{ datasetName }}</span>
+      <a
+        v-if="sourceUrl"
+        class="ev-source-name ev-source-link"
+        :href="sourceUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        :title="t('ev.proof.sources.open')"
+      >{{ datasetName }}</a>
+      <span v-else class="ev-source-name">{{ datasetName }}</span>
       <span v-if="extraQueries > 0" class="ev-source-more">
         {{ t('ev.proof.sources.more', [extraQueries]) }}
       </span>
@@ -51,5 +62,8 @@ const extraQueries = computed(() => {
   font-size: var(--fs-sm); font-weight: 500; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Clickable source: orange (AA token) + underline on hover. */
+.ev-source-link { color: var(--orange-text); text-decoration: none; cursor: pointer; }
+.ev-source-link:hover { text-decoration: underline; }
 .ev-source-more { flex: none; font-size: var(--fs-xs); color: var(--text-3); }
 </style>

@@ -1082,7 +1082,7 @@ class TestModePropagation(unittest.TestCase):
         self.assertIsNone(dx.forced_mode(""))
 
     def test_pick_subagent_llm_per_mode(self):
-        self.assertEqual(dx.pick_subagent_llm("eco"), dx.GPT_MINI_ID)
+        self.assertEqual(dx.pick_subagent_llm("eco"), dx.GEMINI_FLASH_LITE_ID)
         self.assertEqual(dx.pick_subagent_llm("medium"), dx.GEMINI_FLASH_ID)
         self.assertEqual(dx.pick_subagent_llm("high"), dx.SONNET_ID)
 

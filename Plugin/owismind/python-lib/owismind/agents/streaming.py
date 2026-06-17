@@ -130,6 +130,9 @@ def _normalized_sql_event(item, sql_index):
     agent_key = _tag(item, "agent_key", "agentKey")
     if agent_key is not None:
         event["agentKey"] = agent_key
+    source_url = _tag(item, "source_url", "sourceUrl")
+    if source_url:
+        event["sourceUrl"] = source_url
     result = item.get("result")
     if isinstance(result, dict):
         event["result"] = result

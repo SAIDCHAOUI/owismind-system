@@ -17,12 +17,11 @@ const EVIDENCE_W_KEY = 'owi.evidenceW'
 const CTXMSG_KEY = 'owismind.contextMessages'
 const MODELMODE_KEY = 'owismind.modelMode'
 
-// Model mode the chat sends with each turn. The backend defaults unknown values
-// to "medium", so this is purely a UX preference (cheap by default; the strong
-// model is opt-in). Eco = mini only; Medium = mini + conservative auto-escalation;
-// High = strong model.
+// Model mode the chat sends with each turn. One model per mode (no escalation):
+// eco = Gemini 3.1 Flash-Lite (the cheap, fast DEFAULT), medium = Gemini 3.5 Flash,
+// high = Claude Sonnet. The strong model is opt-in. The backend also defaults to eco.
 export const MODEL_MODES = ['eco', 'medium', 'high']
-const MODELMODE_DEFAULT = 'medium'
+const MODELMODE_DEFAULT = 'eco'
 
 // Sidebar width clamp (maquette default 260; keep a sane drag range).
 const SIDEBAR_MIN = 200

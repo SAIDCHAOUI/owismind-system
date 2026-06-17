@@ -84,21 +84,19 @@ VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"
 # Optional override of the queried dataset (default: profile's dataset_name).
 TARGET_DATASET = ""
 
-# LLM Mesh ids. UNDERSTAND runs on every question -> a fast, cheap model good at
-# strict JSON. SQLGEN only runs on the long-tail "custom" intent. MODEL-AGNOSTIC:
-# UNDERSTAND forces native JSON output (deterministic extraction -> reliable parse
-# on any model). Default = Gemini 2.5 Flash (matches the orchestrator's fast tier).
-# ⚠️ VERIFY this id matches your LLM Mesh connection (same note as the orchestrator).
-# Fallbacks kept as named options: SONNET_ID (strongest), GPT_MINI_ID (cheapest).
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash"  # <-- VERIFY
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
-GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
-# Model tier per MODE (propagated by the orchestrator via the injected context).
-# Mirrors the orchestrator: eco=mini (near-free), medium=Gemini Flash, high=Sonnet.
-# So in HIGH mode the WHOLE stack is Sonnet: orchestrator + this sub-agent + (when a
-# Sonnet-backed semantic tool id is set below) the semantic model.
-LLM_BY_MODE = {"eco": GPT_MINI_ID, "medium": GEMINI_FLASH_ID, "high": SONNET_ID}
-DEFAULT_MODE = "medium"
+# LLM Mesh ids. UNDERSTAND runs on every question and forces native JSON output, so
+# a fast, cheap model parses it reliably; SQLGEN runs only on the long-tail "custom"
+# intent. These mirror the orchestrator (same connection) — each id must match an id
+# exposed by the LLM Mesh connection.
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-light"  # eco
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
+# Model tier per mode, propagated by the orchestrator through the injected context.
+# In high mode the whole stack is Sonnet. The Semantic Model Query tool that writes
+# the SQL runs on its own DSS-configured model (Sonnet) in every mode, so offer and
+# column resolution stay strong regardless of the orchestration tier.
+LLM_BY_MODE = {"eco": GEMINI_FLASH_LITE_ID, "medium": GEMINI_FLASH_ID, "high": SONNET_ID}
+DEFAULT_MODE = "eco"
 # Fallback ids when no mode is injected (batch / stand-alone use).
 UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
 SQLGEN_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
@@ -115,27 +113,25 @@ def pick_subagent_llm(mode):
 SUBAGENT_LLM_HEADLINE = False
 
 # --- SQL engine --------------------------------------------------------------
-# "semantic_tool" (DEFAULT — user decision 2026-06-12 after A/B testing in DSS):
-#   the agent does UNDERSTAND + RESOLVE + COMPOSE, then delegates SQL
-#   generation/execution to the DSS Semantic Model Query tool, feeding it a
-#   maximally grounded question (exact catalog values, explicit scenarios and
-#   periods, axis rules, destination context). The semantic model owns the
-#   SQL; every upstream layer exists to hand it the best possible context.
-# "direct": the agent builds and runs its OWN read-only SQL (deterministic
+# "semantic_tool" (default): the agent does UNDERSTAND + RESOLVE + COMPOSE, then
+#   delegates SQL generation and execution to the DSS Semantic Model Query tool,
+#   feeding it a maximally grounded question (exact catalog values, explicit
+#   scenarios and periods, axis rules, destination context). The semantic model
+#   owns the SQL; every upstream layer exists to hand it the best context.
+# "direct": the agent builds and runs its own read-only SQL (deterministic
 #   templates + guarded LLM for the long tail).
-# On a TECHNICAL semantic-tool failure the agent falls back to "direct" when
-# FALLBACK_TO_DIRECT is True (a legit empty result is NOT a failure).
+# On a technical semantic-tool failure the agent falls back to "direct" when
+# FALLBACK_TO_DIRECT is True (an empty result is a valid answer, not a failure).
 SQL_ENGINE = "semantic_tool"
 FALLBACK_TO_DIRECT = True
 SEMANTIC_TOOL_ID = "v4oqA6R"        # Semantic Model Query tool id (instance)
 SEMANTIC_TOOL_NAME = "revenue_semantic_query"
 SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
-# Semantic Model Query tool id PER MODE. The tool's underlying LLM is configured in
-# DSS (not from code), so to get Sonnet on the semantic model in HIGH mode you create
-# a second semantic-model tool backed by Sonnet and put its id under "high" below.
-# Until then all modes share the one tool (the upstream grounding is identical).
+# Semantic Model Query tool id per mode. The tool's underlying LLM is configured in
+# DSS, not from code; all modes share the one tool. To back a mode with a different
+# model, create a second semantic-model tool and set its id for that mode here.
 SEMANTIC_TOOL_ID_BY_MODE = {"eco": SEMANTIC_TOOL_ID, "medium": SEMANTIC_TOOL_ID,
-                            "high": SEMANTIC_TOOL_ID}  # <-- set a Sonnet-backed id for "high" if available
+                            "high": SEMANTIC_TOOL_ID}
 
 
 def pick_semantic_tool_id(mode):
@@ -168,7 +164,7 @@ LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo te
 # lookups, and the drop-in mechanism for future parallel tool calls.
 SUBAGENT_MAX_PARALLEL = 4
 
-# Read-only execution (pattern validated in DSS — evidence backend, L045).
+# Read-only execution: per-statement timeout + a read-only transaction.
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
 
@@ -916,9 +912,9 @@ def rank_candidates(term_norm, rows):
 
 
 def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
-    """Deterministic ambiguity policy (ported from SalesDrive v2, generic):
-    1. preferred column (qualified term) filters candidates when any match;
-    2. strict exact-value preference evicts normalization collisions;
+    """Deterministic ambiguity policy:
+    1. a preferred column (qualified term) filters candidates when any match;
+    2. a strict exact-value preference evicts normalization collisions;
     3. one distinct value left -> auto-pick by profile column priority.
     Returns ("resolved", candidate) or ("ambiguous", reduced_candidates)."""
     cands = [c for c in (candidates or []) if c.get("target_value")]
@@ -971,6 +967,52 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
                                                         -(c.get("occurrences") or 0)))[0]
             return ("resolved", dict(chosen, alt_columns=list(ranked[1:])))
     return ("ambiguous", cands)
+
+
+def defer_multicolumn_offer_terms(resolutions):
+    """For terms still 'ambiguous' after refine_ambiguous, decide whether to ASK the
+    user or DEFER to the semantic model:
+
+      - an offer term whose candidates span >= 2 distinct columns (e.g. 'Roaming
+        Hub' fuzzy-matching Product 'Open Roaming Hub' and sirano 'ROAMING HUB IOT')
+        must not trigger a clarification: the resolver should not interrogate the
+        user on the offer hierarchy. It is reclassified 'deferred' and the raw term
+        is passed to the semantic model, which resolves it from its own full catalog
+        (most granular business level — Product, then Solution; never sirano by
+        default) and discloses the level. This avoids pinning the wrong column,
+        which would drop scenarios the column does not carry (e.g. budget).
+      - a mono-column ambiguity (two distinct entities in one column, e.g. two
+        customers) is a genuine question -> stays 'ambiguous' -> still asks.
+
+    The decision is made purely from the count of distinct candidate columns, never
+    from hardcoded column names. Returns (resolutions, deferred) where deferred =
+    [{raw, columns, samples}] (samples = the resolver's partial cross-column hits,
+    passed to build_semantic_question and the disclosure note as context)."""
+    out, deferred = [], []
+    for r in resolutions or []:
+        if r.get("status") == "ambiguous":
+            cands = r.get("candidates") or []
+            cols, seen = [], set()
+            for c in cands:
+                col = c.get("target_column") or ""
+                if col and col not in seen:
+                    seen.add(col)
+                    cols.append(col)
+            if len(cols) >= 2:
+                samples, sseen = [], set()
+                for c in cands:
+                    col = c.get("target_column") or ""
+                    val = str(c.get("display_value") or c.get("target_value") or "")
+                    key = (col, val)
+                    if col and val and key not in sseen:
+                        sseen.add(key)
+                        samples.append({"column": col, "value": val})
+                deferred.append({"raw": r.get("raw_value", ""), "columns": cols,
+                                 "samples": samples[:8]})
+                out.append(dict(r, status="deferred"))
+                continue
+        out.append(r)
+    return out, deferred
 
 
 def build_filter_clauses(resolutions):
@@ -1162,6 +1204,27 @@ def _metric_inner(metric):
     return qident(metric["column"])
 
 
+# Currency derived from the amount column name (e.g. amount_eur -> €). The
+# column name carries the currency, so no profile configuration is required.
+_CURRENCY_BY_CODE = {"eur": "€", "usd": "$", "gbp": "£", "jpy": "¥", "chf": "CHF"}
+
+
+def metric_unit(metric):
+    """The display unit for a metric: its explicit profile unit, or a currency
+    symbol inferred from its amount column name (amount_eur -> €). None when
+    neither applies (e.g. a plain count)."""
+    if not metric:
+        return None
+    unit = metric.get("unit")
+    if unit:
+        return unit
+    col = str(metric.get("column") or "").lower()
+    for code, symbol in _CURRENCY_BY_CODE.items():
+        if re.search(r"(^|[_-])" + code + r"($|[_-])", col):
+            return symbol
+    return None
+
+
 def period_predicate(time_info, start, end):
     """Time-format-aware period predicate (start/end = YYYY-MM-DD strings).
 
@@ -1247,7 +1310,7 @@ def build_sql(u, profile, filters, table):
     if metric is None and intent not in ("list_values", "count_distinct"):
         raise ValueError("no metric available")
     scen_clause, scen_values = _scenario_clause(profile, u["scenarios"])
-    fmt_map, unit = {}, (metric or {}).get("unit")
+    fmt_map, unit = {}, metric_unit(metric)
     if metric:
         fmt_map[metric["name"]] = metric.get("format", "number")
 
@@ -1554,12 +1617,15 @@ DISCLOSE_NOTE = {
 }
 
 
-def build_disclosure_notes(filters, lang):
-    """Deterministic transparency lines: when a resolved value exists in several
-    columns (an offer term that is also a Solution/SolutionLine/sirano code),
-    disclose the ambiguity and the default policy WITHOUT asserting which level
-    the semantic model picked (it decides). Pure; carries no figures, so it
-    never affects the verified headline."""
+def build_disclosure_notes(filters, lang, offer_terms=None):
+    """Deterministic transparency lines for offer terms that span several columns,
+    disclosing the ambiguity and the default policy WITHOUT asserting which level
+    the semantic model picked (it decides). Two sources:
+      - resolved filters that carry alt_columns (a value also present at another
+        offer level, e.g. a Product that is also a Solution);
+      - offer terms the resolver could NOT confidently ground and DEFERRED to the
+        semantic model (multi-column ambiguity, e.g. 'Roaming Hub') — same wording.
+    Pure; carries no figures, so it never affects the verified headline."""
     lines = []
     for f in filters or []:
         alts = f.get("alt_columns") or []
@@ -1569,6 +1635,13 @@ def build_disclosure_notes(filters, lang):
         lines.append(DISCLOSE_NOTE.get(lang, DISCLOSE_NOTE["en"]).format(
             value=f.get("value", ""),
             cols=" / ".join(_pretty_col(c) for c in cols if c)))
+    for ot in offer_terms or []:
+        cols = ot.get("columns") or []
+        if not cols:
+            continue
+        lines.append(DISCLOSE_NOTE.get(lang, DISCLOSE_NOTE["en"]).format(
+            value=ot.get("raw", ""),
+            cols=" / ".join(_pretty_col(c) for c in cols if c)))
     return "\n\n".join(lines)
 
 
@@ -1576,15 +1649,14 @@ def build_semantic_question(u, profile, filters):
     """Compose the message for the Semantic Model Query tool. Pure and
     deterministic.
 
-    Philosophy (revised 2026-06-15): the Semantic Model Query tool runs on a
-    SMART model (Sonnet) WITH the semantic layer — it understands the dataset
-    far better than our small UNDERSTAND model. So this message gives it the
-    user's REAL question as the source of truth, then our layers ASSIST it with
-    HINTS (a deterministic intent shape, the values/columns the grounding helper
-    matched in the live catalog, the preferred presentation, scenario, period).
-    Hints are help, NOT orders: the tool keeps the final say. We never force a
-    column choice — when a value spans offer levels we SUGGEST the most granular
-    and flag the alternative for the tool (and the user)."""
+    The Semantic Model Query tool runs on a strong model with the semantic layer,
+    so it understands the dataset better than the small UNDERSTAND model. This
+    message gives it the user's real question as the source of truth, then assists
+    it with hints: a deterministic intent shape, the values and columns the resolver
+    matched in the live catalog, the preferred presentation, scenario and period.
+    Hints assist, they do not order — the tool keeps the final say. A column choice
+    is never forced: when a value spans offer levels the most granular is suggested
+    and the alternative is flagged for the tool and the user."""
     intent = u["intent"]
     metric = profile.metric(u["metric"] or "") or profile.default_metric
     parts = ['USER QUESTION (this is the source of truth — answer THIS): "%s"'
@@ -1662,13 +1734,13 @@ def build_semantic_question(u, profile, filters):
     if hint:
         parts.append("EXPECTED SHAPE (guidance, use your judgment): " + hint)
 
-    # Helper findings, presented as HINTS (not orders). A value matched to a
-    # SINGLE column is a confident, catalog-exact spelling (e.g. a customer
-    # name) -> suggested directly. A value that exists in SEVERAL columns (an
-    # ambiguous offer term like 'EVPL', both a Product and a Solution) is NOT
-    # pinned to a column: the smart semantic model resolves it with its own
-    # hierarchy rules + the user's intent (proven more reliable than our small
-    # helper, whose column pick can be wrong — e.g. defaulting to sirano_product).
+    # Resolver findings, presented as hints (not orders). A value matched to a
+    # single column is a confident, catalog-exact spelling (e.g. a customer name)
+    # and is suggested directly. A value present in several columns (an ambiguous
+    # offer term like 'EVPL', both a Product and a Solution) is not pinned to a
+    # column: the semantic model resolves it with its own hierarchy rules and the
+    # user's intent, which is more reliable than a fixed column pick (a fixed pick
+    # can be wrong — e.g. defaulting to sirano_product).
     if filters:
         confident = [f for f in filters if not f.get("alt_columns")]
         ambiguous = [f for f in filters if f.get("alt_columns")]
@@ -1708,6 +1780,22 @@ def build_semantic_question(u, profile, filters):
                 "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
                 "sales channel + an offer) with AND. (Guidance — your judgment.)")
 
+    # Offer terms the resolver could NOT confidently ground and DEFERRED to you
+    # (multi-column ambiguity, no single confident match). You have the full catalog
+    # and the hierarchy — resolve them yourself; never default to sirano_product.
+    for ot in (u.get("offer_terms_for_model") or []):
+        samples = "; ".join("%s: '%s'" % (s.get("column", ""),
+                                          str(s.get("value", "")).replace("'", "''"))
+                            for s in (ot.get("samples") or []))
+        parts.append(
+            "AMBIGUOUS OFFER TERM (no confident match) — the user named \"%s\". "
+            "The grounding helper found only PARTIAL, cross-column matches (%s) and "
+            "did NOT pin a column. Resolve \"%s\" yourself from YOUR catalog using "
+            "the offer hierarchy (prefer the most granular BUSINESS level — Product, "
+            "then Solution, then SolutionLine; NEVER default to sirano_product), then "
+            "DISCLOSE the level you used so the user can ask for another."
+            % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
+
     if scen and intent not in ("list_values",):
         parts.append("SCENARIO (guidance): unless the question implies "
                      "otherwise, consider rows whose %s is in: %s."
@@ -1725,12 +1813,9 @@ def build_semantic_question(u, profile, filters):
     return " ".join(parts)
 
 
-# --- tool-output extraction (ported from SalesDrive v2, hardened for the
-# tool's AGENT MODE) ------------------------------------------------------------
-# Agent mode returns a multi-message transcript (reasoning -> schema
-# exploration -> probe queries -> final answer). Two consequences, both seen
-# live in DSS (2026-06-12: the relayed "answer" was "I'll start by exploring
-# the schema..."):
+# --- tool-output extraction (hardened for the tool's agent mode) --------------
+# Agent mode returns a multi-message transcript (reasoning -> schema exploration
+# -> probe queries -> final answer). Two consequences:
 #   - the ANSWER must be selected by KEY PRIORITY (answer/output_text beat a
 #     generic text) and, within a priority, the LAST occurrence wins (the
 #     final message), never the first (the reasoning preamble);
@@ -2013,6 +2098,52 @@ def _scope_label(u, profile, lang):
     return ", ".join(p for p in parts if p) or profile.dataset_name
 
 
+# --- transparency: an explicit one-line scope statement ----------------------
+# A money answer must never be a bare number: the user has to know what the figure
+# is made of (scenario, period, entity, currency). The sub-agent resolved all of
+# this, so it prepends a "[Scope]" line that the orchestrator restates in natural
+# prose. It is deterministic and carries no figures, so it never affects the
+# verified headline; scenario, period and currency all come from the profile.
+_SCOPE_HEAD = {"fr": "Périmètre", "en": "Scope"}
+_SCOPE_SCENARIO = {"fr": "scénario", "en": "scenario"}
+_SCOPE_DEFAULT = {"fr": " (par défaut)", "en": " (default)"}
+_SCOPE_PERIOD = {"fr": "période", "en": "period"}
+_SCOPE_NO_YEAR = {"fr": " (aucun filtre d'année)", "en": " (no year filter)"}
+_SCOPE_CURRENCY = {"fr": "montants en ", "en": "figures in "}
+
+
+def build_scope_note(u, profile, filters, lang):
+    """One explicit '[Scope] …' line stating EXACTLY what was queried — scenario,
+    period, entity filters and currency — so the orchestrator restates it and the
+    user knows what the figure represents. Empty when there is nothing meaningful."""
+    bits = []
+    scen = profile.scenario
+    if scen:
+        vals = u.get("scenarios") or scen.get("default_values") or []
+        if vals:
+            flag = "" if u.get("scenarios") else _SCOPE_DEFAULT[lang]
+            bits.append("%s : %s%s" % (_SCOPE_SCENARIO[lang], ", ".join(vals), flag))
+    tm = profile.time
+    if tm:
+        period = (u.get("period") or {})
+        if period.get("mode") == "explicit":
+            bits.append("%s : %s" % (_SCOPE_PERIOD[lang], period.get("label", "")))
+        else:
+            bits.append("%s : %s%s" % (_SCOPE_PERIOD[lang], PERIOD_ALL_LABEL[lang],
+                                       _SCOPE_NO_YEAR[lang]))
+    for f in filters or []:
+        col, val = f.get("column", ""), f.get("value", "")
+        if col and val != "":
+            bits.append("%s = %s" % (_pretty_col(col), val))
+    unit = metric_unit(profile.metric(u.get("metric") or "")
+                       or profile.default_metric)
+    if unit:
+        bits.append("%s%s" % (_SCOPE_CURRENCY[lang], unit))
+    if not bits:
+        return ""
+    return "[%s] %s" % (_SCOPE_HEAD[lang], " · ".join(bits))
+
+
 def build_fallback_headline(u, profile, result, lang, fmt_map, unit=None):
     scope = _scope_label(u, profile, lang)
     if u["intent"] == "lookup":
@@ -2034,7 +2165,7 @@ def build_fallback_headline(u, profile, result, lang, fmt_map, unit=None):
     return HEADLINE_FALLBACK[lang].format(scope=scope)
 
 
-# --- verified LLM headline (ported, frozen rule) ------------------------------
+# --- verified LLM headline ----------------------------------------------------
 
 _NUM_TOKEN_RE = re.compile(r"\d(?:[\d\s.,  ]*\d)?")
 
@@ -2223,8 +2354,7 @@ class MyLLM(BaseLLM):
     # ------------------------------------------------------------------ tools
     def _get_tool(self, project, tool_id, tool_name):
         """get_agent_tool(tool_id) with a one-shot fallback matching tool_name
-        against list_agent_tools() (covers a recreated tool whose id changed).
-        Proven pattern from SalesDrive v2 (validated in DSS)."""
+        against list_agent_tools(), which covers a recreated tool whose id changed."""
         if tool_id in self._tools:
             return self._tools[tool_id]
         tool = None
@@ -2395,11 +2525,11 @@ class MyLLM(BaseLLM):
                      "value_norm": t[idx.get("value_norm", 2)],
                      "occurrences": t[idx.get("occurrences", 3)]} for t in raw]
 
-        # Pass 2 (substring/fuzzy) for the terms pass 1 missed. Kept SEQUENTIAL: the
-        # DB thread-safety of concurrent SQLExecutor2 is unproven and the win is
-        # marginal (usually 0-2 unmatched terms after the batched exact pass) — the
-        # project's instance-safety rule wins. (run_parallel is reserved for genuinely
-        # independent TOOL calls, where the gain is real and the calls are isolated.)
+        # Pass 2 (substring/fuzzy) for the terms pass 1 missed. Kept sequential:
+        # concurrent SQLExecutor2 access is not guaranteed thread-safe and the win is
+        # marginal (usually 0-2 unmatched terms after the batched exact pass), so
+        # instance safety wins. run_parallel is reserved for independent tool calls,
+        # where the calls are isolated and the gain is real.
         unmatched = [t for t in base_terms if not exact_rows.get(norms[t])]
 
         def _fuzzy_fetch(term):
@@ -2485,15 +2615,13 @@ class MyLLM(BaseLLM):
                        llm_id=None):
         """2 attempts: native JSON mode (with_json_output) then prompt-only.
 
-        UNDERSTAND is a DETERMINISTIC extraction (scope / intent / terms), NOT a
-        reasoning task — forcing the JSON schema is what makes it reliable (the
-        proven behavior of the original agent). In DSS 14 forced JSON disables
-        the model's reasoning for THIS call only, which is what we want here: a
-        clean, fast parse instead of a long 'thinking' pass that returns prose
-        the parser cannot read. Reasoning stays ON where it helps (the
-        orchestrator's routing, the verified headline). If the model/connection
-        rejects json mode, the guarded attempt 1 still runs as a plain
-        completion and attempt 2 is prompt-only."""
+        UNDERSTAND is a deterministic extraction (scope / intent / terms), not a
+        reasoning task, so forcing the JSON schema is what makes it reliable. Forced
+        JSON disables the model's reasoning for this call only, which is what we want
+        here: a clean, fast parse instead of a long 'thinking' pass that returns prose
+        the parser cannot read. Reasoning stays on where it helps (the orchestrator's
+        routing, the verified headline). If the model or connection rejects JSON mode,
+        attempt 1 still runs as a plain completion and attempt 2 is prompt-only."""
         llm = project.get_llm(llm_id or UNDERSTAND_LLM_ID)
         for attempt, use_json_mode in ((1, True), (2, False)):
             try:
@@ -2638,7 +2766,7 @@ class MyLLM(BaseLLM):
         def n_resolve(state):
             writer = get_stream_writer()
             u, lang = state["u"], state["lang"]
-            resolutions, filters = [], []
+            resolutions, filters, deferred = [], [], []
             if u["terms"]:
                 preferred_columns, base_terms = {}, []
                 for t in u["terms"]:
@@ -2680,9 +2808,15 @@ class MyLLM(BaseLLM):
                             r = dict(r, candidates=data)
                         refined.append(r)
                     resolutions = refined
+                    # Offer terms ambiguous across >=2 columns -> defer to the
+                    # semantic model instead of interrogating the user (the smart
+                    # model resolves the hierarchy + discloses). Mono-column
+                    # ambiguity stays 'ambiguous' and still asks.
+                    resolutions, deferred = defer_multicolumn_offer_terms(resolutions)
                     filters = build_filter_clauses(resolutions)
                     sp.outputs["statuses"] = [r.get("status") for r in resolutions]
                     sp.outputs["filters"] = filters
+                    sp.outputs["deferred_offer_terms"] = [d["raw"] for d in deferred]
                 if any(r.get("status") in ("ambiguous", "unresolved")
                        for r in resolutions):
                     clarification = build_clarification(resolutions, lang)
@@ -2693,7 +2827,10 @@ class MyLLM(BaseLLM):
                     writer(_agent_result("need_clarification", u,
                            resolved_filters=resolved_filters_summary(resolutions)))
                     return {"done": True}
-            return {"resolutions": resolutions, "filters": filters,
+            # Thread the deferred offer terms forward (build_semantic_question asks
+            # the smart model to resolve them; n_render discloses the ambiguity).
+            return {"u": dict(u, offer_terms_for_model=deferred),
+                    "resolutions": resolutions, "filters": filters,
                     "resolved_filters": resolved_filters_summary(resolutions),
                     "done": False}
 
@@ -2790,8 +2927,8 @@ class MyLLM(BaseLLM):
                         result = payload["result"]
                         tool_answer = payload["answer"]
                         tool_row_count = payload["row_count"]
-                        unit = (profile.metric(u["metric"] or "")
-                                or profile.default_metric or {}).get("unit")
+                        unit = metric_unit(profile.metric(u["metric"] or "")
+                                           or profile.default_metric)
                     except Exception as e:
                         logger.exception(
                             "Semantic tool failed%s",
@@ -2938,10 +3075,15 @@ class MyLLM(BaseLLM):
             executed = state.get("executed") or []
             resolved_filters = state.get("resolved_filters") or []
             instruction = state["instruction"]
-            disclosure = build_disclosure_notes(state.get("filters") or [], lang)
+            disclosure = build_disclosure_notes(state.get("filters") or [], lang,
+                                                u.get("offer_terms_for_model"))
+            # Transparency prefix: the exact scenario / period / entity / currency
+            # this answer covers (relayed by the orchestrator into natural prose).
+            scope_note = build_scope_note(u, profile, state.get("filters") or [], lang)
+            scope_prefix = (scope_note + "\n\n") if scope_note else ""
             writer(_block("format_output"))
             if (not result or not result.get("rows")) and tool_answer:
-                writer({"chunk": {"text": tool_answer
+                writer({"chunk": {"text": scope_prefix + tool_answer
                         + (("\n\n" + disclosure) if disclosure else "")}})
                 writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                        sql_count=len(executed), row_count=tool_row_count,
@@ -2967,12 +3109,11 @@ class MyLLM(BaseLLM):
             table_md = build_table(result, lang, fmt_map, profile, unit)
             headline = build_fallback_headline(u, profile, result, lang,
                                                fmt_map, unit)
-            # The LLM headline is now REDUNDANT: the orchestrator writes the
-            # user-facing analysis from this result, so a slow extra reasoning call
-            # here (often ~tens of seconds) only adds latency. Default OFF -> use
-            # the deterministic, hallucination-proof fallback headline (the
-            # orchestrator comments on top). Flip SUBAGENT_LLM_HEADLINE on only if
-            # the sub-agent is ever used stand-alone (no orchestrator wrapper).
+            # The orchestrator writes the user-facing analysis from this result, so
+            # the sub-agent's own LLM headline is redundant and only adds latency.
+            # Off by default: use the deterministic fallback headline (every number
+            # is taken straight from the result). Enable SUBAGENT_LLM_HEADLINE only
+            # when the sub-agent is used stand-alone, without the orchestrator.
             if SUBAGENT_LLM_HEADLINE:
                 allowed = allowed_number_set(
                     result, [instruction, u["period"].get("label", ""),
@@ -2997,7 +3138,7 @@ class MyLLM(BaseLLM):
             if (u.get("original_intent") in ("compare_scenarios", "compare_periods")
                     and u["intent"] not in ("compare_scenarios", "compare_periods")):
                 degraded = "\n\n" + DEGRADED_COMPARISON_NOTE[lang]
-            writer({"chunk": {"text": headline + "\n\n" + table_md
+            writer({"chunk": {"text": scope_prefix + headline + "\n\n" + table_md
                     + (("\n\n" + disclosure) if disclosure else "") + degraded}})
             writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                    sql_count=len(executed), row_count=len(result["rows"]),

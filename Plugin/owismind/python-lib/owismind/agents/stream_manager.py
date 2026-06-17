@@ -350,6 +350,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     ("sqlId", "sql_id"),
                     ("stepIndex", "step_index"),
                     ("agentKey", "agent_key"),
+                    ("sourceUrl", "source_url"),
                     ("result", "result"),
                 ):
                     value = event.get(event_key)

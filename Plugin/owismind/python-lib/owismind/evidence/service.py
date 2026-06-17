@@ -397,6 +397,28 @@ def matched_source_tables(parsed_tables, candidates):
     return out
 
 
+def source_url_for_run(active_item, items):
+    """The dataset source link configured on the answering agent. The orchestrator
+    stamps it on each captured SQL item (``source_url``); this returns the active
+    item's link, falling back to any item that carries one. Empty when unset. Pure.
+    """
+    for candidate in [active_item] + list(items or []):
+        if isinstance(candidate, dict):
+            url = candidate.get("source_url")
+            if isinstance(url, str) and url:
+                return url
+    return ""
+
+
+def with_source_urls(matched_sources, url):
+    """Attach the run's source ``url`` to the matched sources. Only the single-source
+    case is unambiguous (one dataset, one configured link), so the url is added there;
+    a multi-source run is left untouched (no per-dataset link mapping). Pure."""
+    if url and isinstance(matched_sources, list) and len(matched_sources) == 1:
+        return [dict(matched_sources[0], url=url)]
+    return matched_sources
+
+
 def summarize_queries(items, matched_flags):
     """The ``queries`` block of /evidence/meta: one summary per stored item. Pure.
 
@@ -983,11 +1005,15 @@ def evidence_meta(user_id, exchange_id):
             "dataset": ctx["dataset"],
             "schema": ctx["source_schema"],
             "table": ctx["source_table"],
+            # Link to the source dataset in Dataiku (configured on the agent); empty
+            # when none is set, in which case Evidence shows plain text.
+            "url": source_url_for_run(ctx["item"], ctx["items"]),
         },
         # Every DISTINCT source dataset the SQL reads (the live rows table can be
         # re-queried against any of them via /evidence/rows `table`). The frontend
         # renders a selector ONLY when this list has more than one entry.
-        "sources": ctx["matched_sources"],
+        "sources": with_source_urls(
+            ctx["matched_sources"], source_url_for_run(ctx["item"], ctx["items"])),
         "queries": summarize_queries(ctx["items"], matched_flags),
         "verification": verification,
         "explanation": build_explanation(explain),

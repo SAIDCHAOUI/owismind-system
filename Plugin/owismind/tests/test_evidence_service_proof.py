@@ -64,6 +64,8 @@ from owismind.evidence.service import (  # noqa: E402
     has_captured_result,
     item_matches_candidates,
     matched_source_tables,
+    source_url_for_run,
+    with_source_urls,
     normalize_explain,
     predicate_display,
     summarize_queries,
@@ -352,6 +354,33 @@ class MatchedSourceTablesTests(unittest.TestCase):
         self.assertEqual(matched_source_tables(None, self.CANDIDATES), [])
         self.assertEqual(matched_source_tables(["not a dict"], self.CANDIDATES), [])
         self.assertEqual(matched_source_tables([{"table": "tickets"}], None), [])
+
+
+class SourceUrlTests(unittest.TestCase):
+    """The dataset source link configured on the agent (stamped on each captured
+    SQL item by the orchestrator) reaches the Evidence meta."""
+
+    def test_url_from_active_item_then_fallback(self):
+        active = {"sql": "s", "source_url": "https://dss/active"}
+        items = [{"sql": "a"}, active, {"sql": "b", "source_url": "https://dss/other"}]
+        self.assertEqual(source_url_for_run(active, items), "https://dss/active")
+        # No url on the active item -> fall back to any item that carries one.
+        items2 = [{"sql": "a"}, {"sql": "b", "source_url": "https://dss/other"}]
+        self.assertEqual(source_url_for_run({"sql": "s"}, items2), "https://dss/other")
+
+    def test_url_empty_when_unconfigured(self):
+        self.assertEqual(source_url_for_run({"sql": "s"}, [{"sql": "a"}]), "")
+        self.assertEqual(source_url_for_run(None, None), "")
+
+    def test_with_source_urls_single_source_only(self):
+        one = [{"dataset": "DRIVE_Revenues", "table": "t"}]
+        out = with_source_urls(one, "https://dss/d")
+        self.assertEqual(out[0]["url"], "https://dss/d")
+        # Multi-source is left untouched (no per-dataset link mapping).
+        two = [{"dataset": "A"}, {"dataset": "B"}]
+        self.assertEqual(with_source_urls(two, "https://dss/d"), two)
+        # No url -> unchanged.
+        self.assertEqual(with_source_urls(one, ""), one)
 
 
 class ResultBlockTests(unittest.TestCase):

@@ -72,8 +72,8 @@ from langgraph.config import get_stream_writer
 logger = logging.getLogger("owismind.orchestrator")
 
 # Guarded import: the streamed-completion footer class name differs across SDK
-# builds; some builds emit the footer without a "type" field, so we detect it
-# both ways (ORCH-07, validated in DSS).
+# builds, and some builds emit the footer without a "type" field, so it is
+# detected both ways.
 try:                                            # pragma: no cover - SDK dependent
     from dataiku.llm.python import DSSLLMStreamedCompletionFooter
 except Exception:                               # pragma: no cover
@@ -84,48 +84,40 @@ except Exception:                               # pragma: no cover
 # 1. CONFIGURATION
 # =============================================================================
 
-# --- LLM Mesh model ids (edit these to match your connection) ----------------
-# OWIsMind is MODEL-AGNOSTIC: the architecture must work well on a small/fast
-# model and excel on a large one. The ONE knob is which model drives each mode.
-#
-#   Gemini 2.5 Flash  -> streams intermediate progress naturally, reliable tool
-#                        calling, fast. Recommended default for eco/medium.
-#   Claude Sonnet 4.6 -> top reasoning/quality. Used for high.
-#   gpt-5.4-mini      -> cheapest, but tends to "narrate then stop" and is kept
-#                        only as an option (NOT a default).
-#
-# ⚠️ ACTION REQUIRED: set GEMINI_FLASH_ID to the EXACT id shown in your LLM Mesh
-# connection (DSS > Administration > Connections > LLM-7064-revforecast > the
-# Gemini 2.5 Flash model). The id below is a best-guess in the observed format
-# ("<connection-prefix>:<provider>/<model>") and MUST be verified once.
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-flash"  # <-- VERIFY
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
-GPT_MINI_ID = "openai:LLM-7064-revforecast:openai/gpt-5.4-mini"
+# --- LLM Mesh model ids -------------------------------------------------------
+# Model-agnostic: one model drives the whole turn, chosen by the mode. Each id
+# matches an id exposed by the LLM Mesh connection, in the form
+# "<connection-prefix>:<provider>/<model>".
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-light"  # eco
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
 
 # Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
-# token on the current turn; default "medium" when absent). Each mode picks ONE
+# token on the current turn; default "eco" when absent). Each mode picks ONE
 # model that drives the ENTIRE turn — no escalation, no mid-turn switching. The
 # quality difference between modes is purely the model tier; the orchestration
 # logic is identical for all of them.
-#   eco    : gpt-5.4-mini everywhere (cheapest, near-free — the default for
-#            everyday lookups). The mini does NOT narrate alongside tool calls
-#            (it tends to narrate-then-stop), so that prompt section is OFF here.
-#   medium : Gemini 2.5 Flash everywhere (the everyday default; narrates well).
+#   eco    : Gemini 3.1 Flash-Lite everywhere — the DEFAULT (cheap, fast, good).
+#            Its lead-in narration is kept OFF (smallest tier; the deterministic
+#            ticker covers the wait) — see narration_enabled.
+#   medium : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
 #   high   : Sonnet everywhere — orchestrator AND sub-agent AND (when configured)
 #            the semantic model. Max quality; the most expensive.
 # The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
+# The DSS-configured Semantic Model Query tool (which actually writes the SQL) stays
+# on its own strong model (Sonnet) in EVERY mode, so offer/column resolution is
+# consistent regardless of the orchestration tier.
 ORCH_MODES = ("eco", "medium", "high")
-DEFAULT_MODE = "medium"
+DEFAULT_MODE = "eco"
 LOOP_LLM_BY_MODE = {
-    "eco": GPT_MINI_ID,
+    "eco": GEMINI_FLASH_LITE_ID,
     "medium": GEMINI_FLASH_ID,
     "high": SONNET_ID,
 }
 
-# Whether the orchestrator model is asked to write a one-sentence lead-in ALONGSIDE
-# its tool call (ChatGPT-style live narration). ON for capable models (medium/high);
-# OFF for the mini (eco) — the mini tends to narrate then STOP without calling the
-# tool, so we keep eco strictly act-first and let the deterministic ticker narrate.
+# Whether the model writes a one-sentence lead-in alongside its tool call (live
+# narration). On for medium/high; off for eco, which stays strictly act-first so
+# the wait is covered by the deterministic ticker instead.
 def narration_enabled(mode):
     return mode != "eco"
 # Machine-only control tokens the backend appends to the END of the current turn
@@ -207,11 +199,13 @@ CAPABILITIES = {
         },
         "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
         "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
+        # Direct link to the source dataset in Dataiku. When set, Evidence turns the
+        # data source into a clickable link that opens the dataset in a new tab.
+        "source_url": "",
         "pass_context": True,
         "enabled": True,
     },
-    # Adding a sub-agent (e.g. a tickets expert) = one more entry here. Older
-    # predecessors live in git history; we keep the registry to the live agents.
+    # Adding a sub-agent (e.g. a tickets expert) is one more entry here.
 }
 
 # Business domains OWI cares about. A domain is "staffed" when an enabled agent
@@ -539,6 +533,10 @@ def _find_generated_sql(sub_trace, step_index, agent_key):
     Evidence-shaped SQL items. Frozen sql_id format 's{step}q{n}'."""
     root = _trace_to_dict(sub_trace)
     items, counter = [], {"n": 0}
+    # The source dataset link configured on the agent (Evidence turns the data
+    # source into a clickable link when this is set). Carried on each SQL item so
+    # it reaches the backend's Evidence meta alongside the captured SQL.
+    source_url = (CAPABILITIES.get(agent_key) or {}).get("source_url") or ""
 
     def walk(node):
         if isinstance(node, dict):
@@ -554,6 +552,8 @@ def _find_generated_sql(sub_trace, step_index, agent_key):
                     "step_index": step_index,
                     "agent_key": agent_key,
                 }
+                if source_url:
+                    item["source_url"] = source_url
                 res = _extract_result_from_span(outputs)
                 if res is not None:
                     item["result"] = res
@@ -637,13 +637,12 @@ def _add_unique(a, b):
 # =============================================================================
 # 5b. NATIVE-ARTIFACT FORMATTING — what the model SEES of a specialist result
 # -----------------------------------------------------------------------------
-# Root cause of "the model reprints a markdown table": the specialist answer it
-# receives already CONTAINS a ready-made markdown table, so a weak model just
-# copies it. Fix it at the source: the model never sees a table. It receives the
-# headline prose (table stripped) + the structured data as a compact JSON block,
-# and a LIGHT, non-prescriptive nudge to render it with whatever tool fits (it
-# freely picks the chart/table/KPI and the columns — we never force a type, which
-# only constrains a capable model). Plus a deterministic safety net in node_finish.
+# A weak model that is handed a ready-made markdown table tends to reprint it. So
+# the model never sees a table: it receives the headline prose (table stripped) +
+# the structured data as a compact JSON block, and a light, non-prescriptive nudge
+# to render it with whatever tool fits (it freely picks the chart/table/KPI and the
+# columns — forcing a type would only constrain a capable model). A deterministic
+# safety net in node_finish renders a table when the model rendered nothing.
 # =============================================================================
 
 _MD_TABLE_LINE_RE = re.compile(r"^\s*\|.*\|\s*$")
@@ -711,8 +710,10 @@ def _subagent_tool_output(answer, result, intent=None):
         "DISPLAY: render this result in the Evidence panel with the tool that "
         "fits best — show_chart (you choose line/bar/pie + the exact x and y "
         "columns), show_table, or show_kpi — then write your analysis. Use ONLY "
-        "these exact columns: %s. Then COMMENT (trend, key figures, the so-what); "
-        "never reprint a table in your text." % cols)
+        "these exact columns: %s. RESTATE the specialist's '[Scope]'/'[Périmètre]' "
+        "line (scenario, period, currency) in natural language and format every "
+        "monetary figure with thousands separators and €. Then COMMENT (trend, key "
+        "figures, the so-what); never reprint a table in your text." % cols)
     return "\n\n".join(parts)
 
 
@@ -722,13 +723,13 @@ def _subagent_tool_output(answer, result, intent=None):
 
 def parse_mode(text):
     """(mode, clean_text): extract the ⟦owi:mode=…⟧ control token the backend
-    appends to the current turn, strip EVERY ⟦owi:…⟧ control token from the text.
-    Defaults to 'medium'. (The human [Context —…] block is left in place.)
+    appends to the current turn, strip every ⟦owi:…⟧ control token from the text.
+    Defaults to 'eco'. (The human [Context —…] block is left in place.)
 
-    SECURITY: read the LAST valid token, not the first. The backend ALWAYS appends
-    its authoritative token at the END of the message; reading the last occurrence
-    means a user who TYPES a fake ⟦owi:mode=high⟧ earlier in their message cannot
-    force a more expensive model (the backend's appended token wins)."""
+    Security: read the LAST valid token, not the first. The backend always appends
+    its authoritative token at the end of the message, so reading the last
+    occurrence means a user typing a fake ⟦owi:mode=high⟧ earlier in their message
+    cannot force a more expensive model — the backend's appended token wins."""
     mode = DEFAULT_MODE
     if not text:
         return mode, text or ""
@@ -811,28 +812,11 @@ def pick_loop_llm(mode):
 
 
 # =============================================================================
-# 6. SOURCES BLOCK (deterministic, registry-driven, gated by AGENT_RESULT)
+# 6. (removed) SOURCES BLOCK — the dataset source is shown in the Evidence side
+# panel (Data Source), so the chat answer no longer repeats a "**Sources**" block.
+# The registry still keeps dataset_label_* for future use (e.g. a clickable source
+# link in Evidence pointing at the Dataiku dataset).
 # =============================================================================
-
-_SOURCES_HEADER = {"fr": "**Sources**", "en": "**Sources**"}
-# Sub-agent statuses that legitimately consulted data (a clarification or an
-# out-of-scope reply must NOT cite a dataset).
-_SOURCED_STATUSES = ("ready", "no_data")
-
-
-def sources_block(used_caps, statuses, lang):
-    if not any(s in _SOURCED_STATUSES for s in (statuses or [])):
-        return ""
-    labels, seen = [], set()
-    for key in used_caps or []:
-        cap = CAPABILITIES.get(key) or {}
-        label = cap.get("dataset_label_%s" % lang) or cap.get("dataset_label_en")
-        if label and label not in seen:
-            seen.add(label)
-            labels.append("- %s" % label)
-    if not labels:
-        return ""
-    return _SOURCES_HEADER[lang] + "\n" + "\n".join(labels)
 
 
 # =============================================================================
@@ -891,6 +875,20 @@ PERSONA = (
     "INSIGHT — the trend, the outlier, the key figure, the 'so what'. Spend your "
     "effort on the ANALYSIS, not on repeating numbers. A single figure / one-line "
     "answer needs no artifact: just state it.\n\n"
+    "# MONEY, NUMBERS & TRANSPARENCY (NON-NEGOTIABLE)\n"
+    "This is about money — be impeccable with figures.\n"
+    "- Format EVERY monetary amount cleanly: thousands separators AND the currency "
+    "symbol €. Write '123 807 €', never '123807' or '123,807'. Amounts are euros "
+    "(EUR) unless the data says otherwise.\n"
+    "- ALWAYS state the SCOPE a figure represents, so the user knows what it is made "
+    "of. The specialist's answer STARTS with a '[Scope] …' / '[Périmètre] …' line "
+    "giving the exact scenario (ACTUALS / BUDGET / FORECAST…), the period (or 'all "
+    "available months — no year filter'), the entity filtered and the currency. "
+    "Weave that scope into your reply in natural language — NEVER drop it, never "
+    "give a bare number. E.g.: 'Sur le périmètre ACTUALS, toutes périodes "
+    "confondues (aucun filtre d'année), le compte HSBC a réalisé 123 807 €.'\n"
+    "- Then write a short, well-crafted ANALYSIS (the so-what) — not just the "
+    "figure. The answer must read as a clean, trustworthy mini-analysis.\n\n"
     "# WHAT'S ON THE USER'S SCREEN\n"
     "The user can SEE the Evidence panel (the chart/table/KPI from earlier turns). "
     "When an [ON SCREEN NOW …] note is appended to their message, it tells you "
@@ -997,8 +995,8 @@ class OrchState(TypedDict, total=False):
 # 8b. AGENTIC CHAT — explicit transcript with strict tool_call -> tool_output
 # -----------------------------------------------------------------------------
 # The whole conversation is mirrored into an ordered op list and replayed on a
-# fresh completion, preserving the EXACT tool_call -> tool_output pairing (a
-# mismatch is a Mesh 400, cf. L061). One model drives the whole turn.
+# fresh completion, preserving the exact tool_call -> tool_output pairing (a
+# mismatch is rejected by LLM Mesh with a 400). One model drives the whole turn.
 # =============================================================================
 
 class LoopChat(object):
@@ -1446,9 +1444,8 @@ class MyLLM(BaseLLM):
                     text = ("Je n'ai pas pu finaliser la réponse." if lang == "fr"
                             else "I could not finalize the answer.")
             writer(_txt(text[:ANSWER_RELAY_MAX_CHARS]))
-            sb = sources_block(state.get("used_caps"), state.get("statuses"), lang)
-            if sb:
-                writer(_txt("\n\n" + sb))
+            # NO "Sources" block in the chat: the dataset source is already shown
+            # in the Evidence side panel (Data Source), so repeating it here is noise.
             writer(_ev("DONE", {"totalUsage": state.get("usage") or {},
                                 "label": _L["done"][lang]}))
             return {}
@@ -1575,10 +1572,10 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # One model drives the WHOLE turn — the mode picks it (eco=mini, medium=
-            # Gemini Flash, high=Sonnet). No escalation, no mid-turn switching: the
-            # same model routes, calls tools and writes the final answer. Narration
-            # alongside tool calls is enabled only for capable models (not the mini).
+            # One model drives the whole turn — the mode picks it (eco=Gemini
+            # Flash-Lite, medium=Gemini Flash, high=Sonnet). The same model routes,
+            # calls tools and writes the final answer; narration alongside tool calls
+            # is enabled for medium/high only.
             loop_llm = pick_loop_llm(mode)
             system_prompt = build_system_prompt(self._caps, lang,
                                                 narrate=narration_enabled(mode))
@@ -1589,8 +1586,8 @@ class MyLLM(BaseLLM):
             # no-data / out-of-scope message in the user's language (it no longer
             # self-guesses). Plus conversational continuity (the specialist is stateless,
             # so we hand it the previous turn too for disambiguation).
-            # MODE is propagated so the sub-agent uses the SAME tier (eco=mini,
-            # medium=Gemini Flash, high=Sonnet) for its own LLM calls + semantic model.
+            # MODE is propagated so the sub-agent uses the SAME tier (eco=Gemini
+            # Flash-Lite, medium=Gemini Flash, high=Sonnet) for its own LLM calls.
             context_msg = (
                 "MODE: %s\n"
                 "USER LANGUAGE: %s — write any message addressed to the user "
@@ -1617,9 +1614,8 @@ class MyLLM(BaseLLM):
                                       config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 8}):
                 yield chunk
         except Exception:
-            # Name the model in logs + the ERROR event: the #1 deploy failure is a
-            # wrong/unconfigured LLM Mesh id (the GEMINI_FLASH_ID `# <-- VERIFY`
-            # placeholder), which otherwise surfaces as an opaque mid-loop crash.
+            # Name the model in the logs and the ERROR event: a wrong or
+            # unconfigured LLM Mesh id otherwise surfaces as an opaque mid-loop crash.
             logger.exception("Orchestrator failure (model=%s)", loop_llm)
             yield _ev("ERROR", {"stage": "orchestrator", "message": "internal_error",
                                 "model": loop_llm})

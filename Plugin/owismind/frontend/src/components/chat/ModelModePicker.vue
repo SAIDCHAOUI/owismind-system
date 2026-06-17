@@ -4,8 +4,8 @@
 // spells out what each mode is and what it implies: more powerful = better
 // understanding/analysis but higher cost, which burns the €50/month envelope
 // faster. Goal: make the cost trade-off conscious so High is used only on complex
-// queries. The choice is a per-turn preference (ui store); backend defaults to medium.
-//   eco = gpt-5.4-mini (near-free) · medium = Gemini 2.5 Flash · high = Claude Sonnet.
+// queries. The choice is a per-turn preference (ui store); backend defaults to eco.
+//   eco = Gemini 3.1 Flash-Lite (default) · medium = Gemini 3.5 Flash · high = Claude Sonnet.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore, MODEL_MODES } from '../../stores/ui.js'
@@ -55,7 +55,7 @@ function choose(m) {
         >
           <div class="card-head">
             <span class="card-name">{{ t('mode.' + m) }}</span>
-            <span v-if="m === 'medium'" class="badge">{{ t('mode.recommended') }}</span>
+            <span v-if="m === 'eco'" class="badge">{{ t('mode.recommended') }}</span>
             <span v-if="current === m" class="badge current">{{ t('mode.current') }}</span>
           </div>
           <p class="card-desc">{{ t('mode.' + m + '_desc') }}</p>

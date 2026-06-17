@@ -56,7 +56,8 @@ _ROW_KEYS = ("rows", "records", "data", "result_rows", "values")
 _COLUMN_KEYS = ("columns", "column_names", "headers")
 
 # Core item keys that must NEVER be dropped by any cap (only ``result`` is droppable).
-_CORE_ITEM_KEYS = ("sql", "success", "row_count", "sql_id", "step_index", "agent_key")
+_CORE_ITEM_KEYS = ("sql", "success", "row_count", "sql_id", "step_index",
+                   "agent_key", "source_url")
 
 
 def _safe_str(value):
@@ -294,7 +295,7 @@ def cap_sql_list(items):
             if isinstance(sql, str) and len(sql) > MAX_ITEM_SQL_CHARS:
                 out["sql"] = sql[:MAX_ITEM_SQL_CHARS]
                 out["sql_truncated"] = True
-            for tag in ("sql_id", "step_index", "agent_key"):
+            for tag in ("sql_id", "step_index", "agent_key", "source_url"):
                 tv = out.get(tag)
                 if isinstance(tv, str) and len(tv) > _MAX_TAG_CHARS:
                     out[tag] = tv[:_MAX_TAG_CHARS]
