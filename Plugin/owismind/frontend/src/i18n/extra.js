@@ -227,6 +227,8 @@ export const extraMessages = {
     'mode.modal_intro':
       'Choisissez la puissance du modèle selon votre question. Plus de puissance affine l\'analyse, pour un coût plus élevé.',
     'mode.recommended': 'Recommandé',
+    'mode.cancel': 'Annuler',
+    'mode.validate': 'Valider',
     'mode.reco_line': 'Notre recommandation : rapide, économique et de très bonne qualité pour la grande majorité des questions.',
     'mode.cost_label': 'Coût',
     'mode.speed_label': 'Vitesse',
@@ -505,6 +507,8 @@ export const extraMessages = {
     'mode.modal_intro':
       'Choose the model power to match your question. More power sharpens the analysis, for a higher cost.',
     'mode.recommended': 'Recommended',
+    'mode.cancel': 'Cancel',
+    'mode.validate': 'Apply',
     'mode.reco_line': 'Our recommendation: fast, economical and very good quality for the vast majority of questions.',
     'mode.cost_label': 'Cost',
     'mode.speed_label': 'Speed',

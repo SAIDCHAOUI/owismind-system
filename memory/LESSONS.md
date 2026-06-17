@@ -1913,8 +1913,12 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   - **Pop-up de mode (`ModelModePicker.vue`)** réécrit en **2 volets façon DSS** : liste des 3 modes à gauche
     (ligne active = barre Orange + teinte `--orange-soft-dark`), panneau détail à droite avec 2 jauges 5-dots
     **Coût** + **Vitesse** (Éco 1/5 coût, 5/5 vitesse ; Medium 3/3 ; High 5/2). Sobre, bordures fines, Orange
-    en accent unique, dots de coût neutres (`--text-2`). Le détail suit le survol/focus (`preview` -> retombe
-    sur le mode courant) ; clic = `setModelMode` + ferme. **Éco mis en avant** : badge "Recommandé" persistant
+    en accent unique, dots de coût SOMBRES (`--text`). **Interaction = clic-pour-sélectionner + footer
+    Annuler/Valider** (pattern DSS exact), PAS de hover : un 1er essai avec `preview` au survol causait une
+    **VIBRATION** (le détail changeait de hauteur -> la modale centrée se recentrait -> la ligne survolée
+    bougeait -> `mouseenter/leave` réoscillait en boucle). Fix : clic seul (applique sur Valider) +
+    `min-height` sur le panneau détail (zéro reflow). Sélection sobre = **gris + barre orange** (pas de teinte
+    orange), descriptions en noir (charte Orange 80/20). **Éco mis en avant** : badge "Recommandé" persistant
     + ligne `mode.reco_line`. Nouvelles clés i18n `mode.cost_label/speed_label/reco_line/<m>_speed`, copie
     FR/EN réécrite sans tiret. Leçon de design : pour "ne pas faire IA", viser le mood d'un vrai outil
     enterprise (liste + détail + jauges sobres), pas des grosses cartes colorées arrondies.

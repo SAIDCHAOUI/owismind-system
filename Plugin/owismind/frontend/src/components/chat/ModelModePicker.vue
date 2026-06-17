@@ -2,15 +2,16 @@
 // Model-mode picker. A small pill in the prompt bar shows the current mode and
 // opens a chooser modeled on the DSS "conversation settings" dialog: a sober
 // two-pane layout (the three modes listed on the left, a detail panel on the
-// right with cost + speed meters) rather than a flashy stack of cards. Eco is
-// surfaced as the recommended default (best speed/cost, good quality). The choice
-// is a per-turn preference (ui store); the backend defaults to eco.
+// right with cost + speed meters) plus an Annuler / Valider footer. Selection is
+// click-based (no hover preview) so switching rows never reflows the dialog. Eco
+// is surfaced as the recommended default. The choice is a per-turn preference (ui
+// store) applied only on Valider; the backend defaults to eco.
 //   eco = Gemini 3.1 Flash-Lite (default) . medium = Gemini 3.5 Flash . high = Claude Sonnet.
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore, MODEL_MODES } from '../../stores/ui.js'
 import Modal from '../ui/Modal.vue'
-import { Icon } from '../ui'
+import { Icon, Button } from '../ui'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -20,26 +21,26 @@ const current = computed(() => ui.modelMode)
 const modes = MODEL_MODES // ['eco', 'medium', 'high']
 
 // Cost and speed on a 0..5 scale (mirrors the DSS dialog's "n/5" meters). Eco is
-// the cheapest AND fastest, which is exactly why it is the recommended default;
-// high trades speed/cost for depth of reasoning.
+// the cheapest AND fastest, which is why it is the recommended default; high trades
+// speed/cost for depth of reasoning.
 const COST = { eco: 1, medium: 3, high: 5 }
 const SPEED = { eco: 5, medium: 3, high: 2 }
 // Small trigger-pill dot: a calm cost cue (green = the safe recommended default).
 const PILL_LEVEL = { eco: 1, medium: 2, high: 3 }
 
-// Detail pane follows the hovered/focused row, falling back to the active mode.
-const preview = ref('')
-const detail = computed(() => preview.value || current.value)
+// Pending selection inside the dialog (applied only on Valider). Reset to the
+// active mode every time the dialog opens.
+const selected = ref(ui.modelMode)
+watch(open, (isOpen) => {
+  if (isOpen) selected.value = ui.modelMode
+})
 
-function choose(m) {
-  ui.setModelMode(m)
+function validate() {
+  ui.setModelMode(selected.value)
   open.value = false
 }
-function previewMode(m) {
-  preview.value = m
-}
-function clearPreview() {
-  preview.value = ''
+function cancel() {
+  open.value = false
 }
 </script>
 
@@ -57,55 +58,53 @@ function clearPreview() {
       <span class="mode-name">{{ t('mode.' + current) }}</span>
     </button>
 
-    <Modal v-model="open" :title="t('mode.modal_title')" icon="sliders" max-width="660px">
+    <Modal v-model="open" :title="t('mode.modal_title')" max-width="640px">
       <p class="intro">{{ t('mode.modal_intro') }}</p>
 
       <div class="picker">
         <!-- Left: the three modes as a sober list (DSS model-list mood). -->
-        <div class="mode-list" role="radiogroup" :aria-label="t('mode.label')" @mouseleave="clearPreview">
+        <div class="mode-list" role="radiogroup" :aria-label="t('mode.label')">
           <button
             v-for="m in modes"
             :key="m"
             type="button"
             class="mode-row"
-            :class="{ active: current === m, reco: m === 'eco' }"
+            :class="{ active: selected === m }"
             role="radio"
-            :aria-checked="current === m"
-            @click="choose(m)"
-            @mouseenter="previewMode(m)"
-            @focus="previewMode(m)"
+            :aria-checked="selected === m"
+            @click="selected = m"
           >
             <span class="row-main">
               <span class="row-name">{{ t('mode.' + m) }}</span>
               <span v-if="m === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
             </span>
-            <Icon v-if="current === m" name="check" :size="16" class="row-check" />
+            <Icon v-if="selected === m" name="check" :size="16" class="row-check" />
           </button>
         </div>
 
-        <!-- Right: detail of the previewed/active mode (DSS detail-panel mood). -->
+        <!-- Right: detail of the selected mode (DSS detail-panel mood). -->
         <div class="mode-detail">
           <div class="detail-head">
-            <span class="detail-name">{{ t('mode.' + detail) }}</span>
-            <span v-if="detail === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
+            <span class="detail-name">{{ t('mode.' + selected) }}</span>
+            <span v-if="selected === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
           </div>
-          <p class="detail-desc">{{ t('mode.' + detail + '_desc') }}</p>
-          <p v-if="detail === 'eco'" class="detail-reco">{{ t('mode.reco_line') }}</p>
+          <p class="detail-desc">{{ t('mode.' + selected + '_desc') }}</p>
+          <p v-if="selected === 'eco'" class="detail-reco">{{ t('mode.reco_line') }}</p>
 
           <div class="meters">
             <div class="meter-row">
               <span class="meter-label">{{ t('mode.cost_label') }}</span>
               <span class="meter5" aria-hidden="true">
-                <i v-for="n in 5" :key="n" :class="{ on: n <= COST[detail] }" />
+                <i v-for="n in 5" :key="n" :class="{ on: n <= COST[selected] }" />
               </span>
-              <span class="meter-val">{{ t('mode.' + detail + '_cost') }} ({{ COST[detail] }}/5)</span>
+              <span class="meter-val">{{ t('mode.' + selected + '_cost') }} ({{ COST[selected] }}/5)</span>
             </div>
             <div class="meter-row">
               <span class="meter-label">{{ t('mode.speed_label') }}</span>
               <span class="meter5" aria-hidden="true">
-                <i v-for="n in 5" :key="n" :class="{ on: n <= SPEED[detail] }" />
+                <i v-for="n in 5" :key="n" :class="{ on: n <= SPEED[selected] }" />
               </span>
-              <span class="meter-val">{{ t('mode.' + detail + '_speed') }} ({{ SPEED[detail] }}/5)</span>
+              <span class="meter-val">{{ t('mode.' + selected + '_speed') }} ({{ SPEED[selected] }}/5)</span>
             </div>
           </div>
         </div>
@@ -115,6 +114,11 @@ function clearPreview() {
         <Icon name="wallet" :size="15" class="envelope-ico" />
         <span>{{ t('mode.envelope_note') }}</span>
       </p>
+
+      <template #footer>
+        <Button variant="ghost" @click="cancel">{{ t('mode.cancel') }}</Button>
+        <Button variant="primary" @click="validate">{{ t('mode.validate') }}</Button>
+      </template>
     </Modal>
   </div>
 </template>
@@ -138,65 +142,67 @@ function clearPreview() {
 /* Modal body */
 .intro { font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 16px; line-height: 1.5; }
 
-/* Two-pane picker (list + detail), DSS "conversation settings" mood: sober,
-   thin borders, square-ish corners, brand orange as the only accent. */
+/* Two-pane picker (list + detail), DSS "conversation settings" mood: flat, white,
+   thin borders, near-square corners, brand orange used only as an accent (Orange
+   80/20 rule). */
 .picker { display: flex; gap: var(--s-4); align-items: stretch; }
 
-.mode-list { flex: 0 0 200px; display: flex; flex-direction: column; gap: 6px; }
+.mode-list { flex: 0 0 196px; display: flex; flex-direction: column; gap: 4px; }
 .mode-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   text-align: left; width: 100%; padding: 11px 12px;
   border: 1px solid var(--border); border-left: 3px solid transparent;
-  border-radius: var(--r-sm); background: var(--surface);
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  border-radius: 4px; background: var(--bg);
+  transition: background var(--dur) var(--ease);
 }
 .mode-row:hover { background: var(--surface-hover); }
-/* Recommended (eco) keeps a faint brand tint even when not selected. */
-.mode-row.reco { border-color: var(--orange-soft-dark, var(--border)); }
-/* Selected row: brand-orange left bar + tint (echoes the DSS selected item). */
-.mode-row.active { border-color: var(--orange); border-left-color: var(--orange); background: var(--orange-soft-dark, var(--surface-2)); }
+/* Selected row: light grey fill + brand-orange left bar (mirrors the DSS list). */
+.mode-row.active { background: var(--surface-2); border-color: var(--border-strong); border-left-color: var(--orange); }
 .row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .row-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
-.row-check { color: var(--orange-text); flex-shrink: 0; }
+.row-check { color: var(--orange); flex-shrink: 0; }
+/* Recommended tag: small orange label (the brand accent), no fill. */
 .reco-badge {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-  padding: 2px 7px; border-radius: var(--r-pill);
-  background: var(--orange-soft-dark, rgba(255,121,0,0.12)); color: var(--orange-text);
-  white-space: nowrap;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--orange-text); white-space: nowrap;
 }
 
-/* Detail panel */
+/* Detail panel. Fixed min-height so selecting a different mode never changes the
+   dialog height (no reflow / jump). */
 .mode-detail {
-  flex: 1; min-width: 0; padding: var(--s-4);
-  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg);
+  flex: 1; min-width: 0; min-height: 200px; padding: var(--s-4);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
 }
 .detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .detail-name { font-size: var(--fs-lg); font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
 .detail-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.55; margin: 0; }
-.detail-reco { font-size: var(--fs-sm); color: var(--orange-text); font-weight: 500; line-height: 1.5; margin: 8px 0 0; }
+/* Recommendation note: sober text (not an orange paragraph), slightly emphasised. */
+.detail-reco { font-size: var(--fs-sm); color: var(--text); font-weight: 500; line-height: 1.5; margin: 8px 0 0; }
 
-.meters { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.meters { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
 .meter-row { display: flex; align-items: center; gap: 10px; }
 .meter-label {
-  flex: 0 0 54px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+  flex: 0 0 56px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
   text-transform: uppercase; color: var(--text-3);
 }
 .meter5 { display: inline-flex; gap: 4px; }
 .meter5 i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
-.meter5 i.on { background: var(--text-2); }
+/* Dark filled dots, like the DSS cost/eCO2 meters. */
+.meter5 i.on { background: var(--text); }
 .meter-val { font-size: var(--fs-xs); color: var(--text-2); }
 
-/* Cost note: a quiet wallet cue, sober (no warning emoji). */
+/* Cost note: a quiet, neutral hint (grey, no orange fill) with a small wallet cue. */
 .envelope {
   display: flex; align-items: flex-start; gap: 8px;
   font-size: var(--fs-xs); color: var(--text-2); line-height: 1.5;
-  margin: 18px 0 0; padding: 10px 12px; border-radius: var(--r-sm);
-  background: var(--orange-soft-dark, rgba(255,121,0,0.10));
+  margin: 18px 0 0; padding: 10px 12px; border-radius: 4px;
+  background: var(--surface-2);
 }
-.envelope-ico { margin-top: 1px; color: var(--orange-text); }
+.envelope-ico { margin-top: 1px; color: var(--text-3); }
 
 @media (max-width: 560px) {
   .picker { flex-direction: column; }
   .mode-list { flex: 1 1 auto; }
+  .mode-detail { min-height: 0; }
 }
 </style>
