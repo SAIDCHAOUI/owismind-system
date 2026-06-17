@@ -10,16 +10,21 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
-**🎨 RUN 7b (2026-06-17) - ban `—` + pop-up de mode refondu (mood DSS sobre + Orange, liste/détail, jauges
-Coût+Vitesse, Éco recommandé) + écran d'agent rempli (matcher substring) - ⏳ CODÉ + 116 front + 385 back +
-227 agents + build + zip (`index-BxmN4Txj.js`), NON validé DSS (L084).**
-- `ModelModePicker.vue` réécrit 2 volets ; `agentMeta.resolveAgentMeta` repli substring (label
-  « Agent - OWIsMind_orchestrator » résout la carte owismind, plus de fiche vide) ; sweep `—`/`–`→`-` sur
-  tout le contenu source (hors générés/vendored/.claude). Build+zip refaits, `body.html` recâblé.
+**🎨 RUN 7 / 7b / 7c (2026-06-17) - POLISH UI CHAT - ✅ VALIDÉ DSS (user : « super tout fonctionne à
+merveille », 2026-06-17). Zip déployé `index-DCY_crmu.js` (77 entrées), backend redémarré.**
 
-**Avant - 🎨 RUN 7 (2026-06-17) - POLISH UI CHAT (frontend + 1 point backend titres ; agents NON touchés) -
-⏳ CODÉ + 116 frontend + 385 backend + build + zip, 2 revues adversariales (R2 qualité+sécurité = 0 défaut),
-NON validé DSS.**
+**🎨 RUN 7c - correctif pop-up de mode : la VIBRATION au survol (hover→reflow→recentrage modale→boucle
+mouseenter/leave) corrigée à la racine = passage en **clic-pour-sélectionner + footer Annuler/Valider**
+(pattern DSS, plus de hover) + `min-height` détail. Restyle charte Orange 80/20 : ligne sélectionnée gris
++ barre orange (plus de teinte), descriptions en noir, dots de coût sombres, coins quasi carrés, icône
+d'en-tête retirée. Clés `mode.cancel/validate`. (L084.) ✅ VALIDÉ DSS.**
+
+**🎨 RUN 7b - ban `—`/`–` partout (règle #9) + pop-up de mode refondu (mood DSS, liste/détail, jauges
+Coût+Vitesse, Éco recommandé) + écran d'agent rempli (`agentMeta.resolveAgentMeta` repli substring → le
+label « Agent - OWIsMind_orchestrator » résout la carte owismind). ✅ VALIDÉ DSS (L084).**
+
+**🎨 RUN 7 - POLISH UI CHAT (frontend + 1 point backend titres ; agents NON touchés) - 2 revues
+adversariales (qualité+sécurité = 0 défaut). ✅ VALIDÉ DSS.**
 - **Largeur** : token partagé `--chat-col: 90%` / `--chat-col-max: 1200px` → `.conv-inner` (était 760px),
   `.prompt-wrap` (était 920px) et `.empty` partagent la **même mesure** (+padding `--s-7`) = texte aligné
   bord-à-bord avec la zone de saisie. **Écran vide** : `.prompt-wrap.in-empty` plafonné à **760px**.
@@ -33,8 +38,8 @@ NON validé DSS.**
 - **Titre conversation (backend)** : `sql_builders.build_conversation_list_query` nettoie le 1er message
   (`LEFT(BTRIM(regexp_replace(…,'[[:space:]]+',' ','g')), tlen)`) + `CONV_TITLE_MAXLEN` 140→**56**.
   **DÉRIVÉ** (pas de colonne DB) → rétroactif, sans migration. Colonne DB = différée à la feature titre-IA.
-À DÉPLOYER : **upload zip** (**77 entrées, `index-CrvKHGTt.js`**) + ⚠️ **REDÉMARRER backend** (python-lib
-changé : titres). **Pas de recoll des Code Agents.** **NON validé DSS.**
+✅ **DÉPLOYÉ + VALIDÉ DSS** (zip `index-DCY_crmu.js` uploadé, backend redémarré). Colonne `title` en base =
+toujours différée à la feature titre-résumé-IA. Hook pre-commit anti-`—` = proposé, non installé.
 
 **Avant - 🎯 RUN 6 (2026-06-17) - modèles par mode revus + argent €/transparence + désambiguïsation DÉFÉRÉE +
 source Evidence CLIQUABLE + nettoyage prod - ⏳ CODÉ + 227 agents + 384 backend + 116 frontend + build + zip,
@@ -256,7 +261,10 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-17 (Run 7 = polish UI chat) → détail `sessions/2026-06-17.md` (section Run 7)
+## 🧭 Dernière session - 2026-06-17 (Run 7/7b/7c = polish UI chat) ✅ VALIDÉ DSS (« super tout fonctionne à merveille ») → détail `sessions/2026-06-17.md`
+- **Pop-up de mode (7c)** : clic-pour-sélectionner + footer Annuler/Valider (pattern DSS, plus de hover →
+  fini la VIBRATION) + `min-height` détail ; style charte Orange 80/20 (gris + barre orange, dots sombres).
+- **Ban `—`/`–` (7b, règle #9)** partout + écran d'agent rempli (`resolveAgentMeta` repli substring).
 - **Largeur texte = zone de prompt (~90%)** : token partagé `--chat-col`/`--chat-col-max` sur `.conv-inner`
   (760→), `.prompt-wrap` (920→) et `.empty` ; écran vide = prompt plafonné 760px.
 - **Mode picker** : Éco **vert** (feu tricolore vert/orange/rouge), pop-up dé-IA (sliders/coche/wallet, copie

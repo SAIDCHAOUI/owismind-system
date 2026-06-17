@@ -1845,7 +1845,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   recâbler via l'outil **Write** (confirme F10).
 - **Source** : retour user (source cliquable). **Date** : 2026-06-17.
 
-## L083 - Polish UI chat : mesure de colonne partagée (texte aligné sur le prompt) + teintes de statut THÈME-AWARE + titre dérivé nettoyé (✅ local, 2 revues adversariales, NON validé DSS)
+## L083 - Polish UI chat : mesure de colonne partagée (texte aligné sur le prompt) + teintes de statut THÈME-AWARE + titre dérivé nettoyé (✅ VALIDÉ DSS 2026-06-17)
 - **Contexte** : retour user sur l'UI du chat (Run 7) - texte des réponses plus étroit (760px) que la barre de
   prompt (920px) → désaligné ; point du mode Éco gris peu lisible ; pop-up de mode « trop généré par IA » ;
   noms de conversations trop longs ; barre de prompt surdimensionnée sur l'écran vide ; nom d'agent tronqué ;
@@ -1893,7 +1893,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   motif constant, owner-scopé ; Modal : focus/closable inchangés).
 - **Source** : retour user (UI chat). **Date** : 2026-06-17.
 
-## L084 - Tiret cadratin banni partout (signature IA) + pop-up de mode refondu mood DSS + écran d'agent rempli (local OK, NON validé DSS)
+## L084 - Tiret cadratin banni partout (signature IA) + pop-up de mode refondu mood DSS (clic + Annuler/Valider, fix vibration) + écran d'agent rempli (✅ VALIDÉ DSS 2026-06-17)
 - **Contexte** : retour user (Run 7b). (1) Le tiret cadratin `—` (et le demi-cadratin `–`) est percu comme
   une SIGNATURE d'IA : à bannir à tout jamais, partout (repo + sessions). (2) Le pop-up de mode "se voit trop
   comme généré par IA" -> reprendre le style sobre de la boîte DSS "Paramètres de la conversation", charte
