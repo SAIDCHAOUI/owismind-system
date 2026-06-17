@@ -5,14 +5,42 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🧭 MODEL-AGNOSTIC (fin escalade + Dataset Lookup + stop + popup mode) PUIS 3 AUDITS À L'AVEUGLE
+**🎯 RUN 6 (2026-06-17) — modèles par mode revus + argent €/transparence + désambiguïsation DÉFÉRÉE +
+source Evidence CLIQUABLE + nettoyage prod — ⏳ CODÉ + 227 agents + 384 backend + 116 frontend + build + zip,
+NON validé DSS (L080-L082).**
+- **Modèles (L080)** : eco=**Gemini 3.1 Flash-Lite** (DÉFAUT), medium=**Gemini 3.5 Flash**, high=**Sonnet** ;
+  **gpt-5.4-mini supprimé**. Front : défaut Éco + badge « Recommandé » déplacé sur Éco. **⚠️ Vérifier
+  `GEMINI_FLASH_LITE_ID`** (best-effort `…/gemini-3.1-flash-light` ; si Mesh=`flash-lite`, corriger les 2 fichiers).
+- **Argent € + transparence (L080)** : `metric_unit` dérive la devise du **nom de colonne** (`amount_eur→€`,
+  **aucune config profil**) ; le sous-agent préfixe `[Périmètre]/[Scope]` (scénario+« par défaut » / période+
+  « aucun filtre d'année » / entité / devise) ; PERSONA orchestrateur impose `€` + séparateurs + restitution du
+  périmètre + analyse rédigée.
+- **Désambiguïsation (L081)** : `defer_multicolumn_offer_terms` — terme d'offre ambigu sur **≥2 colonnes** =
+  **déféré** au modèle sémantique (Sonnet, « NEVER default to sirano_product ») + **divulgation**, plus de
+  clarification ; mono-colonne (2 clients) demande encore. P3 (décision par **nombre de colonnes**). Affine L058.
+- **Bloc « Sources » retiré** du chat (Evidence le porte déjà).
+- **Source Evidence CLIQUABLE (L082)** : URL configurée dans le **registre orchestrateur** (champ `source_url`,
+  capability `revenue_expert`, **VIDE → à remplir avec le lien Dataiku**), propagée **additif** via les items SQL
+  (`_find_generated_sql`→streaming→stream_manager→capture→`service.py` `meta.source.url`) →
+  `EvidenceSources.vue` rend un `<a target="_blank">` (orange AA, i18n `ev.proof.sources.open`). **Backend
+  python-lib CHANGÉ → REDÉMARRER**.
+- **Nettoyage prod** : commentaires agents réécrits en anglais simple, zéro empreinte IA (dates / refs
+  session-leçons / « VERIFY/ACTION REQUIRED/<--/Flip after DSS test » / « root cause/proven/seen live/user
+  decision/the #1/ported » / ⚠️ en commentaire / première personne). ⚠️ gardés dans les **chaînes utilisateur**.
+  **Revue adversariale** (Workflow 26 agents, 4 dim × 2 sceptiques) = **0 bug de code** (3 commentaires périmés
+  corrigés).
+À DÉPLOYER : **recoller les 2 Code Agents** (env 3.11) + **remplir `source_url`** (si lien voulu) + **upload zip**
+(**77 entrées, `index-8spQsYzC.js`**) + **REDÉMARRER backend** (python-lib changé Evidence/source). **NON validé DSS.**
+
+**Avant — 🧭 MODEL-AGNOSTIC (fin escalade + Dataset Lookup + stop + popup mode) PUIS 3 AUDITS À L'AVEUGLE
 — Run 5/5b/5c (2026-06-16) — ⏳ CODÉ + 217 tests agents + 116 frontend + build + zip, À VALIDER DSS (L071-L078).**
 **🔒 État : audité à l'aveugle 3× (sous-agent « architecte » + skill agentique, copies /tmp, zéro contexte),
 durci à chaque passe → 3ᵉ passe = VERDICT « production-ready côté archi agentique », 0 Critical / 0 High.**
 À DÉPLOYER : **recoller les 2 Code Agents** (env 3.11) + **vérifier `GEMINI_FLASH_ID`** (2 fichiers) + upload zip
 (**77 entrées `index-3FmqVbc1.js`**, backend python-lib inchangé → pas de redémarrage). Les audits n'ont
 touché QUE les Code Agents (zip inchangé depuis Run 5b). **NON validé DSS** (comportement modèles + Dataset
-Lookup réel + rendu = intestables hors instance).
+Lookup réel + rendu = intestables hors instance). [Obsolète Run 6 : eco=mini retiré, défaut medium→eco,
+zip `index-3FmqVbc1.js`→`index-8spQsYzC.js`, python-lib changé.]
 Genèse — Test DSS du Run 4 = ÉCHEC sur gpt-5.4-mini (escalade **systématique** + message hardcodé ; sinon
 **narre puis s'arrête**). User : abandonner gpt-5.4-mini en défaut, passer Gemini 2.5 Flash, **arrêter les
 hacks mono-modèle**, archi optimale qui tourne **même sur les petits modèles**. 4 chantiers :
@@ -197,7 +225,22 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-16 (Run 5/5b/5c) → détail `sessions/2026-06-16.md`, leçons **L071-L078**
+## 🧭 Dernière session — 2026-06-17 (Run 6) → détail `sessions/2026-06-17.md`, leçons **L080-L082**
+- **Modèles par mode revus (L080)** : eco=Gemini 3.1 Flash-Lite (défaut), medium=Gemini 3.5 Flash, high=Sonnet,
+  **gpt-5.4-mini supprimé** ; front défaut Éco + badge Recommandé sur Éco. **Argent €** dérivé du nom de colonne
+  `amount_eur` (`metric_unit`, **pas de config profil**). **Transparence** : sous-agent préfixe `[Périmètre]`,
+  orchestrateur l'impose + `€` + analyse.
+- **Désambiguïsation (L081)** : `defer_multicolumn_offer_terms` — terme d'offre ambigu ≥2 colonnes **déféré**
+  à Sonnet + divulgation (plus de clarification) ; mono-colonne demande encore. P3 (par nombre de colonnes).
+- **Bloc « Sources » retiré** du chat. **Source Evidence cliquable (L082)** : `source_url` dans le registre
+  orchestrateur (vide), propagé additif via items SQL → `service.py` `meta.source.url` → `EvidenceSources.vue`
+  `<a target="_blank">`. **Nettoyage prod** des commentaires agents (zéro empreinte IA).
+- **Vérifs** : **227 agents + 384 backend + 116 frontend** + build (`index-8spQsYzC.js`) + zip (77 entrées) ;
+  revue adversariale (26 agents) = **0 bug**. **Backend python-lib CHANGÉ → redémarrer.**
+- **À faire DSS** : recoller les 2 Code Agents ; **vérifier `GEMINI_FLASH_LITE_ID`** ; **remplir `source_url`** ;
+  upload zip + **redémarrer backend**. **NON validé DSS.**
+
+## Avant — 2026-06-16 (Run 5/5b/5c) → détail `sessions/2026-06-16.md`, leçons **L071-L078**
 - **Run 5/5b** : model-agnostic (fin escalade, 1 modèle/mode eco=mini/medium=Gemini/high=Sonnet propagé au
   sous-agent, narration off en eco, Dataset Lookup + intent `lookup` + schéma live, stop « Stopping… »,
   popup de mode coût/enveloppe 50 €). **Run 5c = 3 AUDITS À L'AVEUGLE** (sous-agent « architecte » + skill
@@ -351,17 +394,18 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🧭. **VALIDER EN DSS le Run 5 (L071-L074)** — (0) **VÉRIFIER `GEMINI_FLASH_ID`** dans les 2 fichiers
-   (orchestrateur + sous-agent) = id exact de la connexion Mesh (le best-guess
-   `…:vertex_ai/gemini-2.5-flash` est à confirmer) ; (1) **recoller LES 2 Code Agents** (env 3.11) ;
-   (2) **upload zip** (**77 entrées, `index-3FmqVbc1.js`** ; backend python-lib inchangé → **pas besoin de
-   redémarrer**). Smoke-tests : (a) « combien avec le client X » en **Éco (mini)** → appelle l'outil sans
-   escalade ni message hardcodé, ne narre PAS pendant le tool-call (ticker déterministe), ne s'arrête pas ;
-   (b) la **même** en Medium (Gemini) → doit narrer naturellement ; (c) « account manager des 3 premiers
-   clients » → **Dataset Lookup** (pas de SQL monstrueux) ; (d) **High** → Sonnet partout (orchestrateur +
-   sous-agent) ; (e) **bouton stop** → « Stopping… » clignotant puis arrêt ; (f) **popup de mode** (coût +
-   enveloppe 50 €) ; (g) steps sous-agent **indentés**. Si l'id Gemini est faux → Medium/High ne répondent pas.
-   Différé : persistance de la chaîne d'events au reload ; modèle sémantique Sonnet en High (tool DSS dédié).
+0🧭. **VALIDER EN DSS le Run 6 (L080-L082)** — (0) **VÉRIFIER `GEMINI_FLASH_LITE_ID`** (best-effort
+   `…/gemini-3.1-flash-light` ; si Mesh = `flash-lite`, corriger les 2 fichiers) ; (1) **recoller LES 2 Code
+   Agents** (env 3.11) ; (2) **remplir `source_url`** (capability `revenue_expert`, orchestrateur) avec le lien
+   Dataiku du dataset si le lien cliquable est voulu ; (3) **upload zip** (**77 entrées, `index-8spQsYzC.js`**)
+   + ⚠️ **REDÉMARRER le backend** (python-lib changé : Evidence/source). Smoke-tests : (a) « revenu réel du compte
+   X » en **Éco (Flash-Lite)** → réponse en **€** + ligne **périmètre** restituée (scénario ACTUALS par défaut,
+   toutes périodes / aucun filtre d'année) ; (b) « budget 2026 Roaming Hub … » → **ne demande PAS**, Sonnet
+   résout via la hiérarchie + **divulgue** (pas de sirano par défaut) ; (c) **source Evidence cliquable** (ouvre
+   le dataset) une fois `source_url` rempli ; (d) Medium/High inchangés. Si l'id Flash-Lite est faux → Éco/défaut
+   ne répond pas. Différé : mapping URL **par-dataset** multi-source (aujourd'hui mono-source seulement).
+0🧭5. **VALIDÉ ? Run 5 (L071-L078)** — model-agnostic, Dataset Lookup, stop « Stopping… », popup mode, timeline
+   indentée : codé+audité, à confirmer sur l'instance en même temps que Run 6 (mêmes Code Agents).
 0🗣️. **✅ FAIT & VALIDÉ DSS (2026-06-16 Run 3)** — narration live (modèle), Evidence lazy, modes, renommage,
    nettoyage. **Process permanent** : à chaque modif repo des agents, **recoller LES 2 Code Agents** (env
    3.11) — **OWIsMind_orchestrator** + **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) — et si le backend

@@ -1787,4 +1787,62 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-vérification** : 219 tests agents verts (colonne dominante résout+divulgue ; tie intra-colonne demande encore). Changement **agent seul** → zip inchangé. ⏳ NON validé DSS.
 - **Source** : retour user (test DSS Éco « Algerie Telecom ») + session 2026-06-16. **Date** : 2026-06-16.
 
+## L080 — Modèles par mode revus (eco=Gemini 3.1 Flash-Lite défaut, gpt-5.4-mini retiré) + argent €-du-nom-de-colonne + ligne [Périmètre] (⏳ codé+227 tests, NON validé DSS)
+- **Contexte** : test DSS Run 5 — gpt-5.4-mini en Éco coûte cher (il « réfléchit ») et rend mal ; petits
+  modèles donnent un chiffre nu sans `€` ni indication du périmètre filtré (Sonnet interprète « actuals 2026 »
+  = jusqu'à aujourd'hui ; Gemini = total sans filtre ; aucun ne le dit).
+- **Ce qui a échoué** : dépendre d'une **unité de profil** pour le `€` (l'user refuse de configurer une
+  métrique « amount euro » : la colonne `amount_eur` porte déjà la devise) ; compter sur le petit modèle pour
+  préserver le scope du headline déterministe.
+- **Solution qui marche** : (1) `LOOP_LLM_BY_MODE`/`LLM_BY_MODE` = {eco:`gemini-3.1-flash-light`,
+  medium:`gemini-3.5-flash`, high:`claude-sonnet-4-6`}, `DEFAULT_MODE="eco"`, **gpt-5.4-mini supprimé**
+  (front `MODELMODE_DEFAULT='eco'` + badge « Recommandé » sur Éco). (2) `metric_unit(metric)` dérive la devise
+  du **nom de colonne** (`_eur→€`, `_usd→$`…), utilisé partout (build_sql, moteur sémantique, scope) → `€`
+  sans config. (3) `build_scope_note` : le sous-agent **préfixe** sa réponse d'une ligne `[Périmètre]/[Scope]`
+  (scénario+« par défaut », période+« aucun filtre d'année », filtres d'entité, devise) ; PERSONA orchestrateur
+  `# MONEY, NUMBERS & TRANSPARENCY` **impose** la restitution + `€` + séparateurs + analyse rédigée.
+- **Preuve-vérification** : 227 tests agents (model ids, défaut eco, `metric_unit` €/$, scope note). NON validé DSS.
+- **Source** : retour user (Q/R Flash-Lite « 123 807 » sans € ni périmètre). **Date** : 2026-06-17.
+
+## L081 — Désambiguïsation des termes d'offre : DÉFÉRER au modèle sémantique au lieu d'interroger (cas « Roaming Hub ») (⏳ codé+tests, NON validé DSS)
+- **Contexte** : « budget 2026 Roaming Hub … » → le sous-agent **demande à l'utilisateur** quel « Roaming Hub »
+  (Open Roaming Hub/Product, ROAMING HUB IOT|FEES/sirano). L'user veut : ne pas interroger, déférer au modèle
+  qui privilégie le niveau le plus granulaire (Product) et **divulgue**, jamais sirano par défaut.
+- **Ce qui a échoué / piège** : `refine_ambiguous` ne résout qu'une **même** valeur multi-colonnes ; ici 3
+  valeurs **distinctes** sur 2 colonnes → reste `ambiguous` → clarification. `column_priority` (`-distinct_count`)
+  classerait même sirano (153) AVANT Product (42). Pin déterministe = piège budget=0 (terme parfois SEULEMENT
+  Solution).
+- **Solution qui marche** : `defer_multicolumn_offer_terms` — candidats sur **≥2 colonnes distinctes** →
+  statut `deferred` (pas de clarification) ; `n_resolve` propage `u["offer_terms_for_model"]` ;
+  `build_semantic_question` émet `AMBIGUOUS OFFER TERM (no confident match)` avec le **terme brut** (Sonnet
+  résout sur SON catalogue, « NEVER default to sirano_product ») ; `build_disclosure_notes` divulgue. Une
+  ambiguïté **mono-colonne** (2 clients) demande encore. **P3-clean** : décision par **nombre de colonnes**,
+  jamais de nom de colonne en dur. Affine L058 (qui ne couvrait que la même-valeur-multi-colonnes).
+- **Preuve-vérification** : tests `defer_multicolumn_offer_terms` (multi→deferred, mono→ambiguous),
+  `build_semantic_question` consomme les offer terms (pas de pin), disclosure. Revue adversariale = 0 bug. NON validé DSS.
+- **Source** : retour user (test DSS « Roaming Hub »). **Date** : 2026-06-17.
+
+## L082 — Source Evidence cliquable : URL dans le registre orchestrateur, propagée via les items SQL (additif sur le pipeline de capture gelé) (⏳ codé+tests, NON validé DSS)
+- **Contexte** : rendre « Data Source : DRIVE_Revenues » d'Evidence **cliquable** vers le dataset Dataiku ;
+  l'user veut configurer le lien **dans l'orchestrateur** (par agent). Bloc « Sources » du chat retiré (redondant).
+- **Ce qui a échoué / piège** : l'orchestrateur (Code Agent) et le backend (python-lib) sont **2 processus
+  séparés** — l'URL du registre orchestrateur n'atteint pas `/evidence/meta` (construit côté backend par
+  découverte de datasets). Le backend **filtre** les champs des items SQL (`_CORE_ITEM_KEYS`,
+  `_normalized_sql_event`) → un champ brut serait droppé. Deux sources de `generated_sql` (spans de trace vs
+  relais `AGENT_DONE`) fusionnées par dédup.
+- **Solution qui marche** : faire **voyager l'URL** depuis le registre via les items SQL (qui portent déjà
+  `agent_key`), tout en **additif** (contrats « only add ») : `_find_generated_sql` tamponne `source_url` ;
+  `streaming._normalized_sql_event` ajoute `sourceUrl` ; `stream_manager` mappe `sourceUrl→source_url` ;
+  `capture` l'ajoute à `_CORE_ITEM_KEYS` + cap de tag (`cap_sql_list` fait `dict(item)` → survit déjà) ;
+  `service.py` `source_url_for_run`+`with_source_urls` attachent `url` à `meta.source`/`sources` (cas
+  **mono-source** seulement) ; `EvidenceSources.vue` rend un `<a target="_blank" rel="noopener">` (orange AA),
+  i18n `ev.proof.sources.open`. **Le relais `AGENT_DONE` passe par `_normalized_sql_event` puis est enrichi
+  sans écraser ses champs** → la propagation est fiable. Champ `source_url=""` par défaut → texte simple, zéro régression.
+- **Preuve-vérification** : 384 tests backend (`source_url_for_run` actif+fallback, `with_source_urls`
+  mono-source) + orchestrateur (stamping conditionnel). Build+zip refaits (python-lib changé → **redémarrer
+  backend**). NON validé DSS (lien réel dépend d'une URL Dataiku valide).
+- **Process — body.html** : le `cp` vers `webapps/.../body.html` reste **refusé** par les permissions →
+  recâbler via l'outil **Write** (confirme F10).
+- **Source** : retour user (source cliquable). **Date** : 2026-06-17.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
