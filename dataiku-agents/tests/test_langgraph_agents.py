@@ -598,13 +598,13 @@ class TestLiveNarration(unittest.TestCase):
         self.assertLessEqual(len(ev["chunk"]["eventData"]["text"]), 280)
 
     def test_narration_phrasings_bilingual(self):
-        for key in ("calling", "resolve", "run_sql", "lookup", "format", "chart",
+        for key in ("calling", "resolve", "run_sql", "format", "chart",
                     "table", "kpi", "writing"):
             self.assertIn("fr", orch._NARR[key])
             self.assertIn("en", orch._NARR[key])
         # Sub-agent phase blockIds map to a narration key.
         self.assertEqual(orch._BLOCK_NARR["run_sql"], "run_sql")
-        self.assertEqual(orch._BLOCK_NARR["lookup"], "lookup")
+        self.assertEqual(orch._BLOCK_NARR["format_output"], "format")
 
     def test_prompt_acts_first_and_invites_narration(self):
         # ACT-FIRST (model-agnostic, anti narrate-and-stop) AND an explicit invite

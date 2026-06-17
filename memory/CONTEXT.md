@@ -10,6 +10,22 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**🔎 RESOLVER RAPIDE `attribute_lookup` + SUPPRESSION TOTALE de `dataset_lookup` (2026-06-18) - ⏳ tool
+construit + 33 tests + RUN TEST DSS validé par l'user (blanchard, Algérie Télécom), NON BRANCHÉ.**
+Le vrai point de douleur DSS : questions simples ("account manager de X ?") LENTES (semantic ~80s) +
+échec ("pas dans les données" alors que la colonne existe) + orthographe colonnes qui casse. Solution =
+nouveau **Custom Python tool** `dataiku-agents/tools/attribute_lookup_tool.py` : **recherche full-text
+`ILIKE` (insensible casse+accents) sur TOUTES les colonnes texte** du fact (read-only, timeout, LIMIT,
+rien en RAM, zéro nom de colonne en dur). Sortie **`found_in`** (où le terme est + valeur exacte) +
+`attributes` si demandés ; fallback alias **optionnel** sur le catalog (suggestions). Principe (L086) :
+"tool vs inline" n'est PAS un débat de charge SQL ; le levier = matching dans la **base (SQL)**, pas en
+RAM (le catalog 170K en pandas = danger 50 users). **`dataset_lookup` ENTIÈREMENT supprimé** (exigence
+user zéro code mort) du sous-agent ET de l'orchestrateur (contrat anti-dérive `KNOWN_*`<->registre) +
+tests + doc. **242 tests verts**, 2 agents parsent, grep `dataset_lookup` = NONE. **À faire** : workflow
+multi-agents (user = PDG technique + conseillers) pour décider conception finale + point de branchement
+(sous-agent vs orchestrateur) ; puis créer le tool en DSS, brancher, recoller LES 2 agents. **En
+attendant le branchement, les questions simples repassent par le semantic model lent.** Voir **L086**.
+
 **🧹 NETTOYAGE / RÉORGANISATION REPO + DOC `dataiku-agents/` (2026-06-17, après Run 7c) - ✅ local
 (nettoyage + structure + doc only, pas de DSS).** Vestiges v2 `orchestrator/`+`salesdrive/` **supprimés** ;
 `cadrage/` -> **`docs/cadrage/`** (git mv), `agentic-research/` -> **`docs/agentic-research/`** (gitignored),
@@ -273,9 +289,14 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-17 (nettoyage repo + doc `dataiku-agents/`) → détail `sessions/2026-06-17.md`
+## 🧭 Dernière session - 2026-06-18 (resolver rapide `attribute_lookup` + suppression `dataset_lookup`) → détail `sessions/2026-06-18.md`
+- **Nouveau Custom Python tool** `dataiku-agents/tools/attribute_lookup_tool.py` : recherche full-text `ILIKE` insensible casse+accents sur **toutes les colonnes texte** du fact ; sortie `found_in` (où + valeur exacte) + `attributes` optionnels ; fallback alias optionnel (catalog). Read-only, borné, rien en RAM, zéro nom de colonne en dur. **33 tests**.
+- **`dataset_lookup` ENTIÈREMENT supprimé** (exigence user zéro code mort) : sous-agent + orchestrateur (contrat anti-dérive `KNOWN_*`<->registre) + 18 tests retirés + doc alignée (4 fichiers). **242 tests verts**, 2 agents parsent, grep = NONE.
+- **Décision** : resolver = SQL full-text sur le fact (le catalog n'indexe pas account_manager ; 170K en pandas-RAM = danger). **Branchement DÉFÉRÉ** : workflow multi-agents prochaine session (conception + sous-agent vs orchestrateur). RUN TEST DSS du tool validé par l'user. Voir **L086**.
+
+## Avant - 2026-06-17 (nettoyage repo + doc `dataiku-agents/`) → détail `sessions/2026-06-17.md`
 - **Vestiges v2 supprimés** (`orchestrator/`+`salesdrive/`) ; `cadrage/`+`agentic-research/` -> `docs/` (refs à jour partout, logs datés intacts).
-- **`dataiku-agents/` = mini-repo documenté** : README maître + CLAUDE.md réécrits + 3 sous-READMEs (`agents/`/`recipes/`/`tools/`) + recette `Value_Catalog` versée (STATUS roadmap). **Archi v3 clarifiée** : inline `value_index` + 2 tools ; `Value_Catalog`/resolver Python = roadmap, recâblage **déféré**.
+- **`dataiku-agents/` = mini-repo documenté** : README maître + CLAUDE.md réécrits + 3 sous-READMEs (`agents/`/`recipes/`/`tools/`) + recette `Value_Catalog` versée (STATUS roadmap). **Archi v3 clarifiée** : inline `value_index` + tools.
 - `flash-light`->`flash-lite` (2 agents, preuve = code déployé). **227 tests** verts ; revue doc-vs-code (5 agents) = 2 LOW corrigées, 0 lien cassé. **Pas de DSS** (nettoyage/doc only). Voir **L085**.
 
 ## Avant - 2026-06-17 (Run 7/7b/7c = polish UI chat) ✅ VALIDÉ DSS (« super tout fonctionne à merveille ») → détail `sessions/2026-06-17.md`
@@ -464,15 +485,20 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🔧. **PROCHAINE SESSION (demandée user, 2026-06-17) : comprendre à fond l'archi TOOLS + SQL** avant tout
-   recâblage. Points clés (déjà documentés `dataiku-agents/agents/README.md` étape RESOLVE + `tools/README.md`) :
-   le **grounding** (recherche de valeurs) n'est **PAS un tool** = SQL inline `dataiku.SQLExecutor2` sur
-   `DRIVE_Revenues_value_index` (`_resolve_terms`/`_run_sql`, exact `value_norm IN` -> fuzzy `LIKE` -> tranche
-   top-5000 + `difflib`, read-only `transaction_read_only`+timeout) ; le **moteur SQL direct** (repli) est aussi
-   inline ; les **vrais tools DSS** (`get_agent_tool(id).run()`) = `revenue_semantic_query` (v4oqA6R, écrit+exécute
-   le SQL analytique) + `dataset_lookup` (9FEzVZk, lecture d'attribut). `resolve_filter_value`/`dataset_sql_query`
-   = **labels d'events**, pas des tools. BUT ensuite : décider le recâblage `dataset_lookup` -> tool Python
-   resolver `Drive_Revenues_resolve_filter_value` (lit `Value_Catalog`, plus riche). Voir **L085**.
+0🔎. **PROCHAINE SESSION (demandée user, 2026-06-18) : WORKFLOW MULTI-AGENTS pour finir l'histoire du
+   resolver.** L'user = PDG technique senior (dev + AI engineering) + conseillers experts, qui débattent
+   et tranchent : (a) la **meilleure conception** du tool `attribute_lookup`
+   (`dataiku-agents/tools/attribute_lookup_tool.py`, déjà construit : recherche full-text `ILIKE`, sortie
+   `found_in` + attributs optionnels, fallback alias) ; (b) le **meilleur point de branchement** :
+   dans le **sous-agent** (`SalesDrive_revenue_expert`, en amont du semantic model pour les questions
+   simples) OU dans l'**orchestrateur** (`OWIsMind_orchestrator`, comme tool/route directe avant de
+   déléguer). **Objectif : justesse d'abord, rapidité ensuite**, surtout les questions simples de
+   recherche de valeurs. Puis créer le Custom Python tool en DSS, brancher, **recoller LES 2 agents**
+   (env 3.11), re-tester. État : `dataset_lookup` supprimé partout, 242 tests verts, tool validé RUN
+   TEST mais NON branché (questions simples repassent par le semantic lent en attendant). Voir **L086**.
+   Note archi (rappel) : grounding = SQL inline sur `value_index` (`_resolve_terms`) ; vrai tool DSS
+   restant = `revenue_semantic_query` (v4oqA6R). `resolve_filter_value`/`dataset_sql_query` = labels
+   d'events, pas des tools.
 0🧭. **VALIDER EN DSS le Run 6 (L080-L082)** - (0) **VÉRIFIER `GEMINI_FLASH_LITE_ID`** (best-effort
    `…/gemini-3.1-flash-light` ; ✅ FAIT cette session : `flash-lite` confirmé du code déployé collé par l'user, corrigé dans les 2 fichiers) ; (1) **recoller LES 2 Code
    Agents** (env 3.11) ; (2) **remplir `source_url`** (capability `revenue_expert`, orchestrateur) avec le lien

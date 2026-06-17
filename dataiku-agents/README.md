@@ -48,11 +48,10 @@ RUNTIME (one chat turn)
                 │  2. RESOLVE      ground user terms by INLINE SQL on DRIVE_Revenues_value_index (exact -> fuzzy) + ambiguity policy
                 │  3. QUERY        SQL_ENGINE="semantic_tool": hand a maximally grounded question to the Semantic Model Query tool
                 │                  (it writes + runs the SQL); technical failure -> FALLBACK to own read-only SQL templates
-                │                  ("lookup" intent: a plain attribute read via the Dataset Lookup tool)
                 │  4. RENDER       table + figures formatted BY CODE; numbers verified; "about_data" answered from the profile (0 SQL)
                 ▼
             DSS tools:  revenue_semantic_query (Semantic Model Query, id v4oqA6R)   << the SQL powerhouse
-                        dataset_lookup        (Dataset Lookup, id 9FEzVZk)          << plain attribute reads (to be replaced, see Roadmap)
+                        attribute_lookup      (Custom Python, attribute_lookup_tool.py)   << fast value resolver (built, not yet wired)
                 ▼
             Semantic Model (SQL) ──► PostgreSQL (read-only transaction)
 ```
@@ -99,14 +98,15 @@ low-cardinality enum values, a few samples), never raw rows.
 
 ## 4. The sub-agent's tools (detail: [`tools/README.md`](tools/README.md))
 
-The sub-agent calls **two** DSS tools at runtime; the third tool exists in the
-instance but is not wired into v3.
+The sub-agent calls **one** DSS tool at runtime (`revenue_semantic_query`); the
+others below are built/roadmap.
 
 | Tool (instance) | Type | Id | Role | Used by v3? |
 |---|---|---|---|---|
 | `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | Writes AND runs the SQL from a grounded natural-language question. The SQL powerhouse. Runs on its own DSS-configured strong model (Sonnet) in every mode. | **yes (default engine)** |
-| `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | Plain attribute read for the `lookup` intent ("who is the account manager of X?"). EQUALS / AND / OR, ~10 rows. | yes (lookup intent) |
-| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | Resolves a typed term to an exact (column, value) using the rich `Value_Catalog`. | **no (roadmap)** |
+| `attribute_lookup` | Custom Python (`tools/attribute_lookup_tool.py`) | (to create) | Fast value resolver: case/accent-insensitive `ILIKE` across all text columns; returns where a value is + its exact spelling (+ requested attributes). | **built, not yet wired** |
+| `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | Was the `lookup` intent's tool. | **REMOVED 2026-06-18** |
+| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | Term -> exact (column, value) via `Value_Catalog`. | no (superseded by `attribute_lookup`) |
 
 Grounding in v3 is **not** a tool: the sub-agent runs inline read-only SQL on
 `DRIVE_Revenues_value_index` (the `resolve_filter_value` / `dataset_sql_query`
@@ -139,9 +139,9 @@ connection.
   RUNNING_TOOL, TOOL_DONE, ARTIFACT, WRITING_ANSWER, DONE, ERROR, SUB_AGENT_*`,
   plus transient `NARRATION`.
 - **Sub-agent collaboration dialect**: `AGENT_BLOCK_START` blockIds
-  (`resolve, run_sql, lookup, format_output, clarify_user, out_of_scope_msg,
+  (`resolve, run_sql, format_output, clarify_user, out_of_scope_msg,
   about_data`); `AGENT_TOOL_START` toolNames (`resolve_filter_value,
-  dataset_sql_query, dataset_lookup`); one final `AGENT_RESULT`
+  dataset_sql_query`); one final `AGENT_RESULT`
   `{status, language, intent, resolvedFilters, sqlCount, rowCount, attempts}`
   (status: `ready | need_clarification | out_of_scope | no_data | error`).
 - **SQL span** named `semantic-model-query` per executed SQL, outputs
@@ -171,7 +171,7 @@ Repo is the source of truth; DSS direct edits are overwritten on the next paste.
    the **Python 3.11** code env.
 3. Check the CONFIG ids match the instance: `GEMINI_FLASH_LITE_ID` /
    `GEMINI_FLASH_ID` / `SONNET_ID`, `SEMANTIC_TOOL_ID` (`v4oqA6R`),
-   `DATASET_LOOKUP_TOOL_ID` (`9FEzVZk`), `agent_id` (`agent:bHrWLyOL`).
+   `agent_id` (`agent:bHrWLyOL`).
 4. Optional: set `source_url` on the `revenue_expert` capability (orchestrator
    registry) to the Dataiku dataset URL - Evidence then turns the data source
    into a clickable link.
@@ -201,14 +201,15 @@ re-paste needed.
 
 ## 9. Roadmap (decided, deferred)
 
-- **Replace the managed Dataset Lookup with the Custom Python resolver**
-  (`Drive_Revenues_resolve_filter_value`, reading the rich `Value_Catalog`):
-  it is more powerful than the managed Dataset Lookup and than the plain
-  `value_index` (aliases like "indirect" / "voice", short account names,
-  business concepts). Decided 2026-06-17; the code rewiring (sub-agent `lookup`
-  path + grounding) is a **dedicated future session**. The catalog recipe and
-  tool doc are already in the repo (`recipes/build_value_catalog_recipe.py`,
-  `tools/README.md`) so the direction is ready.
+- **Wire in `attribute_lookup`** (`tools/attribute_lookup_tool.py`): the managed
+  Dataset Lookup and its `lookup` intent were removed (2026-06-18) and replaced
+  by this standalone Custom Python tool - a fast case/accent-insensitive search
+  across all text columns (it finds values the catalog never indexed, e.g.
+  `account_manager`). It is built + unit-tested + RUN-TEST-validated; the
+  remaining work is to create the Custom Python tool in DSS and route plain
+  reads to it from the sub-agent. An optional catalog fallback (the richer
+  `Value_Catalog`: aliases like "indirect", short account names) offers
+  suggestions when nothing matches.
 - **Semantic model**: keep aligning its config via the `tools/semantic_model/` scripts
   (Phase=ACTUALS, offer hierarchy, transparency, golden queries).
 - **Tickets agent**: 2 recipes + 1 Code Agent + 1 registry entry unlocks the

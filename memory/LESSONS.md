@@ -1956,4 +1956,38 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   sur le code déployé collé par l'user (TODO mémoire résolu).
 - **Source** : demande user (2026-06-17, session nettoyage) ; re-lecture du code des 2 agents. **Date** : 2026-06-17.
 
+## L086 - Resolver de valeurs RAPIDE : recherche SQL full-text (ILIKE) sur le fact, pas le catalog ; tool separe ; `dataset_lookup` supprime (⏳ tool valide RUN TEST, NON branche)
+
+- **Contexte** : en DSS, les questions simples ("account manager de X ?") passaient par le semantic
+  model (~80s) et echouaient ("pas dans les donnees" alors que la colonne existe) ; l'orthographe des
+  colonnes cassait le SQL. Besoin = un vrai *resolver* : une valeur -> existe ? dans quelle colonne ? +
+  valeurs liees, rapide.
+- **Ce qui a echoue / fausses pistes** : (1) resoudre via le `Value_Catalog` -> ne trouve pas
+  `account_manager` (le builder catalog n'indexe que account/offer/business, pas les attributs). (2)
+  Charger le catalog (170K x 22) en pandas-RAM dans un Custom tool -> ~0.5-1 Go RAM + fuzzy CPU lourd
+  sous 50 users (danger instance). (3) Renvoyer la "fiche complete" (toutes colonnes) -> trop verbeux.
+  (4) Bloquer sur ambiguite quand le meme nom est vu comme compte ET groupe -> faux positif penible.
+- **Solution qui marche** : Custom Python tool autonome `tools/attribute_lookup_tool.py` qui fait une
+  **recherche full-text `ILIKE` (insensible casse+accents) sur TOUTES les colonnes texte du fact**
+  (read-only, `statement_timeout`+`LIMIT`, rien en RAM, zero nom de colonne en dur, schema lu live).
+  Sortie **`found_in`** = colonne(s) ou le terme apparait + valeur(s) exacte(s) ; `attributes`
+  (optionnel) -> valeurs des colonnes demandees. Fallback alias **optionnel** sur le catalog
+  (suggestions) si rien ne matche. Ambiguite = noms reellement differents seulement. Principe cle :
+  **"tool vs inline" n'est PAS un debat de charge SQL** (un tool qui requete fait le meme SQL) ; le
+  vrai levier = ou se fait le matching -> **la base (SQL), pas la RAM**. Le full-text remplace
+  avantageusement le catalog (couvre toutes les colonnes, dont les attributs).
+- **`dataset_lookup` ENTIEREMENT supprime** (exigence user zero code mort) : intent `lookup`,
+  `build_lookup_filter`/`extract_lookup_rows`/`lookup_note`/`_lookup_rows`, `Profile.match_attribute`/
+  `attribute_columns`/`live_columns`, `_read_live_columns`, `HEADLINE_LOOKUP`, chemin `n_query`, prompt
+  UNDERSTAND, et contrats `KNOWN_BLOCK_IDS`/`KNOWN_TOOL_NAMES` -> donc AUSSI cote orchestrateur
+  (`block_labels`/`tool_labels`/`_BLOCK_NARR`/`_NARR`, test anti-derive) + tests + doc. **Retirer une
+  capability touche LES DEUX agents** (contrat gele).
+- **Preuve-verification** : `grep dataset_lookup` code agents + tests = NONE ; `ast.parse` des 2 agents
+  OK ; **242 tests verts** ; RUN TEST DSS du tool (resolution blanchard/Algerie Telecom) confirme par
+  l'user. NON branche encore (questions simples repassent par le semantic model lent en attendant) ;
+  format `found_in` a re-tester en DSS ; perf 50 users (index `normalized_value`/fact, `pg_trgm`) non
+  mesuree.
+- **Source** : demande user (2026-06-18) ; skill `agentique-python-dataiku` (tool design, ACI, double
+  chemin Python) ; RUN TEST DSS itere avec l'user. **Date** : 2026-06-18.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

@@ -186,7 +186,6 @@ CAPABILITIES = {
         "block_labels": {
             "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
             "run_sql": {"fr": "interrogation des données", "en": "querying the data"},
-            "lookup": {"fr": "recherche dans les données", "en": "looking up the data"},
             "format_output": {"fr": "mise en forme du résultat", "en": "formatting the result"},
             "clarify_user": {"fr": "demande de précision", "en": "asking for clarification"},
             "out_of_scope_msg": None,
@@ -195,7 +194,6 @@ CAPABILITIES = {
         "tool_labels": {
             "resolve_filter_value": {"fr": "résolution des noms exacts", "en": "resolving exact names"},
             "dataset_sql_query": {"fr": "génération et exécution du SQL", "en": "generating and running SQL"},
-            "dataset_lookup": {"fr": "recherche directe d'une valeur", "en": "direct value lookup"},
         },
         "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
         "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
@@ -395,8 +393,6 @@ _NARR = {
                       "c'est l'étape la plus longue, un instant…",
                 "en": "Generating and running the SQL on the data - this is the "
                       "longest step, one moment…"},
-    "lookup": {"fr": "Je recherche directement la valeur dans les données…",
-               "en": "Looking the value up directly in the data…"},
     "format": {"fr": "Je mets en forme les résultats…",
                "en": "Shaping the results…"},
     "chart": {"fr": "Je prépare le graphique…", "en": "Preparing the chart…"},
@@ -408,7 +404,7 @@ _NARR = {
                 "en": "Reading the figures and writing the answer…"},
 }
 # sub-agent blockId -> narration key (only the phases worth narrating).
-_BLOCK_NARR = {"resolve": "resolve", "run_sql": "run_sql", "lookup": "lookup",
+_BLOCK_NARR = {"resolve": "resolve", "run_sql": "run_sql",
                "format_output": "format"}
 
 

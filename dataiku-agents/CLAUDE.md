@@ -22,12 +22,9 @@ context. A read-only direct-SQL engine is the technical fallback.
 
 The CURRENT (v3) sub-agent:
 - **Grounds terms with INLINE read-only SQL on `DRIVE_Revenues_value_index`** (method `_resolve_terms`). Grounding is NOT a tool.
-- Calls **two** DSS tools: `revenue_semantic_query` (`v4oqA6R`, the SQL engine) and `dataset_lookup` (`9FEzVZk`, plain attribute reads for the `lookup` intent).
-- Does **NOT** use `DRIVE_Revenues_Value_Catalog` nor the Custom Python tool `Drive_Revenues_resolve_filter_value`. Those are the v2 / roadmap path (richer grounding), kept in the repo but not wired in. The timeline labels `resolve_filter_value` / `dataset_sql_query` are event names, not tool calls.
-
-Replacing Dataset Lookup with the Python resolver (Value_Catalog) is decided but
-**deferred to a dedicated session** (see README "Roadmap"). Do not document or wire
-it as current.
+- Calls **one** DSS tool at runtime: `revenue_semantic_query` (`v4oqA6R`, the SQL engine). The timeline labels `resolve_filter_value` / `dataset_sql_query` are event names, not tool calls.
+- The managed **`dataset_lookup`** tool and its whole `lookup` intent were **REMOVED (2026-06-18)**. Its replacement, the standalone Custom Python tool **`attribute_lookup`** (`tools/attribute_lookup_tool.py`), is built + tested but **not yet wired in** (to be branched after validation).
+- Does **NOT** use `DRIVE_Revenues_Value_Catalog` nor `Drive_Revenues_resolve_filter_value` (superseded by `attribute_lookup`).
 
 ## Folder map
 
@@ -64,7 +61,7 @@ it as current.
 ## Deploy reminder
 
 After any change: re-paste BOTH Code Agents (env 3.11), verify the CONFIG ids
-(`GEMINI_*_ID`, `SEMANTIC_TOOL_ID=v4oqA6R`, `DATASET_LOOKUP_TOOL_ID=9FEzVZk`,
-`agent_id=agent:bHrWLyOL`). Recipe changes deploy in the Flow (refresh scenario).
+(`GEMINI_*_ID`, `SEMANTIC_TOOL_ID=v4oqA6R`, `agent_id=agent:bHrWLyOL`). Recipe
+changes deploy in the Flow (refresh scenario).
 Agent-only changes need no zip upload; a `python-lib` backend change does
 (upload zip + restart backend).

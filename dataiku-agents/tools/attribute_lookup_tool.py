@@ -133,6 +133,36 @@ def build_search_sql(fact_table, text_columns, term, sample=SEARCH_SAMPLE_ROWS):
     return "SELECT * FROM %s WHERE %s LIMIT %d" % (fact_table, ors, int(sample))
 
 
+def find_matches(text_columns, rows, term, per_col_cap=DISTINCT_PER_COLUMN):
+    """Where the term actually appears: for each text column whose value contains
+    the term (accent/case-insensitive), the distinct matching value(s). This is
+    the resolver answer - 'the value exists, here, with this exact spelling'.
+    Returns [{column, values}] in stable column order, capped per column."""
+    needle = search_value(term)
+    if not needle:
+        return []
+    found, truncated = {}, set()
+    for r in rows or []:
+        for c in text_columns:
+            v = r.get(c) if isinstance(r, dict) else None
+            if v is None or v == "":
+                continue
+            if needle in search_value(v):
+                bucket = found.setdefault(c, [])
+                sv = str(v)[:200]
+                if sv not in bucket:
+                    if len(bucket) >= per_col_cap:
+                        truncated.add(c)
+                    else:
+                        bucket.append(sv)
+    out = []
+    for c in text_columns:                       # stable, schema order
+        if c in found:
+            vals = found[c] + (["..."] if c in truncated else [])
+            out.append({"column": c, "values": vals})
+    return out
+
+
 def summarize_values(columns, rows, keep=None, per_col_cap=DISTINCT_PER_COLUMN):
     """Distinct, non-null value(s) per column from the matched rows. One value ->
     scalar; several -> list (capped, with a trailing '...' when truncated). `keep`
@@ -314,20 +344,22 @@ class MyAgentTool(BaseAgentTool):
     def get_descriptor(self, tool):
         return {
             "description": (
-                "Search a term across the WHOLE dataset (every text column, "
-                "case-insensitive) and return the matching values - like the "
-                "dataset's search box. Use it for plain reads about a named thing: "
-                "'who is the account manager of <customer>?', 'what does "
-                "<account_manager> manage?', 'carrier code / sales zone / parent "
-                "group of <account>?', 'tell me about <account>'. Do NOT use it "
-                "for sums, totals, rankings or comparisons - use the semantic "
-                "model query tool for those. Pass the term as typed; you usually "
-                "do NOT name a column - by default you get the matching value(s) "
-                "of every column as {column: value(s)}. Optionally pass "
-                "'attributes' to return only those columns. Spelling and casing do "
-                "not matter. If nothing matches, status 'entity_suggestions' "
-                "offers close aliases and 'entity_not_found' means no match - in "
-                "both cases ask the user rather than guessing."
+                "Resolve a value against the dataset: find quickly whether a term "
+                "exists, in WHICH column(s) it is, and its exact spelling - a "
+                "case-insensitive search across every text column (like the "
+                "dataset's search box). Use it for plain reads about a named "
+                "thing: 'is there a customer/account manager named X?', 'who is "
+                "the account manager of <customer>?', 'carrier code / sales zone "
+                "of <account>?'. Do NOT use it for sums, totals, rankings or "
+                "comparisons - use the semantic model query tool for those. Pass "
+                "the term as typed (spelling/casing do not matter). By default the "
+                "result is 'found_in': the column(s) where the term appears with "
+                "its exact value(s). To also get OTHER columns' values for the "
+                "matched rows (e.g. the account manager of a customer), pass "
+                "'attributes' with the wanted column names; they come back under "
+                "'attributes'. status 'suggestions' offers close aliases and "
+                "'not_found' means no match - in both cases ask the user rather "
+                "than guessing."
             ),
             "inputSchema": {
                 "$id": "https://owismind/tools/attribute_lookup/input",
@@ -396,26 +428,27 @@ class MyAgentTool(BaseAgentTool):
             # Nothing matched: offer aliases (short names, business concepts).
             suggestions = self._alias_fallback(term)
             if suggestions:
-                return out({"status": "entity_suggestions",
-                            "entity": {"raw": term},
+                return out({"status": "suggestions", "term": term,
                             "candidates": [{"column": r.get("target_column"),
                                             "value": r.get("target_value"),
                                             "display": r.get("display_value")}
                                            for r in suggestions],
                             "message": "No match for '%s'. Did you mean one of "
                                        "these?" % term})
-            return out({"status": "entity_not_found", "entity": {"raw": term},
-                        "message": "Could not find '%s' in the data." % term})
+            return out({"status": "not_found", "term": term,
+                        "message": "'%s' was not found in the data." % term})
 
-        values = summarize_values(all_columns, rows, keep=keep)
+        # Resolver answer: where the term is + its exact value(s).
         result = {
-            "status": "ok",
-            "entity": {"raw": term},
-            "attributes": values,
+            "status": "found",
+            "term": term,
+            "found_in": find_matches(text_columns, rows, term),
             "rows_matched": len(rows),
-            "truncated": len(rows) >= SEARCH_SAMPLE_ROWS,
             "sql": sql,
         }
+        # Only when specific columns were requested do we return their values.
+        if keep:
+            result["attributes"] = summarize_values(all_columns, rows, keep=keep)
         if unknown:
             result["attributes_unknown"] = unknown
         return out(result)

@@ -107,9 +107,14 @@ writes AND runs the SQL. On a TECHNICAL failure (not an empty result), it falls
 back to the **direct** engine: deterministic SQL templates per structured intent
 (the LLM never writes that SQL), with a guarded LLM only for the `custom`
 long-tail (single read-only SELECT, one whitelisted table, EXPLAIN dry-run, up to
-2 repairs). The **`lookup`** intent is a plain attribute read via the
-**Dataset Lookup tool** (`dataset_lookup`, `9FEzVZk`) - no SQL. Execution is
-always read-only (`transaction_read_only` + `statement_timeout 30s`).
+2 repairs). Execution is always read-only (`transaction_read_only` +
+`statement_timeout 30s`).
+
+> Plain attribute reads ("who is the account manager of X?") used to go through
+> the managed Dataset Lookup tool; that path was REMOVED (2026-06-18). Its
+> replacement is the standalone **`attribute_lookup`** tool
+> ([`../tools/attribute_lookup_tool.py`](../tools/README.md)) - a fast
+> whole-dataset search - which is being validated before it is wired in here.
 
 **4. RENDER** - the answer table and every monetary figure are formatted BY CODE;
 a small LLM may write the headline but every number it cites is verified against
@@ -117,13 +122,10 @@ the result (unverifiable -> deterministic fallback). `SUBAGENT_LLM_HEADLINE` is
 OFF by default (the orchestrator writes the analysis). `about_data` is answered
 from the profile with ZERO SQL.
 
-**Profile accessors (`Profile`)** wrap the profile contract v1 and attach the
-LIVE schema columns at load time (so a freshly added column resolves even if the
-profile recipe has not re-run).
+**Profile accessors (`Profile`)** wrap the profile contract v1.
 
 **CONFIG to set in DSS**: `PROFILE_DATASET`, `VALUE_INDEX_DATASET`,
-`LLM_BY_MODE` ids, `SEMANTIC_TOOL_ID`/`NAME`, `DATASET_LOOKUP_TOOL_ID`/`NAME`,
-`SQL_ENGINE`, `FALLBACK_TO_DIRECT`.
+`LLM_BY_MODE` ids, `SEMANTIC_TOOL_ID`/`NAME`, `SQL_ENGINE`, `FALLBACK_TO_DIRECT`.
 
 ---
 

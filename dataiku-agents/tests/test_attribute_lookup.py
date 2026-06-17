@@ -178,6 +178,31 @@ class TestSearchSql(unittest.TestCase):
         self.assertIn("'%a\\%b%' ESCAPE", sql)
 
 
+class TestFindMatches(unittest.TestCase):
+    def test_reports_column_and_exact_value(self):
+        rows = [{"account_manager": "jean.blanchard@x.com",
+                 "Account_name": "ALGERIE TELECOM"}]
+        out = al.find_matches(["account_manager", "Account_name"], rows, "blanchard")
+        self.assertEqual(out, [{"column": "account_manager",
+                                "values": ["jean.blanchard@x.com"]}])
+
+    def test_accent_insensitive(self):
+        rows = [{"Account_name": "ALGERIE TELECOM"}]
+        out = al.find_matches(["Account_name"], rows, "Algérie Télécom")
+        self.assertEqual(out[0]["column"], "Account_name")
+
+    def test_distinct_values_across_rows(self):
+        rows = [{"account_manager": "a.blanchard@x.com"},
+                {"account_manager": "b.blanchard@x.com"}]
+        out = al.find_matches(["account_manager"], rows, "blanchard")
+        self.assertEqual(sorted(out[0]["values"]),
+                         ["a.blanchard@x.com", "b.blanchard@x.com"])
+
+    def test_no_hit_returns_empty(self):
+        rows = [{"Account_name": "ORANGE"}]
+        self.assertEqual(al.find_matches(["Account_name"], rows, "blanchard"), [])
+
+
 class TestSummarize(unittest.TestCase):
     def test_single_value_scalar(self):
         rows = [{"account_manager": "Jane"}, {"account_manager": "Jane"}]
@@ -240,15 +265,14 @@ class TestInvoke(unittest.TestCase):
          "sales_zone": "Africa", "amount_eur": "250"},
     ]
 
-    def test_search_returns_matching_values(self):
+    def test_found_in_reports_where_and_value(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)
         out = invoke(tool, "blanchard")
-        self.assertEqual(out["status"], "ok")
-        self.assertEqual(out["attributes"]["account_manager"],
-                         "jean.blanchard@x.com")          # constant -> scalar
-        self.assertEqual(out["attributes"]["sales_zone"], "Africa")
-        self.assertEqual(sorted(out["attributes"]["Account_name"]),
-                         ["ALGERIE TELECOM", "MAROC TELECOM"])   # several -> list
+        self.assertEqual(out["status"], "found")
+        self.assertEqual(out["found_in"],
+                         [{"column": "account_manager",
+                           "values": ["jean.blanchard@x.com"]}])
+        self.assertNotIn("attributes", out)   # nothing extra unless asked
 
     def test_search_only_hits_text_columns(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)
@@ -257,16 +281,17 @@ class TestInvoke(unittest.TestCase):
         self.assertIn('"account_manager" ILIKE', fact_sql)
         self.assertNotIn("amount_eur", fact_sql)   # numeric column not searched
 
-    def test_requested_attribute_restricts(self):
+    def test_requested_attributes_return_other_columns(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)
-        out = invoke(tool, "blanchard", ["account manager"])
-        self.assertEqual(out["status"], "ok")
-        self.assertEqual(out["attributes"], {"account_manager": "jean.blanchard@x.com"})
+        out = invoke(tool, "blanchard", ["sales zone"])
+        self.assertEqual(out["status"], "found")
+        self.assertEqual(out["attributes"], {"sales_zone": "Africa"})
+        self.assertEqual(out["found_in"][0]["column"], "account_manager")
 
     def test_attribute_spelling_does_not_break(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)
-        out = invoke(tool, "blanchard", ["Account_Manager"])
-        self.assertIn("account_manager", out["attributes"])
+        out = invoke(tool, "blanchard", ["Sales_Zone"])
+        self.assertIn("sales_zone", out["attributes"])
 
     def test_no_match_offers_alias_suggestions(self):
         tool = FakeTool(fact_rows=[], alias_rows=[
@@ -274,14 +299,14 @@ class TestInvoke(unittest.TestCase):
                      display_value="Indirect distribution",
                      normalized_value="indirect")])
         out = invoke(tool, "indirect")
-        self.assertEqual(out["status"], "entity_suggestions")
+        self.assertEqual(out["status"], "suggestions")
         self.assertEqual(out["candidates"][0]["value"],
                          "Indirect_distribution/Resseler")
 
     def test_no_match_no_catalog_is_not_found(self):
         tool = FakeTool(fact_rows=[], no_catalog=True)
-        out = invoke(tool, "zzz nothing", )
-        self.assertEqual(out["status"], "entity_not_found")
+        out = invoke(tool, "zzz nothing")
+        self.assertEqual(out["status"], "not_found")
 
     def test_attribute_unknown_when_requested(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)

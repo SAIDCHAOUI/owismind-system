@@ -1,20 +1,34 @@
 # tools/ - the DSS agent tools
 
 > The revenue sub-agent (`agents/SalesDrive_revenue_expert.py`) reaches the data
-> through DSS **agent tools**. This folder DOCUMENTS them (ids, types, I/O); the
-> two managed tools are configured no-code in the DSS UI, so there is no `.py`
-> here for them. The Custom Python tool's code lives in DSS (add it here if/when
-> we vault it; see Roadmap).
+> through DSS **agent tools**. This folder DOCUMENTS them (ids, types, I/O); managed
+> tools are configured no-code in the DSS UI; Custom Python tools are vaulted here
+> as `.py`.
 
 | Tool name | Type | Id | Points at | Used by v3? |
 |---|---|---|---|---|
 | `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the aligned semantic model (over `DRIVE_Revenues`) | **yes - default SQL engine** |
-| `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | `DRIVE_Revenues` | yes - the `lookup` intent |
-| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | `DRIVE_Revenues_Value_Catalog` | **no - roadmap** |
+| `attribute_lookup` | Custom Python (`attribute_lookup_tool.py`) | (to create) | `DRIVE_Revenues` (+ catalog fallback) | **built, not yet wired** |
+| `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | `DRIVE_Revenues` | **REMOVED 2026-06-18** |
+| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | `DRIVE_Revenues_Value_Catalog` | no - superseded by `attribute_lookup` |
 
 The sub-agent calls a tool via `project.get_agent_tool(id).run(payload)`, with a
 one-shot fallback that re-resolves the id by name against `list_agent_tools()`
 (covers a recreated tool whose id changed).
+
+## `attribute_lookup` (Custom Python, `attribute_lookup_tool.py`) - fast value resolver
+
+Code vaulted here: [`attribute_lookup_tool.py`](attribute_lookup_tool.py). The
+fast path for plain reads ("is value X in the data, in which column, and what are
+the related values?"). It runs a case/accent-insensitive `ILIKE` search across
+every TEXT column of the fact table (read-only, `statement_timeout` + `LIMIT`,
+nothing loaded into RAM), returns `found_in` (where the term is + its exact
+value), and - when `attributes` are requested - the matched rows' values for
+those columns. No catalog is required; an optional catalog fallback offers
+aliases when nothing matches. **Status: built + unit-tested
+(`tests/test_attribute_lookup.py`), validated by RUN TEST, NOT yet wired into the
+sub-agent** (replaces the removed `dataset_lookup`). To wire: create the Custom
+Python tool in DSS, set its id in the sub-agent, route plain reads to it.
 
 ---
 
@@ -44,23 +58,16 @@ read-only direct-SQL engine (`FALLBACK_TO_DIRECT = True`).
 
 ---
 
-## `dataset_lookup` (Dataset Lookup, `9FEzVZk`) - plain attribute reads
+## `dataset_lookup` (Dataset Lookup, `9FEzVZk`) - REMOVED 2026-06-18
 
-Used for the **`lookup`** intent: retrieve an attribute of a named entity without
-SQL ("who is the account manager of X?", "the carrier code of Y?"). Reserve the
-semantic tool for aggregations, rankings, comparisons; use this for plain field
-reads.
-
-- **Input**: `{"filter": <tree>}` where the tree uses `EQUALS / AND / OR`
-  operators (built by `build_lookup_filter` from the resolved `{column, value}`
-  clauses; an ambiguous offer term becomes an `OR` over its candidate columns).
-- **Output**: up to ~10 rows (`DATASET_LOOKUP_MAX_ROWS`), parsed tolerantly by
-  `extract_lookup_rows`.
-- Disable the whole path with `DATASET_LOOKUP_ENABLED = False` (the `lookup`
-  intent then degrades to the SQL / semantic path).
-
-> **Roadmap**: this managed tool is the **planned replacement target**. It is
-> less powerful than a Custom Python tool reading the rich `Value_Catalog`. See below.
+This managed tool used to serve the `lookup` intent (plain attribute reads). It
+was **removed from the sub-agent**: it could not find values in columns the value
+catalog did not index (e.g. `account_manager`), the empty-result handling added
+complexity, and it duplicated work. All of its code (the `lookup` intent,
+`build_lookup_filter`, `extract_lookup_rows`, `lookup_note`, `_lookup_rows`,
+`Profile.match_attribute` / `attribute_columns` / `live_columns`) is gone. Its
+replacement is **`attribute_lookup`** above. The managed tool object can be
+deleted from DSS once `attribute_lookup` is wired in.
 
 ---
 
