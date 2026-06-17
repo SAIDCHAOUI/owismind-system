@@ -221,13 +221,14 @@ class TestSummarize(unittest.TestCase):
 
 
 class TestEntityPicking(unittest.TestCase):
-    def test_dominant_domain_resolves(self):
-        # An 'account' (target diamond_id) and an 'account_group' (target
-        # Parent_Group) match the same name: the more precise domain wins, by
-        # ENTITY_DOMAINS order - no hardcoded column name.
-        rows = [_cat_row("diamond_id", "AT001", search_domain="account"),
-                _cat_row("Parent_Group", "Algerie Telecom Grp",
-                         search_domain="account_group")]
+    def test_same_name_resolves_to_most_precise(self):
+        # The account and the parent group share the SAME name -> one entity ->
+        # resolve to the more precise (account), no false ambiguity.
+        rows = [_cat_row("diamond_id", "AT001", search_domain="account",
+                         display_value="ALGERIE TELECOM"),
+                _cat_row("Parent_Group", "ALGERIE TELECOM",
+                         search_domain="account_group",
+                         display_value="ALGERIE TELECOM")]
         status, row = al.pick_exact_entity(rows)
         self.assertEqual(status, "resolved")
         self.assertEqual(row["search_domain"], "account")

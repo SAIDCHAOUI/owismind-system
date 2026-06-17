@@ -156,42 +156,37 @@ def _entity_sort_key(row):
     return (is_alias, _domain_rank(row), freq)
 
 
+def _display_key(row):
+    """Conceptual identity of a catalog row = its normalized display name. The
+    same business entity seen as account AND as parent group shares one key."""
+    return norm(row.get("display_value") or row.get("target_value"))
+
+
 def pick_exact_entity(rows):
     """From exact-match catalog rows, return ('resolved', row),
     ('ambiguous', rows) or ('none', None).
 
-    Rows that all point at the SAME (target_column, target_value) collapse to one
-    pick. Across DISTINCT targets, a strictly more-precise search_domain wins (per
-    ENTITY_DOMAINS order); otherwise it is genuinely ambiguous and handed back to
-    the caller to clarify. Ranking uses only generic catalog signals
-    (search_domain, is_alias, frequency) - never a hardcoded dataset column."""
+    Simple rule: rows are grouped by the entity NAME (display). One name -> resolve
+    to its most precise row (e.g. the account over the parent group). Several
+    different names -> genuinely ambiguous, hand back one per name to clarify.
+    Aliases (is_alias=1) are dropped when a real match exists, so a subsidiary
+    listing the term as its parent group does not create false ambiguity. Uses
+    only generic catalog signals - never a hardcoded dataset column."""
     rows = [r for r in (rows or []) if r.get("target_column") and r.get("target_value")]
     if not rows:
         return ("none", None)
-    # Prefer REAL values over hand-crafted aliases: an exact hit on a canonical
-    # name beats the same term reaching an entity only through a parent/alias edge
-    # (is_alias=1). This stops "Algerie Telecom" from looking ambiguous just
-    # because a subsidiary lists it as its parent group.
     non_alias = [r for r in rows if int(r.get("is_alias") or 0) == 0]
     if non_alias:
         rows = non_alias
-    targets = {(str(r["target_column"]), str(r["target_value"])) for r in rows}
-    if len(targets) == 1:
-        return ("resolved", sorted(rows, key=_entity_sort_key)[0])
-    ranked = sorted(rows, key=_entity_sort_key)
-    top, second = ranked[0], ranked[1]
-    # A strictly dominant domain (more precise) wins; a tie between two different
-    # real entities is genuinely ambiguous.
-    if _domain_rank(top) < _domain_rank(second):
-        return ("resolved", top)
-    # de-dup ambiguous candidates by (column, value) for a clean clarification.
-    uniq, seen = [], set()
-    for r in ranked:
-        k = (str(r["target_column"]), str(r["target_value"]))
-        if k not in seen:
-            seen.add(k)
-            uniq.append(r)
-    return ("ambiguous", uniq[:5])
+    groups = {}
+    for r in rows:
+        groups.setdefault(_display_key(r), []).append(r)
+    if len(groups) == 1:
+        only = list(groups.values())[0]
+        return ("resolved", sorted(only, key=_entity_sort_key)[0])
+    reps = [sorted(g, key=_entity_sort_key)[0] for g in groups.values()]
+    reps.sort(key=_entity_sort_key)
+    return ("ambiguous", reps[:5])
 
 
 def pick_fuzzy_entity(term_norm, rows):
