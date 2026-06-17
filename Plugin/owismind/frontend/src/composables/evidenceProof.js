@@ -1,10 +1,10 @@
-// Pure Evidence "trust layer" helpers (NO Vue import — node:test testable, F11).
+// Pure Evidence "trust layer" helpers (NO Vue import - node:test testable, F11).
 //
 // These helpers turn the enriched /evidence/meta contract (frozen in
 // docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md §2) into
 // display-ready primitives for the proof sections of the Evidence panel.
 // Every new meta field is OPTIONAL: a v1 meta (or a degraded/absent one) must
-// fall through to the honest "declared" floor — never throw, never guess up.
+// fall through to the honest "declared" floor - never throw, never guess up.
 //
 // Honesty rules (§9): the mapping is fully deterministic, computed from the
 // backend's own verification verdict; nothing here upgrades a claim.
@@ -37,14 +37,14 @@ const KNOWN_KINDS = new Set(EXPLANATION_KINDS)
 // ellipsis included, so the UI line length is bounded deterministically.
 const MAX_PARAM_CHARS = 80
 
-// Max calc steps ever rendered — mirrors the backend's ≤ 15 steps contract so
+// Max calc steps ever rendered - mirrors the backend's ≤ 15 steps contract so
 // a malformed payload cannot flood the panel.
 export const MAX_CALC_STEPS = 15
 
 /**
  * Map the verification verdict onto the trust badge: {key, tone}.
  *
- * (level × result_captured) grammar — frozen in spec §6:
+ * (level × result_captured) grammar - frozen in spec §6:
  *   calc_decomposed + captured        -> ev.proof.level.result   (solid)
  *   calc_decomposed | scope_exact     -> ev.proof.level.source   (solid)
  *   scope_partial | source_identified -> ev.proof.level.partial  (dashed)
@@ -52,7 +52,7 @@ export const MAX_CALC_STEPS = 15
  *
  * Exhaustive fallback: absent meta, degraded meta (available === false),
  * missing verification block or an UNKNOWN level string all land on
- * `declared` — the floor is the honest claim, never an upgrade.
+ * `declared` - the floor is the honest claim, never an upgrade.
  */
 export function trustLevel(meta) {
   const declared = { key: 'ev.proof.level.declared', tone: TONE_MUTED }
@@ -92,8 +92,8 @@ export function calcStepArgs(step) {
 /**
  * Bounded preview of the captured agent result for the mini-table:
  * {columns, rows, more}. `rows` keeps at most `maxRows` list-shaped rows
- * (cell values untouched — the display layer stringifies, keeping null as
- * '—'); `more` counts the hidden remainder. Shape-defensive: anything that
+ * (cell values untouched - the display layer stringifies, keeping null as
+ * '-'); `more` counts the hidden remainder. Shape-defensive: anything that
  * is not the contract's list-of-lists yields the empty preview, never throws.
  */
 export function resultPreview(result, maxRows = 10) {
@@ -114,7 +114,7 @@ export function resultPreview(result, maxRows = 10) {
 /**
  * Number of agent conditions NOT reproduced by the interactive view (0 when
  * the verification block is absent or clean). Honesty rule §9: dropped
- * elements are COUNTED and listed, never hidden — so take the max of the
+ * elements are COUNTED and listed, never hidden - so take the max of the
  * numeric counter and the display list (the advanced/unmapped fragments may
  * be listed without being counted as predicates).
  */

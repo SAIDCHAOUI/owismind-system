@@ -1,5 +1,5 @@
 <script setup>
-// Evidence rows table — live rows of the matched source table under the agent's
+// Evidence rows table - live rows of the matched source table under the agent's
 // (or user-modified) filters. Sticky header, click-to-sort, BOTH vertical and
 // horizontal scroll, and LAZY / INFINITE loading: the store loads page 0, then
 // appends the next page when the bottom sentinel scrolls into view (never the
@@ -26,7 +26,7 @@ function sortDir(name) {
 }
 function cell(row, name) {
   const v = row[name]
-  return v == null ? '—' : String(v)
+  return v == null ? '-' : String(v)
 }
 
 // ── Infinite scroll ───────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ onBeforeUnmount(teardownObserver)
   <!-- `busy` (55% dim) only applies to refreshes with REAL rows on screen: the
        first-load skeleton must keep full opacity or its shimmer washes out. -->
   <div class="ev-table" :class="{ busy: evidence.rowsLoading && evidence.rows.length > 0 }">
-    <!-- Source-table selector — shown ONLY when the SQL reads several distinct
+    <!-- Source-table selector - shown ONLY when the SQL reads several distinct
          datasets. Single-source keeps the v1 layout (no selector). -->
     <div v-if="evidence.hasMultipleSources" class="ev-table-sources">
       <span class="src-label">{{ t('ev.table.source') }}</span>
@@ -172,7 +172,7 @@ onBeforeUnmount(teardownObserver)
   max-height: min(60vh, 480px);
   min-height: 220px; /* ≈ header + ~7 rows even before the first page lands */
 }
-/* Source-table selector (multi-table SQL) — small chips above the table. */
+/* Source-table selector (multi-table SQL) - small chips above the table. */
 .ev-table-sources {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
   padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
@@ -194,7 +194,7 @@ onBeforeUnmount(teardownObserver)
 /* Dark: translucent orange patch for the active chip (full :global selector, F2/L022). */
 :global(body[data-theme="dark"] .src-chip.active) { background: var(--orange-soft-dark); }
 /* separate + spacing 0: with `collapse`, the th border scrolls away from a
-   sticky header — paint the line as an inset shadow so it sticks with it. */
+   sticky header - paint the line as an inset shadow so it sticks with it. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--surface);
@@ -215,7 +215,7 @@ tbody td {
   text-overflow: ellipsis; max-width: 260px;
 }
 tbody tr:last-child td { border-bottom: none; }
-/* First-load skeleton rows — gradient sweep, alternating widths for a natural look. */
+/* First-load skeleton rows - gradient sweep, alternating widths for a natural look. */
 .sk-cell {
   display: block; height: 12px; border-radius: 4px; width: 70%;
   background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-hover) 50%, var(--surface-2) 75%);
@@ -226,7 +226,7 @@ tbody tr:last-child td { border-bottom: none; }
 @media (prefers-reduced-motion: reduce) {
   .sk-cell { animation: none; }
 }
-/* Infinite-scroll sentinel — a thin band below the rows that triggers the next
+/* Infinite-scroll sentinel - a thin band below the rows that triggers the next
    page when it scrolls into the container's viewport. */
 .ev-table-sentinel {
   display: flex; align-items: center; justify-content: center;

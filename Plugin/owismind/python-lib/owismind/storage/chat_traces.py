@@ -2,24 +2,24 @@
 
 One row per chat exchange whose agent run returned a footer trace: the RAW
 end-of-stream run trace (the artefact the LLM Mesh agent emits at the very end of
-the stream — nested spans, tool outputs, usage), serialised as JSON text and
+the stream - nested spans, tool outputs, usage), serialised as JSON text and
 APPENDED to an admin-selected dataset.
 
 Why a Dataset append and NOT a direct SQL INSERT (the CONFIRMED mechanism)
 --------------------------------------------------------------------------
 DSS LOGS every ``SQLExecutor2`` query (the full statement text). Because SQLExecutor2 has
 no server-side bind (official Python API reference), a value is ALWAYS inlined into that
-text — so a direct ``INSERT INTO ... VALUES ('<huge JSON>')`` would write the entire trace
+text - so a direct ``INSERT INTO ... VALUES ('<huge JSON>')`` would write the entire trace
 blob into a logged SQL statement. On this instance a scenario materialises those query logs
 into a dataset, where an over-long SQL cell trips DSS's row-length limit ("row too long",
-in-memory) — the observed warning.
+in-memory) - the observed warning.
 
 ``dataiku.Dataset(...).write_with_schema(...)`` does NOT go through SQLExecutor2 query
 logging: the row is written by the dataset writer, so the trace blob never lands in a
 logged SQL statement. This is the confirmed fix (and mirrors the production Dash app).
 
 Dataset choice: use a SQL-TABLE-backed dataset (the observed setup; works). Avoid a
-CSV/filesystem-format dataset — its OWN per-row character limit could be exceeded by a
+CSV/filesystem-format dataset - its OWN per-row character limit could be exceeded by a
 large JSON row (``ERR_FORMAT_LINE_TOO_LARGE``). ``MAX_TRACE_BYTES`` caps the row regardless.
 (Note: the SQL-text-capture chain is not described on the official CRU doc page, but it is
 empirically confirmed on this instance via SQLExecutor2 query logging.)
@@ -27,7 +27,7 @@ empirically confirmed on this instance via SQLExecutor2 query logging.)
 Write-only by design
 ---------------------
 The webapp NEVER reads these traces back (loading the raw blob per request would slow
-the app): they exist purely for offline analysis in the Flow. Best-effort — a failure
+the app): they exist purely for offline analysis in the Flow. Best-effort - a failure
 here never affects the answer already on screen. When no dataset is configured, trace
 storage is skipped entirely.
 """
@@ -76,7 +76,7 @@ def _column_order(dataset):
         existing = [c.get("name") for c in (dataset.read_schema() or [])]
     except Exception as exc:
         logger.info(
-            "save_trace — could not read dataset schema (%s); using default column order",
+            "save_trace - could not read dataset schema (%s); using default column order",
             exc,
         )
         existing = []
@@ -96,13 +96,13 @@ def save_trace(exchange_id, trace):
     Skipped silently when no trace dataset is configured.
     """
     if not trace:
-        logger.info("save_trace — no trace to record for exchange_id=%s", exchange_id)
+        logger.info("save_trace - no trace to record for exchange_id=%s", exchange_id)
         return
 
     dataset_name = traces_dataset_name()
     if not dataset_name:
         logger.info(
-            "save_trace — no trace dataset configured; skipping exchange_id=%s",
+            "save_trace - no trace dataset configured; skipping exchange_id=%s",
             exchange_id,
         )
         return
@@ -111,13 +111,13 @@ def save_trace(exchange_id, trace):
         trace_json = json.dumps(trace, ensure_ascii=False, default=str)
     except (TypeError, ValueError) as exc:
         logger.warning(
-            "save_trace — trace not serialisable for exchange_id=%s: %s", exchange_id, exc
+            "save_trace - trace not serialisable for exchange_id=%s: %s", exchange_id, exc
         )
         return
 
     if len(trace_json) > MAX_TRACE_BYTES:
         logger.warning(
-            "save_trace — trace too large (%d bytes) for exchange_id=%s; storing marker",
+            "save_trace - trace too large (%d bytes) for exchange_id=%s; storing marker",
             len(trace_json),
             exchange_id,
         )
@@ -136,7 +136,7 @@ def save_trace(exchange_id, trace):
     }
 
     logger.info(
-        "save_trace — append to dataset %s exchange_id=%s trace_bytes=%d",
+        "save_trace - append to dataset %s exchange_id=%s trace_bytes=%d",
         dataset_name,
         exchange_id,
         len(trace_json),
@@ -145,14 +145,14 @@ def save_trace(exchange_id, trace):
     #   - We build the DataFrame in the dataset's EXISTING column order so the
     #     positional SQL write lines up regardless of how the admin ordered the
     #     columns (otherwise write_with_schema fails with "Name/Type mismatch for
-    #     column N" — the observed failure mode).
+    #     column N" - the observed failure mode).
     #   - appendMode=True turns write_with_schema's default overwrite into an append
     #     (no TRUNCATE), so prior rows are preserved.
     #   - ignore_flow=True only affects RECIPE execution context; in a webapp backend
     #     it is harmless/explicit.
     # The whole write is SELF-CONTAINED best-effort: any failure (missing/incompatible
     # dataset, schema/type mismatch, writer error) is logged on ONE short line and
-    # swallowed HERE, so a trace write can NEVER affect the answer already on screen —
+    # swallowed HERE, so a trace write can NEVER affect the answer already on screen -
     # independently of how the caller invokes this function.
     # MUST be validated in DSS: that rows ACCUMULATE (not overwritten) and that the
     # dataset is SQL-table-backed (NOT CSV/filesystem, which has a per-row length limit).
@@ -162,10 +162,10 @@ def save_trace(exchange_id, trace):
             df = pd.DataFrame([row], columns=_column_order(dataset))
             dataset.spec_item["appendMode"] = True
             dataset.write_with_schema(df)
-        logger.info("save_trace — appended exchange_id=%s", exchange_id)
+        logger.info("save_trace - appended exchange_id=%s", exchange_id)
     except Exception as exc:
         logger.warning(
-            "save_trace — could not append trace for exchange_id=%s (trace skipped): %s",
+            "save_trace - could not append trace for exchange_id=%s (trace skipped): %s",
             exchange_id,
             exc,
         )

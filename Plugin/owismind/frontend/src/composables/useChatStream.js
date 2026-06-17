@@ -1,11 +1,11 @@
-// Chat transport — the validated polling loop, ported VERBATIM in behavior from the
+// Chat transport - the validated polling loop, ported VERBATIM in behavior from the
 // plugin's App.vue (L019/L020). Transport is POLLING (not SSE): DSS's
 // internal proxy buffers long-lived streams, so the run executes in a background worker
 // and we poll /chat/poll for normalized events.
 //
 // Each polled event is fed to the PURE timeline reducer (applyEvent, timelineModel.js),
 // which builds the single ordered, incremental display timeline. `target` is the
-// REACTIVE answer-version object the store created with reactive() — the reducer mutates
+// REACTIVE answer-version object the store created with reactive() - the reducer mutates
 // it in place, so nested mutations (timeline.push, text +=) re-render live (L020).
 import { startChat, pollChat } from '../services/backend.js'
 import { applyEvent } from './timelineModel.js'
@@ -26,7 +26,7 @@ export function handleEvent(target, evt) {
 }
 
 // Start a run and poll its event timeline into `target` until done. The frontend
-// sends ONLY { sessionId, message, agentKey } — agentKey is the OPAQUE logical key
+// sends ONLY { sessionId, message, agentKey } - agentKey is the OPAQUE logical key
 // (identity + real agent id resolved server-side). Throws the backend's stable
 // error code (agent_not_enabled, busy, run_not_found…) for the caller to handle.
 //
@@ -55,7 +55,7 @@ export async function runChatStream({ sessionId, message, agentKey, historyLimit
       failures = 0
     } catch (e) {
       // Superseded mid-poll (conversation switched / newer run started): stop without
-      // touching the stale version — same guard the success path applies after its await.
+      // touching the stale version - same guard the success path applies after its await.
       if (token && token.cancelled) return
       const code = (e && e.message) || ''
       if (TERMINAL_CODES.has(code)) {

@@ -24,7 +24,7 @@ FLOW
 
 Instance safety: exactly ONE agent run per call (no loop, no retry); a hard global
 cap on concurrent runs; TTL eviction of finished/orphaned runs. The agent_id is
-resolved server-side from the whitelist BEFORE this is ever called — nothing here
+resolved server-side from the whitelist BEFORE this is ever called - nothing here
 accepts a raw id from the frontend.
 """
 
@@ -57,7 +57,7 @@ HARD_TTL_SECONDS = 600.0
 
 # Per-run memory bounds (defense in depth). The run lifetime is already bounded by
 # MAX_CONCURRENT_RUNS x HARD_TTL, and the large raw trace is excluded from the live
-# list — but these make the per-run bound EXPLICIT so a pathological/buggy agent
+# list - but these make the per-run bound EXPLICIT so a pathological/buggy agent
 # emitting an enormous answer or event flood cannot grow a single run's memory
 # without limit. Both are far above any legitimate run (normal runs emit a few
 # dozen events and KB-sized answers); terminal events and persistence are never
@@ -76,7 +76,7 @@ MAX_ARTIFACTS_ACCUM = 8
 #     and cut short so its slot is freed instead of running (and billing tokens) for no
 #     consumer. A run never yet polled is bounded only by MAX_RUN_SECONDS.
 # Limitation: both are evaluated between chunks, so a fully-hung upstream call that never
-# yields is still bounded only by the memory TTL — a watchdog thread would be needed for
+# yields is still bounded only by the memory TTL - a watchdog thread would be needed for
 # that and is intentionally not added here (higher risk to a validated path).
 MAX_RUN_SECONDS = 300.0
 ABANDON_AFTER_SECONDS = 30.0
@@ -129,7 +129,7 @@ def _stop_reason(run_id, started_at):
 
     Priority: an explicit user stop (``"stopped"``) wins over the wall-clock deadline
     (``"timeout"``) and the abandoned-by-browser cut (``"abandoned"``). Evaluated between
-    streamed chunks — the official LLM Mesh stream exposes no cancel API, so a cooperative
+    streamed chunks - the official LLM Mesh stream exposes no cancel API, so a cooperative
     stop (simply ceasing to iterate the generator) is the supported way to end it early.
     """
     now = time.monotonic()
@@ -162,7 +162,7 @@ def _evict_stale_locked(now):
     for run_id in stale:
         _RUNS.pop(run_id, None)
     if stale:
-        logger.info("stream_manager — evicted %d stale run(s)", len(stale))
+        logger.info("stream_manager - evicted %d stale run(s)", len(stale))
     # Keep the per-user rate map bounded: drop timestamps older than the hard lifetime.
     for uid in [u for u, ts in _LAST_START_BY_USER.items() if (now - ts) > HARD_TTL_SECONDS]:
         _LAST_START_BY_USER.pop(uid, None)
@@ -220,7 +220,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     )
     thread.start()
     logger.info(
-        "stream_manager — started run_id=%s exchange_id=%s agent_id=%s user_id=%s",
+        "stream_manager - started run_id=%s exchange_id=%s agent_id=%s user_id=%s",
         run_id,
         exchange_id,
         agent_id,
@@ -231,7 +231,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
 
 def _build_screen_block(user_id, history, screen_context):
     """The ON-SCREEN context block (best-effort, never raises). Gated on the
-    frontend's live pointer: we only describe what is ACTUALLY on screen — the
+    frontend's live pointer: we only describe what is ACTUALLY on screen - the
     exchange + tab the user is viewing with the Evidence panel OPEN. No read (and no
     block) when the panel is closed: nothing is on screen then, and the prior answer
     is already in the replayed history. Owner-scoped artifact read only. Returns ''
@@ -264,7 +264,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     instead of yielding HTTP frames. Emits the SAME normalised event sequence the
     frontend already understands: run_started, then the agent's own events
     (agent_event / answer_delta / generated_sql / usage_summary), then final_answer
-    + run_done — or error. The streamed ``trace`` event (the RAW footer trace) is
+    + run_done - or error. The streamed ``trace`` event (the RAW footer trace) is
     captured for storage but never added to the live timeline. Phase two persists the
     answer + any generated SQL AND that raw trace for later lazy reads; a storage
     failure there never aborts the run (the user still gets the answer). The agent_id
@@ -317,7 +317,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             stop_reason = _stop_reason(run_id, started_at)
             if stop_reason:
                 logger.warning(
-                    "stream_manager — cutting run_id=%s short (%s)", run_id, stop_reason
+                    "stream_manager - cutting run_id=%s short (%s)", run_id, stop_reason
                 )
                 break
             etype = event.get("type")
@@ -331,12 +331,12 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 elif not answer_truncated:
                     answer_truncated = True
                     logger.warning(
-                        "stream_manager — answer exceeded %d chars, truncating run_id=%s",
+                        "stream_manager - answer exceeded %d chars, truncating run_id=%s",
                         MAX_ANSWER_CHARS,
                         run_id,
                     )
             elif etype == "generated_sql":
-                # Persistence path — the ENRICHED item (correlation tags + captured
+                # Persistence path - the ENRICHED item (correlation tags + captured
                 # result when present). Bounded at the write point: chat_v5 applies
                 # capture.cap_sql_list right before json.dumps (mirror caps).
                 item = {
@@ -344,7 +344,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     "success": event.get("success"),
                     "row_count": event.get("rowCount"),
                 }
-                # Optional trust-layer keys — copied only when present, so items from
+                # Optional trust-layer keys - copied only when present, so items from
                 # pre-trust-layer runs keep their exact historical shape.
                 for event_key, item_key in (
                     ("sqlId", "sql_id"),
@@ -398,7 +398,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     artifacts.append(spec)
                 continue
             elif etype == "trace":
-                # The RAW footer trace is for PERSISTENCE only — capture it but do
+                # The RAW footer trace is for PERSISTENCE only - capture it but do
                 # NOT add it to the live timeline (it can be large; the front shows
                 # only the ephemeral eventKind steps live, never the stored trace).
                 trace_raw = event.get("trace")
@@ -413,7 +413,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
         answer = "".join(answer_parts).strip()
         # Phase two: persist whatever we have (full answer on a normal run, partial on an
         # early stop), including the run's token/cost usage (None on an early stop with no
-        # footer). A storage failure here must not abort the run — the user already has the
+        # footer). A storage failure here must not abort the run - the user already has the
         # answer on screen.
         try:
             chat_v5.save_assistant_message(
@@ -421,19 +421,19 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             )
         except Exception:
             logger.exception(
-                "stream_manager — failed to persist assistant message run_id=%s", run_id
+                "stream_manager - failed to persist assistant message run_id=%s", run_id
             )
 
         # Increment the per-user lifetime + current-month usage aggregates. The per-exchange
         # usage on chat_v5 (just written) is the source of truth; these denormalised
         # accelerators power the per-user monthly quota. Best-effort: a failure here is
-        # logged and swallowed — it must never affect the answer, and the aggregates can be
+        # logged and swallowed - it must never affect the answer, and the aggregates can be
         # rebuilt from chat_v5. No-op when no usage was captured (early-stopped run).
         try:
             usage.record_usage(user_id, usage_totals)
         except Exception:
             logger.exception(
-                "stream_manager — failed to record usage aggregates run_id=%s", run_id
+                "stream_manager - failed to record usage aggregates run_id=%s", run_id
             )
 
         # Persist the RAW end-of-stream footer trace for this exchange. Also best-effort:
@@ -443,7 +443,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             chat_traces.save_trace(exchange_id, trace_raw)
         except Exception:
             logger.exception(
-                "stream_manager — failed to persist trace (trace lost) run_id=%s", run_id
+                "stream_manager - failed to persist trace (trace lost) run_id=%s", run_id
             )
 
         # Persist this exchange's rendered-artifact specs (chart/table) so the panel
@@ -454,7 +454,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 artifacts_storage.save_artifacts(exchange_id, user_id, artifacts)
         except Exception:
             logger.exception(
-                "stream_manager — failed to persist artifacts run_id=%s", run_id
+                "stream_manager - failed to persist artifacts run_id=%s", run_id
             )
 
         _append_event_locked_free(
@@ -468,7 +468,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 run_id, {"type": "stopped", "exchangeId": exchange_id}
             )
             logger.info(
-                "stream_manager — stopped by user run_id=%s exchange_id=%s answer_len=%d sql_count=%d",
+                "stream_manager - stopped by user run_id=%s exchange_id=%s answer_len=%d sql_count=%d",
                 run_id,
                 exchange_id,
                 len(answer),
@@ -485,7 +485,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 if state is not None:
                     state["error"] = "run_" + stop_reason
             logger.info(
-                "stream_manager — ended run_id=%s exchange_id=%s early (%s) answer_len=%d sql_count=%d",
+                "stream_manager - ended run_id=%s exchange_id=%s early (%s) answer_len=%d sql_count=%d",
                 run_id,
                 exchange_id,
                 stop_reason,
@@ -495,7 +495,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
         else:
             _append_event_locked_free(run_id, {"type": "run_done", "status": "success"})
             logger.info(
-                "stream_manager — done run_id=%s exchange_id=%s answer_len=%d sql_count=%d",
+                "stream_manager - done run_id=%s exchange_id=%s answer_len=%d sql_count=%d",
                 run_id,
                 exchange_id,
                 len(answer),
@@ -504,7 +504,7 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     except Exception:
         # Never leak agent/SQL/connection internals to the client.
         logger.exception(
-            "stream_manager — agent run failed run_id=%s exchange_id=%s",
+            "stream_manager - agent run failed run_id=%s exchange_id=%s",
             run_id,
             exchange_id,
         )
@@ -557,7 +557,7 @@ def request_stop(run_id, user_id):
     two streamed chunks (``_stop_reason`` -> ``"stopped"``), stops iterating, persists
     whatever partial answer accumulated, and ends the run cleanly with a terminal
     ``stopped`` event. Returns False when the run is unknown, already evicted, or owned by
-    someone else (the route maps False to a 404 without revealing which) — all safe
+    someone else (the route maps False to a 404 without revealing which) - all safe
     no-ops, since such a run is already finished or never the caller's. Idempotent.
     """
     with _LOCK:
@@ -565,5 +565,5 @@ def request_stop(run_id, user_id):
         if state is None or state.get("user_id") != user_id:
             return False
         state["stop_requested"] = True
-    logger.info("stream_manager — stop requested run_id=%s user_id=%s", run_id, user_id)
+    logger.info("stream_manager - stop requested run_id=%s user_id=%s", run_id, user_id)
     return True

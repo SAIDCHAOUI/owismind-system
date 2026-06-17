@@ -1,4 +1,4 @@
-"""Unit tests for owismind.security.validation (pure module — no DSS env required).
+"""Unit tests for owismind.security.validation (pure module - no DSS env required).
 
 Run:  python3 -m unittest discover -s Plugin/owismind/tests
 

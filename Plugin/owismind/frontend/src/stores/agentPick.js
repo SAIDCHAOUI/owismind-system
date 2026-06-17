@@ -1,4 +1,4 @@
-// Pure: choose the default agent key — the last-used one if still enabled, else the first
+// Pure: choose the default agent key - the last-used one if still enabled, else the first
 // enabled agent (empty string when there are no agents). No Vue / no I/O, so it stays
 // unit-testable with node:test (NO INSTALL: no vitest).
 export function pickDefaultAgent(agents, lastKey) {

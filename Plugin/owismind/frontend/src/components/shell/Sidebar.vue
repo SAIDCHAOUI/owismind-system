@@ -1,5 +1,5 @@
 <script setup>
-// Sidebar — brand, primary nav, lazy conversation list, and the foot account/help
+// Sidebar - brand, primary nav, lazy conversation list, and the foot account/help
 // menus. Visual spec ported from `.sidebar` / `.side-item` / `.conv-item` /
 // `.user-chip` (components.css). Navigation via vue-router; conversations come from
 // the session store, which pages names-only from /conversations (the full thread of
@@ -28,7 +28,7 @@ function newConversation() {
 }
 function openConversation(c) {
   // Re-clicking the conversation already in the URL is a duplicated navigation
-  // vue-router short-circuits (no param change, no watcher) — go through the
+  // vue-router short-circuits (no param change, no watcher) - go through the
   // store directly so a previously FAILED open gets its retry (ensureSession
   // refetches on threadError; on a healthy thread it is a cheap no-op).
   if (route.params.sessionId === c.id) chat.ensureSession(c.id)
@@ -180,7 +180,7 @@ function onUser(key) {
         <template #trigger="{ toggle }">
           <button class="user-chip" @click="toggle">
             <span class="avatar">{{ session.initials }}</span>
-            <span class="user-name">{{ session.displayName || '—' }}</span>
+            <span class="user-name">{{ session.displayName || '-' }}</span>
           </button>
         </template>
       </Menu>

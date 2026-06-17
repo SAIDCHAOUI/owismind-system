@@ -1,5 +1,5 @@
 <script setup>
-// Chat page — wires the validated transport (chat store → useChatStream → polling)
+// Chat page - wires the validated transport (chat store → useChatStream → polling)
 // to the maquette UI. Empty state centers title + prompt; an active conversation
 // shows the scrollable thread with the prompt pinned below. The route's optional
 // :sessionId selects a conversation (lazily fetched on open); no param = a new one.
@@ -20,7 +20,7 @@ const session = useSessionStore()
 
 // Route → conversation. ensureSession fetches lazily (deep-link hydrates on its
 // own) but skips the refetch when the param already matches the in-memory thread
-// (the URL stamp below, or coming back from Settings — where it still re-runs the
+// (the URL stamp below, or coming back from Settings - where it still re-runs the
 // evidence continuity). New conversation when there's no :sessionId.
 watch(
   () => route.params.sessionId,
@@ -34,7 +34,7 @@ watch(
 // Store → route sync. A conversation STARTED on bare `/chat` keeps its session id
 // only in the store: stamp it into the URL once its first exchange exists, so the
 // sidebar highlights it and the New-conversation button (`router.push('/chat')`)
-// actually changes the route — pushing `/chat` while already on param-less `/chat`
+// actually changes the route - pushing `/chat` while already on param-less `/chat`
 // is a no-op the param watcher never sees (the "dead button" bug). The watcher
 // above ignores the stamp (param === activeSessionId with the thread in memory).
 watch(
@@ -63,7 +63,7 @@ watch(
     <template v-else-if="chat.hasMessages">
       <ChatThread :turns="chat.turns" />
       <div class="prompt-wrap">
-        <!-- A failed switch keeps the PREVIOUS thread on screen — the error must be
+        <!-- A failed switch keeps the PREVIOUS thread on screen - the error must be
              visible here too (sends are blocked by canSend until a clean reload). -->
         <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
         <p v-else-if="chat.errorMsg" class="chat-error">{{ chat.errorMsg }}</p>
@@ -112,7 +112,7 @@ watch(
   flex-shrink: 0;
 }
 /* On the empty / new-chat screen the prompt bar is the only element, so the full
-   90% measure looks oversized — keep it comfortably narrow and centered (the title
+   90% measure looks oversized - keep it comfortably narrow and centered (the title
    and tip above it sit in the same ~760px band). */
 .prompt-wrap.in-empty { padding-bottom: var(--s-7); max-width: 760px; }
 

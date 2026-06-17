@@ -27,7 +27,7 @@ def rows_to_json_safe(df):
     # Replace every remaining NA (NaN/NaT) with None so the payload is valid JSON.
     # Cast to object FIRST: in a numeric column (e.g. an all-NULL TEXT column that
     # pandas typed as float64), where(..., None) would re-coerce None back to NaN,
-    # which jsonify then emits as the bare token `NaN` — invalid JSON for the client.
+    # which jsonify then emits as the bare token `NaN` - invalid JSON for the client.
     mask = df.notna()
     df = df.astype(object).where(mask, None)
     return df.to_dict(orient="records")

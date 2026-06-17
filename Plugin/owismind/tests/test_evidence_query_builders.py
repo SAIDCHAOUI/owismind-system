@@ -1,5 +1,5 @@
 # Plugin/owismind/tests/test_evidence_query_builders.py
-"""evidence.query_builders: pure SQL text builders — owner-scoped, bounded."""
+"""evidence.query_builders: pure SQL text builders - owner-scoped, bounded."""
 import os, sys, unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))

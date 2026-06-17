@@ -1,7 +1,7 @@
 <script setup>
 // Generic page placeholder for secondary routes not yet built (help pages).
 // Driven by route meta i18n keys (eyebrow/title/desc). Renders an HONEST
-// "coming soon" state via the shared PageShell — never fake content.
+// "coming soon" state via the shared PageShell - never fake content.
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'

@@ -1,5 +1,5 @@
 <script setup>
-// Single icon primitive — replaces the maquette's `OWI.iconStr(name)` + innerHTML
+// Single icon primitive - replaces the maquette's `OWI.iconStr(name)` + innerHTML
 // pattern with one reusable component. SVGs are inline, use `currentColor`, and
 // are sized by the `size` prop (defaults to 1em so the icon scales with text).
 //

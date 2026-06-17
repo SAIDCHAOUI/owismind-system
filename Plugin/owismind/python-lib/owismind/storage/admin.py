@@ -42,7 +42,7 @@ def record_user(identity):
     then a guarded UPDATE grants admin only if no admin exists yet.
 
     display_name handling: the value passed in is a DEFAULT derived from the login
-    (see identity.derive_display_name). On conflict we COALESCE — keep the stored
+    (see identity.derive_display_name). On conflict we COALESCE - keep the stored
     name if there is one, otherwise fill it with the derived default. This backfills
     rows left NULL by the old (broken) code path. It is also forward-looking: if a
     "set my display name" feature is added later (none exists yet), the COALESCE
@@ -134,4 +134,4 @@ def set_admin(user_id, value):
         pre_queries=[sql],
         post_queries=["COMMIT"],
     )
-    logger.info("set_admin — user_id=%s is_admin=%s", user_id, bool(value))
+    logger.info("set_admin - user_id=%s is_admin=%s", user_id, bool(value))

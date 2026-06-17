@@ -38,7 +38,7 @@ def make_big_result(n_rows=7, n_cols=50, cell_len=250):
 
 class FrozenCapsTests(unittest.TestCase):
     def test_contract_constants(self):
-        # Frozen contract values (spec §1) — a silent change here must fail loudly.
+        # Frozen contract values (spec §1) - a silent change here must fail loudly.
         self.assertEqual(MAX_RESULT_ROWS, 200)
         self.assertEqual(MAX_RESULT_COLS, 50)
         self.assertEqual(MAX_CELL_CHARS, 256)
@@ -149,7 +149,7 @@ class ExtractCellNormalizationTests(unittest.TestCase):
     def test_primitives_kept_as_is(self):
         out = extract_result({"rows": [[1, 2.5, True, False, None, "txt"]]})
         self.assertEqual(out["rows"], [[1, 2.5, True, False, None, "txt"]])
-        # bool must survive as bool (bool is an int subclass — easy to degrade to 1/0).
+        # bool must survive as bool (bool is an int subclass - easy to degrade to 1/0).
         self.assertIs(out["rows"][0][2], True)
 
     def test_non_primitive_cells_stringified_and_capped(self):
@@ -297,7 +297,7 @@ class CapSqlListTests(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(out)), MAX_PERSISTED_TEXT_CHARS)
         self.assertNotIn("result", out[0])   # oldest non-protected shed first
         self.assertIn("result", out[1])      # last successful item's result preserved
-        self.assertIn("result", out[2])      # budget already met — newest untouched
+        self.assertIn("result", out[2])      # budget already met - newest untouched
 
     def test_last_success_result_preserved_even_when_oldest(self):
         items = [
@@ -428,7 +428,7 @@ class ReviewRegressionCapsTests(unittest.TestCase):
     def test_global_budget_holds_even_for_sql_texts_alone(self):
         # 20 items x 20k chars exceeds the 262_144 global budget: oldest items
         # are dropped so the serialized list always fits (the logged UPDATE
-        # stays bounded — the hole the budget exists to close).
+        # stays bounded - the hole the budget exists to close).
         items = [{"sql": "S" * 20000, "success": True, "row_count": i}
                  for i in range(20)]
         out = cap_sql_list(items)

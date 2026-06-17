@@ -4,7 +4,7 @@ The admin space uses this to build the enabled-agents whitelist: list the projec
 this webapp's identity can see, then list the agents inside a chosen project (the
 LLMs whose id starts with ``agent:``, per the DSS Agents API).
 
-Instance safety — this module is STRICTLY READ-ONLY: only listing calls
+Instance safety - this module is STRICTLY READ-ONLY: only listing calls
 (``list_project_keys`` / ``get_project`` / ``list_llms``), never create/modify/
 delete. Calls are made ON DEMAND (one project at a time, only while an admin is
 configuring) and the results are bounded, so a handler can never trigger heavy or
@@ -39,7 +39,7 @@ def list_project_keys():
     """
     keys = _client().list_project_keys() or []
     keys = sorted(str(k) for k in keys)[:MAX_PROJECTS]
-    logger.info("list_project_keys — %d project(s) visible", len(keys))
+    logger.info("list_project_keys - %d project(s) visible", len(keys))
     return keys
 
 
@@ -65,12 +65,12 @@ def list_project_agents(project_key):
         )
         if len(agents) >= MAX_AGENTS:
             logger.warning(
-                "list_project_agents — project=%s hit MAX_AGENTS=%d; list truncated",
+                "list_project_agents - project=%s hit MAX_AGENTS=%d; list truncated",
                 project_key,
                 MAX_AGENTS,
             )
             break
     logger.info(
-        "list_project_agents — project=%s found %d agent(s)", project_key, len(agents)
+        "list_project_agents - project=%s found %d agent(s)", project_key, len(agents)
     )
     return agents

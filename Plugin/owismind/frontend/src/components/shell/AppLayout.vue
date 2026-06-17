@@ -1,8 +1,8 @@
 <script setup>
-// App shell layout — the `.app` grid (sidebar | main) with a draggable sidebar
+// App shell layout - the `.app` grid (sidebar | main) with a draggable sidebar
 // resize handle. When the Evidence Studio panel is open (`with-evidence`), the
 // grid becomes sidebar | conversation (center, flexible) | evidence (RIGHT,
-// fixed draggable width) — the proof panel docks on the right of the chat.
+// fixed draggable width) - the proof panel docks on the right of the chat.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '../../stores/ui.js'
@@ -18,7 +18,7 @@ const dragging = ref(false)
 const draggingEv = ref(false)
 
 // The proof panel only makes sense NEXT TO a conversation: leaving the chat route
-// (Settings, FAQ, Agents…) closes it so the page renders in the main column —
+// (Settings, FAQ, Agents…) closes it so the page renders in the main column -
 // never squeezed beside a stale panel. Coming back to a conversation re-opens it
 // via the chat store's evidence continuity (ensureSession's skip path or
 // openSession → _autoOpenEvidence).
@@ -28,14 +28,14 @@ const draggingEv = ref(false)
 // an end-of-run auto-open fired while the user sits on a non-chat page (the poll
 // loop lives in the store and survives ChatView's unmount). close() is idempotent
 // and bumps the store's seq, which also aborts any still-in-flight auto commit.
-// Default pre-flush timing closes the panel before paint — no visual flash.
+// Default pre-flush timing closes the panel before paint - no visual flash.
 watch([() => route.name, () => evidence.open], ([name]) => {
   if (name !== 'chat') evidence.close()
 })
 
 // Opening Evidence auto-collapses the conversation sidebar to give the panel
 // room; the expand toggle stays visible in MainTop (it shows whenever the
-// sidebar is collapsed). The user can re-expand at any time — we never force
+// sidebar is collapsed). The user can re-expand at any time - we never force
 // the sidebar back open on close, and the automatic collapse is NOT persisted
 // (persistChoice=false): only an explicit user toggle may decide what state
 // the next session cold-starts with.
@@ -142,11 +142,11 @@ onBeforeUnmount(() => {
   height: 100vh;
   position: relative;
   /* Smooth same-track-count column changes (sidebar collapse/expand). Track-count
-     changes (evidence open/close) are not interpolable and snap — the panel's own
+     changes (evidence open/close) are not interpolable and snap - the panel's own
      slide-in carries the perceived motion there. */
   transition: grid-template-columns var(--dur-slow) var(--ease);
 }
-/* Live drags must track the pointer 1:1 — a transition would rubber-band them. */
+/* Live drags must track the pointer 1:1 - a transition would rubber-band them. */
 .app.resizing { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .app { transition: none; }

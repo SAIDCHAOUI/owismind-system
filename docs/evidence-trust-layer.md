@@ -1,4 +1,4 @@
-# Evidence Studio v2 — Trust layer
+# Evidence Studio v2 - Trust layer
 
 > Technical reference for the Evidence Studio trust layer (2026-06-10 Run 5).
 > Frozen contracts: `docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md`.
@@ -24,26 +24,26 @@ Nothing in the proof path calls an LLM. Every claim maps to a mechanical check.
 
 ## 2. Proof lifecycle
 
-1. **Run** — the orchestrator (Code Agent, `orchestrator/orchestrator_agent.py` v2.2)
+1. **Run** - the orchestrator (Code Agent, `orchestrator/orchestrator_agent.py` v2.2)
    executes the plan; each sub-agent's `semantic-model-query` tool span carries
-   `outputs.{sql, success, row_count}` (+ possibly the result rows — instance-dependent).
+   `outputs.{sql, success, row_count}` (+ possibly the result rows - instance-dependent).
    The orchestrator tags every SQL item with `sql_id` (`s{step}q{n}`), `step_index`,
    `agent_key`, and opportunistically captures a capped result excerpt. Items travel in
    `AGENT_DONE.eventData.generatedSql` AND in the merged footer trace.
-2. **Capture** — `agents/streaming.py` merges both channels (trace = authority,
+2. **Capture** - `agents/streaming.py` merges both channels (trace = authority,
    AGENT_DONE = correlation + early emission so a user-stopped run keeps its SQL).
    `evidence/capture.py` re-caps everything at the write point (never trusts upstream):
    ≤ 200 rows × 50 columns, cells ≤ 256 chars, result ≤ 100 kB, list ≤ 20 items,
    global JSON ≤ 262 144 chars (results shed oldest-first, the last successful item's
    result preserved longest).
-3. **Persist** — `storage/chat_v4.save_assistant_message` stores the capped JSON in the
+3. **Persist** - `storage/chat_v4.save_assistant_message` stores the capped JSON in the
    existing `generated_sql` TEXT column (**no migration**). `/conversation` readback
    strips `result` (thread payload stays light); only `/evidence/meta` returns it.
-4. **Prove** — `GET /evidence/meta?exchange_id=` (owner-scoped, throttled, no source SQL
+4. **Prove** - `GET /evidence/meta?exchange_id=` (owner-scoped, throttled, no source SQL
    executed) re-derives everything from the stored SQL: parse (`sql_parse`), dataset
    match (project auto-discovery), explanation (`sql_explain`), verification level,
    captured result, drill-down availability.
-5. **Explore / drill** — `POST /evidence/rows` re-queries the matched dataset read-only
+5. **Explore / drill** - `POST /evidence/rows` re-queries the matched dataset read-only
    (`SET LOCAL statement_timeout 30s` + `SET LOCAL transaction_read_only`), bounded
    pages; the optional `drill` payload filters to one result group's contributing rows
    after server-side re-validation against the stored SQL's group keys.
@@ -55,7 +55,7 @@ parse, the dataset match, the explainer flags and the REAL predicate drops:
 
 | Level | Mechanical criterion |
 |---|---|
-| `declared` | parse failed or no project dataset matched — agent claim only |
+| `declared` | parse failed or no project dataset matched - agent claim only |
 | `source_identified` | dataset matched, WHERE not assessable |
 | `scope_partial` | matched, ≥1 predicate mapped, completeness broken (drops listed) |
 | `scope_exact` | every WHERE conjunct decomposed + single source + no set-op |
@@ -81,7 +81,7 @@ never claimed re-verifiable. Refusal reasons: `no_group_keys`, `multi_source`,
   planner_description, block/tool labels, `dataset_label_fr/en`, `dataset_ref`) and
   enable the agent in the webapp admin whitelist. Nothing else: capture, proof,
   explanation and drill are generic (they key on the stored SQL + project datasets).
-- **New dataset**: nothing to do — project PostgreSQL datasets are auto-discovered
+- **New dataset**: nothing to do - project PostgreSQL datasets are auto-discovered
   (`service._list_project_sql_datasets`, TTL 300 s).
 - **New SQL construct**: extend `evidence/sql_explain.py` (new step kind → add it to the
   frozen enum in the spec, the backend classifier, and `ev.exp.*` keys in
@@ -104,7 +104,7 @@ never claimed re-verifiable. Refusal reasons: `no_group_keys`, `multi_source`,
 ## 7. Running the tests
 
 ```bash
-# Backend (pure modules, no DSS needed) — from the repo root
+# Backend (pure modules, no DSS needed) - from the repo root
 python3 -m unittest discover -s Plugin/owismind/tests -v
 # Orchestrator (dataiku stubbed)
 python3 -m unittest discover -s orchestrator/tests -v

@@ -1,4 +1,4 @@
-# Spec — Arrêt de la génération en cours (« stop generation »)
+# Spec - Arrêt de la génération en cours (« stop generation »)
 
 > Date : 2026-06-09 · Statut : **validé (design)** · Suite : plan d'implémentation (writing-plans).
 > Source de vérité : ce repo + `memory/`. Code & identifiants en anglais ; prose en français.
@@ -17,10 +17,10 @@ Comportement attendu :
 
 ## 2. Décisions actées (utilisateur)
 
-- **D1 — Contexte du tour arrêté** : un tour arrêté est **inclus comme un tour normal** dans la
+- **D1 - Contexte du tour arrêté** : un tour arrêté est **inclus comme un tour normal** dans la
   chaîne d'ancêtres envoyée à l'agent au tour suivant. Pour l'exclure, l'utilisateur édite le
   prompt → branche (mécanisme existant). Pas de règle d'exclusion spécifique.
-- **D2 — Rendu** : la réponse partielle s'affiche telle quelle suivie d'un marqueur discret
+- **D2 - Rendu** : la réponse partielle s'affiche telle quelle suivie d'un marqueur discret
   « ⏹ Génération arrêtée » ; si **aucun texte** n'a encore été produit (seules des étapes
   event-kind sont passées), la bulle agent affiche le placeholder « Réponse interrompue »
   (jamais de bulle vide).
@@ -43,17 +43,17 @@ Sources officielles : developer.dataiku.com `/latest/api-reference/python/llm-me
 
 ## 4. Approche
 
-**A (retenue)** — Arrêt **explicite et immédiat** : nouvel endpoint `POST /chat/stop` qui pose un
+**A (retenue)** - Arrêt **explicite et immédiat** : nouvel endpoint `POST /chat/stop` qui pose un
 flag coopératif owner-scopé dans `stream_manager` ; le worker le voit entre deux chunks, `break`,
 persiste le partiel (existant) et émet un event terminal `stopped`.
 
-**B (rejetée)** — Aucun changement backend, s'appuyer sur l'auto-coupure `abandoned` (30 s sans
+**B (rejetée)** - Aucun changement backend, s'appuyer sur l'auto-coupure `abandoned` (30 s sans
 poll). Refusée : l'agent tourne (et facture) jusqu'à 30 s après le clic ; le partiel stocké ≠ ce
 qui était à l'écran ; ressenti non réactif.
 
 ## 5. Conception détaillée
 
-### 5.1 Backend — `agents/stream_manager.py`
+### 5.1 Backend - `agents/stream_manager.py`
 - `start_run` : initialiser `"stop_requested": False` dans le dict du run.
 - `request_stop(run_id, user_id) -> bool` : sous `_LOCK`, **owner-scopé** (`state["user_id"] ==
   user_id`) ; pose `state["stop_requested"] = True` ; renvoie `True` si trouvé+possédé, sinon
@@ -66,12 +66,12 @@ qui était à l'écran ; ressenti non réactif.
     `state["error"]` (ce n'est pas une erreur).
   - `timeout` / `abandoned` → comportement **inchangé** (`final_answer` + `error` `run_<reason>`).
   - La persistance phase 2 (`save_assistant_message(exchange_id, partial, sql or None)` +
-    `save_trace`) est **déjà** exécutée pour tout arrêt — inchangée.
+    `save_trace`) est **déjà** exécutée pour tout arrêt - inchangée.
 
-### 5.2 Backend — `api/routes.py`
+### 5.2 Backend - `api/routes.py`
 - `POST /chat/stop` :
   - `resolve_identity` (401 si échec).
-  - Valider `run_id` (str non vide, borné — **réutiliser la garde de longueur de `/chat/poll`**).
+  - Valider `run_id` (str non vide, borné - **réutiliser la garde de longueur de `/chat/poll`**).
   - `ok = stream_manager.request_stop(run_id, identity["user_id"])` → `200 {"status":"ok"}` si
     `True`, sinon `404 {"status":"error","error":"run_not_found"}` (même opacité que `/chat/poll`).
   - Ajouter `/chat/stop` à l'inventaire des routes dans le docstring du module.
@@ -102,7 +102,7 @@ qui était à l'écran ; ressenti non réactif.
     vide, sans dépendre du statut live).
 - `i18n/extra.js` : clés **fr/en** `prompt.stop` (« Arrêter »/« Stop »), `chat.stopped`
   (« Génération arrêtée »/« Generation stopped »), `chat.interrupted_empty` (« Réponse
-  interrompue »/« Response interrupted »). (`messages.json` reste pristine — F6/L023.)
+  interrompue »/« Response interrupted »). (`messages.json` reste pristine - F6/L023.)
 
 ### 5.4 Données / persistance
 - **Aucun changement de schéma** (idiome `_vN`, pas d'ALTER → pas de table v5 pour un marqueur).
@@ -151,7 +151,7 @@ Frontend : `services/backend.js`, `composables/useChatStream.js`, `stores/chat.j
 `composables/timelineModel.js`, `components/chat/PromptBar.vue`, `components/chat/MessageAgent.vue`,
 `components/ui/icons.js` (si icône absente), `i18n/extra.js`.
 Tests : `frontend/test/timeline.test.js` (+ test backend `stream_manager` si stub).
-Finalisation : `/build-plugin` (rebuild + recâblage `body.html` via Write — F10/L033) puis
+Finalisation : `/build-plugin` (rebuild + recâblage `body.html` via Write - F10/L033) puis
 `/package-plugin` (zip propre) ; re-test en DSS.
 
 ## 10. Hors périmètre (YAGNI)

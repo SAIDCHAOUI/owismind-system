@@ -1,4 +1,4 @@
-# Frontend — architecture (Vue 3 + Vite)
+# Frontend - architecture (Vue 3 + Vite)
 
 > Guide d'onboarding pour le front du plugin **OWIsMind**. Toute la prose est en français ; les
 > identifiants (composants, stores, composables, routes, fichiers) restent en anglais, tels qu'écrits
@@ -24,7 +24,7 @@
 | `dompurify` | 3.4.8 | Sanitisation du HTML markdown (seul chemin `v-html`) |
 
 > **NO INSTALL** : les dépendances sont installées par l'utilisateur uniquement (règle non négociable du repo).
-> Les tests purs utilisent `node:test` natif (pas de Vitest) — voir §4.
+> Les tests purs utilisent `node:test` natif (pas de Vitest) - voir §4.
 
 Le front est **buildé** par Vite vers `../resource/owismind-app/` (`outDir`), avec
 `base: '/plugins/owismind/resource/owismind-app/'`. Ces noms sont **canoniques** : ne jamais les changer
@@ -52,14 +52,14 @@ main.js                       # createApp + pinia + i18n + router ; pose body[da
 App.vue                       # shell racine : <AppLayout/> + <ToastHost/> ; session.ensureLoaded() au mount
 
 services/
-  backend.js                  # client backend (fetch via getWebAppBackendUrl) — 1 fn par route, jamais d'URL en dur
+  backend.js                  # client backend (fetch via getWebAppBackendUrl) - 1 fn par route, jamais d'URL en dur
 
 router/
   index.js                    # vue-router HASH ; routes + guard admin (beforeEach)
 
 i18n/
   index.js                    # createI18n(legacy:false) ; merge des catalogues domaine ; setLocale/currentLocale
-  messages.json               # port 1:1 de la maquette d'origine (window.OWI_I18N) — PRISTINE, jamais édité
+  messages.json               # port 1:1 de la maquette d'origine (window.OWI_I18N) - PRISTINE, jamais édité
   extra.js                    # ajouts Phase 3/4 (clé-plate par locale), mergés dans vue-i18n
   langs.json                  # liste des locales [{id,label,short,flag,htmlLang}]
 
@@ -67,14 +67,14 @@ styles/
   tokens.css                  # design tokens (theme.css verbatim + ajouts no-op) ; switch body[data-theme]
   base.css                    # reset + scrollbar + keyframes + utilitaires (importé APRÈS tokens)
 
-stores/                       # Pinia (setup stores) — voir §3
+stores/                       # Pinia (setup stores) - voir §3
   ui.js  session.js  chat.js  conversationList.js  conversationTree.js  agentPick.js  prefs.js
-  evidence.js                 # panneau Evidence Studio — voir §6
+  evidence.js                 # panneau Evidence Studio - voir §6
 
-composables/                  # logique réutilisable — voir §4
+composables/                  # logique réutilisable - voir §4
   timelineModel.js  useChatStream.js  useMarkdown.js  useToasts.js
   useClickOutside.js  useReducedMotion.js  useTr.js
-  evidenceModel.js            # modèle PUR Evidence (chips/payload/modified) — voir §6
+  evidenceModel.js            # modèle PUR Evidence (chips/payload/modified) - voir §6
 
 registries/                   # données statiques enregistrées (extensible = ajouter une entrée)
   agentMeta.js  timelineSteps.js  faqContent.js
@@ -87,7 +87,7 @@ components/
   chat/                       # surface de chat
     AgentPicker.vue  PromptBar.vue  MessageUser.vue  MessageAgent.vue
     ChatThread.vue  ChatEmpty.vue  FeedbackModal.vue
-  evidence/                   # Evidence Studio (panneau de preuve) — voir §6
+  evidence/                   # Evidence Studio (panneau de preuve) - voir §6
     EvidencePanel.vue  EvidenceChips.vue  EvidenceTable.vue  EvidenceSql.vue
   pages/                      # fondations des pages secondaires + barrel index.js
     PageShell.vue  EmptyState.vue  SettingCard.vue
@@ -99,7 +99,7 @@ views/                        # une vue par route (lazy-loadées par le router)
 assets/
   orange-logo.png
 
-test/                         # HORS src/ (jamais buildé/zippé) — node:test pur (`npm test`)
+test/                         # HORS src/ (jamais buildé/zippé) - node:test pur (`npm test`)
   timeline.test.js  prefs.test.js  conversationTree.test.js
   conversationList.test.js  agentPick.test.js  evidenceModel.test.js
 ```
@@ -117,9 +117,9 @@ Tous des **setup stores** (`defineStore('id', () => { … })`).
 | `session` | `stores/session.js` | Identité (`/me`), liste des agents activés (`/agents`), liste **paginée** des conversations (noms seuls). Tout dégrade gracieusement hors DSS. | `user`, `isAdmin`, `needsConfig`, `agents`, `selectedAgentKey`, `conversations`, `convCursor`, `convHasMore` |
 | `chat` | `stores/chat.js` | Conversation active comme **arbre d'échanges** + état d'envoi + brouillon. Enveloppe le transport (`useChatStream`) et la session. | `activeSessionId`, `exchanges` (plat), `turns` (computed = chemin actif), `overrides`, `draft`, `sending`, `threadLoading/Error` |
 | `evidence` | `stores/evidence.js` | État du panneau Evidence Studio : échange affiché, meta serveur, chips éditables locales, page de lignes. Gardé par numéros de séquence anti-réponses périmées. Voir §6. | `open`, `exchangeId`, `meta`, `chips`, `includeAdvanced`, `rows`, `page`, `hasMore`, `sort`, `error`, `rowsError`, `modified` |
-| `conversationList` | `stores/conversationList.js` | **PUR** : helpers de la liste sidebar paginée (`mergeConversations` dédup, `upsertAndBump` remonte en tête). | — (fonctions pures) |
-| `conversationTree` | `stores/conversationTree.js` | **PUR** : reconstruction de l'arbre (`childrenOf`, `activeChildOf`, `buildActivePath`). | — (fonctions pures) |
-| `agentPick` | `stores/agentPick.js` | **PUR** : `pickDefaultAgent(agents, lastKey)` = dernier agent utilisé s'il est encore activé, sinon le premier. | — (fonction pure) |
+| `conversationList` | `stores/conversationList.js` | **PUR** : helpers de la liste sidebar paginée (`mergeConversations` dédup, `upsertAndBump` remonte en tête). | - (fonctions pures) |
+| `conversationTree` | `stores/conversationTree.js` | **PUR** : reconstruction de l'arbre (`childrenOf`, `activeChildOf`, `buildActivePath`). | - (fonctions pures) |
+| `agentPick` | `stores/agentPick.js` | **PUR** : `pickDefaultAgent(agents, lastKey)` = dernier agent utilisé s'il est encore activé, sinon le premier. | - (fonction pure) |
 
 ### 3.1 Le store `chat` : `exchanges` (plat) + `turns` (arbre computed)
 
@@ -136,7 +136,7 @@ exchange: reactive({ uid, id, parentId, userText, version, createdAt })
   remount/flicker).
 - `id` : `null` tant que le run est live, **réconcilié** vers l'`exchange_id` backend via le callback
   `onExchangeId` de `runChatStream` (`stores/chat.js:195`).
-- `version` : un `reactive(createAnswerState())` — la timeline d'affichage + SQL/usage + feedback persisté
+- `version` : un `reactive(createAnswerState())` - la timeline d'affichage + SQL/usage + feedback persisté
   (voir §4/§5).
 - `createdAt` : horloge cliente monotone (`nextStamp`) pour que les échanges frais trient **après** les lignes
   d'historique (dont le `createdAt` est un timestamp serveur), gardant la branche la plus récente active.
@@ -212,7 +212,7 @@ jamais buildé/zippé) :
 
 Le réducteur `timelineModel.applyEvent(state, evt)` (`composables/timelineModel.js:153`) construit **une seule
 liste ordonnée** à partir du flux d'events normalisés que le backend renvoie au poll. Chaque élément apparaît
-exactement là où il a été reçu ; les nouveaux ne s'ajoutent qu'**en dessous** — un event d'activité, un bout de
+exactement là où il a été reçu ; les nouveaux ne s'ajoutent qu'**en dessous** - un event d'activité, un bout de
 texte intermédiaire, un appel d'outil, encore du texte, la réponse finale, une erreur, tout s'entrelace dans
 l'ordre d'arrivée réel.
 
@@ -244,23 +244,23 @@ flux longs (L019).
 Le panneau de **preuve** : pour un message agent ayant produit du SQL, il montre les **filtres de l'agent
 décomposés en chips** + les **lignes live** de la table source whitelistée + le **SQL brut**. Le front
 n'envoie **jamais de SQL** : seulement un `exchange_id`, des filtres structurés `{column, op, values}` et des
-ids de chips verrouillées — tout le reste (table, connexion, requête, whitelist) est résolu serveur
+ids de chips verrouillées - tout le reste (table, connexion, requête, whitelist) est résolu serveur
 (routes `/evidence/*` → [backend-api.md](backend-api.md) §3.5). Spec validée :
 `docs/superpowers/specs/2026-06-09-evidence-studio-v1-design.md`.
 
 ### 6.1 Le store `evidence` (`stores/evidence.js`)
 
 État du panneau : `open`, `exchangeId`, `meta` (dernière réponse `/evidence/meta`), `chips` (état éditable
-**local**), `includeAdvanced`, `rows`/`page`/`hasMore`/`sort`, et deux niveaux d'erreur — `error`
+**local**), `includeAdvanced`, `rows`/`page`/`hasMore`/`sort`, et deux niveaux d'erreur - `error`
 (niveau meta : blanke le panneau) vs `rowsError` (niveau lignes : les chips **restent montées** et
 interactives, retry possible).
 
-- **Gardes de séquence anti-réponses périmées** : `seq` (transitions open/close — toute réponse d'une
-  ouverture supersédée est jetée) et `rowsSeq` (réponses `/evidence/rows` hors d'ordre — la dernière
+- **Gardes de séquence anti-réponses périmées** : `seq` (transitions open/close - toute réponse d'une
+  ouverture supersédée est jetée) et `rowsSeq` (réponses `/evidence/rows` hors d'ordre - la dernière
   **requête** gagne, pas la dernière réponse). Même idiome que le cancel token de `chat.js`.
 - **Auto-open « staged »** (`openForExchange(id, { auto: true })`) : fetch la meta **sans toucher** l'état
   courant du panneau, et ne committe (reset + open + chargement des lignes) **que si** la vue interactive est
-  confirmée (`meta.available`) et qu'aucun open/close utilisateur n'est survenu entre-temps — un auto-reveal
+  confirmée (`meta.available`) et qu'aucun open/close utilisateur n'est survenu entre-temps - un auto-reveal
   dégradé ou échoué ne peut jamais effacer/fermer ce que l'utilisateur regarde. L'**ouverture manuelle**
   (bouton par message) ouvre immédiatement, vue dégradée incluse.
 - **Pagination avec rollback ciblé** : `_loadRows` retourne un tri-état (`true` succès / `false` échec réel /
@@ -273,9 +273,9 @@ interactives, retry possible).
 
 ### 6.2 Modèle pur `evidenceModel.js` (testé `node:test`)
 
-Helpers **purs** (aucun import Vue — F11), testés dans `test/evidenceModel.test.js` :
+Helpers **purs** (aucun import Vue - F11), testés dans `test/evidenceModel.test.js` :
 
-- Forme d'une chip locale : `{ key, id, column, op, values, editable, source }` — `key` stable pour le
+- Forme d'une chip locale : `{ key, id, column, op, values, editable, source }` - `key` stable pour le
   `v-for` (`'a<id>'` chips agent, `'u<n>'` chips user), `source: 'agent' | 'user'`.
 - `chipsFromMeta(meta)` : chips serveur → état éditable local (copies des `values`).
 - `buildRowsPayload(...)` : chips éditables/user → `filters` structurés ; chips verrouillées → `kept_ids`
@@ -283,16 +283,16 @@ Helpers **purs** (aucun import Vue — F11), testés dans `test/evidenceModel.te
 - `normalizeEditableOp(values)` : op cosmétique (`=` à 1 valeur, `IN` sinon) ; contrat : `values` non vide
   (le store **retire** la chip plutôt que de laisser sa dernière valeur se désélectionner).
 - `isModified(meta, chips, includeAdvanced)` : signature positionnelle ordre-stable de l'état des chips vs
-  l'état agent — pilote le badge « modifié » + le bouton « Version agent ».
+  l'état agent - pilote le badge « modifié » + le bouton « Version agent ».
 
 ### 6.3 Les composants (`components/evidence/`)
 
 | Composant | Rôle |
 |---|---|
-| `EvidencePanel.vue` | La colonne **centrale** : header (dataset + « L'agent a vu N ligne(s) » + fermer) et rendu des états du store — loading / erreur meta / **dégradé** (`ev.degraded` + SQL brut) / interactif (chips + table). |
-| `EvidenceChips.vue` | Le WHERE de l'agent en chips : `=`/`IN` **éditables** (picker de valeurs distinctes), comparaisons **verrouillées** mais retirables, fragment avancé = une chip verrouillée retirable en bloc, + « Ajouter un filtre » et reset « Version agent ». Un seul popover à la fois ; garde `pickerSeq` contre les réponses distinct périmées ; les valeurs d'origine de l'agent restent sélectionnables même hors du top-100 (dédup sur `String(v)` — valeurs parsées du SQL = strings vs valeurs live typées). |
+| `EvidencePanel.vue` | La colonne **centrale** : header (dataset + « L'agent a vu N ligne(s) » + fermer) et rendu des états du store - loading / erreur meta / **dégradé** (`ev.degraded` + SQL brut) / interactif (chips + table). |
+| `EvidenceChips.vue` | Le WHERE de l'agent en chips : `=`/`IN` **éditables** (picker de valeurs distinctes), comparaisons **verrouillées** mais retirables, fragment avancé = une chip verrouillée retirable en bloc, + « Ajouter un filtre » et reset « Version agent ». Un seul popover à la fois ; garde `pickerSeq` contre les réponses distinct périmées ; les valeurs d'origine de l'agent restent sélectionnables même hors du top-100 (dédup sur `String(v)` - valeurs parsées du SQL = strings vs valeurs live typées). |
 | `EvidenceTable.vue` | Lignes live : header sticky, **tri au clic**, pages de 50 lignes (`LIMIT n+1` serveur → `has_more`), état vide honnête, erreur lignes **récupérable** (retry sans perdre les chips). |
-| `EvidenceSql.vue` | Footer repliable : le SQL exact de l'agent + bouton copier (toast) — transparence totale sous la preuve visuelle. |
+| `EvidenceSql.vue` | Footer repliable : le SQL exact de l'agent + bouton copier (toast) - transparence totale sous la preuve visuelle. |
 
 ### 6.4 Intégration shell, chat & i18n
 
@@ -301,33 +301,33 @@ Helpers **purs** (aucun import Vue — F11), testés dans `test/evidenceModel.te
   conversation devient la colonne de **droite**, redimensionnable par une 2ᵉ poignée (`startConvResize`,
   largeur = `window.innerWidth - e.clientX` car elle grandit vers la gauche). `ui.setConvpaneWidth` clampe
   via `clampConvpane` (persisté `owi.convpaneW`, **clampé aussi à la lecture** : une largeur persistée sur
-  un grand écran ne doit pas briquer la mise en page ailleurs) — au moins ~520 px restent réservés à
+  un grand écran ne doit pas briquer la mise en page ailleurs) - au moins ~520 px restent réservés à
   sidebar + evidence pour que le panneau et sa poignée restent atteignables.
 - **Auto-open** (`stores/chat.js`, fin de `_runExchange`) : une réponse terminée **proprement**
   (`status === 'done'`, ni stop ni erreur ni cancel) avec **au moins un SQL `success`** déclenche
   `evidence.openForExchange(exch.id, { auto: true })` en **fire-and-forget** (le reveal ne peut jamais
-  affecter le flux d'envoi). Jamais d'auto-open dégradé (décision user — gate `meta.available` dans le
+  affecter le flux d'envoi). Jamais d'auto-open dégradé (décision user - gate `meta.available` dans le
   store). `newConversation()` et `openSession()` appellent `evidence.close()` (le panneau ne survit pas à
   un switch de conversation).
 - **Bouton « Preuves »** (`MessageAgent.vue`) : affiché si `v.sql.length && v.exchangeId`, ouvre
   manuellement le panneau pour **ce** message (vue dégradée incluse) ; style `primary` quand le panneau
   montre déjà cet échange (`isEvidenceOpen`).
 - **i18n** : les strings du panneau vivent sous les clés `ev.*` ajoutées dans `i18n/extra.js` (FR/EN,
-  clé-plate par locale — F6) : titre/fermeture (`ev.title`, `ev.open`, `ev.close`), compteur
+  clé-plate par locale - F6) : titre/fermeture (`ev.title`, `ev.open`, `ev.close`), compteur
   (`ev.agent_rows`), chips (`ev.filters.*`, `ev.modified`), table (`ev.table.*`), SQL (`ev.sql.*`),
   picker (`ev.picker.*`, `ev.column`), états (`ev.degraded`, `ev.error`, `ev.retry`, `ev.loading`).
-  (Les `ev.chip.*` du footer SQL par message préexistent dans `messages.json` — pristine, inchangé.)
+  (Les `ev.chip.*` du footer SQL par message préexistent dans `messages.json` - pristine, inchangé.)
 
 ---
 
 ## 7. Routing & shell
 
-`router/index.js` — **`createWebHashHistory()`** : la webapp DSS est servie à une URL fixe sans réécriture SPA,
+`router/index.js` - **`createWebHashHistory()`** : la webapp DSS est servie à une URL fixe sans réécriture SPA,
 donc l'historique par path 404 au reload/deep-link ; le hash garde tout client-side et reload-safe (**F3**).
 
 | Route (`name`) | Path | Vue | Notes |
 |---|---|---|---|
-| (redirect) | `/` → `/chat` | — | |
+| (redirect) | `/` → `/chat` | - | |
 | `chat` | `/chat/:sessionId?` | `ChatView` | surface principale |
 | `settings` | `/settings` | `SettingsView` | préférences (lit/écrit le store `ui`) |
 | `feedback` | `/feedback` | `FeedbackView` | état vide honnête (pas d'API) |
@@ -336,7 +336,7 @@ donc l'historique par path 404 au reload/deep-link ; le hash garde tout client-s
 | `project` | `/project/:projectId` | `ProjectView` | |
 | `admin` | `/admin` | `AdminView` | **route gardée** (`meta.requiresAdmin`) |
 | `support`/`releases`/`accessibility`/`cgu`/`privacy`/`about` | `/…` | `PagePlaceholder` | placeholders honnêtes pilotés par meta i18n |
-| (catch-all) | `/:pathMatch(.*)*` → `/chat` | — | |
+| (catch-all) | `/:pathMatch(.*)*` → `/chat` | - | |
 
 - Les vues sont **lazy-loadées** (`() => import(...)`) pour garder le bundle chat initial léger.
 - **Guard admin** (`beforeEach`) : si `to.meta.requiresAdmin`, `await session.ensureLoaded()` (mémoïsé) puis
@@ -353,7 +353,7 @@ donc l'historique par path 404 au reload/deep-link ; le hash garde tout client-s
 
 ## 8. i18n
 
-`i18n/index.js` — `createI18n({ legacy: false, globalInjection: true, fallbackLocale: 'fr' })` ; locale détectée
+`i18n/index.js` - `createI18n({ legacy: false, globalInjection: true, fallbackLocale: 'fr' })` ; locale détectée
 depuis `localStorage('owismind.lang')` puis `navigator.language`. `useI18n()` est utilisé en **scope global**.
 
 - **Interpolation en LISTE** : `t('key', [arg0, arg1])` (les `{0}`/`{1}` positionnels de la maquette mappent
@@ -364,7 +364,7 @@ depuis `localStorage('owismind.lang')` puis `navigator.language`. `useI18n()` es
   mergés via `mergeLocaleMessage`. Le catalogue de timeline (`registries/timelineSteps.js → timelineMessages`)
   est mergé de la même façon.
 - `extra.js` contient surtout des états vides/« bientôt disponible » **honnêtes** (préfixes `x.`, `set.`, `fb.`,
-  `faq.`, `ag.`, `pj.`, `sb.`, `chat.`, `msg.`) — jamais de faux chiffres.
+  `faq.`, `ag.`, `pj.`, `sb.`, `chat.`, `msg.`) - jamais de faux chiffres.
 - **Données** `{fr,en}` (agents, FAQ) → rendues via `useTr()`, pas `$t` (§4).
 - `setLocale(id)` valide l'id, applique à vue-i18n, persiste (`owismind.lang`) et pose `<html lang>` ;
   `currentLocale()` lit la locale active. Le store `ui` (`setLang`) en garde un miroir réactif.
@@ -381,7 +381,7 @@ depuis `localStorage('owismind.lang')` puis `navigator.language`. `useI18n()` es
 - **Thème posé sur `<body data-theme>` AVANT mount** (`main.js:14`, **F4**) pour éviter le flash de tokens non
   stylés : les tokens sémantiques (surface/text/border) vivent **uniquement** sous `body[data-theme="…"]` dans
   `tokens.css`. Le store `ui` réconcilie ensuite (idempotent) et expose `setTheme`/`toggleTheme`. Défaut `light`.
-- **`tokens.css`** : palette **Orange** (`--orange:#ff7900`), spacing 8px, type, radius, motion — port verbatim
+- **`tokens.css`** : palette **Orange** (`--orange:#ff7900`), spacing 8px, type, radius, motion - port verbatim
   de la maquette d'origine. Les tokens neufs sont des **ajouts no-op** (valeur = littéral déjà hard-codé → 0 pixel changé).
 - **`base.css`** : reset, scrollbar, sélection, keyframes, utilitaires (`.u-no-shrink`). Importé **après**
   `tokens.css` (l'ordre compte, `main.js:5-6`). `body { overflow: hidden }` (shell viewport fixe, scroll dans
@@ -397,31 +397,31 @@ depuis `localStorage('owismind.lang')` puis `navigator.language`. `useI18n()` es
 
 ## 10. Conventions & gotchas clés (pointeurs mémoire)
 
-Détail complet : `memory/CONTEXT.md` (F1–F21) et `memory/LESSONS.md` (L022–L045).
+Détail complet : `memory/CONTEXT.md` (F1-F21) et `memory/LESSONS.md` (L022-L045).
 
-- **F3 — Router HASH** : `createWebHashHistory()` obligatoire (DSS sans réécriture SPA) — §7.
-- **F4 — Thème pré-mount** : `body[data-theme]` posé dans `main.js` avant `mount` — §9.
-- **F5 — Proxy réactif** : la `version`-réponse est un `reactive()` mué **en place** par `applyEvent` à travers le
-  proxy (re-render fin live) — §4.1/§5.
-- **F6 — i18n** : `useI18n()` global, interpolation liste, `messages.json` pristine + ajouts `extra.js` — §8.
-- **F8 — Timeline** : réducteur pur `timelineModel.js` = une timeline unique ordonnée ; `generated_sql`/`usage`
-  hors timeline — §5.
-- **F10 — Build : recâbler `body.html`** : après build, `index.html` → `body.html` ; l'entrée hash change à
-  chaque build (fait par `/build-plugin`) — [build-test-deploy.md](build-test-deploy.md).
-- **F11 — Tests purs** : réducteur/clamp/SQL-builder/arbre/agentPick purs → testables `node:test` — §4.1.
-- **F12 — Arbre keyé sur `uid`** : `v-for` keyé sur `uid` **stable** (pas l'`id` réconcilié → sinon
-  remount/flicker) ; éditer/régénérer = échange **frère** (parent = `parentId` du tour) — §3.1.
-- **F13 — Scroll vs navigation** : `ChatThread` ne scrolle en bas QUE sur `chat.activeSessionId` (switch),
-  `chat.exchanges.length` (nouvel échange) et le streaming **gaté sur `chat.sending`** — **jamais** sur `turns`
+- **F3 - Router HASH** : `createWebHashHistory()` obligatoire (DSS sans réécriture SPA) - §7.
+- **F4 - Thème pré-mount** : `body[data-theme]` posé dans `main.js` avant `mount` - §9.
+- **F5 - Proxy réactif** : la `version`-réponse est un `reactive()` mué **en place** par `applyEvent` à travers le
+  proxy (re-render fin live) - §4.1/§5.
+- **F6 - i18n** : `useI18n()` global, interpolation liste, `messages.json` pristine + ajouts `extra.js` - §8.
+- **F8 - Timeline** : réducteur pur `timelineModel.js` = une timeline unique ordonnée ; `generated_sql`/`usage`
+  hors timeline - §5.
+- **F10 - Build : recâbler `body.html`** : après build, `index.html` → `body.html` ; l'entrée hash change à
+  chaque build (fait par `/build-plugin`) - [build-test-deploy.md](build-test-deploy.md).
+- **F11 - Tests purs** : réducteur/clamp/SQL-builder/arbre/agentPick purs → testables `node:test` - §4.1.
+- **F12 - Arbre keyé sur `uid`** : `v-for` keyé sur `uid` **stable** (pas l'`id` réconcilié → sinon
+  remount/flicker) ; éditer/régénérer = échange **frère** (parent = `parentId` du tour) - §3.1.
+- **F13 - Scroll vs navigation** : `ChatThread` ne scrolle en bas QUE sur `chat.activeSessionId` (switch),
+  `chat.exchanges.length` (nouvel échange) et le streaming **gaté sur `chat.sending`** - **jamais** sur `turns`
   (computed = nouveau tableau à chaque navigation → scroll parasite qui enterre les flèches de version)
   (`ChatThread.vue:60-65`).
-- **F14 — Feedback** : `persistFeedback` met à jour l'état **après** l'await (un échec ne colorie pas) et retourne
+- **F14 - Feedback** : `persistFeedback` met à jour l'état **après** l'await (un échec ne colorie pas) et retourne
   un bool → toast succès **gaté** (pas de double) ; 👎 commit **avant** la popup ; re-clic = clear ;
   `FeedbackModal` adaptatif via `feedbackMode` (raisons si rating 0) (`MessageAgent.vue:75-129`).
-- **F15 — Agent persistant** : seul `selectAgent` persiste (`owismind.lastAgentKey`) ; adoption **différée** via
-  `ensureLoaded().then(adopt)` — §3.3.
-- **F1 — Validation locale** : `npm run dev` (port 5173, base `/plugins/owismind/resource/owismind-app/`) +
+- **F15 - Agent persistant** : seul `selectAgent` persiste (`owismind.lastAgentKey`) ; adoption **différée** via
+  `ensureLoaded().then(adopt)` - §3.3.
+- **F1 - Validation locale** : `npm run dev` (port 5173, base `/plugins/owismind/resource/owismind-app/`) +
   screenshots Chrome DevTools ; compile-check via `vite build --outDir /tmp/...` (jamais builder dans
-  `resource/` avant `/build-plugin`) — [build-test-deploy.md](build-test-deploy.md).
+  `resource/` avant `/build-plugin`) - [build-test-deploy.md](build-test-deploy.md).
 - **NO INSTALL** + `frontend/` & `node_modules/` jamais zippés ; ne pas éditer à la main `resource/owismind-app/`
   (généré).

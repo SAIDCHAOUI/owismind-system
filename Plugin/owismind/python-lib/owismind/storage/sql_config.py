@@ -9,7 +9,7 @@ Storage is configured PER WEBAPP (Agent-Hub style) through the DSS webapp settin
 Until an admin sets ``sql_connection``, the app reports "not configured" rather
 than guessing (an emergency fallback keeps the process alive and loud-logs it).
 
-Table naming — the project key ALWAYS leads and the ``owismind`` namespace is ALWAYS
+Table naming - the project key ALWAYS leads and the ``owismind`` namespace is ALWAYS
 present (memory L008). An optional prefix is inserted between them:
   - no prefix       -> ``{PROJECT_KEY}_owismind_{logical}``
   - prefix "bidule" -> ``{PROJECT_KEY}_bidule-owismind_{logical}``
@@ -52,7 +52,7 @@ _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 _PREFIX_RE = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
 
 # PostgreSQL truncates identifiers longer than this many bytes (NAMEDATALEN - 1),
-# silently — so we reject over-long identifiers loudly instead.
+# silently - so we reject over-long identifiers loudly instead.
 _MAX_IDENTIFIER_BYTES = 63
 
 
@@ -122,7 +122,7 @@ def connection_name():
 
 
 # Resolved once (the webapp config is cached and DSS restarts the backend on change),
-# so the validation warning for an invalid/over-long prefix is logged ONCE — not on
+# so the validation warning for an invalid/over-long prefix is logged ONCE - not on
 # every full_table() call (it was previously logged on each SQL identifier build).
 _prefix_cache = None  # tuple (effective, raw_input, ignored)
 
@@ -146,7 +146,7 @@ def _resolve_table_prefix():
     elif not _PREFIX_RE.match(raw):
         logger.warning(
             "Ignoring invalid table_prefix %r (allowed: letters, digits, _ and -; "
-            "max 16 chars) — using no prefix",
+            "max 16 chars) - using no prefix",
             raw,
         )
         _prefix_cache = ("", raw, True)
@@ -165,7 +165,7 @@ def traces_dataset_name():
 
     Configured via the webapp Settings 'traces_dataset' DATASET picker. The webapp
     only WRITES to it (append, via the Dataset API), never reads it back. When unset,
-    trace storage is simply skipped — traces are best-effort and non-critical.
+    trace storage is simply skipped - traces are best-effort and non-critical.
     """
     val = _webapp_config().get(PARAM_TRACES_DATASET)
     if isinstance(val, dict):  # DATASET params may arrive wrapped in a dict shape
@@ -235,7 +235,7 @@ def nullable_value(value):
     """SQL fragment for a nullable column value.
 
     Returns the bare ``NULL`` keyword for None/empty input, otherwise the escaped
-    value via ``sql_value`` — so an optional field (e.g. a missing display name)
+    value via ``sql_value`` - so an optional field (e.g. a missing display name)
     stores SQL NULL rather than an empty string.
     """
     if value is None or value == "":

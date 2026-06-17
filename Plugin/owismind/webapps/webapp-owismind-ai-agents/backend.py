@@ -1,4 +1,4 @@
-# OWIsMind WebApp backend — thin bootstrap.
+# OWIsMind WebApp backend - thin bootstrap.
 #
 # All logic lives in python-lib/owismind/ (api / storage / security). DSS injects
 # the Flask `app` object via the customwebapp star-import; here we only wire the

@@ -1,4 +1,4 @@
-# OWIsMind — Architecture
+# OWIsMind - Architecture
 
 > Documentation d'architecture système et de flux de données du plugin Dataiku DSS **OWIsMind**.
 > Destinée à un ingénieur senior en onboarding ou à une passation de production.
@@ -18,12 +18,12 @@ OWIsMind est un **portail de chat agentique métier** packagé en **plugin Datai
 id `owismind`). Le **frontend Vue 3 + Vite** est buildé en assets statiques **servis par DSS** ; le
 **backend Flask** vit dans `python-lib/owismind/` (modulaire) et parle aux agents IA via **LLM Mesh**.
 Tout l'état (conversations, messages, runs persistés, feedback) est stocké en **SQL direct** sur une
-connexion **PostgreSQL** via `SQLExecutor2` — **sans Flow au runtime**. La seule exception au « no Flow »
+connexion **PostgreSQL** via `SQLExecutor2` - **sans Flow au runtime**. La seule exception au « no Flow »
 est la **trace d'exécution**, appendée en write-only sur un dataset Flow optionnel.
 
 Différenciateur produit : **Conversation + Live Timeline + Evidence Studio** (v1 implémenté : panneau de
 preuve qui re-exécute, en lecture seule et bornée, le scope du SQL généré par l'agent sur des datasets
-whitelistés par l'admin — voir §4 et `docs/superpowers/specs/2026-06-09-evidence-studio-v1-design.md`).
+whitelistés par l'admin - voir §4 et `docs/superpowers/specs/2026-06-09-evidence-studio-v1-design.md`).
 
 ---
 
@@ -75,11 +75,11 @@ OWIsMind est une webapp DSS de **type `STANDARD`** avec `hasBackend: "true"` et
 1. **Le frontend statique.** Vite builde le SPA avec `base: '/plugins/owismind/resource/owismind-app/'`
    et `outDir: '../resource/owismind-app'` (`vite.config.js:7-12`). Les assets sont déposés dans
    `resource/owismind-app/` ; l'entrée DSS est `webapps/.../body.html`, qui est une **copie** du
-   `index.html` buildé (le chaînage est fait par `/build-plugin` — voir [`build-test-deploy.md`](./build-test-deploy.md)).
+   `index.html` buildé (le chaînage est fait par `/build-plugin` - voir [`build-test-deploy.md`](./build-test-deploy.md)).
    Les slots `app.js` / `style.css` de la webapp STANDARD restent vidés mais présents (DSS les exige).
 
 2. **Le backend Flask.** DSS injecte l'objet Flask `app` via le star-import `dataiku.customwebapp`.
-   Le bootstrap `backend.py` est volontairement **mince** — aucune logique métier :
+   Le bootstrap `backend.py` est volontairement **mince** - aucune logique métier :
 
    ```python
    from dataiku.customwebapp import *          # fournit `app`
@@ -89,7 +89,7 @@ OWIsMind est une webapp DSS de **type `STANDARD`** avec `hasBackend: "true"` et
 
    `register_routes` enregistre le Blueprint `owismind_api` (préfixe `/owismind-api`,
    `routes.py:60`), applique le niveau de log configuré, et logge la table des routes + le statut
-   storage au démarrage (`routes.py:674-692`) — le log webapp DSS confirme ainsi quel build tourne.
+   storage au démarrage (`routes.py:674-692`) - le log webapp DSS confirme ainsi quel build tourne.
 
 **Identité.** Toute requête `/owismind-api/*` résout l'utilisateur **côté serveur** depuis les
 **en-têtes d'authentification du navigateur** (`resolve_identity(request.headers)`,
@@ -134,7 +134,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
 
 Étapes clés (références : `routes.py:160-299`, `stream_manager.py`, `streaming.py`) :
 
-1. **`POST /chat/start`** (`routes.py:160`) — résout l'identité, valide le payload, résout l'`agent_key`
+1. **`POST /chat/start`** (`routes.py:160`) - résout l'identité, valide le payload, résout l'`agent_key`
    opaque → `(project_key, agent_id)` via la **whitelist serveur** (`settings.resolve_enabled_agent`).
    Pré-check d'admission (`can_accept`, 429/503) **avant tout write**. **Phase 1 du write 2 temps** :
    `chat_v4.save_user_message` persiste le message utilisateur **BRUT** (pour ne pas perdre la question
@@ -142,18 +142,18 @@ Navigateur                     Backend Flask                  Worker (thread)   
    Le **préfixe nom+date** du tour courant (`context.build_user_prefix`) est calculé au build-time et
    passé au worker, mais **le message stocké reste BRUT**.
 
-2. **Worker daemon** (`stream_manager._worker`) — assemble le **contexte multi-tours = chaîne d'ancêtres**
+2. **Worker daemon** (`stream_manager._worker`) - assemble le **contexte multi-tours = chaîne d'ancêtres**
    de la branche (`chat_v4.history_messages_for_chain` remonte `parent_exchange_id`, excluant l'après-branche)
    + le tour courant préfixé, puis itère `streaming.run_agent_streamed`. Chaque event normalisé est empilé
    dans `_RUNS[run_id]["events"]` sous `_LOCK`. Bornes de sûreté : `MAX_CONCURRENT_RUNS=8`, TTL d'éviction
    (60s/600s), `MAX_RUN_SECONDS=300`, `ABANDON_AFTER_SECONDS=30`, caps mémoire par run.
 
-3. **`GET /chat/poll`** (`routes.py:267`) — renvoie les events depuis le `cursor`, **owner-scopé** (un
+3. **`GET /chat/poll`** (`routes.py:267`) - renvoie les events depuis le `cursor`, **owner-scopé** (un
    `run_id` inconnu ou appartenant à un autre user → 404). Events normalisés : `run_started`, `agent_event`,
    `answer_delta`, `generated_sql`, `usage_summary`, `final_answer`, `run_done`, `error`. Le front poll
    toutes les ~500 ms jusqu'à `done`.
 
-4. **Persistance — Phase 2** : à la fin du stream, le worker appelle `chat_v4.save_assistant_message`
+4. **Persistance - Phase 2** : à la fin du stream, le worker appelle `chat_v4.save_assistant_message`
    (UPDATE réponse + `generated_sql`) puis `chat_traces.save_trace` (append dataset Flow, best-effort).
    Un échec de persistance n'avorte jamais le run.
 
@@ -164,7 +164,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
    `/evidence/meta` puis `/evidence/rows` avec **seulement** un `exchange_id` + des filtres structurés
    (jamais de SQL). Le backend (`python-lib/owismind/evidence/`) relit le `generated_sql` **stocké**
    (owner-scopé), le **parse** (table + prédicats + fragment avancé), matche la table contre la
-   **whitelist admin** (param webapp `evidence_datasets`, SELECT — vide = feature désactivée ;
+   **whitelist admin** (param webapp `evidence_datasets`, SELECT - vide = feature désactivée ;
    résolution `(schema, table)` via `get_location_info()` **mise en cache par process, TTL 300 s** →
    coût métadonnées ~0 amorti par requête),
    puis **re-exécute un SELECT borné, lecture seule** (50 lignes/page, pas de COMMIT) sur la
@@ -194,16 +194,16 @@ Le stockage repose sur **3 tables SQL** (connexion `SQL_owi`, schéma `public`) 
 toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` centralisée dans
 `storage/sql_config.py` (`APP_NAMESPACE = "owismind"`, `physical_table()` / `full_table()`).
 
-- **`webapp_chat_v4`** — table courante du chat, structurée en **arbre de conversation** via
+- **`webapp_chat_v4`** - table courante du chat, structurée en **arbre de conversation** via
   `parent_exchange_id` (NULL = racine). Contient user/assistant text, `generated_sql` (JSON), `agent_key`
   (clé logique opaque), colonnes de feedback, et les colonnes d'arbre. Écriture en **2 temps** (INSERT user
   → UPDATE assistant). Idiome `_vN` : v1/v2/v3 inertes, jamais d'ALTER.
-- **`webapp_users_v1`** — registre des utilisateurs (1er user = admin, `display_name` auto-rempli).
-- **`webapp_settings_v1`** — config globale, dont la whitelist `enabled_agents`.
-- **Dataset Flow de trace** (optionnel) — trace brute de fin de run, **write-only** (1 ligne/exchange),
+- **`webapp_users_v1`** - registre des utilisateurs (1er user = admin, `display_name` auto-rempli).
+- **`webapp_settings_v1`** - config globale, dont la whitelist `enabled_agents`.
+- **Dataset Flow de trace** (optionnel) - trace brute de fin de run, **write-only** (1 ligne/exchange),
   écriture **positionnelle** (`_column_order`), best-effort.
 - **Datasets Evidence** (optionnels, param webapp `evidence_datasets`, SELECT peuplé par
-  `resource/compute_available_connections.py`) — datasets que l'Evidence Studio peut **re-requêter en
+  `resource/compute_available_connections.py`) - datasets que l'Evidence Studio peut **re-requêter en
   lecture seule** (jamais d'écriture, aucune table nouvelle) ; liste vide = feature désactivée, le chat
   n'est pas affecté (`storage/sql_config.py` `evidence_dataset_names()`).
 
@@ -239,7 +239,7 @@ owismind/
 ├── memory/                         # SOURCE DE VÉRITÉ (mémoire vivante du projet)
 │   ├── CONTEXT.md                  # mémoire courte (chargée à chaque session)
 │   ├── PROJECT_STATE.md            # mémoire longue (état canonique)
-│   ├── LESSONS.md                  # leçons (L0xx — décisions qui marchent)
+│   ├── LESSONS.md                  # leçons (L0xx - décisions qui marchent)
 │   └── sessions/                   # logs de fin de session
 ├── orchestrator/                   # Code Agent DSS : orchestrator_agent.py v2.2 (+ AUDIT.md, tests)
 ├── docs/                           # cette documentation (+ superpowers/specs/ = specs de conception gelées)
@@ -260,7 +260,7 @@ owismind/
         │   ├── evidence/           #   sql_parse · query_builders · whitelist (purs) · service (DSS)
         │   └── security/           #   identity.py · validation.py
         ├── resource/               # ressources plugin
-        │   ├── owismind-app/       #   ASSETS BUILDÉS par Vite (GÉNÉRÉ — ne pas éditer à la main)
+        │   ├── owismind-app/       #   ASSETS BUILDÉS par Vite (GÉNÉRÉ - ne pas éditer à la main)
         │   └── compute_available_connections.py   # setup des dropdowns (connexion SQL + datasets trace/evidence)
         ├── tests/                  # tests backend unittest (DSS-free)
         └── webapps/webapp-owismind-ai-agents/
@@ -271,7 +271,7 @@ owismind/
 ```
 
 Staging d'upload (généré par `/package-plugin`) : `Plugin/ready-for-dataiku/owismind-upload/`
-(+ `owismind-upload.zip`) — runtime uniquement (`plugin.json` + `python-lib/` + `resource/` + `webapps/`),
+(+ `owismind-upload.zip`) - runtime uniquement (`plugin.json` + `python-lib/` + `resource/` + `webapps/`),
 **sans** `frontend/` ni `node_modules/`. Voir [`build-test-deploy.md`](./build-test-deploy.md).
 
 ---

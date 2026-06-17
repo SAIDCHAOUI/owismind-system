@@ -1,10 +1,10 @@
-# OWIsMind — Système d'agents Dataiku v3 (Dataset Expert générique)
+# OWIsMind - Système d'agents Dataiku v3 (Dataset Expert générique)
 
 > **Le but** : un orchestrateur + des sous-agents **experts de n'importe quel dataset**.
 > L'expertise est **fabriquée dans le Flow** (profil du dataset + index de valeurs), relue
 > par un humain, et consommée au runtime par un agent qui comprend, ground les valeurs
 > exactes, puis **délègue le SQL au Semantic Model Query tool** en lui donnant le meilleur
-> contexte possible (moteur par défaut — A/B testé le 2026-06-12 : le semantic model génère
+> contexte possible (moteur par défaut - A/B testé le 2026-06-12 : le semantic model génère
 > le meilleur SQL, nos couches le rendent précis). Un moteur **SQL direct read-only**
 > (templates + LLM gardé) sert de repli technique. Ajouter un dataset = 2 recettes +
 > 1 Code Agent + 1 entrée de registre.
@@ -24,7 +24,7 @@ RUNTIME (chat)
                 │  PLAN (1 LLM JSON) → EXECUTE (PARALLÈLE si multi-étapes) → SYNTHESIZE
                 ▼
             Dataset Expert (Code Agent générique, 1 par dataset)
-                │ 1. UNDERSTAND   1 LLM JSON — prompt GÉNÉRÉ depuis le profil
+                │ 1. UNDERSTAND   1 LLM JSON - prompt GÉNÉRÉ depuis le profil
                 │ 2. RESOLVE      grounding des termes sur value_index (SQL, exact→fuzzy)
                 │ 3. COMPOSE      question sémantique DÉTERMINISTE par intent : valeurs
                 │                 exactes + scénarios + périodes + règle d'axe + contexte
@@ -37,7 +37,7 @@ RUNTIME (chat)
             Semantic Model (SQL) → PostgreSQL (transaction READ ONLY en mode direct)
 ```
 
-**Ce qui ne change pas** (contrats gelés — la webapp, la timeline et Evidence Studio
+**Ce qui ne change pas** (contrats gelés - la webapp, la timeline et Evidence Studio
 fonctionnent sans modification) : event kinds de l'orchestrateur, spans
 `semantic-model-query` `{sql, success, row_count, rows, columns}` (le `success` devient
 enfin **véridique**), event `AGENT_RESULT`, format `sql_id`, caps 50×50×256×64k.
@@ -61,19 +61,19 @@ enfin **véridique**), event `AGENT_RESULT`, format `sql_id`, caps 50×50×256×
 
 ## 3. Implémentation pas à pas
 
-### Étape 1 — Flow : les deux recettes (≈ 15 min)
+### Étape 1 - Flow : les deux recettes (≈ 15 min)
 
 1. **Recette de profil** : dans le Flow, `+ Recipe → Code → Python`.
    - Input : `DRIVE_Revenues`.
-   - Output : **créer** le dataset `DRIVE_Revenues_profile` — *recommandé sur la
+   - Output : **créer** le dataset `DRIVE_Revenues_profile` - *recommandé sur la
      connexion `SQL_owi`* (schema `{key, payload}`, écrit par la recette).
    - Remplacer tout le code généré par `recipes/profile_dataset_recipe.py`.
    - Dans le bloc CONFIG : vérifier `ENRICH_LLM_ID` (par défaut le Gemini 2.5 Pro
-     connu de l'instance ; mets le **plus fort** dispo — Opus 4.7 si présent dans
+     connu de l'instance ; mets le **plus fort** dispo - Opus 4.7 si présent dans
      le Mesh : ça ne tourne qu'au profilage, le coût est unique).
    - **Run**. (~22 colonnes × 170 k lignes = quelques secondes + 1 appel LLM.)
 2. **Recette d'index de valeurs** : pareil.
-   - Input : `DRIVE_Revenues`. Output : `DRIVE_Revenues_value_index` —
+   - Input : `DRIVE_Revenues`. Output : `DRIVE_Revenues_value_index` -
      ⚠️ **obligatoirement sur la connexion SQL du dataset source** (`SQL_owi`) :
      l'agent l'interroge en SQL au runtime.
    - Code : `recipes/build_value_index_recipe.py`. **Run**.
@@ -82,11 +82,11 @@ enfin **véridique**), event `AGENT_RESULT`, format `sql_id`, caps 50×50×256×
    rien à recoller.
 
 > La recette de profil n'envoie au LLM **que des métadonnées agrégées** (schéma, stats,
-> valeurs distinctes des colonnes ≤ 50 valeurs, 12 échantillons) — jamais les lignes.
+> valeurs distinctes des colonnes ≤ 50 valeurs, 12 échantillons) - jamais les lignes.
 > Les colonnes à forte cardinalité (clients…) ne mettent **pas** leur liste dans le profil ;
 > elles vivent dans l'index de valeurs, interrogé à la demande.
 
-### Étape 2 — Relecture humaine du profil (l'étape qui fait la qualité)
+### Étape 2 - Relecture humaine du profil (l'étape qui fait la qualité)
 
 Ouvre `DRIVE_Revenues_profile` et lis les payloads (ou via un notebook). Tout ce que le
 LLM a écrit est flaggé `"llm_generated": true`. Pour corriger **sans que tes corrections
@@ -112,7 +112,7 @@ valeurs + défaut ACTUALS), `time` (colonne + format détecté), et les `display
 (ex. `diamond_id` → `Account_name`). C'est le pendant code du « semantic model », sauf
 que c'est versionnable, diffable et testé.
 
-### Étape 3 — Le Code Agent « Dataset Expert » (≈ 10 min)
+### Étape 3 - Le Code Agent « Dataset Expert » (≈ 10 min)
 
 1. GenAI → Agents → **New → Code agent** (env Python 3.11, langchain/langgraph
    installés). Nom du Code Agent : **`SalesDrive_revenue_expert`** (`agent:bHrWLyOL`).
@@ -120,7 +120,7 @@ que c'est versionnable, diffable et testé.
    - `PROFILE_DATASET = "DRIVE_Revenues_profile"`
    - `VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"`
    - `SQL_ENGINE = "semantic_tool"` (défaut) + `SEMANTIC_TOOL_ID` / `SEMANTIC_TOOL_NAME`
-     (le tool Semantic Model Query du dataset — `v4oqA6R` / `revenue_semantic_query`
+     (le tool Semantic Model Query du dataset - `v4oqA6R` / `revenue_semantic_query`
      pour les revenus). `FALLBACK_TO_DIRECT = True` : si le tool tombe en panne
      technique, l'agent bascule sur son moteur SQL direct au lieu d'échouer.
    - `UNDERSTAND_LLM_ID` : démarre avec le Gemini 2.5 Pro connu ; passe à
@@ -129,16 +129,16 @@ que c'est versionnable, diffable et testé.
      **que** sur le moteur direct (intent `custom` ou fallback).
 3. Tester direct dans le playground de l'agent (voir §5), noter son id `agent:XXXXXXX`.
 
-### Étape 4 — L'orchestrateur (≈ 5 min)
+### Étape 4 - L'orchestrateur (≈ 5 min)
 
 1. Dans `agents/OWIsMind_orchestrator.py` (repo), l'entrée `revenue_expert` pointe
-   déjà `"agent_id": "agent:bHrWLyOL"` — mettre à jour si l'id du sous-agent change.
+   déjà `"agent_id": "agent:bHrWLyOL"` - mettre à jour si l'id du sous-agent change.
 2. Coller le fichier dans le Code Agent **OWIsMind_orchestrator** (env 3.11). La
    webapp le résout par whitelist → zéro redéploiement du plugin.
 3. Commit côté repo : le repo reste la source de vérité (toute modif DSS directe sera
    écrasée au prochain collage).
 
-### Étape 5 — Rien d'autre
+### Étape 5 - Rien d'autre
 
 La webapp parle déjà à l'orchestrateur par son id ; les events, labels de timeline,
 Evidence et suivi de coûts fonctionnent tels quels (contrats gelés respectés, et le
@@ -151,21 +151,21 @@ déterministes).
 
 | Appel | Fréquence | Reco | Pourquoi |
 |---|---|---|---|
-| Profiler — enrichissement | 1×/dataset (+ refresh) | **Le plus fort dispo** (Opus 4.7 / Gemini 2.5 Pro) | Coût unique, qualité des descriptions = qualité de tout le reste |
-| Orchestrateur — planner | 1×/question | Gemini 2.5 Pro → **tester Flash** | JSON strict + routage ; la recherche montre que bien contextualisé, un petit modèle suffit |
-| Expert — UNDERSTAND | 1×/question | **Gemini 2.5 Flash** (ou GPT-5.4-mini) | Extraction JSON contrainte par enums du profil |
-| Expert — SQLGEN (`custom` seulement) | ~10-20 % des questions | **Gemini 2.5 Pro / Claude** | Le seul endroit où le LLM écrit du SQL |
-| Expert — headline | 1×/question avec résultat | **Flash / mini** | Une phrase, vérifiée chiffre par chiffre de toute façon |
-| Orchestrateur — synthèse | multi-étapes seulement | = planner | Rédaction contrainte aux résultats |
+| Profiler - enrichissement | 1×/dataset (+ refresh) | **Le plus fort dispo** (Opus 4.7 / Gemini 2.5 Pro) | Coût unique, qualité des descriptions = qualité de tout le reste |
+| Orchestrateur - planner | 1×/question | Gemini 2.5 Pro → **tester Flash** | JSON strict + routage ; la recherche montre que bien contextualisé, un petit modèle suffit |
+| Expert - UNDERSTAND | 1×/question | **Gemini 2.5 Flash** (ou GPT-5.4-mini) | Extraction JSON contrainte par enums du profil |
+| Expert - SQLGEN (`custom` seulement) | ~10-20 % des questions | **Gemini 2.5 Pro / Claude** | Le seul endroit où le LLM écrit du SQL |
+| Expert - headline | 1×/question avec résultat | **Flash / mini** | Une phrase, vérifiée chiffre par chiffre de toute façon |
+| Orchestrateur - synthèse | multi-étapes seulement | = planner | Rédaction contrainte aux résultats |
 
-Coût typique d'une question structurée : **2 petits appels LLM + 1-2 requêtes SQL** —
+Coût typique d'une question structurée : **2 petits appels LLM + 1-2 requêtes SQL** -
 moins cher que la chaîne actuelle (le tool semantic faisait ses propres appels cachés).
 
 ---
 
 ## 5. Smoke tests (dans le playground de l'expert, puis via l'orchestrateur)
 
-Tirés du corpus réel (`docs/questions_asked.md`) — coche au fur et à mesure :
+Tirés du corpus réel (`docs/questions_asked.md`) - coche au fur et à mesure :
 
 1. `combien on a fait avec halys l'année dernière ?` → grounding typo→`HALYS`, phase
    ACTUALS par défaut, total + headline vérifiée.
@@ -189,7 +189,7 @@ Tirés du corpus réel (`docs/questions_asked.md`) — coche au fur et à mesure
     progressent **en même temps** dans la timeline.
 
 Si un smoke test diverge : corriger via le **profil/overrides** (vocabulaire, rôles,
-défauts) ou le prompt UNDERSTAND — jamais de valeur métier en dur dans le code (règle P3).
+défauts) ou le prompt UNDERSTAND - jamais de valeur métier en dur dans le code (règle P3).
 
 ---
 
@@ -199,7 +199,7 @@ défauts) ou le prompt UNDERSTAND — jamais de valeur métier en dur dans le co
 2. Relire le profil (overrides éditables).
 3. Dupliquer le Code Agent Dataset Expert → changer les 2 noms de datasets du CONFIG.
 4. Orchestrateur : **1 entrée** registre (copier `revenue_expert`, adapter id/labels/
-   `domain` — `tickets` et `satisfaction` existent déjà dans `BUSINESS_DOMAINS`, le
+   `domain` - `tickets` et `satisfaction` existent déjà dans `BUSINESS_DOMAINS`, le
    CAPABILITY_GAP se referme tout seul).
 5. Dès 2 domaines actifs : les questions 360 (`analyse complète de 1&1`) fan-out en
    parallèle et la synthèse cite chaque source.
@@ -216,7 +216,7 @@ défauts) ou le prompt UNDERSTAND — jamais de valeur métier en dur dans le co
   vérifiée, sinon fallback déterministe) ; 0 ligne → message honnête + scénarios/période
   réellement disponibles (métadonnées du profil) ; terme introuvable → clarification, pas
   de devinette.
-- **Deux moteurs SQL** : `semantic_tool` (défaut — le Semantic Model génère et exécute,
+- **Deux moteurs SQL** : `semantic_tool` (défaut - le Semantic Model génère et exécute,
   nos couches lui fournissent valeurs exactes/scénarios/périodes/contexte de destination)
   et `direct` (templates déterministes + LLM gardé, exécution read-only). Le repli
   technique semantic→direct est automatique ; un résultat vide légitime n'est PAS un
@@ -224,7 +224,7 @@ défauts) ou le prompt UNDERSTAND — jamais de valeur métier en dur dans le co
 - **Limites v1** : pas encore de jointures cross-datasets dans UNE requête (le 360 passe
   par l'orchestrateur, un agent par dataset) ; la qualité du routage d'ambiguïté dépend
   de l'index (re-run du scénario après refresh).
-- **Prochaine session — le semantic model lui-même** : sa config est désormais accessible
+- **Prochaine session - le semantic model lui-même** : sa config est désormais accessible
   par code (`project.get_semantic_model(id)` → versions → `get_settings().get_raw()` →
   JSON complet entities/metrics/filters/goldenQueries/glossary → `save()` + nouvelle
   version active). Pistes : versionner ce JSON dans le repo, enrichir les golden queries

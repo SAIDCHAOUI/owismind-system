@@ -4,7 +4,7 @@
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent file is loaded via
 importlib. Only PURE functions are tested (profile parsing, understanding
 validation, SQL builders, SQL guard, grounding policy, shaping, formatting,
-verified headline, about-data card) — these are byte-identical to the retired
+verified headline, about-data card) - these are byte-identical to the retired
 linear ``dataset_expert_agent.py``, so coverage is preserved on the ACTIVE file.
 Anything touching LLM Mesh / SQLExecutor2 must be validated on the DSS instance.
 
@@ -93,7 +93,7 @@ NBSP = " "
 
 def make_profile():
     """Synthetic profile fixture (structure identical to the real contract,
-    values invented — no business data in the repo)."""
+    values invented - no business data in the repo)."""
     dataset_payload = {
         "profile_version": 1, "dataset_name": "SALES_DEMO",
         "row_count": 170000,
@@ -920,7 +920,7 @@ class TestEvents(unittest.TestCase):
 
 
 # ==========================================================================
-# Dataset Lookup — simple value retrieval (no SQL)
+# Dataset Lookup - simple value retrieval (no SQL)
 # ==========================================================================
 class TestLiveSchemaAttributes(unittest.TestCase):
     def test_attribute_columns_include_live_only_columns(self):
@@ -1073,12 +1073,12 @@ class TestModePropagation(unittest.TestCase):
     high=Sonnet), read from the injected context the orchestrator builds."""
 
     def test_forced_mode_parses_injected_context(self):
-        ctx = "MODE: high\nUSER LANGUAGE: fr — write any message…"
+        ctx = "MODE: high\nUSER LANGUAGE: fr - write any message…"
         self.assertEqual(dx.forced_mode(ctx), "high")
         self.assertEqual(dx.forced_mode("MODE: eco\n…"), "eco")
 
     def test_forced_mode_absent_is_none(self):
-        self.assertIsNone(dx.forced_mode("USER LANGUAGE: fr — …"))
+        self.assertIsNone(dx.forced_mode("USER LANGUAGE: fr - …"))
         self.assertIsNone(dx.forced_mode(""))
 
     def test_pick_subagent_llm_per_mode(self):
@@ -1214,7 +1214,7 @@ class TestColumnFormatCountGuard(unittest.TestCase):
 
 
 class TestIntentDegradationVisibility(unittest.TestCase):
-    """A demoted intent must stay observable (original_intent) — not silently lost."""
+    """A demoted intent must stay observable (original_intent) - not silently lost."""
 
     def test_original_intent_preserved_on_comparison_demotion(self):
         p = make_profile()

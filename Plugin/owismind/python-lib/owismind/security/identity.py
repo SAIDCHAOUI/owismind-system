@@ -47,8 +47,8 @@ def derive_display_name(login):
 
     DSS does NOT return a display name (the auth info has no ``displayName`` key,
     memory L011), but logins follow the ``prenom.nom`` convention. The default
-    display name is therefore the capitalised first name — the segment before the
-    first dot — title-cased per hyphen group so compound first names read well:
+    display name is therefore the capitalised first name - the segment before the
+    first dot - title-cased per hyphen group so compound first names read well:
 
         ``said.chaoui``        -> ``Said``
         ``jean-marc.dupont``   -> ``Jean-Marc``
@@ -119,14 +119,14 @@ def resolve_identity(headers):
     try:
         info = _auth_info(headers)
     except Exception as exc:  # DSS-side failure: surface as an auth error, no leak
-        logger.warning("resolve_identity — auth lookup failed: %s", exc)
+        logger.warning("resolve_identity - auth lookup failed: %s", exc)
         raise IdentityError("auth_lookup_failed") from exc
 
     user_id = info.get("authIdentifier")
     if not user_id:
         # Log the available KEY NAMES (not values) to diagnose an unexpected shape.
         logger.warning(
-            "resolve_identity — no authIdentifier (auth_info_keys=%s)",
+            "resolve_identity - no authIdentifier (auth_info_keys=%s)",
             sorted(info.keys()),
         )
         raise IdentityError("no_auth_identifier")
@@ -140,7 +140,7 @@ def resolve_identity(headers):
     # custom name if/when a set-name feature stores one (no such route exists yet).
     display_name = derive_display_name(user_id)
 
-    logger.info("resolve_identity — user_id=%s groups=%s", user_id, groups)
+    logger.info("resolve_identity - user_id=%s groups=%s", user_id, groups)
     identity = {
         "user_id": user_id,
         "display_name": display_name,

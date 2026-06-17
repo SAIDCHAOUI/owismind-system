@@ -1,4 +1,4 @@
-// Timeline step registry — maps a backend `agent_event.eventKind` to a human
+// Timeline step registry - maps a backend `agent_event.eventKind` to a human
 // label + icon for the live execution timeline (design rule: map technical
 // eventKinds to human labels). Extensible: add an eventKind = add one entry here
 // (+ its i18n strings below); unknown kinds fall back to a humanized label.
@@ -17,8 +17,8 @@ const KNOWN = {
   AGENT_THINKING: { key: 'tl.kind.thinking', icon: 'sparkle' },
   AGENT_PLANNING: { key: 'tl.kind.planning', icon: 'sliders' },
   // Orchestrator kinds (trust layer v2 protocol, spec §5). The orchestrator
-  // usually attaches a human `label` to these events — preferred at resolve
-  // time — so these keys are the LABELLESS fallback. Kinds sharing a meaning
+  // usually attaches a human `label` to these events - preferred at resolve
+  // time - so these keys are the LABELLESS fallback. Kinds sharing a meaning
   // with an existing entry reuse its key (PLANNING, TOOL_DONE).
   START: { key: 'tl.kind.start', icon: 'sparkles' },
   PLANNING: { key: 'tl.kind.planning', icon: 'sliders' },
@@ -97,7 +97,7 @@ function humanize(eventKind) {
 /**
  * Resolve a timeline step's display.
  * `label` (optional) is the backend-provided human label (orchestrator events,
- * spec §5): when it is a non-empty string it WINS over the registry — the
+ * spec §5): when it is a non-empty string it WINS over the registry - the
  * orchestrator knows the business phrasing better than a static kind map. The
  * icon still resolves from the kind, so known steps keep theirs.
  * Returns { key, fallback, icon }: render `key ? t(key) : fallback`.

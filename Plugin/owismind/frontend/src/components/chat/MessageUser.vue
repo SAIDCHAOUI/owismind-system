@@ -1,12 +1,12 @@
 <script setup>
-// User message bubble — the active version's prompt for one turn. Visual spec ported from
+// User message bubble - the active version's prompt for one turn. Visual spec ported from
 // `.msg.user .bubble` (components.css): asymmetric rounded bubble, right-aligned. Text is
-// rendered via interpolation ({{ }}) — never v-html — so user input is always safe.
+// rendered via interpolation ({{ }}) - never v-html - so user input is always safe.
 //
 // Hover reveals two actions: Copy (clipboard) and Edit. Editing opens an inline textarea;
 // submitting calls chat.editTurn(turn, text), which creates a NEW SIBLING branch from this
-// turn's parent (nothing is deleted — the old version stays reachable via the answer's
-// version arrows). Reads useChatStore() directly (no prop-drilling — just the `turn`).
+// turn's parent (nothing is deleted - the old version stays reachable via the answer's
+// version arrows). Reads useChatStore() directly (no prop-drilling - just the `turn`).
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
@@ -120,7 +120,7 @@ async function copy() {
 .u-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .u-actions button :deep(.ui-icon) { width: 14px; height: 14px; }
 
-/* Inline edit box — styled like the prompt input. */
+/* Inline edit box - styled like the prompt input. */
 .edit-box {
   width: 78%;
   display: flex;

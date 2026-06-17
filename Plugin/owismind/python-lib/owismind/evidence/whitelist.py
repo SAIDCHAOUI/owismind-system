@@ -1,4 +1,4 @@
-"""Dataset matching for Evidence Studio (pure part — NO dataiku import).
+"""Dataset matching for Evidence Studio (pure part - NO dataiku import).
 
 The service auto-discovers the webapp project's SQL datasets and resolves each to
 its physical (schema, table); this module matches the table parsed from the
@@ -15,7 +15,7 @@ def match_whitelist(table, schema, candidates):
     ``candidates``: [{"name": dataset_name, "table": physical, "schema": s|None}].
 
     Callers must build the executed table reference from the RETURNED candidate
-    (its resolved physical schema/table), never from the parsed (schema, table) —
+    (its resolved physical schema/table), never from the parsed (schema, table) -
     the schema-wildcard match is only safe under that rule.
     """
     if not table:

@@ -1,5 +1,5 @@
 <script setup>
-// Self-contained dropdown menu — ONE implementation replacing the maquette's
+// Self-contained dropdown menu - ONE implementation replacing the maquette's
 // context/agent/user/help menus. Visual spec ported from `.ctx-menu` /
 // `.ctx-menu-item` / `.ctx-menu-sep` (v4-extras.css). Owns its open state,
 // positions the panel relative to the trigger, closes on Escape, outside-click,

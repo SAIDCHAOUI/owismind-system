@@ -1,5 +1,5 @@
 # =============================================================================
-# OWIsMind — DATASET PROFILER (Dataiku Python recipe, design-time Flow)
+# OWIsMind - DATASET PROFILER (Dataiku Python recipe, design-time Flow)
 # -----------------------------------------------------------------------------
 # Turns ANY input dataset into a machine-readable "dataset profile": the
 # knowledge artifact that makes the Dataset Expert code agent an expert of
@@ -9,9 +9,9 @@
 #
 # Flow wiring:
 #   INPUT  1 (required): the dataset to profile (e.g. DRIVE_Revenues)
-#   INPUT  2 (optional): an EDITABLE dataset of human overrides — schema
+#   INPUT  2 (optional): an EDITABLE dataset of human overrides - schema
 #                        {key, field, value} (see OVERRIDES below)
-#   OUTPUT 1 (required): the profile dataset — schema {key, payload}
+#   OUTPUT 1 (required): the profile dataset - schema {key, payload}
 #                        (e.g. DRIVE_Revenues_profile)
 #
 # Two passes:
@@ -31,7 +31,7 @@
 #             raw string is used.
 #   Overrides are applied AFTER the LLM pass and flagged "human_override".
 #
-# PROFILE CONTRACT (consumed by agents/dataset_expert_agent.py — FROZEN v1):
+# PROFILE CONTRACT (consumed by agents/dataset_expert_agent.py - FROZEN v1):
 #   Output dataset rows: {key: str, payload: str(JSON)}
 #   key "__dataset__" -> table-level payload:
 #     {profile_version, dataset_name, generated_at, row_count,
@@ -65,7 +65,7 @@ logger = logging.getLogger("owismind.profiler")
 # =============================================================================
 
 # LLM Mesh id used for the semantic enrichment pass (PASS B). Use the
-# STRONGEST model available — this runs once per dataset, the cost is
+# STRONGEST model available - this runs once per dataset, the cost is
 # amortized over every future question. Leave "" to SKIP the LLM pass
 # (deterministic profile only; descriptions stay empty for human filling).
 ENRICH_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro"
@@ -326,7 +326,7 @@ def default_role(dss_type, distinct_count, row_count, avg_len, time_format,
 
 
 # =============================================================================
-# 3. PASS A — deterministic statistics (pandas; the recipe runs design-time)
+# 3. PASS A - deterministic statistics (pandas; the recipe runs design-time)
 # =============================================================================
 
 def profile_dataframe(df, schema_columns):
@@ -372,7 +372,7 @@ def profile_dataframe(df, schema_columns):
 
         # PHYSICAL date detection first: a real date/timestamp column must be
         # profiled as format "date" even when the DSS schema type or the
-        # string samples say otherwise — the agent's SQL templates depend on
+        # string samples say otherwise - the agent's SQL templates depend on
         # it (seen in DSS: a PostgreSQL `date` profiled as string broke
         # LEFT(col, 10); the agent is cast-safe now, but the profile should
         # still tell the truth).
@@ -451,14 +451,14 @@ def profile_dataframe(df, schema_columns):
 
 
 # =============================================================================
-# 4. PASS B — LLM enrichment (aggregated metadata only, never raw rows)
+# 4. PASS B - LLM enrichment (aggregated metadata only, never raw rows)
 # =============================================================================
 
 ENRICH_PROMPT = (
     "You are a senior data analyst documenting a dataset so an AI agent can "
     "answer business questions about it with SQL. You receive AGGREGATED "
     "metadata only (schema, stats, distinct values, samples). Return ONE JSON "
-    "object — no markdown fences, no commentary — with this exact shape:\n"
+    "object - no markdown fences, no commentary - with this exact shape:\n"
     "{\n"
     '  "dataset": {\n'
     '    "description_en": "...", "description_fr": "...",\n'
@@ -539,7 +539,7 @@ def run_enrichment(project, dataset_name, dataset_payload, columns):
         except Exception as e:
             logger.warning("Enrichment attempt %d failed: %s", attempt, e)
     if not parsed:
-        logger.warning("LLM enrichment produced no usable JSON — profile stays deterministic")
+        logger.warning("LLM enrichment produced no usable JSON - profile stays deterministic")
         return False
 
     clean = validate_enrichment(parsed, list(columns.keys()))
@@ -640,7 +640,7 @@ def main():
             n = apply_overrides(dataset_payload, columns, rows)
             logger.info("Applied %d human overrides", n)
         except Exception:
-            logger.exception("Overrides dataset unreadable — ignored")
+            logger.exception("Overrides dataset unreadable - ignored")
 
     # Cleanup internals + final rows.
     for c in columns.values():

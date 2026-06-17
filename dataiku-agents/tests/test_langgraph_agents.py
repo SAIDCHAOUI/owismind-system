@@ -3,7 +3,7 @@
   - agents/SalesDrive_revenue_expert.py   (sub-agent: LangGraph wrapper, same engine)
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent files load (importlib),
-so only PURE logic is exercised — registry/tool specs, the honesty sources block,
+so only PURE logic is exercised - registry/tool specs, the honesty sources block,
 trace SQL/usage extraction, artifact validation, language detection, and the frozen
 cross-file event contract (anti-drift). The graph itself is NOT run (it needs DSS).
 
@@ -181,7 +181,7 @@ class TestAntiDrift(unittest.TestCase):
 
 class TestNoSourcesBlock(unittest.TestCase):
     def test_sources_block_removed(self):
-        # The chat answer no longer prints a "**Sources**" block — the dataset
+        # The chat answer no longer prints a "**Sources**" block - the dataset
         # source lives in the Evidence side panel. The function is gone entirely.
         self.assertFalse(hasattr(orch, "sources_block"))
 
@@ -345,7 +345,7 @@ class TestSubAgentEngineIntact(unittest.TestCase):
 # ==========================================================================
 def _align_profile():
     """Minimal profile fixture exercising the offer hierarchy + diamond_id
-    display (values invented — no business data in the repo)."""
+    display (values invented - no business data in the repo)."""
     dataset_payload = {
         "profile_version": 1, "dataset_name": "DEMO", "row_count": 100,
         "description_en": "demo", "description_fr": "demo",
@@ -441,7 +441,7 @@ class TestSemanticAlignment(unittest.TestCase):
 
     def test_semantic_question_ambiguous_term_not_pinned(self):
         # An ambiguous offer term must NOT be pinned to a column (defer to the
-        # smart model) — even if the helper's best guess was sirano_product.
+        # smart model) - even if the helper's best guess was sirano_product.
         u = _align_u(intent="total", instruction="revenus EVPL")
         q = dx.build_semantic_question(u, self.P, [
             {"column": "sirano_product", "value": "EVPL",
@@ -610,7 +610,7 @@ class TestLiveNarration(unittest.TestCase):
         # ACT-FIRST (model-agnostic, anti narrate-and-stop) AND an explicit invite
         # to narrate progress as real, saved text (the live UX the user wants).
         p = orch.build_system_prompt(orch.get_capabilities(), "fr")
-        self.assertIn("ACT — NEVER JUST PROMISE", p)
+        self.assertIn("ACT - NEVER JUST PROMISE", p)
         self.assertIn("FAILURE, not an answer", p)
         self.assertIn("NARRATE AS YOU GO", p)
         self.assertIn("SAME turn", p)
@@ -656,8 +656,8 @@ class TestModelMode(unittest.TestCase):
         self.assertIn("NARRATE AS YOU GO", with_narr)
         self.assertNotIn("NARRATE AS YOU GO", without)
         # ACT-FIRST stays in BOTH (it is the non-negotiable rule, not the narration).
-        self.assertIn("ACT — NEVER JUST PROMISE", with_narr)
-        self.assertIn("ACT — NEVER JUST PROMISE", without)
+        self.assertIn("ACT - NEVER JUST PROMISE", with_narr)
+        self.assertIn("ACT - NEVER JUST PROMISE", without)
 
 
 class TestLanguageControl(unittest.TestCase):
@@ -684,8 +684,8 @@ class TestLanguageControl(unittest.TestCase):
         self.assertEqual(orch.parse_lang("⟦owi:lang=en⟧ bonjour ⟦owi:lang=fr⟧"), "fr")
 
     def test_strip_context_block_removes_suffix(self):
-        msg = ("tu peux rajouter le forecast ?\n\n[Context — User: X · Today: Y"
-               " · Web app language: English]\nIMPORTANT — reply in French...")
+        msg = ("tu peux rajouter le forecast ?\n\n[Context - User: X · Today: Y"
+               " · Web app language: English]\nIMPORTANT - reply in French...")
         self.assertEqual(orch._strip_context_block(msg),
                          "tu peux rajouter le forecast ?")
 
@@ -693,8 +693,8 @@ class TestLanguageControl(unittest.TestCase):
         self.assertEqual(orch._strip_context_block("plain"), "plain")
 
     def test_strip_context_block_removes_screen_and_context(self):
-        msg = ("explique le graphique\n\n[ON SCREEN NOW — a line chart …]\n\n"
-               "[Context — User: X · Today: Y]\nIMPORTANT — reply in French...")
+        msg = ("explique le graphique\n\n[ON SCREEN NOW - a line chart …]\n\n"
+               "[Context - User: X · Today: Y]\nIMPORTANT - reply in French...")
         self.assertEqual(orch._strip_context_block(msg), "explique le graphique")
 
     def test_reply_language_section_at_end_of_system_prompt(self):
@@ -707,7 +707,7 @@ class TestLanguageControl(unittest.TestCase):
         self.assertIn("English", sp_en.rsplit("REPLY LANGUAGE", 1)[1])
 
     def test_subagent_forced_language_override(self):
-        self.assertEqual(dx.forced_language("USER LANGUAGE: fr — write..."), "fr")
+        self.assertEqual(dx.forced_language("USER LANGUAGE: fr - write..."), "fr")
         self.assertEqual(dx.forced_language("USER LANGUAGE: EN\nmore"), "en")
         self.assertIsNone(dx.forced_language("no directive here"))
 

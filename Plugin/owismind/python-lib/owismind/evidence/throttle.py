@@ -9,7 +9,7 @@ import threading
 import time
 
 # Burst capacity and steady refill (tokens/second) per user. meta+rows = 2 tokens,
-# a picker open = 1 — all human-paced; only a sustained >REFILL/s flood is denied.
+# a picker open = 1 - all human-paced; only a sustained >REFILL/s flood is denied.
 EVIDENCE_BUCKET_CAPACITY = 15
 EVIDENCE_REFILL_PER_SEC = 10.0
 # Drop idle buckets after this long to bound the dict (mono-process, per-user state).

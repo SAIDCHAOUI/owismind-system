@@ -1,4 +1,4 @@
-"""Validation of incoming request payloads (pure — no DSS env required).
+"""Validation of incoming request payloads (pure - no DSS env required).
 
 The frontend only ever sends logical data (session_id, message, an opaque
 agent_key, a context-window size, an optional parent exchange id, feedback). It
@@ -116,7 +116,7 @@ DEFAULT_HISTORY_LIMIT = 20
 def validate_history_limit(value):
     """Clamp the client-supplied agent-context window to [10, 50]; default 20.
 
-    Counts individual messages (user/assistant). Never raises — a bad value must
+    Counts individual messages (user/assistant). Never raises - a bad value must
     not break a chat send; it just falls back to a safe default/bound.
     """
     if value is None:
@@ -192,7 +192,7 @@ def validate_feedback(payload):
 def validate_optional_exchange_id(value):
     """A client-supplied parent_exchange_id: a non-empty str <= MAX_SESSION_ID_LENGTH, else None.
 
-    Never raises — a malformed value degrades to None (= start a new branch at the root).
+    Never raises - a malformed value degrades to None (= start a new branch at the root).
     Server still scopes every read/write by user_id, so a forged id can only ever match
     the caller's own rows.
     """
@@ -229,27 +229,27 @@ MAX_EVIDENCE_DRILL = 8
 
 
 def validate_required_exchange_id(value):
-    """A mandatory exchange id: non-empty bounded string — raises otherwise."""
+    """A mandatory exchange id: non-empty bounded string - raises otherwise."""
     if not value or not isinstance(value, str) or len(value) > MAX_SESSION_ID_LENGTH:
         raise ValidationError("invalid_exchange_id")
     return value
 
 
 def validate_evidence_column(value):
-    """A column NAME (shape only — existence is checked against the live schema)."""
+    """A column NAME (shape only - existence is checked against the live schema)."""
     if not value or not isinstance(value, str) or len(value) > MAX_EVIDENCE_COLUMN_CHARS:
         raise ValidationError("invalid_filter_column")
     return value
 
 
 def _validate_evidence_value(v):
-    # bool FIRST (it is an int subclass) — allowed here: boolean dataset columns
+    # bool FIRST (it is an int subclass) - allowed here: boolean dataset columns
     # are legitimate filter values, unlike the feedback rating trap.
     if isinstance(v, bool):
         return v
     if isinstance(v, float) and not math.isfinite(v):
         # NaN/Infinity parse as JSON literals but render as unquoted SQL tokens
-        # downstream — reject at the gate with a stable code instead.
+        # downstream - reject at the gate with a stable code instead.
         raise ValidationError("invalid_filter_value")
     if isinstance(v, (int, float)):
         # JSON ints have arbitrary precision in Python: a 100k-digit literal
@@ -272,7 +272,7 @@ def validate_evidence_rows_request(payload):
     drill, table)``. Raises ValidationError (stable code) on structurally
     invalid input; the page is CLAMPED (never raises), mirroring the other limit
     helpers. ``drill`` is the optional drill-down label list (<= 8 entries of
-    ``{column, value}``; value may be None — it renders an IS NULL test); the
+    ``{column, value}``; value may be None - it renders an IS NULL test); the
     drillable column SET is re-derived server-side from the stored SQL, so only
     shape and bounds are validated here (single stable code: 'invalid_drill').
     ``table`` is the OPTIONAL source-table selector (multi-table SQL): a bounded
@@ -331,7 +331,7 @@ def validate_evidence_rows_request(payload):
 
     # Optional drill-down labels. Unlike sort, a malformed drill RAISES: a drill
     # silently dropped would return the UNdrilled (wider) page while the UI
-    # believes it is showing one group — a scope-honesty violation, not a
+    # believes it is showing one group - a scope-honesty violation, not a
     # cosmetic degradation. Values reuse the filter-value gates (str <= 500,
     # finite numbers, bool) with None additionally allowed (IS NULL drill).
     drill = []

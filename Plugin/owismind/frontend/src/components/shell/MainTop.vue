@@ -1,5 +1,5 @@
 <script setup>
-// Top bar — contextual title on the left; quick theme + language controls on the
+// Top bar - contextual title on the left; quick theme + language controls on the
 // right. Visual spec ported from `.main-top` / `.main-top-left|right` / `.top-action`
 // (components.css). When the sidebar is collapsed it also exposes an expand button.
 //

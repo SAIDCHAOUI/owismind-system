@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
 
 
 def _ensure_dataiku_stub():
-    """Minimal import-time stubs (NO install — the README's "(or a stub)" idiom).
+    """Minimal import-time stubs (NO install - the README's "(or a stub)" idiom).
 
     service.py imports dataiku/SQLExecutor2 (and, transitively, dataiku.sql +
     pandas) at module load. The functions under test never touch them, so bare
-    stubs are enough — and existing stubs from sibling test files are extended,
+    stubs are enough - and existing stubs from sibling test files are extended,
     never replaced (unittest discover shares one sys.modules).
     """
     dk = sys.modules.get("dataiku")
@@ -138,7 +138,7 @@ class NormalizeExplainTests(unittest.TestCase):
 
 
 class VerificationLadderTests(unittest.TestCase):
-    """The deterministic level ladder (frozen contract §2) — honesty matrix."""
+    """The deterministic level ladder (frozen contract §2) - honesty matrix."""
 
     def test_not_matched_is_declared(self):
         # Matrix: invalid SQL / unmapped table -> the degraded 'declared' claim.
@@ -461,7 +461,7 @@ class DrilldownTests(unittest.TestCase):
 
     def test_more_keys_than_the_drill_cap_refuses(self):
         # CONTRACT-01: a drill that cannot constrain EVERY group key would show
-        # a SUPERSET of the group — more than 8 drillable keys means NO drill.
+        # a SUPERSET of the group - more than 8 drillable keys means NO drill.
         colmap = {"c{}".format(i): "C{}".format(i) for i in range(9)}
         keys = ["c{}".format(i) for i in range(9)]
         out = derive_drilldown(_explain(group_keys=keys), colmap, True)

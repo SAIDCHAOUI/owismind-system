@@ -4,7 +4,7 @@
 answer in ``chat_v5.save_assistant_message``). This module maintains the two
 DENORMALISED accelerators that make usage control cheap:
   - ``webapp_users_v1`` LIFETIME cumulative counters (incremented once per response);
-  - ``webapp_usage_monthly_v1`` per-(user, calendar-month) bucket — a single
+  - ``webapp_usage_monthly_v1`` per-(user, calendar-month) bucket - a single
     PRIMARY-KEY row per month, so the planned per-user monthly quota is one PK lookup
     and needs no reset job (a new month is naturally a new row).
 
@@ -14,7 +14,7 @@ The two increments run in ONE committed transaction so the lifetime cumulative a
 monthly bucket never diverge from each other.
 
 All values written here are SERVER-COMPUTED (LLM Mesh trace totals + the auth-resolved
-user_id) — strictly coerced to non-negative numbers and inlined as numeric literals,
+user_id) - strictly coerced to non-negative numbers and inlined as numeric literals,
 with the user_id escaped via ``sql_value``; nothing is taken from the request body.
 """
 
@@ -62,7 +62,7 @@ def record_usage(user_id, usage):
     early-stopped run with no footer) or no user_id. Called exactly once per agent run
     (right after the assistant message is persisted), so each exchange increments the
     aggregates exactly once. Best-effort by contract: the caller wraps this in a
-    try/except — a failure here never affects the answer already on screen, and the
+    try/except - a failure here never affects the answer already on screen, and the
     aggregates can be rebuilt from chat_v5.
     """
     if not user_id or not isinstance(usage, dict):
@@ -78,7 +78,7 @@ def record_usage(user_id, usage):
 
     user_sql = sql_value(user_id)
     # Server-computed numerics inlined as bare literals (cost with fixed decimals to
-    # avoid scientific notation) — never user input, so this mirrors bool_literal.
+    # avoid scientific notation) - never user input, so this mirrors bool_literal.
     in_sql = str(in_tokens)
     out_sql = str(out_tokens)
     cost_sql = "{:.10f}".format(cost)
@@ -96,7 +96,7 @@ def record_usage(user_id, usage):
         post_queries=["COMMIT"],
     )
     logger.info(
-        "record_usage — user_id=%s in=%d out=%d cost=%.6f",
+        "record_usage - user_id=%s in=%d out=%d cost=%.6f",
         user_id,
         in_tokens,
         out_tokens,

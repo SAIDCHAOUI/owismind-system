@@ -1,7 +1,7 @@
 // Pure, dependency-free SQL prettifier + tokenizer for the Evidence "decortication"
 // of the agent's generated query. Display-only: it makes a one-line generated SQL
 // readable (clause breaks) and classifies tokens for safe syntax highlighting
-// (the component renders each token as escaped text — never v-html). Never throws:
+// (the component renders each token as escaped text - never v-html). Never throws:
 // on any problem it degrades to one plain text token, so the raw SQL still shows.
 
 // SQL keywords highlighted (uppercase set; matched case-insensitively).
@@ -50,8 +50,8 @@ export function formatSql(sql) {
 }
 
 // One token: { text, kind } with kind in 'kw' | 'str' | 'num' | 'text'. The
-// trailing catch-all (group 7) consumes any otherwise-unmatched character —
-// e.g. a lone/unterminated quote — so the rendered SQL is ALWAYS a verbatim
+// trailing catch-all (group 7) consumes any otherwise-unmatched character -
+// e.g. a lone/unterminated quote - so the rendered SQL is ALWAYS a verbatim
 // reconstruction of the input (nothing silently dropped).
 const TOKEN_RE = /('(?:[^']|'')*')|("(?:[^"]|"")*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|([^\sA-Za-z0-9_'"]+)|(.)/g
 

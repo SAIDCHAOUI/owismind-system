@@ -1,4 +1,4 @@
-# Design — Édition de prompt + branches (arbre de conversation) · Feedback ⋯ · Agent persistant
+# Design - Édition de prompt + branches (arbre de conversation) · Feedback ⋯ · Agent persistant
 
 > Date : 2026-06-09 (run 4) · OWIsMind (plugin Dataiku DSS, Vue 3 + Flask). Validé par l'utilisateur. Prime sur `cadrage/`.
 
@@ -17,9 +17,9 @@
 
 ---
 
-## Feature 1 — Arbre de conversation (édition de prompt + branches)
+## Feature 1 - Arbre de conversation (édition de prompt + branches)
 
-### Modèle de données — `chat_v4`
+### Modèle de données - `chat_v4`
 `webapp_chat_v4` = colonnes `chat_v3` (incl. feedback) **+ `parent_exchange_id TEXT`** (nullable ; NULL = 1er tour de la session). Chaque envoi enregistre `parent_exchange_id` = l'échange actif qu'il prolonge. Rename `storage/chat_v3.py`→`chat_v4.py`, `CHAT_V3_LOGICAL`→`CHAT_V4_LOGICAL="webapp_chat_v4"`, `ensure_chat_v3_table`→`ensure_chat_v4_table`. v3 abandonnée inerte. Index inchangés (lookup ancêtres = par PK `exchange_id`).
 
 ### Contexte agent = chaîne d'ancêtres
@@ -40,7 +40,7 @@
 
 ---
 
-## Feature 2 — Feedback : popup au 👎, ⋯ pour 👍
+## Feature 2 - Feedback : popup au 👎, ⋯ pour 👍
 - **👎** : `submitFeedback(ex, 0, [], '')` **immédiat** (colorie rouge) **+ ouvre la popup** (raisons + commentaire **optionnels**) ; Envoyer → `submitFeedback(ex, 0, reasons, comment)` ; fermer/annuler → garde juste la note 0.
 - **👍** : `submitFeedback(ex, 1)` immédiat (colorie) ; **pas de popup auto**.
 - **⋯** (menu, primitive `Menu`) à côté des pouces : item « Donner un retour détaillé » → ouvre la popup pour la note **courante** (1 ou 0). Dispo après 👍 et 👎. Extensible (autres items plus tard).
@@ -49,7 +49,7 @@
 
 ---
 
-## Feature 3 — Agent persistant par conversation
+## Feature 3 - Agent persistant par conversation
 - `session.selectAgent(key)` : set `selectedAgentKey` **+ persiste** `owismind.lastAgentKey` (localStorage).
 - `chat.openSession` : après chargement, si le **dernier échange** a un `agent_key` encore présent dans `session.agents` → `session.setSelectedAgent(thatKey)` ; sinon défaut. (rows `/conversation` incluent `agent_key`.)
 - `newConversation` : `selectedAgentKey` = dernier-utilisé (localStorage) s'il est activé, sinon 1er agent.

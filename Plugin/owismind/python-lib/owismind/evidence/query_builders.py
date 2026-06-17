@@ -1,15 +1,15 @@
-"""Pure SQL text builders for Evidence Studio (NO dataiku import — unit-testable).
+"""Pure SQL text builders for Evidence Studio (NO dataiku import - unit-testable).
 
 Same contract as storage/sql_builders.py: callers pass PRE-ESCAPED fragments
 (values via sql_config.sql_value, identifiers via sql_config.pg_identifier) and
-integer bounds — never raw user input. ``render_predicate`` takes the two quoting
+integer bounds - never raw user input. ``render_predicate`` takes the two quoting
 functions as ARGUMENTS so the rendering logic itself stays import-free and
 testable with stub quoters.
 """
 
 
 def build_exchange_sql_query(table_ref, user_value_sql, exchange_value_sql):
-    """The stored generated_sql of ONE exchange — ALWAYS owner-scoped."""
+    """The stored generated_sql of ONE exchange - ALWAYS owner-scoped."""
     return """
     SELECT generated_sql
     FROM {table}
@@ -47,7 +47,7 @@ def build_distinct_query(table_ref, column_ident, limit, conditions=None):
     ``conditions`` (optional, pre-rendered, caller-escaped) scope the picker to the
     agent's locked predicates so it shows values within the agent's evidence, not the
     whole table. The DISTINCT+LIMIT runs in a subquery and only the bounded result is
-    sorted — avoids forcing a full sort of every distinct value on a large table.
+    sorted - avoids forcing a full sort of every distinct value on a large table.
     """
     n = int(limit)
     where = ["{} IS NOT NULL".format(column_ident)]
@@ -67,10 +67,10 @@ def build_distinct_query(table_ref, column_ident, limit, conditions=None):
 def render_predicate(pred, quote_ident, quote_value):
     """One predicate dict -> one SQL condition string.
 
-    Raises ValueError on an unknown op — defensive only: ops are whitelisted by
+    Raises ValueError on an unknown op - defensive only: ops are whitelisted by
     the parser (stored SQL) and the request validator (client filters) upstream.
     values arity (1 for binary/LIKE, 2 for BETWEEN, >= 1 for IN) is enforced
-    upstream; on violation this raises IndexError or yields invalid SQL — it
+    upstream; on violation this raises IndexError or yields invalid SQL - it
     never silently widens scope.
     """
     col = quote_ident(pred["column"])

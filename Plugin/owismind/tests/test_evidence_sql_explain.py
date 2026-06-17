@@ -3,7 +3,7 @@
 
 Locks the frozen contract consumed by service.normalize_explain: step kinds,
 honest completeness flags (under-claim only), identity-lineage group keys, and
-the never-raises guarantee — across the full SQL matrix (simple selects,
+the never-raises guarantee - across the full SQL matrix (simple selects,
 aggregations, calculations, CTE/window structures, set ops, hostile input).
 """
 import os

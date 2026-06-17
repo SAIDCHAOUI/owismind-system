@@ -15,7 +15,7 @@ timeline is ephemeral (shown during the call, never stored); the raw end-of-stre
 trace is what gets stored (mirroring the production Dash app). The worker captures
 the ``trace`` event and stores it, but never adds it to the live, polled timeline.
 
-Instance safety — this performs exactly ONE agent run for one validated message:
+Instance safety - this performs exactly ONE agent run for one validated message:
 no loop, no retry. The agent's own tools may run governed SQL, but that is the
 product's purpose and is controlled by DSS, not by this WebApp. The agent_id is
 resolved server-side from the whitelist before this is ever called; nothing here
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # import: older/newer SDKs differ, and a notebook-validated guard tolerates both).
 try:
     from dataikuapi.dss.llm import DSSLLMStreamedCompletionFooter
-except Exception:  # SDK shape differs / symbol absent — fall back to type sniffing
+except Exception:  # SDK shape differs / symbol absent - fall back to type sniffing
     DSSLLMStreamedCompletionFooter = None
 
 # Chunk ``type`` values that carry an answer text delta (vs an agent lifecycle event).
@@ -46,7 +46,7 @@ _SQL_TOOL_NAME = "semantic-model-query"
 
 # Defensive recursion bound for walking the footer trace. The trace is produced by
 # DSS LLM Mesh (trusted), not the frontend, and a malformed walk is already caught
-# by the worker's try/except — but a depth guard turns a pathologically deep trace
+# by the worker's try/except - but a depth guard turns a pathologically deep trace
 # into a graceful "no extraction" instead of a RecursionError. Real traces nest a
 # handful of levels; 200 is far above any legitimate shape.
 _MAX_TRACE_DEPTH = 200
@@ -57,7 +57,7 @@ _MAX_TRACE_DEPTH = 200
 _AGENT_DONE_KIND = "AGENT_DONE"
 
 # Orchestrator event asking the UI to render the latest data result as an artifact
-# (chart / table). Its eventData carries {kind, title, chart} — NOT covered by the
+# (chart / table). Its eventData carries {kind, title, chart} - NOT covered by the
 # timeline whitelist, so it is surfaced as a dedicated normalized ``artifact`` event.
 _ARTIFACT_KIND = "ARTIFACT"
 _ARTIFACT_CHART_TYPES = ("line", "bar", "pie")
@@ -68,7 +68,7 @@ _NARRATION_KIND = "NARRATION"
 _NARRATION_MAX_CHARS = 280
 
 # eventData keys relayed verbatim onto the live ``agent_event`` (trust-layer context
-# for the timeline). This is a strict WHITELIST pass-through — never the whole dict:
+# for the timeline). This is a strict WHITELIST pass-through - never the whole dict:
 # orchestrator payloads also carry agentId / message / instruction / steps /
 # generatedSql, none of which may ever reach the polled timeline.
 _EVENT_PASSTHROUGH_KEYS = ("label", "stepIndex", "stepCount", "agentKey", "status")
@@ -79,7 +79,7 @@ _EVENT_VALUE_MAX_CHARS = 300
 def _whitelisted_event_fields(event_data):
     """Copy ONLY the whitelisted eventData keys, bounded, for the live agent_event.
 
-    Strings are capped to ``_EVENT_VALUE_MAX_CHARS``; real numbers (bool excluded —
+    Strings are capped to ``_EVENT_VALUE_MAX_CHARS``; real numbers (bool excluded -
     bool is an int subclass but is not a number for this contract) pass as-is; any
     other type is silently dropped. Missing keys are simply absent (additive event).
     """
@@ -111,7 +111,7 @@ def _normalized_sql_event(item, sql_index):
     ONLY when present on the item, so pre-trust-layer flows emit byte-identical
     events. Correlation tags are accepted in snake_case or camelCase: the
     orchestrator v2.2 tags in snake_case (sql_id/step_index/agent_key) and
-    untagged trace-walker items carry no correlation keys at all — both
+    untagged trace-walker items carry no correlation keys at all - both
     spellings stay accepted for forward compatibility (ORCHV22-01).
     """
     event = {
@@ -144,7 +144,7 @@ def _normalized_artifact_event(event_data):
 
     Strict shape: kind in {chart, table, kpi}, bounded title; a chart carries a
     {type, x, y[]} block, a KPI a {value[,delta,delta_pct]} block. The DATA is
-    NOT here — the frontend reuses the captured generated_sql result via
+    NOT here - the frontend reuses the captured generated_sql result via
     /evidence/meta; only the SPEC travels. Pure, never raises."""
     if not isinstance(event_data, dict):
         return None
@@ -195,7 +195,7 @@ def _is_footer_chunk(chunk, data):
     """True when a streamed chunk is the final run footer (carries the trace).
 
     Recognised either by its ``type == "footer"`` payload or, when the SDK exposes
-    the class, by isinstance — matching the notebook-validated detection.
+    the class, by isinstance - matching the notebook-validated detection.
     """
     if isinstance(data, dict) and data.get("type") == "footer":
         return True
@@ -295,29 +295,29 @@ def run_agent_streamed(project_key, agent_id, messages):
 
     Yields, in stream order:
       - ``{type:"agent_event", eventKind, blockId, nextBlockId, toolName, elapsedSeconds}``
-        — plus the WHITELISTED eventData pass-through keys (label / stepIndex /
+        - plus the WHITELISTED eventData pass-through keys (label / stepIndex /
         stepCount / agentKey / status) when present, bounded; never the whole dict
       - ``{type:"answer_delta", text}``
       - ``{type:"generated_sql", sqlIndex, success, rowCount, sql[, sqlId, stepIndex,
-        agentKey, result]}`` — emitted MID-STREAM when an AGENT_DONE event relays its
+        agentKey, result]}`` - emitted MID-STREAM when an AGENT_DONE event relays its
         ``eventData.generatedSql`` (orchestrator v2.2), so a user-stopped run still
         persists its SQL
     then, once the footer arrives:
       - the remaining ``generated_sql`` events from the footer trace (the PRIMARY
         source), MERGED by sql text with the mid-stream emissions: an already-yielded
-        sql is never re-emitted as a new item — when the trace brings success /
+        sql is never re-emitted as a new item - when the trace brings success /
         row_count (or a captured result) the relay lacked, ONE enrichment event is
         re-yielded with the SAME ``sqlIndex`` (the consumer updates its stored item
         in place and keeps the live timeline untouched)
       - ``{type:"usage_summary", promptTokens, completionTokens, totalTokens, estimatedCost}``
-      - ``{type:"trace", trace}`` — the RAW footer trace, emitted for storage only
+      - ``{type:"trace", trace}`` - the RAW footer trace, emitted for storage only
 
     The caller accumulates answer deltas + generated SQL for persistence, stores the
     raw ``trace`` (without surfacing it on the live timeline), and translates the rest
     into transport frames. ``project_key``/``agent_id`` come from the whitelist.
     """
     logger.info(
-        "run_agent_streamed — project_key=%s agent_id=%s turns=%d",
+        "run_agent_streamed - project_key=%s agent_id=%s turns=%d",
         project_key,
         agent_id,
         len(messages or []),
@@ -332,7 +332,7 @@ def run_agent_streamed(project_key, agent_id, messages):
 
     t0 = time.perf_counter()
     footer_data = None
-    # Raw eventData seen during the run — only kept for the relayed-SQL fallback.
+    # Raw eventData seen during the run - only kept for the relayed-SQL fallback.
     seen_event_data = []
     # sql text -> the normalized generated_sql event already yielded for it (dedup +
     # post-loop merge with the footer-trace extraction). sql_index keeps numbering
@@ -354,7 +354,7 @@ def run_agent_streamed(project_key, agent_id, messages):
             event_data = data.get("eventData", {}) or {}
             seen_event_data.append(event_data)
             # NARRATION: a short live "what I'm doing now" message. Surfaced as its
-            # own normalized event so the front renders it as a flowing message —
+            # own normalized event so the front renders it as a flowing message -
             # NOT as a timeline step and NEVER accumulated into the stored answer
             # (it is transient; the worker only appends it to the live timeline).
             if data.get("eventKind") == _NARRATION_KIND:
@@ -408,7 +408,7 @@ def run_agent_streamed(project_key, agent_id, messages):
         else:
             # Unknown chunk shape: surface it as a labelled event for visibility,
             # but never break the stream on it.
-            logger.debug("run_agent_streamed — unknown chunk type: %r", chunk_type)
+            logger.debug("run_agent_streamed - unknown chunk type: %r", chunk_type)
             yield {
                 "type": "agent_event",
                 "eventKind": "UNKNOWN_CHUNK_TYPE:{}".format(chunk_type),
@@ -429,7 +429,7 @@ def run_agent_streamed(project_key, agent_id, messages):
     # entries in emitted_by_sql), consumed ONE-SHOT via pop(): two DISTINCT
     # trace spans with the same sql text (a transient failure then an identical
     # retry) must each emit their own event exactly as the DSS-validated
-    # pre-trust-layer flow did — only a relay duplicate is merged (CHAT-REG-01).
+    # pre-trust-layer flow did - only a relay duplicate is merged (CHAT-REG-01).
     for item in sql_queries:
         if not isinstance(item, dict):
             continue
@@ -442,7 +442,7 @@ def run_agent_streamed(project_key, agent_id, messages):
         # Already yielded mid-stream by AGENT_DONE: never re-emit as a new item.
         # When the trace brings authority the relay lacked (success / row_count,
         # or a captured result), re-yield ONE enrichment event with the SAME
-        # sqlIndex — the consumer fills the missing fields of its stored item in
+        # sqlIndex - the consumer fills the missing fields of its stored item in
         # place and never duplicates the live timeline entry.
         updates = {}
         if prior.get("success") is None and item.get("success") is not None:
@@ -460,7 +460,7 @@ def run_agent_streamed(project_key, agent_id, messages):
     usages = _find_usage_metadata(trace) if trace else []
     totals = _sum_usage_metadata(usages)
     logger.info(
-        "run_agent_streamed — done agent_id=%s sql_count=%d totalTokens=%s cost=%s",
+        "run_agent_streamed - done agent_id=%s sql_count=%d totalTokens=%s cost=%s",
         agent_id,
         sql_index,
         totals.get("totalTokens"),

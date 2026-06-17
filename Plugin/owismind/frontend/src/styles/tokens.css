@@ -1,5 +1,5 @@
 /* =============================================================================
- * OWIsMind — Design tokens (single source of truth for the theme layer).
+ * OWIsMind - Design tokens (single source of truth for the theme layer).
  *
  * Ported VERBATIM from the validated mockup's theme.css: the brand
  * Orange palette, spacing, type, radius and motion tokens, plus the light/dark
@@ -13,7 +13,7 @@
  *
  * Theme switch: set `document.body.dataset.theme = 'light' | 'dark'` (the
  * semantic surface/text/border tokens live ONLY under `body[data-theme=...]`,
- * so a value MUST be present on <body> — main.js sets it before mount).
+ * so a value MUST be present on <body> - main.js sets it before mount).
  * ============================================================================= */
 
 :root {
@@ -75,7 +75,7 @@
   --z-modal: 201;
   --z-toast: 2100;
 
-  /* --- Status colors (NO-OP add) — LIGHT defaults ---
+  /* --- Status colors (NO-OP add) - LIGHT defaults ---
    * These mirror the hard-coded status hexes scattered in the mockup's CSS.
    * Note: the Evidence Studio deliberately avoids green (no-green rule); these are for
    * generic status (toasts, admin, feedback) NOT for Evidence verdicts. */
@@ -102,9 +102,9 @@ body[data-theme="light"] {
   --orange-soft-dark: var(--orange-soft);
   --orange-on-dark: var(--orange-deep);
   /* Orange for SMALL TEXT on --bg: darkened to clear WCAG AA 4.5:1 on white
-     (--orange-deep #cc6100 is only 3.98:1 — fine for accents, not body-size text). */
+     (--orange-deep #cc6100 is only 3.98:1 - fine for accents, not body-size text). */
   --orange-text: #b85700;
-  /* Soft status tints — low-opacity fills for selected/active states, theme-aware
+  /* Soft status tints - low-opacity fills for selected/active states, theme-aware
      like --orange-soft-dark (so they stay visible on the dark surface too). */
   --success-soft: rgba(34, 197, 94, 0.10);
   --danger-soft: rgba(239, 68, 68, 0.08);
@@ -126,13 +126,13 @@ body[data-theme="dark"] {
   --orange-on-dark: #ffb066;                   /* replaced 9 ad-hoc --orange-deep dark subs */
   --orange-text: #ffb066;                      /* small-text orange (10.8:1 on --bg) */
 
-  /* Status colors — dark variants */
+  /* Status colors - dark variants */
   --success: #4ade80;
   --danger: #f87171;
   --warn: #fb923c;
   --info: #93c5fd;
 
-  /* Soft status tints — brighter hue + a touch more opacity so the fill reads on
+  /* Soft status tints - brighter hue + a touch more opacity so the fill reads on
      the dark surface (the light-theme values would wash out to invisible). */
   --success-soft: rgba(74, 222, 128, 0.14);
   --danger-soft: rgba(248, 113, 113, 0.13);

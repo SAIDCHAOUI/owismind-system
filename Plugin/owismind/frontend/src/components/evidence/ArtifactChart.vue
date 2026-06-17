@@ -1,5 +1,5 @@
 <script setup>
-// ArtifactChart.vue — interactive chart for an Evidence Studio artifact, rendered
+// ArtifactChart.vue - interactive chart for an Evidence Studio artifact, rendered
 // with Chart.js. The DATA is built server-side in Python (chart_payload.py) and
 // arrives ready as { labels, datasets } in `data`; this component only chooses the
 // visual style/options and draws. Chart.js gives real interactivity: hover
@@ -23,7 +23,7 @@ const canvasEl = ref(null)
 let instance = null
 let themeObserver = null
 
-// Canvas cannot use CSS var() — resolve the active theme's colors at draw time.
+// Canvas cannot use CSS var() - resolve the active theme's colors at draw time.
 function cssVar(name, fallback) {
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()

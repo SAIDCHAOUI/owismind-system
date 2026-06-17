@@ -1,5 +1,5 @@
 <script setup>
-// Agents page (Phase 3) — list + detail in one view, switched on the optional
+// Agents page (Phase 3) - list + detail in one view, switched on the optional
 // :agentId route param (the backend's opaque logical key, never an agent_id).
 //
 // The LIST is always the backend's enabled agents (session.agents, source of

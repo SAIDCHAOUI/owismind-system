@@ -1,4 +1,4 @@
-// Pure Evidence Studio model helpers (NO Vue import — node:test testable, F11).
+// Pure Evidence Studio model helpers (NO Vue import - node:test testable, F11).
 //
 // Local chip shape (the store's editable working state):
 //   { key, id, column, op, values, editable, source }
@@ -26,7 +26,7 @@ export function chipsFromMeta(meta) {
 
 // Cosmetic op for an edited/user chip: one value reads as '=', several as 'IN'
 // (the backend treats both identically and re-normalizes anyway).
-// CONTRACT: `values` must be non-empty — the backend rejects an '=' filter
+// CONTRACT: `values` must be non-empty - the backend rejects an '=' filter
 // without exactly one value, so the store removes a chip instead of letting its
 // last value be deselected.
 export function normalizeEditableOp(values) {
@@ -52,14 +52,14 @@ export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort,
     sort: sort || null,
   }
   // Drill-down (trust layer v2): OPTIONAL trailing argument so every existing
-  // positional call stays valid. Only {column, value} pairs travel — the server
+  // positional call stays valid. Only {column, value} pairs travel - the server
   // re-derives the drillable group keys from the STORED SQL and 400s anything
   // else, so this list is a request, never an authority.
   if (Array.isArray(drill) && drill.length) {
     payload.drill = drill.map((d) => ({ column: d.column, value: d.value }))
   }
   // Source-table selector (multi-table SQL): OPTIONAL trailing argument. Only a
-  // dataset NAME travels — the server matches it against the SQL's own set of
+  // dataset NAME travels - the server matches it against the SQL's own set of
   // matched tables and falls back to the first when unknown, so it is a request,
   // never an authority. Absent / empty -> default (first matched) table.
   if (typeof table === 'string' && table) {
@@ -72,7 +72,7 @@ export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort,
 // (server-derived meta.drilldown.columns) with the row's value at that column's
 // index in the captured result. The name lookup is case-insensitive because the
 // capture keeps the agent's SQL aliases while drilldown columns come from the
-// live colmap — casing may differ for the same column. Returns null (callers
+// live colmap - casing may differ for the same column. Returns null (callers
 // abort SILENTLY) when ANY column cannot be mapped or its cell is unusable: a
 // partial drill would quietly lie about the scope of the source rows.
 // `cap` mirrors the backend's 8-entry limit on the /evidence/rows `drill` list.
@@ -86,7 +86,7 @@ export function buildDrillLabels(columns, resultColumns, row, cap) {
     if (!byName.has(k)) byName.set(k, i) // first occurrence wins (deterministic)
   }
   // More drillable columns than the backend accepts per request: a truncated
-  // drill would show a SUPERSET of the group under a "source rows" banner —
+  // drill would show a SUPERSET of the group under a "source rows" banner -
   // abort instead of lying (CONTRACT-01; the backend refuses this case too).
   if (columns.length > max) return null
   const labels = []
@@ -96,7 +96,7 @@ export function buildDrillLabels(columns, resultColumns, row, cap) {
     const value = row[idx]
     // Only what the /evidence/rows drill contract accepts (str | finite number
     // | bool | null) may travel: a missing cell, an object or a non-finite
-    // number means this captured row cannot prove the drill — abort.
+    // number means this captured row cannot prove the drill - abort.
     if (value === undefined) return null
     if (typeof value === 'number' && !Number.isFinite(value)) return null
     if (value !== null && typeof value === 'object') return null
@@ -105,7 +105,7 @@ export function buildDrillLabels(columns, resultColumns, row, cap) {
   return labels
 }
 
-// Order-stable, type-faithful chip-state fingerprint (positional tuples — no
+// Order-stable, type-faithful chip-state fingerprint (positional tuples - no
 // object-key-order pitfalls). Deliberately sensitive to VALUE ORDER inside a
 // chip: re-adding a removed value may read as "modified", which is acceptable
 // for a badge + reset affordance ("touched = modified").

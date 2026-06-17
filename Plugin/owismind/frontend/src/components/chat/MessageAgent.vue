@@ -1,5 +1,5 @@
 <script setup>
-// Agent message — head, then the GROUPED activity block (the agent's reasoning/tool
+// Agent message - head, then the GROUPED activity block (the agent's reasoning/tool
 // steps, ChatGPT-style: animated and expanded while running, auto-collapsed to one
 // expandable header line on a terminal status), then the answer body items (text +
 // errors, arrival order), then the collapsible generated-SQL panel and the action
@@ -7,7 +7,7 @@
 //
 // The display model is the pure timeline reducer (composables/timelineModel.js); the
 // activity/body split is done by its read-only selectors (timelineEvents /
-// timelineBodyItems — the stored timeline stays chronological). Text blocks are the
+// timelineBodyItems - the stored timeline stays chronological). Text blocks are the
 // only v-html path (sanitized markdown, D7).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -42,7 +42,7 @@ const showFeedback = ref(false)
 // the modal's adaptive title/reasons/comment and the rating persisted on submit.
 const feedbackMode = ref(0)
 
-// The ⋯ "more options" menu — one entry that opens the detailed-feedback modal for the
+// The ⋯ "more options" menu - one entry that opens the detailed-feedback modal for the
 // CURRENT rating (so a user can also add a comment to a 👍, not just a 👎).
 const moreItems = computed(() => [{ key: 'feedback', label: t('msg.give_feedback'), icon: 'message' }])
 
@@ -53,9 +53,9 @@ const v = computed(() => props.turn.exchange.version)
 const versionCount = computed(() => props.turn.siblings.length)
 const versionIdx = computed(() => props.turn.versionIdx)
 
-// Display model (pure selectors over the live timeline — items keep their ids, so
+// Display model (pure selectors over the live timeline - items keep their ids, so
 // v-for keys and the ChatThread scroll signature are unaffected, F13).
-// LIVE: the timeline renders as chronological SEGMENTS — each phase of consecutive
+// LIVE: the timeline renders as chronological SEGMENTS - each phase of consecutive
 // events is a bounded ticker (last LIVE_WINDOW lines, older ones fade out) and the
 // agent's intermediate answers stay interleaved BETWEEN phases, exactly where they
 // arrived. TERMINAL: all events regroup into one collapsed, expandable header line
@@ -82,7 +82,7 @@ watch(activityLive, (live) => {
   if (!live) activityOpen.value = false
 })
 
-// Locale-aware duration ("0,4 s" in French, "0.4s" in English): durations are floats —
+// Locale-aware duration ("0,4 s" in French, "0.4s" in English): durations are floats -
 // raw `{{ x }}s` would leak the anglophone decimal dot. `fixed` pins 2 decimals so the
 // live chronometer ticks with stable width (mono font, no jitter).
 function fmtSeconds(s, fixed) {
@@ -90,10 +90,10 @@ function fmtSeconds(s, fixed) {
   return t('tl.seconds', [Number(s).toLocaleString(locale.value, opts)])
 }
 
-// --- Live per-step chronometer (purely presentational — the reducer stays pure) ----
+// --- Live per-step chronometer (purely presentational - the reducer stays pure) ----
 // The RUNNING step ticks from its client arrival (seconds + hundredths). A SEALED
 // step shows the backend emission-stamp gap (stepStampDiff) whenever stamps exist:
-// stamps are the truth — immune to live-window eviction (a step sealed AND pushed
+// stamps are the truth - immune to live-window eviction (a step sealed AND pushed
 // out of the 5-line window in one poll flush is never re-rendered live), to poll
 // quantization (a witnessed seal lands ≥ one ~500ms poll late) and to mid-run
 // remounts (Settings round-trip), and consistent with the header total (same stamp
@@ -137,7 +137,7 @@ function stepSeconds(item) {
   const diff = stepStampDiff(events, events.indexOf(item))
   if (diff != null) return diff
   // No usable stamps: freeze the witnessed client clock. Null when the step was
-  // never witnessed running — better hidden than invented.
+  // never witnessed running - better hidden than invented.
   const clock = stepClock.get(item.id)
   if (!clock) return null
   if (clock.end == null) clock.end = performance.now()
@@ -156,7 +156,7 @@ function renderItem(item) {
 }
 
 // Per-message evidence entry point: manual open ALWAYS works (degraded view
-// included) — only the end-of-run auto-open is gated on availability.
+// included) - only the end-of-run auto-open is gated on availability.
 const isEvidenceOpen = computed(
   () => evidence.open && evidence.exchangeId === v.value.exchangeId,
 )
@@ -171,12 +171,12 @@ const hasAnswerText = computed(() => v.value.timeline.some((it) => it.kind === '
 const interruptedEmpty = computed(() => (v.value.status === 'done' || v.value.status === 'stopped') && !hasAnswerText.value)
 // A user-interrupted answer that DID produce partial text: show the partial + a discreet
 // "generation stopped" marker. Live-session only (the stopped state is not persisted, so a
-// reload shows the partial text with no marker — consistent with storing it "as-is").
+// reload shows the partial text with no marker - consistent with storing it "as-is").
 const stoppedWithText = computed(() => v.value.status === 'stopped' && hasAnswerText.value)
 
 // Per-message token/cost usage line. Live: filled from the usage_summary event; reloaded:
 // rebuilt from the persisted columns (usageFromRow). Shown only on a terminal version that
-// actually carries usage — an early-stopped run (no footer) or a pre-usage exchange has
+// actually carries usage - an early-stopped run (no footer) or a pre-usage exchange has
 // none, so it shows no line rather than a misleading zero/empty one.
 const usage = computed(() => v.value.usage)
 const showUsage = computed(
@@ -188,10 +188,10 @@ const showUsage = computed(
       usage.value.estimatedCost != null),
 )
 function fmtTokens(n) {
-  return n == null ? '—' : Number(n).toLocaleString(locale.value)
+  return n == null ? '-' : Number(n).toLocaleString(locale.value)
 }
 function fmtCost(c) {
-  // DSS-estimated cost; the user reasons in dollars. 2–4 decimals keeps the small
+  // DSS-estimated cost; the user reasons in dollars. 2-4 decimals keeps the small
   // per-message amounts readable without collapsing to a misleading "$0.00".
   return (
     '$' +
@@ -231,7 +231,7 @@ const isUp = computed(() => v.value.feedbackRating === 1)
 const isDown = computed(() => v.value.feedbackRating === 0)
 
 // Returns true only when the feedback was actually persisted, so callers can gate a
-// success toast (it never rejects — failures surface here as a warn toast + false).
+// success toast (it never rejects - failures surface here as a warn toast + false).
 async function persistFeedback(rating, reasons, comment) {
   const ex = v.value.exchangeId
   if (!ex) return false // no exchange id yet (still running / not persisted)
@@ -270,7 +270,7 @@ function dislike() {
     }
   })
 }
-// ⋯ menu entry — open the detailed-feedback modal for the CURRENT rating (defaults to the
+// ⋯ menu entry - open the detailed-feedback modal for the CURRENT rating (defaults to the
 // positive/comment variant when no rating is set yet, so a 👍 can also gather a comment).
 function openDetailedFeedback() {
   feedbackMode.value = v.value.feedbackRating === 0 ? 0 : 1
@@ -282,7 +282,7 @@ function onMoreSelect(key) {
 function onFeedbackSubmit(reasons, comment) {
   showFeedback.value = false
   // Persist with the rating the modal was opened for; the gated toast avoids a double toast
-  // on failure (persistFeedback already surfaces the error toast and returns false — L031).
+  // on failure (persistFeedback already surfaces the error toast and returns false - L031).
   persistFeedback(feedbackMode.value, reasons, comment).then((ok) => {
     if (ok) push(t('msg.feedback_sent'), { icon: 'check', tone: 'ok' })
   })
@@ -307,7 +307,7 @@ function nextVersion() {
 
     <!-- ONE persistent .stream wrapper for both phases (swapping two sibling divs
          would replay its slide-up on the FULL answer at end of run).
-         LIVE: chronological segments — each event phase is a bounded ticker (last
+         LIVE: chronological segments - each event phase is a bounded ticker (last
          LIVE_WINDOW lines, evicted lines fade out under the top mask) and the agent's
          intermediate answers render in place BETWEEN phases. Running step = grey with
          a traversing shimmer; finished steps = brand orange.
@@ -337,7 +337,7 @@ function nextVersion() {
                The model's own lead-in streams as 'text' and renders as a real message
                BETWEEN phases; the redundant deterministic narration is no longer shown. -->
           <div v-else-if="seg.kind === 'text'" class="body" v-html="renderItem(seg.item)" />
-          <div v-else-if="seg.kind === 'error'" class="body error">— {{ seg.item.message }} —</div>
+          <div v-else-if="seg.kind === 'error'" class="body error">- {{ seg.item.message }} -</div>
         </template>
       </template>
       <template v-else>
@@ -374,7 +374,7 @@ function nextVersion() {
         <!-- Agent text block (sanitized markdown) -->
         <div v-if="item.kind === 'text'" class="body" v-html="renderItem(item)" />
         <!-- Error surfaced in place -->
-        <div v-else-if="item.kind === 'error'" class="body error">— {{ item.message }} —</div>
+        <div v-else-if="item.kind === 'error'" class="body error">- {{ item.message }} -</div>
       </template>
       </template>
     </div>
@@ -442,7 +442,7 @@ function nextVersion() {
       ><Icon name="shield" />{{ t('ev.open') }}</button>
       <button :class="{ primary: isUp }" :title="t('msg.like')" @click="like"><Icon name="thumbsUp" /></button>
       <button :class="{ danger: isDown }" :title="t('msg.dislike')" @click="dislike"><Icon name="thumbsDown" /></button>
-      <!-- ⋯ detailed feedback — works for either rating (comment a 👍 or a 👎). -->
+      <!-- ⋯ detailed feedback - works for either rating (comment a 👍 or a 👎). -->
       <Menu align="left" placement="top" :items="moreItems" @select="onMoreSelect">
         <template #trigger="{ toggle }">
           <button :title="t('msg.more_options')" @click="toggle"><Icon name="dots" /></button>
@@ -488,9 +488,9 @@ function nextVersion() {
 .head .ico :deep(.ui-icon) { width: 18px; height: 18px; }
 .head .author { color: var(--text); font-weight: 500; font-size: var(--fs-sm); }
 
-/* Body — typography for sanitized markdown (children are not scoped → :deep). */
+/* Body - typography for sanitized markdown (children are not scoped → :deep). */
 .body { font-size: var(--fs-md); line-height: 1.7; color: var(--text); overflow-wrap: anywhere; }
-/* Waiting placeholder — same shimmer sweep as the live activity title. */
+/* Waiting placeholder - same shimmer sweep as the live activity title. */
 .body.thinking {
   color: var(--text-3);
   background: linear-gradient(90deg, var(--text-3) 25%, var(--text) 50%, var(--text-3) 75%);
@@ -505,7 +505,7 @@ function nextVersion() {
 /* Discreet "generation stopped" marker under a partial answer. */
 .stopped-marker { display: flex; align-items: center; gap: 6px; margin-top: var(--s-2); font-size: var(--fs-xs); color: var(--text-3); }
 .stopped-marker :deep(.ui-icon) { width: 12px; height: 12px; }
-/* "Stopping…" — shown while the backend cuts the run cooperatively (spinner + blink). */
+/* "Stopping…" - shown while the backend cuts the run cooperatively (spinner + blink). */
 .stopping-banner { display: flex; align-items: center; gap: 8px; margin-top: var(--s-2); font-size: var(--fs-sm); color: var(--text-2); }
 .stopping-banner .spin {
   width: 13px; height: 13px; flex-shrink: 0; border-radius: 50%;
@@ -543,7 +543,7 @@ function nextVersion() {
 /* --- Live ticker: one bounded window per event phase (max LIVE_WINDOW lines). --- */
 .ticker { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 2px 0; }
 /* Once the phase overflows the window, the oldest visible line fades out under a
-   top mask — the "older steps slip away" effect. */
+   top mask - the "older steps slip away" effect. */
 .ticker.masked {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
   mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
@@ -557,14 +557,14 @@ function nextVersion() {
 }
 .tick-leave-active { position: absolute; left: 0; right: 0; }
 /* A poll batch can evict SEVERAL head rows in one flush; absolutely-positioned flex
-   children all resolve to the same static spot, so only the first one gets the fade —
+   children all resolve to the same static spot, so only the first one gets the fade -
    the extras vanish instantly instead of stacking as superposed text. */
 .tick-leave-active + .tick-leave-active { transition: none; opacity: 0; }
 .tick-move { transition: transform var(--dur) var(--ease); }
-/* The TransitionGroup owns enter/leave — the mount keyframe would fight it. */
+/* The TransitionGroup owns enter/leave - the mount keyframe would fight it. */
 .ticker .step { animation: none; }
 
-/* --- Terminal activity dropdown — one expandable header line. --- */
+/* --- Terminal activity dropdown - one expandable header line. --- */
 .activity { margin: 0 0 2px; }
 .act-head {
   display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 0;
@@ -574,7 +574,7 @@ function nextVersion() {
 .act-head:hover { color: var(--text); }
 .act-head:hover .act-chev { color: var(--text); }
 .act-ind { width: 14px; height: 14px; position: relative; flex-shrink: 0; display: grid; place-items: center; }
-/* Terminal state: brand-orange dot (the run finished — matches the done steps). */
+/* Terminal state: brand-orange dot (the run finished - matches the done steps). */
 .act-ind::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); opacity: 0.9; }
 .act-title {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -585,7 +585,7 @@ function nextVersion() {
 .act-chev :deep(.ui-icon) { width: 14px; height: 14px; }
 
 /* Collapse/expand: the 0fr->1fr grid-row trick animates height without magic numbers
-   (browsers without fr-row transitions just snap — the final state is identical). */
+   (browsers without fr-row transitions just snap - the final state is identical). */
 .act-steps-wrap {
   display: grid; grid-template-rows: 1fr;
   transition: grid-template-rows var(--dur-slow) var(--ease);
@@ -653,7 +653,7 @@ function nextVersion() {
 .act-steps .step.done .label .title { color: var(--text-2); }
 /* Hierarchy: completed steps recede into a calm trail so the eye lands on the ONE
    running step (full strength + shimmer). Avoids the "everything looks important"
-   wall — the past is quiet, the present is loud. */
+   wall - the past is quiet, the present is loud. */
 .ticker .step.done { opacity: 0.68; }
 .ticker .step.running { opacity: 1; }
 .step .label .sub { color: var(--text-3); font-family: var(--font-mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -667,7 +667,7 @@ function nextVersion() {
   .stopping-banner .spin, .stopping-banner .blink,
   .step { animation: none; }
   /* The ripple ring has NO resting state (its whole look lives in the keyframes):
-     animation:none would freeze it as a permanent opaque ring — remove it instead. */
+     animation:none would freeze it as a permanent opaque ring - remove it instead. */
   .step.running .ind::after { content: none; }
   .act-steps-wrap, .act-steps,
   .tick-enter-active, .tick-leave-active, .tick-move { transition: none; }
@@ -689,7 +689,7 @@ function nextVersion() {
   font-size: 12.5px; line-height: 1.65; color: var(--text); overflow-x: auto; white-space: pre;
 }
 
-/* Per-message token/cost usage line — discreet, neutral, mono (like the activity meta). */
+/* Per-message token/cost usage line - discreet, neutral, mono (like the activity meta). */
 .usage-line {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin-top: var(--s-3); font-size: 11px; color: var(--text-3);

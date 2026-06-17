@@ -1,4 +1,4 @@
-# Référence technique — Plugin WebApp Dataiku DSS (OWIsMind)
+# Référence technique - Plugin WebApp Dataiku DSS (OWIsMind)
 
 > Référence d'ingénierie condensée : build/package/zip, stockage SQL direct, agents LLM Mesh + streaming,
 > et gotchas Dataiku. Fusion des deux anciens guides `cadrage/`, dépouillée de leurs redondances et de tout
@@ -7,10 +7,10 @@
 > **⚠️ Source de vérité = `memory/PROJECT_STATE.md` + `memory/LESSONS.md`** (et `memory/CONTEXT.md` au démarrage).
 > Ce fichier n'est qu'un point de départ : noms réels, schéma de tables courant, solutions validées EN DSS vivent
 > en mémoire et **priment**. Les anciens guides employaient des **noms d'exemple** (`owismind-vue`, `owismindvue`,
-> `webapp-owismind-vue`) — **ne pas les recopier** : utiliser les identifiants canoniques de `CLAUDE.md` /
+> `webapp-owismind-vue`) - **ne pas les recopier** : utiliser les identifiants canoniques de `CLAUDE.md` /
 > `PROJECT_STATE.md §3`.
 >
-> Plateforme observée : Dataiku DSS 14.4.x · backend Python **3.9.23** (3.11/FastAPI **non validés** — voir §6).
+> Plateforme observée : Dataiku DSS 14.4.x · backend Python **3.9.23** (3.11/FastAPI **non validés** - voir §6).
 > Code agent réutilisable (appel agent streamé + extraction SQL/usage, création table SQL) :
 > `cadrage/code_samples_dataiku.md` (snippets notebook validés, **gardés à part, non recopiés ici**).
 
@@ -84,18 +84,18 @@ Mécanique de référence ; **commandes opérationnelles = skills `/build-plugin
 (ne pas réimplémenter les scripts bash des anciens guides).
 
 1. **Build** (`npm run build` depuis `frontend/`) → assets hashés dans `resource/<app>/`.
-   Pré-requis : `node_modules/` existe. **NO INSTALL** — l'agent n'installe jamais (cf. règle CLAUDE.md).
+   Pré-requis : `node_modules/` existe. **NO INSTALL** - l'agent n'installe jamais (cf. règle CLAUDE.md).
 2. **Câbler `body.html`** : copier `resource/<app>/index.html` → `webapps/<wa>/body.html`, puis vérifier qu'il
    contient bien `/plugins/<plugin-id>/resource/<app>/`. L'entrée hashée change à chaque build, d'où la recopie
    systématique. (Cf. gotcha F10 : le `cp` peut être refusé par un hook → utiliser une écriture de fichier.)
-3. **Package** : stager **runtime uniquement** dans le dossier d'upload — `plugin.json` (racine du zip) +
-   `python-lib/` + `resource/` + `webapps/` — puis zipper depuis ce staging.
+3. **Package** : stager **runtime uniquement** dans le dossier d'upload - `plugin.json` (racine du zip) +
+   `python-lib/` + `resource/` + `webapps/` - puis zipper depuis ce staging.
 
 ### Invariants de packaging (non négociables)
 - Le zip ne contient **jamais** `frontend/`, `node_modules/`, ni de `plugin.json` mal placé.
   ⚠️ Piège export DSS : `plugin.json` peut arriver dans un dossier `_/` à l'export ; dans le **zip** il doit être
   à la **racine**. Ne jamais zipper depuis la racine source (`zip -r ... .` aspire `frontend/`+`node_modules/`).
-- Slots STANDARD `app.js` / `style.css` : **vidés (commentaire), jamais supprimés** — DSS les exige.
+- Slots STANDARD `app.js` / `style.css` : **vidés (commentaire), jamais supprimés** - DSS les exige.
   `app.js` ne doit **pas** garder le JS du template DSS qui manipule des éléments DOM absents de l'entrée Vue
   (sinon crash JS avant tout appel backend ; symptôme typique : backend up mais aucune requête applicative).
 - `webapp.json` : ne pas réécrire le fichier entier ni « corriger » les types produits par DSS. Champs clés :
@@ -126,10 +126,10 @@ Snippets notebook validés (CREATE/INSERT/SELECT/COMMIT) → `code_samples_datai
   (**COMMIT obligatoire** après tout effet de bord). Idiome **un seul aller-retour** : `pre=[INSERT]`, requête
   principale = `SELECT` de relecture par id, `post=[COMMIT]` (la SELECT voit sa propre écriture).
 - **Nommage des tables** : `{PROJECT_KEY}_owismind_{logical}`, cité `public."OWISMIND_DEV_owismind_..."`.
-  ⚠️ Le namespace `owismind_` (toujours après le project key) est la convention **réelle** — elle **prime sur**
+  ⚠️ Le namespace `owismind_` (toujours après le project key) est la convention **réelle** - elle **prime sur**
   l'ancien exemple `{PROJECT_KEY}_{logical}` des guides. Centralisé dans `storage/sql_config.py`. Sans guillemets
   doubles, PostgreSQL force le nom en minuscules. Idiome `_vN` : nouvelle version = nouvelle table, **jamais d'ALTER**.
-  Le project key est résolu **serveur** (`dataiku.default_project_key()`, validé en contexte plugin) — jamais fourni par le front.
+  Le project key est résolu **serveur** (`dataiku.default_project_key()`, validé en contexte plugin) - jamais fourni par le front.
 
 ### Sécurité SQL (non négociable)
 - **Jamais** de f-string brute avec input utilisateur. Valeurs paramétrées via `dataiku.sql` :

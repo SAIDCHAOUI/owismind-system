@@ -1,11 +1,11 @@
 # =============================================================================
-# OWIsMind — ORCHESTRATOR AGENT (LangGraph, Dataiku Code Agent)
+# OWIsMind - ORCHESTRATOR AGENT (LangGraph, Dataiku Code Agent)
 # -----------------------------------------------------------------------------
 # An AGENTIC orchestrator built on LangGraph (Pattern A: sub-agents as tools).
 # It chats with the user, REASONS, decides which specialist sub-agent(s) to
 # call, can render data as a CHART or a TABLE in the web app side panel, then
 # presents/comments the result in the user's language. It never fetches business
-# data itself — every figure comes from a sub-agent (SQL-grounded), so it
+# data itself - every figure comes from a sub-agent (SQL-grounded), so it
 # structurally cannot invent a number.
 #
 #   user turn ─► [agent] ──(tool calls?)──► [tools] ──► [agent] ──► … ──► [finish]
@@ -25,18 +25,18 @@
 #   - The LLM is called via the NATIVE LLM Mesh completion API (new_completion)
 #     so that the model's REASONING is honored (configure reasoning effort ON the
 #     model in the LLM Mesh connection when the model supports it). We NEVER force
-#     a native JSON output (with_json_output) on the orchestrator — in DSS 14 that
+#     a native JSON output (with_json_output) on the orchestrator - in DSS 14 that
 #     silently disables reasoning. The model emits tool calls (function calling)
 #     and free text; reasoning stays on.
 #   - MODEL-AGNOSTIC BY DESIGN: each user mode (eco/medium/high) maps to ONE model
-#     for the WHOLE turn — no mid-turn model switching, no escalation. The system
+#     for the WHOLE turn - no mid-turn model switching, no escalation. The system
 #     must shine on a small/fast model and excel on a large one; it never depends
 #     on a single model's quirks. Pick the model per mode in LOOP_LLM_BY_MODE below.
 #   - Live UX = events (the DSS proxy buffers long streams). Nodes emit fine
 #     timeline events through LangGraph's custom stream writer; the final answer
 #     arrives as text chunks at the end.
 #
-# FROZEN CONTRACTS (the web app / Evidence Studio depend on these — never
+# FROZEN CONTRACTS (the web app / Evidence Studio depend on these - never
 # rename, only add):
 #   - Orchestrator event kinds: START, PLANNING, CALLING_AGENT, AGENT_DONE,
 #     RUNNING_TOOL, TOOL_DONE, ARTIFACT (NEW), WRITING_ANSWER, DONE, ERROR,
@@ -94,14 +94,14 @@ SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"           
 
 # Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
 # token on the current turn; default "eco" when absent). Each mode picks ONE
-# model that drives the ENTIRE turn — no escalation, no mid-turn switching. The
+# model that drives the ENTIRE turn - no escalation, no mid-turn switching. The
 # quality difference between modes is purely the model tier; the orchestration
 # logic is identical for all of them.
-#   eco    : Gemini 3.1 Flash-Lite everywhere — the DEFAULT (cheap, fast, good).
+#   eco    : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
 #            Its lead-in narration is kept OFF (smallest tier; the deterministic
-#            ticker covers the wait) — see narration_enabled.
+#            ticker covers the wait) - see narration_enabled.
 #   medium : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
-#   high   : Sonnet everywhere — orchestrator AND sub-agent AND (when configured)
+#   high   : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
 #            the semantic model. Max quality; the most expensive.
 # The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
 # The DSS-configured Semantic Model Query tool (which actually writes the SQL) stays
@@ -127,11 +127,11 @@ _MODE_TOKEN_RE = re.compile(r"⟦owi:mode=([a-z]+)⟧")
 _LANG_TOKEN_RE = re.compile(r"⟦owi:lang=([a-z]+)⟧")
 _CTRL_TOKEN_RE = re.compile(r"⟦owi:[a-z_]+=[^⟧]*⟧")
 # The human-readable end-of-prompt blocks the backend appends (the optional
-# "[ON SCREEN NOW …]" screen-state block, then the "[Context — …]" name/date/language
+# "[ON SCREEN NOW …]" screen-state block, then the "[Context - …]" name/date/language
 # block). The MODEL must see them (recency-anchored language rule + screen awareness),
-# but our own derived uses — sub-agent continuity, fallback detection — want the raw
+# but our own derived uses - sub-agent continuity, fallback detection - want the raw
 # question, so we strip from the FIRST appended block to the end.
-_CTX_BLOCK_RE = re.compile(r"\n\n\[(?:ON SCREEN NOW|Context —).*\Z", re.DOTALL)
+_CTX_BLOCK_RE = re.compile(r"\n\n\[(?:ON SCREEN NOW|Context -).*\Z", re.DOTALL)
 
 MAX_TOOL_LOOPS = 8                 # hard bound on agent<->tools cycles per turn
 MAX_PARALLEL_AGENTS = 3            # bounded fan-out (instance safety)
@@ -232,13 +232,13 @@ def staffed_domains():
 
 
 # =============================================================================
-# 3. TOOL SPECS (OpenAI-style function schemas) — generated from the registry
+# 3. TOOL SPECS (OpenAI-style function schemas) - generated from the registry
 # =============================================================================
 
 def build_tool_specs(caps):
     """Return (tool_specs, tool_to_cap). One tool per enabled AGENT capability,
     plus the built-in presentation/utility tools. The SAME tool set is exposed in
-    every mode (no escalation tool) — modes only change which model drives."""
+    every mode (no escalation tool) - modes only change which model drives."""
     specs, tool_to_cap = [], {}
     for key, cap in caps.items():
         if cap.get("kind") != "agent":
@@ -271,7 +271,7 @@ def build_tool_specs(caps):
             },
         })
     # Built-in presentation tools. These RENDER the latest specialist result in
-    # the Evidence side panel — they are the ONLY allowed way to show tabular or
+    # the Evidence side panel - they are the ONLY allowed way to show tabular or
     # multi-value data (a markdown table in your text is forbidden).
     specs.append({
         "type": "function",
@@ -315,7 +315,7 @@ def build_tool_specs(caps):
                 "Render the LATEST specialist result as a full table in the "
                 "Evidence side panel, then COMMENT on it (do NOT reproduce the "
                 "rows in your text). Use this for any list/ranking with several "
-                "rows (top 10/20, breakdowns) — it is the ONLY allowed way to "
+                "rows (top 10/20, breakdowns) - it is the ONLY allowed way to "
                 "show a table."),
             "parameters": {
                 "type": "object",
@@ -330,7 +330,7 @@ def build_tool_specs(caps):
             "name": "show_kpi",
             "description": (
                 "Render ONE headline figure as a big KPI card in the Evidence "
-                "side panel — ideal for a single total / count, or a value with "
+                "side panel - ideal for a single total / count, or a value with "
                 "a delta vs another (budget, last year). 'value' is the EXACT "
                 "column holding the figure; optional 'delta'/'delta_pct' columns "
                 "show the variation. Then comment in one sentence.\n"
@@ -364,7 +364,7 @@ def build_tool_specs(caps):
 
 
 # =============================================================================
-# 4. EVENTS — same dialect as the validated orchestrator (frozen kinds)
+# 4. EVENTS - same dialect as the validated orchestrator (frozen kinds)
 # =============================================================================
 
 def _ev(kind, data=None):
@@ -391,9 +391,9 @@ _NARR = {
     "calling_plain": {"fr": "Je consulte %s…", "en": "Consulting %s…"},
     "resolve": {"fr": "J'analyse votre demande et je repère les bons filtres…",
                 "en": "Reading your request and pinpointing the right filters…"},
-    "run_sql": {"fr": "Je génère et j'exécute la requête SQL sur les données — "
+    "run_sql": {"fr": "Je génère et j'exécute la requête SQL sur les données - "
                       "c'est l'étape la plus longue, un instant…",
-                "en": "Generating and running the SQL on the data — this is the "
+                "en": "Generating and running the SQL on the data - this is the "
                       "longest step, one moment…"},
     "lookup": {"fr": "Je recherche directement la valeur dans les données…",
                "en": "Looking the value up directly in the data…"},
@@ -433,7 +433,7 @@ _L = {
 
 # Whole-word language markers (word-boundary matched, NOT substrings) so the FR
 # "revenu" never matches inside the EN "revenue", and "add" never matches "address".
-# Mirror of the backend context.detect_prompt_language — kept in sync. This is only
+# Mirror of the backend context.detect_prompt_language - kept in sync. This is only
 # the FALLBACK; the authoritative reply language comes from the ⟦owi:lang⟧ token.
 _FR_WORDS = (
     "le", "la", "les", "des", "du", "une", "un", "quel", "quels", "quelle",
@@ -452,7 +452,7 @@ _EN_LANG_RE = re.compile(r"\b(?:" + "|".join(_EN_WORDS) + r")\b")
 
 def _detect_lang(text):
     """Lightweight language guess (FALLBACK when the backend ⟦owi:lang⟧ token is
-    absent — batch/eval — and for timeline labels). Defaults to French (OWI context)."""
+    absent - batch/eval - and for timeline labels). Defaults to French (OWI context)."""
     t = (text or "").lower()
     if re.search(r"[éèêàùçâîôœ]", t):
         return "fr"
@@ -482,7 +482,7 @@ def _is_footer(chunk, data):
 def _cap_cell(value):
     if value is None or isinstance(value, (bool, int)):
         return value
-    # Keep only FINITE floats — NaN / ±inf are not valid JSON and must be stringified
+    # Keep only FINITE floats - NaN / ±inf are not valid JSON and must be stringified
     # (mirror of the sub-agent's _cap_cell so capture is byte-consistent across files).
     if isinstance(value, float):
         return value if (value == value and value not in (float("inf"), float("-inf"))) else str(value)
@@ -635,13 +635,13 @@ def _add_unique(a, b):
 
 
 # =============================================================================
-# 5b. NATIVE-ARTIFACT FORMATTING — what the model SEES of a specialist result
+# 5b. NATIVE-ARTIFACT FORMATTING - what the model SEES of a specialist result
 # -----------------------------------------------------------------------------
 # A weak model that is handed a ready-made markdown table tends to reprint it. So
 # the model never sees a table: it receives the headline prose (table stripped) +
 # the structured data as a compact JSON block, and a light, non-prescriptive nudge
 # to render it with whatever tool fits (it freely picks the chart/table/KPI and the
-# columns — forcing a type would only constrain a capable model). A deterministic
+# columns - forcing a type would only constrain a capable model). A deterministic
 # safety net in node_finish renders a table when the model rendered nothing.
 # =============================================================================
 
@@ -692,7 +692,7 @@ def _compact_data_block(result):
 def _subagent_tool_output(answer, result, intent=None):
     """The tool output handed to the orchestrator model for a specialist call:
     table-stripped headline + structured DATA + a LIGHT, NON-prescriptive nudge to
-    render it (the model freely picks the chart/table/KPI that fits — never a forced
+    render it (the model freely picks the chart/table/KPI that fits - never a forced
     type or column). No rows (clarification / out-of-scope / no-data) -> pass the
     message through untouched."""
     headline = _strip_markdown_tables(answer or "")[:SUBAGENT_ANSWER_MAX_CHARS]
@@ -708,8 +708,8 @@ def _subagent_tool_output(answer, result, intent=None):
         parts.append(block)
     parts.append(
         "DISPLAY: render this result in the Evidence panel with the tool that "
-        "fits best — show_chart (you choose line/bar/pie + the exact x and y "
-        "columns), show_table, or show_kpi — then write your analysis. Use ONLY "
+        "fits best - show_chart (you choose line/bar/pie + the exact x and y "
+        "columns), show_table, or show_kpi - then write your analysis. Use ONLY "
         "these exact columns: %s. RESTATE the specialist's '[Scope]'/'[Périmètre]' "
         "line (scenario, period, currency) in natural language and format every "
         "monetary figure with thousands separators and €. Then COMMENT (trend, key "
@@ -718,18 +718,18 @@ def _subagent_tool_output(answer, result, intent=None):
 
 
 # =============================================================================
-# 5c. MODEL MODE — one model per mode (model-agnostic, no escalation)
+# 5c. MODEL MODE - one model per mode (model-agnostic, no escalation)
 # =============================================================================
 
 def parse_mode(text):
     """(mode, clean_text): extract the ⟦owi:mode=…⟧ control token the backend
     appends to the current turn, strip every ⟦owi:…⟧ control token from the text.
-    Defaults to 'eco'. (The human [Context —…] block is left in place.)
+    Defaults to 'eco'. (The human [Context -…] block is left in place.)
 
     Security: read the LAST valid token, not the first. The backend always appends
     its authoritative token at the end of the message, so reading the last
     occurrence means a user typing a fake ⟦owi:mode=high⟧ earlier in their message
-    cannot force a more expensive model — the backend's appended token wins."""
+    cannot force a more expensive model - the backend's appended token wins."""
     mode = DEFAULT_MODE
     if not text:
         return mode, text or ""
@@ -743,7 +743,7 @@ def parse_mode(text):
 
 def parse_lang(text):
     """The authoritative reply language from the backend's ⟦owi:lang=…⟧ token, or
-    None when absent (batch / eval path) — caller then falls back to _detect_lang.
+    None when absent (batch / eval path) - caller then falls back to _detect_lang.
 
     SECURITY: read the LAST valid token (the backend appends its authoritative one at
     the end), so a user typing a fake ⟦owi:lang=…⟧ cannot override it."""
@@ -756,7 +756,7 @@ def parse_lang(text):
 
 
 def _strip_context_block(text):
-    """Remove the backend's end-of-prompt human [Context —…] block. Used for our
+    """Remove the backend's end-of-prompt human [Context -…] block. Used for our
     OWN derived text (sub-agent continuity, fallback detection); the MODEL still
     sees the block via the replayed history (the language rule lives there)."""
     return _CTX_BLOCK_RE.sub("", text or "").rstrip()
@@ -791,7 +791,7 @@ _NUDGE_MSG = {
 
 
 def _looks_like_premature_stop(text):
-    """True when ``text`` is a short data-fetch promise with no tool call — a
+    """True when ``text`` is a short data-fetch promise with no tool call - a
     narrate-and-stop. Conservative: requires a staffed specialist to exist AND a
     concrete fetch/progress promise (the _LEADIN_RE cues). A bare trailing ellipsis
     is NOT enough on its own (a stylistic '…' must not trigger a nudge), and long
@@ -806,13 +806,13 @@ def _looks_like_premature_stop(text):
 
 def pick_loop_llm(mode):
     """The single model that drives the WHOLE turn for this mode. No escalation,
-    no mid-turn switching — the chosen model handles routing, tool calls and the
+    no mid-turn switching - the chosen model handles routing, tool calls and the
     final answer end to end (see LOOP_LLM_BY_MODE)."""
     return LOOP_LLM_BY_MODE.get(mode, LOOP_LLM_BY_MODE[DEFAULT_MODE])
 
 
 # =============================================================================
-# 6. (removed) SOURCES BLOCK — the dataset source is shown in the Evidence side
+# 6. (removed) SOURCES BLOCK - the dataset source is shown in the Evidence side
 # panel (Data Source), so the chat answer no longer repeats a "**Sources**" block.
 # The registry still keeps dataset_label_* for future use (e.g. a clickable source
 # link in Evidence pointing at the Dataiku dataset).
@@ -827,12 +827,12 @@ PERSONA = (
     "# WHO YOU ARE\n"
     "You are OWIsMind, the internal data assistant of Orange Wholesale "
     "International (OWI). You run as an AI agent inside Dataiku DSS and you are "
-    "used through the OWIsMind web app — a chat interface with a side panel "
+    "used through the OWIsMind web app - a chat interface with a side panel "
     "that can show charts and tables. You talk to sales managers, "
     "business-development leads and executives: busy people who want a sharp, "
     "trustworthy answer, not a lecture.\n\n"
     "# YOUR VOICE\n"
-    "- A sharp, friendly colleague — never a corporate robot.\n"
+    "- A sharp, friendly colleague - never a corporate robot.\n"
     "- Concise. Get to the point. No empty openers ('I'd be happy to…', "
     "'Great question!').\n"
     "- In French, address the user with 'vous'. At most one emoji, only if it "
@@ -840,7 +840,7 @@ PERSONA = (
     "yourself.\n\n"
     "# LANGUAGE (NON-NEGOTIABLE)\n"
     "Always write your WHOLE reply in the SAME language as the user's CURRENT "
-    "(latest) message — including any lead-in sentence and the analysis. The exact "
+    "(latest) message - including any lead-in sentence and the analysis. The exact "
     "reply language is re-stated at the very end of this prompt and at the end of "
     "the user's message; obey it. If the user switches language between turns, you "
     "switch with them (their previous turn in English + this one in French -> reply "
@@ -851,7 +851,7 @@ PERSONA = (
     "capability.\n"
     "- You NEVER tell the user that a metric, a scenario (budget / forecast / "
     "actuals / Q3F / HLF), a figure or a record is missing, zero or "
-    "unavailable — only a specialist can say that, after looking. When unsure "
+    "unavailable - only a specialist can say that, after looking. When unsure "
     "whether the data exists, CALL the specialist; do not guess and do not "
     "deny.\n"
     "- You MAY say you don't yet have an AGENT for a domain (a capability gap). "
@@ -868,26 +868,26 @@ PERSONA = (
     "- NEVER write a markdown table in your answer (no `|` pipes, no `---` rows) "
     "and never paste a long list of rows inline. Put the data in the panel.\n"
     "- When a specialist returns multi-value data, render it with the tool that "
-    "fits — `show_chart` (you pick line/bar/pie + the x and y columns), "
+    "fits - `show_chart` (you pick line/bar/pie + the x and y columns), "
     "`show_table` (a list/ranking), or `show_kpi` (one headline figure, with a "
-    "delta if present) — then write the analysis. Pick freely what reads best.\n"
+    "delta if present) - then write the analysis. Pick freely what reads best.\n"
     "- Your prose REFERENCES the artifact ('the chart shows…') and gives the "
-    "INSIGHT — the trend, the outlier, the key figure, the 'so what'. Spend your "
+    "INSIGHT - the trend, the outlier, the key figure, the 'so what'. Spend your "
     "effort on the ANALYSIS, not on repeating numbers. A single figure / one-line "
     "answer needs no artifact: just state it.\n\n"
     "# MONEY, NUMBERS & TRANSPARENCY (NON-NEGOTIABLE)\n"
-    "This is about money — be impeccable with figures.\n"
+    "This is about money - be impeccable with figures.\n"
     "- Format EVERY monetary amount cleanly: thousands separators AND the currency "
     "symbol €. Write '123 807 €', never '123807' or '123,807'. Amounts are euros "
     "(EUR) unless the data says otherwise.\n"
     "- ALWAYS state the SCOPE a figure represents, so the user knows what it is made "
     "of. The specialist's answer STARTS with a '[Scope] …' / '[Périmètre] …' line "
     "giving the exact scenario (ACTUALS / BUDGET / FORECAST…), the period (or 'all "
-    "available months — no year filter'), the entity filtered and the currency. "
-    "Weave that scope into your reply in natural language — NEVER drop it, never "
+    "available months - no year filter'), the entity filtered and the currency. "
+    "Weave that scope into your reply in natural language - NEVER drop it, never "
     "give a bare number. E.g.: 'Sur le périmètre ACTUALS, toutes périodes "
     "confondues (aucun filtre d'année), le compte HSBC a réalisé 123 807 €.'\n"
-    "- Then write a short, well-crafted ANALYSIS (the so-what) — not just the "
+    "- Then write a short, well-crafted ANALYSIS (the so-what) - not just the "
     "figure. The answer must read as a clean, trustworthy mini-analysis.\n\n"
     "# WHAT'S ON THE USER'S SCREEN\n"
     "The user can SEE the Evidence panel (the chart/table/KPI from earlier turns). "
@@ -895,7 +895,7 @@ PERSONA = (
     "exactly what is displayed. USE it: when they say 'this', 'the chart', 'it', or "
     "ask to explain or change what's shown, they mean THAT. You may explain what's "
     "on screen directly. To CHANGE it or add ANY new figure (e.g. 'add the "
-    "forecast'), CALL the specialist to fetch the data, then re-render — never just "
+    "forecast'), CALL the specialist to fetch the data, then re-render - never just "
     "say you did it, and never invent a number.\n"
 )
 
@@ -920,31 +920,31 @@ def build_system_prompt(caps, lang_hint, narrate=True):
         parts.append(
             "\n# DOMAINS YOU CANNOT STAFF YET (no agent)\n"
             "If the user asks about one of these, say honestly you don't have "
-            "an agent for it yet and offer what you CAN do — never claim the "
+            "an agent for it yet and offer what you CAN do - never claim the "
             "data is missing:\n" + "\n".join(gap_lines))
     parts.append(
         "\n# HOW TO WORK\n"
-        "1. ACT — NEVER JUST PROMISE. The instant the question needs business data "
+        "1. ACT - NEVER JUST PROMISE. The instant the question needs business data "
         "(revenue, billing, budget, forecast, customers, products, amounts…), CALL the "
         "specialist tool on THIS turn. You hold NO data yourself, so CALLING the tool IS "
         "how you 'check' / 'pull' / 'look it up'. A turn that promises an action ('I'll "
-        "check', 'on it') but emits NO tool call is a FAILURE, not an answer — the user "
+        "check', 'on it') but emits NO tool call is a FAILURE, not an answer - the user "
         "gets nothing. When in any doubt, CALL the tool.\n"
-        "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route — "
+        "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route - "
         "never deny). Write each task SELF-CONTAINED (entity, scenario/phase, exact "
         "period); the specialist does not see the conversation.\n"
         "3. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW. Put the whole need "
-        "into ONE task when you can — one call can return actuals AND budget AND the "
+        "into ONE task when you can - one call can return actuals AND budget AND the "
         "delta together. When the question genuinely needs SEVERAL independent answers, "
-        "emit ALL the specialist calls in the SAME turn so they run IN PARALLEL — NEVER "
+        "emit ALL the specialist calls in the SAME turn so they run IN PARALLEL - NEVER "
         "call one, wait for it, then call the next (that is twice as slow).\n"
         "4. PRESENT. When a specialist returns data, render it in the panel with "
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
-        "figure EXACT, in the user's language — comment on the artifact and give "
+        "figure EXACT, in the user's language - comment on the artifact and give "
         "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
         "5. If a specialist asks for clarification or says it's out of scope, "
-        "relay that honestly and ask the user — do not invent an answer.\n")
+        "relay that honestly and ask the user - do not invent an answer.\n")
     # Live narration is a SEPARATE instruction, enabled only for capable models
     # (medium/high). The mini (eco) skips it: it tends to write the lead-in then
     # STOP without the tool call, so eco stays strictly act-first (the deterministic
@@ -956,17 +956,17 @@ def build_system_prompt(caps, lang_hint, narrate=True):
             "Right before you call a tool, write ONE short, natural sentence in the "
             "user's language saying what you're about to do ('Let me pull EVPL revenue, "
             "actuals vs budget…'). It MUST come TOGETHER WITH the tool call on the SAME "
-            "turn — NEVER the sentence alone (a sentence with no tool call is the FAILURE "
+            "turn - NEVER the sentence alone (a sentence with no tool call is the FAILURE "
             "from rule 1). Keep these progress lines brief and human; don't narrate "
             "trivial steps. When the data comes back, continue the SAME message into "
-            "your analysis — do not repeat the lead-in.\n")
+            "your analysis - do not repeat the lead-in.\n")
     # Re-state the reply language LAST (recency slot of the system message). The
     # backend also appends it at the end of the user's message; both anchor it.
     lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
     parts.append(
         "\n# REPLY LANGUAGE (re-stated last on purpose)\n"
         "The user's current message is in %s. Write your ENTIRE reply in %s. "
-        "Match the user's LATEST message every turn — it overrides earlier turns "
+        "Match the user's LATEST message every turn - it overrides earlier turns "
         "and the web-app default." % (lang_label, lang_label))
     return "\n".join(parts)
 
@@ -992,7 +992,7 @@ class OrchState(TypedDict, total=False):
 
 
 # =============================================================================
-# 8b. AGENTIC CHAT — explicit transcript with strict tool_call -> tool_output
+# 8b. AGENTIC CHAT - explicit transcript with strict tool_call -> tool_output
 # -----------------------------------------------------------------------------
 # The whole conversation is mirrored into an ordered op list and replayed on a
 # fresh completion, preserving the exact tool_call -> tool_output pairing (a
@@ -1091,7 +1091,7 @@ class MyLLM(BaseLLM):
             # Defensive: strip EVERY ⟦owi:…⟧ control token (mode + lang) from EVERY
             # replayed turn (not just the current one), so they can never leak to the
             # model as visible text even if a future backend persists them. The human
-            # [Context —…] block is intentionally KEPT — it carries the recency-anchored
+            # [Context -…] block is intentionally KEPT - it carries the recency-anchored
             # reply-language rule the model must obey.
             chat.add_message(_CTRL_TOKEN_RE.sub("", m["content"]).rstrip(),
                              role=m["role"])
@@ -1250,9 +1250,9 @@ class MyLLM(BaseLLM):
         def node_agent(state):
             # ONE agentic loop on the reliable blocking completion: the model calls
             # tools (sub-agents + show_* render tools), then writes the final answer
-            # itself in its last turn (no separate synthesis pass — fewer slow LLM
+            # itself in its last turn (no separate synthesis pass - fewer slow LLM
             # round-trips, which is what keeps the orchestrator fast). The SAME single
-            # model drives every turn (the mode picked it) — no escalation.
+            # model drives every turn (the mode picked it) - no escalation.
             writer = get_stream_writer()
             if not state.get("started"):
                 writer(_ev("START", {"label": _L["start"][lang]}))
@@ -1264,7 +1264,7 @@ class MyLLM(BaseLLM):
             # Narrate-and-stop guard (ONCE per RUN, model-agnostic): the model wrote a
             # forward-looking lead-in that PROMISES a data action ("je rajoute le
             # forecast…") but emitted NO tool call. That is a premature stop, not an
-            # answer — nudge once and re-ask so the promise actually triggers the fetch.
+            # answer - nudge once and re-ask so the promise actually triggers the fetch.
             # Gated by a per-run `nudged` flag (not "before any specialist"), so it also
             # catches a narrate-and-stop on a FOLLOW-UP turn after a sub-agent already
             # ran. Bounded to one extra call total (no loop risk).
@@ -1281,7 +1281,7 @@ class MyLLM(BaseLLM):
                 tcs = list(getattr(resp, "tool_calls", None) or [])
             if tcs and state.get("step", 0) < MAX_TOOL_LOOPS:
                 # `text` here is the model's OWN lead-in written alongside the tool
-                # call ("Let me pull EVPL revenue…") — streamed live as REAL message
+                # call ("Let me pull EVPL revenue…") - streamed live as REAL message
                 # text by node_tools (persisted, ChatGPT-style), not a transient ticker.
                 return {"pending_tool_calls": tcs, "usage": usage, "nudged": nudged,
                         "preamble": text, "step": state.get("step", 0) + 1,
@@ -1352,7 +1352,7 @@ class MyLLM(BaseLLM):
                     result = res.get("result")
                     # Hand the model a NON-table view (headline + structured data +
                     # a light render nudge) so it renders natively and never copies
-                    # a markdown table — but it freely picks the chart/columns. The
+                    # a markdown table - but it freely picks the chart/columns. The
                     # raw result still flows to Evidence via the trace span.
                     tool_output = _subagent_tool_output(answer, result, res.get("intent"))
                     _pair(tool_output, tc.get("id"))
@@ -1409,7 +1409,7 @@ class MyLLM(BaseLLM):
         def node_finish(state):
             # The model already wrote the answer in the loop's last turn. We just
             # relay it (stripping any markdown table when an artifact is in the
-            # panel — the data is shown there), add the deterministic safety net,
+            # panel - the data is shown there), add the deterministic safety net,
             # and close. No extra LLM pass.
             writer = get_stream_writer()
             # Safety net: a specialist returned MULTI-ROW data but the model
@@ -1427,7 +1427,7 @@ class MyLLM(BaseLLM):
             writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
             text = (state.get("final_text") or "").strip()
             # When the data is in the panel, drop any table the model still typed
-            # (keeps the prose clean) — but never blank out a pure-text answer.
+            # (keeps the prose clean) - but never blank out a pure-text answer.
             if rendered:
                 stripped = _strip_markdown_tables(text)
                 if stripped:
@@ -1435,10 +1435,10 @@ class MyLLM(BaseLLM):
             if not text:
                 if state.get("used_caps") and rows:
                     # Data WAS gathered and is in the panel (e.g. the rare loop-cap
-                    # case) — point the user to it instead of an opaque failure.
-                    text = ("Voici les données demandées — le détail est dans le "
+                    # case) - point the user to it instead of an opaque failure.
+                    text = ("Voici les données demandées - le détail est dans le "
                             "panneau Evidence." if lang == "fr" else
-                            "Here is the requested data — details are in the "
+                            "Here is the requested data - details are in the "
                             "Evidence panel.")
                 else:
                     text = ("Je n'ai pas pu finaliser la réponse." if lang == "fr"
@@ -1469,7 +1469,7 @@ class MyLLM(BaseLLM):
         own lead-in this turn, so we skip the deterministic 'calling' fallback."""
         n = len(sub_calls)
         step_count = n            # number of specialists invoked this turn
-        # announce all. The deterministic 'calling' line is only a FALLBACK — used
+        # announce all. The deterministic 'calling' line is only a FALLBACK - used
         # when the model wrote no lead-in of its own (it stays specific: the model's
         # actual task is interpolated, never a canned repeated event kind).
         for i, (tc, name, args) in enumerate(sub_calls):
@@ -1521,7 +1521,7 @@ class MyLLM(BaseLLM):
                 try:
                     msg = out_q.get(timeout=timeout)
                 except queue.Empty:
-                    logger.warning("orchestrator — parallel fan-out timed out, "
+                    logger.warning("orchestrator - parallel fan-out timed out, "
                                    "%d sub-agent(s) still pending", pending)
                     break
                 if msg[0] == "event":
@@ -1562,7 +1562,7 @@ class MyLLM(BaseLLM):
             # (eco/medium/high) + the AUTHORITATIVE reply language (detected on the
             # clean raw message server-side). Read both, then strip every ⟦owi:…⟧
             # token. The reply language comes from the token when present (fallback:
-            # local detection); the model also sees the human [Context —…] block in
+            # local detection); the model also sees the human [Context -…] block in
             # the replayed history, which re-states the rule in the recency slot.
             token_lang = parse_lang(last_user)
             mode, last_user = parse_mode(last_user)
@@ -1572,7 +1572,7 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # One model drives the whole turn — the mode picks it (eco=Gemini
+            # One model drives the whole turn - the mode picks it (eco=Gemini
             # Flash-Lite, medium=Gemini Flash, high=Sonnet). The same model routes,
             # calls tools and writes the final answer; narration alongside tool calls
             # is enabled for medium/high only.
@@ -1590,7 +1590,7 @@ class MyLLM(BaseLLM):
             # Flash-Lite, medium=Gemini Flash, high=Sonnet) for its own LLM calls.
             context_msg = (
                 "MODE: %s\n"
-                "USER LANGUAGE: %s — write any message addressed to the user "
+                "USER LANGUAGE: %s - write any message addressed to the user "
                 "(clarification, no-data, out-of-scope) in THIS language.\n"
                 % (mode, lang))
             if prev_assistant:
@@ -1607,7 +1607,7 @@ class MyLLM(BaseLLM):
             # NON-DURABLE by design: no checkpointer, ephemeral per-request run. The
             # nodes are NOT idempotent (they stream real text, append trace, run
             # sub-agents and mutate `chat`), so a checkpointer must NOT be added
-            # without first moving those side effects out of the nodes — a replay
+            # without first moving those side effects out of the nodes - a replay
             # would double-emit. recursion_limit is a loose backstop ABOVE the real
             # bound (MAX_TOOL_LOOPS, enforced in node_agent): keep them consistent.
             for chunk in graph.stream(initial, stream_mode="custom",

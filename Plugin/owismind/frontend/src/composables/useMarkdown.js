@@ -1,4 +1,4 @@
-// Markdown rendering for the agent answer — the ONLY place untrusted (LLM) text
+// Markdown rendering for the agent answer - the ONLY place untrusted (LLM) text
 // becomes HTML, so it is sanitized. markdown-it with raw HTML
 // DISABLED (so any HTML in the answer is escaped, not interpreted), then a
 // DOMPurify pass as defense in depth. Links open in a new tab safely.

@@ -2,13 +2,13 @@
 // Settings page (Phase 3). Faithful to the maquette's compact layout
 // (`.set-compact` / `.set-head` / `.set-top-grid`) but HONEST: it shows only what
 // the backend actually provides.
-//   - Profile  : from /me — display name, Dataiku id, real groups. No invented
+//   - Profile  : from /me - display name, Dataiku id, real groups. No invented
 //                email / role / title. The "edit profile" button is disabled
 //                ("soon") because there is no "set my name" route yet (memory L017).
 //   - Theme    : segmented light/dark control, wired to the ui store.
 //   - Language : native select, wired to i18n setLocale.
-//   - Budget   : EMPTY state — no mock "19,07/50 €" (memory: zéro faux chiffre).
-//   - Usage    : EMPTY state — no fake usage history.
+//   - Budget   : EMPTY state - no mock "19,07/50 €" (memory: zéro faux chiffre).
+//   - Usage    : EMPTY state - no fake usage history.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore } from '../stores/ui.js'
@@ -26,14 +26,14 @@ const ui = useUiStore()
 const session = useSessionStore()
 
 const groups = computed(() => session.user?.groups || [])
-const userId = computed(() => session.user?.user_id || '—')
+const userId = computed(() => session.user?.user_id || '-')
 
 // Language goes through the ui store (single source of truth shared with the header).
 function onLangChange(e) {
   ui.setLang(e.target.value)
 }
 
-// Agent-context window — the same ui-store preference the chat send reads. Step of 10
+// Agent-context window - the same ui-store preference the chat send reads. Step of 10
 // keeps the choices simple (10/20/30/40/50); the store clamps anything out of range.
 // No refetch: changing it only affects the NEXT send (the bounded multi-turn context).
 const convStep = 10
@@ -109,7 +109,7 @@ function onContextChange(e) {
           <div class="avatar-lg">{{ session.initials }}</div>
           <div class="set-profile-info">
             <div class="name-row">
-              <span class="name">{{ session.displayName || '—' }}</span>
+              <span class="name">{{ session.displayName || '-' }}</span>
             </div>
             <div class="set-profile-meta-row">
               <span class="did-pill">

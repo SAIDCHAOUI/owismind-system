@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the orchestrator structurally unable to assert a business fact it didn't get from a sub-agent, and turn its registry into a generic manifest so adding an expert = one entry — fixing the "budget 2026 → false denial" class of bugs at the root.
+**Goal:** Make the orchestrator structurally unable to assert a business fact it didn't get from a sub-agent, and turn its registry into a generic manifest so adding an expert = one entry - fixing the "budget 2026 → false denial" class of bugs at the root.
 
-**Architecture:** One LLM plan call decides routing (unchanged cost). The orchestrator may only author (a) routing, (b) a deterministic "I have no agent for that domain" template, (c) a deterministic out-of-scope redirect, (d) bounded greeting/clarify/concept text — none of which can carry a business figure. A domain map distinguishes "real domain, no agent" (honest gap) from "non-OWI" (out of scope). An anti-drift test keeps the revenue manifest truthful against the sub-agent's own constants.
+**Architecture:** One LLM plan call decides routing (unchanged cost). The orchestrator may only author (a) routing, (b) a deterministic "I have no agent for that domain" template, (c) a deterministic out-of-scope redirect, (d) bounded greeting/clarify/concept text - none of which can carry a business figure. A domain map distinguishes "real domain, no agent" (honest gap) from "non-OWI" (out of scope). An anti-drift test keeps the revenue manifest truthful against the sub-agent's own constants.
 
 **Tech Stack:** Python 3.9 (standalone DSS Code Agent file, stdlib + `dataiku` only), `unittest` (DSS-free, `dataiku` stubbed via `importlib`).
 
@@ -53,7 +53,7 @@ class DomainMapTests(unittest.TestCase):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k Domain`
-Expected: FAIL — `AttributeError: module ... has no attribute 'BUSINESS_DOMAINS'`
+Expected: FAIL - `AttributeError: module ... has no attribute 'BUSINESS_DOMAINS'`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -65,7 +65,7 @@ In `orchestrator/orchestrator_agent.py`, immediately AFTER the `get_capabilities
 # The planner uses this map to tell apart a real-but-unstaffed domain
 # (-> CAPABILITY_GAP, honest) from a clearly non-OWI question (-> OUT_OF_SCOPE).
 # Adding an agent later = give its registry entry the matching "domain"; the gap
-# closes with NO prompt change. Names only — never a business value (rule P3).
+# closes with NO prompt change. Names only - never a business value (rule P3).
 BUSINESS_DOMAINS = {
     "revenue":       {"fr": "revenus / CA / budget / forecast",       "en": "revenue / billing / budget / forecast"},
     "tickets":       {"fr": "tickets d'incidents",                    "en": "incident tickets"},
@@ -98,7 +98,7 @@ git commit -m "$(printf 'feat(orchestrator): business domain map + staffed_domai
 
 ---
 
-### Task 2: Deterministic templates — capability-gap & out-of-scope (no business-fact surface)
+### Task 2: Deterministic templates - capability-gap & out-of-scope (no business-fact surface)
 
 **Files:**
 - Modify: `orchestrator/orchestrator_agent.py` (UX texts ~after L312; builders in helpers ~after `_build_capabilities_answer` L787)
@@ -138,7 +138,7 @@ class DeterministicTemplateTests(unittest.TestCase):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k DeterministicTemplate`
-Expected: FAIL — `AttributeError: ... '_available_domains_phrase'`
+Expected: FAIL - `AttributeError: ... '_available_domains_phrase'`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -172,7 +172,7 @@ Add the builders AFTER `_build_capabilities_answer` (~L787):
 def _available_domains_phrase(caps, lang):
     """Comma-joined labels of the staffed business domains (registry-sourced,
     deterministic). Falls back to the agent capability labels if no domain is
-    declared. Pure — never emits a business value."""
+    declared. Pure - never emits a business value."""
     labels = []
     for dom in sorted(staffed_domains(caps)):
         lab = BUSINESS_DOMAINS.get(dom, {})
@@ -190,7 +190,7 @@ def _available_domains_phrase(caps, lang):
 
 def build_capability_gap_answer(domain, caps, lang):
     """Honest 'I have no agent for <domain>' message (R2), built from the
-    registry — never an LLM free-text and never a figure."""
+    registry - never an LLM free-text and never a figure."""
     available = _available_domains_phrase(caps, lang)
     dom = BUSINESS_DOMAINS.get(domain or "", {})
     dom_label = dom.get(lang) or dom.get("fr")
@@ -200,7 +200,7 @@ def build_capability_gap_answer(domain, caps, lang):
 
 
 def build_out_of_scope_answer(caps, lang):
-    """Deterministic out-of-scope redirect — no business assertion surface."""
+    """Deterministic out-of-scope redirect - no business assertion surface."""
     return OUT_OF_SCOPE_REDIRECT[lang].format(available=_available_domains_phrase(caps, lang))
 ```
 
@@ -218,7 +218,7 @@ git commit -m "$(printf 'feat(orchestrator): deterministic capability-gap & out-
 
 ---
 
-### Task 3: `render_non_business_text` — the testable firewall router
+### Task 3: `render_non_business_text` - the testable firewall router
 
 **Files:**
 - Modify: `orchestrator/orchestrator_agent.py` (helpers, after `build_out_of_scope_answer`)
@@ -228,7 +228,7 @@ git commit -m "$(printf 'feat(orchestrator): deterministic capability-gap & out-
 
 ```python
 # ==========================================================================
-# render_non_business_text — routes each non-BUSINESS intent to safe text
+# render_non_business_text - routes each non-BUSINESS intent to safe text
 # ==========================================================================
 class RenderNonBusinessTests(unittest.TestCase):
 
@@ -261,7 +261,7 @@ class RenderNonBusinessTests(unittest.TestCase):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k RenderNonBusiness`
-Expected: FAIL — `AttributeError: ... 'render_non_business_text'`
+Expected: FAIL - `AttributeError: ... 'render_non_business_text'`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -294,7 +294,7 @@ git commit -m "$(printf 'feat(orchestrator): pure render_non_business_text firew
 
 ---
 
-### Task 4: `_validate_plan` + schema — accept `CAPABILITY_GAP` / `CONCEPT` and the `domain` field
+### Task 4: `_validate_plan` + schema - accept `CAPABILITY_GAP` / `CONCEPT` and the `domain` field
 
 **Files:**
 - Modify: `orchestrator/orchestrator_agent.py` (`PLANNER_JSON_SCHEMA` ~L364; `_validate_plan` ~L1205)
@@ -336,7 +336,7 @@ Add to the existing `ValidatePlanTests` class:
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k ValidatePlan`
-Expected: FAIL — `CONCEPT`/`CAPABILITY_GAP` rejected (returns None) and/or `KeyError: 'domain'`
+Expected: FAIL - `CONCEPT`/`CAPABILITY_GAP` rejected (returns None) and/or `KeyError: 'domain'`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -400,7 +400,7 @@ Create `orchestrator/tests/test_manifest_antidrift.py`:
 ```python
 """Anti-drift: the revenue manifest in the orchestrator registry MUST keep
 advertising the sub-agent's real coverage (all phases + the main axes). If
-someone shrinks the description back to "revenue only", this test fails — which
+someone shrinks the description back to "revenue only", this test fails - which
 is exactly the bug that made the orchestrator deny "budget 2026". The phases and
 axes are sourced from the sub-agent's OWN constants, never re-hardcoded here.
 
@@ -469,7 +469,7 @@ class AntiDriftTests(unittest.TestCase):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k AntiDrift`
-Expected: FAIL — current manifests say only "Revenue … Data source: DRIVE_Revenues" (no `budget`/`forecast`/`q3f`/`hlf`).
+Expected: FAIL - current manifests say only "Revenue … Data source: DRIVE_Revenues" (no `budget`/`forecast`/`q3f`/`hlf`).
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -477,14 +477,14 @@ Replace the `planner_description` value on BOTH `"salesdrive"` (~L149) and `"sal
 
 ```python
         "planner_description": (
-            "Revenue and billing on OWI customers across ALL scenarios/phases — "
-            "actuals, budget, forecast, Q3F, HLF — broken down by customer, "
+            "Revenue and billing on OWI customers across ALL scenarios/phases - "
+            "actuals, budget, forecast, Q3F, HLF - broken down by customer, "
             "product, solution, solution line, sirano product, partner, "
             "distribution type, sales entity, sales zone, parent group, month or "
             "year; totals, top-N rankings, period comparisons, actuals-vs-budget "
             "deltas and variance, trends and YTD. Handles multi-period and "
             "multi-phase comparisons WITHIN ONE single step. Data source: "
-            "DRIVE_Revenues. You do NOT pre-judge what this data contains — route "
+            "DRIVE_Revenues. You do NOT pre-judge what this data contains - route "
             "the question; only this agent can confirm or deny a specific figure."
         ),
 ```
@@ -503,7 +503,7 @@ git commit -m "$(printf 'feat(orchestrator): full-truth revenue manifest + anti-
 
 ---
 
-### Task 6: `build_planner_prompt` — humility rules, domain map, new intents, examples
+### Task 6: `build_planner_prompt` - humility rules, domain map, new intents, examples
 
 **Files:**
 - Modify: `orchestrator/orchestrator_agent.py` (`build_planner_prompt` ~L390-495)
@@ -515,7 +515,7 @@ Note: this changes the LLM *behaviour*; the unit tests only guard that the rules
 
 ```python
 # ==========================================================================
-# build_planner_prompt — humility rules + domain map are present
+# build_planner_prompt - humility rules + domain map are present
 # ==========================================================================
 class PlannerPromptTests(unittest.TestCase):
 
@@ -547,7 +547,7 @@ class PlannerPromptTests(unittest.TestCase):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python3 -m unittest discover -s orchestrator/tests -v -k PlannerPrompt`
-Expected: FAIL — current prompt has no domain map / new intents / humility rule.
+Expected: FAIL - current prompt has no domain map / new intents / humility rule.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -576,7 +576,7 @@ Replace the `INTENTS` block (the `"INTENTS (field \"intent\"):\n"` … up to the
         "INTENTS (field \"intent\"):\n"
         "- \"BUSINESS\": needs business data or an action -> build \"steps\". This is "
         "the DEFAULT for anything touching a domain that HAS an agent, EVEN IF you "
-        "are unsure the specific figure exists — only the agent can confirm.\n"
+        "are unsure the specific figure exists - only the agent can confirm.\n"
         "- \"CAPABILITY_GAP\": the question is about a real BUSINESS DOMAIN that has "
         "NO agent yet -> set \"domain\" to that domain key. Do NOT answer; the code "
         "emits an honest 'no agent for this yet' message.\n"
@@ -603,7 +603,7 @@ In `HARD RULES`, replace the existing line about revenues never being GREETING/O
         "- NEVER put figures, amounts or any business data in \"direct_answer\".\n"
         "- You do NOT know what the data contains. You NEVER tell the user that a "
         "metric, a scenario (budget/forecast/actuals/Q3F/HLF), a figure or a record "
-        "is unavailable, missing, or zero — that is ONLY the agent's call.\n"
+        "is unavailable, missing, or zero - that is ONLY the agent's call.\n"
         "- You MAY state you lack an AGENT for a domain (CAPABILITY_GAP). You may "
         "NEVER state that the DATA does not exist.\n"
         "- A question about revenues, customers, tickets, products, amounts, budget "
@@ -651,7 +651,7 @@ git commit -m "$(printf 'feat(orchestrator): planner humility rules + domain map
 **Files:**
 - Modify: `orchestrator/orchestrator_agent.py` (non-business branch ~L891-901; `SYNTHESIS_PROMPT` ~L498; module header ~L42)
 
-Note: `process_stream` and `_synthesize` are streaming generators that need a live DSS project/LLM — NOT DSS-free unit-testable. The behaviour is validated on the instance (Task 8). The logic they now call (`render_non_business_text`) is already covered by Task 3.
+Note: `process_stream` and `_synthesize` are streaming generators that need a live DSS project/LLM - NOT DSS-free unit-testable. The behaviour is validated on the instance (Task 8). The logic they now call (`render_non_business_text`) is already covered by Task 3.
 
 - [ ] **Step 1: Rewire the non-business branch**
 
@@ -688,9 +688,9 @@ In `SYNTHESIS_PROMPT` (~L498), add one rule line after the existing "If a step f
 At the top of `orchestrator_agent.py`, add a `v2.4` block to the header comment (after the `v2.3` block ~L42):
 
 ```python
-# v2.4 (Expert Authority — foundation): the orchestrator never authors a business
+# v2.4 (Expert Authority - foundation): the orchestrator never authors a business
 #   fact. Routing is the default (R3); the only "no" it may write is "no agent for
-#   this domain" (CAPABILITY_GAP, deterministic template) — never "the data does
+#   this domain" (CAPABILITY_GAP, deterministic template) - never "the data does
 #   not exist". OUT_OF_SCOPE is templated too; CONCEPT answers general notions
 #   (no OWI figure). Registry is a manifest: add an agent = one entry {key,
 #   agent_id, label, description, domain}. BUSINESS_DOMAINS tells a real-but-
@@ -720,7 +720,7 @@ git commit -m "$(printf 'feat(orchestrator): wire firewall into process_stream +
 ### Task 8: DSS reconciliation + on-instance validation
 
 **Files:**
-- Modify: `orchestrator/orchestrator_agent.py` (registry `enabled` flags + `agent_id` ~L190/L237) — **needs the user's real v2 agent id**
+- Modify: `orchestrator/orchestrator_agent.py` (registry `enabled` flags + `agent_id` ~L190/L237) - **needs the user's real v2 agent id**
 - Modify: `orchestrator/README.md` (note the v2.4 behaviour)
 
 Note: the repo currently has `"salesdrive"` (visual `rNTZ781a`) enabled and `"salesdrive_v2"` disabled with `agent_id: "agent:FILL_ME_SALESDRIVE_V2"`, but the user runs the **code agent v2** in DSS. The repo must match that reality before the file is pasted back.
@@ -758,7 +758,7 @@ Paste the full `orchestrator/orchestrator_agent.py` into its DSS Code Agent (rep
 - "et pour Virtual Network ?" (after a budget turn) → routes with a self-contained instruction.
 - "quelle est la différence entre le SS7 et le LTE ?" → general concept answer, no OWI figure.
 
-Expected: each matches the description above. Log any divergence as a new lesson in `memory/LESSONS.md` (per the project protocol) and iterate on the planner prompt (Task 6) only — never by hardcoding a business value (rule P3).
+Expected: each matches the description above. Log any divergence as a new lesson in `memory/LESSONS.md` (per the project protocol) and iterate on the planner prompt (Task 6) only - never by hardcoding a business value (rule P3).
 
 ---
 
@@ -774,6 +774,6 @@ Expected: each matches the description above. Log any divergence as a new lesson
 - §7 tests → Tasks 1-6 unit tests + Task 8 DSS smoke tests.
 - §8 deployment reconciliation → Task 8.
 
-**Placeholder scan:** the only deferred value is the real v2 `agent_id` (Task 8 Step 1) — an external credential the user supplies, explicitly flagged, not a code TBD. All code/test blocks are complete.
+**Placeholder scan:** the only deferred value is the real v2 `agent_id` (Task 8 Step 1) - an external credential the user supplies, explicitly flagged, not a code TBD. All code/test blocks are complete.
 
 **Type/name consistency:** `BUSINESS_DOMAINS`, `staffed_domains`, `_available_domains_phrase`, `build_capability_gap_answer`, `build_out_of_scope_answer`, `render_non_business_text` are defined in Tasks 1-3 and reused with identical signatures in Tasks 6-7. Intent strings `CAPABILITY_GAP` / `CONCEPT` are consistent across schema, `_validate_plan`, render, and prompt. `domain` field consistent across schema/validate/render.

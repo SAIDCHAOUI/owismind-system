@@ -1,11 +1,11 @@
 # =============================================================================
-# OWIsMind — VALUE INDEX BUILDER (Dataiku Python recipe, design-time Flow)
+# OWIsMind - VALUE INDEX BUILDER (Dataiku Python recipe, design-time Flow)
 # -----------------------------------------------------------------------------
 # Builds the "value index" of a dataset: every distinct value of every
 # groundable text column, with a normalized form. The Dataset Expert agent
 # queries this index at runtime (read-only SQL) to resolve the business terms
 # users type ("algerie telecom", "halys", "ipl") into EXACT cell values and
-# their column — text-to-SQL is case/accent-sensitive, grounding is what
+# their column - text-to-SQL is case/accent-sensitive, grounding is what
 # prevents silent empty results.
 #
 # Flow wiring:
@@ -18,7 +18,7 @@
 #   column_name  STRING   the source column this value belongs to
 #   value        STRING   the EXACT cell value, verbatim
 #   value_norm   STRING   normalized form (lowercase, accents stripped,
-#                          whitespace collapsed) — match key
+#                          whitespace collapsed) - match key
 #   occurrences  BIGINT   row count of this value in the source dataset
 #
 # Re-run this recipe (scenario: weekly or after each source refresh) to keep
@@ -79,7 +79,7 @@ def should_index_column(name, dss_type, distinct_count, row_count, avg_len):
         return False
     if row_count and distinct_count >= ID_UNIQUENESS_RATIO * row_count and row_count > 1000:
         # quasi-unique long-tail ids are still useful when users paste exact
-        # ids — but only when short (carrier codes); skip long ones.
+        # ids - but only when short (carrier codes); skip long ones.
         if avg_len and avg_len > 24:
             return False
     return True

@@ -2,7 +2,7 @@
 
 The orchestrator agent can ask the web app to display the latest data result as a
 chart or a full table (tools ``show_chart`` / ``show_table``). Only the small SPEC
-is stored here — kind, title, and the chart axes — never the rows: the chart/table
+is stored here - kind, title, and the chart axes - never the rows: the chart/table
 DATA is the already-captured ``generated_sql`` result, reused by the frontend via
 ``/evidence/meta``. So an artifact costs a few hundred bytes per exchange.
 
@@ -109,7 +109,7 @@ def save_artifacts(exchange_id, user_id, artifacts):
         return
     payload = json.dumps(specs, ensure_ascii=False)
     if len(payload) > MAX_ARTIFACTS_JSON_CHARS:
-        logger.warning("save_artifacts — payload too large (%d) for exchange_id=%s; skipping",
+        logger.warning("save_artifacts - payload too large (%d) for exchange_id=%s; skipping",
                        len(payload), exchange_id)
         return
     try:
@@ -132,9 +132,9 @@ def save_artifacts(exchange_id, user_id, artifacts):
             pre_queries=[_WRITE_TIMEOUT_PRE_QUERY, upsert],
             post_queries=["COMMIT"],
         )
-        logger.info("save_artifacts — stored %d artifact(s) exchange_id=%s", len(specs), exchange_id)
+        logger.info("save_artifacts - stored %d artifact(s) exchange_id=%s", len(specs), exchange_id)
     except Exception:
-        logger.exception("save_artifacts — could not store artifacts exchange_id=%s", exchange_id)
+        logger.exception("save_artifacts - could not store artifacts exchange_id=%s", exchange_id)
 
 
 def read_artifacts(user_id, exchange_id):
@@ -162,5 +162,5 @@ def read_artifacts(user_id, exchange_id):
         data = json.loads(raw)
         return _sanitize(data) if isinstance(data, list) else []
     except Exception:
-        logger.exception("read_artifacts — failed for exchange_id=%s", exchange_id)
+        logger.exception("read_artifacts - failed for exchange_id=%s", exchange_id)
         return []

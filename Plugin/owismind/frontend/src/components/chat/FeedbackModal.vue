@@ -1,7 +1,7 @@
 <script setup>
-// Per-message detailed feedback — ADAPTIVE to the rating it edits:
+// Per-message detailed feedback - ADAPTIVE to the rating it edits:
 //   • rating === 0 (negative): pick one or more reasons + an optional comment.
-//   • rating === 1 (positive): comment only (no reasons block) — "what did you like".
+//   • rating === 1 (positive): comment only (no reasons block) - "what did you like".
 // Reasons reuse the maquette's i18n (fb.reason.*) + the new 'other'. The parent
 // (MessageAgent) owns persistence; this component only collects + emits.
 //
@@ -30,7 +30,7 @@ const REASONS = ['incorrect', 'incomplete', 'off_topic', 'other']
 const selected = ref([])
 const comment = ref('')
 
-// Re-seed the form whenever the modal (re)opens — supports editing an existing 👎.
+// Re-seed the form whenever the modal (re)opens - supports editing an existing 👎.
 watch(
   () => props.open,
   (open) => {
@@ -48,7 +48,7 @@ function toggle(code) {
   else selected.value.splice(i, 1)
 }
 function submit() {
-  // Positive feedback never carries reasons — force an empty list.
+  // Positive feedback never carries reasons - force an empty list.
   emit('submit', isNegative.value ? [...selected.value] : [], comment.value.trim())
 }
 </script>

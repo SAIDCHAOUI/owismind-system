@@ -1,9 +1,9 @@
 <script setup>
-// Conversation thread — renders the ACTIVE PATH (turns) of the conversation tree and
+// Conversation thread - renders the ACTIVE PATH (turns) of the conversation tree and
 // follows the streaming answer. Each turn is one user bubble (the active version's prompt,
 // with hover edit) + one agent message (the active version, with turn-level version arrows
 // + regenerate). MessageUser / MessageAgent read useChatStore() directly and call
-// chat.editTurn / regenerateTurn / setTurnVersion — no prop-drilling, just the `turn`.
+// chat.editTurn / regenerateTurn / setTurnVersion - no prop-drilling, just the `turn`.
 //
 // The scroll "signature" includes the last turn's streaming version timeline length + text
 // length + status + its versionIdx so we re-evaluate scroll on every poll tick (L020).
@@ -55,12 +55,12 @@ function repin() {
   toBottom()
 }
 // Streaming growth of the live turn: follow ONLY while a run is active (and near bottom).
-// Gating on `sending` is what stops a VERSION-NAVIGATION recompute — which also changes the
-// signature (the last turn differs) and the turn count — from yanking the view to the bottom.
+// Gating on `sending` is what stops a VERSION-NAVIGATION recompute - which also changes the
+// signature (the last turn differs) and the turn count - from yanking the view to the bottom.
 // That auto-scroll would bury the branch-point version arrows when navigating to a longer
 // (older) branch, making the "back to latest" arrow look like it disappeared.
 watch(signature, () => { if (chat.sending) toBottom() }, { flush: 'post' })
-// A new exchange was created (send / edit / regenerate): its answer lands at the bottom —
+// A new exchange was created (send / edit / regenerate): its answer lands at the bottom -
 // pin to it. Pure version navigation does NOT change exchanges.length, so it won't repin.
 watch(() => chat.exchanges.length, repin)
 // Conversation switch (openSession / newConversation): open the thread at its bottom.
@@ -69,7 +69,7 @@ watch(() => chat.activeSessionId, repin)
 // (always the flexible center column) narrows or widens: every message rewraps,
 // scrollHeight changes and the bottom pin is silently lost (the signature watcher
 // is sending-gated, nothing else fires).
-// Re-run the STICK-GATED toBottom() once the new layout is applied — F13-safe: it
+// Re-run the STICK-GATED toBottom() once the new layout is applied - F13-safe: it
 // does not watch `turns`, and a user who scrolled up is never yanked (stick=false).
 watch(() => evidence.open, () => toBottom(), { flush: 'post' })
 onMounted(() => {

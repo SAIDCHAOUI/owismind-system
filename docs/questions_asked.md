@@ -642,7 +642,7 @@ envoie moi par mail à bertrand.mignot@orange.com
 stp faits moi un tableau précis des revenus par client gcs et gcp par region et par produits pour l'ensemble des produits roaming en precisant si ces clients sont mon homé ou pas
 "Parfait ! J'ai les données 2025. Maintenant laissez-moi construire le tableau consolidé complet avec l'analyse mono-homing par région et type de client.
 
-📊 TABLEAU CONSOLIDÉ REVENUS LOS ROAMING 2025 – ANALYSE MONO-HOMING PAR CLIENT & RÉGION
+📊 TABLEAU CONSOLIDÉ REVENUS LOS ROAMING 2025 - ANALYSE MONO-HOMING PAR CLIENT & RÉGION
 PÉRIODE : ACTUALS 2025 (Année complète)
 🎯 SYNTHÈSE GLOBALE PAR TYPE CLIENT
 Type Client	Nb Clients	Revenus 2025 (€k)	% Total	Mono-homing IPX moyen	Mono-homing Signaling
@@ -650,7 +650,7 @@ GCP (Filiales Orange)	30	~22 500	34%	35% (faible IPX)	100% ✅
 GCS (Clients Externes)	170+	~43 800	66%	25% (multi-homed)	95% ✅
 TOTAL	200+	~66 300	100%	28%	97%
 🌍 ANALYSE DÉTAILLÉE PAR RÉGION & TYPE CLIENT
-A. EUROPE WEST – GCS (CLIENTS EXTERNES)
+A. EUROPE WEST - GCS (CLIENTS EXTERNES)
 Rang	Client	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	Roaming Sponsor (€k)	ORH (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	1&1 Mobilfunk GmbH	D__97	99912116092661	-	-	-	17 580	-	17 580	N/A	N/A
 2	Bouygues Telecom	F__28	6242	2 201	14	-	-	-	2 215	❌ NO	✅ YES
@@ -675,7 +675,7 @@ Mono-homing Signalisation : 100% ✅ (tous les clients utilisent OWI pour SS7+LT
 Mono-homing IPX : Faible (~35% en moyenne) - forte présence concurrents (BICS, GSMA, Syniverse)
 Anomalie : Bouygues Telecom génère €2,2M en Signaling mais €0 en IPX → Opportunité cross-sell majeure
 Champion IPX : Vodafone Germany (57% du mix), Iliad Italia (55%)
-B. EUROPE WEST – GCP (FILIALES ORANGE)
+B. EUROPE WEST - GCP (FILIALES ORANGE)
 Rang	Filiale	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	VAS (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	Orange France	F__19	7683	4 028	1 432	3 443	346	9 249	✅ YES	✅ YES
 2	Orange Belgium	BEL26	6275	362	263	871	90	1 586	✅ YES	✅ YES
@@ -693,14 +693,14 @@ Mono-homing IPX : 100% pour 7/8 filiales (sauf Luxembourg = marginal)
 Mono-homing Signalisation : 100% ✅
 Mix IPX vs Signaling : Équilibré (~37% IPX, ~63% Signaling)
 VAS adoption : Seulement France, Belgium, España, Slovensko, Polska → Cross-sell VAS aux autres filiales
-C. EUROPE EAST – GCS (CLIENTS EXTERNES)
+C. EUROPE EAST - GCS (CLIENTS EXTERNES)
 Rang	Client	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	ORH (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	Play (Pologne)	POL37	12012413534098	156	42	187	-	385	⚠️ PARTIEL (49%)	✅ YES
 2	T-Mobile Polska	POL26	6191	98	27	134	-	259	⚠️ PARTIEL (52%)	✅ YES
 3	Vodafone Romania	ROU02	6412	67	19	89	-	175	⚠️ PARTIEL (51%)	✅ YES
 SOUS-TOTAL EUROPE EAST GCS : ~€819k
 
-D. MEA NORTH – GCS (CLIENTS EXTERNES)
+D. MEA NORTH - GCS (CLIENTS EXTERNES)
 Rang	Client	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	ORH (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	Algérie Telecom	DZA01	6548	389	164	-	-	553	❌ NO	✅ YES
 2	Tunisie Telecom	TUN03	6441	137	59	-	-	196	❌ NO	✅ YES
@@ -713,7 +713,7 @@ SOUS-TOTAL MEA NORTH GCS : ~€1 171k
 
 Mono-homing IPX : Quasi-nul (sauf Vodafone Egypt partiel)
 Opportunité IPX : ~€1 000k si conquête IPX sur ces 5 clients (actuellement 0€ IPX pour 4/5)
-E. MEA NORTH – GCP (FILIALES ORANGE)
+E. MEA NORTH - GCP (FILIALES ORANGE)
 Rang	Filiale	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	ORH (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	Orange Tunisie	TUN06	9100214395128	285	161	14	-	460	⚠️ PARTIEL (3% seulement !)	✅ YES
 2	Orange Egypt	EGY04	1062611135850	252	93	76	-	421	⚠️ PARTIEL (18%)	✅ YES
@@ -725,7 +725,7 @@ SOUS-TOTAL MEA NORTH GCP : ~€1 086k
 🚨 ALERTE MONO-HOMING IPX : Extrêmement faible (3-25%)
 Opportunité interne : Ces filiales utilisent massivement des concurrents IPX
 Potentiel cross-sell IPX : +€350k si passage à 50% mono-homing
-F. MEA WEST – GCP (FILIALES ORANGE - ZONE DOMINANTE)
+F. MEA WEST - GCP (FILIALES ORANGE - ZONE DOMINANTE)
 Rang	Filiale	Carrier Code	Diamond_id	SS7 (€k)	LTE (€k)	IPX (€k)	ORH (€k)	TOTAL (€k)	Mono IPX	Mono Sig
 1	Orange Côte d'Ivoire	CTI01	6583	844	-	-	86	930	❌ NO (0% IPX !)	✅ YES
 2	Orange Mali	MLI03	3061613461160	703	116	-	70	889	❌ NO (0% IPX !)	✅ YES

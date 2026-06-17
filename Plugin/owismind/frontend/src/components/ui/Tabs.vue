@@ -1,5 +1,5 @@
 <script setup>
-// Tabs primitive — ported from `.ev-tab` (components.css): underline-on-active
+// Tabs primitive - ported from `.ev-tab` (components.css): underline-on-active
 // (orange), optional monospace count. v-model carries the active tab key.
 //
 // Extensibility: `items` is a plain array of { key, label, count? } so callers

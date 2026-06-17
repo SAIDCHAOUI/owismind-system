@@ -28,7 +28,7 @@ const conversations = computed(() => session.conversations)
 <template>
   <PageShell :eyebrow="t('fb.eyebrow')" :title="t('fb.title')" :desc="t('fb.desc')">
     <div class="fb-grid">
-      <!-- Left: new request form (inert — no endpoint yet) -->
+      <!-- Left: new request form (inert - no endpoint yet) -->
       <div class="fb-col">
         <h3 class="fb-col-title">{{ t('fb.new_request') }}</h3>
         <form class="fb-form" @submit.prevent>
@@ -47,7 +47,7 @@ const conversations = computed(() => session.conversations)
             <label class="lbl" for="fb-conv">{{ t('fb.linked') }}</label>
             <div class="fb-select-wrap">
               <select id="fb-conv" v-model="linkedConv" class="fb-select" :disabled="!conversations.length">
-                <option value="">—</option>
+                <option value="">-</option>
                 <option v-for="c in conversations" :key="c.id" :value="c.id">{{ tr(c.title) }}</option>
               </select>
               <span class="fb-select-arr"><Icon name="chevronDown" /></span>
@@ -76,7 +76,7 @@ const conversations = computed(() => session.conversations)
         </form>
       </div>
 
-      <!-- Right: your requests — empty (no backend) -->
+      <!-- Right: your requests - empty (no backend) -->
       <div class="fb-col">
         <h3 class="fb-col-title">{{ t('fb.your_requests') }}</h3>
         <EmptyState bordered icon="document" :title="t('fb.empty')" :tag="t('x.soon')" :desc="t('fb.soon_note')" />

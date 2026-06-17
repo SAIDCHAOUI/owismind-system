@@ -20,13 +20,13 @@ frozen contract docs/superpowers/specs/2026-06-10-evidence-trust-layer-design.md
     }
 
 NEVER RAISES (the whole body is exception-guarded). Anything not positively
-understood degrades a flag or yields an ``opaque`` step — never a guess: a wrong
+understood degrades a flag or yields an ``opaque`` step - never a guess: a wrong
 explanation would be a false proof, an under-claimed one is merely less helpful.
 
 Reuses sql_parse's tokenizer/predicate bricks; sql_parse itself is NOT modified
 (its contract is locked by the existing test suite). Comments are masked to
 spaces first (length-preserving, offsets intact) so commented SQL still explains
-— re-executable fragments elsewhere keep rejecting comments (validate_fragment).
+- re-executable fragments elsewhere keep rejecting comments (validate_fragment).
 """
 
 import re
@@ -165,7 +165,7 @@ def _parse_with_clause(tokens):
         name, i = _read_ident(tokens, i)
         if name is None:
             return None, -1, recursive
-        # Optional explicit column list: name (col, ...) AS — skipped verbatim.
+        # Optional explicit column list: name (col, ...) AS - skipped verbatim.
         if i < len(tokens) and tokens[i].text == "(" and not _is_word(tokens[i], "AS"):
             close = _match_paren(tokens, i, len(tokens))
             if close is None:
@@ -194,7 +194,7 @@ def _parse_with_clause(tokens):
 
 
 # ---------------------------------------------------------------------------
-# Scope scanner — one SELECT body -> clause spans + table refs (linear, paren-
+# Scope scanner - one SELECT body -> clause spans + table refs (linear, paren-
 # skipping; sub-groups are opaque except derived FROM subqueries, recorded for
 # chain analysis). Independent of sql_parse._scan_scopes (which it does not
 # modify) but follows the same depth/keyword discipline.
@@ -296,7 +296,7 @@ def _scan_scope(tokens, lo, hi):
                     return None
                 if j + 1 < close and _is_word(tokens[j + 1], "SELECT"):
                     scope["derived"].append((j + 1, close))
-                    # Optional [AS] alias after the derived table — skipped.
+                    # Optional [AS] alias after the derived table - skipped.
                     j = close + 1
                     if j < b and _is_word(tokens[j], "AS"):
                         j += 1
@@ -401,10 +401,10 @@ def _classify_expr(text, tokens, a, b, depth=0):
         return {"kind": "literal"}
     if b - a == 1 and tokens[a].text == "*":
         return {"kind": "star"}
-    # CASE ... END — only meaningful inside an aggregate (agg_filtered).
+    # CASE ... END - only meaningful inside an aggregate (agg_filtered).
     if _is_word(tokens[a], "CASE"):
         return {"kind": "case", "span": (a, b)}
-    # function-call shaped: WORD ( ... ) [OVER ( ... )] — only when the call
+    # function-call shaped: WORD ( ... ) [OVER ( ... )] - only when the call
     # covers the WHOLE expression; otherwise fall through to arithmetic below
     # (SUM(a) / NULLIF(SUM(b), 0) must classify as a ratio, not opaque).
     if tokens[a].kind == "word" and a + 1 < b and tokens[a + 1].text == "(":
@@ -547,7 +547,7 @@ def _resolve_group_keys(text, tokens, scope, items):
 
 
 def _resolve_order(text, tokens, scope, items):
-    """``(entries, fully_resolved)`` — entries = [(display, dir)] for ORDER BY."""
+    """``(entries, fully_resolved)`` - entries = [(display, dir)] for ORDER BY."""
     span = scope["order_span"]
     if not span:
         return [], True
@@ -590,7 +590,7 @@ def _having_steps(text, tokens, scope):
         disp = text[conj[0].start: conj[-1].end].strip()[:MAX_PARAM_CHARS]
         steps.append({"kind": "having", "params": [" ".join(disp.split())]})
         # Resolved when shaped <simple pred> or STRICTLY <AGG( ... )> <op> <literal>
-        # (anything looser — e.g. a ratio of aggregates — stays unresolved).
+        # (anything looser - e.g. a ratio of aggregates - stays unresolved).
         if _try_simple(conj) is not None:
             continue
         if not _is_simple_agg_comparison(conj):
@@ -605,7 +605,7 @@ def _is_simple_agg_comparison(conj):
     if len(conj) < 2 or conj[1].text != "(":
         return False
     close = _match_paren(conj, 1, len(conj))
-    # Expect exactly: the closing paren, ONE comparison op, ONE literal — done.
+    # Expect exactly: the closing paren, ONE comparison op, ONE literal - done.
     if close is None or close + 3 != len(conj):
         return False
     return conj[close + 1].kind == "op" and conj[close + 2].kind in ("number", "string")
@@ -633,7 +633,7 @@ def _scope_where(text, tokens, scope, covered_by_fragment):
 
     ``covered_by_fragment`` is True ONLY when sql_parse itself emitted a
     VALIDATED advanced fragment for this statement (the exact fragment the
-    panel re-applies at runtime) — a non-simple conjunct then renders as
+    panel re-applies at runtime) - a non-simple conjunct then renders as
     filter_advanced and stays "complete". On any other shape the conjunct is
     dropped: listed both as a filter_unmapped step (inline honesty, §9) and in
     dropped_where (the completeness counter the verification level reads).
@@ -690,7 +690,7 @@ def _item_steps(text, tokens, items):
         if kind == "ratio":
             left, right = expr["left"], expr["right"]
             # "share of total" claims SUM(x) / SUM(x) OVER () EXACTLY: same
-            # function (SUM), same argument text, and a truly EMPTY over —
+            # function (SUM), same argument text, and a truly EMPTY over -
             # SUM(rev)/SUM(forecast) OVER () or a PARTITION BY would make the
             # wording a lie (FP-05). Anything else renders as an honest ratio.
             if (left.get("kind") == "agg" and left.get("func") == "SUM"
@@ -700,7 +700,7 @@ def _item_steps(text, tokens, items):
                 rarg = right.get("inside")
                 ldisp = _display(text, tokens, larg[0], larg[1]) if larg else ""
                 rdisp = _display(text, tokens, rarg[0], rarg[1]) if rarg else "?"
-                # The window's inside is SUM(<arg>) — compare against SUM(left).
+                # The window's inside is SUM(<arg>) - compare against SUM(left).
                 if ldisp and rdisp.replace(" ", "") == "SUM({})".format(ldisp).replace(" ", ""):
                     steps.append({"kind": "calc_share", "params": [ldisp]})
                     continue
@@ -749,7 +749,7 @@ def _agg_steps(text, tokens, expr):
     if arg.get("kind") == "case":
         ca, cb = arg["span"]
         # ELSE 0 is neutral ONLY for SUM. For AVG it weighs the denominator,
-        # for MIN/MAX the 0 competes — "only when <cond>" would then be a lie.
+        # for MIN/MAX the 0 competes - "only when <cond>" would then be a lie.
         parsed = _parse_simple_case(text, tokens, ca, cb,
                                     allow_else_zero=(func == "SUM"))
         if parsed is not None:
@@ -770,7 +770,7 @@ def _parse_simple_case(text, tokens, a, b, allow_else_zero=True):
     """CASE WHEN <simple pred> THEN <expr> [ELSE 0|NULL] END -> (cond, then).
 
     ``allow_else_zero`` lets the caller restrict the neutral ELSE to NULL only
-    (AVG/MIN/MAX — where ELSE 0 changes the math and the wording would lie).
+    (AVG/MIN/MAX - where ELSE 0 changes the math and the wording would lie).
     """
     if not _is_word(tokens[a], "CASE") or not _is_word(tokens[b - 1], "END"):
         return None
@@ -851,7 +851,7 @@ def _window_step(text, tokens, expr):
 def _collect_chain(text, tokens, ctes, main_lo, main_hi):
     """Analyse the main scope + every reachable CTE/derived body, source-first.
 
-    Returns ``(chain, dag_complete)`` — chain = ordered scope analyses
+    Returns ``(chain, dag_complete)`` - chain = ordered scope analyses
     [{name, scope, items}] (CTEs in declaration order, derived bodies, then the
     outer scope last) or ``(None, False)`` when any body fails to scan.
     """
@@ -912,7 +912,7 @@ def _column_traces_to_source(col, link, by_name, cte_names, depth=0):
     Walks CTE references: a scope reading the real table directly resolves a
     plain column to ITSELF; a scope reading a CTE resolves only if that CTE
     exposes the column as a plain-column item (alias or same name), recursively
-    — and the returned name is the column at the END of the chain. Returning
+    - and the returned name is the column at the END of the chain. Returning
     the SOURCE name (not the outer alias) is what makes the drill filter the
     right physical column when a CTE renames (FP-06: a rename plus a homonymous
     source column would otherwise drill an unrelated column).
@@ -994,7 +994,7 @@ def _explain(sql):
     # single_source requires (a) exactly ONE real-table occurrence AND (b) no
     # multi-ref scope anywhere on the chain: a self-join THROUGH a CTE (FROM c a
     # JOIN c b) references the same real table twice while real_refs sees it
-    # once — any 2-ref/JOIN scope therefore disqualifies, CTE refs included.
+    # once - any 2-ref/JOIN scope therefore disqualifies, CTE refs included.
     multi_ref_scope = any(
         len(link["scope"]["refs"]) >= 2 or link["scope"]["saw_join"]
         for link in chain
@@ -1003,7 +1003,7 @@ def _explain(sql):
     has_set_op = any(link["scope"]["set_arms"] for link in chain)
     out["has_set_op"] = has_set_op
     # An unresolvable ref (neither real table nor declared CTE elsewhere) would
-    # appear as a "real" table — the DAG stays complete by construction here.
+    # appear as a "real" table - the DAG stays complete by construction here.
     calc_resolved = dag_complete and not recursive
 
     steps = []
@@ -1030,7 +1030,7 @@ def _explain(sql):
     group_keys = []
     grouping_scopes = 0
     # A non-simple conjunct is only "covered" when sql_parse itself emits a
-    # VALIDATED advanced fragment for this statement — that fragment is exactly
+    # VALIDATED advanced fragment for this statement - that fragment is exactly
     # what the panel re-applies at runtime. Re-deriving the single-table rule
     # here would diverge (sql_parse counts WHERE sub-query scopes too, FP-01):
     # asking sql_parse directly keeps explain and execution provably aligned.
@@ -1059,12 +1059,12 @@ def _explain(sql):
                 candidate_keys = []
                 for name in names:
                     # Keys carry the SOURCE column name (end of the identity
-                    # chain) — that is the column the drill must filter on the
+                    # chain) - that is the column the drill must filter on the
                     # physical table (FP-06); the outer alias is display-only.
                     source_name = _column_traces_to_source(name, link, by_name, cte_names)
                     if source_name is not None:
                         candidate_keys.append(source_name)
-                # Only keep keys when EVERY group key resolved AND traced —
+                # Only keep keys when EVERY group key resolved AND traced -
                 # a partial key set would drill a superset of the group.
                 if resolved and len(candidate_keys) == len(names):
                     group_keys = candidate_keys
@@ -1087,7 +1087,7 @@ def _explain(sql):
     limit = outer["scope"]["limit"]
     if limit is not None and order_entries and order_resolved:
         # ALL ordering keys travel in the step (tie-breakers decide WHICH rows
-        # make the top-N — hiding them under a "decomposed" badge would lie).
+        # make the top-N - hiding them under a "decomposed" badge would lie).
         joined = ", ".join("{} {}".format(d, direction.lower())
                            for d, direction in order_entries)[:MAX_PARAM_CHARS]
         steps.append({"kind": "topn", "params": [str(limit), joined]})
@@ -1096,7 +1096,7 @@ def _explain(sql):
             steps.append({"kind": "sort",
                           "params": [order_entries[0][0], order_entries[0][1].lower()]})
         if limit is not None:
-            # LIMIT without a resolved ORDER BY is an arbitrary sample — it
+            # LIMIT without a resolved ORDER BY is an arbitrary sample - it
             # must NEVER be worded as a top-N (anti-lie rule).
             steps.append({"kind": "limit_arbitrary", "params": [str(limit)]})
 

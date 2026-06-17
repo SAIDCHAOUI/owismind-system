@@ -47,7 +47,7 @@ export function fetchMe() {
 // Start a real agent run for one message; returns { status, run_id, exchange_id }.
 // Transport is POLLING, not SSE: DSS's internal nginx can buffer a long-lived stream
 // so events would arrive all at once. Instead the agent runs in a background worker
-// and the front polls /chat/poll (short requests the proxy never buffers) — the same
+// and the front polls /chat/poll (short requests the proxy never buffers) - the same
 // pattern as the project's production Dash app. The frontend sends ONLY
 // { session_id, message, agent_key, history_limit }; agent_key is the OPAQUE logical
 // key from /agents (identity + real agent id are resolved server-side). history_limit
@@ -68,7 +68,7 @@ export function startChat(sessionId, message, agentKey, historyLimit, parentExch
       parent_exchange_id: parentExchangeId || null,
       // Model mode (eco / medium / high). Unknown/absent -> medium server-side.
       mode: mode || undefined,
-      // Web-app configured language (fr / en) — helps the agent pick the reply
+      // Web-app configured language (fr / en) - helps the agent pick the reply
       // language (the language of the message itself still wins server-side).
       webapp_lang: webappLang || undefined,
       // Screen-awareness pointer: which exchange + tab the user is viewing in the
@@ -93,7 +93,7 @@ export function pollChat(runId, cursor) {
 // button). Server-side the worker stops iterating the LLM Mesh stream, persists the
 // PARTIAL answer, and ends the run with a terminal `stopped` event (not an error). The
 // run is owner-scoped. Returns { status:'ok' }; throws 'run_not_found' (404) when the run
-// is already finished/unknown — callers treat that as a benign no-op ("already done").
+// is already finished/unknown - callers treat that as a benign no-op ("already done").
 export function stopChat(runId) {
   return request('/owismind-api/chat/stop', {
     method: 'POST',
@@ -113,8 +113,8 @@ export function fetchConversations(cursor, limit) {
   return request(`/owismind-api/conversations${suffix}`)
 }
 
-// Full messages of ONE session — lazy, fetched only when a conversation is opened.
-// Returns { status, session_id, count, rows: [...] } — one row per stored exchange
+// Full messages of ONE session - lazy, fetched only when a conversation is opened.
+// Returns { status, session_id, count, rows: [...] } - one row per stored exchange
 // (user_text, assistant_text, generated_sql, feedback, parent_exchange_id, …).
 export function fetchConversation(sessionId) {
   return request(`/owismind-api/conversation?session_id=${encodeURIComponent(sessionId)}`)
@@ -140,7 +140,7 @@ export function fetchEvidenceMeta(exchangeId) {
   return request('/owismind-api/evidence/meta?exchange_id=' + encodeURIComponent(exchangeId));
 }
 
-// One bounded page of the evidence table. The payload NEVER carries SQL — see
+// One bounded page of the evidence table. The payload NEVER carries SQL - see
 // composables/evidenceModel.js buildRowsPayload for the exact shape.
 export function fetchEvidenceRows(payload) {
   return request('/owismind-api/evidence/rows', {
@@ -160,7 +160,7 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId) {
 }
 
 // Agents the admin has enabled, for any authenticated caller (chat-side picker).
-// Returns { status, count, agents: [{ key, label }] } — opaque logical keys only.
+// Returns { status, count, agents: [{ key, label }] } - opaque logical keys only.
 export function fetchAgents() {
   return request('/owismind-api/agents', { method: 'GET' });
 }

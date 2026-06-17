@@ -1,21 +1,21 @@
-// Chronological answer timeline — a PURE, framework-free reducer (no Vue import) that
+// Chronological answer timeline - a PURE, framework-free reducer (no Vue import) that
 // turns the backend's normalized event stream into ONE ordered, incremental list. Each
 // element appears exactly where it was received and new elements are only ever appended
-// below — an activity event, a chunk of intermediate agent text, a tool call, more
+// below - an activity event, a chunk of intermediate agent text, a tool call, more
 // text, the final answer, or an error all interleave in true arrival order. The DATA
 // stays chronological; how items are grouped on screen (the collapsible activity block
 // above the answer) is a display concern handled by the read-only selectors below.
 //
 // It is pure so it can be unit-tested with node:test, and it mutates the state object
 // IN PLACE so the same calls drive a Vue reactive() proxy (fine-grained live re-render,
-// memory L020) — the store owns wrapping the state in reactive().
+// memory L020) - the store owns wrapping the state in reactive().
 //
 // State shape (the answer "version"):
 //   { timeline:[item], sql:[{sql,success,row_count}], usage, status, error,
 //     showSql, exchangeId, feedbackRating, feedbackReasons, feedbackComment, _seq }
 //
 // Feedback fields are OUT-OF-BAND (persisted server-side per exchange, not derived
-// from the event stream): `applyEvent` never touches them — the chat store / message
+// from the event stream): `applyEvent` never touches them - the chat store / message
 // component own setting them from `/conversation` rows or after a /chat/feedback call.
 //
 // Timeline item shapes (discriminated by `kind`), each with a stable `id` + arrival
@@ -85,7 +85,7 @@ function pushEvent(state, evt) {
   closeText(state)
   // Backend-provided human label (orchestrator whitelist pass-through): copied
   // only when it is a NON-EMPTY string, capped at 300 chars (mirrors the
-  // streaming.py cap). Display-only — it never feeds ids, seq or
+  // streaming.py cap). Display-only - it never feeds ids, seq or
   // timelineSignature, so the chat auto-scroll gating (F8/F13) is untouched.
   const label = typeof evt.label === 'string' && evt.label ? evt.label.slice(0, 300) : null
   state.timeline.push({
@@ -125,7 +125,7 @@ function pushFinalAnswer(state, finalText) {
   sealEvents(state)
   // Never duplicate already-streamed text: if deltas built any text block, the answer is
   // already on screen and final_answer just confirms it. Only materialize the final text
-  // when nothing streamed — i.e. structured agents that emit the whole answer at the end
+  // when nothing streamed - i.e. structured agents that emit the whole answer at the end
   // (memory L019). The block is closed (no further deltas expected).
   if (hasStreamedText(state)) {
     closeText(state)
@@ -153,7 +153,7 @@ function pushError(state, message) {
   })
 }
 
-// A live "what I'm doing now" narration message (transient — backend never
+// A live "what I'm doing now" narration message (transient - backend never
 // persists it as the answer, so it only ever appears during a live run). It
 // interleaves in arrival order like text, but is rendered as a muted status
 // line and is NEVER part of answerText (copy) or the stored answer.
@@ -217,7 +217,7 @@ export function applyEvent(state, evt) {
     case 'stopped':
       // User-requested early stop (cooperative). The partial answer was already
       // materialized by the preceding final_answer; this only marks the version as
-      // interrupted — NOT an error (no error item, no red toast). Like run_done, it
+      // interrupted - NOT an error (no error item, no red toast). Like run_done, it
       // only flips a still-running version, so a late/duplicate stop is a no-op.
       sealEvents(state)
       closeText(state)
@@ -231,7 +231,7 @@ export function applyEvent(state, evt) {
       pushError(state, state.error)
       break
     default:
-      // Unknown / unhandled event type — ignore, never throw.
+      // Unknown / unhandled event type - ignore, never throw.
       break
   }
   return state
@@ -283,7 +283,7 @@ export function timelineSignature(state) {
 // --- Activity-block selectors (display grouping, NOT a timeline mutation) -------------
 // The message component renders the agent's activity (event items) as ONE grouped,
 // collapsible block above the answer, ChatGPT-style. These selectors only READ the
-// timeline — items keep their stable ids, so v-for keys and timelineSignature (and
+// timeline - items keep their stable ids, so v-for keys and timelineSignature (and
 // therefore the ChatThread scroll gating, F13) are unaffected.
 
 /** The activity events (reasoning/tool steps) in arrival order. */
@@ -292,19 +292,19 @@ export function timelineEvents(state) {
   return state.timeline.filter((it) => it.kind === 'event')
 }
 
-/** The non-event items (text blocks + errors) in arrival order — the rendered answer. */
+/** The non-event items (text blocks + errors) in arrival order - the rendered answer. */
 export function timelineBodyItems(state) {
   if (!state || !state.timeline) return []
   // Whitelist the persisted body kinds: real answer text and errors. Transient
   // narration (kind 'narration') is live-only and must NEVER show in the terminal
-  // body — the model's own lead-in is streamed as 'text' (answer_delta), not narration.
+  // body - the model's own lead-in is streamed as 'text' (answer_delta), not narration.
   return state.timeline.filter((it) => it.kind === 'text' || it.kind === 'error')
 }
 
 /**
  * The timeline as chronological SEGMENTS for the LIVE view: consecutive events are
  * grouped ({ kind:'events', key, items }) and text/error items stay in place
- * ({ kind:'text'|'error', key, item }). This preserves the real interleave — an
+ * ({ kind:'text'|'error', key, item }). This preserves the real interleave - an
  * orchestrator that answers mid-run shows its partial answer BETWEEN two event
  * phases, with the next phase ticking below it. Keys are derived from the stable
  * item ids, so v-for/TransitionGroup diffing never remounts existing rows.
@@ -314,7 +314,7 @@ export function timelineBodyItems(state) {
  * run into many tiny groups, it defeated the bounded LIVE_WINDOW (every group was
  * < 5 so nothing scrolled). Skipping it lets consecutive events MERGE into one
  * group so the max-5 rolling window works, and removes the redundant noise. The
- * model's own lead-in still shows — it streams as 'text', not narration.
+ * model's own lead-in still shows - it streams as 'text', not narration.
  */
 export function timelineSegments(state) {
   if (!state || !state.timeline) return []
@@ -336,7 +336,7 @@ export function timelineSegments(state) {
  * Duration of the event at `idx` derived from the backend stamps: the gap between
  * its elapsed-since-run-start stamp and the NEXT event's. Null when either stamp
  * is missing, the gap is negative, or the event is the last one (no successor to
- * bound it). Used for steps that arrive ALREADY SEALED inside one poll batch —
+ * bound it). Used for steps that arrive ALREADY SEALED inside one poll batch -
  * the client clock never saw them running, but the emission stamps still carry
  * their true duration.
  */
@@ -353,7 +353,7 @@ export function stepStampDiff(events, idx) {
 /**
  * One-line summary of the activity block (collapsed header): step count + total
  * duration. `elapsedSeconds` is stamped by the backend as elapsed-since-run-start
- * (streaming.py), so the total is the MAX across events — robust to out-of-order
+ * (streaming.py), so the total is the MAX across events - robust to out-of-order
  * or missing stamps, never a sum of cumulative values.
  */
 export function activitySummary(state) {

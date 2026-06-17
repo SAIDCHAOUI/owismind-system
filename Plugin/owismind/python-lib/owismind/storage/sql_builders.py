@@ -1,9 +1,9 @@
-"""Pure SQL text builders (NO ``dataiku`` import) — unit-testable without the DSS env.
+"""Pure SQL text builders (NO ``dataiku`` import) - unit-testable without the DSS env.
 
 These assemble the exact SQL text used by the storage layer from fragments that the
 caller has ALREADY escaped/quoted: values via ``sql_config.sql_value`` and the table
-reference via ``sql_config.full_table``. Keeping the assembly here — free of the
-``dataiku`` import that the rest of ``storage`` carries — lets the test suite assert
+reference via ``sql_config.full_table``. Keeping the assembly here - free of the
+``dataiku`` import that the rest of ``storage`` carries - lets the test suite assert
 the query SHAPE (most importantly that every read is ALWAYS scoped to a single
 user_id) without a live DSS runtime. No user input is interpolated here directly;
 only pre-escaped fragments and integers bounded by the caller.
@@ -17,7 +17,7 @@ def build_conversation_list_query(table_ref, user_value_sql, cursor_last_at_sql,
     Title = first user message of the session, cleaned into a tidy one-line name:
     newlines/tabs/repeated spaces are collapsed to single spaces and the value is
     trimmed BEFORE truncating to ``title_maxlen`` (so a multi-line prompt reads as a
-    short label, not a wall of text). ``[[:space:]]`` is the POSIX class — no backslash
+    short label, not a wall of text). ``[[:space:]]`` is the POSIX class - no backslash
     escapes to mangle through ``str.format``. Keyset pagination on (last_at,
     session_id). All value fragments are caller-escaped; ints coerced.
     """
@@ -65,11 +65,11 @@ def build_usage_monthly_upsert(table_ref, user_value_sql,
     """UPSERT one user's CURRENT-MONTH usage bucket (calendar month, server clock).
 
     ``period_start`` is ``date_trunc('month', now())::date`` so every calendar month is
-    its own PRIMARY-KEY row — the future per-user monthly quota is one PK lookup and no
+    its own PRIMARY-KEY row - the future per-user monthly quota is one PK lookup and no
     reset job is ever needed. ON CONFLICT the counters are INCREMENTED (never
     overwritten) and one request is tallied. The token/cost fragments are server-computed
     numeric literals supplied by the caller (storage/usage); the period is a fixed SQL
-    expression — neither is user input. Goes in ``pre_queries`` (a COMMIT must follow).
+    expression - neither is user input. Goes in ``pre_queries`` (a COMMIT must follow).
     """
     return """
     INSERT INTO {table} AS m
@@ -91,7 +91,7 @@ def build_users_usage_increment(table_ref, user_value_sql,
     """Increment a user's LIFETIME cumulative usage counters (never overwrite).
 
     Adds this run's tokens/cost to the registry row and stamps ``last_usage_at``. Scoped
-    to a single ``user_id``; a no-op (0 rows) if the user row does not exist yet — in
+    to a single ``user_id``; a no-op (0 rows) if the user row does not exist yet - in
     practice the /me registry upsert always runs first, so the row is present. The
     token/cost fragments are server-computed numeric literals (storage/usage). Goes in
     ``pre_queries`` (a COMMIT must follow).

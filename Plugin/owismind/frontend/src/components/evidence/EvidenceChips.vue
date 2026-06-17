@@ -1,5 +1,5 @@
 <script setup>
-// Filter chips — the agent's WHERE decomposed into chips. EVERY value chip is
+// Filter chips - the agent's WHERE decomposed into chips. EVERY value chip is
 // editable through the distinct-values picker (editing a comparison chip like
 // `period >= '2025-01'` converts it to =/IN of the picked values) and every
 // chip is removable; the advanced fragment is one chip removable as a whole.
@@ -15,12 +15,12 @@ import { Icon } from '../ui'
 const { t } = useI18n()
 const evidence = useEvidenceStore()
 
-// Max distinct values shown in the picker — mirrors backend service.DISTINCT_LIMIT.
+// Max distinct values shown in the picker - mirrors backend service.DISTINCT_LIMIT.
 const PICKER_LIMIT = 100
-// Max values one filter may carry — mirrors backend MAX_EVIDENCE_IN_VALUES
+// Max values one filter may carry - mirrors backend MAX_EVIDENCE_IN_VALUES
 // (security/validation.py): a bigger selection would 400 on every rows call.
 const MAX_FILTER_VALUES = 50
-// Max client filters per request — mirrors backend MAX_EVIDENCE_FILTERS.
+// Max client filters per request - mirrors backend MAX_EVIDENCE_FILTERS.
 const MAX_FILTERS = 20
 
 const zone = ref(null)
@@ -62,7 +62,7 @@ async function _loadPicker(column, current, excludeId) {
     const values = data.values || []
     // Keep the agent's original values selectable even outside the top-N.
     // Compare on String(): chip values parsed from SQL text may be strings
-    // while live distinct values are typed (42 vs "42") — dedupe on display form.
+    // while live distinct values are typed (42 vs "42") - dedupe on display form.
     const seen = new Set(values.map((v) => String(v)))
     const missing = current.filter((v) => !seen.has(String(v)))
     pickerValues.value = missing.concat(values)
@@ -78,7 +78,7 @@ async function _loadPicker(column, current, excludeId) {
 function openChipPicker(chip) {
   pop.value = { kind: 'chip', key: chip.key }
   // Pre-select the current values only for =/IN chips: for any other op
-  // (!=, NOT IN, >=, BETWEEN, LIKE…) the stored values are NOT a selection —
+  // (!=, NOT IN, >=, BETWEEN, LIKE…) the stored values are NOT a selection -
   // pre-checking them and applying would silently INVERT or distort the
   // agent's filter. The user picks the values they want explicitly.
   const preselect = chip.op === '=' || chip.op === 'IN' ? chip.values : []
@@ -111,7 +111,7 @@ function onRemoveChip(chip) {
 }
 // Selection compares on String(v), consistent with the picker's dedupe: chip
 // values parsed from SQL text may be strings while live distinct values carry
-// the column's real type ('2024' vs 2024) — display form is the identity here.
+// the column's real type ('2024' vs 2024) - display form is the identity here.
 function isSelected(v) {
   const s = String(v)
   return pickerSelected.value.some((x) => String(x) === s)

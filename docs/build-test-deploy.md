@@ -1,4 +1,4 @@
-# Build / Test / Package / Deploy — OWIsMind DSS plugin
+# Build / Test / Package / Deploy - OWIsMind DSS plugin
 
 > Procédure de release du plugin Dataiku DSS **OWIsMind** (WebApp Vue 3 + Vite servie par DSS,
 > backend Flask modulaire dans `python-lib/owismind/`).
@@ -22,7 +22,7 @@
 (safety first). Si une dépendance manque, l'agent **s'arrête et demande à l'utilisateur** de l'installer
 lui-même (p. ex. `! cd Plugin/owismind/frontend && npm install`).
 
-Ce garde-fou n'est pas qu'une convention : il est **appliqué par la configuration du harness** —
+Ce garde-fou n'est pas qu'une convention : il est **appliqué par la configuration du harness** -
 
 - [`.claude/settings.json`](../.claude/settings.json) → `permissions.deny` liste explicitement toutes
   les commandes d'installation (et bloque aussi l'écriture directe dans
@@ -30,7 +30,7 @@ Ce garde-fou n'est pas qu'une convention : il est **appliqué par la configurati
 - le hook **PreToolUse** [`.claude/hooks/guardrail.sh`](../.claude/hooks/guardrail.sh) intercepte
   `Bash|Edit|Write|MultiEdit|NotebookEdit` avant exécution.
 
-Conséquence directe sur le repo : le frontend buildé (`resource/owismind-app/`) **est versionné** — un
+Conséquence directe sur le repo : le frontend buildé (`resource/owismind-app/`) **est versionné** - un
 clone frais ne pouvant pas réinstaller les outils, le payload doit voyager dans le repo pour rester
 packageable (voir §9).
 
@@ -52,7 +52,7 @@ Référence figée → [`memory/PROJECT_STATE.md` §3](../memory/PROJECT_STATE.m
 | Racine plugin (disque) | `Plugin/owismind/` (P majuscule) | repo |
 | Frontend source | `Plugin/owismind/frontend/` | repo |
 | Staging packaging | `Plugin/ready-for-dataiku/owismind-upload/` + `owismind-upload.zip` | repo |
-| Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) — sélectionnée dans les Settings de la webapp | guide SQL |
+| Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) - sélectionnée dans les Settings de la webapp | guide SQL |
 | Project key DSS | `OWISMIND_DEV` (résolu serveur via `dataiku.default_project_key()`) | guide SQL |
 | Plateforme / Python | Dataiku DSS 14.4.x · backend **Python 3.9.23** (3.11/FastAPI NON validés) | `/ping` |
 
@@ -93,7 +93,7 @@ Pour vérifier qu'un changement compile **sans** toucher l'app déployée :
 rm -rf /tmp/owi_buildcheck
 ```
 
-> ⚠️ **Ne JAMAIS builder dans `resource/` hors du skill `/build-plugin`** — `outDir` y pointe avec
+> ⚠️ **Ne JAMAIS builder dans `resource/` hors du skill `/build-plugin`** - `outDir` y pointe avec
 > `emptyOutDir: true`, donc un build sauvage **écrase l'app déployée**. Le build officiel passe uniquement
 > par `/build-plugin` (§5). Le dossier `resource/owismind-app/` ne s'édite jamais à la main (bloqué par hook).
 
@@ -105,7 +105,7 @@ Les deux suites sont **pure-logic, sans environnement DSS et sans install** (run
 remplacent pas la validation EN DSS (voir matrice §11 de `PROJECT_STATE.md`) : elles verrouillent les
 invariants testables hors instance.
 
-### 3.1 Backend — `unittest` (65 tests, vérifié)
+### 3.1 Backend - `unittest` (65 tests, vérifié)
 
 ```bash
 python3 -m unittest discover -s Plugin/owismind/tests -v
@@ -116,11 +116,11 @@ Hors `python-lib/`, donc **jamais packagé**. Les tests mettent `python-lib/` su
 
 Couvert aujourd'hui (DSS-free) : `validation` (`/chat/start` shape+bornes), `validate_history_limit`/
 `validate_optional_exchange_id`, `validate_conversations_limit`, `validate_feedback`, les SQL builders
-purs (`build_conversation_list_query`, `build_session_messages_query`, `build_ancestor_chain_query` —
+purs (`build_conversation_list_query`, `build_session_messages_query`, `build_ancestor_chain_query` -
 **user-scopés + bornés**), `pagination` (cursor round-trip), `agents.context` (assemblage multi-tours),
 `security.identity.derive_full_name`.
 
-### 3.2 Frontend — `node:test` (27 tests, vérifié)
+### 3.2 Frontend - `node:test` (27 tests, vérifié)
 
 ```bash
 npm --prefix Plugin/owismind/frontend test          # = node --test test/*.test.js
@@ -137,7 +137,7 @@ Certains modules importent `dataiku`/`pandas` au chargement → besoin du Python
 `sql_config.pg_identifier`, `serialization.rows_to_json_safe`, `settings.resolve_enabled_agent`,
 `agents.stream_manager`, `security.identity.derive_display_name`.
 
-**TEST-01 (recommandé, NON fait — prochaine étape)** : ajouter des tests DSS-free (stub `dataiku`/`pandas`)
+**TEST-01 (recommandé, NON fait - prochaine étape)** : ajouter des tests DSS-free (stub `dataiku`/`pandas`)
 pour ces invariants **déjà durcis mais non couverts** (rejet d'injection sur `pg_identifier`, NaN→None,
 clé d'agent forgée → `None`, cap/TTL/poll-owner/`_stop_reason` du `stream_manager`, no-op/troncature de
 `save_trace`), et brancher `py_compile`/`compileall` sur `python-lib/owismind/**` comme CI minimale. Il
@@ -159,11 +159,11 @@ n'uploade pas, et **rien n'est jamais uploadé par l'agent** (§7).
 
 ---
 
-## 5. Build — skill `/build-plugin`
+## 5. Build - skill `/build-plugin`
 
 Skill : [`.claude/skills/build-plugin/SKILL.md`](../.claude/skills/build-plugin/SKILL.md). Pipeline exact :
 
-1. **Préflight — jamais d'install.** Vérifier `Plugin/owismind/frontend/node_modules`. Absent → **STOP** et
+1. **Préflight - jamais d'install.** Vérifier `Plugin/owismind/frontend/node_modules`. Absent → **STOP** et
    demander à l'utilisateur d'installer (la commande d'install est de toute façon refusée par policy, §0).
 
 2. **Build** depuis la racine du repo :
@@ -173,7 +173,7 @@ Skill : [`.claude/skills/build-plugin/SKILL.md`](../.claude/skills/build-plugin/
    Sortie attendue dans `Plugin/owismind/resource/owismind-app/` (assets **hashés** `assets/index-*.js` /
    `*.css`, `emptyOutDir: true` purge les anciens hashs).
 
-3. **Câbler `body.html`** — recopier l'entrée buildée (ce `cp` Bash est autorisé ; `Edit`/`Write` sur la
+3. **Câbler `body.html`** - recopier l'entrée buildée (ce `cp` Bash est autorisé ; `Edit`/`Write` sur la
    sortie est **bloqué** par le hook) :
    ```bash
    cp Plugin/owismind/resource/owismind-app/index.html \
@@ -188,7 +188,7 @@ Skill : [`.claude/skills/build-plugin/SKILL.md`](../.claude/skills/build-plugin/
    ```
 
 5. **Reporter** (en français) : ce qui a été buildé, les fichiers de sortie, l'état de `body.html`, et
-   rappeler que le packaging (`/package-plugin`) est une étape séparée — rien n'est uploadé.
+   rappeler que le packaging (`/package-plugin`) est une étape séparée - rien n'est uploadé.
 
 ### Pourquoi recâbler `body.html` à CHAQUE build (gotcha F10)
 
@@ -200,7 +200,7 @@ selon le contexte → écrire le fichier à la place ; le skill décrit le `cp` 
 
 ---
 
-## 6. Package — skill `/package-plugin`
+## 6. Package - skill `/package-plugin`
 
 Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plugin/SKILL.md).
 **Précondition** : frontend déjà buildé + `body.html` câblé (lancer `/build-plugin` en cas de doute).
@@ -212,7 +212,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
    mkdir -p Plugin/ready-for-dataiku/owismind-upload
    ```
 
-2. **Stager le runtime uniquement** (`plugin.json` à la **racine** du staging — pas de `_/plugin.json`
+2. **Stager le runtime uniquement** (`plugin.json` à la **racine** du staging - pas de `_/plugin.json`
    dans ce repo, cf. [LESSONS L002](../memory/LESSONS.md)) :
    ```bash
    cp Plugin/owismind/plugin.json Plugin/ready-for-dataiku/owismind-upload/
@@ -221,7 +221,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
    ```
 
 3. **Zipper depuis le staging** (pour que `plugin.json` soit à la racine de l'archive), en excluant les
-   docs dev et les caches Python — **par nom, jamais par glob large** :
+   docs dev et les caches Python - **par nom, jamais par glob large** :
    ```bash
    ( cd Plugin/ready-for-dataiku/owismind-upload && \
      zip -r ../owismind-upload.zip . \
@@ -231,7 +231,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
    ```
 
    > ⚠️ **Le piège `__init__.py` (L002).** Exclure `CLAUDE.md`/`README.md`/`__pycache__`/`*.pyc` **par
-   > nom**, jamais via un `*.py`/`*.md` global — un tel glob raflerait les `python-lib/owismind/**/__init__.py`
+   > nom**, jamais via un `*.py`/`*.md` global - un tel glob raflerait les `python-lib/owismind/**/__init__.py`
    > et casserait `from owismind.api.routes import register_routes` au runtime. Ne jamais zipper depuis la
    > racine source (`zip -r ... .` aspirerait `frontend/` + `node_modules/`).
 
@@ -282,7 +282,7 @@ Référence : [`cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](../cadrage/GUIDE
   créer/recharger la webapp.
 - Après upload : **Start/Restart backend** de la webapp + **refresh forcé** du navigateur (cache d'assets).
 - Sélectionner la **connexion SQL** (`SQL_owi`) dans les *Settings* de la webapp (et, optionnel, le préfixe
-  de table, le dataset de trace, le niveau de log) — tant qu'aucune connexion n'est choisie, l'app reporte
+  de table, le dataset de trace, le niveau de log) - tant qu'aucune connexion n'est choisie, l'app reporte
   « storage not configured » (cf. [`webapp.json`](../Plugin/owismind/webapps/webapp-owismind-ai-agents/webapp.json)).
 
 > Rappel d'identité runtime : la webapp s'exécute sous **Run backend as** (≠ utilisateur final) ;
@@ -302,7 +302,7 @@ Référence : [`cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](../cadrage/GUIDE
 | `plugin.json` (version/meta) | non | **oui** | upload |
 
 Notes :
-- **Slots STANDARD** `app.js` / `style.css` : vidés (commentaire) mais **jamais supprimés** — DSS les exige.
+- **Slots STANDARD** `app.js` / `style.css` : vidés (commentaire) mais **jamais supprimés** - DSS les exige.
 - Changer `vite.config.js` `base` impose impérativement build + recopie de `body.html` (assets 404 sinon).
 - Référence : matrice rebuild de
   [`cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](../cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md) §3
@@ -313,7 +313,7 @@ Notes :
 ## 9. Tracké vs généré
 
 Philosophie du [`.gitignore`](../.gitignore) racine : la **source** est versionnée ; les **inputs**
-réinstallables et les **outputs** régénérables ne le sont pas — **avec une exception délibérée**.
+réinstallables et les **outputs** régénérables ne le sont pas - **avec une exception délibérée**.
 
 | Chemin | Statut Git | Pourquoi |
 |---|---|---|
@@ -330,7 +330,7 @@ réinstallables et les **outputs** régénérables ne le sont pas — **avec une
 ## 10. Protocole mémoire / fin de session
 
 Skill : [`.claude/skills/log-session/SKILL.md`](../.claude/skills/log-session/SKILL.md). À exécuter en
-**fin de session** (`/log-session`) — il **n'écrit que des fichiers mémoire** (pas de build, pas de
+**fin de session** (`/log-session`) - il **n'écrit que des fichiers mémoire** (pas de build, pas de
 package, pas d'upload). Il :
 
 1. écrit/append le log de session dans `memory/sessions/<YYYY-MM-DD>.md` (Objectif / Fait / Décisions /

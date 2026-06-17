@@ -1,5 +1,5 @@
 <script setup>
-// Sources section — WHERE the data comes from, in business terms: the matched
+// Sources section - WHERE the data comes from, in business terms: the matched
 // dataset name plus an honest "+ n other queries" mention when the answer ran
 // more than one. Gated on the NEW meta.source field: a v1 meta (no source
 // block) renders nothing, keeping the panel pixel-identical to today.
@@ -51,7 +51,7 @@ const sourceUrl = computed(() => (source.value && source.value.url) || '')
 <style scoped>
 /* No z-index: the chips popover (z-index 5, L043) must stay above. */
 .ev-sources { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label — same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
 .ev-sec-title {
   font-size: var(--fs-xs); color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.04em;

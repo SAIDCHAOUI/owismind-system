@@ -1,4 +1,4 @@
-# Session 2026-06-01 — Slice chat-probe (SQL direct backend) + cleanup/optim plugin
+# Session 2026-06-01 - Slice chat-probe (SQL direct backend) + cleanup/optim plugin
 
 ## Objectif
 Prouver l'interaction **SQL directe depuis le backend WebApp** (CREATE IF NOT EXISTS + INSERT texte user
@@ -7,11 +7,11 @@ tout le plugin (orphelins/code mort) et optimiser front + back, rebuild + zip.
 
 ## Fait
 **Backend modulaire créé** (`python-lib/owismind/`) :
-- `api/routes.py` — Blueprint `/owismind-api` : `ping`, `dev/chat-probe/send` (POST), `dev/chat-probe/recent` (GET) + `register_routes(app)`.
-- `storage/sql_config.py` — connexion `SQL_owi`, `resolve_project_key()` (cascade env→config→`default_project_key()`→`OWISMIND_DEV`), **`APP_NAMESPACE="owismind"`** + `physical_table`/`full_table`, `sql_value`/`pg_identifier`, `new_executor()`.
-- `storage/migrations.py` — `ensure_chat_probe_table()` (gardé flag+lock, `CREATE TABLE IF NOT EXISTS`, COMMIT).
-- `storage/repositories.py` — `insert_exchange` (**1 aller-retour** pre=INSERT/main=SELECT/post=COMMIT), `recent_exchanges`, `rows_to_json_safe`.
-- `security/validation.py` — `validate_message`.
+- `api/routes.py` - Blueprint `/owismind-api` : `ping`, `dev/chat-probe/send` (POST), `dev/chat-probe/recent` (GET) + `register_routes(app)`.
+- `storage/sql_config.py` - connexion `SQL_owi`, `resolve_project_key()` (cascade env→config→`default_project_key()`→`OWISMIND_DEV`), **`APP_NAMESPACE="owismind"`** + `physical_table`/`full_table`, `sql_value`/`pg_identifier`, `new_executor()`.
+- `storage/migrations.py` - `ensure_chat_probe_table()` (gardé flag+lock, `CREATE TABLE IF NOT EXISTS`, COMMIT).
+- `storage/repositories.py` - `insert_exchange` (**1 aller-retour** pre=INSERT/main=SELECT/post=COMMIT), `recent_exchanges`, `rows_to_json_safe`.
+- `security/validation.py` - `validate_message`.
 - `webapps/.../backend.py` → bootstrap minimal ; `webapp.json` `params: []`.
 
 **Frontend** : `App.vue` page chat minimale (input + Envoyer + thread) + `services/backend.js` (via `getWebAppBackendUrl`).

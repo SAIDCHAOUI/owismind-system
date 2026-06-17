@@ -1,5 +1,5 @@
 # Plugin/owismind/tests/test_chart_payload.py
-"""chart_payload.build_chart_payload — the server-side 'blindé' chart builder.
+"""chart_payload.build_chart_payload - the server-side 'blindé' chart builder.
 Pure (stdlib only), so it imports without any dataiku stub."""
 import os
 import sys

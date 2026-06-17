@@ -1,10 +1,10 @@
 <script setup>
-// Result section — the EXACT rows the agent received (when captured): a sober
-// bounded mini-table (no sort, no pagination — this is evidence, not a data
+// Result section - the EXACT rows the agent received (when captured): a sober
+// bounded mini-table (no sort, no pagination - this is evidence, not a data
 // browser) + the total row count, with a per-row drill chevron when (and only
 // when) the backend certified the drill-down reliable. When nothing was
 // captured, ONE honest line says so (a re-execution is "now", never "what the
-// agent saw" — honesty rules, spec §9).
+// agent saw" - honesty rules, spec §9).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
@@ -27,7 +27,7 @@ const show = computed(
 // Per-row drill is offered ONLY when the backend certified it available AND
 // the rows on screen are the captured ones (drill indexes meta.result.rows).
 // Index-integrity guard: resultPreview drops malformed (non-list) rows, which
-// would shift preview indexes off meta.result.rows — in that case the drill
+// would shift preview indexes off meta.result.rows - in that case the drill
 // chevrons are withheld rather than risking a drill into the WRONG row.
 const drillable = computed(() => {
   const d = meta.value && meta.value.drilldown
@@ -35,7 +35,7 @@ const drillable = computed(() => {
     return false
   }
   // Every drill column must map onto a captured-result column, or the click
-  // would silently no-op (drill keys carry SOURCE column names — a CTE rename
+  // would silently no-op (drill keys carry SOURCE column names - a CTE rename
   // makes them unmappable here, so the affordance is honestly withheld).
   const resultCols = Array.isArray(result.value.columns)
     ? result.value.columns.map((c) => String(c).toLowerCase())
@@ -47,7 +47,7 @@ const drillable = computed(() => {
   return preview.value.rows.length + preview.value.more === total
 })
 
-// Total rows the agent received — prefer the contract's row_count, fall back
+// Total rows the agent received - prefer the contract's row_count, fall back
 // to what the preview can prove (visible rows + hidden remainder).
 const totalRows = computed(() => {
   const rc = result.value && result.value.row_count
@@ -55,7 +55,7 @@ const totalRows = computed(() => {
   return preview.value.rows.length + preview.value.more
 })
 
-// Not-captured case: the CONTRACT field first — result.row_count is the ACTIVE
+// Not-captured case: the CONTRACT field first - result.row_count is the ACTIVE
 // item's count, set by the backend (the item this panel proves). The queries[]
 // scan stays only as a fallback for a meta without a result block; it would
 // otherwise diverge from the active item (CONTRACT-02: a trailing failed query
@@ -74,7 +74,7 @@ const missingRowCount = computed(() => {
 })
 
 function cell(v) {
-  return v == null ? '—' : String(v)
+  return v == null ? '-' : String(v)
 }
 
 // The drill action lands with IMPL-5 (stores/evidence.js): guard so this
@@ -133,7 +133,7 @@ function drillRow(i) {
 /* No z-index ≥ 5 anywhere here: the chips popover (z-index 5, L043) must stay
    above; the sticky header below uses z-index 1 inside its own scroll box. */
 .ev-result { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label — same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
 .ev-sec-title {
   font-size: var(--fs-xs); color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.04em;
@@ -142,7 +142,7 @@ function drillRow(i) {
 /* Bounded viewport: ≤ 10 rows rendered, ~240px max before scrolling. */
 .ev-result-scroll { max-height: 240px; overflow-y: auto; }
 /* separate + spacing 0 (same trick as EvidenceTable): with `collapse` the th
-   border scrolls away from a sticky header — paint it as an inset shadow. */
+   border scrolls away from a sticky header - paint it as an inset shadow. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--surface);
@@ -164,7 +164,7 @@ tbody tr:last-child td { border-bottom: none; }
 .drill-btn:hover { background: var(--surface-hover); color: var(--orange); }
 .drill-btn :deep(.ui-icon) { width: 13px; height: 13px; }
 .ev-result-info { display: flex; align-items: center; gap: var(--s-3); font-size: var(--fs-xs); color: var(--text-3); }
-/* Truncation is a caveat on the proof — small orange text (AA token, F2). */
+/* Truncation is a caveat on the proof - small orange text (AA token, F2). */
 .ev-result-info .trunc { color: var(--orange-text); }
 .ev-result-missing {
   display: flex; flex-direction: column; gap: var(--s-1);

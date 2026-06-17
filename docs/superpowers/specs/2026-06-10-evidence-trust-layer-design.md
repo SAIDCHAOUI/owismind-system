@@ -1,9 +1,9 @@
-# Evidence Studio v2 — « Trust layer » design (FROZEN CONTRACT)
+# Evidence Studio v2 - « Trust layer » design (FROZEN CONTRACT)
 
 > 2026-06-10 Run 5. This document freezes the cross-workstream contracts for the Evidence
 > Studio trust layer. Implementers MUST NOT change field names/shapes without updating this doc.
 > Sources: 4-specialist exploration workflow (orchestrator audit, SQL lineage design,
-> backend audit, frontend UX design) — reports in session transcript.
+> backend audit, frontend UX design) - reports in session transcript.
 
 ## 0. Goal
 
@@ -19,7 +19,7 @@ the proof path, no migration (JSON enrichment of `chat_v4.generated_sql` TEXT),
 read-only + bounded + owner-scoped + throttled as today, the frontend NEVER sends
 SQL/table/connection names.
 
-## 1. Stored data model (chat_v4.generated_sql — JSON TEXT, NO migration)
+## 1. Stored data model (chat_v4.generated_sql - JSON TEXT, NO migration)
 
 Each item (old items stay valid; all new keys optional):
 
@@ -42,7 +42,7 @@ Caps (pure module `evidence/capture.py`, mirrored independently in the orchestra
   (no dataiku import) and unit-tested.
 
 Opportunistic result extraction from the semantic-model-query tool span `outputs`
-(the exact key is NOT confirmed on this instance — extraction is best-effort):
+(the exact key is NOT confirmed on this instance - extraction is best-effort):
 candidate row keys in order: `rows`, `records`, `data`, `result_rows`, `values`;
 accepted shapes: list-of-lists (+ separate `columns`/`column_names`/`headers` key) or
 list-of-dicts (columns = first dict's keys, stable order). Anything else → no capture
@@ -52,7 +52,7 @@ Readback projection: `/conversation` (chat_v4.messages_for_session) must STRIP `
 from generated_sql items (keep sql/success/row_count/sql_id/step_index/agent_key) so the
 thread payload stays light. Only `/evidence/meta` returns the captured result.
 
-## 2. /evidence/meta — enriched contract (additive, all new fields optional)
+## 2. /evidence/meta - enriched contract (additive, all new fields optional)
 
 `available: true` response (v1 fields unchanged: dataset, columns, chips, advanced, sql):
 
@@ -80,20 +80,20 @@ Degraded response gains `verification: {"level": "declared", "result_captured": 
 (rest unchanged: `{available: false, reason, sql}`).
 
 ### Verification levels (deterministic, computed by a pure function with tests)
-- `declared` — parse failed OR no dataset matched (degraded panel). Wording: agent claim.
-- `source_identified` — dataset matched, but the WHERE could not be fully assessed
+- `declared` - parse failed OR no dataset matched (degraded panel). Wording: agent claim.
+- `source_identified` - dataset matched, but the WHERE could not be fully assessed
   (explain not ok) or multi-source scope without completeness.
-- `scope_partial` — matched + at least one predicate mapped, but `where_complete == false`
+- `scope_partial` - matched + at least one predicate mapped, but `where_complete == false`
   (dropped conjuncts / unmapped tables / fragment rejected / set-op arms ignored).
-- `scope_exact` — matched + `where_complete == true` + `single_source == true` + no set-op
+- `scope_exact` - matched + `where_complete == true` + `single_source == true` + no set-op
   on the relevant chain. (Self-join does NOT qualify as single_source.)
-- `calc_decomposed` — scope_exact + `select_understood == true` + group/order/having
+- `calc_decomposed` - scope_exact + `select_understood == true` + group/order/having
   resolved + CTE DAG complete.
 `result_captured` is an ORTHOGONAL boolean (stored rows present for the active item).
-The UI badge maps (level × result_captured) — see §6.
+The UI badge maps (level × result_captured) - see §6.
 
-### Explanation steps — frozen `kind` enum (flat ordered list, ≤ 15 steps; params = display
-strings, column names verbatim — never translated, never invented)
+### Explanation steps - frozen `kind` enum (flat ordered list, ≤ 15 steps; params = display
+strings, column names verbatim - never translated, never invented)
 
 ```
 source [dataset]                      join [type, table]            filter_eq [col, val]
@@ -115,15 +115,15 @@ A single `opaque` step DOWNGRADES `select_understood`. `limit_arbitrary` (LIMIT 
 resolved ORDER BY) must NEVER be worded as top-N.
 
 Post-review amendments (2026-06-11): `topn` params are now `[n, joined_keys_with_dirs]`
-(ALL ordering keys travel — tie-breakers decide which rows make the top-N, FP-07);
+(ALL ordering keys travel - tie-breakers decide which rows make the top-N, FP-07);
 `filter_unmapped` IS emitted inline for every non-reproduced conjunct (§9 honesty,
-CONTRACT-04); `cte_step` stays RESERVED (declared, not yet emitted — CTE steps are
+CONTRACT-04); `cte_step` stays RESERVED (declared, not yet emitted - CTE steps are
 flattened source-first into the list); drill-down refuses when the drillable key set
 exceeds the 8-condition request cap (`not_supported`) instead of silently truncating
 (CONTRACT-01); group keys carry the SOURCE column name at the end of the identity
 chain, never the outer alias (FP-06).
 
-## 3. /evidence/rows — drill-down extension
+## 3. /evidence/rows - drill-down extension
 
 Payload gains optional `drill: [{column, value}]` (≤ 8 entries; value: str ≤ 500 |
 finite number | bool | null). Server behaviour:
@@ -139,14 +139,14 @@ finite number | bool | null). Server behaviour:
 ## 4. Backend hardening (in scope)
 
 - `_EVIDENCE_TIMEOUT_PRE_QUERIES` gains `"SET LOCAL transaction_read_only TO on"`.
-- `save_assistant_message` JSON cap (see §1) — closes today's unbounded sql_json hole.
+- `save_assistant_message` JSON cap (see §1) - closes today's unbounded sql_json hole.
 - service.py light refactor: shared `resolve_context` + TTL cache (300 s, same pattern
   as `_candidates_cache`) for `read_schema` keyed by dataset name.
 - docs/backend-api.md updated (stale: agent_row_count / not_whitelisted / agent-view).
 
 ## 5. Event protocol (orchestrator ↔ webapp ↔ front)
 
-- `streaming.py` agent_event: WHITELISTED eventData pass-through — copy ONLY
+- `streaming.py` agent_event: WHITELISTED eventData pass-through - copy ONLY
   `label`, `stepIndex`, `stepCount`, `agentKey`, `status` (each str-capped 300 chars,
   numbers as-is) when present. NEVER the whole dict; NEVER agentId / message /
   instruction / steps / generatedSql into the live timeline.
@@ -171,7 +171,7 @@ finite number | bool | null). Server behaviour:
 ## 6. Frontend panel layout (sections, top = most business)
 
 Order in `.ev-body`: (a) EvidenceTrust (badge pill: level×captured, solid border =
-certified, dashed = partial, grey = declared — NEVER green, orange tokens only);
+certified, dashed = partial, grey = declared - NEVER green, orange tokens only);
 (b) EvidenceSources (dataset business label + freshness only if provided);
 (c) EvidenceChips (UNCHANGED, F20); (d) EvidenceCalc (numbered steps from
 explanation.steps via ev.exp.*; hidden when steps empty); (e) EvidenceResult (captured
@@ -187,7 +187,7 @@ Trust badge mapping (pure helper `trustLevel(meta)` in composables/evidenceProof
 - scope_partial | source_identified → `ev.proof.level.partial` (+ dropped count note)
 - declared / degraded → `ev.proof.level.declared`
 
-Store additions (stores/evidence.js, additive — seq/rowsSeq idiom preserved):
+Store additions (stores/evidence.js, additive - seq/rowsSeq idiom preserved):
 `drill = ref(null)` → `{labels: [{column, value}], savedChips, savedIncludeAdvanced,
 savedSort, savedPage}`; actions `drillIntoResultRow(rowIndex)` (build labels from
 meta.result.rows[rowIndex] × meta.drilldown.columns; snapshot; page=0; refreshRows)
@@ -199,9 +199,9 @@ i18n: ONE `ev.proof.*` + `ev.exp.*` block appended in extra.js (fr+en, flat keys
 LIST interpolation). All existing ev.* keys kept.
 
 States: COMPLETE / PARTIAL (interactive + honest notes) / SOURCE-ONLY (no calc/result
-sections) / UNAVAILABLE (degraded, declared badge) / ERROR (retry) — each stays useful.
+sections) / UNAVAILABLE (degraded, declared badge) / ERROR (retry) - each stays useful.
 
-## 7. Orchestrator v2.2 (orchestrator/orchestrator_agent.py — repo copy of the DSS Code Agent)
+## 7. Orchestrator v2.2 (orchestrator/orchestrator_agent.py - repo copy of the DSS Code Agent)
 
 Fixes ORCH-01..11 from the audit: (1) generated_sql items tagged sqlId/stepIndex/
 agentKey + opportunistic capped result capture (local caps, standalone file);
@@ -217,7 +217,7 @@ Plus orchestrator/AUDIT.md (findings → fixes → residual risks) and DSS-free 
 (sys.modules dataiku stub) for: _validate_plan, _find_generated_sql (tagging+caps+depth),
 _safe_json_parse, _sub_event_label, _sources_block, _build_capabilities_answer.
 
-## 8. File boundaries (implementation workstreams — strictly disjoint)
+## 8. File boundaries (implementation workstreams - strictly disjoint)
 
 - IMPL-1: `python-lib/owismind/evidence/sql_explain.py` (NEW, pure) +
   `tests/test_evidence_sql_explain.py` (full SQL matrix).

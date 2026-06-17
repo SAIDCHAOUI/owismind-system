@@ -1,4 +1,4 @@
-"""Pure SQL analysis for Evidence Studio (NO dataiku import — unit-testable).
+"""Pure SQL analysis for Evidence Studio (NO dataiku import - unit-testable).
 
 Turns the agent-generated SELECT stored in ``webapp_chat_v5.generated_sql`` into
 a structured, re-buildable description:
@@ -17,7 +17,7 @@ a structured, re-buildable description:
 
 BEST-EFFORT extraction (user decision, supersedes the v1 strict-fidelity rule):
 the parse never fails because the query is "too complex". JOINs, GROUP BY,
-sub-queries, CTEs and set operations all parse — the goal is to recover the
+sub-queries, CTEs and set operations all parse - the goal is to recover the
 SOURCE TABLES and every WHERE predicate that maps onto one of them, so the
 Evidence panel can always show the (filtered) source data. What cannot be
 mapped (aggregations, join plumbing, cross-table conditions) is simply ignored
@@ -30,7 +30,7 @@ FROM/JOIN table refs (with aliases) and its own WHERE span. A predicate carries
 ``binding`` (the lower-cased table its column qualifier resolves to, or None
 when unqualified) and ``scope_tables`` (the lower-cased tables of its scope) so
 ``predicates_for_table`` can keep exactly the ones that apply to the matched
-source table — a self-join keeps both sides' filters, a different joined
+source table - a self-join keeps both sides' filters, a different joined
 table's filter is dropped.
 
 Nothing here ever executes SQL. The service layer re-validates everything again
@@ -42,7 +42,7 @@ bounded read-only SELECT on a discovered project dataset.
 import re
 
 # Hard bound on the SQL text we analyse (instance safety: the parser is O(n) but
-# there is no reason to tokenize megabytes — anything bigger means degraded mode).
+# there is no reason to tokenize megabytes - anything bigger means degraded mode).
 MAX_SQL_CHARS = 20000
 
 # Recursion cap for nested (SELECT ...) groups: 20k chars admit ~1300 nesting
@@ -99,7 +99,7 @@ def tokenize(sql):
 
     Comments are rejected outright ('comment_unsupported'): they may not appear
     in a fragment we could re-execute. Any character the grammar does not know
-    (backslash, $$-quoting, ||, ...) fails with 'tokenize_failed' — degraded mode.
+    (backslash, $$-quoting, ||, ...) fails with 'tokenize_failed' - degraded mode.
     An unterminated string/quoted identifier never matches -> 'tokenize_failed'.
     """
     tokens = []
@@ -121,7 +121,7 @@ def validate_fragment(text):
     """True when an advanced WHERE fragment is safe to append to a read query.
 
     The fragment comes from the agent's OWN already-executed SQL and is only ever
-    applied to a discovered project dataset inside a bounded SELECT — this is the
+    applied to a discovered project dataset inside a bounded SELECT - this is the
     final defensive gate: no second statement, no subquery/set-op/DML keyword, no
     comment, no pg_* function (pg_sleep & friends), balanced parens, bounded
     length. String literals are masked via the tokenizer before the keyword scan
@@ -129,7 +129,7 @@ def validate_fragment(text):
 
     Trust model for function names: only ``pg_*`` and the banned-word list are
     blocked by NAME (checked on bare AND quoted identifiers). Broader safety is
-    NOT name-based — it relies on the fragment being agent-authored, re-validated
+    NOT name-based - it relies on the fragment being agent-authored, re-validated
     here on every request, and only ever appended to a bounded read-only SELECT
     on a project-discovered dataset.
     """
@@ -177,7 +177,7 @@ _NON_ALIAS_WORDS = (
 )
 
 # Operators a chip can faithfully display; only '=' and 'IN' are value-editable
-# as parsed — the UI lets the user EDIT any chip, which converts it to =/IN.
+# as parsed - the UI lets the user EDIT any chip, which converts it to =/IN.
 EDITABLE_OPS = ("=", "IN")
 _SIMPLE_OPS = {"=", "!=", "<>", "<", "<=", ">", ">="}
 
@@ -247,7 +247,7 @@ def _split_conjuncts(toks):
 
 
 def _strip_parens(toks):
-    """Strip ALL paren pairs that wrap the WHOLE conjunct — one O(m) pass.
+    """Strip ALL paren pairs that wrap the WHOLE conjunct - one O(m) pass.
 
     With ``p`` leading '(' tokens, ``q`` trailing ')' tokens and ``d`` the
     minimum running depth over the span between them (after token p-1 up to
@@ -383,7 +383,7 @@ def _try_simple(toks):
 def _read_table_ref(tokens, j, hi):
     """``(ref, next_index)`` for a table reference at j, or ``(None, j)``.
 
-    ``ref`` = {"schema", "table", "alias"} — ident(.ident)* plus an optional
+    ``ref`` = {"schema", "table", "alias"} - ident(.ident)* plus an optional
     ``AS x`` / bare / quoted alias. Clause keywords are never read as an alias,
     and the transparent LATERAL/ONLY prefixes are never read as a table name.
     """
@@ -417,7 +417,7 @@ def _scan_scopes(tokens, lo, hi, scopes, depth=0):
     One scope per SELECT body: the outer statement, plus every parenthesized
     group whose first token is SELECT (sub-queries, CTE bodies, IN (...) sets).
     Non-SELECT paren groups (function args like EXTRACT(x FROM y), USING (...))
-    are opaque — their content can never register tables or WHERE spans.
+    are opaque - their content can never register tables or WHERE spans.
     Each scope records its FROM/JOIN refs and its first WHERE span (start, end).
     A set-operation keyword ends the scan: only the FIRST arm of a UNION/
     EXCEPT/INTERSECT is analysed (same rule as the top level).
@@ -436,7 +436,7 @@ def _scan_scopes(tokens, lo, hi, scopes, depth=0):
         t = tokens[i]
         if t.text == "(":
             close = _match_paren(tokens, i, hi)
-            if close is None:  # unbalanced — tolerated, parse_select gated it already
+            if close is None:  # unbalanced - tolerated, parse_select gated it already
                 i += 1
                 continue
             if depth < MAX_SCOPE_DEPTH and i + 1 < close and _is_word(tokens[i + 1], "SELECT"):
@@ -444,7 +444,7 @@ def _scan_scopes(tokens, lo, hi, scopes, depth=0):
             i = close + 1
             continue
         if t.text == "," and in_from:
-            # Comma join — also reached after a derived table: FROM (SELECT…) s, t2
+            # Comma join - also reached after a derived table: FROM (SELECT…) s, t2
             ref, j = _read_table_ref(tokens, i + 1, hi)
             if ref is not None:
                 scope["refs"].append(ref)
@@ -456,7 +456,7 @@ def _scan_scopes(tokens, lo, hi, scopes, depth=0):
             u = t.text.upper()
             if u in ("FROM", "JOIN"):
                 # The FROM of the `IS [NOT] DISTINCT FROM` operator is NOT a
-                # table site — it always directly follows the word DISTINCT.
+                # table site - it always directly follows the word DISTINCT.
                 if u == "FROM" and i > lo and _is_word(tokens[i - 1], "DISTINCT"):
                     i += 1
                     continue
@@ -466,7 +466,7 @@ def _scan_scopes(tokens, lo, hi, scopes, depth=0):
                     scope["refs"].append(ref)
                     i = j
                     continue
-                # FROM ( SELECT ... ) — the paren group is handled by the loop.
+                # FROM ( SELECT ... ) - the paren group is handled by the loop.
                 i += 1
                 continue
             if u == "WHERE":
@@ -493,7 +493,7 @@ def _render_fragment(sql, toks, alias_map):
     """Fragment text from a token run, with known table qualifiers stripped.
 
     The rebuilt evidence query targets the bare source table (no alias), so a
-    verbatim ``r."amount" > 100`` would not execute — drop the WHOLE qualifier
+    verbatim ``r."amount" > 100`` would not execute - drop the WHOLE qualifier
     chain (``alias.`` or ``schema.table.``) whenever the part right before the
     column resolves in the scope's alias map; an unknown qualifier keeps the
     chain untouched (never a partial strip). Everything kept is emitted as
@@ -570,7 +570,7 @@ def parse_select(sql):
     scopes = []
     _scan_scopes(tokens, 0, len(tokens), scopes)
 
-    # Source-table candidates, scan order, deduped — the service matches them
+    # Source-table candidates, scan order, deduped - the service matches them
     # against the project's discovered datasets (first match = source table).
     tables, seen = [], set()
     for scope in scopes:
@@ -604,7 +604,7 @@ def parse_select(sql):
         where_toks = tokens[scope["where"][0] : scope["where"][1]]
         conjuncts, has_or = _split_conjuncts(where_toks)
         if has_or:
-            # Top-level OR: the conjuncts are not independent — the whole WHERE
+            # Top-level OR: the conjuncts are not independent - the whole WHERE
             # is one fragment (usable only in the single-table case).
             if single:
                 fragments.append(_render_fragment(sql, where_toks, alias_map))
@@ -637,7 +637,7 @@ def predicates_for_table(predicates, table):
     """The predicates that apply to ONE matched source table (best-effort keep).
 
     Keep a predicate when (a) its SELECT scope actually reads the matched table
-    and (b) its column qualifier — if any — binds to that table. Unqualified
+    and (b) its column qualifier - if any - binds to that table. Unqualified
     predicates in a multi-table scope are kept: the service still checks the
     column against the live dataset schema before use.
     """

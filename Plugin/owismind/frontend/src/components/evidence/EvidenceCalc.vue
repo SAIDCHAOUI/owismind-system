@@ -1,10 +1,10 @@
 <script setup>
-// Calculation section — HOW the number was computed, as a numbered list of
+// Calculation section - HOW the number was computed, as a numbered list of
 // business-language steps (no SQL jargon: the i18n ev.exp.* wording carries
 // the translation; column names stay verbatim). Steps come straight from the
 // backend's deterministic explanation; an unknown kind degrades to the
 // ev.exp.opaque fallback (calcStepArgs). Entirely hidden when the backend
-// produced no steps (v1 meta included) — an empty "how" section would only
+// produced no steps (v1 meta included) - an empty "how" section would only
 // erode trust.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -37,7 +37,7 @@ const steps = computed(() => {
 <style scoped>
 /* No z-index: the chips popover (z-index 5, L043) must stay above. */
 .ev-calc { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label — same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
 .ev-sec-title {
   font-size: var(--fs-xs); color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.04em;
@@ -47,7 +47,7 @@ const steps = computed(() => {
   display: flex; flex-direction: column; gap: var(--s-1);
 }
 .ev-calc-step { display: flex; align-items: baseline; gap: var(--s-2); min-width: 0; }
-/* Discreet step number — fixed width keeps the texts left-aligned. */
+/* Discreet step number - fixed width keeps the texts left-aligned. */
 .ev-calc-step .num {
   flex: none; min-width: 16px; text-align: right;
   font-size: 11px; color: var(--text-3);

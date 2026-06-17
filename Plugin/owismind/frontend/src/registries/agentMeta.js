@@ -1,10 +1,10 @@
-// Agent metadata registry — OPTIONAL descriptive cards (icon / tagline / badge /
+// Agent metadata registry - OPTIONAL descriptive cards (icon / tagline / badge /
 // description / bullets / tools), ported from the maquette (data.js → OWI_DATA.agents).
 //
 // IMPORTANT (memory F7 + confidentiality): this registry is NOT the source of the
 // agent LIST. The list always comes from the backend GET /agents (enabled, opaque
 // logical keys). This registry only ENRICHES a backend agent when its label
-// matches a known entry — otherwise the agent shows a generic, honest card (we
+// matches a known entry - otherwise the agent shows a generic, honest card (we
 // never invent capabilities/tools for an unknown agent). All copy is {fr,en} →
 // render through useTr(). Extensibility: add a card = add one entry here.
 export const agentMeta = [
@@ -28,7 +28,7 @@ export const agentMeta = [
   {
     id: 'cooper',
     name: 'Cooper',
-    tagline: { fr: 'Agent commercial — comptes clés', en: 'Sales agent — key accounts' },
+    tagline: { fr: 'Agent commercial - comptes clés', en: 'Sales agent - key accounts' },
     icon: 'robot',
     badge: 'new',
     desc: {
@@ -126,10 +126,24 @@ for (const m of agentMeta) {
   byNorm[norm(m.name)] = m
 }
 
+// Registry keys long enough to be safe for substring matching (avoids a 2-letter
+// id like "cx" matching an unrelated label), longest first so the most specific
+// key wins. Lets a decorated backend label such as "Agent - OWIsMind_orchestrator"
+// still resolve to the OWIsMind card via its embedded "owismind".
+const SUBSTRING_KEYS = Object.keys(byNorm)
+  .filter((k) => k.length >= 4)
+  .sort((a, b) => b.length - a.length)
+
 /**
  * Resolve descriptive metadata for a backend agent label, or null if unknown.
- * The label is the only thing the backend exposes (never an agent_id).
+ * The label is the only thing the backend exposes (never an agent_id). Tries an
+ * exact normalized match first, then falls back to the longest registry key
+ * contained in the label (so admin-decorated labels like "Agent - X" still match).
  */
 export function resolveAgentMeta(label) {
-  return byNorm[norm(label)] || null
+  const n = norm(label)
+  if (!n) return null
+  if (byNorm[n]) return byNorm[n]
+  const hit = SUBSTRING_KEYS.find((k) => n.includes(k))
+  return hit ? byNorm[hit] : null
 }

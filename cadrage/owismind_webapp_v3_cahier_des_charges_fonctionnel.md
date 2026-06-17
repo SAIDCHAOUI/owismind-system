@@ -1,7 +1,7 @@
-# OWIsMind Webapp v3 — Cahier des charges fonctionnel
+# OWIsMind Webapp v3 - Cahier des charges fonctionnel
 
 > **Type :** cahier des charges fonctionnel (produit, pas du how-to technique).
-> **Statut :** cadrage. **Beaucoup de ce document est désormais LIVRÉ et VALIDÉ EN DSS** — l'état réel
+> **Statut :** cadrage. **Beaucoup de ce document est désormais LIVRÉ et VALIDÉ EN DSS** - l'état réel
 > et les décisions actées vivent dans `memory/PROJECT_STATE.md` (§9-13) + `memory/CONTEXT.md`, qui **priment**.
 > Ce document garde surtout l'**intention produit utile pour les fonctions à venir** (au premier chef
 > **Evidence Studio**, différé par décision user).
@@ -11,14 +11,14 @@
 ## 1. Vision produit
 
 Portail **agentique métier** pour les utilisateurs OWI : dialoguer en langage naturel avec des agents IA
-Dataiku DSS, mais pas un simple chatbot — une interface de **confiance** qui expose les preuves d'une réponse.
+Dataiku DSS, mais pas un simple chatbot - une interface de **confiance** qui expose les preuves d'une réponse.
 
 Trois objectifs : **Productivité** (analyses métier rapides) · **Confiance** (données, étapes, SQL, traces,
 coûts visibles) · **Extensibilité** (ajouter agents / artefacts / graphiques sans refonte).
 
 Le trio différenciant : **Conversation + Live Execution Timeline + Evidence Studio**.
 
-Positionnement : portail pro de confiance, orienté données/preuves/traçabilité — pas une démo IA, pas un
+Positionnement : portail pro de confiance, orienté données/preuves/traçabilité - pas une démo IA, pas un
 chatbot grand public, pas un outil opaque.
 
 ---
@@ -34,7 +34,7 @@ chatbot grand public, pas un outil opaque.
   **configuration**, pas de refonte. Agents prévus : Orchestrateur OWIsMind (défaut), Revenues, Tickets, CX,
   Opportunities, Product/Customer Base, Delivery.
 - **Modularité** : conversation, streaming, timeline, Evidence Studio, dataset explorer, charts, SQL/trace/cost
-  viewers, feedback, FAQ, settings, i18n, exports — chaque brique évolue indépendamment.
+  viewers, feedback, FAQ, settings, i18n, exports - chaque brique évolue indépendamment.
 - **Desktop-first responsive** (12" → ultra-wide) ; **mobile hors priorité V1**.
 - **Multilingue extensible** : FR + EN en V1, tout label UI traduisible.
 
@@ -55,7 +55,7 @@ Trois espaces : **Sidebar conversations** | **Conversation + prompt + timeline**
   `Enter` envoie, `Shift+Enter` saute une ligne ; envoi bloqué si budget atteint ou agent indisponible.
 - **Sélecteur d'agent** : défaut = Orchestrateur ; un autre agent si l'utilisateur y a accès ; liste extensible ;
   par agent : nom, courte description, domaine, statut, badge (default/beta/restricted/offline).
-- **Voice input** : transcription insérée dans la prompt bar pour édition — **n'envoie pas automatiquement**.
+- **Voice input** : transcription insérée dans la prompt bar pour édition - **n'envoie pas automatiquement**.
 
 ### Settings / My Account
 Profil (nom, identifiant, agents autorisés, rôle/groupe) · Langue (FR/EN) · Préférences · **Budget dashboard** ·
@@ -89,7 +89,7 @@ SUB_AGENT_FOOTER                       → Résultats et trace reçus
 
 ---
 
-## 5. Evidence Studio (DIFFÉRÉ — intention à conserver)
+## 5. Evidence Studio (DIFFÉRÉ - intention à conserver)
 
 > ⏸️ **Non livré en V1, différé par décision user.** C'est la principale fonction future à laquelle ce cahier
 > sert encore de cadrage. Points d'extension déjà réservés côté front (aside `AppLayout`, registres) →
@@ -99,9 +99,9 @@ SUB_AGENT_FOOTER                       → Résultats et trace reçus
 Panneau de confiance répondant à « pourquoi faire confiance à cette réponse ? ». Ouverture auto (dataset/SQL/chart
 détecté), manuelle (« Open evidence ») ou depuis une étape de timeline. **6 onglets :**
 
-1. **Evidence** (prioritaire) : ce qui a réellement servi — résultat exact, agrégation, row count, scope,
+1. **Evidence** (prioritaire) : ce qui a réellement servi - résultat exact, agrégation, row count, scope,
    filtres, période, agent/dataset source, statut.
-2. **Dataset** : explorer les données de l'agent actif — aperçu, recherche, tri, filtres colonnes, pagination,
+2. **Dataset** : explorer les données de l'agent actif - aperçu, recherche, tri, filtres colonnes, pagination,
    **lazy loading strict** (charger à l'ouverture de l'onglet, seulement l'agent actif). Si sample, warning :
    « Cette vue affiche un échantillon ; le calcul de l'agent peut porter sur le dataset complet. »
 3. **Chart** : visualisations depuis les résultats (auto si série temporelle / group by détectable, sinon bouton
@@ -109,7 +109,7 @@ détecté), manuelle (« Open evidence ») ou depuis une étape de timeline. **6
    waterfall plus tard. Moteur extensible.
 4. **SQL** : SQL généré quand il existe + statut/row count/source + copy/show-hide. Ne pollue pas la réponse.
    Absence de SQL = message neutre (normal pour agents RAG/non-SQL).
-5. **Trace** : déroulé agentique — vue utilisateur (étapes lisibles, agent/outil, durée, statut, erreurs) +
+5. **Trace** : déroulé agentique - vue utilisateur (étapes lisibles, agent/outil, durée, statut, erreurs) +
    vue debug (eventKind/blockId/nextBlockId/toolName/raw).
 6. **Cost** : tokens (prompt/completion/total), coût estimé, nb d'appels LLM, coût par agent/sous-agent, durée.
    Ton pédagogique, pas anxiogène.
@@ -143,7 +143,7 @@ globale, montrer les agents appelés, un espace Evidence par agent, **lazy-loade
 - **Export / report** : Markdown, PDF, PowerPoint, fiche client 360, executive summary, envoi email.
 - **Nouveaux artefacts** : image, carte, document, rapport, slide, contrat, Excel, dashboard externe.
 - **Admin registry** (page future) : agents, descriptions, domaines, datasets associés, icônes, permissions,
-  labels d'étapes, ordre d'affichage. _(Un espace admin de base — users, agents whitelist, storage — est déjà livré ;
+  labels d'étapes, ordre d'affichage. _(Un espace admin de base - users, agents whitelist, storage - est déjà livré ;
   cf. `PROJECT_STATE.md`.)_
 - **Évaluation agent** : note de qualité, benchmark, golden questions, comparaison de versions, taux de réussite.
 

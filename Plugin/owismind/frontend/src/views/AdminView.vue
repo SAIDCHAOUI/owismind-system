@@ -1,9 +1,9 @@
 <script setup>
-// Admin space (Phase 4) — dressed à la maquette admin console (tabbed) but HONEST:
+// Admin space (Phase 4) - dressed à la maquette admin console (tabbed) but HONEST:
 // only the features with a real, validated backend are wired (storage view,
 // agent whitelist, users + admin flag). The maquette's mock-driven tabs (org
 // budget, per-user quotas, activity feed) have NO backend, so they are labeled
-// empty states — never fake KPIs/spend/activity.
+// empty states - never fake KPIs/spend/activity.
 //
 // The data + actions are ported verbatim from the validated AdminPanel.vue logic
 // (same 7 endpoints, same error handling); only the UI is new. The route is
@@ -210,14 +210,14 @@ if (import.meta.env.DEV) {
           <div class="kpi">
             <span class="kpi-ico"><Icon name="database" /></span>
             <span class="kpi-label">{{ t('admin.kpi.connection') }}</span>
-            <span class="kpi-value mono">{{ storage?.connection || '—' }}</span>
+            <span class="kpi-value mono">{{ storage?.connection || '-' }}</span>
           </div>
         </div>
 
         <SettingCard v-if="storage" :eyebrow="t('admin.storage.title')">
           <dl class="kv">
             <dt>{{ t('admin.storage.connection') }}</dt>
-            <dd><code>{{ storage.connection || '—' }}</code></dd>
+            <dd><code>{{ storage.connection || '-' }}</code></dd>
             <dt>{{ t('admin.storage.project_key') }}</dt>
             <dd><code>{{ storage.project_key }}</code></dd>
             <dt>{{ t('admin.storage.prefix') }}</dt>
@@ -316,7 +316,7 @@ if (import.meta.env.DEV) {
                   </td>
                   <td class="muted">{{ (u.user_groups || []).join(', ') }}</td>
                   <td>
-                    <Icon v-if="u.is_admin" name="check" class="admin-yes" /><span v-else class="muted">—</span>
+                    <Icon v-if="u.is_admin" name="check" class="admin-yes" /><span v-else class="muted">-</span>
                   </td>
                   <td class="row-action">
                     <Button variant="ghost" :disabled="busyUser === u.user_id" @click="toggleAdmin(u)">

@@ -34,16 +34,16 @@ import dataiku
 # ----------------------------------------------------------------------------
 # PARAMETERS
 # ----------------------------------------------------------------------------
-OLD_SEMANTIC_MODEL_ID = "2O2KcHw"             # existing model — READ ONLY
+OLD_SEMANTIC_MODEL_ID = "2O2KcHw"             # existing model - READ ONLY
 NEW_SEMANTIC_MODEL_NAME = "Drive_Revenues_Model (aligned)"
 NEW_VERSION_ID = "v1"                         # first version of the NEW model
 
 # Physical table literal used inside golden-query SQL (matches the existing
-# golden queries of the source model — PostgreSQL, case-sensitive identifiers).
+# golden queries of the source model - PostgreSQL, case-sensitive identifiers).
 PHYSICAL_TABLE = '"OWISMIND_DEV_drive_revenues"'
 
 # Exact data literals (verified against the source model's manualValues / golden
-# queries). Keep these in sync with the data — they are the only business values
+# queries). Keep these in sync with the data - they are the only business values
 # this script asserts, and they mirror what the dataset actually contains.
 PHASE_ACTUALS = "ACTUALS"                     # realized revenue (NOT 'ACTUAL')
 INDIRECT_VALUE = "Indirect_distribution/Resseler"
@@ -58,18 +58,18 @@ INDIRECT_VALUE = "Indirect_distribution/Resseler"
 # Parent_Group restraint, and the indirect/Account_partner semantics.
 # ----------------------------------------------------------------------------
 NEW_INSTRUCTIONS = """\
-## Physical model — ONE table, NEVER join
+## Physical model - ONE table, NEVER join
 
 All three entities (revenue_record, customer_account, commercial_offer) map to the SAME
 physical table. Treat them as a single denormalized table and select every needed column
-directly from it. NEVER emit a JOIN, and in particular NEVER self-join the table to itself —
+directly from it. NEVER emit a JOIN, and in particular NEVER self-join the table to itself -
 there is nothing to join.
 
-## Revenue semantics — Phase and booking_type
+## Revenue semantics - Phase and booking_type
 
 amount_eur is bucketed along two axes:
 - Phase: the scenario. Allowed values, EXACTLY: ACTUALS, BUDGET, FORECAST, Q3F, HLF.
-  The realized-revenue scenario is the PLURAL 'ACTUALS' — never write 'ACTUAL'.
+  The realized-revenue scenario is the PLURAL 'ACTUALS' - never write 'ACTUAL'.
 - booking_type: the financial bucket within a scenario.
 
 For a given (diamond_id, Product, year_month) within one Phase, several booking_type rows
@@ -88,7 +88,7 @@ all booking_types in ACTUALS).
 - "pipeline", "open opportunities"              → Phase = 'FORECAST' AND booking_type = 'New customer Open in Pipe'
 - "expected billing", "to bill", "à facturer"   → Phase = 'FORECAST' AND booking_type LIKE 'To Bill%'
 
-## Commercial offer hierarchy — ALWAYS prefer the most granular level (CRITICAL)
+## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)
 
 The offer is a hierarchy, broadest to most granular:
     SolutionLine  >  Solution  >  Product      (sirano_product is a secondary technical code).
@@ -96,7 +96,7 @@ The offer is a hierarchy, broadest to most granular:
 When a user term (e.g. "IPL", "IP Transit", "Roaming Sponsor", "IP") could match a value in
 several of these columns, resolve it to the MOST GRANULAR level that contains it, in this
 STRICT order of preference:
-    1. Product           (default — most users speak at the product level)
+    1. Product           (default - most users speak at the product level)
     2. Solution
     3. SolutionLine
     4. sirano_product    (last resort only)
@@ -108,19 +108,19 @@ sirano_product. Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL
 sirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use
 sirano_product ONLY if the user explicitly gives a sirano code. In particular, BUDGET rows
 may not carry a sirano_product, so resolving an offer term to sirano_product can wrongly drop
-the budget (returning budget = 0) — always prefer Product.
+the budget (returning budget = 0) - always prefer Product.
 
 When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in several offer
-columns), YOU resolve it — pick the level from this hierarchy and the user's intent; do not
+columns), YOU resolve it - pick the level from this hierarchy and the user's intent; do not
 assume the helper's column.
 
 TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g.
 "IP Transit" is both a Product AND a Solution), filter on the most granular level (Product)
 AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: IP Transit
-also exists as a Solution — tell me if you meant the Solution level." Never silently choose a
+also exists as a Solution - tell me if you meant the Solution level." Never silently choose a
 level when the term is ambiguous across levels.
 
-## Customer / account identity — what to GROUP BY vs what to DISPLAY (CRITICAL)
+## Customer / account identity - what to GROUP BY vs what to DISPLAY (CRITICAL)
 
 diamond_id is the master unique customer key and is REQUIRED for correct aggregation, but it
 is a technical id that means nothing to the business. The business identifies an account by
@@ -130,7 +130,7 @@ When grouping or ranking by customer:
 → ALWAYS GROUP BY diamond_id ONLY (never by Account_name, never by carrier_code).
 → For DISPLAY, return MAX(Account_name) AS Account_name and MAX(carrier_code) AS carrier_code.
 → LEAD with Account_name and carrier_code as the first columns. diamond_id may be returned,
-  but ONLY as the LAST column and de-emphasized — never as the leading/identifying column.
+  but ONLY as the LAST column and de-emphasized - never as the leading/identifying column.
 
 Canonical pattern (single table, no join):
     SELECT MAX("Account_name") AS "Account_name",
@@ -146,14 +146,14 @@ Rationale: Account_name spelling varies for the same customer, so grouping by it
 one customer into several rows; diamond_id is stable. Group by the stable id, show the human
 labels.
 
-## Parent_Group — do NOT use unless explicitly asked
+## Parent_Group - do NOT use unless explicitly asked
 
 Parent_Group is the group-level parent of an account. Do NOT group, aggregate or split by
 Parent_Group unless the user explicitly asks for the parent group / corporate group level.
 The default customer granularity is the individual account (diamond_id). When you do use
 Parent_Group, state it explicitly in the answer.
 
-## distribution_type and Account_partner — indirect sales
+## distribution_type and Account_partner - indirect sales
 
 - distribution_type tells direct vs indirect: 'Direct_distribution' (direct) /
   'Indirect_distribution/Resseler' (indirect).
@@ -166,13 +166,13 @@ Parent_Group, state it explicitly in the answer.
   Account_partner; otherwise keep it out of the output. Be transparent about which side (end
   customer vs partner) you grouped on.
 
-## Hints from the grounding helper — assistance, NOT orders
+## Hints from the grounding helper - assistance, NOT orders
 
 Some requests arrive with "HELPER FINDINGS" / "Suggested" values and columns produced by a
 smaller grounding assistant that matched the user's wording against the live data catalog.
-You are the more capable model and you have this semantic model — treat those findings as
+You are the more capable model and you have this semantic model - treat those findings as
 ASSISTANCE, not instructions, and keep the final say:
-- The user's original question is always the source of truth — answer that question.
+- The user's original question is always the source of truth - answer that question.
 - Prefer the suggested exact spellings when they are consistent with the data (they are
   catalog-sourced and avoid typos / case errors).
 - If your semantic understanding disagrees with a hint, follow the data and the rules here.
@@ -211,7 +211,7 @@ GOLDEN_QUERIES = [
         '  AND r."Phase" = \'ACTUALS\'\n'
         '  AND EXTRACT(YEAR FROM r."year_month") = 2025;' % {"t": PHYSICAL_TABLE}),
 
-    # 2. Customer lookup BY NAME — display name + carrier_code, group by id.
+    # 2. Customer lookup BY NAME - display name + carrier_code, group by id.
     _gq("Revenue with a named customer (Year)",
         "How much revenue did we make with HALYS last year (2025)?",
         'SELECT MAX(r."Account_name") AS "Account_name",\n'
@@ -224,7 +224,7 @@ GOLDEN_QUERIES = [
         '  AND EXTRACT(YEAR FROM r."year_month") = 2025\n'
         'GROUP BY r."diamond_id";' % {"t": PHYSICAL_TABLE}),
 
-    # 3. Top customers — NO self-join, name + carrier_code first, diamond_id last.
+    # 3. Top customers - NO self-join, name + carrier_code first, diamond_id last.
     _gq("Top Customers by Revenue (Product, Year)",
         "Top 20 customers for IP Transit in 2025",
         'SELECT MAX(r."Account_name") AS "Account_name",\n'
@@ -240,7 +240,7 @@ GOLDEN_QUERIES = [
         'LIMIT 20;' % {"t": PHYSICAL_TABLE}),
 
     # 4. Term that is BOTH a Product and a Solution -> prefer Product.
-    _gq("Offer term ambiguous across levels — prefer Product",
+    _gq("Offer term ambiguous across levels - prefer Product",
         "How much revenue on IP Transit in 2026? (IP Transit is both a Product and a Solution; prefer the Product level)",
         'SELECT SUM(r."amount_eur") AS total_revenue\n'
         'FROM %(t)s r\n'
@@ -261,7 +261,7 @@ GOLDEN_QUERIES = [
         'GROUP BY r."year_month", r."Phase"\n'
         'ORDER BY r."year_month", r."Phase";' % {"t": PHYSICAL_TABLE}),
 
-    # 6. YTD at SolutionLine level — no hardcoded "today", all of the year.
+    # 6. YTD at SolutionLine level - no hardcoded "today", all of the year.
     _gq("Revenue Actuals YTD (SolutionLine)",
         "Revenue actuals YTD 2026 for the Roaming solution line",
         'SELECT SUM(r."amount_eur") AS total_revenue\n'
@@ -270,7 +270,7 @@ GOLDEN_QUERIES = [
         '  AND r."SolutionLine" = \'ROAMING\'\n'
         '  AND EXTRACT(YEAR FROM r."year_month") = 2026;' % {"t": PHYSICAL_TABLE}),
 
-    # 7. Indirect customers for a product — name + carrier first, diamond_id last.
+    # 7. Indirect customers for a product - name + carrier first, diamond_id last.
     _gq("Indirect Customers by Product (Year)",
         "Indirect customers on EVPL in 2025",
         'SELECT MAX(r."Account_name") AS "Account_name",\n'
@@ -296,7 +296,7 @@ GOLDEN_QUERIES = [
         '  AND EXTRACT(YEAR FROM r."year_month") = 2025;'
         % {"t": PHYSICAL_TABLE, "ind": INDIRECT_VALUE}),
 
-    # 9. Revenue per RESELLER/partner (indirect) — uses Account_partner.
+    # 9. Revenue per RESELLER/partner (indirect) - uses Account_partner.
     _gq("Revenue by partner / reseller (indirect, Year)",
         "Revenue per partner (reseller) for indirect sales in 2025",
         'SELECT r."Account_partner",\n'
@@ -416,7 +416,7 @@ def apply_corrections(raw):
         for t in bogus:
             terms.remove(t)
         changes.append("glossary: removed bogus 'diamond_id' term (described "
-                       "original_dataset / lineage — collided with the real Diamond ID)")
+                       "original_dataset / lineage - collided with the real Diamond ID)")
     # 4b. drop the wrong 'roaming hub' synonym from Roaming Sponsor (different product).
     rs = _find(terms, "term", "Roaming Sponsor")
     if rs and rs.get("synonyms"):
@@ -429,7 +429,7 @@ def apply_corrections(raw):
 
     # --- 6. Golden queries: replace with the corrected + enriched set --------
     raw["goldenQueries"] = [dict(g) for g in GOLDEN_QUERIES]
-    changes.append("goldenQueries: rebuilt (%d) — no self-join, name+carrier_code display, "
+    changes.append("goldenQueries: rebuilt (%d) - no self-join, name+carrier_code display, "
                    "diamond_id last, Product-priority + indirect/partner examples"
                    % len(GOLDEN_QUERIES))
 
@@ -447,7 +447,7 @@ def apply_corrections(raw):
 
 
 # ----------------------------------------------------------------------------
-# STEP 1 — read the source model (READ ONLY) and build the corrected config
+# STEP 1 - read the source model (READ ONLY) and build the corrected config
 # ----------------------------------------------------------------------------
 client = dataiku.api_client()
 try:
@@ -459,7 +459,7 @@ old_sm = project.get_semantic_model(OLD_SEMANTIC_MODEL_ID)
 old_active_id = old_sm.get_active_version_id()
 old_settings = old_sm.get_version(old_active_id).get_settings()
 source_raw = copy.deepcopy(old_settings.get_raw())   # never written back
-print("Source model %s, active version %s — %d entities, %d golden queries, %d glossary terms"
+print("Source model %s, active version %s - %d entities, %d golden queries, %d glossary terms"
       % (OLD_SEMANTIC_MODEL_ID, old_active_id,
          len(source_raw.get("entities") or []),
          len(source_raw.get("goldenQueries") or []),
@@ -476,13 +476,13 @@ print(corrected["sqlGenerationConfig"]["instructions"][:600], "...")
 
 
 # ----------------------------------------------------------------------------
-# STEP 2 — create the NEW model and push the corrected config into version v1
+# STEP 2 - create the NEW model and push the corrected config into version v1
 # (Run this only after reviewing the diff above.)
 # ----------------------------------------------------------------------------
 new_sm = project.create_semantic_model(NEW_SEMANTIC_MODEL_NAME)
 print("\nCreated new semantic model id =", new_sm.id, "name =", NEW_SEMANTIC_MODEL_NAME)
 
-# A fresh model may or may not auto-create a version — handle both, documented.
+# A fresh model may or may not auto-create a version - handle both, documented.
 existing_versions = new_sm.list_versions_ids()
 if existing_versions:
     version_id = existing_versions[0]
@@ -510,7 +510,7 @@ print(">>> WRITE DOWN THE NEW MODEL ID:", new_sm.id)
 
 
 # ----------------------------------------------------------------------------
-# STEP 3 — index the distinct values of the new model (needed for the model's
+# STEP 3 - index the distinct values of the new model (needed for the model's
 # own value resolution). One bounded scan over the source table; safe on
 # PostgreSQL. Run as a separate, deliberate step.
 # ----------------------------------------------------------------------------

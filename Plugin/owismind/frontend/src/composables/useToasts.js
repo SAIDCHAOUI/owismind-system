@@ -1,5 +1,5 @@
 // App-wide transient toast service. Module-level reactive queue so any component
-// (or the ui store) can push a toast without prop-drilling — replaces the
+// (or the ui store) can push a toast without prop-drilling - replaces the
 // maquette's `showToast()` that appended straight to document.body.
 //
 //   import { useToasts } from '@/composables/useToasts'

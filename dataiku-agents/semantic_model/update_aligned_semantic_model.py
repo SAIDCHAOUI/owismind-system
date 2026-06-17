@@ -2,13 +2,13 @@
 # update_aligned_semantic_model.py
 # -----------------------------------------------------------------------------
 # Run this IN A DATAIKU NOTEBOOK (project OWISMIND_DEV) to UPDATE the semantic
-# model you ALREADY created with build_aligned_semantic_model.py — it does NOT
+# model you ALREADY created with build_aligned_semantic_model.py - it does NOT
 # create a new model. It refreshes the SQL-generation INSTRUCTIONS and the
 # GOLDEN QUERIES on the model's ACTIVE version, in place.
 #
 # Use it to iterate on the prompt (e.g. the "never default to sirano_product"
 # rule) without rebuilding. No re-indexing is needed: only instructions and
-# golden queries change — neither touches the distinct-values index.
+# golden queries change - neither touches the distinct-values index.
 #
 # Documented API only (no class created directly):
 #   project.get_semantic_model(id) -> get_active_version_id() -> get_version()
@@ -17,7 +17,7 @@
 # >>> Set NEW_MODEL_ID below to the id printed when the model was created. <<<
 #
 # NOTE: NEW_INSTRUCTIONS and GOLDEN_QUERIES below are the canonical prompt
-# config — keep them in sync with build_aligned_semantic_model.py.
+# config - keep them in sync with build_aligned_semantic_model.py.
 # =============================================================================
 
 import dataiku
@@ -34,18 +34,18 @@ INDIRECT_VALUE = "Indirect_distribution/Resseler"
 # CANONICAL SQL-GENERATION INSTRUCTIONS (keep in sync with the build script)
 # ----------------------------------------------------------------------------
 NEW_INSTRUCTIONS = """\
-## Physical model — ONE table, NEVER join
+## Physical model - ONE table, NEVER join
 
 All three entities (revenue_record, customer_account, commercial_offer) map to the SAME
 physical table. Treat them as a single denormalized table and select every needed column
-directly from it. NEVER emit a JOIN, and in particular NEVER self-join the table to itself —
+directly from it. NEVER emit a JOIN, and in particular NEVER self-join the table to itself -
 there is nothing to join.
 
-## Revenue semantics — Phase and booking_type
+## Revenue semantics - Phase and booking_type
 
 amount_eur is bucketed along two axes:
 - Phase: the scenario. Allowed values, EXACTLY: ACTUALS, BUDGET, FORECAST, Q3F, HLF.
-  The realized-revenue scenario is the PLURAL 'ACTUALS' — never write 'ACTUAL'.
+  The realized-revenue scenario is the PLURAL 'ACTUALS' - never write 'ACTUAL'.
 - booking_type: the financial bucket within a scenario.
 
 For a given (diamond_id, Product, year_month) within one Phase, several booking_type rows
@@ -64,7 +64,7 @@ all booking_types in ACTUALS).
 - "pipeline", "open opportunities"              → Phase = 'FORECAST' AND booking_type = 'New customer Open in Pipe'
 - "expected billing", "to bill", "à facturer"   → Phase = 'FORECAST' AND booking_type LIKE 'To Bill%'
 
-## Commercial offer hierarchy — ALWAYS prefer the most granular level (CRITICAL)
+## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)
 
 The offer is a hierarchy, broadest to most granular:
     SolutionLine  >  Solution  >  Product      (sirano_product is a secondary technical code).
@@ -72,7 +72,7 @@ The offer is a hierarchy, broadest to most granular:
 When a user term (e.g. "IPL", "IP Transit", "Roaming Sponsor", "IP") could match a value in
 several of these columns, resolve it to the MOST GRANULAR level that contains it, in this
 STRICT order of preference:
-    1. Product           (default — most users speak at the product level)
+    1. Product           (default - most users speak at the product level)
     2. Solution
     3. SolutionLine
     4. sirano_product    (last resort only)
@@ -84,19 +84,19 @@ sirano_product. Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL
 sirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use
 sirano_product ONLY if the user explicitly gives a sirano code. In particular, BUDGET rows
 may not carry a sirano_product, so resolving an offer term to sirano_product can wrongly drop
-the budget (returning budget = 0) — always prefer Product.
+the budget (returning budget = 0) - always prefer Product.
 
 When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in several offer
-columns), YOU resolve it — pick the level from this hierarchy and the user's intent; do not
+columns), YOU resolve it - pick the level from this hierarchy and the user's intent; do not
 assume the helper's column.
 
 TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g.
 "IP Transit" is both a Product AND a Solution), filter on the most granular level (Product)
 AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: IP Transit
-also exists as a Solution — tell me if you meant the Solution level." Never silently choose a
+also exists as a Solution - tell me if you meant the Solution level." Never silently choose a
 level when the term is ambiguous across levels.
 
-## Customer / account identity — what to GROUP BY vs what to DISPLAY (CRITICAL)
+## Customer / account identity - what to GROUP BY vs what to DISPLAY (CRITICAL)
 
 diamond_id is the master unique customer key and is REQUIRED for correct aggregation, but it
 is a technical id that means nothing to the business. The business identifies an account by
@@ -106,7 +106,7 @@ When grouping or ranking by customer:
 → ALWAYS GROUP BY diamond_id ONLY (never by Account_name, never by carrier_code).
 → For DISPLAY, return MAX(Account_name) AS Account_name and MAX(carrier_code) AS carrier_code.
 → LEAD with Account_name and carrier_code as the first columns. diamond_id may be returned,
-  but ONLY as the LAST column and de-emphasized — never as the leading/identifying column.
+  but ONLY as the LAST column and de-emphasized - never as the leading/identifying column.
 
 Canonical pattern (single table, no join):
     SELECT MAX("Account_name") AS "Account_name",
@@ -122,14 +122,14 @@ Rationale: Account_name spelling varies for the same customer, so grouping by it
 one customer into several rows; diamond_id is stable. Group by the stable id, show the human
 labels.
 
-## Parent_Group — do NOT use unless explicitly asked
+## Parent_Group - do NOT use unless explicitly asked
 
 Parent_Group is the group-level parent of an account. Do NOT group, aggregate or split by
 Parent_Group unless the user explicitly asks for the parent group / corporate group level.
 The default customer granularity is the individual account (diamond_id). When you do use
 Parent_Group, state it explicitly in the answer.
 
-## distribution_type and Account_partner — indirect sales
+## distribution_type and Account_partner - indirect sales
 
 - distribution_type tells direct vs indirect: 'Direct_distribution' (direct) /
   'Indirect_distribution/Resseler' (indirect).
@@ -142,13 +142,13 @@ Parent_Group, state it explicitly in the answer.
   Account_partner; otherwise keep it out of the output. Be transparent about which side (end
   customer vs partner) you grouped on.
 
-## Hints from the grounding helper — assistance, NOT orders
+## Hints from the grounding helper - assistance, NOT orders
 
 Some requests arrive with "HELPER FINDINGS" / "Suggested" values and columns produced by a
 smaller grounding assistant that matched the user's wording against the live data catalog.
-You are the more capable model and you have this semantic model — treat those findings as
+You are the more capable model and you have this semantic model - treat those findings as
 ASSISTANCE, not instructions, and keep the final say:
-- The user's original question is always the source of truth — answer that question.
+- The user's original question is always the source of truth - answer that question.
 - Prefer the suggested exact spellings when they are consistent with the data (they are
   catalog-sourced and avoid typos / case errors).
 - If your semantic understanding disagrees with a hint, follow the data and the rules here.
@@ -210,7 +210,7 @@ GOLDEN_QUERIES = [
         'ORDER BY total_revenue DESC\n'
         'LIMIT 20;' % {"t": PHYSICAL_TABLE}),
 
-    _gq("Offer term ambiguous across levels — prefer Product",
+    _gq("Offer term ambiguous across levels - prefer Product",
         "How much revenue on IP Transit in 2026? (IP Transit is both a Product and a Solution; prefer the Product level)",
         'SELECT SUM(r."amount_eur") AS total_revenue\n'
         'FROM %(t)s r\n'
@@ -277,7 +277,7 @@ GOLDEN_QUERIES = [
 
 
 # ----------------------------------------------------------------------------
-# UPDATE IN PLACE — refresh instructions + golden queries on the active version
+# UPDATE IN PLACE - refresh instructions + golden queries on the active version
 # ----------------------------------------------------------------------------
 assert NEW_MODEL_ID, "Set NEW_MODEL_ID to the id printed when the model was created."
 

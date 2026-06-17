@@ -1,5 +1,5 @@
 <script setup>
-// Empty conversation state — centered title + subtitle (with a link to the agent
+// Empty conversation state - centered title + subtitle (with a link to the agent
 // library). Visual spec ported from `.empty` / `.empty-title` / `.empty-sub`
 // (components.css). Suggestion cards (mock editorial in the maquette) are deferred.
 import { useI18n } from 'vue-i18n'
@@ -62,7 +62,7 @@ const router = useRouter()
   text-underline-offset: 3px;
   cursor: pointer;
 }
-/* "Be precise" tip — a quiet, left-aligned hint so the multi-line text stays
+/* "Be precise" tip - a quiet, left-aligned hint so the multi-line text stays
    readable (the rest of the empty stage is centered). */
 .empty-tip {
   display: flex;

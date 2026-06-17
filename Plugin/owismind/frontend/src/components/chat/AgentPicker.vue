@@ -1,5 +1,5 @@
 <script setup>
-// Agent picker — repopulated from GET /agents (opaque logical keys), NOT the
+// Agent picker - repopulated from GET /agents (opaque logical keys), NOT the
 // maquette's hard-coded list (a literal port would send invalid keys → 404
 // agent_not_enabled). Reuses the <Menu> primitive; opens upward
 // (it lives in the bottom prompt bar). Binds session.selectedAgentKey.

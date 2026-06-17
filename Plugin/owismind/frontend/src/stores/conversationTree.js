@@ -29,7 +29,7 @@ export function buildActivePath(exchanges, overrides) {
     if (!node) break
     const siblings = childrenOf(exchanges, parentId)
     out.push({ exchange: node, siblings, versionIdx: siblings.findIndex((e) => e.id === node.id) })
-    if (!node.id) break // a live leaf with no backend id yet has no children — stop
+    if (!node.id) break // a live leaf with no backend id yet has no children - stop
     parentId = node.id
   }
   return out

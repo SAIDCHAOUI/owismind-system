@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
 # identity.py imports ``dataiku`` at module load for the auth lookup, which is not
 # available outside the DSS runtime. derive_full_name is a PURE function that never
 # touches dataiku, so we inject a minimal stub module just to let the import succeed
-# (no install — the README documents this "(or a stub)" approach for dataiku-coupled modules).
+# (no install - the README documents this "(or a stub)" approach for dataiku-coupled modules).
 if "dataiku" not in sys.modules:
     sys.modules["dataiku"] = types.ModuleType("dataiku")
 

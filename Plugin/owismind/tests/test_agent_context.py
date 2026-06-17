@@ -73,7 +73,7 @@ class DetectLanguageTests(unittest.TestCase):
         self.assertEqual(detect_prompt_language("can you add the forecast?"), "en")
 
     def test_terse_english_revenue_not_mistaken_for_french(self):
-        # 'revenu' (FR) must NOT match inside 'revenue' (EN) — word-boundary matching.
+        # 'revenu' (FR) must NOT match inside 'revenue' (EN) - word-boundary matching.
         self.assertEqual(detect_prompt_language("revenue EVPL 2026", default="en"), "en")
         self.assertEqual(detect_prompt_language("revenue figures", default="en"), "en")
 

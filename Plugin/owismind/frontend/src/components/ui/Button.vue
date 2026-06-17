@@ -1,5 +1,5 @@
 <script setup>
-// Mutualized button — replaces the maquette's 5 re-implementations
+// Mutualized button - replaces the maquette's 5 re-implementations
 // (.modal-btn / .edit-btn / .fb-btn / .es-btn / .admin-btn × primary/ghost).
 // Visual spec ported from `.modal-btn` (v4-extras.css) + `.es-btn.link`
 // (workspace.css). Variants: primary | ghost | danger | link | icon.
@@ -52,7 +52,7 @@ defineProps({
 .ui-btn--block { width: 100%; }
 .ui-btn__icon { width: 15px; height: 15px; }
 
-/* Ghost (default) — neutral outlined */
+/* Ghost (default) - neutral outlined */
 .ui-btn--ghost {
   background: transparent;
   color: var(--text-2);
@@ -60,7 +60,7 @@ defineProps({
 }
 .ui-btn--ghost:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 
-/* Primary — solid orange */
+/* Primary - solid orange */
 .ui-btn--primary {
   background: var(--orange);
   color: #fff;
@@ -68,7 +68,7 @@ defineProps({
 }
 .ui-btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
 
-/* Danger — solid red (destructive confirm) */
+/* Danger - solid red (destructive confirm) */
 .ui-btn--danger {
   background: #ef4444;
   color: #fff;
@@ -76,7 +76,7 @@ defineProps({
 }
 .ui-btn--danger:hover:not(:disabled) { background: #dc2626; border-color: #dc2626; }
 
-/* Link — text-only inline action */
+/* Link - text-only inline action */
 .ui-btn--link {
   background: transparent;
   border-color: transparent;
@@ -86,7 +86,7 @@ defineProps({
 }
 .ui-btn--link:hover:not(:disabled) { color: var(--orange); }
 
-/* Icon — square, subtle, for icon-only affordances (mic, close, more…) */
+/* Icon - square, subtle, for icon-only affordances (mic, close, more…) */
 .ui-btn--icon {
   background: transparent;
   border-color: transparent;

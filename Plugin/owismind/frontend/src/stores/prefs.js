@@ -1,4 +1,4 @@
-// Pure preference helpers (NO Vue/Pinia import) — unit-testable with node:test and
+// Pure preference helpers (NO Vue/Pinia import) - unit-testable with node:test and
 // reused by the ui store. Keeping the bounds + coercion here means the frontend and
 // backend share ONE contract: these mirror security/validation.py on the backend, so
 // the persisted preference and the server-side SQL LIMIT can never disagree.

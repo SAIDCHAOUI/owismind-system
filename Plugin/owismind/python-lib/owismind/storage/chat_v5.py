@@ -4,7 +4,7 @@ Owns ``webapp_chat_v5`` = the chat exchanges (with per-message feedback columns)
 into a conversation TREE: each exchange carries a ``parent_exchange_id`` linking it to
 the exchange it branched from (NULL for a root / first turn). The agent context of an
 exchange is its ANCESTOR CHAIN (recursive walk up the parents), so a branch never sees
-the messages that came after its branch point — see ``history_messages_for_chain``.
+the messages that came after its branch point - see ``history_messages_for_chain``.
 
 Two-phase write per exchange: the user message is persisted first (with NULL
 assistant reply and NULL generated_sql), then the assistant reply, any SQL the
@@ -15,11 +15,11 @@ write COMMITs explicitly.
 
 Over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's per-message
 feedback columns, over _v2's ``generated_sql``), _v5 adds the per-exchange USAGE columns
-``input_tokens``/``output_tokens``/``total_tokens``/``estimated_cost`` — the run's footer
+``input_tokens``/``output_tokens``/``total_tokens``/``estimated_cost`` - the run's footer
 ``usage_summary`` totals, written with the reply. They are the AUTHORITATIVE per-exchange
 usage record (the users + monthly aggregates are reconstructible from them). Feedback is
 filled out-of-band by ``save_feedback`` (owner-scoped). The persisted ``agent_key`` is the
-OPAQUE logical key, never the raw agent_id — so a readback never leaks a real agent id
+OPAQUE logical key, never the raw agent_id - so a readback never leaks a real agent id
 to the frontend.
 """
 
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 # reference), so sql_value ALWAYS inlines the value into the logged INSERT/UPDATE
 # statement. On this instance a scenario materialises those query logs into a dataset,
 # where an over-long SQL cell trips the row-length limit (the observed warning). Chat
-# messages are normally KB-sized (well under any limit) — the traces, which can be MBs,
+# messages are normally KB-sized (well under any limit) - the traces, which can be MBs,
 # were the actual culprit and avoid the logged-SQL path entirely via the Dataset writer
 # (see chat_traces). This cap bounds the worst case; lower it if your log-materialising
 # dataset has a tight per-row limit. The live answer is NOT capped here (bounded
@@ -78,7 +78,7 @@ def _bounded(text):
 
 # Columns selected for a conversation readback, in a stable order (includes generated_sql,
 # the per-message feedback columns, parent_exchange_id, and the per-exchange usage columns
-# — which feed /conversation -> frontend coloring, conversation-tree reconstruction, and
+# - which feed /conversation -> frontend coloring, conversation-tree reconstruction, and
 # the per-message tokens/cost line on reload).
 _COLUMNS = (
     "exchange_id, session_id, user_id, user_display_name, user_groups, "
@@ -99,7 +99,7 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
     raw agent_id). ``user_display_name`` is a per-message denormalised SNAPSHOT of
     the derived default at write time; it is intentionally NOT back-updated if the
     display name later changes. ``parent_exchange_id`` links this exchange to the one
-    it branched from (NULL for a root / first turn) — the conversation-tree edge.
+    it branched from (NULL for a root / first turn) - the conversation-tree edge.
     """
     exchange_id = uuid4().hex
     groups = identity.get("groups") or []
@@ -130,7 +130,7 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
         parent=nullable_value(parent_exchange_id),
     )
     logger.info(
-        "save_user_message — INSERT into %s exchange_id=%s session_id=%s user_id=%s "
+        "save_user_message - INSERT into %s exchange_id=%s session_id=%s user_id=%s "
         "agent_key=%s groups=%s",
         table,
         exchange_id,
@@ -145,7 +145,7 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
         pre_queries=[insert_sql],
         post_queries=["COMMIT"],
     )
-    logger.info("save_user_message — COMMITTED exchange_id=%s", exchange_id)
+    logger.info("save_user_message - COMMITTED exchange_id=%s", exchange_id)
     return exchange_id
 
 
@@ -153,7 +153,7 @@ def _usage_literal(value, is_float=False):
     """Safe SQL numeric literal for a server-computed usage value, or ``NULL``.
 
     Usage values come from the LLM Mesh trace (never user input). They are strictly
-    coerced — a missing/non-numeric/negative value becomes SQL ``NULL`` — and inlined
+    coerced - a missing/non-numeric/negative value becomes SQL ``NULL`` - and inlined
     as a bare numeric literal (floats with fixed decimals to avoid scientific notation),
     which sidesteps any ``Constant(float)`` escaping ambiguity for a fully-controlled,
     non-user value (mirrors the ``bool_literal`` precedent for server-side scalars).
@@ -181,7 +181,7 @@ def save_assistant_message(exchange_id, assistant_text, generated_sql=None, usag
     the optional trust-layer keys ``sql_id``/``step_index``/``agent_key``/``result``
     (or None/empty when the run produced no SQL). The list is bounded by
     ``capture.cap_sql_list`` BEFORE serialization (mirror caps on each captured
-    ``result``, item-count cap, global serialized budget) — closing the previously
+    ``result``, item-count cap, global serialized budget) - closing the previously
     unbounded sql_json hole. The bounded list is JSON-encoded and stored as text; an
     empty list stores SQL NULL via ``nullable_value`` so "no SQL" reads back cleanly.
     ``_bounded()`` must NEVER touch this JSON: its text marker would corrupt decoding
@@ -190,7 +190,7 @@ def save_assistant_message(exchange_id, assistant_text, generated_sql=None, usag
     ``usage`` is the run's footer ``usage_summary`` totals
     (``promptTokens``/``completionTokens``/``totalTokens``/``estimatedCost``) or None
     (e.g. an early-stopped run with no footer). Each value is coerced to a safe numeric
-    literal — written into the same atomic UPDATE as the reply so the per-exchange usage
+    literal - written into the same atomic UPDATE as the reply so the per-exchange usage
     record (the source of truth for the aggregates) lands together with the answer.
     """
     capped_sql = capture.cap_sql_list(generated_sql) if generated_sql else None
@@ -226,7 +226,7 @@ def save_assistant_message(exchange_id, assistant_text, generated_sql=None, usag
         exchange_id=sql_value(exchange_id),
     )
     logger.info(
-        "save_assistant_message — UPDATE %s exchange_id=%s reply_len=%d sql=%s "
+        "save_assistant_message - UPDATE %s exchange_id=%s reply_len=%d sql=%s "
         "in=%s out=%s cost=%s",
         table,
         exchange_id,
@@ -242,7 +242,7 @@ def save_assistant_message(exchange_id, assistant_text, generated_sql=None, usag
         pre_queries=[update_sql],
         post_queries=["COMMIT"],
     )
-    logger.info("save_assistant_message — COMMITTED exchange_id=%s", exchange_id)
+    logger.info("save_assistant_message - COMMITTED exchange_id=%s", exchange_id)
 
 
 def save_feedback(user_id, exchange_id, rating, reasons, comment):
@@ -256,7 +256,7 @@ def save_feedback(user_id, exchange_id, rating, reasons, comment):
     reasons_json = json.dumps(reasons) if reasons else None
     bounded_comment = _bounded(comment) if comment else None
     # Stamp feedback_at only when a rating is set; clearing (rating None) blanks it too.
-    # This is a fixed SQL literal (now()/NULL), never user input — safe to inline.
+    # This is a fixed SQL literal (now()/NULL), never user input - safe to inline.
     feedback_at_sql = "now()" if rating is not None else "NULL"
     sql = """
         UPDATE {table}
@@ -275,7 +275,7 @@ def save_feedback(user_id, exchange_id, rating, reasons, comment):
         user=sql_value(user_id),
     )
     logger.info(
-        "save_feedback — UPDATE %s exchange_id=%s user_id=%s rating=%s reasons=%d comment_len=%d",
+        "save_feedback - UPDATE %s exchange_id=%s user_id=%s rating=%s reasons=%d comment_len=%d",
         table,
         exchange_id,
         user_id,
@@ -286,7 +286,7 @@ def save_feedback(user_id, exchange_id, rating, reasons, comment):
     new_executor().query_to_df(
         "SELECT 1 AS feedback_saved", pre_queries=[sql], post_queries=["COMMIT"]
     )
-    logger.info("save_feedback — COMMITTED exchange_id=%s user_id=%s", exchange_id, user_id)
+    logger.info("save_feedback - COMMITTED exchange_id=%s user_id=%s", exchange_id, user_id)
 
 
 # Hard ceiling on the recursive ancestor walk (anti-cycle / instance safety). Far above
@@ -368,7 +368,7 @@ def list_conversations(user_id, cursor_token, limit):
 SESSION_MESSAGES_CAP = 500
 
 # Keys of a generated_sql item exposed on the /conversation readback. The captured
-# ``result`` rows are deliberately PROJECTED OUT so the thread payload stays light —
+# ``result`` rows are deliberately PROJECTED OUT so the thread payload stays light -
 # only /evidence/meta returns the stored result (trust-layer contract §1).
 _SQL_ITEM_PUBLIC_KEYS = ("sql", "success", "row_count", "sql_id", "step_index", "agent_key")
 

@@ -5,19 +5,19 @@ DSS runtime, and so ``storage.chat_v5`` can import it without an import cycle.
 
 Three responsibilities, all deterministic and all bounded:
 
-- ``extract_result`` — best-effort extraction of the EXACT rows a SQL tool returned,
+- ``extract_result`` - best-effort extraction of the EXACT rows a SQL tool returned,
   from the ``outputs`` dict of a ``semantic-model-query`` trace span. The exact rows
   key is NOT confirmed on this instance, so extraction is opportunistic: any shape we
-  do not positively recognise yields ``None`` (absence is honest — downstream surfaces
+  do not positively recognise yields ``None`` (absence is honest - downstream surfaces
   ``result_captured: false`` instead of inventing data).
-- ``cap_result`` — MIRROR re-cap of one captured result right before persistence.
+- ``cap_result`` - MIRROR re-cap of one captured result right before persistence.
   Upstream (the orchestrator) applies the same caps independently, but the webapp
   NEVER trusts an upstream cap: everything is re-bounded here at the write point.
-- ``cap_sql_list`` — bounds the whole ``generated_sql`` list (item count + global
+- ``cap_sql_list`` - bounds the whole ``generated_sql`` list (item count + global
   serialized budget) without ever dropping the ``sql``/``success``/``row_count`` core
   of any item, and never raising (persistence must not fail because of a capture).
 
-All caps are STRUCTURAL (rows dropped, ``truncated`` flag flipped) — never a text
+All caps are STRUCTURAL (rows dropped, ``truncated`` flag flipped) - never a text
 marker inside the JSON, which would corrupt decoding (the chat_v5 ``_bounded`` marker
 must never touch this payload).
 """
@@ -38,11 +38,11 @@ MAX_CELL_CHARS = 256
 MAX_RESULT_JSON_CHARS = 100_000
 # Newest-wins bound on the number of persisted generated_sql items.
 MAX_SQL_ITEMS = 20
-# Global budget for the serialized sql_list — mirrors chat_v5.MAX_PERSISTED_TEXT_CHARS
+# Global budget for the serialized sql_list - mirrors chat_v5.MAX_PERSISTED_TEXT_CHARS
 # (duplicated by value to keep this module pure / dataiku-free).
 MAX_PERSISTED_TEXT_CHARS = 262_144
 # Structural per-item bounds (SQL-INST-01): the sql text itself must be capped
-# at the write point — anything longer is unusable by the trust layer anyway
+# at the write point - anything longer is unusable by the trust layer anyway
 # (sql_parse.MAX_SQL_CHARS) and would re-open the unbounded-logged-UPDATE hole
 # the global budget exists to close. Truncation is flagged STRUCTURALLY
 # (sql_truncated: true), never with a text marker inside the SQL itself.
@@ -130,13 +130,13 @@ def extract_result(outputs):
 
     Accepted shapes for the first list-valued candidate key (probed in _ROW_KEYS
     order):
-      - list of lists/tuples — column names come from a separate _COLUMN_KEYS entry
+      - list of lists/tuples - column names come from a separate _COLUMN_KEYS entry
         when present, else synthetic ``col_1..col_n`` (n = widest row);
-      - list of dicts — columns are the FIRST dict's keys in insertion order (stable),
+      - list of dicts - columns are the FIRST dict's keys in insertion order (stable),
         later dicts are projected onto those keys.
     ANY other shape (mixed lists, scalars, no candidate key, non-dict outputs) returns
     ``None``: an honestly-absent capture, never a guess. All caps applied here are
-    re-applied at the write point (``cap_result``) — never trusted downstream.
+    re-applied at the write point (``cap_result``) - never trusted downstream.
     """
     if not isinstance(outputs, dict):
         return None
@@ -217,7 +217,7 @@ def cap_result(result):
     NEVER trusts an upstream cap: rows/cols/cell bounds and the serialized-size budget
     are all re-applied here even when the input claims to be capped already. A result
     that is not positively ``{"columns": list, "rows": list-of-lists}`` is dropped
-    (``None``) — a malformed capture must never reach storage.
+    (``None``) - a malformed capture must never reach storage.
     """
     if not isinstance(result, dict):
         return None
@@ -270,7 +270,7 @@ def cap_sql_list(items):
     """Bound a whole generated_sql list right before persistence. NEVER raises.
 
     In order:
-      1. each item's ``result`` is re-capped via ``cap_result`` (mirror — the upstream
+      1. each item's ``result`` is re-capped via ``cap_result`` (mirror - the upstream
          cap is never trusted); an uncappable/absent result loses its key (honest);
          legacy items without ``result`` pass through byte-identical;
       2. the list is bounded to the NEWEST ``MAX_SQL_ITEMS`` items (oldest dropped);
@@ -288,7 +288,7 @@ def cap_sql_list(items):
         for item in items:
             if not isinstance(item, dict):
                 continue  # undecodable entry: structural drop, never a crash
-            out = dict(item)  # shallow copy — the caller's list is never mutated
+            out = dict(item)  # shallow copy - the caller's list is never mutated
             # Per-item structural bounds: sql text + correlation tags (the only
             # unbounded string fields an upstream source could inflate).
             sql = out.get("sql")
@@ -331,11 +331,11 @@ def cap_sql_list(items):
                 return capped
         # Still over budget after every result is shed (sql texts alone exceed
         # it, theoretically possible up to 20 x 20k chars): drop the OLDEST
-        # items until the list fits — kept items keep sql/success/row_count
+        # items until the list fits - kept items keep sql/success/row_count
         # whole, and the budget guarantee holds (SQL-INST-01).
         while len(capped) > 1 and _json_len(capped) > MAX_PERSISTED_TEXT_CHARS:
             capped.pop(0)
         return capped
     except Exception:
-        logger.exception("cap_sql_list — unexpected failure; persisting without results")
+        logger.exception("cap_sql_list - unexpected failure; persisting without results")
         return _strip_results_fallback(items)

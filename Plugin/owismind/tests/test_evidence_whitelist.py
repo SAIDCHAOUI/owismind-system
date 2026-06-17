@@ -38,7 +38,7 @@ class MatchTests(unittest.TestCase):
 
     def test_first_match_wins(self):
         # Two candidates sharing the same physical table: the docstring promises
-        # the FIRST match — deterministic, admin-controlled ordering.
+        # the FIRST match - deterministic, admin-controlled ordering.
         cands = [
             {"name": "first", "table": "DUP_table", "schema": None},
             {"name": "second", "table": "DUP_table", "schema": "public"},

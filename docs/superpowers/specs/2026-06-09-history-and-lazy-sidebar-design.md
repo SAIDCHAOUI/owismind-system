@@ -1,4 +1,4 @@
-# Design — Historique multi-tours vers l'agent + Sidebar lazy-loading
+# Design - Historique multi-tours vers l'agent + Sidebar lazy-loading
 
 > Date : 2026-06-09 · Projet : OWIsMind (plugin Dataiku DSS, Vue 3 + Flask).
 > Statut : **validé par l'utilisateur** (design approuvé, `/history` backend conservé intact).
@@ -10,7 +10,7 @@
 - La BDD `chat_v2` stocke pourtant tout : 1 ligne = 1 échange (`user_text` + `assistant_text`), lié par `session_id`. Colonnes : `exchange_id` (PK), `session_id`, `user_id`, `user_display_name`, `user_groups`, `user_text`, `assistant_text`, `generated_sql`, `agent_key`, `created_at`, `answered_at` (`migrations.py:41-55`). **Pas de colonne `role`.**
 - **Doc Dataiku officielle** (`developer.dataiku.com` + `doc.dataiku.com` uniquement) : multi-tours = `with_message(message, role='user')` appelé **plusieurs fois** (rôles `system`/`user`/`assistant`/`tool`), puis `execute()` / `execute_streamed()`. Pour un agent conversationnel : *« iterate over `query['messages']` and replay each into the completion to provide the whole context »*. **Aucune limite de contexte documentée.**
 - **Ancien Dash de prod** (même instance, référence prouvée) : vrai multi-tours (`with_message(content, role)` par message), cap **10 derniers messages**, préfixe `[User: {nom} | The NOW Date is: {date}]` sur chaque message `user` (date = `datetime.now()`). **Pas de prompt système** (l'agent est déjà prompté à sa création).
-- **Identité** : DSS ne renvoie que le **login** (`authIdentifier`, ex. `said.chaoui`) — pas de `displayName`/`fullName` (L011). **Les logins suivent `prenom.nom` pour tous** (confirmé user) → dériver « Prénom Nom » est fiable.
+- **Identité** : DSS ne renvoie que le **login** (`authIdentifier`, ex. `said.chaoui`) - pas de `displayName`/`fullName` (L011). **Les logins suivent `prenom.nom` pour tous** (confirmé user) → dériver « Prénom Nom » est fiable.
 - **Sidebar actuelle** : un seul `GET /history?max_conversations=N` ramène **tous les corps de message** des N sessions récentes ; la liste ET le contenu sont dérivés client-side de ce blob mémoire ; cliquer ne refetch pas (filtre mémoire). Pas d'endpoint « noms seuls », pas de pagination.
 
 ## Décisions actées (réponses utilisateur)
@@ -24,7 +24,7 @@
 
 ---
 
-## Item 1 — Historique multi-tours envoyé à l'agent (assemblé backend)
+## Item 1 - Historique multi-tours envoyé à l'agent (assemblé backend)
 
 ### Comportement cible (ce qui part à l'agent)
 ```
@@ -35,7 +35,7 @@ completion.with_message(user_prefix + current_message, "user")   # préfixe nom+
 completion.execute_streamed()
 ```
 - **Stockage inchangé** : `save_user_message` écrit le `message` **brut**. Le préfixe + l'historique sont **build-time only**, jamais persistés.
-- **Préfixe** (chaque tour) : `"[User: {full_name} — Date: {%A, %B %d, %Y at %H:%M}] "` construit serveur depuis l'identité + date courante. Messages d'historique rejoués **verbatim** (pas de re-préfixe → pas de date du jour sur un vieux message).
+- **Préfixe** (chaque tour) : `"[User: {full_name} - Date: {%A, %B %d, %Y at %H:%M}] "` construit serveur depuis l'identité + date courante. Messages d'historique rejoués **verbatim** (pas de re-préfixe → pas de date du jour sur un vieux message).
 - **Comptage** : `history_limit` = nombre de **messages**. On fetch `ceil(history_limit/2)` échanges, on aplatit (user, assistant) oldest→newest, on garde les **derniers `history_limit`** messages.
 
 ### Changements backend
@@ -65,7 +65,7 @@ completion.execute_streamed()
 
 ---
 
-## Item 2 — Sidebar lazy-loading (noms seuls, contenu au clic)
+## Item 2 - Sidebar lazy-loading (noms seuls, contenu au clic)
 
 ### Nouveaux endpoints backend (READ-only, owner-scopés, bornés)
 1. **`GET /conversations?cursor=&limit=`** → `{conversations:[{session_id, title, last_at}], next_cursor, has_more}`.
@@ -101,7 +101,7 @@ completion.execute_streamed()
 ---
 
 ## Réglages (Settings)
-- Contrôle **10–50** existant repurposé : « Conversations affichées » → **« Messages d'historique inclus comme contexte »**. Store : `ui.maxConversations` → **`ui.contextMessages`** (clamp `[10,50]` défaut `20`, nouvelle clé localStorage `owismind.contextMessages`). `prefs.js` : `clampMaxConversations` → `clampContextMessages` (mêmes bornes). **Pas de refetch** au changement (n'affecte que le prochain `/chat/start`). i18n : nouvelles clés via `i18n/extra.js` (merge ; `messages.json` reste pristine).
+- Contrôle **10-50** existant repurposé : « Conversations affichées » → **« Messages d'historique inclus comme contexte »**. Store : `ui.maxConversations` → **`ui.contextMessages`** (clamp `[10,50]` défaut `20`, nouvelle clé localStorage `owismind.contextMessages`). `prefs.js` : `clampMaxConversations` → `clampContextMessages` (mêmes bornes). **Pas de refetch** au changement (n'affecte que le prochain `/chat/start`). i18n : nouvelles clés via `i18n/extra.js` (merge ; `messages.json` reste pristine).
 
 ## Sûreté (non négociable)
 - **Net positif instance** : on cesse de charger TOUS les messages au démarrage ; lectures **bornées + indexées + owner-scopées 2 clauses** ; SQL **paramétré** (`sql_value`/`pg_identifier`) ; **aucun nouveau chemin d'écriture** ; `chat_v2` write + trace dataset **non touchés** ; API DSS lecture seule.

@@ -1,7 +1,7 @@
 <script setup>
 // Collapsible raw-SQL footer of the Evidence panel: the agent's exact query,
 // PRETTY-PRINTED with light syntax highlighting + a copy button (which copies the
-// exact executed query verbatim) — full, readable transparency under the proof.
+// exact executed query verbatim) - full, readable transparency under the proof.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToasts } from '../../composables/useToasts.js'
@@ -61,7 +61,7 @@ async function copySql() {
   color: var(--text-2); white-space: pre;
   tab-size: 2;
 }
-/* Light syntax highlighting — keywords in brand orange, strings/numbers tinted.
+/* Light syntax highlighting - keywords in brand orange, strings/numbers tinted.
    Text-only spans (escaped), so this can never inject markup. */
 .sqltok-kw { color: var(--orange-text); font-weight: 600; }
 .sqltok-str { color: #2f9e44; }

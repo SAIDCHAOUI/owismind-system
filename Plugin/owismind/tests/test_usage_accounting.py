@@ -3,11 +3,11 @@
 inline only safe server-computed numeric literals.
 
 Three pure layers are provable without a live DSS runtime (project TEST-01 idiom):
-  - the SQL builders (monthly UPSERT + lifetime increment) — shape & scoping;
-  - chat_v5._usage_literal — coercion of trace values to safe SQL literals / NULL;
-  - usage.record_usage — one-transaction increment, zero-usage no-op (fake executor).
+  - the SQL builders (monthly UPSERT + lifetime increment) - shape & scoping;
+  - chat_v5._usage_literal - coercion of trace values to safe SQL literals / NULL;
+  - usage.record_usage - one-transaction increment, zero-usage no-op (fake executor).
 The builders carry no ``dataiku`` import; chat_v5/usage do, so a minimal stub is set up
-(extending any sibling test's stubs — unittest discover shares one sys.modules).
+(extending any sibling test's stubs - unittest discover shares one sys.modules).
 """
 import os
 import sys
@@ -59,7 +59,7 @@ class MonthlyUpsertBuilderTests(unittest.TestCase):
         )
 
     def test_period_is_calendar_month_server_clock(self):
-        # The bucket key is the first day of the month per the SERVER clock — no
+        # The bucket key is the first day of the month per the SERVER clock - no
         # Python/DB tz mismatch, and a new month is naturally a new PK row.
         self.assertIn("date_trunc('month', now())::date", self._q())
 
@@ -138,7 +138,7 @@ class UsageLiteralTests(unittest.TestCase):
 
 class RecordUsageTests(unittest.TestCase):
     """record_usage runs ONE committed transaction with both increments, and is a
-    no-op when there is nothing to record — verified with a fake executor."""
+    no-op when there is nothing to record - verified with a fake executor."""
 
     def setUp(self):
         from owismind.storage import usage

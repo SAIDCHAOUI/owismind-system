@@ -2,7 +2,7 @@
 {
     "meta": {
         // label: name of the webapp as displayed, should be short
-        "label": "OWIsMind — AI Agents",
+        "label": "OWIsMind - AI Agents",
         // description: longer string to help end users understand what this webapp does
         "description": "Chat with Dataiku AI agents. Conversations and users are stored via direct SQL in the PostgreSQL connection selected in this webapp's Settings.",
         // icon: must be one of the FontAwesome 5.15.4 icons, complete list here at https://fontawesome.com/v5/docs/
@@ -38,7 +38,7 @@
             "name": "table_prefix",
             "label": "Table name prefix (optional)",
             "type": "STRING",
-            "description": "Optional prefix inserted after the project key. MAX 16 characters, allowed: letters, digits, _ and -. A longer or invalid prefix is IGNORED (no prefix is used) — the Admin page shows when that happens. The project key and the 'owismind' namespace always stay. Example: prefix 'bidule' -> OWISMIND_DEV_bidule-owismind_webapp_chat_v4.",
+            "description": "Optional prefix inserted after the project key. MAX 16 characters, allowed: letters, digits, _ and -. A longer or invalid prefix is IGNORED (no prefix is used) - the Admin page shows when that happens. The project key and the 'owismind' namespace always stay. Example: prefix 'bidule' -> OWISMIND_DEV_bidule-owismind_webapp_chat_v4.",
             "mandatory": false
         },
         {
@@ -46,7 +46,7 @@
             "label": "Agent trace dataset (optional)",
             "type": "SELECT",
             "getChoicesFromPython": true,
-            "description": "Optional. Where each agent run's final trace is appended (one row per exchange) for offline analysis. The dropdown lists the project's SQL-backed datasets, plus '(none)'. FIRST create the dataset in the Flow with exactly these 3 columns — exchange_id (string), trace (string), created_at (date); column ORDER does not matter — then select it here. Choose '(none)' to disable trace storage (you can switch back to none at any time). A missing or incompatible dataset never breaks the chat: the trace is simply skipped (and logged).",
+            "description": "Optional. Where each agent run's final trace is appended (one row per exchange) for offline analysis. The dropdown lists the project's SQL-backed datasets, plus '(none)'. FIRST create the dataset in the Flow with exactly these 3 columns - exchange_id (string), trace (string), created_at (date); column ORDER does not matter - then select it here. Choose '(none)' to disable trace storage (you can switch back to none at any time). A missing or incompatible dataset never breaks the chat: the trace is simply skipped (and logged).",
             "mandatory": false
         },
         {

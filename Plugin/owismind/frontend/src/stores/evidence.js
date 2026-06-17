@@ -1,7 +1,7 @@
-// Evidence Studio store — the proof panel's state: which exchange it shows, the
+// Evidence Studio store - the proof panel's state: which exchange it shows, the
 // server meta (columns/chips/sql), the LOCAL editable chip state and the rows
 // page. Every request is guarded by sequence numbers so a stale response can
-// never overwrite a newer one — `seq` for open/close transitions, `rowsSeq` for
+// never overwrite a newer one - `seq` for open/close transitions, `rowsSeq` for
 // out-of-order rows responses (same idiom as chat.js's cancel token).
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
@@ -18,7 +18,7 @@ import {
   normalizeEditableOp,
 } from '../composables/evidenceModel.js'
 
-// Deepest browsable page index — mirrors the backend's MAX_EVIDENCE_PAGE
+// Deepest browsable page index - mirrors the backend's MAX_EVIDENCE_PAGE
 // (security/validation.py): the server silently clamps anything deeper.
 const MAX_PAGE = 20
 // Defensive client-side cap on the ACCUMULATED (lazily appended) rows: infinite
@@ -106,7 +106,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
 
   // Open the panel for one exchange. `auto` (the end-of-generation reveal) only
-  // opens when meta says the interactive view is available — no degraded
+  // opens when meta says the interactive view is available - no degraded
   // auto-open (user decision). Manual open (the per-message button) opens
   // immediately, degraded view included.
   async function openForExchange(id, opts) {
@@ -159,14 +159,14 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
 
   // Lazily load ONE page of rows. `append` selects the mode:
-  //   - false (default): a FRESH load of page 0 — replaces the accumulated rows
+  //   - false (default): a FRESH load of page 0 - replaces the accumulated rows
   //     (used on open / filter / sort / drill / table change).
   //   - true: load the NEXT page (page + 1) and APPEND to the accumulated rows
   //     (the infinite-scroll sentinel). The accumulated array is capped at
   //     MAX_ROWS so a huge source table can never grow it without bound.
   // Tri-state result: true = latest request succeeded, false = latest request
   // FAILED (no append/reset committed), null = superseded by a newer
-  // request/close (no rollback — something else owns the state now).
+  // request/close (no rollback - something else owns the state now).
   async function _loadRows(mySeq, opts) {
     const append = !!(opts && opts.append)
     const targetPage = append ? page.value + 1 : 0
@@ -269,7 +269,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     page.value = 0
     sort.value = null
     // Back to the agent view = out of any drill. The drill snapshot is NOT
-    // restored — the reset target IS the agent scope, not the pre-drill view.
+    // restored - the reset target IS the agent scope, not the pre-drill view.
     drill.value = null
     refreshRows()
   }
@@ -288,12 +288,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
     if (!Array.isArray(cols) || !cols.length) return
     const row = Array.isArray(m.result.rows) ? m.result.rows[rowIndex] : null
     if (!Array.isArray(row)) return
-    // Capped at 8 labels (backend mirror); null = unmappable column/value —
+    // Capped at 8 labels (backend mirror); null = unmappable column/value -
     // abort silently rather than drill on a partial (lying) scope.
     const labels = buildDrillLabels(cols, m.result.columns, row)
     if (!labels) return
     // Consecutive drill (chevron clicked while already drilling): keep the
-    // ORIGINAL pre-drill snapshot — only the labels change. Re-snapshotting
+    // ORIGINAL pre-drill snapshot - only the labels change. Re-snapshotting
     // here would capture the in-drill view, and exitDrill would then restore
     // the drill instead of the user's pre-drill context (FRONT-UX-02).
     const prev = drill.value
@@ -352,7 +352,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     refreshRows()
   }
 
-  // Distinct values for the picker — returned to the caller (the popover owns
+  // Distinct values for the picker - returned to the caller (the popover owns
   // its own transient open/loading state), never stored here. NOT staleness-
   // guarded: the popover must drop a result that resolves after the panel
   // moved on (it closes on outside-click anyway). `excludeId` = server id of
@@ -363,7 +363,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
 
   // Switch the active tab. Switching MUST NOT touch `open` (the ChatThread scroll
-  // gate is gated on `evidence.open`, not on `activeTab` — F13 rule).
+  // gate is gated on `evidence.open`, not on `activeTab` - F13 rule).
   function setActiveTab(key) {
     activeTab.value = key
   }

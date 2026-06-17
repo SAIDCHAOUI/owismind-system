@@ -1,12 +1,12 @@
 <script setup>
-// Evidence Studio panel — the RIGHT column that opens after a generation: the
+// Evidence Studio panel - the RIGHT column that opens after a generation: the
 // trust surface (trust badge + sources + filter chips + calculation steps +
 // captured agent result + live rows of the matched source table + the agent's
 // raw SQL). All data lives in the evidence store; this component only renders
 // its states (loading / error / degraded / interactive).
 //
 // TABS: when meta.artifacts contains chart/table artifacts, a tab bar is shown
-// at the top of the body. Switching tabs ONLY updates evidence.activeTab — it
+// at the top of the body. Switching tabs ONLY updates evidence.activeTab - it
 // MUST NOT change evidence.open (the ChatThread scroll gate checks open, F13).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -29,7 +29,7 @@ const evidence = useEvidenceStore()
 const meta = computed(() => evidence.meta)
 
 // Marker of the ENRICHED trust-layer contract: a v1 meta (no verification
-// block) must render pixel-identical to today — no badge, no extra labels.
+// block) must render pixel-identical to today - no badge, no extra labels.
 // The proof sections gate themselves on their own optional meta fields.
 const enriched = computed(() => !!(meta.value && meta.value.verification))
 
@@ -39,7 +39,7 @@ const drill = computed(() => evidence.drill || null)
 const drillLabels = computed(() => {
   const labels = drill.value && Array.isArray(drill.value.labels) ? drill.value.labels : []
   return labels
-    .map((l) => l.column + ' = ' + (l.value == null ? '—' : String(l.value)))
+    .map((l) => l.column + ' = ' + (l.value == null ? '-' : String(l.value)))
     .join(', ')
 })
 function onExitDrill() {
@@ -96,7 +96,7 @@ const kpiArtifact = computed(() =>
   artifacts.value.find((a) => a.kind === 'kpi') || null,
 )
 
-// Active tab model — bound to the store so it resets correctly on exchange change.
+// Active tab model - bound to the store so it resets correctly on exchange change.
 const activeTab = computed({
   get: () => evidence.activeTab || 'evidence',
   set: (key) => evidence.setActiveTab(key),
@@ -118,7 +118,7 @@ const activeTab = computed({
       </div>
     </header>
 
-    <!-- Tab bar — shown only when the backend returned chart / table artifacts.
+    <!-- Tab bar - shown only when the backend returned chart / table artifacts.
          Switching tabs MUST NOT change `evidence.open` (F13 scroll gate):
          v-model is wired to evidence.activeTab via the computed setter above. -->
     <Tabs
@@ -139,7 +139,7 @@ const activeTab = computed({
         <div class="sk sk-table" />
       </div>
       <div v-else-if="evidence.error" class="ev-state error">{{ t('ev.error') }}</div>
-      <!-- Degraded: the honest "declared" badge ABOVE the reason — the claim
+      <!-- Degraded: the honest "declared" badge ABOVE the reason - the claim
            level is exactly what a degraded panel is about. -->
       <template v-else-if="meta && !meta.available">
         <EvidenceTrust />
@@ -205,15 +205,15 @@ const activeTab = computed({
   background: var(--bg);
   animation: ev-slide-in var(--dur-slow) var(--ease) both;
 }
-/* The panel docks on the RIGHT — it slides in from the right edge. */
+/* The panel docks on the RIGHT - it slides in from the right edge. */
 @keyframes ev-slide-in {
   from { opacity: 0; transform: translateX(28px); }
   to { opacity: 1; transform: none; }
 }
 /* Staggered content reveal: the header rises first, then each body block (the
-   skeleton while loading, then chips and table when the meta lands — the v-if
+   skeleton while loading, then chips and table when the meta lands - the v-if
    swap re-runs the animation, so loaded content fades in over the skeleton). */
-/* Tab bar — flush to the header border, inheriting the panel's horizontal padding.
+/* Tab bar - flush to the header border, inheriting the panel's horizontal padding.
    The Tabs primitive draws its own border-bottom; no extra border here. */
 .ev-tabs {
   padding: 0 var(--s-5);
@@ -226,7 +226,7 @@ const activeTab = computed({
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
-/* Meta-loading skeleton — gradient sweep over content-shaped placeholders. */
+/* Meta-loading skeleton - gradient sweep over content-shaped placeholders. */
 .ev-skeleton { display: flex; flex-direction: column; gap: var(--s-4); flex: 1; min-height: 0; }
 .sk {
   display: block; border-radius: var(--r-sm);
@@ -259,7 +259,7 @@ const activeTab = computed({
 .ev-state { color: var(--text-3); font-size: var(--fs-sm); }
 .ev-state.error { color: var(--danger); }
 
-/* Drill banner — discreet dashed-orange band (same grammar as the "modified"
+/* Drill banner - discreet dashed-orange band (same grammar as the "modified"
    badge: the table scope was narrowed by the user). NO z-index: the chips
    popover (z-index 5, L043) must stay above every proof section. */
 .ev-drill-band {
@@ -278,12 +278,12 @@ const activeTab = computed({
 }
 .ev-drill-exit:hover { background: var(--surface-hover); color: var(--text); }
 .ev-drill-exit :deep(.ui-icon) { width: 12px; height: 12px; }
-/* Dark: swap the light tint for the translucent orange patch — entire
+/* Dark: swap the light tint for the translucent orange patch - entire
    selector inside :global (scoped+theme rule F2/L022). */
 :global(body[data-theme="dark"] .ev-drill-band) { background: var(--orange-soft-dark); }
 
 /* "Explore source data" label over the live table (same pattern as
-   .ev-chips-title) — only rendered for the enriched contract. */
+   .ev-chips-title) - only rendered for the enriched contract. */
 .ev-explore {
   font-size: var(--fs-xs); color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.04em;

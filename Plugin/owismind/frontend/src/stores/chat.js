@@ -1,4 +1,4 @@
-// Chat store — the active conversation as a TREE of exchanges, sending state, and the
+// Chat store - the active conversation as a TREE of exchanges, sending state, and the
 // prompt draft. Wraps the validated transport (useChatStream) and the session store
 // (selected agent, history).
 //
@@ -6,7 +6,7 @@
 // flat `exchanges` list and derives the ACTIVE PATH (`turns`) via the pure tree walk
 // (conversationTree.js): at each node it follows the override child if one is pinned, else
 // the LATEST child by createdAt. Editing a prompt or regenerating creates a NEW SIBLING
-// exchange (nothing is deleted) — the new sibling is the latest child, so it becomes the
+// exchange (nothing is deleted) - the new sibling is the latest child, so it becomes the
 // active branch automatically. Turn-level version arrows navigate siblings and re-walk the
 // path below them (handled by setTurnVersion + buildActivePath).
 //
@@ -15,9 +15,9 @@
 //             id is null while the run is live, reconciled to the backend exchange id on
 //             /chat/start (onExchangeId). createdAt is a monotonic client stamp for live
 //             ordering (history rows carry the server created_at).
-//   version:  reactive(createAnswerState()) — the ordered display timeline + SQL/usage +
+//   version:  reactive(createAnswerState()) - the ordered display timeline + SQL/usage +
 //             persisted feedback (see composables/timelineModel.js).
-//   turn:     { exchange, siblings, versionIdx } — one row of the active path (turns).
+//   turn:     { exchange, siblings, versionIdx } - one row of the active path (turns).
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { useSessionStore } from './session.js'
@@ -61,7 +61,7 @@ export const useChatStore = defineStore('chat', () => {
   const turns = computed(() => buildActivePath(exchanges.value, overrides.value))
 
   // A monotonic client clock so freshly created exchanges sort AFTER prior ones (and after
-  // history rows, whose createdAt is a server timestamp) — keeps the newest branch active.
+  // history rows, whose createdAt is a server timestamp) - keeps the newest branch active.
   let _clock = 0
   function nextStamp() {
     return new Date().toISOString() + '#' + (++_clock)
@@ -89,7 +89,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const hasMessages = computed(() => turns.value.length > 0)
   // threadLoading/threadError matter here: after a failed or in-flight conversation
-  // switch, `exchanges` still holds the PREVIOUS thread — a send would persist under
+  // switch, `exchanges` still holds the PREVIOUS thread - a send would persist under
   // the NEW session id with a parent exchange from the OLD one (cross-conversation
   // corruption). No sends until the thread on screen is the active session's.
   const canSend = computed(
@@ -111,7 +111,7 @@ export const useChatStore = defineStore('chat', () => {
         ? [{ id: 'txt-0', seq: 0, kind: 'text', text: r.assistant_text, open: false }]
         : [],
       sql: Array.isArray(r.generated_sql) ? r.generated_sql : [],
-      // Persisted token/cost usage (null when none was stored) — so a reloaded
+      // Persisted token/cost usage (null when none was stored) - so a reloaded
       // conversation shows the same per-message usage line as the live run.
       usage: usageFromRow(r),
       status: 'done',
@@ -141,7 +141,7 @@ export const useChatStore = defineStore('chat', () => {
     errorMsg.value = ''
     threadLoading.value = false // clear any spinner left over from an interrupted openSession fetch
     threadError.value = ''
-    // Phase C — last-used agent for a fresh conversation. Guarded so Phase B runs without
+    // Phase C - last-used agent for a fresh conversation. Guarded so Phase B runs without
     // Phase C (the session store doesn't define this method yet).
     if (typeof session.useDefaultAgent === 'function') session.useDefaultAgent()
   }
@@ -149,7 +149,7 @@ export const useChatStore = defineStore('chat', () => {
   // Evidence continuity: entering a conversation re-opens its proof panel on the
   // LAST sql-bearing exchange of the active branch. Same auto contract as the
   // end-of-run reveal: opens only when /evidence/meta confirms the interactive
-  // view — never degraded, never an error surface. Fire-and-forget: a rapid
+  // view - never degraded, never an error surface. Fire-and-forget: a rapid
   // switch is safe (openSession→evidence.close() bumps the store's seq, which
   // invalidates an in-flight auto commit).
   function _autoOpenEvidence(sessionId) {
@@ -165,7 +165,7 @@ export const useChatStore = defineStore('chat', () => {
   // the URL stamp of a started-as-new conversation) skips the refetch but re-runs
   // the evidence continuity (the panel closes on route leave). The loading/error
   // guards matter: after a FAILED or still-in-flight open, `exchanges` still holds
-  // the PREVIOUS conversation's rows — skipping there would show the wrong thread,
+  // the PREVIOUS conversation's rows - skipping there would show the wrong thread,
   // so anything not cleanly in memory goes through a genuine openSession (which is
   // also the retry path). Bonus over the old always-refetch: a live run now
   // SURVIVES a Settings round-trip (no cancelActive on the way back).
@@ -176,7 +176,7 @@ export const useChatStore = defineStore('chat', () => {
       !threadLoading.value &&
       !threadError.value
     ) {
-      // Not while a run is in flight: the end-of-run reveal owns the panel then —
+      // Not while a run is in flight: the end-of-run reveal owns the panel then -
       // racing it could commit the PREVIOUS exchange's proof over the new one.
       if (!sending.value) _autoOpenEvidence(sessionId)
       return
@@ -189,7 +189,7 @@ export const useChatStore = defineStore('chat', () => {
   //
   // We deliberately DO NOT clear `exchanges` here: the current thread stays on screen
   // (under a centered loading overlay, ChatView) during the fetch and is replaced only when
-  // the target conversation's rows arrive — no "new conversation" flash (mirror L031).
+  // the target conversation's rows arrive - no "new conversation" flash (mirror L031).
   async function openSession(sessionId) {
     cancelActive()
     evidence.close()
@@ -203,9 +203,9 @@ export const useChatStore = defineStore('chat', () => {
       if (activeSessionId.value !== sessionId) return // superseded by a newer open
       exchanges.value = (data.rows || []).map(rowToExchange)
       _autoOpenEvidence(sessionId)
-      // Phase C — adopt this conversation's agent only AFTER the agent list is loaded (it
-      // loads via init()/loadAgents on a separate, slower path: /me then /agents — 2 round
-      // trips — while /conversation is a single one that can win the cold-path race, leaving
+      // Phase C - adopt this conversation's agent only AFTER the agent list is loaded (it
+      // loads via init()/loadAgents on a separate, slower path: /me then /agents - 2 round
+      // trips - while /conversation is a single one that can win the cold-path race, leaving
       // session.agents empty when adopt runs). ensureLoaded() is memoized + already in flight
       // from App mount, so .then runs adopt on the next microtask (warm path still adopts).
       // Re-guard the active session in case the user switched conversations meanwhile.
@@ -233,7 +233,7 @@ export const useChatStore = defineStore('chat', () => {
     cancelActive()
     const version = newVersion()
     // `uid` is the stable render key, assigned once and NEVER changed. `id` starts null and
-    // is reconciled to the backend exchange id (onExchangeId) — keying the v-for on `uid`
+    // is reconciled to the backend exchange id (onExchangeId) - keying the v-for on `uid`
     // (not `id`) avoids a mid-stream remount/flicker when that reconciliation happens.
     const exch = reactive({ uid: nextStamp(), id: null, parentId: parentId || null, userText, version, createdAt: nextStamp() })
     exchanges.value.push(exch)
@@ -246,7 +246,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     // Sidebar bump data captured at RUN ENTRY: the finally below can run up to a
     // poll cycle AFTER a cancellation, when the store may already hold ANOTHER
-    // conversation — reading store state there created phantom/retitled sidebar
+    // conversation - reading store state there created phantom/retitled sidebar
     // entries. The run's own conversation is the right one to promote either way:
     // the backend worker persists its answer even when polling was cancelled.
     const runSessionId = activeSessionId.value
@@ -286,7 +286,7 @@ export const useChatStore = defineStore('chat', () => {
       // that produced at least one successful SQL gets its proof panel opened
       // automatically. openForExchange({auto:true}) only opens when
       // /evidence/meta confirms the interactive view (whitelisted table +
-      // parsed filters) — never a degraded auto-open. Not on stopped/error.
+      // parsed filters) - never a degraded auto-open. Not on stopped/error.
       if (!token.cancelled && version.status === 'done' && version.sql.some((q) => q && q.success)) {
         // Fire-and-forget: the reveal must never affect the send flow. The
         // store catches its own fetch errors; this guards the commit path too.
@@ -306,7 +306,7 @@ export const useChatStore = defineStore('chat', () => {
         stopPending = false
       }
       sending.value = false
-      // Promote/insert the RUN's conversation at the top (data captured at entry —
+      // Promote/insert the RUN's conversation at the top (data captured at entry -
       // never the store's CURRENT session, which may have changed since).
       session.bumpCurrentConversation({
         id: runSessionId,
@@ -325,7 +325,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // Edit a prompt: a NEW SIBLING of the edited turn (same parent, new text). Nothing is
-  // deleted — the old version stays reachable via the turn's version arrows.
+  // deleted - the old version stays reachable via the turn's version arrows.
   function editTurn(turn, newText) {
     const t = (newText || '').trim()
     if (!t || !canSend.value || !turn) return
@@ -349,7 +349,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // Explicit user stop of the in-flight run (the ■ button). The backend stop is
-  // cooperative — the LLM Mesh stream has NO cancel API, so the worker can only cut
+  // cooperative - the LLM Mesh stream has NO cancel API, so the worker can only cut
   // BETWEEN streamed chunks (an in-flight LLM call / SQL keeps it busy a few seconds).
   // Rather than fake an instant stop, we KEEP polling and show a clear "Stopping…"
   // indicator until the backend's terminal `stopped` event arrives and finalizes the
@@ -361,7 +361,7 @@ export const useChatStore = defineStore('chat', () => {
     if (activeRunId) stopChat(activeRunId).catch(() => {})
     else stopPending = true
     // Show the "Stopping…" state on the live version (spinner + blinking label). We do
-    // NOT cancel polling and do NOT finalize here — the terminal `stopped` event will.
+    // NOT cancel polling and do NOT finalize here - the terminal `stopped` event will.
     if (activeVersion && activeVersion.status === 'running') {
       activeVersion.stopping = true
     }

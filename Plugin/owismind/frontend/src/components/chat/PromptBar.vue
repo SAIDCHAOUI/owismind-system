@@ -1,5 +1,5 @@
 <script setup>
-// Prompt bar — auto-growing textarea, agent picker (left), voice button (left,
+// Prompt bar - auto-growing textarea, agent picker (left), voice button (left,
 // placeholder: no STT backend), send (right). Visual spec ported from `.prompt`
 // / `.prompt-input` / `.prompt-row` / `.p-icon` / `.send-btn` (components.css).
 // Enter sends; Shift+Enter inserts a newline.
@@ -41,8 +41,8 @@ function onKey(e) {
   }
 }
 function micClick() {
-  // Voice input has no STT backend yet — honest placeholder.
-  push(t('prompt.mic') + ' — bientôt', { icon: 'mic' })
+  // Voice input has no STT backend yet - honest placeholder.
+  push(t('prompt.mic') + ' - bientôt', { icon: 'mic' })
 }
 
 const placeholder = () =>
@@ -73,7 +73,7 @@ const placeholder = () =>
       </div>
       <div class="prompt-right">
         <!-- Mic sits with the send action on the right (voice → send grouping). No STT
-             backend yet — honest placeholder. -->
+             backend yet - honest placeholder. -->
         <button class="p-icon" type="button" :title="t('prompt.mic')" @click="micClick">
           <Icon name="mic" />
         </button>

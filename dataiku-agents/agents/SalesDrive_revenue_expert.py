@@ -1,17 +1,17 @@
 # =============================================================================
-# OWIsMind — DATASET EXPERT AGENT (generic, Dataiku Code Agent)
+# OWIsMind - DATASET EXPERT AGENT (generic, Dataiku Code Agent)
 # -----------------------------------------------------------------------------
 # A dataset-agnostic sub-agent: point it at a PROFILE dataset (built by
 # recipes/profile_dataset_recipe.py) and a VALUE INDEX dataset (built by
 # recipes/build_value_index_recipe.py) and it becomes an expert of that
-# dataset — it knows the columns, the metrics, the scenario values, the time
+# dataset - it knows the columns, the metrics, the scenario values, the time
 # coverage and the exact catalog values, and it answers questions by building
 # and executing its OWN read-only SQL. No semantic-model tool, no black box.
 #
 # Architecture : UNDERSTAND -> RESOLVE -> BUILD SQL -> EXECUTE/REPAIR -> RENDER
 #
 #   1. UNDERSTAND  1 LLM call (strict JSON). The prompt is GENERATED from the
-#                  profile: metrics, scenario values, axes, synonyms — so the
+#                  profile: metrics, scenario values, axes, synonyms - so the
 #                  same code understands any dataset.
 #   2. RESOLVE     User terms are grounded against the value index by SQL
 #                  (exact -> normalized -> fuzzy). Ambiguity policy and the
@@ -28,7 +28,7 @@
 #                  with the database error fed back to the LLM.
 #   5. RENDER      Markdown table + figures formatted BY CODE; a small LLM
 #                  writes only the headline and every number it cites is
-#                  verified against the result — unverifiable -> deterministic
+#                  verified against the result - unverifiable -> deterministic
 #                  fallback. "about_data" questions are answered from the
 #                  profile with ZERO SQL and ZERO hallucination surface.
 #
@@ -37,11 +37,11 @@
 #     clarify_user, out_of_scope_msg, about_data.
 #   - AGENT_TOOL_START toolNames: resolve_filter_value, dataset_sql_query.
 #   - ONE final AGENT_RESULT event {status, language, intent, resolvedFilters,
-#     sqlCount, rowCount, attempts} — status: ready | need_clarification |
+#     sqlCount, rowCount, attempts} - status: ready | need_clarification |
 #     out_of_scope | no_data | error.
 #   - One trace subspan "semantic-model-query" PER EXECUTED SQL with outputs
 #     {sql, success (REAL, observed), row_count} (+ rows/columns on the
-#     successful one) — the orchestrator/webapp Evidence capture works as-is.
+#     successful one) - the orchestrator/webapp Evidence capture works as-is.
 #
 # Cornerstones (NON NEGOTIABLE, inherited from OWIsMind):
 #   - NEVER invents a figure: every number shown comes from the SQL result
@@ -86,7 +86,7 @@ TARGET_DATASET = ""
 
 # LLM Mesh ids. UNDERSTAND runs on every question and forces native JSON output, so
 # a fast, cheap model parses it reliably; SQLGEN runs only on the long-tail "custom"
-# intent. These mirror the orchestrator (same connection) — each id must match an id
+# intent. These mirror the orchestrator (same connection) - each id must match an id
 # exposed by the LLM Mesh connection.
 GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-light"  # eco
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
@@ -139,7 +139,7 @@ def pick_semantic_tool_id(mode):
 
 # --- Dataset Lookup tool (simple value retrieval, NO SQL) --------------------
 # Dataiku managed "Dataset Lookup" tool: returns up to a few rows matching a
-# column/operator/value filter — perfect for "who is the account manager of X?",
+# column/operator/value filter - perfect for "who is the account manager of X?",
 # "what's the carrier code of Y?". Reserve SQL (semantic tool) for aggregations,
 # rankings, comparisons and calculations; use this for plain attribute lookups.
 # The tool's input schema is auto-discovered from its descriptor (we only need
@@ -160,7 +160,7 @@ FUZZY_CANDIDATES_LIMIT = 40
 FUZZY_MIN_RATIO = 0.62             # below -> unresolved (no best candidate)
 LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo terms
 # Max concurrent INDEPENDENT operations the sub-agent runs at once (bounded for
-# Dataiku instance safety). Used by run_parallel() — today for the per-term value
+# Dataiku instance safety). Used by run_parallel() - today for the per-term value
 # lookups, and the drop-in mechanism for future parallel tool calls.
 SUBAGENT_MAX_PARALLEL = 4
 
@@ -168,7 +168,7 @@ SUBAGENT_MAX_PARALLEL = 4
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
 
-# Result capture caps — mirrors of the orchestrator/webapp caps (standalone
+# Result capture caps - mirrors of the orchestrator/webapp caps (standalone
 # file; the webapp re-caps independently before persistence).
 MAX_RESULT_ROWS = 50
 MAX_RESULT_COLS = 50
@@ -189,9 +189,9 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_ ]*$")
 
 OUT_OF_SCOPE_TEXT = {
     "fr": ("Cette question sort du périmètre de données que je couvre "
-           "({label}). Posez-moi une question sur ces données — je m'en occupe."),
+           "({label}). Posez-moi une question sur ces données - je m'en occupe."),
     "en": ("This question is outside the data scope I cover ({label}). "
-           "Ask me about this data — I'll take care of it."),
+           "Ask me about this data - I'll take care of it."),
 }
 NO_DATA_TEXT = {
     "fr": "Aucune donnée trouvée pour les filtres et la période demandés.",
@@ -257,13 +257,13 @@ HEADLINE_LOOKUP = {
     "en": "Here are the details you asked for:",
 }
 # Transparency note when a requested COMPARISON could not be built (only one
-# scenario/period resolved) and the agent fell back to a single figure — so the
+# scenario/period resolved) and the agent fell back to a single figure - so the
 # user is never silently given a total when they asked for a delta.
 DEGRADED_COMPARISON_NOTE = {
     "fr": "_Note : je n'ai pas pu construire la comparaison demandée (un seul "
-          "élément à comparer a été identifié) — voici le chiffre correspondant._",
+          "élément à comparer a été identifié) - voici le chiffre correspondant._",
     "en": "_Note: I couldn't build the requested comparison (only one item to "
-          "compare was identified) — here is the corresponding figure._",
+          "compare was identified) - here is the corresponding figure._",
 }
 HEADLINE_SINGLE = {
     "fr": "{metric} ({scope}) : {value}.",
@@ -285,14 +285,14 @@ ABOUT_ROWS = {"fr": "**Volume**", "en": "**Volume**"}
 
 
 # =============================================================================
-# 3. PROFILE — loading + typed accessors (the agent's knowledge)
+# 3. PROFILE - loading + typed accessors (the agent's knowledge)
 # =============================================================================
 
 def run_parallel(tasks, max_workers=SUBAGENT_MAX_PARALLEL):
     """Run independent thunks CONCURRENTLY (bounded) and return their results in
     INPUT order. A thunk that raises -> its slot is None (the caller filters/handles).
     Bounded by max_workers for Dataiku instance safety. This is the sub-agent's
-    drop-in mechanism for calling several INDEPENDENT tools/queries in parallel —
+    drop-in mechanism for calling several INDEPENDENT tools/queries in parallel -
     use it whenever the work items don't depend on each other (today: per-term value
     lookups; tomorrow: multiple data tools whose calls are mutually independent).
     Sequential, no thread, for 0/1 task (cheaper + keeps simple cases simple)."""
@@ -324,8 +324,8 @@ class Profile(object):
         self.raw = dataset_payload or {}
         self.columns = columns or {}
         # Live schema column names (attached at load time from the dataset's
-        # current schema). Lets lookups reach attribute columns — e.g. an account
-        # manager — even when the profile recipe hasn't re-run after a schema
+        # current schema). Lets lookups reach attribute columns - e.g. an account
+        # manager - even when the profile recipe hasn't re-run after a schema
         # change (the profile can be stale; the live schema never is).
         self.live_columns = []
 
@@ -412,7 +412,7 @@ class Profile(object):
     def attribute_columns(self):
         """All real column names available for a plain lookup (live schema first,
         union with the profiled columns). These are the columns a `lookup` intent
-        may RETURN (e.g. account_manager) — not necessarily groupable axes."""
+        may RETURN (e.g. account_manager) - not necessarily groupable axes."""
         names, seen = [], set()
         for name in list(self.live_columns) + list(self.columns.keys()):
             if name and name not in seen:
@@ -476,7 +476,7 @@ def _read_dataset_rows(name, wanted_columns):
 
 def _read_live_columns(name):
     """Current column names of a dataset, straight from its schema (cheap
-    metadata read — no scan, instance-safe). Used to ground lookups on the
+    metadata read - no scan, instance-safe). Used to ground lookups on the
     real, current columns regardless of profile freshness."""
     schema = dataiku.Dataset(name).read_schema()
     out = []
@@ -488,7 +488,7 @@ def _read_live_columns(name):
 
 
 # =============================================================================
-# 4. PURE HELPERS — parsing / validation
+# 4. PURE HELPERS - parsing / validation
 # =============================================================================
 
 def _safe_json_parse(text):
@@ -509,7 +509,7 @@ def _safe_json_parse(text):
 
 
 def _norm(value):
-    """Accent-insensitive lowercase, collapsed whitespace (FROZEN — must match
+    """Accent-insensitive lowercase, collapsed whitespace (FROZEN - must match
     the value-index recipe's norm_value)."""
     s = unicodedata.normalize("NFKD", str(value))
     s = s.encode("ascii", "ignore").decode("ascii")
@@ -529,7 +529,7 @@ def _validate_period(raw):
 
 
 # The orchestrator pins the reply language via the injected system context
-# ("USER LANGUAGE: fr"). It is AUTHORITATIVE — it reflects the language of the
+# ("USER LANGUAGE: fr"). It is AUTHORITATIVE - it reflects the language of the
 # USER's actual message, which the orchestrator knows; the sub-agent only sees the
 # (possibly English) self-contained task, so its own guess is unreliable.
 _FORCED_LANG_RE = re.compile(r"USER LANGUAGE:\s*(fr|en)\b", re.IGNORECASE)
@@ -678,7 +678,7 @@ def validate_understanding(parsed, profile, instruction):
 
 def _term_stopwords(profile):
     """Words that must never reach the resolver: metric labels/synonyms,
-    scenario values, column names — all PROFILE-derived (rule P3: no hardcoded
+    scenario values, column names - all PROFILE-derived (rule P3: no hardcoded
     business values), plus a small language-level operator list."""
     stop = set()
     for m in profile.metrics:
@@ -703,7 +703,7 @@ def _term_stopwords(profile):
 
 
 # =============================================================================
-# 5. UNDERSTAND — prompt generated from the profile
+# 5. UNDERSTAND - prompt generated from the profile
 # =============================================================================
 
 def build_understand_schema(profile):
@@ -740,14 +740,14 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
     """System prompt of the UNDERSTAND call, GENERATED from the profile."""
     metrics_block = "\n".join(
         '- "%s": %s / %s%s' % (m["name"], m.get("label_fr", ""), m.get("label_en", ""),
-                               (" — " + m["description"]) if m.get("description") else "")
+                               (" - " + m["description"]) if m.get("description") else "")
         for m in profile.metrics) or "(none)"
     default_metric = (profile.default_metric or {}).get("name", "")
 
     scen = profile.scenario
     if scen:
         scen_block = (
-            'The column "%s" holds SCENARIO values — versions of the same '
+            'The column "%s" holds SCENARIO values - versions of the same '
             "figures that must NEVER be summed together. Its exact values: %s. "
             'Fill "scenarios" with the values the user explicitly refers to '
             "(map their words to the closest value); leave it EMPTY when none "
@@ -788,15 +788,15 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
 
     return (
         "You are the understanding module of a data agent for the dataset "
-        '"%s" — %s (one row = %s). You do NOT answer. You do NOT write SQL. '
+        '"%s" - %s (one row = %s). You do NOT answer. You do NOT write SQL. '
         "You return ONE JSON object describing the question. "
         "Current date: %s.\n\n"
         "METRICS (field \"metric\" = one name below; default \"%s\"):\n%s\n\n"
         "SCENARIOS:\n%s\n\n"
         "TIME:\n%s\n\n"
-        "ANALYSIS AXES (for group_by / list_column — output the exact column "
+        "ANALYSIS AXES (for group_by / list_column - output the exact column "
         "name):\n%s\n\n"
-        "ALL COLUMNS (for \"attributes\" on a lookup — output the EXACT name):\n"
+        "ALL COLUMNS (for \"attributes\" on a lookup - output the EXACT name):\n"
         "%s\n\n"
         "INTENTS (field \"intent\"):\n"
         "- \"total\": one aggregated figure.\n"
@@ -812,11 +812,11 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
         "- \"list_values\": the user asks WHICH values exist for an axis "
         "(\"quels clients ?\", \"liste des produits\") -> set list_column.\n"
         "- \"count_distinct\": how many distinct values of an axis -> list_column.\n"
-        "- \"lookup\": retrieve an ATTRIBUTE of one or more NAMED entities — NO "
+        "- \"lookup\": retrieve an ATTRIBUTE of one or more NAMED entities - NO "
         "maths, no totals, no ranking. \"who is the account manager of X?\", "
         "\"the carrier code and sales zone of Y\". Put the named entit(ies) in "
         "\"terms\" and the column(s) to return in \"attributes\" (exact names "
-        "from ALL COLUMNS). This is a fast direct read — PREFER it over a SQL "
+        "from ALL COLUMNS). This is a fast direct read - PREFER it over a SQL "
         "intent whenever the user just wants a field of a known entity.\n"
         "- \"about_data\": the user asks what this dataset is / what you can "
         "answer / which columns or indicators exist.\n"
@@ -828,24 +828,24 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
         "\"YYYY-MM-DD\",\"label\":<as the user said it>} when the user gives "
         "any time scope (\"2025\" -> 2025-01-01..2025-12-31; \"janvier 2026\" "
         "-> 2026-01-01..2026-01-31; \"YTD 2026\" -> 2026-01-01..current date). "
-        "{\"mode\":\"all_available\"} when NO period is given — never invent "
+        "{\"mode\":\"all_available\"} when NO period is given - never invent "
         "one, never ask for one.\n\n"
         "TERMS (field \"terms\"): the business VALUES the user names that must "
         "be matched against the data catalog (names, codes, labels of: %s). "
-        "Copy them EXACTLY as the user wrote them (accents, typos included) — "
+        "Copy them EXACTLY as the user wrote them (accents, typos included) - "
         "never correct, translate or expand. NEVER extract: metric words, "
         "scenario words, dates/periods, operation words (top, split, delta, "
         "compare, sum...), column names themselves. When the user explicitly "
-        "designates the column of a value — typically when answering a "
-        "disambiguation question — keep/produce the qualified form "
+        "designates the column of a value - typically when answering a "
+        "disambiguation question - keep/produce the qualified form "
         "\"VALUE (Column)\" with the exact column name. Never strip an "
         "existing \"(Column)\" qualifier.\n\n"
         "CONVERSATION CONTEXT (when provided before the question): it carries "
         "the PREVIOUS assistant message and the user's raw answer. If that "
         "previous message asked a disambiguation question listing candidate "
-        "values and the user's answer designates one of them — by name, "
+        "values and the user's answer designates one of them - by name, "
         "column, position (\"the first one\", \"la deuxième\") or partial "
-        "wording — output that candidate as a qualified term "
+        "wording - output that candidate as a qualified term "
         "\"VALUE (Column)\" copied EXACTLY from the list. Never output a "
         "candidate that is not in the list.\n\n"
         "CLARIFICATION: ONLY when the question is about this data but too "
@@ -863,7 +863,7 @@ def build_understand_prompt(profile, current_date, lang_hint="fr"):
 
 
 # =============================================================================
-# 6. RESOLVE — value grounding on the index + disambiguation policy
+# 6. RESOLVE - value grounding on the index + disambiguation policy
 # =============================================================================
 
 def parse_qualified_term(term, profile):
@@ -935,7 +935,7 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
         chosen = cands[0]
         # Transparency: the SAME value also lives in other columns (e.g. an
         # offer name that is both a Product and a Solution). Record them so
-        # RENDER can disclose the pick — we still keep the priority column.
+        # RENDER can disclose the pick - we still keep the priority column.
         alts, seen = [], {chosen.get("target_column")}
         for c in cands[1:]:
             col = c.get("target_column") or ""
@@ -947,12 +947,12 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
         return ("resolved", chosen)
     # Several DISTINCT values remain (different value per column). Before asking the
     # user, prefer the column that STRICTLY dominates by priority when it resolves to
-    # a single value — e.g. an account NAME primes over its parent GROUP (account_name
+    # a single value - e.g. an account NAME primes over its parent GROUP (account_name
     # has far more distinct values, so column_priority ranks it first). Pin that column
     # and DISCLOSE the others (transparency) instead of forcing a clarification. A true
     # tie WITHIN the top column (two real distinct entities) still asks. (Same-value
     # offer terms took the branch above; the offer hierarchy itself is the semantic
-    # model's call via the AMBIGUOUS-OFFER marker — unchanged.)
+    # model's call via the AMBIGUOUS-OFFER marker - unchanged.)
     by_col = {}
     for c in cands:
         by_col.setdefault(c.get("target_column") or "", []).append(c)
@@ -978,7 +978,7 @@ def defer_multicolumn_offer_terms(resolutions):
         must not trigger a clarification: the resolver should not interrogate the
         user on the offer hierarchy. It is reclassified 'deferred' and the raw term
         is passed to the semantic model, which resolves it from its own full catalog
-        (most granular business level — Product, then Solution; never sirano by
+        (most granular business level - Product, then Solution; never sirano by
         default) and discloses the level. This avoids pinning the wrong column,
         which would drop scenarios the column does not carry (e.g. budget).
       - a mono-column ambiguity (two distinct entities in one column, e.g. two
@@ -1017,7 +1017,7 @@ def defer_multicolumn_offer_terms(resolutions):
 
 def build_filter_clauses(resolutions):
     """[{column, value}] from resolved items, deduplicated. Values came from
-    the index verbatim — exact by construction."""
+    the index verbatim - exact by construction."""
     out, seen = [], set()
     for r in resolutions or []:
         if r.get("status") != "resolved":
@@ -1118,7 +1118,7 @@ def extract_lookup_rows(raw):
 
 def lookup_note(lookup_filter, attributes):
     """A short, human-readable note describing a Dataset Lookup (shown as the
-    'SQL' in Evidence technical details — honest: it states it was a direct
+    'SQL' in Evidence technical details - honest: it states it was a direct
     lookup, not a generated query)."""
     def describe(node):
         op = node.get("operator")
@@ -1173,7 +1173,7 @@ def resolved_filters_summary(resolutions):
 
 
 # =============================================================================
-# 7. SQL BUILDER — deterministic templates (the LLM never writes these)
+# 7. SQL BUILDER - deterministic templates (the LLM never writes these)
 # =============================================================================
 
 def qident(name):
@@ -1230,7 +1230,7 @@ def period_predicate(time_info, start, end):
 
     String-format predicates compare on LEFT(CAST(col AS text), n): ISO text
     sorts lexicographically, and the CAST makes the SQL valid whether the
-    physical column is text, date or timestamp — profile format detection can
+    physical column is text, date or timestamp - profile format detection can
     be wrong about the PHYSICAL type (seen in DSS: a real PostgreSQL `date`
     profiled as yyyy_mm_dd_str -> LEFT(date, 10) does not exist)."""
     col = qident(time_info["column"])
@@ -1302,7 +1302,7 @@ def _axis_select(profile, axis):
 
 
 def build_sql(u, profile, filters, table):
-    """Deterministic SQL for every structured intent. Returns (sql, meta) —
+    """Deterministic SQL for every structured intent. Returns (sql, meta) -
     meta = {"format_map": {alias: format}, "unit": str|None} for rendering.
     Raises ValueError for unbuildable combinations (caller degrades)."""
     intent = u["intent"]
@@ -1434,16 +1434,16 @@ def build_sql(u, profile, filters, table):
 
 
 # =============================================================================
-# 8. CUSTOM SQL — LLM generation contract + GUARD
+# 8. CUSTOM SQL - LLM generation contract + GUARD
 # =============================================================================
 
 SQLGEN_PROMPT = (
     "You write ONE PostgreSQL SELECT query answering the user's question on "
-    "the single table described below. Output ONLY the SQL — no markdown "
+    "the single table described below. Output ONLY the SQL - no markdown "
     "fences, no commentary, no explanation.\n"
     "HARD RULES:\n"
     "- ONE statement, starting with SELECT or WITH. Read-only.\n"
-    "- Query ONLY the table {table} — no other table, no DML/DDL.\n"
+    "- Query ONLY the table {table} - no other table, no DML/DDL.\n"
     "- Use the EXACT column names and the EXACT filter values given "
     "(case-sensitive). Never invent a column or a value.\n"
     "- {scenario_rule}\n"
@@ -1461,7 +1461,7 @@ SQLGEN_REPAIR_PROMPT = (
 def build_dataset_card(profile, table):
     """Compact dataset card injected into the SQL-generation prompt."""
     lines = ["TABLE: %s" % table,
-             "DATASET: %s — %s" % (profile.dataset_name,
+             "DATASET: %s - %s" % (profile.dataset_name,
                                    profile.description("en")[:300]),
              "GRAIN: %s" % (profile.raw.get("grain") or "one record"),
              "COLUMNS:"]
@@ -1488,7 +1488,7 @@ def build_dataset_card(profile, table):
 ENUM_VALUES_IN_CARD = 30
 
 # DML/DDL/write verbs. NOTE: words that are ALSO common column identifiers
-# (set, comment, lock) are deliberately NOT here — they can't be a leading
+# (set, comment, lock) are deliberately NOT here - they can't be a leading
 # statement (the head must be SELECT/WITH, single-statement), writes are blocked
 # by the read-only transaction, and blacklisting them rejected legitimate columns
 # (e.g. a "comment" column). Literals are blanked before this scan (see caller).
@@ -1583,12 +1583,12 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
 
 
 # =============================================================================
-# 8b. SEMANTIC MODEL QUERY ENGINE — composer + tool-output extraction
+# 8b. SEMANTIC MODEL QUERY ENGINE - composer + tool-output extraction
 # -----------------------------------------------------------------------------
 # The semantic question is 100% deterministic (frozen templates per intent):
-# the LLM never writes it. It carries everything the upstream layers earned —
+# the LLM never writes it. It carries everything the upstream layers earned -
 # exact catalog values from the resolver, explicit scenario values, explicit
-# period bounds, the axis + display rule — plus the DESTINATION CONTEXT (the
+# period bounds, the axis + display rule - plus the DESTINATION CONTEXT (the
 # tool must know its SQL feeds a result table that an LLM reads to answer).
 # =============================================================================
 
@@ -1596,7 +1596,7 @@ SEMANTIC_DESTINATION_NOTE = (
     "CONTEXT: the SQL you generate will produce a result table that is "
     "displayed to the user AND read by another LLM to write the final "
     "answer. Return a clean tabular result with explicit column aliases "
-    "(one column per figure, plus the grouping label columns) — never a "
+    "(one column per figure, plus the grouping label columns) - never a "
     "prose-only answer.")
 
 
@@ -1609,10 +1609,10 @@ def _pretty_col(name):
 
 DISCLOSE_NOTE = {
     "fr": ("ℹ️ « {value} » existe à plusieurs niveaux de l'offre ({cols}) ; le "
-           "niveau le plus précis est privilégié par défaut — précisez si vous "
+           "niveau le plus précis est privilégié par défaut - précisez si vous "
            "vouliez un autre niveau."),
     "en": ("ℹ️ \"{value}\" exists at several offer levels ({cols}); the most "
-           "granular level is used by default — tell me if you meant another "
+           "granular level is used by default - tell me if you meant another "
            "level."),
 }
 
@@ -1624,7 +1624,7 @@ def build_disclosure_notes(filters, lang, offer_terms=None):
       - resolved filters that carry alt_columns (a value also present at another
         offer level, e.g. a Product that is also a Solution);
       - offer terms the resolver could NOT confidently ground and DEFERRED to the
-        semantic model (multi-column ambiguity, e.g. 'Roaming Hub') — same wording.
+        semantic model (multi-column ambiguity, e.g. 'Roaming Hub') - same wording.
     Pure; carries no figures, so it never affects the verified headline."""
     lines = []
     for f in filters or []:
@@ -1654,12 +1654,12 @@ def build_semantic_question(u, profile, filters):
     message gives it the user's real question as the source of truth, then assists
     it with hints: a deterministic intent shape, the values and columns the resolver
     matched in the live catalog, the preferred presentation, scenario and period.
-    Hints assist, they do not order — the tool keeps the final say. A column choice
+    Hints assist, they do not order - the tool keeps the final say. A column choice
     is never forced: when a value spans offer levels the most granular is suggested
     and the alternative is flagged for the tool and the user."""
     intent = u["intent"]
     metric = profile.metric(u["metric"] or "") or profile.default_metric
-    parts = ['USER QUESTION (this is the source of truth — answer THIS): "%s"'
+    parts = ['USER QUESTION (this is the source of truth - answer THIS): "%s"'
              % u["instruction"]]
 
     metric_part = ""
@@ -1740,7 +1740,7 @@ def build_semantic_question(u, profile, filters):
     # offer term like 'EVPL', both a Product and a Solution) is not pinned to a
     # column: the semantic model resolves it with its own hierarchy rules and the
     # user's intent, which is more reliable than a fixed column pick (a fixed pick
-    # can be wrong — e.g. defaulting to sirano_product).
+    # can be wrong - e.g. defaulting to sirano_product).
     if filters:
         confident = [f for f in filters if not f.get("alt_columns")]
         ambiguous = [f for f in filters if f.get("alt_columns")]
@@ -1761,14 +1761,14 @@ def build_semantic_question(u, profile, filters):
                     lines.append("%s IN (%s)" % (col, ", ".join("'%s'" % v
                                                                 for v in vals)))
             parts.append(
-                "HELPER FINDINGS — a grounding assistant matched these values in "
+                "HELPER FINDINGS - a grounding assistant matched these values in "
                 "the live catalog (exact, typo-free spellings). They are HINTS to "
-                "ASSIST you, NOT orders — prefer them when consistent with the "
+                "ASSIST you, NOT orders - prefer them when consistent with the "
                 "data; you keep the final say. Suggested: %s." % "; ".join(lines))
         for f in ambiguous:
             cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])]
             parts.append(
-                "AMBIGUOUS OFFER TERM — \"%s\" is a real data value present in "
+                "AMBIGUOUS OFFER TERM - \"%s\" is a real data value present in "
                 "SEVERAL columns (%s). Do NOT take a pinned column from the "
                 "helper here: YOU resolve it, using your offer-hierarchy rules "
                 "and the user's intent, then disclose the level you picked."
@@ -1778,20 +1778,20 @@ def build_semantic_question(u, profile, filters):
                 "If the question ENUMERATES several of these as items to report, "
                 "treat them independently (OR) and return ONE ROW PER ITEM with a "
                 "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
-                "sales channel + an offer) with AND. (Guidance — your judgment.)")
+                "sales channel + an offer) with AND. (Guidance - your judgment.)")
 
     # Offer terms the resolver could NOT confidently ground and DEFERRED to you
     # (multi-column ambiguity, no single confident match). You have the full catalog
-    # and the hierarchy — resolve them yourself; never default to sirano_product.
+    # and the hierarchy - resolve them yourself; never default to sirano_product.
     for ot in (u.get("offer_terms_for_model") or []):
         samples = "; ".join("%s: '%s'" % (s.get("column", ""),
                                           str(s.get("value", "")).replace("'", "''"))
                             for s in (ot.get("samples") or []))
         parts.append(
-            "AMBIGUOUS OFFER TERM (no confident match) — the user named \"%s\". "
+            "AMBIGUOUS OFFER TERM (no confident match) - the user named \"%s\". "
             "The grounding helper found only PARTIAL, cross-column matches (%s) and "
             "did NOT pin a column. Resolve \"%s\" yourself from YOUR catalog using "
-            "the offer hierarchy (prefer the most granular BUSINESS level — Product, "
+            "the offer hierarchy (prefer the most granular BUSINESS level - Product, "
             "then Solution, then SolutionLine; NEVER default to sirano_product), then "
             "DISCLOSE the level you used so the user can ask for another."
             % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
@@ -1876,7 +1876,7 @@ def extract_tabular_node(outputs):
 def extract_semantic_payload(raw_output):
     """Best-effort structured payload from the Semantic Model Query tool
     return value: {"sqls": [str], "result": {...}|None, "answer": str|None,
-    "row_count": int|None, "shape_keys": [str]}. Defensive walker — the exact
+    "row_count": int|None, "shape_keys": [str]}. Defensive walker - the exact
     output schema is instance-dependent; absence stays honest (None).
     Agent-mode safe: answer by key priority + LAST occurrence; tabular result
     and row_count = LAST occurrence (final result set, not probe queries)."""
@@ -1984,7 +1984,7 @@ def shape_result(columns, row_tuples):
 
 
 # =============================================================================
-# 10. RENDER — formats, table, verified headline
+# 10. RENDER - formats, table, verified headline
 # =============================================================================
 
 def format_int_thousands(value):
@@ -1998,7 +1998,7 @@ def format_int_thousands(value):
 
 
 def format_number(value, fmt, unit=None):
-    """Format one numeric value by declared format (profile-driven — no
+    """Format one numeric value by declared format (profile-driven - no
     business keyword sniffing)."""
     try:
         v = float(value)
@@ -2030,7 +2030,7 @@ def _column_format(name, fmt_map, profile):
         return "count"
     # Semantic-tool result aliases are free-form ("total_revenue", scenario
     # pivot columns named after the scenario values): when the dataset's
-    # default metric is an amount, recognize those shapes — gated on the
+    # default metric is an amount, recognize those shapes - gated on the
     # PROFILE (no hardcoded business words beyond generic metric vocabulary).
     # Guard against count entities ("total_customers" is a COUNT, not EUR): an
     # entity/count word vetoes the amount shape (a wrong unit on a count is worse
@@ -2113,8 +2113,8 @@ _SCOPE_CURRENCY = {"fr": "montants en ", "en": "figures in "}
 
 
 def build_scope_note(u, profile, filters, lang):
-    """One explicit '[Scope] …' line stating EXACTLY what was queried — scenario,
-    period, entity filters and currency — so the orchestrator restates it and the
+    """One explicit '[Scope] …' line stating EXACTLY what was queried - scenario,
+    period, entity filters and currency - so the orchestrator restates it and the
     user knows what the figure represents. Empty when there is nothing meaningful."""
     bits = []
     scen = profile.scenario
@@ -2220,7 +2220,7 @@ HEADLINE_PROMPT = (
     "You write the OPENING of a data answer: one short sentence carrying the "
     "main figure(s), optionally followed by ONE short business signal "
     "sentence IF it is directly visible in the table (large variance, sharp "
-    "drop, spike). Plain text only — no markdown, no emoji, no greeting.\n"
+    "drop, spike). Plain text only - no markdown, no emoji, no greeting.\n"
     "HARD RULES:\n"
     "- Write in this language: {language}.\n"
     "- Every figure MUST be copied EXACTLY from the RESULT TABLE (no "
@@ -2230,11 +2230,11 @@ HEADLINE_PROMPT = (
 
 
 # =============================================================================
-# 11. ABOUT_DATA — deterministic dataset card answer (zero SQL, zero LLM)
+# 11. ABOUT_DATA - deterministic dataset card answer (zero SQL, zero LLM)
 # =============================================================================
 
 def build_about_answer(profile, lang):
-    lines = [ABOUT_HEADER[lang], "", "**%s** — %s"
+    lines = [ABOUT_HEADER[lang], "", "**%s** - %s"
              % (profile.dataset_name, profile.description(lang))]
     grain = profile.raw.get("grain")
     if grain:
@@ -2249,7 +2249,7 @@ def build_about_answer(profile, lang):
                      else "\n%s:" % ABOUT_METRICS[lang])
         for m in profile.metrics:
             label = m.get("label_%s" % lang) or m.get("label_en") or m["name"]
-            desc = (" — " + m["description"]) if m.get("description") else ""
+            desc = (" - " + m["description"]) if m.get("description") else ""
             lines.append("- %s%s" % (label, desc))
     scen = profile.scenario
     if scen:
@@ -2266,7 +2266,7 @@ def build_about_answer(profile, lang):
         c = profile.column(name) or {}
         if c.get("role") == "dimension":
             desc = c.get("description_%s" % lang) or c.get("description_en") or ""
-            axes.append("- **%s**%s" % (name, (" — " + desc[:100]) if desc else ""))
+            axes.append("- **%s**%s" % (name, (" - " + desc[:100]) if desc else ""))
     if axes:
         lines.append("\n%s :" % ABOUT_AXES[lang] if lang == "fr"
                      else "\n%s:" % ABOUT_AXES[lang])
@@ -2279,7 +2279,7 @@ def build_about_answer(profile, lang):
 # =============================================================================
 
 # Declared event contract (FROZEN): every blockId / toolName this agent can
-# emit. The orchestrator registry MUST label exactly these ids — the
+# emit. The orchestrator registry MUST label exactly these ids - the
 # anti-drift test (dataiku-agents/tests/test_orchestrator_v3.py) enforces it.
 KNOWN_BLOCK_IDS = ("resolve", "run_sql", "lookup", "format_output", "clarify_user",
                    "out_of_scope_msg", "about_data")
@@ -2318,7 +2318,7 @@ def _agent_result(status, u, resolved_filters=None, sql_count=0,
 
 class ExpertState(TypedDict, total=False):
     """LangGraph state: the pipeline is linear (no parallel writes), so no
-    reducers are needed — every channel is last-write."""
+    reducers are needed - every channel is last-write."""
     instruction: str
     context: str
     llm_id: str                 # mode-resolved model for this run (eco/medium/high)
@@ -2342,7 +2342,7 @@ class MyLLM(BaseLLM):
     def __init__(self):
         # A DSS Code Agent instantiates this class ONCE per process and may invoke
         # process_stream CONCURRENTLY. So every cache here MUST be keyed by a STABLE
-        # identifier (dataset name / tool id) — never per-request state, and never
+        # identifier (dataset name / tool id) - never per-request state, and never
         # reset from another request's path. Per-request values (mode-resolved model,
         # semantic tool id) travel through the graph STATE, not through self.
         self._profile = None
@@ -2401,7 +2401,7 @@ class MyLLM(BaseLLM):
 
     def _get_table(self, dataset_name):
         """Fully-qualified quoted table name of the target dataset. Cached by
-        dataset name (stable) — never reset by another request's profile reload."""
+        dataset name (stable) - never reset by another request's profile reload."""
         cached = self._tables.get(dataset_name)
         if cached:
             return cached
@@ -2678,7 +2678,7 @@ class MyLLM(BaseLLM):
         UNDERSTAND -> RESOLVE -> QUERY -> RENDER (with out-of-scope / clarify /
         about / no-data gates as conditional edges to END). Every stage calls
         the SAME engine functions as the validated linear original (in git
-        history for rollback) — only the control flow is a graph; behavior is
+        history for rollback) - only the control flow is a graph; behavior is
         identical. Live timeline events are emitted through LangGraph's custom
         stream writer."""
         try:
@@ -2876,7 +2876,7 @@ class MyLLM(BaseLLM):
                             result, u["intent"] = None, "custom"
                     # Keep the lookup result ONLY when it actually returned rows. An
                     # EMPTY lookup is NOT authoritative "no data": the tool may point
-                    # at a different/filtered dataset than the SQL engine — so demote
+                    # at a different/filtered dataset than the SQL engine - so demote
                     # to "custom" and fall through to SQL before concluding no_data.
                     if u["intent"] == "lookup" and result and result.get("rows"):
                         note = lookup_note(lookup_filter, u.get("attributes"))
@@ -2943,9 +2943,9 @@ class MyLLM(BaseLLM):
                 if engine == "semantic_tool":
                     sqls = (payload or {}).get("sqls") or []
                     # The tool's RESULT belongs to the FINAL query it ran (when it
-                    # generates several — e.g. a query then a repaired variant). The
+                    # generates several - e.g. a query then a repaired variant). The
                     # webapp's Evidence/chart pick the LAST successful SQL, so the
-                    # captured rows/columns MUST ride the LAST span, not the first —
+                    # captured rows/columns MUST ride the LAST span, not the first -
                     # otherwise the active item carries no result ("not kept") and
                     # the chart cannot render (fix for the multi-SQL case).
                     last_i = len(sqls) - 1
@@ -3008,7 +3008,7 @@ class MyLLM(BaseLLM):
                                        for f in filters)) if filters else ""
                 user_block = "%s\n\n%s\nQUESTION: %s" % (card, filt_text, instruction)
                 if det_failed:
-                    user_block += ("\n\nA PREVIOUS ATTEMPT FAILED — avoid this "
+                    user_block += ("\n\nA PREVIOUS ATTEMPT FAILED - avoid this "
                                    "mistake.\nFAILED SQL:\n%s\nDATABASE ERROR:\n%s"
                                    % det_failed)
                 sql, last_error = None, None

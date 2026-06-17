@@ -2,7 +2,7 @@
 """evidence.sql_parse: pure tokenizer / parse_select / validate_fragment (no dataiku).
 
 parse_select is BEST-EFFORT (user decision): JOINs, GROUP BY, sub-queries, CTEs
-and set operations all parse — only non-analysable text (not SQL, comments,
+and set operations all parse - only non-analysable text (not SQL, comments,
 multiple statements) degrades. These tests lock that contract, including the
 demo query (self-join + aggregation) that used to degrade as 'join_unsupported'.
 """
@@ -196,7 +196,7 @@ class ParseWhereTests(unittest.TestCase):
         self.assertEqual(p["advanced"], "d >= '2025-01-01'::date")
 
     def test_alias_qualifier_stripped_from_fragment(self):
-        # The rebuilt query targets the bare table — a kept fragment must not
+        # The rebuilt query targets the bare table - a kept fragment must not
         # reference the agent's FROM alias.
         p = self._preds('SELECT * FROM t r WHERE r."amount" + r.fee > 100 AND r.phase = \'X\'')
         self.assertEqual(p["advanced"], '"amount" + fee > 100')
@@ -324,7 +324,7 @@ class BestEffortShapesTests(unittest.TestCase):
 
     def test_deeply_nested_subqueries_never_raise(self):
         # ~1100 nesting levels fit in MAX_SQL_CHARS but would blow the stack
-        # without MAX_SCOPE_DEPTH — the cap keeps the "never raises" contract.
+        # without MAX_SCOPE_DEPTH - the cap keeps the "never raises" contract.
         sql = "SELECT * FROM " + "(SELECT * FROM " * 1100 + "t" + ")" * 1100
         p = parse_select(sql)
         self.assertTrue(p["ok"])  # deeper groups are opaque, not an error

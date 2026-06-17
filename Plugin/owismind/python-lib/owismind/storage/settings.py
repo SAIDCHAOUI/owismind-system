@@ -1,6 +1,6 @@
 """Webapp-global settings registry (key-value, direct SQL, no DSS Flow).
 
-Stores webapp-WIDE admin configuration — not per-user (that is the users table).
+Stores webapp-WIDE admin configuration - not per-user (that is the users table).
 Each setting is one row keyed by a stable ``setting_key``; ``setting_value`` holds
 a JSON-encoded payload, so new global settings never require a new table.
 
@@ -49,7 +49,7 @@ def get_setting(key, default=None):
     try:
         return json.loads(raw)
     except (TypeError, ValueError):
-        logger.warning("get_setting — malformed JSON for key=%s; returning default", key)
+        logger.warning("get_setting - malformed JSON for key=%s; returning default", key)
         return default
 
 
@@ -80,7 +80,7 @@ def set_setting(key, value, updated_by=None):
         post_queries=["COMMIT"],
     )
     logger.info(
-        "set_setting — key=%s updated_by=%s value_len=%d", key, updated_by, len(payload)
+        "set_setting - key=%s updated_by=%s value_len=%d", key, updated_by, len(payload)
     )
 
 

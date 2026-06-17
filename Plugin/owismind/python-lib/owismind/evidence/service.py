@@ -1,23 +1,23 @@
-"""Evidence Studio service — re-runs the agent's stored SELECT scope, read-only.
+"""Evidence Studio service - re-runs the agent's stored SELECT scope, read-only.
 
 Stateless pipeline (everything re-derived per call, nothing new is stored):
-  1. Load the exchange's stored generated_sql — ALWAYS owner-scoped on user_id.
+  1. Load the exchange's stored generated_sql - ALWAYS owner-scoped on user_id.
   2. Pick the LAST successful SQL item (the agent's final refined query).
-  3. Parse it (evidence.sql_parse — pure) into table + predicates + fragment.
+  3. Parse it (evidence.sql_parse - pure) into table + predicates + fragment.
   4. Match the table against the project's auto-discovered SQL datasets (no admin
      whitelist to configure); the executed reference comes from the resolved dataset.
   5. Read the dataset's schema (METADATA only, TTL-cached) and resolve every column.
-  6. Rebuild a BOUNDED read-only SELECT from STRUCTURED filters — the client
+  6. Rebuild a BOUNDED read-only SELECT from STRUCTURED filters - the client
      never sends SQL; locked chips travel as ids and are re-derived here.
 
 Trust layer (frozen contract: docs/superpowers/specs/2026-06-10-evidence-trust-
 layer-design.md §§2-3): /evidence/meta additionally carries ``source``,
 ``queries`` (a bounded summary of every stored SQL item), ``verification`` (an
-HONEST deterministic level — never "verified because SQL ran"), ``explanation``
+HONEST deterministic level - never "verified because SQL ran"), ``explanation``
 (business-language steps from evidence.sql_explain), ``result`` (the EXACT rows
 the agent saw, when captured) and ``drilldown`` (group-key drill availability).
 /evidence/rows accepts an optional ``drill`` list whose columns are RE-DERIVED
-server-side from the stored SQL — the client's column list is never trusted.
+server-side from the stored SQL - the client's column list is never trusted.
 No LLM is ever involved in this proof path; every block is computed by pure,
 unit-tested functions below.
 
@@ -55,9 +55,9 @@ from owismind.storage.sql_config import (
 )
 
 # Workstream IMPL-1 module (pure SQL explainer). Guarded import: when the module
-# is not shipped yet (or fails to import) the trust layer DEGRADES honestly —
+# is not shipped yet (or fails to import) the trust layer DEGRADES honestly -
 # explanation {"ok": False}, verification capped at 'source_identified', drill
-# unavailable ('not_supported') — instead of crashing every /evidence/* route.
+# unavailable ('not_supported') - instead of crashing every /evidence/* route.
 try:
     from owismind.evidence import sql_explain as _sql_explain
 except ImportError:  # honest degradation, never a hard dependency
@@ -128,7 +128,7 @@ def _quote_value(value):
 
     The parser yields Python bools for TRUE/FALSE literals and boolean dataset
     columns legitimately filter on them, but ``Constant(bool)`` escaping is not
-    a documented guarantee (see sql_config.bool_literal) — render the keyword.
+    a documented guarantee (see sql_config.bool_literal) - render the keyword.
     """
     if isinstance(value, bool):
         return bool_literal(value)
@@ -145,7 +145,7 @@ class EvidenceError(Exception):
 
 
 # ============================================================================
-# PURE trust-layer helpers (NO dataiku use — unit-tested without a DSS runtime,
+# PURE trust-layer helpers (NO dataiku use - unit-tested without a DSS runtime,
 # the project's TEST-01 idiom). They only consume plain dicts/lists and the two
 # injected quoting callables, so every honesty rule is provable in tests.
 # ============================================================================
@@ -173,7 +173,7 @@ def normalize_explain(raw):
 
     Pure + defensive: booleans are coerced, lists are type-filtered and bounded,
     anything malformed degrades to the honest defaults. This is the single
-    adapter between IMPL-1's explainer and this service — if the explainer's
+    adapter between IMPL-1's explainer and this service - if the explainer's
     shape drifts, the verification level can only go DOWN, never up.
     """
     out = dict(_EXPLAIN_DEFAULTS)
@@ -213,7 +213,7 @@ def safe_explain(sql):
     """explain_select via the IMPL-1 module when available; never raises.
 
     Returns the normalized explain dict. When the explainer is absent or blows
-    up, the result is the honest not-ok shape — verification then caps at
+    up, the result is the honest not-ok shape - verification then caps at
     'source_identified' and drill-down stays unavailable ('not_supported').
     """
     if _sql_explain is None:
@@ -221,7 +221,7 @@ def safe_explain(sql):
     try:
         return normalize_explain(_sql_explain.explain_select(sql))
     except Exception:
-        logger.exception("evidence — explain_select failed; degrading honestly")
+        logger.exception("evidence - explain_select failed; degrading honestly")
         return dict(_EXPLAIN_DEFAULTS, reason="explain_failed")
 
 
@@ -229,7 +229,7 @@ def effective_where_complete(explain, colmap_dropped):
     """Frozen formula (§2): explain.where_complete AND zero colmap-dropped predicate.
 
     ``colmap_dropped`` counts predicates that DID apply to the matched table but
-    did not resolve on its LIVE schema — each one silently widens the rebuilt
+    did not resolve on its LIVE schema - each one silently widens the rebuilt
     scope, so any of them breaks completeness regardless of what explain says.
     """
     return bool(explain.get("where_complete")) and int(colmap_dropped or 0) == 0
@@ -277,7 +277,7 @@ def predicate_display(pred):
 def build_dropped_display(dropped_predicates, dropped_where):
     """The bounded display list of everything the rebuilt scope DROPPED. Pure.
 
-    Honesty rule §9: dropped elements are LISTED, not hidden — but the list is
+    Honesty rule §9: dropped elements are LISTED, not hidden - but the list is
     display data, so it is capped (the exact count travels separately).
     """
     out = [predicate_display(p) for p in dropped_predicates or []]
@@ -330,7 +330,7 @@ def build_result_block(item):
 
     ``row_count`` is ALWAYS the agent-declared count from the stored item (the
     captured rows may be truncated); absence of a capture is surfaced honestly
-    as ``captured: false`` — never invented rows.
+    as ``captured: false`` - never invented rows.
     """
     item = item if isinstance(item, dict) else {}
     row_count = item.get("row_count")
@@ -352,7 +352,7 @@ def item_matches_candidates(sql, candidates):
     """True when one stored item's SQL reads at least one discovered dataset.
 
     Pure + bounded: reuses the existing parse (O(n), 20k-char cap) and the
-    existing matcher — never raises, a non-parsable item simply does not match.
+    existing matcher - never raises, a non-parsable item simply does not match.
     """
     try:
         parsed = sql_parse.parse_select(sql)
@@ -467,7 +467,7 @@ def build_explanation(explain):
 def derive_drilldown(explain, colmap, where_complete):
     """The ``drilldown`` block: availability + drillable columns + reason. Pure.
 
-    Gates (frozen contract §3) — drill-down is offered ONLY when it is provably
+    Gates (frozen contract §3) - drill-down is offered ONLY when it is provably
     reliable: explainer ok, no recursive CTE, no set operation, a single source
     (a self-join does NOT qualify), a COMPLETE rebuilt WHERE, and at least one
     GROUP BY identity key resolved on the LIVE schema (live casing returned).
@@ -493,7 +493,7 @@ def derive_drilldown(explain, colmap, where_complete):
         return {"available": False, "columns": [], "reason": "no_group_keys"}
     if len(columns) > MAX_DRILL_CONDITIONS:
         # A drill that cannot constrain EVERY group key would show a SUPERSET
-        # of the group's rows under a "source rows" banner — refuse instead
+        # of the group's rows under a "source rows" banner - refuse instead
         # (CONTRACT-01: the ≤8 request cap must never silently truncate keys).
         return {"available": False, "columns": [], "reason": "not_supported"}
     return {"available": True, "columns": columns, "reason": None}
@@ -503,7 +503,7 @@ def build_drill_conditions(drill, allowed_columns, colmap, quote_ident, quote_va
     """Render validated drill labels into SQL conditions (§3). Pure.
 
     Every drill column MUST belong to the SERVER-derived drillable set (live
-    casing, compared case-insensitively) — anything else is 'invalid_drill'
+    casing, compared case-insensitively) - anything else is 'invalid_drill'
     (400), because the client list is never trusted. ``value None`` renders an
     IS NULL test; every other value renders a strict equality. The entry count
     is re-bounded here (mirror of the request validator's cap).
@@ -521,7 +521,7 @@ def build_drill_conditions(drill, allowed_columns, colmap, quote_ident, quote_va
         if not isinstance(column, str) or column.lower() not in allowed_lower:
             raise EvidenceError("invalid_drill", 400)
         live = (colmap or {}).get(column.lower())
-        if live is None:  # allowed set is derived from colmap — pure defense
+        if live is None:  # allowed set is derived from colmap - pure defense
             raise EvidenceError("invalid_drill", 400)
         value = entry.get("value")
         if value is None:
@@ -591,7 +591,7 @@ def _resolve_via_settings_api(name):
 
     Some SQL connectors do not carry the table in ``get_location_info()``; the
     dataset's own settings (``params.table`` / ``params.schema``) do. Best-effort
-    and read-only (no execution) — returns (None, None) on any failure.
+    and read-only (no execution) - returns (None, None) on any failure.
     """
     try:
         client = dataiku.api_client()
@@ -599,7 +599,7 @@ def _resolve_via_settings_api(name):
         params = (raw or {}).get("params", {}) or {}
         return params.get("table"), params.get("schema")
     except Exception:
-        logger.exception("evidence — settings-API table resolution failed for %r", name)
+        logger.exception("evidence - settings-API table resolution failed for %r", name)
         return None, None
 
 
@@ -615,22 +615,22 @@ def _resolve_physical_table(name):
     try:
         info = dataiku.Dataset(name).get_location_info().get("info", {}) or {}
     except Exception:
-        logger.exception("evidence — get_location_info failed for %r", name)
+        logger.exception("evidence - get_location_info failed for %r", name)
     # Diagnostic: surface the REAL shape so a key mismatch is debuggable from logs.
     logger.info(
-        "evidence — dataset %r location_info.info keys=%s table=%r schema=%r",
+        "evidence - dataset %r location_info.info keys=%s table=%r schema=%r",
         name, sorted(info.keys()), info.get("table"), info.get("schema"),
     )
     table, schema = info.get("table"), info.get("schema")
     if not table:
-        # Connector did not expose a table in location info — try the settings API.
+        # Connector did not expose a table in location info - try the settings API.
         table, schema = _resolve_via_settings_api(name)
-        logger.info("evidence — dataset %r settings-API fallback table=%r schema=%r",
+        logger.info("evidence - dataset %r settings-API fallback table=%r schema=%r",
                     name, table, schema)
     table, schema = _sub_project_key(table), _sub_project_key(schema)
     if not table or "${" in str(table):
         logger.warning(
-            "evidence — dataset %r has no resolved physical table; skipped "
+            "evidence - dataset %r has no resolved physical table; skipped "
             "(it must be a SQL-backed dataset)", name,
         )
         return None, None
@@ -650,7 +650,7 @@ def _list_project_sql_datasets():
         client = dataiku.api_client()
         items = client.get_project(PROJECT_KEY).list_datasets()
     except Exception:
-        logger.exception("evidence — list_datasets failed for project %s", PROJECT_KEY)
+        logger.exception("evidence - list_datasets failed for project %s", PROJECT_KEY)
         return []
     out = []
     for it in (items or []):
@@ -673,13 +673,13 @@ def _resolve_dataset_candidates():
     pairs = _list_project_sql_datasets()
     if not pairs:
         logger.warning(
-            "evidence — no SQL-backed dataset found in project %s; Evidence Studio "
+            "evidence - no SQL-backed dataset found in project %s; Evidence Studio "
             "stays degraded (an agent answer's table must map to a project dataset).",
             PROJECT_KEY,
         )
         return []
     if len(pairs) > _MAX_EVIDENCE_DATASETS:
-        logger.warning("evidence — dataset discovery capped at %d (project has %d)",
+        logger.warning("evidence - dataset discovery capped at %d (project has %d)",
                        _MAX_EVIDENCE_DATASETS, len(pairs))
         pairs = pairs[:_MAX_EVIDENCE_DATASETS]
     candidates = []
@@ -696,7 +696,7 @@ def _resolve_dataset_candidates():
                 "schema": (str(schema) if schema and "${" not in str(schema) else None),
             })
     logger.info(
-        "evidence — discovered %d SQL dataset candidate(s) in project %s: %s",
+        "evidence - discovered %d SQL dataset candidate(s) in project %s: %s",
         len(candidates), PROJECT_KEY, [(c["schema"], c["table"]) for c in candidates],
     )
     return candidates
@@ -710,7 +710,7 @@ def _dataset_candidates():
         if cached is not None and (now - _candidates_cache["ts"]) < _CANDIDATES_TTL_SECONDS:
             return cached
     # Resolve OUTSIDE the lock (metadata round-trips are slow; never hold the lock
-    # during IO). A cold-cache burst may resolve a few times concurrently — harmless.
+    # during IO). A cold-cache burst may resolve a few times concurrently - harmless.
     resolved = _resolve_dataset_candidates()
     with _candidates_lock:
         _candidates_cache["value"] = resolved
@@ -723,7 +723,7 @@ def _read_dataset_columns(name):
     try:
         schema = dataiku.Dataset(name).read_schema()
     except Exception:
-        logger.exception("evidence — read_schema failed for %r", name)
+        logger.exception("evidence - read_schema failed for %r", name)
         raise EvidenceError("dataset_unavailable")
     columns = []
     for col in schema:
@@ -734,7 +734,7 @@ def _read_dataset_columns(name):
         try:
             pg_identifier(col_name)
         except ValueError:
-            logger.warning("evidence — column %r is not a safe identifier; hidden", col_name)
+            logger.warning("evidence - column %r is not a safe identifier; hidden", col_name)
             continue
         columns.append({"name": col_name, "type": col_type or ""})
     if not columns:
@@ -747,7 +747,7 @@ def _dataset_columns(name):
 
     Same pattern as _dataset_candidates: the lock guards dict access only, the
     metadata round-trip happens OUTSIDE it (a cold-cache burst may read the
-    schema a few times concurrently — harmless). Failures are NEVER cached, so
+    schema a few times concurrently - harmless). Failures are NEVER cached, so
     a transient DSS hiccup does not stick for a whole TTL. Callers treat the
     returned list as read-only (it is shared between requests).
     """
@@ -777,14 +777,14 @@ def _context(user_id, exchange_id, preferred_table=None):
     Best-effort mapping (user decision): a parsed source table that matches a
     discovered project dataset wins, and only the predicates that BOTH apply to
     that table (sql_parse.predicates_for_table) AND resolve on its live schema
-    are kept — anything unmappable (join plumbing, other tables' filters,
+    are kept - anything unmappable (join plumbing, other tables' filters,
     renamed columns) is dropped instead of degrading the view. The drop counts
     are kept on the context so the trust layer can surface them honestly
     (verification / drill-down gates).
 
     ``preferred_table`` (optional, multi-table SQL): the dataset NAME the caller
     wants re-queried. When it matches one of the SQL's own matched datasets, that
-    one is used; otherwise (None / unknown) the FIRST matched table wins — so the
+    one is used; otherwise (None / unknown) the FIRST matched table wins - so the
     single-table path is byte-identical to before.
     """
     item, items, active_index = _load_sql_item(user_id, exchange_id)
@@ -797,7 +797,7 @@ def _context(user_id, exchange_id, preferred_table=None):
     # match_whitelist resolves an agent FROM/JOIN table to a discovered project
     # dataset (the executed reference is rebuilt from the RESOLVED candidate).
     # First-match wins, UNLESS the caller asked for a specific matched dataset
-    # (multi-table selector) — then the ref mapping to that dataset is preferred.
+    # (multi-table selector) - then the ref mapping to that dataset is preferred.
     match, matched_ref = None, None
     for ref in parsed["tables"]:
         candidate = match_whitelist(ref["table"], ref["schema"], candidates)
@@ -813,7 +813,7 @@ def _context(user_id, exchange_id, preferred_table=None):
         # mismatch (no SQL dataset in the project vs a name/schema difference) is
         # clear in the backend log.
         logger.info(
-            "evidence — no_matching_dataset: agent tables=%s matched none of "
+            "evidence - no_matching_dataset: agent tables=%s matched none of "
             "%d project dataset(s) %s",
             [(t["schema"], t["table"]) for t in parsed["tables"]],
             len(candidates), [(c["schema"], c["table"]) for c in candidates],
@@ -825,7 +825,7 @@ def _context(user_id, exchange_id, preferred_table=None):
         low = c["name"].lower()
         if low in colmap:
             # Two columns differing only by case would make chip/filter column
-            # resolution ambiguous — refuse rather than guess.
+            # resolution ambiguous - refuse rather than guess.
             raise EvidenceError("dataset_schema_invalid")
         colmap[low] = c["name"]
     table_predicates = sql_parse.predicates_for_table(
@@ -839,7 +839,7 @@ def _context(user_id, exchange_id, preferred_table=None):
     # an unsafe/unsupported fragment is dropped, never a blocker.
     advanced = parsed["advanced"]
     if advanced and not sql_parse.validate_fragment(advanced):
-        logger.info("evidence — advanced fragment dropped (failed validation)")
+        logger.info("evidence - advanced fragment dropped (failed validation)")
         advanced = None
     try:
         schema_name = match.get("schema")
@@ -909,7 +909,7 @@ def _drill_conditions(ctx, drill):
     """Server-derived drill gate + rendering for /evidence/rows (§3).
 
     The drillable columns are RE-DERIVED from the stored SQL on every call
-    (explain + the same gates as /evidence/meta) — the client's drill columns
+    (explain + the same gates as /evidence/meta) - the client's drill columns
     are only ever matched against that server-side set, never trusted.
     """
     explain = safe_explain(ctx["sql"])
@@ -936,7 +936,7 @@ def _run_evidence_query(ctx, query, op_name):
             pre_queries=list(_EVIDENCE_TIMEOUT_PRE_QUERIES),
         )
     except Exception:
-        logger.exception("%s — query failed (dataset=%s)", op_name, ctx["dataset"])
+        logger.exception("%s - query failed (dataset=%s)", op_name, ctx["dataset"])
         raise EvidenceError("query_failed")
     return rows_to_json_safe(df)
 
@@ -951,7 +951,7 @@ def evidence_meta(user_id, exchange_id):
     ``available: False`` + the stable reason (the panel then shows the raw SQL).
     The v1 fields (dataset/columns/chips/advanced/sql) are unchanged; the trust
     layer adds source/queries/verification/explanation/result/drilldown (§2),
-    all computed by the pure helpers above — deterministic, no LLM involved.
+    all computed by the pure helpers above - deterministic, no LLM involved.
     """
     try:
         ctx = _context(user_id, exchange_id)
@@ -962,7 +962,7 @@ def evidence_meta(user_id, exchange_id):
             "available": False,
             "reason": exc.code,
             "sql": _degraded_sql(user_id, exchange_id),
-            # Degraded panel: the agent's number is a CLAIM — nothing was
+            # Degraded panel: the agent's number is a CLAIM - nothing was
             # re-verified and no captured result is surfaced here (§2).
             "verification": {"level": "declared", "result_captured": False},
         }
@@ -1082,7 +1082,7 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     rows = _run_evidence_query(ctx, query, "evidence_rows")
     has_more = len(rows) > PAGE_SIZE
     logger.info(
-        "evidence_rows — user_id=%s exchange_id=%s dataset=%s requested_table=%s "
+        "evidence_rows - user_id=%s exchange_id=%s dataset=%s requested_table=%s "
         "page=%d conditions=%d returned=%d",
         user_id, exchange_id, ctx["dataset"], table, page, len(conditions),
         min(len(rows), PAGE_SIZE),
@@ -1096,7 +1096,7 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
     The picker shows values WITHIN the agent's remaining scope: the =/IN
     predicates and the advanced fragment still apply, but the predicate the
     user is currently EDITING (``exclude_id``, the chip's server id) never
-    self-scopes its own picker — every chip is editable in the UI, so a
+    self-scopes its own picker - every chip is editable in the UI, so a
     comparison chip (>=, BETWEEN…) must be able to widen past its own bound.
     """
     ctx = _context(user_id, exchange_id)
@@ -1106,7 +1106,7 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
     conditions = []
     for pred in ctx["predicates"]:
         if pred["editable"]:
-            continue  # =/IN chips are what the user is picking — don't self-scope
+            continue  # =/IN chips are what the user is picking - don't self-scope
         if exclude_id is not None and pred["id"] == exclude_id:
             continue  # the chip being edited must not filter its own picker
         conditions.append(_locked_condition(ctx, pred))
@@ -1122,7 +1122,7 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
     truncated = len(values) > DISTINCT_LIMIT
     values = values[:DISTINCT_LIMIT]
     logger.info(
-        "evidence_distinct — user_id=%s exchange_id=%s dataset=%s column=%s returned=%d truncated=%s",
+        "evidence_distinct - user_id=%s exchange_id=%s dataset=%s column=%s returned=%d truncated=%s",
         user_id, exchange_id, ctx["dataset"], resolved_col, len(values), truncated,
     )
     return {"values": values, "truncated": truncated}

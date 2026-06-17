@@ -1,6 +1,6 @@
 <script setup>
-// ArtifactTable.vue — full captured result table for Evidence Studio artifact tab.
-// Renders meta.result.columns / rows as a scrollable table — the complete data the
+// ArtifactTable.vue - full captured result table for Evidence Studio artifact tab.
+// Renders meta.result.columns / rows as a scrollable table - the complete data the
 // agent received, not the filtered EvidenceTable (which re-queries the source).
 // Cell styling deliberately mirrors EvidenceResult.vue's conventions.
 import { computed } from 'vue'
@@ -25,7 +25,7 @@ const truncated = computed(() => !!(props.result && props.result.truncated))
 
 function cell(row, j) {
   const v = Array.isArray(row) ? row[j] : undefined
-  return v == null ? '—' : String(v)
+  return v == null ? '-' : String(v)
 }
 </script>
 
@@ -76,7 +76,7 @@ function cell(row, j) {
   min-height: 0;
 }
 
-/* Scrollable viewport — taller than EvidenceResult's mini-table since this IS
+/* Scrollable viewport - taller than EvidenceResult's mini-table since this IS
    the data browser tab, not a secondary proof section. */
 .art-table-box {
   border: 1px solid var(--border);
@@ -134,7 +134,7 @@ tbody tr:hover td { background: var(--surface-hover); }
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
-/* Truncation = caveat on proof — orange text (AA token) matching EvidenceResult.vue */
+/* Truncation = caveat on proof - orange text (AA token) matching EvidenceResult.vue */
 .art-trunc { color: var(--orange-text); }
 
 /* Empty state when result was not captured */

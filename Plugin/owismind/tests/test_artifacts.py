@@ -1,5 +1,5 @@
 # Plugin/owismind/tests/test_artifacts.py
-"""Artifact plumbing — PURE validation layers, provable without a live DSS runtime:
+"""Artifact plumbing - PURE validation layers, provable without a live DSS runtime:
   - storage.artifacts._sanitize : strict projection of chart/table specs (write+read);
   - agents.streaming._normalized_artifact_event : the ARTIFACT event normalizer.
 A minimal dataiku stub lets the modules import (unittest discover shares sys.modules).

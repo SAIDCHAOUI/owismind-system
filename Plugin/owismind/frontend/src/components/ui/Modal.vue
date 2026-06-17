@@ -1,5 +1,5 @@
 <script setup>
-// Accessible modal — ONE implementation replacing the maquette's per-screen
+// Accessible modal - ONE implementation replacing the maquette's per-screen
 // modals. Visual spec ported from `.modal-scrim` / `.modal-card` / `.modal-*`
 // (v4-extras.css). Teleported to <body>, closes on Escape and scrim click,
 // moves focus into the card on open and restores it on close.

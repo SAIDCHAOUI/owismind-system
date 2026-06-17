@@ -1,5 +1,5 @@
 <script setup>
-// Project page (Phase 3) — deferred. There is NO project API (memory §13.4:
+// Project page (Phase 3) - deferred. There is NO project API (memory §13.4:
 // rename/delete/projects are not persisted), so instead of the maquette's mock
 // project workspace we show ONE honest "coming soon" state. The route still
 // exists (/project/:projectId) so deep links resolve cleanly.

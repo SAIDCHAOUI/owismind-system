@@ -281,7 +281,7 @@ class TestEnrichmentPlumbing(unittest.TestCase):
 # ==========================================================================
 # pandas-dependent paths (run in DSS / any env with pandas)
 # ==========================================================================
-@unittest.skipUnless(HAS_PANDAS, "pandas not installed locally — covered in DSS")
+@unittest.skipUnless(HAS_PANDAS, "pandas not installed locally - covered in DSS")
 class TestPandasPaths(unittest.TestCase):
 
     def test_profile_dataframe_enum_and_time(self):

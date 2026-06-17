@@ -1,7 +1,7 @@
 """Idempotent, controlled table creation for the OWIsMind WebApp backend.
 
 DDL lives here (never inline in a public route): tables are created by a guarded,
-internal helper triggered lazily on first write — never from user-supplied input
+internal helper triggered lazily on first write - never from user-supplied input
 and never via a generic SQL route. ``CREATE TABLE IF NOT EXISTS`` keeps it
 idempotent and concurrency-safe at the SQL level; a per-process guard avoids
 re-issuing the DDL on every request.
@@ -26,17 +26,17 @@ logger = logging.getLogger(__name__)
 # Physical names always carry the mandatory "owismind" namespace, e.g.
 # public."OWISMIND_DEV_owismind_webapp_chat_v5".
 # v5 = v4 schema + per-exchange token/cost columns (usage accounting); v4 superseded,
-# left inert (the prior table is never dropped by the backend — its old conversations
+# left inert (the prior table is never dropped by the backend - its old conversations
 # simply stop surfacing, the established _vN handover, see memory L008/L014).
 CHAT_V5_LOGICAL = "webapp_chat_v5"
 USERS_V1_LOGICAL = "webapp_users_v1"
 SETTINGS_V1_LOGICAL = "webapp_settings_v1"
-# Per-(user, calendar-month) usage bucket — one PRIMARY-KEY row per month, so the
+# Per-(user, calendar-month) usage bucket - one PRIMARY-KEY row per month, so the
 # planned per-user monthly quota is a single PK lookup and needs no reset job (each
 # month is naturally its own row). chat_v5 stays the source of truth (rebuildable).
 USAGE_MONTHLY_V1_LOGICAL = "webapp_usage_monthly_v1"
 # One row per chat exchange whose orchestrator asked the UI to render an artifact
-# (chart / table spec). Only the small SPEC lives here — the chart/table DATA is
+# (chart / table spec). Only the small SPEC lives here - the chart/table DATA is
 # reused from the captured generated_sql result, surfaced via /evidence/meta. New
 # _v1 table (no ALTER of chat_v5), owner-scoped on read.
 ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
@@ -47,8 +47,8 @@ ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
 # One chat exchange per row, written in two phases (user message, then reply).
 # Versioned _v5: over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's
 # per-message feedback columns, over _v2's ``generated_sql``), it adds the per-exchange
-# USAGE columns — input/output/total tokens + estimated cost of the question→answer run.
-# Per the no-ALTER rule, this is a brand new table (CREATE IF NOT EXISTS) — the _v4 table
+# USAGE columns - input/output/total tokens + estimated cost of the question→answer run.
+# Per the no-ALTER rule, this is a brand new table (CREATE IF NOT EXISTS) - the _v4 table
 # is left untouched and inert (never dropped by the backend).
 # ``generated_sql`` is nullable: an agent run does not always generate SQL. When it
 # does, it stores a JSON-encoded list of {sql, success, row_count} for later use.
@@ -60,7 +60,7 @@ ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
 # The usage columns (input_tokens/output_tokens/total_tokens/estimated_cost) are nullable:
 # they are filled from the run's footer ``usage_summary`` totals at phase-two write, and
 # stay NULL when no footer arrived (e.g. an early-stopped run). They are the AUTHORITATIVE
-# per-exchange usage record — the users + monthly aggregates are reconstructible from them.
+# per-exchange usage record - the users + monthly aggregates are reconstructible from them.
 _CHAT_V5_DDL = """
 CREATE TABLE IF NOT EXISTS {full_table} (
     exchange_id        TEXT       PRIMARY KEY,
@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 # them by their exact user_id). The first ever user is bootstrapped as admin.
 # The LIFETIME usage counters (total_input_tokens/total_output_tokens/total_cost +
 # last_usage_at) are denormalised running totals incremented once per agent response
-# (storage/usage.record_usage) — a cheap per-user lifetime view. They are listed both
+# (storage/usage.record_usage) - a cheap per-user lifetime view. They are listed both
 # here (fresh instances) AND in _ALTERS_BY_LOGICAL (existing instances get them via
-# ADD COLUMN IF NOT EXISTS) — the ONE place the no-ALTER rule is intentionally relaxed
+# ADD COLUMN IF NOT EXISTS) - the ONE place the no-ALTER rule is intentionally relaxed
 # (explicit user authorization, 2026-06-11), because additive counters on the existing
 # registry must not lose the rows it already carries (admin flags, first_seen).
 _USERS_V1_DDL = """
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 # each user gets exactly one row per month: ON CONFLICT increments it (never overwrites),
 # so the future per-user monthly quota check is a single PK lookup
 # (WHERE user_id=? AND period_start = date_trunc('month', now())::date) with no reset job
-# — a new month is simply a new row. ``period_start`` is the first day of the month
+# - a new month is simply a new row. ``period_start`` is the first day of the month
 # (server clock, set by the UPSERT via date_trunc). Counters default to 0 so the first
 # INSERT and every increment share one numeric path.
 _USAGE_MONTHLY_V1_DDL = """
@@ -166,7 +166,7 @@ _DDL_BY_LOGICAL = {
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
-# CREATE) to tables that gained columns AFTER first release — the ONLY relaxation of
+# CREATE) to tables that gained columns AFTER first release - the ONLY relaxation of
 # the no-ALTER rule, used for additive counters on the existing users registry whose
 # rows (admin flags, first_seen) must be preserved. ``ADD COLUMN IF NOT EXISTS`` makes
 # each clause a no-op once applied, so it is safe on every process start AND on a fresh
@@ -182,7 +182,7 @@ _ALTERS_BY_LOGICAL = {
 }
 
 # Secondary indexes per logical table. CREATE INDEX IF NOT EXISTS is additive and
-# idempotent — it is NOT an ALTER of the table structure, so it respects the no-ALTER
+# idempotent - it is NOT an ALTER of the table structure, so it respects the no-ALTER
 # rule. chat_v5 is read with WHERE user_id + ORDER BY created_at DESC (the sidebar
 # conversation list and per-session reads); on a table shared by all users this index
 # turns a full scan + sort into an index scan. The ancestor-chain walk (recursive CTE)
@@ -215,15 +215,15 @@ def _ensure_table(logical):
             return
         table = full_table(logical)
         ddl = _DDL_BY_LOGICAL[logical].format(full_table=table)
-        logger.info("ensure_table — CREATE TABLE IF NOT EXISTS %s", table)
+        logger.info("ensure_table - CREATE TABLE IF NOT EXISTS %s", table)
         # Side-effecting DDL goes in pre_queries; COMMIT is mandatory. Any secondary
         # indexes are created in the same transaction (also idempotent).
         pre = [ddl]
         # Additive ADD COLUMN IF NOT EXISTS clauses (existing tables that gained
-        # columns post-release) — same transaction, idempotent, no-op once applied.
+        # columns post-release) - same transaction, idempotent, no-op once applied.
         for clause in _ALTERS_BY_LOGICAL.get(logical, []):
             pre.append("ALTER TABLE {tbl} {clause}".format(tbl=table, clause=clause))
-            logger.info("ensure_table — ALTER TABLE %s %s", table, clause)
+            logger.info("ensure_table - ALTER TABLE %s %s", table, clause)
         for suffix, columns in _INDEXES_BY_LOGICAL.get(logical, []):
             index_name = pg_identifier("{}_{}".format(physical_table(logical), suffix))
             pre.append(
@@ -231,14 +231,14 @@ def _ensure_table(logical):
                     idx=index_name, tbl=table, cols=columns
                 )
             )
-            logger.info("ensure_table — CREATE INDEX IF NOT EXISTS %s ON %s", index_name, table)
+            logger.info("ensure_table - CREATE INDEX IF NOT EXISTS %s ON %s", index_name, table)
         new_executor().query_to_df(
             "SELECT 1 AS table_creation_committed",
             pre_queries=pre,
             post_queries=["COMMIT"],
         )
         _ensured_tables.add(logical)
-        logger.info("ensure_table — ensured (committed) %s", table)
+        logger.info("ensure_table - ensured (committed) %s", table)
 
 
 def ensure_chat_table():

@@ -1,4 +1,4 @@
-// vue-i18n setup — consolidates ALL UI strings (ported from the maquette's
+// vue-i18n setup - consolidates ALL UI strings (ported from the maquette's
 // window.OWI_I18N via a one-off extraction → messages.json). The maquette's
 // positional `{0}`/`{1}` placeholders map directly onto vue-i18n list
 // interpolation: t('key', [arg0, arg1]).

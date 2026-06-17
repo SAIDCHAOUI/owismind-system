@@ -1,16 +1,16 @@
 """Pure helpers that assemble the multi-turn payload sent to a DSS agent.
 
-No ``dataiku`` import — kept pure so it is unit-testable without a DSS runtime.
+No ``dataiku`` import - kept pure so it is unit-testable without a DSS runtime.
 The official LLM Mesh pattern is to replay each prior turn via
 ``completion.with_message(content, role)`` (developer.dataiku.com), so we build an
 ordered list of ``{"role", "content"}`` dicts: prior messages verbatim, then the
 current user turn carrying a compact context block APPENDED AT THE END.
 
 Why a SUFFIX (not a prefix): small models honor an instruction far better when it
-sits in the highest-recency slot — the very end of the current message. Burying the
-name/date/language directive at the start lets the model forget it. So the block —
+sits in the highest-recency slot - the very end of the current message. Burying the
+name/date/language directive at the start lets the model forget it. So the block -
 user, date, web-app language, and the load-bearing rule "answer in the language of
-THIS message" — is appended last (see ``build_user_suffix``).
+THIS message" - is appended last (see ``build_user_suffix``).
 """
 import math
 import re
@@ -77,8 +77,8 @@ def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mod
     """Compact context block APPENDED to the END of the CURRENT user message.
 
     Placed in the highest-recency slot so even a small model honors it. Carries who
-    is asking, the date, the web-app's configured language and — the load-bearing
-    rule — the language of THIS message, which the agent must answer in (it always
+    is asking, the date, the web-app's configured language and - the load-bearing
+    rule - the language of THIS message, which the agent must answer in (it always
     wins over earlier turns and over the web-app language). The control tokens
     ``⟦owi:mode=…⟧`` / ``⟦owi:lang=…⟧`` are machine-only: the agent parses then
     STRIPS them, so they never reach the model as visible text, while the
@@ -93,7 +93,7 @@ def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mod
         tokens += "⟦owi:mode={0}⟧".format(mode)
     if prompt_lang in _LANG_LABEL:
         tokens += "⟦owi:lang={0}⟧".format(prompt_lang)
-    head = "\n\n[Context — User: {name} · Today: {date}".format(name=name, date=date)
+    head = "\n\n[Context - User: {name} · Today: {date}".format(name=name, date=date)
     if webapp_label:
         head += " · Web app language: {0}".format(webapp_label)
     head += "]"
@@ -102,7 +102,7 @@ def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mod
     parts = [head]
     if prompt_label:
         parts.append(
-            "IMPORTANT — reply in {plabel}: the SAME language as my message above. "
+            "IMPORTANT - reply in {plabel}: the SAME language as my message above. "
             "The language of my current message ALWAYS takes priority over earlier "
             "turns and over the web-app language.".format(plabel=prompt_label))
     return "\n".join(parts)
@@ -192,7 +192,7 @@ def _artifact_phrase(a):
 
 def _screen_columns(artifacts):
     """Collect the data column names referenced by the rendered artifacts (chart
-    x/y, kpi value/delta) — enough for the model to know what 'add X' can touch."""
+    x/y, kpi value/delta) - enough for the model to know what 'add X' can touch."""
     cols, seen = [], set()
     for a in artifacts or []:
         if not isinstance(a, dict):
@@ -222,7 +222,7 @@ def build_screen_state(artifacts, last_answer_excerpt=None, active_tab=None):
     excerpt = (last_answer_excerpt or "").strip()
     if not phrases and not cols and not excerpt:
         return ""
-    out = ["\n\n[ON SCREEN NOW — what the user can see in the app right now:"]
+    out = ["\n\n[ON SCREEN NOW - what the user can see in the app right now:"]
     if phrases:
         out.append(" Displayed in the Evidence panel: " + "; ".join(phrases) + ".")
     if active_tab in ("evidence", "chart", "table"):

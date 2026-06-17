@@ -1,5 +1,5 @@
 /* =============================================================================
- * OWIsMind — Global reset, scrollbar, selection, shared keyframes, utilities.
+ * OWIsMind - Global reset, scrollbar, selection, shared keyframes, utilities.
  *
  * Ported VERBATIM from the validated mockup's theme.css reset block.
  * Imported once (main.js) AFTER tokens.css. Non-scoped on purpose: these are the
@@ -37,7 +37,7 @@ a { color: inherit; }
   50% { transform: scale(1.4); opacity: 0.5; }
 }
 /* Gradient sweep shared by the live-activity shimmer text (background-clip: text)
- * and the Evidence loading skeletons — consumers set their own gradient +
+ * and the Evidence loading skeletons - consumers set their own gradient +
  * `background-size: 200% 100%`, this only slides the position. */
 @keyframes shimmer-sweep {
   0% { background-position: 200% 0; }

@@ -1,4 +1,4 @@
-// Session store — identity, the enabled-agents picker list, and the paginated
+// Session store - identity, the enabled-agents picker list, and the paginated
 // conversation list (names only). Wraps the validated backend client
 // (services/backend.js) without changing it. All network calls degrade gracefully
 // (e.g. outside DSS, where getWebAppBackendUrl is absent) so the shell always renders.
@@ -22,7 +22,7 @@ function persistLastAgent(key) {
   try {
     localStorage.setItem(LAST_AGENT_KEY, key)
   } catch (e) {
-    /* localStorage unavailable (private mode / no DOM) — preference is best-effort. */
+    /* localStorage unavailable (private mode / no DOM) - preference is best-effort. */
   }
 }
 
@@ -35,7 +35,7 @@ export const useSessionStore = defineStore('session', () => {
   const loading = ref(false)
   const error = ref('')
 
-  // Paginated conversation list (names only) — the sidebar fills + infinite-scrolls it.
+  // Paginated conversation list (names only) - the sidebar fills + infinite-scrolls it.
   const conversations = ref([]) // [{ id, title, lastAt }]
   const convCursor = ref(null)
   const convHasMore = ref(true)
@@ -90,7 +90,7 @@ export const useSessionStore = defineStore('session', () => {
 
   // First page of conversations (names only). `count` (optional) is the page size the
   // Sidebar derives from its viewport height; omitting it uses the backend default.
-  // On startup BOTH init() and the Sidebar trigger this — a shared in-flight promise
+  // On startup BOTH init() and the Sidebar trigger this - a shared in-flight promise
   // de-dupes them into a single /conversations request (the second caller awaits the
   // first), so the list is never fetched twice per load.
   let _firstConvPromise = null
@@ -149,7 +149,7 @@ export const useSessionStore = defineStore('session', () => {
     loading.value = false
   }
 
-  // Memoized init — safe to call from multiple places (router guard, App mount).
+  // Memoized init - safe to call from multiple places (router guard, App mount).
   function ensureLoaded() {
     if (!_initPromise) _initPromise = init()
     return _initPromise
@@ -169,7 +169,7 @@ export const useSessionStore = defineStore('session', () => {
 
   // Per-conversation agent: when opening an existing conversation, adopt the agent of its
   // NEWEST exchange (if still enabled). Falls back to the last-used default otherwise.
-  // Does not persist — opening history must not change the user's last-used default.
+  // Does not persist - opening history must not change the user's last-used default.
   function adoptAgentFromExchanges(rows) {
     const list = rows || []
     for (let i = list.length - 1; i >= 0; i--) {

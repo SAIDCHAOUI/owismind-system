@@ -1,4 +1,4 @@
-// vue-router — replaces the maquette's STATE.page string + PAGES table.
+// vue-router - replaces the maquette's STATE.page string + PAGES table.
 //
 // HASH history on purpose: the DSS webapp is served at a fixed URL with no
 // server-side SPA rewrite, so path history would 404 on reload/deep-link. Hash
@@ -13,7 +13,7 @@ import { useSessionStore } from '../stores/session.js'
 
 const ChatView = () => import('../views/ChatView.vue')
 const PagePlaceholder = () => import('../views/PagePlaceholder.vue')
-// Phase-3 dedicated views (lazy — keep the initial chat bundle lean).
+// Phase-3 dedicated views (lazy - keep the initial chat bundle lean).
 const SettingsView = () => import('../views/SettingsView.vue')
 const FeedbackView = () => import('../views/FeedbackView.vue')
 const FaqView = () => import('../views/FaqView.vue')
@@ -56,7 +56,7 @@ export const router = createRouter({
   routes,
 })
 
-// Admin guard — resolve identity (memoized) then gate on is_admin.
+// Admin guard - resolve identity (memoized) then gate on is_admin.
 router.beforeEach(async (to) => {
   if (!to.meta.requiresAdmin) return true
   const session = useSessionStore()

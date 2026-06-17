@@ -54,7 +54,7 @@ class RowsRequestTests(unittest.TestCase):
         # Page is capped at MAX_EVIDENCE_PAGE (20) to bound the worst-case OFFSET sort.
         self.assertEqual(validate_evidence_rows_request(_payload(page=9999))[4], 20)
         self.assertEqual(validate_evidence_rows_request(_payload(page="junk"))[4], 0)
-        # int(float("inf")) raises OverflowError — must clamp to 0, never 500.
+        # int(float("inf")) raises OverflowError - must clamp to 0, never 500.
         self.assertEqual(validate_evidence_rows_request(_payload(page=float("inf")))[4], 0)
 
     def test_rejections(self):
@@ -111,7 +111,7 @@ class RowsRequestTests(unittest.TestCase):
 
 class DrillTests(unittest.TestCase):
     """Optional ``drill`` key: shape + bounds only (the drillable column SET is
-    re-derived server-side from the stored SQL — never trusted from here)."""
+    re-derived server-side from the stored SQL - never trusted from here)."""
 
     def _drill(self, drill):
         return validate_evidence_rows_request(_payload(drill=drill))[6]

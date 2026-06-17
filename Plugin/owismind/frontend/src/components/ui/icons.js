@@ -1,5 +1,5 @@
 /* =============================================================================
- * OWIsMind — Icon registry.
+ * OWIsMind - Icon registry.
  *
  * Ported VERBATIM from the original mockup's icon set (window.OWI_ICONS).
  * Each entry is an inline SVG string using `currentColor` (inherits text color)

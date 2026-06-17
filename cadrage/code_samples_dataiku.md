@@ -13,10 +13,10 @@ except Exception:
 client = dataiku.api_client()
 project = client.get_default_project()
 
-# OPTION A — vrai live le plus fiable : appeler directement le sous-agent Structured Visual Agent
+# OPTION A - vrai live le plus fiable : appeler directement le sous-agent Structured Visual Agent
 AGENT_ID = "agent:rNTZ781a"
 
-# OPTION B — tester le Code Agent dispatcher
+# OPTION B - tester le Code Agent dispatcher
 # AGENT_ID = "agent:TON_CODE_AGENT_ID"
 
 question = "Combien on a fait avec algerie telecom en 2025 ?"

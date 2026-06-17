@@ -1,5 +1,5 @@
 <script setup>
-// Honest empty state — used wherever a feature has NO backend yet (budget,
+// Honest empty state - used wherever a feature has NO backend yet (budget,
 // usage history, feedback list, projects). It states plainly that the data or
 // feature is not available; it NEVER renders fake numbers (memory rule: zéro
 // faux chiffre). Optional "soon" tag + an extra actions slot.

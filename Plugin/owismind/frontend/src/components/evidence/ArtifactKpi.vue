@@ -1,5 +1,5 @@
 <script setup>
-// ArtifactKpi.vue — a big "headline figure" card for an Evidence Studio KPI
+// ArtifactKpi.vue - a big "headline figure" card for an Evidence Studio KPI
 // artifact. The figures are extracted SERVER-SIDE (chart_payload.build_kpi_payload)
 // from the captured result, so the agent only named the value column; this
 // component just formats and draws. Shows the value big, plus an optional
@@ -19,7 +19,7 @@ const ok = computed(() => !!(props.data && props.data.ok))
 
 // Group-aware number formatting (locale-independent thousands separators).
 function fmt(n) {
-  if (n == null || !Number.isFinite(Number(n))) return '—'
+  if (n == null || !Number.isFinite(Number(n))) return '-'
   const v = Number(n)
   const abs = Math.abs(v)
   // Compact large numbers for readability (1.2M, 340k); keep small ones exact.
@@ -29,7 +29,7 @@ function fmt(n) {
   return v.toLocaleString()
 }
 
-const valueText = computed(() => (ok.value ? fmt(props.data.value) : '—'))
+const valueText = computed(() => (ok.value ? fmt(props.data.value) : '-'))
 const label = computed(() => (props.data && props.data.label) || props.title || '')
 
 const hasDelta = computed(

@@ -1,8 +1,8 @@
 <script setup>
-// Trust badge — the FIRST thing a non-technical user reads in the Evidence
+// Trust badge - the FIRST thing a non-technical user reads in the Evidence
 // panel: one pill (verification level × captured result) + one plain-language
 // sentence, mapped deterministically by trustLevel() from the backend's own
-// verification verdict (no LLM, no upgrade — honesty rules, spec §9).
+// verification verdict (no LLM, no upgrade - honesty rules, spec §9).
 // Visual grammar: solid orange = certified, dashed orange = partial, muted
 // grey = agent claim only. NEVER green (Evidence no-green rule).
 import { computed } from 'vue'
@@ -16,7 +16,7 @@ const evidence = useEvidenceStore()
 const trust = computed(() => trustLevel(evidence.meta))
 // One sentence per badge: ev.proof.level.X -> ev.proof.level.desc.X.
 const descKey = computed(() => trust.value.key.replace('ev.proof.level.', 'ev.proof.level.desc.'))
-// Conditions the interactive view could NOT reproduce — listed, never hidden.
+// Conditions the interactive view could NOT reproduce - listed, never hidden.
 const dropped = computed(() => droppedNote(evidence.meta && evidence.meta.verification))
 </script>
 
@@ -55,7 +55,7 @@ const dropped = computed(() => droppedNote(evidence.meta && evidence.meta.verifi
   padding-top: var(--s-1); border-top: 1px dashed var(--border);
   font-size: var(--fs-xs); color: var(--text-3);
 }
-/* Dark: the light tint would glow — swap to the translucent orange patch.
+/* Dark: the light tint would glow - swap to the translucent orange patch.
    Entire selector inside :global (scoped+theme rule F2/L022). The muted pill
    keeps --surface-2 (theme-adaptive), so only orange tones are overridden. */
 :global(body[data-theme="dark"] .ev-trust.tone-solid .ev-trust-pill),

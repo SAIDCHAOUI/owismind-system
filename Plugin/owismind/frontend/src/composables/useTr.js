@@ -1,4 +1,4 @@
-// Data translator — the maquette's `tr(value)`: a plain string passes through,
+// Data translator - the maquette's `tr(value)`: a plain string passes through,
 // a { fr, en } object resolves to the current locale (fallback fr → en → first).
 // Use for DATA (e.g. agent metadata, fixtures), NOT for UI strings (use $t/t).
 //

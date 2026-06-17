@@ -1,4 +1,4 @@
-// UI store — the SINGLE source of truth for user preferences (theme, language,
+// UI store - the SINGLE source of truth for user preferences (theme, language,
 // sidebar state, history window), replacing the maquette's window.STATE. Both the
 // header (MainTop) and the Settings page read/write this store, so a change in one
 // place is instantly reflected in the other. Every preference is persisted to
@@ -63,7 +63,7 @@ export const useUiStore = defineStore('ui', () => {
   // screen) must not brick the evidence layout on a smaller one.
   const evidenceW = ref(clampEvidence(readNum(EVIDENCE_W_KEY, EVIDENCE_DEFAULT)))
   // Language mirrors the active i18n locale (already detected from localStorage at
-  // i18n setup). setLang below keeps the two in sync — this store never persists the
+  // i18n setup). setLang below keeps the two in sync - this store never persists the
   // language itself (setLocale owns the 'owismind.lang' key) to avoid a second system.
   const lang = ref(currentLocale())
   // Agent-context window (count of most-recent MESSAGES sent to the agent), clamped
@@ -134,7 +134,7 @@ export const useUiStore = defineStore('ui', () => {
     persist(MODELMODE_KEY, m)
   }
   // `persistChoice: false` = an AUTOMATIC collapse (e.g. Evidence opening):
-  // it must never overwrite the USER's stored preference — only an explicit
+  // it must never overwrite the USER's stored preference - only an explicit
   // toggle decides what the next session starts with.
   function setSidebarCollapsed(v, persistChoice = true) {
     sidebarCollapsed.value = !!v

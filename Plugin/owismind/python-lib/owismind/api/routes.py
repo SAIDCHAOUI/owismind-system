@@ -14,17 +14,17 @@ Routes:
   - ``/chat/feedback`` : persist a 👍/👎 (+ optional reasons/comment) on one's own message.
   - ``/conversations`` : names-only, keyset-paginated conversation list (sidebar).
   - ``/conversation``  : all messages of ONE session, fetched lazily on click.
-  - ``/evidence/*``    : Evidence Studio — meta / rows / distinct (owner-scoped, read-only, project datasets).
+  - ``/evidence/*``    : Evidence Studio - meta / rows / distinct (owner-scoped, read-only, project datasets).
   - ``/admin/*``       : storage view + user/admin + agent-whitelist management (admin-gated).
 
 Transport is polling, not SSE: DSS's internal nginx can buffer a long-lived
 event-stream so events would arrive all at once. Instead the agent runs in a
 background worker (agents/stream_manager) and the front polls short requests the
-proxy never buffers — the same pattern the project's production Dash app uses.
+proxy never buffers - the same pattern the project's production Dash app uses.
 
 Identity is always resolved from the authenticated browser headers, never from the
 request body. The frontend only ever sends logical data (e.g. {session_id, message,
-agent_key}); it never chooses table, connection, query, or a raw agent id — the
+agent_key}); it never chooses table, connection, query, or a raw agent id - the
 agent_key is an opaque logical key resolved server-side against the whitelist.
 """
 
@@ -72,7 +72,7 @@ api = Blueprint("owismind_api", __name__, url_prefix="/owismind-api")
 def _logical_key(project_key, agent_id):
     """Deterministic, opaque logical key for an enabled agent.
 
-    A stable hash of ``project_key:agent_id`` — stable so re-saving the selection
+    A stable hash of ``project_key:agent_id`` - stable so re-saving the selection
     keeps the same key, opaque so the chat front never receives a raw agent_id
     (the whitelist requirement: the front references an agent only by this key).
     """
@@ -120,8 +120,8 @@ def ping():
 def me():
     """Return the caller's identity, admin status and storage-config state.
 
-    Identity is resolved server-side from the browser auth headers. The side effect —
-    recording the caller in the users registry AND the first-admin bootstrap — happens
+    Identity is resolved server-side from the browser auth headers. The side effect -
+    recording the caller in the users registry AND the first-admin bootstrap - happens
     ONLY on POST, so a naive prefetch/scanner GET can neither create a user row nor win
     the first-admin election (the operational rule "first to open = admin" must not be
     triggerable by a non-interactive GET). The frontend issues POST once on init; GET
@@ -130,11 +130,11 @@ def me():
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/me — identity resolution failed: %s", exc)
+        logger.warning("/me - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     logger.info(
-        "/me — %s user_id=%s groups=%s",
+        "/me - %s user_id=%s groups=%s",
         request.method,
         identity["user_id"],
         identity["groups"],
@@ -150,7 +150,7 @@ def me():
                 admin.record_user(identity)
             is_admin_flag = admin.is_admin(identity["user_id"])
         except Exception:
-            logger.exception("/me — user registry failed")
+            logger.exception("/me - user registry failed")
 
     return jsonify(
         {
@@ -203,7 +203,7 @@ def chat_start():
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/chat/start — identity resolution failed: %s", exc)
+        logger.warning("/chat/start - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     try:
@@ -211,7 +211,7 @@ def chat_start():
             request.get_json(silent=True)
         )
     except ValidationError as exc:
-        logger.warning("/chat/start — invalid payload: %s", exc.code)
+        logger.warning("/chat/start - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
 
     # Optional agent-context window (number of prior messages to replay). Read and
@@ -221,29 +221,29 @@ def chat_start():
     history_limit = validate_history_limit(body.get("history_limit"))
 
     # Optional conversation-tree edge: the exchange this new turn branches from (NULL for
-    # a first turn / root). Never raises — a malformed value degrades to None, and the
+    # a first turn / root). Never raises - a malformed value degrades to None, and the
     # ancestor-chain read is always user-scoped, so a forged id can only ever match the
     # caller's own rows.
     parent_exchange_id = validate_optional_exchange_id(body.get("parent_exchange_id"))
 
     if not sql_config.is_configured():
-        logger.warning("/chat/start — storage not configured")
+        logger.warning("/chat/start - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
 
     # Whitelist enforcement: resolve the opaque logical key to a real, still-enabled
     # agent. A forged or stale key matches nothing -> rejected (never runs an agent).
     agent = settings.resolve_enabled_agent(agent_key)
     if not agent:
-        logger.warning("/chat/start — agent_key not enabled: %s", agent_key)
+        logger.warning("/chat/start - agent_key not enabled: %s", agent_key)
         return jsonify({"status": "error", "error": "agent_not_enabled"}), 404
     project_key = agent["project_key"]
     agent_id = agent["agent_id"]
 
     # Never log message CONTENT (privacy / log hygiene): only its length. Every other
     # module deliberately keeps prompt/answer bodies out of the logs; this request entry
-    # point — the one place a body could leak — stays content-free too.
+    # point - the one place a body could leak - stays content-free too.
     logger.info(
-        "/chat/start — user_id=%s session_id=%s agent_key=%s msg_len=%d",
+        "/chat/start - user_id=%s session_id=%s agent_key=%s msg_len=%d",
         identity["user_id"],
         session_id,
         agent_key,
@@ -255,7 +255,7 @@ def chat_start():
     # is still the real gate). 429 for the per-user rate gate, 503 for the global cap.
     ok, reason = stream_manager.can_accept(identity["user_id"])
     if not ok:
-        logger.warning("/chat/start — rejected before write: %s", reason)
+        logger.warning("/chat/start - rejected before write: %s", reason)
         return jsonify({"status": "error", "error": reason}), (
             429 if reason == "rate_limited" else 503
         )
@@ -268,7 +268,7 @@ def chat_start():
             session_id, identity, message, agent_key, parent_exchange_id
         )
     except Exception:
-        logger.exception("/chat/start — failed to persist user message")
+        logger.exception("/chat/start - failed to persist user message")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     # Optional model mode (eco / medium / high) chosen in the web app. Unknown or
@@ -289,7 +289,7 @@ def chat_start():
 
     # Per-turn context block (who is asking + server-side date + web-app language + the
     # "answer in THIS message's language" rule) APPENDED to the END of the current user
-    # message — the agent is stateless between calls and honors end-of-prompt best.
+    # message - the agent is stateless between calls and honors end-of-prompt best.
     user_suffix = context.build_user_suffix(
         derive_full_name(identity["user_id"]), datetime.now(),
         webapp_lang=webapp_lang, prompt_lang=prompt_lang, mode=mode,
@@ -309,10 +309,10 @@ def chat_start():
             screen_context=screen_context,
         )
     except stream_manager.CapacityError:
-        logger.warning("/chat/start — concurrency cap reached, rejected")
+        logger.warning("/chat/start - concurrency cap reached, rejected")
         return jsonify({"status": "error", "error": "busy"}), 503
     except Exception:
-        logger.exception("/chat/start — failed to start agent run")
+        logger.exception("/chat/start - failed to start agent run")
         return jsonify({"status": "error", "error": "agent_unavailable"}), 500
 
     return jsonify({"status": "ok", "run_id": run_id, "exchange_id": exchange_id})
@@ -333,7 +333,7 @@ def chat_poll():
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/chat/poll — identity resolution failed: %s", exc)
+        logger.warning("/chat/poll - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     run_id = request.args.get("run_id", "")
@@ -362,13 +362,13 @@ def chat_stop():
     cancel API), persists whatever PARTIAL answer accumulated, and ends the run with a
     terminal ``stopped`` event (not an error). Owner-scoped: a run_id that is unknown,
     already finished/evicted, or owned by another user yields 404 (without revealing
-    which) — a safe no-op the client treats as "already done". Identity comes from the
+    which) - a safe no-op the client treats as "already done". Identity comes from the
     auth headers, never the body.
     """
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/chat/stop — identity resolution failed: %s", exc)
+        logger.warning("/chat/stop - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     payload = request.get_json(silent=True) or {}
@@ -379,7 +379,7 @@ def chat_stop():
     if not stream_manager.request_stop(run_id, identity["user_id"]):
         return jsonify({"status": "error", "error": "run_not_found"}), 404
 
-    logger.info("/chat/stop — run_id=%s user_id=%s", run_id, identity["user_id"])
+    logger.info("/chat/stop - run_id=%s user_id=%s", run_id, identity["user_id"])
     return jsonify({"status": "ok"})
 
 
@@ -389,18 +389,18 @@ def chat_feedback():
 
     Identity comes from the auth headers (never the body); the UPDATE in
     ``chat_v5.save_feedback`` is owner-scoped (WHERE exchange_id AND user_id), so a
-    caller can only rate their own exchange — an exchange owned by someone else is a
+    caller can only rate their own exchange - an exchange owned by someone else is a
     silent no-op. The payload is validated/bounded server-side (rating 0/1/None,
     whitelisted reasons, bounded comment).
     """
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/chat/feedback — identity resolution failed: %s", exc)
+        logger.warning("/chat/feedback - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     if not sql_config.is_configured():
-        logger.warning("/chat/feedback — storage not configured")
+        logger.warning("/chat/feedback - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
 
     try:
@@ -408,7 +408,7 @@ def chat_feedback():
             request.get_json(silent=True)
         )
     except ValidationError as exc:
-        logger.warning("/chat/feedback — invalid payload: %s", exc.code)
+        logger.warning("/chat/feedback - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
 
     try:
@@ -417,11 +417,11 @@ def chat_feedback():
             identity["user_id"], exchange_id, rating, reasons, comment
         )
     except Exception:
-        logger.exception("/chat/feedback — feedback save failed")
+        logger.exception("/chat/feedback - feedback save failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     logger.info(
-        "/chat/feedback — user_id=%s exchange_id=%s rating=%s",
+        "/chat/feedback - user_id=%s exchange_id=%s rating=%s",
         identity["user_id"],
         exchange_id,
         rating,
@@ -434,17 +434,17 @@ def conversations():
     """Names-only, keyset-paginated conversation list for the signed-in user.
 
     Powers the lazy sidebar: one page of conversation summaries (session_id, title,
-    last_at) — never message bodies. ``cursor`` resumes a previous page; ``limit`` is
+    last_at) - never message bodies. ``cursor`` resumes a previous page; ``limit`` is
     clamped server-side to [1, 60] (default 30). Strictly owner-scoped.
     """
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/conversations — identity resolution failed: %s", exc)
+        logger.warning("/conversations - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     if not sql_config.is_configured():
-        logger.warning("/conversations — storage not configured")
+        logger.warning("/conversations - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
 
     limit = validate_conversations_limit(request.args.get("limit"))
@@ -458,11 +458,11 @@ def conversations():
         ensure_chat_table()
         page = chat_v5.list_conversations(identity["user_id"], cursor_token, limit)
     except Exception:
-        logger.exception("/conversations — listing failed")
+        logger.exception("/conversations - listing failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     logger.info(
-        "/conversations — user_id=%s limit=%d returned %d (has_more=%s)",
+        "/conversations - user_id=%s limit=%d returned %d (has_more=%s)",
         identity["user_id"],
         limit,
         len(page.get("conversations", [])),
@@ -483,11 +483,11 @@ def conversation():
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/conversation — identity resolution failed: %s", exc)
+        logger.warning("/conversation - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     if not sql_config.is_configured():
-        logger.warning("/conversation — storage not configured")
+        logger.warning("/conversation - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
 
     session_id = (request.args.get("session_id") or "").strip()
@@ -498,11 +498,11 @@ def conversation():
         ensure_chat_table()
         rows = chat_v5.messages_for_session(identity["user_id"], session_id)
     except Exception:
-        logger.exception("/conversation — load failed")
+        logger.exception("/conversation - load failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     logger.info(
-        "/conversation — user_id=%s session_id=%s returned %d rows",
+        "/conversation - user_id=%s session_id=%s returned %d rows",
         identity["user_id"],
         session_id,
         len(rows),
@@ -517,23 +517,23 @@ def agents_available():
     """List the agents the admin has enabled, for any authenticated caller.
 
     This powers the chat-side agent picker. It returns ONLY each agent's opaque
-    logical key and human label — never a raw agent_id or project key — so the
+    logical key and human label - never a raw agent_id or project key - so the
     chat front references an agent solely by its logical key (server whitelist).
     """
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/agents — identity resolution failed: %s", exc)
+        logger.warning("/agents - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
     if not sql_config.is_configured():
-        logger.warning("/agents — storage not configured")
+        logger.warning("/agents - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
 
     try:
         enabled = settings.get_enabled_agents()
     except Exception:
-        logger.exception("/agents — query failed")
+        logger.exception("/agents - query failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     # Project off only the public-safe fields (no agent_id / project_key leak).
@@ -543,7 +543,7 @@ def agents_available():
         if a.get("logical_key")
     ]
     logger.info(
-        "/agents — user_id=%s returned %d enabled agent(s)",
+        "/agents - user_id=%s returned %d enabled agent(s)",
         identity["user_id"],
         len(public),
     )
@@ -565,21 +565,21 @@ def _evidence_guard():
     try:
         identity = resolve_identity(request.headers)
     except IdentityError as exc:
-        logger.warning("/evidence — identity resolution failed: %s", exc)
+        logger.warning("/evidence - identity resolution failed: %s", exc)
         return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
     if not sql_config.is_configured():
-        logger.warning("/evidence — storage not configured")
+        logger.warning("/evidence - storage not configured")
         return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
     try:
         ensure_chat_table()
     except Exception:
-        logger.exception("/evidence — chat table bootstrap failed")
+        logger.exception("/evidence - chat table bootstrap failed")
         return None, (jsonify({"status": "error", "error": "storage_unavailable"}), 500)
     # Per-user token-bucket gate: a scripted flood must not pin worker threads of the
     # mono-process polling backend (the legitimate auto-open meta+rows pair fits well
     # within the burst capacity). Checked after the cheap auth/config/bootstrap path.
     if not evidence_throttle.can_accept(identity["user_id"]):
-        logger.warning("/evidence — rate limited user_id=%s", identity["user_id"])
+        logger.warning("/evidence - rate limited user_id=%s", identity["user_id"])
         return None, (jsonify({"status": "error", "error": "rate_limited"}), 429)
     return identity, None
 
@@ -589,7 +589,7 @@ def evidence_meta():
     """Interactive descriptor of one exchange's evidence (or a degraded shape).
 
     The caller sends ONLY ``exchange_id``: table, connection, SQL and dataset
-    matching are all resolved server-side. Owner-scoped — someone else's
+    matching are all resolved server-side. Owner-scoped - someone else's
     exchange is 404.
     """
     identity, err = _evidence_guard()
@@ -598,14 +598,14 @@ def evidence_meta():
     try:
         exchange_id = validate_required_exchange_id(request.args.get("exchange_id"))
     except ValidationError as exc:
-        logger.warning("/evidence/meta — invalid exchange_id")
+        logger.warning("/evidence/meta - invalid exchange_id")
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
         meta = evidence_service.evidence_meta(identity["user_id"], exchange_id)
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
-        logger.exception("/evidence/meta — failed")
+        logger.exception("/evidence/meta - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     # One observability line per meta: the verification outcome is the trust
     # layer's whole point, so it must be greppable next to available/reason.
@@ -613,7 +613,7 @@ def evidence_meta():
     drilldown = meta.get("drilldown") or {}
     # Attach this exchange's rendered-artifact specs (chart / table the orchestrator
     # asked for). Owner-scoped, best-effort: a read failure degrades to no artifacts,
-    # never a 500 — the rest of the evidence panel stays usable.
+    # never a 500 - the rest of the evidence panel stays usable.
     try:
         arts = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
         # Server-side chart shaping: build the Chart.js-ready {labels, datasets}
@@ -628,10 +628,10 @@ def evidence_meta():
                 a["data"] = chart_payload.build_kpi_payload(result_block, a.get("kpi"))
         meta["artifacts"] = arts
     except Exception:
-        logger.exception("/evidence/meta — artifacts read failed (non-fatal)")
+        logger.exception("/evidence/meta - artifacts read failed (non-fatal)")
         meta["artifacts"] = []
     logger.info(
-        "/evidence/meta — user_id=%s exchange_id=%s available=%s reason=%s "
+        "/evidence/meta - user_id=%s exchange_id=%s available=%s reason=%s "
         "level=%s result_captured=%s drill_available=%s artifacts=%d",
         identity["user_id"], exchange_id, meta.get("available"), meta.get("reason"),
         verification.get("level"), verification.get("result_captured"),
@@ -656,7 +656,7 @@ def evidence_rows():
         (exchange_id, filters, kept_ids, include_advanced, page, sort, drill,
          table) = validate_evidence_rows_request(request.get_json(silent=True))
     except ValidationError as exc:
-        logger.warning("/evidence/rows — invalid payload: %s", exc.code)
+        logger.warning("/evidence/rows - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
         result = evidence_service.evidence_rows(
@@ -666,7 +666,7 @@ def evidence_rows():
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
-        logger.exception("/evidence/rows — failed")
+        logger.exception("/evidence/rows - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     return jsonify({"status": "ok", **result})
 
@@ -686,7 +686,7 @@ def evidence_distinct():
         exchange_id = validate_required_exchange_id(request.args.get("exchange_id"))
         column = validate_evidence_column(request.args.get("column"))
     except ValidationError as exc:
-        logger.warning("/evidence/distinct — invalid payload: %s", exc.code)
+        logger.warning("/evidence/distinct - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     raw_exclude = request.args.get("exclude_id")
     try:
@@ -702,7 +702,7 @@ def evidence_distinct():
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
-        logger.exception("/evidence/distinct — failed")
+        logger.exception("/evidence/distinct - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     return jsonify({"status": "ok", **result})
 
@@ -726,7 +726,7 @@ def _admin_guard():
         if not admin.is_admin(identity["user_id"]):
             return None, (jsonify({"status": "error", "error": "forbidden"}), 403)
     except Exception:
-        logger.exception("admin guard — admin check failed")
+        logger.exception("admin guard - admin check failed")
         return None, (jsonify({"status": "error", "error": "storage_unavailable"}), 500)
     return identity, None
 
@@ -749,7 +749,7 @@ def admin_users():
     try:
         users = admin.list_users()
     except Exception:
-        logger.exception("admin/users — query failed")
+        logger.exception("admin/users - query failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
     return jsonify({"status": "ok", "count": len(users), "users": users})
 
@@ -790,7 +790,7 @@ def admin_projects():
     try:
         projects = discovery.list_project_keys()
     except Exception:
-        logger.exception("admin/projects — discovery failed")
+        logger.exception("admin/projects - discovery failed")
         return jsonify({"status": "error", "error": "discovery_unavailable"}), 500
     return jsonify({"status": "ok", "count": len(projects), "projects": projects})
 
@@ -810,7 +810,7 @@ def admin_project_agents(project_key):
             return jsonify({"status": "error", "error": "project_not_found"}), 404
         agents = discovery.list_project_agents(project_key)
     except Exception:
-        logger.exception("admin/projects/<key>/agents — discovery failed")
+        logger.exception("admin/projects/<key>/agents - discovery failed")
         return jsonify({"status": "error", "error": "discovery_unavailable"}), 500
     return jsonify(
         {
@@ -830,7 +830,7 @@ def admin_agents():
     POST persists a new selection from ``{agents: [{project_key, agent_id}, ...]}``.
     Every requested agent is RE-VALIDATED server-side against the live DSS listings
     (project visible + agent actually present), so the persisted whitelist can only
-    ever contain real, authorised agents — the front cannot inject an arbitrary id.
+    ever contain real, authorised agents - the front cannot inject an arbitrary id.
     """
     identity, err = _admin_guard()
     if err:
@@ -840,7 +840,7 @@ def admin_agents():
         try:
             enabled = settings.get_enabled_agents()
         except Exception:
-            logger.exception("admin/agents — GET failed")
+            logger.exception("admin/agents - GET failed")
             return jsonify({"status": "error", "error": "storage_unavailable"}), 500
         return jsonify({"status": "ok", "count": len(enabled), "agents": enabled})
 
@@ -871,7 +871,7 @@ def admin_agents():
         for project_key, requested_ids in requested_by_project.items():
             if project_key not in visible_projects:
                 logger.warning(
-                    "admin/agents — project %s not visible; skipped", project_key
+                    "admin/agents - project %s not visible; skipped", project_key
                 )
                 continue
             available = {
@@ -881,7 +881,7 @@ def admin_agents():
             for agent_id in requested_ids:
                 if agent_id not in available:
                     logger.warning(
-                        "admin/agents — agent %s not in project %s; skipped",
+                        "admin/agents - agent %s not in project %s; skipped",
                         agent_id,
                         project_key,
                     )
@@ -901,11 +901,11 @@ def admin_agents():
 
         settings.set_enabled_agents(enabled, updated_by=identity["user_id"])
     except Exception:
-        logger.exception("admin/agents — POST failed")
+        logger.exception("admin/agents - POST failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
     logger.info(
-        "admin/agents — saved %d enabled agent(s) by %s",
+        "admin/agents - saved %d enabled agent(s) by %s",
         len(enabled),
         identity["user_id"],
     )
@@ -930,4 +930,4 @@ def register_routes(app):
         for rule in app.url_map.iter_rules()
         if rule.rule.startswith("/owismind-api")
     )
-    logger.info("OWIsMind API ready — %d routes: %s", len(rules), ", ".join(rules))
+    logger.info("OWIsMind API ready - %d routes: %s", len(rules), ", ".join(rules))
