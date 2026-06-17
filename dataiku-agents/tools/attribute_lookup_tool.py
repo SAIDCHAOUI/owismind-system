@@ -51,7 +51,10 @@ RESOLVE_FUZZY_LIMIT = 60      # candidates pulled on the fuzzy LIKE pass
 FUZZY_MIN_RATIO = 0.78        # difflib ratio floor to accept a fuzzy entity
 FUZZY_MARGIN = 0.06           # winner must beat the runner-up by this margin
 MAX_RESULT_ROWS = 50          # cap on the attribute result
-MAX_ATTRIBUTES = 8            # cap on requested attributes (anti-abuse)
+MAX_ATTRIBUTES = 12           # cap on requested attributes (anti-abuse)
+PROFILE_SAMPLE_ROWS = 500     # rows sampled to infer the entity's stable attributes
+MAX_DISTINCT_FOR_ATTRIBUTE = 8  # a column with more distinct values is a measure,
+                                # not an attribute, and is dropped from the profile
 
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
@@ -165,6 +168,13 @@ def pick_exact_entity(rows):
     rows = [r for r in (rows or []) if r.get("target_column") and r.get("target_value")]
     if not rows:
         return ("none", None)
+    # Prefer REAL values over hand-crafted aliases: an exact hit on a canonical
+    # name beats the same term reaching an entity only through a parent/alias edge
+    # (is_alias=1). This stops "Algerie Telecom" from looking ambiguous just
+    # because a subsidiary lists it as its parent group.
+    non_alias = [r for r in rows if int(r.get("is_alias") or 0) == 0]
+    if non_alias:
+        rows = non_alias
     targets = {(str(r["target_column"]), str(r["target_value"])) for r in rows}
     if len(targets) == 1:
         return ("resolved", sorted(rows, key=_entity_sort_key)[0])
@@ -211,15 +221,53 @@ def pick_fuzzy_entity(term_norm, rows):
     return ("resolved", best)
 
 
-def build_attribute_sql(fact_table, entity_col, entity_val, attr_cols):
-    """SELECT DISTINCT of the requested attributes for the resolved entity.
-    entity_col and attr_cols are REAL, schema-validated column names; the value is
-    a quoted literal. Bounded by LIMIT."""
-    select_cols = ", ".join(quote_ident(c) for c in attr_cols)
-    return ("SELECT DISTINCT %s FROM %s WHERE %s = %s LIMIT %d"
-            % (select_cols, fact_table,
-               quote_ident(entity_col), quote_literal(entity_val),
-               MAX_RESULT_ROWS))
+def build_profile_sql(fact_table, entity_col, entity_val, sample=PROFILE_SAMPLE_ROWS):
+    """Sample the resolved entity's rows to infer its attributes. entity_col is a
+    REAL, schema-validated column name; the value is a quoted literal; LIMIT bounds
+    the scan. SELECT * stays dataset-agnostic - which columns are attributes is
+    decided afterwards from the data, not hardcoded."""
+    return ("SELECT * FROM %s WHERE %s = %s LIMIT %d"
+            % (fact_table, quote_ident(entity_col), quote_literal(entity_val),
+               int(sample)))
+
+
+def summarize_entity_attributes(columns, rows, keep=None,
+                                max_distinct=MAX_DISTINCT_FOR_ATTRIBUTE):
+    """Turn a sample of an entity's rows into {column: value_or_list}.
+
+    A column with a single non-null value across the sample is a stable attribute
+    (value as a scalar); a few distinct values become a list. In a FULL profile
+    (keep is None), high-cardinality columns (more than max_distinct distinct
+    values) are measures, not attributes, and are dropped. When `keep` lists
+    specific columns, they are always returned (capped), even if multi-valued.
+    Generic: attribute-vs-measure is inferred from the data, never hardcoded."""
+    targets = keep if keep is not None else columns
+    out = {}
+    for col in targets:
+        if col not in columns:
+            continue
+        order, seen = [], set()
+        overflow = False
+        for r in rows or []:
+            v = r.get(col) if isinstance(r, dict) else None
+            if v is None or v == "":
+                continue
+            sv = str(v)[:200]
+            if sv not in seen:
+                seen.add(sv)
+                order.append(sv)
+            if len(order) > max_distinct:
+                overflow = True
+                break
+        if not order:
+            continue
+        if overflow:
+            if keep is None:
+                continue              # a measure -> not an entity attribute
+            out[col] = order[:max_distinct] + ["..."]
+        else:
+            out[col] = order[0] if len(order) == 1 else order
+    return out
 
 
 # ============================================================
@@ -309,19 +357,22 @@ class MyAgentTool(BaseAgentTool):
     def get_descriptor(self, tool):
         return {
             "description": (
-                "Read one or more plain attributes of a single named entity "
-                "(account, customer, partner) directly from the dataset, with a "
-                "fast read-only SQL lookup. Use this for simple field reads such "
+                "Look up a single named entity (account, customer, partner) and "
+                "return its descriptive attributes directly from the dataset, with "
+                "a fast read-only SQL lookup. Use this for plain field reads such "
                 "as 'who is the account manager of <customer>?', 'what is the "
-                "carrier code / parent group / sales zone of <account>?'. Do NOT "
-                "use it for sums, totals, rankings, comparisons or any "
-                "aggregation - use the semantic model query tool for those. "
-                "Pass the entity name as typed and the attribute(s) to read; the "
-                "tool resolves the exact entity value and the real column names "
-                "itself (spelling and casing do not matter). Returns the distinct "
-                "attribute value(s), the resolved entity, and the SQL used. "
-                "status 'entity_not_found' or 'entity_ambiguous' means you should "
-                "ask the user to clarify instead of guessing."
+                "carrier code / parent group / sales zone of <account>?', or 'tell "
+                "me about <account>'. Do NOT use it for sums, totals, rankings, "
+                "comparisons or any aggregation - use the semantic model query "
+                "tool for those. Pass the entity name as typed; you usually do NOT "
+                "need to name a column - by default the tool returns ALL of the "
+                "entity's stable attributes as {column: value} and you pick the "
+                "one you need. Optionally pass 'attributes' to restrict the "
+                "output. The tool resolves the exact entity and the real column "
+                "names itself, so spelling and casing do not matter. Returns the "
+                "resolved entity, its attributes, and the SQL used. status "
+                "'entity_not_found' or 'entity_ambiguous' means you should ask the "
+                "user to clarify instead of guessing."
             ),
             "inputSchema": {
                 "$id": "https://owismind/tools/attribute_lookup/input",
@@ -331,21 +382,22 @@ class MyAgentTool(BaseAgentTool):
                     "entity": {
                         "type": "string",
                         "description": (
-                            "Name of the entity to read an attribute of, as the "
-                            "user typed it (e.g. 'Algerie Telecom', 'Telesat')."
+                            "Name of the entity to look up, as the user typed it "
+                            "(e.g. 'Algerie Telecom', 'Telesat')."
                         ),
                     },
                     "attributes": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "Attribute(s) / column(s) to return (e.g. "
-                            "['account manager'], ['carrier code','sales zone']). "
-                            "Case and underscores do not matter."
+                            "OPTIONAL. Restrict the output to these attribute(s) / "
+                            "column(s) (e.g. ['account manager']). Omit to get all "
+                            "of the entity's attributes. Case and underscores do "
+                            "not matter."
                         ),
                     },
                 },
-                "required": ["entity", "attributes"],
+                "required": ["entity"],
             },
         }
 
@@ -361,19 +413,22 @@ class MyAgentTool(BaseAgentTool):
                     "sources": [{"id": FACT_DATASET, "type": "dataset",
                                  "name": "Dataset: %s" % FACT_DATASET}]}
 
-        if not raw_entity or not raw_attributes:
-            return out({"status": "bad_input", "message":
-                        "Provide both 'entity' and at least one 'attributes' name."})
+        if not raw_entity:
+            return out({"status": "bad_input",
+                        "message": "Provide an 'entity' to look up."})
 
-        # 1) Map requested attributes to REAL columns (spelling-proof).
+        # 1) If specific attributes were requested, map them to REAL columns
+        #    (spelling-proof). Empty list -> full profile (all attributes).
         live_columns = self._live_columns(FACT_DATASET)
-        attr_cols, unknown = map_attributes(raw_attributes, live_columns)
-        if not attr_cols:
-            return out({"status": "attribute_unknown",
-                        "attributes_unknown": unknown,
-                        "available_columns": live_columns,
-                        "message": "None of the requested attributes match a real "
-                                   "column."})
+        keep, unknown = (None, [])
+        if raw_attributes:
+            keep, unknown = map_attributes(raw_attributes, live_columns)
+            if not keep:
+                return out({"status": "attribute_unknown",
+                            "attributes_unknown": unknown,
+                            "available_columns": live_columns,
+                            "message": "None of the requested attributes match a "
+                                       "real column."})
 
         # 2) Resolve the entity to an exact (column, value) filter.
         status, payload = self._resolve_entity(raw_entity)
@@ -397,23 +452,23 @@ class MyAgentTool(BaseAgentTool):
                         "message": "Resolved column '%s' is not in %s (catalog out "
                                    "of sync)." % (entity_col, FACT_DATASET)})
 
-        # 4) Read the attribute(s).
+        # 4) Sample the entity's rows and distil its stable attributes.
         fact_table = self._get_table(FACT_DATASET)
-        sql = build_attribute_sql(fact_table, entity_col, entity_val, attr_cols)
-        columns, rows = self._run_sql(FACT_DATASET, sql, max_rows=MAX_RESULT_ROWS)
+        sql = build_profile_sql(fact_table, entity_col, entity_val)
+        columns, rows = self._run_sql(FACT_DATASET, sql, max_rows=PROFILE_SAMPLE_ROWS)
+        attributes = summarize_entity_attributes(columns, rows, keep=keep)
 
         result = {
-            "status": "ok" if rows else "no_value",
+            "status": "ok" if attributes else "no_value",
             "entity": {"raw": raw_entity, "column": entity_col, "value": entity_val,
                        "display": payload.get("display_value") or entity_val},
-            "attributes_resolved": attr_cols,
-            "attributes_unknown": unknown,
-            "columns": columns,
-            "rows": [[r.get(c) for c in columns] for r in rows],
-            "row_count": len(rows),
+            "attributes": attributes,
+            "rows_scanned": len(rows),
             "sql": sql,
         }
-        if not rows:
-            result["message"] = ("No value found for %s = %s."
+        if unknown:
+            result["attributes_unknown"] = unknown
+        if not attributes:
+            result["message"] = ("No attribute value found for %s = %s."
                                  % (entity_col, entity_val))
         return out(result)

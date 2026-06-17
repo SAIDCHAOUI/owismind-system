@@ -174,12 +174,50 @@ class TestSqlBuilders(unittest.TestCase):
         sql = al.build_resolve_sql('"public"."CAT"', "a%b", fuzzy=True)
         self.assertIn("LIKE '%a\\%b%' ESCAPE", sql)
 
-    def test_attribute_sql_quotes_idents_and_value(self):
-        sql = al.build_attribute_sql('"public"."F"', "diamond_id", "AT'1",
-                                     ["account_manager", "sales_zone"])
-        self.assertIn('SELECT DISTINCT "account_manager", "sales_zone"', sql)
+    def test_profile_sql_quotes_idents_and_value(self):
+        sql = al.build_profile_sql('"public"."F"', "diamond_id", "AT'1")
+        self.assertIn('SELECT * FROM "public"."F"', sql)
         self.assertIn('WHERE "diamond_id" = \'AT\'\'1\'', sql)
-        self.assertIn("LIMIT %d" % al.MAX_RESULT_ROWS, sql)
+        self.assertIn("LIMIT %d" % al.PROFILE_SAMPLE_ROWS, sql)
+
+
+class TestSummarize(unittest.TestCase):
+    def _rows(self, *dicts):
+        return list(dicts)
+
+    def test_stable_single_value_is_scalar(self):
+        cols = ["account_manager", "carrier_code"]
+        rows = self._rows({"account_manager": "Jane", "carrier_code": "DZ1"},
+                          {"account_manager": "Jane", "carrier_code": "DZ1"})
+        out = al.summarize_entity_attributes(cols, rows)
+        self.assertEqual(out, {"account_manager": "Jane", "carrier_code": "DZ1"})
+
+    def test_few_distinct_become_list(self):
+        cols = ["account_manager"]
+        rows = self._rows({"account_manager": "Jane"}, {"account_manager": "John"})
+        out = al.summarize_entity_attributes(cols, rows)
+        self.assertEqual(out["account_manager"], ["Jane", "John"])
+
+    def test_measure_dropped_in_full_profile(self):
+        cols = ["account_manager", "amount_eur"]
+        rows = [{"account_manager": "Jane", "amount_eur": str(i)}
+                for i in range(40)]
+        out = al.summarize_entity_attributes(cols, rows)
+        self.assertIn("account_manager", out)
+        self.assertNotIn("amount_eur", out)   # high cardinality -> not an attribute
+
+    def test_keep_returns_even_high_cardinality(self):
+        cols = ["amount_eur"]
+        rows = [{"amount_eur": str(i)} for i in range(40)]
+        out = al.summarize_entity_attributes(cols, rows, keep=["amount_eur"])
+        self.assertIn("amount_eur", out)
+        self.assertEqual(out["amount_eur"][-1], "...")
+
+    def test_nulls_and_empty_skipped(self):
+        cols = ["a", "b"]
+        rows = [{"a": None, "b": ""}, {"a": "x", "b": ""}]
+        out = al.summarize_entity_attributes(cols, rows)
+        self.assertEqual(out, {"a": "x"})
 
 
 class TestEntityPicking(unittest.TestCase):
@@ -208,6 +246,18 @@ class TestEntityPicking(unittest.TestCase):
         self.assertEqual(status, "ambiguous")
         self.assertEqual(len(cands), 2)
 
+    def test_non_alias_preferred_drops_alias_match(self):
+        # Real case: the term hits the canonical account (is_alias=0) AND a
+        # subsidiary that lists it as parent group (is_alias=1). The alias is
+        # dropped, so it resolves cleanly instead of looking ambiguous.
+        rows = [_cat_row("diamond_id", "AT001", search_domain="account",
+                         display_value="ALGERIE TELECOM", is_alias=0),
+                _cat_row("diamond_id", "MOB99", search_domain="account",
+                         display_value="ATM MOBILIS", is_alias=1)]
+        status, row = al.pick_exact_entity(rows)
+        self.assertEqual(status, "resolved")
+        self.assertEqual(row["target_value"], "AT001")
+
     def test_empty(self):
         self.assertEqual(al.pick_exact_entity([]), ("none", None))
 
@@ -235,33 +285,49 @@ class TestEntityPicking(unittest.TestCase):
 # Full invoke flow
 # --------------------------------------------------------------------------- #
 class TestInvoke(unittest.TestCase):
-    def test_happy_path_account_manager(self):
+    # Stable attributes constant across rows; amount_eur varies every row (a
+    # measure) so it exceeds the distinct cap and is dropped from the profile.
+    FACT = [{"diamond_id": "AT001", "Account_name": "ALGERIE TELECOM",
+             "account_manager": "Jane Doe", "carrier_code": "DZ1",
+             "sales_zone": "Africa", "amount_eur": str(i * 17)}
+            for i in range(10)]
+
+    def test_full_profile_by_default(self):
+        # No attribute requested -> return ALL stable attributes; measures dropped.
         tool = FakeTool(
             exact_rows=[_cat_row("diamond_id", "AT001",
                                  display_value="Algerie Telecom SA",
                                  normalized_value="algerie telecom")],
-            fact_rows=[{"account_manager": "Jane Doe"}])
-        out = invoke(tool, "Algérie Télécom", ["account manager"])
+            fact_rows=self.FACT)
+        out = invoke(tool, "Algérie Télécom", [])
         self.assertEqual(out["status"], "ok")
         self.assertEqual(out["entity"]["value"], "AT001")
-        self.assertEqual(out["entity"]["display"], "Algerie Telecom SA")
-        self.assertEqual(out["attributes_resolved"], ["account_manager"])
-        self.assertEqual(out["rows"], [["Jane Doe"]])
-        self.assertIn('"account_manager"', out["sql"])
+        self.assertEqual(out["attributes"]["account_manager"], "Jane Doe")
+        self.assertEqual(out["attributes"]["sales_zone"], "Africa")
+        self.assertNotIn("amount_eur", out["attributes"])   # measure dropped
         self.assertIn("'AT001'", out["sql"])
+
+    def test_requested_attribute_restricts(self):
+        tool = FakeTool(
+            exact_rows=[_cat_row("diamond_id", "AT001",
+                                 normalized_value="algerie telecom")],
+            fact_rows=self.FACT)
+        out = invoke(tool, "Algerie Telecom", ["account manager"])
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["attributes"], {"account_manager": "Jane Doe"})
 
     def test_spelling_of_attribute_does_not_break(self):
         tool = FakeTool(
             exact_rows=[_cat_row("diamond_id", "AT001",
                                  normalized_value="algerie telecom")],
-            fact_rows=[{"account_manager": "Jane Doe"}])
+            fact_rows=self.FACT)
         out = invoke(tool, "Algerie Telecom", ["Account_Manager"])
         self.assertEqual(out["status"], "ok")
-        self.assertEqual(out["attributes_resolved"], ["account_manager"])
+        self.assertIn("account_manager", out["attributes"])
 
     def test_entity_not_found_falls_to_fuzzy_then_gives_up(self):
         tool = FakeTool(exact_rows=[], fuzzy_rows=[])
-        out = invoke(tool, "Nonexistent Co", ["account manager"])
+        out = invoke(tool, "Nonexistent Co", [])
         self.assertEqual(out["status"], "entity_not_found")
         # two catalog reads were attempted (exact then fuzzy)
         cat_reads = [s for (d, s) in tool.sql_log if d == al.CATALOG_DATASET]
@@ -272,8 +338,8 @@ class TestInvoke(unittest.TestCase):
             exact_rows=[],
             fuzzy_rows=[_cat_row("diamond_id", "AT001",
                                  normalized_value="algerie telecom")],
-            fact_rows=[{"account_manager": "Jane Doe"}])
-        out = invoke(tool, "algerie telcom", ["account manager"])
+            fact_rows=self.FACT)
+        out = invoke(tool, "algerie telcom", [])
         self.assertEqual(out["status"], "ok")
         self.assertEqual(out["entity"]["value"], "AT001")
 
@@ -281,21 +347,20 @@ class TestInvoke(unittest.TestCase):
         tool = FakeTool(exact_rows=[
             _cat_row("diamond_id", "AT001", display_value="Telecom A"),
             _cat_row("diamond_id", "ZZ999", display_value="Telecom Z")])
-        out = invoke(tool, "Telecom", ["account manager"])
+        out = invoke(tool, "Telecom", [])
         self.assertEqual(out["status"], "entity_ambiguous")
         self.assertEqual(len(out["candidates"]), 2)
 
-    def test_attribute_unknown(self):
+    def test_attribute_unknown_when_requested(self):
         tool = FakeTool(exact_rows=[_cat_row("diamond_id", "AT001")])
         out = invoke(tool, "Algerie Telecom", ["gross margin"])
         self.assertEqual(out["status"], "attribute_unknown")
         self.assertIn("gross margin", out["attributes_unknown"])
 
-    def test_bad_input(self):
+    def test_bad_input_only_when_entity_missing(self):
         tool = FakeTool()
         self.assertEqual(invoke(tool, "", ["account manager"])["status"],
                          "bad_input")
-        self.assertEqual(invoke(tool, "X", [])["status"], "bad_input")
 
     def test_resolved_column_absent_from_fact_schema(self):
         # Catalog points at a column the live fact no longer has.
@@ -303,7 +368,7 @@ class TestInvoke(unittest.TestCase):
             exact_rows=[_cat_row("legacy_id", "AT001",
                                  normalized_value="algerie telecom")],
             live_columns=["diamond_id", "account_manager"])
-        out = invoke(tool, "Algerie Telecom", ["account manager"])
+        out = invoke(tool, "Algerie Telecom", [])
         self.assertEqual(out["status"], "entity_not_found")
 
     def test_no_value(self):
@@ -311,17 +376,15 @@ class TestInvoke(unittest.TestCase):
             exact_rows=[_cat_row("diamond_id", "AT001",
                                  normalized_value="algerie telecom")],
             fact_rows=[])
-        out = invoke(tool, "Algerie Telecom", ["account manager"])
+        out = invoke(tool, "Algerie Telecom", [])
         self.assertEqual(out["status"], "no_value")
 
     def test_output_has_sources(self):
         tool = FakeTool(
             exact_rows=[_cat_row("diamond_id", "AT001",
                                  normalized_value="algerie telecom")],
-            fact_rows=[{"account_manager": "Jane Doe"}])
-        full = tool.invoke({"input": {"entity": "Algerie Telecom",
-                                      "attributes": ["account manager"]}},
-                           trace=None)
+            fact_rows=self.FACT)
+        full = tool.invoke({"input": {"entity": "Algerie Telecom"}}, trace=None)
         self.assertEqual(full["sources"][0]["id"], al.FACT_DATASET)
 
 
