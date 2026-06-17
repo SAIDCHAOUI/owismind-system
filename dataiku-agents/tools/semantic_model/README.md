@@ -1,7 +1,7 @@
 # Semantic model - aligned rebuild (2026-06-15)
 
-> Part of the OWIsMind agent system: see [`../README.md`](../README.md) (master guide) and
-> [`../tools/README.md`](../tools/README.md). The Semantic Model Query tool `revenue_semantic_query`
+> Part of the OWIsMind agent system: see [`../../README.md`](../../README.md) (master guide) and
+> [`../README.md`](../README.md) (tools). The Semantic Model Query tool `revenue_semantic_query`
 > (`v4oqA6R`) called by the sub-agent points at the model built/aligned by the scripts here.
 
 Goal: make the **semantic model** (SQL generator) and the **Dataset Expert sub-agent**

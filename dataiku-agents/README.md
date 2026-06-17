@@ -22,7 +22,7 @@
 2. This `README.md` - the full architecture, the Flow, deploy, extend, roadmap.
 3. The skill `agentique-python-dataiku` - how to build/audit DSS agents safely.
 4. `memory/PROJECT_STATE.md` + `memory/LESSONS.md` (repo root) - canonical ids and what really works (these PRIME over the cadrage guides).
-5. Sub-folder READMEs for detail: [`agents/`](agents/README.md), [`recipes/`](recipes/README.md), [`tools/`](tools/README.md), [`semantic_model/`](semantic_model/README.md).
+5. Sub-folder READMEs for detail: [`agents/`](agents/README.md), [`recipes/`](recipes/README.md), [`tools/`](tools/README.md) (incl. [`tools/semantic_model/`](tools/semantic_model/README.md)).
 
 To navigate the code ("where is X handled?"), query the knowledge graph first
 (`graphify query "..."`), not a full re-read.
@@ -209,7 +209,7 @@ re-paste needed.
   path + grounding) is a **dedicated future session**. The catalog recipe and
   tool doc are already in the repo (`recipes/build_value_catalog_recipe.py`,
   `tools/README.md`) so the direction is ready.
-- **Semantic model**: keep aligning its config via the `semantic_model/` scripts
+- **Semantic model**: keep aligning its config via the `tools/semantic_model/` scripts
   (Phase=ACTUALS, offer hierarchy, transparency, golden queries).
 - **Tickets agent**: 2 recipes + 1 Code Agent + 1 registry entry unlocks the
   parallel 360.

@@ -237,8 +237,8 @@ owismind/
 │   ├── CLAUDE.md                   #   orientation Claude (contrats gelés, règles, pointeurs)
 │   ├── agents/                     #   OWIsMind_orchestrator.py + SalesDrive_revenue_expert.py (LangGraph)
 │   ├── recipes/                    #   recettes Flow : profil + value index + value catalog
-│   ├── tools/                      #   doc des tools DSS du sous-agent (semantic query, lookup, resolver)
-│   ├── semantic_model/             #   scripts de config du Semantic Model (API scriptable)
+│   ├── tools/                      #   doc des tools DSS (semantic query, lookup, resolver) + modèle sémantique
+│   │   └── semantic_model/         #     scripts API du Semantic Model que le tool sémantique interroge
 │   └── tests/                      #   tests unitaires DSS-free
 ├── memory/                         # SOURCE DE VÉRITÉ (mémoire vivante du projet)
 │   ├── CONTEXT.md                  # mémoire courte (chargée à chaque session)

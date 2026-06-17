@@ -37,7 +37,7 @@ it as current.
 | `agents/` | The two Code Agents (LangGraph) + [`agents/README.md`](agents/README.md). |
 | `recipes/` | The three Flow recipes (profile, value index, value catalog) + [`recipes/README.md`](recipes/README.md). |
 | `tools/` | Doc of the DSS agent tools + [`tools/README.md`](tools/README.md). |
-| `semantic_model/` | Scripts to build/update the aligned Semantic Model + [`semantic_model/README.md`](semantic_model/README.md). |
+| `tools/semantic_model/` | Scripts to build/update the aligned Semantic Model that the `revenue_semantic_query` tool queries + [`tools/semantic_model/README.md`](tools/semantic_model/README.md). |
 | `tests/` | DSS-free unit tests: `python3 -m unittest discover -s dataiku-agents/tests`. |
 
 ## Rules you must not break

@@ -36,7 +36,7 @@ rule, a destination note.
 - **Output**: the executed SQL + result rows, captured from the tool's trace into
   the frozen `semantic-model-query` span `{sql, success, row_count, rows, columns}`.
 - The aligned semantic model itself is scripted under
-  [`../semantic_model/`](../semantic_model/README.md) (Phase=ACTUALS, offer
+  [`semantic_model/`](semantic_model/README.md) (Phase=ACTUALS, offer
   hierarchy, "never default to sirano_product", transparency, golden queries).
 
 On a TECHNICAL failure (not an empty result), the sub-agent falls back to its own

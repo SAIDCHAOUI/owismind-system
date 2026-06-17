@@ -167,7 +167,7 @@ agentique simple qui marche** + correction des vrais bugs :
 **🧠 MODÈLE SÉMANTIQUE ALIGNÉ + SOUS-AGENT ASSISTIF (2026-06-15 Run 2) - ✅ NOUVEAU MODÈLE CRÉÉ
 (Sonnet 4.6, Playground OK) ; ⏳ FIX SOUS-AGENT codé+157 tests, à RE-COLLER + re-tester DSS.** On a
 créé un **nouveau** modèle sémantique aligné (l'ancien `2O2KcHw` intact) via script notebook
-doc-strict (`dataiku-agents/semantic_model/build_aligned_semantic_model.py` = create+index ;
+doc-strict (`dataiku-agents/tools/semantic_model/build_aligned_semantic_model.py` = create+index ;
 `update_aligned_semantic_model.py` = modif en place instructions+golden queries, sans re-index ;
 `README.md`). Corrigé : `Phase 'ACTUAL'→'ACTUALS'` (dont le filtre « Actual Revenue Only » qui
 matchait **0 ligne**) ; glossaire `diamond_id` bidon retiré ; « roaming hub » retiré de Roaming
@@ -497,7 +497,7 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    (l'ancien `2O2KcHw` intact), Phase 'ACTUAL'→'ACTUALS' (dont filtre « Actual Revenue Only »),
    glossaire `diamond_id` bidon + synonyme « roaming hub » retirés, hiérarchie offre + transparence,
    affichage nom+carrier (diamond_id discret), Account_partner, 9 golden queries, instructions
-   versionnées au repo (`dataiku-agents/semantic_model/`). Reste = 0★★ (recoller le sous-agent + valider).
+   versionnées au repo (`dataiku-agents/tools/semantic_model/`). Reste = 0★★ (recoller le sous-agent + valider).
 0bis. Poursuivre les smoke tests README §5 au fil de l'usage (part du total, YoY, trend, ellipses,
    « IPL » ambigu) ; toute divergence → profil/overrides/prompts, jamais de valeur en dur (P3).
 0ter. **Agent tickets** (2 recettes + 1 Code Agent + 1 entrée registre) → débloque le 360 parallèle.

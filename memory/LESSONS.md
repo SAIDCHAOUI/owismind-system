@@ -1356,7 +1356,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   instructions/golden-queries **ne nécessitent PAS de ré-indexation** (l'index ne porte que sur les
   valeurs distinctes). Le tool « Semantic Model Query » pointe un modèle précis → **repointer le tool**
   après création d'un nouveau modèle (le code du sous-agent ne change pas). Fichiers :
-  `dataiku-agents/semantic_model/{build,update}_aligned_semantic_model.py` (canonical config dupliqué
+  `dataiku-agents/tools/semantic_model/{build,update}_aligned_semantic_model.py` (canonical config dupliqué
   byte-identique entre les deux - éditer `update_…` désormais).
 - **Preuve-vérification** : l'user a créé + indexé + repointé le tool sur le nouveau modèle (« ça a
   très bien marché ») ; Playground OK. Doc : developer.dataiku.com/latest/api-reference/python/semantic-models.html.
