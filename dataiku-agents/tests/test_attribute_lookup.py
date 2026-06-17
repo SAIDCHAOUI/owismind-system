@@ -259,8 +259,35 @@ class TestEntityPicking(unittest.TestCase):
         self.assertEqual(status, "resolved")
         self.assertEqual(row["target_value"], "AT001")
 
+    def test_only_aliases_returns_none(self):
+        # Aliases are not auto-resolved; the caller offers them as suggestions.
+        rows = [_cat_row("distribution_type", "Indirect_distribution",
+                         is_alias=1, display_value="Indirect_distribution")]
+        self.assertEqual(al.pick_exact_entity(rows), ("none", None))
+
     def test_empty(self):
         self.assertEqual(al.pick_exact_entity([]), ("none", None))
+
+
+class TestAliasSuggestions(unittest.TestCase):
+    def test_returns_alias_rows_ranked(self):
+        rows = [_cat_row("distribution_type", "Indirect_distribution/Resseler",
+                         is_alias=1, display_value="Indirect distribution",
+                         normalized_value="indirect")]
+        sugg = al.alias_suggestions(rows, "indirect")
+        self.assertEqual(len(sugg), 1)
+        self.assertEqual(sugg[0]["target_value"], "Indirect_distribution/Resseler")
+
+    def test_ignores_non_alias(self):
+        rows = [_cat_row("diamond_id", "AT001", is_alias=0)]
+        self.assertEqual(al.alias_suggestions(rows, "whatever"), [])
+
+    def test_dedup_by_display(self):
+        rows = [_cat_row("Product", "X", is_alias=1, display_value="Roaming Hub",
+                         normalized_value="roaming hub"),
+                _cat_row("Product", "X", is_alias=1, display_value="Roaming Hub",
+                         normalized_value="open roaming hub")]
+        self.assertEqual(len(al.alias_suggestions(rows, "roaming hub")), 1)
 
     def test_fuzzy_accepts_clear_winner(self):
         rows = [_cat_row("diamond_id", "AT001",
@@ -351,6 +378,18 @@ class TestInvoke(unittest.TestCase):
         out = invoke(tool, "Telecom", [])
         self.assertEqual(out["status"], "entity_ambiguous")
         self.assertEqual(len(out["candidates"]), 2)
+
+    def test_alias_only_proposes_suggestions(self):
+        # No real match for "indirect", but a business alias exists -> propose it.
+        tool = FakeTool(exact_rows=[
+            _cat_row("distribution_type", "Indirect_distribution/Resseler",
+                     is_alias=1, display_value="Indirect distribution",
+                     normalized_value="indirect")])
+        out = invoke(tool, "indirect", [])
+        self.assertEqual(out["status"], "entity_suggestions")
+        self.assertEqual(len(out["candidates"]), 1)
+        self.assertEqual(out["candidates"][0]["value"],
+                         "Indirect_distribution/Resseler")
 
     def test_attribute_unknown_when_requested(self):
         tool = FakeTool(exact_rows=[_cat_row("diamond_id", "AT001")])

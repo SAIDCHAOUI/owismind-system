@@ -163,21 +163,19 @@ def _display_key(row):
 
 
 def pick_exact_entity(rows):
-    """From exact-match catalog rows, return ('resolved', row),
-    ('ambiguous', rows) or ('none', None).
+    """Resolve over REAL (non-alias) exact rows only. Returns ('resolved', row),
+    ('ambiguous', rows) or ('none', None) - aliases are handled separately, as
+    suggestions, by the caller.
 
-    Simple rule: rows are grouped by the entity NAME (display). One name -> resolve
-    to its most precise row (e.g. the account over the parent group). Several
-    different names -> genuinely ambiguous, hand back one per name to clarify.
-    Aliases (is_alias=1) are dropped when a real match exists, so a subsidiary
-    listing the term as its parent group does not create false ambiguity. Uses
-    only generic catalog signals - never a hardcoded dataset column."""
-    rows = [r for r in (rows or []) if r.get("target_column") and r.get("target_value")]
+    Simple rule: real rows are grouped by entity NAME (display). One name ->
+    resolve to its most precise row (e.g. the account over the parent group).
+    Several different names -> genuinely ambiguous, hand back one per name to
+    clarify. Uses only generic catalog signals - never a hardcoded column."""
+    rows = [r for r in (rows or [])
+            if r.get("target_column") and r.get("target_value")
+            and int(r.get("is_alias") or 0) == 0]
     if not rows:
         return ("none", None)
-    non_alias = [r for r in rows if int(r.get("is_alias") or 0) == 0]
-    if non_alias:
-        rows = non_alias
     groups = {}
     for r in rows:
         groups.setdefault(_display_key(r), []).append(r)
@@ -187,6 +185,34 @@ def pick_exact_entity(rows):
     reps = [sorted(g, key=_entity_sort_key)[0] for g in groups.values()]
     reps.sort(key=_entity_sort_key)
     return ("ambiguous", reps[:5])
+
+
+def alias_suggestions(rows, term_norm):
+    """Alias rows (is_alias=1) to PROPOSE when no real match was found, ranked by
+    closeness to the term and de-duplicated by display name (at most 5). Aliases
+    are short names, business concepts ('indirect', 'roaming hub') and parent
+    edges - good hints, but only offered, never auto-resolved."""
+    aliases = [r for r in (rows or [])
+               if int(r.get("is_alias") or 0) == 1
+               and r.get("target_column") and r.get("target_value")]
+    if not aliases:
+        return []
+
+    def rank(r):
+        ratio = difflib.SequenceMatcher(
+            None, term_norm, norm(r.get("normalized_value"))).ratio()
+        return (-ratio,) + _entity_sort_key(r)
+
+    aliases.sort(key=rank)
+    out, seen = [], set()
+    for r in aliases:
+        k = _display_key(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+        if len(out) >= 5:
+            break
+    return out
 
 
 def pick_fuzzy_entity(term_norm, rows):
@@ -327,8 +353,11 @@ class MyAgentTool(BaseAgentTool):
     # --- resolution -----------------------------------------------------------
     def _resolve_entity(self, raw_entity):
         """Resolve a raw entity name to a catalog row. Returns
-        (status, row_or_candidates) with status in
-        {'resolved', 'ambiguous', 'not_found'}. The catalog TABLE goes in the
+        (status, payload) with status in
+        {'resolved', 'ambiguous', 'suggestions', 'not_found'}.
+
+        Order: real exact match -> real fuzzy match -> ALIAS suggestions (only
+        when nothing real is close) -> not found. The catalog TABLE goes in the
         FROM clause; the catalog DATASET name drives the SQL executor."""
         term_norm = norm(raw_entity)
         if not term_norm:
@@ -343,9 +372,16 @@ class MyAgentTool(BaseAgentTool):
         _, fuzzy_rows = self._run_sql(
             CATALOG_DATASET, build_resolve_sql(catalog_table, term_norm, fuzzy=True),
             max_rows=RESOLVE_FUZZY_LIMIT)
-        status, payload = pick_fuzzy_entity(term_norm, fuzzy_rows)
+        status, payload = pick_fuzzy_entity(
+            term_norm, [r for r in fuzzy_rows if int(r.get("is_alias") or 0) == 0])
         if status == "resolved":
             return (status, payload)
+        # Nothing real matched: offer aliases (short names, business concepts,
+        # parent edges) as suggestions instead of a blunt "not found".
+        suggestions = (alias_suggestions(exact_rows, term_norm)
+                       or alias_suggestions(fuzzy_rows, term_norm))
+        if suggestions:
+            return ("suggestions", suggestions)
         return ("not_found", None)
 
     # --- contract -------------------------------------------------------------
@@ -438,6 +474,14 @@ class MyAgentTool(BaseAgentTool):
                                        for r in payload],
                         "message": "'%s' matches several entities; ask the user "
                                    "which one." % raw_entity})
+        if status == "suggestions":
+            return out({"status": "entity_suggestions", "entity": {"raw": raw_entity},
+                        "candidates": [{"column": r.get("target_column"),
+                                        "value": r.get("target_value"),
+                                        "display": r.get("display_value")}
+                                       for r in payload],
+                        "message": "No exact match for '%s'. Did you mean one of "
+                                   "these?" % raw_entity})
 
         entity_col = str(payload.get("target_column"))
         entity_val = str(payload.get("target_value"))
