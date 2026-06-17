@@ -1,78 +1,70 @@
-# CLAUDE.md - dataiku-agents/ (système d'agents v3)
+# CLAUDE.md - dataiku-agents/
 
-> Résumé d'orientation pour ce dossier. Guide d'implémentation complet → `README.md`.
-> Mémoire projet → `memory/CONTEXT.md` (L051-L052). **Repo = source de vérité** : toute
-> modif se fait ici puis se RECOLLE dans les Code Agents DSS (jamais l'inverse).
+> Orientation for any Claude session touching the agent system. Full guide:
+> [`README.md`](README.md). Engineering reference for building agents safely:
+> the skill `agentique-python-dataiku`. Project memory (source of truth):
+> `memory/PROJECT_STATE.md` + `memory/LESSONS.md` (these PRIME over the cadrage guides).
 
-## Ce que c'est
+## What this is
 
-Le système agentique v3 d'OWIsMind : un **orchestrateur** + des **Dataset Experts
-génériques** (1 Code Agent par dataset, même fichier, CONFIG différent). L'expertise
-d'un dataset est **fabriquée dans le Flow** (2 recettes → profil JSON + index de
-valeurs exactes), relue par l'humain (dataset éditable d'overrides), et consommée au
-runtime. Décision clé (A/B testé en DSS le 2026-06-12) : **le Semantic Model Query
-tool génère le meilleur SQL** - toutes nos couches (compréhension, grounding,
-désambiguïsation) existent pour lui fournir le meilleur contexte possible.
+The OWIsMind agentic system: an **orchestrator** (`agents/OWIsMind_orchestrator.py`)
+that routes to a **revenue sub-agent** (`agents/SalesDrive_revenue_expert.py`,
+`agent:bHrWLyOL`), which is an expert of `DRIVE_Revenues`. The sub-agent's
+expertise is fabricated in the **Flow** (recipes -> a profile + a value index),
+human-reviewable, consumed at runtime. The **Semantic Model Query tool** owns the
+SQL; every layer (understand, ground, disambiguate) exists to feed it the best
+context. A read-only direct-SQL engine is the technical fallback.
 
-> **Fichiers ACTIFS (Code Agents LangGraph, env 3.11)** : orchestrateur
-> `agents/OWIsMind_orchestrator.py` · sous-agent revenus `agents/SalesDrive_revenue_expert.py`
-> (`agent:bHrWLyOL`). Les anciennes versions linéaires (`*_agent.py`) et v2 (`orchestrator/`,
-> `salesdrive/`) ont été retirées du repo (préservées dans l'historique git).
+> **Repo = source of truth.** Change code HERE, then re-paste into the DSS Code
+> Agents (env 3.11). DSS direct edits are overwritten on the next paste.
 
-## Pipeline du Dataset Expert (`agents/SalesDrive_revenue_expert.py`)
+## Read this before assuming the architecture (avoid the v2/v3 trap)
 
-```
-UNDERSTAND  1 LLM JSON - prompt GÉNÉRÉ du profil (métriques, scénarios, axes, synonymes)
-RESOLVE     grounding SQL sur <dataset>_value_index (exact → fuzzy) + politique
-            d'ambiguïté + round-trip « VALEUR (Colonne) »
-COMPOSE     question sémantique déterministe : la QUESTION USER MÈNE TOUJOURS +
-            intent attendu + valeurs exactes groupées par colonne (IN, jamais de AND
-            intra-colonne) + règle énumération→OR/une-ligne-par-item + scénario +
-            période + note de destination (« ta table sera lue par un LLM »)
-QUERY       SQL_ENGINE="semantic_tool" (défaut) → tool v4oqA6R, extraction mode-Agent
-            safe (answer = priorité de clés + DERNIER texte ; rows = DERNIER jeu) ;
-            panne technique → fallback "direct" (templates 9 intents + LLM gardé +
-            EXPLAIN + 2 réparations, exécution SQLExecutor2 READ ONLY)
-RENDER      table par code + headline LLM vérifiée chiffre par chiffre ;
-            about_data = carte du profil, 0 SQL
-```
+The CURRENT (v3) sub-agent:
+- **Grounds terms with INLINE read-only SQL on `DRIVE_Revenues_value_index`** (method `_resolve_terms`). Grounding is NOT a tool.
+- Calls **two** DSS tools: `revenue_semantic_query` (`v4oqA6R`, the SQL engine) and `dataset_lookup` (`9FEzVZk`, plain attribute reads for the `lookup` intent).
+- Does **NOT** use `DRIVE_Revenues_Value_Catalog` nor the Custom Python tool `Drive_Revenues_resolve_filter_value`. Those are the v2 / roadmap path (richer grounding), kept in the repo but not wired in. The timeline labels `resolve_filter_value` / `dataset_sql_query` are event names, not tool calls.
 
-Orchestrateur (`agents/OWIsMind_orchestrator.py`) = boucle agentique LangGraph
-(le modèle appelle les outils PUIS rédige la réponse - pas de passe de synthèse
-séparée) + pare-feu d'honnêteté + **fan-out parallèle** des sous-agents (pool ≤3,
-events live via queue) + narration live (events `NARRATION`) + modes Éco/Medium/High
-(`pick_loop_llm`) + registre `revenue_expert`.
+Replacing Dataset Lookup with the Python resolver (Value_Catalog) is decided but
+**deferred to a dedicated session** (see README "Roadmap"). Do not document or wire
+it as current.
 
-## État (2026-06-12)
+## Folder map
 
-| Brique | État |
+| Path | What |
 |---|---|
-| Recettes profil + value index (Flow) | ✅ Exécutées en DSS sur DRIVE_Revenues |
-| Sous-agent revenus `SalesDrive_revenue_expert` (`agent:bHrWLyOL`, moteur semantic_tool) | ✅ Validé DSS (« ça marche beaucoup mieux ») |
-| Orchestrateur `OWIsMind_orchestrator` (LangGraph, narration live + modes) | ⏳ codé, en cours de validation DSS |
-| Fan-out parallèle réel (≥2 domaines) | ⏳ Testable quand un 2ᵉ agent existera |
-| Tests | `python3 -m unittest discover -s dataiku-agents/tests` (langgraph + dataset-expert + profiler) |
+| `README.md` | Master guide: architecture, Flow, models, deploy, extend, roadmap, contracts. |
+| `agents/` | The two Code Agents (LangGraph) + [`agents/README.md`](agents/README.md). |
+| `recipes/` | The three Flow recipes (profile, value index, value catalog) + [`recipes/README.md`](recipes/README.md). |
+| `tools/` | Doc of the DSS agent tools + [`tools/README.md`](tools/README.md). |
+| `semantic_model/` | Scripts to build/update the aligned Semantic Model + [`semantic_model/README.md`](semantic_model/README.md). |
+| `tests/` | DSS-free unit tests: `python3 -m unittest discover -s dataiku-agents/tests`. |
 
-Bugs réels corrigés en route : `LEFT(date,10)` (profil string vs colonne date → prédicats
-cast-safe + auto-fallback), préambule mode-Agent relayé comme réponse, AND impossible
-sur énumérations multi-valeurs, fetch resolver plafonné à 51 lignes.
+## Rules you must not break
 
-## Règles à respecter ici
+1. **P3 - no hardcoded business values** in agent logic. Everything comes from
+   the profile / value index / human overrides. Unknown cases -> constrained LLM
+   understanding (candidate list) or an honest refusal, never a value patch.
+2. **Frozen contracts** (event kinds, the `semantic-model-query` span shape,
+   `AGENT_RESULT`, `sql_id`, registry `block_labels`/`tool_labels` <-> sub-agent
+   `KNOWN_*`, the profile contract v1). The webapp / Evidence depend on them.
+   Never rename, only add. An anti-drift test guards the registry <-> sub-agent.
+3. **One enabled capability per business domain** (rollback = re-flip the flags).
+4. **Standalone files**: agents import only stdlib + `dataiku` + `langgraph`
+   (env 3.11); recipes may use pandas (design-time). No plugin import.
+5. **LLM Mesh discipline** (see the skill): native completion API for reasoning +
+   tool-calling; `with_json_output` is FORCED on the sub-agent's UNDERSTAND
+   (deterministic extraction) and NEVER on the orchestrator (it disables
+   reasoning in DSS 14).
+6. **Dataiku safety**: read-only SQL, statement timeout, bounded parallelism,
+   no raw-row data sent to the LLM. Ask before anything risky for the instance.
+7. **Code + comments in English**; no em dash `-` (U+2014) or en dash (U+2013)
+   anywhere (project rule #9).
 
-1. **P3** : jamais de valeur métier en dur - tout vient du profil/index/overrides.
-2. **Contrats gelés** : event kinds orchestrateur ; `KNOWN_BLOCK_IDS`/`KNOWN_TOOL_NAMES`
-   de l'expert ↔ `block_labels`/`tool_labels` du registre (test anti-dérive) ; spans
-   `semantic-model-query` `{sql, success, row_count, rows, columns}` ; `AGENT_RESULT`.
-   La webapp/Evidence en dépendent - ne jamais renommer.
-3. **Une seule capability revenue `enabled`** à la fois (rollback = re-flip des flags).
-4. Norm de valeurs (minuscules/sans accents) FROZEN, partagée recettes ↔ agent.
-5. Fichiers agents = STANDALONE (stdlib + dataiku) ; recettes = pandas OK (design-time).
+## Deploy reminder
 
-## Prochaine session : le semantic model lui-même
-
-Config scriptable (`project.get_semantic_model("2O2KcHw")` → `get_raw()`/`save()` +
-versions). À faire : corriger `Phase = 'ACTUAL'` → `'ACTUALS'` (description entité +
-filtre « Actual Revenue Only »), retirer le synonyme « roaming hub » du terme Roaming
-Sponsor (produit différent), versionner le JSON dans le repo, enrichir golden queries
-depuis `docs/questions_asked.md`, aligner glossaire ↔ profil. Ensuite : agent tickets
-(2 recettes + 1 Code Agent + 1 entrée registre) → débloque le 360 parallèle.
+After any change: re-paste BOTH Code Agents (env 3.11), verify the CONFIG ids
+(`GEMINI_*_ID`, `SEMANTIC_TOOL_ID=v4oqA6R`, `DATASET_LOOKUP_TOOL_ID=9FEzVZk`,
+`agent_id=agent:bHrWLyOL`). Recipe changes deploy in the Flow (refresh scenario).
+Agent-only changes need no zip upload; a `python-lib` backend change does
+(upload zip + restart backend).

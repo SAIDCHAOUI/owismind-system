@@ -12,7 +12,7 @@
 ---
 
 ## L001 - Les noms des guides sont des EXEMPLES, pas les vrais noms
-- **Contexte** : les guides de `cadrage/` parlent de `owismind-vue`, `owismindvue`, `webapp-owismind-vue`.
+- **Contexte** : les guides de `docs/cadrage/` parlent de `owismind-vue`, `owismindvue`, `webapp-owismind-vue`.
 - **Ce qui pourrait échouer** : recopier ces noms → `base` Vite, chemins d'assets et imports Python cassés.
 - **Solution qui marche** : utiliser les noms RÉELS - plugin `owismind`, package `owismind`, webapp
   `webapp-owismind-ai-agents`, resource `owismind-app`, base `/plugins/owismind/resource/owismind-app/`.
@@ -45,7 +45,7 @@
   `default_project_key()`, streaming HTTP) - non prouvé.
 - **Solution** : marquer « notebook only » jusqu'à preuve en backend ; valider via probes
   (`/dev/storage-probe`, `/dev/agent-probe`) avant intégration.
-- **Source** : guides `cadrage/`. **Date** : 2026-06-01.
+- **Source** : guides `docs/cadrage/`. **Date** : 2026-06-01.
 
 ## L006 - Python backend = 3.9.23 (3.11 NON validé)
 - **Contexte** : le ping a retourné `"python": "3.9.23"`.
@@ -1930,5 +1930,30 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `—`/`–` résiduel en i18n/.vue, 0 U+FFFD, tokens spéciaux intacts. Zip propre (77 entrées, `index-BxmN4Txj.js`).
   Pop-up et écran d'agent = rendu visuel NON validé DSS.
 - **Source** : retour user (2026-06-17, captures pop-up + boîte DSS + écran agent vide). **Date** : 2026-06-17.
+
+## L085 - Repo cleanup : système agentique regroupé/documenté dans `dataiku-agents/`, doc à la demande sous `docs/`, archi v3 clarifiée (grounding inline `value_index` + 2 tools ; `Value_Catalog`/resolver = roadmap) (✅ local, structure)
+
+- **Contexte** : avant d'aller plus loin, l'user veut un nettoyage : supprimer `orchestrator/`+`salesdrive/`
+  (vestiges v2), ranger `cadrage/` et `agentic-research/` (doc lisible à la demande) sous `docs/`, et faire
+  de `dataiku-agents/` un mini-repo "super bien décrit" pour que chaque Claude comprenne le système.
+- **Ce qui a échoué / pièges évités** : (1) le modèle mental "3 tools dont un Python resolver lisant
+  `Value_Catalog`" correspond à la **v2**, PAS au code v3 déployé : la doc maître a failli être fausse.
+  (2) zsh ne fait **pas** de word-splitting sur `$VAR` non quotée -> une boucle `for f in $FILES; do sed...`
+  passe toute la liste comme **un seul** nom de fichier (rien substitué). Utiliser `for f in ${=FILES}`.
+- **Solution qui marche** : (a) **l'archi v3 = le code (source de vérité)** : le sous-agent ground en SQL
+  inline sur `value_index` (`_resolve_terms`) et appelle 2 tools DSS (`revenue_semantic_query` v4oqA6R +
+  `dataset_lookup` 9FEzVZk) ; `Value_Catalog` + `Drive_Revenues_resolve_filter_value` (Custom Python) ne
+  sont câblés NULLE PART en v3 (= roadmap). `resolve_filter_value`/`dataset_sql_query` = **labels d'events**,
+  pas des tools. (b) Déplacer un dossier référencé partout : la **barre oblique** distingue le dossier
+  (`cadrage/`) du nom commun "cadrage" -> sed sûr hors-`docs/` (`s|cadrage/|docs/cadrage/|`) ; à l'intérieur
+  de `docs/`, corriger les liens relatifs `../cadrage/` à la main ; laisser les **logs de session datés**
+  intacts. (c) `git mv` pour le dossier tracké (historique), `mv` + maj `.gitignore`/`.graphifyignore` pour
+  le dossier gitignored. (d) Vérifier la doc générée par une **revue adversariale doc-vs-code** (Workflow).
+- **Preuve-vérification** : 227 tests agents verts ; `grep -rlP '\xe2\x80\x9[34]'` = 0 ; revue adversariale
+  doc-vs-code (Workflow 5 agents) = 0 lien cassé, 2 imprécisions LOW corrigées (token `owi:mode` dans ses
+  délimiteurs blancs au lieu de la forme nue ; formatage symbole euro au lieu de `EUR`) ; `git status`
+  cohérent (renommages `R`/`RM`, `docs/agentic-research/` `!!` ignoré). `flash-light`->`flash-lite` aligné
+  sur le code déployé collé par l'user (TODO mémoire résolu).
+- **Source** : demande user (2026-06-17, session nettoyage) ; re-lecture du code des 2 agents. **Date** : 2026-06-17.
 
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

@@ -139,7 +139,7 @@ for chunk in completion.execute_streamed():
     if ctype == "event":              ...   # relay ou capture
     elif ctype in ("content", "text"): answer_parts.append(data.get("text", ""))
 ```
-Le **footer** se reconnaît par `data.get("type") == "footer"` OU, quand le SDK l'expose, `isinstance(chunk, DSSLLMStreamedCompletionFooter)` — import **gardé** car les builds SDK diffèrent (certains émettent le footer sans champ `type`). `footer.trace` est le **seul** endroit pour récupérer l'**usage** (`usageMetadata`) et les spans **SQL générée**. (corpus OWIsMind §0 · `cadrage/code_samples_dataiku.md:123-167`)
+Le **footer** se reconnaît par `data.get("type") == "footer"` OU, quand le SDK l'expose, `isinstance(chunk, DSSLLMStreamedCompletionFooter)` — import **gardé** car les builds SDK diffèrent (certains émettent le footer sans champ `type`). `footer.trace` est le **seul** endroit pour récupérer l'**usage** (`usageMetadata`) et les spans **SQL générée**. (corpus OWIsMind §0 · `docs/cadrage/code_samples_dataiku.md:123-167`)
 
 ### 3.7 Tools définis dans un Code Agent (style LangChain — chemin 3.11 uniquement)
 ```python
@@ -398,5 +398,5 @@ agent = project.get_agent("id"); agent.get_settings(); agent.wake_up(); agent.st
 - MCP : agents/tools/local-mcp.html · remote-mcp.html · https://developer.dataiku.com/latest/tutorials/genai/agents-and-tools/mcp/index.html
 - Guardrails / coût / rate : generative-ai/guardrails/index.html · cost-control.html · rate-limiting.html
 - Release notes : https://doc.dataiku.com/dss/latest/release_notes/14.html
-- Recency/versions (autoritatif) : `agentic-research/gap-version-recency-recheck-2026.md`
-- Ground truth OWIsMind : `agentic-research/owismind-project-patterns.md` (+ `memory/LESSONS.md` L006/L019/L047/L048/L050/L051/L052)
+- Recency/versions (autoritatif) : `docs/agentic-research/gap-version-recency-recheck-2026.md`
+- Ground truth OWIsMind : `docs/agentic-research/owismind-project-patterns.md` (+ `memory/LESSONS.md` L006/L019/L047/L048/L050/L051/L052)

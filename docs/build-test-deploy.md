@@ -6,7 +6,7 @@
 > **Source de vérité = la mémoire**, pas ce document. Les commandes opérationnelles vivent dans les
 > skills `/build-plugin`, `/package-plugin`, `/log-session` ; les invariants validés EN DSS vivent dans
 > [`memory/PROJECT_STATE.md`](../memory/PROJECT_STATE.md) (§3 = noms canoniques, §5 = chaîne build) et
-> [`memory/LESSONS.md`](../memory/LESSONS.md). En cas de conflit guides `cadrage/` ↔ mémoire, **la mémoire
+> [`memory/LESSONS.md`](../memory/LESSONS.md). En cas de conflit guides `docs/cadrage/` ↔ mémoire, **la mémoire
 > fait foi**. Ce fichier ne réimplémente aucune commande : il décrit *quand* et *pourquoi*, et renvoie aux skills.
 >
 > Doc voisine : [architecture.md](architecture.md) · [backend-api.md](backend-api.md) ·
@@ -56,7 +56,7 @@ Référence figée → [`memory/PROJECT_STATE.md` §3](../memory/PROJECT_STATE.m
 | Project key DSS | `OWISMIND_DEV` (résolu serveur via `dataiku.default_project_key()`) | guide SQL |
 | Plateforme / Python | Dataiku DSS 14.4.x · backend **Python 3.9.23** (3.11/FastAPI NON validés) | `/ping` |
 
-> ⚠️ Les guides de `cadrage/` emploient des **noms d'exemple** (`owismind-vue`, `owismindvue`,
+> ⚠️ Les guides de `docs/cadrage/` emploient des **noms d'exemple** (`owismind-vue`, `owismindvue`,
 > `webapp-owismind-vue`) qui **ne sont pas** les vrais noms. Toujours utiliser le tableau ci-dessus.
 > `vite.config.js` (`base` + `outDir`) est **canonique** : ne jamais le modifier sans rebuild + recâblage
 > de `body.html` (voir §8).
@@ -273,7 +273,7 @@ racine). C'est ce que la mémoire désigne par « ~64 fichiers ». Un écart fra
 ## 7. Déploiement DSS (manuel)
 
 **L'agent n'uploade jamais.** L'upload du zip dans DSS est une **opération manuelle** de l'utilisateur.
-Référence : [`cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](../cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md) §3.
+Référence : [`docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md) §3.
 
 - Un plugin **Development** du même id **ne peut pas** être mis à jour par upload ZIP
   (« you cannot update it »).
@@ -305,7 +305,7 @@ Notes :
 - **Slots STANDARD** `app.js` / `style.css` : vidés (commentaire) mais **jamais supprimés** - DSS les exige.
 - Changer `vite.config.js` `base` impose impérativement build + recopie de `body.html` (assets 404 sinon).
 - Référence : matrice rebuild de
-  [`cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](../cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md) §3
+  [`docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md) §3
   et `PROJECT_STATE.md` §5.
 
 ---
@@ -341,6 +341,6 @@ package, pas d'upload). Il :
    des guides ou qu'un truc échoue puis marche (Contexte / Échec / Solution / Preuve / Source / Date) ;
 4. met à jour [`memory/PROJECT_STATE.md`](../memory/PROJECT_STATE.md) pour tout changement d'état durable.
 
-> **La mémoire prime sur les guides de `cadrage/`** (ceux-ci sont des points de départ). Les noms réels et
+> **La mémoire prime sur les guides de `docs/cadrage/`** (ceux-ci sont des points de départ). Les noms réels et
 > les solutions validées EN DSS vivent en mémoire. Au démarrage d'une session : lire `CONTEXT.md`, puis
 > `LESSONS.md` et `PROJECT_STATE.md` pour le détail.

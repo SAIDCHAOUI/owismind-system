@@ -10,6 +10,18 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**🧹 NETTOYAGE / RÉORGANISATION REPO + DOC `dataiku-agents/` (2026-06-17, après Run 7c) - ✅ local
+(nettoyage + structure + doc only, pas de DSS).** Vestiges v2 `orchestrator/`+`salesdrive/` **supprimés** ;
+`cadrage/` -> **`docs/cadrage/`** (git mv), `agentic-research/` -> **`docs/agentic-research/`** (gitignored),
+refs mises à jour partout (CLAUDE.md, mémoire, skill, docs, ignore files). **`dataiku-agents/` = mini-repo
+documenté** : README maître + CLAUDE.md réécrits, nouveaux `agents/`+`recipes/`+`tools/` READMEs, recette
+`Value_Catalog` versée en STATUS roadmap. **Archi v3 CLARIFIÉE** : grounding **SQL inline sur `value_index`**
++ **2 tools** (`revenue_semantic_query` v4oqA6R + `dataset_lookup` 9FEzVZk) ; `Value_Catalog` + tool Python
+`Drive_Revenues_resolve_filter_value` = **roadmap, PAS câblés en v3** (labels `resolve_filter_value`/
+`dataset_sql_query` = events, pas des tools). **Recâblage lookup->resolver Python = DÉFÉRÉ** à une session
+dédiée (décision user). Fix vérifié `flash-light`->**`flash-lite`** (2 agents, preuve = code déployé collé).
+227 tests verts + revue adversariale doc-vs-code (5 agents) = 0 lien cassé, 2 LOW corrigées. Voir **L085**.
+
 **🎨 RUN 7 / 7b / 7c (2026-06-17) - POLISH UI CHAT - ✅ VALIDÉ DSS (user : « super tout fonctionne à
 merveille », 2026-06-17). Zip déployé `index-DCY_crmu.js` (77 entrées), backend redémarré.**
 
@@ -193,7 +205,7 @@ LangGraph / Dataiku : choix d'abstraction, orchestration superviseur+sous-agents
 mémoire/persistance, RAG, MCP, éval/gouvernance, anti-patterns. **Encart central = double chemin
 Python 3.9/3.11** (L054). Construit par 3 workflows (recherche → fabrication → validation 6/6).
 Claims DSS-réels marqués `UNVERIFIED` (import `DKUChatModel`, API semantic model) → à lever sur
-l'instance. Corpus `agentic-research/` gitignoré (provenance). Détail → `sessions/2026-06-14.md`, L053-L054.
+l'instance. Corpus `docs/agentic-research/` gitignoré (provenance). Détail → `sessions/2026-06-14.md`, L053-L054.
 **0★★) SYSTÈME D'AGENTS v3 « dataiku-agents/ » - ✅ VALIDÉ DSS (2026-06-12, « ça marche super
 bien »).** Architecture HYBRIDE tranchée par A/B user : **le Semantic Model Query tool garde le
 SQL** (`SQL_ENGINE="semantic_tool"`, tool `v4oqA6R`, mode Agent), et le **Dataset Expert générique**
@@ -261,7 +273,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-17 (Run 7/7b/7c = polish UI chat) ✅ VALIDÉ DSS (« super tout fonctionne à merveille ») → détail `sessions/2026-06-17.md`
+## 🧭 Dernière session - 2026-06-17 (nettoyage repo + doc `dataiku-agents/`) → détail `sessions/2026-06-17.md`
+- **Vestiges v2 supprimés** (`orchestrator/`+`salesdrive/`) ; `cadrage/`+`agentic-research/` -> `docs/` (refs à jour partout, logs datés intacts).
+- **`dataiku-agents/` = mini-repo documenté** : README maître + CLAUDE.md réécrits + 3 sous-READMEs (`agents/`/`recipes/`/`tools/`) + recette `Value_Catalog` versée (STATUS roadmap). **Archi v3 clarifiée** : inline `value_index` + 2 tools ; `Value_Catalog`/resolver Python = roadmap, recâblage **déféré**.
+- `flash-light`->`flash-lite` (2 agents, preuve = code déployé). **227 tests** verts ; revue doc-vs-code (5 agents) = 2 LOW corrigées, 0 lien cassé. **Pas de DSS** (nettoyage/doc only). Voir **L085**.
+
+## Avant - 2026-06-17 (Run 7/7b/7c = polish UI chat) ✅ VALIDÉ DSS (« super tout fonctionne à merveille ») → détail `sessions/2026-06-17.md`
 - **Pop-up de mode (7c)** : clic-pour-sélectionner + footer Annuler/Valider (pattern DSS, plus de hover →
   fini la VIBRATION) + `min-height` détail ; style charte Orange 80/20 (gris + barre orange, dots sombres).
 - **Ban `—`/`–` (7b, règle #9)** partout + écran d'agent rempli (`resolveAgentMeta` repli substring).
@@ -341,7 +358,7 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 
 ## Avant - 2026-06-14 → détail `sessions/2026-06-14.md`, leçons **L053-L054**
 - **Skill d'agentique créé** : `.claude/skills/agentique-python-dataiku/` (`SKILL.md` + 15 références)
-  via 3 workflows (recherche 24 agents → corpus 23 briefs `agentic-research/` ; fabrication 36 agents
+  via 3 workflows (recherche 24 agents → corpus 23 briefs `docs/agentic-research/` ; fabrication 36 agents
   draft→revue→fix ; validation 13 agents **6/6, 0 piège**). Réconciliation corpus + source ChatGPT.
 - **Double chemin Python 3.9/3.11** (correction autorité user, L054) = encart central ; vérité des versions
   (`create_agent` pas `create_react_agent`, `recursion_limit=25`, `astream_events` v2…) intégrée.

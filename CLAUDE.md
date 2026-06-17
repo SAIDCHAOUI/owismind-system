@@ -15,7 +15,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 - **Au démarrage** : lire `memory/CONTEXT.md` (auto-importé ci-dessus), puis `memory/LESSONS.md` et
   `memory/PROJECT_STATE.md` pour le détail. Vérifier qu'un fichier/flag cité existe encore avant de t'y fier.
 - **Source de vérité** : `memory/PROJECT_STATE.md` + `memory/LESSONS.md` **priment sur les guides** de
-  `cadrage/` (ceux-ci sont des points de départ). Les noms réels et les solutions qui marchent vivent en mémoire.
+  `docs/cadrage/` (ceux-ci sont des points de départ). Les noms réels et les solutions qui marchent vivent en mémoire.
 - **Apprentissage continu** : dès qu'une solution diverge des guides, ou qu'un truc échoue puis marche →
   **appende** une entrée dans `memory/LESSONS.md` (contexte / échec / solution / preuve / source / date).
 - **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + `memory/sessions/`).
@@ -29,7 +29,7 @@ convertie, a été supprimée du repo le 2026-06-11).
   orchestrateur **OWIsMind_orchestrator** (`dataiku-agents/agents/OWIsMind_orchestrator.py`) →
   sous-agent revenus **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, fichier `…/SalesDrive_revenue_expert.py`).
 - API `/owismind-api/*` (santé `/owismind-api/ping`)
-- ⚠️ Les guides de `cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) - **ne pas les recopier**.
+- ⚠️ Les guides de `docs/cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) - **ne pas les recopier**.
 
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
 - `/build-plugin` : `npm run build` (frontend) → `resource/owismind-app/`, puis `index.html` → `body.html`.
@@ -65,9 +65,9 @@ convertie, a été supprimée du repo le 2026-06-11).
    parenthèses à la place. (Décision user 2026-06-17.)
 
 ## Référence
-- `cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` - cahier des charges fonctionnel (produit ; Evidence Studio = intention future différée).
-- `cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
-- `cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).
+- `docs/cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` - cahier des charges fonctionnel (produit ; Evidence Studio = intention future différée).
+- `docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
+- `docs/cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).
 - `docs/` - référence d'ingénierie (architecture, API, frontend, data model, sécurité, build/deploy) ; `docs/superpowers/specs/` = specs de conception gelées.
 
 > À lire **à la demande** (ne pas recopier leur contenu ici). En cas de conflit guides ↔ mémoire : la mémoire fait foi.

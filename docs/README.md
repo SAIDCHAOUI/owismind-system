@@ -33,11 +33,15 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 - **`memory/`** - mémoire vivante (chargée à chaque session de dev) : `CONTEXT.md` (focus courant),
   `PROJECT_STATE.md` (état/archi/ids canoniques/schéma), `LESSONS.md` (décisions et ce qui a divergé des
   guides), `sessions/` (journal par session). **Source de vérité.**
-- **`cadrage/`** - points de départ : `GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` (référence d'ingénierie
+- **`dataiku-agents/`** - le **système d'agents** (orchestrateur + sous-agent revenus, recettes Flow,
+  semantic model). C'est la **source de vérité** du code agentique, recollée dans les Code Agents DSS.
+  Lire son `README.md` (guide maître) et son `CLAUDE.md` (orientation par session). Voir aussi le skill
+  `agentique-python-dataiku` pour les bonnes pratiques LangGraph / Dataiku DSS.
+- **`docs/cadrage/`** - points de départ : `GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` (référence d'ingénierie
   Dataiku condensée), `owismind_webapp_v3_cahier_des_charges_fonctionnel.md` (cahier des charges produit),
   `code_samples_dataiku.md` (snippets notebook validés).
-- **`orchestrator/`** - l'agent orchestrateur (Code Agent DSS) : `orchestrator_agent.py` v2.2 à coller
-  dans DSS, + `AUDIT.md` et ses tests.
+- **`docs/agentic-research/`** - corpus de recherche (briefs d'agents) ayant nourri le skill
+  `agentique-python-dataiku`. **Gitignored** (provenance, hors git) : à lire à la demande, pas maintenu.
 - **`docs/superpowers/specs/`** - specs de conception **gelées** des lots livrés (2026-06-09/10) :
   Evidence Studio v1, trust layer, arbre de conversation… Décisions distillées dans `memory/LESSONS.md`.
   (Les plans d'exécution associés et la maquette d'origine - convertie en Vue 3 - ont été supprimés au

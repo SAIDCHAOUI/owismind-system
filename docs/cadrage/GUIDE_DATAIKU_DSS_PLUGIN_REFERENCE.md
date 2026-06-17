@@ -12,7 +12,7 @@
 >
 > Plateforme observée : Dataiku DSS 14.4.x · backend Python **3.9.23** (3.11/FastAPI **non validés** - voir §6).
 > Code agent réutilisable (appel agent streamé + extraction SQL/usage, création table SQL) :
-> `cadrage/code_samples_dataiku.md` (snippets notebook validés, **gardés à part, non recopiés ici**).
+> `docs/cadrage/code_samples_dataiku.md` (snippets notebook validés, **gardés à part, non recopiés ici**).
 
 ---
 

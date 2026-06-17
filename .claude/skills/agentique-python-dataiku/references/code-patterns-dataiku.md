@@ -164,13 +164,13 @@ out = graph.invoke({"question": "360 on roaming"}, config={"recursion_limit": 50
 
 ## 4. [Python 3.9] Appeler un agent / tool LLM Mesh — APIs Dataiku natives (sans LangChain)
 
-Le chemin **3.9 / stdlib-only** : aucun `import langchain`. On parle au Mesh directement. C'est le pattern validé DSS d'OWIsMind (`get_agent_tool().run()` + appel d'agent streamé) (corpus `owismind-project-patterns.md` §0, §4.2 ; `cadrage/code_samples_dataiku.md`).
+Le chemin **3.9 / stdlib-only** : aucun `import langchain`. On parle au Mesh directement. C'est le pattern validé DSS d'OWIsMind (`get_agent_tool().run()` + appel d'agent streamé) (corpus `owismind-project-patterns.md` §0, §4.2 ; `docs/cadrage/code_samples_dataiku.md`).
 
 ### 4a. Appeler un sous-agent depuis du code (orchestrateur → sous-agent), streamé
 
 ```python
 # PYTHON 3.9 (stdlib + dataiku only). NEVER import langchain here.
-# Derives from: owismind-project-patterns.md §0 (orchestrator -> sub-agent) + cadrage/code_samples_dataiku.md.
+# Derives from: owismind-project-patterns.md §0 (orchestrator -> sub-agent) + docs/cadrage/code_samples_dataiku.md.
 import dataiku
 project = dataiku.api_client().get_default_project()
 

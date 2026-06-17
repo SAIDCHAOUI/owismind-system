@@ -1,0 +1,96 @@
+# recipes/ - the design-time Flow
+
+> Three Python recipes that turn `DRIVE_Revenues` into the knowledge artifacts the
+> sub-agent consumes. They run **design-time** in the DSS Flow (pandas allowed),
+> never at chat runtime. A refresh scenario keeps the outputs fresh; the agent
+> always reads live, no re-paste needed when a recipe re-runs.
+
+```
+DRIVE_Revenues ──► [profile_dataset_recipe]    ──► DRIVE_Revenues_profile        (the business brain)        USED BY v3
+               ──► [build_value_index_recipe]  ──► DRIVE_Revenues_value_index    (exact-value grounding)     USED BY v3
+               ──► [build_value_catalog_recipe]──► DRIVE_Revenues_Value_Catalog  (rich alias catalog)        ROADMAP only
+```
+
+---
+
+## The four datasets
+
+### `DRIVE_Revenues` (source, ~175 k rows, 20 columns)
+
+The revenue base. Grain: roughly one row per (Phase, offer, account, month).
+
+| Column | Type | Role |
+|---|---|---|
+| `Phase` | text | **scenario** column: ACTUALS / BUDGET / FORECAST / Q3F / HLF (never sum across) |
+| `booking_type` | text | booking type |
+| `SolutionLine`, `Solution`, `Product`, `sirano_product` | text | the **offer hierarchy** (most granular = Product, then Solution, then SolutionLine; `sirano_product` is the lowest technical level, never the default) |
+| `Account_name` | text | customer name |
+| `Account_partner` | text | indirect reseller / partner |
+| `distribution_type` | text | Direct_distribution / Indirect_distribution/Resseler |
+| `Parent_Group` | text | account parent group |
+| `carrier_code` | text | carrier code |
+| `diamond_id` | text | customer id (display pair: `Account_name`) |
+| `year_month` | date | the **time** column |
+| `amount_eur` | decimal | the **measure** (revenue, EUR) - the `metric_unit` derives the `EUR` currency from this column name |
+| `sales_entity` | text | GCS (external) / GCP (internal Orange) |
+| `sales_zone` | text | sales zone |
+| `account_manager`, `area_manager`, `sales_director` | e-mail | attribute columns (typical `lookup` targets) |
+| `original_dataset` | text | provenance |
+
+### `DRIVE_Revenues_profile` (`{key, payload}`, built by `profile_dataset_recipe.py`)
+
+The business brain. Profile **contract v1**: one `__dataset__` row (table-level:
+metrics, scenario, time, grain, descriptions) + one row per column (role,
+descriptions, synonyms, enum values, display pairs, stats). Two passes:
+deterministic stats (zero LLM), then an LLM enrichment that sends **aggregated
+metadata only** (schema, stats, low-cardinality enums, a few samples), never raw
+rows. Everything the LLM wrote is flagged `llm_generated: true`.
+
+**Human overrides (the step that makes quality).** Create an editable dataset
+`DRIVE_Revenues_profile_overrides` with columns `{key, field, value}`, add it as
+the recipe's 2nd input, re-run. Overrides are applied LAST (humans always win) and
+survive re-runs. Set the scenario default (ACTUALS), metric currency, display
+pairs, synonyms. Configure `ENRICH_LLM_ID` to the strongest available Mesh model
+(it runs once per dataset; cost is amortized).
+
+### `DRIVE_Revenues_value_index` (`{column_name, value, value_norm, occurrences}`, ~3.6 k rows)
+
+Built by `build_value_index_recipe.py`. Every distinct value of every groundable
+text column + its normalized form (lowercase, accents stripped, whitespace
+collapsed - the FROZEN `norm_value`, shared with the sub-agent's `_norm`). The
+sub-agent queries this **in SQL at runtime** to ground typed terms into exact cell
+values, so **create the output ON THE SOURCE SQL CONNECTION** (`SQL_owi`).
+
+### `DRIVE_Revenues_Value_Catalog` (12 columns, ~4.9 k rows) - ROADMAP only
+
+Built by `build_value_catalog_recipe.py`. A RICHER catalog than the value index:
+account resolvers with short-name aliases, the offer/business resolvers, AND
+hand-crafted **business concept aliases** maintained in code (e.g. "indirect" /
+"reseller" -> `distribution_type`, "gcp" -> `sales_entity`, "roaming hub" ->
+`Product`). Columns: `search_domain, source_column, target_column, target_value,
+matched_value, display_value, normalized_value, frequency,
+canonical_account_name, canonical_carrier_code, parent_group, is_alias`.
+
+This catalog is read by the Custom Python tool `Drive_Revenues_resolve_filter_value`,
+which is **not wired into the v3 sub-agent** (v3 grounds on `value_index`).
+Adopting it as the grounding path is the decided-but-deferred roadmap item (see
+[`../README.md`](../README.md) "Roadmap" and the recipe's STATUS header).
+
+---
+
+## Deploy a recipe
+
+1. Flow: `+ Recipe -> Code -> Python`. Input `DRIVE_Revenues` (+ optional overrides
+   input for the profile). Output = the target dataset (the value index MUST be on
+   the SQL connection).
+2. Paste the recipe code; review the CONFIG block (`ENRICH_LLM_ID` for the profile,
+   the column selection thresholds for the value index).
+3. Run. Add a **refresh scenario** (weekly or after each source refresh) so the
+   profile + index stay fresh.
+
+## Tests
+
+`profile_dataset_recipe.py` and `build_value_index_recipe.py` have pure helpers
+unit-tested in `../tests/test_profiler.py` (norm, time-format detection,
+enrichment validation, column selection). Run:
+`python3 -m unittest discover -s dataiku-agents/tests`.

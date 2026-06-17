@@ -1,5 +1,5 @@
 # ── graphify corpus exclusions (gitignore syntax) ────────────────────────────
-# Read natively by graphify's detect/extract — keeps the knowledge graph free
+# Read natively by graphify's detect/extract: keeps the knowledge graph free
 # of generated, vendored and binary content. Mirror of the manual filter used
 # for the initial 2026-06-11 build; the git post-commit hook respects it too.
 
@@ -18,8 +18,5 @@ docs/screenshots/
 *.svg
 *.ico
 
-# Transient debug artifacts (raw DSS trace exports — not knowledge)
-salesdrive/*.csv
-
 # Temp research corpus for the agentique skill (provenance, not project knowledge)
-agentic-research/
+docs/agentic-research/

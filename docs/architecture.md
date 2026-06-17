@@ -4,7 +4,7 @@
 > Destinée à un ingénieur senior en onboarding ou à une passation de production.
 >
 > **Source de vérité** : `memory/PROJECT_STATE.md` + `memory/LESSONS.md` priment sur tout
-> (les guides de `cadrage/` sont des points de départ). Ce document décrit l'architecture telle
+> (les guides de `docs/cadrage/` sont des points de départ). Ce document décrit l'architecture telle
 > qu'observée dans le code ; pour le « pourquoi » détaillé d'une décision, suivre les liens vers la mémoire.
 >
 > **Docs sœurs** : [`backend-api.md`](./backend-api.md) · [`frontend.md`](./frontend.md) ·
@@ -232,17 +232,23 @@ toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` 
 ```
 owismind/
 ├── CLAUDE.md                       # instructions projet (règles NON NÉGOCIABLES)
-├── cadrage/                        # guides de référence (points de départ, PAS source de vérité)
-│   ├── GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md
-│   ├── code_samples_dataiku.md
-│   └── owismind_webapp_v3_cahier_des_charges_fonctionnel.md   # cahier des charges fonctionnel
+├── dataiku-agents/                 # SYSTÈME D'AGENTS (source de vérité, recollé dans les Code Agents DSS)
+│   ├── README.md                   #   guide maître : architecture runtime + Flow + déploiement + roadmap
+│   ├── CLAUDE.md                   #   orientation Claude (contrats gelés, règles, pointeurs)
+│   ├── agents/                     #   OWIsMind_orchestrator.py + SalesDrive_revenue_expert.py (LangGraph)
+│   ├── recipes/                    #   recettes Flow : profil + value index + value catalog
+│   ├── tools/                      #   doc des tools DSS du sous-agent (semantic query, lookup, resolver)
+│   ├── semantic_model/             #   scripts de config du Semantic Model (API scriptable)
+│   └── tests/                      #   tests unitaires DSS-free
 ├── memory/                         # SOURCE DE VÉRITÉ (mémoire vivante du projet)
 │   ├── CONTEXT.md                  # mémoire courte (chargée à chaque session)
 │   ├── PROJECT_STATE.md            # mémoire longue (état canonique)
 │   ├── LESSONS.md                  # leçons (L0xx - décisions qui marchent)
 │   └── sessions/                   # logs de fin de session
-├── orchestrator/                   # Code Agent DSS : orchestrator_agent.py v2.2 (+ AUDIT.md, tests)
-├── docs/                           # cette documentation (+ superpowers/specs/ = specs de conception gelées)
+├── docs/                           # cette documentation d'ingénierie
+│   ├── cadrage/                    #   guides de référence (points de départ, PAS source de vérité)
+│   ├── agentic-research/           #   corpus de recherche du skill agentique (gitignored, provenance)
+│   └── superpowers/specs/          #   specs de conception gelées
 └── Plugin/
     └── owismind/                   # RACINE DU PLUGIN DSS
         ├── plugin.json             # id="owismind" v0.0.1 (racine du zip)

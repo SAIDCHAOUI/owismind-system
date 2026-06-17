@@ -250,4 +250,4 @@ Les patterns ci-dessus sous-tendent déjà le design du repo :
 - Comparatif frameworks : https://galileo.ai/blog/autogen-vs-crewai-vs-langgraph-vs-openai-agents-framework · https://composio.dev/content/openai-agents-sdk-vs-langgraph-vs-autogen-vs-crewai
 - MS Agent Framework (« write a function instead ») : https://learn.microsoft.com/en-us/agent-framework/overview/
 - OpenAI Agents SDK : https://github.com/openai/openai-agents-python · Claude Agent SDK : https://platform.claude.com/docs · Pydantic AI : https://github.com/pydantic/pydantic-ai · CrewAI : https://docs.crewai.com/en/concepts/flows · ADK : https://google.github.io/adk-docs/ · LlamaIndex : https://developers.llamaindex.ai · smolagents : https://huggingface.co/docs/smolagents · Haystack : https://github.com/deepset-ai/haystack
-- Recency/versions (autoritatif) : `agentic-research/gap-version-recency-recheck-2026.md`
+- Recency/versions (autoritatif) : `docs/agentic-research/gap-version-recency-recheck-2026.md`

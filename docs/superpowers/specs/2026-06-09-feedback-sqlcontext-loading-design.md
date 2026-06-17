@@ -1,7 +1,7 @@
 # Design - Feedback par message + SQL dans le contexte agent + chargement sans flash
 
 > Date : 2026-06-09 (run 2) · Projet : OWIsMind (plugin Dataiku DSS, Vue 3 + Flask).
-> Statut : **validé par l'utilisateur**. Peaufinage de l'existant avant Evidence Studio. Prime sur les guides `cadrage/`.
+> Statut : **validé par l'utilisateur**. Peaufinage de l'existant avant Evidence Studio. Prime sur les guides `docs/cadrage/`.
 
 ## Contexte
 Suite de la session multi-tours + lazy sidebar (L030). 3 finitions demandées. Faits établis (lecture du code) :

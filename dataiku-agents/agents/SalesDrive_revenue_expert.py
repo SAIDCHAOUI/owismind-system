@@ -88,7 +88,7 @@ TARGET_DATASET = ""
 # a fast, cheap model parses it reliably; SQLGEN runs only on the long-tail "custom"
 # intent. These mirror the orchestrator (same connection) - each id must match an id
 # exposed by the LLM Mesh connection.
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-light"  # eco
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # eco
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
 SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
 # Model tier per mode, propagated by the orchestrator through the injected context.

@@ -1,6 +1,6 @@
 # Design - Édition de prompt + branches (arbre de conversation) · Feedback ⋯ · Agent persistant
 
-> Date : 2026-06-09 (run 4) · OWIsMind (plugin Dataiku DSS, Vue 3 + Flask). Validé par l'utilisateur. Prime sur `cadrage/`.
+> Date : 2026-06-09 (run 4) · OWIsMind (plugin Dataiku DSS, Vue 3 + Flask). Validé par l'utilisateur. Prime sur `docs/cadrage/`.
 
 ## Contexte (lecture du code)
 - `MessageUser.vue` = bulle simple (pas de hover). Clés i18n `msg.edit/edit_hint/edit_placeholder` existent (maquette) mais l'édition→branche n'a jamais été portée.

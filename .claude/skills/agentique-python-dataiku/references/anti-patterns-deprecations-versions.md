@@ -72,7 +72,7 @@ answer = out["messages"][-1].content
 ## 2. Vérité des versions — valeurs & signatures à corriger
 
 Ces corrections **priment** sur tout brief, tuto ou réponse de modèle qui dirait le contraire.
-(autorité : `agentic-research/gap-version-recency-recheck-2026.md`)
+(autorité : `docs/agentic-research/gap-version-recency-recheck-2026.md`)
 
 ### 2.1 Valeurs par défaut souvent fausses
 

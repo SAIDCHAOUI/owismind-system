@@ -2,7 +2,7 @@
 
 > Date : 2026-06-09 · Projet : OWIsMind (plugin Dataiku DSS, Vue 3 + Flask).
 > Statut : **validé par l'utilisateur** (design approuvé, `/history` backend conservé intact).
-> Référence : ce spec prime sur les guides `cadrage/` ; il sera consigné en mémoire (`LESSONS.md`) après validation DSS.
+> Référence : ce spec prime sur les guides `docs/cadrage/` ; il sera consigné en mémoire (`LESSONS.md`) après validation DSS.
 
 ## Contexte & constat (vérifié dans le code + doc Dataiku officielle + ancien Dash)
 

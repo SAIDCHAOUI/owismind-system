@@ -88,7 +88,7 @@ except Exception:                               # pragma: no cover
 # Model-agnostic: one model drives the whole turn, chosen by the mode. Each id
 # matches an id exposed by the LLM Mesh connection, in the form
 # "<connection-prefix>:<provider>/<model>".
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-light"  # eco
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # eco
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
 SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
 

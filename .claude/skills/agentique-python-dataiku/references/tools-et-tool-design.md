@@ -596,4 +596,4 @@ Taxonomie Dataiku (source ChatGPT, conceptuellement valide) : **Simple Visual Ag
 - Dataiku — Code Agent / Tools LLM Mesh : https://developer.dataiku.com/latest/tutorials/genai/agents-and-tools/code-agent/index.html · https://developer.dataiku.com/latest/tutorials/genai/agents-and-tools/llm-agentic/tools/index.html
 - Tool hallucination (arXiv) : https://arxiv.org/pdf/2412.04141 · guardrails : https://medium.com/@Nexumo_/7-guardrails-that-reduce-llm-hallucinations-78facbb0d560
 - Anti-patterns tooling : https://medium.com/@bhagyarana80/7-langchain-tooling-anti-patterns-that-melt-agents-3588643e9644
-- Recency/versions (autoritaire) : `agentic-research/gap-version-recency-recheck-2026.md`
+- Recency/versions (autoritaire) : `docs/agentic-research/gap-version-recency-recheck-2026.md`

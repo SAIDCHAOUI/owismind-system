@@ -301,6 +301,6 @@ Apports propres de ChatGPT retenus : taxonomie Dataiku (Simple/Structured Visual
 - 7 Guardrails that reduce LLM hallucinations : https://medium.com/@Nexumo_/7-guardrails-that-reduce-llm-hallucinations-78facbb0d560 · LLM Agent Guardrails playbook : https://dev.to/monuminu/llm-agent-guardrails-the-engineering-playbook-for-taking-an-8b-local-model-from-53-to-99-on-18c
 - Dataiku — Code Agent / tools LLM Mesh : https://developer.dataiku.com/latest/tutorials/genai/agents-and-tools/code-agent/index.html
 - Repo OWIsMind (vérité terrain DSS-validée) : `dataiku-agents/agents/dataset_expert_agent.py`, `dataiku-agents/agents/orchestrator_agent.py`, `salesdrive/salesdrive_agent.py`, `memory/LESSONS.md` (L047, L048, L050, L051, L052)
-- Recency/versions : `agentic-research/gap-version-recency-recheck-2026.md` (autoritatif)
+- Recency/versions : `docs/agentic-research/gap-version-recency-recheck-2026.md` (autoritatif)
 
 > **Note de fiabilité.** Ids Anthropic `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5` = réels/courants. `gpt-5.5` / `gemini-3.5-flash` = **NON VÉRIFIÉS** (non-Anthropic). `astream_events` défaut = **`v2`** (`v3` opt-in, ≥ LangChain 1.3). `docs.anthropic.com` redirige (301) vers `platform.claude.com/docs`.
