@@ -39,7 +39,11 @@ FACT_DATASET = "DRIVE_Revenues"
 CATALOG_DATASET = "DRIVE_Revenues_Value_Catalog"
 
 # Catalog search domains an *entity* (the thing we read an attribute FOR) lives
-# in. Offers / business scenarios are not entities you read an attribute of.
+# in, in PREFERENCE ORDER (most precise first). This is the catalog's own
+# convention (see build_value_catalog_recipe), NOT a dataset column name - so it
+# stays universal: point the tool at another dataset + its catalog and only this
+# tuple may need adjusting. Domains not listed here (offers, scenarios) are never
+# treated as entities.
 ENTITY_DOMAINS = ("account", "account_group", "alias")
 
 RESOLVE_EXACT_LIMIT = 50      # candidates pulled on the exact pass
@@ -51,11 +55,6 @@ MAX_ATTRIBUTES = 8            # cap on requested attributes (anti-abuse)
 
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
-
-# When one entity name maps to several identity columns, prefer the most precise:
-# an exact id over a carrier code over a name over a group.
-ENTITY_COLUMN_PRIORITY = {"diamond_id": 1, "carrier_code": 2,
-                          "Account_name": 3, "Parent_Group": 4}
 
 
 # ============================================================
@@ -141,11 +140,17 @@ def build_resolve_sql(catalog_table, term_norm, fuzzy):
             % (cols, catalog_table, where, domains, limit))
 
 
+def _domain_rank(row):
+    """Preference rank of a catalog row's search_domain (lower = preferred), from
+    the position in ENTITY_DOMAINS. Generic: no dataset column name involved."""
+    dom = str(row.get("search_domain") or "")
+    return ENTITY_DOMAINS.index(dom) if dom in ENTITY_DOMAINS else len(ENTITY_DOMAINS)
+
+
 def _entity_sort_key(row):
-    pr = ENTITY_COLUMN_PRIORITY.get(str(row.get("target_column") or ""), 99)
     is_alias = int(row.get("is_alias") or 0)
     freq = -int(row.get("frequency") or 0)
-    return (is_alias, pr, freq)
+    return (is_alias, _domain_rank(row), freq)
 
 
 def pick_exact_entity(rows):
@@ -153,9 +158,10 @@ def pick_exact_entity(rows):
     ('ambiguous', rows) or ('none', None).
 
     Rows that all point at the SAME (target_column, target_value) collapse to one
-    pick. Several DISTINCT targets that share a target_column are ranked by
-    priority/frequency; distinct entities across different identity columns are
-    ambiguous and handed back to the caller to clarify."""
+    pick. Across DISTINCT targets, a strictly more-precise search_domain wins (per
+    ENTITY_DOMAINS order); otherwise it is genuinely ambiguous and handed back to
+    the caller to clarify. Ranking uses only generic catalog signals
+    (search_domain, is_alias, frequency) - never a hardcoded dataset column."""
     rows = [r for r in (rows or []) if r.get("target_column") and r.get("target_value")]
     if not rows:
         return ("none", None)
@@ -164,10 +170,9 @@ def pick_exact_entity(rows):
         return ("resolved", sorted(rows, key=_entity_sort_key)[0])
     ranked = sorted(rows, key=_entity_sort_key)
     top, second = ranked[0], ranked[1]
-    # A strictly dominant identity column (higher priority) wins; a tie between
-    # two different real entities is genuinely ambiguous.
-    if ENTITY_COLUMN_PRIORITY.get(str(top.get("target_column")), 99) < \
-       ENTITY_COLUMN_PRIORITY.get(str(second.get("target_column")), 99):
+    # A strictly dominant domain (more precise) wins; a tie between two different
+    # real entities is genuinely ambiguous.
+    if _domain_rank(top) < _domain_rank(second):
         return ("resolved", top)
     # de-dup ambiguous candidates by (column, value) for a clean clarification.
     uniq, seen = [], set()

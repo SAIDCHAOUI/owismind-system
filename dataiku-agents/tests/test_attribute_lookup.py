@@ -183,14 +183,16 @@ class TestSqlBuilders(unittest.TestCase):
 
 
 class TestEntityPicking(unittest.TestCase):
-    def test_single_target_resolves(self):
-        rows = [_cat_row("diamond_id", "AT001"),
-                _cat_row("Account_name", "Algerie Telecom",
-                         display_value="Algerie Telecom")]
-        # Same entity, different columns but distinct targets -> priority decides.
+    def test_dominant_domain_resolves(self):
+        # An 'account' (target diamond_id) and an 'account_group' (target
+        # Parent_Group) match the same name: the more precise domain wins, by
+        # ENTITY_DOMAINS order - no hardcoded column name.
+        rows = [_cat_row("diamond_id", "AT001", search_domain="account"),
+                _cat_row("Parent_Group", "Algerie Telecom Grp",
+                         search_domain="account_group")]
         status, row = al.pick_exact_entity(rows)
         self.assertEqual(status, "resolved")
-        self.assertEqual(row["target_column"], "diamond_id")
+        self.assertEqual(row["search_domain"], "account")
 
     def test_collapses_identical_target(self):
         rows = [_cat_row("diamond_id", "AT001", frequency=5),
