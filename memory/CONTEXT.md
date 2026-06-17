@@ -464,8 +464,17 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🔧. **PROCHAINE SESSION (demandée user, 2026-06-17) : comprendre à fond l'archi TOOLS + SQL** avant tout
+   recâblage. Points clés (déjà documentés `dataiku-agents/agents/README.md` étape RESOLVE + `tools/README.md`) :
+   le **grounding** (recherche de valeurs) n'est **PAS un tool** = SQL inline `dataiku.SQLExecutor2` sur
+   `DRIVE_Revenues_value_index` (`_resolve_terms`/`_run_sql`, exact `value_norm IN` -> fuzzy `LIKE` -> tranche
+   top-5000 + `difflib`, read-only `transaction_read_only`+timeout) ; le **moteur SQL direct** (repli) est aussi
+   inline ; les **vrais tools DSS** (`get_agent_tool(id).run()`) = `revenue_semantic_query` (v4oqA6R, écrit+exécute
+   le SQL analytique) + `dataset_lookup` (9FEzVZk, lecture d'attribut). `resolve_filter_value`/`dataset_sql_query`
+   = **labels d'events**, pas des tools. BUT ensuite : décider le recâblage `dataset_lookup` -> tool Python
+   resolver `Drive_Revenues_resolve_filter_value` (lit `Value_Catalog`, plus riche). Voir **L085**.
 0🧭. **VALIDER EN DSS le Run 6 (L080-L082)** - (0) **VÉRIFIER `GEMINI_FLASH_LITE_ID`** (best-effort
-   `…/gemini-3.1-flash-light` ; si Mesh = `flash-lite`, corriger les 2 fichiers) ; (1) **recoller LES 2 Code
+   `…/gemini-3.1-flash-light` ; ✅ FAIT cette session : `flash-lite` confirmé du code déployé collé par l'user, corrigé dans les 2 fichiers) ; (1) **recoller LES 2 Code
    Agents** (env 3.11) ; (2) **remplir `source_url`** (capability `revenue_expert`, orchestrateur) avec le lien
    Dataiku du dataset si le lien cliquable est voulu ; (3) **upload zip** (**77 entrées, `index-8spQsYzC.js`**)
    + ⚠️ **REDÉMARRER le backend** (python-lib changé : Evidence/source). Smoke-tests : (a) « revenu réel du compte
