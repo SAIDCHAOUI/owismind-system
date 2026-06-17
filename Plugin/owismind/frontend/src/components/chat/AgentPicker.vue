@@ -51,7 +51,7 @@ function onSelect(key) {
   color: var(--text-2);
   font-size: var(--fs-sm);
   font-weight: 500;
-  max-width: 240px;
+  max-width: 320px;
   transition: all var(--dur) var(--ease);
 }
 .agent-pick:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }

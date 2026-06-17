@@ -14,8 +14,12 @@ def build_conversation_list_query(table_ref, user_value_sql, cursor_last_at_sql,
                                   cursor_session_sql, limit, title_maxlen):
     """Names-only conversation list (one row per session), newest-active first.
 
-    Title = first user message of the session, server-truncated. Keyset pagination
-    on (last_at, session_id). All value fragments are caller-escaped; ints coerced.
+    Title = first user message of the session, cleaned into a tidy one-line name:
+    newlines/tabs/repeated spaces are collapsed to single spaces and the value is
+    trimmed BEFORE truncating to ``title_maxlen`` (so a multi-line prompt reads as a
+    short label, not a wall of text). ``[[:space:]]`` is the POSIX class — no backslash
+    escapes to mangle through ``str.format``. Keyset pagination on (last_at,
+    session_id). All value fragments are caller-escaped; ints coerced.
     """
     n = int(limit)
     tlen = int(title_maxlen)
@@ -29,7 +33,7 @@ def build_conversation_list_query(table_ref, user_value_sql, cursor_last_at_sql,
     SELECT session_id, title, last_at
     FROM (
       SELECT session_id,
-             COALESCE(LEFT((ARRAY_AGG(user_text ORDER BY created_at ASC, exchange_id ASC))[1], {tlen}), '') AS title,
+             COALESCE(LEFT(BTRIM(regexp_replace((ARRAY_AGG(user_text ORDER BY created_at ASC, exchange_id ASC))[1], '[[:space:]]+', ' ', 'g')), {tlen}), '') AS title,
              MAX(created_at) AS last_at
       FROM {table}
       WHERE user_id = {user}

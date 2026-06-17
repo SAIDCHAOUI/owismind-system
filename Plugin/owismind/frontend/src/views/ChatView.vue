@@ -105,13 +105,16 @@ watch(
 }
 
 .prompt-wrap {
-  width: 100%;
-  max-width: 920px;
+  width: var(--chat-col);
+  max-width: var(--chat-col-max);
   margin: 0 auto;
   padding: 0 var(--s-7) var(--s-7);
   flex-shrink: 0;
 }
-.prompt-wrap.in-empty { padding-bottom: var(--s-7); }
+/* On the empty / new-chat screen the prompt bar is the only element, so the full
+   90% measure looks oversized — keep it comfortably narrow and centered (the title
+   and tip above it sit in the same ~760px band). */
+.prompt-wrap.in-empty { padding-bottom: var(--s-7); max-width: 760px; }
 
 .chat-error {
   text-align: center;

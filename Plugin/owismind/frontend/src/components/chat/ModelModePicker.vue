@@ -10,6 +10,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore, MODEL_MODES } from '../../stores/ui.js'
 import Modal from '../ui/Modal.vue'
+import { Icon } from '../ui'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -40,7 +41,7 @@ function choose(m) {
       <span class="mode-name">{{ t('mode.' + current) }}</span>
     </button>
 
-    <Modal v-model="open" :title="t('mode.modal_title')" icon="sparkles" max-width="520px">
+    <Modal v-model="open" :title="t('mode.modal_title')" icon="sliders" max-width="520px">
       <p class="intro">{{ t('mode.modal_intro') }}</p>
       <div class="cards" role="radiogroup" :aria-label="t('mode.label')">
         <button
@@ -48,26 +49,30 @@ function choose(m) {
           :key="m"
           type="button"
           class="card"
-          :class="{ active: current === m }"
+          :class="['lvl-' + COST_LEVEL[m], { active: current === m }]"
           role="radio"
           :aria-checked="current === m"
           @click="choose(m)"
         >
           <div class="card-head">
+            <span class="dot" :class="'lvl-' + COST_LEVEL[m]" aria-hidden="true" />
             <span class="card-name">{{ t('mode.' + m) }}</span>
             <span v-if="m === 'eco'" class="badge">{{ t('mode.recommended') }}</span>
-            <span v-if="current === m" class="badge current">{{ t('mode.current') }}</span>
+            <Icon v-if="current === m" name="check" :size="16" class="card-check" />
           </div>
           <p class="card-desc">{{ t('mode.' + m + '_desc') }}</p>
           <div class="card-cost">
             <span class="meter" aria-hidden="true">
-              <i v-for="n in 3" :key="n" :class="{ on: n <= COST_LEVEL[m], hi: m === 'high' }" />
+              <i v-for="n in 3" :key="n" :class="['lvl-' + COST_LEVEL[m], { on: n <= COST_LEVEL[m] }]" />
             </span>
             <span class="cost-label">{{ t('mode.' + m + '_cost') }}</span>
           </div>
         </button>
       </div>
-      <p class="envelope">{{ t('mode.envelope_note') }}</p>
+      <p class="envelope">
+        <Icon name="wallet" :size="15" class="envelope-ico" />
+        <span>{{ t('mode.envelope_note') }}</span>
+      </p>
     </Modal>
   </div>
 </template>
@@ -83,38 +88,53 @@ function choose(m) {
   transition: all var(--dur) var(--ease); white-space: nowrap;
 }
 .mode-trigger:hover { color: var(--text); border-color: var(--border-strong); }
-.mode-trigger .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.dot.lvl-1 { background: var(--text-3); }
+/* Cost level reads as a traffic light: eco = calm green, medium = brand orange,
+   high = red. The eco dot is no longer a dim grey — green signals "the safe,
+   recommended default". --success is theme-aware (light/dark). */
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot.lvl-1 { background: var(--success); }
 .dot.lvl-2 { background: var(--orange); }
-.dot.lvl-3 { background: #ef4444; }
+.dot.lvl-3 { background: var(--danger); }
 
 /* Modal body */
 .intro { font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 16px; line-height: 1.5; }
 .cards { display: flex; flex-direction: column; gap: 10px; }
 .card {
-  text-align: left; padding: 12px 14px; border-radius: var(--r-md, 12px);
+  text-align: left; padding: 12px 14px; border-radius: var(--r-lg);
   border: 1.5px solid var(--border); background: var(--surface);
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .card:hover { border-color: var(--border-strong); background: var(--surface-hover); }
-.card.active { border-color: var(--orange); background: var(--orange-soft, var(--surface-2)); }
+/* Selected card is tinted by its own cost colour, so the choice and its cost read
+   as one. Eco green / medium orange / high red. */
+.card.active.lvl-1 { border-color: var(--success); background: var(--success-soft); }
+.card.active.lvl-2 { border-color: var(--orange); background: var(--orange-soft-dark, var(--surface-2)); }
+.card.active.lvl-3 { border-color: var(--danger); background: var(--danger-soft); }
 .card-head { display: flex; align-items: center; gap: 8px; }
 .card-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
 .badge {
   font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: var(--r-pill);
-  background: var(--orange-soft-dark, rgba(255,122,0,0.14)); color: var(--orange-text);
+  background: var(--success-soft); color: var(--success);
 }
-.badge.current { background: var(--surface-2); color: var(--text-3); }
+/* Check on the active card — replaces the old "current mode" text pill. */
+.card-check { margin-left: auto; color: var(--text-2); }
+.card.active.lvl-1 .card-check { color: var(--success); }
+.card.active.lvl-2 .card-check { color: var(--orange-text); }
+.card.active.lvl-3 .card-check { color: var(--danger); }
 .card-desc { font-size: var(--fs-sm); color: var(--text-2); margin: 6px 0 10px; line-height: 1.45; }
 .card-cost { display: flex; align-items: center; gap: 8px; }
 .meter { display: inline-flex; gap: 3px; }
 .meter i { width: 14px; height: 5px; border-radius: 2px; background: var(--border); }
-.meter i.on { background: var(--orange); }
-.meter i.on.hi { background: #ef4444; }
+.meter i.on.lvl-1 { background: var(--success); }
+.meter i.on.lvl-2 { background: var(--orange); }
+.meter i.on.lvl-3 { background: var(--danger); }
 .cost-label { font-size: var(--fs-xs); color: var(--text-3); }
+/* Cost note — a quiet wallet cue instead of a warning emoji (less "AI-generated"). */
 .envelope {
+  display: flex; align-items: flex-start; gap: 8px;
   font-size: var(--fs-xs); color: var(--text-2); line-height: 1.5;
   margin: 18px 0 0; padding: 10px 12px; border-radius: var(--r-sm);
   background: var(--orange-soft-dark, rgba(255,122,0,0.10));
 }
+.envelope-ico { margin-top: 1px; color: var(--orange-text); }
 </style>

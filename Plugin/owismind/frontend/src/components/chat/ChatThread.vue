@@ -92,7 +92,8 @@ onMounted(() => {
 <style scoped>
 .conv { flex: 1; overflow-y: auto; min-height: 0; padding-bottom: var(--s-7); }
 .conv-inner {
-  max-width: 760px;
+  width: var(--chat-col);
+  max-width: var(--chat-col-max);
   margin: 0 auto;
   padding: var(--s-7);
   display: flex;

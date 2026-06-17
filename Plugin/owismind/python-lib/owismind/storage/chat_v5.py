@@ -326,7 +326,10 @@ def history_messages_for_chain(user_id, parent_exchange_id, max_messages):
 
 
 # Server-side truncation length for a conversation title (first user message).
-CONV_TITLE_MAXLEN = 140
+# Short on purpose: the sidebar shows a one-line name (CSS-ellipsised anyway), and
+# the stored/tooltip value should read as a label, not a full prompt. A future
+# version may replace this truncation with an AI-generated summary title.
+CONV_TITLE_MAXLEN = 56
 
 
 def list_conversations(user_id, cursor_token, limit):

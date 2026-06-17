@@ -14,6 +14,13 @@ export const extraMessages = {
     // Generic reusable
     'x.soon': 'Bientôt',
     'x.coming_soon': 'Bientôt disponible',
+    'x.close': 'Fermer',
+
+    // Chat — prompt guidance: better input → better answer. Overrides the maquette's
+    // neutral placeholder (messages.json) and adds an empty-screen tip.
+    'prompt.placeholder': 'Décrivez votre demande le plus précisément possible…',
+    'empty.tip':
+      'Conseil : plus votre demande est précise et bien formulée — les termes employés, la période, le périmètre — meilleure sera la réponse.',
 
     // Settings — honest empty states (no mock budget/usage figures)
     'set.profile.groups': 'Groupes',
@@ -216,22 +223,21 @@ export const extraMessages = {
     'mode.medium_hint': 'Medium — équilibré, qualité supérieure. Cliquez pour changer de mode.',
     'mode.high_hint': 'High — qualité maximale, plus coûteux. Cliquez pour changer de mode.',
     // Mode-explanation popup
-    'mode.modal_title': 'Choisir le mode de génération',
+    'mode.modal_title': 'Mode de réponse',
     'mode.modal_intro':
-      'Le mode règle la puissance des modèles utilisés. Plus c\'est puissant, meilleures sont la compréhension et l\'analyse — mais plus ça coûte cher.',
-    'mode.current': 'Mode actuel',
+      'Réglez la puissance du modèle selon la question. Plus de puissance, c\'est une analyse plus fine — et un coût plus élevé.',
     'mode.recommended': 'Recommandé',
     'mode.eco_desc':
-      'Le plus rapide et le moins cher — le choix par défaut, idéal pour les recherches simples et les questions du quotidien.',
+      'Le plus rapide et le plus économique. Recommandé pour les recherches simples et les questions courantes.',
     'mode.medium_desc':
-      'Bon équilibre qualité / coût, pour les analyses qui demandent un peu plus de finesse.',
+      'Un bon compromis entre qualité et coût, pour les analyses qui demandent un peu plus de finesse.',
     'mode.high_desc':
-      'Raisonnement et analyse maximum (meilleure compréhension, réponses plus fines). À réserver aux questions complexes.',
+      'Raisonnement et analyse poussés, pour les questions complexes. Coût plus élevé.',
     'mode.eco_cost': 'Coût minimal',
     'mode.medium_cost': 'Coût modéré',
     'mode.high_cost': 'Coût élevé',
     'mode.envelope_note':
-      '⚠️ Les modes plus puissants consomment plus vite votre enveloppe de 50 €/mois. Réservez High aux requêtes complexes qui nécessitent vraiment plus de réflexion.',
+      'Les modes plus puissants consomment plus vite l\'enveloppe de 50 €/mois. Réservez High aux requêtes qui le justifient vraiment.',
 
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
@@ -281,6 +287,13 @@ export const extraMessages = {
     // Generic reusable
     'x.soon': 'Soon',
     'x.coming_soon': 'Coming soon',
+    'x.close': 'Close',
+
+    // Chat — prompt guidance: better input → better answer. Overrides the maquette's
+    // neutral placeholder (messages.json) and adds an empty-screen tip.
+    'prompt.placeholder': 'Describe your request as precisely as possible…',
+    'empty.tip':
+      'Tip: the more precise and well-phrased your request — the terms you use, the period, the scope — the better the answer.',
 
     // Settings — honest empty states (no mock budget/usage figures)
     'set.profile.groups': 'Groups',
@@ -482,22 +495,21 @@ export const extraMessages = {
     'mode.medium_hint': 'Medium — balanced, higher quality. Click to change mode.',
     'mode.high_hint': 'High — maximum quality, more expensive. Click to change mode.',
     // Mode-explanation popup
-    'mode.modal_title': 'Choose the generation mode',
+    'mode.modal_title': 'Response mode',
     'mode.modal_intro':
-      'The mode sets how powerful the models are. More power means better understanding and analysis — but it costs more.',
-    'mode.current': 'Current mode',
+      'Set the model\'s power to match the question. More power means sharper analysis — and a higher cost.',
     'mode.recommended': 'Recommended',
     'mode.eco_desc':
-      'The fastest and cheapest — the default choice, best for simple lookups and everyday questions.',
+      'The fastest and most economical. Recommended for simple lookups and everyday questions.',
     'mode.medium_desc':
-      'A good quality / cost balance, for questions that need a bit more finesse.',
+      'A good balance of quality and cost, for questions that need a bit more finesse.',
     'mode.high_desc':
-      'Maximum reasoning and analysis (better understanding, sharper answers). Reserve it for complex questions.',
+      'Deeper reasoning and analysis, for complex questions. Higher cost.',
     'mode.eco_cost': 'Minimal cost',
     'mode.medium_cost': 'Moderate cost',
     'mode.high_cost': 'High cost',
     'mode.envelope_note':
-      '⚠️ More powerful modes burn through your €50/month envelope faster. Reserve High for complex queries that genuinely need more reasoning.',
+      'More powerful modes use up the €50/month envelope faster. Reserve High for queries that genuinely warrant it.',
 
     // Calculation steps — frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.

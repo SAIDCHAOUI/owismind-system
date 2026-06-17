@@ -27,6 +27,16 @@ class ConversationListQueryTests(unittest.TestCase):
         self.assertIn("ARRAY_AGG(user_text ORDER BY created_at ASC", q)
         self.assertIn("120", q)  # LEFT(..., 120)
 
+    def test_title_is_cleaned_to_one_line_before_truncating(self):
+        # Newlines/tabs/repeated spaces collapse to single spaces and the value is
+        # trimmed BEFORE LEFT(...), so a multi-line prompt becomes a tidy label.
+        q = self._q(tlen=56)
+        self.assertIn("regexp_replace(", q)
+        self.assertIn("'[[:space:]]+'", q)
+        self.assertIn("BTRIM(", q)
+        # Cleanup must wrap the first-message extraction, inside the LEFT truncation.
+        self.assertIn("LEFT(BTRIM(regexp_replace((ARRAY_AGG(user_text", q)
+
     def test_no_cursor_no_keyset_clause(self):
         q = self._q()
         self.assertNotIn("last_at <", q)

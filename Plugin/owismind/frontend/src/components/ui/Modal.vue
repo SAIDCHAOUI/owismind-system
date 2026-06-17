@@ -7,6 +7,7 @@
 // v-model carries the open state. Slots: #header (or `title` prop), default
 // (body), #footer (actions row, e.g. <Button> primitives).
 import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useReducedMotion } from '../../composables/useReducedMotion.js'
 import Icon from './Icon.vue'
 
@@ -22,6 +23,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'close'])
 
+const { t } = useI18n()
 const reduced = useReducedMotion()
 const card = ref(null)
 let lastFocused = null
@@ -75,7 +77,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
             v-if="closable"
             type="button"
             class="ui-modal-close"
-            aria-label="Fermer"
+            :aria-label="t('x.close')"
             @click="close"
           >
             <Icon name="x" />

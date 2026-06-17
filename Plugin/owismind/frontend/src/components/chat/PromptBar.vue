@@ -69,12 +69,14 @@ const placeholder = () =>
     <div class="prompt-row">
       <div class="prompt-left">
         <AgentPicker />
-        <button class="p-icon" type="button" :title="t('prompt.mic')" @click="micClick">
-          <Icon name="mic" />
-        </button>
         <ModelModePicker />
       </div>
       <div class="prompt-right">
+        <!-- Mic sits with the send action on the right (voice → send grouping). No STT
+             backend yet — honest placeholder. -->
+        <button class="p-icon" type="button" :title="t('prompt.mic')" @click="micClick">
+          <Icon name="mic" />
+        </button>
         <!-- While a run is in flight, the send button becomes a STOP button (cuts the
              generation short; the partial answer is kept). Otherwise it sends. -->
         <button

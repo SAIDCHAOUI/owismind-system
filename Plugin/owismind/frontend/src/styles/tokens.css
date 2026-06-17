@@ -55,6 +55,13 @@
   --r-lg: 12px;    /* NO-OP add: large containers */
   --r-pill: 100px; /* NO-OP add: pills/badges/progress */
 
+  /* --- Chat column measure ---
+   * The message thread and the prompt bar share ONE width so the answer text
+   * lines up edge-to-edge with the input (like ChatGPT / Claude). ~90% of the
+   * available center column, capped so lines stay readable on ultra-wide screens. */
+  --chat-col: 90%;
+  --chat-col-max: 1200px;
+
   /* --- Motion --- */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --dur: 200ms;
@@ -97,6 +104,10 @@ body[data-theme="light"] {
   /* Orange for SMALL TEXT on --bg: darkened to clear WCAG AA 4.5:1 on white
      (--orange-deep #cc6100 is only 3.98:1 — fine for accents, not body-size text). */
   --orange-text: #b85700;
+  /* Soft status tints — low-opacity fills for selected/active states, theme-aware
+     like --orange-soft-dark (so they stay visible on the dark surface too). */
+  --success-soft: rgba(34, 197, 94, 0.10);
+  --danger-soft: rgba(239, 68, 68, 0.08);
 }
 body[data-theme="dark"] {
   --bg: #0d0d0d;
@@ -120,4 +131,9 @@ body[data-theme="dark"] {
   --danger: #f87171;
   --warn: #fb923c;
   --info: #93c5fd;
+
+  /* Soft status tints — brighter hue + a touch more opacity so the fill reads on
+     the dark surface (the light-theme values would wash out to invisible). */
+  --success-soft: rgba(74, 222, 128, 0.14);
+  --danger-soft: rgba(248, 113, 113, 0.13);
 }

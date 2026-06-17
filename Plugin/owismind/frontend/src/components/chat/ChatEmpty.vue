@@ -4,6 +4,7 @@
 // (components.css). Suggestion cards (mock editorial in the maquette) are deferred.
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { Icon } from '../ui'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -17,6 +18,10 @@ const router = useRouter()
     <p class="empty-sub">
       {{ t('empty.sub_a') }}<a class="lnk" @click="router.push('/agents')">{{ t('empty.sub_link') }}</a>{{ t('empty.sub_b') }}
     </p>
+    <p class="empty-tip">
+      <Icon name="info" :size="16" class="empty-tip__ico" />
+      <span>{{ t('empty.tip') }}</span>
+    </p>
   </div>
 </template>
 
@@ -28,8 +33,8 @@ const router = useRouter()
   justify-content: center;
   padding: 0 var(--s-7);
   text-align: center;
-  max-width: 920px;
-  width: 100%;
+  width: var(--chat-col);
+  max-width: var(--chat-col-max);
   margin: 0 auto;
   gap: var(--s-5);
 }
@@ -57,4 +62,21 @@ const router = useRouter()
   text-underline-offset: 3px;
   cursor: pointer;
 }
+/* "Be precise" tip — a quiet, left-aligned hint so the multi-line text stays
+   readable (the rest of the empty stage is centered). */
+.empty-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  max-width: 560px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.empty-tip__ico { flex-shrink: 0; margin-top: 1px; color: var(--orange-text); }
 </style>

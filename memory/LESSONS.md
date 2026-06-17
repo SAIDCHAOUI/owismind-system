@@ -1845,4 +1845,52 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   recâbler via l'outil **Write** (confirme F10).
 - **Source** : retour user (source cliquable). **Date** : 2026-06-17.
 
+## L083 — Polish UI chat : mesure de colonne partagée (texte aligné sur le prompt) + teintes de statut THÈME-AWARE + titre dérivé nettoyé (✅ local, 2 revues adversariales, NON validé DSS)
+- **Contexte** : retour user sur l'UI du chat (Run 7) — texte des réponses plus étroit (760px) que la barre de
+  prompt (920px) → désaligné ; point du mode Éco gris peu lisible ; pop-up de mode « trop généré par IA » ;
+  noms de conversations trop longs ; barre de prompt surdimensionnée sur l'écran vide ; nom d'agent tronqué ;
+  micro mal placé. Aucun changement d'agent (frontend + 1 point backend titres).
+- **Ce qui a échoué (attrapé par revue adversariale R1)** : pour teinter la carte de mode sélectionnée j'avais
+  mis des **rgba codées en dur faible-alpha CLAIRES** (`rgba(34,197,94,0.07)` vert, `rgba(239,68,68,0.07)`
+  rouge). Sur le `--bg` sombre (#0d0d0d/#161616) elles deviennent **quasi invisibles** → la hiérarchie visuelle
+  casse en dark mode (alors que la bordure, en `var(--success)`/`var(--danger)`, s'éclaircit bien). Régression
+  classique « couleur en dur » (rappel F2/L022/L031 : **pas de couleur en dur, tokens thème-aware**).
+- **Solution qui marche** :
+  - **Largeur** : token partagé `--chat-col: 90%` / `--chat-col-max: 1200px` (tokens.css) utilisé par
+    `.conv-inner` (était `max-width:760px`), `.prompt-wrap` (était `920px`) et `.empty` — **même mesure + même
+    padding `--s-7`** → le texte des réponses s'aligne **bord-à-bord** avec la zone de saisie (effet
+    ChatGPT/Claude). Écran vide : `.prompt-wrap.in-empty { max-width: 760px }` (la barre seule paraissait trop
+    large). `.empty` reste centré (contenu centré, peu importe la largeur du conteneur).
+  - **Teintes statut thème-aware** : nouveaux tokens `--success-soft` / `--danger-soft` définis dans **les deux**
+    blocs `body[data-theme]` (clair = rgba claire faible-alpha ; sombre = hue plus vive + alpha un peu plus fort),
+    exactement comme `--orange-soft-dark`. Le mode picker les consomme pour les teintes de carte + le badge. Échelle
+    de coût = **feu tricolore** : Éco `--success` (vert), Medium `--orange`, High `--danger` (rouge), keyée par
+    `'lvl-' + COST_LEVEL[m]` (dot + jauge + carte). Le « vert » est OK ici : la règle no-green ne vise QUE l'Evidence.
+  - **Pop-up dé-IA** : icône `sparkles`→`sliders` ; badge texte « Mode actuel »→**coche** (`Icon name="check"`,
+    sélection portée par `role="radio"`+`aria-checked`) ; ⚠️ emoji de la note de coût → **icône `wallet`** ; copie
+    FR/EN réécrite (ton produit) ; clé i18n morte `mode.current` supprimée. **Icône dimensionnée via `:size`**
+    (le `.ui-icon` met un style inline width/height = `1em` qui **bat** un width en CSS scopé — donc passer la prop).
+  - **Guidage « soyez précis »** : `prompt.placeholder` **surchargé dans `extra.js`** (le merge `mergeLocaleMessage`
+    applique extra APRÈS messages → override propre, `messages.json` reste pristine) + nouveau `empty.tip` rendu
+    dans `ChatEmpty` (encart sobre + icône `info`). Tous en **interpolation `{{ }}`** (jamais v-html).
+  - **AgentPicker** `max-width` 240→320px (ellipse = filet) ; **micro déplacé** `.prompt-left`→`.prompt-right`
+    (avant Envoyer) ; **`Modal.vue`** `aria-label="Fermer"` en dur → `:aria-label="t('x.close')"` (+`useI18n`,
+    clé `x.close` FR/EN) — corrige l'a11y de **tous** les modals (bug pré-existant).
+  - **Titre de conversation (backend)** : `build_conversation_list_query` nettoie le 1er message en une ligne —
+    `LEFT(BTRIM(regexp_replace((ARRAY_AGG(user_text …))[1], '[[:space:]]+', ' ', 'g')), {tlen})` (POSIX
+    `[[:space:]]` = pas de backslash à faire survivre `str.format`) ; `CONV_TITLE_MAXLEN` 140→**56**. **DÉRIVÉ**
+    du message déjà stocké → **rétroactif sur toutes les conversations, sans migration ni risque instance**.
+    `LEFT` est char-based (pas d'UTF-8 cassé). Reste **owner-scopé** (`WHERE user_id`), motif littéral constant →
+    **aucune nouvelle surface d'injection** (confirmé par la revue sécu).
+- **Décision** : **pas de colonne `title` en base maintenant** — pour la troncature « pour le moment » le dérivé
+  est fonctionnellement identique, rétroactif et sans risque ; la **colonne DB prendra son sens avec la feature
+  titre-résumé-IA** (stockage/édition d'un vrai titre). Proposé à l'user → il garde le dérivé.
+- **Preuve-vérification** : **116 tests frontend (node:test) + 385 backend (unittest, +1 ajouté)** verts ; build
+  Vite OK ; zip propre (**77 entrées, `index-CrvKHGTt.js`**, `body.html` recâblé via Write — F10/L033). **2 revues
+  adversariales (Workflow)** : R1 sur le 1er lot = 4 défauts **tous corrigés** (dont le dark-mode invisible
+  ci-dessus + alignement de l'écran vide + close-button FR en dur + clé morte) ; **R2 qualité + sécurité** sur tout
+  le diff = **0 défaut, 0 finding sécurité** (XSS : tout en `{{ }}`/attributs liés, aucun v-html neuf ; SQL :
+  motif constant, owner-scopé ; Modal : focus/closable inchangés).
+- **Source** : retour user (UI chat). **Date** : 2026-06-17.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

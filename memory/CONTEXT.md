@@ -5,7 +5,26 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🎯 RUN 6 (2026-06-17) — modèles par mode revus + argent €/transparence + désambiguïsation DÉFÉRÉE +
+**🎨 RUN 7 (2026-06-17) — POLISH UI CHAT (frontend + 1 point backend titres ; agents NON touchés) —
+⏳ CODÉ + 116 frontend + 385 backend + build + zip, 2 revues adversariales (R2 qualité+sécurité = 0 défaut),
+NON validé DSS.**
+- **Largeur** : token partagé `--chat-col: 90%` / `--chat-col-max: 1200px` → `.conv-inner` (était 760px),
+  `.prompt-wrap` (était 920px) et `.empty` partagent la **même mesure** (+padding `--s-7`) = texte aligné
+  bord-à-bord avec la zone de saisie. **Écran vide** : `.prompt-wrap.in-empty` plafonné à **760px**.
+- **Mode picker** : feu tricolore — **Éco vert** (`--success`), Medium orange, High rouge (`--danger`) ;
+  pop-up dé-IA (icône `sparkles`→`sliders`, badge « Mode actuel »→coche `check`, ⚠️ emoji→icône `wallet`,
+  copie FR/EN réécrite, clé morte `mode.current` retirée). **Tokens `--success-soft`/`--danger-soft`**
+  (clair+sombre) corrigent des rgba codées en dur **invisibles en dark** (bug revue R1).
+- **Guidage** : `prompt.placeholder` surchargé (extra.js, override de messages.json pristine) + `empty.tip`
+  (« soyez précis ») dans `ChatEmpty`. **AgentPicker** `max-width` 240→320px ; **micro déplacé à droite**
+  (près d'Envoyer) ; **`Modal`** close `aria-label` en dur FR → `t('x.close')` (corrige tous les modals).
+- **Titre conversation (backend)** : `sql_builders.build_conversation_list_query` nettoie le 1er message
+  (`LEFT(BTRIM(regexp_replace(…,'[[:space:]]+',' ','g')), tlen)`) + `CONV_TITLE_MAXLEN` 140→**56**.
+  **DÉRIVÉ** (pas de colonne DB) → rétroactif, sans migration. Colonne DB = différée à la feature titre-IA.
+À DÉPLOYER : **upload zip** (**77 entrées, `index-CrvKHGTt.js`**) + ⚠️ **REDÉMARRER backend** (python-lib
+changé : titres). **Pas de recoll des Code Agents.** **NON validé DSS.**
+
+**Avant — 🎯 RUN 6 (2026-06-17) — modèles par mode revus + argent €/transparence + désambiguïsation DÉFÉRÉE +
 source Evidence CLIQUABLE + nettoyage prod — ⏳ CODÉ + 227 agents + 384 backend + 116 frontend + build + zip,
 NON validé DSS (L080-L082).**
 - **Modèles (L080)** : eco=**Gemini 3.1 Flash-Lite** (DÉFAUT), medium=**Gemini 3.5 Flash**, high=**Sonnet** ;
@@ -225,7 +244,21 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session — 2026-06-17 (Run 6) → détail `sessions/2026-06-17.md`, leçons **L080-L082**
+## 🧭 Dernière session — 2026-06-17 (Run 7 = polish UI chat) → détail `sessions/2026-06-17.md` (section Run 7)
+- **Largeur texte = zone de prompt (~90%)** : token partagé `--chat-col`/`--chat-col-max` sur `.conv-inner`
+  (760→), `.prompt-wrap` (920→) et `.empty` ; écran vide = prompt plafonné 760px.
+- **Mode picker** : Éco **vert** (feu tricolore vert/orange/rouge), pop-up dé-IA (sliders/coche/wallet, copie
+  réécrite FR/EN, clé `mode.current` retirée) ; **tokens `--success-soft`/`--danger-soft`** clair+sombre (fix
+  dark-mode invisible). **Guidage « soyez précis »** (placeholder + `empty.tip`). **AgentPicker** 240→320px ;
+  **micro à droite** ; **`Modal`** close `aria-label`→`t('x.close')`.
+- **Titre conversation** : nettoyage 1 ligne (`regexp_replace`/`BTRIM`) + `CONV_TITLE_MAXLEN` 140→56, **dérivé**
+  (pas de colonne DB ; rétroactif, sans migration ; colonne DB différée à la feature titre-IA).
+- **Vérifs** : **116 frontend + 385 backend** + build + zip (**77 entrées, `index-CrvKHGTt.js`**) ; **2 revues
+  adversariales** (R1 → 4 défauts tous corrigés dont dark-mode invisible ; R2 qualité+sécurité = **0 défaut /
+  0 sécurité**). Agents NON touchés.
+- **À faire DSS** : **upload zip** + ⚠️ **redémarrer backend** (python-lib titres). Pas de recoll d'agents.
+
+## Avant — 2026-06-17 (Run 6) → détail `sessions/2026-06-17.md`, leçons **L080-L082**
 - **Modèles par mode revus (L080)** : eco=Gemini 3.1 Flash-Lite (défaut), medium=Gemini 3.5 Flash, high=Sonnet,
   **gpt-5.4-mini supprimé** ; front défaut Éco + badge Recommandé sur Éco. **Argent €** dérivé du nom de colonne
   `amount_eur` (`metric_unit`, **pas de config profil**). **Transparence** : sous-agent préfixe `[Périmètre]`,
