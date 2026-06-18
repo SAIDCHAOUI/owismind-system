@@ -52,3 +52,16 @@ a { color: inherit; }
  * otherwise the browser compresses them instead of scrolling. Apply `u-no-shrink`
  * to flex items inside any `overflow-y:auto` flex column. */
 .u-no-shrink { flex-shrink: 0; }
+
+/* --- Brand entrance motion (tasteful, 1-2 elements per view) ---
+ * `owi-rise`: fade + small upward translate (page heroes, cards). Consumers add
+ * `.u-rise` and may stagger with an inline `animation-delay`. */
+@keyframes owi-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.u-rise { animation: owi-rise var(--dur-slow) var(--ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .u-rise { animation: none; }
+}

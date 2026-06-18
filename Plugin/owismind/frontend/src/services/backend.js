@@ -159,8 +159,10 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId) {
   return request('/owismind-api/evidence/distinct' + q);
 }
 
-// Agents the admin has enabled, for any authenticated caller (chat-side picker).
-// Returns { status, count, agents: [{ key, label }] } - opaque logical keys only.
+// Agents the admin has enabled, for any authenticated caller (chat-side picker +
+// agent library). Returns { status, count, agents: [{ key, label, tagline,
+// description, capabilities, tools, icon, badge }] } - opaque logical keys plus the
+// admin-AUTHORED display profile (no raw agent_id / project_key ever leaks).
 export function fetchAgents() {
   return request('/owismind-api/agents', { method: 'GET' });
 }
@@ -210,13 +212,16 @@ export function fetchAdminProjectAgents(projectKey) {
   });
 }
 
-// Currently enabled agents (admin view): { agents: [{ logical_key, project_key, agent_id, label }] }.
+// Currently enabled agents (admin view): { agents: [{ logical_key, project_key,
+// agent_id, label, profile: { tagline, description, capabilities, tools, icon, badge } }] }.
 export function fetchAdminAgents() {
   return request('/owismind-api/admin/agents', { method: 'GET' });
 }
 
-// Persist the enabled-agents selection; backend re-validates each entry.
-// `agents` is a list of { project_key, agent_id }. Returns the stored selection.
+// Persist the enabled-agents selection; backend re-validates each entry against the
+// live DSS listings and sanitizes the authored profile. `agents` is a list of
+// { project_key, agent_id, profile? } where `profile` is the admin-authored display
+// copy (tagline/description/capabilities/tools/icon/badge). Returns the stored selection.
 export function saveAdminAgents(agents) {
   return request('/owismind-api/admin/agents', {
     method: 'POST',

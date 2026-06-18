@@ -46,6 +46,7 @@ from owismind.security.identity import IdentityError, derive_full_name, resolve_
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
     ValidationError,
+    validate_agent_meta,
     validate_budget_amount,
     validate_chat_start_request,
     validate_conversations_limit,
@@ -602,12 +603,28 @@ def agents_available():
         logger.exception("/agents - query failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
-    # Project off only the public-safe fields (no agent_id / project_key leak).
-    public = [
-        {"key": a.get("logical_key"), "label": a.get("label")}
-        for a in enabled
-        if a.get("logical_key")
-    ]
+    # Project off only the public-safe fields (no agent_id / project_key leak). The
+    # admin-authored PROFILE (tagline / description / capabilities / tools / icon /
+    # badge) is display copy written by an administrator - safe to expose, and the
+    # source of the agent-library cards (no hardcoded descriptions client-side).
+    public = []
+    for a in enabled:
+        key = a.get("logical_key")
+        if not key:
+            continue
+        profile = a.get("profile") if isinstance(a.get("profile"), dict) else {}
+        public.append(
+            {
+                "key": key,
+                "label": a.get("label"),
+                "tagline": profile.get("tagline", ""),
+                "description": profile.get("description", ""),
+                "capabilities": profile.get("capabilities", []),
+                "tools": profile.get("tools", []),
+                "icon": profile.get("icon", "robot"),
+                "badge": profile.get("badge", ""),
+            }
+        )
     logger.info(
         "/agents - user_id=%s returned %d enabled agent(s)",
         identity["user_id"],
@@ -1028,8 +1045,12 @@ def admin_agents():
     try:
         visible_projects = set(discovery.list_project_keys())
 
-        # Group requested agent ids by project so each project is listed only once.
-        requested_by_project = {}
+        # Preserve the admin's add order, de-dup pairs, and keep each pair's authored
+        # display profile (tagline/description/capabilities/tools/icon/badge), keyed by
+        # the (project_key, agent_id) pair. Last write wins for a duplicated pair.
+        ordered_pairs = []
+        meta_by_pair = {}
+        seen_pairs = set()
         for item in requested:
             if not isinstance(item, dict):
                 continue
@@ -1037,40 +1058,54 @@ def admin_agents():
             agent_id = item.get("agent_id")
             if not project_key or not agent_id:
                 continue
-            requested_by_project.setdefault(str(project_key), set()).add(str(agent_id))
+            pair = (str(project_key), str(agent_id))
+            meta_by_pair[pair] = item.get("profile")
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            ordered_pairs.append(pair)
 
+        # Cache each project's live agent listing so a project is listed only once,
+        # however many of its agents the admin selected (bounded, read-only discovery).
+        listing_cache = {}
         enabled = []
         seen_keys = set()
-        for project_key, requested_ids in requested_by_project.items():
+        for project_key, agent_id in ordered_pairs:
             if project_key not in visible_projects:
                 logger.warning(
                     "admin/agents - project %s not visible; skipped", project_key
                 )
                 continue
-            available = {
-                a["agent_id"]: a["description"]
-                for a in discovery.list_project_agents(project_key)
-            }
-            for agent_id in requested_ids:
-                if agent_id not in available:
-                    logger.warning(
-                        "admin/agents - agent %s not in project %s; skipped",
-                        agent_id,
-                        project_key,
-                    )
-                    continue
-                logical_key = _logical_key(project_key, agent_id)
-                if logical_key in seen_keys:
-                    continue
-                seen_keys.add(logical_key)
-                enabled.append(
-                    {
-                        "logical_key": logical_key,
-                        "project_key": project_key,
-                        "agent_id": agent_id,
-                        "label": available[agent_id],
-                    }
+            if project_key not in listing_cache:
+                listing_cache[project_key] = {
+                    a["agent_id"]: a["description"]
+                    for a in discovery.list_project_agents(project_key)
+                }
+            available = listing_cache[project_key]
+            if agent_id not in available:
+                logger.warning(
+                    "admin/agents - agent %s not in project %s; skipped",
+                    agent_id,
+                    project_key,
                 )
+                continue
+            logical_key = _logical_key(project_key, agent_id)
+            if logical_key in seen_keys:
+                continue
+            seen_keys.add(logical_key)
+            enabled.append(
+                {
+                    "logical_key": logical_key,
+                    "project_key": project_key,
+                    "agent_id": agent_id,
+                    "label": available[agent_id],
+                    # Admin-authored display profile - sanitized + bounded server-side
+                    # (never a query/table/connection, just the agent-library copy).
+                    "profile": validate_agent_meta(
+                        meta_by_pair.get((project_key, agent_id))
+                    ),
+                }
+            )
 
         settings.set_enabled_agents(enabled, updated_by=identity["user_id"])
     except Exception:

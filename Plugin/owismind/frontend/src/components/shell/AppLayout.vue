@@ -151,8 +151,10 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .app { transition: none; }
 }
+/* Collapsed = a thin icon RAIL (not fully hidden): keeps New conversation, nav,
+   help and the account avatar one click away while freeing the canvas. */
 .app.sidebar-collapsed {
-  grid-template-columns: 0 1fr;
+  grid-template-columns: var(--rail-w) 1fr;
 }
 
 .resize-handle {
@@ -196,7 +198,7 @@ onBeforeUnmount(() => {
   grid-template-columns: var(--sidebar-w) 1fr var(--evidence-w);
 }
 .app.sidebar-collapsed.with-evidence {
-  grid-template-columns: 0 1fr var(--evidence-w);
+  grid-template-columns: var(--rail-w) 1fr var(--evidence-w);
 }
 .app.with-evidence .main {
   border-right: 1px solid var(--border);

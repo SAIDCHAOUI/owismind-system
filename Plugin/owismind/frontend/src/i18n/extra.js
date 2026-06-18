@@ -206,6 +206,80 @@ export const extraMessages = {
     'admin.quotas.applied': '{0} utilisateur(s) mis à jour.',
     'admin.activity.empty': "Le journal d'activité sera bientôt disponible.",
 
+    // === Charte redesign additions =========================================
+    // Account (the page formerly "Settings" -> "My account").
+    'set.eyebrow': 'Mon compte',
+    'set.title': 'Mon compte',
+    'sb.settings': 'Mon compte',
+    'sb.account': 'Compte',
+
+    // Sidebar - collapsed icon rail (tooltips).
+    'sb.expand': 'Déplier le menu',
+    'sb.collapse': 'Replier le menu',
+    'rail.new': 'Nouvelle conversation',
+    'rail.chat': 'Conversations',
+    'rail.agents': 'Agents',
+    'rail.help': 'Aide et support',
+    'rail.account': 'Mon compte',
+
+    // Agents library - list + detail.
+    'ag.eyebrow': 'Bibliothèque',
+    'ag.title': 'Agents disponibles',
+    'ag.desc':
+      "Les agents OWI déployés sur Dataiku DSS. Ouvrez une fiche pour voir ce qu'un agent sait faire, puis démarrez une conversation.",
+    'ag.search': 'Rechercher un agent…',
+    'ag.no_match': "Aucun agent ne correspond à « {0} ».",
+    'ag.count': '{0} agent(s)',
+    'ag.back': 'Tous les agents',
+    'ag.capabilities': 'Ce que fait cet agent',
+    'ag.tools': 'Outils exposés',
+    'ag.tools_count': '{0} outil(s)',
+    'ag.new_conv_with': 'Démarrer une conversation',
+    'ag.start': 'Démarrer une conversation',
+    'ag.open': 'Voir la fiche',
+    'ag.badge.default': 'Par défaut',
+    'ag.badge.new': 'Nouveau',
+    'ag.badge.beta': 'Bêta',
+    'ag.meta_missing':
+      "La fiche de cet agent n'a pas encore été renseignée par un administrateur.",
+
+    // Admin - agent profile editor (admin-authored, stored with the whitelist).
+    'admin.agents.pick_project': 'Projet source',
+    'admin.agents.in_project': 'Agents du projet',
+    'admin.agents.add': 'Ajouter',
+    'admin.agents.added': 'Ajouté',
+    'admin.agents.enabled_count': 'Agents exposés ({0})',
+    'admin.agents.enabled_empty':
+      'Aucun agent exposé pour le moment. Choisissez un projet, puis ajoutez les agents à mettre à disposition.',
+    'admin.agents.configure': 'Modifier la fiche',
+    'admin.agents.no_profile': 'Fiche à compléter',
+    'admin.agents.has_profile': 'Fiche renseignée',
+    'admin.agents.editor_title': "Fiche de l'agent",
+    'admin.agents.editor_desc':
+      "Cette fiche est ce que vos utilisateurs voient dans la bibliothèque. Renseignez-la pour qu'ils comprennent ce que l'agent sait faire.",
+    'admin.agents.f_label': 'Agent (Dataiku)',
+    'admin.agents.f_icon': 'Icône',
+    'admin.agents.f_badge': 'Badge',
+    'admin.agents.f_tagline': 'Accroche',
+    'admin.agents.f_tagline_ph': 'Ex. : Revenus, budget et forecast',
+    'admin.agents.f_desc': 'Description',
+    'admin.agents.f_desc_ph':
+      "Décrivez en quelques phrases ce que l'agent sait faire, ses sources de données et quand l'utiliser.",
+    'admin.agents.f_caps': 'Capacités',
+    'admin.agents.f_caps_ph': 'Une capacité par ligne',
+    'admin.agents.f_caps_hint': 'Une capacité par ligne (8 maximum).',
+    'admin.agents.f_tools': 'Outils exposés',
+    'admin.agents.f_tools_ph': 'Un outil par ligne',
+    'admin.agents.f_tools_hint': 'Noms affichés aux utilisateurs (un par ligne, 16 maximum).',
+    'admin.agents.badge.none': 'Aucun',
+    'admin.agents.badge.default': 'Par défaut',
+    'admin.agents.badge.new': 'Nouveau',
+    'admin.agents.badge.beta': 'Bêta',
+    'admin.agents.preview': 'Aperçu',
+    'admin.agents.editor_done': 'Terminé',
+    'admin.agents.unsaved': 'Fiches modifiées - cliquez sur « {0} » pour appliquer.',
+    'admin.agents.char_count': '{0}/{1}',
+
     // Evidence Studio (v1) - the proof panel
     'ev.title': 'Evidence Studio',
     'ev.open': 'Preuves',
@@ -553,6 +627,79 @@ export const extraMessages = {
     'admin.quotas.clear': 'Reset to default',
     'admin.quotas.applied': '{0} user(s) updated.',
     'admin.activity.empty': 'The activity log will be available soon.',
+
+    // === Charte redesign additions =========================================
+    // Account (the page formerly "Settings" -> "My account").
+    'set.eyebrow': 'My account',
+    'set.title': 'My account',
+    'sb.settings': 'My account',
+    'sb.account': 'Account',
+
+    // Sidebar - collapsed icon rail (tooltips).
+    'sb.expand': 'Expand menu',
+    'sb.collapse': 'Collapse menu',
+    'rail.new': 'New conversation',
+    'rail.chat': 'Conversations',
+    'rail.agents': 'Agents',
+    'rail.help': 'Help and support',
+    'rail.account': 'My account',
+
+    // Agents library - list + detail.
+    'ag.eyebrow': 'Library',
+    'ag.title': 'Available agents',
+    'ag.desc':
+      'The OWI agents deployed on Dataiku DSS. Open an agent to see what it can do, then start a conversation.',
+    'ag.search': 'Search agents…',
+    'ag.no_match': 'No agent matches "{0}".',
+    'ag.count': '{0} agent(s)',
+    'ag.back': 'All agents',
+    'ag.capabilities': 'What this agent does',
+    'ag.tools': 'Exposed tools',
+    'ag.tools_count': '{0} tool(s)',
+    'ag.new_conv_with': 'Start a conversation',
+    'ag.start': 'Start a conversation',
+    'ag.open': 'View profile',
+    'ag.badge.default': 'Default',
+    'ag.badge.new': 'New',
+    'ag.badge.beta': 'Beta',
+    'ag.meta_missing': "This agent's profile has not been filled in by an administrator yet.",
+
+    // Admin - agent profile editor (admin-authored, stored with the whitelist).
+    'admin.agents.pick_project': 'Source project',
+    'admin.agents.in_project': 'Agents in the project',
+    'admin.agents.add': 'Add',
+    'admin.agents.added': 'Added',
+    'admin.agents.enabled_count': 'Exposed agents ({0})',
+    'admin.agents.enabled_empty':
+      'No agent exposed yet. Pick a project, then add the agents you want to make available.',
+    'admin.agents.configure': 'Edit profile',
+    'admin.agents.no_profile': 'Profile to complete',
+    'admin.agents.has_profile': 'Profile filled in',
+    'admin.agents.editor_title': 'Agent profile',
+    'admin.agents.editor_desc':
+      "This profile is what your users see in the library. Fill it in so they understand what the agent can do.",
+    'admin.agents.f_label': 'Agent (Dataiku)',
+    'admin.agents.f_icon': 'Icon',
+    'admin.agents.f_badge': 'Badge',
+    'admin.agents.f_tagline': 'Tagline',
+    'admin.agents.f_tagline_ph': 'e.g. Revenue, budget and forecast',
+    'admin.agents.f_desc': 'Description',
+    'admin.agents.f_desc_ph':
+      'Describe in a few sentences what the agent can do, its data sources and when to use it.',
+    'admin.agents.f_caps': 'Capabilities',
+    'admin.agents.f_caps_ph': 'One capability per line',
+    'admin.agents.f_caps_hint': 'One capability per line (8 max).',
+    'admin.agents.f_tools': 'Exposed tools',
+    'admin.agents.f_tools_ph': 'One tool per line',
+    'admin.agents.f_tools_hint': 'Names shown to users (one per line, 16 max).',
+    'admin.agents.badge.none': 'None',
+    'admin.agents.badge.default': 'Default',
+    'admin.agents.badge.new': 'New',
+    'admin.agents.badge.beta': 'Beta',
+    'admin.agents.preview': 'Preview',
+    'admin.agents.editor_done': 'Done',
+    'admin.agents.unsaved': 'Profiles edited - click "{0}" to apply.',
+    'admin.agents.char_count': '{0}/{1}',
 
     // Evidence Studio (v1) - the proof panel
     'ev.title': 'Evidence Studio',

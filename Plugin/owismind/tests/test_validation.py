@@ -107,5 +107,73 @@ class ValidateChatStartTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "agent_key_too_long")
 
 
+from owismind.security.validation import (  # noqa: E402
+    DEFAULT_AGENT_ICON,
+    MAX_AGENT_DESC_CHARS,
+    MAX_AGENT_TAGLINE_CHARS,
+    validate_agent_meta,
+)
+
+
+class TestAgentMeta(unittest.TestCase):
+    """Admin-authored agent profile: sanitized + bounded, never raising."""
+
+    def test_none_or_garbage_yields_empty_profile(self):
+        for raw in (None, "x", 42, [], True):
+            meta = validate_agent_meta(raw)
+            self.assertEqual(meta["tagline"], "")
+            self.assertEqual(meta["description"], "")
+            self.assertEqual(meta["capabilities"], [])
+            self.assertEqual(meta["tools"], [])
+            self.assertEqual(meta["icon"], DEFAULT_AGENT_ICON)
+            self.assertEqual(meta["badge"], "")
+
+    def test_strings_are_stripped_and_clamped(self):
+        meta = validate_agent_meta(
+            {"tagline": "  hello  ", "description": "x" * (MAX_AGENT_DESC_CHARS + 50)}
+        )
+        self.assertEqual(meta["tagline"], "hello")
+        self.assertEqual(len(meta["description"]), MAX_AGENT_DESC_CHARS)
+
+    def test_tagline_is_length_capped(self):
+        meta = validate_agent_meta({"tagline": "a" * (MAX_AGENT_TAGLINE_CHARS + 10)})
+        self.assertEqual(len(meta["tagline"]), MAX_AGENT_TAGLINE_CHARS)
+
+    def test_lists_drop_empties_and_cap_count(self):
+        meta = validate_agent_meta(
+            {
+                "capabilities": ["a", "  ", "", "b", 1, None] + ["c"] * 20,
+                "tools": ["t1", "  t2  ", ""],
+            }
+        )
+        # Empties / non-strings dropped, count capped at 8.
+        self.assertEqual(len(meta["capabilities"]), 8)
+        self.assertEqual(meta["capabilities"][0], "a")
+        self.assertEqual(meta["capabilities"][1], "b")
+        self.assertEqual(meta["tools"], ["t1", "t2"])
+
+    def test_icon_must_be_whitelisted(self):
+        self.assertEqual(validate_agent_meta({"icon": "trendUp"})["icon"], "trendUp")
+        # An unknown / unsafe icon name falls back to the default (never rendered raw).
+        self.assertEqual(validate_agent_meta({"icon": "<script>"})["icon"], DEFAULT_AGENT_ICON)
+        self.assertEqual(validate_agent_meta({"icon": 123})["icon"], DEFAULT_AGENT_ICON)
+
+    def test_badge_must_be_in_enum(self):
+        self.assertEqual(validate_agent_meta({"badge": "new"})["badge"], "new")
+        self.assertEqual(validate_agent_meta({"badge": "bogus"})["badge"], "")
+
+    def test_unhashable_icon_or_badge_never_raises(self):
+        # JSON arrays/objects arrive as list/dict: the membership test must not raise.
+        for raw in ({"icon": [], "badge": {}}, {"icon": {"a": 1}, "badge": ["x"]}):
+            meta = validate_agent_meta(raw)
+            self.assertEqual(meta["icon"], DEFAULT_AGENT_ICON)
+            self.assertEqual(meta["badge"], "")
+
+    def test_control_chars_are_stripped(self):
+        meta = validate_agent_meta({"tagline": "ab\x00\x07cd", "description": "x\ny"})
+        self.assertNotIn("\x00", meta["tagline"])
+        self.assertNotIn("\x07", meta["tagline"])
+
+
 if __name__ == "__main__":
     unittest.main()

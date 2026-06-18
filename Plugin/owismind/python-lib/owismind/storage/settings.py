@@ -99,8 +99,10 @@ def set_setting(key, value, updated_by=None):
 def get_enabled_agents():
     """Return the admin-enabled agents list, or ``[]`` if none configured.
 
-    Each item is ``{logical_key, project_key, agent_id, label}``. This is the
-    server-side whitelist; the chat front references an agent only by logical_key.
+    Each item is ``{logical_key, project_key, agent_id, label, profile}`` (``profile``
+    is the admin-authored display copy: tagline / description / capabilities / tools /
+    icon / badge). This is the server-side whitelist; the chat front references an
+    agent only by logical_key.
     """
     value = get_setting(SETTING_ENABLED_AGENTS, default=[])
     return value if isinstance(value, list) else []
@@ -116,9 +118,10 @@ def resolve_enabled_agent(logical_key):
 
     This is the whitelist ENFORCEMENT point for the chat path: the frontend sends
     only an opaque ``logical_key`` (never a raw agent_id). We look it up in the
-    currently-enabled list and return ``{logical_key, project_key, agent_id, label}``
-    only if it matches a real, still-enabled agent. A forged or stale key matches
-    nothing and yields None, so it can never resolve to an agent to run.
+    currently-enabled list and return the whole entry (``{logical_key, project_key,
+    agent_id, label, profile}``) only if it matches a real, still-enabled agent; the
+    chat path uses just project_key/agent_id (the ``profile`` is display-only). A forged
+    or stale key matches nothing and yields None, so it can never resolve to an agent to run.
     """
     if not logical_key:
         return None

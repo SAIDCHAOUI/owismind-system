@@ -19,7 +19,7 @@ defineProps({
 
 <template>
   <div :class="['empty-state', { 'empty-state--bordered': bordered }]">
-    <span v-if="icon" class="empty-state__icon"><Icon :name="icon" /></span>
+    <span v-if="icon" class="empty-state__icon"><Icon :name="icon" :size="20" /></span>
     <div class="empty-state__head">
       <span v-if="title" class="empty-state__title">{{ title }}</span>
       <span v-if="tag" class="empty-state__tag">{{ tag }}</span>
@@ -45,15 +45,16 @@ defineProps({
   background: var(--surface);
 }
 .empty-state__icon {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: var(--orange-soft-dark);
-  color: var(--orange);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
 }
-.empty-state__icon :deep(.ui-icon) { width: 18px; height: 18px; }
+.empty-state__icon :deep(.ui-icon) { width: 20px; height: 20px; }
 .empty-state__head {
   display: inline-flex;
   align-items: center;

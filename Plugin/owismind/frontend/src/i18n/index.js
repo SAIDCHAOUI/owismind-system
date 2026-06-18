@@ -22,15 +22,17 @@ function detectLocale() {
   } catch (e) {
     /* localStorage may be unavailable */
   }
-  const nav = (navigator.language || 'fr').slice(0, 2).toLowerCase()
-  return SUPPORTED.includes(nav) ? nav : 'fr'
+  // English is the primary language of the app: a user with no stored choice and
+  // a non-English browser still lands in English (the language switcher remains).
+  const nav = (navigator.language || 'en').slice(0, 2).toLowerCase()
+  return SUPPORTED.includes(nav) ? nav : 'en'
 }
 
 export const i18n = createI18n({
   legacy: false, // Composition API
   globalInjection: true, // $t in templates
   locale: detectLocale(),
-  fallbackLocale: 'fr',
+  fallbackLocale: 'en',
   messages,
   warnHtmlMessage: false, // a few keys carry trusted canned HTML (e.g. default.answer_html)
   missingWarn: false,

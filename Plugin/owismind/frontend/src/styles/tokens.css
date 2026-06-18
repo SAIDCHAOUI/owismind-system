@@ -1,19 +1,15 @@
 /* =============================================================================
  * OWIsMind - Design tokens (single source of truth for the theme layer).
  *
- * Ported VERBATIM from the validated mockup's theme.css: the brand
- * Orange palette, spacing, type, radius and motion tokens, plus the light/dark
- * theme variables switched via `body[data-theme]`.
+ * Orange brand, sober (white / near-black / Orange #FF7900 used as a rare accent).
+ * The additions below (a weight scale, a focus ring, the collapsed-rail width, a
+ * small square radius for icon chips) sit on top of the validated neutral palette as
+ * ADDITIVE tokens: every PRE-EXISTING token keeps its name and value, so the
+ * validated chat / Evidence visuals do not move.
  *
- * NEW tokens added here are NO-OP additions: their
- * values equal the literals already hard-coded across the maquette, so adding
- * them changes NOT A SINGLE PIXEL. They exist only to make a future, clean
- * dark-first pass (and consistent status colors / z-index) feasible without
- * touching the validated visuals. Nothing references the new tokens yet.
- *
- * Theme switch: set `document.body.dataset.theme = 'light' | 'dark'` (the
- * semantic surface/text/border tokens live ONLY under `body[data-theme=...]`,
- * so a value MUST be present on <body> - main.js sets it before mount).
+ * Theme switch: set `document.body.dataset.theme = 'light' | 'dark'` (the semantic
+ * surface/text/border tokens live ONLY under `body[data-theme=...]`, so a value
+ * MUST be present on <body> - main.js sets it before mount).
  * ============================================================================= */
 
 :root {
@@ -21,9 +17,11 @@
   --orange: #ff7900;
   --orange-deep: #cc6100;
   --orange-soft: #fff5ec;
+  /* A faint orange hairline tint for brand chrome (outlined chips / active rows). */
+  --orange-line: rgba(255, 121, 0, 0.22);
 
   /* --- Spacing (8px-anchored) --- */
-  --s-1: 4px;      /* NO-OP add: sub-8px gaps were hard-coded in the mockup */
+  --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
   --s-4: 16px;
@@ -36,7 +34,9 @@
   --s-11: 96px;
   --s-12: 128px;
 
-  /* --- Type --- */
+  /* --- Type ---
+   * Helvetica Neue IS the Orange master-brand typeface direction: we lean into it
+   * with heavy weights and tight tracking (the editorial feel) rather than swap it. */
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
 
@@ -49,36 +49,46 @@
   --fs-2xl: 28px;
   --fs-3xl: 36px;
 
-  /* --- Radius --- */
+  /* Weight scale (Helvetica Neue resolves up to 700). */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Tracking presets for tight titles / open uppercase labels. */
+  --tracking-tight: -0.02em;
+  --tracking-eyebrow: 0.08em;
+
+  /* --- Radius (kept: border-radius is a deliberate brand choice the user keeps) --- */
+  --r-xs: 4px;
   --r-sm: 6px;
   --r: 10px;
-  --r-lg: 12px;    /* NO-OP add: large containers */
-  --r-pill: 100px; /* NO-OP add: pills/badges/progress */
+  --r-lg: 12px;
+  --r-pill: 100px;
 
-  /* --- Chat column measure ---
-   * The message thread and the prompt bar share ONE width so the answer text
-   * lines up edge-to-edge with the input (like ChatGPT / Claude). ~90% of the
-   * available center column, capped so lines stay readable on ultra-wide screens. */
+  /* Small square radius for icon chips (the orange logo is a square). */
+  --square: 8px;
+
+  /* --- Chat column measure (unchanged) --- */
   --chat-col: 90%;
   --chat-col-max: 1200px;
 
+  /* Collapsed-sidebar icon rail width. */
+  --rail-w: 60px;
+
   /* --- Motion --- */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur: 200ms;
   --dur-slow: 380ms;
 
-  /* --- Z-index scale (NO-OP add) ---
-   * Ordered to PRESERVE the maquette's existing stacking (collisions at 60/200/2100).
-   * menu < overlay < modal < toast. */
+  /* --- Z-index scale --- */
   --z-menu: 60;
   --z-overlay: 200;
   --z-modal: 201;
   --z-toast: 2100;
 
-  /* --- Status colors (NO-OP add) - LIGHT defaults ---
-   * These mirror the hard-coded status hexes scattered in the mockup's CSS.
-   * Note: the Evidence Studio deliberately avoids green (no-green rule); these are for
-   * generic status (toasts, admin, feedback) NOT for Evidence verdicts. */
+  /* --- Status colors - LIGHT defaults --- */
   --success: #15803d;
   --danger: #b91c1c;
   --warn: #d97706;
@@ -98,14 +108,11 @@ body[data-theme="light"] {
   --text-3: #9a9a9a;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 
-  /* NO-OP add: light value of the orange tint (used as-is today) */
   --orange-soft-dark: var(--orange-soft);
   --orange-on-dark: var(--orange-deep);
-  /* Orange for SMALL TEXT on --bg: darkened to clear WCAG AA 4.5:1 on white
-     (--orange-deep #cc6100 is only 3.98:1 - fine for accents, not body-size text). */
+  /* Orange for SMALL TEXT on --bg: darkened to clear WCAG AA 4.5:1 on white. */
   --orange-text: #b85700;
-  /* Soft status tints - low-opacity fills for selected/active states, theme-aware
-     like --orange-soft-dark (so they stay visible on the dark surface too). */
+  /* Soft status tints. */
   --success-soft: rgba(34, 197, 94, 0.10);
   --danger-soft: rgba(239, 68, 68, 0.08);
 }
@@ -121,19 +128,15 @@ body[data-theme="dark"] {
   --text-3: #6e6e6e;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 
-  /* NO-OP add: dark replacements that were inlined as raw rgba/hex in the mockup */
-  --orange-soft-dark: rgba(255, 121, 0, 0.10); /* replaced 35 inline dark patches */
-  --orange-on-dark: #ffb066;                   /* replaced 9 ad-hoc --orange-deep dark subs */
-  --orange-text: #ffb066;                      /* small-text orange (10.8:1 on --bg) */
+  --orange-soft-dark: rgba(255, 121, 0, 0.10);
+  --orange-on-dark: #ffb066;
+  --orange-text: #ffb066;
 
-  /* Status colors - dark variants */
   --success: #4ade80;
   --danger: #f87171;
   --warn: #fb923c;
   --info: #93c5fd;
 
-  /* Soft status tints - brighter hue + a touch more opacity so the fill reads on
-     the dark surface (the light-theme values would wash out to invisible). */
   --success-soft: rgba(74, 222, 128, 0.14);
   --danger-soft: rgba(248, 113, 113, 0.13);
 }

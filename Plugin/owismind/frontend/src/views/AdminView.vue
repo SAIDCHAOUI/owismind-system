@@ -1,13 +1,14 @@
 <script setup>
-// Admin space (Phase 4) - dressed à la maquette admin console (tabbed) but HONEST:
-// only the features with a real, validated backend are wired (storage view,
-// agent whitelist, users + admin flag). The maquette's mock-driven tabs (org
-// budget, per-user quotas, activity feed) have NO backend, so they are labeled
-// empty states - never fake KPIs/spend/activity.
+// Admin console (tabbed) - HONEST: only features with a real, validated backend are
+// wired (storage view, agent whitelist + authored profiles, users + admin flag,
+// monthly budgets). The activity feed has no backend, so it is an explicit empty
+// state (never fake KPIs/spend/activity). The route is server-gated AND guarded
+// client-side (router meta.requiresAdmin).
 //
-// The data + actions are ported verbatim from the validated AdminPanel.vue logic
-// (same 7 endpoints, same error handling); only the UI is new. The route is
-// already server-gated AND guarded client-side (router meta.requiresAdmin).
+// Agents tab: besides enabling agents, an admin authors each agent's PROFILE
+// (tagline / description / capabilities / tools / icon / badge) in a modal editor.
+// That profile is stored with the whitelist and is the single source of the
+// agent-library cards (no hardcoded copy anywhere in the frontend).
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '../stores/session.js'
@@ -30,7 +31,7 @@ import {
   gaugePct,
 } from '../composables/budgetModel.js'
 import { PageShell, SettingCard, EmptyState } from '../components/pages'
-import { Tabs, Button, Icon } from '../components/ui'
+import { Tabs, Button, Icon, Modal } from '../components/ui'
 
 const { t, locale } = useI18n()
 const session = useSessionStore()
@@ -45,28 +46,97 @@ const storage = ref(null) // { connection, project_key, table_prefix, namespace,
 const users = ref([]) // [{ user_id, display_name, user_groups, is_admin, ... }]
 const busyUser = ref('')
 
-// --- Agent whitelist config (ported from AdminPanel.vue) ----------------------
+// --- Agent whitelist + authored profiles --------------------------------------
 const projects = ref([]) // visible DSS project keys
 const selectedProject = ref('') // currently inspected project
 const projectAgents = ref([]) // [{ agent_id, description }] for the selected project
 const loadingAgents = ref(false)
-const enabled = ref([]) // working selection: [{ project_key, agent_id, label }]
+// Working selection: [{ project_key, agent_id, label, profile }].
+const enabled = ref([])
 const savingAgents = ref(false)
 const agentsMsg = ref('')
+const profilesDirty = ref(false)
 
-// --- Monthly budgets / quotas -------------------------------------------------
-const budget = ref(null) // { config, period_start, next_reset, users: [...] }
+// Icons an admin may assign to an agent (must match the server-side whitelist).
+const AGENT_ICONS = [
+  'robot', 'sparkle', 'sparkles', 'trendUp', 'chart', 'layers', 'database',
+  'route', 'message', 'users', 'wallet', 'shield', 'globe', 'alert',
+  'thumbsUp', 'sliders', 'bookOpen', 'tool', 'tag', 'grid',
+]
+const BADGES = ['', 'default', 'new', 'beta']
+const TAGLINE_MAX = 120
+const DESC_MAX = 700
+
+function emptyProfile() {
+  return { tagline: '', description: '', capabilities: [], tools: [], icon: 'robot', badge: '' }
+}
+
+// --- Profile editor (modal) ---------------------------------------------------
+const editorOpen = ref(false)
+const editingIndex = ref(-1)
+const editForm = reactive({
+  label: '',
+  project_key: '',
+  icon: 'robot',
+  badge: '',
+  tagline: '',
+  description: '',
+  capsText: '',
+  toolsText: '',
+})
+
+function linesToList(text, max) {
+  return String(text || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, max)
+}
+
+function openEditor(i) {
+  const e = enabled.value[i]
+  if (!e) return
+  const p = e.profile || emptyProfile()
+  editingIndex.value = i
+  editForm.label = e.label
+  editForm.project_key = e.project_key
+  editForm.icon = p.icon || 'robot'
+  editForm.badge = p.badge || ''
+  editForm.tagline = p.tagline || ''
+  editForm.description = p.description || ''
+  editForm.capsText = (p.capabilities || []).join('\n')
+  editForm.toolsText = (p.tools || []).join('\n')
+  editorOpen.value = true
+}
+
+function applyEditor() {
+  const e = enabled.value[editingIndex.value]
+  if (e) {
+    e.profile = {
+      icon: editForm.icon || 'robot',
+      badge: editForm.badge || '',
+      tagline: editForm.tagline.trim().slice(0, TAGLINE_MAX),
+      description: editForm.description.trim().slice(0, DESC_MAX),
+      capabilities: linesToList(editForm.capsText, 8),
+      tools: linesToList(editForm.toolsText, 16),
+    }
+    profilesDirty.value = true
+  }
+  editorOpen.value = false
+}
+
+// Live preview of how the agent card will read with the current form values.
+const previewCaps = computed(() => linesToList(editForm.capsText, 8))
+const previewTools = computed(() => linesToList(editForm.toolsText, 16))
+
+// --- Monthly budgets / quotas (unchanged logic) -------------------------------
+const budget = ref(null)
 const budgetMsg = ref('')
 const savingBudget = ref(false)
 const applyingQuota = ref(false)
-// Global-config form (seeded from budget.config on load). Temp fields are blank when
-// no global boost is active; filling BOTH arms the boost on save.
 const budgetForm = reactive({ limit_usd: 50, enabled: true, temp_limit_usd: '', temp_days: '' })
-// Per-user override action: the working set of selected users + the limit to apply.
 const selected = reactive(new Set())
 const applyForm = reactive({ limit_usd: '', duration: 'permanent', note: '' })
-// Preset temporary-boost durations offered in the apply panel (days). 'permanent' is a
-// separate option; these map to expires_days on save.
 const DAY_DURATIONS = ['7', '30', '90']
 
 const budgetUsers = computed(() => (budget.value && budget.value.users) || [])
@@ -88,8 +158,6 @@ function seedBudgetForm() {
   if (!c) return
   budgetForm.limit_usd = c.limit_usd
   budgetForm.enabled = c.enabled !== false
-  // The temp-boost fields arm a NEW boost; the active one is shown separately (tempActive),
-  // so the form always starts blank - editing the default limit never touches the boost.
   budgetForm.temp_limit_usd = ''
   budgetForm.temp_days = ''
 }
@@ -125,10 +193,6 @@ function toggleAll() {
   }
 }
 
-// Single POST helper. {limit_usd, enabled} are always sent; ``extra`` carries the temp
-// action (nothing = preserve the active boost, {temp_limit_usd,temp_days} = arm a new
-// one, {clear_temp:true} = remove it). This decoupling is what lets an admin edit the
-// default limit without disturbing (or being blocked by) an active global boost.
 async function postBudget(extra) {
   if (savingBudget.value) return
   savingBudget.value = true
@@ -145,13 +209,9 @@ async function postBudget(extra) {
     savingBudget.value = false
   }
 }
-
-// Save the default limit + enforcement switch only (the active boost is preserved).
 function saveBudget() {
   return postBudget({})
 }
-
-// Arm a fresh global temp boost (amount + duration). Both fields are required.
 function applyTempBoost() {
   if (budgetForm.temp_limit_usd === '' || budgetForm.temp_days === '') return
   return postBudget({
@@ -159,8 +219,6 @@ function applyTempBoost() {
     temp_days: Number(budgetForm.temp_days),
   })
 }
-
-// Remove the active global temp boost (everyone reverts to the default limit).
 function clearTempBoost() {
   return postBudget({ clear_temp: true })
 }
@@ -222,11 +280,12 @@ async function loadAll() {
     storage.value = s.storage
     users.value = u.users || []
     projects.value = p.projects || []
-    // Keep only the fields we resend on save; labels come from the backend.
+    // Keep the fields we resend on save (selection + authored profile); labels come from the backend.
     enabled.value = (a.agents || []).map((e) => ({
       project_key: e.project_key,
       agent_id: e.agent_id,
       label: e.label,
+      profile: e.profile && typeof e.profile === 'object' ? { ...emptyProfile(), ...e.profile } : emptyProfile(),
     }))
     budget.value = { config: b.config, period_start: b.period_start, next_reset: b.next_reset, users: b.users || [] }
     seedBudgetForm()
@@ -270,8 +329,10 @@ function toggleAgent(agent) {
       project_key: selectedProject.value,
       agent_id: agent.agent_id,
       label: agent.description,
+      profile: emptyProfile(),
     })
   }
+  profilesDirty.value = true
 }
 
 function removeEnabled(entry) {
@@ -279,6 +340,12 @@ function removeEnabled(entry) {
     (e) => e.project_key === entry.project_key && e.agent_id === entry.agent_id,
   )
   if (idx >= 0) enabled.value.splice(idx, 1)
+  profilesDirty.value = true
+}
+
+function hasProfile(e) {
+  const p = e.profile || {}
+  return !!(p.tagline || p.description || (p.capabilities && p.capabilities.length))
 }
 
 async function saveAgents() {
@@ -286,13 +353,19 @@ async function saveAgents() {
   savingAgents.value = true
   agentsMsg.value = ''
   try {
-    const payload = enabled.value.map((e) => ({ project_key: e.project_key, agent_id: e.agent_id }))
+    const payload = enabled.value.map((e) => ({
+      project_key: e.project_key,
+      agent_id: e.agent_id,
+      profile: e.profile || emptyProfile(),
+    }))
     const res = await saveAdminAgents(payload)
     enabled.value = (res.agents || []).map((e) => ({
       project_key: e.project_key,
       agent_id: e.agent_id,
       label: e.label,
+      profile: e.profile && typeof e.profile === 'object' ? { ...emptyProfile(), ...e.profile } : emptyProfile(),
     }))
+    profilesDirty.value = false
     agentsMsg.value = t('admin.agents.saved', [res.count])
   } catch (e) {
     agentsMsg.value = t('admin.load_error')
@@ -318,18 +391,9 @@ async function toggleAdmin(u) {
 
 onMounted(loadAll)
 
-// DEV-only: expose the local refs so local visual validation can seed admin data
-// without a backend (mirrors main.js window.__pinia). Tree-shaken from prod.
 if (import.meta.env.DEV) {
   window.__adminRefs = {
-    loading,
-    errorMsg,
-    storage,
-    users,
-    projects,
-    selectedProject,
-    projectAgents,
-    enabled,
+    loading, errorMsg, storage, users, projects, selectedProject, projectAgents, enabled,
   }
 }
 </script>
@@ -352,21 +416,21 @@ if (import.meta.env.DEV) {
     <p v-else-if="errorMsg" class="admin-status admin-error">{{ errorMsg }}</p>
 
     <template v-else>
-      <!-- OVERVIEW: real KPIs only + storage config -->
+      <!-- ===================== OVERVIEW ===================== -->
       <div v-show="activeTab === 'overview'" class="admin-panel">
         <div class="kpi-grid">
           <div class="kpi">
-            <span class="kpi-ico"><Icon name="users" /></span>
+            <span class="kpi-ico"><Icon name="users" :size="18" /></span>
             <span class="kpi-label">{{ t('admin.kpi.users') }}</span>
             <span class="kpi-value mono">{{ users.length }}</span>
           </div>
           <div class="kpi">
-            <span class="kpi-ico"><Icon name="sparkle" /></span>
+            <span class="kpi-ico"><Icon name="robot" :size="18" /></span>
             <span class="kpi-label">{{ t('admin.kpi.agents') }}</span>
             <span class="kpi-value mono">{{ enabled.length }}</span>
           </div>
           <div class="kpi">
-            <span class="kpi-ico"><Icon name="database" /></span>
+            <span class="kpi-ico"><Icon name="database" :size="18" /></span>
             <span class="kpi-label">{{ t('admin.kpi.connection') }}</span>
             <span class="kpi-value mono">{{ storage?.connection || '-' }}</span>
           </div>
@@ -402,13 +466,14 @@ if (import.meta.env.DEV) {
         </SettingCard>
       </div>
 
-      <!-- AGENTS: real whitelist config -->
+      <!-- ===================== AGENTS ===================== -->
       <div v-show="activeTab === 'agents'" class="admin-panel">
         <SettingCard :eyebrow="t('admin.agents.title')">
           <p class="card-desc muted">{{ t('admin.agents.desc') }}</p>
 
+          <!-- 1. Pick a project, then add its agents ------------------------------ -->
           <div class="agent-pick">
-            <label class="field-label" for="admin-project">{{ t('admin.agents.project') }}</label>
+            <label class="field-label" for="admin-project">{{ t('admin.agents.pick_project') }}</label>
             <div class="select-wrap">
               <select id="admin-project" v-model="selectedProject" class="admin-select" @change="onProjectChange">
                 <option value="">{{ t('admin.agents.project_choose') }}</option>
@@ -419,40 +484,66 @@ if (import.meta.env.DEV) {
           </div>
 
           <p v-if="loadingAgents" class="muted card-desc">{{ t('admin.agents.loading') }}</p>
-          <ul v-else-if="projectAgents.length" class="agent-list">
-            <li v-for="a in projectAgents" :key="a.agent_id">
-              <label class="agent-row">
-                <input type="checkbox" :checked="isEnabled(a)" @change="toggleAgent(a)" />
-                <span class="agent-label">{{ a.description }}</span>
-                <code class="agent-id">{{ a.agent_id }}</code>
-              </label>
+          <ul v-else-if="projectAgents.length" class="pick-list">
+            <li v-for="a in projectAgents" :key="a.agent_id" class="pick-row" :class="{ on: isEnabled(a) }">
+              <span class="pick-info">
+                <span class="pick-label">{{ a.description }}</span>
+                <code class="pick-id">{{ a.agent_id }}</code>
+              </span>
+              <button
+                type="button"
+                class="pick-btn"
+                :class="{ on: isEnabled(a) }"
+                @click="toggleAgent(a)"
+              >
+                <Icon :name="isEnabled(a) ? 'check' : 'plus'" />
+                {{ isEnabled(a) ? t('admin.agents.added') : t('admin.agents.add') }}
+              </button>
             </li>
           </ul>
           <p v-else-if="selectedProject" class="muted card-desc">{{ t('admin.agents.none_in_project') }}</p>
+        </SettingCard>
 
-          <div v-if="enabled.length" class="enabled-box">
-            <p class="field-label">{{ t('admin.agents.enabled_title') }}</p>
-            <ul class="tags">
-              <li v-for="e in enabled" :key="e.project_key + '::' + e.agent_id" class="tag">
-                <span class="tag-label">{{ e.label }}</span>
-                <span class="tag-project mono">{{ e.project_key }}</span>
-                <button class="tag-x" type="button" :title="t('admin.agents.remove')" @click="removeEnabled(e)">
+        <!-- 2. Exposed agents + their authored profiles --------------------------- -->
+        <SettingCard :eyebrow="t('admin.agents.enabled_count', [enabled.length])">
+          <EmptyState v-if="!enabled.length" icon="robot" :desc="t('admin.agents.enabled_empty')" />
+          <ul v-else class="exposed-list">
+            <li v-for="(e, i) in enabled" :key="e.project_key + '::' + e.agent_id" class="exposed-row">
+              <span class="exposed-ico"><Icon :name="(e.profile && e.profile.icon) || 'robot'" :size="20" /></span>
+              <span class="exposed-info">
+                <span class="exposed-label">{{ e.label }}</span>
+                <span class="exposed-meta">
+                  <span class="exposed-project mono">{{ e.project_key }}</span>
+                  <span class="profile-state" :class="{ ok: hasProfile(e) }">
+                    <Icon :name="hasProfile(e) ? 'check' : 'alert'" />
+                    {{ hasProfile(e) ? t('admin.agents.has_profile') : t('admin.agents.no_profile') }}
+                  </span>
+                </span>
+              </span>
+              <span class="exposed-actions">
+                <button type="button" class="ghost-btn" @click="openEditor(i)">
+                  <Icon name="pencil" />{{ t('admin.agents.configure') }}
+                </button>
+                <button type="button" class="x-btn" :title="t('admin.agents.remove')" @click="removeEnabled(e)">
                   <Icon name="x" />
                 </button>
-              </li>
-            </ul>
-          </div>
+              </span>
+            </li>
+          </ul>
 
           <div class="agent-actions">
             <Button variant="primary" :disabled="savingAgents" @click="saveAgents">
               {{ savingAgents ? t('admin.agents.saving') : t('admin.agents.save') }}
             </Button>
+            <span v-if="profilesDirty && !agentsMsg" class="unsaved">
+              <Icon name="alert" />{{ t('admin.agents.unsaved', [t('admin.agents.save')]) }}
+            </span>
             <span v-if="agentsMsg" class="muted card-desc">{{ agentsMsg }}</span>
           </div>
         </SettingCard>
       </div>
 
-      <!-- USERS: real list + admin flag -->
+      <!-- ===================== USERS ===================== -->
       <div v-show="activeTab === 'users'" class="admin-panel">
         <SettingCard :eyebrow="t('admin.users.title')">
           <p class="card-desc muted">{{ t('admin.users.desc') }}</p>
@@ -488,9 +579,8 @@ if (import.meta.env.DEV) {
         </SettingCard>
       </div>
 
-      <!-- QUOTAS: real monthly-budget management -->
+      <!-- ===================== QUOTAS ===================== -->
       <div v-show="activeTab === 'quotas'" class="admin-panel">
-        <!-- Global configuration -->
         <SettingCard :eyebrow="t('admin.quotas.title')">
           <p class="card-desc muted">{{ t('admin.quotas.desc', [defaultLimit]) }}</p>
 
@@ -538,7 +628,6 @@ if (import.meta.env.DEV) {
           </div>
         </SettingCard>
 
-        <!-- Per-user limits -->
         <SettingCard :eyebrow="t('admin.quotas.users_title')">
           <p class="card-desc muted">{{ t('admin.quotas.users_desc') }}</p>
 
@@ -585,7 +674,6 @@ if (import.meta.env.DEV) {
             </table>
           </div>
 
-          <!-- Apply panel: shown once at least one user is selected -->
           <div v-if="selectedCount" class="q-apply">
             <div class="q-apply-head">{{ t('admin.quotas.apply_title', [selectedCount]) }}</div>
             <div class="q-apply-row">
@@ -620,11 +708,141 @@ if (import.meta.env.DEV) {
         </SettingCard>
       </div>
 
-      <!-- ACTIVITY: no activity backend → honest empty state -->
+      <!-- ===================== ACTIVITY ===================== -->
       <div v-show="activeTab === 'activity'" class="admin-panel">
         <EmptyState bordered icon="clock" :title="t('admin.tab.activity')" :tag="t('x.soon')" :desc="t('admin.activity.empty')" />
       </div>
     </template>
+
+    <!-- ===================== AGENT PROFILE EDITOR ===================== -->
+    <Modal v-model="editorOpen" :title="t('admin.agents.editor_title')" maxWidth="720px">
+      <p class="editor-desc">{{ t('admin.agents.editor_desc') }}</p>
+
+      <div class="editor-grid">
+        <div class="editor-form">
+          <div class="ed-field">
+            <label class="field-label">{{ t('admin.agents.f_label') }}</label>
+            <div class="ed-readonly">{{ editForm.label }} <code class="mono">{{ editForm.project_key }}</code></div>
+          </div>
+
+          <div class="ed-row">
+            <div class="ed-field ed-field--grow">
+              <label class="field-label">{{ t('admin.agents.f_icon') }}</label>
+              <div class="icon-picker">
+                <button
+                  v-for="ic in AGENT_ICONS"
+                  :key="ic"
+                  type="button"
+                  class="icon-opt"
+                  :class="{ on: editForm.icon === ic }"
+                  :aria-pressed="editForm.icon === ic"
+                  @click="editForm.icon = ic"
+                >
+                  <Icon :name="ic" :size="18" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ed-row">
+            <div class="ed-field">
+              <label class="field-label">{{ t('admin.agents.f_badge') }}</label>
+              <div class="badge-picker">
+                <button
+                  v-for="b in BADGES"
+                  :key="b || 'none'"
+                  type="button"
+                  class="badge-opt"
+                  :class="{ on: editForm.badge === b }"
+                  @click="editForm.badge = b"
+                >
+                  {{ t('admin.agents.badge.' + (b || 'none')) }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ed-field">
+            <label class="field-label" for="ed-tagline">
+              {{ t('admin.agents.f_tagline') }}
+              <span class="ed-count">{{ t('admin.agents.char_count', [editForm.tagline.length, TAGLINE_MAX]) }}</span>
+            </label>
+            <input
+              id="ed-tagline"
+              v-model="editForm.tagline"
+              type="text"
+              :maxlength="TAGLINE_MAX"
+              class="ed-input"
+              :placeholder="t('admin.agents.f_tagline_ph')"
+            />
+          </div>
+
+          <div class="ed-field">
+            <label class="field-label" for="ed-desc">
+              {{ t('admin.agents.f_desc') }}
+              <span class="ed-count">{{ t('admin.agents.char_count', [editForm.description.length, DESC_MAX]) }}</span>
+            </label>
+            <textarea
+              id="ed-desc"
+              v-model="editForm.description"
+              :maxlength="DESC_MAX"
+              rows="4"
+              class="ed-input ed-textarea"
+              :placeholder="t('admin.agents.f_desc_ph')"
+            />
+          </div>
+
+          <div class="ed-field">
+            <label class="field-label" for="ed-caps">{{ t('admin.agents.f_caps') }}</label>
+            <textarea
+              id="ed-caps"
+              v-model="editForm.capsText"
+              rows="4"
+              class="ed-input ed-textarea"
+              :placeholder="t('admin.agents.f_caps_ph')"
+            />
+            <p class="ed-hint">{{ t('admin.agents.f_caps_hint') }}</p>
+          </div>
+
+          <div class="ed-field">
+            <label class="field-label" for="ed-tools">{{ t('admin.agents.f_tools') }}</label>
+            <textarea
+              id="ed-tools"
+              v-model="editForm.toolsText"
+              rows="3"
+              class="ed-input ed-textarea"
+              :placeholder="t('admin.agents.f_tools_ph')"
+            />
+            <p class="ed-hint">{{ t('admin.agents.f_tools_hint') }}</p>
+          </div>
+        </div>
+
+        <!-- Live preview of the user-facing card -->
+        <aside class="editor-preview">
+          <span class="preview-label">{{ t('admin.agents.preview') }}</span>
+          <div class="preview-card">
+            <div class="preview-top">
+              <span class="preview-ico"><Icon :name="editForm.icon || 'robot'" :size="18" /></span>
+              <span v-if="editForm.badge" class="bdg" :class="editForm.badge">{{ t('ag.badge.' + editForm.badge) }}</span>
+            </div>
+            <div class="preview-name">{{ editForm.label }}</div>
+            <div v-if="editForm.tagline" class="preview-tagline">{{ editForm.tagline }}</div>
+            <div class="preview-desc">{{ editForm.description || t('ag.meta_missing') }}</div>
+            <ul v-if="previewCaps.length" class="preview-caps">
+              <li v-for="(c, i) in previewCaps" :key="i"><Icon name="check" />{{ c }}</li>
+            </ul>
+            <div v-if="previewTools.length" class="preview-tools">
+              <span v-for="tn in previewTools" :key="tn" class="preview-tool mono">{{ tn }}</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <template #footer>
+        <Button variant="ghost" @click="editorOpen = false">{{ t('mode.cancel') }}</Button>
+        <Button variant="primary" @click="applyEditor">{{ t('admin.agents.editor_done') }}</Button>
+      </template>
+    </Modal>
   </PageShell>
 </template>
 
@@ -652,21 +870,15 @@ if (import.meta.env.DEV) {
   align-items: center;
   gap: 5px;
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: 0.08em;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: var(--r-pill);
   background: var(--orange);
   color: #fff;
 }
 .admin-badge :deep(.ui-icon) { width: 11px; height: 11px; }
-.admin-desc {
-  margin: var(--s-4) 0 0;
-  font-size: var(--fs-md);
-  line-height: 1.6;
-  color: var(--text-2);
-  max-width: 640px;
-}
+.admin-desc { margin: var(--s-4) 0 0; font-size: var(--fs-md); line-height: 1.6; color: var(--text-2); max-width: 640px; }
 .admin-tabs { margin-top: var(--s-6); }
 
 .admin-status { padding: var(--s-6) 0; }
@@ -679,104 +891,179 @@ if (import.meta.env.DEV) {
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   padding: var(--s-5);
   border: 1px solid var(--border);
   border-radius: var(--r);
   background: var(--bg);
 }
 .kpi-ico {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--square);
   background: var(--orange-soft-dark);
   color: var(--orange);
   margin-bottom: 4px;
 }
-.kpi-ico :deep(.ui-icon) { width: 16px; height: 16px; }
-.kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); }
+.kpi-ico :deep(.ui-icon) { width: 18px; height: 18px; }
+.kpi-label { font-size: 11px; font-weight: var(--fw-semibold); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; color: var(--text-3); }
 .kpi-value { font-size: var(--fs-xl); font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
 
 /* --- Storage key-value --- */
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 8px var(--s-5); margin: 0 0 var(--s-4); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 9px var(--s-5); margin: 0 0 var(--s-4); }
 .kv dt { font-size: var(--fs-sm); color: var(--text-3); }
 .kv dd { font-size: var(--fs-sm); color: var(--text); margin: 0; }
-.kv code, .tables code, .agent-id { font-family: var(--font-mono); font-size: 12px; }
+.kv code, .tables code, .pick-id { font-family: var(--font-mono); font-size: 12px; }
 .kv-note { font-size: var(--fs-xs); margin: var(--s-3) 0 var(--s-2); }
-.prefix-warn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 8px;
-  font-size: var(--fs-xs);
-  color: var(--danger);
-}
+.prefix-warn { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; font-size: var(--fs-xs); color: var(--danger); }
 .prefix-warn :deep(.ui-icon) { width: 13px; height: 13px; flex-shrink: 0; }
 .tables { list-style: none; padding: 0; margin: 0 0 var(--s-3); display: flex; flex-direction: column; gap: 4px; }
 .tables code { color: var(--text-2); }
 
-/* --- Agent whitelist --- */
-.field-label { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-3); }
-.agent-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--s-4); max-width: 360px; }
+/* --- Agent whitelist + profiles --- */
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.agent-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--s-4); max-width: 380px; }
 .select-wrap { position: relative; display: flex; }
 .admin-select {
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
-  padding: 9px 34px 9px 12px;
+  padding: 10px 34px 10px 13px;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   font-size: var(--fs-sm);
   color: var(--text);
   cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
 }
-.admin-select:focus { outline: none; border-color: var(--text-3); }
-.select-arr { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-3); }
+.admin-select:hover { border-color: var(--text-3); }
+.admin-select:focus { outline: none; border-color: var(--orange); }
+.select-arr { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-3); }
 .select-arr :deep(.ui-icon) { width: 15px; height: 15px; }
 
-.agent-list { list-style: none; padding: 0; margin: 0 0 var(--s-4); display: flex; flex-direction: column; gap: 2px; }
-.agent-row {
+/* Pickable project agents */
+.pick-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.pick-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.agent-row:hover { background: var(--surface-hover); }
-.agent-row input { accent-color: var(--orange); width: 15px; height: 15px; flex-shrink: 0; }
-.agent-label { font-size: var(--fs-sm); color: var(--text); }
-.agent-id { color: var(--text-3); margin-left: auto; }
-
-.enabled-box { margin-bottom: var(--s-4); display: flex; flex-direction: column; gap: 8px; }
-.tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.tag {
+.pick-row.on { border-color: var(--orange-line); background: var(--orange-soft-dark); }
+.pick-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pick-label { font-size: var(--fs-sm); color: var(--text); font-weight: var(--fw-medium); }
+.pick-id { color: var(--text-3); }
+.pick-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 6px 5px 12px;
-  border-radius: var(--r-pill);
-  background: var(--orange-soft-dark);
-  border: 1px solid var(--border);
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  background: var(--bg);
+  transition: all var(--dur) var(--ease);
 }
-.tag-label { font-size: var(--fs-sm); color: var(--text); font-weight: 500; }
-.tag-project { font-size: 10px; color: var(--text-3); }
-.tag-x {
-  width: 18px;
-  height: 18px;
+.pick-btn:hover { border-color: var(--orange); color: var(--orange); }
+.pick-btn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+.pick-btn :deep(.ui-icon) { width: 13px; height: 13px; }
+
+/* Exposed agents list */
+.exposed-list { list-style: none; padding: 0; margin: 0 0 var(--s-5); display: flex; flex-direction: column; gap: 8px; }
+.exposed-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  transition: border-color var(--dur) var(--ease);
+}
+.exposed-row:hover { border-color: var(--border-strong); }
+.exposed-ico {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--square);
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  background: var(--orange-soft-dark);
+  color: var(--orange);
+}
+.exposed-ico :deep(.ui-icon) { width: 19px; height: 19px; }
+.exposed-info { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.exposed-label { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text); }
+.exposed-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.exposed-project { font-size: 10.5px; color: var(--text-2); }
+.profile-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+}
+/* The status hue rides on the icon (AA-safe), the label stays readable --text-2. */
+.profile-state :deep(.ui-icon) { width: 12px; height: 12px; color: var(--warn); }
+.profile-state.ok :deep(.ui-icon) { color: var(--success); }
+.exposed-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  background: var(--bg);
+  transition: all var(--dur) var(--ease);
+}
+.ghost-btn:hover { border-color: var(--orange); color: var(--orange); }
+.ghost-btn :deep(.ui-icon) { width: 13px; height: 13px; }
+.x-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
   color: var(--text-3);
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.tag-x:hover { background: var(--surface-hover); color: var(--text); }
-.tag-x :deep(.ui-icon) { width: 12px; height: 12px; }
+.x-btn:hover { background: var(--danger-soft); color: var(--danger); }
+.x-btn :deep(.ui-icon) { width: 14px; height: 14px; }
+
 .agent-actions { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+.unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--warn);
+  font-weight: var(--fw-medium);
+}
+.unsaved :deep(.ui-icon) { width: 13px; height: 13px; }
 
 /* --- Users table --- */
 .table-scroll { overflow-x: auto; }
@@ -784,7 +1071,7 @@ if (import.meta.env.DEV) {
 .admin-table th {
   text-align: left;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -793,7 +1080,7 @@ if (import.meta.env.DEV) {
   white-space: nowrap;
 }
 .admin-table td { padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); vertical-align: middle; }
-.user-id { color: var(--text); font-weight: 500; }
+.user-id { color: var(--text); font-weight: var(--fw-medium); }
 .you { color: var(--orange); font-size: var(--fs-xs); margin-left: 6px; }
 .admin-yes { color: var(--success); }
 .admin-yes :deep(.ui-icon), .admin-yes { width: 16px; height: 16px; }
@@ -805,7 +1092,7 @@ if (import.meta.env.DEV) {
 .q-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .q-field--grow { flex: 1; min-width: 160px; }
 .q-input {
-  padding: 9px 12px; background: var(--bg); border: 1px solid var(--border);
+  padding: 9px 12px; background: var(--bg); border: 1px solid var(--border-strong);
   border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--text); width: 180px; max-width: 100%;
 }
 .q-input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-soft-dark); }
@@ -813,39 +1100,107 @@ if (import.meta.env.DEV) {
 .q-check { display: inline-flex; align-items: center; gap: 9px; font-size: var(--fs-sm); color: var(--text); cursor: pointer; padding-bottom: 9px; }
 .q-check input { accent-color: var(--orange); width: 16px; height: 16px; }
 .q-hint { font-size: var(--fs-xs); margin: 0 0 var(--s-4); }
-.q-subhead { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); margin: var(--s-4) 0 var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--border); }
+.q-subhead { font-size: 11px; font-weight: var(--fw-semibold); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; color: var(--text-3); margin: var(--s-4) 0 var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--border); }
 .q-temp-active { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 var(--s-3); }
 .q-temp-active :deep(.ui-icon) { width: 14px; height: 14px; color: var(--orange); flex-shrink: 0; }
 .q-link { color: var(--orange); font-size: var(--fs-xs); text-decoration: underline; text-underline-offset: 2px; }
 .q-link:hover { color: var(--orange-deep); }
 
-/* Per-user table */
 .q-table th, .q-table td { vertical-align: middle; }
 .q-check-col { width: 36px; }
 .q-table input[type="checkbox"] { accent-color: var(--orange); width: 15px; height: 15px; }
 .q-row-sel { background: var(--orange-soft-dark); }
 .q-user { display: flex; align-items: center; gap: 6px; }
-.q-uid { display: block; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+.q-uid { display: block; font-size: 10.5px; color: var(--text-2); margin-top: 2px; }
 .q-usage { min-width: 150px; }
 .q-mini-bar { height: 6px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; margin-bottom: 4px; max-width: 130px; }
 .q-mini-fill { display: block; height: 100%; background: var(--orange); border-radius: var(--r-pill); }
 .q-mini-fill.over { background: var(--danger); }
 .q-usage-amt { font-size: 12px; }
-.q-src { display: inline-block; padding: 2px 8px; border-radius: var(--r-pill); font-size: 10.5px; font-weight: 600; }
-.q-src.src-default { background: var(--surface-2); color: var(--text-3); }
+.q-src { display: inline-block; padding: 2px 8px; border-radius: var(--r-pill); font-size: 10.5px; font-weight: var(--fw-semibold); }
+.q-src.src-default { background: var(--surface-2); color: var(--text-2); }
 .q-src.src-user { background: var(--orange-soft-dark); color: var(--orange); }
 .q-src.src-temp { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); }
 .q-src.src-over { background: var(--danger-soft); color: var(--danger); }
-.q-blocked { margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--danger); }
+.q-blocked { margin-left: 6px; font-size: 10px; font-weight: var(--fw-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--danger); }
 
-/* Apply panel */
-.q-apply { margin-top: var(--s-5); padding: var(--s-4); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); }
-.q-apply-head { font-size: var(--fs-sm); font-weight: 600; color: var(--text); margin-bottom: var(--s-3); }
+.q-apply { margin-top: var(--s-5); padding: var(--s-5); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); }
+.q-apply-head { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text); margin-bottom: var(--s-3); }
 .q-apply-row { display: flex; align-items: flex-end; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4); }
 .q-apply .admin-select { min-width: 160px; }
+
+/* --- Profile editor (modal) --- */
+.editor-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.6; margin: 0 0 var(--s-5); }
+.editor-grid { display: grid; grid-template-columns: 1fr 248px; gap: var(--s-6); align-items: start; }
+.editor-form { display: flex; flex-direction: column; gap: var(--s-4); min-width: 0; }
+.ed-field { display: flex; flex-direction: column; gap: 7px; }
+.ed-field--grow { flex: 1; }
+.ed-row { display: flex; gap: var(--s-4); }
+.ed-readonly {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); font-size: var(--fs-sm); color: var(--text); font-weight: var(--fw-medium);
+}
+.ed-readonly code { font-size: 11px; color: var(--text-3); }
+.ed-count { margin-left: auto; font-size: 10px; font-weight: var(--fw-regular); color: var(--text-3); letter-spacing: 0; text-transform: none; }
+.ed-input {
+  padding: 9px 12px; background: var(--bg); border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--text); width: 100%; font-family: inherit;
+}
+.ed-input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-soft-dark); }
+.ed-input::placeholder { color: var(--text-3); }
+.ed-textarea { resize: vertical; line-height: 1.5; min-height: 64px; }
+.ed-hint { font-size: var(--fs-xs); color: var(--text-3); margin: 0; }
+
+.icon-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.icon-opt {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text-2); background: var(--bg);
+  transition: all var(--dur) var(--ease);
+}
+.icon-opt:hover { border-color: var(--border-strong); color: var(--text); }
+.icon-opt.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+.icon-opt :deep(.ui-icon) { width: 17px; height: 17px; }
+
+.badge-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge-opt {
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--r-pill);
+  font-size: var(--fs-xs); font-weight: var(--fw-medium); color: var(--text-2); background: var(--bg);
+  transition: all var(--dur) var(--ease);
+}
+.badge-opt:hover { border-color: var(--border-strong); color: var(--text); }
+.badge-opt.on { background: var(--text); border-color: var(--text); color: var(--bg); }
+
+/* Editor preview card */
+.editor-preview { position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; }
+.preview-label { font-size: 10px; font-weight: var(--fw-semibold); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; color: var(--text-3); }
+.preview-card {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: var(--s-5); border: 1px solid var(--border); border-radius: var(--r); background: var(--bg);
+}
+.preview-top { display: flex; align-items: center; justify-content: space-between; }
+.preview-ico { width: 38px; height: 38px; border-radius: var(--square); display: grid; place-items: center; background: var(--orange-soft-dark); color: var(--orange); }
+.preview-ico :deep(.ui-icon) { width: 18px; height: 18px; }
+.preview-name { font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--text); letter-spacing: var(--tracking-tight); line-height: 1.25; }
+.preview-tagline { font-size: var(--fs-xs); color: var(--orange); font-weight: var(--fw-semibold); margin-top: -4px; }
+.preview-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.preview-caps { list-style: none; padding: 0; margin: 2px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.preview-caps li { display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px; color: var(--text); line-height: 1.4; }
+.preview-caps :deep(.ui-icon) { width: 13px; height: 13px; color: var(--orange); flex-shrink: 0; margin-top: 1px; }
+.preview-tools { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.preview-tool { font-size: 10.5px; padding: 3px 7px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xs); color: var(--text-2); }
+
+/* Badges reused in preview */
+.bdg { font-size: 9px; letter-spacing: 0.06em; padding: 2px 8px; border-radius: var(--r-pill); font-weight: var(--fw-bold); text-transform: uppercase; }
+.bdg.default { background: var(--orange-soft-dark); color: var(--orange); }
+.bdg.new { background: var(--orange); color: #fff; }
+.bdg.beta { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
 
 @media (max-width: 760px) {
   .kpi-grid { grid-template-columns: 1fr; }
   .q-input { width: 140px; }
+  .editor-grid { grid-template-columns: 1fr; }
+  .editor-preview { position: static; }
 }
 </style>

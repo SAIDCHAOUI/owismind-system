@@ -446,3 +446,93 @@ def validate_quota_note(value):
     if not isinstance(value, str):
         return ""
     return value.strip()[:MAX_QUOTA_NOTE_CHARS]
+
+
+# --- Agent profile metadata (admin-authored display copy) --------------------
+# An admin describes each exposed agent (what it does, capabilities, exposed tools)
+# so users see an honest, authored profile instead of hardcoded copy. This content
+# is DISPLAY text only - never a query, table, connection or raw agent id - so it is
+# sanitized/clamped rather than rejected (an over-long field must not fail the whole
+# save). The icon name is whitelisted against the frontend icon registry (an unknown
+# name renders nothing client-side anyway, but we keep it tidy server-side too).
+MAX_AGENT_TAGLINE_CHARS = 120
+MAX_AGENT_DESC_CHARS = 700
+MAX_AGENT_CAP_ITEMS = 8
+MAX_AGENT_CAP_CHARS = 120
+MAX_AGENT_TOOL_ITEMS = 16
+MAX_AGENT_TOOL_CHARS = 48
+
+# Curated subset of the frontend icon registry an admin may assign to an agent.
+ALLOWED_AGENT_ICONS = frozenset(
+    {
+        "robot", "sparkle", "sparkles", "trendUp", "alert", "thumbsUp", "layers",
+        "chart", "database", "users", "route", "message", "wallet", "shield",
+        "globe", "sliders", "bookOpen", "tool", "tag", "grid",
+    }
+)
+DEFAULT_AGENT_ICON = "robot"
+ALLOWED_AGENT_BADGES = frozenset({"", "default", "new", "beta"})
+
+
+def _clean_str(value, max_chars):
+    """A single bounded display line: whitespace/control runs collapse to one space,
+    the result is stripped and length-capped.
+
+    The cards render as flowing text, so EVERY non-printable character (line breaks,
+    tabs, vertical tab, form feed, NEL, U+2028 / U+2029, C0 controls...) becomes a
+    space rather than being deleted - that way adjacent words are never glued
+    together. Accents and normal printable text (the euro sign included) are kept.
+    """
+    if not isinstance(value, str):
+        return ""
+    # Any non-printable char -> space, then collapse whitespace runs + strip.
+    spaced = "".join(ch if ch.isprintable() else " " for ch in value)
+    return " ".join(spaced.split())[:max_chars]
+
+
+def _clean_str_list(value, max_items, max_chars):
+    """A bounded list of bounded non-empty display lines (order-preserving)."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value:
+        line = _clean_str(item, max_chars)
+        if line:
+            out.append(line)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def validate_agent_meta(raw):
+    """Sanitize an admin-authored agent profile into a bounded, safe display dict.
+
+    Never raises: every field is clamped/dropped to its bound so an over-long or
+    malformed field degrades gracefully instead of failing the whole whitelist save.
+    Returns ``{tagline, description, capabilities, tools, icon, badge}``; absent input
+    yields the empty profile (all fields blank, default icon).
+    """
+    if not isinstance(raw, dict):
+        raw = {}
+    # Coerce to str BEFORE the membership test: an unhashable value (a JSON array ->
+    # list, object -> dict) would otherwise raise TypeError on `x in frozenset(...)`,
+    # which would break the "never raise / clamp, don't fail" contract this function
+    # is relied upon for (it sits on the admin whitelist-save path).
+    icon = raw.get("icon")
+    if not isinstance(icon, str) or icon not in ALLOWED_AGENT_ICONS:
+        icon = DEFAULT_AGENT_ICON
+    badge = raw.get("badge")
+    if not isinstance(badge, str) or badge not in ALLOWED_AGENT_BADGES:
+        badge = ""
+    return {
+        "tagline": _clean_str(raw.get("tagline"), MAX_AGENT_TAGLINE_CHARS),
+        "description": _clean_str(raw.get("description"), MAX_AGENT_DESC_CHARS),
+        "capabilities": _clean_str_list(
+            raw.get("capabilities"), MAX_AGENT_CAP_ITEMS, MAX_AGENT_CAP_CHARS
+        ),
+        "tools": _clean_str_list(
+            raw.get("tools"), MAX_AGENT_TOOL_ITEMS, MAX_AGENT_TOOL_CHARS
+        ),
+        "icon": icon,
+        "badge": badge,
+    }
