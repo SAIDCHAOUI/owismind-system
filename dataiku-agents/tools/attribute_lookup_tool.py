@@ -11,18 +11,14 @@ Answers:
   - "carrier code / sales zone / parent group of <account>?"
 
 Flow:
-  1. SEARCH: SELECT * FROM <fact>
-     WHERE translate(lower(concat_ws(' ', col1, col2, ...)), <accents>, <ascii>)
-           ILIKE '%term%' LIMIT <n>
-     The term is matched anywhere across all text columns in one predicate.
-     Casing via lower()/ILIKE, accents via a translate() map; the columns are
-     concatenated so the search is a single ILIKE.
-  2. SUMMARIZE: distinct value(s) per column from the matched rows (or only the
-     requested columns), capped. 'found_in' carries flags: rows_capped (the LIMIT
-     was hit, so the rows are a sample) and multi_column (the term appears in
-     several columns).
-  3. FALLBACK: if nothing matches and no specific attribute was requested, query
-     the value catalog for close aliases and return them as suggestions.
+  1. SEARCH one ILIKE over an accent-folded concat_ws of every text column (a
+     single predicate; casing via lower()/ILIKE, accents via a translate() map):
+     SELECT * FROM <fact> WHERE <folded concat> ILIKE '%term%' LIMIT <n>.
+  2. SUMMARIZE distinct value(s) per matched column (or only the requested ones),
+     capped. 'found_in' carries rows_capped (LIMIT hit, so a sample) and
+     multi_column (the term appears in several columns).
+  3. FALLBACK: nothing matched and no attribute requested -> query the value
+     catalog for close aliases and return them as suggestions.
 
 Execution is read-only (statement_timeout + transaction_read_only) and bounded by
 LIMIT; only schema-discovered column names reach the SQL; rows are streamed, not
@@ -373,7 +369,7 @@ class MyAgentTool(BaseAgentTool):
     def _cache_key(self, dataset, term, raw_attributes):
         """Key: dataset + accent-folded needle + requested attribute names
         (case/space-insensitive)."""
-        attrs = tuple(sorted(norm(a) for a in (raw_attributes or []) if norm(a)))
+        attrs = tuple(sorted(n for n in (norm(a) for a in raw_attributes or []) if n))
         return (dataset, search_value(term), attrs)
 
     def _cache_get(self, key):

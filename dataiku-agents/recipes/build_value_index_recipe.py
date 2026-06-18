@@ -1,28 +1,18 @@
 # =============================================================================
-# OWIsMind - VALUE INDEX BUILDER (Dataiku Python recipe, design-time Flow)
-# -----------------------------------------------------------------------------
-# Builds the "value index" of a dataset: every distinct value of every
-# groundable text column, with a normalized form. The Dataset Expert agent
-# queries this index at runtime (read-only SQL) to resolve the business terms
-# users type ("algerie telecom", "halys", "ipl") into EXACT cell values and
-# their column - text-to-SQL is case/accent-sensitive, grounding is what
-# prevents silent empty results.
+# OWIsMind value-index builder (Dataiku Python recipe, design-time Flow).
 #
-# Flow wiring:
-#   INPUT  1 (required): the dataset to index (e.g. DRIVE_Revenues)
-#   OUTPUT 1 (required): the index dataset (e.g. DRIVE_Revenues_value_index)
-#                        *** create the output ON THE SQL CONNECTION of the
-#                        source dataset *** so the agent can query it in SQL.
+# Builds the "value index" of a dataset: every distinct value of every groundable
+# text column, with a normalized form. The sub-agent queries this index at runtime
+# (read-only SQL) to resolve the business terms users type ("algerie telecom",
+# "halys", "ipl") into EXACT cell values and their column. Text-to-SQL is case and
+# accent sensitive, so this grounding is what prevents silent empty results.
 #
-# Output schema (FROZEN v1, consumed by agents/dataset_expert_agent.py):
-#   column_name  STRING   the source column this value belongs to
-#   value        STRING   the EXACT cell value, verbatim
-#   value_norm   STRING   normalized form (lowercase, accents stripped,
-#                          whitespace collapsed) - match key
-#   occurrences  BIGINT   row count of this value in the source dataset
-#
-# Re-run this recipe (scenario: weekly or after each source refresh) to keep
-# the index fresh; the agent always queries live, no cache invalidation needed.
+# Flow    : INPUT = dataset to index; OUTPUT = value_index. Create the OUTPUT on
+#           the SOURCE dataset's SQL connection so the agent can query it in SQL.
+# Schema  : column_name, value (exact, verbatim), value_norm (FROZEN norm: lower,
+#           accents stripped, whitespace collapsed), occurrences. FROZEN v1.
+# Refresh : re-run weekly or after each source refresh; the agent queries live,
+#           there is no cache to invalidate.
 # =============================================================================
 
 import logging

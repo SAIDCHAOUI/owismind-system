@@ -14,16 +14,11 @@ old Custom Python tool Drive_Revenues_resolve_filter_value that used to read thi
 catalog is being deleted; attribute_lookup superseded it. The managed
 dataset_lookup tool was removed (2026-06-18). See ../README.md and ../tools/README.md.
 
-Compared to v1:
-- Adds a `variants` mechanism: a single canonical value (e.g. "Indirect_distribution/Resseler")
-  can be reachable through multiple user-typed phrases ("indirect", "indirect sales",
-  "clients indirects", "reseller", "vente indirecte", ...).
-- Adds short alias rows for long Account_name values, so users can type a short name
-  ("Telesat", "Telroaming") instead of the full canonical label.
-- Adds business concept aliases (Voice / Messaging / Roaming Hub) maintained INSIDE this recipe
-  (not in a separate config file), pointing to the real DRIVE_Revenues values.
-- Removes the "wants_group_context" downstream Python complexity by exposing a clean
-  `is_alias` flag in the catalog itself.
+Each row maps a user-typed phrase to a real (column, value) filter: account names
+(with short aliases for long names), the offer and business column values
+themselves, and hand-crafted business-concept aliases ("indirect", "gcp", "roaming
+hub") pointing to real DRIVE_Revenues values. The `is_alias` flag marks the
+hand-crafted rows.
 
 Output schema (1 row = 1 (variant -> target) edge):
 - search_domain         : account | account_group | offer | business | alias
@@ -65,19 +60,11 @@ ACCOUNT_NAME_STOPWORDS = {
     "telecommunications", "spa", "bv", "nv", "plc", "kg",
 }
 
-# Business concept aliases, maintained here, in code, not in YAML.
-# Each entry maps a list of user-typed phrases to one or more canonical
-# (target_column, target_value) tuples that already exist in DRIVE_Revenues.
-#
-# IMPORTANT: only include target_value strings that EXIST in DRIVE_Revenues.
-#            If you add a new alias, verify the target value is in the source.
-#
-# Format:
-#   {
-#       "phrases": ["voice", "voix"],
-#       "targets": [("Solution", "SERVICES")],
-#       "note": "Voice services routed under Solution=SERVICES"
-#   }
+# Business concept aliases, maintained here in code (not YAML). Each entry maps
+# user-typed phrases to canonical (target_column, target_value) tuples.
+# IMPORTANT: only target_value strings that ACTUALLY EXIST in DRIVE_Revenues
+# (verify a new alias against the source, or it silently matches nothing).
+# Format: {"phrases": [...], "targets": [(column, value), ...], "note": "..."}.
 BUSINESS_ALIASES = [
     # ---- distribution_type ----
     {
