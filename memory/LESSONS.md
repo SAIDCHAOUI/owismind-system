@@ -1990,4 +1990,62 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : demande user (2026-06-18) ; skill `agentique-python-dataiku` (tool design, ACI, double
   chemin Python) ; RUN TEST DSS itere avec l'user. **Date** : 2026-06-18.
 
+## L087 - `attribute_lookup` branche dans l'ORCHESTRATEUR (built-in, zero contrat `KNOWN_*`) + multi-table par registre + SQL 1-ILIKE sans extension ; conseiller avant de supprimer (⏳ code + 267 tests + RUN TEST DSS, a recoller)
+
+- **Contexte** : `attribute_lookup` construit (L086) mais non branche. Decider OU le brancher
+  (sous-agent vs orchestrateur), le rendre universel (n'importe quelle table de n'importe quel
+  sous-agent), rendre son SQL lisible, et le durcir. Conseil multi-agents (Workflow) = moi PDG + 4
+  conseillers + 2 contradicteurs adversariaux.
+- **Decision branchement = ORCHESTRATEUR built-in** (4/4 du conseil) : spec dans `build_tool_specs`,
+  dispatch inline dans `node_tools` (comme `show_table`/`current_date`). **Preuve** : les built-ins ne
+  passent pas par `tool_to_cap` et ne touchent PAS le test anti-derive `KNOWN_BLOCK_IDS`/
+  `KNOWN_TOOL_NAMES` (verifie ligne par ligne). => **zero contrat gele touche, SOUS-AGENT INCHANGE**
+  (1 seul agent a recoller). La branche sous-agent est dominee : elle paie le hop + l'appel UNDERSTAND
+  AVANT de pouvoir court-circuiter, et reincube le cout contrat que la suppression de `dataset_lookup`
+  venait de payer.
+- **Provenance Evidence d'un built-in** : `state['captured']` est **vestigial** (jamais relu). Le vrai
+  canal = un subspan `semantic-model-query` sur le `trace` orchestrateur (lu par le backend, comme le
+  SQL sous-agent/direct). Ne PAS poser `state['latest']` depuis un lookup (pas d'artefact ; ecraserait
+  le resultat du specialiste en turn mixte).
+- **Multi-table generique (exigence user)** : le modele passe un **domaine logique** (jamais un nom de
+  table, rule #3/#4), l'orchestrateur resout vers la table whitelistee via le registre
+  (`lookup_domains()` lit `lookup_dataset`/`lookup_catalog` par capability). Le tool accepte
+  `dataset`/`catalog` en entree (defaut = config). Un 2e agent = une ligne de registre.
+- **SQL lisible sans toucher la base** : `build_search_sql` = **UN seul `ILIKE`** sur
+  `concat_ws(' ', col1, ...)` (au lieu d'un `OR ... ILIKE` par colonne, 18x illisible). Accents geres a
+  la requete par `translate(lower(concat_ws(...)), <accents>, <ascii>)`, **donnees jamais modifiees**.
+  L'user a d'abord choisi l'extension `unaccent` (SQL plus court) PUIS l'a **refusee** (ne veut pas
+  toucher la base de prod) -> reste sur `translate` (zero install) ; le flag/branche `unaccent` a ete
+  **retire** (zero code mort) et la fonction renommee `accent_fold_sql`. Pliage **symetrique**
+  needle/colonne (meme map). Index `pg_trgm` pour la perf 50 users = a PROPOSER au DBA, jamais cree par
+  l'agent (NO INSTALL).
+- **Qui ecrit le SQL** (question user) : le **tool** = code deterministe (template `build_search_sql`),
+  jamais un LLM -> rapide/pas cher/sur mais verbeux (cherche partout). Le **modele semantique** =
+  le LLM ecrit un SQL cible (court, joli) mais lent/cher. Deux taches differentes (ou est la valeur vs
+  interroger en sachant ou).
+- **Datasets de connaissance** : `profile` + `value_index` = lus par le SOUS-AGENT seulement
+  (comprendre + resoudre les noms), indispensables. `Value_Catalog` = lu par le tool seulement
+  (fallback alias) -> optionnel. Vieux tool `Drive_Revenues_resolve_filter_value` = appele par
+  PERSONNE (le seul `get_agent_tool` du sous-agent vise `revenue_semantic_query`, celui de
+  l'orchestrateur vise `attribute_lookup`) ET charge le catalog 170K en pandas-RAM -> **a supprimer en
+  DSS**. `resolve_filter_value` reste un **label de timeline**, pas un appel de tool.
+- **Garder le Value_Catalog + suggestions = decision user FINALE** (revirement) : une tentative de
+  suppression du Value_Catalog/fallback a ete EXECUTEE alors que l'user demandait un CONSEIL
+  ("tranchons a ton avis"). Tout restaure. **Regle process : ne jamais executer une suppression de
+  feature/dataset sans feu vert explicite ; conseiller d'abord, agir apres validation.**
+- **Durcissement** : flags `rows_capped` (LIMIT atteint -> echantillon) / `multi_column` (ambigu),
+  garde needle court (`MIN_NEEDLE_CHARS=2`), cache TTL borne (cle inclut le dataset), `not_found`
+  adouci (firewall : jamais "absent des donnees"), garde "rows mais rien de reconfirme + aucun attribut
+  -> not_found". Revue adversariale du diff (Workflow, 3 relecteurs + verif) = **0 critical/0 high**,
+  **2 LOW corriges** (pliage accents symetrique ; garde found-vide). Commentaires nettoyes : zero
+  empreinte IA (retire "technical board"/"decided"/"we do not"/dates de decision).
+- **Preuve-verification** : **267 tests verts** (`python3 -m unittest discover -s dataiku-agents/tests`),
+  2 agents `ast.parse` OK, zero tiret banni, zero empreinte IA. **RUN TEST DSS user** : "account manager
+  de algerie telecom" -> lookup rapide (~14-16s, step "Recherche rapide d'une valeur"), reponse bonne,
+  preuve Evidence ; "les autres comptes de ce manager" -> descend a l'expert (SQL cible). Les 2 portes
+  marchent. NON deploye en version finale (tool DSS a MAJ + orchestrateur a recoller + vieux resolver a
+  supprimer).
+- **Source** : demande user (2026-06-18) ; conseil multi-agents (Workflow) ; skill
+  `agentique-python-dataiku` ; RUN TEST DSS itere avec l'user. **Date** : 2026-06-18.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

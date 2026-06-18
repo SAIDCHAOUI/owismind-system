@@ -10,21 +10,27 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
-**🔎 RESOLVER RAPIDE `attribute_lookup` + SUPPRESSION TOTALE de `dataset_lookup` (2026-06-18) - ⏳ tool
-construit + 33 tests + RUN TEST DSS validé par l'user (blanchard, Algérie Télécom), NON BRANCHÉ.**
-Le vrai point de douleur DSS : questions simples ("account manager de X ?") LENTES (semantic ~80s) +
-échec ("pas dans les données" alors que la colonne existe) + orthographe colonnes qui casse. Solution =
-nouveau **Custom Python tool** `dataiku-agents/tools/attribute_lookup_tool.py` : **recherche full-text
-`ILIKE` (insensible casse+accents) sur TOUTES les colonnes texte** du fact (read-only, timeout, LIMIT,
-rien en RAM, zéro nom de colonne en dur). Sortie **`found_in`** (où le terme est + valeur exacte) +
-`attributes` si demandés ; fallback alias **optionnel** sur le catalog (suggestions). Principe (L086) :
-"tool vs inline" n'est PAS un débat de charge SQL ; le levier = matching dans la **base (SQL)**, pas en
-RAM (le catalog 170K en pandas = danger 50 users). **`dataset_lookup` ENTIÈREMENT supprimé** (exigence
-user zéro code mort) du sous-agent ET de l'orchestrateur (contrat anti-dérive `KNOWN_*`<->registre) +
-tests + doc. **242 tests verts**, 2 agents parsent, grep `dataset_lookup` = NONE. **À faire** : workflow
-multi-agents (user = PDG technique + conseillers) pour décider conception finale + point de branchement
-(sous-agent vs orchestrateur) ; puis créer le tool en DSS, brancher, recoller LES 2 agents. **En
-attendant le branchement, les questions simples repassent par le semantic model lent.** Voir **L086**.
+**🔎 `attribute_lookup` BRANCHÉ (ORCHESTRATEUR built-in) + durci + multi-table (2026-06-18 Run 2) -
+⏳ CODÉ + 267 tests verts + RUN TEST DSS validé (lookup rapide ~14s + descente expert), À RECOLLER
++ MAJ tool DSS.** Conseil multi-agents (Workflow, moi=PDG + 4 conseillers + 2 contradicteurs) = **4/4
+brancher dans l'ORCHESTRATEUR** (built-in, comme `show_table`/`current_date`) : **zéro contrat `KNOWN_*`
+touché, SOUS-AGENT INCHANGÉ** (1 seul agent à recoller). Branche sous-agent dominée (latence + recoût
+contrat). Provenance Evidence via subspan `semantic-model-query` (canal réel ; `state['captured']`
+vestigial). **Multi-table générique** (exigence user) : le modèle passe un **domaine logique**,
+l'orchestrateur résout la table via le registre (`lookup_domains()` lit `lookup_dataset`/`lookup_catalog`
+par capability) - rule #3/#4 OK. **SQL lisible** : `build_search_sql` = **UN seul `ILIKE`** sur
+`concat_ws` (au lieu de 18 `OR`), accents par **`translate` à la requête, données intactes** (user
+REFUSE de toucher la base de prod -> pas d'extension `unaccent` ; flag/branche unaccent retiré, fonction
+`accent_fold_sql`). Durcissement : flags `rows_capped`/`multi_column`, garde needle court, cache TTL
+(clé inclut dataset), `not_found` adouci (jamais "absent"), garde found-vide->not_found, pliage accents
+symétrique. **Value_Catalog + fallback alias/`suggestions` GARDÉS** (décision user finale, après une
+suppression annulée). Revue adversariale du diff = **0 critical/0 high, 2 LOW corrigés**. Commentaires =
+zéro empreinte IA (demande user). **DSS à faire** : (1) MAJ le Custom Python tool `attribute_lookup` ;
+(2) recoller l'ORCHESTRATEUR (env 3.11) ; (3) **SUPPRIMER l'objet tool `Drive_Revenues_resolve_filter_value`**
+(jamais appelé, charge 170K en pandas-RAM ; `resolve_filter_value` reste un label timeline, pas un tool) ;
+(4) optionnel `LOOKUP_TOOL_ID` (sinon fallback par nom). Pas de zip/redémarrage (python-lib inchangé).
+**Leçon process** : ne JAMAIS exécuter une suppression de feature/dataset sans feu vert explicite
+(conseiller d'abord) - une tentative de suppression Value_Catalog non validée a dû être restaurée. Voir **L087**.
 
 **🧹 NETTOYAGE / RÉORGANISATION REPO + DOC `dataiku-agents/` (2026-06-17, après Run 7c) - ✅ local
 (nettoyage + structure + doc only, pas de DSS).** Vestiges v2 `orchestrator/`+`salesdrive/` **supprimés** ;
@@ -289,10 +295,10 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-18 (resolver rapide `attribute_lookup` + suppression `dataset_lookup`) → détail `sessions/2026-06-18.md`
-- **Nouveau Custom Python tool** `dataiku-agents/tools/attribute_lookup_tool.py` : recherche full-text `ILIKE` insensible casse+accents sur **toutes les colonnes texte** du fact ; sortie `found_in` (où + valeur exacte) + `attributes` optionnels ; fallback alias optionnel (catalog). Read-only, borné, rien en RAM, zéro nom de colonne en dur. **33 tests**.
-- **`dataset_lookup` ENTIÈREMENT supprimé** (exigence user zéro code mort) : sous-agent + orchestrateur (contrat anti-dérive `KNOWN_*`<->registre) + 18 tests retirés + doc alignée (4 fichiers). **242 tests verts**, 2 agents parsent, grep = NONE.
-- **Décision** : resolver = SQL full-text sur le fact (le catalog n'indexe pas account_manager ; 170K en pandas-RAM = danger). **Branchement DÉFÉRÉ** : workflow multi-agents prochaine session (conception + sous-agent vs orchestrateur). RUN TEST DSS du tool validé par l'user. Voir **L086**.
+## 🧭 Dernière session - 2026-06-18 Run 2 (`attribute_lookup` branché ORCHESTRATEUR + durci + multi-table) → détail `sessions/2026-06-18.md`
+- **Conseil multi-agents (Workflow)** = **4/4 brancher dans l'ORCHESTRATEUR** (built-in, zéro contrat `KNOWN_*`, **sous-agent INCHANGÉ**). Câblé : spec `build_tool_specs` + dispatch inline `node_tools` + provenance via subspan `semantic-model-query`. **Multi-table** : domaine logique -> table via registre (`lookup_domains`).
+- **SQL lisible** : **1 seul `ILIKE`** sur `concat_ws` (au lieu de 18 `OR`), accents par `translate` à la requête (user REFUSE de toucher la base prod -> pas d'`unaccent` ; `accent_fold_sql`). Durci : flags `rows_capped`/`multi_column`, garde needle court, cache TTL, garde found-vide->not_found. **Value_Catalog + suggestions GARDÉS** (décision user, après suppression annulée). **267 tests verts**, revue adversariale = 0 crit/0 high.
+- **RUN TEST DSS validé** (lookup rapide ~14s + descente expert OK). **À faire DSS** : MAJ tool + recoller orchestrateur + **supprimer le vieux `Drive_Revenues_resolve_filter_value`**. **Leçon process** : conseiller avant d'exécuter une suppression (L087). Voir **L087**.
 
 ## Avant - 2026-06-17 (nettoyage repo + doc `dataiku-agents/`) → détail `sessions/2026-06-17.md`
 - **Vestiges v2 supprimés** (`orchestrator/`+`salesdrive/`) ; `cadrage/`+`agentic-research/` -> `docs/` (refs à jour partout, logs datés intacts).
