@@ -10,6 +10,18 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**📚 DOCUMENTATION COMPLÈTE DU PROJET + PITCH CUSTOMER DAY (2026-06-18, session doc parallèle) - ✅ LIVRÉ
+(read-only sauf `project-documentation/`).** `project-documentation/` = doc d'ingénierie EN ANGLAIS, en
+couches, **53 fichiers** markdown (~136k mots) : 00-overview ... 09-maintenance + portail README + 12 ADR
++ 24 docs à diagrammes Mermaid. Construite par 3 workflows (recherche 14 packs -> rédaction 53 -> vérif/
+correction), **0 tiret cadratin** (byte-safe), **761 liens internes valides**. Packs bruts dans
+`project-documentation/.workdir/` (scratch interne, supprimable). **Pitch** dans
+`project-documentation/presentation-customer-day/` : `01-deck-structure-and-slides.md` (7 frames + prompt
+prêt pour claude.ai + fact-check) + scripts orateur `02-...FR.md` (accents corrigés) et `03-...EN.md`,
+~15 min, thèse « OWIsMind = un SYSTÈME (webapp + agents + recipes + SQL), pas une webapp ni un agent ».
+Doc en anglais (choix user) ; coexiste avec `docs/` + `memory/` en français ; aucun code touché ; aucune
+incidence DSS. Voir **L088**.
+
 **🔎 `attribute_lookup` BRANCHÉ (ORCHESTRATEUR built-in) + durci + multi-table (2026-06-18 Run 2) -
 ⏳ CODÉ + 267 tests verts + RUN TEST DSS validé (lookup rapide ~14s + descente expert), À RECOLLER
 + MAJ tool DSS.** Conseil multi-agents (Workflow, moi=PDG + 4 conseillers + 2 contradicteurs) = **4/4
