@@ -40,6 +40,13 @@ USAGE_MONTHLY_V1_LOGICAL = "webapp_usage_monthly_v1"
 # reused from the captured generated_sql result, surfaced via /evidence/meta. New
 # _v1 table (no ALTER of chat_v5), owner-scoped on read.
 ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
+# Per-user monthly-budget OVERRIDE set by an admin (a row exists only for a user who
+# got a custom limit). The global default ($50/month) lives in webapp_settings_v1; this
+# table only holds the EXCEPTIONS. ``expires_at`` NULL = permanent override, otherwise a
+# temporary boost that lapses back to the global limit once now() passes it (no reset
+# job - the active test is a plain ``expires_at > now()``). Brand new _v1 table per the
+# no-ALTER rule; the existing usage_monthly / users / settings tables are untouched.
+USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"
 # Note: raw agent traces are NO LONGER stored in a backend-managed SQL table. They are
 # appended to an admin-selected Flow dataset via the Dataset API (see storage/chat_traces.py),
 # which keeps the large JSON out of any SQL statement text (and out of DSS CRU logs).
@@ -155,6 +162,23 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# Per-user monthly-budget override. One row per user the admin gave a custom limit;
+# the absence of a row means "use the global default". ``limit_usd`` is the monthly cap
+# (US dollars, matching the LLM-Mesh estimated cost the rest of the app shows). NULL
+# ``expires_at`` = permanent; a future timestamp = a temporary boost that lapses on its
+# own. ``note`` is an optional admin memo. Values are server-computed/admin-supplied and
+# escaped; the table is read with a plain LEFT JOIN against now() for the active test.
+_USER_QUOTA_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    user_id     TEXT             PRIMARY KEY,
+    limit_usd   DOUBLE PRECISION NOT NULL,
+    expires_at  TIMESTAMP,
+    note        TEXT,
+    updated_at  TIMESTAMP        NOT NULL DEFAULT now(),
+    updated_by  TEXT
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -163,6 +187,7 @@ _DDL_BY_LOGICAL = {
     SETTINGS_V1_LOGICAL: _SETTINGS_V1_DDL,
     USAGE_MONTHLY_V1_LOGICAL: _USAGE_MONTHLY_V1_DDL,
     ARTIFACTS_V1_LOGICAL: _ARTIFACTS_V1_DDL,
+    USER_QUOTA_V1_LOGICAL: _USER_QUOTA_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -269,3 +294,8 @@ def ensure_usage_monthly_table():
 def ensure_artifacts_table():
     """Ensure the per-exchange artifacts table exists (create-if-missing), once per process."""
     _ensure_table(ARTIFACTS_V1_LOGICAL)
+
+
+def ensure_user_quota_table():
+    """Ensure the per-user budget-override table exists (create-if-missing), once per process."""
+    _ensure_table(USER_QUOTA_V1_LOGICAL)

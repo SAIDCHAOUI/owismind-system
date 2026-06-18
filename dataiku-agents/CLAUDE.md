@@ -23,7 +23,7 @@ context. A read-only direct-SQL engine is the technical fallback.
 The CURRENT (v3) sub-agent:
 - **Grounds terms with INLINE read-only SQL on `DRIVE_Revenues_value_index`** (method `_resolve_terms`). Grounding is NOT a tool.
 - Calls **one** DSS tool at runtime: `revenue_semantic_query` (`v4oqA6R`, the SQL engine). The timeline labels `resolve_filter_value` / `dataset_sql_query` are event names, not tool calls.
-- The managed **`dataset_lookup`** tool and its whole `lookup` intent were **REMOVED (2026-06-18)**. Its replacement, the standalone Custom Python tool **`attribute_lookup`** (`tools/attribute_lookup_tool.py`), is built + tested but **not yet wired in** (to be branched after validation).
+- The managed **`dataset_lookup`** tool and its whole `lookup` intent were **REMOVED (2026-06-18)**. Its replacement, the standalone Custom Python tool **`attribute_lookup`** (`tools/attribute_lookup_tool.py`), is wired (2026-06-18, board decision) as an **ORCHESTRATOR built-in tool** (appended in `build_tool_specs`, dispatched inline in `node_tools` like `show_table`/`current_date`): it touches **no frozen `KNOWN_*` contract** and the **sub-agent is UNCHANGED**. Deploy = create the Custom Python tool in DSS + set `LOOKUP_TOOL_ID` (or rely on the name fallback) + re-paste the ORCHESTRATOR only.
 - Does **NOT** use `DRIVE_Revenues_Value_Catalog` nor `Drive_Revenues_resolve_filter_value` (superseded by `attribute_lookup`).
 
 ## Folder map

@@ -127,6 +127,16 @@ class TestNorm(unittest.TestCase):
         self.assertEqual(al.search_value("Téléçom"), "telecom")
         self.assertEqual(al.search_value("Blanchard"), "blanchard")
 
+    def test_search_value_symmetric_fold_keeps_out_of_map(self):
+        # In-map accents fold; OUT-of-map glyphs are KEPT - exactly like the
+        # column-side translate(), so needle and column never de-sync (the
+        # old NFKD needle dropped them, breaking the match).
+        self.assertEqual(al.search_value("Telenør"), "telenør")   # o-slash kept
+        # Folding the needle with the SAME map as unaccent_lower_sql means an
+        # out-of-map char that survives on the needle also survives in SQL.
+        self.assertEqual("Telenør".lower().translate(al._NEEDLE_TRANSLATION),
+                         al.search_value("Telenør"))
+
     def test_none_empty(self):
         self.assertEqual(al.norm(None), "")
         self.assertEqual(al.search_value(None), "")
@@ -164,14 +174,33 @@ class TestSearchSql(unittest.TestCase):
     def test_or_ilike_over_text_columns(self):
         sql = al.build_search_sql('"public"."F"',
                                   ["account_manager", "Account_name"], "blanchard")
-        self.assertIn('"account_manager" ILIKE \'%blanchard%\'', sql)
-        self.assertIn('"Account_name" ILIKE \'%blanchard%\'', sql)
+        self.assertIn("'%blanchard%'", sql)
+        self.assertIn('"account_manager"', sql)
+        self.assertIn('"Account_name"', sql)
+        self.assertIn("ILIKE", sql)
         self.assertIn(" OR ", sql)
         self.assertIn("LIMIT %d" % al.SEARCH_SAMPLE_ROWS, sql)
 
     def test_accent_insensitive_needle(self):
         sql = al.build_search_sql('"public"."F"', ["Account_name"], "Télécom")
         self.assertIn("'%telecom%'", sql)
+
+    def test_column_side_accent_folded_no_extension(self):
+        # The COLUMN side must be accent-folded too, or a stored accented value
+        # ('Societe Generale' with accents) is invisible to an unaccented needle.
+        # Done with translate(), NOT the unaccent extension (NO INSTALL rule).
+        sql = al.build_search_sql('"public"."F"', ["Account_name"], "telecom")
+        self.assertIn("translate(lower(", sql)
+        self.assertNotIn("unaccent(", sql)
+
+    def test_accent_map_equal_length(self):
+        # translate() maps char-for-char; unequal lengths silently drop chars.
+        self.assertEqual(len(al._ACCENTS_FROM), len(al._ACCENTS_TO))
+
+    def test_unaccent_lower_sql_shape(self):
+        expr = al.unaccent_lower_sql('"col"')
+        self.assertTrue(expr.startswith("translate(lower(CAST("))
+        self.assertIn('"col"', expr)
 
     def test_needle_escaped(self):
         sql = al.build_search_sql('"public"."F"', ["c"], "a%b")
@@ -278,7 +307,8 @@ class TestInvoke(unittest.TestCase):
         tool = FakeTool(fact_rows=self.BLANCHARD)
         invoke(tool, "blanchard")
         fact_sql = [s for (d, s) in tool.sql_log if d == al.FACT_DATASET][0]
-        self.assertIn('"account_manager" ILIKE', fact_sql)
+        self.assertIn('"account_manager"', fact_sql)
+        self.assertIn("ILIKE", fact_sql)
         self.assertNotIn("amount_eur", fact_sql)   # numeric column not searched
 
     def test_requested_attributes_return_other_columns(self):
@@ -321,6 +351,77 @@ class TestInvoke(unittest.TestCase):
         tool = FakeTool(fact_rows=self.BLANCHARD)
         full = tool.invoke({"input": {"entity": "blanchard"}}, trace=None)
         self.assertEqual(full["sources"][0]["id"], al.FACT_DATASET)
+
+    def test_found_carries_flags(self):
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        out = invoke(tool, "blanchard")
+        # 2 fixture rows < SEARCH_SAMPLE_ROWS, term only in account_manager.
+        self.assertFalse(out["rows_capped"])
+        self.assertFalse(out["multi_column"])
+
+    def test_rows_capped_flag_when_limit_hit(self):
+        many = [{"Account_name": "ALGERIE TELECOM %d" % i, "amount_eur": "1"}
+                for i in range(al.SEARCH_SAMPLE_ROWS)]
+        tool = FakeTool(fact_rows=many)
+        out = invoke(tool, "telecom")
+        self.assertTrue(out["rows_capped"])
+
+    def test_multi_column_flag_when_term_in_two_columns(self):
+        rows = [{"Account_name": "BLANCHARD GROUP",
+                 "account_manager": "p.blanchard@x.com", "amount_eur": "1"}]
+        tool = FakeTool(fact_rows=rows)
+        out = invoke(tool, "blanchard")
+        self.assertTrue(out["multi_column"])
+        self.assertEqual(len(out["found_in"]), 2)
+
+    def test_alias_fallback_skipped_when_attributes_requested(self):
+        # An attribute read that misses wants a clean not_found, NOT alias guesses
+        # (and must not pay the extra catalog round-trips).
+        tool = FakeTool(fact_rows=[], alias_rows=[
+            _cat_row("distribution_type", "Indirect_distribution/Resseler",
+                     display_value="Indirect distribution",
+                     normalized_value="indirect")])
+        out = invoke(tool, "indirect", ["sales zone"])
+        self.assertEqual(out["status"], "not_found")
+        self.assertFalse(any(d == al.CATALOG_DATASET for (d, _) in tool.sql_log))
+
+    def test_short_needle_skips_broad_scan(self):
+        tool = FakeTool(fact_rows=self.BLANCHARD, no_catalog=True)
+        out = invoke(tool, "a")     # 1-char needle
+        self.assertEqual(out["status"], "not_found")
+        self.assertFalse(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
+
+    def test_cache_avoids_second_sql(self):
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        invoke(tool, "blanchard")
+        n_after_first = len(tool.sql_log)
+        out = invoke(tool, "Blanchard")   # same needle, different casing
+        self.assertEqual(out["status"], "found")
+        self.assertEqual(len(tool.sql_log), n_after_first)   # served from cache
+
+    def test_softer_not_found_message_no_absolute_claim(self):
+        tool = FakeTool(fact_rows=[], no_catalog=True)
+        out = invoke(tool, "zzz nothing")
+        self.assertEqual(out["status"], "not_found")
+        self.assertNotIn("was not found in the data", out["message"])
+
+    def test_rows_without_reconfirm_is_not_found_not_found_status(self):
+        # SQL matched rows (FakeTool returns them verbatim) but the term does not
+        # re-confirm in any value and no attribute was asked -> a 'found' with an
+        # empty found_in would be a lie; it must degrade to not_found.
+        tool = FakeTool(fact_rows=[{"Account_name": "ORANGE", "amount_eur": "1"}],
+                        no_catalog=True)
+        out = invoke(tool, "ghost")
+        self.assertEqual(out["status"], "not_found")
+
+    def test_attributes_only_answer_still_found(self):
+        # found_in can be empty while a requested attribute resolved -> still a
+        # valid 'found' (attributes-only), not a not_found.
+        tool = FakeTool(fact_rows=[{"Account_name": "ORANGE", "sales_zone": "Europe",
+                                    "amount_eur": "1"}])
+        out = invoke(tool, "orange", ["sales zone"])
+        self.assertEqual(out["status"], "found")
+        self.assertEqual(out["attributes"], {"sales_zone": "Europe"})
 
 
 if __name__ == "__main__":

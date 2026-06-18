@@ -98,6 +98,9 @@ export const useChatStore = defineStore('chat', () => {
       !threadLoading.value &&
       !threadError.value &&
       !session.needsConfig &&
+      // Monthly budget exhausted (enforcement on): sends are paused until the reset.
+      // The server-side gate stays authoritative; this just disables the UI proactively.
+      !session.budgetBlocked &&
       session.hasAgents &&
       !!session.selectedAgentKey,
   )
@@ -294,9 +297,17 @@ export const useChatStore = defineStore('chat', () => {
       }
     } catch (e) {
       if (!token.cancelled) {
-        version.status = 'error'
-        version.error = (e && e.message) || 'inconnue'
-        errorMsg.value = version.error
+        const code = (e && e.message) || 'inconnue'
+        if (code === 'monthly_quota_exceeded') {
+          // Lost the monthly-budget race (the gate flipped on between send and start):
+          // no run actually started, so drop the optimistic exchange and let the budget
+          // banner (refreshed in the finally) explain - no empty error bubble in the thread.
+          exchanges.value = exchanges.value.filter((x) => x !== exch)
+        } else {
+          version.status = 'error'
+          version.error = code
+          errorMsg.value = code
+        }
       }
     } finally {
       if (activeToken === token) {
@@ -313,6 +324,10 @@ export const useChatStore = defineStore('chat', () => {
         title: runTitle,
         lastAt: new Date().toISOString(),
       })
+      // Refresh the monthly budget after every run (the spend was recorded server-side),
+      // so the profile + chat banner reflect the new remaining and the gate flips on as
+      // soon as the user crosses their limit. Fire-and-forget: never blocks the UI.
+      if (typeof session.loadUsage === 'function') session.loadUsage()
     }
   }
 

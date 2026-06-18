@@ -28,6 +28,17 @@ logger = logging.getLogger(__name__)
 # Stable key for the enabled-agents whitelist payload (a JSON list of agent dicts).
 SETTING_ENABLED_AGENTS = "enabled_agents"
 
+# Defense-in-depth (mirrors storage/artifacts.py + evidence/service.py): the settings
+# reads run on the synchronous chat hot path (the agent-whitelist resolution on every
+# /chat/start, and the budget config), so bound them with a read-only transaction +
+# statement_timeout - a contended/locked settings row can then never pin a worker thread
+# past 30s. The write caps its own runtime the same way. All are single-row PK ops.
+_READ_PRE_QUERIES = [
+    "SET LOCAL statement_timeout TO '30000'",
+    "SET LOCAL transaction_read_only TO on",
+]
+_WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
+
 
 def get_setting(key, default=None):
     """Return the JSON-decoded value for ``key``, or ``default`` if absent/invalid.
@@ -40,7 +51,7 @@ def get_setting(key, default=None):
     sql = "SELECT setting_value FROM {table} WHERE setting_key = {key}".format(
         table=table, key=sql_value(key)
     )
-    rows = rows_to_json_safe(new_executor().query_to_df(sql))
+    rows = rows_to_json_safe(new_executor().query_to_df(sql, pre_queries=_READ_PRE_QUERIES))
     if not rows:
         return default
     raw = rows[0].get("setting_value")
@@ -76,7 +87,7 @@ def set_setting(key, value, updated_by=None):
     )
     new_executor().query_to_df(
         "SELECT 1 AS setting_saved",
-        pre_queries=[upsert_sql],
+        pre_queries=[_WRITE_TIMEOUT_PRE_QUERY, upsert_sql],
         post_queries=["COMMIT"],
     )
     logger.info(

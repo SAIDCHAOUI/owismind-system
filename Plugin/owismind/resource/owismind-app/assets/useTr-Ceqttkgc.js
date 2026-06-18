@@ -1,1 +1,0 @@
-import{i as e}from"./Icon-R0zNmMF0.js";function t(){let{locale:t}=e();return function(e){if(typeof e!=`object`||!e||Array.isArray(e))return e;let n=t.value;if(e[n]!=null)return e[n];if(e.fr!=null)return e.fr;if(e.en!=null)return e.en;let r=Object.values(e);return r.length?r[0]:``}}export{t};

@@ -5,6 +5,7 @@ Routes:
   - ``/me``            : caller identity (resolved server-side) + admin/config flags. POST
                          also records the caller in the users registry + first-admin bootstrap;
                          GET stays read-only.
+  - ``/usage``         : the caller's own monthly budget status (spend / limit / remaining).
   - ``/agents``        : the agents the admin enabled (opaque logical keys + labels).
   - ``/chat/start``    : run a real agent for one message in a background worker and
                          return a run_id; persists the user message first (phase one).
@@ -15,7 +16,7 @@ Routes:
   - ``/conversations`` : names-only, keyset-paginated conversation list (sidebar).
   - ``/conversation``  : all messages of ONE session, fetched lazily on click.
   - ``/evidence/*``    : Evidence Studio - meta / rows / distinct (owner-scoped, read-only, project datasets).
-  - ``/admin/*``       : storage view + user/admin + agent-whitelist management (admin-gated).
+  - ``/admin/*``       : storage view + user/admin + agent-whitelist + monthly-budget management (admin-gated).
 
 Transport is polling, not SSE: DSS's internal nginx can buffer a long-lived
 event-stream so events would arrive all at once. Instead the agent runs in a
@@ -45,16 +46,20 @@ from owismind.security.identity import IdentityError, derive_full_name, resolve_
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
     ValidationError,
+    validate_budget_amount,
     validate_chat_start_request,
     validate_conversations_limit,
     validate_evidence_column,
     validate_evidence_rows_request,
+    validate_expires_days,
     validate_feedback,
     validate_history_limit,
     validate_optional_exchange_id,
+    validate_quota_note,
     validate_required_exchange_id,
+    validate_user_id_list,
 )
-from owismind.storage import admin, chat_v5, settings, sql_config
+from owismind.storage import admin, budget, chat_v5, settings, sql_config
 from owismind.storage.migrations import ensure_chat_table
 
 logger = logging.getLogger(__name__)
@@ -166,6 +171,46 @@ def me():
     )
 
 
+@api.route("/usage", methods=["GET"])
+def usage_me():
+    """The caller's own monthly budget status (spend, effective limit, remaining, reset).
+
+    Powers the profile's consumption view and the chat budget banner. Strictly
+    owner-scoped: the status is read for the auth-resolved user_id only, never a body
+    value. Returns the resolved limit and its SOURCE (default / global temp boost /
+    per-user override) so the UI can be fully transparent about why the cap is what it is.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/usage - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    if not sql_config.is_configured():
+        logger.warning("/usage - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    # Per-user token bucket on this always-on read: the legitimate cadence (init + one
+    # read per finished run + Settings open) fits easily; a scripted flood is denied so it
+    # cannot pin the mono-process backend's threads / the shared SQL connection.
+    if not evidence_throttle.usage_can_accept(identity["user_id"]):
+        logger.warning("/usage - rate limited user_id=%s", identity["user_id"])
+        return jsonify({"status": "error", "error": "rate_limited"}), 429
+
+    try:
+        status = budget.usage_status(identity["user_id"])
+    except Exception:
+        logger.exception("/usage - status read failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    logger.info(
+        "/usage - user_id=%s spent=%.4f limit=%.4f source=%s blocked=%s",
+        identity["user_id"], status.get("spent_usd"), status.get("limit_usd"),
+        status.get("limit_source"), status.get("blocked"),
+    )
+    return jsonify({"status": "ok", "usage": status})
+
+
 _SCREEN_TABS = ("evidence", "chart", "table")
 
 
@@ -259,6 +304,27 @@ def chat_start():
         return jsonify({"status": "error", "error": reason}), (
             429 if reason == "rate_limited" else 503
         )
+
+    # Monthly budget gate (before any write): reject a run once the user has reached
+    # their monthly credit. Fails OPEN on a storage error - delivering the answer matters
+    # more than a perfectly-timed block, and the spend is still recorded afterwards, so
+    # the next request is gated once the read recovers. 402 (Payment Required) carries the
+    # current budget status so the front can show exactly what is left.
+    try:
+        within_budget, budget_status = budget.has_budget(identity["user_id"])
+    except Exception:
+        logger.exception("/chat/start - budget check failed (allowing the run)")
+        within_budget = True
+    if not within_budget:
+        logger.info(
+            "/chat/start - monthly quota exceeded user_id=%s spent=%.4f limit=%.4f",
+            identity["user_id"],
+            budget_status.get("spent_usd"),
+            budget_status.get("limit_usd"),
+        )
+        return jsonify(
+            {"status": "error", "error": "monthly_quota_exceeded", "budget": budget_status}
+        ), 402
 
     # Phase one: persist the user message. Done in the request thread so a write
     # error surfaces as a clean HTTP error rather than inside the worker.
@@ -776,6 +842,113 @@ def admin_set_admin():
         logger.exception("admin/users/set-admin failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
     return jsonify({"status": "ok", "users": users})
+
+
+# --- admin: monthly budgets / quotas -----------------------------------------
+
+
+@api.route("/admin/budget", methods=["GET", "POST"])
+def admin_budget():
+    """Get or set the monthly budget config + per-user usage overview.
+
+    GET returns ``{config, period_start, next_reset, users:[...]}`` - the global config
+    (default limit, enforcement switch, any global temp boost) and every registered user's
+    current-month spend + resolved effective limit. POST persists ``{limit_usd, enabled}``
+    (always) and handles the temp boost independently so editing the default never disturbs
+    an active boost: ``clear_temp:true`` removes it; ``temp_limit_usd`` + ``temp_days`` arms
+    a fresh one; neither (the plain default-limit save) PRESERVES the existing boost. POST
+    returns the refreshed overview so the UI updates in one round-trip.
+    """
+    identity, err = _admin_guard()
+    if err:
+        return err
+
+    if request.method == "GET":
+        try:
+            return jsonify({"status": "ok", **budget.admin_overview()})
+        except Exception:
+            logger.exception("admin/budget - GET failed")
+            return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    body = request.get_json(silent=True) or {}
+    clear_temp = bool(body.get("clear_temp"))
+    try:
+        limit_usd = validate_budget_amount(body.get("limit_usd"))
+        enabled = bool(body.get("enabled", True))
+        # Temp boost is independent of the default-limit save: an explicit clear, a fresh
+        # arm (amount + duration both required), or - when no temp field is sent - PRESERVE
+        # whatever boost is already active (so a default-limit edit never clears it).
+        temp_limit, temp_days, preserve_temp = None, None, False
+        raw_temp = body.get("temp_limit_usd")
+        if clear_temp:
+            pass
+        elif raw_temp is None or raw_temp == "":
+            preserve_temp = True
+        else:
+            temp_limit = validate_budget_amount(raw_temp)
+            temp_days = validate_expires_days(body.get("temp_days"))
+            if temp_days is None:
+                raise ValidationError("invalid_expires")
+    except ValidationError as exc:
+        logger.warning("admin/budget - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    try:
+        budget.set_budget_config(
+            limit_usd, enabled, temp_limit, temp_days,
+            clear_temp=clear_temp, preserve_temp=preserve_temp,
+            updated_by=identity["user_id"],
+        )
+        overview = budget.admin_overview()
+    except Exception:
+        logger.exception("admin/budget - POST failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+    logger.info("admin/budget - config saved by %s", identity["user_id"])
+    return jsonify({"status": "ok", **overview})
+
+
+@api.route("/admin/budget/users", methods=["POST"])
+def admin_budget_users():
+    """Set or clear a PER-USER monthly limit override for one, several or all users.
+
+    Body: ``{user_ids:[...], clear:bool, limit_usd, expires_days, note}``. ``clear:true``
+    removes the override(s) (revert to the global limit). Otherwise an override is upserted
+    with ``limit_usd`` (required) and an optional ``expires_days`` (absent = permanent,
+    an int = a temporary boost). The user_ids list is bounded; everything is re-validated
+    server-side. Returns the refreshed overview.
+    """
+    identity, err = _admin_guard()
+    if err:
+        return err
+
+    body = request.get_json(silent=True) or {}
+    clear = bool(body.get("clear"))
+    try:
+        user_ids = validate_user_id_list(body.get("user_ids"))
+        if not clear:
+            limit_usd = validate_budget_amount(body.get("limit_usd"))
+            expires_days = validate_expires_days(body.get("expires_days"))
+            note = validate_quota_note(body.get("note"))
+    except ValidationError as exc:
+        logger.warning("admin/budget/users - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    try:
+        if clear:
+            budget.clear_user_quotas(user_ids, updated_by=identity["user_id"])
+        else:
+            budget.set_user_quotas(
+                user_ids, limit_usd, expires_days, note, updated_by=identity["user_id"]
+            )
+        overview = budget.admin_overview()
+    except Exception:
+        logger.exception("admin/budget/users - failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+    logger.info(
+        "admin/budget/users - %s %d user(s) by %s",
+        "cleared" if clear else "set", len(user_ids), identity["user_id"],
+    )
+    return jsonify({"status": "ok", **overview})
 
 
 # --- admin: agent whitelist configuration ------------------------------------

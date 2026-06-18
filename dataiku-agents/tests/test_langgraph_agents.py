@@ -147,6 +147,70 @@ class TestRegistryAndTools(unittest.TestCase):
         self.assertIn("y", req)
 
 
+class TestAttributeLookupWiring(unittest.TestCase):
+    """The fast value lookup is wired as a BUILT-IN tool (like current_date), so
+    it touches NO frozen KNOWN_* contract: it must be in the specs but NOT in the
+    capability map, and it must NOT add a sub-agent capability."""
+
+    def test_lookup_is_builtin_not_a_capability(self):
+        specs, t2c = orch.build_tool_specs(orch.get_capabilities())
+        names = {s["function"]["name"] for s in specs}
+        self.assertIn(orch.LOOKUP_TOOL_NAME, names)
+        self.assertEqual(orch.LOOKUP_TOOL_NAME, "attribute_lookup")
+        self.assertNotIn(orch.LOOKUP_TOOL_NAME, t2c)   # built-in, zero contract
+        spec = next(s for s in specs
+                    if s["function"]["name"] == orch.LOOKUP_TOOL_NAME)
+        self.assertEqual(spec["function"]["parameters"]["required"], ["term"])
+
+    def test_lookup_does_not_touch_known_contract(self):
+        # Adding the built-in must not have grown the frozen sub-agent contract.
+        self.assertEqual(set(orch.CAPABILITIES["revenue_expert"]["block_labels"]),
+                         set(dx.KNOWN_BLOCK_IDS))
+        self.assertEqual(set(orch.CAPABILITIES["revenue_expert"]["tool_labels"]),
+                         set(dx.KNOWN_TOOL_NAMES))
+
+    def test_extract_lookup_output_unwraps(self):
+        payload = {"status": "found", "term": "x"}
+        self.assertEqual(orch._extract_lookup_output({"output": payload}), payload)
+        self.assertEqual(orch._extract_lookup_output(payload), payload)
+        import json as _json
+        self.assertEqual(
+            orch._extract_lookup_output(_json.dumps({"output": payload})), payload)
+
+    def test_lookup_tool_output_found_lists_values(self):
+        payload = {"status": "found", "term": "blanchard",
+                   "found_in": [{"column": "account_manager",
+                                 "values": ["jean.blanchard@x.com"]}],
+                   "attributes": {"sales_zone": "Africa"}}
+        text = orch._lookup_tool_output(payload)
+        self.assertIn("account_manager", text)
+        self.assertIn("jean.blanchard@x.com", text)
+        self.assertIn("sales_zone = Africa", text)
+
+    def test_lookup_tool_output_not_found_never_denies_data(self):
+        text = orch._lookup_tool_output({"status": "not_found", "term": "zzz"})
+        # Routes to the specialist and explicitly forbids asserting data absence.
+        self.assertIn("ask_revenue_expert", text)
+        self.assertIn("NEVER state that the data does not exist", text)
+
+    def test_lookup_evidence_item_carries_sql_and_rows(self):
+        payload = {"status": "found", "term": "blanchard", "rows_matched": 2,
+                   "sql": "SELECT * FROM t WHERE ...",
+                   "found_in": [{"column": "account_manager",
+                                 "values": ["jean.blanchard@x.com"]}]}
+        item = orch._lookup_evidence_item(payload, 3, 1, source_url="http://dss/x")
+        self.assertEqual(item["sql_id"], "s3lk1")
+        self.assertEqual(item["agent_key"], orch.LOOKUP_SOURCE_CAP)
+        self.assertEqual(item["source_url"], "http://dss/x")
+        self.assertEqual(item["result"]["columns"], ["column", "value"])
+        self.assertEqual(item["result"]["rows"][0],
+                         ["account_manager", "jean.blanchard@x.com"])
+
+    def test_lookup_evidence_item_none_when_not_found(self):
+        self.assertIsNone(
+            orch._lookup_evidence_item({"status": "not_found"}, 1, 1))
+
+
 class TestAntiDrift(unittest.TestCase):
     """The orchestrator's labels for the sub-agent MUST match the sub-agent's
     frozen block/tool ids, or the timeline mislabels / hides the wrong steps."""

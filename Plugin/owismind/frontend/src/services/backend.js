@@ -165,6 +165,16 @@ export function fetchAgents() {
   return request('/owismind-api/agents', { method: 'GET' });
 }
 
+// --- Monthly budget / usage ---------------------------------------------------
+
+// The caller's own monthly budget status. Returns { status, usage: {...} } where usage
+// carries spend_usd, the effective limit + its source (default / global temp boost /
+// per-user override), remaining, whether enforcement is on / the user is blocked, the
+// reset date and the lifetime counters. Strictly owner-scoped server-side.
+export function fetchUsage() {
+  return request('/owismind-api/usage', { method: 'GET' });
+}
+
 // --- Admin endpoints (server-gated: 403 if the caller is not an admin) --------
 
 // Resolved storage config: { connection, project_key, table_prefix, namespace, tables }.
@@ -212,5 +222,36 @@ export function saveAdminAgents(agents) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agents }),
+  });
+}
+
+// --- Admin: monthly budgets / quotas -----------------------------------------
+
+// Global budget config + every user's current-month usage & resolved limit.
+// Returns { status, config, period_start, next_reset, users: [...] }.
+export function fetchAdminBudget() {
+  return request('/owismind-api/admin/budget', { method: 'GET' });
+}
+
+// Persist the GLOBAL budget config. `config` = { limit_usd, enabled, temp_limit_usd,
+// temp_days } (a temp boost is stored only when both temp_limit_usd and temp_days are
+// set, else cleared). Returns the refreshed overview.
+export function saveAdminBudget(config) {
+  return request('/owismind-api/admin/budget', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+}
+
+// Set or clear a PER-USER monthly limit override for one, several or all users.
+// `payload` = { user_ids:[...], clear:bool, limit_usd, expires_days, note }.
+// (clear:true removes the override; expires_days absent/null = permanent.)
+// Returns the refreshed overview.
+export function saveAdminUserQuota(payload) {
+  return request('/owismind-api/admin/budget/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }

@@ -151,6 +151,22 @@ CHART_TYPES = ("line", "bar", "pie")
 # Artifact kinds the orchestrator can render in the side panel (frozen + KPI).
 ARTIFACT_KINDS = ("chart", "table", "kpi")
 
+# --- Fast value-lookup tool (built-in, NOT a sub-agent capability) ------------
+# attribute_lookup (tools/attribute_lookup_tool.py) is a standalone Custom Python
+# agent tool: a sub-second case/accent-insensitive search of the revenue dataset
+# for a NAMED value (does X exist, in which column, exact spelling, a named
+# record's plain attribute). It short-circuits the slow semantic path for simple
+# "who/what is the <attribute> of <entity>" questions. It is wired here as a
+# BUILT-IN tool (dispatched inline in node_tools like show_table/current_date),
+# so it touches NO frozen KNOWN_* contract. Fill LOOKUP_TOOL_ID after creating
+# the Custom Python tool in DSS; the name fallback recovers a recreated id.
+LOOKUP_TOOL_ID = ""                       # e.g. "ab12CdEf" - set in DSS
+LOOKUP_TOOL_NAME = "attribute_lookup"
+# The dataset the lookup tool reads (only used to attach an Evidence source link;
+# the tool itself owns its FACT_DATASET config). Mirrors the revenue capability.
+LOOKUP_SOURCE_CAP = "revenue_expert"
+LOOKUP_RESULT_MAX_ROWS = 25               # cap on found_in rows shaped for Evidence
+
 
 # =============================================================================
 # 2. REGISTRY = server-side whitelist & manifest
@@ -358,6 +374,50 @@ def build_tool_specs(caps):
             "parameters": {"type": "object", "properties": {}},
         },
     })
+    # Fast value lookup (built-in, NOT a sub-agent). Use it FIRST for a plain
+    # "who/what is the <attribute> of <named entity>" question - it answers in
+    # under a second instead of the specialist's slow path. NEVER use it for a
+    # computed figure (sum, total, count, ranking, share, trend, comparison) or
+    # for "list all X": those go to ask_revenue_expert. It returns where a term
+    # is + its exact spelling, and a named record's attribute when asked.
+    specs.append({
+        "type": "function",
+        "function": {
+            "name": LOOKUP_TOOL_NAME,
+            "description": (
+                "Look up an EXISTING value in the revenue data FAST: does a NAMED "
+                "thing exist, in which column, its EXACT spelling, and a named "
+                "record's plain attribute (the account manager / carrier code / "
+                "sales zone OF a named account). Use it FIRST for a who/what-is "
+                "question about a SINGLE named thing (e.g. 'who is the account "
+                "manager of <account>?', 'carrier code of <account>?', 'is there a "
+                "customer named X?'). NEVER use it for a sum, total, count, "
+                "average, ranking, top-N, share, trend, period/scenario comparison "
+                "or any COMPUTED number, and NEVER for 'list all X' - call "
+                "ask_revenue_expert for those. On 'not_found'/'suggestions', ask "
+                "the user to confirm or call ask_revenue_expert; never say the data "
+                "does not exist."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "description": ("The named thing to look up, as the user "
+                                        "wrote it (spelling/casing/accents do not "
+                                        "matter)."),
+                    },
+                    "attributes": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": ("OPTIONAL. The column(s) you want for the "
+                                        "matched record (e.g. ['account manager']). "
+                                        "Omit to just locate the term."),
+                    },
+                },
+                "required": ["term"],
+            },
+        },
+    })
     return specs, tool_to_cap
 
 
@@ -400,6 +460,8 @@ _NARR = {
               "en": "Laying out the detailed table…"},
     "kpi": {"fr": "Je mets en avant le chiffre clé…",
             "en": "Highlighting the key figure…"},
+    "lookup": {"fr": "Je recherche cette valeur dans les données…",
+               "en": "Looking that value up in the data…"},
     "writing": {"fr": "J'analyse les chiffres et je rédige la réponse…",
                 "en": "Reading the figures and writing the answer…"},
 }
@@ -418,6 +480,7 @@ _L = {
     "tool_table": {"fr": "Préparation du tableau", "en": "Preparing the table"},
     "tool_kpi": {"fr": "Préparation de l'indicateur", "en": "Preparing the KPI"},
     "tool_date": {"fr": "Date du jour", "en": "Current date"},
+    "tool_lookup": {"fr": "Recherche rapide d'une valeur", "en": "Fast value lookup"},
     "tool_done": {"fr": "Outil terminé", "en": "Tool done"},
     "artifact_chart": {"fr": "Graphique prêt", "en": "Chart ready"},
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
@@ -714,6 +777,109 @@ def _subagent_tool_output(answer, result, intent=None):
 
 
 # =============================================================================
+# 5b. FAST VALUE LOOKUP (built-in tool) - output shaping + Evidence capture
+# =============================================================================
+
+def _extract_lookup_output(raw):
+    """The attribute_lookup tool returns {"output": <payload>, "sources": [...]}.
+    Some SDK builds wrap or JSON-encode it; unwrap defensively to the payload dict."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return {"status": "error", "message": raw[:400]}
+    if isinstance(raw, dict):
+        out = raw.get("output", raw)
+        if isinstance(out, str):
+            try:
+                out = json.loads(out)
+            except Exception:
+                return {"status": "error", "message": out[:400]}
+        if isinstance(out, dict):
+            return out
+    return {"status": "error", "message": "unexpected lookup tool output"}
+
+
+def _lookup_tool_output(payload):
+    """The text handed back to the orchestrator model for a lookup call. Factual
+    and compact; tells the model how to phrase each status WITHOUT ever asserting
+    the data is absent (the honesty firewall forbids that). The model writes the
+    final sentence in the user's language."""
+    status = (payload or {}).get("status")
+    term = (payload or {}).get("term", "")
+    if status == "found":
+        lines = ["LOOKUP for '%s': found." % term]
+        for fi in payload.get("found_in") or []:
+            vals = fi.get("values")
+            vals = vals if isinstance(vals, list) else [vals]
+            lines.append("- in '%s': %s" % (fi.get("column"),
+                                            ", ".join(str(v) for v in vals[:10])))
+        attrs = payload.get("attributes") or {}
+        for col, val in attrs.items():
+            val = val if not isinstance(val, list) else ", ".join(str(v) for v in val[:10])
+            lines.append("- %s = %s" % (col, val))
+        if payload.get("multi_column"):
+            lines.append("NOTE: the term appears in SEVERAL columns (possibly "
+                         "different entities) - ask the user which one before "
+                         "answering.")
+        if payload.get("rows_capped"):
+            lines.append("NOTE: this is a SAMPLE (the result was capped) - say so "
+                         "if you list values.")
+        lines.append("Answer the user in one short sentence using these exact "
+                     "values; do not invent anything; do not show a table.")
+        return "\n".join(lines)
+    if status == "suggestions":
+        cands = "; ".join("%s (%s)" % (c.get("value"), c.get("column"))
+                          for c in (payload.get("candidates") or [])[:5])
+        return ("LOOKUP for '%s': no exact match. Close options: %s. Ask the user "
+                "which they mean - do NOT pick one yourself." % (term, cands))
+    if status == "not_found":
+        return ("LOOKUP for '%s': the quick search did not pinpoint it. Either ask "
+                "the user to confirm the exact name, OR call ask_revenue_expert to "
+                "look deeper. NEVER state that the data does not exist." % term)
+    if status in ("attribute_unknown",):
+        cols = ", ".join((payload.get("available_columns") or [])[:30])
+        return ("LOOKUP: the requested attribute is not a real column. Available "
+                "columns: %s. Ask the user to rephrase." % cols)
+    return ("LOOKUP could not run cleanly (%s). Hand the question to "
+            "ask_revenue_expert." % (payload or {}).get("status", "error"))
+
+
+def _lookup_evidence_item(payload, step_index, n, source_url=""):
+    """Shape a 'found' lookup result as an Evidence-capturable SQL item so the
+    fast path keeps provenance (the built-in path bypasses the sub-agent trace
+    capture). Mirrors the sql_item contract; sql_id is distinct from the
+    sub-agent's 's{step}q{n}' to avoid collisions ('lk')."""
+    if not isinstance(payload, dict) or payload.get("status") != "found":
+        return None
+    sql = payload.get("sql")
+    if not sql:
+        return None
+    rows = []
+    for fi in payload.get("found_in") or []:
+        vals = fi.get("values")
+        vals = vals if isinstance(vals, list) else [vals]
+        for v in vals:
+            rows.append([fi.get("column"), str(v)])
+            if len(rows) >= LOOKUP_RESULT_MAX_ROWS:
+                break
+        if len(rows) >= LOOKUP_RESULT_MAX_ROWS:
+            break
+    item = {
+        "sql": sql,
+        "success": True,
+        "row_count": payload.get("rows_matched"),
+        "sql_id": "s%dlk%d" % (step_index, n),
+        "step_index": step_index,
+        "agent_key": LOOKUP_SOURCE_CAP,
+        "result": {"columns": ["column", "value"], "rows": rows},
+    }
+    if source_url:
+        item["source_url"] = source_url
+    return item
+
+
+# =============================================================================
 # 5c. MODEL MODE - one model per mode (model-agnostic, no escalation)
 # =============================================================================
 
@@ -928,7 +1094,15 @@ def build_system_prompt(caps, lang_hint, narrate=True):
         "gets nothing. When in any doubt, CALL the tool.\n"
         "2. ROUTE WELL. Route to the specialist whose domain fits (in doubt, route - "
         "never deny). Write each task SELF-CONTAINED (entity, scenario/phase, exact "
-        "period); the specialist does not see the conversation.\n"
+        "period); the specialist does not see the conversation. EXCEPTION - the fast "
+        "lookup: for a PLAIN 'who/what is the <attribute> of <named entity>' question "
+        "(the account manager / carrier code / sales zone OF a named account; does X "
+        "exist; the exact spelling of a name), call `attribute_lookup` FIRST - it "
+        "answers in under a second, where the specialist is slow. Use the specialist "
+        "for any COMPUTED figure (sum, total, count, ranking, share, trend, scenario/ "
+        "period comparison) or for 'list all X'. If the lookup returns "
+        "not_found/suggestions, ask the user to confirm the name or call the "
+        "specialist - never say the data is missing.\n"
         "3. ASK FOR EVERYTHING AT ONCE. A specialist call is SLOW. Put the whole need "
         "into ONE task when you can - one call can return actuals AND budget AND the "
         "delta together. When the question genuinely needs SEVERAL independent answers, "
@@ -1056,11 +1230,65 @@ class MyLLM(BaseLLM):
         self._caps = None
         self._tool_specs = None
         self._tool_to_cap = None
+        self._tools = {}             # tool_id -> agent tool handle (stable cache)
 
     # ---- registry / specs (cheap; rebuilt to honor live enabled flags) ----
     def _ensure_specs(self):
         self._caps = get_capabilities()
         self._tool_specs, self._tool_to_cap = build_tool_specs(self._caps)
+
+    # ---- DSS agent tools (the built-in fast lookup) -----------------------
+    def _get_tool(self, project, tool_id, tool_name):
+        """get_agent_tool(tool_id) with a one-shot fallback matching tool_name
+        against list_agent_tools() (covers a recreated tool whose id changed).
+        Cached by id (stable; the class is instantiated once per process)."""
+        if tool_id and tool_id in self._tools:
+            return self._tools[tool_id]
+        tool = None
+        if tool_id:
+            try:
+                tool = project.get_agent_tool(tool_id)
+                tool.get_descriptor()      # validate the id with a roundtrip
+            except Exception:
+                tool = None
+        if tool is None:
+            try:
+                for item in project.list_agent_tools():
+                    raw = item if isinstance(item, dict) else getattr(item, "raw", {})
+                    name = str(raw.get("name") or "")
+                    if tool_name.lower() in name.lower():
+                        tool = project.get_agent_tool(raw.get("id") or name)
+                        break
+            except Exception:
+                logger.exception("Tool lookup failed for %s (%s)", tool_id, tool_name)
+        if tool is None:
+            raise RuntimeError("Agent tool not found: %s (%s)" % (tool_id, tool_name))
+        if tool_id:
+            self._tools[tool_id] = tool
+        return tool
+
+    def _run_lookup(self, project, args, step_index):
+        """Run the built-in fast value lookup. Returns (tool_output_text,
+        evidence_item|None). Never raises - a tool failure degrades to a hint to
+        use the specialist, so the turn always completes."""
+        term = str((args or {}).get("term") or "").strip()
+        attrs = (args or {}).get("attributes") or []
+        if isinstance(attrs, str):
+            attrs = [attrs]
+        if not term:
+            return ("LOOKUP needs a 'term'. Ask the user what to look up, or call "
+                    "ask_revenue_expert.", None)
+        try:
+            tool = self._get_tool(project, LOOKUP_TOOL_ID, LOOKUP_TOOL_NAME)
+            raw = tool.run({"entity": term, "attributes": attrs})
+            payload = _extract_lookup_output(raw)
+        except Exception as e:
+            logger.exception("attribute_lookup failed")
+            return ("The fast lookup is unavailable (%s). Hand the question to "
+                    "ask_revenue_expert." % str(e)[:160], None)
+        source_url = (CAPABILITIES.get(LOOKUP_SOURCE_CAP) or {}).get("source_url") or ""
+        item = _lookup_evidence_item(payload, step_index, 1, source_url)
+        return _lookup_tool_output(payload), item
 
     # ---- input ------------------------------------------------------------
     @staticmethod
@@ -1393,6 +1621,35 @@ class MyLLM(BaseLLM):
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok", "label": _L["tool_done"][lang]}))
                     _pair(today, tc.get("id"))
+                elif name == LOOKUP_TOOL_NAME:
+                    if not model_narrated:
+                        writer(_narr(_NARR["lookup"][lang]))
+                    writer(_ev("RUNNING_TOOL", {"toolKey": name, "stepIndex": base_step,
+                                                "label": _L["tool_lookup"][lang]}))
+                    text, item = self._run_lookup(project, args, base_step)
+                    if item:
+                        # Provenance for the fast path: emit the lookup SQL + the
+                        # 'where the term is' result as a 'semantic-model-query'
+                        # subspan - the SAME footer-trace channel the backend already
+                        # captures for sub-agent / direct SQL (the built-in path has
+                        # no sub-agent trace). Keeps the trust layer intact without a
+                        # new contract. We do NOT set state['latest']: a lookup is
+                        # answered in one sentence (no artifact), and in a mixed turn
+                        # that would overwrite the specialist's renderable result.
+                        try:
+                            with trace.subspan("semantic-model-query") as lsp:
+                                lsp.outputs["sql"] = item["sql"]
+                                lsp.outputs["success"] = True
+                                lsp.outputs["row_count"] = item.get("row_count")
+                                lsp.outputs["columns"] = item["result"]["columns"]
+                                lsp.outputs["rows"] = item["result"]["rows"]
+                                if item.get("source_url"):
+                                    lsp.outputs["source_url"] = item["source_url"]
+                        except Exception:
+                            logger.exception("lookup evidence span failed (non-fatal)")
+                    writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
+                                             "status": "ok", "label": _L["tool_done"][lang]}))
+                    _pair(text, tc.get("id"))
                 else:
                     _pair("[unknown tool]", tc.get("id"))
             # Leftover net: pair any tool_call no branch handled (must never happen,

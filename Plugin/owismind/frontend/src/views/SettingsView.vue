@@ -7,9 +7,11 @@
 //                ("soon") because there is no "set my name" route yet (memory L017).
 //   - Theme    : segmented light/dark control, wired to the ui store.
 //   - Language : native select, wired to i18n setLocale.
-//   - Budget   : EMPTY state - no mock "19,07/50 €" (memory: zéro faux chiffre).
-//   - Usage    : EMPTY state - no fake usage history.
-import { computed } from 'vue'
+//   - Budget   : REAL - the user's monthly credit (spend / limit / remaining / reset),
+//                from /usage via the session store. Transparent about the limit source
+//                (default / temporary boost / admin override). No mock figures.
+//   - Usage    : REAL - this-month tokens + spend and the lifetime counters.
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore } from '../stores/ui.js'
 import { useSessionStore } from '../stores/session.js'
@@ -18,15 +20,58 @@ import {
   CONTEXT_MESSAGES_MIN,
   CONTEXT_MESSAGES_MAX,
 } from '../stores/prefs.js'
-import { PageShell, SettingCard, EmptyState } from '../components/pages'
+import {
+  formatMoney,
+  formatTokens,
+  formatShortDate,
+  usagePct,
+  gaugePct,
+  usageLevel,
+} from '../composables/budgetModel.js'
+import { PageShell, SettingCard } from '../components/pages'
 import { Icon } from '../components/ui'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const ui = useUiStore()
 const session = useSessionStore()
 
 const groups = computed(() => session.user?.groups || [])
 const userId = computed(() => session.user?.user_id || '-')
+
+// --- Monthly budget / usage (real, from /usage via the session store) ----------
+const usage = computed(() => session.usage)
+// Refresh on entry so the figures are current even if the user lands here directly
+// (init() already loads it; this just guarantees freshness without a full reload).
+onMounted(() => {
+  if (!session.needsConfig && typeof session.loadUsage === 'function') session.loadUsage()
+})
+
+const money = (v) => formatMoney(v, locale.value)
+const tokens = (v) => formatTokens(v, locale.value)
+const shortDate = (v) => formatShortDate(v, locale.value)
+
+const pct = computed(() => (usage.value ? usagePct(usage.value.spent_usd, usage.value.limit_usd) : 0))
+const fill = computed(() => (usage.value ? gaugePct(usage.value.spent_usd, usage.value.limit_usd) : 0))
+const level = computed(() => usageLevel(usage.value))
+const blocked = computed(() => !!usage.value && usage.value.enforced !== false && !!usage.value.blocked)
+
+// Transparency line: WHY the limit is what it is (default / global temp / per-user).
+const sourceLabel = computed(() => {
+  const u = usage.value
+  if (!u) return ''
+  const limit = money(u.limit_usd)
+  const exp = shortDate(u.limit_expires_at)
+  switch (u.limit_source) {
+    case 'global_temp':
+      return t('set.budget.src_global_temp', [limit, exp])
+    case 'user_permanent':
+      return t('set.budget.src_user', [limit])
+    case 'user_temp':
+      return t('set.budget.src_user_temp', [limit, exp])
+    default:
+      return t('set.budget.src_default', [limit])
+  }
+})
 
 // Language goes through the ui store (single source of truth shared with the header).
 function onLangChange(e) {
@@ -128,7 +173,49 @@ function onContextChange(e) {
       </SettingCard>
 
       <SettingCard :eyebrow="t('set.budget')">
-        <EmptyState icon="wallet" :title="t('set.budget')" :tag="t('x.soon')" :desc="t('set.budget.empty')" />
+        <div v-if="!usage" class="bud-loading muted">{{ t('set.budget.loading') }}</div>
+        <div v-else class="bud" :class="level">
+          <div class="bud-head">
+            <div class="bud-amounts">
+              <span class="bud-spent mono">{{ money(usage.spent_usd) }}</span>
+              <span class="bud-of mono">/ {{ money(usage.limit_usd) }}</span>
+            </div>
+            <span class="bud-pct mono" :class="level">{{ pct }}%</span>
+          </div>
+
+          <div class="bud-bar" :class="level">
+            <span class="bud-fill" :style="{ width: fill + '%' }" />
+          </div>
+
+          <div class="bud-meta">
+            <span class="bud-remaining">
+              <strong class="mono">{{ money(usage.remaining_usd) }}</strong> {{ t('set.budget.remaining') }}
+            </span>
+            <span v-if="usage.next_reset" class="bud-reset">
+              {{ t('set.budget.resets', [shortDate(usage.next_reset)]) }}
+            </span>
+          </div>
+
+          <!-- Blocked / disabled / transparency line -->
+          <p v-if="blocked" class="bud-flag bud-flag--block">
+            <Icon name="alert" />{{ t('set.budget.blocked', [shortDate(usage.next_reset)]) }}
+          </p>
+          <p v-else-if="level === 'off'" class="bud-flag bud-flag--off">
+            <Icon name="wallet" />{{ t('set.budget.off') }}
+          </p>
+          <p class="bud-source muted">{{ sourceLabel }}</p>
+
+          <div class="bud-stats">
+            <span class="bud-stat">
+              <span class="bud-stat-k">{{ t('set.budget.requests') }}</span>
+              <span class="bud-stat-v mono">{{ formatTokens(usage.request_count, locale) }}</span>
+            </span>
+            <span class="bud-stat">
+              <span class="bud-stat-k">{{ t('set.usage.tokens_month') }}</span>
+              <span class="bud-stat-v mono">{{ tokens(usage.total_tokens) }}</span>
+            </span>
+          </div>
+        </div>
       </SettingCard>
     </div>
 
@@ -153,9 +240,30 @@ function onContextChange(e) {
       </div>
     </SettingCard>
 
-    <!-- Usage history (empty) -->
+    <!-- Usage detail (this month + lifetime) -->
     <SettingCard :eyebrow="t('set.usage')" class="set-usage-card">
-      <EmptyState icon="chart" :title="t('set.usage')" :tag="t('x.soon')" :desc="t('set.usage.empty')" />
+      <div v-if="!usage" class="bud-loading muted">{{ t('set.budget.loading') }}</div>
+      <div v-else class="use-grid">
+        <div class="use-cell">
+          <span class="use-k">{{ t('set.usage.tokens_month') }}</span>
+          <span class="use-v mono">{{ tokens(usage.total_tokens) }}</span>
+          <span class="use-sub mono">↑ {{ tokens(usage.input_tokens) }} · ↓ {{ tokens(usage.output_tokens) }}</span>
+        </div>
+        <div class="use-cell">
+          <span class="use-k">{{ t('set.usage.spend_month') }}</span>
+          <span class="use-v mono">{{ money(usage.spent_usd) }}</span>
+          <span class="use-sub">{{ formatTokens(usage.request_count, locale) }} {{ t('set.usage.calls') }}</span>
+        </div>
+        <div class="use-cell">
+          <span class="use-k">{{ t('set.usage.lifetime_cost') }}</span>
+          <span class="use-v mono">{{ money(usage.lifetime.cost_usd) }}</span>
+          <span class="use-sub mono">{{ tokens(usage.lifetime.total_tokens) }} {{ t('msg.usage_tokens') }}</span>
+        </div>
+        <div v-if="usage.lifetime.last_usage_at" class="use-cell">
+          <span class="use-k">{{ t('set.usage.last') }}</span>
+          <span class="use-v">{{ shortDate(usage.lifetime.last_usage_at) }}</span>
+        </div>
+      </div>
     </SettingCard>
   </PageShell>
 </template>
@@ -356,6 +464,56 @@ function onContextChange(e) {
   background: var(--orange-soft-dark);
   color: var(--orange);
 }
+
+/* --- Monthly budget card (real /usage data) --- */
+.bud-loading { font-size: var(--fs-sm); padding: var(--s-3) 0; }
+.bud { display: flex; flex-direction: column; gap: var(--s-3); }
+.bud-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.bud-amounts { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.bud-spent { font-size: var(--fs-2xl); font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.bud-of { font-size: var(--fs-md); color: var(--text-3); }
+.bud-pct { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.bud-pct.warn { color: var(--orange-text); }
+.bud-pct.over { color: var(--danger); }
+
+/* Gauge: a rounded track with a fill colored by severity. */
+.bud-bar { position: relative; height: 9px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+.bud-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill);
+  background: var(--orange); transition: width var(--dur-slow) var(--ease);
+}
+.bud-bar.warn .bud-fill { background: var(--orange); }
+.bud-bar.over .bud-fill { background: var(--danger); }
+.bud-bar.off .bud-fill { background: var(--text-3); }
+
+.bud-meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.bud-remaining { font-size: var(--fs-sm); color: var(--text-2); }
+.bud-remaining strong { color: var(--text); font-weight: 600; }
+.bud-reset { font-size: var(--fs-xs); color: var(--text-3); }
+
+.bud-flag {
+  display: flex; align-items: center; gap: 7px; margin: 0;
+  font-size: var(--fs-xs); line-height: 1.5; padding: 7px 10px; border-radius: var(--r-sm);
+}
+.bud-flag :deep(.ui-icon) { width: 14px; height: 14px; flex-shrink: 0; }
+.bud-flag--block { color: var(--danger); background: var(--danger-soft); }
+.bud-flag--off { color: var(--text-2); background: var(--surface); }
+.bud-source { font-size: var(--fs-xs); line-height: 1.5; margin: 0; }
+
+.bud-stats { display: flex; gap: var(--s-5); flex-wrap: wrap; padding-top: var(--s-2); border-top: 1px solid var(--border); }
+.bud-stat { display: flex; flex-direction: column; gap: 2px; }
+.bud-stat-k { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); }
+.bud-stat-v { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+
+/* --- Usage detail grid (this month + lifetime) --- */
+.use-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-4); }
+.use-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r); background: var(--bg);
+}
+.use-k { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); }
+.use-v { font-size: var(--fs-lg); font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.use-sub { font-size: var(--fs-xs); color: var(--text-3); }
 
 @media (max-width: 760px) {
   .set-top-grid { grid-template-columns: 1fr; }

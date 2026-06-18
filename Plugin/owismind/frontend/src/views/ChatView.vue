@@ -3,20 +3,45 @@
 // to the maquette UI. Empty state centers title + prompt; an active conversation
 // shows the scrollable thread with the prompt pinned below. The route's optional
 // :sessionId selects a conversation (lazily fetched on open); no param = a new one.
-import { watch } from 'vue'
+import { watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../stores/chat.js'
 import { useSessionStore } from '../stores/session.js'
+import { formatMoney, formatShortDate } from '../composables/budgetModel.js'
 import ChatThread from '../components/chat/ChatThread.vue'
 import ChatEmpty from '../components/chat/ChatEmpty.vue'
 import PromptBar from '../components/chat/PromptBar.vue'
+import { Icon } from '../components/ui'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const chat = useChatStore()
 const session = useSessionStore()
+
+// Monthly-budget banner (transparent): shown above the prompt when the user has hit
+// their credit and enforcement is on. The server-side gate is authoritative; this just
+// explains WHY sending is paused and WHEN it resumes (the reset date).
+const budgetBlocked = computed(() => session.budgetBlocked)
+const budgetMsg = computed(() => {
+  const u = session.usage
+  if (!u) return ''
+  return t('chat.quota_banner', [
+    formatMoney(u.spent_usd, locale.value),
+    formatMoney(u.limit_usd, locale.value),
+    formatShortDate(u.next_reset, locale.value),
+  ])
+})
+
+// Map the few send errors that benefit from a human message (the monthly-quota race in
+// particular); anything else shows its raw stable code (unchanged behaviour).
+const friendlyError = computed(() => {
+  const code = chat.errorMsg
+  if (!code) return ''
+  if (code === 'monthly_quota_exceeded') return budgetMsg.value || t('chat.quota_short')
+  return code
+})
 
 // Route → conversation. ensureSession fetches lazily (deep-link hydrates on its
 // own) but skips the refetch when the param already matches the in-memory thread
@@ -63,10 +88,15 @@ watch(
     <template v-else-if="chat.hasMessages">
       <ChatThread :turns="chat.turns" />
       <div class="prompt-wrap">
+        <!-- Monthly budget exhausted: a clear, transparent banner (sends are paused). -->
+        <div v-if="budgetBlocked" class="budget-banner">
+          <Icon name="wallet" />
+          <span>{{ budgetMsg }}</span>
+        </div>
         <!-- A failed switch keeps the PREVIOUS thread on screen - the error must be
              visible here too (sends are blocked by canSend until a clean reload). -->
         <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
-        <p v-else-if="chat.errorMsg" class="chat-error">{{ chat.errorMsg }}</p>
+        <p v-else-if="chat.errorMsg" class="chat-error">{{ friendlyError }}</p>
         <PromptBar />
       </div>
     </template>
@@ -74,8 +104,12 @@ watch(
     <div v-else class="empty-stage">
       <ChatEmpty />
       <div class="prompt-wrap in-empty">
+        <div v-if="budgetBlocked" class="budget-banner">
+          <Icon name="wallet" />
+          <span>{{ budgetMsg }}</span>
+        </div>
         <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
-        <p v-else-if="chat.errorMsg" class="chat-error">{{ chat.errorMsg }}</p>
+        <p v-else-if="chat.errorMsg" class="chat-error">{{ friendlyError }}</p>
         <PromptBar />
       </div>
     </div>
@@ -122,6 +156,21 @@ watch(
   color: var(--danger);
   margin: 0 0 var(--s-3);
 }
+/* Monthly budget banner (transparent "credit reached" state above the prompt). */
+.budget-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 var(--s-3);
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--r-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.budget-banner :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; }
 /* Conversation-switch loading overlay (centered spinner over the whole .chat area). */
 .thread-loading {
   position: absolute;

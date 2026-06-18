@@ -107,6 +107,121 @@ def build_users_usage_increment(table_ref, user_value_sql,
                in_t=in_tokens_sql, out_t=out_tokens_sql, cost=cost_sql)
 
 
+# --- Monthly budget / usage status -------------------------------------------
+# The "month" everywhere is the calendar month on the SERVER clock
+# (date_trunc('month', now())), matching the usage_monthly UPSERT bucket key, so a
+# user's spend resets on its own at the 1st (a new month is a new bucket row) with no
+# reset job. ``next_reset`` is the first day of the following month (shown to the user).
+
+
+def build_user_usage_status_query(monthly_ref, quota_ref, users_ref, user_value_sql):
+    """One row of the caller's CURRENT-MONTH usage + any active per-user override.
+
+    LEFT JOINs the current-month bucket, the per-user quota override and the user's
+    lifetime counters onto a single anchor row, so a brand-new user (no bucket, no
+    override) still returns one fully-COALESCEd row (zeros). ``override_active`` is
+    decided in SQL against now() (NULL expires_at = permanent). The effective limit and
+    its source are resolved in Python (the global default / temp boost live in settings,
+    not SQL). All fragments are caller-escaped; nothing here is user input.
+    """
+    return """
+    SELECT
+      date_trunc('month', now())::date                          AS period_start,
+      (date_trunc('month', now()) + interval '1 month')::date   AS next_reset,
+      COALESCE(m.total_cost, 0)                                  AS spent_usd,
+      COALESCE(m.input_tokens, 0)                                AS input_tokens,
+      COALESCE(m.output_tokens, 0)                               AS output_tokens,
+      COALESCE(m.request_count, 0)                               AS request_count,
+      q.limit_usd                                                AS override_limit,
+      q.expires_at                                               AS override_expires,
+      (q.user_id IS NOT NULL AND (q.expires_at IS NULL OR q.expires_at > now())) AS override_active,
+      COALESCE(us.total_input_tokens, 0)                         AS lifetime_input_tokens,
+      COALESCE(us.total_output_tokens, 0)                        AS lifetime_output_tokens,
+      COALESCE(us.total_cost, 0)                                 AS lifetime_cost,
+      us.last_usage_at                                           AS last_usage_at
+    FROM (SELECT {user} AS uid) base
+    LEFT JOIN {monthly} m ON m.user_id = base.uid
+                         AND m.period_start = date_trunc('month', now())::date
+    LEFT JOIN {quota}   q ON q.user_id = base.uid
+    LEFT JOIN {users}  us ON us.user_id = base.uid
+    """.format(monthly=monthly_ref, quota=quota_ref, users=users_ref, user=user_value_sql)
+
+
+def build_admin_usage_overview_query(users_ref, monthly_ref, quota_ref, cap):
+    """Every registered user with their CURRENT-MONTH usage + override (admin quotas view).
+
+    Anchored on the users registry (so users who never spent this month still appear),
+    LEFT JOINing the current-month bucket and the quota override. Ordered by this month's
+    spend (biggest spenders first), bounded by ``cap``. The effective limit per user is
+    resolved in Python. Caller escapes nothing user-supplied here; cap is int-coerced.
+    """
+    n = int(cap)
+    return """
+    SELECT
+      date_trunc('month', now())::date                          AS period_start,
+      (date_trunc('month', now()) + interval '1 month')::date   AS next_reset,
+      u.user_id, u.display_name, u.user_groups, u.is_admin,
+      COALESCE(u.total_cost, 0)                                  AS lifetime_cost,
+      u.last_usage_at,
+      COALESCE(m.total_cost, 0)                                  AS spent_usd,
+      COALESCE(m.input_tokens, 0)                                AS input_tokens,
+      COALESCE(m.output_tokens, 0)                               AS output_tokens,
+      COALESCE(m.request_count, 0)                               AS request_count,
+      q.limit_usd                                                AS override_limit,
+      q.expires_at                                               AS override_expires,
+      q.note                                                     AS override_note,
+      (q.user_id IS NOT NULL AND (q.expires_at IS NULL OR q.expires_at > now())) AS override_active
+    FROM {users} u
+    LEFT JOIN {monthly} m ON m.user_id = u.user_id
+                         AND m.period_start = date_trunc('month', now())::date
+    LEFT JOIN {quota}   q ON q.user_id = u.user_id
+    ORDER BY COALESCE(m.total_cost, 0) DESC, u.user_id
+    LIMIT {n}
+    """.format(users=users_ref, monthly=monthly_ref, quota=quota_ref, n=n)
+
+
+def build_user_quota_upsert(quota_ref, user_value_sql, limit_sql,
+                            expires_days, note_sql, updated_by_sql):
+    """UPSERT one user's budget override (permanent when ``expires_days`` is None).
+
+    ``expires_days`` (int or None) is the temporary-boost duration; None stores NULL
+    (permanent). When set, ``expires_at = now() + interval '1 day' * <days>`` - the days
+    count is int-coerced here (never user text), so the multiplied interval is injection-
+    safe and the expiry is anchored on the server clock. ``limit_sql`` is a server-computed
+    numeric literal; ``user``/``note``/``updated_by`` are caller-escaped. Goes in
+    ``pre_queries`` (a COMMIT must follow).
+    """
+    if expires_days is None:
+        expires_sql = "NULL"
+    else:
+        d = int(expires_days)
+        expires_sql = "now() + (interval '1 day' * {})".format(d)
+    return """
+    INSERT INTO {table} AS q
+      (user_id, limit_usd, expires_at, note, updated_at, updated_by)
+    VALUES ({user}, {lim}, {exp}, {note}, now(), {by})
+    ON CONFLICT (user_id) DO UPDATE
+       SET limit_usd  = EXCLUDED.limit_usd,
+           expires_at = EXCLUDED.expires_at,
+           note       = EXCLUDED.note,
+           updated_at = now(),
+           updated_by = EXCLUDED.updated_by
+    """.format(table=quota_ref, user=user_value_sql, lim=limit_sql,
+               exp=expires_sql, note=note_sql, by=updated_by_sql)
+
+
+def build_user_quota_clear(quota_ref, user_values_csv_sql):
+    """DELETE the override rows for a set of users (revert them to the global limit).
+
+    ``user_values_csv_sql`` is a comma-joined list of ALREADY-escaped user_id literals
+    (the caller builds it via sql_value). A no-op when no row matches. Goes in
+    ``pre_queries`` (a COMMIT must follow).
+    """
+    return "DELETE FROM {table} WHERE user_id IN ({ids})".format(
+        table=quota_ref, ids=user_values_csv_sql
+    )
+
+
 def build_ancestor_chain_query(table_ref, columns, user_value_sql,
                                start_exchange_sql, max_depth, cap):
     """Walk parent_exchange_id UP from a start exchange to the root (recursive CTE).

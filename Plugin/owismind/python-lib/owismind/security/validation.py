@@ -362,3 +362,87 @@ def validate_evidence_rows_request(payload):
         table = raw_table
 
     return exchange_id, filters, kept_ids, include_advanced, page, sort, drill, table
+
+
+# --- Monthly budget / quota (admin) -------------------------------------------
+# The admin sets a global default monthly limit (US dollars) and may grant per-user
+# overrides (permanent or temporary). Amounts are bounded to a sane range; durations
+# to whole days; the user-id list is bounded so one admin call can never fan out
+# unboundedly. None of these values ever reach SQL unescaped - the storage layer
+# inlines amounts as server-computed numeric literals and escapes the user ids.
+MAX_BUDGET_USD = 1_000_000.0
+MAX_QUOTA_USERS = 1000
+MIN_QUOTA_DAYS = 1
+MAX_QUOTA_DAYS = 3650  # ~10 years - a "temporary" boost is never unbounded
+MAX_QUOTA_NOTE_CHARS = 280
+
+
+def validate_budget_amount(value):
+    """A monetary limit in USD: a finite number in [0, MAX_BUDGET_USD]. Raises otherwise.
+
+    0 is allowed (an explicit "no budget" / hard block); negatives, NaN/inf and
+    non-numbers are rejected with a stable code. bool is refused (int subclass trap).
+    """
+    if isinstance(value, bool):
+        raise ValidationError("invalid_amount")
+    try:
+        amount = float(value)
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: a bare huge JSON integer (e.g. 10**400) parses as an
+        # arbitrary-precision Python int whose float() overflows - reject cleanly (400)
+        # instead of letting it bubble up as an opaque 500.
+        raise ValidationError("invalid_amount")
+    if not math.isfinite(amount) or amount < 0 or amount > MAX_BUDGET_USD:
+        raise ValidationError("invalid_amount")
+    return amount
+
+
+def validate_expires_days(value):
+    """Optional temporary-boost duration in whole days, or None (= permanent).
+
+    None / missing / 0 -> None (permanent). Otherwise an int in [1, MAX_QUOTA_DAYS];
+    anything else raises a stable code. bool is refused (int subclass trap).
+    """
+    if value is None or value == 0 or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValidationError("invalid_expires")
+    try:
+        days = int(value)
+    except (TypeError, ValueError):
+        raise ValidationError("invalid_expires")
+    if days < MIN_QUOTA_DAYS or days > MAX_QUOTA_DAYS:
+        raise ValidationError("invalid_expires")
+    return days
+
+
+def validate_user_id_list(value):
+    """A non-empty, bounded list of distinct user ids (each a bounded non-empty str).
+
+    Order-preserving de-dup; caps the count at MAX_QUOTA_USERS and each id at
+    MAX_SESSION_ID_LENGTH. Raises a stable code on a structurally invalid list.
+    """
+    if not isinstance(value, list) or not value:
+        raise ValidationError("invalid_user_ids")
+    seen = set()
+    out = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValidationError("invalid_user_ids")
+        uid = item.strip()
+        if not uid or len(uid) > MAX_SESSION_ID_LENGTH:
+            raise ValidationError("invalid_user_ids")
+        if uid in seen:
+            continue
+        seen.add(uid)
+        out.append(uid)
+    if len(out) > MAX_QUOTA_USERS:
+        raise ValidationError("too_many_users")
+    return out
+
+
+def validate_quota_note(value):
+    """An optional admin memo on an override: a bounded string (empty when absent)."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:MAX_QUOTA_NOTE_CHARS]

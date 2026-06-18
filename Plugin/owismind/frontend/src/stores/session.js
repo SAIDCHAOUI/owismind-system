@@ -4,7 +4,7 @@
 // (e.g. outside DSS, where getWebAppBackendUrl is absent) so the shell always renders.
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { fetchMe, fetchConversations, fetchAgents } from '../services/backend.js'
+import { fetchMe, fetchConversations, fetchAgents, fetchUsage } from '../services/backend.js'
 import { mergeConversations, upsertAndBump } from './conversationList.js'
 import { pickDefaultAgent } from './agentPick.js'
 
@@ -35,6 +35,11 @@ export const useSessionStore = defineStore('session', () => {
   const loading = ref(false)
   const error = ref('')
 
+  // Monthly budget status (from /usage): spend, effective limit + source, remaining,
+  // reset date, lifetime counters, and whether enforcement is on / the user is blocked.
+  // null until loaded (or when storage is unconfigured / the read fails).
+  const usage = ref(null)
+
   // Paginated conversation list (names only) - the sidebar fills + infinite-scrolls it.
   const conversations = ref([]) // [{ id, title, lastAt }]
   const convCursor = ref(null)
@@ -45,6 +50,11 @@ export const useSessionStore = defineStore('session', () => {
   let _initPromise = null
 
   const hasAgents = computed(() => agents.value.length > 0)
+  // The user has hit their monthly credit AND enforcement is on -> sends are paused.
+  // A null/unenforced/under-limit status leaves sending fully enabled.
+  const budgetBlocked = computed(
+    () => !!usage.value && usage.value.enforced !== false && !!usage.value.blocked,
+  )
   const displayName = computed(() => {
     const u = user.value
     if (!u) return ''
@@ -67,6 +77,19 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       user.value = null
       isAdmin.value = false
+    }
+  }
+
+  // Monthly budget status. Best-effort: a failure leaves `usage` as-is (the profile shows
+  // a neutral state, the chat banner stays hidden, the server-side gate is still the real
+  // enforcement). Refreshed on init and after each completed run (so the banner appears
+  // as soon as the user crosses their limit).
+  async function loadUsage() {
+    try {
+      const data = await fetchUsage()
+      usage.value = data.usage || null
+    } catch (e) {
+      /* keep the last known status; the backend gate remains authoritative. */
     }
   }
 
@@ -144,7 +167,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = ''
     await loadMe()
     if (!needsConfig.value) {
-      await Promise.all([loadAgents(), loadFirstConversations()])
+      await Promise.all([loadAgents(), loadFirstConversations(), loadUsage()])
     }
     loading.value = false
   }
@@ -190,6 +213,8 @@ export const useSessionStore = defineStore('session', () => {
     selectedAgentKey,
     loading,
     error,
+    usage,
+    budgetBlocked,
     conversations,
     convCursor,
     convHasMore,
@@ -199,6 +224,7 @@ export const useSessionStore = defineStore('session', () => {
     displayName,
     initials,
     loadMe,
+    loadUsage,
     loadAgents,
     loadFirstConversations,
     loadMoreConversations,

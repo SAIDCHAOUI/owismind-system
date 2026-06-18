@@ -8,7 +8,7 @@
 | Tool name | Type | Id | Points at | Used by v3? |
 |---|---|---|---|---|
 | `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the aligned semantic model (over `DRIVE_Revenues`) | **yes - default SQL engine** |
-| `attribute_lookup` | Custom Python (`attribute_lookup_tool.py`) | (to create) | `DRIVE_Revenues` (+ catalog fallback) | **built, not yet wired** |
+| `attribute_lookup` | Custom Python (`attribute_lookup_tool.py`) | (to create) | `DRIVE_Revenues` (+ catalog fallback) | **wired as an ORCHESTRATOR built-in (pending DSS deploy)** |
 | `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | `DRIVE_Revenues` | **REMOVED 2026-06-18** |
 | `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | `DRIVE_Revenues_Value_Catalog` | no - superseded by `attribute_lookup` |
 
@@ -24,11 +24,29 @@ the related values?"). It runs a case/accent-insensitive `ILIKE` search across
 every TEXT column of the fact table (read-only, `statement_timeout` + `LIMIT`,
 nothing loaded into RAM), returns `found_in` (where the term is + its exact
 value), and - when `attributes` are requested - the matched rows' values for
-those columns. No catalog is required; an optional catalog fallback offers
-aliases when nothing matches. **Status: built + unit-tested
-(`tests/test_attribute_lookup.py`), validated by RUN TEST, NOT yet wired into the
-sub-agent** (replaces the removed `dataset_lookup`). To wire: create the Custom
-Python tool in DSS, set its id in the sub-agent, route plain reads to it.
+those columns. Both sides are accent-folded with a shared translate map (no DB
+extension). The result carries `rows_capped` (the `LIMIT` fired -> sample) and
+`multi_column` (the term spans several columns -> ambiguous). A short-needle
+guard, a bounded TTL cache, and a conditional alias fallback (entity searches
+only) round it off. `status` is `found` / `suggestions` / `not_found`; the
+not_found message never asserts the data is absent.
+
+**Wiring (decided by a technical board, 2026-06-18): branched in the
+ORCHESTRATOR as a BUILT-IN tool, NOT in the sub-agent.** It is appended in
+`build_tool_specs` and dispatched inline in `node_tools` (like
+`show_table` / `current_date`), so it touches NO frozen `KNOWN_*` contract and
+the sub-agent is UNCHANGED. The orchestrator calls it via
+`project.get_agent_tool(LOOKUP_TOOL_ID).run({entity, attributes})` (name fallback
+if the id is empty), routes simple "who/what is the &lt;attribute&gt; of
+&lt;named entity&gt;" questions to it FIRST (descriptor + a HOW-TO-WORK rule),
+and emits the lookup SQL + result as a `semantic-model-query` subspan so Evidence
+keeps provenance. On `not_found`/`suggestions` the planner asks the user or hands
+off to `ask_revenue_expert`; it never claims the data is missing (honesty
+firewall). **Status: built + hardened + unit-tested
+(`tests/test_attribute_lookup.py` + `tests/test_langgraph_agents.py`), validated
+by RUN TEST. To deploy: create the Custom Python tool in DSS, set
+`LOOKUP_TOOL_ID` in the orchestrator (optional - the name fallback resolves
+`attribute_lookup`), re-paste the ORCHESTRATOR (env 3.11). No sub-agent change.**
 
 ---
 

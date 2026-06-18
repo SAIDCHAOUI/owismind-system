@@ -299,5 +299,6 @@ def storage_status():
             "users": physical_table("webapp_users_v1"),
             "settings": physical_table("webapp_settings_v1"),
             "usage_monthly": physical_table("webapp_usage_monthly_v1"),
+            "user_quota": physical_table("webapp_user_quota_v1"),
         },
     }

@@ -22,10 +22,26 @@ export const extraMessages = {
     'empty.tip':
       'Conseil : plus votre demande est précise et bien formulée - les termes employés, la période, le périmètre - meilleure sera la réponse.',
 
-    // Settings - honest empty states (no mock budget/usage figures)
+    // Settings - profile groups label
     'set.profile.groups': 'Groupes',
-    'set.budget.empty': 'Le suivi du budget mensuel sera bientôt disponible.',
-    'set.usage.empty': "L'historique d'usage sera bientôt disponible.",
+
+    // Settings - monthly budget card (real /usage data)
+    'set.budget.loading': 'Chargement de votre consommation…',
+    'set.budget.resets': 'Réinitialisé le {0}',
+    'set.budget.blocked':
+      'Budget mensuel atteint. De nouvelles requêtes seront possibles le {0} (réinitialisation mensuelle).',
+    'set.budget.off': 'Suivi de consommation actif. Aucune limite mensuelle appliquée actuellement.',
+    'set.budget.src_default': 'Limite mensuelle : {0} (par défaut).',
+    'set.budget.src_global_temp': 'Limite mensuelle : {0} (augmentation temporaire jusqu\'au {1}).',
+    'set.budget.src_user': 'Limite mensuelle : {0} (allouée par un administrateur).',
+    'set.budget.src_user_temp': 'Limite mensuelle : {0} (boost temporaire jusqu\'au {1}).',
+
+    // Settings - usage detail (this month + lifetime)
+    'set.usage.tokens': 'tokens',
+    'set.usage.tokens_month': 'Tokens ce mois',
+    'set.usage.spend_month': 'Dépense ce mois',
+    'set.usage.lifetime_cost': 'Dépense totale',
+    'set.usage.last': 'Dernière activité',
 
     // Settings - agent-context window (repurposed from the old "conversations shown").
     'set.context': 'Contexte',
@@ -48,6 +64,11 @@ export const extraMessages = {
     'chat.stopped': 'Génération arrêtée',
     'chat.stopping': 'Arrêt en cours…',
     'chat.interrupted_empty': 'Réponse interrompue',
+
+    // Chat - monthly budget banner (sends paused once the credit is reached)
+    'chat.quota_banner':
+      'Budget mensuel épuisé : {0} utilisés sur {1}. De nouvelles requêtes seront possibles le {2}.',
+    'chat.quota_short': 'Budget mensuel épuisé. Réessayez après la réinitialisation du 1er du mois.',
 
     // Chat - the collapsed activity block (agent steps header line)
     'tl.steps': "Étapes de l'agent",
@@ -136,7 +157,53 @@ export const extraMessages = {
     'admin.users.make_admin': 'Rendre admin',
     'admin.users.revoke_admin': 'Retirer admin',
     'admin.users.last_admin_error': 'Impossible : il doit rester au moins un admin.',
-    'admin.quotas.empty': 'La gestion des quotas et budgets sera bientôt disponible.',
+    // Admin - monthly budgets / quotas (real)
+    'admin.quotas.title': 'Budgets mensuels',
+    'admin.quotas.desc':
+      'Chaque utilisateur dispose d\'un crédit mensuel (par défaut {0}) qui se réinitialise le 1er du mois. Ajustez la limite globale ou attribuez des limites par utilisateur.',
+    'admin.quotas.loading': 'Chargement des budgets…',
+    'admin.quotas.error': "Échec de l'opération.",
+    'admin.quotas.global_title': 'Configuration globale',
+    'admin.quotas.default_limit': 'Limite mensuelle par défaut ($)',
+    'admin.quotas.enabled': 'Appliquer la limite (bloquer au dépassement)',
+    'admin.quotas.enabled_hint':
+      'Si désactivé, la consommation reste suivie et affichée, mais aucune requête n\'est bloquée.',
+    'admin.quotas.temp_title': 'Augmentation temporaire (tous les utilisateurs)',
+    'admin.quotas.temp_amount': 'Limite temporaire ($)',
+    'admin.quotas.temp_days': 'Durée (jours)',
+    'admin.quotas.temp_active': 'Boost global actif : {0} jusqu\'au {1}.',
+    'admin.quotas.temp_clear': 'Retirer le boost global',
+    'admin.quotas.temp_apply': 'Appliquer le boost',
+    'admin.quotas.save': 'Enregistrer la configuration',
+    'admin.quotas.saving': 'Enregistrement…',
+    'admin.quotas.saved': 'Configuration enregistrée.',
+    'admin.quotas.users_title': 'Limites par utilisateur',
+    'admin.quotas.users_desc':
+      'Cochez un ou plusieurs utilisateurs, puis attribuez une limite (permanente ou temporaire) ou réinitialisez au défaut.',
+    'admin.quotas.col_user': 'Utilisateur',
+    'admin.quotas.col_usage': 'Ce mois',
+    'admin.quotas.col_limit': 'Limite',
+    'admin.quotas.col_remaining': 'Restant',
+    'admin.quotas.col_source': 'Origine',
+    'admin.quotas.src.default': 'Défaut',
+    'admin.quotas.src.global_temp': 'Boost global',
+    'admin.quotas.src.user_permanent': 'Personnalisée',
+    'admin.quotas.src.user_temp': 'Temporaire',
+    'admin.quotas.blocked_tag': 'Bloqué',
+    'admin.quotas.expires_on': 'jusqu\'au {0}',
+    'admin.quotas.select_all': 'Tout',
+    'admin.quotas.selected': '{0} sélectionné(s)',
+    'admin.quotas.none_selected': 'Sélectionnez au moins un utilisateur.',
+    'admin.quotas.apply_title': 'Appliquer aux {0} utilisateur(s) sélectionné(s)',
+    'admin.quotas.limit_amount': 'Nouvelle limite ($)',
+    'admin.quotas.duration': 'Durée',
+    'admin.quotas.permanent': 'Permanente',
+    'admin.quotas.temp_days_opt': 'Temporaire ({0} j)',
+    'admin.quotas.note': 'Note (facultatif)',
+    'admin.quotas.apply': 'Appliquer la limite',
+    'admin.quotas.applying': 'Application…',
+    'admin.quotas.clear': 'Réinitialiser au défaut',
+    'admin.quotas.applied': '{0} utilisateur(s) mis à jour.',
     'admin.activity.empty': "Le journal d'activité sera bientôt disponible.",
 
     // Evidence Studio (v1) - the proof panel
@@ -245,7 +312,7 @@ export const extraMessages = {
     'mode.medium_speed': 'Rapide',
     'mode.high_speed': 'Plus posé',
     'mode.envelope_note':
-      'Les modes plus puissants consomment plus vite votre enveloppe de 50 €/mois. Réservez High aux questions qui le justifient vraiment.',
+      'Les modes plus puissants consomment plus vite votre enveloppe mensuelle de 50 $. Réservez High aux questions qui le justifient vraiment.',
 
     // Calculation steps - frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
@@ -303,10 +370,26 @@ export const extraMessages = {
     'empty.tip':
       'Tip: the more precise and well-phrased your request - the terms you use, the period, the scope - the better the answer.',
 
-    // Settings - honest empty states (no mock budget/usage figures)
+    // Settings - profile groups label
     'set.profile.groups': 'Groups',
-    'set.budget.empty': 'Monthly budget tracking will be available soon.',
-    'set.usage.empty': 'Usage history will be available soon.',
+
+    // Settings - monthly budget card (real /usage data)
+    'set.budget.loading': 'Loading your usage…',
+    'set.budget.resets': 'Resets on {0}',
+    'set.budget.blocked':
+      'Monthly budget reached. New requests resume on {0} (monthly reset).',
+    'set.budget.off': 'Usage tracking is on. No monthly limit is currently enforced.',
+    'set.budget.src_default': 'Monthly limit: {0} (default).',
+    'set.budget.src_global_temp': 'Monthly limit: {0} (temporary boost until {1}).',
+    'set.budget.src_user': 'Monthly limit: {0} (granted by an administrator).',
+    'set.budget.src_user_temp': 'Monthly limit: {0} (temporary boost until {1}).',
+
+    // Settings - usage detail (this month + lifetime)
+    'set.usage.tokens': 'tokens',
+    'set.usage.tokens_month': 'Tokens this month',
+    'set.usage.spend_month': 'Spend this month',
+    'set.usage.lifetime_cost': 'Lifetime spend',
+    'set.usage.last': 'Last activity',
 
     // Settings - agent-context window (repurposed from the old "conversations shown").
     'set.context': 'Context',
@@ -329,6 +412,11 @@ export const extraMessages = {
     'chat.stopped': 'Generation stopped',
     'chat.stopping': 'Stopping…',
     'chat.interrupted_empty': 'Response interrupted',
+
+    // Chat - monthly budget banner (sends paused once the credit is reached)
+    'chat.quota_banner':
+      'Monthly budget reached: {0} used of {1}. New requests resume on {2}.',
+    'chat.quota_short': 'Monthly budget reached. Try again after the 1st-of-month reset.',
 
     // Chat - the collapsed activity block (agent steps header line)
     'tl.steps': 'Agent steps',
@@ -417,7 +505,53 @@ export const extraMessages = {
     'admin.users.make_admin': 'Make admin',
     'admin.users.revoke_admin': 'Revoke admin',
     'admin.users.last_admin_error': 'Not allowed: at least one admin must remain.',
-    'admin.quotas.empty': 'Quotas and budget management will be available soon.',
+    // Admin - monthly budgets / quotas (real)
+    'admin.quotas.title': 'Monthly budgets',
+    'admin.quotas.desc':
+      'Every user gets a monthly credit (default {0}) that resets on the 1st. Adjust the global limit or grant per-user limits.',
+    'admin.quotas.loading': 'Loading budgets…',
+    'admin.quotas.error': 'The operation failed.',
+    'admin.quotas.global_title': 'Global settings',
+    'admin.quotas.default_limit': 'Default monthly limit ($)',
+    'admin.quotas.enabled': 'Enforce the limit (block when exceeded)',
+    'admin.quotas.enabled_hint':
+      'When off, usage is still tracked and shown, but no request is ever blocked.',
+    'admin.quotas.temp_title': 'Temporary boost (all users)',
+    'admin.quotas.temp_amount': 'Temporary limit ($)',
+    'admin.quotas.temp_days': 'Duration (days)',
+    'admin.quotas.temp_active': 'Global boost active: {0} until {1}.',
+    'admin.quotas.temp_clear': 'Remove the global boost',
+    'admin.quotas.temp_apply': 'Apply boost',
+    'admin.quotas.save': 'Save configuration',
+    'admin.quotas.saving': 'Saving…',
+    'admin.quotas.saved': 'Configuration saved.',
+    'admin.quotas.users_title': 'Per-user limits',
+    'admin.quotas.users_desc':
+      'Tick one or more users, then grant a limit (permanent or temporary) or reset them to the default.',
+    'admin.quotas.col_user': 'User',
+    'admin.quotas.col_usage': 'This month',
+    'admin.quotas.col_limit': 'Limit',
+    'admin.quotas.col_remaining': 'Remaining',
+    'admin.quotas.col_source': 'Source',
+    'admin.quotas.src.default': 'Default',
+    'admin.quotas.src.global_temp': 'Global boost',
+    'admin.quotas.src.user_permanent': 'Custom',
+    'admin.quotas.src.user_temp': 'Temporary',
+    'admin.quotas.blocked_tag': 'Blocked',
+    'admin.quotas.expires_on': 'until {0}',
+    'admin.quotas.select_all': 'All',
+    'admin.quotas.selected': '{0} selected',
+    'admin.quotas.none_selected': 'Select at least one user.',
+    'admin.quotas.apply_title': 'Apply to the {0} selected user(s)',
+    'admin.quotas.limit_amount': 'New limit ($)',
+    'admin.quotas.duration': 'Duration',
+    'admin.quotas.permanent': 'Permanent',
+    'admin.quotas.temp_days_opt': 'Temporary ({0}d)',
+    'admin.quotas.note': 'Note (optional)',
+    'admin.quotas.apply': 'Apply limit',
+    'admin.quotas.applying': 'Applying…',
+    'admin.quotas.clear': 'Reset to default',
+    'admin.quotas.applied': '{0} user(s) updated.',
     'admin.activity.empty': 'The activity log will be available soon.',
 
     // Evidence Studio (v1) - the proof panel
@@ -525,7 +659,7 @@ export const extraMessages = {
     'mode.medium_speed': 'Fast',
     'mode.high_speed': 'More deliberate',
     'mode.envelope_note':
-      'More powerful modes use up your €50/month envelope faster. Reserve High for questions that genuinely warrant it.',
+      'More powerful modes use up your $50/month envelope faster. Reserve High for questions that genuinely warrant it.',
 
     // Calculation steps - frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
