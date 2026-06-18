@@ -2057,4 +2057,54 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve / vérification** : 53 docs (~136k mots) ; `LC_ALL=C grep -rlP '\xe2\x80\x9[34]'` = 0 partout ; 761 liens relatifs, 0 cassé (check Python) ; script FR = UTF-8 valide + accents présents + 0 dash. `project-documentation/` déjà committé par l'autre session (71 fichiers trackés). Pitch dans `project-documentation/presentation-customer-day/` (structure 7 frames + prompt claude.ai + scripts FR/EN).
 - **Source** : demande user (2026-06-18) ; ultracode / Workflow ; coexistence avec la session `dataiku-agents/`. **Date** : 2026-06-18.
 
+## L089 - Les recettes/tools testés gardent pandas/numpy en imports LAZY (env de test NO INSTALL, sans pandas) (✅ corrigé, 267 tests)
+
+- **Contexte** : `/simplify` du profiler `recipes/profile_dataset_recipe.py`. J'ai voulu "optimiser" en
+  hoistant `import pandas as pd` en tête de module (sortir l'import de la boucle/des fonctions).
+- **Ce qui a échoué** : `python3 -m unittest discover -s dataiku-agents/tests` -> `ModuleNotFoundError:
+  No module named 'pandas'`. Les tests chargent les modules de recette via `importlib.util.
+  spec_from_file_location` APRÈS avoir stubbé `dataiku` dans `sys.modules`, mais **pandas/numpy ne sont
+  PAS installés** en local (règle NO INSTALL). Un `import pandas` au niveau module casse donc l'import du
+  module - et donc le test des helpers PURS.
+- **Solution qui marche** : pandas en import **lazy** DANS les fonctions qui l'utilisent
+  (`profile_dataframe`, `main`) ; numpy en import **gardé** au niveau module
+  (`try: import numpy as np except: np = None`, `json_safe` dégrade si `np is None`). Idem
+  `build_value_index` (pandas lazy dans `main`). NE PAS ajouter pandas à `attribute_lookup_tool` /
+  `build_value_catalog` (testé / script-style). **Avant tout import top-level** : vérifier si un test
+  charge ce module (`grep -n importlib dataiku-agents/tests/*.py`).
+- **Preuve-vérification** : après correction, **267 tests verts** ; le `git diff --stat` montre le retrait
+  du `import pandas` top-level. **Source** : `/simplify` (4 relecteurs) + run des tests. **Date** : 2026-06-18.
+
+## L090 - Evidence "degraded / maps to no SQL dataset in this project" = la table du FROM de l'agent ne matche aucun dataset du projet webapp ; c'est le MODÈLE SÉMANTIQUE (pas le code agent) qui décide la table (✅ root cause confirmée user)
+
+- **Contexte** : nouveau projet PROD propre `OWISMIND_PROD_V1` (recréé en parallèle de DEV). Le chat
+  répond et affiche tableau/graphique, mais l'onglet Table d'Evidence dit "The table the agent queried
+  maps to no SQL dataset in this project - the interactive view is unavailable". En DEV : marche.
+- **Mécanisme (backend `python-lib/owismind/evidence/service.py`)** : la vue interactive parse le SQL de
+  l'agent (span `semantic-model-query`), extrait la/les table(s) du FROM, et les matche via
+  `match_whitelist(table, schema, candidates)` contre les **datasets SQL auto-découverts du projet où
+  tourne la webapp** (`_resolve_dataset_candidates`, scopé `default_project_key()`). Aucun match ->
+  niveau `declared` -> panneau dégradé (i18n front `ev.degraded.no_dataset`). Le **code de l'agent
+  n'intervient pas** : la table physique du FROM est décidée par le **modèle sémantique** (entity
+  `datasetRef` + golden queries que le LLM recopie).
+- **Ce qui a échoué (root cause)** : le script de migration sémantique DEV->PROD de l'user avait des
+  mappings **tapés à la main** qui ont droppé le suffixe de clé de projet :
+  `OWISMIND_DEV.DRIVE_Revenues` -> `OWISMIND.DRIVE_Revenues` (au lieu de
+  `OWISMIND_PROD_V1.DRIVE_Revenues`) et `"OWISMIND_DEV_drive_revenues"` -> `"OWISMIND_drive_revenues"`
+  (au lieu de `"OWISMIND_PROD_V1_drive_revenues"`). Le modèle PROD interroge donc `OWISMIND_drive_revenues`,
+  table inexistante en PROD -> aucun dataset PROD ne matche. En DEV le nom DEV matchait le dataset DEV
+  (d'où "ça marche en DEV").
+- **Solution qui marche** : remapper le modèle PROD vers la vraie table `OWISMIND_PROD_V1_drive_revenues`
+  (datasetRef + golden queries + instructions) + **ré-indexer** ; vérifier que le tool
+  `revenue_semantic_query` PROD pointe sur ce modèle. **Diagnostic en 5 s** : lire la clause FROM dans
+  "the exact query the agent ran" affichée DANS le panneau dégradé + log backend `evidence -
+  no_matching_dataset: agent tables=[...] matched none of N project dataset(s) [...]`.
+- **Prévention** : 2 scripts versés `tools/semantic_model/migrate_semantic_model_to_project.py`
+  (remapping **dérivé des clés de projet**, jamais tapé à la main -> impossible de perdre le suffixe ;
+  garde anti-doublon ; warn des refs source restantes) + `remap_semantic_model.py` (correction en place).
+- **Preuve-vérification** : root cause **confirmée par l'user** ("c'est ça !!! le nom de la table sur le
+  projet prod c'est OWISMIND_PROD_V1_drive_revenues") + lecture du backend (`evidence/service.py`
+  `_context`/`match_whitelist`/`_resolve_dataset_candidates`) et de l'i18n front. **Source** : debug avec
+  l'user (2026-06-18). **Date** : 2026-06-18.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

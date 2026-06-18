@@ -13,6 +13,8 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | `build_aligned_semantic_model.py` | One-time CREATE of the aligned model from a read-only copy of the old one (corrections, golden queries, instructions, index). |
 | `update_aligned_semantic_model.py` | In-place MODIFY of an existing aligned model: refresh instructions + golden queries on the active version (no create, no re-index). The going-forward iteration path. |
 | `dump_semantic_model.py` | Export the live model `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json` (refresh the snapshot, no transcription drift). |
+| `migrate_semantic_model_to_project.py` | COPY a model to another project (e.g. DEV -> PROD), remapping dataset refs + table names automatically from the project keys. Creates a new model in the target. |
+| `remap_semantic_model.py` | Rewrite an EXISTING model's dataset refs / table literals IN PLACE (no copy), then re-index. Fixes a botched migration or repoints a model at a different table. |
 
 > **Not versioned as JSON yet.** Only the scripts + `MODEL.md` are in the repo. The canonical
 > SQL-generation rules live verbatim in `build_aligned_semantic_model.py` (`NEW_INSTRUCTIONS`,

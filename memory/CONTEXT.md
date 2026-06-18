@@ -10,6 +10,26 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**🧹 NETTOYAGE + DOC REFLET-DSS de `dataiku-agents/` + SIMPLIFICATION recettes/tool + DEBUG Evidence
+dégradé PROD (2026-06-18, session `dataiku-agents/`) - ✅ LOCAL (repo only, aucun DSS de ma part).** Doc
+réécrite pour qu'un Claude sans contexte comprenne TOUT le mécanisme (audit 6 lecteurs -> réécriture ->
+revue adversariale 3 lecteurs) : `CLAUDE.md` auto-suffisant + READMEs (`README`/`agents`/`tools`/`recipes`/
+`semantic_model`) + **nouveaux** `MODEL.md` (vue lisible du modèle live) + `dump_semantic_model.py`.
+Dérives corrigées : `Value_Catalog` = **utilisé** (fallback alias `attribute_lookup`, plus "roadmap") ;
+`attribute_lookup` existe DSS + branché built-in orchestrateur ; `resolve_filter_value` à supprimer ;
+tool sémantique = **mode Agent OFF (pipeline linéaire) Sonnet** ; intent fantôme `lookup` retiré.
+**`/simplify`** du profiler (en-tête 51->14 l., `ENRICH_LLM_ID`->**`claude-opus-4-7`**) + des 2 autres
+recettes + le tool (267 tests, 0 tiret, ref morte `dataset_expert_agent.py` retirée). **GOTCHA pandas
+lazy** (env de test NO INSTALL sans pandas : ne jamais hoister `import pandas` top-level, L089). **DEBUG
+Evidence "dégradé" PROD = RÉSOLU** : la requête de l'agent visait une table non remappée vers le projet
+PROD (script de migration sémantique DEV->PROD qui avait **droppé `_PROD_V1`** -> `OWISMIND_drive_revenues`
+au lieu de `OWISMIND_PROD_V1_drive_revenues`) ; c'est le **modèle sémantique** (entity `datasetRef` +
+golden queries) qui décide la table, **pas le code agent** ; le backend Evidence matche la table du FROM
+contre les datasets SQL du projet webapp (L090). 2 scripts versés dans `tools/semantic_model/` :
+`migrate_semantic_model_to_project.py` (remapping **dérivé des clés de projet** = anti-bug, garde
+anti-doublon) + `remap_semantic_model.py` (correction en place + ré-index). **DEV reste le projet de
+référence du repo** ; `OWISMIND_PROD_V1` = entité PROD parallèle (table `OWISMIND_PROD_V1_drive_revenues`).
+
 **📚 DOCUMENTATION COMPLÈTE DU PROJET + PITCH CUSTOMER DAY (2026-06-18, session doc parallèle) - ✅ LIVRÉ
 (read-only sauf `project-documentation/`).** `project-documentation/` = doc d'ingénierie EN ANGLAIS, en
 couches, **53 fichiers** markdown (~136k mots) : 00-overview ... 09-maintenance + portail README + 12 ADR
@@ -307,7 +327,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-18 Run 2 (`attribute_lookup` branché ORCHESTRATEUR + durci + multi-table) → détail `sessions/2026-06-18.md`
+## 🧭 Dernière session - 2026-06-18 Run 4 (`dataiku-agents/` doc reflet-DSS + simplify recettes/tool + debug Evidence PROD) → détail `sessions/2026-06-18.md`
+- **Doc `dataiku-agents/` réécrite reflet-DSS** (audit 6 lecteurs + revue adversariale 3) : `CLAUDE.md` auto-suffisant + READMEs + **`MODEL.md`** + **`dump_semantic_model.py`** ; dérives corrigées (Value_Catalog **utilisé**, attribute_lookup **branché** built-in, resolve_filter_value **à supprimer**, tool sémantique **linéaire Sonnet**, intent `lookup` fantôme retiré).
+- **`/simplify`** profiler + 2 recettes + tool : en-têtes resserrés, `ENRICH_LLM_ID`->**`claude-opus-4-7`**, micro-optims ; **267 tests verts, 0 tiret**. **GOTCHA pandas lazy** (env test sans pandas, L089).
+- **Evidence "dégradé" PROD RÉSOLU** : le **modèle sémantique** PROD pointait une table non remappée (`_PROD_V1` droppé par le script de migration) ; c'est le modèle (pas le code agent) qui décide la table, le backend matche le FROM vs les datasets du projet webapp (L090). 2 scripts versés : `migrate_semantic_model_to_project.py` + `remap_semantic_model.py`.
+
+## Avant - 2026-06-18 Run 2/3 (`attribute_lookup` branché ORCHESTRATEUR + durci + multi-table ; doc projet parallèle) → détail `sessions/2026-06-18.md`
 - **Conseil multi-agents (Workflow)** = **4/4 brancher dans l'ORCHESTRATEUR** (built-in, zéro contrat `KNOWN_*`, **sous-agent INCHANGÉ**). Câblé : spec `build_tool_specs` + dispatch inline `node_tools` + provenance via subspan `semantic-model-query`. **Multi-table** : domaine logique -> table via registre (`lookup_domains`).
 - **SQL lisible** : **1 seul `ILIKE`** sur `concat_ws` (au lieu de 18 `OR`), accents par `translate` à la requête (user REFUSE de toucher la base prod -> pas d'`unaccent` ; `accent_fold_sql`). Durci : flags `rows_capped`/`multi_column`, garde needle court, cache TTL, garde found-vide->not_found. **Value_Catalog + suggestions GARDÉS** (décision user, après suppression annulée). **267 tests verts**, revue adversariale = 0 crit/0 high.
 - **RUN TEST DSS validé** (lookup rapide ~14s + descente expert OK). **À faire DSS** : MAJ tool + recoller orchestrateur + **supprimer le vieux `Drive_Revenues_resolve_filter_value`**. **Leçon process** : conseiller avant d'exécuter une suppression (L087). Voir **L087**.

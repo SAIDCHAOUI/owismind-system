@@ -121,7 +121,7 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 | Frontend source | `Plugin/owismind/frontend/` | repo |
 | Staging packaging | `Plugin/ready-for-dataiku/owismind-upload/` + `owismind-upload.zip` | repo |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) | guide SQL |
-| Project key DSS | `OWISMIND_DEV` (résolu via `dataiku.default_project_key()`) ; variante test `OWISMIND_LAB` | guide SQL |
+| Project key DSS | `OWISMIND_DEV` (résolu via `dataiku.default_project_key()`, **reste la référence du repo**) ; variante test `OWISMIND_LAB` ; **projet PROD parallèle `OWISMIND_PROD_V1`** (table physique `OWISMIND_PROD_V1_drive_revenues` ; agent `agent:uO5hEzAs`, `LOOKUP_TOOL_ID=szOZCoU` ; migration via `tools/semantic_model/migrate_semantic_model_to_project.py` qui dérive le remapping des clés - sinon Evidence dégradé, L090) | guide SQL ; 2026-06-18 |
 | Agent « revenue » v1 (visual) | `agent:rNTZ781a` (Structured Visual Agent - revenus) - conservé en filet, **désactivé du registre depuis v2.4 (v2 actif)** | guide SQL / code_samples |
 | Agent « revenue » v2 (Code Agent, L047/L048 ✅ DSS 2026-06-11) | `agent:MODpGFcC` ← `salesdrive/salesdrive_agent.py` (repo = source de vérité, + README + 55 tests stub) ; tools : resolver `aNxeOc4` (`Drive_Revenues_resolve_filter_value`), semantic `v4oqA6R` (`revenue_semantic_query`) ; catalogue `DRIVE_Revenues_Value_Catalog` | repo / `sessions/2026-06-11.md` Run 3 |
 | Blueprint API | préfixe URL `/owismind-api` | guide build |
