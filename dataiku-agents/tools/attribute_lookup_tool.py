@@ -1,34 +1,36 @@
 # -*- coding: utf-8 -*-
-"""attribute_lookup - Custom Python agent tool for OWIsMind sub-agents.
+"""attribute_lookup - Custom Python agent tool.
 
-The FAST path for plain reads about a named thing - NO semantic model, NO
-dataframe in memory. It behaves like Dataiku's "Whole data" search box: a
-case-insensitive filter over EVERY text column of the dataset that returns the
-matching values of the other columns (or only the column you asked for).
+A whole-dataset value search. It behaves like Dataiku's "Whole data" search box:
+a case- and accent-insensitive filter over every text column that returns the
+matching values of the other columns (or only the requested column).
 
-Examples it answers in < 1s:
+Answers:
   - "who is the account manager of <customer>?"  (the term is the customer)
   - "what does <account_manager> manage?"        (the term is the manager)
   - "carrier code / sales zone / parent group of <account>?"
 
 Flow:
-  1. SEARCH: SELECT * FROM <fact> WHERE (unaccent(col1) ILIKE %term% OR ...) over
-     every text column - the term is matched ANYWHERE, spelling/casing/accents
-     aside (both sides are accent-folded; no DB extension needed).
+  1. SEARCH: SELECT * FROM <fact>
+     WHERE translate(lower(concat_ws(' ', col1, col2, ...)), <accents>, <ascii>)
+           ILIKE '%term%' LIMIT <n>
+     The term is matched anywhere across all text columns in one predicate.
+     Casing via lower()/ILIKE, accents via a translate() map; the columns are
+     concatenated so the search is a single ILIKE.
   2. SUMMARIZE: distinct value(s) per column from the matched rows (or only the
      requested columns), capped. 'found_in' carries flags: rows_capped (the LIMIT
-     fired -> sample) and multi_column (the term spans several columns -> ambiguous).
-  3. FALLBACK: if nothing matches AND no specific attribute was asked, OFFER catalog
-     aliases (short names, business concepts like 'indirect' / 'roaming hub') as
-     suggestions - never auto-picked.
+     was hit, so the rows are a sample) and multi_column (the term appears in
+     several columns).
+  3. FALLBACK: if nothing matches and no specific attribute was requested, query
+     the value catalog for close aliases and return them as suggestions.
 
-Safety: read-only (statement_timeout + transaction_read_only), bounded by LIMIT;
-only real, schema-discovered column names ever reach the SQL; nothing is loaded
-into RAM. A bounded, TTL'd in-process cache absorbs repeated lookups (distinct
-values only). The catalog fallback is optional - the tool works without it.
+Execution is read-only (statement_timeout + transaction_read_only) and bounded by
+LIMIT; only schema-discovered column names reach the SQL; rows are streamed, not
+loaded into a dataframe. A bounded, TTL'd in-process cache holds recent results.
 
-To reuse for another dataset: change FACT_DATASET (and CATALOG_DATASET if you
-keep the alias fallback). No column name is hardcoded anywhere.
+To reuse for another dataset, change FACT_DATASET (and CATALOG_DATASET for the
+alias fallback) or pass `dataset` / `catalog` at call time. No column name is
+hardcoded.
 """
 
 import re
@@ -41,44 +43,35 @@ from dataiku.llm.agent_tools import BaseAgentTool
 
 
 # ============================================================
-# CONFIG - change per sub-agent / dataset
+# CONFIG
 # ============================================================
 FACT_DATASET = "DRIVE_Revenues"
-CATALOG_DATASET = "DRIVE_Revenues_Value_Catalog"   # optional alias fallback
+CATALOG_DATASET = "DRIVE_Revenues_Value_Catalog"   # value catalog (alias fallback)
 
-# Catalog search domains used only by the alias fallback, in preference order.
-# Catalog convention (see build_value_catalog_recipe), not a dataset column.
+# Catalog search domains for the alias fallback, in preference order. A catalog
+# convention (build_value_catalog_recipe), not a dataset column.
 ENTITY_DOMAINS = ("account", "account_group", "alias")
 
 SEARCH_SAMPLE_ROWS = 1000     # rows scanned to collect the matching values
 DISTINCT_PER_COLUMN = 25      # max distinct values returned per column
-MAX_ATTRIBUTES = 12           # cap on requested attributes (anti-abuse)
+MAX_ATTRIBUTES = 12           # cap on requested attributes
 RESOLVE_EXACT_LIMIT = 50      # alias fallback: exact pass
 RESOLVE_FUZZY_LIMIT = 60      # alias fallback: fuzzy pass
-# A one-character needle ILIKE '%x%' matches almost every row of every column:
-# a pathological full scan that returns pure noise. Such terms skip the broad
-# search and go straight to the alias/not-found path. Two-char codes (carrier
-# codes like 'DZ') are still searched.
+# A 1-char needle ILIKE '%x%' matches almost every row; such terms skip the broad
+# search and go to the alias/not-found path. Two-char codes are still searched.
 MIN_NEEDLE_CHARS = 2
-# Bounded in-process result cache (lookups repeat heavily - the same big
-# accounts get asked again and again). Keyed by (needle, requested attributes);
-# values are the small resolved payloads (distinct values only, never fact
-# rows), so memory stays tiny. Our call, no DB load - mirrors the table cache.
+# In-process result cache, keyed by (dataset, needle, attributes). Bounded and
+# TTL'd; values are the small resolved payloads (distinct values only).
 CACHE_MAX_ENTRIES = 256
 CACHE_TTL_SECONDS = 120
 
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
 
-# Accent folding done in SQL WITHOUT the unaccent extension (NO INSTALL rule):
-# a fixed, generic character transliteration (not a business value). ILIKE only
-# folds CASE, never accents, so a stored accented value ("Societe Generale" with
-# accents) would be invisible to an accent-stripped needle. translate() on the
-# COLUMN side closes that gap on any PostgreSQL, extension or not. FROM/TO must be
-# equal length (translate maps char-for-char); lower() is applied first. The
-# needle (search_value) folds with the SAME map (str.translate) so both sides
-# fold IDENTICALLY - an out-of-map glyph (e.g. Turkish s-cedilla, Nordic o-slash)
-# survives on BOTH sides instead of being dropped on one and kept on the other.
+# Lowercase + accent-fold map, applied char-for-char by SQL translate() on the
+# column side and by str.translate() on the needle/Python re-filter, so both
+# sides fold identically. FROM/TO must be the same length. Folding happens at
+# query time only; the stored data is not modified.
 _ACCENTS_FROM = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿ"
 _ACCENTS_TO = "aaaaaaceeeeiiiinooooouuuuyy"
 _NEEDLE_TRANSLATION = str.maketrans(_ACCENTS_FROM, _ACCENTS_TO)
@@ -99,11 +92,8 @@ def norm(value):
 
 
 def search_value(term):
-    """The term as a LIKE needle, folded the SAME way as the column side
-    (unaccent_lower_sql): lowercased, then accent-folded through the shared
-    translate map. NFKD-then-ascii-ignore is deliberately NOT used: it DROPS
-    out-of-map non-ASCII glyphs on the needle while translate() KEEPS them on the
-    column, which would silently de-sync the two sides and miss the row."""
+    """The term as a LIKE needle: lowercased then accent-folded through the shared
+    translate map, so it folds the same way as the SQL column side."""
     return str(term or "").strip().lower().translate(_NEEDLE_TRANSLATION)
 
 
@@ -113,8 +103,8 @@ def quote_literal(value):
 
 
 def quote_ident(name):
-    """Double-quoted SQL identifier (doubles embedded double quotes). Only ever
-    called on names already discovered from the live schema."""
+    """Double-quoted SQL identifier (doubles embedded double quotes). Only called
+    on names already discovered from the live schema."""
     return '"' + str(name).replace('"', '""') + '"'
 
 
@@ -123,19 +113,18 @@ def like_escape(value):
             .replace("_", "\\_"))
 
 
-def unaccent_lower_sql(col_ident):
-    """SQL expression folding a column to lowercase, accent-stripped text using
-    translate() - NO database extension required (the unaccent extension is a
-    DBA install, out of scope). CAST(... AS text) keeps it valid whatever the
-    physical type the schema reports. col_ident is an already-quoted identifier."""
+def accent_fold_sql(col_expr):
+    """SQL expression: text lowercased and accent-folded via translate(). CAST(...
+    AS text) keeps it valid for any physical type. col_expr is an already-quoted
+    identifier or a text expression (e.g. a concat)."""
     return ("translate(lower(CAST(%s AS text)), %s, %s)"
-            % (col_ident, quote_literal(_ACCENTS_FROM), quote_literal(_ACCENTS_TO)))
+            % (col_expr, quote_literal(_ACCENTS_FROM), quote_literal(_ACCENTS_TO)))
 
 
 def match_attribute_column(raw, live_columns):
-    """Map a user/LLM column designation to a REAL column name, ignoring case,
-    spaces and underscores ('account manager' -> 'account_manager'). None when no
-    column matches. live_columns wins over guesses: spelling never breaks it."""
+    """Map a column designation to a real column name, ignoring case, spaces and
+    underscores ('account manager' -> 'account_manager'). None when no column
+    matches; live_columns is authoritative."""
     if not raw:
         return None
     key = norm(raw)
@@ -164,27 +153,21 @@ def map_attributes(raw_attributes, live_columns):
 
 
 def build_search_sql(fact_table, text_columns, term, sample=SEARCH_SAMPLE_ROWS):
-    """Whole-dataset, case- AND accent-insensitive search in ONE readable
-    predicate: the term matched anywhere across a space-joined concatenation of
-    every text column, accent-folded at query time (the data is never altered -
-    the tool adapts to the human, not the reverse). One ILIKE instead of one OR
-    per column. find_matches() then pinpoints the exact column(s) Python-side, so
-    a rare match straddling two columns in the concatenation is filtered out
-    there. concat_ws skips NULLs; both sides are accent-folded (needle by
-    search_value, column by translate); the needle is a quoted, escaped literal."""
+    """One ILIKE over an accent-folded concatenation of every text column: the
+    term matched anywhere in a single predicate. find_matches() then pinpoints the
+    exact column(s) Python-side, filtering out a match that straddles two columns
+    in the concatenation. concat_ws converts its arguments to text and skips NULLs;
+    the needle is a quoted, escaped literal."""
     needle = quote_literal("%" + like_escape(search_value(term)) + "%")
-    # concat_ws converts every argument to text and skips NULLs, so no per-column
-    # CAST is needed - keeps the predicate short and readable.
     concat = "concat_ws(' ', %s)" % ", ".join(quote_ident(c) for c in text_columns)
     return ("SELECT * FROM %s WHERE %s ILIKE %s ESCAPE '\\' LIMIT %d"
-            % (fact_table, unaccent_lower_sql(concat), needle, int(sample)))
+            % (fact_table, accent_fold_sql(concat), needle, int(sample)))
 
 
 def find_matches(text_columns, rows, term, per_col_cap=DISTINCT_PER_COLUMN):
-    """Where the term actually appears: for each text column whose value contains
-    the term (accent/case-insensitive), the distinct matching value(s). This is
-    the resolver answer - 'the value exists, here, with this exact spelling'.
-    Returns [{column, values}] in stable column order, capped per column."""
+    """For each text column whose value contains the term (accent/case-
+    insensitive), the distinct matching value(s) with their exact spelling.
+    Returns [{column, values}] in schema order, capped per column."""
     needle = search_value(term)
     if not needle:
         return []
@@ -213,8 +196,7 @@ def find_matches(text_columns, rows, term, per_col_cap=DISTINCT_PER_COLUMN):
 def summarize_values(columns, rows, keep=None, per_col_cap=DISTINCT_PER_COLUMN):
     """Distinct, non-null value(s) per column from the matched rows. One value ->
     scalar; several -> list (capped, with a trailing '...' when truncated). `keep`
-    restricts to those real columns; otherwise every column is summarized. Which
-    columns matter is decided from the data, never hardcoded."""
+    restricts to those real columns; otherwise every column is summarized."""
     targets = keep if keep is not None else columns
     out = {}
     for col in targets:
@@ -276,7 +258,7 @@ def build_resolve_sql(catalog_table, term_norm, fuzzy):
 
 
 def alias_suggestions(rows, term_norm):
-    """Alias rows (is_alias=1) to PROPOSE when no real match was found, ranked by
+    """Alias rows (is_alias=1) to propose when no real match was found, ranked by
     closeness to the term and de-duplicated by display name (at most 5)."""
     aliases = [r for r in (rows or [])
                if int(r.get("is_alias") or 0) == 1
@@ -309,7 +291,7 @@ class MyAgentTool(BaseAgentTool):
 
     def __init__(self):
         self._tables = {}
-        self._cache = {}          # key -> (expires_at, payload). Bounded, TTL'd.
+        self._cache = {}          # key -> (expires_at, payload)
 
     # --- DSS access (overridden in tests) -------------------------------------
     def _get_table(self, dataset_name):
@@ -328,7 +310,7 @@ class MyAgentTool(BaseAgentTool):
         return table
 
     def _live_columns_typed(self, dataset_name):
-        """[(name, type)] from the schema (cheap metadata read, no scan)."""
+        """[(name, type)] from the schema (metadata read, no scan)."""
         schema = dataiku.Dataset(dataset_name).read_schema()
         out = []
         for c in schema:
@@ -364,9 +346,8 @@ class MyAgentTool(BaseAgentTool):
         return columns, rows
 
     def _alias_fallback(self, term, catalog):
-        """Catalog aliases to suggest when the full-text search finds nothing.
-        Optional: a missing/empty/unreadable catalog yields no suggestions, never
-        an error (a domain without a value catalog simply has no alias fallback)."""
+        """Catalog aliases to suggest when the search finds nothing. A missing,
+        empty or unreadable catalog yields no suggestions and never raises."""
         term_norm = norm(term)
         if not term_norm or not catalog:
             return []
@@ -390,9 +371,8 @@ class MyAgentTool(BaseAgentTool):
 
     # --- cache ----------------------------------------------------------------
     def _cache_key(self, dataset, term, raw_attributes):
-        """Stable key: target dataset + accent-folded needle + the requested
-        attribute names (case/space-insensitive). Two phrasings of the same lookup
-        on the same dataset share a key; different datasets never collide."""
+        """Key: dataset + accent-folded needle + requested attribute names
+        (case/space-insensitive)."""
         attrs = tuple(sorted(norm(a) for a in (raw_attributes or []) if norm(a)))
         return (dataset, search_value(term), attrs)
 
@@ -408,7 +388,6 @@ class MyAgentTool(BaseAgentTool):
 
     def _cache_put(self, key, payload):
         if len(self._cache) >= CACHE_MAX_ENTRIES:
-            # Drop the oldest-expiring entry (bounded, no ordering structure needed).
             oldest = min(self._cache, key=lambda k: self._cache[k][0])
             self._cache.pop(oldest, None)
         self._cache[key] = (time.time() + CACHE_TTL_SECONDS, payload)
@@ -427,18 +406,18 @@ class MyAgentTool(BaseAgentTool):
                 "account manager of <customer>?', 'carrier code of <account>?'. "
                 "NEVER use it for a sum, total, count, average, ranking, top-N, "
                 "share, trend, period or scenario comparison, or any COMPUTED "
-                "number, and NEVER for 'list all X' - route those to the revenue "
-                "expert. Pass the term as typed (spelling/casing/accents do not "
-                "matter). By default the result is 'found_in': the column(s) where "
-                "the term appears with its exact value(s). To also get OTHER "
+                "number, and NEVER for 'list all X' - route those to the "
+                "specialist. Pass the term as typed (spelling/casing/accents do "
+                "not matter). By default the result is 'found_in': the column(s) "
+                "where the term appears with its exact value(s). To also get OTHER "
                 "columns' values for the matched record (e.g. the account manager "
                 "of a customer), pass 'attributes' with the wanted column names; "
                 "they come back under 'attributes'. If 'found_in' spans several "
                 "columns (multi_column=true) the term is ambiguous: ask the user "
                 "which one. status 'suggestions' offers close aliases and "
                 "'not_found' means the quick search did not pinpoint it - in both "
-                "cases ask the user or hand the question to the revenue expert; "
-                "never assert the data does not exist."
+                "cases ask the user or hand the question to the specialist; never "
+                "assert the data does not exist."
             ),
             "inputSchema": {
                 "$id": "https://owismind/tools/attribute_lookup/input",
@@ -464,18 +443,15 @@ class MyAgentTool(BaseAgentTool):
                     "dataset": {
                         "type": "string",
                         "description": (
-                            "OPTIONAL, set by the orchestrator: the Dataiku dataset "
-                            "to search (a whitelisted table resolved from the "
-                            "question's domain). Defaults to the tool's configured "
-                            "fact dataset. Not chosen by the end user."
+                            "OPTIONAL, set by the caller: the Dataiku dataset to "
+                            "search. Defaults to the configured fact dataset."
                         ),
                     },
                     "catalog": {
                         "type": "string",
                         "description": (
-                            "OPTIONAL, set by the orchestrator: the value-catalog "
-                            "dataset for the alias fallback (empty when the domain "
-                            "has none). Defaults to the tool's configured catalog."
+                            "OPTIONAL, set by the caller: the value-catalog dataset "
+                            "for the alias fallback. Defaults to the configured one."
                         ),
                     },
                 },
@@ -489,10 +465,7 @@ class MyAgentTool(BaseAgentTool):
         raw_attributes = args.get("attributes") or []
         if isinstance(raw_attributes, str):
             raw_attributes = [raw_attributes]
-        # Target dataset + optional value catalog. Supplied by the caller (the
-        # ORCHESTRATOR, which resolves a logical domain to a whitelisted dataset
-        # from its registry - the model never names a table). Defaults keep the
-        # tool usable stand-alone and back-compatible.
+        # Optional target dataset + value catalog; default to the configured ones.
         dataset = (args.get("dataset") or "").strip() or FACT_DATASET
         catalog = args.get("catalog")
         catalog = (catalog.strip() if isinstance(catalog, str) else "") or CATALOG_DATASET
@@ -520,15 +493,13 @@ class MyAgentTool(BaseAgentTool):
                             "message": "None of the requested attributes match a "
                                        "real column."})
 
-        # SQL work (search + optional alias) is cacheable; the input-validation
-        # branches above are not (cheap, no DB). Serve a fresh cached payload.
+        # The SQL work below is cacheable; the validation branches above are not.
         cache_key = self._cache_key(dataset, term, raw_attributes)
         cached = self._cache_get(cache_key)
         if cached is not None:
             return out(cached)
 
-        # A 1-char needle matches almost everything: skip the broad scan and let
-        # the alias/not-found path handle it (no pathological full scan, no noise).
+        # Skip the broad scan for a 1-char needle (it matches almost everything).
         needle = search_value(term)
         rows, sql = [], None
         if text_columns and len(needle) >= MIN_NEEDLE_CHARS:
@@ -536,20 +507,16 @@ class MyAgentTool(BaseAgentTool):
             sql = build_search_sql(fact_table, text_columns, term)
             _, rows = self._run_sql(dataset, sql, max_rows=SEARCH_SAMPLE_ROWS)
 
-        # What the matched rows actually yield: where the term re-confirms (exact
-        # spelling) + the requested columns' values. A row can match the SQL ILIKE
-        # yet not re-confirm Python-side (a column-name casing edge), so these can
-        # be empty even with rows - a 'found' with nothing to show is a lie.
+        # Where the term re-confirms + the requested columns' values. A row can
+        # match the SQL ILIKE yet not re-confirm Python-side (e.g. a column-name
+        # casing edge), so both can be empty even with rows.
         found_in = find_matches(text_columns, rows, term) if rows else []
         attributes = (summarize_values(all_columns, rows, keep=keep)
                       if (rows and keep) else {})
 
         if not found_in and not attributes:
-            # Nothing usable: no row matched, OR the matches carried neither the
-            # term nor a requested attribute. Offer aliases (short names, business
-            # concepts) ONLY for a bare entity search - when explicit attributes
-            # were requested the caller wants a clean, fast 'not_found', not an
-            # alias guess (and the catalog never indexes attribute columns anyway).
+            # No usable result. Offer catalog aliases only for a bare entity
+            # search; an attribute lookup returns a clean not_found instead.
             suggestions = [] if keep else self._alias_fallback(term, catalog)
             if suggestions:
                 payload = {"status": "suggestions", "term": term,
@@ -563,25 +530,19 @@ class MyAgentTool(BaseAgentTool):
                 payload = {"status": "not_found", "term": term,
                            "message": "The quick lookup did not pinpoint '%s'. Ask "
                                       "the user to confirm the spelling, or hand "
-                                      "the question to the revenue expert." % term}
+                                      "the question to the specialist." % term}
             self._cache_put(cache_key, payload)
             return out(payload)
 
-        # Resolver answer: where the term is + its exact value(s).
         payload = {
             "status": "found",
             "term": term,
             "found_in": found_in,
             "rows_matched": len(rows),
-            # The LIMIT fired: the rows above are a sample, so found_in /
-            # attributes may be incomplete (the model should say "sample").
-            "rows_capped": len(rows) >= SEARCH_SAMPLE_ROWS,
-            # The term lives in more than one column (possibly different entities):
-            # the caller should disambiguate rather than assume one.
-            "multi_column": len(found_in) > 1,
+            "rows_capped": len(rows) >= SEARCH_SAMPLE_ROWS,   # LIMIT hit -> sample
+            "multi_column": len(found_in) > 1,                # term in >1 column
             "sql": sql,
         }
-        # Only when specific columns were requested do we return their values.
         if keep:
             payload["attributes"] = attributes
         if unknown:
@@ -591,7 +552,7 @@ class MyAgentTool(BaseAgentTool):
 
 
 def logger_warn(message):
-    """Tiny stdlib logger shim (the tool stays dependency-free)."""
+    """Minimal stdlib logger; keeps the tool dependency-free."""
     try:
         import logging
         logging.getLogger(__name__).warning(message)

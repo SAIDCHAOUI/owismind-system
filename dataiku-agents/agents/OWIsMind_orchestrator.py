@@ -1684,14 +1684,13 @@ class MyLLM(BaseLLM):
                                                 "label": _L["tool_lookup"][lang]}))
                     text, item = self._run_lookup(project, args, base_step)
                     if item:
-                        # Provenance for the fast path: emit the lookup SQL + the
-                        # 'where the term is' result as a 'semantic-model-query'
-                        # subspan - the SAME footer-trace channel the backend already
-                        # captures for sub-agent / direct SQL (the built-in path has
-                        # no sub-agent trace). Keeps the trust layer intact without a
-                        # new contract. We do NOT set state['latest']: a lookup is
-                        # answered in one sentence (no artifact), and in a mixed turn
-                        # that would overwrite the specialist's renderable result.
+                        # Emit the lookup SQL + result as a 'semantic-model-query'
+                        # subspan: the same footer-trace channel the backend reads
+                        # for sub-agent / direct SQL, so Evidence captures it. The
+                        # built-in path has no sub-agent trace of its own. state
+                        # ['latest'] is left untouched (a lookup needs no artifact,
+                        # and setting it would override a specialist result in a
+                        # mixed turn).
                         try:
                             with trace.subspan("semantic-model-query") as lsp:
                                 lsp.outputs["sql"] = item["sql"]

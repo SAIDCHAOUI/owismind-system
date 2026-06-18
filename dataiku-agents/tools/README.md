@@ -24,9 +24,9 @@ the related values?"). It runs a case/accent-insensitive search across every TEX
 column in ONE readable predicate (a single `ILIKE` over an accent-folded
 `concat_ws` of the columns, not one OR per column), read-only,
 `statement_timeout` + `LIMIT`, nothing loaded into RAM. Casing is handled by
-`lower()`/ILIKE and accents by a shared `translate` map at QUERY time - the
-source data is never altered (the tool adapts to the human, not the reverse; no
-`unaccent` extension required). It returns `found_in` (where the term is + its
+`lower()`/ILIKE and accents (a `translate()` map) at QUERY time - the source data
+is never altered and no database extension is required. It returns `found_in`
+(where the term is + its
 exact value), and - when `attributes` are requested - the matched record's values
 for those columns. The result carries `rows_capped` (the `LIMIT` fired -> sample)
 and `multi_column` (the term spans several columns -> ambiguous). A short-needle
@@ -34,8 +34,7 @@ guard, a bounded TTL cache, and a conditional alias fallback (entity searches
 only) round it off. `status` is `found` / `suggestions` / `not_found`; the
 not_found message never asserts the data is absent.
 
-**Wiring (decided by a technical board, 2026-06-18): branched in the
-ORCHESTRATOR as a BUILT-IN tool, NOT in the sub-agent.** It is appended in
+**Wiring: a BUILT-IN tool of the ORCHESTRATOR, NOT of the sub-agent.** It is appended in
 `build_tool_specs` and dispatched inline in `node_tools` (like
 `show_table` / `current_date`), so it touches NO frozen `KNOWN_*` contract and
 the sub-agent is UNCHANGED. **Multi-table by design**: the model passes a logical

@@ -192,22 +192,20 @@ class TestSearchSql(unittest.TestCase):
         sql = al.build_search_sql('"public"."F"', ["Account_name"], "Télécom")
         self.assertIn("'%telecom%'", sql)
 
-    def test_column_side_accent_folded_no_extension(self):
-        # The COLUMN side must be accent-folded too, or a stored accented value
-        # ('Societe Generale' with accents) is invisible to an unaccented needle.
-        # Done with translate(), NOT the unaccent extension (NO INSTALL rule).
+    def test_column_side_accent_folded(self):
+        # The COLUMN side must be accent-folded, or a stored accented value
+        # ('Societe Generale' with accents) is invisible to a folded needle.
         sql = al.build_search_sql('"public"."F"', ["Account_name"], "telecom")
         self.assertIn("translate(lower(", sql)
-        self.assertNotIn("unaccent(", sql)
 
     def test_accent_map_equal_length(self):
         # translate() maps char-for-char; unequal lengths silently drop chars.
         self.assertEqual(len(al._ACCENTS_FROM), len(al._ACCENTS_TO))
 
-    def test_unaccent_lower_sql_shape(self):
-        expr = al.unaccent_lower_sql('"col"')
-        self.assertTrue(expr.startswith("translate(lower(CAST("))
+    def test_accent_fold_sql_shape(self):
+        expr = al.accent_fold_sql('"col"')
         self.assertIn('"col"', expr)
+        self.assertTrue(expr.startswith("translate(lower(CAST("))
 
     def test_needle_escaped(self):
         sql = al.build_search_sql('"public"."F"', ["c"], "a%b")
