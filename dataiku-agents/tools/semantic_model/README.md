@@ -1,130 +1,131 @@
-# Semantic model - aligned rebuild (2026-06-15)
+# semantic_model/ - the SQL brain that revenue_semantic_query queries
 
 > Part of the OWIsMind agent system: see [`../../README.md`](../../README.md) (master guide) and
 > [`../README.md`](../README.md) (tools). The Semantic Model Query tool `revenue_semantic_query`
-> (`v4oqA6R`) called by the sub-agent points at the model built/aligned by the scripts here.
+> (`v4oqA6R`), called by the sub-agent, points at the model documented here.
 
-Goal: make the **semantic model** (SQL generator) and the **Dataset Expert sub-agent**
-fully complementary and ultra-precise, and fix the incoherences found in the live `v4`
-config. The old model (`2O2KcHw` / `Drive_Revenues_Model`) is **never touched** - we build a
-**brand-new model** from a read-only copy of its active version.
+This folder holds the **scripts** that build/iterate the aligned semantic model, plus a
+human-readable snapshot of its config. The live model itself lives in DSS.
 
-## What changed and why
+| File | What |
+|---|---|
+| [`MODEL.md`](MODEL.md) | Human-readable snapshot of the LIVE model (entities, metric, filters, golden queries, glossary, instructions, tool config). **Read this first.** |
+| `build_aligned_semantic_model.py` | One-time CREATE of the aligned model from a read-only copy of the old one (corrections, golden queries, instructions, index). |
+| `update_aligned_semantic_model.py` | In-place MODIFY of an existing aligned model: refresh instructions + golden queries on the active version (no create, no re-index). The going-forward iteration path. |
+| `dump_semantic_model.py` | Export the live model `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json` (refresh the snapshot, no transcription drift). |
+
+> **Not versioned as JSON yet.** Only the scripts + `MODEL.md` are in the repo. The canonical
+> SQL-generation rules live verbatim in `build_aligned_semantic_model.py` (`NEW_INSTRUCTIONS`,
+> byte-identical to `update_aligned_semantic_model.py`). Run `dump_semantic_model.py` to commit the
+> full machine config.
+
+## Live model and tool (source of truth = DSS)
+
+- Active model: **`Drive_Revenues_Semantic_Model`**, version `v1` (Active). Built as the aligned
+  rebuild of the old model (`2O2KcHw` / `Drive_Revenues_Model`, kept intact as rollback).
+- Bound to the tool **`revenue_semantic_query`** (`v4oqA6R`): LLM `vertex_ai/claude-sonnet-4-6`,
+  embedding `vertex_ai/text-embedding-005`, **Agent mode OFF** (the faster linear SQL pipeline,
+  not a multi-step agent), access datasets as the calling user, project `OWISMIND_DEV`.
+- Queried by the sub-agent `SalesDrive_revenue_expert` (`agent:bHrWLyOL`) via
+  `SEMANTIC_TOOL_ID = "v4oqA6R"` when `SQL_ENGINE = "semantic_tool"` (the default).
+
+## What the aligned rebuild fixed (vs the old `2O2KcHw`)
 
 ### Philosophy: the sub-agent ASSISTS, it does not DICTATE
 
-The Semantic Model Query tool runs on a **smart model (Sonnet 4.6) WITH the semantic layer**,
-so it understands the dataset far better than our small UNDERSTAND model. The sub-agent
-therefore sends the tool the **user's real question (source of truth)** plus **HINTS**: the
-intent shape, the values/columns its grounding helper matched in the live catalog, the
-preferred presentation, scenario and period. Hints are **help, not orders - the tool keeps
-the final say**. We never force a column choice; when a value spans offer levels we *suggest*
-the most granular and flag the alternative.
+The tool runs on a **smart model (Sonnet) WITH the semantic layer**, so it understands the
+dataset far better than the sub-agent's small UNDERSTAND model. The sub-agent sends the tool the
+**user's real question (source of truth)** plus **HINTS**: the intent shape, the values/columns
+its grounding helper matched in the live catalog, the preferred presentation, scenario and
+period. Hints are **help, not orders - the tool keeps the final say**. We never force a column
+choice; when a value spans offer levels we *suggest* the most granular and flag the alternative.
 
-The business rules below therefore live in **both** places: as firm rules in the model
-instructions (the tool enforces them) and as supportive hints from the sub-agent.
+The business rules below live in **both** places: as firm rules in the model instructions (the
+tool enforces them) and as supportive hints from the sub-agent.
 
 1. **Offer hierarchy priority + transparency.** A term is resolved to the most granular level
-   that contains it: **Product › Solution › SolutionLine › sirano_product**. "IP" is a
-   SolutionLine; "IPL"/"Roaming Sponsor" are Products. When a value exists at several levels
-   (e.g. *IP Transit*/*EVPL* are both a Product and a Solution) the most granular (Product) is
-   used **and disclosed** ("…also exists as a Solution - tell me if you meant that level").
-   - **The semantic model owns this decision** (it has the layer + the hierarchy rules in
-     `sqlGenerationConfig.instructions` + `commercial_offer` description, incl. *never default
-     to sirano_product*). The Playground proved Sonnet resolves these correctly on its own.
-   - **The sub-agent does NOT pin a column for an ambiguous offer term** - it only flags
+   that contains it: **Product > Solution > SolutionLine > sirano_product**. "IP" is a
+   SolutionLine; "IPL" / "Roaming Sponsor" are Products. When a value exists at several levels
+   (e.g. *IP Transit* / *EVPL* are both a Product and a Solution) the most granular (Product) is
+   used **and disclosed** ("... also exists as a Solution, tell me if you meant that level").
+   - **The semantic model owns this decision** (hierarchy rules in
+     `sqlGenerationConfig.instructions` + `commercial_offer` description, incl. *never default to
+     sirano_product*).
+   - **The sub-agent does NOT pin a column for an ambiguous offer term**: it flags
      `AMBIGUOUS OFFER TERM - "EVPL" is present in (Product, Solution, sirano_product); YOU
-     resolve it`, and leaves the choice to the model. (Regression that motivated this: the
-     sub-agent's `column_priority` fell back to `-distinct_count`, so it pinned
-     `sirano_product = 'EVPL'` - and BUDGET rows have no sirano_product → budget = 0.)
-     Confident single-column values (e.g. a customer name) are still suggested as typo-free
-     hints. A neutral disclosure note (`build_disclosure_notes`) lists the ambiguity.
+     resolve it` and leaves the choice to the model. (Regression that motivated this: pinning
+     `sirano_product = 'EVPL'` while BUDGET rows have no sirano_product, so budget = 0.)
+     Confident single-column values (e.g. a customer name) are still suggested as typo-free hints.
 
-2. **Customer identity: display name + carrier_code, diamond_id discreet.** `diamond_id` is
-   the master key (kept in `GROUP BY` for exactness) but means nothing to the business - we
-   lead with **Account_name + carrier_code** and keep diamond_id as the **last, de-emphasized**
-   column.
-   - Model: customer-grouping rule in the instructions + canonical pattern.
-   - Sub-agent: `axis_sentence` now supports a `display_columns` list (profile override on
-     `diamond_id` below) → `GROUP BY diamond_id, MAX(Account_name), MAX(carrier_code)`,
-     diamond_id last.
-   - ⚠️ `MAX(carrier_code)` picks one code if a customer has several - acceptable per the
-     business (name + carrier identify an account); revisit if a customer spans many codes.
+2. **Customer identity: display name + carrier_code, diamond_id discreet.** `diamond_id` is the
+   master key (kept in `GROUP BY` for exactness) but means nothing to the business: lead with
+   **Account_name + carrier_code** and keep diamond_id as the **last, de-emphasized** column.
 
-3. **Account_partner & Parent_Group.** `Account_partner` = the reseller in an **indirect**
-   deal (we sell to Airbus, who resells to Maroc Telecom → end customer = Maroc Telecom,
-   partner = Airbus). `Parent_Group` is **not** used unless explicitly asked. Both documented
-   in the instructions and the attribute descriptions.
+3. **Account_partner & Parent_Group.** `Account_partner` = the reseller in an **indirect** deal
+   (we sell to Airbus, who resells to Maroc Telecom: end customer = Maroc Telecom, partner =
+   Airbus). `Parent_Group` is **not** used unless explicitly asked.
 
 ### Incoherences fixed in the model
 
-- `Phase = 'ACTUAL'` → **`'ACTUALS'`** in the `revenue_record` description, the `Phase`
+- `Phase = 'ACTUAL'` -> **`'ACTUALS'`** in the `revenue_record` description, the `Phase`
   attribute, and the **`Actual Revenue Only` filter** (which was matching **zero rows**).
-- Removed the **bogus `diamond_id` glossary term** (it described `original_dataset` / lineage
-  and collided with the real *Diamond ID*).
-- Removed the **`roaming hub` synonym** from *Roaming Sponsor* (Roaming Hub is a Solution).
+- Removed the **bogus `diamond_id` glossary term** (it described `original_dataset` / lineage).
+- Removed the **`roaming hub` synonym** from *Roaming Sponsor*.
 - Golden queries: **no self-join** (all 3 entities map to one physical table), name +
-  carrier_code display, diamond_id last; added Product-priority, named-customer, indirect and
-  per-partner examples.
-- YTD aligned to "latest available reporting month" (no hardcoded "today" → no partial month).
+  carrier_code display, diamond_id last; Product-priority, named-customer, indirect, per-partner.
+- YTD aligned to "latest available reporting month" (no hardcoded "today" -> no partial month).
 - Instructions now state **one physical table, never JOIN**.
 
 ## Two scripts
 
-- `build_aligned_semantic_model.py` - **one-time CREATE** of the new model (reads the old
-  model read-only, applies all corrections, creates the new model + version, indexes).
-- `update_aligned_semantic_model.py` - **MODIFY in place** an existing aligned model: refreshes
-  the SQL-generation instructions + golden queries on its active version (no create, no
-  re-index). Use this for every prompt / golden-query iteration once the model exists. Set
-  `NEW_MODEL_ID` first. (`NEW_INSTRUCTIONS` / `GOLDEN_QUERIES` are kept byte-identical in both
-  files - edit them in `update_…` going forward.)
+- `build_aligned_semantic_model.py` - **one-time CREATE**: reads the old model read-only
+  (`get_raw()` on a deep copy, never `save()` / `set_active` / `delete` on the old handle, so the
+  old model stays 100 % untouched), applies all corrections, creates the new model + version v1,
+  indexes. Prints the new model id.
+- `update_aligned_semantic_model.py` - **MODIFY in place**: refreshes instructions + golden
+  queries on the active version (no create, no re-index). Set `NEW_MODEL_ID` first.
+  (`NEW_INSTRUCTIONS` / `GOLDEN_QUERIES` are byte-identical in both files; edit them in `update_`
+  going forward.)
 
-## Deployment - do it in this order
+## How the live model was built, and how to iterate now
 
-1. **Build the new model.** Open `build_aligned_semantic_model.py` in a **Dataiku notebook**
-   (project OWISMIND_DEV). STEP 1 opens the old model **READ-ONLY** (`get_raw()` on a deep
-   copy - it never calls `save()` / `set_active` / `delete` on the old handle, so the old
-   model is 100 % untouched) to start from the exact current config, prints the diff; review,
-   then STEP 2 **creates a brand-new model** (`create_semantic_model`) + version v1, and
-   STEP 3 indexes it. **Write down the new model id** it prints.
+The aligned model already exists and `revenue_semantic_query` is already bound to it; the steps
+below are the iteration path, not a first-time deploy.
 
-2. **Test in the new model's Playground** with: a Product also a Solution (*IP Transit*),
-   "IP" at SolutionLine, "top customers" (check name + carrier_code, diamond_id last),
-   indirect customers / per-partner, a named customer ("HALYS").
+1. **Iterate the rules.** Edit `NEW_INSTRUCTIONS` / `GOLDEN_QUERIES`, set `NEW_MODEL_ID` to the
+   live model id, run `update_aligned_semantic_model.py` in a DSS notebook (project OWISMIND_DEV).
+   In place, no re-index.
+2. **Test in the model's Playground**: a Product that is also a Solution (*IP Transit*), "IP" at
+   SolutionLine, "top customers" (name + carrier_code, diamond_id last), indirect / per-partner,
+   a named customer ("HALYS").
+3. **Refresh the repo snapshot**: run `dump_semantic_model.py` and commit
+   `Drive_Revenues_Semantic_Model.v1.json` + update `MODEL.md` if the structure changed.
+4. **Profile overrides for the sub-agent** (optional reinforcement, not on the critical path):
+   add rows to the editable overrides dataset (INPUT 2 of the profile recipe) then re-run
+   `profile_dataset_recipe.py`. The model instructions are the source of truth for the offer /
+   display rules.
 
-3. **Profile overrides for the sub-agent** - add these rows to the editable **overrides
-   dataset** (INPUT 2 of the profile recipe, columns `key,field,value`) then **re-run the
-   profile recipe** (`profile_dataset_recipe.py`, design-time, small/safe):
+   | key | field | value | needed? |
+   |---|---|---|---|
+   | `diamond_id` | `display_columns` | `["Account_name","carrier_code"]` | recommended (reinforces name + carrier display) |
+   | `Product` | `ambiguity_priority` | `0` | optional (the model already resolves ambiguity) |
+   | `Solution` | `ambiguity_priority` | `1` | optional |
+   | `SolutionLine` | `ambiguity_priority` | `2` | optional |
+   | `sirano_product` | `ambiguity_priority` | `3` | optional |
 
-   | key            | field              | value                              | needed? |
-   |----------------|--------------------|------------------------------------|---------|
-   | diamond_id     | display_columns    | `["Account_name","carrier_code"]`  | recommended (reinforces name+carrier display) |
-   | Product        | ambiguity_priority | `0`                                | optional now |
-   | Solution       | ambiguity_priority | `1`                                | optional now |
-   | SolutionLine   | ambiguity_priority | `2`                                | optional now |
-   | sirano_product | ambiguity_priority | `3`                                | optional now |
+5. **No sub-agent re-paste needed for a model-only change** (the sub-agent references the tool by
+   id). Re-paste `SalesDrive_revenue_expert.py` into its Code Agent (`agent:bHrWLyOL`, env 3.11)
+   only when the agent code itself changes.
 
-   (`value` is JSON-parsed when possible; the recipe flags these `human_override` and they
-   survive re-runs.) The `ambiguity_priority` rows are now **optional**: ambiguous offer terms
-   are resolved by the semantic model, not by the sub-agent's `column_priority`. The
-   `display_columns` row is a useful reinforcement of the name+carrier display, but the model
-   instructions already enforce it. **The model instructions are the source of truth for all
-   these rules** - re-running the recipe is no longer on the critical path.
+## DSS housekeeping tied to the model
 
-4. **Point the tool at the new model.** The Semantic Model Query tool **`v4oqA6R`**
-   (`revenue_semantic_query`, used by the sub-agent constant `SEMANTIC_TOOL_ID`) still targets
-   the OLD model. Edit that tool's settings → select the **new** model. The model is unchanged
-   in code, so no sub-agent code edit is needed. (Alternative: create a new tool and update
-   `SEMANTIC_TOOL_ID` - but editing the existing tool is simpler.)
-
-5. **Re-paste the sub-agent** `dataset_expert_langgraph.py` into its Code Agent
-   (`agent:AKQaQ0Am`, env 3.11). The repo is the source of truth.
-
-6. **Smoke-test end to end** in the webapp, then keep the OLD model as rollback (do NOT
-   delete it).
+- **Update the tool's "Description for LLM"** (see [`../README.md`](../README.md)): drop the stale
+  *"only after Drive_Revenues_resolve_filter_value ..."* precondition (that tool is being deleted;
+  grounding is now inline).
+- Keep the OLD model (`2O2KcHw`) as rollback; do NOT delete it.
 
 ## Rollback
 
-- Tool → re-point to the old model. Sub-agent → the originals `*_agent.py` are untouched
-  (the enhancements live only in `*_langgraph.py`); revert the profile overrides + re-run the
-  recipe to drop the priority/display changes.
+- Tool -> re-point to the old model (`2O2KcHw`). The aligned model and the sub-agent code live in
+  git history; revert there. The profile overrides can be removed by editing the overrides
+  dataset and re-running the profile recipe.

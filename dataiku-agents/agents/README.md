@@ -84,9 +84,11 @@ dataset and it becomes an expert of that dataset. LangGraph `StateGraph`:
 **1. UNDERSTAND** - one LLM call with `with_json_output` (forced JSON, reliable),
 prompt GENERATED from the profile (metrics, scenario values, axes, synonyms, all
 columns). Output is validated/degraded deterministically against the profile
-(never against hardcoded business values). Intents:
+(never against hardcoded business values). The 11 intents (`KNOWN_INTENTS`):
 `total, breakdown, top_n, share_of_total, compare_scenarios, compare_periods,
-trend, list_values, count_distinct, about_data, lookup, custom`.
+trend, list_values, count_distinct, about_data, custom`. (There is no `lookup`
+intent: that path was removed 2026-06-18 and plain reads now go to the
+orchestrator's `attribute_lookup` built-in, not to this sub-agent.)
 
 **2. RESOLVE** - grounds the user's business terms against
 `DRIVE_Revenues_value_index` by **inline read-only SQL** (exact -> normalized ->
@@ -103,7 +105,9 @@ machine-parseable `VALUE (Column)` echo makes clarification loop-proof.
 grounded natural-language question (exact catalog values grouped per column with
 `IN`, explicit scenarios/periods, axis rule, destination context) and hand it to
 the **Semantic Model Query tool** (`revenue_semantic_query`, `v4oqA6R`), which
-writes AND runs the SQL. On a TECHNICAL failure (not an empty result), it falls
+writes AND runs the SQL (on its own DSS-configured Sonnet, **linear pipeline mode,
+Agent mode OFF**, in every orchestration tier). On a TECHNICAL failure (not an
+empty result), it falls
 back to the **direct** engine: deterministic SQL templates per structured intent
 (the LLM never writes that SQL), with a guarded LLM only for the `custom`
 long-tail (single read-only SELECT, one whitelisted table, EXPLAIN dry-run, up to
@@ -114,7 +118,10 @@ long-tail (single read-only SELECT, one whitelisted table, EXPLAIN dry-run, up t
 > the managed Dataset Lookup tool; that path was REMOVED (2026-06-18). Its
 > replacement is the standalone **`attribute_lookup`** tool
 > ([`../tools/attribute_lookup_tool.py`](../tools/README.md)) - a fast
-> whole-dataset search - which is being validated before it is wired in here.
+> whole-dataset search - wired as an **ORCHESTRATOR built-in**, NOT in this
+> sub-agent. The sub-agent is UNCHANGED by it: the orchestrator routes the fast
+> read before delegating. See [`OWIsMind_orchestrator.py`](OWIsMind_orchestrator.py)
+> and [`../tools/README.md`](../tools/README.md).
 
 **4. RENDER** - the answer table and every monetary figure are formatted BY CODE;
 a small LLM may write the headline but every number it cites is verified against

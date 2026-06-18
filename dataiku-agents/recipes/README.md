@@ -6,10 +6,15 @@
 > always reads live, no re-paste needed when a recipe re-runs.
 
 ```
-DRIVE_Revenues ──► [profile_dataset_recipe]    ──► DRIVE_Revenues_profile        (the business brain)        USED BY v3
-               ──► [build_value_index_recipe]  ──► DRIVE_Revenues_value_index    (exact-value grounding)     USED BY v3
-               ──► [build_value_catalog_recipe]──► DRIVE_Revenues_Value_Catalog  (rich alias catalog)        ROADMAP only
+DRIVE_Revenues ──► [profile_dataset_recipe]    ──► DRIVE_Revenues_profile        (the business brain)        USED BY v3 (sub-agent)
+               ──► [build_value_index_recipe]  ──► DRIVE_Revenues_value_index    (exact-value grounding)     USED BY v3 (sub-agent)
+               ──► [build_value_catalog_recipe]──► DRIVE_Revenues_Value_Catalog  (rich alias catalog)        USED BY v3 (attribute_lookup fallback)
 ```
+
+Who reads what: `profile` + `value_index` are read by the **sub-agent**
+(`SalesDrive_revenue_expert`); `Value_Catalog` is read by the **`attribute_lookup`**
+tool (an orchestrator built-in) as its alias / suggestions fallback. `DRIVE_Revenues`
+itself is read by the semantic model (SQL) and by `attribute_lookup` (fact search).
 
 ---
 
@@ -61,7 +66,7 @@ collapsed - the FROZEN `norm_value`, shared with the sub-agent's `_norm`). The
 sub-agent queries this **in SQL at runtime** to ground typed terms into exact cell
 values, so **create the output ON THE SOURCE SQL CONNECTION** (`SQL_owi`).
 
-### `DRIVE_Revenues_Value_Catalog` (12 columns, ~4.9 k rows) - ROADMAP only
+### `DRIVE_Revenues_Value_Catalog` (12 columns, approx. 4.9 k rows) - USED BY v3 (alias fallback)
 
 Built by `build_value_catalog_recipe.py`. A RICHER catalog than the value index:
 account resolvers with short-name aliases, the offer/business resolvers, AND
@@ -71,10 +76,14 @@ hand-crafted **business concept aliases** maintained in code (e.g. "indirect" /
 matched_value, display_value, normalized_value, frequency,
 canonical_account_name, canonical_carrier_code, parent_group, is_alias`.
 
-This catalog is read by the Custom Python tool `Drive_Revenues_resolve_filter_value`,
-which is **not wired into the v3 sub-agent** (v3 grounds on `value_index`).
-Adopting it as the grounding path is the decided-but-deferred roadmap item (see
-[`../README.md`](../README.md) "Roadmap" and the recipe's STATUS header).
+This catalog is read **at runtime** by the `attribute_lookup` tool
+([`../tools/attribute_lookup_tool.py`](../tools/attribute_lookup_tool.py),
+`CATALOG_DATASET`): when the fast search finds no exact match, the tool queries
+the catalog (`search_domain` in account / account_group / alias) to return close
+**suggestions** ("did you mean ..."). It is the tool's alias fallback, NOT the
+primary grounding path (the primary path is inline SQL on `value_index`). The
+old `Drive_Revenues_resolve_filter_value` tool that used to read this catalog is
+being deleted; `attribute_lookup` superseded it.
 
 ---
 

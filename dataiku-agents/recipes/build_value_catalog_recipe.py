@@ -2,18 +2,17 @@
 """
 Build DRIVE_Revenues_Value_Catalog (v2).
 
-STATUS (2026-06-17): this recipe builds the RICH value catalog (aliases,
-variants, business concepts, short account names) that the Custom Python tool
-`Drive_Revenues_resolve_filter_value` reads. That tool is NOT wired into the
-current v3 sub-agent (agents/SalesDrive_revenue_expert.py), which grounds user
-terms with INLINE SQL on DRIVE_Revenues_value_index (built by
-recipes/build_value_index_recipe.py) and calls only two DSS tools at runtime
-(revenue_semantic_query + dataset_lookup). Adopting this catalog + the Python
-resolver as the sub-agent's grounding path (richer than value_index, replacing
-the weaker managed Dataset Lookup) is the PLANNED next step, deferred to a
-dedicated session: see ../README.md, section "Roadmap". This file is kept in the
-repo as the source of truth for that direction; running the recipe is harmless
-(it only writes its own output dataset, used by nothing in v3 yet).
+STATUS (2026-06-18): this recipe builds the RICH value catalog (aliases,
+variants, business concepts, short account names). It IS used at runtime: the
+`attribute_lookup` tool (tools/attribute_lookup_tool.py, CATALOG_DATASET) reads
+it as its alias / suggestions fallback when the fast fact search finds no exact
+match. It is NOT the primary grounding path: the sub-agent
+(agents/SalesDrive_revenue_expert.py) grounds user terms with INLINE SQL on
+DRIVE_Revenues_value_index (built by recipes/build_value_index_recipe.py), and
+the sub-agent calls only ONE DSS tool at runtime (revenue_semantic_query). The
+old Custom Python tool Drive_Revenues_resolve_filter_value that used to read this
+catalog is being deleted; attribute_lookup superseded it. The managed
+dataset_lookup tool was removed (2026-06-18). See ../README.md and ../tools/README.md.
 
 Compared to v1:
 - Adds a `variants` mechanism: a single canonical value (e.g. "Indirect_distribution/Resseler")

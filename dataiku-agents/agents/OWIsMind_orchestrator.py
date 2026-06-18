@@ -15,8 +15,12 @@
 # Tools exposed to the model (generated from the registry + built-ins):
 #   - ask_<capability>  : delegate a self-contained task to a specialist
 #                         sub-agent (e.g. ask_revenue_expert -> agent:bHrWLyOL).
+#   - attribute_lookup  : fast value lookup BUILT-IN (does a named value exist,
+#                         in which column, its exact spelling, a named record's
+#                         plain attribute). NOT a sub-agent; dispatched inline.
 #   - show_chart        : render the latest data result as a line/bar/pie chart.
 #   - show_table        : render the latest data result as a full table.
+#   - show_kpi          : render one headline figure (with a delta if present).
 #   - current_date      : return today's date.
 #
 # RUNTIME (NON NEGOTIABLE):
@@ -158,9 +162,10 @@ ARTIFACT_KINDS = ("chart", "table", "kpi")
 # record's plain attribute). It short-circuits the slow semantic path for simple
 # "who/what is the <attribute> of <entity>" questions. It is wired here as a
 # BUILT-IN tool (dispatched inline in node_tools like show_table/current_date),
-# so it touches NO frozen KNOWN_* contract. Fill LOOKUP_TOOL_ID after creating
-# the Custom Python tool in DSS; the name fallback recovers a recreated id.
-LOOKUP_TOOL_ID = ""                       # e.g. "ab12CdEf" - set in DSS
+# so it touches NO frozen KNOWN_* contract. The Custom Python tool already EXISTS
+# in DSS; set LOOKUP_TOOL_ID to its real id for a direct bind, otherwise the
+# name fallback (LOOKUP_TOOL_NAME) resolves it by name on each run.
+LOOKUP_TOOL_ID = ""                       # "" -> resolve by name; else e.g. "ab12CdEf"
 LOOKUP_TOOL_NAME = "attribute_lookup"
 # The dataset the lookup tool reads (only used to attach an Evidence source link;
 # the tool itself owns its FACT_DATASET config). Mirrors the revenue capability.

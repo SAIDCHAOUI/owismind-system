@@ -5,32 +5,36 @@
 # recipes/profile_dataset_recipe.py) and a VALUE INDEX dataset (built by
 # recipes/build_value_index_recipe.py) and it becomes an expert of that
 # dataset - it knows the columns, the metrics, the scenario values, the time
-# coverage and the exact catalog values, and it answers questions by building
-# and executing its OWN read-only SQL. No semantic-model tool, no black box.
+# coverage and the exact catalog values.
 #
-# Architecture : UNDERSTAND -> RESOLVE -> BUILD SQL -> EXECUTE/REPAIR -> RENDER
+# Architecture : UNDERSTAND -> RESOLVE -> QUERY -> RENDER  (LangGraph StateGraph)
 #
 #   1. UNDERSTAND  1 LLM call (strict JSON). The prompt is GENERATED from the
 #                  profile: metrics, scenario values, axes, synonyms - so the
 #                  same code understands any dataset.
-#   2. RESOLVE     User terms are grounded against the value index by SQL
+#   2. RESOLVE     User terms are grounded against the value index by INLINE SQL
 #                  (exact -> normalized -> fuzzy). Ambiguity policy and the
-#                  "VALUE (Column)" round-trip are deterministic code.
-#   3. BUILD SQL   Structured intents (total, breakdown, top_n, share_of_total,
+#                  "VALUE (Column)" round-trip are deterministic code. Grounding
+#                  is NOT a tool - it is read-only SQL on DRIVE_Revenues_value_index.
+#   3. QUERY       Default SQL_ENGINE = "semantic_tool": the agent COMPOSEs a
+#                  maximally grounded natural-language question and hands it to
+#                  the DSS Semantic Model Query tool (revenue_semantic_query,
+#                  v4oqA6R), which WRITES AND RUNS the SQL. The semantic model
+#                  owns the SQL; every upstream layer feeds it the best context.
+#                  On a TECHNICAL failure (not an empty result) it FALLS BACK to
+#                  the "direct" engine: DETERMINISTIC SQL templates per structured
+#                  intent (total, breakdown, top_n, share_of_total,
 #                  compare_scenarios, compare_periods, trend, list_values,
-#                  count_distinct) -> DETERMINISTIC SQL templates (the LLM
-#                  never writes that SQL). Long-tail "custom" intent -> LLM
-#                  SQL constrained by the dataset card + SQL GUARD (single
-#                  read-only SELECT on the one table, LIMIT enforced).
-#   4. EXECUTE     SQLExecutor2 on the dataset's own connection, transaction
-#                  forced read-only + statement_timeout (validated pattern).
-#                  Custom SQL gets EXPLAIN dry-run + up to 2 repair attempts
-#                  with the database error fed back to the LLM.
-#   5. RENDER      Markdown table + figures formatted BY CODE; a small LLM
-#                  writes only the headline and every number it cites is
-#                  verified against the result - unverifiable -> deterministic
-#                  fallback. "about_data" questions are answered from the
-#                  profile with ZERO SQL and ZERO hallucination surface.
+#                  count_distinct) + a guarded LLM only for the "custom" long tail
+#                  (single read-only SELECT on the one table, EXPLAIN dry-run, up
+#                  to 2 repairs). Execution is always read-only (transaction_read_only
+#                  + statement_timeout).
+#   4. RENDER      Markdown table + figures formatted BY CODE; a small LLM may
+#                  write the headline (OFF by default: the orchestrator writes the
+#                  analysis) and every number it cites is verified against the
+#                  result - unverifiable -> deterministic fallback. A "[Scope]"
+#                  line states scenario/period/entity/currency. "about_data"
+#                  questions are answered from the profile with ZERO SQL.
 #
 # Collaboration contract with the orchestrator (unchanged dialect):
 #   - AGENT_BLOCK_START blockIds: resolve, run_sql, format_output,
@@ -2473,9 +2477,10 @@ class MyLLM(BaseLLM):
                 yield {"chunk": {"text": PROFILE_MISSING_TEXT["fr"]}}
                 yield _agent_result("error", None)
                 return
-            # Model tier for THIS run, propagated by the orchestrator (eco=mini,
-            # medium=Gemini Flash, high=Sonnet). Threaded through the graph state so
-            # node closures never read per-request state off `self` (concurrency-safe).
+            # Model tier for THIS run, propagated by the orchestrator
+            # (eco=Gemini Flash-Lite, medium=Gemini Flash, high=Sonnet). Threaded
+            # through the graph state so node closures never read per-request state
+            # off `self` (concurrency-safe).
             mode = forced_mode(conversation_context) or DEFAULT_MODE
             graph = self._build_graph(project, profile, trace)
             initial = {"instruction": instruction,
