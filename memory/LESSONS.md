@@ -2107,4 +2107,44 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `_context`/`match_whitelist`/`_resolve_dataset_candidates`) et de l'i18n front. **Source** : debug avec
   l'user (2026-06-18). **Date** : 2026-06-18.
 
+## L091 - Discipline de marque (charte Orange) + fiches d'agent rédigées par l'admin (refonte UI) [⏳ codé+revu, NON validé DSS]
+- **Contexte** : session **design only** demandée par l'user (PDG, très sensible à la marque Orange) : UI plus
+  « chartée », moins « IA générique » ; sidebar repliée en **rail** ; cartes + **fiche d'agent** refaites ;
+  **descriptions d'agent hardcodées bannies** (rédigées par l'admin, stockées en base) ; console admin +
+  formulaire de fiche ; tout en anglais + Settings -> « My account » ; petites animations ; sécurité.
+- **Ce qui a échoué (2 retours user)** : je me suis **permis des ajouts NON demandés** qui sortaient de la
+  charte. (1) bouton « New conversation » passé en **orange**, **logo orange centré** sur l'écran d'accueil,
+  **titre d'accroche passé en noir** (il était « très bien en orange ») ; (2) **glows orange**
+  (`box-shadow rgba(255,121,0,...)`) + **grosses ombres** (`--shadow-pop` 0 12px 32px), **puces carrées**
+  d'eyebrow partout, avatars en carré orange, `--orange-text` au lieu de la palette de la charte ; (3) un
+  **focus-ring orange GLOBAL** (`:focus-visible{box-shadow}` sur tout `input`/`textarea` dans `base.css`) ->
+  **contour orange sur la zone de saisie du chat** (validé, intouchable) ; (4) **suppression du bouton de
+  dépli** dans le header (`MainTop`, l'affordance « déplier la barre ») au profit du seul rail.
+- **Solution qui marche (charte fournie par l'user)** : **l'orange est un accent RARE** (actions / états
+  actifs / la SEULE accroche d'une vue), sur **blanc + noir**, **aplats** (zéro dégradé/blur/glassmorphism),
+  **ombre 1px max**, **carré-net** (cartes <=10px, badges 4px, toggles 0-2px), **Helvetica**, zéro emoji,
+  contenu aligné à gauche, beaucoup de blanc. **Règle de process** : en session de restyle, **ne PAS
+  sur-designer ; revenir à l'ORIGINAL pour tout ce qui n'est pas explicitement demandé** ; un focus-ring se
+  met **par champ**, jamais en global (sinon il touche le chat validé) ; **garder les affordances existantes**
+  (le bouton de dépli header était là avant -> le restaurer). Reverts faits : ChatEmpty d'origine, bouton
+  neutre, avatars ronds gris, glows/ombres/puces retirés, `--orange-text`->`--orange`/`--orange-deep`, tokens
+  spéculatifs supprimés (`--chip-bg/fg`, `--shadow-pop`, `--fs-display`, `--focus-ring`...).
+- **Gains techniques (à garder)** : (a) **fiche d'agent rédigée par l'admin** stockée **DANS le JSON
+  `enabled_agents` existant de `webapp_settings_v1`** (PAS de nouvelle table - simple, sûr, borné) ;
+  `validate_agent_meta()` = **fonction pure qui NE LÈVE JAMAIS** (coercition `isinstance(x,str)` AVANT le test
+  `x in frozenset` - sinon `TypeError` sur liste/dict JSON non-hashable), bornes (tagline 120/desc 700/caps
+  8x120/tools 16x48), **whitelist d'icônes == le registre d'icônes du front** (défense en profondeur : inconnu
+  -> rien rendu côté `Icon.vue`), sanitize control-chars (tout non-imprimable -> espace pour ne pas coller les
+  mots). `/agents` projette **8 champs d'affichage**, **jamais** `agent_id`/`project_key`. (b) **rail** :
+  garder la liste de conversations **montée en `v-show`** (pas `v-if`) -> jamais de re-fetch au repli/dépli ;
+  et **garder `el.clientHeight>0`** avant la boucle de remplissage (sinon `0<=0` -> sur-fetch /conversations
+  quand la barre démarre repliée).
+- **Preuve-vérification** : **2 workflows de revue adversariale** (Workflow, 5 puis 3 agents) -> audit
+  sécurité/sûreté-instance final **CLEAN** (0 fuite, XSS sûr - tout rendu en `{{ }}`, pas de surcharge
+  instance, 25 entrées adverses sur `validate_agent_meta` sans lever) ; findings LOW/medium **tous corrigés**.
+  Build Vite OK ; **124** tests frontend + **438** backend (dont 8 fiche) ; zip propre (**79 entrées,
+  `index-Bd4XhFvS.js`**) ; **0 tiret** + **0 dégradé/blur/glow/emoji** ajouté. Retours user directs sur les
+  reverts. **NON validé DSS** (rendu + flux fiche intestables hors instance).
+- **Source** : session design + charte Orange officielle de l'user + 2 revues Workflow. **Date** : 2026-06-18.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

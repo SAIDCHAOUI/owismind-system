@@ -313,7 +313,10 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
 - **Table 2026-06-03 (✅ validée EN DSS)** :
   - `OWISMIND_DEV_owismind_webapp_settings_v1` (logique `webapp_settings_v1`) : `setting_key` PK,
     `setting_value` (JSON), `updated_at`, `updated_by`. **Config globale webapp** (clé `enabled_agents` =
-    whitelist `[{logical_key,project_key,agent_id,label}]`). Via `storage/settings.py`. Voir L017.
+    whitelist `[{logical_key,project_key,agent_id,label,profile}]`). **`profile`** (2026-06-18, L091) = fiche
+    d'affichage **rédigée par l'admin** (tagline/description/capabilities/tools/icon/badge), validée+bornée
+    serveur par `validate_agent_meta` (pur, ne lève jamais ; whitelist icônes = registre front) et **stockée
+    DANS ce JSON, PAS de nouvelle table**. Via `storage/settings.py`. Voir L017 + L091.
 - **Connexion configurable** (plus de hardcode) : params webapp `sql_connection`/`table_prefix`/`log_level`
   (`hideWebAppConfig=false`), lus via `get_webapp_config()`. ⚠️ dropdown Settings KO (L012) → champ texte.
   Nommage `{PROJECT_KEY}_{prefix-}owismind_{logical}` (préfixe optionnel après le project key).
@@ -326,8 +329,11 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   `list_project_agents` filtré sur `agent:`), choisit la sélection, persistée en `webapp_settings_v1`
   (clé `enabled_agents`). La POST `/admin/agents` **re-valide** chaque agent contre le listing live.
   Le front user reçoit **uniquement** des **clés logiques opaques** (`ag_<sha1>`) + labels via `/agents` ;
-  jamais d'`agent_id`/`project_key`. **Chat → résolution serveur** : `settings.resolve_enabled_agent(key)` mappe
-  la clé logique → `(project_key, agent_id)` dans `/chat/stream` (L018).
+  jamais d'`agent_id`/`project_key`. Depuis **L091 (2026-06-18)**, `/agents` renvoie AUSSI la **fiche
+  d'affichage rédigée par l'admin** (tagline/description/capabilities/tools/icon/badge) = source unique des
+  cartes de la bibliothèque (fin du registre hardcodé `agentMeta.js`, supprimé) ; toujours **aucun**
+  `agent_id`/`project_key`. **Chat → résolution serveur** : `settings.resolve_enabled_agent(key)` mappe
+  la clé logique → `(project_key, agent_id)` dans `/chat/stream` (L018) ; la `profile` est ignorée côté chat.
 - **Streaming ✅ VALIDÉ EN DSS (L019)** - run agent : `agents/streaming.py` →
   `dataiku.api_client().get_project(project_key).get_llm(agent_id).new_completion().with_message(q)
   .execute_streamed()` (⚠️ `get_project(pk)`, pas `get_default_project()` : l'agent peut être hors projet courant).

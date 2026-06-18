@@ -10,6 +10,45 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**🎨 REFONTE UI "CHARTÉ ORANGE" + FICHES D'AGENT RÉDIGÉES PAR L'ADMIN (2026-06-18, session design) -
+⏳ CODÉ + revu (2 workflows) + corrigé, NON validé DSS.** Détail -> `memory/sessions/2026-06-18-design-ui.md`.
+Session **design only** (frontend Vue + un seul ajout backend). **Descriptions d'agent hardcodées BANNIES** :
+`agentMeta.js` **supprimé** ; accroche/description/capacités/outils/icône/badge **rédigés par l'admin**
+(modale dans `AdminView`), validés/bornés serveur (`validate_agent_meta`, **pur, ne lève jamais**, whitelist
+icônes = registre front, sanitize), stockés **dans le JSON `enabled_agents` de `webapp_settings_v1` (PAS de
+nouvelle table)**, exposés via `/agents` **sans fuite** d'`agent_id`/projet. **Sidebar repliée = RAIL**
+(carré de marque qui déplie, `+`, Agents, puis aide `?` au-dessus du profil ; liste `v-show` montée = zéro
+re-fetch). `AgentsView` (recherche + fiche éditoriale) + `AdminView` (sélection + formulaire) refondus
+charté. **Settings -> "My account"**, **anglais par défaut** (FR gardé). **⚠️ LEÇON L091 (discipline de
+marque, exigence user)** : je m'étais permis des ajouts NON demandés (bouton New conversation orange, logo
+centré sur l'accueil, titre passé en noir, **glows/grosses ombres**, **focus-ring orange global** = contour
+sur la zone de saisie, puces carrées d'eyebrow) -> **tout remis comme avant** après 2 retours user + **bouton
+de dépli restauré** (`MainTop`, `v-if collapsed`). **Charte Orange officielle fournie par l'user** (orange =
+accent RARE sur actions/états actifs ; blanc/noir ; aplats ; ombre 1px ; carré-net ; Helvetica ; pas de
+dégradé/blur/emoji) -> **à coller dans `CLAUDE.md`** (proposé, non fait). Audit sécurité final = **CLEAN**
+(0 fuite, XSS sûr, pas de surcharge instance). **À FAIRE DSS** : upload zip (**79 entrées, `index-Bd4XhFvS.js`**)
++ **REDÉMARRER backend** (python-lib changé : `validation.py`+`routes.py`) + remplir les fiches dans
+Administration > Agents. Pas de recoll d'agent.
+
+**💳 WEBAPP - SUIVI CONSO + BUDGET MENSUEL $50/USER (2026-06-18, session webapp parallèle) - ⏳ CODÉ +
+430 backend + 124 frontend + build + zip, NON validé DSS ; audit sécu + audit RENFORCÉ sûreté-instance =
+0 danger.** Détail complet -> `memory/sessions/2026-06-18-webapp-budget.md`. Crédit mensuel **50 $/user**
+(mois calendaire, reset le 1er, basé sur le coût Mesh `estimatedCost` déjà capté par échange). **Profil
+(Settings)** : vraie carte Budget (jauge dépensé/limite, restant, date reset, ligne de transparence sur
+l'origine de la limite) + carte Usage (tokens mois + lifetime). **Chat** : `canSend` bloqué + bannière
+transparente quand épuisé (enforcement serveur dans `/chat/start` -> 402, fail-open). **Admin onglet
+Quotas** : défaut global + boost temporaire global + table par user + override **un/plusieurs/tous**,
+**permanent ou temporaire**. **NO ALTER** : nouvelle table **`webapp_user_quota_v1`** (overrides), défaut
+global dans `webapp_settings_v1`, bucket `webapp_usage_monthly_v1` + lifetime `webapp_users_v1` inchangés.
+Backend : `storage/budget.py` (résolution + gate + admin overview + set/clear) + routes `/usage` +
+`/admin/budget(/users)` + enforcement. Durcissements sûreté (au-delà du requis) : **cache config en process**
+(supprime le 2e aller-retour DB par envoi de chat) + `settings.get_setting/set_setting` bornés
+`statement_timeout`+read-only ; budget reads/writes idem (calque `artifacts.py`). **À FAIRE DSS (user seul)** :
+upload zip (**79 entrées, `index-DeS8HQfW.js`**) + **REDÉMARRER backend** (python-lib changé) ; **PAS de recoll
+d'agents**. Table quota créée lazy. ⚠️ Coexiste avec les éditions concurrentes session-agents (feature agent
+profile/meta : `validate_agent_meta`, `profile` dans la whitelist) - merge propre (parties de fichiers
+distinctes). **AUCUN commit/push de ma part** (interdit cette session).
+
 **🧹 NETTOYAGE + DOC REFLET-DSS de `dataiku-agents/` + SIMPLIFICATION recettes/tool + DEBUG Evidence
 dégradé PROD (2026-06-18, session `dataiku-agents/`) - ✅ LOCAL (repo only, aucun DSS de ma part).** Doc
 réécrite pour qu'un Claude sans contexte comprenne TOUT le mécanisme (audit 6 lecteurs -> réécriture ->
@@ -327,7 +366,22 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-18 Run 4 (`dataiku-agents/` doc reflet-DSS + simplify recettes/tool + debug Evidence PROD) → détail `sessions/2026-06-18.md`
+## 🧭 Dernière session - 2026-06-18 (refonte UI charté Orange + fiches d'agent admin) → détail `sessions/2026-06-18-design-ui.md`
+- **Design only** (frontend + 1 ajout backend). **Descriptions d'agent hardcodées BANNIES** (`agentMeta.js`
+  supprimé) -> rédigées par l'admin (modale `AdminView`), validées/bornées serveur (`validate_agent_meta`,
+  pur, ne lève jamais, whitelist icônes), stockées **dans le JSON `enabled_agents` (pas de nouvelle table)**,
+  exposées via `/agents` sans fuite `agent_id`/projet.
+- **Sidebar repliée = RAIL** (`+`, Agents, aide `?` au-dessus du profil) ; **`AgentsView`** (recherche +
+  fiche éditoriale) + **`AdminView`** (sélection + formulaire) refondus charté ; **Settings -> "My account"** ;
+  **anglais par défaut**. Petites animations (`u-rise`), `prefers-reduced-motion` respecté.
+- **2 revues adversariales** (Workflow) : sécurité finale **CLEAN** (0 fuite, XSS sûr, instance OK) ; LOW/medium
+  corrigés. **2 retours user -> reverts** d'ajouts non demandés (orange en trop, focus-ring global, logo
+  centré, glows) + **bouton de dépli header restauré**. **Leçon L091 (discipline de marque)**.
+- **Vérifs** : build OK, **124** frontend + **438** backend, zip propre (**79 entrées, `index-Bd4XhFvS.js`**),
+  0 tiret, 0 dégradé/blur/glow ajouté. **NON validé DSS.** À faire : upload zip + **redémarrer backend** +
+  remplir les fiches (Administration > Agents). Charte Orange officielle de l'user **à coller dans `CLAUDE.md`** (proposé).
+
+## Avant - 2026-06-18 Run 4 (`dataiku-agents/` doc reflet-DSS + simplify recettes/tool + debug Evidence PROD) → détail `sessions/2026-06-18.md`
 - **Doc `dataiku-agents/` réécrite reflet-DSS** (audit 6 lecteurs + revue adversariale 3) : `CLAUDE.md` auto-suffisant + READMEs + **`MODEL.md`** + **`dump_semantic_model.py`** ; dérives corrigées (Value_Catalog **utilisé**, attribute_lookup **branché** built-in, resolve_filter_value **à supprimer**, tool sémantique **linéaire Sonnet**, intent `lookup` fantôme retiré).
 - **`/simplify`** profiler + 2 recettes + tool : en-têtes resserrés, `ENRICH_LLM_ID`->**`claude-opus-4-7`**, micro-optims ; **267 tests verts, 0 tiret**. **GOTCHA pandas lazy** (env test sans pandas, L089).
 - **Evidence "dégradé" PROD RÉSOLU** : le **modèle sémantique** PROD pointait une table non remappée (`_PROD_V1` droppé par le script de migration) ; c'est le modèle (pas le code agent) qui décide la table, le backend matche le FROM vs les datasets du projet webapp (L090). 2 scripts versés : `migrate_semantic_model_to_project.py` + `remap_semantic_model.py`.
@@ -528,6 +582,15 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🎨. **DÉPLOYER + VALIDER la refonte UI charté + fiches d'agent (2026-06-18, design)** : (1) **upload zip**
+   (**79 entrées, `index-Bd4XhFvS.js`**) ; (2) ⚠️ **REDÉMARRER le backend** (python-lib changé :
+   `validation.py` `validate_agent_meta` + `routes.py` `/agents`+`/admin/agents`) ; (3) **Administration >
+   Agents** : « Edit profile » sur l'orchestrateur et **remplir la fiche** (accroche/desc/capacités/outils/
+   icône/badge) - tant qu'elle est vide -> carte « profile to complete » (voulu, plus aucun hardcode).
+   Pas de recoll d'agent (logique inchangée). Smoke-tests : fiche s'affiche dans la bibliothèque + carte
+   honnête si vide ; rail (`+`/aide/profil) + **bouton de dépli header** OK ; zéro contour orange sur la
+   zone de saisie. **Optionnel** : coller la **charte Orange** (fournie par l'user) dans `CLAUDE.md` +
+   note mémoire. Voir **L091** + `sessions/2026-06-18-design-ui.md`.
 0🔎. **PROCHAINE SESSION (demandée user, 2026-06-18) : WORKFLOW MULTI-AGENTS pour finir l'histoire du
    resolver.** L'user = PDG technique senior (dev + AI engineering) + conseillers experts, qui débattent
    et tranchent : (a) la **meilleure conception** du tool `attribute_lookup`
