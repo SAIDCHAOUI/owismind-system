@@ -217,8 +217,15 @@ class TestAttributeLookupWiring(unittest.TestCase):
     def test_lookup_tool_output_not_found_never_denies_data(self):
         text = orch._lookup_tool_output({"status": "not_found", "term": "zzz"})
         # Routes to the specialist and explicitly forbids asserting data absence.
-        self.assertIn("ask_revenue_expert", text)
+        self.assertIn("the specialist", text)
         self.assertIn("NEVER state that the data does not exist", text)
+
+    def test_lookup_tool_output_suggestions_asks_user(self):
+        text = orch._lookup_tool_output({
+            "status": "suggestions", "term": "indirct",
+            "candidates": [{"value": "Indirect_distribution", "column": "distribution_type"}]})
+        self.assertIn("Indirect_distribution", text)
+        self.assertIn("which", text.lower())
 
     def test_lookup_evidence_item_carries_sql_and_rows(self):
         payload = {"status": "found", "term": "blanchard", "rows_matched": 2,

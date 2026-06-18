@@ -224,7 +224,7 @@ def summarize_values(columns, rows, keep=None, per_col_cap=DISTINCT_PER_COLUMN):
     return out
 
 
-# ----- alias fallback (catalog) -------------------------------------------------
+# ----- alias fallback (value catalog) -------------------------------------------
 def _domain_rank(row):
     dom = str(row.get("search_domain") or "")
     return ENTITY_DOMAINS.index(dom) if dom in ENTITY_DOMAINS else len(ENTITY_DOMAINS)

@@ -217,10 +217,10 @@ CAPABILITIES = {
         # data source into a clickable link that opens the dataset in a new tab.
         "source_url": "",
         # Fast value-lookup routing: the table the attribute_lookup built-in
-        # searches for THIS domain, and its optional value catalog (alias
-        # fallback; "" = none). The model passes a logical DOMAIN, never a table;
-        # the orchestrator resolves it here (server-side whitelist, rule #3/#4).
-        # A second agent simply declares its own lookup_dataset.
+        # searches for THIS domain, plus the value catalog for the alias fallback
+        # ("" = none). The model passes a logical DOMAIN, never a table; the
+        # orchestrator resolves it here (server-side whitelist, rule #3/#4). A
+        # second agent simply declares its own lookup_dataset.
         "lookup_dataset": "DRIVE_Revenues",
         "lookup_catalog": "DRIVE_Revenues_Value_Catalog",
         "pass_context": True,
@@ -872,14 +872,14 @@ def _lookup_tool_output(payload):
                 "which they mean - do NOT pick one yourself." % (term, cands))
     if status == "not_found":
         return ("LOOKUP for '%s': the quick search did not pinpoint it. Either ask "
-                "the user to confirm the exact name, OR call ask_revenue_expert to "
-                "look deeper. NEVER state that the data does not exist." % term)
-    if status in ("attribute_unknown",):
+                "the user to confirm the exact name, OR call the specialist to look "
+                "deeper. NEVER state that the data does not exist." % term)
+    if status == "attribute_unknown":
         cols = ", ".join((payload.get("available_columns") or [])[:30])
         return ("LOOKUP: the requested attribute is not a real column. Available "
                 "columns: %s. Ask the user to rephrase." % cols)
-    return ("LOOKUP could not run cleanly (%s). Hand the question to "
-            "ask_revenue_expert." % (payload or {}).get("status", "error"))
+    return ("LOOKUP could not run cleanly (%s). Hand the question to the "
+            "specialist." % (payload or {}).get("status", "error"))
 
 
 def _lookup_evidence_item(payload, step_index, n, source_url="",
