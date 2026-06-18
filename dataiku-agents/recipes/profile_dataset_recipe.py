@@ -1,80 +1,54 @@
 # =============================================================================
-# OWIsMind - DATASET PROFILER (Dataiku Python recipe, design-time Flow)
-# -----------------------------------------------------------------------------
-# Turns ANY input dataset into a machine-readable "dataset profile": the
-# knowledge artifact that makes the Dataset Expert code agent an expert of
-# that dataset. Data never leaves DSS: only AGGREGATED metadata (schema,
-# stats, low-cardinality enum values, a few samples) is sent to the LLM Mesh
-# model (which is cleared for the data anyway), never the raw rows.
+# OWIsMind dataset profiler (Dataiku Python recipe, design-time Flow).
 #
-# Flow wiring:
-#   INPUT  1 (required): the dataset to profile (e.g. DRIVE_Revenues)
-#   INPUT  2 (optional): an EDITABLE dataset of human overrides - schema
-#                        {key, field, value} (see OVERRIDES below)
-#   OUTPUT 1 (required): the profile dataset - schema {key, payload}
-#                        (e.g. DRIVE_Revenues_profile)
+# Builds a machine-readable "profile" of a dataset: the knowledge artifact that
+# makes the dataset-expert sub-agent fluent in that dataset. Only AGGREGATED
+# metadata (schema, stats, low-cardinality values, a few samples) ever reaches
+# the LLM, never raw rows.
 #
-# Two passes:
-#   PASS A (deterministic, zero LLM): schema, types, null rates, distinct
-#          counts, verbatim enum values for low-cardinality columns, samples
-#          for the rest, numeric/time stats, time-format detection.
-#   PASS B (LLM via Mesh): business descriptions, column roles, synonyms,
-#          suggested metrics, scenario/time column election, display pairs.
-#          Output validated & degraded deterministically; everything the LLM
-#          wrote is flagged "llm_generated": true so humans know to review.
-#
-# OVERRIDES (human-in-the-loop, survives re-runs):
-#   Create an *editable* dataset with columns: key, field, value
-#     key   = "__dataset__" or a column name
-#     field = any profile field (description_fr, role, synonyms, metrics, ...)
-#     value = the value; JSON is parsed when possible ("["a","b"]"), else the
-#             raw string is used.
-#   Overrides are applied AFTER the LLM pass and flagged "human_override".
-#
-# PROFILE CONTRACT (consumed by agents/dataset_expert_agent.py - FROZEN v1):
-#   Output dataset rows: {key: str, payload: str(JSON)}
-#   key "__dataset__" -> table-level payload:
-#     {profile_version, dataset_name, generated_at, row_count,
-#      description_en, description_fr, grain,
-#      default_metric, metrics: [{name, agg, column, format,
-#                                 label_fr, label_en, description}],
-#      scenario: {column, values, default_values} | null,
-#      time: {column, format, min, max} | null,
-#      notes: [str]}
-#   key "<column>" -> column payload:
-#     {name, dss_type, role, description_en, description_fr, synonyms,
-#      null_pct, distinct_count, is_enum, values: [{v, n}], samples,
-#      stats, display_column, groupable, indexed, llm_generated,
-#      human_override?}
-#   time.format is one of: date | yyyy_mm_dd_str | yyyy_mm_str |
-#                          yyyymm_int | year_int
+# Flow    : INPUT 1 = dataset to profile; INPUT 2 (optional) = editable overrides
+#           {key, field, value}; OUTPUT = profile {key, payload(JSON)}.
+# Passes  : A = deterministic stats (zero LLM); B = LLM enrichment (descriptions,
+#           roles, synonyms, metrics, scenario/time election), flagged
+#           llm_generated. Human overrides are applied LAST and always win.
+# Contract: profile v1, rows {key, payload}; key "__dataset__" = table-level,
+#           key "<column>" = per-column. Fields summarized in recipes/README.md;
+#           time.format is one of TIME_FORMATS.
 # =============================================================================
 
 import json
 import logging
+import math
 import re
 import unicodedata
 from datetime import datetime
 
 import dataiku
 
+# pandas is imported lazily inside the two functions that need it (the local test
+# env has no pandas, and the pure helpers below must import without it). numpy is
+# optional too: json_safe degrades gracefully when it is absent.
+try:
+    import numpy as np
+except Exception:
+    np = None
+
 logger = logging.getLogger("owismind.profiler")
 
 # =============================================================================
-# 1. CONFIGURATION (review before the first run)
+# 1. CONFIGURATION
 # =============================================================================
 
-# LLM Mesh id used for the semantic enrichment pass (PASS B). Use the
-# STRONGEST model available - this runs once per dataset, the cost is
-# amortized over every future question. Leave "" to SKIP the LLM pass
-# (deterministic profile only; descriptions stay empty for human filling).
-ENRICH_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro"
+# LLM Mesh id for the enrichment pass (PASS B). Use the strongest model: it runs
+# once per dataset and the cost is amortized over every future question. Set to
+# "" to skip the LLM pass (deterministic profile only, descriptions left empty).
+ENRICH_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-opus-4-7"
 
-ENUM_MAX_VALUES = 50        # <= N distincts -> full verbatim value list kept
-SAMPLES_N = 12              # sample values kept for non-enum columns
+ENUM_MAX_VALUES = 50        # <= N distincts: keep the full verbatim value list
+SAMPLES_N = 12              # sample values kept per non-enum column
 SAMPLE_VALUE_MAX_CHARS = 80
 MAX_ROWS_IN_MEMORY = 2_000_000   # safety cap for get_dataframe()
-FREE_TEXT_AVG_LEN = 120     # avg length above which a string col = free text
+FREE_TEXT_AVG_LEN = 120     # avg length above which a string column = free text
 PROFILE_VERSION = 1
 
 KNOWN_ROLES = ("dimension", "measure", "time", "scenario", "identifier",
@@ -93,53 +67,38 @@ _RE_YYYY_MM = re.compile(r"^\d{4}-\d{2}$")
 
 
 # =============================================================================
-# 2. PURE HELPERS (unit-tested in dataiku-agents/tests/test_profiler.py)
+# 2. PURE HELPERS (unit-tested in tests/test_profiler.py)
 # =============================================================================
 
 def norm_value(value):
-    """Accent-insensitive lowercase with collapsed whitespace (the same
-    normalization the value-index recipe and the agent's resolver use)."""
-    s = unicodedata.normalize("NFKD", str(value))
-    s = s.encode("ascii", "ignore").decode("ascii")
+    """Accent-insensitive lowercase with collapsed whitespace. Same as the
+    value-index recipe and the agent resolver (FROZEN normalization)."""
+    s = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
     return re.sub(r"\s+", " ", s.strip().lower())
 
 
 def json_safe(value):
-    """numpy / pandas scalars -> plain JSON-safe Python values."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
+    """numpy / pandas scalars -> plain JSON-safe Python values (non-finite -> None)."""
+    if value is None or isinstance(value, bool):
         return value
-    try:
-        import math
-        if isinstance(value, float) and not math.isfinite(value):
-            return None
-    except Exception:
-        pass
-    for caster in (int, float):
-        try:
-            if isinstance(value, caster):
-                return value
-        except Exception:
-            pass
-    try:
-        import numpy as np
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if np is not None:
         if isinstance(value, np.integer):
             return int(value)
         if isinstance(value, np.floating):
             f = float(value)
-            import math
             return f if math.isfinite(f) else None
         if isinstance(value, np.bool_):
             return bool(value)
-    except Exception:
-        pass
     return str(value)[:SAMPLE_VALUE_MAX_CHARS * 4]
 
 
 def detect_time_format(dss_type, sample_values):
-    """Best-effort time format detection from the DSS type + a few samples.
-    Returns one of TIME_FORMATS or None. Pure & defensive."""
+    """Best-effort time format from the DSS type + a few samples; one of
+    TIME_FORMATS or None. Pure and defensive."""
     if dss_type in _DATE_DSS_TYPES:
         return "date"
     samples = [s for s in (sample_values or []) if s is not None][:20]
@@ -170,10 +129,12 @@ def looks_like_time_name(name):
 
 
 def _coerce_str_list(raw, cap=12, item_cap=60):
-    out = []
+    """Trimmed, de-duplicated (case-insensitive) list of strings, capped."""
+    out, seen = [], set()
     for item in (raw if isinstance(raw, list) else []):
         s = str(item).strip()
-        if s and s.lower() not in [o.lower() for o in out]:
+        if s and s.lower() not in seen:
+            seen.add(s.lower())
             out.append(s[:item_cap])
         if len(out) >= cap:
             break
@@ -181,9 +142,8 @@ def _coerce_str_list(raw, cap=12, item_cap=60):
 
 
 def validate_enrichment(parsed, column_names):
-    """Deterministic validation of the LLM enrichment output. Never raises.
-    Unknown columns / roles / aggs degrade field by field. Returns
-    {"dataset": {...}, "columns": {name: {...}}} with only valid content."""
+    """Validate the LLM enrichment field by field; unknown columns/roles/aggs
+    are dropped. Never raises. Returns {"dataset": {...}, "columns": {...}}."""
     out = {"dataset": {}, "columns": {}}
     if not isinstance(parsed, dict):
         return out
@@ -196,7 +156,7 @@ def validate_enrichment(parsed, column_names):
             v = ds.get(field)
             if isinstance(v, str) and v.strip():
                 clean[field] = v.strip()[:600]
-        # metrics
+
         metrics = []
         for m in (ds.get("metrics") or [])[:12]:
             if not isinstance(m, dict):
@@ -213,8 +173,7 @@ def validate_enrichment(parsed, column_names):
             metrics.append({
                 "name": name, "agg": agg,
                 "column": column if agg != "COUNT" else None,
-                "format": fmt,
-                "unit": unit or None,
+                "format": fmt, "unit": unit or None,
                 "label_fr": str(m.get("label_fr") or name)[:80],
                 "label_en": str(m.get("label_en") or name)[:80],
                 "description": str(m.get("description") or "")[:300],
@@ -224,12 +183,11 @@ def validate_enrichment(parsed, column_names):
             default = str(ds.get("default_metric") or "")
             clean["default_metric"] = (default if any(m["name"] == default for m in metrics)
                                        else metrics[0]["name"])
-        # scenario column election
+
         scen = ds.get("scenario")
         if isinstance(scen, dict) and scen.get("column") in known:
             clean["scenario"] = {"column": scen["column"],
                                  "default_values": _coerce_str_list(scen.get("default_values"), cap=5)}
-        # time column election
         tm = ds.get("time")
         if isinstance(tm, dict) and tm.get("column") in known:
             clean["time"] = {"column": tm["column"]}
@@ -241,9 +199,8 @@ def validate_enrichment(parsed, column_names):
             if name not in known or not isinstance(payload, dict):
                 continue
             clean = {}
-            role = payload.get("role")
-            if role in KNOWN_ROLES:
-                clean["role"] = role
+            if payload.get("role") in KNOWN_ROLES:
+                clean["role"] = payload["role"]
             for field in ("description_en", "description_fr"):
                 v = payload.get(field)
                 if isinstance(v, str) and v.strip():
@@ -260,7 +217,7 @@ def validate_enrichment(parsed, column_names):
 
 
 def parse_override_value(raw):
-    """Override 'value' cell -> JSON when parseable, else trimmed string."""
+    """Override 'value' cell -> JSON when parseable, else the trimmed string."""
     s = str(raw if raw is not None else "").strip()
     if not s:
         return None
@@ -271,8 +228,8 @@ def parse_override_value(raw):
 
 
 def apply_overrides(dataset_payload, column_payloads, override_rows):
-    """Apply human override rows {key, field, value} IN PLACE (after the LLM
-    pass, so humans always win). Unknown keys/fields are ignored, never fatal."""
+    """Apply human {key, field, value} rows in place (humans always win).
+    Unknown keys/fields are ignored. Returns the number applied."""
     applied = 0
     for row in override_rows or []:
         key = str(row.get("key") or "").strip()
@@ -292,10 +249,10 @@ def apply_overrides(dataset_payload, column_payloads, override_rows):
 
 
 def safe_json_parse(text):
+    """Parse JSON from an LLM reply, tolerating ```fences``` and surrounding prose."""
     if not text:
         return None
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(),
-                     flags=re.MULTILINE).strip()
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE).strip()
     try:
         return json.loads(cleaned)
     except Exception:
@@ -308,9 +265,8 @@ def safe_json_parse(text):
     return None
 
 
-def default_role(dss_type, distinct_count, row_count, avg_len, time_format,
-                 name):
-    """Deterministic fallback role when the LLM pass is skipped or silent."""
+def default_role(dss_type, distinct_count, row_count, avg_len, time_format, name):
+    """Deterministic role when the LLM pass is skipped or silent."""
     if time_format:
         return "time"
     if dss_type in _NUMERIC_DSS_TYPES:
@@ -326,11 +282,13 @@ def default_role(dss_type, distinct_count, row_count, avg_len, time_format,
 
 
 # =============================================================================
-# 3. PASS A - deterministic statistics (pandas; the recipe runs design-time)
+# 3. PASS A - deterministic statistics (pandas, design-time)
 # =============================================================================
 
 def profile_dataframe(df, schema_columns):
     """-> (dataset_payload, {column_name: column_payload}). Deterministic."""
+    import pandas as pd
+
     row_count = int(len(df))
     dss_types = {c["name"]: str(c.get("type") or "string") for c in schema_columns}
 
@@ -370,16 +328,11 @@ def profile_dataframe(df, schema_columns):
             except Exception:
                 avg_len = 0.0
 
-        # PHYSICAL date detection first: a real date/timestamp column must be
-        # profiled as format "date" even when the DSS schema type or the
-        # string samples say otherwise - the agent's SQL templates depend on
-        # it (seen in DSS: a PostgreSQL `date` profiled as string broke
-        # LEFT(col, 10); the agent is cast-safe now, but the profile should
-        # still tell the truth).
+        # Time format. A real date/timestamp dtype wins over the schema type or
+        # string samples, so a physical date is always profiled as "date".
         tfmt = None
         try:
-            import pandas as _pd
-            if _pd.api.types.is_datetime64_any_dtype(series):
+            if pd.api.types.is_datetime64_any_dtype(series):
                 tfmt = "date"
             elif len(non_null):
                 first = non_null.iloc[0]
@@ -390,11 +343,11 @@ def profile_dataframe(df, schema_columns):
         if tfmt is None:
             tfmt = detect_time_format(dss_type, sample_values)
         if tfmt and not looks_like_time_name(name) and dss_type not in _DATE_DSS_TYPES:
-            # Plausible-but-unnamed time column: keep as low-priority candidate.
-            time_candidates.append((1, name, tfmt))
+            time_candidates.append((1, name, tfmt))   # plausible but unnamed: low priority
         elif tfmt:
             time_candidates.append((0, name, tfmt))
 
+        # Numeric columns get full stats; time columns get min/max only.
         if dss_type in _NUMERIC_DSS_TYPES and not tfmt:
             try:
                 payload["stats"] = {
@@ -414,31 +367,29 @@ def profile_dataframe(df, schema_columns):
             except Exception:
                 payload["stats"] = {}
 
-        # Time columns are never enums: listing 30 month values as "allowed
-        # values" pollutes the UNDERSTAND prompt and the SQL card for nothing.
+        # Low-cardinality non-time columns become enums (full value list); the
+        # rest keep a few samples. Time columns are never enums (a month list
+        # would bloat the prompt for nothing).
         if 0 < distinct <= ENUM_MAX_VALUES and not tfmt:
             payload["is_enum"] = True
             try:
-                counts = non_null.value_counts()
                 payload["values"] = [
-                    {"v": str(json_safe(v))[:SAMPLE_VALUE_MAX_CHARS],
-                     "n": int(n)}
-                    for v, n in counts.items()][:ENUM_MAX_VALUES]
+                    {"v": str(json_safe(v))[:SAMPLE_VALUE_MAX_CHARS], "n": int(n)}
+                    for v, n in non_null.value_counts().items()][:ENUM_MAX_VALUES]
             except Exception:
                 payload["values"] = []
         else:
             payload["samples"] = [str(s)[:SAMPLE_VALUE_MAX_CHARS]
                                   for s in sample_values[:SAMPLES_N]]
 
-        payload["role"] = default_role(dss_type, distinct, row_count, avg_len,
-                                       tfmt, name)
+        payload["role"] = default_role(dss_type, distinct, row_count, avg_len, tfmt, name)
         if payload["role"] in ("free_text", "measure"):
             payload["groupable"] = False
         if tfmt:
-            payload["_time_format"] = tfmt   # promoted below, then cleaned
+            payload["_time_format"] = tfmt   # promoted below, then dropped
         columns[name] = payload
 
-    # Deterministic time election (LLM may override): named candidates first.
+    # Deterministic time election (the LLM may override). Named candidates win.
     if time_candidates:
         time_candidates.sort()
         _, tname, tfmt = time_candidates[0]
@@ -508,8 +459,8 @@ def build_enrichment_input(dataset_name, dataset_payload, columns):
         desc = "- %s | type=%s | distinct=%s | nulls=%s%%" % (
             name, c["dss_type"], c["distinct_count"], c["null_pct"])
         if c.get("is_enum") and c.get("values"):
-            vals = ", ".join("%s(%s)" % (v["v"], v["n"]) for v in c["values"][:ENUM_MAX_VALUES])
-            desc += " | ALL VALUES: " + vals
+            desc += " | ALL VALUES: " + ", ".join(
+                "%s(%s)" % (v["v"], v["n"]) for v in c["values"][:ENUM_MAX_VALUES])
         elif c.get("samples"):
             desc += " | samples: " + ", ".join(c["samples"][:8])
         if c.get("stats"):
@@ -519,8 +470,8 @@ def build_enrichment_input(dataset_name, dataset_payload, columns):
 
 
 def run_enrichment(project, dataset_name, dataset_payload, columns):
-    """Calls the Mesh model (2 attempts) and merges the validated output into
-    the payloads. Failure is non-fatal: the deterministic profile survives."""
+    """Call the Mesh model (2 attempts) and merge the validated output in place.
+    Failure is non-fatal: the deterministic profile survives. Returns success."""
     if not ENRICH_LLM_ID:
         logger.info("ENRICH_LLM_ID empty -> skipping the LLM pass")
         return False
@@ -532,8 +483,7 @@ def run_enrichment(project, dataset_name, dataset_payload, columns):
             completion = llm.new_completion()
             completion.with_message(ENRICH_PROMPT, role="system")
             completion.with_message(user_block, role="user")
-            resp = completion.execute()
-            parsed = safe_json_parse(getattr(resp, "text", None))
+            parsed = safe_json_parse(getattr(completion.execute(), "text", None))
             if parsed:
                 break
         except Exception as e:
@@ -572,10 +522,9 @@ def run_enrichment(project, dataset_name, dataset_payload, columns):
 
     for name, fields in clean["columns"].items():
         col = columns[name]
-        for field, value in fields.items():
-            col[field] = value
+        col.update(fields)
         col["llm_generated"] = True
-        if col.get("role") in ("free_text",):
+        if col.get("role") == "free_text":
             col["groupable"] = False
     return True
 
@@ -585,6 +534,7 @@ def run_enrichment(project, dataset_name, dataset_payload, columns):
 # =============================================================================
 
 def main():
+    import pandas as pd
     from dataiku import recipe
 
     inputs = recipe.get_inputs_as_datasets()
@@ -608,7 +558,7 @@ def main():
     dataset_payload, columns = profile_dataframe(df, schema_cols_raw)
     dataset_payload["dataset_name"] = dataset_name
 
-    # Pull column-level descriptions already set in the DSS UI (free signal).
+    # Reuse column descriptions already set in the DSS UI (free signal).
     for c in schema_columns:
         comment = (c.get("comment") if isinstance(c, dict) else getattr(c, "comment", None))
         name = c["name"] if isinstance(c, dict) else c.name
@@ -618,8 +568,7 @@ def main():
     project = dataiku.api_client().get_default_project()
     run_enrichment(project, dataset_name, dataset_payload, columns)
 
-    # Default metric fallback when the LLM pass was skipped/failed: first
-    # numeric measure column, SUM.
+    # Fallback metric when the LLM pass was skipped or failed: first measure, SUM.
     if not dataset_payload.get("metrics"):
         for name, c in columns.items():
             if c["role"] == "measure":
@@ -632,26 +581,21 @@ def main():
                 dataset_payload["default_metric"] = metric_name
                 break
 
-    # Human overrides ALWAYS win (applied last).
+    # Human overrides always win (applied last).
     if overrides_ds is not None:
         try:
-            odf = overrides_ds.get_dataframe(infer_with_pandas=False)
-            rows = odf.to_dict("records")
-            n = apply_overrides(dataset_payload, columns, rows)
-            logger.info("Applied %d human overrides", n)
+            rows = overrides_ds.get_dataframe(infer_with_pandas=False).to_dict("records")
+            logger.info("Applied %d human overrides", apply_overrides(dataset_payload, columns, rows))
         except Exception:
             logger.exception("Overrides dataset unreadable - ignored")
 
-    # Cleanup internals + final rows.
     for c in columns.values():
-        c.pop("_time_format", None)
+        c.pop("_time_format", None)   # internal, never serialized
 
-    import pandas as pd
     out_rows = [{"key": "__dataset__",
                  "payload": json.dumps(dataset_payload, ensure_ascii=False, default=str)}]
-    for name, c in columns.items():
-        out_rows.append({"key": name,
-                         "payload": json.dumps(c, ensure_ascii=False, default=str)})
+    out_rows += [{"key": name, "payload": json.dumps(c, ensure_ascii=False, default=str)}
+                 for name, c in columns.items()]
     output.write_with_schema(pd.DataFrame(out_rows, columns=["key", "payload"]))
     logger.info("Profile written: %d columns + 1 dataset row", len(columns))
 
