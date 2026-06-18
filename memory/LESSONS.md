@@ -2147,4 +2147,40 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   reverts. **NON validé DSS** (rendu + flux fiche intestables hors instance).
 - **Source** : session design + charte Orange officielle de l'user + 2 revues Workflow. **Date** : 2026-06-18.
 
+## L092 - Restyle multi-agents vers une maquette : charte durable + "vraie image, jamais de visuel généré"
+- **Contexte** : l'user fournit une **maquette HTML** (Account & Admin, Orange) et demande de refondre le style
+  des vraies pages OWIsMind "comme la maquette", en lançant **un agent par page en parallèle**. Puis : graver la
+  charte Orange comme **style obligatoire permanent** (la maquette sera supprimée).
+- **Ce qui a marché (orchestration)** : découpage **par OWNERSHIP DE FICHIER**, pas seulement par page. Un agent
+  `foundation` possède le **chrome partagé + primitives** (`tokens.css`, `PageShell`, `SettingCard`, `EmptyState`,
+  `Button`, `Modal`) ; chaque vue n'édite **que son fichier**. Interdiction absolue à tous de toucher
+  `tokens.css`/`base.css`/i18n (`extra.js`)/`Tabs.vue` (ce dernier partagé avec l'Evidence panel **validé** du
+  chat -> styliser les onglets Admin **localement** via `:deep()`). Brief partagé identique à tous (charte +
+  **mapping "design speak" -> tokens** + bans). Résultat : 6 agents Sonnet en parallèle, **fichiers disjoints =
+  zéro conflit**, APIs des composants partagés **préservées** (les vues les consomment sans les voir changer).
+  Intégration centralisée par le lead : vérif périmètre (`git status` = seuls les 12 fichiers), **0 tiret long**,
+  **0 clé i18n manquante** (diff clés utilisées vs définies ; familles dynamiques `mode.*`/`ag.badge.*` peuplées),
+  **0 `color-mix`/blur/hex en dur**, compile-check Vite, puis 1 seul build/zip.
+- **Ce qui a échoué (1 retour user)** : l'agent `shell`, en suivant la maquette **à la lettre**, a **reconstruit
+  le logo en carré CSS** (`<span class="brand-mark"><span class="brand-mark-bar">`) et **retiré l'import de la
+  vraie image** qui existait avant (`import logoUrl from '../../assets/orange-logo.png'`). L'user : « le logo
+  c'est l'image ou un truc généré ? faut utiliser l'image ! ».
+- **Solution qui marche** : **toujours utiliser la VRAIE image de marque** (`<img :src="logoUrl">`), **jamais**
+  reconstruire un visuel de marque en CSS, **même si la maquette le fait** (une maquette HTML simule souvent les
+  assets). Quand on restyle d'après une maquette, **préserver les assets réels** déjà câblés. Ajouté aux interdits
+  de la charte. Règle d'orchestration : dire explicitement aux agents "si un asset réel (logo/image) est déjà
+  importé, garde-le ; ne reproduis pas un visuel de marque en CSS".
+- **Charte rendue DURABLE** (la maquette disparaît) : **`docs/cadrage/CHARTE_ORANGE_UI.md`** auto-suffisant
+  (tokens, géométrie carrée, recettes de composants, bans, mapping) ; **règle non négociable #10** dans le
+  `CLAUDE.md` racine + ref ; section "Style = Charte Orange" dans `frontend/CLAUDE.md` ; mémoire persistante
+  `orange-charter-styling.md`. Essentiel : blanc/noir + **un orange #FF7900 en accent RARE**, **carré
+  (`border-radius:0`, avatars ronds)**, aplats/filets 1px, **H1 36/800 + eyebrow orange + title-bar 52x4**,
+  tokens sémantiques (texte orange = `--orange-text` AA), bans `color-mix`/blur/dégradé/glow/emoji/focus-ring
+  global/visuel généré.
+- **Preuve-vérification** : build Vite OK (233 modules) ; périmètre = 12 fichiers assignés ; **png bundlé**
+  (`orange-logo-C6rK4N-7.png`) présent dans le zip ; zip propre **79 entrées, `index-BHeG2NRY.js`** ; `body.html`
+  recâblé. **NON validé DSS** (rendu réel = user après upload). Frontend uniquement -> **pas de redémarrage backend**.
+- **Source** : session 2026-06-19 (refonte UI maquette Orange) + retour logo de l'user. Affine **L091**
+  (discipline de marque). **Date** : 2026-06-19.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

@@ -49,11 +49,12 @@
   --fs-2xl: 28px;
   --fs-3xl: 36px;
 
-  /* Weight scale (Helvetica Neue resolves up to 700). */
+  /* Weight scale (Helvetica Neue resolves up to 700; 800 compresses to bold). */
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-semibold: 600;
   --fw-bold: 700;
+  --fw-heavy: 800;
 
   /* Tracking presets for tight titles / open uppercase labels. */
   --tracking-tight: -0.02em;

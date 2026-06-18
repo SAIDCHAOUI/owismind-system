@@ -484,6 +484,12 @@ au nettoyage du 2026-06-11, en même temps que `docs/superpowers/plans/` (journa
 > (ajouter une brique = enregistrer un module isolé). Travail dans `Plugin/owismind/frontend/`. **✅ Phases 0-5 validées EN
 > DSS** (confirmation user « ça fonctionne à merveille » : chat live, identité avec prénom, agents, history, pages + Admin) ;
 > **Evidence Studio différé** (décision user). Audit sécurité pré-DSS passé GO + 4 correctifs backend (→ L026).
+>
+> **🟠 STYLE = CHARTE ORANGE (source de vérité : `docs/cadrage/CHARTE_ORANGE_UI.md`, règle non négociable #10).**
+> Refonte "maquette Orange" 2026-06-19 (multi-agents, L092) : blanc/noir + orange #FF7900 accent RARE, géométrie
+> **carrée**, aplats/filets 1px, H1 36/800 + eyebrow orange + title-bar 52x4, tokens sémantiques. Le logo de marque
+> est la VRAIE image `assets/orange-logo.png` (rail + sidebar), **jamais** un visuel généré en CSS. Tout futur style
+> applique cette charte.
 
 ### 13.1 Stack & deps (installées par l'user - NO INSTALL)
 `vue@3.5` · `vite@8` · `@vitejs/plugin-vue@6` · **`pinia@3.0.4`** · **`vue-router@5.1.0`** · **`vue-i18n@11.4.4`** ·

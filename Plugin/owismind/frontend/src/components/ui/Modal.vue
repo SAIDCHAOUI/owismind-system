@@ -102,20 +102,20 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
+/* Flat scrim - NO backdrop-filter blur (charter ban). */
 .ui-modal-scrim {
   position: fixed;
   inset: 0;
   z-index: var(--z-overlay);
-  background: rgba(10, 10, 12, 0.48);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
 }
-:global(body[data-theme="dark"] .ui-modal-scrim) { background: rgba(0, 0, 0, 0.58); }
+:global(body[data-theme="dark"] .ui-modal-scrim) { background: rgba(0, 0, 0, 0.65); }
 
+/* Square card: 0 radius, 1px border, minimal shadow (charter: no big drops). */
 .ui-modal-card {
   position: relative;
   width: 100%;
@@ -123,36 +123,39 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  padding: 26px 26px 22px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.08);
+  border-radius: 0;
+  padding: 24px 24px 22px;
+  box-shadow: var(--shadow);
   outline: none;
-  animation: ui-modalCardIn 200ms var(--ease) forwards;
+  animation: ui-modalCardIn 180ms var(--ease) forwards;
 }
 .ui-modal-card.is-static { animation: none; }
 :global(body[data-theme="dark"] .ui-modal-card) {
   background: var(--surface);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 @keyframes ui-modalCardIn {
-  from { transform: translateY(8px) scale(0.985); }
-  to { transform: translateY(0) scale(1); }
+  from { transform: translateY(6px); opacity: 0.85; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-modal-card { animation: none; }
 }
 
+/* Square close button - matches mockup .modal-x. */
 .ui-modal-close {
   position: absolute;
   top: 12px;
   right: 12px;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--text-3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease);
 }
-.ui-modal-close:hover { background: var(--surface-hover); color: var(--text); }
+.ui-modal-close:hover { color: var(--text); }
 .ui-modal-close :deep(.ui-icon) { width: 16px; height: 16px; }
 
 .ui-modal-head {
@@ -161,10 +164,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   gap: 12px;
   padding-right: 30px;
 }
+/* Square icon tile - matches mockup sharp geometry. */
 .ui-modal-icon {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,14 +176,15 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   background: var(--surface-2);
   color: var(--text-2);
 }
-.ui-modal-icon.danger { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.ui-modal-icon.danger { background: rgba(205, 60, 20, 0.10); color: var(--danger); }
 .ui-modal-icon :deep(.ui-icon) { width: 20px; height: 20px; }
+/* Heavy title - matches mockup .modal-title 20px/800. */
 .ui-modal-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 800;
   color: var(--text);
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .ui-modal-body { margin-top: 18px; }
@@ -190,7 +195,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   margin-top: 22px;
 }
 
-/* Scrim fade (gracefully degraded if reduced-motion via shortened duration) */
+/* Scrim fade. */
 .ui-modal-enter-active,
 .ui-modal-leave-active { transition: opacity var(--dur) var(--ease); }
 .ui-modal-enter-from,

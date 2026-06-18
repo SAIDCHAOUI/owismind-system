@@ -20,3 +20,6 @@ docs/screenshots/
 
 # Temp research corpus for the agentique skill (provenance, not project knowledge)
 docs/agentic-research/
+
+# Style mockup reference (transient: extracted into docs/cadrage/CHARTE_ORANGE_UI.md, then deleted)
+style-reference/

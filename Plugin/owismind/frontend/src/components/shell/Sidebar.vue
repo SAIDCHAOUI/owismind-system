@@ -138,15 +138,16 @@ function onUser(key) {
     <!-- HEAD: brand (full) / expand control (rail) -->
     <div class="sidebar-head">
       <RouterLink v-if="!collapsed" to="/chat" class="brand">
+        <!-- Official Orange brand logo (square) -->
         <img class="brand-mark" :src="logoUrl" alt="" width="30" height="30" />
         <span class="brand-name">{{ t('sb.brand') }}</span>
       </RouterLink>
       <button v-if="!collapsed" class="icon-btn" :title="t('sb.collapse')" @click="ui.toggleSidebar()">
         <Icon name="sidebar" />
       </button>
-      <button v-else class="rail-brand" :title="t('sb.expand')" @click="ui.toggleSidebar()">
+      <!-- Rail: the Orange logo doubles as the expand button -->
+      <button v-else class="rail-logo" :title="t('sb.expand')" @click="ui.toggleSidebar()">
         <img class="brand-mark" :src="logoUrl" alt="OWIsMind" width="30" height="30" />
-        <span class="rail-brand-hint"><Icon name="chevronsRight" /></span>
       </button>
     </div>
 
@@ -221,13 +222,27 @@ function onUser(key) {
 </template>
 
 <style scoped>
+/* =========================================================================
+   Sidebar - Orange brand, flat/sharp surfaces.
+   Light rail bg = var(--bg) (#fff), dark = var(--bg) (#0a0a0a), matching mockup.
+   Orange is used ONLY as the logo mark background and the active-item accent.
+   ========================================================================= */
 .sidebar {
   border-right: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+}
+
+/* --- Brand mark: the official Orange logo image (sharp square, no radius) --- */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 /* --- Head --------------------------------------------------------------- */
@@ -242,94 +257,79 @@ function onUser(key) {
   align-items: center;
   gap: 10px;
   font-size: var(--fs-lg);
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: var(--fw-heavy, 800);
+  letter-spacing: -0.015em;
   color: var(--text);
   text-decoration: none;
 }
-.brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 3px;
-  display: block;
-  flex-shrink: 0;
-  object-fit: cover;
+.brand-name {
+  font-family: var(--font-sans);
 }
+
+/* Collapse toggle (icon button) inside the expanded sidebar */
 .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   color: var(--text-2);
-  border-radius: var(--r-sm);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  /* sharp: no border-radius */
+  transition: color var(--dur) var(--ease);
   flex-shrink: 0;
 }
-.icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+.icon-btn:hover { color: var(--text); }
 .icon-btn :deep(.ui-icon) { width: 18px; height: 18px; }
 
-/* Rail brand doubles as the expand control: the orange square + a hover chevron. */
-.rail-brand {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--square);
+/* Rail: orange logo square is the expand button */
+.rail-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   margin: 0 auto;
-  transition: transform var(--dur) var(--ease);
+  /* no extra styles: the .brand-mark inside provides the orange square */
 }
-.rail-brand:hover { transform: translateY(-1px); }
-.rail-brand-hint {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-xs);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text-3);
-  opacity: 0;
-  transform: scale(0.7);
-  transition: all var(--dur) var(--ease);
-}
-.rail-brand:hover .rail-brand-hint { opacity: 1; transform: scale(1); }
-.rail-brand-hint :deep(.ui-icon) { width: 11px; height: 11px; }
 
 /* --- Primary nav -------------------------------------------------------- */
-.sidebar-primary { padding: 0 var(--s-3); display: flex; flex-direction: column; gap: 3px; }
+.sidebar-primary { padding: 0 var(--s-3); display: flex; flex-direction: column; gap: 2px; }
 
 .side-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
-  border-radius: var(--r-sm);
+  /* sharp: no border-radius */
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text);
   cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
   text-decoration: none;
   width: 100%;
   text-align: left;
 }
-.side-item:hover, .side-item.open { background: var(--surface-hover); }
-.side-item.active { background: var(--surface-hover); font-weight: 600; }
-.side-item :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-2); }
+.side-item:hover,
+.side-item.open { background: var(--surface); }
+/* Active: left orange bar accent, bold text */
+.side-item.active {
+  background: var(--surface);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+.side-item :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-3); }
 .side-item.active :deep(.ui-icon) { color: var(--text); }
+.side-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 
 /* --- Conversations ------------------------------------------------------ */
 .sidebar-section { margin-top: var(--s-7); padding: 0 var(--s-5) var(--s-3); }
 .sidebar-section-title {
   font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
+  font-weight: 700;
   color: var(--text-3);
-  letter-spacing: var(--tracking-eyebrow);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  font-family: var(--font-sans);
 }
 
 .conv-list {
@@ -343,18 +343,23 @@ function onUser(key) {
   width: 100%;
   text-align: left;
   padding: 7px 12px;
-  border-radius: var(--r-sm);
+  /* sharp: no border-radius */
   font-size: 13px;
   color: var(--text-2);
   cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-sans);
 }
-.conv-item:hover { background: var(--surface-hover); color: var(--text); }
-.conv-item.active { background: var(--surface-hover); color: var(--text); }
+.conv-item:hover { background: var(--surface); color: var(--text); }
+.conv-item.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+.conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .conv-state {
   padding: 8px 12px;
   margin: 0;
@@ -372,7 +377,7 @@ function onUser(key) {
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 .sidebar-foot .ui-menu-wrap { display: block; }
 .user-chip {
@@ -380,58 +385,91 @@ function onUser(key) {
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-radius: var(--r-sm);
+  /* sharp: no border-radius */
   font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
+  font-weight: 500;
   color: var(--text);
   cursor: pointer;
   transition: background var(--dur) var(--ease);
   width: 100%;
   text-align: left;
 }
-.user-chip:hover, .user-chip.open { background: var(--surface-hover); }
+.user-chip:hover,
+.user-chip.open { background: var(--surface); }
+.user-chip:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+/* Avatar: 32px circle, var(--surface-2) background, bold initial - per mockup */
 .user-chip .avatar {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: #d4d4d4;
+  background: var(--surface-2);
   display: grid;
   place-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
   flex-shrink: 0;
 }
-:global(body[data-theme="dark"] .user-chip .avatar) { background: var(--surface-2); }
 .user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* =========================================================================
-   RAIL (collapsed): icon-only, centered, labels hidden. The list is display:none
-   (v-show) so it keeps its scroll state and is never re-fetched on expand.
+   RAIL (collapsed): 56px icon-only column.
+   Matches mockup .rail: bg=var(--bg), right border, 14px top padding,
+   items centered, labels hidden.
    ========================================================================= */
-/* The foot menus (Help / account) are 220px wide and NOT teleported; in the 60px
-   rail they must escape the column. The list is hidden here (v-show) so the rail
-   never needs its own scroll - overflow can safely be visible. */
-.sidebar.rail { overflow: visible; }
-.sidebar.rail .sidebar-head { padding: var(--s-4) 0 var(--s-5); justify-content: center; }
-.sidebar.rail .sidebar-primary { padding: 0 10px; gap: 6px; }
-.sidebar.rail .sidebar-foot { padding: 8px; gap: 6px; }
+/* Foot menus are 220px wide and NOT teleported; overflow must be visible so
+   the popover escapes the narrow rail column. */
+.sidebar.rail { overflow: visible; width: 56px; }
+.sidebar.rail .sidebar-head {
+  padding: 14px 0 14px;
+  justify-content: center;
+}
+.sidebar.rail .sidebar-primary { padding: 0 9px; gap: 4px; }
+.sidebar.rail .sidebar-foot { padding: 8px 9px; gap: 4px; }
 
-/* Icon-only square targets, centered, labels collapsed away. */
+/* Labels hidden; items become 38px square icon targets - per mockup .rail-btn */
 .sidebar.rail .side-label { display: none; }
-.sidebar.rail .side-item,
+.sidebar.rail .side-item {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  margin: 0 auto;
+  /* no radius (sharp brand) */
+  box-shadow: none; /* active bar accent removed in rail (no room) */
+}
+.sidebar.rail .side-item :deep(.ui-icon) { color: var(--text-3); }
+.sidebar.rail .side-item:hover :deep(.ui-icon) { color: var(--text); }
+.sidebar.rail .side-item.active :deep(.ui-icon) { color: var(--orange); }
+
+/* User chip: square icon target, avatar fills it */
 .sidebar.rail .user-chip {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   justify-content: center;
   gap: 0;
   margin: 0 auto;
 }
-.sidebar.rail .user-chip .avatar { width: 26px; height: 26px; }
+.sidebar.rail .user-chip .avatar {
+  width: 32px;
+  height: 32px;
+}
+.sidebar.rail .user-name { display: none; }
 
-/* Reduced-motion: drop the positional hover movement (transitions stay). */
+/* No focus ring shift in rail */
+.sidebar.rail .side-item:focus-visible,
+.sidebar.rail .user-chip:focus-visible {
+  outline-offset: 0;
+}
+
+/* Reduced-motion: keep transitions, skip decorative position changes */
 @media (prefers-reduced-motion: reduce) {
-  .rail-brand:hover { transform: none; }
+  .sidebar,
+  .side-item,
+  .conv-item,
+  .user-chip,
+  .icon-btn { transition: none; }
 }
 </style>

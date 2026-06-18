@@ -30,31 +30,34 @@ defineProps({
 </template>
 
 <style scoped>
+/* Square empty state: flat surface, solid border, no pill radius. */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: var(--s-3);
-  padding: var(--s-7) var(--s-5);
+  padding: 64px var(--s-5);
   color: var(--text-2);
 }
 .empty-state--bordered {
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   background: var(--surface);
 }
+/* 46x46 square icon box - matches mockup .empty .ei. */
 .empty-state__icon {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
-  border-radius: var(--r);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--border-strong);
   color: var(--text-3);
+  margin-bottom: var(--s-1);
 }
-.empty-state__icon :deep(.ui-icon) { width: 20px; height: 20px; }
+.empty-state__icon :deep(.ui-icon) { width: 22px; height: 22px; }
 .empty-state__head {
   display: inline-flex;
   align-items: center;
@@ -62,18 +65,20 @@ defineProps({
 }
 .empty-state__title {
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
 }
+/* Orange "soon" tag: square, solid orange, white text - matches mockup .soon. */
 .empty-state__tag {
+  display: inline-block;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  background: var(--orange-soft-dark);
-  color: var(--orange);
+  padding: 2px 6px;
+  border-radius: 0;
+  background: var(--orange);
+  color: #fff;
 }
 .empty-state__desc {
   margin: 0;

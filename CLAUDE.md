@@ -63,8 +63,18 @@ convertie, a été supprimée du repo le 2026-06-11).
    PARTOUT : chaînes i18n / texte UI, code, commentaires, mémoire, messages de commit ET réponses dans le chat.
    C'est une signature typographique d'IA, l'user l'interdit absolument. Utiliser `-`, `:`, `,` ou des
    parenthèses à la place. (Décision user 2026-06-17.)
+10. **CHARTE ORANGE = style UI obligatoire, à CHAQUE travail de style** (page, composant, retouche). Source de
+   vérité auto-suffisante : **`docs/cadrage/CHARTE_ORANGE_UI.md`** (lire AVANT de styliser). Essentiel :
+   blanc / noir / **un seul orange `#FF7900` en accent RARE** ; **géométrie carrée** (`border-radius: 0`, seuls
+   les avatars ronds) ; **aplats, filets 1px, gros titres lourds** (H1 36px/800, eyebrow orange MAJ, **title-bar
+   orange 52x4px** sous le H1) ; toujours les **tokens sémantiques** de `frontend/src/styles/tokens.css` (jamais
+   de hex en dur ; texte orange = `--orange-text` AA) ; **interdits** : `color-mix`, blur/backdrop-filter,
+   dégradés, glow/grosses ombres, emoji, focus-ring orange global, **et visuel de marque reconstruit en CSS**
+   (toujours la VRAIE image `frontend/src/assets/orange-logo.png`, jamais un carré généré). Dark via
+   `body[data-theme]` + tokens. (Décision user 2026-06-18 : « à chaque fois qu'on fait du style, comme ça ».)
 
 ## Référence
+- `docs/cadrage/CHARTE_ORANGE_UI.md` - **charte de style UI (règle #10), auto-suffisante** : tokens, géométrie carrée, recettes de composants, interdits. À lire avant tout travail de style (la maquette HTML d'origine a été supprimée, cette charte la remplace).
 - `docs/cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` - cahier des charges fonctionnel (produit ; Evidence Studio = intention future différée).
 - `docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
 - `docs/cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).

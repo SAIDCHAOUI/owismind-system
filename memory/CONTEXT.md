@@ -10,6 +10,28 @@ BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
 `perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
 
+**🟠 RÈGLE NON NÉGOCIABLE #10 (2026-06-18/19) : CHARTE ORANGE = style UI obligatoire à CHAQUE travail de
+style.** Source auto-suffisante : **`docs/cadrage/CHARTE_ORANGE_UI.md`** (à LIRE avant de styliser ; la maquette
+HTML d'origine a été supprimée). Blanc/noir + **un orange #FF7900 en accent RARE** ; **carré** (`border-radius:0`,
+avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52x4** ; **tokens sémantiques**
+(`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
+focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
+
+**🎨 REFONTE UI "MAQUETTE ORANGE" (multi-agents) + CHARTE DURABLE (2026-06-19) - ⏳ CODÉ + build + zip,
+NON validé DSS.** L'user a fourni une **maquette HTML** (Account & Admin) ; refonte du style des vraies pages
+"comme la maquette" via **6 agents Sonnet en parallèle** (découpage **par ownership de fichier**, brief charte
+commun, `Tabs.vue`/`tokens.css`/i18n intouchables) : `foundation` (chrome partagé + primitives ; ajout
+`--fw-heavy:800`), `shell` (rail + top bar), `settings` (My account), `admin` (Administration + modale profil
+agent), `agents` (bibliothèque + fiche), `modepicker` (Response mode). Géométrie **carrée** assumée -> `Button`/
+`Modal` partagés deviennent carrés/plats (le chat hérite, on-charter ; corrige radius 16px+blur+ombre de la modale).
+**Correctif logo (retour user)** : `shell` avait reconstruit le logo en **carré CSS** -> **rebranché la VRAIE
+image** `frontend/src/assets/orange-logo.png` (`<img :src="logoUrl">`) rail + sidebar. Vérifs : périmètre = 12
+fichiers, **0 tiret long**, **0 clé i18n manquante**, **0 color-mix/blur/hex en dur**, build Vite OK. Zip propre
+**79 entrées, `index-BHeG2NRY.js`** (png bundlé). **Charte gravée** : `CHARTE_ORANGE_UI.md` + règle #10
+(`CLAUDE.md` racine + `frontend/CLAUDE.md`) + mémoire `orange-charter-styling.md`. **À FAIRE DSS** : **upload zip**
+(frontend only -> **PAS de redémarrage backend**, pas de recoll d'agent) + smoke-tests (vrai logo, pages carrées,
+thème, modales à plat). Détail -> `sessions/2026-06-19.md`. Voir **L092** (+ L091 discipline de marque).
+
 **🎨 REFONTE UI "CHARTÉ ORANGE" + FICHES D'AGENT RÉDIGÉES PAR L'ADMIN (2026-06-18, session design) -
 ⏳ CODÉ + revu (2 workflows) + corrigé, NON validé DSS.** Détail -> `memory/sessions/2026-06-18-design-ui.md`.
 Session **design only** (frontend Vue + un seul ajout backend). **Descriptions d'agent hardcodées BANNIES** :
@@ -366,7 +388,18 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-18 (refonte UI charté Orange + fiches d'agent admin) → détail `sessions/2026-06-18-design-ui.md`
+## 🧭 Dernière session - 2026-06-19 (refonte UI "maquette Orange" multi-agents + charte durable) → détail `sessions/2026-06-19.md`
+- **6 agents Sonnet en parallèle** (ownership par fichier, brief charte commun) ont restylé les pages "comme la
+  maquette" fournie par l'user : `foundation` (chrome + primitives, `--fw-heavy:800`), `shell`, `settings`,
+  `admin` (+ modale profil), `agents`, `modepicker`. Carré/aplat/orange rare ; `Button`/`Modal` partagés -> chat hérite.
+- **Logo (retour user)** : `shell` l'avait reconstruit en carré CSS -> **rebranché la VRAIE image `orange-logo.png`**
+  (rail + sidebar). **Charte gravée durablement** : `docs/cadrage/CHARTE_ORANGE_UI.md` + règle #10 (`CLAUDE.md` x2)
+  + mémoire `orange-charter-styling.md` (la maquette HTML va être supprimée par l'user).
+- **Vérifs** : périmètre 12 fichiers, 0 tiret/color-mix/blur/hex en dur, 0 clé i18n manquante, build OK, png bundlé,
+  zip propre **79 entrées `index-BHeG2NRY.js`**. **NON validé DSS.** À faire : **upload zip** (frontend only ->
+  **pas de redémarrage backend**, pas de recoll d'agent). Voir **L092**.
+
+## Avant - 2026-06-18 (refonte UI charté Orange + fiches d'agent admin) → détail `sessions/2026-06-18-design-ui.md`
 - **Design only** (frontend + 1 ajout backend). **Descriptions d'agent hardcodées BANNIES** (`agentMeta.js`
   supprimé) -> rédigées par l'admin (modale `AdminView`), validées/bornées serveur (`validate_agent_meta`,
   pur, ne lève jamais, whitelist icônes), stockées **dans le JSON `enabled_agents` (pas de nouvelle table)**,
@@ -582,8 +615,14 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🎨. **DÉPLOYER + VALIDER la refonte UI charté + fiches d'agent (2026-06-18, design)** : (1) **upload zip**
-   (**79 entrées, `index-Bd4XhFvS.js`**) ; (2) ⚠️ **REDÉMARRER le backend** (python-lib changé :
+0🎨NEW. **DÉPLOYER + VALIDER la refonte UI "maquette Orange" (2026-06-19)** : **upload zip** (**79 entrées,
+   `index-BHeG2NRY.js`**, **vrai logo png bundlé**). ⚠️ **Ce zip embarque AUSSI le python-lib non encore
+   déployé des sessions 2026-06-18 (fiches d'agent `validate_agent_meta`/`/agents` + budget `storage/budget.py`).
+   Donc : si ces backends ne sont pas déjà live sur l'instance -> REDÉMARRER le backend après upload.** Pas de
+   recoll d'agent (logique d'agents inchangée). Smoke-tests : vrai logo (rail + sidebar), pages carrées chartées,
+   thème clair/sombre, modales à plat, fiche d'agent (Administration > Agents > Edit profile). Voir **L092**.
+0🎨. **DÉPLOYER + VALIDER la refonte UI charté + fiches d'agent (2026-06-18, design)** [intégré dans le zip ci-dessus] : (1) **upload zip**
+   (zip courant = **`index-BHeG2NRY.js`**) ; (2) ⚠️ **REDÉMARRER le backend** (python-lib changé :
    `validation.py` `validate_agent_meta` + `routes.py` `/agents`+`/admin/agents`) ; (3) **Administration >
    Agents** : « Edit profile » sur l'orchestrateur et **remplir la fiche** (accroche/desc/capacités/outils/
    icône/badge) - tant qu'elle est vide -> carte « profile to complete » (voulu, plus aucun hardcode).

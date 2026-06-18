@@ -159,197 +159,235 @@ function badgeLabel(b) {
 </template>
 
 <style scoped>
+/* =============================================================================
+ * AgentsView styles - Orange brand restyle.
+ *
+ * Rules: square geometry (border-radius 0 on cards, chips, inputs, icon tiles),
+ * 1px solid borders, hover = near-black border, orange as a RARE accent.
+ * No gradients, no blur, no glow, no soft drop shadows.
+ * ============================================================================= */
+
 /* --- Toolbar (search + count) ------------------------------------------- */
 .ag-toolbar {
   display: flex;
   align-items: center;
   gap: var(--s-4);
-  margin-bottom: var(--s-5);
+  margin: var(--s-7) 0 22px;
 }
+
+/* Search bar: square, 1px border, focus = orange border only (no glow). */
 .ag-search {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   flex: 1;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--r);
+  border-radius: 0;
   background: var(--bg);
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease);
 }
-.ag-search:focus-within { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-soft-dark); }
-.ag-search :deep(.ui-icon) { width: 17px; height: 17px; color: var(--text-3); flex-shrink: 0; }
+.ag-search:focus-within { border-color: var(--orange); }
+.ag-search :deep(.ui-icon) { width: 16px; height: 16px; color: var(--text-3); flex-shrink: 0; }
 .ag-search input {
   border: none;
   background: none;
   outline: none;
   width: 100%;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
+  font-family: var(--font-sans);
   color: var(--text);
 }
 .ag-search input::placeholder { color: var(--text-3); }
-.ag-count { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+
+/* Count note: monospaced, muted. */
+.ag-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .ag-no-match { font-size: var(--fs-sm); color: var(--text-2); padding: var(--s-6) 0; }
 
 /* --- Cards grid --------------------------------------------------------- */
+/* Auto-fill so columns respond naturally without a fixed count. */
 .agents-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--s-4);
 }
+
+/* Each card: square, 1px border, hover = near-black border. No lift, no shadow. */
 .agent-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: var(--s-5);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
+  padding: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   background: var(--bg);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease);
 }
-.agent-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow);
-}
+.agent-card:hover { border-color: var(--text); }
+
 .agent-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-/* Square icon chip (a light orange-soft accent, squared per the brand). */
+
+/* Square icon tile: bordered, orange glyph, no tinted fill per Orange brand. */
 .ico-square {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--r-sm);
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   display: grid;
   place-items: center;
-  background: var(--orange-soft-dark);
+  background: var(--bg);
   color: var(--orange);
 }
-.ico-square :deep(.ui-icon) { width: 19px; height: 19px; }
+.ico-square :deep(.ui-icon) { width: 20px; height: 20px; }
+
+/* Agent name: 16px/800 - editorial weight. */
 .agent-card-name {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-size: 16px;
+  font-weight: var(--fw-heavy);
   color: var(--text);
   line-height: 1.25;
+  display: block;
+  margin-top: 14px;
 }
+
+/* Tagline: orange accent text (AA-safe token), bold. */
 .agent-card-tagline {
-  font-size: var(--fs-xs);
-  color: var(--orange);
-  font-weight: 500;
-  margin-top: -4px;
-}
-.agent-card-desc {
   font-size: var(--fs-sm);
+  color: var(--orange-text);
+  font-weight: var(--fw-bold);
+  margin-top: 8px;
+}
+
+.agent-card-desc {
+  font-size: var(--fs-base);
   color: var(--text-2);
   line-height: 1.55;
   flex: 1;
+  margin-top: 6px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Card foot: tools count + chevron. Square, 1px top border. */
 .agent-card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
-  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
 }
 .foot-meta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-  font-weight: var(--fw-medium);
+  gap: 7px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
 }
-.foot-meta :deep(.ui-icon) { width: 13px; height: 13px; }
-.foot-meta--muted { font-weight: var(--fw-regular); }
-.open-ico { color: var(--text-3); display: inline-flex; transition: transform var(--dur) var(--ease), color var(--dur) var(--ease); }
-.agent-card:hover .open-ico { color: var(--orange); transform: translateX(2px); }
+.foot-meta :deep(.ui-icon) { width: 15px; height: 15px; }
+.foot-meta--muted { color: var(--text-3); }
+.open-ico { display: inline-flex; color: var(--text-3); }
 .open-ico :deep(.ui-icon) { width: 15px; height: 15px; }
 
 /* --- Badges (shared list + detail) -------------------------------------- */
+/* Square badges - no border-radius. */
 .bdg {
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  padding: 3px 8px;
-  border-radius: var(--r-xs);
-  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 0;
+  font-weight: var(--fw-heavy);
   text-transform: uppercase;
   white-space: nowrap;
 }
-.bdg.default { background: var(--orange-soft-dark); color: var(--orange); }
+.bdg.default { background: var(--orange); color: #fff; }
 .bdg.new { background: var(--orange); color: #fff; }
-.bdg.beta { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.bdg.beta { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-strong); }
 
 /* --- Detail ------------------------------------------------------------- */
+/* Back link: plain, no background pill. */
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
+  gap: 7px;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
   color: var(--text-2);
-  margin-bottom: var(--s-6);
-  padding: 5px 10px 5px 6px;
-  border-radius: var(--r-sm);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  margin-bottom: 24px;
+  transition: color var(--dur) var(--ease);
 }
-.back-link:hover { background: var(--surface-hover); color: var(--text); }
+.back-link:hover { color: var(--text); }
 .back-link :deep(.ui-icon) { width: 16px; height: 16px; }
 
+/* Detail header: large square icon tile + name + tagline. */
 .agent-hero {
   display: flex;
   align-items: center;
-  gap: var(--s-5);
+  gap: 18px;
   margin-bottom: var(--s-6);
 }
-/* Agent identity chip: a squared orange-soft accent (flat, no glow). */
+
+/* Large icon tile: 56px, bordered square, orange glyph. */
 .agent-hero-ico {
   width: 56px;
   height: 56px;
   flex-shrink: 0;
-  border-radius: var(--r);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   display: grid;
   place-items: center;
-  background: var(--orange-soft-dark);
+  background: var(--bg);
   color: var(--orange);
 }
-.agent-hero-ico :deep(.ui-icon) { width: 26px; height: 26px; }
-.agent-hero-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.agent-hero-ico :deep(.ui-icon) { width: 28px; height: 28px; }
+
+.agent-hero-text { flex: 1; min-width: 0; }
+.agent-hero-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 0; }
+
+/* Detail h1: large heavy. */
 .agent-hero-name {
-  font-size: var(--fs-3xl);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-tight);
   margin: 0;
-  line-height: 1.05;
+  line-height: 1.1;
   color: var(--text);
 }
-.agent-hero-row .bdg { font-size: 10px; padding: 3px 9px; }
+.agent-hero-row .bdg { font-size: 10px; padding: 2px 6px; }
+
+/* Tagline under name: orange accent text. */
 .agent-hero-tagline {
-  font-size: var(--fs-md);
-  color: var(--orange);
-  font-weight: 500;
-  margin: 8px 0 0;
+  font-size: var(--fs-base);
+  color: var(--orange-text);
+  font-weight: var(--fw-bold);
+  margin: 6px 0 0;
 }
 
+/* Description paragraph under the hero. */
 .agent-lead {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
   color: var(--text);
   line-height: 1.6;
-  margin: 0 0 var(--s-8);
+  margin: 22px 0 28px;
   max-width: 760px;
-  font-weight: var(--fw-regular);
 }
 
+/* Two-column doc grid (capabilities + tools). */
 .agent-doc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -357,38 +395,54 @@ function badgeLabel(b) {
   margin-bottom: var(--s-8);
   align-items: start;
 }
-.agent-doc-col { padding: var(--s-5); border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); }
+
+/* Each section card: square, 1px border, no radius. */
+.agent-doc-col {
+  padding: var(--s-5);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--bg);
+}
+
+/* Section title: orange uppercase eyebrow weight, muted. */
 .agent-doc-title {
   font-size: 11px;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  color: var(--text-3);
-  font-weight: 600;
-  margin-bottom: var(--s-3);
+  color: var(--text-2);
+  font-weight: var(--fw-heavy);
+  margin-bottom: var(--s-4);
 }
+
+/* Capability list: orange check icon per item. */
 .agent-bullets { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.agent-bullets li { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-sm); line-height: 1.5; color: var(--text); }
-.agent-bullets .ic { color: var(--orange); flex-shrink: 0; margin-top: 1px; }
-.agent-bullets .ic :deep(.ui-icon) { width: 15px; height: 15px; }
-.tool-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.agent-bullets li { display: flex; align-items: flex-start; gap: 10px; font-size: var(--fs-base); line-height: 1.5; color: var(--text); }
+.agent-bullets .ic { color: var(--orange); flex-shrink: 0; margin-top: 2px; }
+.agent-bullets .ic :deep(.ui-icon) { width: 16px; height: 16px; }
+
+/* Tool chips: square, bordered, monospaced. No radius. */
+.tool-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .tool-chip {
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
   padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   color: var(--text);
 }
-.agent-cta-row { display: flex; gap: var(--s-3); }
+
+.agent-cta-row { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
 
 @media (max-width: 760px) {
   .agents-grid { grid-template-columns: 1fr; }
   .agent-doc-grid { grid-template-columns: 1fr; }
-  .agent-hero-name { font-size: var(--fs-3xl); }
+  .agent-hero-name { font-size: var(--fs-xl); }
 }
-/* Honor reduced-motion for positional movement too (not just the entrance fade). */
+
+/* Honor reduced-motion: no positional transforms at all. */
 @media (prefers-reduced-motion: reduce) {
-  .agent-card:hover { transform: none; }
-  .agent-card:hover .open-ico { transform: none; }
+  .agent-card { transition: border-color var(--dur) var(--ease); }
 }
 </style>

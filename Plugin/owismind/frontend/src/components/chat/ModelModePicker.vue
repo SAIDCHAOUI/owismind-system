@@ -125,7 +125,8 @@ function cancel() {
 
 <style scoped>
 .mode-wrap { display: inline-flex; }
-/* Trigger pill */
+
+/* Trigger pill: compact inline control that opens the chooser. */
 .mode-trigger {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px; border-radius: var(--r-pill);
@@ -139,70 +140,90 @@ function cancel() {
 .dot.lvl-2 { background: var(--orange); }
 .dot.lvl-3 { background: var(--danger); }
 
-/* Modal body */
-.intro { font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 16px; line-height: 1.5; }
+/* ---- Modal inner content (the frame comes from Modal.vue) ---- */
 
-/* Two-pane picker (list + detail), DSS "conversation settings" mood: flat, white,
-   thin borders, near-square corners, brand orange used only as an accent (Orange
-   80/20 rule). */
-.picker { display: flex; gap: var(--s-4); align-items: stretch; }
+/* Two-column grid: bordered option list (left) + bordered detail panel (right).
+   Square geometry throughout - no card radius. */
+.picker {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+}
 
-.mode-list { flex: 0 0 196px; display: flex; flex-direction: column; gap: 4px; }
+/* Option list: a single bordered block; rows separated by inner bottom borders. */
+.mode-list {
+  border: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+}
 .mode-row {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  text-align: left; width: 100%; padding: 11px 12px;
-  border: 1px solid var(--border); border-left: 3px solid transparent;
-  border-radius: 4px; background: var(--bg);
+  text-align: left; width: 100%; padding: 16px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  background: var(--bg);
   transition: background var(--dur) var(--ease);
 }
-.mode-row:hover { background: var(--surface-hover); }
-/* Selected row: light grey fill + brand-orange left bar (mirrors the DSS list). */
-.mode-row.active { background: var(--surface-2); border-color: var(--border-strong); border-left-color: var(--orange); }
-.row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.row-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
-.row-check { color: var(--orange); flex-shrink: 0; }
-/* Recommended tag: small orange label (the brand accent), no fill. */
+.mode-row:last-child { border-bottom: none; }
+.mode-row:hover { background: var(--surface); }
+/* Active row: orange left bar + soft fill (Orange 80/20 accent rule). */
+.mode-row.active { border-left-color: var(--orange); background: var(--surface); }
+
+.row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.row-name { font-size: 15px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }
+/* RECOMMENDED label: uppercase, orange, tight tracking. */
 .reco-badge {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--orange-text); white-space: nowrap;
 }
+/* Check shown only when active; orange. */
+.row-check { color: var(--orange); flex-shrink: 0; }
 
-/* Detail panel. Fixed min-height so selecting a different mode never changes the
-   dialog height (no reflow / jump). */
+/* Detail panel: flat border, square, fixed min-height so switching rows never
+   reflowing the dialog. */
 .mode-detail {
-  flex: 1; min-width: 0; min-height: 200px; padding: var(--s-4);
-  border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
+  border: 1px solid var(--border-strong);
+  padding: 20px;
+  min-height: 220px;
 }
-.detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.detail-name { font-size: var(--fs-lg); font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.detail-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.55; margin: 0; }
-/* Recommendation note: sober text (not an orange paragraph), slightly emphasised. */
-.detail-reco { font-size: var(--fs-sm); color: var(--text); font-weight: 500; line-height: 1.5; margin: 8px 0 0; }
+.detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.detail-name { font-size: 16px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }
+.detail-desc { font-size: 14px; color: var(--text-2); line-height: 1.55; margin: 0 0 12px; }
+/* Recommendation line: slightly bolder, near-black (not orange). */
+.detail-reco { font-size: 14px; color: var(--text); font-weight: 600; line-height: 1.5; margin: 0; }
 
-.meters { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
-.meter-row { display: flex; align-items: center; gap: 10px; }
+/* Cost / Speed meter rows with 5-dot gauges. */
+.meters { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.meter-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .meter-label {
-  flex: 0 0 56px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
-  text-transform: uppercase; color: var(--text-3);
+  width: 54px; flex-shrink: 0;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-2);
+  font-family: var(--font-sans);
 }
-.meter5 { display: inline-flex; gap: 4px; }
-.meter5 i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
-/* Dark filled dots, like the DSS cost/eCO2 meters. */
+/* Dots: circles by nature (not affected by the square-geometry rule). */
+.meter5 { display: inline-flex; gap: 5px; }
+.meter5 i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
 .meter5 i.on { background: var(--text); }
 .meter-val { font-size: var(--fs-xs); color: var(--text-2); }
 
-/* Cost note: a quiet, neutral hint (grey, no orange fill) with a small wallet cue. */
+/* Envelope note: flat surface, thin border, square, wallet icon + quiet text. */
 .envelope {
-  display: flex; align-items: flex-start; gap: 8px;
-  font-size: var(--fs-xs); color: var(--text-2); line-height: 1.5;
-  margin: 18px 0 0; padding: 10px 12px; border-radius: 4px;
-  background: var(--surface-2);
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; color: var(--text-2); line-height: 1.5;
+  margin-top: 18px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border);
 }
-.envelope-ico { margin-top: 1px; color: var(--text-3); }
+.envelope-ico { flex-shrink: 0; margin-top: 1px; color: var(--text-3); }
 
 @media (max-width: 560px) {
-  .picker { flex-direction: column; }
-  .mode-list { flex: 1 1 auto; }
+  .picker { grid-template-columns: 1fr; }
   .mode-detail { min-height: 0; }
+}
+
+/* Respect user motion preference for the trigger transition. */
+@media (prefers-reduced-motion: reduce) {
+  .mode-trigger, .mode-row { transition: none; }
 }
 </style>

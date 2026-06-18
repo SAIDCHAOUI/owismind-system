@@ -1,7 +1,6 @@
 <script setup>
-// Settings page (Phase 3). Faithful to the maquette's compact layout
-// (`.set-compact` / `.set-head` / `.set-top-grid`) but HONEST: it shows only what
-// the backend actually provides.
+// Settings page (Phase 3). Faithful to the maquette's compact layout but HONEST:
+// it shows only what the backend actually provides.
 //   - Profile  : from /me - display name, Dataiku id, real groups. No invented
 //                email / role / title. The "edit profile" button is disabled
 //                ("soon") because there is no "set my name" route yet (memory L017).
@@ -90,23 +89,27 @@ const convOptions = computed(() => {
 function onContextChange(e) {
   ui.setContextMessages(e.target.value)
 }
+
+// Current locale flag + label for the language select display chip.
+const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lang) || AVAILABLE_LOCALES[0])
 </script>
 
 <template>
   <PageShell wide>
-    <!-- Compact header: title on the left, quick theme + language prefs on the right -->
+    <!-- Custom header: eyebrow + h1 + orange title-bar on left; theme/lang controls on right -->
     <template #header>
-      <div class="set-head">
-        <div class="set-head-l">
+      <div class="header-row">
+        <div class="header-left">
           <p class="set-eyebrow">{{ t('set.eyebrow') }}</p>
-          <h1 class="set-title">{{ t('set.title') }}</h1>
+          <h1 class="set-h1">{{ t('set.title') }}</h1>
+          <div class="title-bar"></div>
         </div>
-        <div class="set-head-r">
-          <div class="pref-toggle" role="group" :aria-label="t('set.appearance')">
+        <div class="controls">
+          <!-- Theme segmented control: flat 1px border row, active = near-black bg + white text -->
+          <div class="seg" role="group" :aria-label="t('set.appearance')">
             <button
               type="button"
-              class="pref-toggle-btn"
-              :class="{ active: ui.theme === 'light' }"
+              :class="{ on: ui.theme === 'light' }"
               :aria-pressed="ui.theme === 'light'"
               @click="ui.setTheme('light')"
             >
@@ -114,8 +117,7 @@ function onContextChange(e) {
             </button>
             <button
               type="button"
-              class="pref-toggle-btn"
-              :class="{ active: ui.theme === 'dark' }"
+              :class="{ on: ui.theme === 'dark' }"
               :aria-pressed="ui.theme === 'dark'"
               @click="ui.setTheme('dark')"
             >
@@ -123,145 +125,152 @@ function onContextChange(e) {
             </button>
           </div>
 
-          <div class="pref-select-wrap">
+          <!-- Language: flag chip + label + chevron over an invisible native select -->
+          <div class="lang-wrap">
+            <span class="lang-flag-chip" aria-hidden="true">{{ currentLocale.flag }}</span>
+            <span class="lang-label" aria-hidden="true">{{ currentLocale.label }}</span>
             <select
-              class="pref-select"
+              class="lang-select"
               :value="ui.lang"
               :aria-label="t('set.language')"
               @change="onLangChange"
             >
               <option v-for="l in AVAILABLE_LOCALES" :key="l.id" :value="l.id">
-                {{ l.flag }}&nbsp;&nbsp;{{ l.label }}
+                {{ l.label }}
               </option>
             </select>
-            <span class="pref-select-arr"><Icon name="chevronDown" /></span>
+            <span class="lang-chevron" aria-hidden="true"><Icon name="chevronDown" /></span>
           </div>
         </div>
       </div>
     </template>
 
-    <!-- Top grid: profile (real) + budget (empty) -->
+    <!-- Top grid: profile (real) + budget (real) -->
     <div class="set-top-grid">
-      <SettingCard :eyebrow="t('set.profile')">
-        <template #action>
-          <button class="set-profile-edit-btn" type="button" disabled :title="t('x.soon')">
+      <!-- Profile card -->
+      <SettingCard>
+        <div class="card-label-row">
+          <span class="card-lbl">{{ t('set.profile') }}</span>
+          <button class="set-edit-btn" type="button" disabled :title="t('x.soon')">
             <Icon name="pencil" /><span>{{ t('set.profile.edit') }}</span>
-            <span class="soon-tag">{{ t('x.soon') }}</span>
+            <span class="soon-badge">{{ t('x.soon') }}</span>
           </button>
-        </template>
+        </div>
 
-        <div class="set-profile-row">
+        <div class="profile-name">
           <div class="avatar-lg">{{ session.initials }}</div>
-          <div class="set-profile-info">
-            <div class="name-row">
-              <span class="name">{{ session.displayName || '-' }}</span>
-            </div>
-            <div class="set-profile-meta-row">
-              <span class="did-pill">
-                <Icon name="lock" /><span class="did-label">Dataiku</span>
-                <span class="did-id mono">{{ userId }}</span>
-              </span>
-            </div>
-            <div v-if="groups.length" class="group-block">
-              <span class="group-label">{{ t('set.profile.groups') }}</span>
-              <div class="group-pills">
-                <span v-for="g in groups" :key="g" class="group-pill">{{ g }}</span>
-              </div>
+          <div class="profile-info">
+            <b class="profile-display-name">{{ session.displayName || '-' }}</b>
+            <div class="id-pill">
+              <Icon name="lock" /><span class="id-label">Dataiku</span>
+              <span class="id-uid">{{ userId }}</span>
             </div>
           </div>
         </div>
+
+        <template v-if="groups.length">
+          <p class="card-lbl" style="margin: 20px 0 10px;">{{ t('set.profile.groups') }}</p>
+          <div class="chips">
+            <span v-for="g in groups" :key="g" class="chip accent">{{ g }}</span>
+          </div>
+        </template>
       </SettingCard>
 
-      <SettingCard :eyebrow="t('set.budget')">
+      <!-- Monthly budget card -->
+      <SettingCard>
+        <p class="card-lbl" style="margin: 0 0 14px;">{{ t('set.budget') }}</p>
+
         <div v-if="!usage" class="bud-loading muted">{{ t('set.budget.loading') }}</div>
-        <div v-else class="bud" :class="level">
-          <div class="bud-head">
-            <div class="bud-amounts">
-              <span class="bud-spent mono">{{ money(usage.spent_usd) }}</span>
-              <span class="bud-of mono">/ {{ money(usage.limit_usd) }}</span>
-            </div>
-            <span class="bud-pct mono" :class="level">{{ pct }}%</span>
+        <div v-else :class="['bud', level]">
+          <!-- Amount row: big mono spent + "/ limit" + right-aligned percent -->
+          <div class="budget-amt">
+            <b class="bud-spent">{{ money(usage.spent_usd) }}</b>
+            <span class="bud-of">/ {{ money(usage.limit_usd) }}</span>
+            <span class="bud-pct" :class="level">{{ pct }}%</span>
           </div>
 
+          <!-- 8px flat bar, orange fill (or danger on over-budget) -->
           <div class="bud-bar" :class="level">
-            <span class="bud-fill" :style="{ width: fill + '%' }" />
+            <i :style="{ width: fill + '%' }"></i>
           </div>
 
-          <div class="bud-meta">
-            <span class="bud-remaining">
-              <strong class="mono">{{ money(usage.remaining_usd) }}</strong> {{ t('set.budget.remaining') }}
-            </span>
-            <span v-if="usage.next_reset" class="bud-reset">
-              {{ t('set.budget.resets', [shortDate(usage.next_reset)]) }}
-            </span>
+          <div class="budget-meta">
+            <span><strong class="bud-remaining-val">{{ money(usage.remaining_usd) }}</strong> {{ t('set.budget.remaining') }}</span>
+            <span v-if="usage.next_reset" class="bud-reset-date">{{ t('set.budget.resets', [shortDate(usage.next_reset)]) }}</span>
           </div>
 
-          <!-- Blocked / disabled / transparency line -->
+          <p class="budget-sub">{{ sourceLabel }}</p>
+
+          <!-- Blocked / off flags -->
           <p v-if="blocked" class="bud-flag bud-flag--block">
             <Icon name="alert" />{{ t('set.budget.blocked', [shortDate(usage.next_reset)]) }}
           </p>
           <p v-else-if="level === 'off'" class="bud-flag bud-flag--off">
             <Icon name="wallet" />{{ t('set.budget.off') }}
           </p>
-          <p class="bud-source muted">{{ sourceLabel }}</p>
 
-          <div class="bud-stats">
-            <span class="bud-stat">
-              <span class="bud-stat-k">{{ t('set.budget.requests') }}</span>
-              <span class="bud-stat-v mono">{{ formatTokens(usage.request_count, locale) }}</span>
-            </span>
-            <span class="bud-stat">
-              <span class="bud-stat-k">{{ t('set.usage.tokens_month') }}</span>
-              <span class="bud-stat-v mono">{{ tokens(usage.total_tokens) }}</span>
-            </span>
+          <!-- Mini-grid: requests + tokens this month -->
+          <div class="mini-grid">
+            <div>
+              <div class="ml">{{ t('set.budget.requests') }}</div>
+              <div class="mv">{{ formatTokens(usage.request_count, locale) }}</div>
+            </div>
+            <div>
+              <div class="ml">{{ t('set.usage.tokens_month') }}</div>
+              <div class="mv">{{ tokens(usage.total_tokens) }}</div>
+            </div>
           </div>
         </div>
       </SettingCard>
     </div>
 
     <!-- Agent-context window preference (real, persisted in the ui store) -->
-    <SettingCard :eyebrow="t('set.context')" class="set-history-card">
-      <div class="set-history-row">
-        <div class="set-history-text">
-          <p class="set-history-label">{{ t('set.context.max') }}</p>
-          <p class="set-history-desc">{{ t('set.context.max_desc') }}</p>
+    <SettingCard class="set-context-card">
+      <div class="block-title">{{ t('set.context') }}</div>
+      <div class="ctx-row">
+        <div class="ctx-text">
+          <div class="ctx-lab">{{ t('set.context.max') }}</div>
+          <div class="ctx-sub">{{ t('set.context.max_desc') }}</div>
         </div>
-        <div class="pref-select-wrap">
+        <div class="ctx-select-wrap">
           <select
-            class="pref-select pref-select--narrow"
+            class="ctx-select"
             :value="ui.contextMessages"
             :aria-label="t('set.context.max')"
             @change="onContextChange"
           >
             <option v-for="n in convOptions" :key="n" :value="n">{{ n }}</option>
           </select>
-          <span class="pref-select-arr"><Icon name="chevronDown" /></span>
+          <span class="ctx-chevron"><Icon name="chevronDown" /></span>
         </div>
       </div>
     </SettingCard>
 
-    <!-- Usage detail (this month + lifetime) -->
-    <SettingCard :eyebrow="t('set.usage')" class="set-usage-card">
+    <!-- Usage history: 4-up stat tiles separated by 1px right-borders -->
+    <SettingCard class="set-usage-card">
+      <div class="block-title">{{ t('set.usage') }}</div>
       <div v-if="!usage" class="bud-loading muted">{{ t('set.budget.loading') }}</div>
-      <div v-else class="use-grid">
-        <div class="use-cell">
-          <span class="use-k">{{ t('set.usage.tokens_month') }}</span>
-          <span class="use-v mono">{{ tokens(usage.total_tokens) }}</span>
-          <span class="use-sub mono">↑ {{ tokens(usage.input_tokens) }} · ↓ {{ tokens(usage.output_tokens) }}</span>
+      <div v-else class="stat-grid">
+        <div class="stat">
+          <div class="sl">{{ t('set.usage.tokens_month') }}</div>
+          <div class="sv">{{ tokens(usage.total_tokens) }}</div>
+          <div class="sm">
+            <span class="up">{{ tokens(usage.input_tokens) }}</span> · <span class="dn">{{ tokens(usage.output_tokens) }}</span>
+          </div>
         </div>
-        <div class="use-cell">
-          <span class="use-k">{{ t('set.usage.spend_month') }}</span>
-          <span class="use-v mono">{{ money(usage.spent_usd) }}</span>
-          <span class="use-sub">{{ formatTokens(usage.request_count, locale) }} {{ t('set.usage.calls') }}</span>
+        <div class="stat">
+          <div class="sl">{{ t('set.usage.spend_month') }}</div>
+          <div class="sv">{{ money(usage.spent_usd) }}</div>
+          <div class="sm">{{ formatTokens(usage.request_count, locale) }} {{ t('set.usage.calls') }}</div>
         </div>
-        <div class="use-cell">
-          <span class="use-k">{{ t('set.usage.lifetime_cost') }}</span>
-          <span class="use-v mono">{{ money(usage.lifetime.cost_usd) }}</span>
-          <span class="use-sub mono">{{ tokens(usage.lifetime.total_tokens) }} {{ t('msg.usage_tokens') }}</span>
+        <div class="stat">
+          <div class="sl">{{ t('set.usage.lifetime_cost') }}</div>
+          <div class="sv">{{ money(usage.lifetime.cost_usd) }}</div>
+          <div class="sm">{{ tokens(usage.lifetime.total_tokens) }} {{ t('msg.usage_tokens') }}</div>
         </div>
-        <div v-if="usage.lifetime.last_usage_at" class="use-cell">
-          <span class="use-k">{{ t('set.usage.last') }}</span>
-          <span class="use-v">{{ shortDate(usage.lifetime.last_usage_at) }}</span>
+        <div class="stat stat--last">
+          <div class="sl">{{ t('set.usage.last') }}</div>
+          <div class="sv sv--date">{{ usage.lifetime.last_usage_at ? shortDate(usage.lifetime.last_usage_at) : '-' }}</div>
         </div>
       </div>
     </SettingCard>
@@ -269,253 +278,589 @@ function onContextChange(e) {
 </template>
 
 <style scoped>
-/* --- Compact header (title + inline prefs) --- */
-.set-head {
+/* === Header row: left = eyebrow + h1 + title-bar; right = controls === */
+.header-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--s-5);
+  gap: var(--s-6);
   flex-wrap: wrap;
-  margin-bottom: var(--s-7);
+  margin-bottom: var(--s-9);
 }
+
 .set-eyebrow {
-  font-size: var(--fs-xs);
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--orange);
-  margin: 0 0 var(--s-3);
+  margin: 0 0 10px;
 }
-.set-title {
-  font-size: var(--fs-2xl);
-  font-weight: 600;
-  letter-spacing: -0.025em;
+
+.set-h1 {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
   color: var(--text);
   margin: 0;
+  line-height: 1.05;
 }
-.set-head-r {
+
+/* 52x4px solid orange title-bar, matches mockup */
+.title-bar {
+  width: 52px;
+  height: 4px;
+  background: var(--orange);
+  margin-top: 16px;
+}
+
+/* Controls row: theme segmented + language select */
+.controls {
   display: flex;
   align-items: center;
-  gap: var(--s-3);
+  gap: 10px;
+  margin-top: 6px;
   flex-wrap: wrap;
 }
 
-/* Theme segmented control */
-.pref-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--surface);
+/* Segmented control: 1px border box, active = near-black bg + inverted text */
+.seg {
+  display: flex;
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-sm);
 }
-.pref-toggle-btn {
-  display: inline-flex;
+
+.seg button {
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border-radius: calc(var(--r-sm) - 2px);
+  padding: 9px 16px;
   font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text-2);
-  transition: all var(--dur) var(--ease);
-}
-.pref-toggle-btn :deep(.ui-icon) { width: 15px; height: 15px; }
-.pref-toggle-btn.active {
-  background: var(--bg);
-  color: var(--text);
-  font-weight: 500;
-  box-shadow: var(--shadow);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
-/* Language select */
-.pref-select-wrap {
+.seg button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.seg button :deep(.ui-icon) {
+  width: 15px;
+  height: 15px;
+}
+
+.seg button.on {
+  background: var(--text);
+  color: var(--bg);
+}
+
+/* Language select: flag chip + label + chevron over a native select */
+.lang-wrap {
   position: relative;
   display: inline-flex;
-}
-.pref-select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 8px 36px 8px 12px;
-  min-width: 180px;
-  font-size: var(--fs-sm);
-  color: var(--text);
-  background: var(--bg);
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  padding: 9px 14px;
+  background: var(--bg);
 }
-.pref-select:hover { border-color: var(--orange); }
-.pref-select:focus {
-  outline: none;
-  border-color: var(--orange);
-  box-shadow: 0 0 0 2px var(--orange-soft-dark);
+
+.lang-flag-chip {
+  font-size: 13px;
+  pointer-events: none;
 }
-.pref-select-arr {
+
+.lang-select {
+  /* Invisible overlay for click/keyboard, positioned over the whole wrapper */
   position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+.lang-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.lang-chevron {
   pointer-events: none;
   color: var(--text-3);
+  line-height: 0;
+  margin-left: 4px;
 }
-.pref-select-arr :deep(.ui-icon) { width: 15px; height: 15px; }
 
-/* --- Layout grids --- */
+.lang-chevron :deep(.ui-icon) {
+  width: 14px;
+  height: 14px;
+}
+
+/* === Layout grids === */
 .set-top-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--s-4);
   margin-bottom: var(--s-4);
 }
-.set-usage-card { display: block; }
-.set-history-card { display: block; margin-bottom: var(--s-4); }
 
-/* History preferences row */
-.set-history-row {
+.set-context-card {
+  display: block;
+  margin-bottom: var(--s-4);
+}
+
+.set-usage-card {
+  display: block;
+}
+
+/* === Card internals: label rows, profile, budget === */
+
+/* Uppercase 11px/800 card label */
+.card-lbl {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.card-label-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--s-5);
-  flex-wrap: wrap;
+  margin-bottom: 18px;
 }
-.set-history-text { min-width: 0; }
-.set-history-label { font-size: var(--fs-sm); font-weight: 600; color: var(--text); margin: 0 0 4px; }
-.set-history-desc { font-size: var(--fs-xs); color: var(--text-3); margin: 0; max-width: 520px; }
-.pref-select--narrow { min-width: 90px; }
 
-/* --- Profile card (real /me data only) --- */
-.set-profile-row {
+/* --- Profile card --- */
+.profile-name {
   display: flex;
   align-items: flex-start;
-  gap: var(--s-4);
+  gap: 14px;
+  margin-bottom: 0;
 }
+
+/* Avatar: circle, near-black bg, white initial, bold 800 */
 .avatar-lg {
   width: 52px;
   height: 52px;
-  flex-shrink: 0;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-.set-profile-info { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.name-row { display: flex; align-items: center; gap: 8px; }
-.name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
-.set-profile-meta-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.did-pill {
-  display: inline-flex;
+  background: var(--text);
+  color: var(--bg);
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border-radius: var(--r-pill);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-}
-.did-pill :deep(.ui-icon) { width: 12px; height: 12px; color: var(--text-3); }
-.did-label { font-weight: 600; color: var(--text-2); }
-.did-id { color: var(--text); font-size: 11px; }
-.group-block { display: flex; flex-direction: column; gap: 6px; }
-.group-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.group-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-.group-pill {
-  padding: 2px 9px;
-  border-radius: var(--r-pill);
-  background: var(--orange-soft-dark);
-  color: var(--orange);
-  font-size: 11px;
-  font-weight: 500;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 20px;
+  flex: 0 0 52px;
 }
 
-/* Disabled "edit profile" button (no set-name route yet → labeled "soon") */
-.set-profile-edit-btn {
+:global(body[data-theme="dark"] .avatar-lg) {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-display-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* id-pill: 1px border, flat, lock icon + "Dataiku" label + mono uid */
+.id-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--bg);
-  font-size: var(--fs-xs);
+  border: 1px solid var(--border-strong);
+  padding: 5px 9px;
+  font-size: 12px;
   color: var(--text-2);
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-.set-profile-edit-btn :deep(.ui-icon) { width: 13px; height: 13px; }
-.soon-tag {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 1px 6px;
-  border-radius: var(--r-pill);
-  background: var(--orange-soft-dark);
-  color: var(--orange);
 }
 
-/* --- Monthly budget card (real /usage data) --- */
-.bud-loading { font-size: var(--fs-sm); padding: var(--s-3) 0; }
-.bud { display: flex; flex-direction: column; gap: var(--s-3); }
-.bud-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
-.bud-amounts { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.bud-spent { font-size: var(--fs-2xl); font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
-.bud-of { font-size: var(--fs-md); color: var(--text-3); }
-.bud-pct { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.id-pill :deep(.ui-icon) {
+  width: 12px;
+  height: 12px;
+  color: var(--text-3);
+}
+
+.id-label {
+  font-weight: 600;
+}
+
+.id-uid {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Square chips with orange accent border + accent text */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--border-strong);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  /* border-radius: 0 is the default (no border-radius = square) */
+}
+
+.chip.accent {
+  border-color: var(--orange);
+  color: var(--orange-text);
+}
+
+/* Disabled "customize profile" button */
+.set-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--bg);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.set-edit-btn :deep(.ui-icon) {
+  width: 13px;
+  height: 13px;
+}
+
+.soon-badge {
+  display: inline-block;
+  background: var(--orange);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* --- Monthly budget card --- */
+.bud-loading {
+  font-size: var(--fs-sm);
+  padding: var(--s-3) 0;
+}
+
+.bud {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Big mono amount: "$x.xx" + "/ $50.00" + right-pushed percent */
+.budget-amt {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.bud-spent {
+  font-size: 34px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text);
+  line-height: 1;
+}
+
+.bud-of {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-3);
+}
+
+.bud-pct {
+  margin-left: auto;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
 .bud-pct.warn { color: var(--orange-text); }
 .bud-pct.over { color: var(--danger); }
 
-/* Gauge: a rounded track with a fill colored by severity. */
-.bud-bar { position: relative; height: 9px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
-.bud-fill {
-  position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill);
-  background: var(--orange); transition: width var(--dur-slow) var(--ease);
+/* 8px flat track (no border-radius = square), orange fill */
+.bud-bar {
+  height: 8px;
+  background: var(--surface-2);
+  margin: 16px 0;
+  overflow: hidden;
 }
-.bud-bar.warn .bud-fill { background: var(--orange); }
-.bud-bar.over .bud-fill { background: var(--danger); }
-.bud-bar.off .bud-fill { background: var(--text-3); }
 
-.bud-meta { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
-.bud-remaining { font-size: var(--fs-sm); color: var(--text-2); }
-.bud-remaining strong { color: var(--text); font-weight: 600; }
-.bud-reset { font-size: var(--fs-xs); color: var(--text-3); }
+.bud-bar i {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+  transition: width var(--dur-slow) var(--ease);
+}
 
+.bud-bar.over i { background: var(--danger); }
+.bud-bar.off i  { background: var(--text-3); }
+
+.budget-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.bud-remaining-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.bud-reset-date {
+  color: var(--text-3);
+}
+
+/* "Monthly limit: $50.00 (default)." sub-text */
+.budget-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 6px 0 0;
+}
+
+/* Blocked / off flags */
 .bud-flag {
-  display: flex; align-items: center; gap: 7px; margin: 0;
-  font-size: var(--fs-xs); line-height: 1.5; padding: 7px 10px; border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  font-size: var(--fs-xs);
+  padding: 7px 10px;
 }
-.bud-flag :deep(.ui-icon) { width: 14px; height: 14px; flex-shrink: 0; }
-.bud-flag--block { color: var(--danger); background: var(--danger-soft); }
-.bud-flag--off { color: var(--text-2); background: var(--surface); }
-.bud-source { font-size: var(--fs-xs); line-height: 1.5; margin: 0; }
 
-.bud-stats { display: flex; gap: var(--s-5); flex-wrap: wrap; padding-top: var(--s-2); border-top: 1px solid var(--border); }
-.bud-stat { display: flex; flex-direction: column; gap: 2px; }
-.bud-stat-k { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); }
-.bud-stat-v { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
-
-/* --- Usage detail grid (this month + lifetime) --- */
-.use-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-4); }
-.use-cell {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r); background: var(--bg);
+.bud-flag :deep(.ui-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
-.use-k { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); }
-.use-v { font-size: var(--fs-lg); font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.use-sub { font-size: var(--fs-xs); color: var(--text-3); }
 
+.bud-flag--block {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.bud-flag--off {
+  color: var(--text-2);
+  background: var(--surface);
+}
+
+/* 2-column mini-grid: requests + tokens this month */
+.mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.ml {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.mv {
+  font-size: 20px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text);
+  margin-top: 4px;
+}
+
+/* --- Context preferences row --- */
+.block-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 0 0 16px;
+}
+
+.ctx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-6);
+}
+
+.ctx-text {
+  min-width: 0;
+}
+
+.ctx-lab {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.ctx-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+
+/* Context select: 1px border, flat, narrow */
+.ctx-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+}
+
+.ctx-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 9px 36px 9px 14px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  min-width: 72px;
+}
+
+.ctx-select:focus {
+  outline: none;
+}
+
+.ctx-chevron {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: var(--text-3);
+  line-height: 0;
+}
+
+.ctx-chevron :deep(.ui-icon) {
+  width: 14px;
+  height: 14px;
+}
+
+/* --- Usage history: 4-up stat tiles, 1px right-border separators --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  /* Tiles bleed to the card edges via negative margin on the wrapping SettingCard padding */
+  margin: 12px -1px -1px;
+  border-top: 1px solid var(--border);
+}
+
+.stat {
+  padding: 20px 22px;
+  border-right: 1px solid var(--border);
+}
+
+.stat--last {
+  border-right: none;
+}
+
+/* Uppercase 11px/800 stat label */
+.sl {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
+/* 22px mono value */
+.sv {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+/* Date value uses sans-serif at slightly smaller size */
+.sv--date {
+  font-family: var(--font-sans);
+  font-size: 18px;
+}
+
+/* Small sub-line under the value */
+.sm {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  font-family: var(--font-mono);
+}
+
+.up { color: var(--success); }
+.dn { color: var(--text-2); }
+
+/* --- Responsive --- */
 @media (max-width: 760px) {
-  .set-top-grid { grid-template-columns: 1fr; }
+  .set-top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat:nth-child(2) {
+    border-right: none;
+  }
+
+  .stat:nth-child(3) {
+    border-right: 1px solid var(--border);
+  }
+
+  .header-row {
+    flex-direction: column;
+  }
+
+  .controls {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat--last {
+    border-bottom: none;
+  }
 }
 </style>

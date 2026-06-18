@@ -81,41 +81,66 @@ const langShort = computed(() => {
 </template>
 
 <style scoped>
+/* =========================================================================
+   Top bar - Orange brand. Flat, 56px, bottom hairline.
+   Left: sidebar expand (when collapsed) + contextual title.
+   Right: theme toggle + language selector.
+   Matches mockup .topbar / .icon-btn / .lang spec.
+   ========================================================================= */
 .main-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s-4) var(--s-6);
+  padding: 0 22px;
   height: 56px;
+  gap: 16px;
   flex-shrink: 0;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
-.main-top-left { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
-.main-top-right { display: flex; align-items: center; gap: var(--s-2); }
+.main-top-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.main-top-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+/* Contextual title: modest weight in the topbar (the big H1 lives in the page body) */
 .main-top-title {
-  font-size: var(--fs-md);
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text);
-  letter-spacing: -0.01em;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--font-sans);
 }
+
+/* Icon buttons: sidebar toggle + theme toggle - per mockup .icon-btn */
 .top-action {
-  height: 32px;
-  min-width: 32px;
-  padding: 0 7px;
-  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
   color: var(--text-2);
-  border-radius: var(--r-sm);
-  transition: all var(--dur) var(--ease);
+  /* sharp: no border-radius */
+  transition: color var(--dur) var(--ease);
+  flex-shrink: 0;
 }
-.top-action:hover { background: var(--surface-hover); color: var(--text); }
+.top-action:hover { color: var(--text); }
+.top-action:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .top-action :deep(.ui-icon) { width: 18px; height: 18px; }
+
+/* Language selector: globe + short code, weight 600 - per mockup .lang */
+.top-action--lang {
+  width: auto;
+  padding: 0 6px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
 .top-action--lang :deep(.ui-icon) { width: 16px; height: 16px; }
-.lang-short { font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.02em; }
+.lang-short { letter-spacing: 0.02em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .top-action { transition: none; }
+}
 </style>
