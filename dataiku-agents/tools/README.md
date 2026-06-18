@@ -20,13 +20,16 @@ one-shot fallback that re-resolves the id by name against `list_agent_tools()`
 
 Code vaulted here: [`attribute_lookup_tool.py`](attribute_lookup_tool.py). The
 fast path for plain reads ("is value X in the data, in which column, and what are
-the related values?"). It runs a case/accent-insensitive `ILIKE` search across
-every TEXT column of the fact table (read-only, `statement_timeout` + `LIMIT`,
-nothing loaded into RAM), returns `found_in` (where the term is + its exact
-value), and - when `attributes` are requested - the matched rows' values for
-those columns. Both sides are accent-folded with a shared translate map (no DB
-extension). The result carries `rows_capped` (the `LIMIT` fired -> sample) and
-`multi_column` (the term spans several columns -> ambiguous). A short-needle
+the related values?"). It runs a case/accent-insensitive search across every TEXT
+column in ONE readable predicate (a single `ILIKE` over an accent-folded
+`concat_ws` of the columns, not one OR per column), read-only,
+`statement_timeout` + `LIMIT`, nothing loaded into RAM. Casing is handled by
+`lower()`/ILIKE and accents by a shared `translate` map at QUERY time - the
+source data is never altered (the tool adapts to the human, not the reverse; no
+`unaccent` extension required). It returns `found_in` (where the term is + its
+exact value), and - when `attributes` are requested - the matched record's values
+for those columns. The result carries `rows_capped` (the `LIMIT` fired -> sample)
+and `multi_column` (the term spans several columns -> ambiguous). A short-needle
 guard, a bounded TTL cache, and a conditional alias fallback (entity searches
 only) round it off. `status` is `found` / `suggestions` / `not_found`; the
 not_found message never asserts the data is absent.
@@ -35,18 +38,23 @@ not_found message never asserts the data is absent.
 ORCHESTRATOR as a BUILT-IN tool, NOT in the sub-agent.** It is appended in
 `build_tool_specs` and dispatched inline in `node_tools` (like
 `show_table` / `current_date`), so it touches NO frozen `KNOWN_*` contract and
-the sub-agent is UNCHANGED. The orchestrator calls it via
-`project.get_agent_tool(LOOKUP_TOOL_ID).run({entity, attributes})` (name fallback
-if the id is empty), routes simple "who/what is the &lt;attribute&gt; of
-&lt;named entity&gt;" questions to it FIRST (descriptor + a HOW-TO-WORK rule),
-and emits the lookup SQL + result as a `semantic-model-query` subspan so Evidence
-keeps provenance. On `not_found`/`suggestions` the planner asks the user or hands
-off to `ask_revenue_expert`; it never claims the data is missing (honesty
-firewall). **Status: built + hardened + unit-tested
-(`tests/test_attribute_lookup.py` + `tests/test_langgraph_agents.py`), validated
-by RUN TEST. To deploy: create the Custom Python tool in DSS, set
-`LOOKUP_TOOL_ID` in the orchestrator (optional - the name fallback resolves
-`attribute_lookup`), re-paste the ORCHESTRATOR (env 3.11). No sub-agent change.**
+the sub-agent is UNCHANGED. **Multi-table by design**: the model passes a logical
+`domain`, NEVER a table; the orchestrator resolves it to a whitelisted dataset
+via the registry (`lookup_domains()` reads each capability's `lookup_dataset` /
+`lookup_catalog`), so a second agent is searchable just by declaring its dataset
+(rule #3/#4 - the table name never leaves the server). The orchestrator calls
+`project.get_agent_tool(LOOKUP_TOOL_ID).run({entity, attributes, dataset, catalog})`
+(name fallback if the id is empty), routes simple "who/what is the
+&lt;attribute&gt; of &lt;named entity&gt;" questions to it FIRST (descriptor + a
+HOW-TO-WORK rule), and emits the lookup SQL + result as a `semantic-model-query`
+subspan so Evidence keeps provenance. On `not_found`/`suggestions` the planner
+asks the user or hands off to the specialist; it never claims the data is missing
+(honesty firewall). **Status: built + hardened + unit-tested
+(`tests/test_attribute_lookup.py` + `tests/test_langgraph_agents.py`), RUN-TEST
+validated in DSS (fast path + specialist fall-through both confirmed). To deploy:
+create the Custom Python tool in DSS, set `LOOKUP_TOOL_ID` in the orchestrator
+(optional - the name fallback resolves `attribute_lookup`), re-paste the
+ORCHESTRATOR (env 3.11). No sub-agent change.**
 
 ---
 

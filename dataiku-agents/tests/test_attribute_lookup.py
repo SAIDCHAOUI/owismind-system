@@ -99,19 +99,25 @@ class FakeTool(al.MyAgentTool):
 
     def _run_sql(self, dataset_name, sql, max_rows=al.SEARCH_SAMPLE_ROWS):
         self.sql_log.append((dataset_name, sql))
-        if dataset_name == al.FACT_DATASET:
-            return list(self._all), list(self._fact_rows)
-        if self._no_catalog:
-            raise RuntimeError("no catalog dataset")
-        cols = ["search_domain", "source_column", "target_column", "target_value",
-                "display_value", "normalized_value", "frequency", "is_alias"]
-        return cols, list(self._alias_rows)
+        # The catalog dataset feeds the alias fallback; ANY other dataset name is
+        # treated as a fact table (so multi-table routing can be exercised).
+        if dataset_name == al.CATALOG_DATASET:
+            if self._no_catalog:
+                raise RuntimeError("no catalog dataset")
+            cols = ["search_domain", "source_column", "target_column", "target_value",
+                    "display_value", "normalized_value", "frequency", "is_alias"]
+            return cols, list(self._alias_rows)
+        return list(self._all), list(self._fact_rows)
 
 
-def invoke(tool, entity, attributes=None):
+def invoke(tool, entity, attributes=None, dataset=None, catalog=None):
     payload = {"entity": entity}
     if attributes is not None:
         payload["attributes"] = attributes
+    if dataset is not None:
+        payload["dataset"] = dataset
+    if catalog is not None:
+        payload["catalog"] = catalog
     return tool.invoke({"input": payload}, trace=None)["output"]
 
 
@@ -171,14 +177,15 @@ class TestQuoting(unittest.TestCase):
 
 
 class TestSearchSql(unittest.TestCase):
-    def test_or_ilike_over_text_columns(self):
+    def test_single_ilike_over_concat_of_text_columns(self):
         sql = al.build_search_sql('"public"."F"',
                                   ["account_manager", "Account_name"], "blanchard")
         self.assertIn("'%blanchard%'", sql)
         self.assertIn('"account_manager"', sql)
         self.assertIn('"Account_name"', sql)
-        self.assertIn("ILIKE", sql)
-        self.assertIn(" OR ", sql)
+        self.assertIn("concat_ws(' ', ", sql)        # one concatenation...
+        self.assertEqual(sql.count("ILIKE"), 1)       # ...so ONE ILIKE, not one per column
+        self.assertNotIn(" OR ", sql)                 # readable, no 18-way OR
         self.assertIn("LIMIT %d" % al.SEARCH_SAMPLE_ROWS, sql)
 
     def test_accent_insensitive_needle(self):
@@ -422,6 +429,23 @@ class TestInvoke(unittest.TestCase):
         out = invoke(tool, "orange", ["sales zone"])
         self.assertEqual(out["status"], "found")
         self.assertEqual(out["attributes"], {"sales_zone": "Europe"})
+
+    def test_routes_to_caller_supplied_dataset(self):
+        # Multi-table: the orchestrator passes a whitelisted dataset; the tool
+        # searches THAT table (not the hardcoded default) and sources it.
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        full = tool.invoke({"input": {"entity": "blanchard",
+                                      "dataset": "TICKETS_FACT"}}, trace=None)
+        out = full["output"]
+        self.assertEqual(out["status"], "found")
+        self.assertTrue(any(d == "TICKETS_FACT" for (d, _) in tool.sql_log))
+        self.assertFalse(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
+        self.assertEqual(full["sources"][0]["id"], "TICKETS_FACT")
+
+    def test_default_dataset_when_not_supplied(self):
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        invoke(tool, "blanchard")
+        self.assertTrue(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
 
 
 if __name__ == "__main__":

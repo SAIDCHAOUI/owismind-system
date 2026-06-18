@@ -216,6 +216,13 @@ CAPABILITIES = {
         # Direct link to the source dataset in Dataiku. When set, Evidence turns the
         # data source into a clickable link that opens the dataset in a new tab.
         "source_url": "",
+        # Fast value-lookup routing: the table the attribute_lookup built-in
+        # searches for THIS domain, and its optional value catalog (alias
+        # fallback; "" = none). The model passes a logical DOMAIN, never a table;
+        # the orchestrator resolves it here (server-side whitelist, rule #3/#4).
+        # A second agent simply declares its own lookup_dataset.
+        "lookup_dataset": "DRIVE_Revenues",
+        "lookup_catalog": "DRIVE_Revenues_Value_Catalog",
         "pass_context": True,
         "enabled": True,
     },
@@ -243,6 +250,27 @@ def get_capabilities():
 def staffed_domains():
     return {v["domain"] for v in get_capabilities().values()
             if v.get("kind") == "agent" and v.get("domain")}
+
+
+def lookup_domains(caps=None):
+    """Logical domain -> the whitelisted dataset (+ catalog, source link, label)
+    the fast value lookup may search for it. Built from the registry: a capability
+    that declares a `lookup_dataset` is searchable. The model picks a DOMAIN; the
+    orchestrator resolves the table here, so the table name never leaves the
+    server (rule #3/#4). Empty when no enabled agent supports a lookup."""
+    out = {}
+    for key, cap in (caps or get_capabilities()).items():
+        if cap.get("kind") != "agent":
+            continue
+        domain, dataset = cap.get("domain"), cap.get("lookup_dataset")
+        if domain and dataset and domain not in out:
+            out[domain] = {"dataset": dataset,
+                           "catalog": cap.get("lookup_catalog") or "",
+                           "source_url": cap.get("source_url") or "",
+                           "cap_key": key,
+                           "label_fr": cap.get("label_fr") or cap.get("label_en"),
+                           "label_en": cap.get("label_en") or cap.get("label_fr")}
+    return out
 
 
 # =============================================================================
@@ -378,46 +406,55 @@ def build_tool_specs(caps):
     # "who/what is the <attribute> of <named entity>" question - it answers in
     # under a second instead of the specialist's slow path. NEVER use it for a
     # computed figure (sum, total, count, ranking, share, trend, comparison) or
-    # for "list all X": those go to ask_revenue_expert. It returns where a term
-    # is + its exact spelling, and a named record's attribute when asked.
-    specs.append({
-        "type": "function",
-        "function": {
-            "name": LOOKUP_TOOL_NAME,
-            "description": (
-                "Look up an EXISTING value in the revenue data FAST: does a NAMED "
-                "thing exist, in which column, its EXACT spelling, and a named "
-                "record's plain attribute (the account manager / carrier code / "
-                "sales zone OF a named account). Use it FIRST for a who/what-is "
-                "question about a SINGLE named thing (e.g. 'who is the account "
-                "manager of <account>?', 'carrier code of <account>?', 'is there a "
-                "customer named X?'). NEVER use it for a sum, total, count, "
-                "average, ranking, top-N, share, trend, period/scenario comparison "
-                "or any COMPUTED number, and NEVER for 'list all X' - call "
-                "ask_revenue_expert for those. On 'not_found'/'suggestions', ask "
-                "the user to confirm or call ask_revenue_expert; never say the data "
-                "does not exist."),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "term": {
-                        "type": "string",
-                        "description": ("The named thing to look up, as the user "
-                                        "wrote it (spelling/casing/accents do not "
-                                        "matter)."),
-                    },
-                    "attributes": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": ("OPTIONAL. The column(s) you want for the "
-                                        "matched record (e.g. ['account manager']). "
-                                        "Omit to just locate the term."),
-                    },
-                },
-                "required": ["term"],
+    # for "list all X": those go to the specialist. It searches the dataset of a
+    # logical DOMAIN, resolved server-side (the model never names a table).
+    lk_domains = sorted(lookup_domains(caps))
+    if lk_domains:
+        props = {
+            "term": {
+                "type": "string",
+                "description": ("The named thing to look up, as the user wrote it "
+                                "(spelling/casing/accents do not matter)."),
             },
-        },
-    })
+            "attributes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": ("OPTIONAL. The column(s) you want for the matched "
+                                "record (e.g. ['account manager']). Omit to just "
+                                "locate the term."),
+            },
+        }
+        required = ["term"]
+        if len(lk_domains) > 1:
+            # Several searchable domains -> the model MUST say which one, so the
+            # orchestrator searches the right table.
+            props["domain"] = {
+                "type": "string", "enum": lk_domains,
+                "description": ("Which domain's data to search (the table is "
+                                "resolved server-side from this domain)."),
+            }
+            required.append("domain")
+        specs.append({
+            "type": "function",
+            "function": {
+                "name": LOOKUP_TOOL_NAME,
+                "description": (
+                    "Look up an EXISTING value FAST: does a NAMED thing exist, in "
+                    "which column, its EXACT spelling, and a named record's plain "
+                    "attribute (the account manager / carrier code / sales zone OF "
+                    "a named account). Use it FIRST for a who/what-is question "
+                    "about a SINGLE named thing (e.g. 'who is the account manager "
+                    "of <account>?', 'carrier code of <account>?', 'is there a "
+                    "customer named X?'). NEVER use it for a sum, total, count, "
+                    "average, ranking, top-N, share, trend, period/scenario "
+                    "comparison or any COMPUTED number, and NEVER for 'list all "
+                    "X' - call the specialist for those. On "
+                    "'not_found'/'suggestions', ask the user to confirm or call "
+                    "the specialist; never say the data does not exist."),
+                "parameters": {"type": "object", "properties": props,
+                               "required": required},
+            },
+        })
     return specs, tool_to_cap
 
 
@@ -845,7 +882,8 @@ def _lookup_tool_output(payload):
             "ask_revenue_expert." % (payload or {}).get("status", "error"))
 
 
-def _lookup_evidence_item(payload, step_index, n, source_url=""):
+def _lookup_evidence_item(payload, step_index, n, source_url="",
+                          agent_key=LOOKUP_SOURCE_CAP):
     """Shape a 'found' lookup result as an Evidence-capturable SQL item so the
     fast path keeps provenance (the built-in path bypasses the sub-agent trace
     capture). Mirrors the sql_item contract; sql_id is distinct from the
@@ -871,7 +909,7 @@ def _lookup_evidence_item(payload, step_index, n, source_url=""):
         "row_count": payload.get("rows_matched"),
         "sql_id": "s%dlk%d" % (step_index, n),
         "step_index": step_index,
-        "agent_key": LOOKUP_SOURCE_CAP,
+        "agent_key": agent_key or LOOKUP_SOURCE_CAP,
         "result": {"columns": ["column", "value"], "rows": rows},
     }
     if source_url:
@@ -1268,26 +1306,44 @@ class MyLLM(BaseLLM):
         return tool
 
     def _run_lookup(self, project, args, step_index):
-        """Run the built-in fast value lookup. Returns (tool_output_text,
-        evidence_item|None). Never raises - a tool failure degrades to a hint to
-        use the specialist, so the turn always completes."""
+        """Run the built-in fast value lookup. Resolves the question's logical
+        DOMAIN to a whitelisted dataset (server-side, the model never names a
+        table), then searches it. Returns (tool_output_text, evidence_item|None).
+        Never raises - a tool/lookup failure degrades to a hint to use the
+        specialist, so the turn always completes."""
         term = str((args or {}).get("term") or "").strip()
         attrs = (args or {}).get("attributes") or []
         if isinstance(attrs, str):
             attrs = [attrs]
         if not term:
             return ("LOOKUP needs a 'term'. Ask the user what to look up, or call "
-                    "ask_revenue_expert.", None)
+                    "the specialist.", None)
+        domains = lookup_domains()
+        if not domains:
+            return ("No fast lookup is configured. Hand the question to the "
+                    "specialist.", None)
+        requested = str((args or {}).get("domain") or "").strip()
+        if requested and requested in domains:
+            domain = requested
+        elif len(domains) == 1:
+            domain = next(iter(domains))         # the sole searchable domain
+        else:
+            return ("Several lookup domains exist (%s) - say which one, or hand "
+                    "the question to the specialist."
+                    % ", ".join(sorted(domains)), None)
+        info = domains[domain]
         try:
             tool = self._get_tool(project, LOOKUP_TOOL_ID, LOOKUP_TOOL_NAME)
-            raw = tool.run({"entity": term, "attributes": attrs})
+            raw = tool.run({"entity": term, "attributes": attrs,
+                            "dataset": info["dataset"], "catalog": info["catalog"]})
             payload = _extract_lookup_output(raw)
         except Exception as e:
             logger.exception("attribute_lookup failed")
             return ("The fast lookup is unavailable (%s). Hand the question to "
-                    "ask_revenue_expert." % str(e)[:160], None)
-        source_url = (CAPABILITIES.get(LOOKUP_SOURCE_CAP) or {}).get("source_url") or ""
-        item = _lookup_evidence_item(payload, step_index, 1, source_url)
+                    "the specialist." % str(e)[:160], None)
+        item = _lookup_evidence_item(payload, step_index, 1,
+                                     source_url=info.get("source_url") or "",
+                                     agent_key=info.get("cap_key") or LOOKUP_SOURCE_CAP)
         return _lookup_tool_output(payload), item
 
     # ---- input ------------------------------------------------------------

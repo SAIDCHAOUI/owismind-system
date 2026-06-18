@@ -160,7 +160,34 @@ class TestAttributeLookupWiring(unittest.TestCase):
         self.assertNotIn(orch.LOOKUP_TOOL_NAME, t2c)   # built-in, zero contract
         spec = next(s for s in specs
                     if s["function"]["name"] == orch.LOOKUP_TOOL_NAME)
+        # One staffed lookup domain today -> the model only needs 'term'.
         self.assertEqual(spec["function"]["parameters"]["required"], ["term"])
+
+    def test_lookup_domains_resolve_from_registry(self):
+        # The model passes a logical DOMAIN; the orchestrator maps it to a
+        # whitelisted dataset server-side (the table name never leaves the server).
+        domains = orch.lookup_domains()
+        self.assertIn("revenue", domains)
+        self.assertEqual(domains["revenue"]["dataset"], "DRIVE_Revenues")
+        self.assertEqual(domains["revenue"]["catalog"],
+                         "DRIVE_Revenues_Value_Catalog")
+        self.assertEqual(domains["revenue"]["cap_key"], "revenue_expert")
+
+    def test_lookup_domain_required_only_when_several(self):
+        # With a SECOND searchable domain, the model must say which one.
+        caps = dict(orch.get_capabilities())
+        caps["tickets_expert"] = {"kind": "agent", "domain": "tickets",
+                                  "tool_name": "ask_tickets", "label_en": "Tickets",
+                                  "planner_description": "Tickets expert.",
+                                  "block_labels": {}, "tool_labels": {},
+                                  "lookup_dataset": "TICKETS_FACT", "enabled": True}
+        specs, _ = orch.build_tool_specs(caps)
+        spec = next(s for s in specs
+                    if s["function"]["name"] == orch.LOOKUP_TOOL_NAME)
+        params = spec["function"]["parameters"]
+        self.assertIn("domain", params["required"])
+        self.assertEqual(set(params["properties"]["domain"]["enum"]),
+                         {"revenue", "tickets"})
 
     def test_lookup_does_not_touch_known_contract(self):
         # Adding the built-in must not have grown the frozen sub-agent contract.

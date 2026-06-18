@@ -164,16 +164,20 @@ def map_attributes(raw_attributes, live_columns):
 
 
 def build_search_sql(fact_table, text_columns, term, sample=SEARCH_SAMPLE_ROWS):
-    """Whole-dataset, case- AND accent-insensitive search: the term matched
-    anywhere across the given text columns. Both sides are accent-folded - the
-    needle by search_value(), the COLUMN by unaccent_lower_sql() - so a stored
-    accented value matches an accent-stripped query. Columns are real schema
-    names; the needle is a quoted, escaped literal; LIMIT bounds the scan."""
+    """Whole-dataset, case- AND accent-insensitive search in ONE readable
+    predicate: the term matched anywhere across a space-joined concatenation of
+    every text column, accent-folded at query time (the data is never altered -
+    the tool adapts to the human, not the reverse). One ILIKE instead of one OR
+    per column. find_matches() then pinpoints the exact column(s) Python-side, so
+    a rare match straddling two columns in the concatenation is filtered out
+    there. concat_ws skips NULLs; both sides are accent-folded (needle by
+    search_value, column by translate); the needle is a quoted, escaped literal."""
     needle = quote_literal("%" + like_escape(search_value(term)) + "%")
-    ors = " OR ".join("%s ILIKE %s ESCAPE '\\'" % (unaccent_lower_sql(quote_ident(c)),
-                                                   needle)
-                      for c in text_columns)
-    return "SELECT * FROM %s WHERE %s LIMIT %d" % (fact_table, ors, int(sample))
+    # concat_ws converts every argument to text and skips NULLs, so no per-column
+    # CAST is needed - keeps the predicate short and readable.
+    concat = "concat_ws(' ', %s)" % ", ".join(quote_ident(c) for c in text_columns)
+    return ("SELECT * FROM %s WHERE %s ILIKE %s ESCAPE '\\' LIMIT %d"
+            % (fact_table, unaccent_lower_sql(concat), needle, int(sample)))
 
 
 def find_matches(text_columns, rows, term, per_col_cap=DISTINCT_PER_COLUMN):
@@ -359,24 +363,24 @@ class MyAgentTool(BaseAgentTool):
                 for r in df.head(max_rows).itertuples(index=False, name=None)]
         return columns, rows
 
-    def _alias_fallback(self, term):
+    def _alias_fallback(self, term, catalog):
         """Catalog aliases to suggest when the full-text search finds nothing.
-        Optional: a missing/unreadable catalog yields no suggestions, never an
-        error."""
+        Optional: a missing/empty/unreadable catalog yields no suggestions, never
+        an error (a domain without a value catalog simply has no alias fallback)."""
         term_norm = norm(term)
-        if not term_norm:
+        if not term_norm or not catalog:
             return []
         try:
-            catalog_table = self._get_table(CATALOG_DATASET)
+            catalog_table = self._get_table(catalog)
             _, exact = self._run_sql(
-                CATALOG_DATASET,
+                catalog,
                 build_resolve_sql(catalog_table, term_norm, fuzzy=False),
                 max_rows=RESOLVE_EXACT_LIMIT)
             sugg = alias_suggestions(exact, term_norm)
             if sugg:
                 return sugg
             _, fuzzy = self._run_sql(
-                CATALOG_DATASET,
+                catalog,
                 build_resolve_sql(catalog_table, term_norm, fuzzy=True),
                 max_rows=RESOLVE_FUZZY_LIMIT)
             return alias_suggestions(fuzzy, term_norm)
@@ -385,11 +389,12 @@ class MyAgentTool(BaseAgentTool):
             return []
 
     # --- cache ----------------------------------------------------------------
-    def _cache_key(self, term, raw_attributes):
-        """Stable key: accent-folded needle + the requested attribute names
-        (case/space-insensitive). Two phrasings of the same lookup share a key."""
+    def _cache_key(self, dataset, term, raw_attributes):
+        """Stable key: target dataset + accent-folded needle + the requested
+        attribute names (case/space-insensitive). Two phrasings of the same lookup
+        on the same dataset share a key; different datasets never collide."""
         attrs = tuple(sorted(norm(a) for a in (raw_attributes or []) if norm(a)))
-        return (search_value(term), attrs)
+        return (dataset, search_value(term), attrs)
 
     def _cache_get(self, key):
         hit = self._cache.get(key)
@@ -456,6 +461,23 @@ class MyAgentTool(BaseAgentTool):
                             "matching value(s). Case and underscores do not matter."
                         ),
                     },
+                    "dataset": {
+                        "type": "string",
+                        "description": (
+                            "OPTIONAL, set by the orchestrator: the Dataiku dataset "
+                            "to search (a whitelisted table resolved from the "
+                            "question's domain). Defaults to the tool's configured "
+                            "fact dataset. Not chosen by the end user."
+                        ),
+                    },
+                    "catalog": {
+                        "type": "string",
+                        "description": (
+                            "OPTIONAL, set by the orchestrator: the value-catalog "
+                            "dataset for the alias fallback (empty when the domain "
+                            "has none). Defaults to the tool's configured catalog."
+                        ),
+                    },
                 },
                 "required": ["entity"],
             },
@@ -467,17 +489,24 @@ class MyAgentTool(BaseAgentTool):
         raw_attributes = args.get("attributes") or []
         if isinstance(raw_attributes, str):
             raw_attributes = [raw_attributes]
+        # Target dataset + optional value catalog. Supplied by the caller (the
+        # ORCHESTRATOR, which resolves a logical domain to a whitelisted dataset
+        # from its registry - the model never names a table). Defaults keep the
+        # tool usable stand-alone and back-compatible.
+        dataset = (args.get("dataset") or "").strip() or FACT_DATASET
+        catalog = args.get("catalog")
+        catalog = (catalog.strip() if isinstance(catalog, str) else "") or CATALOG_DATASET
 
         def out(payload):
             return {"output": payload,
-                    "sources": [{"id": FACT_DATASET, "type": "dataset",
-                                 "name": "Dataset: %s" % FACT_DATASET}]}
+                    "sources": [{"id": dataset, "type": "dataset",
+                                 "name": "Dataset: %s" % dataset}]}
 
         if not term:
             return out({"status": "bad_input",
                         "message": "Provide a term to search."})
 
-        typed = self._live_columns_typed(FACT_DATASET)
+        typed = self._live_columns_typed(dataset)
         all_columns = [n for (n, _) in typed]
         text_columns = [n for (n, t) in typed if t == "string"]
 
@@ -493,7 +522,7 @@ class MyAgentTool(BaseAgentTool):
 
         # SQL work (search + optional alias) is cacheable; the input-validation
         # branches above are not (cheap, no DB). Serve a fresh cached payload.
-        cache_key = self._cache_key(term, raw_attributes)
+        cache_key = self._cache_key(dataset, term, raw_attributes)
         cached = self._cache_get(cache_key)
         if cached is not None:
             return out(cached)
@@ -503,9 +532,9 @@ class MyAgentTool(BaseAgentTool):
         needle = search_value(term)
         rows, sql = [], None
         if text_columns and len(needle) >= MIN_NEEDLE_CHARS:
-            fact_table = self._get_table(FACT_DATASET)
+            fact_table = self._get_table(dataset)
             sql = build_search_sql(fact_table, text_columns, term)
-            _, rows = self._run_sql(FACT_DATASET, sql, max_rows=SEARCH_SAMPLE_ROWS)
+            _, rows = self._run_sql(dataset, sql, max_rows=SEARCH_SAMPLE_ROWS)
 
         # What the matched rows actually yield: where the term re-confirms (exact
         # spelling) + the requested columns' values. A row can match the SQL ILIKE
@@ -521,7 +550,7 @@ class MyAgentTool(BaseAgentTool):
             # concepts) ONLY for a bare entity search - when explicit attributes
             # were requested the caller wants a clean, fast 'not_found', not an
             # alias guess (and the catalog never indexes attribute columns anyway).
-            suggestions = [] if keep else self._alias_fallback(term)
+            suggestions = [] if keep else self._alias_fallback(term, catalog)
             if suggestions:
                 payload = {"status": "suggestions", "term": term,
                            "candidates": [{"column": r.get("target_column"),
