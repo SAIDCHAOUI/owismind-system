@@ -430,7 +430,7 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
 ## 🧭 Dernière session - 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) → détail `sessions/2026-06-19.md` Run 3
 - **✅ VALIDÉ DSS** (« super tout fonctionne à merveille »). 3 features livrées via sous-agents + 3 revues sécu (0 crit/high/medium).
 - **Auth gate** (`AuthGate.vue` + `session.authState` + `App.vue`, clés `authgate.*`) ; **impersonation admin** read-only & admin-only (`security/impersonation.py` + `features/admin-impersonate/`, header `X-OWI-Impersonate`, FENCÉ/supprimable, **L095**) qui REMPLACE l'ancienne "revue de convs" SUPPRIMÉE (**L096**) ; **plugin DEV** `owismind_dev` (source unique, `tools/build_dev_plugin.py` + skill `/package-plugin-dev`, **L094**), **prod intacte**, tables create-if-not-exist inchangées.
-- À faire : **promotion prod** = rebuild prod + upload quand DEV validé (idem agents). Impersonation = **temporaire** (à retirer plus tard, blocs FENCÉS).
+- **✅ PROMU EN PROD + DÉPLOYÉ** (user « super tout marche ») : zip prod `owismind-upload.zip` (id `owismind`, entry **`index-CApWkAm7.js`**, 80 entrées) uploadé + backend redémarré. Commits `f5b2976` (session) + `f967347` (build prod). Impersonation = **temporaire** (à retirer plus tard, blocs FENCÉS).
 
 ## Avant - 2026-06-19 Run 2 (doc ultra-complète + plateforme web "parcours") → détail `sessions/2026-06-19.md` Run 2
 - **Doc `project-documentation/` corrigée + complétée** (workflow 23 agents Sonnet, ownership/fichier + vérif
