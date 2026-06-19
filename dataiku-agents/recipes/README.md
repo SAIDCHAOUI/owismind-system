@@ -87,9 +87,23 @@ being deleted; `attribute_lookup` superseded it.
 
 ---
 
+## Reusable for any dataset (auto-IO + NA-safe)
+
+All three recipes are **dataset-agnostic**: they auto-detect INPUT/OUTPUT from the
+Flow wiring (`recipe.get_inputs_as_datasets()` / `get_outputs_as_datasets()`), so to
+onboard a new domain (e.g. tickets) you wire them on the new base dataset with NO
+code edit. The reads are **NA-safe** (they fall back to pandas inference when an
+integer column contains NULLs, e.g. a resolution duration empty for open tickets,
+which otherwise raises "Integer column has NA values"). `build_value_catalog_recipe`
+is **dataset-adaptive**: the revenue-shaped dataset gets the rich curated catalog;
+any other dataset gets a generic per-value catalog (search_domain "value") that
+feeds the `attribute_lookup` "did you mean" fallback. Worked example + the column
+inventory: [`../PLAYBOOK_ADD_AGENT.md`](../PLAYBOOK_ADD_AGENT.md) and
+[`../DATASETS.md`](../DATASETS.md).
+
 ## Deploy a recipe
 
-1. Flow: `+ Recipe -> Code -> Python`. Input `DRIVE_Revenues` (+ optional overrides
+1. Flow: `+ Recipe -> Code -> Python`. Input the base dataset (+ optional overrides
    input for the profile). Output = the target dataset (the value index MUST be on
    the SQL connection).
 2. Paste the recipe code; review the CONFIG block (`ENRICH_LLM_ID` for the profile,

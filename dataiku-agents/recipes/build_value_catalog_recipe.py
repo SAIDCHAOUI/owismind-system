@@ -1,6 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Build DRIVE_Revenues_Value_Catalog (v2).
+Build a dataset's Value Catalog (generic, auto-IO).
+
+INPUT / OUTPUT are auto-detected from the recipe (like profile_dataset_recipe and
+build_value_index_recipe); the INPUT_DATASET / OUTPUT_DATASET constants are only a
+fallback for a non-recipe run. The recipe is DATASET-ADAPTIVE: for the
+revenue-shaped dataset (the REVENUE_SIGNATURE columns are present) it builds the
+RICH curated catalog described below; for ANY other dataset (e.g. tickets) it
+builds a GENERIC catalog of each categorical text column's distinct values
+(search_domain "value", is_alias 0), so a new domain gets a usable catalog with no
+hardcoding. The read is NA-safe (falls back to pandas inference when an int column
+has NULLs, e.g. a duration empty for open tickets).
 
 STATUS (2026-06-18): this recipe builds the RICH value catalog (aliases,
 variants, business concepts, short account names). It IS used at runtime: the
@@ -21,7 +31,7 @@ hub") pointing to real DRIVE_Revenues values. The `is_alias` flag marks the
 hand-crafted rows.
 
 Output schema (1 row = 1 (variant -> target) edge):
-- search_domain         : account | account_group | offer | business | alias
+- search_domain         : account | account_group | offer | business | alias | value
 - source_column         : the column of the variant in DRIVE_Revenues (or "alias" for hand-crafted)
 - target_column         : the column to filter on at SQL time
 - target_value          : the value to filter on at SQL time
@@ -45,8 +55,20 @@ import re
 # CONFIG
 # ============================================================
 
+# Fallback dataset names for a non-recipe run; in a recipe the INPUT/OUTPUT are
+# auto-detected from the Flow wiring (see the READ DATA section below).
 INPUT_DATASET = "DRIVE_Revenues"
 OUTPUT_DATASET = "DRIVE_Revenues_Value_Catalog"
+
+# A dataset is "revenue-shaped" (gets the rich curated catalog) when it carries
+# these signature columns; any other dataset gets the generic catalog instead.
+REVENUE_SIGNATURE = {"diamond_id", "Account_name", "Phase", "amount_eur"}
+# Generic catalog caps (mirror build_value_index_recipe): skip numeric/date and
+# quasi-unique / very-high-cardinality / long free-text columns.
+GENERIC_NUMERIC_TYPES = {"tinyint", "smallint", "int", "bigint", "float",
+                         "double", "decimal"}
+GENERIC_MAX_DISTINCT = 20000
+GENERIC_MAX_AVG_LEN = 120
 
 # Boost frequency given to alias rows so they win over fuzzy matches.
 ALIAS_FREQUENCY = 99999
@@ -215,10 +237,35 @@ def add_row(
 
 
 # ============================================================
-# READ DATA
+# READ DATA (auto-IO + NA-safe)
 # ============================================================
 
-df = dataiku.Dataset(INPUT_DATASET).get_dataframe(infer_with_pandas=False, int_as_float=False)
+try:
+    from dataiku import recipe as _recipe
+    _inputs = _recipe.get_inputs_as_datasets()
+    _outputs = _recipe.get_outputs_as_datasets()
+    source = _inputs[0] if _inputs else dataiku.Dataset(INPUT_DATASET)
+    output = _outputs[0] if _outputs else dataiku.Dataset(OUTPUT_DATASET)
+except Exception:
+    source = dataiku.Dataset(INPUT_DATASET)
+    output = dataiku.Dataset(OUTPUT_DATASET)
+
+# infer_with_pandas=False keeps exact storage types but raises "Integer column has
+# NA values" when an int column has NULLs; fall back to pandas inference then.
+try:
+    df = source.get_dataframe(infer_with_pandas=False, int_as_float=False)
+except ValueError:
+    df = source.get_dataframe(infer_with_pandas=True)
+
+# Dataset shape -> which catalog to build, plus the text columns for the generic one.
+is_revenue_shaped = REVENUE_SIGNATURE.issubset(set(df.columns))
+_schema = source.read_schema(raise_if_empty=True)
+_text_columns = set()
+for _c in _schema:
+    _name = _c["name"] if isinstance(_c, dict) else _c.name
+    _typ = str((_c.get("type") if isinstance(_c, dict) else getattr(_c, "type", None)) or "")
+    if _typ not in GENERIC_NUMERIC_TYPES and not _typ.startswith("date"):
+        _text_columns.add(_name)
 
 
 # ============================================================
@@ -344,7 +391,8 @@ if "diamond_id" in df.columns and "Account_name" in df.columns:
 # 2. OFFER RESOLVER
 # ============================================================
 
-for col in ["Product", "Solution", "SolutionLine", "sirano_product"]:
+for col in (["Product", "Solution", "SolutionLine", "sirano_product"]
+            if is_revenue_shaped else []):
     if col not in df.columns:
         continue
     values = get_series(df, col).dropna().apply(clean_value)
@@ -370,7 +418,8 @@ for col in ["Product", "Solution", "SolutionLine", "sirano_product"]:
 # 3. BUSINESS / SCENARIO RESOLVER
 # ============================================================
 
-for col in ["Phase", "booking_type", "distribution_type", "sales_entity", "sales_zone"]:
+for col in (["Phase", "booking_type", "distribution_type", "sales_entity", "sales_zone"]
+            if is_revenue_shaped else []):
     if col not in df.columns:
         continue
     values = get_series(df, col).dropna().apply(clean_value)
@@ -396,7 +445,7 @@ for col in ["Phase", "booking_type", "distribution_type", "sales_entity", "sales
 # 4. BUSINESS CONCEPT ALIASES (hand-crafted, in code)
 # ============================================================
 
-for entry in BUSINESS_ALIASES:
+for entry in (BUSINESS_ALIASES if is_revenue_shaped else []):
     phrases = entry.get("phrases", [])
     targets = entry.get("targets", [])
     for phrase in phrases:
@@ -410,6 +459,44 @@ for entry in BUSINESS_ALIASES:
                 display_value=target_value,
                 frequency=ALIAS_FREQUENCY,
                 is_alias=True,
+            )
+
+
+# ============================================================
+# 4b. GENERIC CATALOG (non-revenue datasets) - each categorical text column's
+#     distinct values under search_domain "value". No domain-specific knowledge,
+#     so any new dataset (tickets, ...) gets a usable "did you mean" catalog.
+# ============================================================
+
+if not is_revenue_shaped:
+    n_total = len(df)
+    for col in df.columns:
+        if col not in _text_columns:
+            continue
+        series = get_series(df, col).dropna().apply(clean_value)
+        series = series[series != ""]
+        if series.empty:
+            continue
+        nuniq = series.nunique()
+        if nuniq == 0 or nuniq > GENERIC_MAX_DISTINCT:
+            continue
+        avg_len = series.str.len().mean()
+        if avg_len and avg_len > GENERIC_MAX_AVG_LEN:
+            continue
+        # Quasi-unique id guard (mirror build_value_index_recipe): a near-unique
+        # long-ish column is an identifier, not a nameable catalog value.
+        if n_total > 1000 and nuniq >= 0.95 * n_total and avg_len and avg_len > 24:
+            continue
+        for value, freq in series.value_counts().items():
+            value = clean_value(value)
+            add_row(
+                search_domain="value",
+                source_column=col,
+                target_column=col,
+                target_value=value,
+                matched_value=value,
+                display_value=value,
+                frequency=int(freq),
             )
 
 
@@ -436,4 +523,4 @@ if not catalog.empty:
         ascending=[True, True, True, False],
     )
 
-dataiku.Dataset(OUTPUT_DATASET).write_with_schema(catalog)
+output.write_with_schema(catalog)

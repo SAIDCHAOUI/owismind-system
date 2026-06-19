@@ -181,6 +181,10 @@ class TestAttributeLookupWiring(unittest.TestCase):
         # excludes the long free-text columns.
         self.assertIn("tickets", domains)
         self.assertEqual(domains["tickets"]["dataset"], "TroubleTickets_year")
+        # Tickets has its OWN value catalog (so the lookup fallback never queries
+        # the revenue catalog by accident).
+        self.assertEqual(domains["tickets"]["catalog"],
+                         "TroubleTickets_year_value_catalogue")
         self.assertIn("Account_name", domains["tickets"]["search_columns"])
         self.assertNotIn("CurrentStatus_Reason", domains["tickets"]["search_columns"])
         self.assertNotIn("ticketEntry", domains["tickets"]["search_columns"])

@@ -27,7 +27,11 @@ the steps below.
   (routing, timeline labels, lookup dataset + search allowlist). Fill `agent_id`
   in step 6.
 - `tools/attribute_lookup_tool.py` - now accepts a per-domain `searchable_columns`
-  allowlist (the orchestrator passes the tickets one server-side).
+  allowlist (the orchestrator passes the tickets one server-side), and surfaces the
+  generic catalog's `value`-domain rows as "did you mean" suggestions.
+- `recipes/build_value_catalog_recipe.py` - now auto-IO + NA-safe +
+  dataset-adaptive (revenue keeps its curated catalog; any other dataset gets a
+  generic per-value catalog). The profile + value_index recipes are also NA-safe.
 - `tools/semantic_model/update_tickets_semantic_model.py` +
   `dump_tickets_semantic_model.py` - the tickets semantic-model brain + snapshot.
 - `registry.json` + `DATASETS.md` - the spec + column inventory.
@@ -56,11 +60,16 @@ Wire the SAME recipes (no code edit; they read INPUT/OUTPUT from the recipe API)
   ```
   (The auto-selector would mostly do this anyway; the explicit lists are
   deterministic.)
-- `TroubleTickets_year_Value_Catalog`: **skip for v1** (the sub-agent does not read
-  it; `build_value_catalog_recipe.py` is revenue-hardcoded and would need a fork).
+- `TroubleTickets_year_value_catalogue`: `build_value_catalog_recipe.py` (now
+  auto-IO + NA-safe + dataset-adaptive). On a non-revenue dataset it builds a
+  GENERIC catalog of each categorical text column's distinct values
+  (search_domain "value"), which feeds the orchestrator lookup's "did you mean"
+  fallback for tickets. Optional but recommended for consistency; the sub-agent
+  does not read it (it grounds on profile + value_index), so it can come later.
 
 Run these as a **scheduled scenario, off-peak** (never from the webapp UI). 83,738
-rows is small; no OOM risk.
+rows is small; no OOM risk. The three recipes auto-detect INPUT/OUTPUT from the
+Flow wiring (no hardcoded dataset names) and are NA-safe.
 
 ### 2. [curate] Pin the COUNT default metric (overrides dataset)
 

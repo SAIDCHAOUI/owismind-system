@@ -105,6 +105,7 @@ updated (corrected text in [`tools/README.md`](tools/README.md)).
 | `TroubleTickets_year` | source (83,738 rows, 21 cols) | tickets semantic model (SQL); `attribute_lookup` (allowlisted search) | the incident-tickets base (CODED, pending Flow build) |
 | `TroubleTickets_year_profile` | `recipes/profile_dataset_recipe.py` | the **tickets sub-agent** (UNDERSTAND, about_data) | tickets business brain; set COUNT default metric via overrides |
 | `TroubleTickets_year_value_index` | `recipes/build_value_index_recipe.py` | the **tickets sub-agent** (RESOLVE, inline SQL) | tickets exact-value grounding; MUST be on the SQL connection |
+| `TroubleTickets_year_value_catalogue` | `recipes/build_value_catalog_recipe.py` (generic path) | `attribute_lookup` (alias fallback) | tickets "did you mean" catalog (search_domain `value`) |
 
 ### Semantic model
 

@@ -46,8 +46,10 @@ FACT_DATASET = "DRIVE_Revenues"
 CATALOG_DATASET = "DRIVE_Revenues_Value_Catalog"   # value catalog (alias fallback)
 
 # Catalog search domains for the alias fallback, in preference order. A catalog
-# convention (build_value_catalog_recipe), not a dataset column.
-ENTITY_DOMAINS = ("account", "account_group", "alias")
+# convention (build_value_catalog_recipe), not a dataset column. "value" is the
+# GENERIC domain emitted for a non-revenue dataset (each categorical column's
+# distinct values); revenue catalogs carry none, so it is inert for them.
+ENTITY_DOMAINS = ("account", "account_group", "alias", "value")
 
 SEARCH_SAMPLE_ROWS = 1000     # rows scanned to collect the matching values
 DISTINCT_PER_COLUMN = 25      # max distinct values returned per column
@@ -274,10 +276,14 @@ def build_resolve_sql(catalog_table, term_norm, fuzzy):
 
 
 def alias_suggestions(rows, term_norm):
-    """Alias rows (is_alias=1) to propose when no real match was found, ranked by
-    closeness to the term and de-duplicated by display name (at most 5)."""
+    """Catalog rows to propose when no real match was found, ranked by closeness to
+    the term and de-duplicated by display name (at most 5). Eligible rows are the
+    hand-crafted aliases (is_alias=1) and the generic per-value entries
+    (search_domain='value'), so a non-revenue dataset's catalog also yields
+    'did you mean' suggestions."""
     aliases = [r for r in (rows or [])
-               if int(r.get("is_alias") or 0) == 1
+               if (int(r.get("is_alias") or 0) == 1
+                   or str(r.get("search_domain") or "") == "value")
                and r.get("target_column") and r.get("target_value")]
     if not aliases:
         return []

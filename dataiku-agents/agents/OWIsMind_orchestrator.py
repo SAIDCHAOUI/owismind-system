@@ -272,9 +272,10 @@ CAPABILITIES = {
         "dataset_label_en": "OWI incident tickets base (TroubleTickets_year)",
         "source_url": "",
         "lookup_dataset": "TroubleTickets_year",
-        # No Value_Catalog for tickets yet (the alias fallback is optional and the
-        # sub-agent does not read it); "" degrades gracefully.
-        "lookup_catalog": "",
+        # The generic value catalog (build_value_catalog_recipe on the non-revenue
+        # path) feeds the lookup's "did you mean" fallback for tickets. Without it
+        # the tool would fall back to the revenue catalog (wrong suggestions).
+        "lookup_catalog": "TroubleTickets_year_value_catalogue",
         # Search ONLY the named-entity / identifier text columns, never the long
         # free-text columns (ticketEntry, CurrentStatus_Reason) - those would make
         # a short needle match noisily. Any column is still returnable as an

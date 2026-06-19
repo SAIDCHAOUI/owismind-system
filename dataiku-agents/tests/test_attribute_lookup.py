@@ -469,6 +469,26 @@ class TestInvoke(unittest.TestCase):
         self.assertTrue(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
 
 
+class TestGenericValueCatalog(unittest.TestCase):
+    """A non-revenue dataset's catalog emits per-value rows under search_domain
+    'value'; the alias fallback must surface them as 'did you mean' suggestions."""
+
+    def test_entity_domains_includes_value(self):
+        self.assertIn("value", al.ENTITY_DOMAINS)
+
+    def test_value_domain_rows_are_suggested(self):
+        rows = [_cat_row("priority", "Critical", search_domain="value", is_alias=0,
+                         display_value="Critical", normalized_value="critical")]
+        sugg = al.alias_suggestions(rows, "critcal")   # typo of 'critical'
+        self.assertEqual(len(sugg), 1)
+        self.assertEqual(sugg[0]["target_value"], "Critical")
+
+    def test_non_alias_non_value_rows_still_ignored(self):
+        # A plain 'account' exact row (is_alias=0) is NOT a suggestion (unchanged).
+        rows = [_cat_row("diamond_id", "AT001", search_domain="account", is_alias=0)]
+        self.assertEqual(al.alias_suggestions(rows, "at001"), [])
+
+
 class TestSearchAllowlist(unittest.TestCase):
     """The caller (orchestrator) may restrict the broad search to a domain's
     allowlist (e.g. tickets: named-entity / id columns only, never long prose)."""
