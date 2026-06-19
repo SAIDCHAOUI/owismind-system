@@ -30,6 +30,20 @@ export const useSessionStore = defineStore('session', () => {
   const user = ref(null) // { user_id, groups }
   const isAdmin = ref(false)
   const needsConfig = ref(false)
+  // Authentication state, used by App.vue to decide what to render:
+  // 'pending' (before /me resolves) -> neutral splash, 'ok' -> the full shell,
+  // 'unauthenticated' -> ONLY the AuthGate (no navigation). We only flip to
+  // 'unauthenticated' on a DEFINITIVE 401 from /me; any other failure (e.g. running
+  // outside DSS, backend down) stays 'ok' to keep the degraded-shell behaviour.
+  const authState = ref('pending')
+  // BEGIN impersonation (temporary) - admin "view as user". While impersonating,
+  // /me reports the EFFECTIVE (impersonated) identity above (user/isAdmin) plus
+  // these two flags: `impersonating` drives the banner + the read-only UI gate,
+  // `realUserId` is the admin behind the session. Default false / ''. Removable:
+  // delete these refs + their reads in loadMe + the exports.
+  const impersonating = ref(false)
+  const realUserId = ref('')
+  // END impersonation (temporary)
   const agents = ref([]) // [{ key, label }] from /agents
   const selectedAgentKey = ref('')
   const loading = ref(false)
@@ -74,9 +88,23 @@ export const useSessionStore = defineStore('session', () => {
       user.value = { user_id: me.user_id, groups: me.groups || [], display_name: me.display_name }
       isAdmin.value = !!me.is_admin
       needsConfig.value = !!me.needs_config
+      // BEGIN impersonation (temporary) - capture the impersonation flags from /me.
+      impersonating.value = !!me.impersonating
+      realUserId.value = me.real_user_id || ''
+      // END impersonation (temporary)
+      authState.value = 'ok'
     } catch (e) {
       user.value = null
       isAdmin.value = false
+      // BEGIN impersonation (temporary) - reset on a failed /me (no stale state).
+      impersonating.value = false
+      realUserId.value = ''
+      // END impersonation (temporary)
+      // Gate ONLY on a definitive "not signed in to DSS" answer. Any other failure
+      // (getWebAppBackendUrl unavailable outside DSS, backend down, ...) leaves the
+      // shell in its existing degraded mode.
+      const code = (e && e.message) || ''
+      authState.value = code === 'unauthenticated' || code === 'http_401' ? 'unauthenticated' : 'ok'
     }
   }
 
@@ -209,6 +237,11 @@ export const useSessionStore = defineStore('session', () => {
     user,
     isAdmin,
     needsConfig,
+    authState,
+    // BEGIN impersonation (temporary)
+    impersonating,
+    realUserId,
+    // END impersonation (temporary)
     agents,
     selectedAgentKey,
     loading,

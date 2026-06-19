@@ -2201,4 +2201,24 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   .claude skills, agentic-research, mockup) que `grep -rlP` n'avait jamais signalés.
 - **Source** : session 2026-06-19 Run 2 (doc ultra-complète + plateforme web). **Date** : 2026-06-19.
 
+## L094 - Plugin DEV/PROD : SOURCE UNIQUE + cible de build (jamais 2 copies à maintenir) ; renommer AUSSI le label du webapp [✅ validé DSS 2026-06-19]
+- **Contexte** : besoin d'un plugin DEV coexistant avec la prod sur la MÊME instance DSS, sans toucher la prod.
+- **Ce qui ne marche pas / pièges** : (a) dupliquer le dossier plugin -> 2 copies qui divergent. (b) ne renommer que `plugin.json` -> les 2 webapps s'affichent avec le MÊME label (`webapp.json meta.label`) dans la liste DSS, impossible de les distinguer (retour user + capture). (c) collision `import owismind` si le package python n'est pas renommé (le code env est partagé entre plugins).
+- **Solution qui marche** : garder UNE source `Plugin/owismind/` ; `tools/build_dev_plugin.py` (Python stdlib, NO install) émet un 2e plugin `owismind_dev` : renomme l'**id plugin** + le **package python** (`from/import owismind` en word-boundary + `getLogger("owismind")` racine ; **laisse intacts** `APP_NAMESPACE="owismind"`, l'URL `/owismind-api`, `Blueprint("owismind_api")`) + la **base Vite** via env `OWI_PLUGIN_ID` (défaut prod inchangé) + le **label de `plugin.json` ET de `webapp.json`** ("OWIsMind (DEV)" / "OWIsMind - AI Agents (DEV)"). Invariantes auto-assertées + zip propre. "Passer en prod" = rebuild prod depuis la source validée + upload.
+- **Données** : `CREATE TABLE IF NOT EXISTS` déjà partout (`ensure_*`), prod/dev même code ; isolation = `table_prefix` optionnel au DÉPLOIEMENT (sans prefix = mêmes tables que prod). RIEN à changer côté tables.
+- **Preuve-vérification** : `owismind_dev-upload.zip` uploadé + testé DSS (« tout fonctionne à merveille ») ; parité python 34=34 ; prod (artefacts + source) jamais touchée.
+- **Source** : session 2026-06-19 Run 3. **Date** : 2026-06-19.
+
+## L095 - Impersonation admin "act as user" : chokepoint `effective_identity` (READ swap / WRITE block), honoré SEULEMENT pour un admin réel [✅ validé DSS 2026-06-19, TEMPORAIRE]
+- **Contexte** : un admin doit consulter les conversations d'un autre user "à sa place" (analyse/amélioration des agents). Feature temporaire (RGPD), à retirer plus tard.
+- **Solution qui marche** : header `X-OWI-Impersonate: <user>` posé par le front (sessionStorage), injecté UNE fois dans `services/backend.js` `request()` -> porté sur chaque appel. Backend `security/impersonation.py` : `effective_identity(real_identity)` lit le header et ne le résout en identité cible que si `admin.is_admin(real_user_id)` (le caller réel vient des headers DSS, jamais du body) ; sinon identité réelle. Ne lève JAMAIS (target invalide/over-long/storage off -> identité réelle) ; pas d'appel DB si pas de header. Câblage `routes.py` (fencé) : READ `identity = effective_identity(identity)` (swap) ; WRITE `if effective_identity(identity).impersonating: 403 impersonation_read_only` AVANT tout travail ; `/me` ajoute `impersonating`+`real_user_id` et **ne record pas** le user impersonné. Front `features/admin-impersonate/` (picker + banner + Quitter, `canSend && !impersonating`).
+- **Pièges évités** : ne PAS swapper sur les routes d'écriture (bloquer, pas agir) ; ne PAS swapper `_admin_guard`/`/admin/*` (sinon l'admin perdrait l'accès) ; SQL reste paramétré (`sql_value`). Un non-admin qui force le sessionStorage est banni serveur (header ignoré) -> il ne voit que ses propres données.
+- **Preuve-vérification** : 17 tests dédiés + revue adversariale sécu = **0 crit / 0 high / 0 medium** ; validé DSS.
+- **Source** : session 2026-06-19 Run 3. **Date** : 2026-06-19.
+
+## L096 - Cadrer l'INTENTION UX d'une feature tôt : "consulter les convs" a fait v1 -> v2 -> suppression -> impersonation [process]
+- **Contexte** : feature "consulter les conversations d'un autre user". J'ai construit une revue read-only dédiée (v1), puis un sélecteur de source cross-env + scoping de découverte + débat sur le renommage de tables (v2) ; l'user a finalement tout fait supprimer pour une simple **impersonation** ("je m'identifie à sa place").
+- **Leçon** : pour une feature dont l'UX est ambiguë, faire préciser l'INTERACTION cible (écran séparé ? impersonation ? lecture seule ?) AVANT de coder, pas seulement les contraintes (isolation, sécu). Le sur-cadrage technique (sélecteur de source, scoping, renommage) a été du travail jeté. Point positif : la discipline d'isolation (modules dédiés + edits FENCÉS) a rendu la suppression totale triviale et sans risque.
+- **Source** : session 2026-06-19 Run 3 (recadrage user). **Date** : 2026-06-19.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

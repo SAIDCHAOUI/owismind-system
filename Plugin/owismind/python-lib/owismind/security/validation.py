@@ -504,6 +504,28 @@ def _clean_str_list(value, max_items, max_chars):
     return out
 
 
+# --- Admin conversation review (view-as) -------------------------------------
+# An admin consults ANOTHER user's stored conversations (read-only) for agent
+# improvement. The target user id travels in the query/body of the admin-gated
+# /admin/inspect/* routes; it is bounded here exactly like every other id (the
+# storage reads are then scoped on this value, never the admin's own id).
+MAX_TARGET_USER_ID_LENGTH = 256
+
+
+def validate_target_user_id(value):
+    """A non-empty, length-bounded target user id (the inspected user). Raises otherwise.
+
+    Stripped; must be a non-empty str of at most ``MAX_TARGET_USER_ID_LENGTH``
+    characters - any other shape raises ``ValidationError('invalid_target')``.
+    """
+    if not isinstance(value, str):
+        raise ValidationError("invalid_target")
+    value = value.strip()
+    if not value or len(value) > MAX_TARGET_USER_ID_LENGTH:
+        raise ValidationError("invalid_target")
+    return value
+
+
 def validate_agent_meta(raw):
     """Sanitize an admin-authored agent profile into a bounded, safe display dict.
 

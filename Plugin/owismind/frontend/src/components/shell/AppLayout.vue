@@ -7,12 +7,19 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '../../stores/ui.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
+import { useSessionStore } from '../../stores/session.js'
 import Sidebar from './Sidebar.vue'
 import MainTop from './MainTop.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
+// BEGIN impersonation (temporary) - top banner shown while an admin views as a user.
+// Removable: delete this import + the <ImpersonateBanner> in the template + the
+// .shell wrapper, and the features/admin-impersonate folder.
+import ImpersonateBanner from '../../features/admin-impersonate/ImpersonateBanner.vue'
+// END impersonation (temporary)
 
 const ui = useUiStore()
 const evidence = useEvidenceStore()
+const session = useSessionStore()
 const route = useRoute()
 const dragging = ref(false)
 const draggingEv = ref(false)
@@ -104,36 +111,54 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="app"
-    :class="{
-      'sidebar-collapsed': ui.sidebarCollapsed,
-      'with-evidence': evidence.open,
-      resizing: dragging || draggingEv,
-    }"
-    :style="appStyle"
-  >
-    <Sidebar />
+  <!-- BEGIN impersonation (temporary) - the shell wrapper stacks the read-only
+       banner above the app grid while an admin views as a user. When not
+       impersonating, the wrapper just holds the grid (no visual change). -->
+  <div class="shell">
+    <ImpersonateBanner v-if="session.impersonating" />
+    <!-- END impersonation (temporary) -->
     <div
-      class="resize-handle left"
-      :class="{ active: dragging }"
-      @pointerdown.prevent="startResize"
-    />
-    <main class="main">
-      <MainTop />
-      <RouterView />
-    </main>
-    <div
-      v-if="evidence.open"
-      class="resize-handle ev"
-      :class="{ active: draggingEv }"
-      @pointerdown.prevent="startEvResize"
-    />
-    <EvidencePanel v-if="evidence.open" />
+      class="app"
+      :class="{
+        'sidebar-collapsed': ui.sidebarCollapsed,
+        'with-evidence': evidence.open,
+        resizing: dragging || draggingEv,
+      }"
+      :style="appStyle"
+    >
+      <Sidebar />
+      <div
+        class="resize-handle left"
+        :class="{ active: dragging }"
+        @pointerdown.prevent="startResize"
+      />
+      <main class="main">
+        <MainTop />
+        <RouterView />
+      </main>
+      <div
+        v-if="evidence.open"
+        class="resize-handle ev"
+        :class="{ active: draggingEv }"
+        @pointerdown.prevent="startEvResize"
+      />
+      <EvidencePanel v-if="evidence.open" />
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* BEGIN impersonation (temporary) - the shell wrapper stacks the read-only banner
+   above the app grid. Without a banner it is a plain full-height column holding the
+   grid, so the layout is byte-identical to before. With the banner, the grid fills
+   the remaining height (min-height: 0 lets the grid's own overflow work). */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.shell > .app { flex: 1; min-height: 0; height: auto; }
+/* END impersonation (temporary) */
 .app {
   --sidebar-w: 260px;
   display: grid;

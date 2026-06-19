@@ -62,6 +62,11 @@ from owismind.security.validation import (
 )
 from owismind.storage import admin, budget, chat_v5, settings, sql_config
 from owismind.storage.migrations import ensure_chat_table
+# --- BEGIN impersonation (temporary, removable) ---
+# Admin "act as user" (read-only). The whole feature lives in security/impersonation.py
+# plus the FENCED blocks below; remove the feature = delete that module + these blocks.
+from owismind.security import impersonation
+# --- END impersonation ---
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,12 @@ def me():
         logger.warning("/me - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
+    # --- BEGIN impersonation (temporary, removable) ---
+    # Swap to the EFFECTIVE identity (the impersonated target when an admin carries the
+    # header; otherwise the real caller). Downstream uses identity["user_id"] unchanged.
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
     logger.info(
         "/me - %s user_id=%s groups=%s",
         request.method,
@@ -152,8 +163,15 @@ def me():
     is_admin_flag = False
     if configured:
         try:
-            if request.method == "POST":
+            # --- BEGIN impersonation (temporary, removable) ---
+            # Do NOT record/bootstrap the impersonated user: the side effect must only
+            # ever apply to a real, non-impersonated caller (a forged registry row /
+            # first-admin election under someone else's id would be a bug).
+            if request.method == "POST" and not identity.get("impersonating"):
                 admin.record_user(identity)
+            # --- END impersonation ---
+            # is_admin reflects the EFFECTIVE user: while impersonating a normal user it
+            # is False, so the admin UI correctly hides (exit is via the banner).
             is_admin_flag = admin.is_admin(identity["user_id"])
         except Exception:
             logger.exception("/me - user registry failed")
@@ -168,6 +186,12 @@ def me():
             "groups": identity["groups"],
             "needs_config": not configured,
             "is_admin": is_admin_flag,
+            # --- BEGIN impersonation (temporary, removable) ---
+            # Expose the impersonation state so the frontend can show the banner + hide
+            # write affordances; real_user_id is the admin actually driving the session.
+            "impersonating": identity.get("impersonating", False),
+            "real_user_id": identity.get("real_user_id"),
+            # --- END impersonation ---
         }
     )
 
@@ -186,6 +210,11 @@ def usage_me():
     except IdentityError as exc:
         logger.warning("/usage - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # Read the EFFECTIVE user's usage (the impersonated target when an admin impersonates).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
 
     if not sql_config.is_configured():
         logger.warning("/usage - storage not configured")
@@ -251,6 +280,15 @@ def chat_start():
     except IdentityError as exc:
         logger.warning("/chat/start - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while an admin impersonates (consultation only, no sending /
+    # no budget spend under the user's name). Checked BEFORE any work / whitelist /
+    # budget / persist. We block here rather than swap identity (we do not act as them).
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/chat/start - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
 
     try:
         session_id, message, agent_key = validate_chat_start_request(
@@ -438,6 +476,14 @@ def chat_stop():
         logger.warning("/chat/stop - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
+    # stop a run under the inspected user's name; checked before any work.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/chat/stop - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
     payload = request.get_json(silent=True) or {}
     run_id = payload.get("run_id") or ""
     if not isinstance(run_id, str) or not run_id or len(run_id) > _MAX_RUN_ID_LENGTH:
@@ -465,6 +511,14 @@ def chat_feedback():
     except IdentityError as exc:
         logger.warning("/chat/feedback - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
+    # rate a message under the inspected user's name; checked before any work.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/chat/feedback - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
 
     if not sql_config.is_configured():
         logger.warning("/chat/feedback - storage not configured")
@@ -510,6 +564,11 @@ def conversations():
         logger.warning("/conversations - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
 
+    # --- BEGIN impersonation (temporary, removable) ---
+    # List the EFFECTIVE user's conversations (the impersonated target for an admin).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
     if not sql_config.is_configured():
         logger.warning("/conversations - storage not configured")
         return jsonify({"status": "error", "error": "storage_not_configured"}), 409
@@ -552,6 +611,11 @@ def conversation():
     except IdentityError as exc:
         logger.warning("/conversation - identity resolution failed: %s", exc)
         return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # Load the EFFECTIVE user's session (the impersonated target for an admin).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
 
     if not sql_config.is_configured():
         logger.warning("/conversation - storage not configured")
@@ -650,6 +714,11 @@ def _evidence_guard():
     except IdentityError as exc:
         logger.warning("/evidence - identity resolution failed: %s", exc)
         return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
+    # --- BEGIN impersonation (temporary, removable) ---
+    # Evidence reads scope to the EFFECTIVE user (the impersonated target for an admin),
+    # so an admin sees exactly the SQL / charts / tables the inspected user sees.
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
     if not sql_config.is_configured():
         logger.warning("/evidence - storage not configured")
         return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)

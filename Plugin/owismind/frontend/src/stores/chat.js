@@ -101,6 +101,11 @@ export const useChatStore = defineStore('chat', () => {
       // Monthly budget exhausted (enforcement on): sends are paused until the reset.
       // The server-side gate stays authoritative; this just disables the UI proactively.
       !session.budgetBlocked &&
+      // BEGIN impersonation (temporary) - an admin viewing as a user is read-only.
+      // The server also 403s write routes while impersonating; this is the proactive
+      // UI gate (disables the prompt). Removable: delete this one line.
+      !session.impersonating &&
+      // END impersonation (temporary)
       session.hasAgents &&
       !!session.selectedAgentKey,
   )

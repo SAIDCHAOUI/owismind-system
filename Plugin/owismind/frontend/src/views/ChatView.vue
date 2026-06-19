@@ -34,6 +34,18 @@ const budgetMsg = computed(() => {
   ])
 })
 
+// BEGIN impersonation (temporary) - read-only note while an admin views as a user.
+// The label is the EFFECTIVE (impersonated) user from the session. Sending is also
+// disabled via chat.canSend; this just explains why. Removable: delete this computed
+// + the .imp-note block in both prompt-wraps + its styles.
+const impersonateNote = computed(() => {
+  if (!session.impersonating) return ''
+  const u = session.user
+  const label = (u && (u.display_name || u.user_id)) || '-'
+  return t('impersonate.readonly_note', [label])
+})
+// END impersonation (temporary)
+
 // Map the few send errors that benefit from a human message (the monthly-quota race in
 // particular); anything else shows its raw stable code (unchanged behaviour).
 const friendlyError = computed(() => {
@@ -88,6 +100,12 @@ watch(
     <template v-else-if="chat.hasMessages">
       <ChatThread :turns="chat.turns" />
       <div class="prompt-wrap">
+        <!-- BEGIN impersonation (temporary) - read-only note (admin viewing as user). -->
+        <div v-if="impersonateNote" class="imp-note">
+          <Icon name="users" />
+          <span>{{ impersonateNote }}</span>
+        </div>
+        <!-- END impersonation -->
         <!-- Monthly budget exhausted: a clear, transparent banner (sends are paused). -->
         <div v-if="budgetBlocked" class="budget-banner">
           <Icon name="wallet" />
@@ -104,6 +122,12 @@ watch(
     <div v-else class="empty-stage">
       <ChatEmpty />
       <div class="prompt-wrap in-empty">
+        <!-- BEGIN impersonation (temporary) - read-only note (admin viewing as user). -->
+        <div v-if="impersonateNote" class="imp-note">
+          <Icon name="users" />
+          <span>{{ impersonateNote }}</span>
+        </div>
+        <!-- END impersonation -->
         <div v-if="budgetBlocked" class="budget-banner">
           <Icon name="wallet" />
           <span>{{ budgetMsg }}</span>
@@ -171,6 +195,24 @@ watch(
   line-height: 1.5;
 }
 .budget-banner :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; }
+/* BEGIN impersonation (temporary) - read-only note above the prompt (admin view-as).
+   Flat, square, a thin orange left accent (charter: orange is a rare accent). */
+.imp-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 var(--s-3);
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--orange);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.imp-note :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--orange); }
+/* END impersonation */
 /* Conversation-switch loading overlay (centered spinner over the whole .chat area). */
 .thread-loading {
   position: absolute;

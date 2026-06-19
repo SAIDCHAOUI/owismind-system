@@ -120,6 +120,8 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 | Racine plugin (sur disque) | `Plugin/owismind/` (P majuscule) | repo |
 | Frontend source | `Plugin/owismind/frontend/` | repo |
 | Staging packaging | `Plugin/ready-for-dataiku/owismind-upload/` + `owismind-upload.zip` | repo |
+| Plugin DEV (coexistant, L094 ✅ DSS) | id `owismind_dev`, zip `Plugin/ready-for-dataiku/owismind_dev-upload.zip` (label "OWIsMind (DEV)", webapp "OWIsMind - AI Agents (DEV)") - généré par `tools/build_dev_plugin.py` / skill `/package-plugin-dev` | repo |
+| Source de build DEV | UNE source `Plugin/owismind/` ; base Vite via env `OWI_PLUGIN_ID` (défaut `owismind`) ; package python renommé `owismind`->`owismind_dev` au packaging (L094) ; tables = create-if-not-exist, isolation = `table_prefix` optionnel au déploiement | repo |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) | guide SQL |
 | Project key DSS | `OWISMIND_DEV` (résolu via `dataiku.default_project_key()`, **reste la référence du repo**) ; variante test `OWISMIND_LAB` ; **projet PROD parallèle `OWISMIND_PROD_V1`** (table physique `OWISMIND_PROD_V1_drive_revenues` ; agent `agent:uO5hEzAs`, `LOOKUP_TOOL_ID=szOZCoU` ; migration via `tools/semantic_model/migrate_semantic_model_to_project.py` qui dérive le remapping des clés - sinon Evidence dégradé, L090) | guide SQL ; 2026-06-18 |
 | Agent « revenue » v1 (visual) | `agent:rNTZ781a` (Structured Visual Agent - revenus) - conservé en filet, **désactivé du registre depuis v2.4 (v2 actif)** | guide SQL / code_samples |

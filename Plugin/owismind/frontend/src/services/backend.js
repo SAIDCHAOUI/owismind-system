@@ -5,6 +5,13 @@
 // Paths must match the Flask routes exactly (blueprint prefix "/owismind-api"),
 // with no trailing slash.
 
+// BEGIN impersonation (temporary) - admin "view as user". This adds the
+// X-OWI-Impersonate header to EVERY call when an admin is impersonating a user.
+// Removable: delete this import + the merge in request() below, and the
+// features/admin-impersonate folder.
+import { impersonationHeaders } from '../features/admin-impersonate/impersonation.js'
+// END impersonation (temporary)
+
 function backendUrl(path) {
   const resolver = window.getWebAppBackendUrl;
   if (typeof resolver !== 'function') {
@@ -20,7 +27,10 @@ async function request(path, options) {
   const res = await fetch(backendUrl(path), {
     credentials: 'same-origin',
     ...opts,
-    headers: { Accept: 'application/json', ...(opts.headers || {}) },
+    // BEGIN impersonation (temporary) - carry the X-OWI-Impersonate header (empty
+    // object when not impersonating). Server honours it only for real admins.
+    headers: { Accept: 'application/json', ...impersonationHeaders(), ...(opts.headers || {}) },
+    // END impersonation (temporary)
   });
   if (!res.ok) {
     let code = 'http_' + res.status;

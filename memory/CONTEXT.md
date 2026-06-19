@@ -19,6 +19,28 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🔐 SESSION 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) - ✅ VALIDÉ DSS
+(user : « super tout fonctionne à merveille »).** 3 livrables via sous-agents + 3 revues adversariales
+sécu ; zip DEV déployé. **(1) Auth gate** (`AuthGate.vue` + `session.authState` + `App.vue`) : `/me` 401
+-> écran plein "non identifié" (EN/FR + thème + F5, vrai logo), AUCUNE navigation ; autres erreurs (hors
+DSS) gardent le shell. Clés `authgate.*`. **(2) Impersonation admin "se mettre à la place d'un user"**
+(TEMPORAIRE ; remplace l'idée abandonnée de "revue read-only") : Administration -> "Consulter les
+conversations" -> liste users -> clic -> la webapp **recharge en s'identifiant à ce user**, **lecture
+seule** (envoi off UI + serveur 403 `impersonation_read_only`), **admin-only**. Backend = chokepoint
+`security/impersonation.py` (`effective_identity`, header `X-OWI-Impersonate`, honoré **seulement si le
+caller RÉEL est admin**), câblé FENCÉ dans `routes.py` (READ swap : /me,/usage,/conversations,
+/conversation,_evidence_guard ; WRITE bloqué : chat start/feedback/stop ; /me ne record PAS ;
+/chat/poll,/agents,/admin = identité réelle). Front `features/admin-impersonate/` (header injecté dans
+`services/backend.js`, picker, banner+Quitter, `canSend && !impersonating`). **Isolé/supprimable.** Revue
+sécu dédiée = **0 crit / 0 high / 0 medium**. Voir **L095**. **(3) DEV/PROD = SOURCE UNIQUE + cible de
+build** (L094) : `tools/build_dev_plugin.py` + skill `/package-plugin-dev` -> `owismind_dev-upload.zip`
+(id `owismind_dev`, label "OWIsMind (DEV)", **webapp "OWIsMind - AI Agents (DEV)"**, package python
+renommé, base Vite via `OWI_PLUGIN_ID`). **Prod 100% inchangée.** Tables = **create-if-not-exist** déjà
+partout (rien à changer) : DEV **sans prefix** -> vraies données prod (impersonation des vrais users) ;
+**`table_prefix=dev`** -> bac à sable. Promotion prod = rebuild prod + upload. **Ancienne feature
+SUPPRIMÉE** (`admin_inspect.py`, `features/admin-inspect/`, route `/admin/inspect`, clés `inspect.*`) :
+avait fait v1 (revue read-only) -> v2 (sélecteur de source), jetées sur recadrage user (**L096**).
+
 **📚 DOCUMENTATION ULTRA-COMPLÈTE + PLATEFORME WEB "PARCOURS" (2026-06-19 Run 2, session autonome nuit) -
 ✅ LIVRÉ LOCAL (doc + site, commit de session).** Doc `project-documentation/` **corrigée + complétée** par
 workflow Sonnet (11 clusters, ownership par fichier, vérif adversariale + intégration) : budget blocage = **codé**
@@ -405,7 +427,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-19 Run 2 (doc ultra-complète + plateforme web "parcours") → détail `sessions/2026-06-19.md` Run 2
+## 🧭 Dernière session - 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) → détail `sessions/2026-06-19.md` Run 3
+- **✅ VALIDÉ DSS** (« super tout fonctionne à merveille »). 3 features livrées via sous-agents + 3 revues sécu (0 crit/high/medium).
+- **Auth gate** (`AuthGate.vue` + `session.authState` + `App.vue`, clés `authgate.*`) ; **impersonation admin** read-only & admin-only (`security/impersonation.py` + `features/admin-impersonate/`, header `X-OWI-Impersonate`, FENCÉ/supprimable, **L095**) qui REMPLACE l'ancienne "revue de convs" SUPPRIMÉE (**L096**) ; **plugin DEV** `owismind_dev` (source unique, `tools/build_dev_plugin.py` + skill `/package-plugin-dev`, **L094**), **prod intacte**, tables create-if-not-exist inchangées.
+- À faire : **promotion prod** = rebuild prod + upload quand DEV validé (idem agents). Impersonation = **temporaire** (à retirer plus tard, blocs FENCÉS).
+
+## Avant - 2026-06-19 Run 2 (doc ultra-complète + plateforme web "parcours") → détail `sessions/2026-06-19.md` Run 2
 - **Doc `project-documentation/` corrigée + complétée** (workflow 23 agents Sonnet, ownership/fichier + vérif
   adversariale) : périmés corrigés (budget = **codé** ; doc = **anglais**), 3 features 2026-06-18 ajoutées,
   **+5 fichiers** (user-guide 05/06, ADR 0013/0014/0015), **61 .md** propres, 21 routes, build->zip détaillé.
@@ -642,6 +669,12 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🔐NEW. **SESSION 2026-06-19 Run 3 = ✅ VALIDÉ DSS** (auth gate + impersonation admin + plugin DEV `owismind_dev`).
+   **Workflow DEV->PROD en place** : promotion prod = `/build-plugin` + `/package-plugin` (prod) + upload quand le
+   DEV est bon (idem agents : valider en DEV, puis promouvoir). **Impersonation = feature TEMPORAIRE** : suppression
+   future = retirer `security/impersonation.py` + `features/admin-impersonate/` + les blocs FENCÉS (routes.py /
+   backend.js / session.js / chat.js / ChatView.vue / AppLayout.vue / AdminView.vue) + clés `impersonate.*`. Détail
+   -> `sessions/2026-06-19.md` Run 3, **L094-L096**.
 0📚NEW. **DOC + PLATEFORME WEB (2026-06-19 Run 2) - ✅ livrées local.** (a) Ouvrir
    `project-documentation/site/index.html` (double-clic) pour parcourir la doc en parcours (offline, charté Orange).
    (b) **Décider du sort des em-dash PRÉEXISTANTS hors livrable** (NON introduits cette session) : surtout

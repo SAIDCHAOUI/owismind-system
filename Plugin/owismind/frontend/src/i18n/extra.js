@@ -431,6 +431,28 @@ export const extraMessages = {
     'ev.exp.cte_step': 'Étape intermédiaire {0} : {1}',
     'ev.exp.union': 'Empiler avec {0} autre(s) ensemble(s) - non détaillés',
     'ev.exp.opaque': 'Opération non interprétée : {0}',
+
+    // === Auth gate (not authenticated to DSS) - full-screen sign-in-required screen ===
+    'authgate.eyebrow': 'Accès',
+    'authgate.title': 'Connexion à Dataiku requise',
+    'authgate.body':
+      "Nous n'avons pas pu vous identifier. Connectez-vous à Dataiku DSS dans ce navigateur, puis rechargez cette page (F5). Vous pouvez aussi ouvrir OWIsMind directement depuis l'espace OWIsMind dans Dataiku DSS.",
+    'authgate.reload': 'Recharger (F5)',
+    'authgate.lang': 'Langue',
+    'authgate.theme_dark': 'Passer au thème sombre',
+    'authgate.theme_light': 'Passer au thème clair',
+
+    // === Admin impersonation ("view as user", READ-ONLY) - isolated, removable feature ===
+    'impersonate.open': 'Consulter les conversations',
+    'impersonate.picker_title': 'Consulter en tant qu\'un utilisateur',
+    'impersonate.search': 'Rechercher un utilisateur…',
+    'impersonate.empty': 'Aucun utilisateur à afficher.',
+    'impersonate.loading': 'Chargement des utilisateurs…',
+    'impersonate.error': 'Chargement impossible. Réessayez.',
+    'impersonate.banner': 'Consultation en tant que {0} (revue admin) - lecture seule',
+    'impersonate.exit': 'Quitter la consultation',
+    'impersonate.readonly_note':
+      'Lecture seule : vous consultez le compte de {0}, l\'envoi est désactivé.',
   },
   en: {
     // Generic reusable
@@ -851,5 +873,27 @@ export const extraMessages = {
     'ev.exp.cte_step': 'Intermediate step {0}: {1}',
     'ev.exp.union': 'Stack with {0} other set(s) - not detailed',
     'ev.exp.opaque': 'Operation not interpreted: {0}',
+
+    // === Auth gate (not authenticated to DSS) - full-screen sign-in-required screen ===
+    'authgate.eyebrow': 'Access',
+    'authgate.title': 'Sign in to Dataiku required',
+    'authgate.body':
+      'We could not identify you. Please sign in to Dataiku DSS in this browser, then reload this page (F5). You can also open OWIsMind directly from the OWIsMind workspace in Dataiku DSS.',
+    'authgate.reload': 'Reload (F5)',
+    'authgate.lang': 'Language',
+    'authgate.theme_dark': 'Switch to dark theme',
+    'authgate.theme_light': 'Switch to light theme',
+
+    // === Admin impersonation ("view as user", READ-ONLY) - isolated, removable feature ===
+    'impersonate.open': 'Review conversations',
+    'impersonate.picker_title': 'View as a user',
+    'impersonate.search': 'Search a user…',
+    'impersonate.empty': 'No user to show.',
+    'impersonate.loading': 'Loading users…',
+    'impersonate.error': 'Could not load. Try again.',
+    'impersonate.banner': 'Viewing as {0} (admin review) - read-only',
+    'impersonate.exit': 'Exit impersonation',
+    'impersonate.readonly_note':
+      "Read-only: you are viewing {0}'s account, sending is disabled.",
   },
 }

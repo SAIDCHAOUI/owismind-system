@@ -32,10 +32,24 @@ import {
 } from '../composables/budgetModel.js'
 import { PageShell, SettingCard, EmptyState } from '../components/pages'
 import { Tabs, Button, Icon, Modal } from '../components/ui'
+// BEGIN impersonation (temporary) - admin "view as user" picker. Removable:
+// delete this import + the openImpersonate handler + the <UserPicker> in the
+// template + the impersonatePickerOpen ref, and the features/admin-impersonate folder.
+import UserPicker from '../features/admin-impersonate/UserPicker.vue'
+// END impersonation (temporary)
 
 const { t, locale } = useI18n()
 const session = useSessionStore()
 const meId = computed(() => session.user?.user_id || '')
+
+// BEGIN impersonation (temporary) - open the user picker; on pick it reloads the
+// webapp as the chosen user (consultation only). Deleting this + its button + the
+// modal removes the only AdminView coupling.
+const impersonatePickerOpen = ref(false)
+function openImpersonate() {
+  impersonatePickerOpen.value = true
+}
+// END impersonation (temporary)
 
 const activeTab = ref('overview')
 
@@ -406,6 +420,14 @@ if (import.meta.env.DEV) {
         <div class="admin-title-row">
           <h1 class="admin-title">{{ t('admin.title') }}</h1>
           <span class="admin-badge"><Icon name="shield" />ADMIN</span>
+          <!-- BEGIN impersonation (temporary) - "view as user" entry. Opens the user
+               picker modal; on pick the webapp reloads as that user (read-only
+               consultation). Deleting this button + the modal below + the script
+               fences + the features/admin-impersonate folder removes the feature. -->
+          <button type="button" class="inspect-link" @click="openImpersonate">
+            <Icon name="users" />{{ t('impersonate.open') }}
+          </button>
+          <!-- END impersonation entry -->
         </div>
         <p class="admin-desc">{{ t('admin.desc') }}</p>
       </div>
@@ -848,6 +870,10 @@ if (import.meta.env.DEV) {
         <Button variant="primary" @click="applyEditor">{{ t('admin.agents.editor_done') }}</Button>
       </template>
     </Modal>
+
+    <!-- BEGIN impersonation (temporary) - "view as user" picker modal. -->
+    <UserPicker v-model="impersonatePickerOpen" />
+    <!-- END impersonation -->
   </PageShell>
 </template>
 
@@ -908,6 +934,24 @@ if (import.meta.env.DEV) {
   /* Square: no border-radius */
 }
 .admin-badge :deep(.ui-icon) { width: 12px; height: 12px; }
+
+/* Impersonation ("view as user") entry - removable feature. Square ghost button,
+   1px border, hover inverts (charter). */
+.inspect-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--bg);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.inspect-link:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.inspect-link :deep(.ui-icon) { width: 14px; height: 14px; }
 
 .admin-desc {
   margin: 14px 0 0;
