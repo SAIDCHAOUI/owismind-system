@@ -13,6 +13,8 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | `build_aligned_semantic_model.py` | One-time CREATE of the aligned model from a read-only copy of the old one (corrections, golden queries, instructions, index). |
 | `update_aligned_semantic_model.py` | In-place MODIFY of an existing aligned model: refresh instructions + golden queries on the active version (no create, no re-index). The going-forward iteration path. |
 | `dump_semantic_model.py` | Export the live model `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json` (refresh the snapshot, no transcription drift). |
+| `update_tickets_semantic_model.py` | In-place MODIFY of the TICKETS model: inject the tickets instructions + golden queries on the active version (no create, no re-index). The iteration path for tickets. |
+| `dump_tickets_semantic_model.py` | Export the live tickets model to `TroubleTickets_Semantic_Model.v1.json`. |
 | `migrate_semantic_model_to_project.py` | COPY a model to another project (e.g. DEV -> PROD), remapping dataset refs + table names automatically from the project keys. Creates a new model in the target. |
 | `remap_semantic_model.py` | Rewrite an EXISTING model's dataset refs / table literals IN PLACE (no copy), then re-index. Fixes a botched migration or repoints a model at a different table. |
 
@@ -118,6 +120,28 @@ below are the iteration path, not a first-time deploy.
 5. **No sub-agent re-paste needed for a model-only change** (the sub-agent references the tool by
    id). Re-paste `SalesDrive_revenue_expert.py` into its Code Agent (`agent:bHrWLyOL`, env 3.11)
    only when the agent code itself changes.
+
+## The tickets semantic model (second domain)
+
+The tickets domain gets its OWN dedicated model `TroubleTickets_Semantic_Model`
+and its own tool `tickets_semantic_query` (a shared model is forbidden: the
+one-table-never-JOIN rule and the 1:1 tool-to-model binding). Unlike revenue (built
+by cloning the old model), the tickets model is created in the **DSS UI on the
+`TroubleTickets_year` dataset** (the UI auto-discovers entities/attributes with
+valid shapes), then the brain is injected by script:
+
+1. DSS UI: create `TroubleTickets_Semantic_Model` on `TroubleTickets_year`; index
+   distinct values once.
+2. `update_tickets_semantic_model.py` (set `NEW_MODEL_ID`): inject the tickets
+   `TICKETS_INSTRUCTIONS` + golden queries (in place, no re-index). Refine the
+   `[CONFIRM]` items (Duration_ticket_total unit; exact `CurrentStatus` values).
+3. `dump_tickets_semantic_model.py`: snapshot to
+   `TroubleTickets_Semantic_Model.v1.json`.
+4. Create the `tickets_semantic_query` tool (Agent OFF, Sonnet, access-as-user)
+   bound to the model; put its id in `agents/TroubleTickets_expert.py`
+   (`SEMANTIC_TOOL_ID`) and in `registry.json`.
+
+Full runbook: [`../../PLAYBOOK_ADD_AGENT.md`](../../PLAYBOOK_ADD_AGENT.md).
 
 ## DSS housekeeping tied to the model
 

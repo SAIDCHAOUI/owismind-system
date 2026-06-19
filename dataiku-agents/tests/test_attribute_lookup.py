@@ -110,7 +110,8 @@ class FakeTool(al.MyAgentTool):
         return list(self._all), list(self._fact_rows)
 
 
-def invoke(tool, entity, attributes=None, dataset=None, catalog=None):
+def invoke(tool, entity, attributes=None, dataset=None, catalog=None,
+           searchable_columns=None):
     payload = {"entity": entity}
     if attributes is not None:
         payload["attributes"] = attributes
@@ -118,6 +119,8 @@ def invoke(tool, entity, attributes=None, dataset=None, catalog=None):
         payload["dataset"] = dataset
     if catalog is not None:
         payload["catalog"] = catalog
+    if searchable_columns is not None:
+        payload["searchable_columns"] = searchable_columns
     return tool.invoke({"input": payload}, trace=None)["output"]
 
 
@@ -163,6 +166,26 @@ class TestAttributeMatching(unittest.TestCase):
             ["account manager", "Account_Manager", "wat", "sales zone"], ALL_COLS)
         self.assertEqual(resolved, ["account_manager", "sales_zone"])
         self.assertEqual(unknown, ["wat"])
+
+
+class TestResolveSearchColumns(unittest.TestCase):
+    def test_empty_returns_all_text_columns(self):
+        self.assertEqual(al.resolve_search_columns(TEXT_COLS, []), list(TEXT_COLS))
+        self.assertEqual(al.resolve_search_columns(TEXT_COLS, None), list(TEXT_COLS))
+
+    def test_subset_in_schema_order(self):
+        out = al.resolve_search_columns(TEXT_COLS, ["Account_name", "account manager"])
+        self.assertEqual(out, ["Account_name", "account_manager"])
+
+    def test_case_underscore_insensitive(self):
+        self.assertEqual(al.resolve_search_columns(TEXT_COLS, ["ACCOUNT_MANAGER"]),
+                         ["account_manager"])
+
+    def test_unmatched_falls_back_to_all(self):
+        # An allowlist that matches no live column must NOT yield an empty search
+        # (a broken predicate) - it falls back to every text column.
+        self.assertEqual(al.resolve_search_columns(TEXT_COLS, ["does_not_exist"]),
+                         list(TEXT_COLS))
 
 
 class TestQuoting(unittest.TestCase):
@@ -444,6 +467,34 @@ class TestInvoke(unittest.TestCase):
         tool = FakeTool(fact_rows=self.BLANCHARD)
         invoke(tool, "blanchard")
         self.assertTrue(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
+
+
+class TestSearchAllowlist(unittest.TestCase):
+    """The caller (orchestrator) may restrict the broad search to a domain's
+    allowlist (e.g. tickets: named-entity / id columns only, never long prose)."""
+
+    def test_allowlist_restricts_searched_columns(self):
+        tool = FakeTool(fact_rows=TestInvoke.BLANCHARD)
+        invoke(tool, "telecom", searchable_columns=["Account_name"])
+        fact_sql = [s for (d, s) in tool.sql_log if d == al.FACT_DATASET][0]
+        self.assertIn('"Account_name"', fact_sql)
+        self.assertNotIn('"account_manager"', fact_sql)   # excluded by allowlist
+        self.assertNotIn('"sales_zone"', fact_sql)
+
+    def test_allowlist_unmatched_searches_all(self):
+        # A junk allowlist must not break the search; it falls back to all text.
+        tool = FakeTool(fact_rows=TestInvoke.BLANCHARD)
+        invoke(tool, "blanchard", searchable_columns=["nope"])
+        fact_sql = [s for (d, s) in tool.sql_log if d == al.FACT_DATASET][0]
+        self.assertIn('"account_manager"', fact_sql)
+
+    def test_allowlist_changes_cache_key(self):
+        # Two different allowlists must not collide in the cache (different scans).
+        tool = FakeTool(fact_rows=TestInvoke.BLANCHARD)
+        invoke(tool, "telecom", searchable_columns=["Account_name"])
+        n_after_first = len(tool.sql_log)
+        invoke(tool, "telecom", searchable_columns=["carrier_code"])
+        self.assertGreater(len(tool.sql_log), n_after_first)   # not served from cache
 
 
 if __name__ == "__main__":

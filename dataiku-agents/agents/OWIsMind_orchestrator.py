@@ -228,10 +228,65 @@ CAPABILITIES = {
         # second agent simply declares its own lookup_dataset.
         "lookup_dataset": "DRIVE_Revenues",
         "lookup_catalog": "DRIVE_Revenues_Value_Catalog",
+        # OPTIONAL allowlist of text columns the fast lookup may search for this
+        # domain (server-side; "" / absent = search every text column, today's
+        # behaviour). Revenue keeps the full search (validated); see tickets below.
+        "lookup_search_columns": [],
         "pass_context": True,
         "enabled": True,
     },
-    # Adding a sub-agent (e.g. a tickets expert) is one more entry here.
+    # --- Incident tickets (TroubleTickets_year) -----------------------------
+    # Second specialist. The engine file agents/TroubleTickets_expert.py mirrors
+    # the revenue sub-agent's frozen KNOWN_BLOCK_IDS / KNOWN_TOOL_NAMES, so the
+    # block_labels / tool_labels below are the same keys (anti-drift test). Fill
+    # agent_id with the new DSS Code Agent id once created (env 3.11).
+    "tickets_expert": {
+        "kind": "agent",
+        "agent_id": "agent:TODO_TICKETS",       # TroubleTickets_expert (TroubleTickets_year)
+        "domain": "tickets",                     # already a BUSINESS_DOMAINS key
+        "label_fr": "Expert tickets (incidents)",
+        "label_en": "Tickets expert (incidents)",
+        "tool_name": "ask_tickets_expert",
+        "planner_description": (
+            "The OWI incident-tickets expert. Owns ALL figures of the "
+            "TroubleTickets dataset: ticket counts and breakdowns by status, "
+            "priority, category, problem category, origin and type; resolution "
+            "durations; open vs closed; rankings and top-N; trends over "
+            "creation / detection / closed dates; per customer, account, service "
+            "or product; distinct values; and 'what does this data contain' "
+            "questions. Route here ANY question about tickets, incidents, "
+            "support, problems, outages, SLAs or resolution times."),
+        "block_labels": {
+            "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
+            "run_sql": {"fr": "interrogation des données", "en": "querying the data"},
+            "format_output": {"fr": "mise en forme du résultat", "en": "formatting the result"},
+            "clarify_user": {"fr": "demande de précision", "en": "asking for clarification"},
+            "out_of_scope_msg": None,
+            "about_data": {"fr": "description des données", "en": "describing the data"},
+        },
+        "tool_labels": {
+            "resolve_filter_value": {"fr": "résolution des noms exacts", "en": "resolving exact names"},
+            "dataset_sql_query": {"fr": "génération et exécution du SQL", "en": "generating and running SQL"},
+        },
+        "dataset_label_fr": "Base des tickets d'incidents OWI (TroubleTickets_year)",
+        "dataset_label_en": "OWI incident tickets base (TroubleTickets_year)",
+        "source_url": "",
+        "lookup_dataset": "TroubleTickets_year",
+        # No Value_Catalog for tickets yet (the alias fallback is optional and the
+        # sub-agent does not read it); "" degrades gracefully.
+        "lookup_catalog": "",
+        # Search ONLY the named-entity / identifier text columns, never the long
+        # free-text columns (ticketEntry, CurrentStatus_Reason) - those would make
+        # a short needle match noisily. Any column is still returnable as an
+        # attribute; this only restricts what the broad search scans.
+        "lookup_search_columns": [
+            "Account_name", "CustomerRepresentative_Name", "Service_id",
+            "Service_Specification_id", "Service_id_1", "Product", "id",
+        ],
+        "pass_context": True,
+        "enabled": True,
+    },
+    # Adding a sub-agent (e.g. another domain expert) is one more entry here.
 }
 
 # Business domains OWI cares about. A domain is "staffed" when an enabled agent
@@ -272,6 +327,7 @@ def lookup_domains(caps=None):
             out[domain] = {"dataset": dataset,
                            "catalog": cap.get("lookup_catalog") or "",
                            "source_url": cap.get("source_url") or "",
+                           "search_columns": list(cap.get("lookup_search_columns") or []),
                            "cap_key": key,
                            "label_fr": cap.get("label_fr") or cap.get("label_en"),
                            "label_en": cap.get("label_en") or cap.get("label_fr")}
@@ -1339,8 +1395,13 @@ class MyLLM(BaseLLM):
         info = domains[domain]
         try:
             tool = self._get_tool(project, LOOKUP_TOOL_ID, LOOKUP_TOOL_NAME)
-            raw = tool.run({"entity": term, "attributes": attrs,
-                            "dataset": info["dataset"], "catalog": info["catalog"]})
+            run_args = {"entity": term, "attributes": attrs,
+                        "dataset": info["dataset"], "catalog": info["catalog"]}
+            # Restrict the broad search to this domain's allowlist when declared
+            # (server-side; the model never names a column). Empty = search all.
+            if info.get("search_columns"):
+                run_args["searchable_columns"] = info["search_columns"]
+            raw = tool.run(run_args)
             payload = _extract_lookup_output(raw)
         except Exception as e:
             logger.exception("attribute_lookup failed")

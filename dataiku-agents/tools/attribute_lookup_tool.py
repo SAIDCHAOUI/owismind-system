@@ -25,8 +25,9 @@ LIMIT; only schema-discovered column names reach the SQL; rows are streamed, not
 loaded into a dataframe. A bounded, TTL'd in-process cache holds recent results.
 
 To reuse for another dataset, change FACT_DATASET (and CATALOG_DATASET for the
-alias fallback) or pass `dataset` / `catalog` at call time. No column name is
-hardcoded.
+alias fallback) or pass `dataset` / `catalog` at call time. Optionally pass
+`searchable_columns` to restrict the broad search to named-entity / id columns
+(keeping long free-text columns out of a noisy match). No column name is hardcoded.
 """
 
 import re
@@ -146,6 +147,25 @@ def map_attributes(raw_attributes, live_columns):
             seen.add(col)
             resolved.append(col)
     return resolved, unknown
+
+
+def resolve_search_columns(text_columns, requested):
+    """The text columns the broad search may scan: the requested allowlist
+    intersected with the live string columns (case/space/underscore-insensitive),
+    in live schema order. An empty allowlist - or one that matches no live column -
+    falls back to EVERY text column, so the search never runs on an empty column
+    set (which would be a broken predicate). The allowlist only narrows the SEARCH;
+    any column is still returnable as an attribute."""
+    if not requested:
+        return list(text_columns)
+    wanted = set()
+    for raw in requested:
+        col = match_attribute_column(raw, text_columns)
+        if col:
+            wanted.add(col)
+    if not wanted:
+        return list(text_columns)
+    return [c for c in text_columns if c in wanted]
 
 
 def build_search_sql(fact_table, text_columns, term, sample=SEARCH_SAMPLE_ROWS):
@@ -366,11 +386,13 @@ class MyAgentTool(BaseAgentTool):
             return []
 
     # --- cache ----------------------------------------------------------------
-    def _cache_key(self, dataset, term, raw_attributes):
-        """Key: dataset + accent-folded needle + requested attribute names
-        (case/space-insensitive)."""
+    def _cache_key(self, dataset, term, raw_attributes, search_columns=None):
+        """Key: dataset + accent-folded needle + requested attribute names + the
+        resolved search-column allowlist (case/space-insensitive). The allowlist
+        is part of the key because it changes which columns are scanned."""
         attrs = tuple(sorted(n for n in (norm(a) for a in raw_attributes or []) if n))
-        return (dataset, search_value(term), attrs)
+        scols = tuple(sorted(search_columns or []))
+        return (dataset, search_value(term), attrs, scols)
 
     def _cache_get(self, key):
         hit = self._cache.get(key)
@@ -450,6 +472,16 @@ class MyAgentTool(BaseAgentTool):
                             "for the alias fallback. Defaults to the configured one."
                         ),
                     },
+                    "searchable_columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "OPTIONAL, set by the caller: restrict the broad search "
+                            "to these text column(s). Omit / empty to search every "
+                            "text column. Only narrows the SEARCH; any column is "
+                            "still returnable as an attribute."
+                        ),
+                    },
                 },
                 "required": ["entity"],
             },
@@ -461,6 +493,11 @@ class MyAgentTool(BaseAgentTool):
         raw_attributes = args.get("attributes") or []
         if isinstance(raw_attributes, str):
             raw_attributes = [raw_attributes]
+        # OPTIONAL caller-set allowlist of columns the broad search may scan
+        # (server-side; the model never names a column). Empty = search all text.
+        raw_search_columns = args.get("searchable_columns") or []
+        if isinstance(raw_search_columns, str):
+            raw_search_columns = [raw_search_columns]
         # Optional target dataset + value catalog; default to the configured ones.
         dataset = (args.get("dataset") or "").strip() or FACT_DATASET
         catalog = args.get("catalog")
@@ -478,6 +515,10 @@ class MyAgentTool(BaseAgentTool):
         typed = self._live_columns_typed(dataset)
         all_columns = [n for (n, _) in typed]
         text_columns = [n for (n, t) in typed if t == "string"]
+        # Narrow the broad search to the caller's allowlist when given (e.g. only
+        # named-entity / id columns, never long free-text columns). Falls back to
+        # every text column when empty or unmatched.
+        search_columns = resolve_search_columns(text_columns, raw_search_columns)
 
         keep, unknown = (None, [])
         if raw_attributes:
@@ -490,7 +531,7 @@ class MyAgentTool(BaseAgentTool):
                                        "real column."})
 
         # The SQL work below is cacheable; the validation branches above are not.
-        cache_key = self._cache_key(dataset, term, raw_attributes)
+        cache_key = self._cache_key(dataset, term, raw_attributes, search_columns)
         cached = self._cache_get(cache_key)
         if cached is not None:
             return out(cached)
@@ -498,15 +539,15 @@ class MyAgentTool(BaseAgentTool):
         # Skip the broad scan for a 1-char needle (it matches almost everything).
         needle = search_value(term)
         rows, sql = [], None
-        if text_columns and len(needle) >= MIN_NEEDLE_CHARS:
+        if search_columns and len(needle) >= MIN_NEEDLE_CHARS:
             fact_table = self._get_table(dataset)
-            sql = build_search_sql(fact_table, text_columns, term)
+            sql = build_search_sql(fact_table, search_columns, term)
             _, rows = self._run_sql(dataset, sql, max_rows=SEARCH_SAMPLE_ROWS)
 
         # Where the term re-confirms + the requested columns' values. A row can
         # match the SQL ILIKE yet not re-confirm Python-side (e.g. a column-name
         # casing edge), so both can be empty even with rows.
-        found_in = find_matches(text_columns, rows, term) if rows else []
+        found_in = find_matches(search_columns, rows, term) if rows else []
         attributes = (summarize_values(all_columns, rows, keep=keep)
                       if (rows and keep) else {})
 

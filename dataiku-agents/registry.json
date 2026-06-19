@@ -1,0 +1,98 @@
+{
+  "_meta": {
+    "what": "Single, versioned, DEV-OWNED source of truth for the per-domain agent spec: ids, the four design-time dataset names, the semantic model + tool binding, the fast-lookup config and the guardrails. One object per capability, mirroring CAPABILITIES in agents/OWIsMind_orchestrator.py.",
+    "how_it_is_used": "Human + machine reference and a BUILD-TIME / codegen input (PLAN_AGENTS.md A1.1). It is NOT imported at runtime: the Code Agent files must stay standalone-pasteable (no plugin import), so CAPABILITIES stays inlined in the orchestrator. Keep this file in sync with that dict by hand until a gen_capabilities.py codegen lands.",
+    "governance": "agent_id, semantic ids, lookup_dataset, guardrails.allowed_tables are DEV-OWNED here only. They are NEVER admin-editable and NEVER reachable by validate_agent_meta (which governs only the editorial enabled_agents JSON: label/desc/icon/badge/enabled/source_url). The webapp sends a logical capability key; the backend resolves the id (rule #4).",
+    "column_inventory": "Per-dataset columns + types + which are searchable / returnable live in DATASETS.md (one canonical place; do not duplicate column lists in the READMEs).",
+    "last_reviewed": "2026-06-19"
+  },
+  "capabilities": {
+    "revenue_expert": {
+      "kind": "agent",
+      "domain": "revenue",
+      "enabled": true,
+      "agent_id": "agent:bHrWLyOL",
+      "agent_file": "agents/SalesDrive_revenue_expert.py",
+      "tool_name": "ask_revenue_expert",
+      "label_fr": "Expert revenus (Drive)",
+      "label_en": "Revenue expert (Drive)",
+      "datasets": {
+        "base": "DRIVE_Revenues",
+        "profile": "DRIVE_Revenues_profile",
+        "value_index": "DRIVE_Revenues_value_index",
+        "value_catalog": "DRIVE_Revenues_Value_Catalog"
+      },
+      "semantic_model": {
+        "name": "Drive_Revenues_Semantic_Model",
+        "tool_id": "v4oqA6R",
+        "tool_name": "revenue_semantic_query",
+        "agent_mode": false,
+        "sql_engine": "semantic_tool"
+      },
+      "lookup": {
+        "dataset": "DRIVE_Revenues",
+        "catalog": "DRIVE_Revenues_Value_Catalog",
+        "search_columns": []
+      },
+      "source_url": "",
+      "guardrails": {
+        "read_only": true,
+        "max_rows": 500,
+        "allowed_tables": ["DRIVE_Revenues"]
+      },
+      "status": "LIVE - validated in DSS"
+    },
+    "tickets_expert": {
+      "kind": "agent",
+      "domain": "tickets",
+      "enabled": true,
+      "agent_id": "agent:TODO_TICKETS",
+      "agent_file": "agents/TroubleTickets_expert.py",
+      "tool_name": "ask_tickets_expert",
+      "label_fr": "Expert tickets (incidents)",
+      "label_en": "Tickets expert (incidents)",
+      "datasets": {
+        "base": "TroubleTickets_year",
+        "profile": "TroubleTickets_year_profile",
+        "value_index": "TroubleTickets_year_value_index",
+        "value_catalog": ""
+      },
+      "semantic_model": {
+        "name": "TroubleTickets_Semantic_Model",
+        "tool_id": "TODO_TICKETS_SEMANTIC_TOOL_ID",
+        "tool_name": "tickets_semantic_query",
+        "agent_mode": false,
+        "sql_engine": "semantic_tool"
+      },
+      "lookup": {
+        "dataset": "TroubleTickets_year",
+        "catalog": "",
+        "search_columns": [
+          "Account_name",
+          "CustomerRepresentative_Name",
+          "Service_id",
+          "Service_Specification_id",
+          "Service_id_1",
+          "Product",
+          "id"
+        ]
+      },
+      "source_url": "",
+      "guardrails": {
+        "read_only": true,
+        "max_rows": 500,
+        "allowed_tables": ["TroubleTickets_year"]
+      },
+      "status": "CODED in repo - NOT YET deployed to DSS (create datasets + model + tool + Code Agent, fill the TODO ids)"
+    }
+  },
+  "business_domains": {
+    "note": "Domains OWI cares about. A domain is 'staffed' when an enabled agent declares it; otherwise the orchestrator says honestly 'no agent for it yet'. Mirrors BUSINESS_DOMAINS in the orchestrator.",
+    "revenue": "staffed (revenue_expert)",
+    "tickets": "staffed (tickets_expert, pending DSS deploy)",
+    "satisfaction": "unstaffed",
+    "opportunities": "unstaffed",
+    "delivery": "unstaffed",
+    "billing": "unstaffed"
+  }
+}

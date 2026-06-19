@@ -22,6 +22,7 @@
 3. The skill `agentique-python-dataiku` - how to build/audit DSS agents safely.
 4. `memory/PROJECT_STATE.md` + `memory/LESSONS.md` (repo root) - canonical ids and what really works (these PRIME over the cadrage guides).
 5. Sub-folder READMEs for detail: [`agents/`](agents/README.md), [`recipes/`](recipes/README.md), [`tools/`](tools/README.md), [`tools/semantic_model/`](tools/semantic_model/MODEL.md).
+6. [`registry.json`](registry.json) (the per-domain spec: ids, dataset names, model + tool binding, lookup config, guardrails) + [`DATASETS.md`](DATASETS.md) (the column inventory) - the single source of truth for "which datasets / columns / tools / agents / ids exist". To add an agent, follow [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md).
 
 To navigate the code ("where is X handled?"), query the knowledge graph first
 (`graphify query "..."`), not a full re-read.
@@ -75,6 +76,7 @@ surfaces in the Evidence panel.
 |---|---|---|---|
 | Orchestrator | `agents/OWIsMind_orchestrator.py` | **OWIsMind_orchestrator** (env 3.11) | Chats, reasons, routes to specialist sub-agent(s), runs the `attribute_lookup` built-in for fast reads, renders chart/table/KPI, writes the analysis. Honesty firewall: never denies that data exists, never invents a figure. Bounded parallel fan-out (`MAX_PARALLEL_AGENTS = 3`). |
 | Revenue sub-agent | `agents/SalesDrive_revenue_expert.py` | **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, env 3.11) | Expert of `DRIVE_Revenues`. UNDERSTAND -> RESOLVE -> QUERY -> RENDER. Owns ALL revenue figures across every Phase (ACTUALS / BUDGET / FORECAST / Q3F / HLF). |
+| Tickets sub-agent | `agents/TroubleTickets_expert.py` | **TroubleTickets_expert** (`agent:TODO_TICKETS`, env 3.11) | Expert of `TroubleTickets_year`. SAME engine, tickets CONFIG. Ticket counts, resolution durations, status / priority / category breakdowns. **CODED, pending DSS deploy** (see [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md)). |
 
 Both are **standalone files** (stdlib + `dataiku` + `langgraph` only, no plugin
 import) pasted into a DSS Code Agent on the **Python 3.11 code env** (LangGraph
@@ -220,17 +222,34 @@ fresh, no re-paste needed.
 
 ## 8. Add a new dataset / domain (e.g. tickets, CSAT)
 
+> The **tickets** domain is the worked example and is already CODED in the repo
+> (sub-agent, orchestrator entry, semantic-model scripts, registry, tests). The
+> full ordered runbook is [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md); the
+> per-domain spec is [`registry.json`](registry.json), columns are in
+> [`DATASETS.md`](DATASETS.md). The steps in brief:
+
 1. Flow: wire the **same recipes** on the new dataset -> `X_profile` + `X_value_index`
-   (+ `X_Value_Catalog` if you want the alias fallback).
-2. Human-review the profile via an editable overrides dataset.
-3. Duplicate the Dataset Expert Code Agent, change the two dataset names in its CONFIG.
-4. Orchestrator: add **one** entry to `CAPABILITIES` (copy `revenue_expert`,
-   adapt `agent_id` / labels / `domain` / `lookup_dataset` / `lookup_catalog`).
+   (+ `X_Value_Catalog` if you want the alias fallback). Run off-peak (scheduled
+   scenario), never from the webapp UI.
+2. Human-review the profile via an editable overrides dataset (e.g. pin the COUNT
+   default metric for tickets so it is not `SUM(duration)`).
+3. Create a dedicated semantic model for the domain (DSS UI on the base table) +
+   a Semantic Model Query tool (Agent OFF, Sonnet); inject the domain brain via an
+   `update_*_semantic_model.py` script. One model + one tool per domain (the
+   one-table-never-JOIN rule and the 1:1 tool binding both forbid a shared model).
+4. Copy `SalesDrive_revenue_expert.py` -> `agents/X_expert.py`, swap the CONFIG
+   header (datasets + semantic tool id/name), neutralize any revenue-specific
+   prompt wording; keep the engine body + frozen contracts byte-identical.
+5. Orchestrator: add **one** entry to `CAPABILITIES` (copy `revenue_expert`,
+   adapt `agent_id` / labels / `domain` / `lookup_dataset` / `lookup_search_columns`).
    The domains `tickets`, `satisfaction`, etc. already exist in `BUSINESS_DOMAINS`,
-   so the honest capability-gap message closes itself, and the new dataset becomes
-   searchable by `attribute_lookup` automatically (it declared `lookup_dataset`).
-5. With two staffed domains, "360" questions fan out in parallel and the
-   orchestrator's synthesis cites each source.
+   so the capability-gap message closes itself, and the dataset becomes searchable
+   by `attribute_lookup` automatically. Add the same to `registry.json` +
+   `DATASETS.md`; the anti-drift test loops all enabled caps, so it covers the new
+   agent. New Code Agent (3.11) + re-paste the orchestrator.
+6. With two staffed domains, "360" questions fan out in parallel and the
+   orchestrator's synthesis cites each source (`Account_name` bridges revenue and
+   tickets).
 
 ---
 

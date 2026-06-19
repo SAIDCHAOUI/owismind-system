@@ -68,13 +68,15 @@ SQL surfaces in the Evidence panel (every SQL emits a `semantic-model-query` spa
 |---|---|---|---|
 | OWIsMind_orchestrator | `agents/OWIsMind_orchestrator.py` | (orchestrator) | Chat, reason, route, fast-lookup, render, write the analysis. |
 | SalesDrive_revenue_expert | `agents/SalesDrive_revenue_expert.py` | `agent:bHrWLyOL` | Expert of `DRIVE_Revenues`. All revenue figures, every Phase. |
+| TroubleTickets_expert | `agents/TroubleTickets_expert.py` | `agent:TODO_TICKETS` (CODED, not yet deployed) | Expert of `TroubleTickets_year`. Ticket counts, durations, status/priority/category breakdowns. Same engine as revenue. See `PLAYBOOK_ADD_AGENT.md`. |
 
 ### DSS agent tools (3 objects)
 
 | Tool | Type | Id | Called by | Status |
 |---|---|---|---|---|
-| `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the **sub-agent** (QUERY) | **LIVE - the SQL engine** |
-| `attribute_lookup` | Custom Python (`tools/attribute_lookup_tool.py`) | resolved by name | the **orchestrator** (built-in) | tool object **created in DSS**; the built-in wiring goes live after the next **orchestrator re-paste** |
+| `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the **revenue sub-agent** (QUERY) | **LIVE - the SQL engine** |
+| `tickets_semantic_query` | Semantic Model Query | `TODO_TICKETS_SEMANTIC_TOOL_ID` | the **tickets sub-agent** (QUERY) | **CODED, not yet created in DSS** (create on `TroubleTickets_Semantic_Model`, Agent OFF, Sonnet) |
+| `attribute_lookup` | Custom Python (`tools/attribute_lookup_tool.py`) | resolved by name | the **orchestrator** (built-in) | tool object **created in DSS**; serves BOTH domains (the orchestrator passes the per-domain dataset + search allowlist); built-in wiring goes live after the next **orchestrator re-paste** |
 | `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | nobody | **TO DELETE (superseded)** |
 
 So among the 3 tool objects: 2 live (`revenue_semantic_query`,
@@ -100,6 +102,9 @@ updated (corrected text in [`tools/README.md`](tools/README.md)).
 | `DRIVE_Revenues_profile` | `recipes/profile_dataset_recipe.py` | the **sub-agent** (UNDERSTAND, about_data) | the business brain (`{key, payload}`, contract v1) |
 | `DRIVE_Revenues_value_index` | `recipes/build_value_index_recipe.py` | the **sub-agent** (RESOLVE, inline SQL) | exact-value grounding; MUST be on the SQL connection |
 | `DRIVE_Revenues_Value_Catalog` | `recipes/build_value_catalog_recipe.py` | `attribute_lookup` (alias fallback) | rich alias / suggestions catalog |
+| `TroubleTickets_year` | source (83,738 rows, 21 cols) | tickets semantic model (SQL); `attribute_lookup` (allowlisted search) | the incident-tickets base (CODED, pending Flow build) |
+| `TroubleTickets_year_profile` | `recipes/profile_dataset_recipe.py` | the **tickets sub-agent** (UNDERSTAND, about_data) | tickets business brain; set COUNT default metric via overrides |
+| `TroubleTickets_year_value_index` | `recipes/build_value_index_recipe.py` | the **tickets sub-agent** (RESOLVE, inline SQL) | tickets exact-value grounding; MUST be on the SQL connection |
 
 ### Semantic model
 
@@ -126,7 +131,10 @@ stays on Sonnet in every mode.
 | Path | What |
 |---|---|
 | `README.md` | Master guide: architecture, Flow, models, deploy, extend, roadmap, contracts. |
-| `agents/` | The two Code Agents (LangGraph) + [`agents/README.md`](agents/README.md). |
+| `registry.json` | **Single source of truth** for the per-domain spec (ids, dataset names, semantic model + tool binding, lookup config, guardrails). Dev-owned, versioned, build-time / codegen reference - NOT imported at runtime. |
+| `DATASETS.md` | Canonical column inventory per dataset (types, role, searchable / returnable, consumer). |
+| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets): Flow recipes -> profile -> semantic model -> Code Agent -> orchestrator -> smoke-test. |
+| `agents/` | The Code Agents (LangGraph): orchestrator + revenue + tickets + [`agents/README.md`](agents/README.md). |
 | `recipes/` | The three Flow recipes (profile, value index, value catalog) + [`recipes/README.md`](recipes/README.md). |
 | `tools/` | Doc of the DSS agent tools + the `attribute_lookup` Custom Python code + [`tools/README.md`](tools/README.md). |
 | `tools/semantic_model/` | Build/update/dump scripts + [`MODEL.md`](tools/semantic_model/MODEL.md) (the live model, readable) + [`README.md`](tools/semantic_model/README.md). |
@@ -171,3 +179,21 @@ zip + restart backend).
 precondition); (2) re-paste the ORCHESTRATOR so the `attribute_lookup` built-in is
 live (optionally set `LOOKUP_TOOL_ID`); (3) delete the
 `Drive_Revenues_resolve_filter_value` tool object.
+
+**Pending DSS steps to ship the TICKETS agent (2026-06-19, all CODED in repo):**
+follow [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md). In short: (1) Flow recipes
+on `TroubleTickets_year` -> profile + value_index (+ COUNT default metric via
+overrides); (2) create `TroubleTickets_Semantic_Model` (DSS UI) + inject the brain
+via `tools/semantic_model/update_tickets_semantic_model.py`; (3) create the
+`tickets_semantic_query` tool (Agent OFF, Sonnet) and put its id in
+`TroubleTickets_expert.py` (`SEMANTIC_TOOL_ID`); (4) create the
+`TroubleTickets_expert` Code Agent (env 3.11), put its id in the orchestrator
+`CAPABILITIES["tickets_expert"]["agent_id"]`; (5) re-paste the orchestrator. No zip
+upload (python-lib unchanged). Fill the `TODO_*` ids in `registry.json` too.
+**Order matters**: `tickets_expert` ships `enabled:True` with a placeholder
+`agent_id`, so fill the real id (and create the Code Agent) BEFORE re-pasting the
+orchestrator; pasting early degrades tickets questions to a graceful technical
+error (not a crash). To paste early safely, set `enabled:False` on `tickets_expert`
+first (honest capability-gap via `BUSINESS_DOMAINS`), then flip it on once the id
+is real. Golden-query example year (2025) is illustrative - confirm it exists in
+`TroubleTickets_year` when curating the model.

@@ -91,6 +91,7 @@ def _load(mod_name, filename):
 
 orch = _load("orchestrator_under_test", "OWIsMind_orchestrator.py")
 dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
+tx = _load("tickets_expert_under_test", "TroubleTickets_expert.py")
 
 
 class TestModelIds(unittest.TestCase):
@@ -160,8 +161,10 @@ class TestAttributeLookupWiring(unittest.TestCase):
         self.assertNotIn(orch.LOOKUP_TOOL_NAME, t2c)   # built-in, zero contract
         spec = next(s for s in specs
                     if s["function"]["name"] == orch.LOOKUP_TOOL_NAME)
-        # One staffed lookup domain today -> the model only needs 'term'.
-        self.assertEqual(spec["function"]["parameters"]["required"], ["term"])
+        # Two staffed lookup domains (revenue + tickets) -> the model must say which.
+        req = spec["function"]["parameters"]["required"]
+        self.assertIn("term", req)
+        self.assertIn("domain", req)
 
     def test_lookup_domains_resolve_from_registry(self):
         # The model passes a logical DOMAIN; the orchestrator maps it to a
@@ -172,6 +175,15 @@ class TestAttributeLookupWiring(unittest.TestCase):
         self.assertEqual(domains["revenue"]["catalog"],
                          "DRIVE_Revenues_Value_Catalog")
         self.assertEqual(domains["revenue"]["cap_key"], "revenue_expert")
+        # Revenue searches every text column (no allowlist).
+        self.assertEqual(domains["revenue"]["search_columns"], [])
+        # Tickets is a second staffed lookup domain WITH a search allowlist that
+        # excludes the long free-text columns.
+        self.assertIn("tickets", domains)
+        self.assertEqual(domains["tickets"]["dataset"], "TroubleTickets_year")
+        self.assertIn("Account_name", domains["tickets"]["search_columns"])
+        self.assertNotIn("CurrentStatus_Reason", domains["tickets"]["search_columns"])
+        self.assertNotIn("ticketEntry", domains["tickets"]["search_columns"])
 
     def test_lookup_domain_required_only_when_several(self):
         # With a SECOND searchable domain, the model must say which one.
@@ -250,12 +262,23 @@ class TestAntiDrift(unittest.TestCase):
     frozen block/tool ids, or the timeline mislabels / hides the wrong steps."""
 
     def test_block_labels_match_known_block_ids(self):
-        labels = orch.CAPABILITIES["revenue_expert"]["block_labels"]
-        self.assertEqual(set(labels.keys()), set(dx.KNOWN_BLOCK_IDS))
+        # EVERY enabled sub-agent's block labels must match the shared frozen
+        # KNOWN_BLOCK_IDS (the engine is shared; tickets mirrors revenue), or the
+        # timeline mislabels / hides the wrong steps for that agent.
+        for key, cap in orch.get_capabilities().items():
+            if cap.get("kind") != "agent":
+                continue
+            self.assertEqual(set(cap["block_labels"].keys()),
+                             set(dx.KNOWN_BLOCK_IDS),
+                             "block_labels drift for %s" % key)
 
     def test_tool_labels_match_known_tool_names(self):
-        labels = orch.CAPABILITIES["revenue_expert"]["tool_labels"]
-        self.assertEqual(set(labels.keys()), set(dx.KNOWN_TOOL_NAMES))
+        for key, cap in orch.get_capabilities().items():
+            if cap.get("kind") != "agent":
+                continue
+            self.assertEqual(set(cap["tool_labels"].keys()),
+                             set(dx.KNOWN_TOOL_NAMES),
+                             "tool_labels drift for %s" % key)
 
     def test_result_caps_agree_across_files(self):
         # The two STANDALONE files duplicate the result caps (no shared module). They
@@ -275,6 +298,57 @@ class TestAntiDrift(unittest.TestCase):
         # NaN compares unequal to itself, so assert both stringify it.
         self.assertEqual(orch._cap_cell(float("nan")), dx._cap_cell(float("nan")))
         self.assertIsInstance(orch._cap_cell(float("nan")), str)
+
+
+class TestTicketsExpert(unittest.TestCase):
+    """The second specialist (incident tickets) reuses the shared engine, so its
+    frozen contracts must stay identical to the revenue sub-agent, and the
+    orchestrator must expose it as a routable capability + lookup domain."""
+
+    def test_capability_present_and_enabled(self):
+        caps = orch.get_capabilities()
+        self.assertIn("tickets_expert", caps)
+        cap = caps["tickets_expert"]
+        self.assertTrue(cap["enabled"])
+        self.assertEqual(cap["domain"], "tickets")
+        self.assertEqual(cap["tool_name"], "ask_tickets_expert")
+        self.assertEqual(cap["lookup_dataset"], "TroubleTickets_year")
+
+    def test_routable_as_a_tool(self):
+        specs, t2c = orch.build_tool_specs(orch.get_capabilities())
+        names = {s["function"]["name"] for s in specs}
+        self.assertIn("ask_tickets_expert", names)
+        self.assertEqual(t2c["ask_tickets_expert"], "tickets_expert")
+
+    def test_tickets_does_not_disable_revenue(self):
+        # Tickets is a NEW domain; revenue stays enabled (one-enabled-per-domain
+        # is per-domain, not global).
+        caps = orch.get_capabilities()
+        self.assertTrue(caps["revenue_expert"]["enabled"])
+        self.assertTrue(caps["tickets_expert"]["enabled"])
+
+    def test_engine_contracts_identical_to_revenue(self):
+        # The tickets file is the SAME engine: frozen contracts MUST match, or the
+        # orchestrator timeline / Evidence capture diverges for tickets.
+        self.assertEqual(tx.KNOWN_BLOCK_IDS, dx.KNOWN_BLOCK_IDS)
+        self.assertEqual(tx.KNOWN_TOOL_NAMES, dx.KNOWN_TOOL_NAMES)
+        self.assertEqual(tx.KNOWN_INTENTS, dx.KNOWN_INTENTS)
+        self.assertEqual(tx.MAX_RESULT_ROWS, dx.MAX_RESULT_ROWS)
+        self.assertEqual(tx.MAX_RESULT_COLS, dx.MAX_RESULT_COLS)
+        self.assertEqual(tx._RESULT_CELL_MAX_CHARS, dx._RESULT_CELL_MAX_CHARS)
+        self.assertEqual(tx._RESULT_JSON_MAX_CHARS, dx._RESULT_JSON_MAX_CHARS)
+
+    def test_tickets_config_points_at_tickets_datasets(self):
+        self.assertEqual(tx.PROFILE_DATASET, "TroubleTickets_year_profile")
+        self.assertEqual(tx.VALUE_INDEX_DATASET, "TroubleTickets_year_value_index")
+        self.assertEqual(tx.SEMANTIC_TOOL_NAME, "tickets_semantic_query")
+        # Same model tier mapping as revenue (shared Mesh connection).
+        self.assertEqual(tx.LLM_BY_MODE, dx.LLM_BY_MODE)
+
+    def test_orchestrator_labels_match_tickets_engine_known(self):
+        cap = orch.CAPABILITIES["tickets_expert"]
+        self.assertEqual(set(cap["block_labels"].keys()), set(tx.KNOWN_BLOCK_IDS))
+        self.assertEqual(set(cap["tool_labels"].keys()), set(tx.KNOWN_TOOL_NAMES))
 
 
 class TestNoSourcesBlock(unittest.TestCase):
