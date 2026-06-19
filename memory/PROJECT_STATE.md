@@ -372,6 +372,22 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   → event gelé `ARTIFACT` → table `webapp_artifacts_v1` (read-only+timeout) → `/evidence/meta` →
   onglets Evidence/Chart/Table, **Chart.js** (payload Python `evidence/chart_payload.py`). `chart.js`
   ajouté au front (bundlé). Détail → `sessions/2026-06-15.md`.
+- **2e SOUS-AGENT "tickets" + factory repo (2026-06-19 Run 4, ✅ testé DSS « marche plutôt bien », à pofiner -
+  L097/L098)** : expert incidents sur `TroubleTickets_year` (83 738 l., 21 col.). `agents/TroubleTickets_expert.py`
+  = copie du moteur revenus, **corps byte-identique** (contrats gelés), seuls l'en-tête CONFIG + les textes
+  hiérarchie-d'offre (neutralisés) diffèrent. Orchestrateur : **1 entrée `CAPABILITIES["tickets_expert"]`**
+  (domaine `tickets`, déjà dans `BUSINESS_DOMAINS`) + champ `lookup_search_columns` (allowlist de recherche par
+  domaine, passée serveur). `tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
+  **Modèle sémantique DÉDIÉ par domaine** (jamais une source ajoutée au modèle revenus) ; scripts
+  `tools/semantic_model/update_tickets_semantic_model.py` + `dump_tickets_semantic_model.py` ; tool DSS attendu
+  `tickets_semantic_query` (Agent OFF, Sonnet). **3 recipes rendues génériques (auto-IO) + NA-safe** (fix
+  `infer_with_pandas=False` -> fallback `True` sur int nullable) ; `build_value_catalog_recipe` dataset-adaptatif
+  (revenus curé inchangé ; non-revenus = catalogue générique). **Factory repo (source de vérité scaling)** :
+  `dataiku-agents/registry.json` (spec par domaine, dev-owned, jamais runtime) + `DATASETS.md` (inventaire
+  colonnes) + `PLAYBOOK_ADD_AGENT.md` (runbook). Test anti-dérive **généralisé** à tous les caps. **À finaliser
+  DSS** (PLAYBOOK) : override métrique COUNT, modèle sémantique, tool, Code Agent + `agent_id` réel, re-coll
+  orchestrateur (pas de zip). Datasets : `TroubleTickets_year` + `_profile` + `_value_index` (sur `SQL_owi`) +
+  `_value_catalogue`. Débloque la fiche client 360 (pont `Account_name`/`Customer_id`). Détail → `sessions/2026-06-19.md` Run 4.
 
 ---
 

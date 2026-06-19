@@ -19,6 +19,25 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🎫 SESSION 2026-06-19 Run 4 (2e sous-agent "tickets d'incidents" + factory repo) - ✅ TESTÉ DSS
+(« marche plutôt bien »), à pofiner.** 2e expert sur `TroubleTickets_year` (83 738 l., 21 col.) à côté
+des revenus. **Moteur ~95% générique** : `agents/TroubleTickets_expert.py` = copie revenus, corps
+**byte-identique** (contrats gelés `KNOWN_*`/`AGENT_RESULT`/span/caps), seuls l'en-tête CONFIG + les
+textes hiérarchie-offre (neutralisés) changent. Orchestrateur = **1 entrée `CAPABILITIES["tickets_expert"]`**
++ allowlist `lookup_search_columns` (recherche restreinte par domaine). **Modèle sémantique DÉDIÉ séparé**
+(décision, question user : jamais ajouté au modèle revenus - "une table jamais de JOIN", instructions/golden
+focalisées, binding tool 1:1) : scripts `tools/semantic_model/update_tickets_semantic_model.py` +
+`dump_tickets_semantic_model.py`. **Recipes rendues génériques (auto-IO) + NA-safe** (fix
+`infer_with_pandas=False` -> fallback `True` sur int nullable `Duration_ticket_total`, **L097**) ;
+`build_value_catalog_recipe` **dataset-adaptatif** (revenus curé inchangé ; non-revenus = catalogue
+générique `search_domain="value"`, exploité par `attribute_lookup`). **Factory repo** :
+`dataiku-agents/registry.json` (source de vérité unique par domaine, dev-owned) + `DATASETS.md`
+(inventaire colonnes) + `PLAYBOOK_ADD_AGENT.md` (runbook). 283 tests verts (anti-dérive **généralisé**),
+revue adversariale 4-dim = **0 finding réel**. **À FINALISER (PLAYBOOK)** : override métrique COUNT
+(jamais SUM durée), modèle sémantique DSS + `update_tickets_*`, tool `tickets_semantic_query` (Agent OFF,
+Sonnet), Code Agent env 3.11 + **`agent_id` réel AVANT de re-coller l'orchestrateur** (sinon erreur
+gracieuse). Voir **L097** (NA-safe) + **L098** (factory / 2e agent).
+
 **🔐 SESSION 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) - ✅ VALIDÉ DSS
 (user : « super tout fonctionne à merveille »).** 3 livrables via sous-agents + 3 revues adversariales
 sécu ; zip DEV déployé. **(1) Auth gate** (`AuthGate.vue` + `session.authState` + `App.vue`) : `/me` 401
@@ -427,7 +446,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) → détail `sessions/2026-06-19.md` Run 3
+## 🧭 Dernière session - 2026-06-19 Run 4 (2e sous-agent "tickets d'incidents" + factory repo) → détail `sessions/2026-06-19.md` Run 4
+- **✅ TESTÉ DSS « marche plutôt bien »** (à pofiner plus tard). 2e expert `TroubleTickets_year` à côté des revenus : `agents/TroubleTickets_expert.py` (copie moteur, corps byte-identique, CONFIG + textes offre neutralisés) + 1 entrée `CAPABILITIES["tickets_expert"]` + allowlist `lookup_search_columns`.
+- **Modèle sémantique DÉDIÉ séparé** (décision user) ; scripts `update_tickets_semantic_model.py`/`dump_tickets_semantic_model.py`. **Recipes auto-IO + NA-safe** (fix int nullable `Duration_ticket_total`, **L097**) ; `value_catalog` dataset-adaptatif (générique `value`). **Factory** : `registry.json` + `DATASETS.md` + `PLAYBOOK_ADD_AGENT.md`. 283 tests, revue 4-dim = 0 finding (**L098**).
+- **À finaliser (PLAYBOOK)** : override COUNT, modèle sémantique DSS, tool `tickets_semantic_query`, Code Agent + `agent_id` réel AVANT re-coll orchestrateur. Pas de zip (python-lib inchangé). **AUCUN commit de ma part avant `/log-session`.**
+
+## Avant - 2026-06-19 Run 3 (auth gate + impersonation admin + plugin DEV/PROD) → détail `sessions/2026-06-19.md` Run 3
 - **✅ VALIDÉ DSS** (« super tout fonctionne à merveille »). 3 features livrées via sous-agents + 3 revues sécu (0 crit/high/medium).
 - **Auth gate** (`AuthGate.vue` + `session.authState` + `App.vue`, clés `authgate.*`) ; **impersonation admin** read-only & admin-only (`security/impersonation.py` + `features/admin-impersonate/`, header `X-OWI-Impersonate`, FENCÉ/supprimable, **L095**) qui REMPLACE l'ancienne "revue de convs" SUPPRIMÉE (**L096**) ; **plugin DEV** `owismind_dev` (source unique, `tools/build_dev_plugin.py` + skill `/package-plugin-dev`, **L094**), **prod intacte**, tables create-if-not-exist inchangées.
 - **✅ PROMU EN PROD + DÉPLOYÉ** (user « super tout marche ») : zip prod `owismind-upload.zip` (id `owismind`, entry **`index-CApWkAm7.js`**, 80 entrées) uploadé + backend redémarré. Commits `f5b2976` (session) + `f967347` (build prod). Impersonation = **temporaire** (à retirer plus tard, blocs FENCÉS).
@@ -669,7 +693,17 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🔐NEW. **SESSION 2026-06-19 Run 3 = ✅ VALIDÉ DSS** (auth gate + impersonation admin + plugin DEV `owismind_dev`).
+0🎫NEW. **FINALISER + POFINER le 2e agent TICKETS (2026-06-19 Run 4) - suivre `dataiku-agents/PLAYBOOK_ADD_AGENT.md`.**
+   Recipes (profil + value_index + value_catalogue) ✅ construites en DSS (NA-safe). Reste : (1) **override
+   métrique COUNT** (`__dataset__/default_metric=ticket_count` + `avg_duration` AVG, JAMAIS SUM durée ni
+   `format:"amount"`) via le dataset overrides ; (2) créer `TroubleTickets_Semantic_Model` (UI DSS sur le
+   dataset) + `update_tickets_semantic_model.py` (cerveau, items `[CONFIRM]` : unité `Duration_ticket_total`,
+   valeurs exactes `CurrentStatus`) ; (3) tool `tickets_semantic_query` (Agent OFF, Sonnet) -> id dans
+   `TroubleTickets_expert.py` + registry ; (4) Code Agent env 3.11 -> `agent_id` réel dans l'orchestrateur
+   **AVANT** re-coll (sinon erreur gracieuse, ou `enabled:False` en attendant) ; (5) re-coll orchestrateur (pas
+   de zip, python-lib inchangé). Smoke-tests dans le PLAYBOOK. Débloque la **fiche client 360** (fan-out
+   revenus+tickets, pont `Account_name`/`Customer_id`). Voir **L097** (NA-safe) + **L098** (factory).
+0🔐. **SESSION 2026-06-19 Run 3 = ✅ VALIDÉ DSS** (auth gate + impersonation admin + plugin DEV `owismind_dev`).
    **Workflow DEV->PROD en place** : promotion prod = `/build-plugin` + `/package-plugin` (prod) + upload quand le
    DEV est bon (idem agents : valider en DEV, puis promouvoir). **Impersonation = feature TEMPORAIRE** : suppression
    future = retirer `security/impersonation.py` + `features/admin-impersonate/` + les blocs FENCÉS (routes.py /
