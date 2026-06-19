@@ -129,7 +129,14 @@ def main():
         dss_types[name] = str((c.get("type") if isinstance(c, dict)
                                else getattr(c, "type", None)) or "string")
 
-    df = source.get_dataframe(infer_with_pandas=False)
+    # infer_with_pandas=False preserves exact storage types but raises "Integer
+    # column has NA values" when an int column contains NULLs. Fall back to pandas
+    # inference (only text columns are indexed and dss_types drives that selection,
+    # so an inferred numeric dtype here is irrelevant).
+    try:
+        df = source.get_dataframe(infer_with_pandas=False)
+    except ValueError:
+        df = source.get_dataframe(infer_with_pandas=True)
     rows = build_index_rows(df, dss_types)
 
     import pandas as pd

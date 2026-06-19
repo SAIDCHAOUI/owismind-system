@@ -550,7 +550,16 @@ def main():
                         "type": c.get("type") if isinstance(c, dict) else c.type}
                        for c in schema_columns]
 
-    df = source.get_dataframe(infer_with_pandas=False)
+    # infer_with_pandas=False preserves exact storage types but raises "Integer
+    # column has NA values" when an int column contains NULLs (e.g. a resolution
+    # duration that is empty for still-open tickets). Fall back to pandas inference
+    # in that case (the NA-int column becomes float, which holds NaN). Role/type
+    # classification reads the DSS schema separately (schema_cols_raw), so this only
+    # affects stats / enums / samples and stays correct.
+    try:
+        df = source.get_dataframe(infer_with_pandas=False)
+    except ValueError:
+        df = source.get_dataframe(infer_with_pandas=True)
     if len(df) > MAX_ROWS_IN_MEMORY:
         df = df.head(MAX_ROWS_IN_MEMORY)
         logger.warning("Dataset truncated to %d rows for profiling", MAX_ROWS_IN_MEMORY)
@@ -584,7 +593,11 @@ def main():
     # Human overrides always win (applied last).
     if overrides_ds is not None:
         try:
-            rows = overrides_ds.get_dataframe(infer_with_pandas=False).to_dict("records")
+            try:
+                ov_df = overrides_ds.get_dataframe(infer_with_pandas=False)
+            except ValueError:
+                ov_df = overrides_ds.get_dataframe(infer_with_pandas=True)
+            rows = ov_df.to_dict("records")
             logger.info("Applied %d human overrides", apply_overrides(dataset_payload, columns, rows))
         except Exception:
             logger.exception("Overrides dataset unreadable - ignored")
