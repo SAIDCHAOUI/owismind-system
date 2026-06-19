@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Experience - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="experience" data-theme="light">
+
+  <div class="shell">
+
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <div class="main">
+
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- PAGE HEADER -->
+                <header class="page-header">
+                  <p class="eyebrow">Level 1 - The Experience</p>
+                  <h1>The Experience</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">A guided tour of OWIsMind: screen layout, asking questions, reading verified evidence, managing your budget and browsing the agent library.</p>
+                </header>
+
+                <!-- ============================================================
+                     SECTION 1: GETTING STARTED
+                     ============================================================ -->
+                <h2>Getting started</h2>
+
+                <p>OWIsMind is a chat portal that lets you query your business data in natural language, without writing a single line of code. You ask a question the way you would ask a knowledgeable colleague and the application returns a quantified answer grounded in a real SQL result - along with every detail of how that result was produced.</p>
+
+                <p>The application lives inside your Dataiku DSS instance as a plugin webapp. There is nothing to install on your workstation: open the address your administrator gave you in your usual browser. You are already authenticated by DSS; OWIsMind reuses that session, so there is no new password or login form.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux</p>
+                    <p>If you see a "Storage not configured" message in the center of the screen when you open the application, it means an administrator has not yet chosen the SQL storage connection in the webapp settings. This is not an error on your side: notify your administrator. As long as this setting is missing, the chat remains unavailable.</p>
+                  </div>
+                </aside>
+
+                <h3>Your identity, resolved automatically</h3>
+
+                <p>OWIsMind recognizes who you are without asking you anything. On opening, the application retrieves your identity from DSS and derives a display name from your login identifier - for example, <code>said.chaoui</code> becomes "Said". Your initials appear in a chip at the bottom left of the screen.</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">What this means for you</p>
+                    <div class="stack">
+                      <p>You only see <strong>your</strong> conversations. No one else can read your exchanges, and you do not see those of other users.</p>
+                      <p>You only see the <strong>agents authorized</strong> by the administrator. The list of available agents is set on the server side, not in the browser.</p>
+                    </div>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Administrator vs. standard user</p>
+                    <p>The very first user who opens the application after it is configured becomes an <strong>administrator</strong> and gains access to an Administration console. All following users are standard users. Administrators enable agents, author their profiles, and manage user budgets.</p>
+                  </div>
+                </div>
+
+                <h3>The screen layout: three spaces</h3>
+
+                <p>The Chat screen is divided into three areas, from left to right. The right-hand area (Evidence Studio) only appears on demand.</p>
+
+                <!-- DIAGRAM 1: Annotated app layout -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Annotated layout of the OWIsMind application showing three panels: sidebar/rail on the left, conversation in the center, and Evidence Studio on the right">
+
+                    <!-- Background lane -->
+                    <rect class="lane" x="0" y="0" width="760" height="300"/>
+
+                    <!-- PANEL A: Sidebar / Rail -->
+                    <rect class="node" x="16" y="16" width="130" height="268"/>
+                    <!-- Rail icons schematic -->
+                    <rect class="node-soft" x="24" y="24" width="40" height="32"/>
+                    <text x="44" y="45" text-anchor="middle" class="diagram u-small text-accent" style="font-size:9px;font-weight:700">LOGO</text>
+                    <rect class="node-soft" x="24" y="64" width="40" height="24"/>
+                    <text x="44" y="80" text-anchor="middle" class="diagram" style="font-size:9px">+ New</text>
+                    <rect class="node-soft" x="24" y="96" width="40" height="24"/>
+                    <text x="44" y="112" text-anchor="middle" class="diagram" style="font-size:9px">Agents</text>
+                    <!-- Conversation list -->
+                    <rect class="node-soft" x="70" y="64" width="68" height="12"/>
+                    <rect class="node-soft" x="70" y="82" width="60" height="12"/>
+                    <rect class="node-soft" x="70" y="100" width="65" height="12"/>
+                    <rect class="node-soft" x="70" y="118" width="55" height="12"/>
+                    <text x="104" y="58" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Recent convs.</text>
+                    <!-- Bottom -->
+                    <rect class="node-soft" x="24" y="240" width="40" height="24"/>
+                    <text x="44" y="256" text-anchor="middle" class="diagram" style="font-size:9px">? Help</text>
+                    <circle class="node-accent" cx="44" cy="272" r="10"/>
+                    <text x="44" y="276" text-anchor="middle" fill="#fff" class="diagram" style="font-size:8px">SC</text>
+                    <!-- Label -->
+                    <text x="81" y="195" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">Sidebar</text>
+                    <text x="81" y="210" text-anchor="middle" class="diagram text-muted" style="font-size:9px">Nav + conversations</text>
+                    <text x="81" y="224" text-anchor="middle" class="diagram text-muted" style="font-size:9px">+ account. Collapses</text>
+                    <text x="81" y="238" text-anchor="middle" class="diagram text-muted" style="font-size:9px">to icon rail.</text>
+
+                    <!-- PANEL B: Conversation (center) -->
+                    <rect class="node" x="154" y="16" width="310" height="268"/>
+                    <!-- Chat bubbles schematic -->
+                    <rect class="node-soft" x="162" y="32" width="160" height="32"/>
+                    <text x="242" y="52" text-anchor="middle" class="diagram" style="font-size:9px">Your question</text>
+                    <rect class="node-soft" x="162" y="72" width="290" height="60"/>
+                    <text x="307" y="100" text-anchor="middle" class="diagram" style="font-size:9px">Agent response</text>
+                    <!-- Timeline -->
+                    <rect class="node-soft" x="162" y="140" width="290" height="50"/>
+                    <text x="307" y="162" text-anchor="middle" class="diagram" style="font-size:9px;font-weight:700">Live timeline</text>
+                    <text x="307" y="178" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Steps: understand - query - write</text>
+                    <!-- Input bar -->
+                    <rect class="node-accent" x="162" y="222" width="290" height="38" rx="0"/>
+                    <text x="307" y="238" text-anchor="middle" fill="#fff" class="diagram" style="font-size:9px">Input bar (Enter sends, Shift+Enter = newline)</text>
+                    <text x="307" y="252" text-anchor="middle" fill="#fff" class="diagram" style="font-size:8px">Agent picker | Mode picker | Mic | Send</text>
+                    <!-- Label -->
+                    <text x="307" y="285" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">Conversation</text>
+
+                    <!-- Orange accent border on center panel -->
+                    <rect fill="none" stroke="var(--orange)" stroke-width="2" x="154" y="16" width="310" height="268"/>
+
+                    <!-- PANEL C: Evidence Studio -->
+                    <rect class="node" x="472" y="16" width="272" height="268"/>
+                    <!-- Badge schematic -->
+                    <rect class="node-soft" x="480" y="32" width="256" height="28"/>
+                    <text x="608" y="50" text-anchor="middle" class="diagram" style="font-size:9px;font-weight:700">Trust badge</text>
+                    <!-- Chips -->
+                    <rect class="node-soft" x="480" y="68" width="60" height="16"/>
+                    <rect class="node-soft" x="548" y="68" width="80" height="16"/>
+                    <rect class="node-soft" x="636" y="68" width="50" height="16"/>
+                    <text x="608" y="96" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Filter chips (editable)</text>
+                    <!-- Calculation steps -->
+                    <rect class="node-soft" x="480" y="104" width="256" height="60"/>
+                    <text x="608" y="124" text-anchor="middle" class="diagram" style="font-size:9px">How this was calculated</text>
+                    <text x="608" y="140" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Numbered steps in business language</text>
+                    <!-- Result -->
+                    <rect class="node-soft" x="480" y="172" width="256" height="44"/>
+                    <text x="608" y="192" text-anchor="middle" class="diagram" style="font-size:9px">Result used by the agent</text>
+                    <text x="608" y="208" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Exact captured rows + drill</text>
+                    <!-- Tabs: Evidence / Chart / Table / KPI -->
+                    <rect class="node-soft" x="480" y="224" width="56" height="20"/>
+                    <rect class="node-accent" x="538" y="224" width="46" height="20"/>
+                    <rect class="node-soft" x="586" y="224" width="50" height="20"/>
+                    <rect class="node-soft" x="638" y="224" width="38" height="20"/>
+                    <text x="508" y="238" text-anchor="middle" class="diagram" style="font-size:8px">Evidence</text>
+                    <text x="561" y="238" text-anchor="middle" fill="#fff" class="diagram" style="font-size:8px">Chart</text>
+                    <text x="611" y="238" text-anchor="middle" class="diagram" style="font-size:8px">Table</text>
+                    <text x="657" y="238" text-anchor="middle" class="diagram" style="font-size:8px">KPI</text>
+                    <!-- SQL collapsed -->
+                    <rect class="node-soft" x="480" y="252" width="256" height="16"/>
+                    <text x="608" y="264" text-anchor="middle" class="diagram text-muted" style="font-size:8px">Technical details (SQL, collapsed)</text>
+                    <!-- Label -->
+                    <text x="608" y="285" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">Evidence Studio</text>
+
+                    <!-- Connecting lines between panels -->
+                    <line class="edge" x1="146" y1="150" x2="154" y2="150"/>
+                    <polygon class="arrowhead" points="150,146 154,150 150,154"/>
+                    <line class="edge" x1="464" y1="150" x2="472" y2="150"/>
+                    <polygon class="arrowhead" points="468,146 472,150 468,154"/>
+
+                    <!-- Annotation: "opens automatically after an answer" -->
+                    <line class="edge-accent" x1="608" y1="14" x2="608" y2="8"/>
+                    <text x="608" y="6" text-anchor="middle" class="diagram text-accent" style="font-size:8px;font-weight:700">Opens automatically after a response</text>
+                  </svg>
+                  <p class="diagram-caption">The three-panel layout: the sidebar (navigation + conversation history), the center (conversation thread + input), and Evidence Studio (verifiable proof, opens on the right after each answer).</p>
+                </figure>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Area</th>
+                        <th>What it is for</th>
+                        <th>Collapses?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Sidebar / rail (left)</strong></td>
+                        <td>Navigation, recent conversations, account avatar and help. The collapse button hides the text and leaves only a narrow icon rail. The conversation list stays mounted so it reloads instantly on expand.</td>
+                        <td>Yes - into icon rail</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Conversation (center)</strong></td>
+                        <td>The thread of messages, the input bar, the agent/mode pickers and the live timeline. Always visible.</td>
+                        <td>No (always visible)</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Evidence Studio (right)</strong></td>
+                        <td>Opens automatically at the end of an answer. Shows the verification badge, data sources, filter chips, calculation steps, the exact captured result and a collapsed SQL view. Can be closed at any time.</td>
+                        <td>Yes - close with the X</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Your first question: step by step</h3>
+
+                <p>The workflow is immediate. The home screen shows a blank input area in the center - there is no intermediate page to navigate through.</p>
+
+                <!-- DIAGRAM 2: One-question user flow -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flow from typing a question to receiving a verified answer: type question, press Enter, live timeline advances, answer drops in, Evidence panel opens automatically">
+
+                    <rect class="lane" x="0" y="0" width="680" height="100"/>
+
+                    <!-- Step 1 -->
+                    <rect class="node" x="16" y="20" width="118" height="60"/>
+                    <text x="75" y="46" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">1. Type</text>
+                    <text x="75" y="62" text-anchor="middle" class="diagram text-muted" style="font-size:9px">your question</text>
+                    <text x="75" y="76" text-anchor="middle" class="diagram text-muted" style="font-size:9px">+ press Enter</text>
+
+                    <line class="edge-accent" x1="134" y1="50" x2="158" y2="50"/>
+                    <polygon class="arrowhead-accent" points="154,46 162,50 154,54"/>
+
+                    <!-- Step 2 -->
+                    <rect class="node" x="162" y="20" width="118" height="60"/>
+                    <text x="221" y="46" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">2. Timeline</text>
+                    <text x="221" y="62" text-anchor="middle" class="diagram text-muted" style="font-size:9px">steps advance live</text>
+                    <text x="221" y="76" text-anchor="middle" class="diagram text-muted" style="font-size:9px">~500 ms polling</text>
+
+                    <line class="edge-accent" x1="280" y1="50" x2="304" y2="50"/>
+                    <polygon class="arrowhead-accent" points="300,46 308,50 300,54"/>
+
+                    <!-- Step 3 -->
+                    <rect class="node" x="308" y="20" width="118" height="60"/>
+                    <text x="367" y="46" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">3. Answer</text>
+                    <text x="367" y="62" text-anchor="middle" class="diagram text-muted" style="font-size:9px">in euros, with scope</text>
+                    <text x="367" y="76" text-anchor="middle" class="diagram text-muted" style="font-size:9px">(often drops in one block)</text>
+
+                    <line class="edge-accent" x1="426" y1="50" x2="450" y2="50"/>
+                    <polygon class="arrowhead-accent" points="446,46 454,50 446,54"/>
+
+                    <!-- Step 4 -->
+                    <rect class="node-accent" x="454" y="20" width="210" height="60"/>
+                    <text x="559" y="42" text-anchor="middle" fill="#fff" class="diagram" style="font-size:10px;font-weight:700">4. Evidence Studio opens</text>
+                    <text x="559" y="58" text-anchor="middle" fill="#fff" class="diagram" style="font-size:9px">automatically - badge, sources,</text>
+                    <text x="559" y="72" text-anchor="middle" fill="#fff" class="diagram" style="font-size:9px">calculation, captured result</text>
+                  </svg>
+                  <p class="diagram-caption">A single question in OWIsMind: type it, watch the live timeline, receive the written answer (often all at once at the end), and inspect the automatically opened Evidence panel.</p>
+                </figure>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Example questions suited to the current domain (revenues)</p>
+                  <div class="stack">
+                    <p>"What is the actual revenue of the HSBC account?"</p>
+                    <p>"Break down revenues by solution line."</p>
+                    <p>"Top 10 customers by turnover."</p>
+                    <p>"Compare the 2026 budget and the actuals for roaming."</p>
+                    <p>"What does this data contain, what can you do?"</p>
+                  </div>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Text arrives all at once</p>
+                    <p>The written answer often drops in one block at the end of the generation, rather than word by word. This is not a freeze: meanwhile, the timeline shows you the agent is progressing. Rely on the timeline during generation, not on the text area.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: single staffed domain</p>
+                    <p>Only one domain is genuinely covered by an agent today: <strong>revenues</strong> (the <code>DRIVE_Revenues</code> dataset). If you ask about another domain (tickets, satisfaction, etc.), the orchestrator honestly answers that it does not yet have an agent for that domain - and never claims the data does not exist.</p>
+                  </div>
+                </aside>
+
+                <h3>Conversation history</h3>
+
+                <p>A conversation carries a unique identifier. From your first exchange onward, this identifier appears in the page address as <code>/chat/&lt;identifier&gt;</code> and the conversation is highlighted in the sidebar. The title shown in the list is derived automatically from your first message (no entry required). To start over from scratch, click <strong>New conversation</strong>; your previous conversation remains in the sidebar, intact.</p>
+
+                <a href="../01-user-guide/01-getting-started.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/01-getting-started.md
+                </a>
+
+
+                <!-- ============================================================
+                     SECTION 2: USING THE CHAT
+                     ============================================================ -->
+                <h2>Using the chat</h2>
+
+                <p>The center column is where the conversation happens. You type in the input bar at the bottom, watch the live timeline while the agent works, and read the response in the thread above. This section covers all the controls of that center column.</p>
+
+                <h3>The input bar</h3>
+
+                <p>The input bar sits at the bottom of the center column and expands automatically as you type.</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Keyboard shortcuts</p>
+                    <dl class="kv">
+                      <dt><kbd>Enter</kbd></dt>
+                      <dd>Send the question.</dd>
+                      <dt><kbd>Shift + Enter</kbd></dt>
+                      <dd>Insert a line break (useful for multi-line requests).</dd>
+                    </dl>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Send is blocked when...</p>
+                    <div class="stack">
+                      <p>No agent is selected, or the agent is unavailable.</p>
+                      <p>The conversation is still loading or storage is not configured.</p>
+                      <p>Your <strong>monthly budget</strong> is exhausted (a banner appears).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: voice dictation</p>
+                    <p>The microphone button on the input bar is a placeholder. Clicking it shows a "coming soon" message only. Voice input never sends a request automatically.</p>
+                  </div>
+                </aside>
+
+                <h4>Writing a good question</h4>
+
+                <p>OWIsMind is not a guessing engine: the more precise your request, the better the response. The input bar carries an explicit placeholder: "Describe your request as precisely as possible".</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>What to specify</th>
+                        <th>Why it helps</th>
+                        <th>Example</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Entity or customer</td>
+                        <td>The agent anchors your term to an exact value in the database</td>
+                        <td>"the HSBC account", "the EVPL product"</td>
+                      </tr>
+                      <tr>
+                        <td>Scenario (Phase)</td>
+                        <td>Figures exist in several versions (<code>ACTUALS</code>, <code>BUDGET</code>, <code>FORECAST</code>, <code>Q3F</code>, <code>HLF</code>) that are never mixed</td>
+                        <td>"actuals vs budget"</td>
+                      </tr>
+                      <tr>
+                        <td>Period</td>
+                        <td>Without a period, the agent uses all periods and tells you so</td>
+                        <td>"YTD 2026", "for 2025"</td>
+                      </tr>
+                      <tr>
+                        <td>Type of analysis</td>
+                        <td>Total, breakdown, top N, comparison, trend</td>
+                        <td>"top 10 customers by revenue"</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Choosing an agent</h3>
+
+                <p>The agent selector (to the left of the input bar) shows the agent that will answer your next question. By default it is the <code>OWIsMind_orchestrator</code> - the generalist entry point that understands your question, routes it to the right specialist, and writes the analysis. The list always comes from the server: you only see agents that an administrator has enabled for your account.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Honesty firewall</p>
+                    <p>If you ask about a domain not yet equipped (for example tickets), the orchestrator answers honestly that it does not yet have an agent for that domain. It will never say the data "does not exist" - this is a deliberate product rule called the honesty firewall.</p>
+                  </div>
+                </aside>
+
+                <h3>Choosing a response mode: Eco, Medium, High</h3>
+
+                <p>The mode selector (next to the agent picker) is a cost/quality slider. A small pill displays the current mode with a colored dot (green for Eco, orange for Medium, red for High). Clicking it opens an explanation window with the three modes side by side, with cost and speed gauges.</p>
+
+                <div class="grid-3 mt">
+                  <div class="card kpi">
+                    <p class="k-label">Eco (default)</p>
+                    <p class="k-val" style="color:var(--green)">1/5</p>
+                    <p class="k-sub">Recommended. Fast, economical. Best for the vast majority of everyday questions.</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Medium</p>
+                    <p class="k-val" style="color:var(--orange-deep)">3/5</p>
+                    <p class="k-sub">Moderate cost. Faster. For analyses that require a bit more finesse.</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">High</p>
+                    <p class="k-val" style="color:var(--red)">5/5</p>
+                    <p class="k-sub">High cost, more deliberate. For complex questions that warrant in-depth reasoning.</p>
+                  </div>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">SQL accuracy is the same in all modes</p>
+                    <p>The analytical SQL is always written by the same engine (the Semantic Model Query tool, on a fixed Sonnet model). Switching mode does not change the accuracy of the figure - it mainly changes the quality of the wording and the cost. Stay in Eco for most questions; reserve High for those that truly warrant in-depth reasoning.</p>
+                  </div>
+                </aside>
+
+                <p>Your choice takes effect only after you click <strong>Apply</strong> in the mode window. <strong>Cancel</strong> closes it without changing anything. The mode window also shows a reminder that the monthly budget of $50 is shared across all modes - the more powerful the mode, the faster the budget is consumed.</p>
+
+                <p>A cost tracking line appears under each response: input tokens, output tokens and the estimated cost of that exchange.</p>
+
+                <h3>The live execution timeline</h3>
+
+                <p>When you send a question, the agent works before it answers: it understands your request, grounds your terms onto exact database values, runs a SQL query, and drafts the response. OWIsMind makes this visible as a live timeline of steps in the agent's response bubble.</p>
+
+                <p>During the generation you see steps as they happen (planning, routing to the revenue specialist, executing the query, writing). Each step shows a human-readable label and a timer. To avoid overwhelming you, only the most recent five steps are displayed at once.</p>
+
+                <p>Once the response is finished, all steps collapse into a single collapsible header ("Agent steps - N steps - total time"). You can expand it to review what happened, but the written response is always the main element.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: step labels</p>
+                    <p>The exact list of steps displayed depends on the labels emitted by the agents, which are evolving. An unknown label is simply humanized, so a new kind of step never breaks the display.</p>
+                  </div>
+                </aside>
+
+                <h3>Stopping a generation</h3>
+
+                <p>While an agent is working, the send button becomes a stop button (square "stop"). Clicking it requests a cooperative stop - the backend cuts off cleanly between two pieces of the response rather than killing the work abruptly.</p>
+
+                <p>You will first see a blinking "Stopping..." indicator with a spinner. Then the final state appears:</p>
+
+                <ul>
+                  <li>If the agent had already written some text, the partial is kept and marked "Generation stopped".</li>
+                  <li>If it had not yet produced anything, OWIsMind displays "Response interrupted" rather than an empty bubble.</li>
+                </ul>
+
+                <p>The stopped response stays in the thread - it is not removed.</p>
+
+                <h3>Conversation branches: editing and regenerating</h3>
+
+                <p>An OWIsMind conversation is not a simple linear list - it is a tree. You can start again from any previous question without losing anything.</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Edit your question</p>
+                    <p>Hover over your bubble and click the edit icon. An inline text area opens; on validating, OWIsMind creates a new sibling branch with your reformulated question. The old version is never erased. Use this to correct or refine a poorly worded request.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Regenerate the response</p>
+                    <p>Under an agent response, the "Regenerate" button reruns the same prompt to obtain another response as a new sibling branch. Useful if the first response does not suit you, or if you want to replay in a different mode.</p>
+                  </div>
+                </div>
+
+                <p class="mt">When a point in the conversation has several versions, navigation arrows appear with a counter such as "2/3". The left and right arrows move between versions.</p>
+
+                <h3>Feedback</h3>
+
+                <p>Under each agent response, a thumbs-up and a thumbs-down button let you rate it. A thumbs-down opens a small window to specify what went wrong (wrong response, incomplete, off topic, or a free comment). A thumbs-up can also be commented on via the "..." menu. Your feedback is stored and helps the OWI team improve the agents.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>You want to</th>
+                        <th>How</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Ask a question</td><td>Type in the bar, <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a new line</td></tr>
+                      <tr><td>Switch agent</td><td>Agent selector to the left of the bar</td></tr>
+                      <tr><td>Set cost/quality</td><td>Mode selector (Eco recommended, Medium, High) then Apply</td></tr>
+                      <tr><td>Follow work live</td><td>The step timeline in the response bubble</td></tr>
+                      <tr><td>Stop</td><td>The send button becomes a stop button during generation</td></tr>
+                      <tr><td>Correct a question</td><td>Hover over your bubble, edit icon (creates a branch)</td></tr>
+                      <tr><td>Replay a response</td><td>"Regenerate" button (creates a branch)</td></tr>
+                      <tr><td>Navigate versions</td><td>Arrows and "n/m" counter under the response</td></tr>
+                      <tr><td>Give an opinion</td><td>Thumbs-up / thumbs-down, then reasons and comment</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <a href="../01-user-guide/02-using-the-chat.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/02-using-the-chat.md
+                </a>
+
+
+                <!-- ============================================================
+                     SECTION 3: UNDERSTANDING THE RESULTS (EVIDENCE STUDIO)
+                     ============================================================ -->
+                <h2>Understanding the results</h2>
+
+                <p>When you ask a question, OWIsMind does not simply hand you a figure: it opens an evidence panel called <strong>Evidence Studio</strong> to the right of the chat. This panel answers one question: "Can I trust this result, and how was it obtained?"</p>
+
+                <p>The key point to remember is this: every figure shown comes from a real SQL query run against the data, never from an estimate produced by the language model. The panel rebuilds the explanation from that real query, automatically and deterministically - the same result always yields the same explanation. No language model is involved at evidence time.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Live re-read</p>
+                    <p>Evidence Studio re-reads the data right now, at the moment you look at it. Only the "Result used by the agent" block shows what the agent actually saw when it answered. If the data has changed since the response, the exploration rows here may differ from those the agent used.</p>
+                  </div>
+                </aside>
+
+                <h3>The panel tabs</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Tab</th>
+                        <th>What you see there</th>
+                        <th>Always shown?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Evidence</strong></td>
+                        <td>The heart of the panel: badge, sources, filter chips, calculation steps, captured result, exploration table, SQL. Always present.</td>
+                        <td>Yes</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Chart</strong></td>
+                        <td>An interactive chart (line, bars or pie) built server-side from the captured result. Appears only if the agent requested a visual display.</td>
+                        <td>No</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Table</strong></td>
+                        <td>The exact result received by the agent, presented as a table.</td>
+                        <td>No</td>
+                      </tr>
+                      <tr>
+                        <td><strong>KPI</strong></td>
+                        <td>A key figure highlighted, with an optional variation (green arrow if up, red if down).</td>
+                        <td>No</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p class="mt">Switching tabs does not affect the conversation thread. Charts, tables and KPIs are built server-side: the agent only states which field goes on the x-axis or y-axis, and the server does the rest. If the data does not lend itself to a plot, the tab shows an honest message rather than a false chart.</p>
+
+                <h3>The trust badge: the five levels</h3>
+
+                <p>At the very top of the Evidence tab, a pill summarizes the verification level. The color rule is deliberate and <strong>never includes green</strong> - green would give a false impression of total guarantee.</p>
+
+                <!-- DIAGRAM 3: Trust badge scale -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trust badge scale showing five levels from calc_decomposed (highest, solid orange) down to declared (lowest, gray)">
+
+                    <rect class="lane" x="0" y="0" width="700" height="320"/>
+
+                    <!-- Title line -->
+                    <text x="350" y="22" text-anchor="middle" class="diagram" style="font-size:11px;font-weight:700">Trust badge scale - from most to least verified</text>
+
+                    <!-- Level 1: calc_decomposed -->
+                    <rect class="node" x="16" y="36" width="668" height="50"/>
+                    <!-- Orange solid border badge -->
+                    <rect fill="none" stroke="var(--orange)" stroke-width="2" x="24" y="46" width="180" height="28"/>
+                    <text x="114" y="65" text-anchor="middle" class="diagram text-accent" style="font-size:10px;font-weight:700">Certified result</text>
+                    <line class="edge-accent" x1="204" y1="61" x2="224" y2="61"/>
+                    <polygon class="arrowhead-accent" points="220,57 228,61 220,65"/>
+                    <text x="470" y="55" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">calc_decomposed</text>
+                    <text x="470" y="72" text-anchor="middle" class="diagram text-muted" style="font-size:9px">Calculation decomposed step by step + exact captured result kept. Highest level.</text>
+
+                    <!-- Level 2: scope_exact -->
+                    <rect class="node" x="16" y="90" width="668" height="50"/>
+                    <rect fill="none" stroke="var(--orange)" stroke-width="2" x="24" y="100" width="180" height="28"/>
+                    <text x="114" y="119" text-anchor="middle" class="diagram text-accent" style="font-size:10px;font-weight:700">Certified source</text>
+                    <line class="edge-accent" x1="204" y1="115" x2="224" y2="115"/>
+                    <polygon class="arrowhead-accent" points="220,111 228,115 220,119"/>
+                    <text x="470" y="109" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">scope_exact</text>
+                    <text x="470" y="126" text-anchor="middle" class="diagram text-muted" style="font-size:9px">Exact source and scope identified. Rows shown are re-read now.</text>
+
+                    <!-- Level 3: scope_partial -->
+                    <rect class="node" x="16" y="144" width="668" height="50"/>
+                    <!-- Dashed border badge -->
+                    <rect fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="4,3" x="24" y="154" width="180" height="28"/>
+                    <text x="114" y="173" text-anchor="middle" class="diagram text-accent" style="font-size:10px;font-weight:700">Partial evidence</text>
+                    <line class="edge" x1="204" y1="169" x2="224" y2="169"/>
+                    <polygon class="arrowhead" points="220,165 228,169 220,173"/>
+                    <text x="470" y="163" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">scope_partial</text>
+                    <text x="470" y="180" text-anchor="middle" class="diagram text-muted" style="font-size:9px">Only part of the scope reproduced. Unreproduced elements are listed, never hidden.</text>
+
+                    <!-- Level 4: source_identified -->
+                    <rect class="node" x="16" y="198" width="668" height="50"/>
+                    <rect fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="4,3" x="24" y="208" width="180" height="28"/>
+                    <text x="114" y="227" text-anchor="middle" class="diagram text-accent" style="font-size:10px;font-weight:700">Source identified</text>
+                    <line class="edge" x1="204" y1="223" x2="224" y2="223"/>
+                    <polygon class="arrowhead" points="220,219 228,223 220,227"/>
+                    <text x="470" y="217" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">source_identified</text>
+                    <text x="470" y="234" text-anchor="middle" class="diagram text-muted" style="font-size:9px">Data source identified; scope or filters could not be fully reproduced.</text>
+
+                    <!-- Level 5: declared -->
+                    <rect class="node" x="16" y="252" width="668" height="50"/>
+                    <!-- Gray badge -->
+                    <rect class="node-soft" x="24" y="262" width="180" height="28"/>
+                    <text x="114" y="281" text-anchor="middle" class="diagram text-muted" style="font-size:10px;font-weight:700">Stated by the agent</text>
+                    <line class="edge" x1="204" y1="277" x2="224" y2="277"/>
+                    <polygon class="arrowhead" points="220,273 228,277 220,281"/>
+                    <text x="470" y="271" text-anchor="middle" class="diagram" style="font-size:10px;font-weight:700">declared</text>
+                    <text x="470" y="288" text-anchor="middle" class="diagram text-muted" style="font-size:9px">A statement from the agent; no automatic verification was possible. Gray muted pill.</text>
+
+                    <!-- Vertical arrow showing direction -->
+                    <line class="edge-accent" x1="680" y1="56" x2="680" y2="292"/>
+                    <polygon class="arrowhead-accent" points="676,288 680,296 684,288"/>
+                    <text x="695" y="174" text-anchor="middle" class="diagram text-accent" style="font-size:9px;font-weight:700;writing-mode:vertical-rl;text-orientation:mixed" transform="rotate(90 695 174)">Less verified</text>
+                  </svg>
+                  <p class="diagram-caption">The five trust badge levels. A solid orange border = certified. A dashed orange border = partial. A gray muted pill = declared (unverified). The badge is never green: this is a deliberate honesty choice.</p>
+                </figure>
+
+                <h3>Filter chips (editable)</h3>
+
+                <p>The filters section breaks down the query's <code>WHERE</code> condition into chips - one per filter, in column/value language. Each chip is editable (you can change its values via a distinct-values selector) and removable (removing a chip broadens the scope). An "Add a filter" button lets you add filters on any column; an "Agent version" button reverts to the original filters.</p>
+
+                <p>Changing a filter drives the exploration table below. It never rewrites the agent's response: you are exploring the source data freely, not changing the answer. A dashed orange border on the filter area signals that you have diverged from the agent's original filters.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Security: no raw SQL ever sent from the browser</p>
+                    <p>When you change a filter, the application never sends SQL to the server. It only transmits the column, the operator and the chosen values. The server itself rebuilds the query, bounded and read-only. You never choose the table or the connection.</p>
+                  </div>
+                </aside>
+
+                <h3>Captured result and drill</h3>
+
+                <p>The "Result used by the agent" section shows the exact rows the agent received to formulate its response, in a small bounded table along with the total row count. Two cases:</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Captured result</p>
+                    <p>The table shows the first rows actually used. If the result was truncated, a note "Result truncated - first rows only." makes it clear.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Result not captured</p>
+                    <p>An honest line indicates "The exact result used by the agent was not kept for this response." Capture is best-effort and not guaranteed. The panel remains useful for everything else (badge, sources, calculation, exploration, SQL).</p>
+                  </div>
+                </div>
+
+                <p class="mt">When the backend has certified the drill as reliable, a chevron appears at the end of each result row. Clicking it "dives" into the source rows that make up that result. The drill is offered only when proven reliable: if a column cannot be tied back with certainty, the chevron is deliberately hidden.</p>
+
+                <h3>Exploration table and collapsed SQL</h3>
+
+                <p>Below the drill banner, the "Explore the source data" section shows the rows of the source table, loaded lazily as you scroll (up to 500 rows). This table reflects the current chips. It re-reads today's data, which may differ from what the agent saw.</p>
+
+                <p>At the very bottom, a collapsed "Technical details (SQL)" panel shows the exact query run by the agent, formatted and colored. A copy button copies it as-is. This is the ultimate level of transparency: the evidence hides nothing.</p>
+
+                <h3>Degraded mode</h3>
+
+                <p>When the interactive view is not available (for example the queried table does not match any SQL dataset in the project), the panel shows the "Stated by the agent" badge and an explanatory message, and still offers the raw query when it exists. Nothing is invented: you are told honestly what is missing.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: result capture and KPI tab</p>
+                    <p>Capture of the exact result (and the Chart / Table / KPI tabs that derive from it) is best-effort and may be absent on the instance. The KPI tab is wired on the interface side, but its appearance depends on the agent requesting that type of display. These behaviors are detailed in the backend documentation.</p>
+                  </div>
+                </aside>
+
+                <a href="../01-user-guide/03-understanding-evidence.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/03-understanding-evidence.md
+                </a>
+
+
+                <!-- ============================================================
+                     SECTION 4: MY ACCOUNT AND BUDGET
+                     ============================================================ -->
+                <h2>My account and budget</h2>
+
+                <p>The <strong>My account</strong> page is reached from the sidebar avatar (click your initials chip at the bottom left) or via the sidebar menu entry "My account". It groups everything personal: appearance preferences, your identity, your monthly budget gauge and your usage history.</p>
+
+                <h3>Theme and language</h3>
+
+                <p>Two controls at the top right of the page adjust the look immediately:</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Theme</p>
+                    <p>A flat segmented control switches between <strong>Light</strong> and <strong>Dark</strong> mode. The change takes effect at once and is remembered across sessions. Both controls are also accessible from the header bar on every page.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Language</p>
+                    <p>A selector switches the interface between French and English. The default is English. Conversation history and agent responses already in the thread are not re-translated.</p>
+                  </div>
+                </div>
+
+                <h3>Your profile</h3>
+
+                <p>The profile card shows your display name (derived automatically from your Dataiku login), a Dataiku identifier pill with a lock icon, and your groups listed as chips with an orange accent border. The "Edit profile" button is currently disabled ("Soon" badge) - your identity is always derived from your Dataiku session.</p>
+
+                <h3>The monthly budget gauge</h3>
+
+                <p>OWIsMind assigns every user a rolling monthly credit in US dollars (default $50). The budget card shows the current state in real time:</p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Budget card - what each element means</p>
+                  <dl class="kv">
+                    <dt>Big amount (left)</dt>
+                    <dd>Cumulative spend this calendar month, driven by the LLM-Mesh <code>estimatedCost</code> of each exchange.</dd>
+                    <dt>/ $50.00</dt>
+                    <dd>Your current monthly limit.</dd>
+                    <dt>Percentage (right)</dt>
+                    <dd>Spend as a percentage of the limit.</dd>
+                    <dt>Flat bar</dt>
+                    <dd>Visual gauge, capped at 100% visually. Turns red when you are blocked or over the limit.</dd>
+                    <dt>Remaining</dt>
+                    <dd>How much credit is left this month.</dd>
+                    <dt>Resets on ...</dt>
+                    <dd>The first day of the next calendar month. The budget resets automatically, with no action required.</dd>
+                    <dt>Transparency line</dt>
+                    <dd>Explains exactly why your limit is what it is (see below).</dd>
+                  </dl>
+                </div>
+
+                <h4>Limit source transparency</h4>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Message shown</th>
+                        <th>What it means</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>"Monthly limit: $X (default)."</td>
+                        <td>Your limit is the global default set by the administrator.</td>
+                      </tr>
+                      <tr>
+                        <td>"Monthly limit: $X (temporary boost until [date])."</td>
+                        <td>A global temporary boost is active for all users; it expires on the shown date and then reverts to the default.</td>
+                      </tr>
+                      <tr>
+                        <td>"Monthly limit: $X (granted by an administrator)."</td>
+                        <td>An administrator assigned you a permanent personal override.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h4>Gauge severity levels</h4>
+
+                <div class="grid-3 mt">
+                  <div class="card kpi">
+                    <p class="k-label">Normal</p>
+                    <p class="k-val u-muted">below 80%</p>
+                    <p class="k-sub">Default neutral color.</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Warning</p>
+                    <p class="k-val" style="color:var(--orange-deep)">80%+</p>
+                    <p class="k-sub">Gauge and percentage turn orange.</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Over / Blocked</p>
+                    <p class="k-val" style="color:var(--red)">100%</p>
+                    <p class="k-sub">Gauge turns red. Sending is blocked.</p>
+                  </div>
+                </div>
+
+                <h3>When the budget is exhausted</h3>
+
+                <p>When your spend reaches your limit and enforcement is on, the budget card shows a red alert flag. Simultaneously, in the chat:</p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">What you see in the chat</p>
+                  <p>The input bar becomes greyed out and a transparent banner appears above it:</p>
+                  <blockquote style="margin:12px 0;padding:10px 14px;border-left:3px solid var(--orange);color:var(--ink-2);font-style:italic">"Monthly budget reached: $50.00 used of $50.00. New requests resume on Jul 1, 2026."</blockquote>
+                  <p>You cannot send new requests until the 1st of the following month, when the budget resets automatically with no action required.</p>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Enforcement fails open</p>
+                    <p>The block is enforced server-side at <code>/chat/start</code> (HTTP 402). If the budget status cannot be read due to a backend error, the request is allowed through rather than blocking you incorrectly. The spend is still recorded.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: budget enforcement on the instance</p>
+                    <p>The budget enforcement is coded and validated at the code level but has not yet been confirmed live on the DSS instance. If you do not see a budget gauge on your My account page, the budget feature may not yet be deployed. Contact your administrator.</p>
+                  </div>
+                </aside>
+
+                <h3>Usage history</h3>
+
+                <p>Below the gauge, a mini-grid shows your current-month request count and token total. Further down, a four-tile grid shows lifetime statistics: tokens this month (with input/output sub-lines), spend this month, lifetime spend, and last activity date.</p>
+
+                <h3>Context window preference</h3>
+
+                <p>At the bottom of the page, a preference card lets you set how many recent messages OWIsMind sends to the agent as context for each new exchange. Default: 20 messages; minimum 10; maximum 50; step 10. Lowering this value makes each exchange cheaper and faster. Raising it lets the agent refer to earlier parts of a long conversation.</p>
+
+                <a href="../01-user-guide/05-account-and-budget.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/05-account-and-budget.md
+                </a>
+
+
+                <!-- ============================================================
+                     SECTION 5: AGENTS LIBRARY AND ADMINISTRATION
+                     ============================================================ -->
+                <h2>Agents library and administration</h2>
+
+                <p>OWIsMind exposes a growing set of AI agents. This section covers two connected features: the <strong>Agents library</strong>, available to every user for browsing and reading agent profiles; and the <strong>Administration console</strong>, visible only to administrators, for enabling agents, authoring profiles, managing users and controlling monthly budgets.</p>
+
+                <h3>The Agents library (all users)</h3>
+
+                <p>Click <strong>Agents</strong> in the sidebar to open the agent library. It shows all agents currently enabled for your account. The list always comes from the server - if an agent does not appear here, it is not available on your instance.</p>
+
+                <p>The library opens on a grid of cards. Above the grid, a search bar filters by name, tagline or description; a count line ("N agent(s)") updates live. Each card shows:</p>
+
+                <ul>
+                  <li>A square icon tile (orange glyph on a white square with a 1px border).</li>
+                  <li>An optional badge (Default, New, Beta) in the top-right corner.</li>
+                  <li>The agent name (bold, 16px) and a tagline (short punchline in orange text, AA-safe).</li>
+                  <li>A description (up to 3 lines, clipped with "..." if longer).</li>
+                  <li>A footer line with the number of documented tools, or "View profile" if none.</li>
+                </ul>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Zero hardcoded content</p>
+                    <p>Every profile (tagline, description, capabilities, tools, icon, badge) is authored by an administrator. If a profile has not been filled in yet, the card reads: "This agent's profile has not been filled in by an administrator yet." This is an honest state, never invented content.</p>
+                  </div>
+                </aside>
+
+                <h4>Detail view</h4>
+
+                <p>Clicking a card navigates to the agent's detail page and shows the full editorial profile: a hero header with a large icon tile (56x56), the agent name and tagline; a description paragraph (up to 700 characters); a two-column grid with capabilities (up to 8 bullet items) and exposed tools (chip-style labels in monospace, up to 16 items); and a "Start a conversation" button that pre-selects this agent in the chat input and navigates to the Chat page.</p>
+
+                <h3>The Administration console (admins only)</h3>
+
+                <p>The first user to open OWIsMind after the webapp is configured becomes the administrator. All subsequent users are standard users. The Administration console is server-gated: the backend checks whether the authenticated user has the admin flag before serving any admin route.</p>
+
+                <h4>The five console tabs</h4>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Tab</th>
+                        <th>What you manage there</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Overview</strong></td>
+                        <td>KPI tiles (user count, exposed agents, SQL connection) and storage details.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Agents</strong></td>
+                        <td>Enable/disable agents; author each agent's editorial profile.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Users</strong></td>
+                        <td>Promote or demote users to/from administrator.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Quotas &amp; budgets</strong></td>
+                        <td>Global monthly limit, temporary global boost, per-user overrides.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Activity log</strong></td>
+                        <td>Coming soon - no backend yet.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h4>Enabling agents and authoring profiles</h4>
+
+                <p>In the Agents tab, choose a Dataiku project from the dropdown. The agents found in that project appear below; tick one or click "Add" to add it to the enabled list. For each enabled agent, a status chip shows "Profile to complete" or "Profile filled in". Click <strong>Edit profile</strong> to open the profile editor modal.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Field</th>
+                        <th>Constraint</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Agent name (read-only)</td><td>The Dataiku label; not editable.</td></tr>
+                      <tr><td>Icon</td><td>Choose from the allowed icon set (server-side whitelist).</td></tr>
+                      <tr><td>Badge</td><td>None / Default / New / Beta.</td></tr>
+                      <tr><td>Tagline</td><td>Up to 120 characters.</td></tr>
+                      <tr><td>Description</td><td>Up to 700 characters.</td></tr>
+                      <tr><td>Capabilities</td><td>One per line, up to 8 items of 120 characters each.</td></tr>
+                      <tr><td>Exposed tools</td><td>One per line, up to 16 items of 48 characters each.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p class="mt">A live preview pane inside the modal shows how the card will look in the library as you type. Click <strong>Done</strong> to apply locally, then <strong>Save selection</strong> in the main tab to commit to the server. The profile is stored inside the <code>enabled_agents</code> JSON in the <code>webapp_settings_v1</code> settings table - no new table is created.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Honesty contract</p>
+                    <p>The profile is the only source of agent card content. There is no fallback copy hardcoded anywhere in the frontend. An agent whose profile has not been authored shows an honest "profile to complete" state. The backend's <code>validate_agent_meta()</code> sanitizes every field on write (icon must be in the server-side whitelist; badge must be one of default / new / beta or empty). The profile is returned via <code>GET /agents</code> without leaking the Dataiku <code>agent_id</code> or the source project.</p>
+                  </div>
+                </aside>
+
+                <h4>Managing users</h4>
+
+                <p>The Users tab lists every user who has ever opened the webapp. For each user the table shows: display name, groups, and an admin toggle (Make admin / Revoke admin). You cannot revoke admin from yourself if you are the last administrator. You cannot promote a user who has never opened the webapp.</p>
+
+                <h4>Quotas and budgets</h4>
+
+                <p>The Quotas &amp; budgets tab manages the monthly per-user budget system. It has three panels:</p>
+
+                <div class="stack mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Global settings</p>
+                    <p>Set the <strong>default monthly limit</strong> (in dollars) and toggle whether the limit is enforced (blocking requests) or just tracked. Default limit: $50. Click "Save configuration" to apply.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Temporary global boost</p>
+                    <p>Raise every user's limit for a limited time - useful during a busy reporting period. Set a temporary limit amount and a duration in days. The boost reverts automatically when it expires. Click "Apply boost" to activate; "Remove the global boost" to cancel early.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Per-user limits table</p>
+                    <p>Lists all users with their current-month spend, effective limit, remaining amount and source (Default / Global boost / Custom / Temporary). Tick one or more users, fill in a new limit amount and duration (Permanent or Temporary: 7, 30 or 90 days), then click "Apply limit". Click "Reset to default" to remove personal overrides.</p>
+                  </div>
+                </div>
+
+                <h4>Limit resolution priority</h4>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Priority</th>
+                        <th>Rule</th>
+                        <th>Active when</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge orange">1 (highest)</span></td>
+                        <td>Per-user override</td>
+                        <td>Row exists in <code>webapp_user_quota_v1</code> and <code>expires_at &gt; now()</code> or NULL</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">2</span></td>
+                        <td>Global temporary boost</td>
+                        <td><code>monthly_budget</code> config has a <code>temp</code> field with a future expiry</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">3 (lowest)</span></td>
+                        <td>Global default</td>
+                        <td>Always applies as the fallback; <code>default_limit_usd</code> from <code>webapp_settings_v1</code></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: budget enforcement on the instance</p>
+                    <p>The budget enforcement is coded and ready but has not yet been confirmed live on the DSS instance. The UI described here is present in the deployed frontend. Admins are subject to the same budget rules as regular users: being an admin does not grant an unlimited budget.</p>
+                  </div>
+                </aside>
+
+                <a href="../01-user-guide/06-agents-and-administration.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/06-agents-and-administration.md
+                </a>
+
+
+                <!-- ============================================================
+                     SECTION 6: FAQ AND TROUBLESHOOTING
+                     ============================================================ -->
+                <h2>FAQ and troubleshooting</h2>
+
+                <p>Practical answers to everyday questions and the right course of action for common situations.</p>
+
+                <h3>Frequently asked questions</h3>
+
+                <h4>Which agents can I query today?</h4>
+
+                <p>By default, your questions are routed to the <code>OWIsMind_orchestrator</code>, which routes your request to the appropriate specialist. In v3, a single domain is genuinely equipped: <strong>revenue</strong> (the <code>SalesDrive_revenue_expert</code> sub-agent). It knows every revenue figure in the <code>DRIVE_Revenues</code> dataset, across all Phases: <code>ACTUALS</code> (default), <code>BUDGET</code>, <code>FORECAST</code>, <code>Q3F</code>, <code>HLF</code>.</p>
+
+                <h4>Why trust an answer?</h4>
+
+                <p>Every numeric answer comes with the Evidence Studio panel that re-derives, without any AI, how the figure was produced. The badge is never green: solid orange = certified, dashed orange = partial, gray = declared. See <a href="#understanding-the-results">Understanding the results</a> above.</p>
+
+                <h4>Is there a monthly budget?</h4>
+
+                <p>Yes. Every user gets a rolling monthly credit in US dollars (default $50) that resets automatically on the 1st of each month. Your current spend, limit, remaining amount and reset date are visible on the <strong>My account</strong> page. When your monthly budget is exhausted, the input bar is blocked and a banner appears. If you need a higher limit, contact your administrator.</p>
+
+                <h4>Are my conversations private?</h4>
+
+                <p>You only see your conversations and the agents authorized for you. Identity is resolved on the server side from your browser session, never from the content you send.</p>
+
+                <h3>Common problems</h3>
+
+                <h4>The agent says it does not have an agent for this domain</h4>
+
+                <p>This is intended behavior, not a failure. The orchestrator applies a honesty firewall: it never invents a figure and never claims data "does not exist". The only form of "no" it allows is: "I do not yet have an agent for this domain" (a capability gap). If you genuinely need that domain covered, report it to your administrator - adding an agent is a configuration action on the agent side.</p>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Report this to support</p>
+                    <p>If the orchestrator claims that a figure "does not exist" or "is zero" without having consulted the specialist, that is abnormal - it violates the honesty firewall. Report it to support.</p>
+                  </div>
+                </aside>
+
+                <h4>The answer takes a while or drops in one block at the end</h4>
+
+                <p>This is normal and tied to the architecture: SSE streaming is buffered by DSS, so a polling transport is used. What is truly "live" is the timeline. A request may also take time because it chains several steps (understanding, grounding terms to exact values, running SQL, formatting). Follow the timeline rather than the text area.</p>
+
+                <h4>"Stopping..." stays displayed for a moment after I stop</h4>
+
+                <p>The stop is cooperative: the backend can only cut between two chunks. If a model call or a SQL query is in progress, this may take a few seconds. The "Stopping..." indicator and spinner confirm the stop was received. You have nothing else to do but wait.</p>
+
+                <h4>The answer is empty or no figure is displayed</h4>
+
+                <p>Three cases to distinguish:</p>
+                <ul>
+                  <li><strong>No row matches your scope.</strong> The specialist searched but the filter returns nothing. Check the scope line in the response and try broadening or correcting a term. Remember: you never sum across Phases; specify the intended Phase.</li>
+                  <li><strong>The typed term does not match any exact value.</strong> A typo or an approximate label may find nothing. Use the exact name of the customer, product or zone.</li>
+                  <li><strong>The interactive Evidence view is unavailable.</strong> The panel shows an explicit message and still shows you the exact query executed. The chat answer remains valid.</li>
+                </ul>
+
+                <h4>The send is blocked with a budget banner</h4>
+
+                <p>Your monthly budget has been reached. Wait for the automatic reset on the 1st of the month, or contact your administrator to raise your limit temporarily or permanently.</p>
+
+                <h3>Error messages reference</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>What you see</th>
+                        <th>Internal code</th>
+                        <th>What to do</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>"storage not configured"</td>
+                        <td><code>storage_not_configured</code> (409)</td>
+                        <td>Contact an administrator to choose a SQL connection in webapp settings.</td>
+                      </tr>
+                      <tr>
+                        <td>Chosen agent not available</td>
+                        <td><code>agent_not_enabled</code> (404)</td>
+                        <td>Reselect an agent; if missing, ask an admin to enable it.</td>
+                      </tr>
+                      <tr>
+                        <td>Monthly budget reached, send blocked</td>
+                        <td><code>monthly_quota_exceeded</code> (402)</td>
+                        <td>Wait for the 1st-of-month reset, or ask an admin to raise your limit.</td>
+                      </tr>
+                      <tr>
+                        <td>"Service busy, try again"</td>
+                        <td><code>busy</code> (503)</td>
+                        <td>Wait a few seconds and resend your request.</td>
+                      </tr>
+                      <tr>
+                        <td>Generation interrupts and resumes once</td>
+                        <td><code>run_not_found</code> / <code>run_lost</code></td>
+                        <td>Recoverable, non-blocking: relaunch your request.</td>
+                      </tr>
+                      <tr>
+                        <td>"not authenticated"</td>
+                        <td><code>unauthenticated</code></td>
+                        <td>Reload the page; if it persists, contact an admin.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>When to contact an administrator</h3>
+
+                <p>Call an administrator (rather than simply reloading the page) in these cases:</p>
+
+                <ul>
+                  <li><strong>"storage not configured"</strong>: the SQL connection is not chosen. Only an admin configures it.</li>
+                  <li><strong>An agent you need does not appear</strong> in the selector: enabling it is an admin setting.</li>
+                  <li><strong>An agent's card shows "profile to complete"</strong>: the agent is enabled but its profile has not been authored yet.</li>
+                  <li><strong>Your monthly budget is exhausted before the end of the month</strong>: an admin can raise your limit.</li>
+                  <li><strong>Generalized slowness in all modes</strong>, or repeated <code>busy</code> errors: may signal a backend to restart or a loaded instance.</li>
+                  <li><strong>The orchestrator claims data "does not exist"</strong> instead of consulting the specialist: report as a deviation from the honesty firewall.</li>
+                </ul>
+
+                <a href="../01-user-guide/04-faq-and-troubleshooting.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 01-user-guide/04-faq-and-troubleshooting.md
+                </a>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <script src="assets/site.js"></script>
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Architecture overview
 
-> Audience: developer, architect. Last updated: 2026-06-18. Summary: this document
+> Audience: developer, architect. Last updated: 2026-06-19. Summary: this document
 > presents the big picture of OWIsMind (the four layers, their boundaries and their guiding
 > principles) and serves as an entry point into the detailed documentation for each layer.
 
@@ -45,7 +45,7 @@ flowchart TB
     end
 
     subgraph storage["PostgreSQL storage (SQL_owi connection)"]
-        chat[("webapp_chat_v5<br/>webapp_users_v1<br/>webapp_settings_v1<br/>webapp_usage_monthly_v1<br/>webapp_artifacts_v1")]
+        chat[("webapp_chat_v5<br/>webapp_users_v1<br/>webapp_settings_v1<br/>webapp_usage_monthly_v1<br/>webapp_artifacts_v1<br/>webapp_user_quota_v1")]
         trace[("Trace dataset<br/>(write-only, optional)")]
     end
 
@@ -201,8 +201,12 @@ The canonical home of the streaming-by-polling diagram is
   ROADMAP, NOT wired in v3.
 - The per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must match the
   instance's LLM Mesh connection; a wrong id breaks the corresponding mode and must be verified in DSS.
-- The monthly budget quota (50 EUR per user per month): the STORAGE is ready
-  (`webapp_usage_monthly_v1`), but the BLOCKING is NOT implemented.
+- The monthly budget quota (50 USD per user per month): BOTH the storage AND the blocking are
+  implemented (as of 2026-06-18). The table `webapp_user_quota_v1` holds per-user overrides;
+  `storage/budget.py` resolves the effective limit; `POST /chat/start` calls `budget.has_budget`
+  and returns `402 monthly_quota_exceeded` when enforcement is on and the limit is reached
+  (fail-open: a storage error lets the run through and the spend is still recorded). The frontend
+  mirrors this in `canSend` and a transparent budget banner in `ChatView`.
 - The capture of the Evidence `result` is best-effort: the key for the tool span's rows is not confirmed
   on the instance, so the `result` may be absent.
 

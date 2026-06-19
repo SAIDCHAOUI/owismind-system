@@ -1,6 +1,6 @@
 # Frontend - build and assets
 
-> Audience: frontend developer. Last updated: 2026-06-18. Summary: how the Vue 3
+> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the Vue 3
 > + Vite frontend is compiled into static assets served by DSS (canonical `base` and `outDir`), how
 > the built `index.html` becomes the webapp's `body.html`, and which rules govern this chain
 > (NO INSTALL, never edit `resource/` by hand, throwaway compile-check).
@@ -96,8 +96,15 @@ app) lives in `main.js` and is described in
   `assets/index-<hash>.js`, its CSS `assets/index-<hash>.css`, the lazy chunks per view
   (`ChatView-<hash>.js`, `AdminView-*`, `AgentsView-*`, `SettingsView-*`, etc., with their twin
   `.css` files), the shared chunks (`Icon-<hash>.js`, `session-<hash>.js`, `useTr-<hash>.js`,
-  `pages-<hash>.js`) and the image asset `orange-logo-<hash>.png`;
+  `pages-<hash>.js`, `budgetModel-<hash>.js`) and the image asset `orange-logo-<hash>.png` (Vite
+  bundles the PNG because `Sidebar.vue` imports it via `import logoUrl from '../../assets/orange-logo.png'`);
 - the `favicon.svg` copied from `public/`.
+
+The brand logo (`orange-logo.png`) is bundled as a hashed asset because the Sidebar imports it as a module
+(`import logoUrl from '../../assets/orange-logo.png'`). This is the correct and only way to include the logo:
+using the bundled URL from `logoUrl` guarantees the correct `base`-prefixed path in production. Any attempt
+to reference the PNG via a hardcoded path or a CSS-generated placeholder (a colored square, for instance)
+violates the Orange charter (rule #10) and must never be done.
 
 The code-splitting (lazy chunks per view) follows from the lazy-loading of routes, described in
 [01-overview-and-structure.md](01-overview-and-structure.md): only the bare minimum needed for the chat is

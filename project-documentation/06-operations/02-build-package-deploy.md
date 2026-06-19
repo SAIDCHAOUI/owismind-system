@@ -1,6 +1,6 @@
 # Build, packaging and deployment
 
-> Audience: Developer, operator. Last updated: 2026-06-18. Summary: how to go from source code to a running
+> Audience: Developer, operator. Last updated: 2026-06-19. Summary: how to go from source code to a running
 > DSS plugin, through the two steps `/build-plugin` then `/package-plugin`, the manual upload of the zip, and
 > the clear decision of when to restart the backend or re-paste the agents.
 
@@ -67,9 +67,10 @@ The actual output: `index.html`, `favicon.svg`, and an `assets/` folder of about
 `body.html` is the DSS entry of the webapp (`baseType` STANDARD). The built `index.html` references a HASHED
 bundle, and that hash changes on every build. Without the copy of `index.html` to `body.html`, DSS serves a
 `body.html` that points to an old hash, hence assets returning 404. After the copy, `body.html` must be
-identical to the built `index.html`. Actual state observed in `body.html`: entry `assets/index-DCY_crmu.js`,
-modulepreload `Icon-R0zNmMF0.js` and `session-lX0dumx_.js`, stylesheets `Icon-xzaNi_GI.css` and
-`index-D7fJBFZD.css`.
+identical to the built `index.html`. The asset hashes change on every build; the exact entries in the
+current `body.html` are therefore representative, not permanent. The reference is the hash embedded in
+`body.html` and `resource/owismind-app/` after the last `/build-plugin` run (currently `index-BHeG2NRY.js`
+as of 2026-06-19).
 
 The skill uses an allowed Bash `cp`. Depending on context, that `cp` may be refused: the documented fallback
 is to write `body.html` via the `Write` tool. This is gotcha F10 of the project memory.
@@ -113,7 +114,7 @@ the import of the API blueprint at runtime (`from owismind.api.routes import reg
 ## 4. What is in the zip, and what is not
 
 The archive is staged from the staging folder, so its canonical content is: `plugin.json` (at the root) +
-`python-lib/` + `resource/` + `webapps/`. Actual verified state of the current archive: 77 entries,
+`python-lib/` + `resource/` + `webapps/`. Actual verified state of the current archive: 79 entries,
 top-level `plugin.json` / `python-lib/` / `resource/` / `webapps/`, verdict "ZIP clean" (zero pollution), 6
 `__init__.py` preserved (the by-name glob correctly protects the `__init__.py`).
 
@@ -136,9 +137,10 @@ presence for a STANDARD webapp. `app.js` contains only a comment ("Vue/Vite appl
 body.html") and `style.css` an empty-slot comment; all the styling ships in the Vite bundle scoped on
 `App.vue`.
 
-> IN FLUX: the entry count (77) and the list of hashed assets (`index-DCY_crmu.js`, etc.) are the state
-> observed as of the date of this page; these values change on every build. The reference docs `docs/`
-> sometimes mention older counts (for example "64 entries"): the code and the memory take precedence.
+> IN FLUX: the entry count and the list of hashed assets change on every build. The current archive holds
+> **79 entries** (as of 2026-06-19, build `index-BHeG2NRY.js`). The reference docs `docs/` sometimes
+> mention older counts (for example "77" or "64 entries"): the code and the memory take precedence; always
+> count the actual zip after packaging.
 
 ## 5. The Code Agents: a separate deployment (outside the zip)
 
@@ -185,10 +187,11 @@ connection of the instance after each pasting:
 | `agent:bHrWLyOL` | id of the sub-agent resolved by the orchestrator |
 
 > IN FLUX: `dataiku-agents/` is being edited live. The managed tool `dataset_lookup` (`9FEzVZk`) and the
-> `lookup` intent were REMOVED on 2026-06-18; their replacement `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`) is built and unit-tested but NOT yet wired into the sub-agent. The
-> `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value` remain
-> ROADMAP, not wired in v3.
+> `lookup` intent were REMOVED on 2026-06-18. Their replacement `attribute_lookup`
+> (`tools/attribute_lookup_tool.py`) is wired as a BUILT-IN in the orchestrator (dispatched inline in
+> `node_tools`, DSS test-run validated). `DRIVE_Revenues_Value_Catalog` is USED by `attribute_lookup` as
+> an alias-fallback catalog. The Custom Python tool `Drive_Revenues_resolve_filter_value` is SUPERSEDED
+> and pending deletion from DSS.
 
 The detail of the agent layer and its editing lives in
 [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md).
@@ -229,9 +232,11 @@ The upload is a manual operation performed by the operator; the agent never uplo
 The detail of installation and configuration lives in
 [Installation and configuration](01-installation-and-configuration.md).
 
-> IN FLUX: the per-mode LLM Mesh ids must match the instance connection; the monthly budget quota
-> (50 EUR/user/month) has its STORAGE ready (`webapp_usage_monthly_v1`) but the BLOCKING is NOT implemented.
-> These points are to be verified or finished in DSS.
+> IN FLUX: the per-mode LLM Mesh ids must match the instance connection (verify `GEMINI_FLASH_LITE_ID`,
+> `GEMINI_FLASH_ID`, `SONNET_ID` after every re-paste). The monthly budget (default $50 USD/user/month)
+> is fully implemented: enforcement gate at `/chat/start` returns HTTP 402 `monthly_quota_exceeded` when
+> the limit is reached; per-user and global overrides are managed from the Quotas tab. See
+> [Installation and configuration](01-installation-and-configuration.md) section 7.
 
 ## 8. Decision matrix: what to rebuild, restart, re-paste
 

@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    /* ---- Landing-specific overrides ---- */
+
+    /* Hero strip: full-width panel above main body */
+    .hero {
+      background: var(--soft);
+      border-bottom: 1px solid var(--line);
+      padding: 40px 0 36px;
+      margin-bottom: 36px;
+    }
+    .hero-inner {
+      max-width: var(--wrap-max);
+      margin: 0 auto;
+      padding: 0 32px;
+    }
+    .hero-tagline {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--orange-deep);
+      margin: 0 0 12px;
+    }
+    .hero-title {
+      font-size: 36px;
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--ink);
+      margin: 0 0 8px;
+    }
+    .hero-bar {
+      display: block;
+      width: 52px;
+      height: 4px;
+      background: var(--orange);
+      margin: 0 0 18px;
+    }
+    .hero-sub {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--ink-2);
+      max-width: 680px;
+      margin: 0 0 28px;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .hero-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .hero-logo img {
+      height: 36px;
+      width: auto;
+    }
+    .hero-plugin-tag {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+    }
+
+    /* Value proposition trio - horizontal cards */
+    .trio {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--line);
+    }
+    .trio-item {
+      padding: 20px 20px 22px;
+      border-right: 1px solid var(--line);
+    }
+    .trio-item:last-child { border-right: none; }
+    .trio-num {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--orange-deep);
+      border-top: 2px solid var(--orange);
+      padding-top: 4px;
+      margin-bottom: 8px;
+    }
+    .trio-head {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 6px;
+    }
+    .trio-body {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ink-2);
+      margin: 0;
+    }
+    @media (max-width: 880px) {
+      .trio { grid-template-columns: 1fr; }
+      .trio-item { border-right: none; border-bottom: 1px solid var(--line); }
+      .trio-item:last-child { border-bottom: none; }
+    }
+
+    /* Journey map grid */
+    .journey-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--line);
+    }
+    .journey-card {
+      padding: 18px 20px 20px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      transition: background .12s ease;
+    }
+    .journey-card:hover { background: var(--soft); color: inherit; text-decoration: none; }
+    .journey-card:nth-child(even) { border-right: none; }
+    .journey-card:nth-child(7),
+    .journey-card:nth-child(8) { border-bottom: none; }
+    .journey-card:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+    .jc-level {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin: 0 0 4px;
+    }
+    .jc-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 4px;
+    }
+    .jc-audience {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      margin: 0 0 7px;
+    }
+    .jc-teaser {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ink-2);
+      margin: 0;
+    }
+    .jc-dots {
+      display: flex;
+      gap: 3px;
+      margin-top: 10px;
+    }
+    .jc-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--line);
+    }
+    .jc-dot.lit { background: var(--orange); }
+    @media (max-width: 880px) {
+      .journey-grid { grid-template-columns: 1fr; }
+      .journey-card { border-right: none; }
+      .journey-card:nth-child(even) { border-right: none; }
+      .journey-card:nth-child(7),
+      .journey-card:nth-child(8) { border-bottom: 1px solid var(--line); }
+      .journey-card:last-child { border-bottom: none; }
+    }
+
+    /* Honesty panel */
+    .honesty-panel {
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--orange);
+    }
+    .honesty-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .honesty-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--orange-deep);
+      margin: 0 0 4px;
+    }
+    .honesty-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0;
+    }
+    .honesty-rules {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .honesty-rules li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--ink-2);
+    }
+    .honesty-rules li:last-child { border-bottom: none; }
+    .honesty-icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--orange);
+      margin-top: 2px;
+    }
+
+    /* Trust badge legend */
+    .badge-legend {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--line);
+    }
+    .badge-leg-item {
+      flex: 1;
+      padding: 14px 16px;
+      border-right: 1px solid var(--line);
+    }
+    .badge-leg-item:last-child { border-right: none; }
+    .badge-leg-icon {
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+    .badge-leg-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 2px;
+    }
+    .badge-leg-desc {
+      font-size: 11px;
+      color: var(--ink-2);
+      margin: 0;
+    }
+    .badge-circle {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+    .badge-solid { background: var(--ink-2); }
+    .badge-dotted { border: 2px dashed var(--ink-2); }
+    .badge-gray { background: var(--soft-2); border: 1px solid var(--line); }
+    @media (max-width: 880px) {
+      .badge-legend { flex-direction: column; }
+      .badge-leg-item { border-right: none; border-bottom: 1px solid var(--line); }
+      .badge-leg-item:last-child { border-bottom: none; }
+    }
+
+    /* Canonical identifiers table overrides */
+    .id-table td:first-child { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+    .id-table .badge-row { color: var(--ink-3); font-size: 11px; }
+
+    /* Domain status grid */
+    .domain-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      border: 1px solid var(--line);
+    }
+    .domain-item {
+      padding: 14px 16px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .domain-item:nth-child(3n) { border-right: none; }
+    .domain-item:nth-child(4),
+    .domain-item:nth-child(5),
+    .domain-item:nth-child(6) { border-bottom: none; }
+    .domain-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--ink);
+      font-family: var(--mono);
+      margin: 0 0 3px;
+    }
+    .domain-status {
+      font-size: 11px;
+      font-weight: 700;
+      margin: 0 0 3px;
+    }
+    .domain-status.staffed { color: var(--green); }
+    .domain-status.gap { color: var(--ink-3); }
+    .domain-desc {
+      font-size: 11px;
+      color: var(--ink-2);
+      margin: 0;
+    }
+    @media (max-width: 880px) {
+      .domain-grid { grid-template-columns: 1fr 1fr; }
+      .domain-item:nth-child(3n) { border-right: 1px solid var(--line); }
+      .domain-item:nth-child(2n) { border-right: none; }
+      .domain-item:nth-child(4),
+      .domain-item:nth-child(5),
+      .domain-item:nth-child(6) { border-bottom: 1px solid var(--line); }
+      .domain-item:nth-child(5),
+      .domain-item:nth-child(6) { border-bottom: none; }
+    }
+
+    /* Offset the hero so it sits above .wrap */
+    .doc-content .hero { margin-left: 0; margin-right: 0; }
+  </style>
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="welcome" data-theme="light">
+
+  <div class="shell">
+
+    <!-- Left icon rail - JS renders this from PAGES array -->
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <div class="main">
+
+      <!-- Topbar: breadcrumb + depth meter + controls - JS renders this -->
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+
+              <!-- ============================================================
+                   HERO - full-width, outside .wrap so it spans the content column
+                   ============================================================ -->
+              <section class="hero" aria-labelledby="hero-heading">
+                <div class="hero-inner">
+                  <div class="hero-logo">
+                    <img src="assets/orange-logo.png" alt="OWIsMind">
+                    <span class="hero-plugin-tag">DSS plugin &middot; v0.0.1</span>
+                  </div>
+                  <p class="hero-tagline">Level 0 - Discover</p>
+                  <h1 class="hero-title" id="hero-heading">OWIsMind</h1>
+                  <span class="hero-bar" aria-hidden="true"></span>
+                  <p class="hero-sub">
+                    A business agentic chat portal, packaged as a Dataiku DSS plugin. Ask a question in
+                    natural language about Orange/OWI telecom revenues. Get a figure-based answer without
+                    writing a single line of SQL. Inspect the evidence behind every number: the exact SQL,
+                    the captured result, the scope and the cost. Not a demo. Not a consumer chatbot. A
+                    trusted, professional, data-oriented portal built on traceability.
+                  </p>
+                  <div class="hero-actions">
+                    <a href="01-experience.html" class="btn btn-primary">Start the journey</a>
+                    <a href="../00-overview/01-product-overview.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Source: 00-overview/01-product-overview.md
+                    </a>
+                  </div>
+                </div>
+              </section>
+
+              <div class="wrap">
+
+                <!-- ============================================================
+                     THE PROBLEM AND THE ANSWER
+                     ============================================================ -->
+                <h2>The problem it solves</h2>
+
+                <p>
+                  OWI/Orange business users need revenue figures, but those figures live in a SQL dataset
+                  that requires SQL skills to query. Two classic obstacles arise: you have to write SQL
+                  (a rare skill on the business side), and you have to trust an AI-generated answer (the
+                  risk of hallucination, of an invented figure, of a fuzzy scope). OWIsMind addresses
+                  both at once.
+                </p>
+
+                <div class="trio mt">
+                  <div class="trio-item">
+                    <span class="trio-num">Productivity</span>
+                    <p class="trio-head">No SQL required</p>
+                    <p class="trio-body">Ask in French or English. The agent translates your question into
+                    a SQL query, executes it, formats the result in euros, and writes the analysis. No
+                    schema knowledge, no query syntax.</p>
+                  </div>
+                  <div class="trio-item">
+                    <span class="trio-num">Trust</span>
+                    <p class="trio-head">Evidence behind every number</p>
+                    <p class="trio-body">Every figure comes from a real SQL result. The user sees the exact
+                    query, the captured rows, the scope (scenario, period, entity) and the cost. Nothing
+                    is generated from memory.</p>
+                  </div>
+                  <div class="trio-item">
+                    <span class="trio-num">Extensibility</span>
+                    <p class="trio-head">Configuration, not a rewrite</p>
+                    <p class="trio-body">Adding an agent, an artifact type or a new domain is a matter of
+                    configuration: one registry entry, one Code Agent. The webapp contains no
+                    agent business logic.</p>
+                  </div>
+                </div>
+
+                <!-- ============================================================
+                     THE DIFFERENTIATING TRIO (SIGNATURE DIAGRAM)
+                     ============================================================ -->
+                <h2>The differentiating trio</h2>
+
+                <p>
+                  The product is recognizable by three capabilities that work in concert. A single
+                  natural-language question triggers all three simultaneously.
+                </p>
+
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg" aria-labelledby="trio-diagram-title trio-diagram-desc">
+                    <title id="trio-diagram-title">The OWIsMind differentiating trio</title>
+                    <desc id="trio-diagram-desc">A natural-language question fans out to three pillars: Conversation (center), Live Execution Timeline (left), and Evidence Studio (right). Each pillar is described with its core characteristics.</desc>
+
+                    <!-- Background lane -->
+                    <rect class="lane" x="0" y="0" width="680" height="320"/>
+
+                    <!-- NL Question box (top center) -->
+                    <rect class="node-accent" x="240" y="16" width="200" height="46"/>
+                    <text x="340" y="36" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" class="diagram">Natural-language question</text>
+                    <text x="340" y="52" text-anchor="middle" font-size="10" fill="#fff" class="diagram">"What did HSBC generate in ACTUALS?"</text>
+
+                    <!-- Fan arrows from question box -->
+                    <!-- to Conversation (center) -->
+                    <line class="edge-accent" x1="340" y1="62" x2="340" y2="108"/>
+                    <polygon class="arrowhead-accent" points="335,108 340,118 345,108"/>
+
+                    <!-- to Timeline (left) -->
+                    <line class="edge-accent" x1="290" y1="70" x2="130" y2="108"/>
+                    <polygon class="arrowhead-accent" points="123,101 120,113 133,108"/>
+
+                    <!-- to Evidence (right) -->
+                    <line class="edge-accent" x1="390" y1="70" x2="550" y2="108"/>
+                    <polygon class="arrowhead-accent" points="547,101 560,108 547,113"/>
+
+                    <!-- PILLAR 1: Conversation (center) -->
+                    <rect class="node" x="240" y="118" width="200" height="150"/>
+                    <rect x="240" y="118" width="200" height="4" fill="#ff7900"/>
+                    <text x="340" y="138" text-anchor="middle" font-size="11" font-weight="800" class="diagram">Conversation</text>
+                    <line class="edge" x1="256" y1="147" x2="424" y2="147"/>
+                    <text x="340" y="163" text-anchor="middle" font-size="10" class="diagram text-muted">Multi-turn dialogue</text>
+                    <text x="340" y="179" text-anchor="middle" font-size="10" class="diagram text-muted">Answer in user's language</text>
+                    <text x="340" y="195" text-anchor="middle" font-size="10" class="diagram text-muted">Amounts in euros</text>
+                    <text x="340" y="211" text-anchor="middle" font-size="10" class="diagram text-muted">Scope stated explicitly</text>
+                    <text x="340" y="227" text-anchor="middle" font-size="10" class="diagram text-muted">(scenario, period, entity)</text>
+                    <text x="340" y="248" text-anchor="middle" font-size="10" font-weight="700" class="diagram text-accent">Figure comes from real SQL</text>
+
+                    <!-- PILLAR 2: Live Execution Timeline (left) -->
+                    <rect class="node" x="20" y="118" width="200" height="150"/>
+                    <rect x="20" y="118" width="200" height="4" fill="#ff7900"/>
+                    <text x="120" y="138" text-anchor="middle" font-size="11" font-weight="800" class="diagram">Live Execution Timeline</text>
+                    <line class="edge" x1="36" y1="147" x2="204" y2="147"/>
+                    <text x="120" y="163" text-anchor="middle" font-size="10" class="diagram text-muted">Steps unfold live</text>
+                    <text x="120" y="179" text-anchor="middle" font-size="10" class="diagram text-muted">Human-readable labels</text>
+                    <text x="120" y="195" text-anchor="middle" font-size="10" class="diagram text-muted">Sub-steps indented</text>
+                    <text x="120" y="211" text-anchor="middle" font-size="10" class="diagram text-muted">Debug mode shows tech names</text>
+                    <text x="120" y="227" text-anchor="middle" font-size="10" class="diagram text-muted">Usable "live" view</text>
+                    <text x="120" y="248" text-anchor="middle" font-size="10" font-weight="700" class="diagram text-accent">(not word-by-word text)</text>
+
+                    <!-- PILLAR 3: Evidence Studio (right) -->
+                    <rect class="node" x="460" y="118" width="200" height="150"/>
+                    <rect x="460" y="118" width="200" height="4" fill="#ff7900"/>
+                    <text x="560" y="138" text-anchor="middle" font-size="11" font-weight="800" class="diagram">Evidence Studio</text>
+                    <line class="edge" x1="476" y1="147" x2="644" y2="147"/>
+                    <text x="560" y="163" text-anchor="middle" font-size="10" class="diagram text-muted">Verification badge</text>
+                    <text x="560" y="179" text-anchor="middle" font-size="10" class="diagram text-muted">Filter chips (editable)</text>
+                    <text x="560" y="195" text-anchor="middle" font-size="10" class="diagram text-muted">Exact captured result</text>
+                    <text x="560" y="211" text-anchor="middle" font-size="10" class="diagram text-muted">Collapsed SQL</text>
+                    <text x="560" y="227" text-anchor="middle" font-size="10" class="diagram text-muted">Chart / Table / KPI artifacts</text>
+                    <text x="560" y="248" text-anchor="middle" font-size="10" font-weight="700" class="diagram text-accent">Zero LLM call to re-derive</text>
+
+                    <!-- Dashed arrows: Evidence &lt;-&gt; Conversation -->
+                    <line x1="440" y1="193" x2="462" y2="193" stroke-dasharray="4,3" class="edge"/>
+                    <polygon class="arrowhead" points="462,188 472,193 462,198"/>
+
+                    <!-- Caption band -->
+                    <rect class="lane" x="0" y="283" width="680" height="37"/>
+                    <text x="340" y="305" text-anchor="middle" font-size="10" font-weight="600" class="diagram text-muted">Auto-opens when generation ends. Every figure traces back to a real SQL result. Zero hallucination path.</text>
+                  </svg>
+                  <p class="diagram-caption">The differentiating trio: a single question activates all three simultaneously. Evidence Studio re-derives everything deterministically (zero LLM call).</p>
+                </figure>
+
+                <a href="../00-overview/01-product-overview.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/01-product-overview.md (section 4.1)
+                </a>
+
+                <!-- ============================================================
+                     HONESTY FIREWALL
+                     ============================================================ -->
+                <h2>The honesty firewall</h2>
+
+                <p>
+                  Trust does not rest on a promise. It rests on a structural constraint. The orchestrator
+                  holds no business figure: every figure comes from a sub-agent that executed SQL. Therefore
+                  it structurally cannot invent a number. This is not a safety filter bolted on; it is the
+                  architecture.
+                </p>
+
+                <div class="honesty-panel mt">
+                  <div class="honesty-header">
+                    <p class="honesty-label">Structural invariant</p>
+                    <p class="honesty-title">The orchestrator's four rules (from its system prompt)</p>
+                  </div>
+                  <ul class="honesty-rules" role="list">
+                    <li>
+                      <svg class="honesty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                      It never produces an unsourced business fact, a figure, a source or a capability
+                      on its own.
+                    </li>
+                    <li>
+                      <svg class="honesty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                      It never tells the user that a measure, a scenario or a record is missing, null or
+                      unavailable. Only a specialist sub-agent can say that, after looking at the data.
+                    </li>
+                    <li>
+                      <svg class="honesty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                      The only allowed form of "no" is the capability gap: "there is no AGENT yet for
+                      this domain." It will never say "the data does not exist."
+                    </li>
+                    <li>
+                      <svg class="honesty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                      It never does arithmetic in its head. Exact sums, deltas, ratios and rankings are
+                      the specialist's work.
+                    </li>
+                  </ul>
+                </div>
+
+                <h3>The trust badge: never green</h3>
+
+                <p>
+                  On the Evidence Studio side, a product choice reinforces this stance. The verification
+                  badge is <strong>never green</strong> - to avoid any false assurance. Three levels:
+                </p>
+
+                <div class="badge-legend mt">
+                  <div class="badge-leg-item">
+                    <div class="badge-leg-icon"><span class="badge-circle badge-solid" aria-label="Solid circle"></span></div>
+                    <p class="badge-leg-name">Certified (solid)</p>
+                    <p class="badge-leg-desc">Exact scope identified, result captured, SQL stored. Highest confidence - but shown in neutral, not green.</p>
+                  </div>
+                  <div class="badge-leg-item">
+                    <div class="badge-leg-icon"><span class="badge-circle badge-dotted" aria-label="Dashed circle"></span></div>
+                    <p class="badge-leg-name">Partial (dotted)</p>
+                    <p class="badge-leg-desc">Source identified or scope partially matched. Readable, but some details could not be confirmed deterministically.</p>
+                  </div>
+                  <div class="badge-leg-item">
+                    <div class="badge-leg-icon"><span class="badge-circle badge-gray" aria-label="Gray circle"></span></div>
+                    <p class="badge-leg-name">Declared (gray)</p>
+                    <p class="badge-leg-desc">Minimal evidence. The agent declared a result but the Evidence engine could not re-derive it fully from stored SQL.</p>
+                  </div>
+                </div>
+
+                <a href="../00-overview/01-product-overview.md" class="source-ref mt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/01-product-overview.md (section 4.2)
+                </a>
+
+                <!-- ============================================================
+                     JOURNEY MAP (SIGNATURE DIAGRAM + GRID OF CARDS)
+                     ============================================================ -->
+                <h2>Journey map</h2>
+
+                <p>
+                  Eight levels of documentation, from the first-impression overview to the deepest
+                  architectural decisions. Each level is a self-contained page. Read linearly or jump
+                  to your entry point.
+                </p>
+
+                <!-- Journey descent SVG diagram -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" aria-labelledby="journey-diagram-title journey-diagram-desc">
+                    <title id="journey-diagram-title">OWIsMind documentation journey - descent from overview to decisions</title>
+                    <desc id="journey-diagram-desc">Eight levels arranged as a staircase descent. Level 0 Welcome at top left, descending through Experience, Architecture, Frontend, Backend, Agents, Operations, to Decisions at bottom right. Complexity increases with depth.</desc>
+
+                    <!-- Lane -->
+                    <rect class="lane" x="0" y="0" width="680" height="200"/>
+
+                    <!-- Staircase blocks, left to right, descending -->
+                    <!-- L0 Welcome -->
+                    <rect class="node-accent" x="10" y="14" width="70" height="28"/>
+                    <text x="45" y="29" text-anchor="middle" font-size="9" font-weight="800" fill="#fff" class="diagram">L0</text>
+                    <text x="45" y="40" text-anchor="middle" font-size="8" fill="#fff" class="diagram">Welcome</text>
+
+                    <!-- L1 Experience -->
+                    <rect class="node" x="90" y="34" width="70" height="28"/>
+                    <rect x="90" y="34" width="70" height="3" fill="#ff7900"/>
+                    <text x="125" y="49" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L1</text>
+                    <text x="125" y="59" text-anchor="middle" font-size="8" class="diagram text-muted">Experience</text>
+
+                    <!-- L2 Architecture -->
+                    <rect class="node" x="170" y="54" width="70" height="28"/>
+                    <rect x="170" y="54" width="70" height="3" fill="#ff7900"/>
+                    <text x="205" y="69" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L2</text>
+                    <text x="205" y="79" text-anchor="middle" font-size="8" class="diagram text-muted">Architecture</text>
+
+                    <!-- L3 Frontend -->
+                    <rect class="node" x="250" y="74" width="70" height="28"/>
+                    <rect x="250" y="74" width="70" height="3" fill="#ff7900"/>
+                    <text x="285" y="89" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L3</text>
+                    <text x="285" y="99" text-anchor="middle" font-size="8" class="diagram text-muted">Frontend</text>
+
+                    <!-- L4 Backend -->
+                    <rect class="node" x="330" y="94" width="70" height="28"/>
+                    <rect x="330" y="94" width="70" height="3" fill="#ff7900"/>
+                    <text x="365" y="109" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L4</text>
+                    <text x="365" y="119" text-anchor="middle" font-size="8" class="diagram text-muted">Backend</text>
+
+                    <!-- L5 Agents -->
+                    <rect class="node" x="410" y="114" width="70" height="28"/>
+                    <rect x="410" y="114" width="70" height="3" fill="#ff7900"/>
+                    <text x="445" y="129" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L5</text>
+                    <text x="445" y="139" text-anchor="middle" font-size="8" class="diagram text-muted">Agents</text>
+
+                    <!-- L6 Operations -->
+                    <rect class="node" x="490" y="134" width="70" height="28"/>
+                    <rect x="490" y="134" width="70" height="3" fill="#ff7900"/>
+                    <text x="525" y="149" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L6</text>
+                    <text x="525" y="159" text-anchor="middle" font-size="8" class="diagram text-muted">Operations</text>
+
+                    <!-- L7 Decisions -->
+                    <rect class="node" x="570" y="154" width="70" height="28"/>
+                    <rect x="570" y="154" width="70" height="3" fill="#ff7900"/>
+                    <text x="605" y="169" text-anchor="middle" font-size="9" font-weight="700" class="diagram">L7</text>
+                    <text x="605" y="179" text-anchor="middle" font-size="8" class="diagram text-muted">Decisions</text>
+
+                    <!-- Left axis label: Simple -->
+                    <text x="6" y="186" font-size="9" font-weight="700" class="diagram text-muted">Simple</text>
+
+                    <!-- Right axis label: Technical -->
+                    <text x="598" y="194" font-size="9" font-weight="700" class="diagram text-muted">Technical</text>
+
+                    <!-- Diagonal descent arrow -->
+                    <line class="edge" x1="80" y1="28" x2="640" y2="168" stroke-dasharray="6,4"/>
+                    <polygon class="arrowhead" points="638,161 648,170 636,173"/>
+
+                    <!-- Complexity label along the arrow -->
+                    <text x="350" y="88" font-size="9" class="diagram text-muted" transform="rotate(13, 350, 88)">complexity grows with depth</text>
+                  </svg>
+                  <p class="diagram-caption">Eight levels from overview (L0) to architectural decisions (L7). Each page is self-contained; you can jump directly to your level.</p>
+                </figure>
+
+                <!-- Journey cards grid -->
+                <div class="journey-grid mt-2">
+
+                  <a href="01-experience.html" class="journey-card">
+                    <p class="jc-level">Level 1 - Use</p>
+                    <p class="jc-title">The Experience</p>
+                    <p class="jc-audience">Users, analysts, managers</p>
+                    <p class="jc-teaser">What the product looks like from a seat: the chat, the timeline, the Evidence Studio, typical questions and how answers are built.</p>
+                    <div class="jc-dots" aria-label="Complexity: 1 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="02-architecture.html" class="journey-card">
+                    <p class="jc-level">Level 2 - Understand</p>
+                    <p class="jc-title">Architecture</p>
+                    <p class="jc-audience">Technical newcomers, architects</p>
+                    <p class="jc-teaser">The four-layer system: Vue 3 frontend, Flask backend, LangGraph Code Agents and PostgreSQL storage - how they talk at runtime.</p>
+                    <div class="jc-dots" aria-label="Complexity: 2 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="03-frontend.html" class="journey-card">
+                    <p class="jc-level">Level 3 - Build</p>
+                    <p class="jc-title">Frontend</p>
+                    <p class="jc-audience">Frontend developers</p>
+                    <p class="jc-teaser">Vue 3 + Vite: the router, Pinia stores, components and views, how polling works client-side, the build pipeline and the Orange charter.</p>
+                    <div class="jc-dots" aria-label="Complexity: 3 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="04-backend.html" class="journey-card">
+                    <p class="jc-level">Level 4 - Build</p>
+                    <p class="jc-title">Backend</p>
+                    <p class="jc-audience">Backend developers</p>
+                    <p class="jc-teaser">Flask on Python 3.9.23: the API, the polling-via-thread streaming transport, SQL storage model, Evidence capture, security and validation rules.</p>
+                    <div class="jc-dots" aria-label="Complexity: 4 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="05-agents.html" class="journey-card">
+                    <p class="jc-level">Level 5 - Build</p>
+                    <p class="jc-title">The Agents (the brain)</p>
+                    <p class="jc-audience">Agent engineers, AI developers</p>
+                    <p class="jc-teaser">LangGraph Code Agents in Python 3.11: the orchestrator, the revenue sub-agent, the Semantic Model Query tool, grounding, modes, prompts, deployment.</p>
+                    <div class="jc-dots" aria-label="Complexity: 5 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="06-operations.html" class="journey-card">
+                    <p class="jc-level">Level 6 - Operate</p>
+                    <p class="jc-title">Operations &amp; Maintenance</p>
+                    <p class="jc-audience">Admins, operators, DevOps</p>
+                    <p class="jc-teaser">Install, configure, build, package, deploy. Monitor logs, respond to incidents. Runbooks for the most common failure modes.</p>
+                    <div class="jc-dots" aria-label="Complexity: 6 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot"></span>
+                    </div>
+                  </a>
+
+                  <a href="07-decisions.html" class="journey-card">
+                    <p class="jc-level">Level 7 - Decide</p>
+                    <p class="jc-title">Decisions (ADR)</p>
+                    <p class="jc-audience">Architects, technical leads</p>
+                    <p class="jc-teaser">The 15 structuring choices and their rationale: why polling not SSE, why direct SQL, why LangGraph, why the honesty firewall, and more.</p>
+                    <div class="jc-dots" aria-label="Complexity: 7 of 7">
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                      <span class="jc-dot lit"></span>
+                    </div>
+                  </a>
+
+                </div>
+
+                <!-- ============================================================
+                     CANONICAL IDENTIFIERS
+                     ============================================================ -->
+                <h2>Canonical identifiers</h2>
+
+                <p>
+                  These identifiers recur throughout all documentation and code. They are quoted verbatim.
+                  A wrong identifier (wrong plugin id, wrong agent name, stale agent_id) will silently
+                  break a deployment step.
+                </p>
+
+                <div class="grid-2 mt">
+                  <!-- Plugin and webapp layer -->
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Plugin and webapp</p>
+                    </div>
+                    <div class="block">
+                      <dl class="kv">
+                        <dt>Plugin id</dt><dd><code>owismind</code> (version <code>0.0.1</code>)</dd>
+                        <dt>WebApp id</dt><dd><code>webapp-owismind-ai-agents</code></dd>
+                        <dt>Resource folder</dt><dd><code>owismind-app</code></dd>
+                        <dt>API prefix</dt><dd><code>/owismind-api</code></dd>
+                        <dt>Health endpoint</dt><dd><code>/owismind-api/ping</code></dd>
+                        <dt>DSS platform</dt><dd>DSS 14.4.x</dd>
+                      </dl>
+                    </div>
+                  </div>
+
+                  <!-- Storage and backend -->
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Storage and backend</p>
+                    </div>
+                    <div class="block">
+                      <dl class="kv">
+                        <dt>SQL connection</dt><dd><code>SQL_owi</code> (PostgreSQL, schema <code>public</code>)</dd>
+                        <dt>Project key</dt><dd><code>OWISMIND_DEV</code> (resolved server-side)</dd>
+                        <dt>Flask backend</dt><dd>Python 3.9.23 (never LangChain)</dd>
+                        <dt>python-lib package</dt><dd><code>owismind</code></dd>
+                      </dl>
+                    </div>
+                  </div>
+
+                  <!-- Code Agents -->
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Code Agents (Python 3.11 env)</p>
+                    </div>
+                    <div class="block">
+                      <dl class="kv">
+                        <dt>Orchestrator</dt><dd><code>OWIsMind_orchestrator</code></dd>
+                        <dt>Revenue sub-agent</dt><dd><code>SalesDrive_revenue_expert</code></dd>
+                        <dt>Sub-agent id</dt><dd><code>agent:bHrWLyOL</code></dd>
+                        <dt>Semantic Model tool</dt><dd><code>revenue_semantic_query</code> (<code>v4oqA6R</code>)</dd>
+                      </dl>
+                    </div>
+                  </div>
+
+                  <!-- Dual Python runtime -->
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Dual Python runtime (critical)</p>
+                    </div>
+                    <div class="block">
+                      <dl class="kv">
+                        <dt>Backend runtime</dt><dd>Python 3.9.23 - Flask, SQLExecutor2, direct SQL. No LangChain, no LangGraph.</dd>
+                        <dt>Agent runtime</dt><dd>Python 3.11 env - LangGraph, LangChain v1, native LLM Mesh calls.</dd>
+                      </dl>
+                    </div>
+                    <div class="block">
+                      <p class="block-note">These are two completely separate runtimes. Code that imports <code>langchain</code> must ONLY run in the 3.11 Code Agent environment.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Repository is the source of truth for agents</p>
+                    <p>The two Code Agents are re-pasted by hand from <code>dataiku-agents/</code> into DSS (3.11 env).
+                    Old names (<code>orchestrator_agent.py</code>, <code>dataset_expert_langgraph.py</code>, <code>agent:AKQaQ0Am</code>)
+                    are remnants of earlier renamings. Do not reuse them. In case of conflict between historical guides and code, the code prevails.</p>
+                  </div>
+                </aside>
+
+                <a href="../00-overview/03-glossary.md" class="source-ref mt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/03-glossary.md (Canonical identifiers)
+                </a>
+
+                <!-- ============================================================
+                     WHAT IT DOES / WHAT IS IN FLUX
+                     ============================================================ -->
+                <h2>What works today, what is in flux</h2>
+
+                <h3>Business domain coverage</h3>
+
+                <p>
+                  In v3, only one business domain actually has an agent. The orchestrator knows the full
+                  list of OWI business domains and returns an honest "capability gap" for unstaffed ones -
+                  it never claims the data does not exist.
+                </p>
+
+                <div class="domain-grid mt">
+                  <div class="domain-item">
+                    <p class="domain-name">revenue</p>
+                    <p class="domain-status staffed">Staffed</p>
+                    <p class="domain-desc">Actuals, Budget, Forecast, Q3F, HLF on DRIVE_Revenues.</p>
+                  </div>
+                  <div class="domain-item">
+                    <p class="domain-name">tickets</p>
+                    <p class="domain-status gap">Capability gap</p>
+                    <p class="domain-desc">No agent yet. Honest "no agent for this domain" message.</p>
+                  </div>
+                  <div class="domain-item">
+                    <p class="domain-name">satisfaction</p>
+                    <p class="domain-status gap">Capability gap</p>
+                    <p class="domain-desc">No agent yet.</p>
+                  </div>
+                  <div class="domain-item">
+                    <p class="domain-name">opportunities</p>
+                    <p class="domain-status gap">Capability gap</p>
+                    <p class="domain-desc">No agent yet.</p>
+                  </div>
+                  <div class="domain-item">
+                    <p class="domain-name">delivery</p>
+                    <p class="domain-status gap">Capability gap</p>
+                    <p class="domain-desc">No agent yet.</p>
+                  </div>
+                  <div class="domain-item">
+                    <p class="domain-name">billing</p>
+                    <p class="domain-status gap">Capability gap</p>
+                    <p class="domain-desc">No agent yet.</p>
+                  </div>
+                </div>
+
+                <h3>Cost modes</h3>
+
+                <p>A logical key chosen by the user drives the loop model. One model runs the whole turn
+                with no escalation. The mode propagates to the sub-agent.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mode</th>
+                        <th>Loop model</th>
+                        <th>Live narration</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>eco</code> <span class="badge orange">Default</span></td>
+                        <td>Gemini 3.1 Flash-Lite (<code>GEMINI_FLASH_LITE_ID</code>)</td>
+                        <td>OFF (strict act-first)</td>
+                        <td>Default mode</td>
+                      </tr>
+                      <tr>
+                        <td><code>medium</code></td>
+                        <td>Gemini 3.5 Flash (<code>GEMINI_FLASH_ID</code>)</td>
+                        <td>ON</td>
+                        <td>Balanced</td>
+                      </tr>
+                      <tr>
+                        <td><code>high</code></td>
+                        <td>Claude Sonnet 4.6 (<code>SONNET_ID</code>)</td>
+                        <td>ON</td>
+                        <td>Full quality</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: LLM Mesh model ids</p>
+                    <p>The per-mode LLM Mesh ids (<code>GEMINI_FLASH_LITE_ID</code>, <code>GEMINI_FLASH_ID</code>, <code>SONNET_ID</code>)
+                    must match the LLM Mesh connection of the Dataiku instance. A wrong id breaks the corresponding mode - for example,
+                    if the Flash-Lite id is wrong, eco mode (the default) will not answer. To be verified in DSS.</p>
+                  </div>
+                </aside>
+
+                <h3>Items built but not yet validated in DSS</h3>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: Orange charter UI refactor</p>
+                    <p>The full Orange charter UI refactor (zip <code>index-BHeG2NRY.js</code>, 79 entries) is built and packaged but
+                    not yet confirmed in DSS. Square geometry, real <code>orange-logo.png</code> (not a CSS-generated mark),
+                    flat modals, token-based styling throughout.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: monthly budget enforcement</p>
+                    <p>The monthly budget quota ($50/user/month) is fully implemented - storage
+                    (<code>webapp_usage_monthly_v1</code>, <code>webapp_user_quota_v1</code>) AND server-side enforcement
+                    (HTTP 402 gate at <code>/chat/start</code>, fail-open). Not yet validated in DSS.
+                    A backend restart is required after python-lib upload.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: attribute_lookup tool wiring</p>
+                    <p>The <code>attribute_lookup</code> tool (<code>tools/attribute_lookup_tool.py</code>) is built, unit-tested, and
+                    wired as a built-in tool in the orchestrator. Its predecessor <code>dataset_lookup</code> (<code>9FEzVZk</code>)
+                    and the <code>lookup</code> intent were REMOVED on 2026-06-18. The built-in becomes operational only after the
+                    orchestrator is re-pasted into DSS. <code>LOOKUP_TOOL_ID = ""</code> means the tool is resolved by name.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: Evidence Studio</p>
+                    <p>Evidence Studio v1 works (the agent's SELECT is replayed read-only), but the user has indicated "it works well, but not yet the way he wants".
+                    The precise adjustments (labels, badge, layout, drill) have not yet been gathered. The full panel with six tabs
+                    (Evidence, Dataset, Chart, SQL, Trace, Cost) is deferred.</p>
+                  </div>
+                </aside>
+
+                <h3>Roadmap items (not yet built)</h3>
+
+                <aside class="callout callout-roadmap mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Roadmap</p>
+                    <p>Not wired in v3: <code>DRIVE_Revenues_Value_Catalog</code> (richer alias catalog) and the Python resolver
+                    <code>Drive_Revenues_resolve_filter_value</code>. Also deferred: the multi-agent "360" analysis
+                    (single conversation, global timeline, one Evidence space per agent); the full Evidence Studio six-tab panel;
+                    export and report artifacts (Markdown, PDF, PowerPoint, Excel); tickets agent (which unblocks the 360 analysis).</p>
+                  </div>
+                </aside>
+
+                <a href="../00-overview/02-scope-and-limitations.md" class="source-ref mt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/02-scope-and-limitations.md
+                </a>
+
+                <!-- ============================================================
+                     KNOWN LIMITATIONS (SCOPE CHOICES)
+                     ============================================================ -->
+                <h2>Known limitations</h2>
+
+                <p>
+                  These are deliberate architecture or V1 scope choices, not oversights.
+                </p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">No cross-dataset JOIN</p>
+                    <p>The sub-agent works on one table, never a JOIN. An analysis spanning multiple datasets goes through the orchestrator (one agent per dataset). This requires a second staffed domain.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">No SSE streaming - polling transport</p>
+                    <p>DSS buffers SSE responses. The chosen solution is polling-via-thread: the frontend polls <code>/chat/poll</code> every ~500 ms. The text answer often arrives in one block at the end; the usable live view is the timeline.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Desktop-first, mobile out of scope</p>
+                    <p>V1 targets desktop workstations from 12 inches to ultra-wide. Mobile is explicitly out of scope for this version.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Single-process assumption</p>
+                    <p>The backend assumes a single process (in-memory <code>_RUNS</code> dict). Guardrails: max 8 concurrent runs, orphan TTL eviction, run queryable only by its owner.</p>
+                  </div>
+                </div>
+
+                <a href="../00-overview/02-scope-and-limitations.md" class="source-ref mt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/02-scope-and-limitations.md (section 4)
+                </a>
+
+                <!-- ============================================================
+                     KEY TERMS (QUICK GLOSSARY REFERENCE)
+                     ============================================================ -->
+                <h2>Key terms at a glance</h2>
+
+                <p>
+                  The full glossary is at <a href="../00-overview/03-glossary.md">00-overview/03-glossary.md</a>.
+                  These six terms appear on almost every page.
+                </p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Term</th>
+                        <th>Definition</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>grounding</strong></td>
+                        <td>Anchoring the user's typed terms onto exact cell values, via read-only inline SQL on the value index. Happens in the RESOLVE step. It is NOT a tool call.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Evidence Studio</strong></td>
+                        <td>The right-hand panel that deterministically re-derives how a reply was produced (zero LLM call). Opens automatically when generation ends.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>honesty firewall</strong></td>
+                        <td>The orchestrator's structural rule: emit no unsourced business fact; the only allowed "no" is a capability gap, never "the data does not exist".</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Phase / scenario</strong></td>
+                        <td>The <code>Phase</code> column of <code>DRIVE_Revenues</code>: <code>ACTUALS</code> (default, always plural), <code>BUDGET</code>, <code>FORECAST</code>, <code>Q3F</code>, <code>HLF</code>. NEVER sum across phases.</td>
+                      </tr>
+                      <tr>
+                        <td><strong>capability gap</strong></td>
+                        <td>The ONLY form of "no" the orchestrator may give: "there is no AGENT yet for this domain." Never "the data does not exist."</td>
+                      </tr>
+                      <tr>
+                        <td><strong>agent_key</strong></td>
+                        <td>The opaque key (<code>ag_&lt;hash&gt;</code>) the frontend sends. The backend resolves it to <code>(project_key, agent_id)</code>. A raw <code>agent_id</code> is never accepted from the front.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <a href="../00-overview/03-glossary.md" class="source-ref mt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 00-overview/03-glossary.md
+                </a>
+
+                <!-- ============================================================
+                     START CTA
+                     ============================================================ -->
+                <h2>Start the journey</h2>
+
+                <p>
+                  Each page of this documentation platform is self-contained. You can read linearly or
+                  jump to your entry point. The page navigation (prev/next) at the bottom guides you
+                  through all eight levels in order.
+                </p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Where to start by audience</p>
+                  <div class="card">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>If you are...</th>
+                          <th>Start with</th>
+                          <th>Then explore</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>User, analyst, manager</td>
+                          <td><a href="01-experience.html">L1 - The Experience</a></td>
+                          <td>The chat screen, reading Evidence, FAQ, account and budget</td>
+                        </tr>
+                        <tr>
+                          <td>Admin (enables agents, sets budgets)</td>
+                          <td><a href="01-experience.html">L1 - The Experience</a></td>
+                          <td>Then <a href="06-operations.html">L6 - Operations</a> for installation and configuration</td>
+                        </tr>
+                        <tr>
+                          <td>Frontend developer</td>
+                          <td><a href="03-frontend.html">L3 - Frontend</a></td>
+                          <td>State and stores, components, build pipeline, backend communication</td>
+                        </tr>
+                        <tr>
+                          <td>Backend developer</td>
+                          <td><a href="04-backend.html">L4 - Backend</a></td>
+                          <td>API reference, streaming/runs, storage model, Evidence and artifacts</td>
+                        </tr>
+                        <tr>
+                          <td>Agent engineer</td>
+                          <td><a href="05-agents.html">L5 - The Agents</a></td>
+                          <td>Orchestrator, revenue sub-agent, tools, Semantic Model, deployment</td>
+                        </tr>
+                        <tr>
+                          <td>Architect / decision-maker</td>
+                          <td><a href="02-architecture.html">L2 - Architecture</a></td>
+                          <td>Then <a href="07-decisions.html">L7 - Decisions (ADR)</a> for all structuring choices</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="row mt-2">
+                  <a href="01-experience.html" class="btn btn-primary">Start the journey: L1 - The Experience</a>
+                  <a href="../README.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: project-documentation/README.md
+                  </a>
+                </div>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <!-- Core site JS (rail, topbar, TOC, pager, theme, search, code copy) -->
+  <script src="assets/site.js"></script>
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

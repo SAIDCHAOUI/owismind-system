@@ -155,4 +155,4 @@ assets is canonical in [Frontend - build and assets](../03-frontend/05-build-and
 - [Frontend - backend communication](../03-frontend/04-backend-communication.md) - `getWebAppBackendUrl`, call catalog, error codes.
 - [Build, packaging and deployment](../06-operations/02-build-package-deploy.md) - `/build-plugin` and `/package-plugin` skills, what-to-rebuild-when matrix.
 - [Architecture overview](../02-architecture/01-system-overview.md) - the frontend's place within the four layers.
-- [Architecture Decision Records (ADR) - index](README.md) - list of the twelve ADRs.
+- [Architecture Decision Records (ADR) - index](README.md) - list of all architecture decisions.

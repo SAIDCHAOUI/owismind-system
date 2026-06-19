@@ -2183,4 +2183,22 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-06-19 (refonte UI maquette Orange) + retour logo de l'user. Affine **L091**
   (discipline de marque). **Date** : 2026-06-19.
 
+## L093
+- **Contexte** : vérification de la règle #9 (aucun tiret cadratin `—`/`–`) sur l'environnement de la session
+  (macOS, shell `zsh`). Le protocole projet (CONTEXT.md, ADR-0012) prescrit `grep -rlP '\xe2\x80\x9[34]'`.
+- **Ce qui a échoué** : le `grep` par défaut de ce Mac est **BSD grep**, qui **ne supporte pas `-P`** (PCRE).
+  Test : `printf 'a\xe2\x80\x94b\n' | grep -P '\xe2\x80\x94'` -> échoue. Conséquence : `grep -rlP` retourne
+  "(rien)" même quand des em-dash existent -> **faux négatifs silencieux**. Les audits "0 tiret" passés par
+  cette commande sur cette machine étaient donc **non fiables**.
+- **Solution qui marche** : audit **en Python** (lecture UTF-8 + `.count('—')`/`.count('–')`), qui est
+  l'autorité. Pour corriger en masse, **Python** aussi (`t.replace('—','-').replace('–','-')`) - byte-correct,
+  contrairement à `perl -CSD` interdit sur fichiers à glyphes multioctets (L084). Si `grep -P` est voulu,
+  installer GNU grep (`ggrep`) - mais NO INSTALL, donc demander à l'user.
+- **Preuve-vérification** : le scan Python a (a) confirmé le livrable `project-documentation/` (61 .md) + le
+  site (`project-documentation/site/`, HTML/CSS/JS) **propres** (seul `0012` cite les glyphes entre backticks =
+  exception assumée) ; (b) révélé 12 em-dash **préexistants** dans `Plugin/owismind/resource/`
+  `compute_available_connections.py` (corrigés) + des dizaines hors livrable (frontend tests, docs/, memory,
+  .claude skills, agentic-research, mockup) que `grep -rlP` n'avait jamais signalés.
+- **Source** : session 2026-06-19 Run 2 (doc ultra-complète + plateforme web). **Date** : 2026-06-19.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->

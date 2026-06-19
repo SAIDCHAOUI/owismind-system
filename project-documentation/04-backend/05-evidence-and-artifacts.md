@@ -1,6 +1,6 @@
 # Backend - Evidence Studio and artifacts
 
-> Audience: backend developer. Last updated: 2026-06-18. Summary: how the backend
+> Audience: backend developer. Last updated: 2026-06-19. Summary: how the backend
 > re-derives, in a purely deterministic way (zero LLM), the "evidence" behind an agent answer (badge,
 > sources, chips, explanation, captured result, drill, SQL) and reconstructs the artifacts (chart /
 > table / kpi) while strictly separating signal from data.
@@ -318,11 +318,18 @@ the lock). DSS restarts the backend when the webapp config changes, which cold-s
 ### 8.3 throttle
 
 Per-user token-bucket for the read-only routes. The pure core `take_token` is deterministic in `now`
-(testable); `can_accept(user_id)` is the process-wide thread-safe wrapper called by the routes.
-`EVIDENCE_BUCKET_CAPACITY = 15`, `EVIDENCE_REFILL_PER_SEC = 10.0`, `_BUCKET_TTL_SECONDS = 300` (the
-idle buckets are evicted to bound the dict). It is burst-tolerant (the meta+rows pair = 2 tokens, a
-picker = 1, all human-paced) but blocks a sustained scripted flood that would pin the worker threads of the
-single-process polling backend.
+(testable). Two separate buckets (separate dicts, same lock) prevent starvation between the Evidence
+panel and the budget-status endpoint:
+
+- **Evidence bucket** (`can_accept(user_id)`): `EVIDENCE_BUCKET_CAPACITY = 15`,
+  `EVIDENCE_REFILL_PER_SEC = 10.0`. Guards `GET /evidence/meta`, `POST /evidence/rows`, and
+  `GET /evidence/distinct`. Burst-tolerant (meta+rows = 2 tokens, a picker = 1, all human-paced)
+  but blocks a sustained scripted flood.
+- **Usage bucket** (`usage_can_accept(user_id)`): `USAGE_BUCKET_CAPACITY = 12`,
+  `USAGE_REFILL_PER_SEC = 5.0`. Guards `GET /usage` (the budget-status endpoint). Independent of
+  the Evidence bucket so an active Evidence session never starves the profile's budget refresh.
+
+Both buckets evict idle entries after `_BUCKET_TTL_SECONDS = 300` to bound the in-process dict.
 
 ### 8.4 Read-only guards + statement_timeout
 

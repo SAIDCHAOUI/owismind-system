@@ -1,6 +1,6 @@
 # Flow recipes and building the expertise
 
-> Audience: agents engineer, data engineer. Last updated: 2026-06-18. Summary: how the Dataiku Flow
+> Audience: agents engineer, data engineer. Last updated: 2026-06-19. Summary: how the Dataiku Flow
 > builds, at DESIGN-TIME, via three Python recipes, the artifacts (profile + value index, plus a value
 > catalog on the roadmap) that turn the sub-agent into an expert on a dataset, and how those artifacts are
 > then consumed at runtime for grounding.
@@ -58,9 +58,9 @@ Summary of the three recipes:
 
 | Recipe | Output | Output schema | v3 status |
 |---|---|---|---|
-| `profile_dataset_recipe.py` | `DRIVE_Revenues_profile` | `{key, payload}` (v1 contract) | WIRED (the business brain) |
-| `build_value_index_recipe.py` | `DRIVE_Revenues_value_index` | `{column_name, value, value_norm, occurrences}` | WIRED (grounding) |
-| `build_value_catalog_recipe.py` | `DRIVE_Revenues_Value_Catalog` | 12 columns (variants, aliases) | ROADMAP (see 5) |
+| `profile_dataset_recipe.py` | `DRIVE_Revenues_profile` | `{key, payload}` (v1 contract) | WIRED (the sub-agent's business brain) |
+| `build_value_index_recipe.py` | `DRIVE_Revenues_value_index` | `{column_name, value, value_norm, occurrences}` | WIRED (sub-agent grounding) |
+| `build_value_catalog_recipe.py` | `DRIVE_Revenues_Value_Catalog` | 12 columns (variants, aliases) | WIRED as `attribute_lookup` alias fallback (see 5) |
 
 ## 3. Recipe 1: `profile_dataset_recipe.py`, the business brain
 
@@ -95,8 +95,9 @@ samples otherwise, numeric/temporal stats, and temporal-format detection. Highli
 - Default role: `default_role(...)` = deterministic fallback when the LLM is absent or silent (time /
   measure for numeric / free_text if long / identifier if near-unique or name ending in `_id` / dimension otherwise).
 
-PASS B (LLM via Mesh), function `run_enrichment(...)`. It calls the `ENRICH_LLM_ID` model (default
-`openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro`) with 2 attempts, via the NATIVE Mesh completion API
+PASS B (LLM via Mesh), function `run_enrichment(...)`. It calls the `ENRICH_LLM_ID` model (current value
+`openai:LLM-7064-revforecast:vertex_ai/claude-opus-4-7`, changed from Gemini 2.5 Pro during the 2026-06-18
+simplify session) with 2 attempts, via the NATIVE Mesh completion API
 (`project.get_llm(ENRICH_LLM_ID).new_completion()`, `.with_message(..., role=...)`, `.execute()`). The
 `ENRICH_PROMPT` system prompt enforces a SINGLE JSON object, with no markdown fences: EN/FR descriptions, grain, metrics,
 `default_metric`, scenario, time, and per column role/synonyms/display_column. The user input, built
@@ -271,22 +272,18 @@ TO '30000'", "SET LOCAL transaction_read_only TO on"]`.
 
 ### 5.1 Status
 
-> ROADMAP: the value catalog is BUILT but is NOT the grounding path of the v3 sub-agent, which
-> grounds on the value index. Running the recipe is harmless (it only writes its own output,
-> used by nothing in v3).
+The value catalog is built by the recipe and is NOT the grounding path of the v3 sub-agent (which
+grounds on the value index). However, `attribute_lookup` uses it as an **alias fallback**: when no
+match is found in `DRIVE_Revenues` AND no specific attribute is requested, `_alias_fallback` queries
+`DRIVE_Revenues_Value_Catalog` for close aliases (hand-crafted business concepts, account short names)
+and returns them as `suggestions`. Running the recipe is therefore useful for the fast-lookup path.
 
-> IN FLUX (doc-vs-code divergence to be aware of): the recipe's STATUS header (dated 2026-06-17) still
-> describes the catalog as feeding the Custom Python tool `Drive_Revenues_resolve_filter_value`, itself
-> the planned replacement for grounding. That target has MOVED: the managed tool `dataset_lookup` and its
-> `lookup` intent were REMOVED on 2026-06-18, and the chosen replacement is the new Custom Python tool
-> `attribute_lookup` (`tools/attribute_lookup_tool.py`). More recently still (`dataiku-agents/CLAUDE.md`,
-> decision board 2026-06-18), `attribute_lookup` is now WIRED as a BUILT-IN tool of the ORCHESTRATOR (declared in
-> `build_tool_specs`, dispatched inline in `node_tools` like `show_table`/`current_date`, ids
-> `LOOKUP_TOOL_ID`/`LOOKUP_TOOL_NAME`); it touches NO frozen `KNOWN_*` contract and the sub-agent remains
-> UNCHANGED. Consequence for this area: the value catalog becomes at best a suggestions FALLBACK, its
-> exact place in the target remains to be confirmed. The RECIPES front stays stable: `profile` + `value_index`
-> wired in v3, `value_catalog` roadmap. Detail of `attribute_lookup` in
-> [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
+> The recipe's STATUS header (in the code, dated 2026-06-17) still references `Drive_Revenues_resolve_filter_value`
+> as the target consumer. That tool is being deleted (called by nobody). The value catalog's current consumer
+> is `attribute_lookup`, which reads it as an alias fallback via `_alias_fallback` (entity searches only:
+> domains `account`, `account_group`, `alias`). The RECIPES front is stable: `profile` + `value_index` are
+> the sub-agent's grounding path; `value_catalog` feeds the orchestrator's fast lookup alias path. Detail of
+> `attribute_lookup` in [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
 
 ### 5.2 What the catalog adds vs the value index
 
@@ -357,7 +354,7 @@ columns/aggs/roles rejected, `default_metric` fallback, scenario/time columns mu
 | Value index not on the SQL connection | `_resolve_terms` raises "value index dataset is not SQL" | Create the output on `SQL_owi` (deployment trap #1) |
 | `indexed` always `False` in output | Filtering by indexed column inactive (runtime warning) | Set `indexed=true` via human override (to be confirmed as practice) |
 | Two different normalizations | `norm_value` (frozen, keeps punctuation) vs the catalog's `norm` (removes punctuation) | Do not confuse them |
-| Empty `ENRICH_LLM_ID` | No PASS B: deterministic profile, empty descriptions to fill in by hand | Configure the strongest Mesh model; verify that `gemini-2.5-pro` exists on the Mesh |
+| Empty `ENRICH_LLM_ID` | No PASS B: deterministic profile, empty descriptions to fill in by hand | Configure a strong Mesh model; current default `claude-opus-4-7`; verify the id on the Mesh connection |
 | `MAX_ROWS_IN_MEMORY` (2 000 000) | `get_dataframe()` truncates; profile on a head sample beyond that | Profile on a bounded dataset or a representative sample |
 | Currency derived from the column name | `amount_eur -> €` via `metric_unit` | Renaming the amount column changes the displayed currency |
 

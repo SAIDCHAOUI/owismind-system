@@ -1,9 +1,10 @@
 # Installation and configuration
 
-> Audience: DSS admin, operator. Last updated: 2026-06-18. Summary: how to install the OWIsMind
+> Audience: DSS admin, operator. Last updated: 2026-06-19. Summary: how to install the OWIsMind
 > plugin, build the two code envs (3.9 backend, 3.11 agents), instantiate the webapp, configure it in
-> the Settings (SQL connection, table prefix, traces dataset, log level), paste the two Code Agents and
-> have an admin activate the agent whitelist.
+> the Settings (SQL connection, table prefix, traces dataset, log level), paste the two Code Agents,
+> have an admin activate the agent whitelist, configure the monthly budget (default $50 USD/user), and
+> fill in the agent profiles via Administration > Agents > Edit profile.
 
 OWIsMind is deployed as three independent building blocks: a **DSS plugin** (Flask backend + built Vue
 frontend, shipped in a zip), two **LangGraph Code Agents** pasted in by hand (outside the zip), and a
@@ -29,7 +30,7 @@ Canonical identifiers to know: plugin id `owismind` (version `0.0.1`), webapp
 | Python 3.9 code env | For the Flask backend. This is the env observed in DSS (`/owismind-api/ping` returns `3.9.23`), WITHOUT langchain. Flask + direct SQL only. |
 | Python 3.11 code env | For the two LangGraph Code Agents (langchain/langgraph are installed there). LangGraph v1 requires Python >= 3.10. |
 | LLM Mesh connection | Exposing the per-mode models (Gemini Flash-Lite, Gemini Flash, Claude Sonnet) and the `revenue_semantic_query` tool (`v4oqA6R`). Managed by DSS; no provider token transits through the repository. |
-| Permissions | A DSS account able to install a plugin, create a webapp and configure its Settings. The very first user who POSTs `/me` after configuration becomes the application admin (see section 8). |
+| Permissions | A DSS account able to install a plugin, create a webapp and configure its Settings. The very first user who POSTs `/me` after configuration becomes the application admin (see section 10). |
 
 > NO INSTALL: the structuring rule of the project is that the agent (Claude) never installs a
 > dependency. Building the code envs and adding langchain/langgraph is a MANUAL operation performed by
@@ -48,7 +49,7 @@ accident:
   and `langgraph`, never the plugin's `owismind` package.
 
 You cannot put langgraph in the 3.9 backend; that is why the agents do NOT travel inside the zip and are
-deployed by copy-paste into Code Agents on a 3.11 env (section 7). This separation is formalized in
+deployed by copy-paste into Code Agents on a 3.11 env (section 5). This separation is formalized in
 [ADR-0005](../08-decisions/0005-langgraph-code-agents-python-311.md).
 
 ---
@@ -89,7 +90,7 @@ Before instantiating the webapp, prepare the two environments:
 - **3.9 code env** for the backend: Flask is enough (the backend does not need langchain). This is the
   env the webapp will use.
 - **3.11 code env** for the agents: install `langchain` and `langgraph` there. This env will be attached
-  to the two Code Agents (section 7), not to the webapp.
+  to the two Code Agents (section 5), not to the webapp.
 
 ---
 
@@ -151,8 +152,10 @@ This is the only truly indispensable setting. Select the dedicated PostgreSQL co
   possible if the connection does indeed exist on the DSS side.
 - On the first write, the backend lazily creates its tables (`CREATE TABLE IF NOT EXISTS`). The complete
   data model (tables `webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`,
-  `webapp_usage_monthly_v1`, `webapp_artifacts_v1`) is described in
-  [Backend - storage and data model](../04-backend/04-storage-and-data-model.md).
+  `webapp_usage_monthly_v1`, `webapp_user_quota_v1`, and the artifacts table) is described in
+  [Backend - storage and data model](../04-backend/04-storage-and-data-model.md). The admin space
+  (`/admin/storage`) exposes the physical names of the five core tables tracked by `storage_status()`
+  (`chat`, `users`, `settings`, `usage_monthly`, `user_quota`).
 
 ### 4.2 Optional table prefix (`table_prefix`)
 
@@ -165,7 +168,7 @@ or `{prefix}-owismind` with a valid prefix. Example with project key `OWISMIND_D
 
 The prefix is validated against `^[A-Za-z0-9_-]{1,16}$`. A prefix that is too long or invalid is
 **ignored** (the app runs without a prefix) and a warning is emitted ONCE only. The admin space
-(`/admin/storage`, see section 10) exposes the triplet `table_prefix` (effective), `table_prefix_input`
+(`/admin/storage`, see section 12) exposes the triplet `table_prefix` (effective), `table_prefix_input`
 (raw) and `table_prefix_ignored`, so that an ignored prefix is visible instead of failing silently.
 
 ### 4.3 Optional traces dataset (`traces_dataset`)
@@ -227,20 +230,21 @@ Always re-paste BOTH together when one changes: the orchestrator resolves the su
 After pasting, verify that the ids indeed referenced objects exposed by your LLM Mesh connection. A wrong
 id does not crash at boot: it is the corresponding mode that does not respond. Ids to check:
 
-| Constant (in both agents) | Value observed in the code | Use |
-|---|---|---|
-| `GEMINI_FLASH_LITE_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite` | eco mode (default) |
-| `GEMINI_FLASH_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash` | medium mode |
-| `SONNET_ID` | `openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6` | high mode + Semantic Model |
-| `SEMANTIC_TOOL_ID` (sub-agent) | `v4oqA6R` | `revenue_semantic_query` tool (writes/executes the SQL) |
-| sub-agent `agent_id` (orchestrator) | `agent:bHrWLyOL` | resolution of the sub-agent by id |
+| Constant | Where | Value observed in the code | Use |
+|---|---|---|---|
+| `GEMINI_FLASH_LITE_ID` | both agents | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite` | eco mode (default) |
+| `GEMINI_FLASH_ID` | both agents | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash` | medium mode |
+| `SONNET_ID` | both agents | `openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6` | high mode + Semantic Model |
+| `SEMANTIC_TOOL_ID` | sub-agent only | `v4oqA6R` | `revenue_semantic_query` tool (writes/executes the SQL) |
+| `agent_id` of the sub-agent | orchestrator `CAPABILITIES` | `agent:bHrWLyOL` | resolution of the sub-agent by id |
 
 > IN FLUX: the `dataiku-agents/` layer is being edited live. The LLM Mesh ids above must match YOUR
-> instance's connection; re-verify them on every re-paste. Furthermore, the managed tool `dataset_lookup`
-> (`9FEzVZk`) and its `lookup` intent were REMOVED on 2026-06-18; their replacement `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`) is built and unit-tested but NOT yet wired into the sub-agent. The
-> `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value` remain
-> ROADMAP, not wired in v3.
+> instance's connection; re-verify them on every re-paste. The managed tool `dataset_lookup` (`9FEzVZk`)
+> and its `lookup` intent were REMOVED on 2026-06-18. Their replacement `attribute_lookup`
+> (`tools/attribute_lookup_tool.py`) is wired as a BUILT-IN in the orchestrator (dispatched inline in
+> `node_tools`, DSS test-run validated). The `DRIVE_Revenues_Value_Catalog` dataset is USED by
+> `attribute_lookup` as an alias-fallback catalog. The Custom Python tool
+> `Drive_Revenues_resolve_filter_value` is SUPERSEDED and pending deletion from DSS.
 
 ---
 
@@ -273,7 +277,65 @@ sub-agent.
 
 ---
 
-## 7. Run-as-user and permissions
+## 7. Configure the monthly budget (Quotas tab)
+
+The budget feature is **live at first deploy**: every user gets a default rolling credit of **$50 USD per
+calendar month** (`DEFAULT_MONTHLY_LIMIT_USD = 50.0` in `storage/budget.py`). Spend is tracked by the LLM
+Mesh `estimatedCost` field already captured per exchange in `webapp_usage_monthly_v1`; the month bucket
+resets automatically on the 1st (a new month is a new DB row, no reset job).
+
+The **Quotas tab** of the admin space (`GET /admin/budget`) exposes the global config and every user's
+current spend. From there an admin can:
+
+| Action | How | Effect |
+|---|---|---|
+| Change the default global limit | POST `/admin/budget` with `{limit_usd, enabled}` | New default for users with no per-user override |
+| Enable/disable budget enforcement | POST `/admin/budget` with `{enabled: false}` | `false` disables the 402 gate at `/chat/start` (spend is still recorded) |
+| Set a temporary global boost | POST `/admin/budget` with `{temp_limit_usd, temp_days}` | Overrides the default for all users without a per-user override until `expires_at` |
+| Clear the temp global boost | POST `/admin/budget` with `{clear_temp: true}` | Reverts to the base global default |
+| Override one or more users | POST `/admin/budget/users` with `{user_ids:[...], limit_usd, expires_days, note}` | Per-user limit wins over the global default while active; `expires_days` absent = permanent |
+| Remove a per-user override | POST `/admin/budget/users` with `{user_ids:[...], clear: true}` | User reverts to the global default |
+
+When a user's monthly spend reaches their effective limit and enforcement is on, `/chat/start` returns
+**HTTP 402** (`monthly_quota_exceeded`) with the current budget status (`spent_usd`, `limit_usd`,
+`remaining_usd`). The gate **fails open**: if the budget DB read errors out, the run proceeds and the
+spend is still recorded (so the next request is gated once the read recovers). A user's own budget status
+is readable at any time via `GET /usage`.
+
+The table `webapp_user_quota_v1` (per-user overrides) is created lazily on first use; no manual DDL is
+needed.
+
+> The budget amounts are in US dollars, matching the `estimatedCost` field the LLM Mesh already exposes
+> in the trace. Runbook 8 (in [Runbooks](04-runbooks.md)) covers the "user blocked" incident procedure.
+
+---
+
+## 8. Fill in the agent profiles (Administration > Agents > Edit profile)
+
+Agent descriptions are **never hardcoded** in the frontend (the legacy `agentMeta.js` was removed). Every
+agent's library card (tagline, description, capabilities, tools, icon, badge) is authored by an admin
+through the **Administration > Agents** page and stored in the `enabled_agents` JSON of
+`webapp_settings_v1`.
+
+Until a profile is filled in, the agent-library card shows a "profile to complete" placeholder (deliberate
+- no hardcode, honest signal). To fill in a profile:
+
+1. Open the app as an admin, navigate to **Administration > Agents**.
+2. Click **Edit profile** on an enabled agent.
+3. Fill in: **tagline** (short line), **description** (richer text), **capabilities** (list),
+   **tools** (list), **icon** (name from the frontend icon registry) and **badge** (optional label).
+4. Save. The change is validated and sanitized server-side (`validate_agent_meta` in
+   `security/validation.py`, pure, never raises, icon sanitized against a server-registered whitelist)
+   and stored in the whitelist JSON - no separate table.
+
+The `/agents` route exposes these fields to authenticated users (opaque logical key + label + profile);
+it never leaks `agent_id` or `project_key`.
+
+> Runbook 9 (in [Runbooks](04-runbooks.md)) covers the "profile to complete" placeholder.
+
+---
+
+## 9. Run-as-user and permissions
 
 Two identities coexist, and confusing them is the most frequent source of error:
 
@@ -298,7 +360,7 @@ The detail of this model is in the [Security model](../02-architecture/04-securi
 
 ---
 
-## 8. First admin (TOFU)
+## 10. First admin (TOFU)
 
 The very first user who POSTs `/owismind-api/me` AFTER storage is configured becomes the application admin
 (Trust On First Use). The election is serialized by a PostgreSQL advisory lock
@@ -312,7 +374,7 @@ the application first. Anti-lockout guard: `set-admin` never removes the last re
 
 ---
 
-## 9. Ordered checklist
+## 11. Ordered checklist
 
 Complete sequence, from zero to the first conversation:
 
@@ -332,7 +394,12 @@ Complete sequence, from zero to the first conversation:
    `agent:bHrWLyOL`).
 8. **First admin**: open the app as the deploying admin (POST `/me` => TOFU election).
 9. **Whitelist**: via the admin space, activate at minimum the orchestrator `OWIsMind_orchestrator`.
-10. **Smoke test**: `GET /owismind-api/ping` must return `{"status":"ok","python":"3.9.23"}`;
+10. **Budget**: the default $50 USD/month limit is active immediately. Review or adjust it via the Quotas
+    tab in the admin space (see section 7). No action is required if the default is acceptable.
+11. **Agent profiles**: in **Administration > Agents**, click **Edit profile** on each enabled agent and
+    fill in the library card (tagline, description, capabilities, tools, icon, badge). Until filled, the
+    agent card shows a "profile to complete" placeholder (see section 8).
+12. **Smoke test**: `GET /owismind-api/ping` must return `{"status":"ok","python":"3.9.23"}`;
     `/admin/storage` must show `configured: true` and the connection; ask a simple question in the chat
     and verify that a response arrives.
 
@@ -343,7 +410,7 @@ Complete sequence, from zero to the first conversation:
 
 ---
 
-## 10. Verify the configuration (afterwards)
+## 12. Verify the configuration (afterwards)
 
 | Verification | How | Expected result |
 |---|---|---|
@@ -355,17 +422,18 @@ Complete sequence, from zero to the first conversation:
 If `/me` returns `needs_config: true`, it means `sql_connection` is not selected: go back to section 4.1.
 The application error codes useful on the operator side: `storage_not_configured` (409, on the admin
 routes if there is no connection), `agent_not_enabled` (404, non-whitelisted agent), `forbidden` (403,
-non-admin), `unauthenticated` (401, identity not resolved).
+non-admin), `unauthenticated` (401, identity not resolved), `monthly_quota_exceeded` (402, monthly budget
+exhausted - see section 7 and Runbook 8).
 
 ---
 
 ## See also
 - [Build, packaging and deployment](02-build-package-deploy.md) - produce the zip, the what-to-rebuild-when matrix.
 - [Monitoring and logs](03-monitoring-and-logs.md) - content-free logs, observability, storage_status.
-- [Runbooks](04-runbooks.md) - incident procedures (backend to restart, mode that does not respond, storage not configured).
+- [Runbooks](04-runbooks.md) - incident procedures (backend to restart, mode that does not respond, storage not configured, budget exceeded, agent profile empty).
 - [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md) - re-paste the 2 Code Agents, verify the ids.
 - [Backend - storage and data model](../04-backend/04-storage-and-data-model.md) - the `_vN` tables created on the first write.
-- [Backend - security and validation](../04-backend/06-security-and-validation.md) - server whitelist, validation, admin guards.
+- [Backend - security and validation](../04-backend/06-security-and-validation.md) - server whitelist, validation, admin guards, `validate_agent_meta`.
 - [Security model](../02-architecture/04-security-model.md) - run-as-user, owner-scoping, single-process.
 - [ADR-0004 - Server-side agent whitelist](../08-decisions/0004-whitelist-agents-serveur.md).
 - [ADR-0005 - LangGraph Code Agents in Python 3.11](../08-decisions/0005-langgraph-code-agents-python-311.md).

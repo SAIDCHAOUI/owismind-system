@@ -1,6 +1,6 @@
 # Frontend - overview and structure
 
-> Audience: frontend developer. Last updated: 2026-06-18. Summary: how the Vue
+> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the Vue
 > 3 + Vite application starts up (bootstrap, theme set before mount), how `src/` is organized, and how the
 > HASH router, i18n and theming are wired.
 
@@ -32,12 +32,12 @@ graph TD
   SRC --> ROUTER["router/ (index.js, HASH)"]
   SRC --> I18N["i18n/ (index.js, messages.json, extra.js, langs.json)"]
   SRC --> STYLES["styles/ (tokens.css, base.css)"]
-  SRC --> STORES["stores/ (ui, session, chat, evidence, + pure stores)"]
-  SRC --> COMPO["composables/ (useTr, useMarkdown, timelineModel...)"]
-  SRC --> REG["registries/ (timelineSteps, agentMeta, faqContent)"]
+  SRC --> STORES["stores/ (ui, session, chat, evidence, + pure modules)"]
+  SRC --> COMPO["composables/ (useTr, useMarkdown, budgetModel, timelineModel...)"]
+  SRC --> REG["registries/ (timelineSteps, faqContent)"]
   SRC --> SERV["services/ (backend.js)"]
   SRC --> COMP["components/ (chat, evidence, pages, shell, ui)"]
-  SRC --> VIEWS["views/ (ChatView, SettingsView, AdminView...)"]
+  SRC --> VIEWS["views/ (ChatView, SettingsView, AdminView, AgentsView...)"]
   SRC --> ASSETS["assets/ (orange-logo.png)"]
 ```
 
@@ -46,21 +46,21 @@ graph TD
 | `main.js` | Bootstrap: creates the app, sets the theme, mounts on `#app`. | This page. |
 | `App.vue` | Thin shell: renders `AppLayout` + `ToastHost`, resolves identity once. | This page. |
 | `router/` | HASH router (`index.js`): route table, admin guard. | This page. |
-| `i18n/` | FR/EN i18n: pristine `messages.json` + `extra.js` overrides + `langs.json`. | This page. |
-| `styles/` | Theme layer: `tokens.css` (design tokens), `base.css` (reset + keyframes). | This page. |
-| `stores/` | Pinia state: `ui`, `session`, `chat`, `evidence` + pure stores. | [State and stores](02-state-and-stores.md). |
-| `composables/` | Reusable logic: `useTr`, `useMarkdown`, `timelineModel`... | [Components and views](03-components-and-views.md). |
-| `registries/` | Extensible data: `timelineSteps`, `agentMeta`, `faqContent`. | [Components and views](03-components-and-views.md). |
+| `i18n/` | EN/FR i18n: pristine `messages.json` + `extra.js` overrides + `langs.json`. | This page. |
+| `styles/` | Theme layer: `tokens.css` (design tokens, Orange charter), `base.css` (reset + keyframes). | This page. |
+| `stores/` | Pinia state: `ui`, `session`, `chat`, `evidence` + pure modules. | [State and stores](02-state-and-stores.md). |
+| `composables/` | Reusable logic: `useTr`, `useMarkdown`, `budgetModel`, `timelineModel`... | [Components and views](03-components-and-views.md). |
+| `registries/` | Extensible data: `timelineSteps`, `faqContent`. (Note: `agentMeta.js` has been DELETED - agent profiles are now admin-authored, see below.) | [Components and views](03-components-and-views.md). |
 | `services/` | `backend.js`: one function per `/owismind-api/*` route. | [Backend communication](04-backend-communication.md). |
 | `components/` | Components by domain: `chat/`, `evidence/`, `pages/`, `shell/`, `ui/`. | [Components and views](03-components-and-views.md). |
-| `views/` | Routed views (lazy): `ChatView`, `SettingsView`, `AdminView`... | [Components and views](03-components-and-views.md). |
+| `views/` | Routed views (lazy): `ChatView`, `SettingsView`, `AdminView`, `AgentsView`... | [Components and views](03-components-and-views.md). |
 
 The full map of modules by layer (Pinia stores, python-lib sub-packages, recipes) has its
 canonical home in [Component map](../02-architecture/02-component-map.md).
 
 ## Bootstrap: `main.js`
 
-The `src/main.js` file is short (33 lines) but its order of operations is meaningful. The
+The `src/main.js` file is short but its order of operations is meaningful. The
 exact sequence:
 
 1. Import the global styles IN ORDER: `./styles/tokens.css` THEN `./styles/base.css`. The order is
@@ -127,21 +127,22 @@ from several places (the guard and the `onMounted` of `App.vue`) without duplica
 
 ## i18n: pristine `messages.json` + `extra.js`
 
-The `src/i18n/` folder contains `index.js` (setup), `messages.json` (660 lines), `extra.js` (574
-lines) and `langs.json`.
+The `src/i18n/` folder contains `index.js` (setup), `messages.json`, `extra.js` and `langs.json`.
 
 ### Setup (`i18n/index.js`)
 
 The instance is created as follows: `createI18n({ legacy:false, globalInjection:true, locale:detectLocale(),
-fallbackLocale:'fr', messages, warnHtmlMessage:false, missingWarn:false, fallbackWarn:false })`.
+fallbackLocale:'en', messages, warnHtmlMessage:false, missingWarn:false, fallbackWarn:false })`.
 
 - `legacy:false` enables the Composition API (`useI18n()`), `globalInjection:true` exposes `$t` in
   templates.
 - `warnHtmlMessage:false` because a few keys carry trusted canned HTML (for example
   `default.answer_html`).
 - Locale detection (`detectLocale`) first reads `localStorage.getItem('owismind.lang')` if the value
-  is supported, otherwise `navigator.language` truncated to 2 letters and lowercased, otherwise `'fr'`. The constant
+  is supported; otherwise `navigator.language` truncated to 2 letters; otherwise `'en'`. The constant
   `STORAGE_KEY = 'owismind.lang'` is the key already used by the original mockup.
+- English (`'en'`) is the DEFAULT locale and the `fallbackLocale`. A user with no stored choice and
+  a non-English browser still lands in English.
 - `SUPPORTED` is derived from `langs.json` (`langs.map(l => l.id)`), and `AVAILABLE_LOCALES = langs` is exported
   for the language selector.
 
@@ -160,12 +161,12 @@ Two domain catalogs are merged at setup, AFTER `messages` is loaded, via
 2. `extraMessages.fr/en`, from `i18n/extra.js` (strings for the more recent UI phases).
 
 Because the merge happens AFTER `messages`, `extra.js` can OVERRIDE a key of `messages.json`:
-the override wins. Concrete example: `'prompt.placeholder'` is redefined in `extra.js` (FR:
-`'Decrivez votre demande le plus precisement possible...'`) and `'empty.tip'` is added there, to guide the
-user toward being precise. The source `messages.json` does not need to be touched for this.
+the override wins. Concrete example: `'prompt.placeholder'` is redefined in `extra.js` and `'empty.tip'` is
+added there. The source `messages.json` does not need to be touched for this.
 
 Key families in `extra.js`: generic `x.*` (for example `x.close`), `set.*`, `sb.*`, `chat.*`,
-`fb.*`, `msg.*`, `faq.*`, `ag.*`, `pj.*`, `admin.*`, `ev.*` (Evidence Studio), `art.*` (artifacts
+`fb.*`, `msg.*`, `faq.*`, `ag.*` (agents library including `ag.badge.*`), `pj.*`, `admin.*` (including
+`admin.tab.*` and `admin.quotas.*`), `ev.*` (Evidence Studio), `art.*` (artifacts
 tabs), `mode.*` (mode selector) and `ev.exp.*` (trust layer computation steps, frozen `kind`
 enum). The philosophy is the honest empty state: a "coming soon" label, never a fake figure.
 
@@ -191,7 +192,7 @@ The `ui` store keeps a reactive MIRROR of the language: `setLang(id)` calls `set
 key `owismind.lang`, which avoids a second competing persistence system.
 
 Distinction to remember: the INTERFACE STRINGS go through `$t` / `t` (vue-i18n); the bilingual DATA
-in `{fr, en}` format (agent metadata, FAQ content) goes through the `useTr()` composable, whose
+in `{fr, en}` format (FAQ content) goes through the `useTr()` composable, whose
 `tr(v)` function passes a string through as-is and resolves a `{fr, en}` object on the current locale
 with fallback `cur -> fr -> en -> first value`. `useTr` is reactive on the locale ref, so
 the templates re-render on a language change.
@@ -199,22 +200,45 @@ the templates re-render on a language change.
 > Adding a language: add its block in `langs.json`, a locale block in `messages.json`, and the
 > corresponding field on every `{fr, en}` data object.
 
-## Theming: tokens and `body[data-theme]`
+## Theming: Orange charter + `body[data-theme]`
+
+### Orange design system
+
+The OWIsMind UI follows a strict Orange brand charter, documented in full at
+`docs/cadrage/CHARTE_ORANGE_UI.md`. The rules are non-negotiable (project rule #10) and must be
+consulted before any styling work. Key principles:
+
+- Color: white / near-black as the base, with a SINGLE orange `#FF7900` used as a RARE accent on active
+  states and primary actions only.
+- Geometry: square corners everywhere (`border-radius: 0`). Only avatars/logo chips are round. The
+  token `--square: 8px` is for icon chips (the orange logo square shape), not for general radius.
+- Typography: `--font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif`. H1 at 36px / weight 800
+  (`--fw-heavy`). An orange uppercase eyebrow (small-caps label, `--tracking-eyebrow`). An orange
+  52px-tall, 4px-wide title-bar decoration under the H1.
+- Flat surfaces, 1px borders (`--border`), minimal shadows (`--shadow`).
+- Brand mark: ALWAYS the real image `src/assets/orange-logo.png`, bundled by Vite. Never reconstructed
+  in CSS (a CSS-generated square is forbidden, even if it "looks the same").
+
+Absolute bans: `color-mix()`, blur / `backdrop-filter`, gradients, glow / large box-shadows, emoji in
+UI, a global orange focus-ring, and any CSS-reconstructed brand mark.
+
+Dark theme via `body[data-theme="dark"]` + tokens (see below). In dark mode, `--orange-text` switches to
+`#ffb066` (a lighter orange that clears WCAG AA on dark backgrounds) and status tints are more saturated.
 
 ### Single source: `tokens.css`
 
-`src/styles/tokens.css` (139 lines) is the single source of the theme layer, ported verbatim from the
-`theme.css` of the validated mockup. Its structure:
+`src/styles/tokens.css` is the single source of the theme layer. Its structure:
 
 - `:root` carries the THEME-INDEPENDENT tokens: the Orange brand (`--orange: #ff7900`, `--orange-deep`,
-  `--orange-soft`), the 8px-anchored spacing (`--s-1` to `--s-12`), the typography (`--font-sans`, `--font-mono`,
-  scale `--fs-xs` to `--fs-3xl`), the radii (`--r-sm`, `--r`, `--r-lg`, `--r-pill`), the motion
-  (`--ease`, `--dur`, `--dur-slow`), the z-index scale (`--z-menu: 60` < `--z-overlay: 200` <
+  `--orange-soft`, `--orange-line`), the 8px-anchored spacing (`--s-1` to `--s-12`), the typography
+  (`--font-sans`, `--font-mono`, scale `--fs-xs` to `--fs-3xl`), the weight scale (`--fw-regular`,
+  `--fw-medium`, `--fw-semibold`, `--fw-bold`, `--fw-heavy: 800`), tracking presets
+  (`--tracking-tight`, `--tracking-eyebrow`), the radius tokens (`--r-xs`, `--r-sm`, `--r`, `--r-lg`,
+  `--r-pill`) and the square chip token (`--square: 8px`), the chat column measure (`--chat-col: 90%`,
+  `--chat-col-max: 1200px`), the collapsed-rail width (`--rail-w: 60px`), the motion
+  (`--ease`, `--ease-out`, `--dur`, `--dur-slow`), the z-index scale (`--z-menu: 60` < `--z-overlay: 200` <
   `--z-modal: 201` < `--z-toast: 2100`) and the default status colors (`--success`, `--danger`,
   `--warn`, `--info`).
-- The chat column measure also lives in `:root`: `--chat-col: 90%` and `--chat-col-max: 1200px`. The
-  message thread and the prompt bar share THIS width so that the answer text aligns
-  edge-to-edge with the input area (in the manner of ChatGPT / Claude).
 - The SEMANTIC TOKENS (surface, text, border) are defined under two selectors swapped on
   `<body>`: `body[data-theme="light"]` and `body[data-theme="dark"]`. Each provides `--bg`, `--surface`,
   `--surface-2`, `--surface-hover`, `--border`, `--border-strong`, `--text`, `--text-2`, `--text-3`,
@@ -222,19 +246,14 @@ the templates re-render on a language change.
   status tints (`--success-soft`, `--danger-soft`).
 
 Two implementation points to know. First, `--orange-text` is a darkened version of the orange
-in light mode (`#b85700`) to pass the WCAG AA 4.5:1 contrast on a white background, the brand orange being
-too light for small text. Second, the status tints `--success-soft` / `--danger-soft` have in
+in light mode (`#b85700`) to pass the WCAG AA 4.5:1 contrast on a white background (the brand orange is
+too light for small text). Second, the status tints `--success-soft` / `--danger-soft` have in
 dark mode a more vivid tint and slightly more opacity: the light-theme values washed out
 to invisible on a dark surface.
 
-Many tokens added here are NO-OP additions: their value equals the literal already hard-coded in
-the mockup, so adding them does not change a pixel. They exist to make possible a dark-first
-or clean-status pass without touching the validated visuals. Some are not yet referenced by
-anyone.
-
 ### `base.css`: reset and utilities
 
-`src/styles/base.css` (54 lines) is imported AFTER `tokens.css`. It provides the `box-sizing` reset,
+`src/styles/base.css` is imported AFTER `tokens.css`. It provides the `box-sizing` reset,
 `html, body { height: 100% }`, `body { overflow: hidden }` (fixed-viewport shell, scroll lives in the
 inner regions), the form-control reset, `::selection { background: var(--orange) }` and
 a custom scrollbar, the shared keyframes (`slide-up`, `pulse-dot`, `shimmer-sweep`), and a few
@@ -259,12 +278,12 @@ localStorage keys managed by `ui.js`: `owismind.theme` (theme), `owismind.sideba
 `owi.sidebarW` and `owi.evidenceW` (mockup keys, widths), `owismind.contextMessages` (context
 window) and `owismind.modelMode`. The model mode is one of the keys `['eco', 'medium', 'high']`, default
 `'eco'`: eco = Gemini 3.1 Flash-Lite (fast, low-cost, default), medium = Gemini 3.5 Flash, high =
-Claude Sonnet. The fine-grained management of the `ui` store (and of the pure stores `prefs` / `conversationList` /
+Claude Sonnet. The fine-grained management of the `ui` store (and of the pure modules `prefs` / `conversationList` /
 `conversationTree` / `agentPick`) is detailed in [State and stores](02-state-and-stores.md).
 
 > Theming gotcha (F2): in a `<style scoped>`, a theme override must place the ENTIRE SELECTOR
 > inside `:global(body[data-theme="dark"] .x)`, otherwise the scoped descendant is lost. Do not use
-> `color-mix` (uncertain browser support): prefer `rgba` with a `:global` override, or the token
+> `color-mix` (banned by the Orange charter): prefer `rgba` with a `:global` override, or the token
 > `--orange-soft-dark`.
 
 ## In-flux points and pitfalls
@@ -276,9 +295,11 @@ Claude Sonnet. The fine-grained management of the `ui` store (and of the pure st
   `extra.js`, and the `extra.js` merge can intentionally mask a key of `messages.json`.
 - The import order `tokens.css` then `base.css` is load-bearing, just like setting `body[data-theme]`
   before the mount.
+- The `registries/agentMeta.js` file has been DELETED. Agent descriptions now come from the backend
+  (`/agents`), authored by the admin in `AdminView`. There is no static registry of agent profiles.
 
 ## See also
-- [Frontend - state and Pinia stores](02-state-and-stores.md) - the `ui` store (theme, language, mode) and the pure stores.
+- [Frontend - state and Pinia stores](02-state-and-stores.md) - the `ui` store (theme, language, mode) and the pure modules.
 - [Frontend - components and views](03-components-and-views.md) - the component tree, the lazy routed views, the composables.
 - [Frontend - backend communication](04-backend-communication.md) - `services/backend.js`, the opaque agent key, the polling.
 - [Frontend - build and assets](05-build-and-assets.md) - Vite `base` / `outDir`, the move to `body.html`, the hashes.

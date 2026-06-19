@@ -1,6 +1,6 @@
 # Agent evaluation
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: how to judge the
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: how to judge the
 > orchestrator and the revenue sub-agent beyond "it works", through a versioned dataset of cases,
 > test families (routing, tool selection, business accuracy, non-hallucination,
 > security, injection), the Semantic Model golden queries, the README smoke tests and the DSS Agent Review.
@@ -13,9 +13,9 @@ sub-agent `SalesDrive_revenue_expert`, `agent:bHrWLyOL`). The general test strat
 suites, NO INSTALL, the DSS boundary) lives in [01-test-strategy.md](01-test-strategy.md); this page
 focuses on the behavioral quality of the agents.
 
-> IN FLUX: the `dataiku-agents/` folder is being edited live. Several facts below (the wiring of
-> `attribute_lookup`, the LLM Mesh ids, the test counts) were confirmed in the code as of
-> 2026-06-18 but may shift; the note appears at the relevant point.
+> IN FLUX: the `dataiku-agents/` folder is being edited live. The `attribute_lookup` wiring
+> in the orchestrator is CONFIRMED in the code (verified 2026-06-19); the LLM Mesh ids still need
+> per-instance verification. The note appears at each relevant point.
 
 ## 1. The problem: "it works" is not enough
 
@@ -64,9 +64,9 @@ must become a permanent regression case.
 ## 3. Test families
 
 Evaluation is split into families, each targeting one failure mode. Part of it is already covered by
-DSS-free pure-logic tests (the `dataiku-agents/tests/` suite, ~262 test functions spread across
-`test_langgraph_agents.py`, `test_dataset_expert.py`, `test_attribute_lookup.py`, `test_profiler.py`,
-count verified as of 2026-06-18). Another part can only be validated in DSS, with the LLM in the loop (flagged
+DSS-free pure-logic tests (the `dataiku-agents/tests/` suite, 267 test functions across
+`test_langgraph_agents.py` (88), `test_dataset_expert.py` (106), `test_attribute_lookup.py` (48), `test_profiler.py` (25),
+verified 2026-06-19). Another part can only be validated in DSS, with the LLM in the loop (flagged
 "DSS only").
 
 ### 3.1 Orchestrator routing
@@ -94,17 +94,19 @@ rejects a `show_chart` whose `x`/`y` are not exact columns of the last result (c
 resolution), rejects a `show_kpi` without a valid `value` column, and then lists the exact columns
 to the model. Pure-logic tests: `test_chart_valid`, `test_chart_unknown_column_rejected`,
 `test_show_kpi_records_value_column`, `test_show_kpi_unknown_column_rejected`,
+`test_show_kpi_tool_in_specs` (the tool must be present in the built tool specs), `test_table_valid`,
 `test_no_result_yet` (rejects a rendering before any specialist call).
 
-> IN FLUX: the fast attribute-read tool `attribute_lookup` (`tools/attribute_lookup_tool.py`)
-> is now WIRED as a built-in of the orchestrator (constants `LOOKUP_TOOL_NAME = "attribute_lookup"`
-> and `LOOKUP_TOOL_ID`, inline dispatch in `node_tools`), confirmed in `OWIsMind_orchestrator.py` and
-> in the test class `TestAttributeLookupWiring`. Beware the doc divergence: `agents/README.md`
-> section 9 still describes it as "roadmap, to be routed from the sub-agent"; the CODE (orchestrator)
-> is authoritative. `LOOKUP_TOOL_ID` stays EMPTY by default: as long as the Custom Python tool is not created in DSS,
-> the call falls back on name resolution. To evaluate specifically: that the orchestrator prefers
-> `attribute_lookup` for a simple read ("who is the account manager of X?") and the Semantic Model
-> for any sum/ranking/comparison.
+> IN FLUX (DSS deployment only): `attribute_lookup` (`tools/attribute_lookup_tool.py`) is wired
+> as a built-in of the orchestrator (constants `LOOKUP_TOOL_NAME = "attribute_lookup"` and
+> `LOOKUP_TOOL_ID`, inline dispatch in `node_tools`), confirmed in `OWIsMind_orchestrator.py` and
+> in the test class `TestAttributeLookupWiring` (48 tests, 267-test suite). The CODE is authoritative;
+> ignore any stale "roadmap" label in older doc files. `LOOKUP_TOOL_ID` stays empty by default:
+> the orchestrator falls back to name resolution. What still remains to do IN DSS: create the Custom
+> Python tool object pointing to `attribute_lookup_tool.py`, optionally set `LOOKUP_TOOL_ID`, and
+> re-paste the orchestrator. To evaluate: that the orchestrator calls `attribute_lookup` for a
+> simple attribute read ("who is the account manager of X?") and delegates to the Semantic Model
+> for any sum, ranking or comparison; that a missing `LOOKUP_TOOL_ID` falls back gracefully via name.
 
 ### 3.3 Business accuracy
 
@@ -302,10 +304,10 @@ cannot (it stubs `dataiku` and never runs the graph).
 An honest summary of what off-instance evaluation does NOT cover and that requires a DSS pass:
 
 - the orchestrator's routing DECISION (LLM decision, not testable in pure-logic);
-- live behavior per mode and the validity of the LLM Mesh ids;
-- the real wiring of `attribute_lookup` (Custom Python tool to create, `LOOKUP_TOOL_ID` to fill in);
-- the golden queries played in the aligned model's Playground (id of the new model to record);
-- the end-to-end smoke tests and the Evidence rendering (chart/table/kpi, clickable source).
+- live behavior per mode and the validity of the LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`);
+- `attribute_lookup` DSS deployment: create the Custom Python tool object pointing to `attribute_lookup_tool.py`, optionally set `LOOKUP_TOOL_ID`, re-paste the orchestrator; the pure-logic wiring (48 tests) is confirmed, the DSS side is pending;
+- the golden queries played in the aligned model's Playground (id of the new model to record in `PROJECT_STATE.md`);
+- the end-to-end smoke tests and the Evidence rendering (chart/table/kpi, clickable source once `source_url` is filled on the `revenue_expert` capability).
 
 The permanent rule: on every modification of an agent, re-paste BOTH Code Agents (env 3.11),
 verify the CONFIG ids, then replay golden queries + smoke tests via the Agent Review. The detail of the

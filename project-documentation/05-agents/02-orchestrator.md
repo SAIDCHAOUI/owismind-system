@@ -1,6 +1,6 @@
 # The orchestrator (`OWIsMind_orchestrator`)
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: internal structure of the orchestrator
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: internal structure of the orchestrator
 > Code Agent (LangGraph loop, capability registry, delegation and rendering tools, honesty firewall,
 > per-mode models and propagation to the sub-agent) anchored in
 > `dataiku-agents/agents/OWIsMind_orchestrator.py`.
@@ -12,8 +12,8 @@ Evidence panel, then writes the analysis in the user's language. Its position in
 the collaboration contract with the sub-agent are described in the
 [agent system overview](01-agent-system-overview.md); this page details the INSIDE of the file.
 
-> IN FLUX: the `dataiku-agents/` layer is being edited live. The file observed here is 1914 lines as
-> of 2026-06-18 (line numbers are therefore not cited). The exact names have been re-verified against
+> IN FLUX: the `dataiku-agents/` layer is being edited live. Line numbers are not cited (the file
+> grows with each session; 1974 lines as of 2026-06-19). The exact names have been re-verified against
 > the source; the points still in motion are flagged by dedicated blockquotes further down.
 
 ## 1. Role and central invariant
@@ -187,12 +187,12 @@ EXACT columns of the last result.
 > IN FLUX: the orchestrator file WIRES a built-in `attribute_lookup` tool (decision of 2026-06-18):
 > name in the `LOOKUP_TOOL_NAME` constant, id in `LOOKUP_TOOL_ID`, added in `build_tool_specs` and
 > dispatched inline in `node_tools` like `show_table` / `current_date`. It touches NO frozen `KNOWN_*`
-> contract and the SUB-AGENT remains UNCHANGED. What REMAINS to do in DSS: create the Custom Python
-> tool (`tools/attribute_lookup_tool.py`, built and unit-tested) then fill in `LOOKUP_TOOL_ID` (today
-> `LOOKUP_TOOL_ID = ""` is EMPTY; the name-based fallback covers a recreated id) and re-paste the
-> ORCHESTRATOR alone. Its predecessor, the managed `dataset_lookup` tool (`9FEzVZk`) and the
-> sub-agent's `lookup` intent, were REMOVED on 2026-06-18. See
-> [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
+> contract and the SUB-AGENT remains UNCHANGED. The Custom Python tool object **already exists in DSS**
+> (`dataiku-agents/tools/README.md`). What remains: re-paste the ORCHESTRATOR so the built-in is live.
+> Optional: set `LOOKUP_TOOL_ID` to the tool's real id (the name-based fallback `LOOKUP_TOOL_NAME =
+> "attribute_lookup"` resolves it as long as the name stays stable). Its predecessor, the managed
+> `dataset_lookup` tool (`9FEzVZk`) and the sub-agent's `lookup` intent, were REMOVED on 2026-06-18.
+> See [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
 
 The design intent: for a simple question "who/what is the `<attribute>` of `<named entity>`" (account
 manager, carrier code, sales zone of an account, existence or exact spelling of a name), the model
@@ -200,7 +200,10 @@ calls `attribute_lookup` FIRST, because it answers in under a second where the s
 must NEVER use it for a computed figure (sum, total, count, ranking, share, trend, comparison) nor for
 "list all X": those go to `ask_revenue_expert`. It is a LOCAL tool (dispatched inline in `node_tools`
 like `show_table` / `current_date`), so it touches no frozen `KNOWN_*` contract of the sub-agent.
-Parameters: `term` (required), `attributes` (optional array).
+Parameters: `term` (required - the named thing to look up, as the user wrote it), `attributes` (optional array). Note: `_run_lookup` reads `term` from the model's call and passes it as `entity` to the underlying Python tool; the Python tool's input key is `entity`, but the model-facing parameter name is `term`. The model passes
+a logical `domain`, never a table name; the orchestrator resolves it via the registry's
+`lookup_dataset` / `lookup_catalog` fields (`lookup_domains()`), so the tool is multi-table by design
+and the table name never leaves the server (rule #3/#4).
 
 ### Artifact validation: `_record_artifact`
 
@@ -403,6 +406,8 @@ carried so that the specialist writes its user messages (clarification, no-data,
 right language. The conversation continuity (previous assistant message + current raw question) is
 added for disambiguation, the sub-agent being stateless.
 
+For the `_run_lookup` local tool call: the orchestrator calls `tool.run({"entity": term, "attributes": attrs, "dataset": dataset, "catalog": catalog})`. The dataset and catalog are resolved SERVER-SIDE from the registry's `lookup_dataset` / `lookup_catalog` fields, so the model never names a table.
+
 > Note: the Semantic Model Query tool (`v4oqA6R`, `revenue_semantic_query`) that actually writes the
 > SQL stays on ITS OWN strong model (Sonnet) in ALL modes, independently of the orchestration tier. See
 > [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
@@ -451,7 +456,7 @@ opaque crash in the middle of the loop.
 - Re-paste BOTH Code Agents in env 3.11 when one changes (some fixes live on both sides). See
   [Deploying and editing the agents](07-deploying-and-editing-agents.md).
 - Verify the CONFIG ids after pasting: `GEMINI_*_ID`, the id of the Semantic Model Query tool
-  (`v4oqA6R`), `agent_id = agent:bHrWLyOL`, and `LOOKUP_TOOL_ID` once the lookup tool is created.
+  (`v4oqA6R`), `agent_id = agent:bHrWLyOL`, and optionally `LOOKUP_TOOL_ID` (tool exists in DSS; name fallback resolves it).
 - `node_tools` is the only output writer; every tool call MUST be paired (otherwise a Mesh 400).
 - `parse_mode` / `parse_lang` read the LAST token (anti user-spoofing).
 - Never force `with_json_output` on the orchestrator (breaks reasoning in DSS 14).

@@ -1,6 +1,6 @@
 # Monitoring and logs
 
-> Audience: operator, support. Last updated: 2026-06-18. Summary: where to look to
+> Audience: operator, support. Last updated: 2026-06-19. Summary: where to look to
 > diagnose OWIsMind (the webapp backend log, content-free), which identifiers to correlate
 > (`run_id`, `exchange_id`, `user_id`), how to monitor run concurrency and the caps,
 > and the safety best practices on a shared Dataiku instance.
@@ -72,7 +72,10 @@ to the logs.** Only metadata (length, identifiers, statuses) is.
 - `/chat/start` logs a deliberately content-free line:
   `/chat/start - user_id=... session_id=... agent_key=... msg_len=...`. The message length
   (`msg_len`) is logged, never the message. This is the only entry point where a body could
-  leak, and it stays content-free by explicit choice.
+  leak, and it stays content-free by explicit choice. When the monthly budget gate fires,
+  a dedicated INFO line is logged BEFORE the run starts:
+  `/chat/start - monthly quota exceeded user_id=... spent=... limit=...`; the route then
+  returns HTTP 402 (`monthly_quota_exceeded`) with the budget status in the body.
 - The authentication header values (which may carry credentials / cookies) are
   NEVER logged by `security/identity.py`. On an identity failure, it is the NAMES of the keys
   present (not their values) that are logged for diagnostics.

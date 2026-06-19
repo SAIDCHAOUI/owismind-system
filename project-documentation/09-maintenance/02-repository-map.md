@@ -1,7 +1,7 @@
 # Repository map
 
-> Audience: Developer. Last updated: 2026-06-18. Summary: where everything lives in the
-> OWIsMind repository (DSS plugin, agents, docs, memory, Claude tooling), what is source vs generated, and
+> Audience: Developer. Last updated: 2026-06-19. Summary: where everything lives in the
+> OWIsMind repository (DSS plugin, agents, docs, memory, project documentation, Claude tooling), what is source vs generated, and
 > what must never be edited by hand.
 
 This document is an orientation map: it describes the ROLE of each important folder, its Git status
@@ -9,15 +9,17 @@ This document is an orientation map: it describes the ROLE of each important fol
 editing rule. It does not detail the internal content of each layer: for that, follow the links in the
 `## See also` section. The cross-cutting golden rule: edit the SOURCE, never the OUTPUT.
 
-## 1. Overview: four zones, three Git statuses
+## 1. Overview: five zones, three Git statuses
 
-The repository mixes four zones of different natures:
+The repository mixes five zones of different natures:
 
 - `Plugin/owismind/`: the Dataiku DSS plugin itself (Vue frontend, Flask backend, webapp descriptor,
   resources). This is the core deliverable.
 - `dataiku-agents/`: the LangGraph Code Agents and the design-time fabrication (recipes, tools, semantic
   model). This layer is deployed SEPARATELY (copy-paste into DSS), it never goes through the zip.
-- `docs/`, `memory/`: the reference engineering documentation and the project's living memory.
+- `docs/`, `memory/`: the reference engineering documentation (in French) and the project's living memory.
+- `project-documentation/`: the structured English documentation set (architecture, backend, frontend,
+  agents, operations, testing, decisions, maintenance). This folder is the canonical prose reference.
 - `.claude/`, `graphify-out/`: the assistant's tooling (skills, hooks, permissions) and the regenerated
   knowledge graph.
 
@@ -61,7 +63,7 @@ one per sub-package, all indispensable to the import `from owismind.api.routes i
 | `api/` | The Flask blueprint and all the `/owismind-api/*` routes (`routes.py`). |
 | `agents/` | Run lifecycle (`stream_manager.py`), normalization of LLM Mesh events (`streaming.py`), context suffix and modes (`context.py`), project/agent discovery (`discovery.py`). |
 | `evidence/` | Evidence Studio pipeline: capture (`capture.py`), SQL parsing/explanation (`sql_parse.py`, `sql_explain.py`), query builders (`query_builders.py`), service (`service.py`), throttle (`throttle.py`), column whitelist (`whitelist.py`), Chart.js/KPI shaping (`chart_payload.py`). |
-| `security/` | Identity resolution (`identity.py`) and pure payload validators (`validation.py`). |
+| `security/` | Identity resolution (`identity.py`) and pure payload validators (`validation.py`), including `validate_agent_meta` - the function that coerces and bounds the admin-authored agent profile (never raises, whitelist-based). |
 | `storage/` | Direct PostgreSQL SQL: chat (`chat_v5.py`), admin/users (`admin.py`), agent whitelist (`settings.py`), config and naming (`sql_config.py`), idempotent DDL (`migrations.py`), pagination (`pagination.py`), safe serialization (`serialization.py`), usage/cost (`usage.py`), budget (`budget.py`), artifacts (`artifacts.py`), write-only Flow trace (`chat_traces.py`), pure SQL builders (`sql_builders.py`). |
 
 The detailed module map by layer lives in
@@ -77,6 +79,15 @@ plugin is its built OUTPUT under `resource/owismind-app/` (section 5).
 | Path | Lives here | Status |
 |---|---|---|
 | `src/` | Application code: `main.js`, `App.vue`, `components/`, `views/`, `stores/`, `services/`, `router/`, `i18n/`, `styles/`, `composables/`, `registries/`, `assets/` | Source |
+| `src/views/` | Page-level Vue components: `ChatView.vue`, `AgentsView.vue` (agent catalogue and editorial card), `AdminView.vue` (settings + agent whitelist + Quotas tab), `SettingsView.vue` ("My account"), `FeedbackView.vue`, `FaqView.vue`, `ProjectView.vue`, `PagePlaceholder.vue` | Source |
+| `src/stores/` | Pinia stores by domain: `chat.js`, `session.js`, `evidence.js`, `conversationList.js`, `conversationTree.js`, `agentPick.js`, `prefs.js`, `ui.js` | Source |
+| `src/services/` | Backend bridge: `backend.js` (all `fetch` calls to `/owismind-api/*`) | Source |
+| `src/composables/` | Composable models and pure Vue composables: `budgetModel.js` (budget/usage client model), `evidenceModel.js`, `evidenceProof.js`, `timelineModel.js`, `sqlPretty.js`; plus `useChatStream.js`, `useMarkdown.js`, `useTr.js`, `useClickOutside.js`, `useToasts.js`, `useReducedMotion.js` | Source |
+| `src/registries/` | Static registries: `timelineSteps.js`, `faqContent.js` | Source |
+| `src/assets/` | Static assets bundled by Vite: `orange-logo.png` (the REAL Orange brand logo, always used via `<img :src="logoUrl">`, never replaced by a CSS shape) | Source |
+| `src/styles/` | Global CSS: `tokens.css` (all semantic design tokens, including Orange charter tokens), `base.css` (reset + shared animations) | Source |
+| `src/components/shell/` | App shell: `AppLayout.vue`, `MainTop.vue`, `Sidebar.vue` | Source |
+| `src/components/ui/` | Shared primitives: `Button.vue`, `Modal.vue`, `Tabs.vue`, `Icon.vue`, `Menu.vue`, `ToastHost.vue`, `icons.js`, `index.js` | Source |
 | `public/` | Assets copied as-is (`favicon.svg`) | Source |
 | `test/` | Pure `node:test` tests (outside `src/`, without Vue or dataiku) | Source, never built/zipped |
 | `vite.config.js` | CANONICAL Vite config: `base: /plugins/owismind/resource/owismind-app/`, `outDir: ../resource/owismind-app`, `emptyOutDir: true` | Source, do not change without a rebuild + re-wiring of `body.html` |
@@ -159,16 +170,20 @@ goes through the zip; an agent-only change does not touch `ready-for-dataiku/`.
 | `agents/SalesDrive_revenue_expert.py` | The revenue expert sub-agent (`agent:bHrWLyOL`): UNDERSTAND -> RESOLVE -> QUERY -> RENDER pipeline | Source |
 | `agents/README.md` | Agent system documentation (pipeline, deployment) | Source |
 | `recipes/` | Design-time Flow recipes: `profile_dataset_recipe.py`, `build_value_index_recipe.py`, `build_value_catalog_recipe.py` (+ `README.md`) | Source; deployed as Python recipes in the Flow, not via the zip |
-| `tools/` | Agent tools and semantic model: `attribute_lookup_tool.py`, `semantic_model/` sub-folder (`build_aligned_semantic_model.py`, `update_aligned_semantic_model.py`, `README.md`), `README.md` | Source |
+| `tools/` | Agent tools and semantic model: `attribute_lookup_tool.py` (full-text `ILIKE` resolver, wired as a built-in tool of the orchestrator as of 2026-06-18); `semantic_model/` sub-folder: `build_aligned_semantic_model.py`, `update_aligned_semantic_model.py`, `dump_semantic_model.py`, `migrate_semantic_model_to_project.py`, `remap_semantic_model.py`, `MODEL.md`, `README.md`; `README.md` | Source |
 | `tests/` | DSS-free agents `unittest` suite: `test_profiler.py`, `test_dataset_expert.py`, `test_langgraph_agents.py` (registry anti-drift test), `test_attribute_lookup.py` | Source |
 | `README.md`, `CLAUDE.md` | Master documentation and engineering notes | Source |
 
 The agents are standalone files: they import only stdlib + `dataiku` + `langgraph`, never the plugin
 package. Running the tests: `python3 -m unittest discover -s dataiku-agents/tests`.
 
-> IN FLUX: `tools/attribute_lookup_tool.py` is BUILT and unit-tested
-> (`tests/test_attribute_lookup.py`), but NOT yet wired into the sub-agent. Its predecessor, the
-> managed tool `dataset_lookup` (`9FEzVZk`) and the `lookup` intent, were REMOVED on 2026-06-18.
+> IN FLUX: `tools/attribute_lookup_tool.py` is BUILT, unit-tested (`tests/test_attribute_lookup.py`),
+> and (as of 2026-06-18) wired as a BUILT-IN tool of the ORCHESTRATOR (dispatched inline in `node_tools`,
+> like `show_table`/`current_date`). The sub-agent is UNCHANGED. The predecessor managed tool
+> `dataset_lookup` (`9FEzVZk`) and the `lookup` intent were REMOVED on 2026-06-18. A DSS RUN TEST
+> validated the lookup path (~14 s for a fast attribute search). Remaining DSS action: update the Custom
+> Python tool in DSS, re-paste the orchestrator, and delete the old `Drive_Revenues_resolve_filter_value`
+> tool (never called, wastes pandas RAM).
 
 > ROADMAP: the recipe `build_value_catalog_recipe.py` produces `DRIVE_Revenues_Value_Catalog`, and the
 > Python resolver `Drive_Revenues_resolve_filter_value` that would consume it, are planned but NOT wired
@@ -186,7 +201,10 @@ figures, for example `chat_v4` vs the actual `chat_v5`, or old test/zip-entry co
 | Path | Lives here | Status |
 |---|---|---|
 | `architecture.md`, `backend-api.md`, `frontend.md`, `data-model.md`, `security.md`, `build-test-deploy.md`, `evidence-trust-layer.md` | Engineering guides by theme | Source (sometimes stale on the figures) |
-| `cadrage/` | Functional specification + Dataiku reference guide + validated snippets | Source |
+| `cadrage/CHARTE_ORANGE_UI.md` | **Orange charter (self-contained, authoritative)**: palette tokens, square geometry, typography, component recipes, banned patterns, real logo rule. Read BEFORE any styling work (rule #10). | Source |
+| `cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` | Dataiku engineering reference: build/package/zip, SQL direct, LLM Mesh + streaming, DSS gotchas | Source |
+| `cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` | Functional specification (product intent) | Source |
+| `cadrage/code_samples_dataiku.md` | Validated Dataiku code snippets (streamed agent call, SQL usage extraction, direct SQL table) | Source |
 | `superpowers/specs/`, `superpowers/plans/` | Frozen design specs and plans | Source |
 | `questions_asked.md` | Corpus of 817 real questions used for the analysis | Source |
 | `screenshots/` | Reference screenshots | Source |
@@ -203,7 +221,27 @@ The memory prevails over the `docs/cadrage/` guides. Maintained by the `/log-ses
 | `LESSONS.md` | Journal of the `L0xx` lessons (context / failure / solution / proof / source / date) | Source |
 | `sessions/` | One log per session day (~16 files `YYYY-MM-DD.md`) | Source |
 
-## 11. `.claude/` and `graphify-out/`: assistant tooling
+## 11. `project-documentation/`: the structured English documentation set
+
+Structured documentation produced in 2026-06-18 (English, 53+ files). This is the canonical prose reference for all engineering layers. It is version-controlled source (not generated): never delete or regenerate it with a script.
+
+| Path | Lives here | Status |
+|---|---|---|
+| `README.md` | Portal: one-page navigation guide to the entire documentation tree | Source |
+| `00-overview/` | Project overview and glossary | Source |
+| `01-user-guide/` | User-facing guides (conversations, agents, settings, evidence) | Source |
+| `02-architecture/` | Architecture overview, component map, data flow, security model | Source |
+| `03-frontend/` | Vue SPA internals, components, i18n, theming, build pipeline | Source |
+| `04-backend/` | Flask backend: routes, streaming, storage, Evidence Studio, security | Source |
+| `05-agents/` | LangGraph agent system, orchestrator, sub-agent, tools, deployment | Source |
+| `06-operations/` | Build/package/deploy runbooks, monitoring | Source |
+| `07-testing/` | Test strategy and suites | Source |
+| `08-decisions/` | Architecture decision records (ADR-0001 to ADR-0015) | Source |
+| `09-maintenance/` | Contributing conventions, repository map (this file), known gotchas | Source |
+| `presentation-customer-day/` | Customer Day pitch deck structure and speaker scripts | Source |
+| `.workdir/` | Internal research scratch (knowledge packs, conventions draft) - note: `.workdir/CONVENTIONS.md` section 1.3 states prose is French; that is STALE. The prose is English. | Source (scratch) |
+
+## 12. `.claude/` and `graphify-out/`: assistant tooling
 
 Claude Code tooling: skills, hooks, permissions. The `settings.json` and the skills are versioned; the
 local overrides and the graph are ignored.
@@ -222,7 +260,7 @@ Two additional Git hooks live under `.git/hooks/` (outside the versioned tree, i
 an LLM) in the background. The detail of the build/hooks chain is in
 [Build, packaging and deployment](../06-operations/02-build-package-deploy.md).
 
-## 12. Memo: the editing rule by zone
+## 13. Memo: the editing rule by zone
 
 | You modify... | You edit... | You do NOT touch... |
 |---|---|---|

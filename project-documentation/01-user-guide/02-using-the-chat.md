@@ -1,7 +1,7 @@
 # Using the chat
 
 > Audience: business user (analyst, sales representative, OWI/Orange manager). Last updated:
-> 2026-06-18. Summary: how to ask an agent a question in OWIsMind, set the cost/quality mode, follow
+> 2026-06-19. Summary: how to ask an agent a question in OWIsMind, set the cost/quality mode, follow
 > the agent working live, stop a generation, navigate the versions of a response and give feedback.
 
 The chat is the central screen of OWIsMind. There, you converse in natural language with an AI agent
@@ -28,9 +28,12 @@ microphone button and the send button.
 > automatically (`PromptBar.vue`, function `micClick`).
 
 Sending is blocked until certain conditions are met: no agent selected, agent unavailable, conversation
-still loading, or storage not configured. In these cases, the send button stays greyed out. As long as
-the backend has no SQL connection configured, the application displays a "storage not configured" state
-and the chat is inactive.
+still loading, storage not configured, or the monthly budget exhausted. In these cases, the send button
+stays greyed out. As long as the backend has no SQL connection configured, the application displays a
+"storage not configured" state and the chat is inactive. When a user's monthly budget has been fully
+consumed, a transparent banner appears above the input bar with the exact amounts spent vs. the limit
+and the reset date (i18n key `chat.quota_banner`); sending is unblocked again on the 1st of the
+following month when the budget resets automatically.
 
 ### Writing a good question: be precise
 
@@ -95,12 +98,13 @@ consume your monthly envelope of 50 € faster.
 
 The mode window presents the three modes as a list on the left and the detail of the selected mode on
 the right (description, cost gauge and speed gauge). Your choice applies only after you click
-**Validate**; **Cancel** closes it without changing anything. It is a preference that is attached to
-each question sent.
+**Apply** (i18n key `mode.validate`); **Cancel** closes it without changing anything. It is a
+preference that is attached to each question sent.
 
-> IN FLUX: the 50 €/month envelope is currently a cost benchmark, not a blocking ceiling. Consumption
-> tracking is in place (each response displays its tokens and its estimated cost), but automatic
-> BLOCKING on overrun is not yet enabled.
+The popup also shows a reminder: more powerful modes use up your monthly budget faster. Reserve High
+for questions that genuinely warrant it (key `mode.envelope_note`, referencing a $50/month envelope).
+The actual limit for your account is set by an administrator and is visible in [My account and
+budget](05-account-and-budget.md).
 
 Cost tracking is also visible under each response: a discreet line shows the input tokens, the output
 tokens and the estimated cost of the exchange.
@@ -213,6 +217,7 @@ conversation later. It helps the OWI team improve the agents.
 ## See also
 - [Getting started](01-getting-started.md) - open the application and ask a first question.
 - [Understanding the results](03-understanding-evidence.md) - the Evidence Studio panel on the right (badge, filters, drill, chart).
+- [My account and budget](05-account-and-budget.md) - the monthly budget gauge, what happens when the budget is reached, and how to check your usage.
 - [FAQ and troubleshooting](04-faq-and-troubleshooting.md) - practical answers and frequent error messages.
 - [The orchestrator](../05-agents/02-orchestrator.md) - how the agent routes your question and the honesty firewall (technical reader).
 - [Backend - streaming and runs](../04-backend/03-streaming-and-runs.md) - the polling mechanism behind the live timeline (technical reader).

@@ -1,10 +1,11 @@
 # Backend - overview and structure
 
-> Audience: backend developer. Last updated: 2026-06-18. Summary: how the OWIsMind Flask backend
+> Audience: backend developer. Last updated: 2026-06-19. Summary: how the OWIsMind Flask backend
 > is assembled (thin bootstrap, `/owismind-api` blueprint, `before_request` hooks), how the
 > `python-lib/owismind/` package is split into sub-packages (api, agents, evidence, security,
 > storage), and which cross-cutting conventions (Python 3.9, stable error codes, owner-scoping)
-> govern the whole layer.
+> govern the whole layer. Reflects the 2026-06-18 additions: monthly budget system
+> (`storage/budget.py`), agent profile metadata, and the 21-route API surface.
 
 The OWIsMind backend is a **STANDARD DSS WebApp with a Python backend** (`hasBackend: "true"`
 in `webapp.json`). It is a **Flask** server that acts as an intermediary between the Vue 3 frontend (served
@@ -86,7 +87,7 @@ flowchart TD
       SEC["security/<br/>identity + validation"]
       AG["agents/<br/>stream_manager, streaming,<br/>context, discovery"]
       EV["evidence/<br/>service, capture, sql_parse,<br/>chart_payload, throttle..."]
-      ST["storage/<br/>sql_config, migrations, chat_v5,<br/>admin, settings, usage..."]
+      ST["storage/<br/>sql_config, migrations, chat_v5,<br/>admin, settings, usage, budget..."]
     end
     API --> SEC
     API --> AG
@@ -170,16 +171,31 @@ a response, read-only and owner-scoped. The pure analysis (`sql_parse.py`, `quer
 ### 3.5 `storage/` - all application state in direct SQL
 
 The largest sub-package. It persists ALL the application state (conversations, messages, feedback,
-user registry, global settings, token/cost usage, artifacts) in **direct SQL via `SQLExecutor2`** on
-a PostgreSQL connection, **with no Flow at runtime** (with a single exception: the write-only trace
-dataset, `chat_traces.py`). Key modules: `sql_config.py` (the foundation: connection, physical naming
-`{PROJECT_KEY}_{namespace}_{logical}`, parameterization and identifier helpers), `migrations.py`
-(idempotent DDL, `_vN` strategy with no structural `ALTER`), `chat_v5.py` (two-phase writing,
-conversation tree, reads), `admin.py` and `settings.py` (user registry + agent whitelist),
-`usage.py` (usage accounting), plus the pure helpers `sql_builders.py`, `pagination.py`,
-`serialization.py`. The current chat table is `webapp_chat_v5` (never `webapp_chat_v4`). The complete
-data model is documented in
-[Backend - storage and data model](04-storage-and-data-model.md).
+user registry, global settings, token/cost usage, artifacts, budget overrides) in **direct SQL via
+`SQLExecutor2`** on a PostgreSQL connection, **with no Flow at runtime** (with a single exception:
+the write-only trace dataset, `chat_traces.py`). Key modules:
+
+- `sql_config.py`: the foundation - connection, physical naming `{PROJECT_KEY}_{namespace}_{logical}`,
+  parameterization and identifier helpers.
+- `migrations.py`: idempotent DDL, `_vN` strategy with no structural `ALTER`. Also owns the lazy
+  creation of `webapp_user_quota_v1` (the per-user budget override table, created on first
+  `/admin/budget/users` write).
+- `chat_v5.py`: two-phase writing, conversation tree, reads. The current chat table is
+  `webapp_chat_v5` (never `webapp_chat_v4`).
+- `admin.py` and `settings.py`: user registry + agent whitelist (stored in `webapp_settings_v1`),
+  including the admin-authored agent `profile` (tagline, description, capabilities, tools, icon,
+  badge).
+- `budget.py`: the **single source of truth for monthly credit math**. Functions: `usage_status`
+  (owner-scoped spend + resolved limit), `has_budget` (the `/chat/start` gate, fails OPEN on
+  storage error), `admin_overview`, `set_budget_config`, `set_user_quotas`, `clear_user_quotas`.
+  Carries an in-process config cache (TTL 30 s, busted on write) so the `/chat/start` hot path
+  does one DB read, not two.
+- `usage.py`: token and cost accounting (accumulates into `webapp_usage_monthly_v1` and lifetime in
+  `webapp_users_v1`).
+- `artifacts.py`: owner-stamped UPSERT and read of artifact specs (`webapp_artifacts_v1`) for the chart/table/kpi pipeline. Best-effort; a failure never aborts a run.
+- Pure helpers: `sql_builders.py`, `pagination.py`, `serialization.py`.
+
+The complete data model is documented in [Backend - storage and data model](04-storage-and-data-model.md).
 
 ## 4. Cross-cutting conventions (apply to the whole layer)
 
@@ -197,8 +213,9 @@ These rules are common to all the sub-packages; knowing them saves re-reading ea
 | `unauthenticated` | 401 | `resolve_identity` fails (except `/ping`). |
 | `storage_not_configured` | 409 | No SQL connection chosen (except `/ping` and `/me`). |
 | `agent_not_enabled` | 404 | `agent_key` forged/stale, does not resolve against the whitelist. |
-| `rate_limited` | 429 | Per-user spacing (< 1 s between two starts). |
+| `rate_limited` | 429 | Per-user spacing (< 1 s between two starts), or Evidence/usage throttle. |
 | `busy` | 503 | Global concurrency cap reached (8 runs). |
+| `monthly_quota_exceeded` | 402 | Monthly budget spent >= effective limit AND enforcement enabled. Gate evaluated before any write on `/chat/start`; fails OPEN on storage error. |
 | `<ValidationError.code>` | 400 | Invalid payload (the exact code comes from the validator). |
 | `forbidden` | 403 | Non-admin caller on an `/admin/*` route. |
 

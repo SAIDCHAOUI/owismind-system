@@ -1,9 +1,9 @@
 # Backend - storage and data model
 
-> Audience: backend developer, DBA. Last updated: 2026-06-18. Summary: how the OWIsMind backend
+> Audience: backend developer, DBA. Last updated: 2026-06-19. Summary: how the OWIsMind backend
 > persists all of its state in direct SQL (PostgreSQL via `SQLExecutor2`), with the detail of each
-> `_vN` table, the conversation tree, the 3-level usage accounting, and the instance safety
-> guardrails.
+> `_vN` table, the conversation tree, the 3-level usage accounting, the per-user monthly budget
+> system, and the instance safety guardrails.
 
 ## 1. Structuring principles
 
@@ -34,9 +34,9 @@ The non-negotiable invariants (project rule #3, memory L008) govern the whole su
 
 > IN FLUX (doc legacy vs code divergence): `docs/data-model.md` is OUTDATED. It describes
 > `webapp_chat_v4` and `CONV_TITLE_MAXLEN = 140`, whereas the LIVE code uses `webapp_chat_v5` (usage
-> columns added) and `CONV_TITLE_MAXLEN = 56`. It mentions neither `webapp_usage_monthly_v1`, nor
-> `webapp_artifacts_v1`, nor the lifetime columns of `webapp_users_v1`. The CODE prevails; this page
-> reflects it.
+> columns added) and `CONV_TITLE_MAXLEN = 56`. It mentions neither `webapp_usage_monthly_v1`,
+> `webapp_artifacts_v1`, `webapp_user_quota_v1`, nor the lifetime columns of `webapp_users_v1`. The
+> CODE prevails; this page reflects it.
 
 ## 2. `sql_config.py`: the configuration and safety foundation
 
@@ -95,7 +95,9 @@ prefix was ignored instead of failing silently.
 `storage_status()` returns the resolved config for the admin area: `configured`, `connection`,
 `project_key`, `project_key_source`, `table_prefix` (effective), `table_prefix_input`,
 `table_prefix_ignored`, `namespace`, `traces_dataset`, and the `tables` mapping (physical names of
-`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`, `webapp_usage_monthly_v1`).
+`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`, `webapp_usage_monthly_v1`,
+`webapp_user_quota_v1`). Note: `webapp_artifacts_v1` is not surfaced in this mapping because it
+is managed lazily by the artifact pipeline, which has its own `ensure_artifacts_table` call.
 
 ## 3. `migrations.py`: idempotent DDL and the `_vN` strategy
 
@@ -105,7 +107,7 @@ structural `ALTER`.
 
 Logical names: `CHAT_V5_LOGICAL = "webapp_chat_v5"`, `USERS_V1_LOGICAL = "webapp_users_v1"`,
 `SETTINGS_V1_LOGICAL = "webapp_settings_v1"`, `USAGE_MONTHLY_V1_LOGICAL = "webapp_usage_monthly_v1"`,
-`ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"`.
+`ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"`, `USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"`.
 
 Chat table history: v2 (+`generated_sql`) -> v3 (+feedback columns) -> v4
 (+`parent_exchange_id`) -> **v5 (+token/cost usage columns)**. At each switch the new table starts
@@ -114,7 +116,7 @@ surfacing).
 
 ### 3.1 Data model diagram
 
-Canonical home of the SQL data model (this page). The 5 tables and the `parent_exchange_id` tree edge:
+Canonical home of the SQL data model (this page). The 6 tables and the `parent_exchange_id` tree edge:
 
 ```mermaid
 erDiagram
@@ -173,16 +175,26 @@ erDiagram
         TEXT artifacts
         TIMESTAMP created_at
     }
+    webapp_user_quota_v1 {
+        TEXT user_id PK
+        DOUBLE limit_usd
+        TIMESTAMP expires_at
+        TEXT note
+        TIMESTAMP updated_at
+        TEXT updated_by
+    }
     webapp_chat_v5 ||--o| webapp_chat_v5 : "parent_exchange_id (tree)"
     webapp_chat_v5 ||--o| webapp_artifacts_v1 : "1:0..1 per exchange_id"
+    webapp_users_v1 ||--o| webapp_user_quota_v1 : "0..1 per-user override"
 ```
 
 Reading note: no physical SQL foreign-key constraint links these tables (the coupling is at the
 application level). `user_id` is not a declared foreign key toward `webapp_users_v1`; it serves as the
 owner scoping key. The `parent_exchange_id` edge is a logical self-reference (the conversation tree,
-section 7).
+section 7). The `webapp_user_quota_v1` relation is a logical join on `user_id`: a row exists ONLY
+for users who have an admin-set override; absent row = global default applies.
 
-### 3.2 The 5 tables and their columns
+### 3.2 The 6 tables and their columns
 
 **`webapp_chat_v5`**: one chat exchange per row, written in two phases.
 
@@ -233,6 +245,25 @@ monthly quota is a single lookup by PK, with no reset job (a new month is natura
 `exchange_id`. Columns: `user_id`, `artifacts` (JSON), `created_at`. Only the SPEC is stored, never the
 data rows (reused from the captured `generated_sql.result`).
 
+**`webapp_user_quota_v1`** (NEW, 2026-06-18): per-user monthly budget override, PK `user_id`. A row
+exists ONLY for users who have an admin-set custom limit; the absence of a row means the global
+default applies. Columns:
+
+| Column | Type | Role |
+|---|---|---|
+| `user_id` | `TEXT PRIMARY KEY` | The DSS login of the user who got a custom limit. |
+| `limit_usd` | `DOUBLE PRECISION NOT NULL` | The custom monthly cap in US dollars. |
+| `expires_at` | `TIMESTAMP` | `NULL` = permanent override; a future timestamp = temporary boost that lapses on its own (no reset job, the active test is `expires_at > now()`). |
+| `note` | `TEXT` | Optional admin memo (bounded to 280 chars by the route). |
+| `updated_at` | `TIMESTAMP NOT NULL DEFAULT now()` | Last update timestamp. |
+| `updated_by` | `TEXT` | The admin user who set the override. |
+
+This table is created LAZILY on the first write (like all other tables): `ensure_user_quota_table()`
+is called from `budget.set_user_quotas`, `budget.clear_user_quotas`, and `budget.usage_status`.
+An absent table is transparent: the `usage_status` JOIN returns no override row, and the global
+default applies automatically. Per the no-ALTER rule, this is a brand-new `_v1` table; existing
+usage and settings tables are untouched.
+
 ### 3.3 Additive ADD COLUMN: the only relaxation of no-ALTER
 
 `_ALTERS_BY_LOGICAL` carries only `USERS_V1_LOGICAL`: 4 `ADD COLUMN IF NOT EXISTS` clauses
@@ -256,7 +287,7 @@ ancestors CTE walks up by PK `exchange_id`, so no dedicated index.
 `query_to_df("SELECT 1 ...", pre_queries=pre, post_queries=["COMMIT"])`. `CREATE TABLE IF NOT EXISTS`
 stays idempotent and concurrency-safe if two requests cross. Public wrappers, called on the first
 write of each domain: `ensure_chat_table()`, `ensure_users_table()`, `ensure_settings_table()`,
-`ensure_usage_monthly_table()`, `ensure_artifacts_table()`.
+`ensure_usage_monthly_table()`, `ensure_artifacts_table()`, `ensure_user_quota_table()`.
 
 ## 4. `chat_v5.py`: two-phase write, caps, reads
 
@@ -406,7 +437,7 @@ branching point, nor the other branches.
 The anchor lookup is done by PK `exchange_id`; the values are pre-escaped on the caller side, and
 `max_depth` / `cap` are coerced to int in the builder.
 
-## 8. 3-level usage and registry / whitelist
+## 8. 3-level usage accounting, monthly budget, and registry / whitelist
 
 ### 8.1 3-level usage accounting
 
@@ -434,11 +465,81 @@ fixed SQL expression, never user input. The token/cost fragments passed to the b
 server-computed numeric LITERALS (`str(int)`, `"{:.10f}".format(cost)`); only `user_id` is escaped via
 `sql_value`.
 
-> IN FLUX: the **50 EUR/user/month monthly quota is NOT implemented**. Only the STORAGE is ready
-> (`webapp_usage_monthly_v1`, read by PK lookup), the BLOCKING (hook envisaged before `start_run`)
-> remains to be done.
+### 8.2 Monthly per-user budget (`storage/budget.py`)
 
-### 8.2 Users/admins registry (`admin.py`)
+`budget.py` (NEW, 2026-06-18) is the **single source of truth for the monthly limit math**. The system
+is in US dollars (matching the `estimatedCost` already tracked by `webapp_usage_monthly_v1`). The
+default rolling credit is `DEFAULT_MONTHLY_LIMIT_USD = 50.0`.
+
+**Two configuration layers** resolve the effective limit for a user, in priority order:
+
+1. **Per-user override** (`webapp_user_quota_v1`): an admin-set custom limit, permanent or temporary.
+   Active test: `expires_at > now()` evaluated in SQL (DB clock). A row for the user must exist AND
+   be active; otherwise this layer is bypassed.
+2. **Global config** (`webapp_settings_v1`, key `monthly_budget`): a JSON dict holding `limit_usd`
+   (the default cap), `enabled` (on/off enforcement switch), and an optional time-boxed global temp
+   boost (`temp_limit_usd` + `temp_expires_at`). Active test for the temp boost: comparison in Python
+   against the app clock (`datetime.now() < datetime.fromisoformat(ts)`).
+
+**Resolution order for one user**: ACTIVE per-user override > ACTIVE global temp boost > global
+default. The result is a `limit_source` tag: `user_permanent`, `user_temp`, `global_temp`, or
+`default`.
+
+**In-process config cache**: `get_budget_config()` caches the global config with a 30-second TTL
+(`_CONFIG_TTL_SECONDS`). This is lock-free (tuple assignment is atomic under the GIL), keeping the
+`/chat/start` hot path to a single DB read. `set_budget_config` busts the cache immediately. A
+slightly stale limit (at most 30 s) is harmless at month-scale granularity.
+
+**`has_budget(user_id)`**: the enforcement gate. Returns `(ok, status)` where `ok` is `False` only
+when enforcement is enabled and `spent >= limit`. It RAISES on a storage error; the `/chat/start`
+route catches and **fails open** (the run is allowed, and the spend is still recorded for next time).
+
+**`usage_status(user_id)`**: owner-scoped single-query read (3-table JOIN: `webapp_usage_monthly_v1`
++ `webapp_user_quota_v1` + `webapp_users_v1`) that returns the full public status dict: `period_start`,
+`next_reset`, `spent_usd`, token counts, `request_count`, `lifetime` counters, `limit_usd`,
+`limit_source`, `limit_expires_at`, `enforced`, `remaining_usd`, `blocked`, `default_limit_usd`,
+`currency`. Never returns `None` (a brand-new user yields an all-zero status against the resolved limit).
+
+**`admin_overview()`**: same JOIN, no `user_id` filter, returns the global config + all registered
+users with their resolved limits and spend (bounded to `MAX_OVERVIEW_USERS = 1000`). Admin-gated by
+the route.
+
+**`set_budget_config(limit_usd, enabled, ...)`**: persists the global config to `webapp_settings_v1`
+under key `monthly_budget`. The temp boost is handled independently so editing the default limit
+never disturbs an active boost: three exclusive modes for the temp - `clear_temp`, new `temp_limit_usd
++ temp_days` (expiry stamped from `datetime.now() + timedelta(days=temp_days)`), or `preserve_temp`
+(keep the existing boost as-is).
+
+**`set_user_quotas(user_ids, limit_usd, expires_days, note, updated_by)`**: UPSERT one or more user
+overrides in ONE committed transaction (all upserts in `pre_queries`, single COMMIT). Inputs are
+pre-validated by the route. `expires_days = None` = permanent.
+
+**`clear_user_quotas(user_ids, updated_by)`**: DELETE the override rows for these users (reverts
+them to the global limit).
+
+**Read-only guards**: every budget READ runs with `SET LOCAL statement_timeout TO '30000'` and `SET
+LOCAL transaction_read_only TO on` (same pattern as `evidence/service.py` and `storage/artifacts.py`).
+Writes use `SET LOCAL statement_timeout TO '30000'` only (the quota write is a small single-row
+UPSERT). Budget reads are O(1) PK lookups; the timeout is a safety bound, not a performance necessity.
+
+**Enforcement in `/chat/start`**: the route calls `budget.has_budget(user_id)` BEFORE calling
+`start_run`. If `ok` is `False`, it returns `402 monthly_quota_exceeded` with the current budget
+status so the frontend can show exactly what is left. Admins ARE subject to the budget.
+
+> CORRECTION: earlier iterations of the documentation stated that budget blocking was "not
+> implemented". That is wrong. The blocking IS coded and enforced in `api/routes.py /chat/start`
+> (402, fail-open). It has not yet been validated on the DSS instance, but the code path is active.
+
+**`GET /usage`** (throttled by `evidence_throttle.usage_can_accept`, separate bucket from Evidence):
+returns the caller's own budget status. Powers the profile Budget card and the chat budget banner.
+
+**`GET/POST /admin/budget`**: admin global config + overview. POST preserves the active temp boost
+unless explicitly touched (via `preserve_temp`).
+
+**`POST /admin/budget/users`**: set or clear overrides for one/several/all users. Payload:
+`{user_ids, limit_usd, expires_days, note, action}` where `action = "clear"` drops the rows.
+
+### 8.3 Users/admins registry (`admin.py`)
 
 `record_user(identity)` is an idempotent UPSERT (PK `user_id`) that refreshes `user_groups`/`last_seen`,
 with `display_name = COALESCE(u.display_name, EXCLUDED.display_name)` (keeps the stored name if it
@@ -451,18 +552,27 @@ PostgreSQL READ COMMITTED, otherwise both would evaluate "no admin" before commi
 Other helpers: `is_admin(user_id)`, `count_admins()` (prevents removing the last admin), `list_users()`
 (oldest-first, bounded `MAX_USERS_LISTED = 1000`), `set_admin(user_id, value)` (via `bool_literal`).
 
-### 8.3 Global settings and agents whitelist (`settings.py`)
+### 8.4 Global settings and agents whitelist (`settings.py`)
 
 `get_setting(key, default)` / `set_setting(key, value, updated_by)` form a generic JSON key-value store
 (idempotent UPSERT on PK `setting_key`). A malformed stored JSON never breaks a query (logged +
-`default`).
+`default`). Both operations run with `SET LOCAL statement_timeout TO '30000'`; reads additionally use
+`SET LOCAL transaction_read_only TO on` (all settings reads are single-row PK lookups on the hot path).
 
 The **agents whitelist** lives under `SETTING_ENABLED_AGENTS = "enabled_agents"`: a JSON list of
-`{logical_key, project_key, agent_id, label}`. It is the SERVER SOURCE OF TRUTH for agent resolution.
+`{logical_key, project_key, agent_id, label, profile}`. The `profile` key (NEW, 2026-06-18) holds the
+admin-authored display copy for the agent card (tagline, description, capabilities, tools, icon, badge).
+This profile is stored INSIDE the existing `enabled_agents` JSON; no separate table was created.
 `resolve_enabled_agent(logical_key)` is the chat's ENFORCEMENT POINT: the front only sends an opaque
 `logical_key` (never a raw `agent_id`), and a forged or stale key matches nothing and returns `None`
 (it can never resolve to an executable agent). `get_enabled_agents()` / `set_enabled_agents()` are the
 typed helpers.
+
+The **monthly budget global config** lives under key `monthly_budget` (see section 8.2). It is the only
+other persistent key that the current backend reads on the chat hot path.
+
+For the security details of `validate_agent_meta` (which sanitizes the `profile` fields before storage)
+see [Backend - security and validation](06-security-and-validation.md) section 3.7.
 
 ## 9. Traces: write-only dataset (the only exception to "no Flow")
 
@@ -494,8 +604,9 @@ Mechanisms (`chat_traces.py`):
 
 ## 10. Connections to the rest of the system
 
-- **Lifecycle of an exchange**: `POST /chat/start` -> phase 1 `save_user_message` (request thread) ->
-  the `stream_manager` worker runs the agent (LLM Mesh) -> at the end: phase 2
+- **Lifecycle of an exchange**: `POST /chat/start` -> budget gate (`budget.has_budget`, 402 if
+  blocked, fail-open on error) -> phase 1 `save_user_message` (request thread) -> the
+  `stream_manager` worker runs the agent (LLM Mesh) -> at the end: phase 2
   `save_assistant_message` + `record_usage` + `save_trace` + `save_artifacts`, all best-effort.
 - **Reloading a conversation**: `GET /conversation` -> `messages_for_session`; sidebar list ->
   `list_conversations`.
@@ -504,7 +615,13 @@ Mechanisms (`chat_traces.py`):
 - **Evidence Studio**: creates NEITHER table nor column; re-reads `generated_sql` from
   `webapp_chat_v5` (owner-scope) and re-derives on the fly; `/evidence/meta` returns the `artifacts` +
   the captured `result` (projected out of the normal thread by `_project_sql_items`).
-- **Admin**: `admin.is_admin` gates the `/admin/*` routes; `storage_status` feeds the admin area.
+- **Budget status**: `GET /usage` -> `budget.usage_status` (3-table JOIN, owner-scoped); powers the
+  Settings Budget card and the chat budget banner.
+- **Admin budget**: `GET /admin/budget` -> `budget.admin_overview`; `POST /admin/budget` ->
+  `budget.set_budget_config`; `POST /admin/budget/users` -> `budget.set_user_quotas` or
+  `budget.clear_user_quotas`.
+- **Admin**: `admin.is_admin` gates the `/admin/*` routes; `storage_status` feeds the admin area
+  (now surfaces `user_quota` in the `tables` mapping).
 
 ## 11. Summary caps (instance safety)
 
@@ -521,6 +638,9 @@ Mechanisms (`chat_traces.py`):
 | `MAX_RESULT_JSON_CHARS` / `MAX_ITEM_SQL_CHARS` | 100 000 / 20 000 | `evidence/capture.py` |
 | `MAX_HISTORY_LIMIT` / `MAX_CONV_PAGE` | 50 / 60 | `security/validation.py` |
 | `_MAX_IDENTIFIER_BYTES` (NAMEDATALEN limit) | 63 | `sql_config.py` |
+| `MAX_OVERVIEW_USERS` | 1000 | `storage/budget.py` |
+| `DEFAULT_MONTHLY_LIMIT_USD` | 50.0 (USD) | `storage/budget.py` |
+| `_CONFIG_TTL_SECONDS` (budget config cache TTL) | 30.0 s | `storage/budget.py` |
 
 ## See also
 - [Backend - overview and structure](01-overview-and-structure.md) - where the `storage/` sub-package fits into the backend.

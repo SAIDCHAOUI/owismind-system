@@ -8,7 +8,9 @@
 **⛔ RÈGLE NON NÉGOCIABLE #9 (2026-06-17) : tiret cadratin `—` (U+2014) et demi-cadratin `–` (U+2013)
 BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits, réponses chat). Signature
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
-`perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif : `grep -rlP '\xe2\x80\x9[34]'`. Voir L084.
+`perl -CSD` sur fichiers à glyphes multioctets type `⟦⟧`). Vérif = **scan Python** (`t.count('—')`/`('–')`) ;
+⚠️ le `grep -rlP '\xe2\x80\x9[34]'` du protocole **échoue silencieusement sur le BSD grep** de ce Mac (faux
+négatifs ; installer `ggrep` GNU sinon). Voir L084 + **L093**.
 
 **🟠 RÈGLE NON NÉGOCIABLE #10 (2026-06-18/19) : CHARTE ORANGE = style UI obligatoire à CHAQUE travail de
 style.** Source auto-suffisante : **`docs/cadrage/CHARTE_ORANGE_UI.md`** (à LIRE avant de styliser ; la maquette
@@ -17,7 +19,22 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-**🎨 REFONTE UI "MAQUETTE ORANGE" (multi-agents) + CHARTE DURABLE (2026-06-19) - ⏳ CODÉ + build + zip,
+**📚 DOCUMENTATION ULTRA-COMPLÈTE + PLATEFORME WEB "PARCOURS" (2026-06-19 Run 2, session autonome nuit) -
+✅ LIVRÉ LOCAL (doc + site, commit de session).** Doc `project-documentation/` **corrigée + complétée** par
+workflow Sonnet (11 clusters, ownership par fichier, vérif adversariale + intégration) : budget blocage = **codé**
+(`/chat/start` 402 fail-open, plus "non implémenté") ; EN/FR de `CONVENTIONS.md` §1.3 corrigé (doc = **anglais**) ;
+3 features 2026-06-18 ajoutées (fiches d'agent admin `validate_agent_meta`, budget/quota `storage/budget.py`+
+`webapp_user_quota_v1`, charte/UI Orange + rail) ; **+5 fichiers** (user-guide `05-account-and-budget`/
+`06-agents-and-administration`, ADR `0013`/`0014`/`0015`) ; **61 .md** propres (21 routes, build->fichiers->zip
+détaillé + matrice). **Plateforme `project-documentation/site/`** = **HTML/CSS offline** (double-clic `index.html`),
+**parcours descendant** 8 pages (niveau 0 accueil -> 7 ADR), chrome JS (rail+topbar+TOC scrollspy+pager+recherche+
+thème persistant clé `owi-theme`), **~30 diagrammes SVG faits main** (4 couches, séquence chat 15 étapes, boucles
+d'agent, pipeline build->zip...), **vrai logo** `assets/orange-logo.png`. **QA navigateur réel (Playwright + http
+local)** = OK (2 thèmes + persistance, logo, diagrammes denses aérés). **Bonus** : 12 em-dash corrigés dans
+`Plugin/owismind/resource/compute_available_connections.py`. **⚠️ L093 : `grep -P` échoue sur le BSD grep du Mac
+-> auditer les em-dash en PYTHON.** Détail -> `sessions/2026-06-19.md` Run 2.
+
+**🎨 REFONTE UI "MAQUETTE ORANGE" (multi-agents) + CHARTE DURABLE (2026-06-19 Run 1) - ⏳ CODÉ + build + zip,
 NON validé DSS.** L'user a fourni une **maquette HTML** (Account & Admin) ; refonte du style des vraies pages
 "comme la maquette" via **6 agents Sonnet en parallèle** (découpage **par ownership de fichier**, brief charte
 commun, `Tabs.vue`/`tokens.css`/i18n intouchables) : `foundation` (chrome partagé + primitives ; ajout
@@ -388,7 +405,17 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-19 (refonte UI "maquette Orange" multi-agents + charte durable) → détail `sessions/2026-06-19.md`
+## 🧭 Dernière session - 2026-06-19 Run 2 (doc ultra-complète + plateforme web "parcours") → détail `sessions/2026-06-19.md` Run 2
+- **Doc `project-documentation/` corrigée + complétée** (workflow 23 agents Sonnet, ownership/fichier + vérif
+  adversariale) : périmés corrigés (budget = **codé** ; doc = **anglais**), 3 features 2026-06-18 ajoutées,
+  **+5 fichiers** (user-guide 05/06, ADR 0013/0014/0015), **61 .md** propres, 21 routes, build->zip détaillé.
+- **Plateforme `project-documentation/site/`** (workflow 10 agents Sonnet) = **HTML/CSS offline** en **parcours**
+  descendant (8 pages, niveau 0 -> 7), chrome JS, ~30 **diagrammes SVG**, **vrai logo**, thème persistant.
+  **QA Playwright réel** OK (2 thèmes, diagrammes denses aérés). Ouvrir `site/index.html` au double-clic.
+- **Bonus + leçon** : 12 em-dash corrigés dans `compute_available_connections.py` ; **L093** : `grep -P` faux
+  négatif sur BSD grep (Mac) -> audit em-dash **en Python**. Em-dash **préexistants** hors livrable signalés à l'user.
+
+## Avant - 2026-06-19 Run 1 (refonte UI "maquette Orange" multi-agents + charte durable) → détail `sessions/2026-06-19.md`
 - **6 agents Sonnet en parallèle** (ownership par fichier, brief charte commun) ont restylé les pages "comme la
   maquette" fournie par l'user : `foundation` (chrome + primitives, `--fw-heavy:800`), `shell`, `settings`,
   `admin` (+ modale profil), `agents`, `modepicker`. Carré/aplat/orange rare ; `Button`/`Modal` partagés -> chat hérite.
@@ -615,6 +642,13 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0📚NEW. **DOC + PLATEFORME WEB (2026-06-19 Run 2) - ✅ livrées local.** (a) Ouvrir
+   `project-documentation/site/index.html` (double-clic) pour parcourir la doc en parcours (offline, charté Orange).
+   (b) **Décider du sort des em-dash PRÉEXISTANTS hors livrable** (NON introduits cette session) : surtout
+   `Plugin/owismind/frontend/test/*.test.js` (13), `docs/cadrage/CHARTE_ORANGE_UI.md`, `docs/scaling/PLAN_WEBAPP.md`,
+   `memory/*` (souvent citations de la règle), `.claude/skills/*` (exclus ADR-0012), `docs/agentic-research/*`
+   (gitignoré), `style-reference/*` (à supprimer). (c) **Remplacer `grep -P` par Python** (ou `ggrep`) dans le
+   protocole de vérif règle #9 (L093). `project-documentation/.workdir/` = scratch supprimable. Aucune incidence DSS.
 0🎨NEW. **DÉPLOYER + VALIDER la refonte UI "maquette Orange" (2026-06-19)** : **upload zip** (**79 entrées,
    `index-BHeG2NRY.js`**, **vrai logo png bundlé**). ⚠️ **Ce zip embarque AUSSI le python-lib non encore
    déployé des sessions 2026-06-18 (fiches d'agent `validate_agent_meta`/`/agents` + budget `storage/budget.py`).

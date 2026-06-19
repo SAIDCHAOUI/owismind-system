@@ -1,6 +1,6 @@
 # Understanding Results (Evidence Studio)
 
-> Audience: business user. Last updated: 2026-06-18. Summary: this guide explains the Evidence Studio
+> Audience: business user. Last updated: 2026-06-19. Summary: this guide explains the Evidence Studio
 > panel (trust badge, sources, calculation, captured result, drill, exploration, collapsed SQL,
 > Chart/Table/KPI tabs) and why every figure shown comes from a real SQL result, never from a fabrication.
 
@@ -177,5 +177,6 @@ made up: you are told honestly what is missing.
 ## See also
 - [Using the chat](02-using-the-chat.md) - ask a question, choose the agent and the mode, follow the timeline.
 - [FAQ and troubleshooting](04-faq-and-troubleshooting.md) - practical answers and common error messages.
+- [Agents and administration](06-agents-and-administration.md) - the agents library and the admin console.
 - [Backend - Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md) - for the technical reader: capture, verification levels, artifacts pipeline.
 - [Security Model](../02-architecture/04-security-model.md) - read-only re-reads, owner-scoping, the frontend never chooses table or connection.

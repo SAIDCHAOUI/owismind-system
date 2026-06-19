@@ -1,8 +1,9 @@
 # Backend - security and validation
 
-> Audience: backend developer, security. Last updated: 2026-06-18. Summary: code-level detail of identity
-> resolution, payload validation, admin gating (403), log hygiene, and defense in depth (sanitize on read AND
-> on write) that implement the security model summarized by the architecture.
+> Audience: backend developer, security. Last updated: 2026-06-19. Summary: code-level detail of identity
+> resolution, payload validation (including agent profile sanitization and budget validators), admin gating
+> (403), log hygiene, and defense in depth (sanitize on read AND on write) that implement the security
+> model summarized by the architecture.
 
 This document drops one level below [the security model (architecture)](../02-architecture/04-security-model.md):
 where the latter lays out the trust boundaries and invariants, this page shows the CODE that enforces them,
@@ -185,6 +186,70 @@ lacks `open` returns `None`. The `exchange_id` must be `str`/`int` (bool exclude
 `_SCREEN_TABS = ("evidence", "chart", "table")`. The worker then reads that exchange's artifacts in
 OWNER-SCOPE: a forged id can only reveal the caller's own data.
 
+### 3.7 Agent profile validation: `validate_agent_meta` (FEATURE A, 2026-06-18)
+
+The frontend file `agentMeta.js` has been DELETED. Agent profiles (tagline, description,
+capabilities, tools, icon, badge) are now authored by the admin in `views/AdminView.vue`
+and validated server-side by `validate_agent_meta(raw)` in `security/validation.py`.
+
+Key design decisions:
+
+- **PURE, never raises.** Every field is clamped/sanitized to its bound so an over-long or
+  malformed field degrades gracefully instead of failing the whole whitelist save. The function
+  returns `{tagline, description, capabilities, tools, icon, badge}` even when given an empty or
+  non-dict input (all fields blank, default icon `robot`).
+- **Control-character stripping** via `_clean_str`: any non-printable character (line breaks, tabs,
+  C0 controls, NEL, U+2028/U+2029) is replaced by a space before whitespace is collapsed and the
+  result is stripped and capped. This prevents invisible characters from leaking into rendered cards.
+- **Icon whitelist**: `ALLOWED_AGENT_ICONS` is a frozen set of curated names from the frontend icon
+  registry (`robot`, `sparkle`, `sparkles`, `trendUp`, `alert`, `thumbsUp`, `layers`, `chart`,
+  `database`, `users`, `route`, `message`, `wallet`, `shield`, `globe`, `sliders`, `bookOpen`,
+  `tool`, `tag`, `grid`). An unknown icon falls back to `DEFAULT_AGENT_ICON = "robot"`.
+- **Badge enum**: `ALLOWED_AGENT_BADGES = {"", "default", "new", "beta"}`. Unknown badge -> `""`.
+- **Unhashable value guard**: the icon check is `if not isinstance(icon, str) or icon not in
+  ALLOWED_AGENT_ICONS`. A non-string value (e.g. a JSON array or object) fails the `isinstance`
+  branch and short-circuits to `DEFAULT_AGENT_ICON` before any `frozenset` membership test is
+  reached, so no `TypeError` can occur.
+
+Bounds enforced:
+
+| Field | Bound |
+|---|---|
+| `tagline` | `MAX_AGENT_TAGLINE_CHARS = 120` |
+| `description` | `MAX_AGENT_DESC_CHARS = 700` |
+| `capabilities` | `MAX_AGENT_CAP_ITEMS = 8` items, each `MAX_AGENT_CAP_CHARS = 120` |
+| `tools` | `MAX_AGENT_TOOL_ITEMS = 16` items, each `MAX_AGENT_TOOL_CHARS = 48` |
+
+Storage: the profile is stored INSIDE the existing `enabled_agents` JSON of `webapp_settings_v1`
+(under the `profile` key of each agent entry), without a new table. It is exposed via `GET /agents`
+WITHOUT leaking `agent_id` or project key. `POST /admin/agents` validates the profile with
+`validate_agent_meta` before persisting. An empty profile renders a "profile to complete" card on
+the frontend - no hardcoded fallback copy.
+
+### 3.8 Budget and quota validators (FEATURE B, 2026-06-18)
+
+Four validators for the monthly budget system, all in `security/validation.py`:
+
+| Validator | Returns | Raises |
+|---|---|---|
+| `validate_budget_amount(value)` | A finite `float` in `[0, MAX_BUDGET_USD=1_000_000]` | `invalid_amount`: bool, non-number, NaN/Inf, negative, overflow, or exceeds cap. `0` is allowed ("no budget / hard block"). |
+| `validate_expires_days(value)` | An `int` in `[1, MAX_QUOTA_DAYS=3650]`, or `None` (permanent) | `invalid_expires`: bool, non-integer, or out of range. `None`/`0`/`""` -> `None` (permanent). |
+| `validate_user_id_list(value)` | Order-preserving de-duped list, `<= MAX_QUOTA_USERS=1000` | `invalid_user_ids`: not a list, empty, non-str items, blank or too-long ids; `too_many_users`: list exceeds 1000. |
+| `validate_quota_note(value)` | Stripped `str`, `<= MAX_QUOTA_NOTE_CHARS=280` | Never raises: a non-str yields `""`. |
+
+Design notes:
+
+- `validate_budget_amount` rejects bool (subtype of int, same trap as `validate_feedback`).
+- `validate_expires_days` explicitly maps `value == 0` to `None` (permanent), avoiding the
+  ambiguity of "0 days" (which would be in the past).
+- `validate_user_id_list` de-duplicates in insertion order so one admin call can never fan out
+  unboundedly (the storage layer will UPSERT all ids in one transaction).
+- `validate_quota_note` never raises because a display memo must not block a valid budget save.
+
+These validators gate the routes `POST /admin/budget` and `POST /admin/budget/users`. The budget
+amounts are inlined as server-computed numeric literals in SQL (never via `sql_value` with a raw
+user float), and user ids are escaped via `sql_value`.
+
 ## 4. Agent whitelist: server-side enforcement
 
 The frontend only receives and sends an OPAQUE logical key. The key is computed by `_logical_key(project_key,
@@ -277,9 +342,10 @@ and surfaced to the admin via `storage_status()`.
 
 The frontend never chooses table, connection, or query: `physical_table(logical)` and `full_table(logical)`
 only compose names from LOGICAL constants (`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`,
-`webapp_usage_monthly_v1`), the connection comes from the admin dropdown (never hardcoded), and `new_executor()`
-RAISES if no connection is configured rather than guessing. There is NO generic SQL route. The explicit COMMIT
-discipline (`post_queries=["COMMIT"]`) and the absence of destructive DDL round out the picture (detail in
+`webapp_usage_monthly_v1`, `webapp_artifacts_v1`, `webapp_user_quota_v1`), the connection comes from the admin dropdown (never
+hardcoded), and `new_executor()` RAISES if no connection is configured rather than guessing. There is
+NO generic SQL route. The explicit COMMIT discipline (`post_queries=["COMMIT"]`) and the absence of
+destructive DDL round out the picture (detail in
 [04-backend/04-storage-and-data-model.md](04-storage-and-data-model.md) and
 [ADR-0003](../08-decisions/0003-sql-direct-sans-flow.md)).
 
@@ -318,7 +384,9 @@ them into i18n messages. A few representative examples:
 | `forbidden` | 403 | Admin route called by a non-admin (`_admin_guard` gating). |
 | `storage_not_configured` | 409 | No SQL connection chosen (except `/ping` and `/me`). |
 | `agent_not_enabled` | 404 | Forged or disabled agent key (whitelist resolver). |
+| `monthly_quota_exceeded` | 402 | User has reached their effective monthly budget limit (budget gate in `/chat/start`, fail-open on storage error). |
 | `invalid_rating` / `invalid_drill` / `invalid_filter_value` | 400 | Payload validation (stable codes from `validation.py`). |
+| `invalid_amount` / `invalid_expires` / `invalid_user_ids` / `too_many_users` | 400 | Budget/quota payload validation (stable codes from `validation.py`). |
 | `cannot_remove_last_admin` | 400 | Admin anti-lockout. |
 
 Owner-scoped 404s (unknown run vs belonging to another, another user's exchange) never reveal WHICH case
@@ -327,21 +395,27 @@ occurred, which avoids an existence oracle.
 ## 8. In-flux points to be aware of
 
 > IN FLUX: the SINGLE-PROCESS assumption underpins all in-memory state (identity cache, runs, rate-limit
-> buckets, Evidence caches). In multi-process, the cache would stay correct (per-process) but the concurrency
-> cap would be multiplied and the cross-process poll would return 404. The first-admin election, however, stays
-> protected by the PostgreSQL advisory lock (cross-connection), not by process state. To be forced to 1 process
-> at deployment (see [02-architecture/04-security-model.md](../02-architecture/04-security-model.md)).
+> buckets, Evidence caches, budget config cache). In multi-process, the cache would stay correct
+> (per-process) but the concurrency cap would be multiplied and the cross-process poll would return 404.
+> The first-admin election, however, stays protected by the PostgreSQL advisory lock (cross-connection),
+> not by process state. To be forced to 1 process at deployment
+> (see [02-architecture/04-security-model.md](../02-architecture/04-security-model.md)).
 
-> IN FLUX: several already-hardened invariants (bool rejection in rating/kept_ids, drill that raises, NaN/Inf
-> rejected, admin gating) are not yet all covered by unit tests. The agent layer (`dataiku-agents/`) that hosts
-> the honesty firewall and the anti-injection robustness lives outside this scope and is edited live.
+> IN FLUX: several already-hardened invariants (bool rejection in rating/kept_ids, drill that raises,
+> NaN/Inf rejected, admin gating, `validate_agent_meta` PURE contract, budget validators) are not yet all
+> covered by unit tests. The agent layer (`dataiku-agents/`) that hosts the honesty firewall and the
+> anti-injection robustness lives outside this scope and is edited live.
+
+> CORRECTION: the monthly budget blocking (402 `monthly_quota_exceeded`) IS coded and enforced in
+> `/chat/start` (fail-open). It has not yet been validated on the live DSS instance, but the code path
+> is active. Any earlier documentation that says "not implemented / not enforced" is stale.
 
 ## See also
 
 - [Security model (architecture)](../02-architecture/04-security-model.md) - the framework this page details at the code level.
 - [Backend - API reference](02-api-reference.md) - all endpoints, their payloads and error codes.
 - [Backend - streaming and run lifecycle](03-streaming-and-runs.md) - admission, concurrency caps, owner-scoping of runs.
-- [Backend - storage and data model](04-storage-and-data-model.md) - SQL naming, safety helpers, owner-scoping in the database.
+- [Backend - storage and data model](04-storage-and-data-model.md) - SQL naming, safety helpers, owner-scoping in the database, and the monthly budget system (`storage/budget.py`, `webapp_user_quota_v1`).
 - [Backend - Evidence Studio and artifacts](05-evidence-and-artifacts.md) - the chain of defenses around the read-only SELECT re-execution.
 - [ADR-0004 - Server-side agent whitelist](../08-decisions/0004-whitelist-agents-serveur.md) - the decision behind the opaque logical key.
 - [ADR-0003 - Direct SQL, no Flow at runtime](../08-decisions/0003-sql-direct-sans-flow.md) - the SQL safety posture.

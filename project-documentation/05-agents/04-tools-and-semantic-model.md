@@ -1,8 +1,9 @@
 # Agent tools and Semantic Model
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: this document details the real DSS tools
-> called at runtime by the revenue sub-agent (`revenue_semantic_query` `v4oqA6R`, plus the new
-> `attribute_lookup` that is built but not yet wired) and the aligned Semantic Model that owns the
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: this document details the real DSS tools
+> called at runtime by the agents: `revenue_semantic_query` (`v4oqA6R`, called by the sub-agent) and
+> `attribute_lookup` (Custom Python tool, called as an orchestrator built-in; DSS object exists,
+> wiring goes live on the next orchestrator re-paste), plus the aligned Semantic Model that owns the
 > analytical SQL.
 
 The revenue expert sub-agent (`SalesDrive_revenue_expert`, `agent:bHrWLyOL`) does not compute revenue
@@ -22,16 +23,19 @@ table below reflects the state read on 2026-06-18 (source: `dataiku-agents/tools
 
 | Tool | DSS type | Id | Points to | v3 status |
 |---|---|---|---|---|
-| `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the aligned Semantic Model (over `DRIVE_Revenues`) | active (sub-agent), default SQL engine |
-| `attribute_lookup` | Custom Python | (to create in DSS) | `DRIVE_Revenues` (+ catalog as fallback) | wired as an ORCHESTRATOR built-in (DSS deployment pending) |
+| `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | the aligned Semantic Model (over `DRIVE_Revenues`) | ACTIVE - the sub-agent's SQL engine |
+| `attribute_lookup` | Custom Python | (instance, resolved by name) | `DRIVE_Revenues` (+ catalog as fallback) | DSS tool object EXISTS; wiring live after next orchestrator re-paste |
 | `dataset_lookup` | Dataset Lookup (managed) | `9FEzVZk` | `DRIVE_Revenues` | REMOVED on 2026-06-18 |
-| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | `DRIVE_Revenues_Value_Catalog` | roadmap, not wired (superseded by `attribute_lookup`) |
+| `Drive_Revenues_resolve_filter_value` | Custom Python | (instance) | `DRIVE_Revenues_Value_Catalog` | TO DELETE - superseded by `attribute_lookup`, called by nobody |
 
 A capital point to avoid confusion: `resolve_filter_value` and `dataset_sql_query` are timeline event
 LABELS (`KNOWN_TOOL_NAMES` in the sub-agent), NOT tool calls. Likewise, term grounding on the value index
 is inline SQL, not a tool. On the SUB-AGENT side, the only real DSS tool called at runtime in v3 is
-`revenue_semantic_query`. On the ORCHESTRATOR side, a second real DSS tool now exists: `attribute_lookup`,
-wired as a built-in pending deployment (see below).
+`revenue_semantic_query`. On the ORCHESTRATOR side, a second real DSS tool exists: `attribute_lookup`,
+whose DSS object is already created and whose built-in wiring goes live on the next orchestrator re-paste
+(see below). Two different consumers, two completely different tool ids: the sub-agent calls
+`revenue_semantic_query` via `get_agent_tool("v4oqA6R")`; the orchestrator calls `attribute_lookup` by name.
+They never call each other's tool.
 
 > IN FLUX: the `dataiku-agents/` folder is being edited live by another engineer. The paths, ids and
 > contracts below reflect the state read on 2026-06-18. The code takes precedence over this documentation
@@ -128,13 +132,15 @@ empty result is a valid answer). This direct engine composes per-intent SQL temp
 sub-agent pipeline in [The revenue expert sub-agent](03-revenue-expert-subagent.md). For this document, the
 key point is: under nominal operation, the SQL belongs to the Semantic Model, not to the agent code.
 
-## The new `attribute_lookup` tool: wired as an orchestrator built-in
+## The `attribute_lookup` tool: wired as an orchestrator built-in
 
-> IN FLUX: the architecture of `attribute_lookup` evolved on 2026-06-18 while this documentation was being
-> written. The tool (`tools/attribute_lookup_tool.py`) is BUILT and unit-tested
-> (`tests/test_attribute_lookup.py`, validated by RUN TEST), and it is now WIRED as a built-in tool of the
-> ORCHESTRATOR (not the sub-agent), pending DSS deployment. Its DSS id (`LOOKUP_TOOL_ID`) still has to be
-> created/filled. Its predecessor, the managed `dataset_lookup` tool (`9FEzVZk`) and the entire `lookup`
+> IN FLUX: `attribute_lookup` (`tools/attribute_lookup_tool.py`) is built, unit-tested, RUN-TEST
+> validated in DSS (fast path + specialist fall-through both confirmed), and its Custom Python tool
+> object EXISTS in DSS. It is WIRED as a built-in tool of the ORCHESTRATOR (not the sub-agent).
+> What remains: re-paste the ORCHESTRATOR (env 3.11) so the built-in dispatching is live. The
+> constant `LOOKUP_TOOL_ID = ""` is empty; the name-based fallback (`LOOKUP_TOOL_NAME =
+> "attribute_lookup"`) resolves the tool without a code change, so filling `LOOKUP_TOOL_ID` is
+> optional. Its predecessor, the managed `dataset_lookup` tool (`9FEzVZk`) and the entire `lookup`
 > intent, were REMOVED from the sub-agent on 2026-06-18.
 
 ### What it does and what it is for
@@ -152,10 +158,12 @@ changing `FACT_DATASET`.
 
 ### The three-step flow
 
-1. SEARCH (`build_search_sql`): `SELECT * FROM <fact> WHERE (col1 ILIKE %term% OR col2 ILIKE %term% ...)
-   LIMIT <sample>` over each text column. The term and the column are both folded to lowercase and
-   accent-stripped (the key is `unaccent_lower_sql`, which uses `translate()` WITHOUT the `unaccent`
-   extension, in line with the NO INSTALL rule). The query is bounded by `SEARCH_SAMPLE_ROWS` (1000).
+1. SEARCH (`build_search_sql`): ONE `ILIKE` over an accent-folded `concat_ws` of ALL text columns
+   (`SELECT * FROM <fact> WHERE accent_fold_sql(concat_ws(' ', col1, col2, ...)) ILIKE '%term%' LIMIT
+   <sample>`). This is a SINGLE predicate, not one OR per column. `find_matches` then pinpoints which
+   column(s) match Python-side. Both the concatenated expression and the needle are folded by
+   `accent_fold_sql` (which uses `translate()` WITHOUT the `unaccent` extension, in line with the NO
+   INSTALL rule). The query is bounded by `SEARCH_SAMPLE_ROWS` (1000).
 2. SUMMARIZE: `find_matches` returns `found_in`, that is, where the term appears and with which exact
    values; `summarize_values` returns the distinct values of the requested columns (parameter `keep`).
 3. FALLBACK: if nothing matches AND no specific column was requested, `_alias_fallback` proposes catalog
@@ -182,10 +190,12 @@ into the sub-agent. It is a built-in tool on the same footing as `show_table` or
 added to the tool specs by `build_tool_specs` and dispatched inline in the orchestrator graph's
 `node_tools` node. The benefit: it touches NO frozen `KNOWN_*` contract and the sub-agent stays UNCHANGED.
 
-On the orchestrator side, the CONFIG is `LOOKUP_TOOL_ID = ""` (to fill in after creating the Custom Python
-tool in DSS, e.g. `"ab12CdEf"`) and `LOOKUP_TOOL_NAME = "attribute_lookup"`. The `_run_lookup` method
-resolves the tool via the same `_get_tool` (id then fallback by name), calls it with
-`tool.run({"entity": term, "attributes": attrs})`, and NEVER raises: a failure degrades into a hint
+On the orchestrator side, the CONFIG is `LOOKUP_TOOL_ID = ""` (empty; use the name fallback) and
+`LOOKUP_TOOL_NAME = "attribute_lookup"`. The `_run_lookup` method resolves the tool via the same
+`_get_tool` (id then fallback by name), calls it with
+`tool.run({"entity": term, "attributes": attrs, "dataset": dataset, "catalog": catalog})` where
+`dataset` and `catalog` are resolved SERVER-SIDE from the capability's `lookup_dataset` /
+`lookup_catalog` fields (never from the model), and NEVER raises: a failure degrades into a hint
 inviting the question to be passed to the sub-agent (`ask_revenue_expert`), so the turn always completes.
 The output is also transformed into an Evidence item (`_lookup_evidence_item`), with a source link
 inherited from the `revenue_expert` capability (`LOOKUP_SOURCE_CAP`), bounded to `LOOKUP_RESULT_MAX_ROWS`
@@ -196,9 +206,10 @@ account manager of X", "does X exist / what is its exact spelling", in order to 
 semantic path when a simple read is enough. For sums, totals, rankings or comparisons, the orchestrator
 routes to the revenue expert sub-agent.
 
-> DEPLOYMENT: create the Custom Python tool in DSS, fill `LOOKUP_TOOL_ID` on the orchestrator side
-> (optional thanks to the by-name fallback that resolves `attribute_lookup`), then RE-PASTE THE ORCHESTRATOR
-> only (env 3.11). No sub-agent change. See [Deploying and editing the agents](07-deploying-and-editing-agents.md).
+> DEPLOYMENT: the Custom Python tool object already exists in DSS. Re-paste the ORCHESTRATOR only
+> (env 3.11) so the built-in dispatching becomes live. Optionally set `LOOKUP_TOOL_ID` to the tool's
+> real id (the by-name fallback `LOOKUP_TOOL_NAME = "attribute_lookup"` resolves it without any code
+> change). No sub-agent change. See [Deploying and editing the agents](07-deploying-and-editing-agents.md).
 
 ### Why `dataset_lookup` was removed
 
@@ -209,10 +220,11 @@ All the `lookup` intent code on the sub-agent side (`build_lookup_filter`, `extr
 `lookup_note`, `_lookup_rows`, and the profile helpers `match_attribute`/`attribute_columns`/`live_columns`)
 was removed. Its replacement is `attribute_lookup`.
 
-> ROADMAP: `Drive_Revenues_resolve_filter_value` (Custom Python, over `DRIVE_Revenues_Value_Catalog`) and
-> the `DRIVE_Revenues_Value_Catalog` itself remain roadmap, NOT wired in v3. The decision (made and
-> deferred) is to replace the managed Dataset Lookup with a richer Python resolver in a dedicated session.
-> `attribute_lookup` supersedes that resolver for now.
+> `Drive_Revenues_resolve_filter_value` (Custom Python, over `DRIVE_Revenues_Value_Catalog`) is a DSS
+> tool object called by NOBODY (the sub-agent targets `revenue_semantic_query`; the orchestrator targets
+> `attribute_lookup`). It loads the catalog into pandas RAM and is being **deleted in DSS** (superseded
+> by `attribute_lookup`). No `.py` is kept in the repo. The label `resolve_filter_value` survives only
+> as a frozen timeline event label in `KNOWN_TOOL_NAMES`: it is NOT a tool call and must never be renamed.
 
 ## The aligned Semantic Model: the Semantic Model owns the SQL
 
@@ -308,9 +320,9 @@ sub-agent code edit is needed if you reuse the same tool (alternative: create a 
 - In all modes, the tool runs on Sonnet: the quality of SQL generation does not depend on the user mode.
 - The Semantic Model owns the business rules (offer hierarchy, ACTUALS by default, never `sirano_product`
   by default, customer identity). They are edited via the scripts, never hard-coded in the agent.
-- `attribute_lookup` is wired as an ORCHESTRATOR built-in (not the sub-agent), pending DSS deployment:
-  create the Custom Python tool, fill `LOOKUP_TOOL_ID`, re-paste the orchestrator. The sub-agent no longer
-  has a `lookup` path (intent removed on 2026-06-18).
+- `attribute_lookup` is wired as an ORCHESTRATOR built-in (not the sub-agent). The DSS tool object
+  exists. To activate: re-paste the orchestrator. The sub-agent has no `lookup` path (intent removed
+  on 2026-06-18). Two callers, two tools, never crossed.
 
 ## See also
 - [The revenue expert sub-agent](03-revenue-expert-subagent.md) - the UNDERSTAND/RESOLVE/QUERY/RENDER pipeline that calls these tools.

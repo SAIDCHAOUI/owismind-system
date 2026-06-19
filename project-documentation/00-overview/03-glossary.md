@@ -1,6 +1,6 @@
 # Glossary
 
-> Audience: everyone (both business and technical readers). Last updated: 2026-06-18.
+> Audience: everyone (both business and technical readers). Last updated: 2026-06-19.
 > Summary: this document lays out, in alphabetical order, the business AND technical terms of OWIsMind,
 > with a short definition, what NOT to confuse it with, and a pointer to the document that
 > goes deeper on the term.
@@ -34,6 +34,21 @@ the outcome of a delegation (status + intent). It is NOT text shown to the user.
 Do not confuse with: the sub-agent's prose reply (the `answer`), which can be read by
 the model. Detail: [the revenue expert sub-agent](../05-agents/03-revenue-expert-subagent.md).
 
+### agent profile (admin-authored display metadata)
+The display metadata an administrator writes for each enabled agent: a tagline (max 120 chars),
+a description (max 700 chars), up to 8 capability lines (each max 120 chars), up to 16 tool
+labels (each max 48 chars), an icon name from a server-side whitelist (`ALLOWED_AGENT_ICONS` in
+`security/validation.py`), and a badge (`""`, `"default"`, `"new"`, `"beta"`). The profile is
+AUTHORED: no description is ever hardcoded in the frontend (the former `agentMeta.js` file was
+deleted on 2026-06-18). The admin writes profiles in the Administration panel (views/AdminView.vue);
+the server validates and sanitizes them via `validate_agent_meta` (pure, never raises); the profile
+is stored inside the `enabled_agents` JSON in `webapp_settings_v1` (no new table). It is served via
+`GET /agents` without leaking the raw `agent_id` or project key. An agent whose profile is entirely
+blank renders a "profile to complete" placeholder card in the library.
+Do not confuse with: the `DRIVE_Revenues_profile` (the business brain built by a Flow recipe, not
+display copy); the agent whitelist (which governs WHICH agents are enabled, not their display text).
+Detail: [backend API reference](../04-backend/02-api-reference.md) and [backend security and validation](../04-backend/06-security-and-validation.md).
+
 ### artifact
 A display SPEC requested by the orchestrator through the `show_chart` / `show_table` /
 `show_kpi` tools. It carries `{kind, title, chart|kpi}` but NEVER the data rows. The data is the
@@ -47,10 +62,11 @@ Detail: [Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.
 A standalone Custom Python tool (`tools/attribute_lookup_tool.py`) that looks up a named value in
 the revenue dataset (does it exist, in which column, what is the exact spelling, which attribute
 of a record). It short-circuits the slow semantic path for simple questions such as
-"who is the account manager for X".
-> IN FLUX: `attribute_lookup` is BUILT and unit-tested, and now wired as a built-in tool
-> of the orchestrator, but the `LOOKUP_TOOL_ID` constant is still empty (not operational until the
-> Custom Python tool is created in DSS). Its predecessor, the managed tool `dataset_lookup`
+"who is the account manager for X". The tool object already EXISTS in DSS.
+> IN FLUX: `attribute_lookup` is BUILT, unit-tested, and wired as a built-in tool dispatched
+> inline in the orchestrator's `node_tools` node. `LOOKUP_TOOL_ID = ""` means the tool is
+> resolved by name (no hard-coded id needed). The built-in becomes operational only after the
+> orchestrator is re-pasted into DSS. Its predecessor, the managed tool `dataset_lookup`
 > (`9FEzVZk`) and the `lookup` intent, were REMOVED on 2026-06-18: they no longer appear in
 > `KNOWN_INTENTS`. Attribute lookups are therefore in transition.
 Detail: [agent tools and Semantic Model](../05-agents/04-tools-and-semantic-model.md).
@@ -64,6 +80,20 @@ enabled agent covers it. This list enables the honest capability gap ("no agent 
 tickets").
 Do not confuse with: `CAPABILITIES` (the registry of actually active sub-agents). In v3, only
 `revenue` is staffed. Detail: [the orchestrator](../05-agents/02-orchestrator.md).
+
+### budget / monthly quota / per-user override
+The monthly spending cap applied per user. Spend is the LLM-Mesh `estimatedCost` accumulated in
+`webapp_usage_monthly_v1` (one row per `(user_id, month)`, rolling calendar month, resets on the 1st
+with no reset job). The effective limit for a user is resolved by `storage/budget.py` in this order:
+an ACTIVE per-user override (in `webapp_user_quota_v1`, `expires_at > now()` or NULL=permanent) >
+an ACTIVE global temporary boost > the global default (stored as key `monthly_budget` in
+`webapp_settings_v1`, default $50 USD). The enforcement gate `has_budget` is called at `/chat/start`
+and returns HTTP 402 `monthly_quota_exceeded` when spent >= limit and enforcement is enabled. It
+fails OPEN: a read error lets the answer through. Admins set the global config and per-user overrides
+via `GET/POST /admin/budget` and `POST /admin/budget/users`.
+Do not confuse with: token tracking (the raw `input_tokens`, `output_tokens` columns of
+`webapp_chat_v5`, which is separate from the spend aggregation); the trace dataset (an optional
+offline dump, unrelated to quota). Detail: [storage and data model](../04-backend/04-storage-and-data-model.md).
 
 ## C
 
@@ -177,6 +207,24 @@ language. It NEVER holds a business figure.
 Do not confuse with: the sub-agent (which does hold the figures); the Flask backend (which does not
 reason). Detail: [the orchestrator](../05-agents/02-orchestrator.md).
 
+### Orange charter (design system)
+The project-wide UI design system (project rule #10). Its source of truth is
+`docs/cadrage/CHARTE_ORANGE_UI.md`. Key rules: white/black palette with `#FF7900` used as a RARE
+accent only; square geometry (`border-radius: 0`, only avatar circles are round); flat fills,
+1px rules, heavy titles (H1 36px/800, uppercase orange eyebrow, orange title-bar 52x4px below the
+H1); always the semantic tokens in `frontend/src/styles/tokens.css` (which defines `--fw-heavy: 800`
+and `--orange-text` for AA-compliant orange text); the brand logo is always the REAL image
+`frontend/src/assets/orange-logo.png` bundled by Vite, never a CSS-generated mark. The collapsed
+sidebar is a RAIL (logo, `+`, Agents library, help `?`, avatar). The expand button lives in the
+header (shell/MainTop.vue). Dark theme via `body[data-theme]` + tokens. Bans: `color-mix`,
+blur/backdrop-filter, gradients, glow/large shadows, emoji, global orange focus-ring, any brand mark
+rebuilt in CSS. New shared components added in 2026-06-18/19: `ui/Button.vue`, `ui/Modal.vue`
+(square/flat), `ui/Tabs.vue`, `ui/ToastHost.vue`, `ui/Menu.vue`, `pages/PageShell.vue`,
+`pages/SettingCard.vue`, `pages/EmptyState.vue`, `shell/AppLayout.vue`, `shell/MainTop.vue`,
+`shell/Sidebar.vue`. Settings is renamed "My account"; English is the default locale.
+Do not confuse with: the Orange brand guidelines (the charter is a project-specific interpretation);
+any hex colour value used directly in code (the charter prohibits raw hex, only tokens).
+
 ### OWIsMind
 The product: a Dataiku DSS plugin, an agentic business chat portal (id `owismind`, version
 `0.0.1`). It combines a Vue 3 frontend, a Flask backend and two LLM Mesh Code Agents.
@@ -288,9 +336,11 @@ Do not confuse with: the profile (`DRIVE_Revenues_profile`, the "business brain"
 ### Value_Catalog (`DRIVE_Revenues_Value_Catalog`)
 A richer catalog of aliases and variants (business concepts, short account names), built
 design-time in the Flow.
-> ROADMAP: `DRIVE_Revenues_Value_Catalog` and the associated Python resolver
-> `Drive_Revenues_resolve_filter_value` are NOT wired in the v3 sub-agent (which grounds on the
-> value index).
+> IN FLUX / ROADMAP: `DRIVE_Revenues_Value_Catalog` is NOT used by the v3 sub-agent (which
+> grounds on the value index only). It IS configured as the alias fallback in
+> `attribute_lookup_tool.py` (the `CATALOG_DATASET` constant), but `attribute_lookup` itself is
+> not yet operational in DSS (see `attribute_lookup` entry above). The associated Python resolver
+> `Drive_Revenues_resolve_filter_value` is roadmap only: it is NOT wired in v3.
 Do not confuse with: the value index (which IS used by v3); the profile. Detail:
 [Flow recipes and grounding](../05-agents/05-flow-recipes-and-grounding.md).
 
@@ -310,6 +360,7 @@ A handful of identifiers recur throughout the documentation and are cited VERBAT
 | `OWISMIND_DEV` | the project key (resolved server-side) |
 | `agent:bHrWLyOL` | the `agent_id` of the `SalesDrive_revenue_expert` sub-agent |
 | `v4oqA6R` | the id of the `revenue_semantic_query` Semantic Model Query tool |
+| `webapp_user_quota_v1` | the per-user budget override table (created lazily on first use via `_ensure_table` in `storage/migrations.py`; physical name resolved by `storage/sql_config.full_table`) |
 
 ---
 
@@ -321,3 +372,5 @@ A handful of identifiers recur throughout the documentation and are cited VERBAT
 - [Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md) - capture, levels, chart_payload.
 - [Flow recipes and grounding](../05-agents/05-flow-recipes-and-grounding.md) - profile, value index, value catalog.
 - [Streaming and run lifecycle](../04-backend/03-streaming-and-runs.md) - polling, worker, `_RUNS`.
+- [Backend API reference](../04-backend/02-api-reference.md) - agent profile routes, budget routes, validation.
+- [Storage and data model](../04-backend/04-storage-and-data-model.md) - `webapp_usage_monthly_v1`, `webapp_user_quota_v1`, exchange model.

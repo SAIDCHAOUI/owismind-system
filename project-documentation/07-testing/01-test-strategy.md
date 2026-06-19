@@ -1,6 +1,6 @@
 # Test strategy
 
-> Audience: Developer. Last updated: 2026-06-18. Summary: OWIsMind's three pure-logic test
+> Audience: Developer. Last updated: 2026-06-19. Summary: OWIsMind's three pure-logic test
 > suites (backend, frontend, agents), how to run them WITHOUT INSTALL, what they
 > cover, and where automatable verification stops outside a DSS instance.
 
@@ -17,11 +17,11 @@ lock down the invariants that are testable outside an instance; they do not repl
 
 ## Overview of the three suites
 
-| Suite | Location | Runner | Run from | Tests (verified 2026-06-18) |
+| Suite | Location | Runner | Run from | Tests (verified 2026-06-19) |
 |---|---|---|---|---|
-| Backend | `Plugin/owismind/tests/` | `python3 -m unittest` | repository root | 385 `test_` functions (20 files) |
-| Frontend | `Plugin/owismind/frontend/test/` | `node --test` | `Plugin/owismind/frontend/` | 116 `test(...)` (8 files) |
-| Agents | `dataiku-agents/tests/` | `python3 -m unittest` | repository root | 262 `test_` functions (4 files) |
+| Backend | `Plugin/owismind/tests/` | `python3 -m unittest` | repository root | 438 `test_` functions (21 files) |
+| Frontend | `Plugin/owismind/frontend/test/` | `node --test` | repository root (via `npm --prefix`) | 124 `test(...)` (9 files) |
+| Agents | `dataiku-agents/tests/` | `python3 -m unittest` | repository root | 267 `test_` functions (4 files) |
 
 None of these three suites instantiates a real `dataiku` client, touches PostgreSQL, calls LLM
 Mesh, or runs a real LangGraph graph. Everything that requires the instance is isolated behind pure
@@ -46,7 +46,8 @@ runtime. The busiest modules are on the Evidence and capture side.
 
 | Domain | File(s) | What is locked down |
 |---|---|---|
-| Payload validation | `test_validation.py`, `test_history_limit.py`, `test_conversations_limit.py`, `test_feedback_validation.py` | shape and bounds of `/chat/start`; `validate_history_limit` clamp [10, 50] default 20; `validate_optional_exchange_id`; `validate_conversations_limit` clamp [1, 60] default 30 (never raises); `validate_feedback` (rating in {0, 1, None}, boolean rating rejected) |
+| Payload validation | `test_validation.py`, `test_history_limit.py`, `test_conversations_limit.py`, `test_feedback_validation.py` | shape and bounds of `/chat/start`; `validate_history_limit` clamp [10, 50] default 20; `validate_optional_exchange_id`; `validate_conversations_limit` clamp [1, 60] default 30 (never raises); `validate_feedback` (rating in {0, 1, None}, boolean rating rejected); `validate_agent_meta` (admin-authored agent profile: strings stripped and clamped, lists deduped and capped at 8 items, icon against a whitelist, badge against an enum, control chars stripped, never raises) |
+| Budget and quotas | `test_budget.py` | SQL query builders (`build_user_usage_status_query`, `build_admin_usage_overview_query`, `build_user_quota_upsert`, `build_user_quota_clear`): server-side month arithmetic, LEFT JOINs, upsert shape, int-coerced days; `_resolve_limit` priority (user override > active global temp boost > default, enforcement disabled = never blocked, exactly-at-limit blocks); `get_budget_config` in-process cache (second call = cache hit, invalidation forces re-read, returns independent copies); `set_budget_config` (arm/clear/preserve temp boost); `set_user_quotas` / `clear_user_quotas` (one committed transaction, statement_timeout pre-query); input validators `validate_budget_amount` and `validate_expires_days` (bool-trap, overflow, inf, negative, over-cap); `validate_user_id_list` (dedup, bounds) |
 | Pure SQL builders | `test_session_queries.py`, `test_ancestor_chain.py` | `build_conversation_list_query`, `build_session_messages_query`, `build_ancestor_chain_query`: user-scoped queries (in BOTH members of the recursive CTE for the ancestor walk), keyset-paginated, depth-bounded and `LIMIT` |
 | Pagination | `test_pagination.py` | opaque cursor round-trip; malformed input degrades to `None` |
 | Agent context | `test_agent_context.py` | pure multi-turn assembly (user prefix, flattening of exchanges into messages, generated-SQL grounding, final completion list) |
@@ -72,15 +73,16 @@ modules (reducers, selectors, clamps, parsing).
 
 ### What is covered
 
-| File | What is locked down |
-|---|---|
-| `timeline.test.js` | the timeline's `applyEvent` reducer (the largest unit: 42 tests) |
-| `evidenceModel.test.js` | the Evidence Studio model (chips, payload, `modified` state) |
-| `evidenceProof.test.js` | the derivation of evidence / drill levels on the frontend |
-| `conversationTree.test.js`, `conversationList.test.js` | the pure conversation tree and the side list |
-| `sqlPretty.test.js` | Evidence's colored SQL formatting |
-| `agentPick.test.js` | agent selection |
-| `prefs.test.js` | preference clamps |
+| File | Tests | What is locked down |
+|---|---|---|
+| `timeline.test.js` | 42 | the timeline's `applyEvent` reducer |
+| `evidenceModel.test.js` | 23 | the Evidence Studio model (chips, payload, `modified` state) |
+| `evidenceProof.test.js` | 28 | the derivation of evidence / drill levels on the frontend |
+| `budgetModel.test.js` | 8 | budget/usage helpers: `toNum`, `formatMoney`, `formatTokens`, `formatShortDate`, `usagePct`, `gaugePct`, `usageLevel` (gauge math, severity levels, formatting edge cases used by the profile card, chat banner and admin quotas table) |
+| `conversationTree.test.js`, `conversationList.test.js` | 5 + 3 | the pure conversation tree and the side list |
+| `sqlPretty.test.js` | 7 | Evidence's colored SQL formatting |
+| `agentPick.test.js` | 3 | agent selection |
+| `prefs.test.js` | 5 | preference clamps |
 
 ## 3. Agents suite (LangGraph, Python 3.11 in DSS, but tested DSS-free)
 
@@ -96,12 +98,12 @@ is NOT executed (it needs DSS).
 
 ### What is covered
 
-| File | What is locked down |
-|---|---|
-| `test_profiler.py` | design-time profiling (building the profile) |
-| `test_dataset_expert.py` | the sub-agent's engine (UNDERSTAND/RESOLVE/QUERY/RENDER pipeline, SQL guard, normalization): the largest file |
-| `test_langgraph_agents.py` | the registry and tool specs, the honesty sources block, the SQL/usage extraction from the trace, artifact validation, language detection, and the frozen cross-file events contract (anti-drift) |
-| `test_attribute_lookup.py` | the `attribute_lookup` tool (case-/accent-insensitive lookup on text columns) |
+| File | Tests | What is locked down |
+|---|---|---|
+| `test_profiler.py` | 25 | design-time profiling (building the profile) |
+| `test_dataset_expert.py` | 106 | the sub-agent's engine (UNDERSTAND/RESOLVE/QUERY/RENDER pipeline, SQL guard, normalization): the largest file |
+| `test_langgraph_agents.py` | 88 | the registry and tool specs, the honesty sources block, the SQL/usage extraction from the trace, artifact validation, language detection, the `attribute_lookup` wiring (built-in routing, evidence items, output shaping), `show_kpi` specs and the frozen cross-file events contract (anti-drift) |
+| `test_attribute_lookup.py` | 48 | the `attribute_lookup` tool (case-/accent-insensitive lookup on text columns, `concat_ws` + single `ILIKE`, `translate`-based accent folding, `rows_capped` / `multi_column` flags, Value_Catalog alias fallback, `not_found` / `suggestions` shaping) |
 
 ### The anti-drift test (central invariant)
 
@@ -114,12 +116,14 @@ declared for the `revenue_expert` capability match exactly the `KNOWN_BLOCK_IDS`
 both files up to date, this test breaks. This is what makes it possible to **re-paste the two Code Agents
 together with confidence**: orchestrator <-> sub-agent consistency is verified locally before deployment.
 
-> IN FLUX: the `dataiku-agents/` layer is being edited live. `test_attribute_lookup.py` exists (46
-> tests) and the `attribute_lookup` tool (`tools/attribute_lookup_tool.py`) is built and unit-tested,
-> but it is **not yet wired** into the sub-agent. Its predecessor, the managed
-> `dataset_lookup` tool (`9FEzVZk`) and the `lookup` intent, were REMOVED on 2026-06-18. The wiring of
-> `attribute_lookup` remains to be done (creating the Custom Python tool in DSS + routing attribute
-> reads from the sub-agent).
+> IN FLUX: `attribute_lookup` (`tools/attribute_lookup_tool.py`) is built, unit-tested (48 tests),
+> and **wired as a built-in of the orchestrator** (constants `LOOKUP_TOOL_NAME = "attribute_lookup"`,
+> `LOOKUP_TOOL_ID`, inline dispatch in `node_tools`) - confirmed in `agents/OWIsMind_orchestrator.py`.
+> The sub-agent is UNCHANGED by this wiring (rule P2: the lookup is an orchestrator built-in only).
+> What remains to do IN DSS: create the Custom Python tool object pointing to `attribute_lookup_tool.py`,
+> optionally set `LOOKUP_TOOL_ID` for a direct bind (defaults to name resolution), and re-paste the
+> orchestrator. The predecessor `dataset_lookup` tool (`9FEzVZk`) and the `lookup` intent were REMOVED
+> on 2026-06-18. The `Drive_Revenues_resolve_filter_value` tool object is pending deletion in DSS.
 
 ## Checking that a build compiles locally (throwaway compile-check)
 
@@ -167,16 +171,16 @@ agent smoke tests, described in [Agent evaluation](02-agent-evaluation.md).
 # Backend (from the repository root)
 python3 -m unittest discover -s Plugin/owismind/tests -v
 
-# Frontend (from Plugin/owismind/frontend/)
+# Frontend (from the repository root)
 npm --prefix Plugin/owismind/frontend test
 
 # Agents (from the repository root)
 python3 -m unittest discover -s dataiku-agents/tests
 ```
 
-> Note on stale reference docs: `docs/build-test-deploy.md` still cites "65 tests" backend and
-> "27 tests" frontend. These are stale counts. The CODE is the source of truth: 385 backend, 116
-> frontend, 262 agents (verified 2026-06-18). Do not copy a stale number.
+> Note on stale reference docs: `docs/build-test-deploy.md` may still cite old test counts (65 backend,
+> 27 frontend). These are stale. The CODE is the source of truth: 438 backend (21 files), 124 frontend
+> (9 files), 267 agents (4 files) - verified 2026-06-19. Do not copy a stale number.
 
 ## See also
 - [Agent evaluation](02-agent-evaluation.md) - anti-drift test in detail, smoke tests, golden queries, what remains to validate in DSS.

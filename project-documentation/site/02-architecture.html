@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Architecture - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="architecture" data-theme="light">
+
+  <div class="shell">
+
+    <!-- Left icon rail - JS renders this from PAGES array -->
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <!-- Main content column -->
+    <div class="main">
+
+      <!-- Topbar: breadcrumb + depth meter + controls - JS renders this -->
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <!-- Scrollable content area -->
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- PAGE HEADER -->
+                <header class="page-header">
+                  <p class="eyebrow">Level 2 - Understand</p>
+                  <h1>Architecture</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">How OWIsMind is structured: four deliberately narrow layers - a Vue 3 SPA, a Flask backend, LangGraph Code Agents, and direct PostgreSQL storage - connected by contracts that keep each layer ignorant of the others' internals.</p>
+                </header>
+
+                <!-- KPI cards: the key numbers at a glance -->
+                <div class="grid-4 mt">
+                  <div class="card kpi">
+                    <p class="k-label">Layers</p>
+                    <p class="k-val">4</p>
+                    <p class="k-sub">Frontend, Backend, Agents, Storage</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Python envs</p>
+                    <p class="k-val">2</p>
+                    <p class="k-sub">3.9.23 (backend) + 3.11 (agents)</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">SQL tables</p>
+                    <p class="k-val mono">6</p>
+                    <p class="k-sub">Direct PostgreSQL, no Flow at runtime</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">DSS platform</p>
+                    <p class="k-val u-small">14.4.x</p>
+                    <p class="k-sub">Dataiku DSS, plugin id <code>owismind</code></p>
+                  </div>
+                </div>
+
+                <!-- ============================================================
+                     SECTION 1 - THE FOUR LAYERS
+                     ============================================================ -->
+                <h2 id="four-layers">The Four Layers</h2>
+
+                <p>OWIsMind's architecture reads as four stacked layers connected by deliberately narrow contracts. Each layer knows only what it needs from the one below. This diagram is the <strong>canonical home</strong> of the system context: other documents refer back to it.</p>
+
+                <!-- SIGNATURE DIAGRAM 1: Four-layer system context -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 820 560" xmlns="http://www.w3.org/2000/svg" aria-label="OWIsMind four-layer system context diagram">
+
+                    <!-- Title -->
+                    <text x="410" y="22" text-anchor="middle" font-size="12" font-weight="700" class="diagram">OWIsMind - System Context</text>
+
+                    <!-- ===== USER ===== -->
+                    <rect class="node-accent" x="330" y="38" width="160" height="44" rx="0"/>
+                    <text x="410" y="57" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" class="diagram">Business User</text>
+                    <text x="410" y="72" text-anchor="middle" font-size="10" fill="#fff" class="diagram">OWI / Orange</text>
+
+                    <!-- Arrow: user -> SPA -->
+                    <line class="edge" x1="410" y1="82" x2="410" y2="108"/>
+                    <polygon class="arrowhead" points="405,108 415,108 410,118"/>
+                    <text x="415" y="100" font-size="9" class="diagram text-muted">HTTP / opaque key</text>
+
+                    <!-- ===== WEBAPP LANE ===== -->
+                    <rect class="lane" x="10" y="118" width="800" height="130"/>
+                    <text x="18" y="136" font-size="10" font-weight="700" class="diagram text-accent">The webapp (served by DSS)</text>
+
+                    <!-- Vue SPA box -->
+                    <rect class="node" x="30" y="142" width="250" height="92"/>
+                    <text x="155" y="162" text-anchor="middle" font-size="11" font-weight="700" class="diagram">Vue 3 + Vite SPA</text>
+                    <text x="155" y="178" text-anchor="middle" font-size="9" class="diagram text-muted">resource/owismind-app/</text>
+                    <text x="155" y="192" text-anchor="middle" font-size="9" class="diagram text-muted">Hash router, i18n FR/EN</text>
+                    <text x="155" y="206" text-anchor="middle" font-size="9" class="diagram text-muted">Pinia stores, Chart.js, DOMPurify</text>
+                    <text x="155" y="220" text-anchor="middle" font-size="9" class="diagram text-muted">never knows agent_id or table name</text>
+
+                    <!-- Arrow: SPA -> Flask -->
+                    <line class="edge" x1="280" y1="188" x2="378" y2="188"/>
+                    <polygon class="arrowhead" points="378,183 390,188 378,193"/>
+                    <text x="328" y="182" font-size="9" text-anchor="middle" class="diagram text-muted">/owismind-api/*</text>
+                    <text x="328" y="196" font-size="9" text-anchor="middle" class="diagram text-muted">poll ~500 ms</text>
+
+                    <!-- Flask backend box -->
+                    <rect class="node" x="390" y="142" width="400" height="92"/>
+                    <text x="590" y="162" text-anchor="middle" font-size="11" font-weight="700" class="diagram">Flask backend (python-lib)</text>
+                    <text x="590" y="178" text-anchor="middle" font-size="9" class="diagram text-muted">Blueprint /owismind-api - Python 3.9.23</text>
+                    <text x="590" y="192" text-anchor="middle" font-size="9" class="diagram text-muted">identity resolution, agent whitelist, worker thread</text>
+                    <text x="590" y="206" text-anchor="middle" font-size="9" class="diagram text-muted">Evidence re-derivation, budget enforcement</text>
+                    <text x="590" y="220" text-anchor="middle" font-size="9" class="diagram text-muted">no langchain / no langgraph</text>
+
+                    <!-- ===== AGENTS LANE ===== -->
+                    <rect class="lane" x="10" y="262" width="800" height="145"/>
+                    <text x="18" y="280" font-size="10" font-weight="700" class="diagram text-accent">Agent layer (Code Agents, Python 3.11)</text>
+
+                    <!-- Arrow: Flask -> Orchestrator -->
+                    <line class="edge-accent" x1="590" y1="234" x2="590" y2="290"/>
+                    <polygon class="arrowhead-accent" points="585,290 595,290 590,300"/>
+                    <text x="620" y="268" font-size="9" class="diagram text-muted">LLM Mesh</text>
+                    <text x="620" y="280" font-size="9" class="diagram text-muted">native call</text>
+
+                    <!-- Orchestrator box -->
+                    <rect class="node" x="390" y="300" width="230" height="92"/>
+                    <text x="505" y="320" text-anchor="middle" font-size="11" font-weight="700" class="diagram">OWIsMind_orchestrator</text>
+                    <text x="505" y="336" text-anchor="middle" font-size="9" class="diagram text-muted">LangGraph "sub-agents as tools"</text>
+                    <text x="505" y="350" text-anchor="middle" font-size="9" class="diagram text-muted">honesty firewall (no raw figures)</text>
+                    <text x="505" y="364" text-anchor="middle" font-size="9" class="diagram text-muted">CAPABILITIES registry</text>
+                    <text x="505" y="378" text-anchor="middle" font-size="9" class="diagram text-muted">show_chart / show_table / show_kpi</text>
+
+                    <!-- Arrow: Orchestrator -> sub-agent -->
+                    <line class="edge" x1="390" y1="350" x2="280" y2="350"/>
+                    <polygon class="arrowhead" points="280,345 268,350 280,355"/>
+                    <text x="335" y="342" font-size="9" text-anchor="middle" class="diagram text-muted">ask_revenue</text>
+                    <text x="335" y="356" font-size="9" text-anchor="middle" class="diagram text-muted">_expert</text>
+
+                    <!-- Sub-agent box -->
+                    <rect class="node" x="30" y="300" width="230" height="92"/>
+                    <text x="145" y="320" text-anchor="middle" font-size="11" font-weight="700" class="diagram">SalesDrive_revenue_expert</text>
+                    <text x="145" y="336" text-anchor="middle" font-size="9" class="diagram text-muted">agent:bHrWLyOL</text>
+                    <text x="145" y="350" text-anchor="middle" font-size="9" class="diagram text-muted">UNDERSTAND - RESOLVE - QUERY - RENDER</text>
+                    <text x="145" y="364" text-anchor="middle" font-size="9" class="diagram text-muted">inline SQL grounding on value_index</text>
+                    <text x="145" y="378" text-anchor="middle" font-size="9" class="diagram text-muted">calls revenue_semantic_query (v4oqA6R)</text>
+
+                    <!-- Semantic tool box -->
+                    <rect class="node-soft" x="640" y="300" width="160" height="68"/>
+                    <text x="720" y="320" text-anchor="middle" font-size="10" font-weight="700" class="diagram">revenue_semantic_query</text>
+                    <text x="720" y="335" text-anchor="middle" font-size="9" class="diagram text-muted">v4oqA6R</text>
+                    <text x="720" y="349" text-anchor="middle" font-size="9" class="diagram text-muted">writes + runs analytical SQL</text>
+                    <text x="720" y="363" text-anchor="middle" font-size="9" class="diagram text-muted">Sonnet model, all modes</text>
+
+                    <!-- Arrow: sub-agent -> semantic tool -->
+                    <line class="edge" x1="260" y1="334" x2="638" y2="334"/>
+                    <polygon class="arrowhead" points="638,329 650,334 638,339"/>
+
+                    <!-- ===== STORAGE LANES ===== -->
+                    <!-- PostgreSQL lane -->
+                    <rect class="lane" x="10" y="420" width="500" height="128"/>
+                    <text x="18" y="438" font-size="10" font-weight="700" class="diagram text-accent">PostgreSQL storage (SQL_owi, schema public)</text>
+
+                    <!-- Arrow: Flask -> PG -->
+                    <line class="edge" x1="490" y1="234" x2="252" y2="420"/>
+                    <polygon class="arrowhead" points="248,414 258,420 248,426"/>
+                    <text x="416" y="336" font-size="9" class="diagram text-muted">direct SQLExecutor2</text>
+
+                    <!-- Arrow: Semantic tool -> PG -->
+                    <line class="edge" x1="720" y1="368" x2="720" y2="408"/>
+                    <line class="edge" x1="720" y1="408" x2="332" y2="448"/>
+                    <polygon class="arrowhead" points="328,443 340,448 328,453"/>
+                    <text x="700" y="396" font-size="9" class="diagram text-muted">analytical SQL</text>
+
+                    <!-- PG tables list -->
+                    <text x="30" y="458" font-size="9" font-weight="600" class="diagram">Application tables:</text>
+                    <text x="30" y="472" font-size="9" class="diagram text-muted">webapp_chat_v5 - webapp_users_v1 - webapp_settings_v1</text>
+                    <text x="30" y="486" font-size="9" class="diagram text-muted">webapp_usage_monthly_v1 - webapp_artifacts_v1 - webapp_user_quota_v1</text>
+                    <text x="30" y="500" font-size="9" font-weight="600" class="diagram">All created lazily (CREATE IF NOT EXISTS), never ALTER-ed.</text>
+                    <text x="30" y="514" font-size="9" class="diagram text-muted">One exception: trace dataset is write-only via DSS Flow (never re-read at runtime).</text>
+
+                    <!-- Design-time Flow lane -->
+                    <rect class="lane" x="520" y="420" width="290" height="128"/>
+                    <text x="528" y="438" font-size="10" font-weight="700" class="diagram text-muted">Design-time Flow only (no runtime)</text>
+                    <text x="528" y="455" font-size="9" class="diagram text-muted">DRIVE_Revenues (source dataset)</text>
+                    <text x="528" y="470" font-size="9" class="diagram text-muted">DRIVE_Revenues_profile (business brain)</text>
+                    <text x="528" y="485" font-size="9" class="diagram text-muted">DRIVE_Revenues_value_index (grounding)</text>
+                    <text x="528" y="502" font-size="9" font-style="italic" class="diagram text-muted">Dotted: recipes run at design-time,</text>
+                    <text x="528" y="516" font-size="9" font-style="italic" class="diagram text-muted">never during a chat turn.</text>
+
+                    <!-- Dotted arrow: Flow -> sub-agent (design-time knowledge) -->
+                    <line stroke-dasharray="4,3" class="edge" x1="528" y1="470" x2="145" y2="392"/>
+                    <polygon class="arrowhead" points="142,387 152,392 142,397"/>
+                    <text x="295" y="440" font-size="9" text-anchor="middle" font-style="italic" class="diagram text-muted">profile = business brain</text>
+
+                  </svg>
+                  <p class="diagram-caption">System context: a user question travels from the SPA through the Flask backend to the LangGraph agents on LLM Mesh, while the backend persists in direct PostgreSQL SQL. Design-time Flow recipes (dotted) run only when the admin refreshes the expertise datasets.</p>
+                </figure>
+
+                <a href="../02-architecture/01-system-overview.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 02-architecture/01-system-overview.md
+                </a>
+
+                <h3 id="layer-descriptions">Layer descriptions</h3>
+
+                <div class="grid-2 mt">
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Vue 3 SPA (frontend)</p>
+                      <p class="block-note">Where: <code>Plugin/owismind/frontend/</code>, built into <code>resource/owismind-app/</code></p>
+                    </div>
+                    <div class="block">
+                      <p>Renders three screen areas: conversations sidebar, chat thread with live timeline, and the Evidence Studio panel. Sends only opaque logical keys to the backend - never a raw <code>agent_id</code>, table name, or SQL. Polls <code>/owismind-api/chat/poll</code> every ~500 ms while a run is live.</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Flask backend (python-lib)</p>
+                      <p class="block-note">Where: <code>Plugin/owismind/python-lib/owismind/</code> - Python 3.9.23</p>
+                    </div>
+                    <div class="block">
+                      <p>A Flask Blueprint mounted under <code>/owismind-api</code>. Resolves identity, applies the agent whitelist, launches the agent in a daemon worker thread, persists in direct SQL, and re-derives Evidence purely deterministically. No langchain, no langgraph.</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">LangGraph agent layer (Code Agents)</p>
+                      <p class="block-note">Where: <code>dataiku-agents/agents/</code>, pasted into DSS Code Agents - Python 3.11</p>
+                    </div>
+                    <div class="block">
+                      <p><code>OWIsMind_orchestrator</code> routes to the revenue expert sub-agent <code>SalesDrive_revenue_expert</code> (<code>agent:bHrWLyOL</code>). Both use LangGraph with native LLM Mesh calls. The orchestrator holds the honesty firewall: it never holds a business figure. The repo is the source of truth; agents are pasted by hand, not zipped.</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">PostgreSQL storage (direct SQL)</p>
+                      <p class="block-note">Where: <code>SQL_owi</code> connection, schema <code>public</code></p>
+                    </div>
+                    <div class="block">
+                      <p>Six tables in <code>_vN</code> naming, created lazily on first use, never <code>ALTER</code>-ed structurally. All accessed via <code>SQLExecutor2</code> with parameterized values and explicit <code>COMMIT</code>. No Flow at runtime (the only exception is the write-only trace dataset).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <h3 id="guiding-principles">Guiding principles</h3>
+
+                <p>Five cross-cutting invariants explain why the layer boundaries are where they are. Each is backed by an architecture decision record (ADR).</p>
+
+                <div class="stack mt">
+
+                  <div class="card card-pad">
+                    <p class="card-label">1 - Direct SQL, no Flow at runtime</p>
+                    <p>All application state (conversations, messages, feedback, user registry, settings, token usage, artifacts) is persisted in direct SQL via <code>SQLExecutor2</code> on the admin-configured <code>SQL_owi</code> connection. Requires: a fresh executor per call (never shared across threads), physical naming <code>{PROJECT_KEY}_{namespace}_{logical}</code>, <code>_vN</code> versioning (no <code>ALTER</code>), explicit <code>COMMIT</code>, always-parameterized values, systematic <code>user_id</code> scoping. The only exception: the write-only trace dataset, appended via <code>dataiku.Dataset.write_with_schema</code> to avoid inlining a large JSON blob in a logged <code>INSERT</code>.</p>
+                    <div class="chips mt">
+                      <span class="chip accent">ADR-0003</span>
+                      <span class="chip">SQLExecutor2</span>
+                      <span class="chip">parameterized</span>
+                    </div>
+                  </div>
+
+                  <div class="card card-pad">
+                    <p class="card-label">2 - Server-side agent whitelist, opaque logical key</p>
+                    <p>The frontend never picks an agent in the clear. It sends an opaque logical key of the form <code>ag_&lt;sha1[:12]&gt;</code>; the backend resolves it into <code>(project_key, agent_id)</code> via <code>settings.resolve_enabled_agent</code>. A forged or disabled key resolves to <code>None</code> and can never reach an executable agent. The whitelist is two-tiered: the backend resolves the orchestrator; the orchestrator's <code>CAPABILITIES</code> registry resolves the sub-agent by capability name (e.g. <code>ask_revenue_expert</code>), never by raw id from the front.</p>
+                    <div class="chips mt">
+                      <span class="chip accent">ADR-0004</span>
+                      <span class="chip">agent_key opaque</span>
+                      <span class="chip">never raw agent_id</span>
+                    </div>
+                  </div>
+
+                  <div class="card card-pad">
+                    <p class="card-label">3 - Repo = source of truth for the agents</p>
+                    <p>The two Code Agents are NOT packaged in the plugin zip. They live in <code>dataiku-agents/agents/</code> (source of truth) and are pasted by hand into DSS Code Agents on a Python 3.11 env (where langchain/langgraph are installed). The backend runs on Python 3.9.23 (Flask, no langchain). When either file changes, BOTH are re-pasted together - some fixes live on both sides. Configuration ids are re-verified after pasting.</p>
+                    <div class="chips mt">
+                      <span class="chip accent">ADR-0005</span>
+                      <span class="chip">Python 3.11</span>
+                      <span class="chip">outside the zip</span>
+                    </div>
+                  </div>
+
+                  <div class="card card-pad">
+                    <p class="card-label">4 - Signal vs data: the orchestrator holds no figure</p>
+                    <p>The orchestrator NEVER holds a business figure: every number comes from a sub-agent (SQL-grounded) so it structurally cannot invent one. The "honesty firewall" manifests as: (a) an artifact event carries only a display SPEC (<code>{kind, title, chart|kpi}</code>), never the rows - the data is the separately captured <code>result</code>; (b) the live polling timeline strips the <code>result</code> key - data is read only at persistence; (c) grounding on <code>value_index</code> is read-only inline SQL in the sub-agent, NOT a tool - the labels <code>resolve_filter_value</code> and <code>dataset_sql_query</code> on the timeline are event names, not tool calls. The only real DSS tool called at runtime is <code>revenue_semantic_query</code> (<code>v4oqA6R</code>).</p>
+                    <div class="chips mt">
+                      <span class="chip accent">ADR-0008</span>
+                      <span class="chip accent">ADR-0010</span>
+                      <span class="chip">signal / data separation</span>
+                    </div>
+                  </div>
+
+                  <div class="card card-pad">
+                    <p class="card-label">5 - Dataiku instance safety, everywhere</p>
+                    <p>Every code path first asks: is this risky, slow, or overloading for the instance? This translates into explicit bounds: <code>MAX_CONCURRENT_RUNS = 8</code>, <code>MAX_RUN_SECONDS = 300.0</code>, TTL eviction of orphaned runs, <code>MAX_PERSISTED_TEXT_CHARS = 262_144</code>, caps on captured results, <code>MAX_CHAIN_DEPTH = 200</code> for the ancestor tree, <code>MAX_PARALLEL_AGENTS = 3</code> for sub-agent fan-out. No generic SQL route is exposed; the frontend never picks a table, connection, or query.</p>
+                    <div class="chips mt">
+                      <span class="chip">concurrency capped at 8</span>
+                      <span class="chip">300 s wall-clock limit</span>
+                      <span class="chip">no generic SQL route</span>
+                    </div>
+                  </div>
+
+                </div>
+
+                <h3 id="transport-polling">Transport: polling, not SSE</h3>
+
+                <p>The transport between the SPA and the backend is polling via a background thread, NOT Server-Sent Events. DSS places an internal nginx in front of each webapp backend; that nginx buffers a long <code>text/event-stream</code> response, so all events would arrive at once at the end. OWIsMind works around this exactly like the production Dash app on the same instance: the agent runs in a daemon worker thread, its progress accumulates in a module-level dict (<code>_RUNS</code>), and the frontend polls that dict with short requests the proxy never buffers.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Visible consequence</p>
+                    <p>The text answer often lands in a block at the end of a run. What is genuinely usable live is the execution timeline, not word-by-word streaming. This is a platform constraint, not a design limitation.</p>
+                  </div>
+                </aside>
+
+                <!-- ============================================================
+                     SECTION 2 - COMPONENT MAP
+                     ============================================================ -->
+                <h2 id="component-map">Component Map</h2>
+
+                <p>This section inventories the modules of each layer: where they live and what they own. The system context diagram above shows who calls whom; this section shows what is INSIDE each box.</p>
+
+                <a href="../02-architecture/02-component-map.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 02-architecture/02-component-map.md
+                </a>
+
+                <!-- COMPONENT MAP DIAGRAM -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 820 420" xmlns="http://www.w3.org/2000/svg" aria-label="OWIsMind module map by layer">
+
+                    <text x="410" y="18" text-anchor="middle" font-size="12" font-weight="700" class="diagram">Module map by layer</text>
+
+                    <!-- ===== FRONTEND LANE ===== -->
+                    <rect class="lane" x="10" y="28" width="390" height="180"/>
+                    <text x="18" y="46" font-size="10" font-weight="700" class="diagram text-accent">Frontend (Plugin/owismind/frontend/src)</text>
+
+                    <rect class="node-soft" x="18" y="52" width="175" height="40"/>
+                    <text x="105" y="68" text-anchor="middle" font-size="9" font-weight="600" class="diagram">services/backend.js</text>
+                    <text x="105" y="82" text-anchor="middle" font-size="9" class="diagram text-muted">single transport client</text>
+
+                    <rect class="node-soft" x="206" y="52" width="185" height="40"/>
+                    <text x="298" y="68" text-anchor="middle" font-size="9" font-weight="600" class="diagram">stores/ (Pinia)</text>
+                    <text x="298" y="82" text-anchor="middle" font-size="9" class="diagram text-muted">chat, session, evidence, ui, tree</text>
+
+                    <rect class="node-soft" x="18" y="104" width="175" height="40"/>
+                    <text x="105" y="120" text-anchor="middle" font-size="9" font-weight="600" class="diagram">composables/</text>
+                    <text x="105" y="134" text-anchor="middle" font-size="9" class="diagram text-muted">timelineModel, useChatStream</text>
+
+                    <rect class="node-soft" x="206" y="104" width="185" height="40"/>
+                    <text x="298" y="120" text-anchor="middle" font-size="9" font-weight="600" class="diagram">views/ + components/</text>
+                    <text x="298" y="134" text-anchor="middle" font-size="9" class="diagram text-muted">chat, evidence, shell, ui primitives</text>
+
+                    <rect class="node-soft" x="18" y="156" width="375" height="40"/>
+                    <text x="205" y="172" text-anchor="middle" font-size="9" font-weight="600" class="diagram">registries/</text>
+                    <text x="205" y="186" text-anchor="middle" font-size="9" class="diagram text-muted">timelineSteps.js (event labels) - agentMeta.js REMOVED 2026-06-18</text>
+
+                    <!-- ===== BACKEND LANE ===== -->
+                    <rect class="lane" x="415" y="28" width="395" height="180"/>
+                    <text x="423" y="46" font-size="10" font-weight="700" class="diagram text-accent">Flask backend (python-lib/owismind)</text>
+
+                    <rect class="node-soft" x="423" y="52" width="180" height="40"/>
+                    <text x="513" y="68" text-anchor="middle" font-size="9" font-weight="600" class="diagram">api/routes.py</text>
+                    <text x="513" y="82" text-anchor="middle" font-size="9" class="diagram text-muted">blueprint /owismind-api, all routes</text>
+
+                    <rect class="node-soft" x="616" y="52" width="185" height="40"/>
+                    <text x="708" y="68" text-anchor="middle" font-size="9" font-weight="600" class="diagram">security/</text>
+                    <text x="708" y="82" text-anchor="middle" font-size="9" class="diagram text-muted">identity.py + validation.py</text>
+
+                    <rect class="node-soft" x="423" y="104" width="180" height="40"/>
+                    <text x="513" y="120" text-anchor="middle" font-size="9" font-weight="600" class="diagram">agents/ (backend side)</text>
+                    <text x="513" y="134" text-anchor="middle" font-size="9" class="diagram text-muted">stream_manager, streaming, context</text>
+
+                    <rect class="node-soft" x="616" y="104" width="185" height="40"/>
+                    <text x="708" y="120" text-anchor="middle" font-size="9" font-weight="600" class="diagram">evidence/</text>
+                    <text x="708" y="134" text-anchor="middle" font-size="9" class="diagram text-muted">service, capture, sql_parse, chart_payload</text>
+
+                    <rect class="node-soft" x="423" y="156" width="380" height="40"/>
+                    <text x="613" y="172" text-anchor="middle" font-size="9" font-weight="600" class="diagram">storage/</text>
+                    <text x="613" y="186" text-anchor="middle" font-size="9" class="diagram text-muted">chat_v5, migrations, usage, settings, admin, budget, artifacts, pagination</text>
+
+                    <!-- ===== AGENTS LANE ===== -->
+                    <rect class="lane" x="10" y="222" width="550" height="110"/>
+                    <text x="18" y="240" font-size="10" font-weight="700" class="diagram text-accent">Agent layer (dataiku-agents/, Python 3.11)</text>
+
+                    <rect class="node-soft" x="18" y="248" width="240" height="74"/>
+                    <text x="138" y="266" text-anchor="middle" font-size="9" font-weight="600" class="diagram">agents/OWIsMind_orchestrator.py</text>
+                    <text x="138" y="280" text-anchor="middle" font-size="9" class="diagram text-muted">LangGraph loop, CAPABILITIES registry</text>
+                    <text x="138" y="294" text-anchor="middle" font-size="9" class="diagram text-muted">honesty firewall, built-in tools</text>
+                    <text x="138" y="308" text-anchor="middle" font-size="9" class="diagram text-muted">show_chart / show_table / show_kpi</text>
+
+                    <rect class="node-soft" x="270" y="248" width="240" height="74"/>
+                    <text x="390" y="266" text-anchor="middle" font-size="9" font-weight="600" class="diagram">agents/SalesDrive_revenue_expert.py</text>
+                    <text x="390" y="280" text-anchor="middle" font-size="9" class="diagram text-muted">id: agent:bHrWLyOL</text>
+                    <text x="390" y="294" text-anchor="middle" font-size="9" class="diagram text-muted">UNDERSTAND - RESOLVE - QUERY - RENDER</text>
+                    <text x="390" y="308" text-anchor="middle" font-size="9" class="diagram text-muted">calls revenue_semantic_query (v4oqA6R)</text>
+
+                    <!-- ===== STORAGE LANE ===== -->
+                    <rect class="lane" x="575" y="222" width="235" height="110"/>
+                    <text x="583" y="240" font-size="10" font-weight="700" class="diagram text-accent">SQL storage</text>
+                    <text x="583" y="256" font-size="9" class="diagram text-muted">webapp_chat_v5</text>
+                    <text x="583" y="270" font-size="9" class="diagram text-muted">webapp_users_v1</text>
+                    <text x="583" y="284" font-size="9" class="diagram text-muted">webapp_settings_v1</text>
+                    <text x="583" y="298" font-size="9" class="diagram text-muted">webapp_usage_monthly_v1</text>
+                    <text x="583" y="312" font-size="9" class="diagram text-muted">webapp_artifacts_v1</text>
+                    <text x="583" y="326" font-size="9" class="diagram text-muted">webapp_user_quota_v1</text>
+
+                    <!-- ===== ARROWS ===== -->
+                    <!-- FE -> BE -->
+                    <line class="edge" x1="200" y1="72" x2="421" y2="72"/>
+                    <polygon class="arrowhead" points="421,67 413,72 421,77"/>
+                    <text x="310" y="66" text-anchor="middle" font-size="8" class="diagram text-muted">HTTP</text>
+
+                    <!-- BE -> agents -->
+                    <line class="edge-accent" x1="513" y1="208" x2="390" y2="248"/>
+                    <polygon class="arrowhead-accent" points="386,243 395,248 386,253"/>
+                    <text x="440" y="232" font-size="8" text-anchor="middle" class="diagram text-muted">LLM Mesh</text>
+
+                    <!-- BE -> storage -->
+                    <line class="edge" x1="650" y1="208" x2="650" y2="222"/>
+                    <polygon class="arrowhead" points="645,222 655,222 650,232"/>
+
+                    <!-- Tools/recipes -->
+                    <rect class="lane" x="10" y="346" width="550" height="64"/>
+                    <text x="18" y="364" font-size="10" font-weight="700" class="diagram text-muted">Tools + design-time recipes (dataiku-agents/)</text>
+                    <text x="18" y="380" font-size="9" class="diagram text-muted">tools/attribute_lookup_tool.py (built, wired as built-in, LOOKUP_TOOL_ID empty - IN FLUX)</text>
+                    <text x="18" y="396" font-size="9" class="diagram text-muted">recipes/ profile_dataset_recipe.py + build_value_index_recipe.py (design-time only)</text>
+
+                  </svg>
+                  <p class="diagram-caption">Module map: every named box is a real file or directory in the repository. The frontend knows only logical keys; storage is never reached directly by the frontend or the agents.</p>
+                </figure>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - agent layer</p>
+                    <p>The <code>dataiku-agents/</code> folder is being edited live. The <code>attribute_lookup</code> tool is built and wired as a built-in of the orchestrator, but <code>LOOKUP_TOOL_ID</code> is still empty (not operational until the Custom Python tool is created in DSS). The managed <code>dataset_lookup</code> tool (<code>9FEzVZk</code>) and the <code>lookup</code> intent were removed on 2026-06-18. Per-mode LLM Mesh ids must be verified against the instance after each re-paste.</p>
+                  </div>
+                </aside>
+
+                <h3 id="frontend-modules">Frontend modules</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Module</th>
+                        <th>File</th>
+                        <th>Responsibility</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Backend client</td>
+                        <td><code>services/backend.js</code></td>
+                        <td>The ONLY network point. Every call goes through <code>getWebAppBackendUrl('/owismind-api/...')</code>, never a hardcoded URL.</td>
+                      </tr>
+                      <tr>
+                        <td>Chat store</td>
+                        <td><code>stores/chat.js</code></td>
+                        <td>Active conversation as a TREE of exchanges. <code>_runExchange</code> is the only place where an exchange is created and launched.</td>
+                      </tr>
+                      <tr>
+                        <td>Session store</td>
+                        <td><code>stores/session.js</code></td>
+                        <td>Identity, list of enabled agents with editorial profiles, monthly usage status (exposes <code>budgetBlocked</code>). Degrades gracefully outside DSS.</td>
+                      </tr>
+                      <tr>
+                        <td>Evidence store</td>
+                        <td><code>stores/evidence.js</code></td>
+                        <td>State of the Evidence Studio panel: current exchange, server meta, local editable chips, row pagination, drill.</td>
+                      </tr>
+                      <tr>
+                        <td>Timeline reducer</td>
+                        <td><code>composables/timelineModel.js</code></td>
+                        <td>The heart of streaming: <code>applyEvent</code> turns the backend event stream into an ordered incremental list mutated in place. Pure, tested with <code>node:test</code>.</td>
+                      </tr>
+                      <tr>
+                        <td>Polling loop</td>
+                        <td><code>composables/useChatStream.js</code></td>
+                        <td><code>runChatStream</code> calls <code>startChat</code>, receives <code>run_id</code>, loops <code>pollChat</code> every 500 ms. Exponential backoff on transient failures, up to <code>MAX_POLL_FAILURES = 5</code>.</td>
+                      </tr>
+                      <tr>
+                        <td>Trust layer</td>
+                        <td><code>composables/evidenceProof.js</code></td>
+                        <td><code>trustLevel(meta)</code> returns a deterministic level (solid/dashed/muted). NEVER green. A v1 meta falls back to "declared".</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3 id="backend-modules">Backend modules</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Sub-package</th>
+                        <th>Key file(s)</th>
+                        <th>Responsibility</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>api</code></td>
+                        <td><code>api/routes.py</code></td>
+                        <td>All routes, shared guards (<code>_evidence_guard</code>, <code>_admin_guard</code>), content-free logging hooks.</td>
+                      </tr>
+                      <tr>
+                        <td><code>security</code></td>
+                        <td><code>identity.py</code>, <code>validation.py</code></td>
+                        <td>Identity resolution with 5 s TTL cache. PURE validators (no DSS): shape/bounds for every payload. <code>validate_agent_meta</code> sanitizes the admin-authored editorial profile.</td>
+                      </tr>
+                      <tr>
+                        <td><code>agents</code></td>
+                        <td><code>stream_manager.py</code>, <code>streaming.py</code>, <code>context.py</code></td>
+                        <td>Admission, worker thread lifecycle, event normalization, per-turn context suffix with mode/lang tokens.</td>
+                      </tr>
+                      <tr>
+                        <td><code>evidence</code></td>
+                        <td><code>service.py</code>, <code>capture.py</code>, <code>chart_payload.py</code></td>
+                        <td>Stateless deterministic re-derivation pipeline; structural bounding of <code>generated_sql</code>; Chart.js payload built server-side.</td>
+                      </tr>
+                      <tr>
+                        <td><code>storage</code></td>
+                        <td><code>sql_config.py</code>, <code>chat_v5.py</code>, <code>budget.py</code>, <code>settings.py</code></td>
+                        <td>Foundation (fresh executor per call, naming, parameterization), two-phase chat write, monthly budget enforcement (fail-open), agent whitelist enforcement.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3 id="sql-tables">SQL storage tables</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Table</th>
+                        <th>Purpose</th>
+                        <th>Key detail</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>webapp_chat_v5</code></td>
+                        <td>Conversations, messages, generated SQL, usage columns</td>
+                        <td>Source of truth for usage; two-phase write (user message first, assistant message after run)</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_users_v1</code></td>
+                        <td>User registry + lifetime token accumulators + admin flag</td>
+                        <td>First POST to <code>/me</code> elects the first admin via <code>pg_advisory_xact_lock</code></td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_settings_v1</code></td>
+                        <td>Global key-value store: <code>enabled_agents</code> (whitelist + profiles), <code>monthly_budget</code></td>
+                        <td>Agent whitelist is JSON under one key; no separate whitelist table</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_usage_monthly_v1</code></td>
+                        <td>Monthly usage bucket, one row per <code>(user_id, month)</code></td>
+                        <td>UPSERT incremental; resets naturally on the 1st (month column)</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_artifacts_v1</code></td>
+                        <td>Chart/table/KPI artifact specs (signal only, not data rows)</td>
+                        <td>UPSERT keyed on <code>exchange_id</code>; Chart.js payload computed at read time</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_user_quota_v1</code></td>
+                        <td>Per-user monthly budget overrides (permanent or temporary)</td>
+                        <td><code>NULL expires_at</code> = permanent; future timestamp = temporary boost</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-roadmap" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Roadmap - agent grounding tools</p>
+                    <p><code>DRIVE_Revenues_Value_Catalog</code> (produced by <code>build_value_catalog_recipe.py</code>) and the Python resolver <code>Drive_Revenues_resolve_filter_value</code> are NOT wired in v3. The current grounding uses inline SQL on <code>DRIVE_Revenues_value_index</code> (not a DSS tool). The labels <code>resolve_filter_value</code> and <code>dataset_sql_query</code> visible on the timeline are event names only.</p>
+                  </div>
+                </aside>
+
+                <!-- ============================================================
+                     SECTION 3 - RUNTIME FLOWS
+                     ============================================================ -->
+                <h2 id="runtime-flows">Runtime Flows</h2>
+
+                <p>This section is the canonical home of the runtime sequence diagrams. A full chat turn involves seven actors across four layers. The diagrams below show the complete path in detail.</p>
+
+                <a href="../02-architecture/03-runtime-flows.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 02-architecture/03-runtime-flows.md
+                </a>
+
+                <h3 id="full-chat-turn">A full chat turn, end to end</h3>
+
+                <!-- SIGNATURE DIAGRAM 2: Complete chat-turn sequence -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 860 780" xmlns="http://www.w3.org/2000/svg" aria-label="Complete chat turn sequence diagram">
+
+                    <text x="430" y="18" text-anchor="middle" font-size="12" font-weight="700" class="diagram">Full chat turn - end to end (15 steps)</text>
+
+                    <!-- Actor columns: x positions -->
+                    <!-- FE=70, API=190, SM=310, ORC=430, SUB=555, TOOL=670, PG=790 -->
+
+                    <!-- Actor headers -->
+                    <rect class="node-soft" x="20" y="28" width="98" height="36"/>
+                    <text x="69" y="44" text-anchor="middle" font-size="9" font-weight="700" class="diagram">Frontend</text>
+                    <text x="69" y="57" text-anchor="middle" font-size="8" class="diagram text-muted">chat.js / useChatStream</text>
+
+                    <rect class="node-soft" x="140" y="28" width="98" height="36"/>
+                    <text x="189" y="44" text-anchor="middle" font-size="9" font-weight="700" class="diagram">Flask backend</text>
+                    <text x="189" y="57" text-anchor="middle" font-size="8" class="diagram text-muted">api/routes.py</text>
+
+                    <rect class="node-soft" x="260" y="28" width="98" height="36"/>
+                    <text x="309" y="44" text-anchor="middle" font-size="9" font-weight="700" class="diagram">stream_manager</text>
+                    <text x="309" y="57" text-anchor="middle" font-size="8" class="diagram text-muted">thread worker</text>
+
+                    <rect class="node-accent" x="380" y="28" width="98" height="36"/>
+                    <text x="429" y="44" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" class="diagram">Orchestrator</text>
+                    <text x="429" y="57" text-anchor="middle" font-size="8" fill="#fff" class="diagram">LangGraph</text>
+
+                    <rect class="node-accent" x="500" y="28" width="110" height="36"/>
+                    <text x="555" y="44" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" class="diagram">Revenue sub-agent</text>
+                    <text x="555" y="57" text-anchor="middle" font-size="8" fill="#fff" class="diagram">agent:bHrWLyOL</text>
+
+                    <rect class="node-soft" x="622" y="28" width="98" height="36"/>
+                    <text x="671" y="44" text-anchor="middle" font-size="9" font-weight="700" class="diagram">Semantic tool</text>
+                    <text x="671" y="57" text-anchor="middle" font-size="8" class="diagram text-muted">v4oqA6R</text>
+
+                    <rect class="node-soft" x="742" y="28" width="98" height="36"/>
+                    <text x="791" y="44" text-anchor="middle" font-size="9" font-weight="700" class="diagram">PostgreSQL</text>
+                    <text x="791" y="57" text-anchor="middle" font-size="8" class="diagram text-muted">SQL_owi</text>
+
+                    <!-- Lifelines -->
+                    <line class="edge" x1="69" y1="64" x2="69" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="189" y1="64" x2="189" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="309" y1="64" x2="309" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="429" y1="64" x2="429" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="555" y1="64" x2="555" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="671" y1="64" x2="671" y2="768" stroke-dasharray="3,3"/>
+                    <line class="edge" x1="791" y1="64" x2="791" y2="768" stroke-dasharray="3,3"/>
+
+                    <!-- Step 1: FE -> API POST /chat/start -->
+                    <line class="edge-accent" x1="69" y1="85" x2="185" y2="85"/>
+                    <polygon class="arrowhead-accent" points="185,80 197,85 185,90"/>
+                    <text x="127" y="79" text-anchor="middle" font-size="8" font-weight="600" class="diagram text-accent">1</text>
+                    <text x="127" y="93" text-anchor="middle" font-size="8" class="diagram">POST /chat/start</text>
+                    <text x="127" y="103" text-anchor="middle" font-size="7" class="diagram text-muted">(session_id, message, agent_key, mode)</text>
+
+                    <!-- Step 2: API validates -->
+                    <rect class="node-soft" x="170" y="110" width="36" height="20" rx="0"/>
+                    <text x="188" y="124" text-anchor="middle" font-size="8" class="diagram">2</text>
+                    <text x="232" y="122" font-size="8" class="diagram text-muted">validate, resolve_identity, resolve_enabled_agent</text>
+
+                    <!-- Step 3: API -> PG save user message -->
+                    <line class="edge" x1="189" y1="136" x2="787" y2="136"/>
+                    <polygon class="arrowhead" points="787,131 799,136 787,141"/>
+                    <text x="440" y="130" text-anchor="middle" font-size="8" class="diagram">3. save_user_message (phase 1) - webapp_chat_v5</text>
+
+                    <!-- PG ack -->
+                    <line class="edge" x1="791" y1="148" x2="191" y2="148" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="193,143 181,148 193,153"/>
+
+                    <!-- Step 4: API -> SM start_run -->
+                    <line class="edge" x1="189" y1="162" x2="305" y2="162"/>
+                    <polygon class="arrowhead" points="305,157 317,162 305,167"/>
+                    <text x="249" y="156" text-anchor="middle" font-size="8" class="diagram">4. start_run()</text>
+
+                    <!-- SM returns run_id -->
+                    <line class="edge" x1="309" y1="174" x2="193" y2="174" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="193,169 181,174 193,179"/>
+                    <text x="249" y="168" text-anchor="middle" font-size="7" class="diagram text-muted">run_id</text>
+
+                    <!-- Step 5: API -> FE return {run_id, exchange_id} -->
+                    <line class="edge" x1="189" y1="188" x2="73" y2="188" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="73,183 61,188 73,193"/>
+                    <text x="127" y="182" text-anchor="middle" font-size="7" class="diagram text-muted">5. {run_id, exchange_id}</text>
+
+                    <!-- Worker note -->
+                    <rect class="lane" x="264" y="196" width="90" height="18"/>
+                    <text x="309" y="209" text-anchor="middle" font-size="7" class="diagram text-muted">thread spawned</text>
+
+                    <!-- Step 6: SM -> ORC run_agent_streamed -->
+                    <line class="edge-accent" x1="309" y1="222" x2="425" y2="222"/>
+                    <polygon class="arrowhead-accent" points="425,217 437,222 425,227"/>
+                    <text x="369" y="216" text-anchor="middle" font-size="8" class="diagram">6. run_agent_streamed (LLM Mesh)</text>
+
+                    <!-- Step 7: ORC -> SUB ask_revenue_expert -->
+                    <line class="edge" x1="429" y1="238" x2="551" y2="238"/>
+                    <polygon class="arrowhead" points="551,233 563,238 551,243"/>
+                    <text x="492" y="232" text-anchor="middle" font-size="8" class="diagram">7. ask_revenue_expert</text>
+
+                    <!-- Step 8: SUB UNDERSTAND RESOLVE (inline SQL, not a tool) -->
+                    <rect class="node-soft" x="512" y="246" width="86" height="20" rx="0"/>
+                    <text x="555" y="260" text-anchor="middle" font-size="7" class="diagram">8. UNDERSTAND + RESOLVE</text>
+                    <text x="848" y="258" text-anchor="end" font-size="7" class="diagram text-muted">(inline SQL on value_index, not a DSS tool)</text>
+
+                    <!-- Step 9: SUB -> TOOL revenue_semantic_query -->
+                    <line class="edge" x1="555" y1="274" x2="667" y2="274"/>
+                    <polygon class="arrowhead" points="667,269 679,274 667,279"/>
+                    <text x="612" y="268" text-anchor="middle" font-size="8" class="diagram">9. revenue_semantic_query (v4oqA6R)</text>
+
+                    <!-- Step 10: TOOL -> PG analytical SQL -->
+                    <line class="edge" x1="671" y1="288" x2="787" y2="288"/>
+                    <polygon class="arrowhead" points="787,283 799,288 787,293"/>
+                    <text x="730" y="282" text-anchor="middle" font-size="8" class="diagram">10. analytical SQL</text>
+
+                    <!-- PG -> TOOL rows -->
+                    <line class="edge" x1="791" y1="302" x2="675" y2="302" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="675,297 663,302 675,307"/>
+                    <text x="733" y="296" text-anchor="middle" font-size="7" class="diagram text-muted">rows</text>
+
+                    <!-- TOOL -> SUB SQL + rows -->
+                    <line class="edge" x1="671" y1="316" x2="559" y2="316" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="559,311 547,316 559,321"/>
+                    <text x="615" y="310" text-anchor="middle" font-size="7" class="diagram text-muted">SQL + rows</text>
+
+                    <!-- SUB -> ORC prose + compact data block -->
+                    <line class="edge" x1="555" y1="330" x2="433" y2="330" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="433,325 421,330 433,335"/>
+                    <text x="494" y="324" text-anchor="middle" font-size="7" class="diagram text-muted">11. prose headline + compact data</text>
+
+                    <!-- ORC show_chart/show_table -->
+                    <rect class="node-soft" x="392" y="338" width="74" height="20" rx="0"/>
+                    <text x="429" y="352" text-anchor="middle" font-size="7" class="diagram">12. show_chart/table/kpi</text>
+                    <text x="508" y="350" font-size="7" class="diagram text-muted">+ writes analysis in prose</text>
+
+                    <!-- Polling loop box: title sits ABOVE the box as a caption; inner labels each on their own line -->
+                    <text x="165" y="365" text-anchor="middle" font-size="9" font-weight="700" class="diagram">Polling loop (parallel, every ~500 ms)</text>
+                    <rect class="lane" x="20" y="372" width="306" height="116"/>
+                    <line class="edge" x1="69" y1="398" x2="185" y2="398"/>
+                    <polygon class="arrowhead" points="185,393 197,398 185,403"/>
+                    <text x="133" y="392" text-anchor="middle" font-size="8" class="diagram">GET /chat/poll?run_id=&amp;cursor=</text>
+                    <line class="edge" x1="189" y1="412" x2="305" y2="412"/>
+                    <polygon class="arrowhead" points="305,407 317,412 305,417"/>
+                    <text x="249" y="406" text-anchor="middle" font-size="7" class="diagram text-muted">poll(run_id, user_id, cursor)</text>
+                    <line class="edge" x1="309" y1="428" x2="193" y2="428" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="193,423 181,428 193,433"/>
+                    <text x="249" y="422" text-anchor="middle" font-size="7" class="diagram text-muted">{events[cursor:], cursor, done}</text>
+                    <text x="127" y="458" text-anchor="middle" font-size="7" class="diagram text-muted">applyEvent -> live timeline render</text>
+
+                    <!-- Step 13: persistence phase 2 -->
+                    <line class="edge" x1="309" y1="506" x2="787" y2="506"/>
+                    <polygon class="arrowhead" points="787,501 799,506 787,511"/>
+                    <text x="549" y="499" text-anchor="middle" font-size="8" class="diagram">13. persist: response + SQL + usage + trace + artifacts (phase 2, best-effort)</text>
+
+                    <!-- Step 14: terminal events -->
+                    <line class="edge" x1="309" y1="534" x2="73" y2="534" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="73,529 61,534 73,539"/>
+                    <text x="249" y="527" text-anchor="middle" font-size="8" class="diagram">14. final_answer then run_done (or stopped / error)</text>
+
+                    <!-- Step 15: Evidence auto-open -->
+                    <line class="edge-accent" x1="69" y1="566" x2="185" y2="566"/>
+                    <polygon class="arrowhead-accent" points="185,561 197,566 185,571"/>
+                    <text x="127" y="559" text-anchor="middle" font-size="8" font-weight="600" class="diagram text-accent">15. GET /evidence/meta (auto-open)</text>
+                    <text x="127" y="582" text-anchor="middle" font-size="7" class="diagram text-muted">only on status=done + at least 1 successful SQL</text>
+
+                    <!-- Evidence -> FE meta + artifacts + Chart.js -->
+                    <line class="edge" x1="189" y1="600" x2="73" y2="600" stroke-dasharray="2,2"/>
+                    <polygon class="arrowhead" points="73,595 61,600 73,605"/>
+                    <text x="127" y="618" text-anchor="middle" font-size="7" class="diagram text-muted">meta + artifacts + Chart.js data</text>
+
+                  </svg>
+                  <p class="diagram-caption">Complete chat turn (15 steps). The polling loop (steps labelled inside the grey box) runs in parallel with the worker thread. The Evidence panel opens automatically on step 15, only if the run finished cleanly and produced at least one successful SQL query.</p>
+                </figure>
+
+                <h3 id="bounds-table">Latencies and safety bounds</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Constant</th>
+                        <th>Value</th>
+                        <th>Effect</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>POLL_INTERVAL_MS</code></td>
+                        <td>500 ms</td>
+                        <td>Nominal polling cadence on the frontend</td>
+                      </tr>
+                      <tr>
+                        <td><code>MAX_CONCURRENT_RUNS</code></td>
+                        <td>8</td>
+                        <td>Hard cap of simultaneous runs across the whole process (503 if exceeded)</td>
+                      </tr>
+                      <tr>
+                        <td><code>MAX_RUN_SECONDS</code></td>
+                        <td>300.0 s</td>
+                        <td>Hard wall-clock deadline for a run (evaluated between chunks)</td>
+                      </tr>
+                      <tr>
+                        <td><code>ABANDON_AFTER_SECONDS</code></td>
+                        <td>30.0 s</td>
+                        <td>Cuts a run if the browser has stopped polling (tab closed without explicit stop)</td>
+                      </tr>
+                      <tr>
+                        <td><code>MAX_TOOL_LOOPS</code></td>
+                        <td>8</td>
+                        <td>Maximum agent-to-tools cycles per turn on the orchestrator side</td>
+                      </tr>
+                      <tr>
+                        <td><code>MAX_PARALLEL_AGENTS</code></td>
+                        <td>3</td>
+                        <td>Bounded fan-out when several sub-agents are called in parallel</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3 id="artifact-flow">The artifact flow (show_chart to Chart.js)</h3>
+
+                <p>The system rigorously separates the SIGNAL (what the orchestrator asks to display) from the DATA (the real rows). An <code>ARTIFACT</code> event carries only a SPEC (<code>{kind, title, chart|kpi}</code>), never the rows. The Chart.js payload is rebuilt server-side at read time from the captured <code>generated_sql</code> result.</p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Artifact pipeline, step by step</p>
+                  <ol class="stack" style="padding-left:1.2em; margin:0;">
+                    <li>Orchestrator calls <code>show_chart(chart_type, x, y)</code> - validated against exact columns of the last result.</li>
+                    <li><code>agents/streaming.py</code> normalizes the <code>ARTIFACT</code> event to a strict form: <code>kind</code> in <code>{chart, table, kpi}</code>, bounded title, <code>y</code> bounded to 8 series.</li>
+                    <li>Worker accumulates the spec (cap <code>MAX_ARTIFACTS_ACCUM = 8</code>), NOT on the live timeline.</li>
+                    <li>At end of run, <code>save_artifacts</code> writes an owner-stamped UPSERT to <code>webapp_artifacts_v1</code>. Best-effort: a failure never aborts the response.</li>
+                    <li>When the Evidence panel opens, <code>/evidence/meta</code> reads the spec and calls <code>chart_payload.build_chart_payload(result_block, chart_spec)</code> server-side. A mistyped column or non-numeric cell degrades to an honest empty state (<code>{ok: false, reason: ...}</code>), never a broken chart.</li>
+                    <li><code>ArtifactChart.vue</code> renders the already-secured Chart.js payload. This is the culmination of signal/data separation.</li>
+                  </ol>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - Evidence result capture</p>
+                    <p>The key of the tool span's rows is not confirmed on the instance. The capture of the Evidence <code>result</code> is best-effort: it may be absent (<code>result_captured: false</code>), in which case the chart degrades to an empty state but the rest of the Evidence panel remains useful.</p>
+                  </div>
+                </aside>
+
+                <!-- ============================================================
+                     SECTION 4 - SECURITY MODEL
+                     ============================================================ -->
+                <h2 id="security-model">Security Model</h2>
+
+                <p>OWIsMind is a multi-user WebApp served by a shared Dataiku DSS instance. Security does not rest on "who can reach the app", but on four pillars: identity, agent whitelist, SQL safety, and owner-scoping. The trust boundary is the browser: everything arriving from it is untrusted.</p>
+
+                <a href="../02-architecture/04-security-model.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 02-architecture/04-security-model.md
+                </a>
+
+                <!-- SIGNATURE DIAGRAM 3: Trust boundary -->
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg" aria-label="Security trust boundary diagram">
+
+                    <text x="410" y="18" text-anchor="middle" font-size="12" font-weight="700" class="diagram">Trust boundary - controls applied at each layer</text>
+
+                    <!-- UNTRUSTED ZONE -->
+                    <rect class="lane" x="10" y="30" width="250" height="340"/>
+                    <text x="135" y="48" text-anchor="middle" font-size="10" font-weight="700" class="diagram text-muted">UNTRUSTED (browser side)</text>
+
+                    <rect class="node-soft" x="25" y="56" width="218" height="50"/>
+                    <text x="134" y="74" text-anchor="middle" font-size="10" font-weight="600" class="diagram">Browser</text>
+                    <text x="134" y="89" text-anchor="middle" font-size="9" class="diagram text-muted">all content from it is UNTRUSTED</text>
+                    <text x="134" y="103" text-anchor="middle" font-size="9" class="diagram text-muted">sends: session_id, message, agent_key (opaque), mode</text>
+
+                    <text x="134" y="128" text-anchor="middle" font-size="9" class="diagram text-muted">NEVER sends:</text>
+                    <text x="134" y="142" text-anchor="middle" font-size="9" class="diagram text-muted">- raw agent_id</text>
+                    <text x="134" y="156" text-anchor="middle" font-size="9" class="diagram text-muted">- table / column name</text>
+                    <text x="134" y="170" text-anchor="middle" font-size="9" class="diagram text-muted">- SQL query</text>
+                    <text x="134" y="184" text-anchor="middle" font-size="9" class="diagram text-muted">- connection name</text>
+
+                    <!-- TRUST WALL -->
+                    <rect class="node-accent" x="262" y="30" width="16" height="340"/>
+                    <text x="270" y="200" text-anchor="middle" font-size="8" fill="#fff" font-weight="700" class="diagram" transform="rotate(-90,270,200)">TRUST BOUNDARY</text>
+
+                    <!-- TRUSTED ZONE -->
+                    <rect class="lane" x="280" y="30" width="530" height="340"/>
+                    <text x="545" y="48" text-anchor="middle" font-size="10" font-weight="700" class="diagram text-accent">TRUSTED (server side)</text>
+
+                    <!-- Identity box -->
+                    <rect class="node" x="292" y="56" width="160" height="74"/>
+                    <text x="372" y="74" text-anchor="middle" font-size="9" font-weight="700" class="diagram">1. Identity</text>
+                    <text x="372" y="88" text-anchor="middle" font-size="8" class="diagram text-muted">resolve_identity(headers)</text>
+                    <text x="372" y="102" text-anchor="middle" font-size="8" class="diagram text-muted">5 s TTL cache (SHA-256 fingerprint)</text>
+                    <text x="372" y="116" text-anchor="middle" font-size="8" class="diagram text-muted">-> user_id, display_name</text>
+                    <text x="372" y="130" text-anchor="middle" font-size="8" class="diagram text-muted">fail -> 401 unauthenticated</text>
+
+                    <!-- Whitelist box -->
+                    <rect class="node" x="464" y="56" width="160" height="74"/>
+                    <text x="544" y="74" text-anchor="middle" font-size="9" font-weight="700" class="diagram">2. Agent whitelist</text>
+                    <text x="544" y="88" text-anchor="middle" font-size="8" class="diagram text-muted">resolve_enabled_agent(opaque_key)</text>
+                    <text x="544" y="102" text-anchor="middle" font-size="8" class="diagram text-muted">forged/disabled key -> None -> 404</text>
+                    <text x="544" y="116" text-anchor="middle" font-size="8" class="diagram text-muted">raw agent_id stays server-side</text>
+                    <text x="544" y="130" text-anchor="middle" font-size="8" class="diagram text-muted">two-tier: backend + CAPABILITIES</text>
+
+                    <!-- Budget box -->
+                    <rect class="node" x="636" y="56" width="160" height="74"/>
+                    <text x="716" y="74" text-anchor="middle" font-size="9" font-weight="700" class="diagram">3. Budget gate</text>
+                    <text x="716" y="88" text-anchor="middle" font-size="8" class="diagram text-muted">budget.has_budget(user_id)</text>
+                    <text x="716" y="102" text-anchor="middle" font-size="8" class="diagram text-muted">before any persistence</text>
+                    <text x="716" y="116" text-anchor="middle" font-size="8" class="diagram text-muted">fail -> 402 quota_exceeded</text>
+                    <text x="716" y="130" text-anchor="middle" font-size="8" class="diagram text-muted">storage error -> fail OPEN</text>
+
+                    <!-- SQL safety box -->
+                    <rect class="node" x="292" y="150" width="240" height="84"/>
+                    <text x="412" y="168" text-anchor="middle" font-size="9" font-weight="700" class="diagram">4. SQL safety</text>
+                    <text x="412" y="182" text-anchor="middle" font-size="8" class="diagram text-muted">parameterized (sql_value / pg_identifier)</text>
+                    <text x="412" y="196" text-anchor="middle" font-size="8" class="diagram text-muted">explicit COMMIT after each write</text>
+                    <text x="412" y="210" text-anchor="middle" font-size="8" class="diagram text-muted">no generic SQL route</text>
+                    <text x="412" y="224" text-anchor="middle" font-size="8" class="diagram text-muted">Evidence re-exec: read-only + 30 s timeout</text>
+
+                    <!-- Owner scoping box -->
+                    <rect class="node" x="546" y="150" width="248" height="84"/>
+                    <text x="670" y="168" text-anchor="middle" font-size="9" font-weight="700" class="diagram">5. Owner-scoping (anti-IDOR)</text>
+                    <text x="670" y="182" text-anchor="middle" font-size="8" class="diagram text-muted">user_id in WHERE on EVERY storage query</text>
+                    <text x="670" y="196" text-anchor="middle" font-size="8" class="diagram text-muted">another user's session -> 0 rows</text>
+                    <text x="670" y="210" text-anchor="middle" font-size="8" class="diagram text-muted">poll/stop: state.user_id != user_id -> 404</text>
+                    <text x="670" y="224" text-anchor="middle" font-size="8" class="diagram text-muted">Evidence: exchange + user_id in WHERE</text>
+
+                    <!-- LLM box -->
+                    <rect class="node-soft" x="292" y="252" width="240" height="60"/>
+                    <text x="412" y="270" text-anchor="middle" font-size="9" font-weight="700" class="diagram">6. LLM confidentiality</text>
+                    <text x="412" y="284" text-anchor="middle" font-size="8" class="diagram text-muted">no raw data rows in agent context</text>
+                    <text x="412" y="298" text-anchor="middle" font-size="8" class="diagram text-muted">control tokens (mode/lang) parsed + stripped</text>
+
+                    <!-- Admin box -->
+                    <rect class="node-soft" x="546" y="252" width="248" height="60"/>
+                    <text x="670" y="270" text-anchor="middle" font-size="9" font-weight="700" class="diagram">7. Admin gating</text>
+                    <text x="670" y="284" text-anchor="middle" font-size="8" class="diagram text-muted">_admin_guard: 401/409/403</text>
+                    <text x="670" y="298" text-anchor="middle" font-size="8" class="diagram text-muted">bootstrap lock (pg_advisory_xact_lock)</text>
+
+                    <!-- Two identities note -->
+                    <rect class="node-soft" x="292" y="328" width="502" height="30"/>
+                    <text x="543" y="341" text-anchor="middle" font-size="8" font-weight="600" class="diagram">Two identities: connected user (scoping) vs WebApp run-as identity (SQL + agent execution)</text>
+                    <text x="543" y="353" text-anchor="middle" font-size="8" class="diagram text-muted">Application admin (is_admin flag in webapp_users_v1) is distinct from DSS admin rights.</text>
+
+                  </svg>
+                  <p class="diagram-caption">Trust boundary: everything from the browser is untrusted. The server applies seven controls before any agent call or SQL write. Two identities coexist: the connected DSS user (scoping) and the WebApp run-as identity (SQL + LLM Mesh execution).</p>
+                </figure>
+
+                <h3 id="two-identities">Two identities</h3>
+
+                <p>This is the most often misunderstood distinction in the system. Two identities coexist at runtime.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Aspect</th>
+                        <th>Connected DSS user (caller)</th>
+                        <th>Backend run-as-user (WebApp identity)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Origin</td>
+                        <td>Browser auth headers (DSS session cookie)</td>
+                        <td>Identity under which the DSS WebApp backend process runs</td>
+                      </tr>
+                      <tr>
+                        <td>Resolution</td>
+                        <td><code>resolve_identity(request.headers)</code> - 5 s TTL cache</td>
+                        <td>Implicit: the DSS execution context for <code>SQLExecutor2</code>, LLM Mesh, and discovery</td>
+                      </tr>
+                      <tr>
+                        <td>Key value</td>
+                        <td><code>user_id = info.get("authIdentifier")</code> (DSS login)</td>
+                        <td>Never appears as a value in code; it is the execution context</td>
+                      </tr>
+                      <tr>
+                        <td>Role</td>
+                        <td>Scoping ALL storage queries (owner-scoping); application admin election</td>
+                        <td>Actually runs SQL and calls agents; project/agent visibility reflects its DSS permissions</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">TOFU - first user is admin</p>
+                    <p>The first user to open the app after configuration becomes the application admin (Trust On First Use, via <code>pg_advisory_xact_lock</code>). On deployment, ensure it is the intended admin who opens the app first. The application admin flag (<code>is_admin</code> in <code>webapp_users_v1</code>) is distinct from DSS admin rights.</p>
+                  </div>
+                </aside>
+
+                <h3 id="security-summary-table">Security controls at a glance</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Control</th>
+                        <th>Mechanism</th>
+                        <th>Where</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Authentication</td>
+                        <td>Browser headers -> <code>resolve_identity</code> -> 401 if missing</td>
+                        <td>All routes except <code>/ping</code></td>
+                      </tr>
+                      <tr>
+                        <td>User isolation</td>
+                        <td>Owner-scoping: <code>user_id</code> in every storage query</td>
+                        <td><code>storage/</code> + <code>evidence/</code></td>
+                      </tr>
+                      <tr>
+                        <td>Agent choice</td>
+                        <td>Opaque key -> <code>resolve_enabled_agent</code> -> None otherwise</td>
+                        <td>Server whitelist in <code>storage/settings.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Agent profile bounding</td>
+                        <td><code>validate_agent_meta</code> (never raises, clamp + icon whitelist)</td>
+                        <td><code>security/validation.py</code> before <code>enabled_agents</code> write</td>
+                      </tr>
+                      <tr>
+                        <td>SQL safety</td>
+                        <td>Parameterized + read-only + caps + COMMIT + no generic route</td>
+                        <td><code>storage/</code>, <code>evidence/</code></td>
+                      </tr>
+                      <tr>
+                        <td>LLM confidentiality</td>
+                        <td>No raw rows in context; control tokens stripped by orchestrator</td>
+                        <td><code>agents/context.py</code> + orchestrator</td>
+                      </tr>
+                      <tr>
+                        <td>Admin gating</td>
+                        <td><code>_admin_guard</code> (401/409/403) + bootstrap lock + anti-lockout</td>
+                        <td><code>api/routes.py</code>, <code>storage/admin.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Monthly budget</td>
+                        <td><code>budget.has_budget</code> -> 402 if blocked (fail-open)</td>
+                        <td><code>storage/budget.py</code>, <code>api/routes.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Instance safety</td>
+                        <td>Concurrency caps, TTL, deadlines (single-process)</td>
+                        <td><code>agents/stream_manager.py</code></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ============================================================
+                     SECTION 5 - TECHNOLOGY STACK
+                     ============================================================ -->
+                <h2 id="technology-stack">Technology Stack</h2>
+
+                <p>Four layers, two Python runtimes, one structuring rule. Understanding the stack starts with the fact that these layers live in DISTINCT execution environments that share neither runtime nor dependency chain.</p>
+
+                <a href="../02-architecture/05-technology-stack.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 02-architecture/05-technology-stack.md
+                </a>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Layer</th>
+                        <th>Language / runtime</th>
+                        <th>Main frameworks</th>
+                        <th>In the zip</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Frontend</td>
+                        <td>JavaScript (ES modules)</td>
+                        <td>Vue 3.5, Vite 8, Pinia 3, vue-router 5, vue-i18n 11, Chart.js 4, markdown-it, DOMPurify</td>
+                        <td>The BUILD only (<code>resource/owismind-app/</code>)</td>
+                      </tr>
+                      <tr>
+                        <td>Backend</td>
+                        <td>Python 3.9.23 (DSS webapp env)</td>
+                        <td>Flask (via <code>dataiku.customwebapp</code>), <code>SQLExecutor2</code></td>
+                        <td>Yes (<code>python-lib/owismind/</code>)</td>
+                      </tr>
+                      <tr>
+                        <td>Agents</td>
+                        <td>Python 3.11 (separate DSS code env)</td>
+                        <td>LangGraph, LangChain v1, native LLM Mesh calls</td>
+                        <td>No (outside the zip, pasted by hand)</td>
+                      </tr>
+                      <tr>
+                        <td>Storage</td>
+                        <td>PostgreSQL (connection <code>SQL_owi</code>)</td>
+                        <td><code>SQLExecutor2</code>, parameterized queries, explicit COMMIT</td>
+                        <td>No (external)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3 id="frontend-stack">Frontend: Vue 3 + Vite</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Dependency</th>
+                        <th>Declared version</th>
+                        <th>Role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>vue</code></td><td><code>^3.5.34</code></td><td>Framework, Composition API, <code>&lt;script setup&gt;</code></td></tr>
+                      <tr><td><code>pinia</code></td><td><code>^3.0.4</code></td><td>State management (setup stores)</td></tr>
+                      <tr><td><code>vue-router</code></td><td><code>^5.1.0</code></td><td>Routing in HASH mode (<code>createWebHashHistory</code>)</td></tr>
+                      <tr><td><code>vue-i18n</code></td><td><code>^11.4.4</code></td><td>FR/EN i18n, <code>legacy:false</code> (Composition API)</td></tr>
+                      <tr><td><code>chart.js</code></td><td><code>^4.5.1</code></td><td>Interactive charts in Evidence panel; payload built server-side in Python</td></tr>
+                      <tr><td><code>markdown-it</code></td><td><code>^14.2.0</code></td><td>Markdown rendering of agent responses</td></tr>
+                      <tr><td><code>dompurify</code></td><td><code>^3.4.8</code></td><td>Sanitization of markdown HTML (the ONLY authorized <code>v-html</code> path)</td></tr>
+                      <tr><td><code>vite</code></td><td><code>^8.0.12</code></td><td>Build pipeline (devDependency); fixes <code>base</code> and <code>outDir</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Hash router: why</p>
+                    <p>Vue Router runs in HASH mode (<code>createWebHashHistory</code>) because DSS serves the webapp at a fixed URL with no server-side SPA rewrite. A path-based history would yield a 404 on reload or deep-link. See ADR-0001.</p>
+                  </div>
+                </aside>
+
+                <h3 id="dual-python">Dual Python environment (3.9 and 3.11)</h3>
+
+                <p>The dual-environment is a platform constraint, not a choice:</p>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Python 3.9.23 - Flask backend</p>
+                    <p>The DSS webapp Python environment, observed in production via <code>/owismind-api/ping</code>. Flask is provided by DSS via <code>from dataiku.customwebapp import *</code>. The backend does NOT bundle langchain or langgraph: it only uses Flask plus direct SQL. Rule #8: do not assume Python 3.11 or FastAPI work here.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Python 3.11 - LangGraph agents</p>
+                    <p>A separate DSS code env where langchain and langgraph are installed. LangGraph / LangChain v1 require Python >= 3.10 and therefore cannot live in the backend's 3.9 env. The agents are pasted by hand (not zipped). Their import stack is stdlib + <code>dataiku</code> + langchain/langgraph only: zero import of the plugin code.</p>
+                  </div>
+                </div>
+
+                <h3 id="per-mode-models">Per-mode LLM Mesh ids</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mode</th>
+                        <th>Constant</th>
+                        <th>Model</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>eco (default)</td>
+                        <td><code>GEMINI_FLASH_LITE_ID</code></td>
+                        <td>Gemini 3.1 Flash-Lite</td>
+                      </tr>
+                      <tr>
+                        <td>medium</td>
+                        <td><code>GEMINI_FLASH_ID</code></td>
+                        <td>Gemini 3.5 Flash</td>
+                      </tr>
+                      <tr>
+                        <td>high</td>
+                        <td><code>SONNET_ID</code></td>
+                        <td>Claude Sonnet 4.6</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - per-mode LLM Mesh ids</p>
+                    <p>The ids declared at the top of each agent file (<code>GEMINI_FLASH_LITE_ID</code>, <code>GEMINI_FLASH_ID</code>, <code>SONNET_ID</code>) must match an id actually exposed by the instance's LLM Mesh connection. A wrong id breaks the corresponding mode. They must be re-checked in DSS after each re-paste of the Code Agents. The Semantic Model Query tool (<code>v4oqA6R</code>) always uses Sonnet regardless of the loop mode.</p>
+                  </div>
+                </aside>
+
+                <h3 id="no-install">The NO INSTALL rule</h3>
+
+                <p>NO INSTALL is the project's structuring rule #1: the agent (the assistant) NEVER installs a dependency - no <code>npm install</code>, no <code>pip install</code>, no <code>brew</code>, no <code>npx</code>. Only the user installs. This rule is enforced at three levels: harness permissions (<code>.claude/settings.json</code> deny list), a pre-tool hook (<code>guardrail.sh</code> that blocks install commands), and documentation.</p>
+
+                <p>The non-trivial consequence: <code>resource/owismind-app/</code> (the built frontend) is <strong>git-tracked</strong>, even though it is a regenerated output. Because a fresh clone cannot reinstall the toolchain, the plugin payload must travel within the repository to remain packageable. It must NEVER be edited by hand.</p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Canonical stack identifiers</p>
+                  <dl class="kv">
+                    <dt>Plugin id</dt>
+                    <dd><code>owismind</code> (version <code>0.0.1</code>)</dd>
+                    <dt>Platform</dt>
+                    <dd>Dataiku DSS 14.4.x</dd>
+                    <dt>WebApp</dt>
+                    <dd><code>webapp-owismind-ai-agents</code></dd>
+                    <dt>API prefix</dt>
+                    <dd><code>/owismind-api</code> (health: <code>/owismind-api/ping</code>)</dd>
+                    <dt>SQL connection</dt>
+                    <dd><code>SQL_owi</code> (PostgreSQL, schema <code>public</code>)</dd>
+                    <dt>Project key</dt>
+                    <dd><code>OWISMIND_DEV</code> (resolved server-side, not a secret)</dd>
+                    <dt>Resource folder</dt>
+                    <dd><code>owismind-app</code></dd>
+                    <dt>Vite base</dt>
+                    <dd><code>/plugins/owismind/resource/owismind-app/</code></dd>
+                  </dl>
+                </div>
+
+                <!-- ============================================================
+                     SECTION 6 - SEE ALSO
+                     ============================================================ -->
+                <h2 id="see-also">See Also</h2>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Within this section</p>
+                    <ul class="stack" style="padding-left:1.2em; margin:0;">
+                      <li><a href="../02-architecture/01-system-overview.md">01-system-overview.md</a> - the four layers and guiding principles</li>
+                      <li><a href="../02-architecture/02-component-map.md">02-component-map.md</a> - per-layer module inventory</li>
+                      <li><a href="../02-architecture/03-runtime-flows.md">03-runtime-flows.md</a> - all runtime sequence diagrams</li>
+                      <li><a href="../02-architecture/04-security-model.md">04-security-model.md</a> - full security posture</li>
+                      <li><a href="../02-architecture/05-technology-stack.md">05-technology-stack.md</a> - exact versions and NO INSTALL</li>
+                    </ul>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Deep dives</p>
+                    <ul class="stack" style="padding-left:1.2em; margin:0;">
+                      <li><a href="../04-backend/03-streaming-and-runs.md">Backend - streaming and runs</a> - canonical home of the run lifecycle diagram</li>
+                      <li><a href="../04-backend/04-storage-and-data-model.md">Backend - storage and data model</a> - SQL tables, conversation tree</li>
+                      <li><a href="../04-backend/05-evidence-and-artifacts.md">Backend - Evidence Studio and artifacts</a> - capture, trust levels, chart payload</li>
+                      <li><a href="../05-agents/01-agent-system-overview.md">Agent system overview</a> - orchestrator, sub-agent, frozen contracts</li>
+                      <li><a href="../08-decisions/0003-sql-direct-sans-flow.md">ADR-0003 - Direct SQL, no Flow</a></li>
+                      <li><a href="../08-decisions/0004-whitelist-agents-serveur.md">ADR-0004 - Agent whitelist</a></li>
+                      <li><a href="../08-decisions/0005-langgraph-code-agents-python-311.md">ADR-0005 - Python 3.11 dual path</a></li>
+                    </ul>
+                  </div>
+                </div>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <!-- Core site JS (rail, topbar, TOC, pager, theme, search, code copy) -->
+  <script src="assets/site.js"></script>
+
+  <!-- Search index - loaded from shared assets/search-index.js -->
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

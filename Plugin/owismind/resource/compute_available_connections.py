@@ -4,13 +4,13 @@ DSS calls do() to populate the dropdowns shown in the webapp Settings, routing e
 parameter via payload['parameterName']. 'sql_connection' is built from
 client.list_connections() (PostgreSQL only); 'traces_dataset' from the project's
 datasets (SQL-backed, plus an explicit '(none)' entry). Nothing is hardcoded.
-(Evidence Studio needs no param — it auto-discovers the project's SQL datasets at
+(Evidence Studio needs no param - it auto-discovers the project's SQL datasets at
 runtime.)
 
 list_connections() can be admin-restricted (see DSS docs: connection operations
 require the "admin rights" flag) or unavailable in this param-setup context. When
 that happens we surface a CLEARLY LABELLED fallback (and log the cause) instead of
-a silent one, so it is obvious in the UI that the dynamic list was unavailable —
+a silent one, so it is obvious in the UI that the dynamic list was unavailable -
 rather than pretending SQL_owi is the only real connection.
 
 This module is strictly READ-ONLY: it only LISTS connections and datasets, never
@@ -58,7 +58,7 @@ def _fallback(reason):
         "choices": [
             {
                 "value": _FALLBACK_CONNECTION,
-                "label": "{} (fallback — {})".format(_FALLBACK_CONNECTION, reason),
+                "label": "{} (fallback - {})".format(_FALLBACK_CONNECTION, reason),
             }
         ]
     }
@@ -69,7 +69,7 @@ def _fallback(reason):
 # dataset could hit a per-row length limit on a large JSON trace), PLUS an explicit
 # "(none)" entry so an admin can turn trace storage back OFF after selecting one.
 _MAX_DATASETS = 1000
-_NONE_CHOICE = {"value": "", "label": "(none — disable trace storage)"}
+_NONE_CHOICE = {"value": "", "label": "(none - disable trace storage)"}
 
 
 def _iter_datasets(items):
@@ -92,13 +92,13 @@ def _trace_dataset_choices():
         project_key = dataiku.default_project_key()
         items = client.get_project(project_key).list_datasets()
     except Exception as exc:
-        logger.exception("param setup — list_datasets() failed")
+        logger.exception("param setup - list_datasets() failed")
         # Still let the admin DISABLE trace storage even when listing is unavailable.
         return {
             "choices": [
                 dict(
                     _NONE_CHOICE,
-                    label="(none — disable; dataset listing failed: {})".format(
+                    label="(none - disable; dataset listing failed: {})".format(
                         type(exc).__name__
                     ),
                 )
@@ -106,9 +106,9 @@ def _trace_dataset_choices():
         }
 
     pairs = list(_iter_datasets(items))
-    logger.info("param setup — list_datasets saw %d dataset(s)", len(pairs))
+    logger.info("param setup - list_datasets saw %d dataset(s)", len(pairs))
     logger.debug(
-        "param setup — dataset names/types: %s",
+        "param setup - dataset names/types: %s",
         sorted("{}:{}".format(n, t) for n, t in pairs),
     )
 
@@ -154,16 +154,16 @@ def _connection_choices():
     except Exception as exc:
         # Do NOT swallow silently: log it, and put the error type in the label so
         # the cause is visible in the Settings dropdown without digging through logs.
-        logger.exception("param setup — list_connections() failed")
+        logger.exception("param setup - list_connections() failed")
         return _fallback("listing failed: {}".format(type(exc).__name__))
 
     pairs = list(_iter_connections(conns))
     # Log only the COUNT at INFO (a harmless diagnostic for a short dropdown). The
     # connection names/types are enumerated at DEBUG only, to avoid routinely
     # exposing the instance's connection inventory in INFO-level plugin logs.
-    logger.info("param setup — list_connections saw %d connection(s)", len(pairs))
+    logger.info("param setup - list_connections saw %d connection(s)", len(pairs))
     logger.debug(
-        "param setup — connection names/types: %s",
+        "param setup - connection names/types: %s",
         sorted("{}:{}".format(n, t) for n, t in pairs),
     )
 
@@ -177,7 +177,7 @@ def _connection_choices():
 
     # Listing worked but exposed no PostgreSQL connection in this context.
     logger.warning(
-        "param setup — no PostgreSQL connection visible (saw %d total); using fallback",
+        "param setup - no PostgreSQL connection visible (saw %d total); using fallback",
         len(pairs),
     )
     return _fallback(

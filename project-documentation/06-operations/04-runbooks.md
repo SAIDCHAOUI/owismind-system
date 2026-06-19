@@ -1,9 +1,9 @@
 # Runbooks (incident procedures)
 
-> Audience: OWIsMind operator and support. Last updated: 2026-06-18. Summary: seven concrete
+> Audience: OWIsMind operator and support. Last updated: 2026-06-19. Summary: nine concrete
 > symptom -> checks -> resolution procedures for the most frequent failures (silent agent,
-> storage not configured, agent not enabled, mode with no answer, slowness in High, empty chart, non-clickable
-> Evidence source), each with its own checklist.
+> storage not configured, agent not enabled, mode with no answer, slowness in High, empty chart,
+> non-clickable Evidence source, budget exceeded, agent profile not filled), each with its own checklist.
 
 This document is an intervention toolbox. Each runbook follows the same structure: a symptom
 observable on the user side, the checks to run (from least to most costly), the resolution,
@@ -25,7 +25,8 @@ Three structuring facts recur in almost every runbook, so let us state them once
   [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md).
 - The application-level HTTP error codes are stable and carried by `api/routes.py`:
   `storage_not_configured` (409), `agent_not_enabled` (404), `busy` (503), `rate_limited` (429),
-  `run_not_found` (404), `storage_unavailable` (500), `agent_unavailable` (500), `unauthenticated` (401).
+  `run_not_found` (404), `storage_unavailable` (500), `agent_unavailable` (500), `unauthenticated` (401),
+  `monthly_quota_exceeded` (402, monthly budget exhausted).
 
 The two main observation points:
 
@@ -38,11 +39,11 @@ The two main observation points:
 
 ---
 
-## Runbook 1 - The agent no longer answers / stays on "Analyzing the request"
+## Runbook 1 - The agent no longer answers / stays on "Parsing the request"
 
 ### Symptom
 
-The timeline shows the first step **"Analyzing the request"** (i18n key `tl.kind.turn_start`,
+The timeline shows the first step **"Parsing the request"** (i18n key `tl.kind.turn_start`,
 `registries/timelineSteps.js`) and does not advance, or the spinner keeps turning without a final answer. This is the
 most frequently reported case from users.
 
@@ -203,7 +204,7 @@ resolves it via `settings.resolve_enabled_agent(agent_key)`. If the key resolves
 
 A specific mode fails systematically (typically **Eco**, which is the **default**), while the other
 modes answer, or conversely. Recurring error on the run side: `agent_unavailable`, or the run stays blocked
-on "Analyzing the request" for that one mode only.
+on "Parsing the request" for that one mode only.
 
 > IN FLUX: the `dataiku-agents/` layer is being edited live; the model ids migrated recently
 > (Run 6). They are best-effort in the observed format and **must be re-verified on the instance**. An id that
@@ -417,10 +418,122 @@ relayed, cf. `streaming.py` and `evidence/capture.py`), then `service.py` projec
 
 ---
 
+## Runbook 8 - User blocked by monthly budget (HTTP 402 `monthly_quota_exceeded`)
+
+### Symptom
+
+A user can no longer send messages. The chat shows a banner indicating the monthly budget is exhausted.
+The backend returns **HTTP 402** (`monthly_quota_exceeded`) with a `budget` object containing `spent_usd`,
+`limit_usd`, and `remaining_usd`. The user can still read past conversations and open Evidence panels.
+
+### Cause
+
+The user's accumulated LLM-Mesh `estimatedCost` for the current calendar month has reached (or exceeded)
+their effective monthly limit. The effective limit is resolved in this order:
+1. An active per-user override in `webapp_user_quota_v1` (wins over everything while active).
+2. An active global temporary boost in `webapp_settings_v1` (key `monthly_budget`, field `temp_limit_usd`).
+3. The global default limit (default: **$50 USD**, constant `DEFAULT_MONTHLY_LIMIT_USD` in `storage/budget.py`).
+
+Budget enforcement is enabled when the global config has `enabled: true`. The gate **fails open**: if the
+budget DB read throws, the run is allowed and the spend is still recorded (the next request is then gated
+once the read recovers).
+
+### Checks
+
+| Order | Check | Tool |
+|---|---|---|
+| 1 | Is budget enforcement enabled? | Admin page > Quotas tab: `config.enabled` field. |
+| 2 | Does the user have a per-user override that is still active? | Admin page > Quotas tab: per-user table, `limit_usd` column for that user. |
+| 3 | Is the global default limit appropriate? | Admin page > Quotas tab: `config.limit_usd`. |
+| 4 | Is the monthly reset not yet due? | Budget resets on the 1st of each calendar month (new DB bucket row, no manual reset). |
+
+### Resolution
+
+Choose the appropriate action from the admin Quotas tab:
+
+- **Permanent per-user boost**: POST `/admin/budget/users` with `{user_ids:[<id>], limit_usd: <new>, expires_days: null}`.
+  This creates (or replaces) a permanent per-user override for that user.
+- **Temporary per-user boost**: same call with a non-null `expires_days` (e.g. 7 for one week).
+- **Global temporary boost**: POST `/admin/budget` with `{temp_limit_usd: <boost>, temp_days: <n>}`. Applies
+  to all users WITHOUT a per-user override until expiry.
+- **Raise the global default**: POST `/admin/budget` with `{limit_usd: <new>, enabled: true}`. Affects all
+  users with no override immediately (a new DB bucket row is never needed; the math is always
+  `limit - spent`).
+- **Disable enforcement**: POST `/admin/budget` with `{enabled: false}`. Runs are allowed regardless of spend
+  (spend is still recorded for reporting).
+
+After the change, the frontend's next `/usage` poll refreshes the budget status and unblocks the send button
+automatically.
+
+> The user's own status is always available at `GET /usage` (authenticated, owner-scoped). The backend log
+> line to grep: `/chat/start - monthly quota exceeded user_id=<id> spent=... limit=...`.
+
+### Checklist
+
+- [ ] Symptom confirmed (HTTP 402, `monthly_quota_exceeded` in the browser console)
+- [ ] Budget enforcement status checked (enabled vs disabled)
+- [ ] Effective limit for that user identified (per-user override, temp boost, or global default)
+- [ ] Appropriate override applied (per-user, global boost, or default raise)
+- [ ] User confirmed unblocked (frontend budget banner dismissed)
+
+---
+
+## Runbook 9 - Agent library card shows "profile to complete"
+
+### Symptom
+
+In the **Agents** section of the app, an agent's library card shows a "profile to complete" placeholder
+instead of a tagline, description, capabilities and tools. This is a deliberate design: there is no
+hardcoded fallback description. The agent is functional (conversations work), but the library presentation
+is empty.
+
+### Cause
+
+Agent descriptions are authored by an admin via the **Administration > Agents > Edit profile** form and
+stored as a `profile` object inside the `enabled_agents` JSON in `webapp_settings_v1`. Until an admin fills
+in the profile, the `profile` dict is empty or absent, and the `/agents` route returns empty strings for
+`tagline`, `description`, `capabilities`, `tools`, etc. The frontend renders the placeholder in that case.
+
+This is not a code bug: it is the intended post-deploy state on a fresh install. The old `agentMeta.js`
+(hardcoded descriptions) was intentionally removed.
+
+### Checks
+
+| Order | Check | Interpretation |
+|---|---|---|
+| 1 | Is the agent present in the whitelist? | If not enabled, it is not visible at all (see Runbook 3). |
+| 2 | Has an admin opened Edit profile and saved? | No profile saved -> placeholder (expected). |
+| 3 | Is the icon value valid? | `validate_agent_meta` in `security/validation.py` sanitizes the icon against a whitelist; an unrecognized icon silently falls back to `"robot"`. |
+
+### Resolution
+
+1. Open the app as an admin, navigate to **Administration > Agents**.
+2. Click **Edit profile** on the agent that shows the placeholder.
+3. Fill in all fields: **tagline** (one line, short), **description** (richer text, visible in the library
+   card and the agent detail sheet), **capabilities** (list of capability bullet points), **tools** (list
+   of tool names), **icon** (name from the frontend icon registry, e.g. `robot`, `chart-bar`), **badge**
+   (optional label such as "Beta" or "Revenue").
+4. Save. The change is validated server-side by `validate_agent_meta` (pure, never raises, icon
+   sanitized), stored in `webapp_settings_v1`, and the `/agents` route immediately returns the filled
+   profile on the next frontend poll.
+
+> There is nothing to restart: the profile is read from the DB on every `/agents` call. The change is
+> effective immediately after saving.
+
+### Checklist
+
+- [ ] Agent confirmed enabled in the whitelist (otherwise: Runbook 3)
+- [ ] Admin opened Administration > Agents and located the agent
+- [ ] Edit profile form filled (tagline, description, capabilities, tools, icon, badge)
+- [ ] Saved successfully
+- [ ] Agent library card reloaded and placeholder replaced by the authored content
+
+---
+
 ## See also
 
 - [Monitoring and logs](03-monitoring-and-logs.md) - where to read `storage_status`, the content-free WARNINGs and Evidence observability before intervening.
-- [Installation and configuration](01-installation-and-configuration.md) - choose the `SQL_owi` connection and the webapp params (resolves `storage_not_configured`).
+- [Installation and configuration](01-installation-and-configuration.md) - choose the `SQL_owi` connection and the webapp params (resolves `storage_not_configured`); section 7 for budget, section 8 for agent profiles.
 - [Build, packaging and deployment](02-build-package-deploy.md) - the what-to-rebuild-when matrix and the Restart backend procedure.
 - [Backend - streaming and run lifecycle](../04-backend/03-streaming-and-runs.md) - polling, deadlines, cooperative stop, error codes (Runbooks 1 and 5).
 - [Backend - Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md) - `result` capture, chart payload, source_url (Runbooks 6 and 7).

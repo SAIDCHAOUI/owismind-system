@@ -1,8 +1,9 @@
 # Backend - API reference
 
-> Audience: backend developer, integrator. Last updated: 2026-06-18. Summary: complete
-> catalogue of the `/owismind-api/*` endpoints (parameters, response shapes, error codes, HTTP statuses,
-> auth and owner-scoping), grouped by domain.
+> Audience: backend developer, integrator. Last updated: 2026-06-19. Summary: complete
+> catalogue of all 21 `/owismind-api/*` endpoints (parameters, response shapes, error codes, HTTP
+> statuses, auth and owner-scoping), grouped by domain, including the monthly budget system added
+> in the 2026-06-18 session.
 
 All routes are mounted under the `/owismind-api` prefix (blueprint `owismind_api`, defined in
 `api/routes.py`). The Vue 3 frontend consumes ONLY logical keys and structured data: it
@@ -41,10 +42,13 @@ reference catalogue.
 
 ## Route summary table
 
+This table covers all 21 registered routes (mounted by `register_routes(app)` in `api/routes.py`).
+
 | Method | Path | Domain | Auth | Storage required |
 |---|---|---|---|---|
 | GET | `/ping` | health | no | no |
 | GET, POST | `/me` | identity | yes | no (tolerates pristine) |
+| GET | `/usage` | budget | yes | yes |
 | GET | `/agents` | agents | yes | yes |
 | POST | `/chat/start` | chat | yes | yes |
 | GET | `/chat/poll` | chat | yes | yes |
@@ -58,6 +62,8 @@ reference catalogue.
 | GET | `/admin/storage` | admin | yes | yes + admin |
 | GET | `/admin/users` | admin | yes | yes + admin |
 | POST | `/admin/users/set-admin` | admin | yes | yes + admin |
+| GET, POST | `/admin/budget` | admin / budget | yes | yes + admin |
+| POST | `/admin/budget/users` | admin / budget | yes | yes + admin |
 | GET | `/admin/projects` | admin | yes | yes + admin |
 | GET | `/admin/projects/<project_key>/agents` | admin | yes | yes + admin |
 | GET, POST | `/admin/agents` | admin | yes | yes + admin |
@@ -107,21 +113,79 @@ Returns the caller's identity (resolved server-side from the headers), their adm
 
 No `storage_not_configured` here (this route tolerates a pristine instance).
 
-## 2. Agents (chat-side picker)
+## 2. Monthly budget status
+
+### `GET /usage`
+
+Returns the authenticated caller's own monthly budget status. Owner-scoped: the status is read for
+the identity resolved from the headers, never from the request body.
+
+This route powers the profile's consumption card (gauge, remaining, reset date, limit source line)
+and the chat budget banner. It is also the data source for frontend `composables/budgetModel.js`
+and `stores/session.js`. There is a lightweight per-user rate gate (`evidence_throttle.usage_can_accept`)
+that throttles scripted floods while admitting the legitimate cadence (init, after each run, on
+Settings open).
+
+```json
+{
+  "status": "ok",
+  "usage": {
+    "spent_usd": 12.40,
+    "limit_usd": 50.0,
+    "remaining_usd": 37.60,
+    "enabled": true,
+    "blocked": false,
+    "limit_source": "default",
+    "period_start": "2026-06-01T00:00:00",
+    "next_reset": "2026-07-01T00:00:00",
+    "currency": "USD"
+  }
+}
+```
+
+`limit_source` is one of `"default"` (global default), `"global_temp"` (active global temp boost),
+or `"user_override"` (active per-user override). The UI uses this to display a transparent
+explanation of why the cap is what it is. The budget resolution logic lives in `storage/budget.py`
+(see section 8 below).
+
+| Error code | HTTP status | Condition |
+|---|---|---|
+| `unauthenticated` | 401 | identity not resolvable |
+| `storage_not_configured` | 409 | storage not configured |
+| `rate_limited` | 429 | per-user usage throttle |
+| `storage_unavailable` | 500 | read failure |
+
+## 3. Agents (chat-side picker)
 
 ### `GET /agents`
 
-Lists the agents the admin has enabled, for any authenticated caller. Feeds the chat agent picker.
-Projects ONLY `key` (= the opaque `logical_key`) and `label`: never `agent_id` nor `project_key`
-(whitelist).
+Lists the agents the admin has enabled, for any authenticated caller. Feeds the chat agent picker
+and the agent-library page. Projects ONLY the public-safe fields: never `agent_id` nor `project_key`
+(whitelist). The admin-authored `profile` (display copy written via the Administration > Agents UI)
+is safe to expose and is the source of the agent-library cards.
 
 ```json
 {
   "status": "ok",
   "count": 1,
-  "agents": [{ "key": "ag_3f2a91c0e7b4", "label": "OWIsMind_orchestrator" }]
+  "agents": [
+    {
+      "key": "ag_3f2a91c0e7b4",
+      "label": "OWIsMind_orchestrator",
+      "tagline": "Your revenue intelligence assistant",
+      "description": "Ask any question about SalesDrive revenue data...",
+      "capabilities": ["Revenue analysis", "Budget vs actuals"],
+      "tools": ["Revenue expert", "Semantic model query"],
+      "icon": "robot",
+      "badge": "Recommended"
+    }
+  ]
 }
 ```
+
+When the admin has not yet written a profile for an agent, `tagline`, `description`,
+`capabilities`, and `tools` are empty strings/arrays. The frontend renders an honest
+"profile to complete" card in that case (no hardcoded fallback descriptions).
 
 | Error code | HTTP status | Condition |
 |---|---|---|
@@ -129,7 +193,7 @@ Projects ONLY `key` (= the opaque `logical_key`) and `label`: never `agent_id` n
 | `storage_not_configured` | 409 | storage not configured |
 | `storage_unavailable` | 500 | failure reading the settings |
 
-## 3. Chat
+## 4. Chat
 
 ### `POST /chat/start`
 
@@ -160,16 +224,21 @@ Exact server-side sequence (the order of the guards matters for error mapping):
 6. Content-free log: `user_id`, `session_id`, `agent_key`, `msg_len` (never the content).
 7. **Admission gate BEFORE any write**: `stream_manager.can_accept(user_id)` returns
    `(ok, reason)`. `reason == "rate_limited"` -> `429`, otherwise (`"busy"`) -> `503`.
-8. **Phase one (write)**: `ensure_chat_table()` then `chat_v5.save_user_message(...)` returns an
+8. **Monthly budget gate BEFORE any write**: `budget.has_budget(user_id)` returns
+   `(within_budget, budget_status)`. If `not within_budget` -> `402 monthly_quota_exceeded` (includes
+   `budget_status` payload so the frontend can show the exact spend/limit). This gate **fails OPEN** by
+   design: a storage exception lets the run proceed (the spend is still recorded after the fact, so the
+   next request is gated once the read recovers). Admins are subject to the budget like any other user.
+9. **Phase one (write)**: `ensure_chat_table()` then `chat_v5.save_user_message(...)` returns an
    `exchange_id` (generated in Python, without readback). Failure -> `500 storage_unavailable`.
-9. Resolution of `mode` (default `medium`), `webapp_lang`, and detection of THIS turn's reply language:
-   `context.detect_prompt_language(message, default=webapp_lang or "fr")` on the RAW message.
-10. Construction of the per-turn suffix `context.build_user_suffix(...)`, appended at the END of the
+10. Resolution of `mode` (default `medium`), `webapp_lang`, and detection of THIS turn's reply language:
+    `context.detect_prompt_language(message, default=webapp_lang or "fr")` on the RAW message.
+11. Construction of the per-turn suffix `context.build_user_suffix(...)`, appended at the END of the
     current message (the agent is stateless between calls and honors the end of the prompt better).
-11. `screen_context = _sanitize_screen_context(body.get("screen_context"))`.
-12. `stream_manager.start_run(...)` (bounded worker). `CapacityError` -> `503 busy`; any other exception ->
+12. `screen_context = _sanitize_screen_context(body.get("screen_context"))`.
+13. `stream_manager.start_run(...)` (bounded worker). `CapacityError` -> `503 busy`; any other exception ->
     `500 agent_unavailable`.
-13. Success: `{"status": "ok", "run_id": ..., "exchange_id": ...}`. The `run_id` is the only
+14. Success: `{"status": "ok", "run_id": ..., "exchange_id": ...}`. The `run_id` is the only
     opaque handle on the frontend side; `agent_id` stays server-side.
 
 ```json
@@ -184,11 +253,18 @@ Exact server-side sequence (the order of the guards matters for error mapping):
 | `agent_not_enabled` | 404 | `agent_key` not resolved by the whitelist |
 | `rate_limited` | 429 | per-user spacing (< 1 s since the last start) |
 | `busy` | 503 | global concurrent-runs cap reached (8) |
+| `monthly_quota_exceeded` | 402 | monthly budget spent >= effective limit AND enforcement enabled; includes `budget` key with the current status |
 | `storage_unavailable` | 500 | failure of phase one (message persistence) |
 | `agent_unavailable` | 500 | worker start failure (other than `CapacityError`) |
 
 > Note: `rate_limited` (429) and `busy` (503) are distinct by design. 429 = per-user spacing (1 s),
 > 503 = global concurrent cap (8). The distinction serves client-side retry.
+>
+> Note: `monthly_quota_exceeded` (402) is evaluated AFTER the concurrency/rate gates but BEFORE any
+> write (no user message is persisted on a 402). The gate fails OPEN: a storage error on the budget
+> read lets the run proceed. The spend accumulates in `webapp_usage_monthly_v1` via
+> `usage.record_usage` in the worker's phase-two persistence, so the next request is gated once the
+> read recovers. See section 8 for the full budget system documentation.
 
 ### `GET /chat/poll`
 
@@ -267,7 +343,7 @@ exchange is a silent no-op. Success `{"status": "ok"}`.
 | `invalid_payload`, `invalid_exchange_id`, `invalid_rating` | 400 | failure of `validate_feedback` |
 | `storage_unavailable` | 500 | write failure |
 
-## 4. Conversations (sidebar)
+## 5. Conversations (sidebar)
 
 ### `GET /conversations`
 
@@ -331,7 +407,7 @@ that the frontend reuses a single row->message mapper. The data model detail is 
 | `invalid_session_id` | 400 | `session_id` empty or > 128 |
 | `storage_unavailable` | 500 | load failure |
 
-## 5. Evidence Studio (owner-scope, read-only)
+## 6. Evidence Studio (owner-scope, read-only)
 
 The three `/evidence/*` routes share the `_evidence_guard()` guard, which chains: (1)
 `resolve_identity` -> `401 unauthenticated`; (2) `is_configured()` -> `409 storage_not_configured`;
@@ -414,7 +490,7 @@ Bounded distinct values of ONE column (the value picker of the filter chips).
 | `<EvidenceError.code>` | `<EvidenceError.status>` | Evidence business error |
 | `evidence_unavailable` | 500 | unexpected exception |
 
-## 6. screen_context (sanitization, on `/chat/start`)
+## 7. screen_context (sanitization, on `/chat/start`)
 
 The optional `screen_context` field of `POST /chat/start` is a bounded view of what the
 user is looking at (the exchange rendered in the Evidence panel and its tab). `_sanitize_screen_context`
@@ -428,7 +504,7 @@ user is looking at (the exchange rendered in the Evidence panel and its tab). `_
 The worker reads the artifacts of this exchange OWNER-SCOPE, so a forged id can only reveal the
 caller's own data.
 
-## 7. Admin
+## 8. Admin
 
 The `/admin/*` routes share `_admin_guard()`: (1) `resolve_identity` -> `401 unauthenticated`;
 (2) `is_configured()` -> `409 storage_not_configured`; (3) `admin.is_admin(user_id)` false ->
@@ -442,7 +518,7 @@ Resolved storage config, via `sql_config.storage_status()`: `configured`, `conne
 `project_key` (+ `project_key_source`), `table_prefix` (+ `table_prefix_input` / `table_prefix_ignored`),
 `namespace`, `traces_dataset`, and the physical names computed in `tables` (`chat` -> `webapp_chat_v5`,
 `users` -> `webapp_users_v1`, `settings` -> `webapp_settings_v1`, `usage_monthly` ->
-`webapp_usage_monthly_v1`).
+`webapp_usage_monthly_v1`, `user_quota` -> `webapp_user_quota_v1`).
 
 ```json
 { "status": "ok", "storage": { "configured": true, "connection": "SQL_owi", "tables": { "chat": "OWISMIND_DEV_owismind_webapp_chat_v5" } } }
@@ -470,6 +546,89 @@ Sets or removes a user's admin flag. Body `{"user_id": "...", "is_admin": true|f
 | `cannot_remove_last_admin` | 400 | removal of the last admin |
 | `storage_unavailable` | 500 | write failure |
 
+### `GET|POST /admin/budget`
+
+Reads or writes the global monthly budget configuration plus the per-user spend overview.
+
+The global budget config (stored as JSON in `webapp_settings_v1` under key `monthly_budget`) has three
+components: the default monthly limit (`limit_usd`, default 50 USD), an enforcement switch (`enabled`, the
+gate that blocks `/chat/start` when `false` means the limit is still tracked but not enforced), and an
+optional time-boxed global temporary boost (`temp_limit_usd` + `temp_expires_at`). The resolution chain
+is documented in `storage/budget.py`: active per-user override > active global temp boost > global default.
+
+**GET** returns the global config, the current billing period boundaries, and an overview of every
+registered user's current-month spend against their resolved effective limit:
+
+```json
+{
+  "status": "ok",
+  "config": {
+    "limit_usd": 50.0,
+    "enabled": true,
+    "temp_limit_usd": null,
+    "temp_expires_at": null
+  },
+  "period_start": "2026-06-01T00:00:00",
+  "next_reset": "2026-07-01T00:00:00",
+  "currency": "USD",
+  "users": [
+    {
+      "user_id": "said.chaoui",
+      "spent_usd": 12.40,
+      "limit_usd": 50.0,
+      "limit_source": "default",
+      "override_expires_at": null,
+      "blocked": false
+    }
+  ]
+}
+```
+
+**POST** body fields:
+
+| Field | Type | Rule |
+|---|---|---|
+| `limit_usd` | float | required; non-negative, finite; validated by `validate_budget_amount` |
+| `enabled` | bool | required; whether to enforce the limit on `/chat/start` |
+| `clear_temp` | bool | optional; if `true`, removes any active temp boost |
+| `temp_limit_usd` | float | optional; if present, arms a fresh temp boost (requires `temp_days`) |
+| `temp_days` | int | optional; duration of the temp boost in days; validated by `validate_expires_days` |
+
+Temp boost handling: explicit `clear_temp:true` removes it; `temp_limit_usd` + `temp_days` arms a fresh
+one; neither of those (a plain default-limit save) PRESERVES the existing boost. This design means
+editing the default limit never silently clears an active emergency boost. POST returns the refreshed
+overview so the UI updates in one round-trip.
+
+| Error code | HTTP status | Condition |
+|---|---|---|
+| guards | 401 / 409 / 403 | `_admin_guard()` |
+| `invalid_budget_amount`, `invalid_expires` | 400 | validation failure |
+| `storage_unavailable` | 500 | read or write failure |
+
+### `POST /admin/budget/users`
+
+Sets or clears a per-user monthly limit override for one, several, or all users. Per-user overrides
+are stored in `webapp_user_quota_v1` (created lazily on first write). An override wins over the global
+default and the global temp boost while it is active (`expires_at > now()`, or `NULL` = permanent).
+
+Body:
+
+| Field | Type | Rule |
+|---|---|---|
+| `user_ids` | list of str | required; validated by `validate_user_id_list` (bounded, non-empty) |
+| `clear` | bool | if `true`, removes the override (reverts to global limit); other fields ignored |
+| `limit_usd` | float | required when not clearing; non-negative, finite |
+| `expires_days` | int / null | optional; absent or `null` = permanent override; int = temporary, expires in N days |
+| `note` | str | optional; admin annotation; validated by `validate_quota_note` (bounded, stripped) |
+
+Returns the refreshed overview (same shape as GET `/admin/budget`).
+
+| Error code | HTTP status | Condition |
+|---|---|---|
+| guards | 401 / 409 / 403 | `_admin_guard()` |
+| `invalid_user_ids`, `invalid_budget_amount`, `invalid_expires`, `invalid_quota_note` | 400 | validation failure |
+| `storage_unavailable` | 500 | write or overview read failure |
+
 ### `GET /admin/projects`
 
 `discovery.list_project_keys()` -> `{"status": "ok", "count": ..., "projects": [...]}`. Failure ->
@@ -496,16 +655,18 @@ arbitrary or hidden key.
 
 Reads or writes the whitelist of enableable agents.
 
-- **GET**: the stored selection (admin view, includes `project_key` / `agent_id`) -> `{"status": "ok",
-  "count": ..., "agents": [...]}`.
-- **POST**: persists `{"agents": [{"project_key": ..., "agent_id": ...}, ...]}`. `agents` non-list ->
-  `400 invalid_payload`; > 50 (`MAX_ENABLED_AGENTS`) -> `400 too_many_agents`. Each requested agent is
-  **RE-VALIDATED server-side** against the live DSS listings (visible project AND agent actually present);
-  a missing agent is skipped (logged), not an error. The `logical_key` is derived from a STABLE hash of
-  `project_key:agent_id` by `_logical_key` (`"ag_" + sha1(...)[:12]`): stable so that re-saving keeps
-  the same key (existing conversations referencing `agent_key` stay valid), opaque so that the
-  frontend never receives a raw `agent_id`. Persistence via `settings.set_enabled_agents(enabled,
-  updated_by=user_id)`.
+- **GET**: the stored selection (admin view, includes `project_key` / `agent_id` / `profile`) ->
+  `{"status": "ok", "count": ..., "agents": [...]}`.
+- **POST**: persists `{"agents": [{"project_key": ..., "agent_id": ..., "profile": {...}}, ...]}`.
+  `agents` non-list -> `400 invalid_payload`; > 50 (`MAX_ENABLED_AGENTS`) -> `400 too_many_agents`.
+  Each requested agent is **RE-VALIDATED server-side** against the live DSS listings (visible project AND
+  agent actually present); a missing agent is skipped (logged), not an error. The `logical_key` is derived
+  from a STABLE hash of `project_key:agent_id` by `_logical_key` (`"ag_" + sha1(...)[:12]`): stable so
+  that re-saving keeps the same key (existing conversations referencing `agent_key` stay valid), opaque so
+  that the frontend never receives a raw `agent_id`. The admin-authored `profile` (tagline, description,
+  capabilities, tools, icon, badge) is validated/bounded by `validate_agent_meta` (pure, never raises,
+  sanitizes strings, caps list lengths, whitelist on `icon`). Persistence via
+  `settings.set_enabled_agents(enabled, updated_by=user_id)`.
 
 | Error code | HTTP status | Condition |
 |---|---|---|
@@ -529,11 +690,13 @@ Reads or writes the whitelist of enableable agents.
 | `invalid_exchange_id`, `invalid_rating` | 400 | `/chat/feedback`, `/evidence/*` |
 | `invalid_filter_*`, `filter_value_too_long`, `invalid_kept_ids`, `invalid_drill` | 400 | `/evidence/rows`, `/evidence/distinct` |
 | `missing_user_id`, `cannot_remove_last_admin` | 400 | `/admin/users/set-admin` |
+| `invalid_budget_amount`, `invalid_expires`, `invalid_user_ids`, `invalid_quota_note` | 400 | `/admin/budget`, `/admin/budget/users` |
 | `too_many_agents` | 400 | `/admin/agents` |
 | `agent_not_enabled` | 404 | `/chat/start` |
 | `run_not_found` | 404 | `/chat/poll`, `/chat/stop` |
 | `project_not_found` | 404 | `/admin/projects/<key>/agents` |
-| `rate_limited` | 429 | `/chat/start`, `/evidence/*` |
+| `monthly_quota_exceeded` | 402 | `/chat/start` (budget enforcement) |
+| `rate_limited` | 429 | `/chat/start`, `/evidence/*`, `/usage` |
 | `busy` | 503 | `/chat/start` |
 | `storage_unavailable` | 500 | most storage-backed routes |
 | `agent_unavailable` | 500 | `/chat/start` |
@@ -543,7 +706,7 @@ Reads or writes the whitelist of enableable agents.
 ## See also
 - [Backend - overview and structure](01-overview-and-structure.md) - blueprint, sub-packages, cross-cutting guards.
 - [Backend - streaming and run lifecycle](03-streaming-and-runs.md) - `/chat/poll`, cursor, admission, caps and stop.
-- [Backend - storage and data model](04-storage-and-data-model.md) - `webapp_*` tables, `_COLUMNS`, conversation tree.
+- [Backend - storage and data model](04-storage-and-data-model.md) - `webapp_*` tables, `_COLUMNS`, conversation tree, `webapp_user_quota_v1`.
 - [Backend - Evidence Studio and artifacts](05-evidence-and-artifacts.md) - meta, capture, levels, chart_payload.
 - [Backend - security and validation](06-security-and-validation.md) - payload validation, SQL safety, read-only guards.
 - [Frontend - communication with the backend](../03-frontend/04-backend-communication.md) - the same contract seen from the client side (call catalogue, polling, i18n mapping of the codes).

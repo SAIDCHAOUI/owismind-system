@@ -1,6 +1,6 @@
 # Runtime flows
 
-> Audience: developer. Last updated: 2026-06-18. Summary: this document is the canonical home
+> Audience: developer. Last updated: 2026-06-19. Summary: this document is the canonical home
 > for OWIsMind's runtime sequence diagrams (full chat turn, streaming-by-polling transport,
 > artifact pipeline, Evidence panel opening), each one explained step by step beneath the diagram.
 
@@ -82,8 +82,13 @@ sequenceDiagram
    via `settings.resolve_enabled_agent`. A forged or disabled key returns `None` and a 404
    `agent_not_enabled`. The front never sees a raw `agent_id`.
 3. **Admission pre-check** BEFORE any write: `stream_manager.can_accept(user_id)` returns
-   `rate_limited` (429, per-user spacing) or `busy` (503, global cap). Refusing here avoids
-   persisting a row for nothing.
+   `rate_limited` (429, per-user spacing) or `busy` (503, global cap). If admission passes, the
+   budget gate runs next: `budget.has_budget(user_id)` checks whether the user's calendar-month
+   spend in `webapp_usage_monthly_v1` has reached their effective monthly limit (per-user override
+   in `webapp_user_quota_v1` or global default). If blocked, the route returns `402
+   monthly_quota_exceeded` with the budget status in the body. If `has_budget` raises (storage
+   error) the gate fails OPEN and the run proceeds. Both checks occur before any persistence,
+   so no row is written for a refused request.
 4. **Persistence phase 1.** `chat_v5.save_user_message` writes the user message into
    `webapp_chat_v5`, on the request thread, so that a write error surfaces as a clean HTTP error
    rather than in the worker.

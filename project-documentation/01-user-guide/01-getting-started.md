@@ -1,7 +1,7 @@
 # Getting Started
 
 > Audience: business user (analysts, sales representatives, OWI/Orange managers). Last updated:
-> 2026-06-18. Summary: how to open OWIsMind in Dataiku DSS, understand the home screen, ask
+> 2026-06-19. Summary: how to open OWIsMind in Dataiku DSS, understand the home screen, ask
 > your first question and find your conversations again, with no technical prerequisites.
 
 OWIsMind is a chat portal that lets you query your business data (first and foremost Orange telecom
@@ -51,25 +51,33 @@ demand.
 
 | Area | What it is for |
 |---|---|
-| Sidebar (left) | The "New conversation" button, the list of your recent conversations, and at the bottom your account (name + initials) and the help/settings menu. |
+| Sidebar / rail (left) | Navigation, the list of your recent conversations, and at the bottom your account avatar and the help menu. Collapses into a narrow icon rail. |
 | Conversation (center) | The heart of the application: the conversation thread, the input area at the bottom, and the timeline that shows the agent at work. |
 | Evidence Studio (right) | The Evidence panel: it explains how an answer was produced (source data, filters, calculation, SQL, charts). It opens on its own at the end of an answer and can always be hidden. |
 
 ```mermaid
 flowchart LR
-    A["Sidebar<br/>(conversations, account)"]
+    A["Sidebar / rail<br/>(nav, conversations, account)"]
     B["Conversation<br/>(thread + input + timeline)"]
     C["Evidence Studio<br/>(evidence, hideable)"]
     A --- B
     B --- C
 ```
 
-### The sidebar
+### The sidebar and the icon rail
 
-At the top, the **New conversation** button (label `sb.new_conversation`) starts a blank exchange.
-Below it, your past conversations are listed by title, the most recent first; the list fills in as you
-scroll (progressive loading). At the very bottom, your display name and initials appear, next to the help
-menu and access to **Settings** (light/dark theme, interface language).
+The sidebar contains, from top to bottom: the **OWIsMind logo** (the real Orange brand image), a
+"New conversation" button (`+`), the **Agents** library link, your recent conversations listed by
+title (the most recent first, loaded progressively as you scroll), a **Help** icon (`?`), and at
+the very bottom your avatar (initials in a circle) that opens the account / settings menu. The
+collapse button (`sb.collapse`) sits at the top of the sidebar, next to the logo. When collapsed,
+the logo itself acts as the expand button; a second expand button also appears in the top bar when
+the sidebar is in rail mode. The compact **icon rail** still gives you access to all destinations
+via icons with tooltips (`rail.new`, `rail.agents`, `rail.help`, `rail.account`). The
+conversation list is hidden in the rail but stays mounted so it is ready the moment you expand again.
+
+The navigation links lead to: **Chat** (conversations), **Agents** (the agent library),
+**My account** (formerly "Settings"), and if you are an administrator, **Administration**.
 
 ### The center: the home screen of a blank conversation
 
@@ -161,12 +169,16 @@ this panel is covered in [Understanding the results](03-understanding-evidence.m
 
 You now know how to open the application, ask a question and find your conversations again. To go further:
 choosing an agent, setting the response mode, editing or replaying a message, stopping a generation, and
-reading the timeline, head to [Using the chat](02-using-the-chat.md). If something does not go as
-expected, the [FAQ and troubleshooting](04-faq-and-troubleshooting.md) lists the most common situations.
+reading the timeline, head to [Using the chat](02-using-the-chat.md). To understand your monthly usage
+and budget, see [My account and budget](05-account-and-budget.md). To browse what the agents can do,
+see [Agents and administration](06-agents-and-administration.md). If something does not go as expected,
+the [FAQ and troubleshooting](04-faq-and-troubleshooting.md) lists the most common situations.
 
 ## See also
 - [Using the chat](02-using-the-chat.md) - the prompt, the agent selector, the modes, the timeline, the versions and stopping.
 - [Understanding the results](03-understanding-evidence.md) - the Evidence Studio from the user side (badge, chips, drill, charts).
+- [My account and budget](05-account-and-budget.md) - theme, language, profile, the monthly budget gauge and what happens when it is reached.
+- [Agents and administration](06-agents-and-administration.md) - browse the agent library; admin tasks (enable agents, author profiles, manage quotas).
 - [FAQ and troubleshooting](04-faq-and-troubleshooting.md) - practical answers and frequent error messages.
 - [Product overview](../00-overview/01-product-overview.md) - the problem solved and the differentiating trio.
 - [Scope and limitations](../00-overview/02-scope-and-limitations.md) - what the product does and does not do yet.

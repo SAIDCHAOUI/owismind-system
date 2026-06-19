@@ -1,0 +1,1374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decisions (ADR) - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+    It reads localStorage and sets body[data-theme] before first paint.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+
+  <style>
+    /* ---- ADR-specific styles ---- */
+
+    /* Status badge strips */
+    .adr-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      background: var(--soft);
+      color: var(--ink-2);
+    }
+    .adr-status.accepted {
+      border-color: var(--ink-2);
+      color: var(--ink);
+      background: var(--soft);
+    }
+    .adr-status.influx {
+      border-color: var(--orange);
+      color: var(--orange-deep);
+      background: var(--soft);
+    }
+    .adr-status.roadmap {
+      border-color: var(--line);
+      color: var(--ink-3);
+      background: var(--soft);
+    }
+
+    /* ADR card block */
+    .adr-card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      margin-bottom: 20px;
+    }
+    .adr-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      flex-wrap: wrap;
+    }
+    .adr-card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      flex: 1;
+    }
+    .adr-card-num {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--orange-deep);
+      margin-bottom: 4px;
+    }
+    .adr-card-body {
+      padding: 16px 20px;
+    }
+    .adr-card-decision {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 10px;
+      border-left: 3px solid var(--orange);
+      padding-left: 10px;
+    }
+    .adr-card-rationale {
+      font-size: 13px;
+      color: var(--ink-2);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .adr-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 20px;
+      border-top: 1px solid var(--line-soft);
+      background: var(--soft);
+    }
+    .adr-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    /* Timeline / map diagram extras */
+    .adr-map-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* Consequence lists */
+    .con-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .con-list li {
+      display: flex;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.55;
+      padding: 3px 0;
+    }
+    .con-pos::before {
+      content: "+";
+      font-weight: 800;
+      color: var(--green);
+      flex-shrink: 0;
+      width: 14px;
+    }
+    .con-neg::before {
+      content: "-";
+      font-weight: 800;
+      color: var(--red);
+      flex-shrink: 0;
+      width: 14px;
+    }
+
+    /* Group separator label */
+    .group-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      padding: 4px 0 8px;
+      margin-top: 28px;
+      border-bottom: 1px solid var(--line-soft);
+      margin-bottom: 16px;
+    }
+    .group-label:first-of-type {
+      margin-top: 0;
+    }
+  </style>
+</head>
+
+<body data-page="decisions" data-theme="light">
+
+  <!-- SHELL: the 3-column layout the JS populates -->
+  <div class="shell">
+
+    <!-- Left icon rail - JS renders this from PAGES array -->
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <!-- Main content column -->
+    <div class="main">
+
+      <!-- Topbar: breadcrumb + depth meter + controls - JS renders this -->
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <!-- Scrollable content area -->
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- ============================================================
+                     PAGE HEADER
+                     ============================================================ -->
+                <header class="page-header">
+                  <p class="eyebrow">Level 7 - Why We Did It</p>
+                  <h1>Decisions (ADR)</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">The 15 architecture decision records that capture the reasoning behind OWIsMind - the WHY behind the hash router, polling transport, direct SQL, LangGraph agents, and the Orange charter.</p>
+                </header>
+
+                <!-- KPI row -->
+                <div class="grid-3 mt">
+                  <div class="card kpi">
+                    <p class="k-label">Total ADRs</p>
+                    <p class="k-val mono">15</p>
+                    <p class="k-sub">All numbered 0001 to 0015</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Validated in DSS</p>
+                    <p class="k-val mono">10</p>
+                    <p class="k-sub">Accepted + confirmed on the instance</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Recent (2026-06-18/19)</p>
+                    <p class="k-val mono">3</p>
+                    <p class="k-sub">ADR-0013, 0014, 0015 (profiles, budget, Orange UI)</p>
+                  </div>
+                </div>
+
+                <!-- ============================================================
+                     WHAT ADRS ARE
+                     ============================================================ -->
+                <h2>What these records are for</h2>
+
+                <p>
+                  An ADR (Architecture Decision Record) is a short document that captures a structuring choice: the context that made it necessary, what was decided, the reasons, the consequences (good and bad), and the alternatives that were ruled out. The goal is not to re-explain the code - the technical sections do that - but to answer the question every newcomer or future maintainer asks: "why is this done THIS WAY, and not otherwise?"
+                </p>
+
+                <p>
+                  In OWIsMind, several choices look counter-intuitive at first glance: streaming goes through polling rather than SSE, the runtime uses no Dataiku Flow, the frontend routes in hash mode, and the agents run in a Python environment different from the backend. Each of these decisions has a concrete cause - often a failure observed in DSS - and a safety constraint behind it. The ADRs preserve this memory and prevent a future "simplification" from reintroducing a bug that has already been paid for.
+                </p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Source of truth hierarchy</p>
+                    <p>The ADRs are the hardened projection of the project's living memory (<code>memory/LESSONS.md</code> and <code>memory/PROJECT_STATE.md</code>). In case of divergence with an older guide in <code>docs/cadrage/</code>, the memory files take precedence.</p>
+                  </div>
+                </aside>
+
+                <h3>ADR format</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Section</th>
+                        <th>What it contains</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><strong>Status</strong></td><td>Accepted / Accepted (in flux) / Roadmap / Superseded by ADR-NN</td></tr>
+                      <tr><td><strong>Context</strong></td><td>The problem or constraint that forced the decision - often a failure observed in DSS</td></tr>
+                      <tr><td><strong>Decision</strong></td><td>What was decided, in a clear statement, with real code identifiers</td></tr>
+                      <tr><td><strong>Reasons</strong></td><td>Why this option rather than another, what evidence supports it</td></tr>
+                      <tr><td><strong>Consequences</strong></td><td>Positive effects AND assumed costs. A good decision always has a cost; naming it avoids surprises.</td></tr>
+                      <tr><td><strong>Rejected alternatives</strong></td><td>Options ruled out and why, so they are not naively re-proposed</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <a href="../08-decisions/README.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 08-decisions/README.md
+                </a>
+
+                <!-- ============================================================
+                     SIGNATURE DIAGRAM: ADR MAP / TIMELINE
+                     ============================================================ -->
+                <h2>ADR map and timeline</h2>
+
+                <p>
+                  The 15 decisions span four themes - delivery and platform, backend safety, agent intelligence, and product identity. The three most recent decisions (ADR-0013 through 0015) are highlighted below.
+                </p>
+
+                <!-- ADR Timeline diagram -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ADR map grouped by theme: Delivery and Platform (0001-0002), Safety and Storage (0003-0004), Agent Intelligence (0005-0011), and Product Identity (0012-0015)">
+
+                    <!-- Lane: Delivery and Platform -->
+                    <rect class="lane" x="0" y="0" width="760" height="100"/>
+                    <text x="12" y="18" class="adr-map-label text-muted" font-size="10" font-weight="700" letter-spacing="1">DELIVERY + PLATFORM</text>
+
+                    <rect class="node" x="12" y="24" width="150" height="64"/>
+                    <text x="87" y="46" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0001</text>
+                    <text x="87" y="62" text-anchor="middle" class="diagram" font-size="10">Vue SPA + hash router</text>
+                    <text x="87" y="77" text-anchor="middle" class="diagram text-muted" font-size="9">DSS static assets</text>
+
+                    <rect class="node" x="178" y="24" width="150" height="64"/>
+                    <text x="253" y="46" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0002</text>
+                    <text x="253" y="62" text-anchor="middle" class="diagram" font-size="10">Streaming via polling</text>
+                    <text x="253" y="77" text-anchor="middle" class="diagram text-muted" font-size="9">No SSE (nginx buffers)</text>
+
+                    <!-- Lane: Safety and Storage -->
+                    <rect class="lane" x="0" y="105" width="760" height="100"/>
+                    <text x="12" y="123" class="adr-map-label text-muted" font-size="10" font-weight="700" letter-spacing="1">SAFETY + STORAGE</text>
+
+                    <rect class="node" x="12" y="129" width="150" height="64"/>
+                    <text x="87" y="151" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0003</text>
+                    <text x="87" y="167" text-anchor="middle" class="diagram" font-size="10">Direct SQL, no Flow</text>
+                    <text x="87" y="182" text-anchor="middle" class="diagram text-muted" font-size="9">SQLExecutor2, COMMIT</text>
+
+                    <rect class="node" x="178" y="129" width="150" height="64"/>
+                    <text x="253" y="151" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0004</text>
+                    <text x="253" y="167" text-anchor="middle" class="diagram" font-size="10">Server-side whitelist</text>
+                    <text x="253" y="182" text-anchor="middle" class="diagram text-muted" font-size="9">Opaque logical key</text>
+
+                    <!-- Lane: Agent Intelligence -->
+                    <rect class="lane" x="0" y="210" width="760" height="120"/>
+                    <text x="12" y="228" class="adr-map-label text-muted" font-size="10" font-weight="700" letter-spacing="1">AGENT INTELLIGENCE</text>
+
+                    <rect class="node" x="12" y="234" width="96" height="84"/>
+                    <text x="60" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0005</text>
+                    <text x="60" y="271" text-anchor="middle" class="diagram" font-size="9">LangGraph</text>
+                    <text x="60" y="284" text-anchor="middle" class="diagram" font-size="9">Python 3.11</text>
+
+                    <rect class="node" x="116" y="234" width="96" height="84"/>
+                    <text x="164" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0006</text>
+                    <text x="164" y="271" text-anchor="middle" class="diagram" font-size="9">Native LLM</text>
+                    <text x="164" y="284" text-anchor="middle" class="diagram" font-size="9">Mesh calls</text>
+
+                    <rect class="node" x="220" y="234" width="96" height="84"/>
+                    <text x="268" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0007</text>
+                    <text x="268" y="271" text-anchor="middle" class="diagram" font-size="9">JSON output</text>
+                    <text x="268" y="284" text-anchor="middle" class="diagram" font-size="9">on UNDERSTAND</text>
+
+                    <rect class="node" x="324" y="234" width="96" height="84"/>
+                    <text x="372" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0008</text>
+                    <text x="372" y="271" text-anchor="middle" class="diagram" font-size="9">Evidence trust</text>
+                    <text x="372" y="284" text-anchor="middle" class="diagram" font-size="9">layer + artifacts</text>
+
+                    <rect class="node" x="428" y="234" width="96" height="84"/>
+                    <text x="476" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0009</text>
+                    <text x="476" y="271" text-anchor="middle" class="diagram" font-size="9">Per-mode</text>
+                    <text x="476" y="284" text-anchor="middle" class="diagram" font-size="9">models</text>
+
+                    <rect class="node" x="532" y="234" width="96" height="84"/>
+                    <text x="580" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0010</text>
+                    <text x="580" y="271" text-anchor="middle" class="diagram" font-size="9">Grounding +</text>
+                    <text x="580" y="284" text-anchor="middle" class="diagram" font-size="9">Semantic Model</text>
+
+                    <rect class="node" x="636" y="234" width="96" height="84"/>
+                    <text x="684" y="256" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0011</text>
+                    <text x="684" y="271" text-anchor="middle" class="diagram" font-size="9">Assistive</text>
+                    <text x="684" y="284" text-anchor="middle" class="diagram" font-size="9">sub-agent</text>
+
+                    <!-- Lane: Product Identity (last 4, with accents on 13-15) -->
+                    <rect class="lane" x="0" y="335" width="760" height="100"/>
+                    <text x="12" y="353" class="adr-map-label text-muted" font-size="10" font-weight="700" letter-spacing="1">PRODUCT IDENTITY</text>
+
+                    <rect class="node" x="12" y="359" width="160" height="64"/>
+                    <text x="92" y="381" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0012</text>
+                    <text x="92" y="397" text-anchor="middle" class="diagram" font-size="10">No em dash, ever</text>
+                    <text x="92" y="412" text-anchor="middle" class="diagram text-muted" font-size="9">Typographic rule #9</text>
+
+                    <!-- New ADRs - accent border treatment -->
+                    <rect class="node-soft" x="188" y="359" width="160" height="64" stroke="var(--orange)" stroke-width="1.5"/>
+                    <text x="268" y="375" text-anchor="middle" class="diagram text-accent" font-size="9" font-weight="700">NEW 2026-06-18</text>
+                    <text x="268" y="389" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0013</text>
+                    <text x="268" y="405" text-anchor="middle" class="diagram" font-size="10">Admin-authored profiles</text>
+
+                    <rect class="node-soft" x="364" y="359" width="160" height="64" stroke="var(--orange)" stroke-width="1.5"/>
+                    <text x="444" y="375" text-anchor="middle" class="diagram text-accent" font-size="9" font-weight="700">NEW 2026-06-18</text>
+                    <text x="444" y="389" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0014</text>
+                    <text x="444" y="405" text-anchor="middle" class="diagram" font-size="10">Monthly budget + quotas</text>
+
+                    <rect class="node-soft" x="540" y="359" width="200" height="64" stroke="var(--orange)" stroke-width="1.5"/>
+                    <text x="640" y="375" text-anchor="middle" class="diagram text-accent" font-size="9" font-weight="700">NEW 2026-06-18/19</text>
+                    <text x="640" y="389" text-anchor="middle" class="diagram" font-size="11" font-weight="700">ADR-0015</text>
+                    <text x="640" y="405" text-anchor="middle" class="diagram" font-size="10">Orange charter UI</text>
+
+                  </svg>
+                  <p class="diagram-caption">ADR map grouped by theme. Orange-bordered cards (ADR-0013 to 0015) are the three most recent decisions, added in the 2026-06-18/19 sessions.</p>
+                </figure>
+
+                <!-- ============================================================
+                     INDEX TABLE
+                     ============================================================ -->
+                <h2>Complete ADR index</h2>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ADR</th>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Deep page</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>0001</code></td>
+                        <td>Vue SPA served by DSS (hash router)</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="03-frontend.html">Frontend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0002</code></td>
+                        <td>Streaming by polling (no SSE)</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0003</code></td>
+                        <td>Direct SQL, no Flow at runtime</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0004</code></td>
+                        <td>Server-side agent whitelist (opaque logical key)</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0005</code></td>
+                        <td>LangGraph Code Agents in Python 3.11</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0006</code></td>
+                        <td>Native LLM Mesh calls (no <code>as_langchain_chat_model</code>)</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0007</code></td>
+                        <td><code>with_json_output</code> forced on UNDERSTAND only</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0008</code></td>
+                        <td>Evidence trust layer and artifacts (signal vs data)</td>
+                        <td><span class="adr-status accepted">Accepted (DSS)</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0009</code></td>
+                        <td>Per-mode model and mode propagation (no escalation)</td>
+                        <td><span class="adr-status influx">Accepted (in flux)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0010</code></td>
+                        <td>Grounding via value_index; Semantic Model owns the SQL</td>
+                        <td><span class="adr-status influx">Accepted (in flux)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0011</code></td>
+                        <td>Assistive sub-agent (does not pin an ambiguous column)</td>
+                        <td><span class="adr-status influx">Accepted (in flux)</span></td>
+                        <td><a href="05-agents.html">Agents</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0012</code></td>
+                        <td>Typographic rule: no em dash or en dash, ever</td>
+                        <td><span class="adr-status accepted">Accepted</span></td>
+                        <td><a href="06-operations.html">Operations</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0013</code></td>
+                        <td>Agent profiles are admin-authored (no hardcoded copy)</td>
+                        <td><span class="adr-status accepted">Accepted</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0014</code></td>
+                        <td>Monthly rolling budget and per-user quota overrides</td>
+                        <td><span class="adr-status influx">Accepted (in flux)</span></td>
+                        <td><a href="04-backend.html">Backend</a></td>
+                      </tr>
+                      <tr>
+                        <td><code>0015</code></td>
+                        <td>The Orange charter: sober design system for the UI</td>
+                        <td><span class="adr-status influx">Accepted (in flux)</span></td>
+                        <td><a href="03-frontend.html">Frontend</a></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ============================================================
+                     SECTION: DELIVERY AND PLATFORM
+                     ============================================================ -->
+                <h2>Delivery and platform (ADR-0001, 0002)</h2>
+
+                <p>
+                  Two foundational decisions set the delivery model. Both were forced by concrete constraints of the DSS hosting environment, discovered by testing, not by reading documentation.
+                </p>
+
+                <!-- ADR-0001 -->
+                <p class="group-label">ADR-0001</p>
+                <article class="adr-card" aria-label="ADR-0001">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0001</p>
+                      <p class="adr-card-title">Vue SPA served by DSS as static assets (hash router)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: build Vue 3 + Vite into <code>resource/owismind-app/</code>, set <code>base</code> to the DSS plugin path, use <code>createWebHashHistory()</code>, and copy <code>index.html</code> to <code>body.html</code> after each build.</p>
+                    <p class="adr-card-rationale">
+                      DSS serves the plugin's <code>resource/</code> folder at an imposed fixed path and has no server-side URL rewriting for SPAs. A router in "history path" mode would return a 404 on page reload or deep-link sharing. Aligning Vite's <code>base</code> to the DSS serving path makes all asset links correct without post-processing. The hash keeps all routing client-side, so DSS always serves the same entry page. The NO INSTALL rule keeps library versions frozen: only the user installs, never the agent.
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Simple deployment: a static-asset zip upload, no server runtime on the frontend side.</li>
+                      <li class="con-pos">Robust reload and deep links: <code>#/chat/&lt;sessionId&gt;</code> reopens without a 404.</li>
+                      <li class="con-neg">Hash-based URLs (<code>#/route</code>) are less clean than pure paths - an accepted trade-off of the DSS model.</li>
+                      <li class="con-neg"><code>body.html</code> must be rewired after every build; never edit it by hand.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="03-frontend.html" class="btn btn-sm">Frontend page</a>
+                    </div>
+                    <a href="../08-decisions/0001-vue-spa-servie-par-dss.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0001-vue-spa-servie-par-dss.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0002 -->
+                <p class="group-label">ADR-0002</p>
+                <article class="adr-card" aria-label="ADR-0002">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0002</p>
+                      <p class="adr-card-title">Streaming by polling (no SSE, no WebSockets)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: drop SSE; use polling-through-a-thread (<code>POST /chat/start</code> spawns a daemon thread, <code>GET /chat/poll?run_id=&amp;cursor=</code> returns new events since the cursor, polled every ~500 ms until <code>done</code>).</p>
+                    <p class="adr-card-rationale">
+                      SSE was the first implementation. On the real instance it failed: the DSS nginx proxy buffered the entire long response and delivered all events at once at the end. The <code>X-Accel-Buffering: no</code> header is not guaranteed to be honored from a standard webapp backend. The fix was copied from the client's production Dash app running on the SAME instance - it never exposes a long HTTP response, so it bypasses buffering by design. Each <code>/chat/poll</code> response is a short, fast request (3-4 ms measured in DSS), immune to buffering. The cursor keeps only new events per poll, so cost per call stays constant.
+                    </p>
+                    <p class="u-small u-muted mt">Safety guardrails added: <code>MAX_CONCURRENT_RUNS = 8</code>, <code>FINISHED_TTL_SECONDS = 60</code>, <code>HARD_TTL_SECONDS = 600</code>, <code>MAX_RUN_SECONDS = 300</code>, owner-scoped run ids, per-user anti-spam gate <code>MIN_START_INTERVAL_SECONDS = 1</code>, and per-run memory bounds.</p>
+                    <ul class="con-list">
+                      <li class="con-pos">Transport proven in DSS. Zero buffering at the proxy. Multi-agent flow works.</li>
+                      <li class="con-pos">No long HTTP response, so no proxy buffering surface. Run is bounded and safe.</li>
+                      <li class="con-neg">No word-by-word typing. The live content that is usable is the timeline of steps, not letter-by-letter prose.</li>
+                      <li class="con-neg">A backend restart loses in-flight runs (<code>_RUNS</code> is in-process memory); handled gracefully by the frontend terminal code.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0002-streaming-par-polling.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0002-streaming-par-polling.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ============================================================
+                     SECTION: SAFETY AND STORAGE
+                     ============================================================ -->
+                <h2>Safety and storage (ADR-0003, 0004)</h2>
+
+                <p>
+                  These two decisions define the trust boundary and the data safety posture. Both are NON-NEGOTIABLE project rules (rules 3 and 4 in <code>CLAUDE.md</code>), audited adversarially and confirmed in DSS.
+                </p>
+
+                <!-- Schema: polling transport diagram -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 160" xmlns="http://www.w3.org/2000/svg" aria-label="Polling transport: browser polls /chat/poll every 500ms, daemon worker accumulates events in _RUNS dict, done flag ends the loop">
+
+                    <rect class="lane" x="0" y="0" width="680" height="160"/>
+
+                    <!-- Browser -->
+                    <rect class="node" x="10" y="40" width="110" height="80"/>
+                    <text x="65" y="75" text-anchor="middle" class="diagram" font-size="11" font-weight="700">Browser</text>
+                    <text x="65" y="92" text-anchor="middle" class="diagram text-muted" font-size="9">POST /chat/start</text>
+                    <text x="65" y="105" text-anchor="middle" class="diagram text-muted" font-size="9">GET /chat/poll</text>
+
+                    <!-- Arrow: start -->
+                    <line class="edge-accent" x1="120" y1="68" x2="178" y2="68"/>
+                    <polygon class="arrowhead-accent" points="178,63 188,68 178,73"/>
+                    <text x="154" y="62" text-anchor="middle" class="diagram text-muted" font-size="9">start</text>
+
+                    <!-- Flask routes -->
+                    <rect class="node" x="190" y="40" width="130" height="80"/>
+                    <text x="255" y="72" text-anchor="middle" class="diagram" font-size="11" font-weight="700">Flask routes</text>
+                    <text x="255" y="88" text-anchor="middle" class="diagram text-muted" font-size="9">/chat/start</text>
+                    <text x="255" y="101" text-anchor="middle" class="diagram text-muted" font-size="9">/chat/poll (cursor)</text>
+                    <text x="255" y="114" text-anchor="middle" class="diagram text-muted" font-size="9">/chat/stop</text>
+
+                    <!-- Arrow: spawn thread -->
+                    <line class="edge" x1="320" y1="68" x2="378" y2="68"/>
+                    <polygon class="arrowhead" points="378,63 388,68 378,73"/>
+                    <text x="354" y="62" text-anchor="middle" class="diagram text-muted" font-size="9">spawn</text>
+
+                    <!-- Worker -->
+                    <rect class="node-accent" x="390" y="40" width="130" height="80"/>
+                    <text x="455" y="72" text-anchor="middle" fill="#fff" class="diagram" font-size="11" font-weight="700">Daemon worker</text>
+                    <text x="455" y="88" text-anchor="middle" fill="#fff" class="diagram" font-size="9">_RUNS[run_id]</text>
+                    <text x="455" y="101" text-anchor="middle" fill="#fff" class="diagram" font-size="9">events list</text>
+                    <text x="455" y="114" text-anchor="middle" fill="#fff" class="diagram" font-size="9">done flag</text>
+
+                    <!-- Arrow: LLM Mesh -->
+                    <line class="edge" x1="520" y1="80" x2="578" y2="80"/>
+                    <polygon class="arrowhead" points="578,75 588,80 578,85"/>
+
+                    <!-- LLM Mesh -->
+                    <rect class="node" x="590" y="40" width="80" height="80"/>
+                    <text x="630" y="76" text-anchor="middle" class="diagram" font-size="11" font-weight="700">LLM</text>
+                    <text x="630" y="92" text-anchor="middle" class="diagram" font-size="9">Mesh</text>
+
+                    <!-- Poll return arrow -->
+                    <line class="edge" x1="390" y1="104" x2="320" y2="116"/>
+                    <polygon class="arrowhead" points="324,112 312,118 320,124"/>
+                    <text x="354" y="132" text-anchor="middle" class="diagram text-muted" font-size="9">events[cursor:] + done flag</text>
+
+                    <!-- Browser return -->
+                    <line class="edge" x1="190" y1="116" x2="122" y2="104"/>
+                    <polygon class="arrowhead" points="126,100 114,106 120,112"/>
+                    <text x="156" y="142" text-anchor="middle" class="diagram text-muted" font-size="9">poll ~500 ms until done</text>
+                  </svg>
+                  <p class="diagram-caption">ADR-0002 - Polling transport: the daemon worker accumulates events; the browser polls every 500 ms using a cursor to request only new events. The proxy never sees a long HTTP response.</p>
+                </figure>
+
+                <!-- ADR-0003 -->
+                <p class="group-label">ADR-0003</p>
+                <article class="adr-card" aria-label="ADR-0003">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0003</p>
+                      <p class="adr-card-title">Direct SQL, no Flow at runtime</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: all runtime reads and writes go through <code>SQLExecutor2</code> with parameterized queries, explicit <code>COMMIT</code>, a fresh executor per call, and read-only transactions on replay paths. No DSS Flow at runtime.</p>
+                    <p class="adr-card-rationale">
+                      OWIsMind runs on a shared Dataiku instance. Flow execution touches the scheduler and orchestration of the entire instance - unsuitable for KB-sized transactional writes on every chat request. Direct SQL is predictable, auditable, and bounded. Key invariants: fresh executor per call (avoids shared transaction state across Flask worker threads), parameterized values via <code>sql_value()</code> (never string-concatenated), systematic <code>COMMIT</code> in <code>post_queries</code>, read-only transactions on Evidence replay paths, and versioned <code>_vN</code> tables instead of destructive ALTER. Schema naming: <code>public."PROJECT_KEY_owismind_tablename"</code>.
+                    </p>
+                    <aside class="callout callout-warning" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">Non-negotiable rule</p>
+                        <p>There is NO generic SQL route. The frontend never chooses the table, connection, or query. No <code>/execute-sql</code> endpoint exists. This is rule #3 in <code>CLAUDE.md</code>.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">No injection surface: adversarial greps for DROP/TRUNCATE/set_* came back empty.</li>
+                      <li class="con-pos">6-lens Evidence audit: 0 injection / 0 IDOR / 0 XSS.</li>
+                      <li class="con-neg">Schema changes require a new <code>_vN</code> table (old conversations become invisible at switchover - accepted).</li>
+                      <li class="con-neg"><code>SQLExecutor2</code> always inlines values into query text (logged by DSS); hence the persisted-text cap.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0003-sql-direct-sans-flow.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0003-sql-direct-sans-flow.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0004 -->
+                <p class="group-label">ADR-0004</p>
+                <article class="adr-card" aria-label="ADR-0004">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0004</p>
+                      <p class="adr-card-title">Server-side agent whitelist (opaque logical key)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: the frontend only ever sees an opaque logical key (<code>ag_&lt;sha1[:12]&gt;</code>). The backend is the single point of resolution to <code>(project_key, agent_id)</code> via an administered whitelist in <code>webapp_settings_v1</code>. A raw <code>agent_id</code> never crosses the trust boundary.</p>
+                    <p class="adr-card-rationale">
+                      The frontend is an untrusted client. Giving it a raw <code>agent_id</code> (e.g. <code>agent:bHrWLyOL</code>) would allow any user to run an agent that the admin never authorized. The opaque key is derived deterministically from <code>sha1(project_key:agent_id)[:12]</code> so that re-saving the same selection yields the same key (conversations stay attached). Admin saves re-validate every agent against the live DSS listing: a forged or invisible project id can never be persisted. <code>GET /agents</code> returns only <code>{key, label}</code>; <code>POST /chat/start</code> enforces the whitelist via <code>resolve_enabled_agent()</code>.
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Validated in DSS. No table readable by the frontend exposes an <code>agent_id</code> or <code>project_key</code>.</li>
+                      <li class="con-pos">Adding or removing an agent is a purely administrative operation - no code change, no schema migration.</li>
+                      <li class="con-neg">If an agent is deactivated or moved to another project, its logical key stops resolving and old conversations referencing it become orphaned.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0004-whitelist-agents-serveur.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0004-whitelist-agents-serveur.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ============================================================
+                     SECTION: AGENT INTELLIGENCE
+                     ============================================================ -->
+                <h2>Agent intelligence (ADR-0005 to 0011)</h2>
+
+                <p>
+                  Seven decisions shape the agent layer. Together they define the runtime (LangGraph on Python 3.11), the LLM integration discipline (native Mesh calls, forced JSON only on UNDERSTAND), the data-trust contract (Evidence Studio), the model-agnostic mode system, the data engine (Semantic Model + grounding), and the sub-agent assistance principle.
+                </p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux: agent layer being edited live</p>
+                    <p>ADR-0009, 0010, and 0011 carry elements not yet confirmed in DSS. The per-mode Gemini model ids must be verified on the instance. The <code>attribute_lookup</code> tool wiring and the EVPL smoke test via the orchestrator are pending. Details in the in-flux notes on each card below.</p>
+                  </div>
+                </aside>
+
+                <!-- Agent architecture diagram -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" aria-label="Agent architecture: Flask backend (Python 3.9) calls orchestrator LangGraph agent (Python 3.11) which calls sub-agent and tools">
+
+                    <rect class="lane" x="0" y="0" width="720" height="50"/>
+                    <text x="12" y="18" class="diagram text-muted" font-size="10" font-weight="700" letter-spacing="1">PYTHON 3.9 (FLASK BACKEND)</text>
+                    <rect class="node" x="12" y="20" width="150" height="24"/>
+                    <text x="87" y="36" text-anchor="middle" class="diagram" font-size="10">python-lib/owismind routes.py</text>
+
+                    <line class="edge-accent" x1="162" y1="32" x2="218" y2="68"/>
+                    <polygon class="arrowhead-accent" points="214,64 224,72 218,76"/>
+                    <text x="185" y="58" class="diagram text-accent" font-size="9">get_agent_tool().run()</text>
+
+                    <rect class="lane" x="0" y="55" width="720" height="160"/>
+                    <text x="12" y="73" class="diagram text-muted" font-size="10" font-weight="700" letter-spacing="1">PYTHON 3.11 (CODE AGENTS)</text>
+
+                    <!-- Orchestrator -->
+                    <rect class="node-accent" x="12" y="80" width="190" height="120"/>
+                    <text x="107" y="102" text-anchor="middle" fill="#fff" class="diagram" font-size="11" font-weight="700">OWIsMind_orchestrator</text>
+                    <text x="107" y="118" text-anchor="middle" fill="#fff" class="diagram" font-size="9">LangGraph StateGraph</text>
+                    <text x="107" y="131" text-anchor="middle" fill="#fff" class="diagram" font-size="9">pick_loop_llm(mode)</text>
+                    <text x="107" y="144" text-anchor="middle" fill="#fff" class="diagram" font-size="9">Tools: ask_* / show_* / current_date</text>
+                    <text x="107" y="157" text-anchor="middle" fill="#fff" class="diagram" font-size="9">attribute_lookup (IN FLUX)</text>
+                    <text x="107" y="170" text-anchor="middle" fill="#fff" class="diagram" font-size="9">emit events via get_stream_writer</text>
+
+                    <!-- Arrow to sub-agent -->
+                    <line class="edge" x1="202" y1="130" x2="258" y2="130"/>
+                    <polygon class="arrowhead" points="258,125 268,130 258,135"/>
+                    <text x="230" y="120" text-anchor="middle" class="diagram text-muted" font-size="9">ask_revenue_expert</text>
+
+                    <!-- Sub-agent -->
+                    <rect class="node" x="270" y="80" width="190" height="120"/>
+                    <text x="365" y="102" text-anchor="middle" class="diagram" font-size="11" font-weight="700">SalesDrive_revenue_expert</text>
+                    <text x="365" y="118" text-anchor="middle" class="diagram" font-size="9">UNDERSTAND (with_json_output)</text>
+                    <text x="365" y="131" text-anchor="middle" class="diagram" font-size="9">RESOLVE (value_index inline SQL)</text>
+                    <text x="365" y="144" text-anchor="middle" class="diagram" font-size="9">COMPOSE (build_semantic_question)</text>
+                    <text x="365" y="157" text-anchor="middle" class="diagram" font-size="9">QUERY (revenue_semantic_query)</text>
+                    <text x="365" y="170" text-anchor="middle" class="diagram" font-size="9">RENDER + disclosure notes</text>
+
+                    <!-- Arrow to tools -->
+                    <line class="edge" x1="460" y1="130" x2="516" y2="130"/>
+                    <polygon class="arrowhead" points="516,125 526,130 516,135"/>
+
+                    <!-- Tools -->
+                    <rect class="node-soft" x="528" y="80" width="180" height="120"/>
+                    <text x="618" y="102" text-anchor="middle" class="diagram" font-size="11" font-weight="700">DSS Managed Tools</text>
+                    <text x="618" y="118" text-anchor="middle" class="diagram" font-size="9">revenue_semantic_query (v4oqA6R)</text>
+                    <text x="618" y="131" text-anchor="middle" class="diagram" font-size="9">Sonnet model in ALL modes</text>
+                    <text x="618" y="144" text-anchor="middle" class="diagram text-accent" font-size="9">attribute_lookup (IN FLUX)</text>
+                    <text x="618" y="157" text-anchor="middle" class="diagram" font-size="9">SQL on DRIVE_Revenues</text>
+                    <text x="618" y="170" text-anchor="middle" class="diagram" font-size="9">via Semantic Model layer</text>
+                  </svg>
+                  <p class="diagram-caption">Agent architecture (ADR-0005 to 0011): the orchestrator (LangGraph, Python 3.11, native Mesh) delegates to the revenue expert sub-agent, which grounds terms via inline SQL then calls the Semantic Model Query tool to generate and execute analytical SQL.</p>
+                </figure>
+
+                <!-- ADR-0005 -->
+                <p class="group-label">ADR-0005</p>
+                <article class="adr-card" aria-label="ADR-0005">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0005</p>
+                      <p class="adr-card-title">LangGraph Code Agents in Python 3.11 (3.9/3.11 dual path)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: both agents are LangGraph <code>StateGraph</code> programs in self-contained Python files, running on a Python 3.11 code env, distinct from the Flask backend (Python 3.9.23). The repository is the source of truth; agents are re-pasted by hand into DSS after every change.</p>
+                    <p class="adr-card-rationale">
+                      LangChain and LangGraph require Python 3.10 or higher; the Flask backend runs on 3.9.23 (observed, not assumed). Both code envs exist on the instance simultaneously - the dual path is the platform reality. DSS visual agents are black boxes that give no control over the loop, frozen event contracts, deterministic evidence capture, or mode propagation. LangGraph brings an explicit typed <code>StateGraph</code> loop and a custom stream writer for the timeline, with full code control. <code>get_stream_writer()</code> works in synchronous nodes on Python 3.11 (proven in the DSS log, lesson L055) - a key reason to stay on 3.11 and keep nodes synchronous.
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Validated in DSS: the DSS log proves LangGraph runs on the 3.11 Code Agent.</li>
+                      <li class="con-pos">Full control of the loop, contracts, evidence capture, and mode propagation.</li>
+                      <li class="con-neg">Manual re-pasting: every repository change requires re-pasting BOTH Code Agents into DSS (env 3.11).</li>
+                      <li class="con-neg">Two separate processes: config set in one does not reach the other without being explicitly routed.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0005-langgraph-code-agents-python-311.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0005-langgraph-code-agents-python-311.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0006 -->
+                <p class="group-label">ADR-0006</p>
+                <article class="adr-card" aria-label="ADR-0006">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0006</p>
+                      <p class="adr-card-title">Native LLM Mesh calls in nodes (no <code>as_langchain_chat_model</code>)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: all LLM calls inside nodes use native Mesh APIs - <code>project.get_llm(id).new_completion()</code> then <code>execute()</code> / <code>execute_streamed()</code>, and <code>project.get_agent_tool(id).run()</code> for tools. Never <code>as_langchain_chat_model()</code>.</p>
+                    <p class="adr-card-rationale">
+                      The <code>as_langchain_chat_model()</code> adapter normalizes the exchange to the LangChain format and loses the Mesh's native reasoning and tool-calling. Without reasoning, the orchestrator cannot route reliably; without tool-calling, it cannot delegate to sub-agents or request chart rendering. Native calls also preserve the exact <code>tool_call -&gt; tool_output</code> pairing required by Claude/Vertex (a broken pairing triggers a 400). Additionally, synchronous nodes with native blocking Mesh calls work correctly with <code>get_stream_writer()</code> on Python 3.11 - the async path has a known bug for this.
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Reasoning and tool-calling preserved end to end. Evidence capture is deterministic (SQL and rows read from the tool return value, not guessed from a trace).</li>
+                      <li class="con-pos">The tool_call / tool_output pairing is under direct code control - avoids 400s from the Mesh API.</li>
+                      <li class="con-neg">The agent files must be self-contained (only stdlib, <code>dataiku</code>, <code>langgraph</code>; no plugin imports). Re-pasting is required after every change.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0006-appels-natifs-llm-mesh.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0006-appels-natifs-llm-mesh.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0007 -->
+                <p class="group-label">ADR-0007</p>
+                <article class="adr-card" aria-label="ADR-0007">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0007</p>
+                      <p class="adr-card-title"><code>with_json_output</code> forced on UNDERSTAND, never on the orchestrator</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: the sub-agent's UNDERSTAND step calls <code>completion.with_json_output(schema=...)</code> for a clean, fast parse. The orchestrator NEVER calls <code>with_json_output</code> because in DSS 14 it silently disables the model's reasoning.</p>
+                    <p class="adr-card-rationale">
+                      Without forced JSON, the UNDERSTAND step's model "thought" for 15 seconds then returned prose the parser could not read. The sub-agent would short-circuit the entire pipeline with an internal error before a single SQL query ran (lesson L056). The general rule: <code>with_json_output</code> for any output consumed by code (deterministic extraction), and reasoning reserved for decisions and prose (the orchestrator's routing and the verified headline). In DSS 14, native JSON mode disables reasoning for that call - which is exactly what we want for UNDERSTAND (an extraction does not need to think) and exactly what we must avoid for the orchestrator (which must reason to route correctly).
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Validated in DSS: extraction is reliable and fast; the internal-error-before-SQL bug is gone.</li>
+                      <li class="con-pos">Schema anchored on the profile enums: the model cannot produce an out-of-domain value.</li>
+                      <li class="con-neg">If JSON mode becomes unavailable on the connection, the prompt-only fallback (attempt 2) is less reliable on small models. Traced and observable via span attributes.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0007-json-output-force-sur-understand.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0007-json-output-force-sur-understand.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0008 -->
+                <p class="group-label">ADR-0008</p>
+                <article class="adr-card" aria-label="ADR-0008">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0008</p>
+                      <p class="adr-card-title">Evidence trust layer and artifacts (signal vs data separation)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted (DSS)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: Evidence Studio re-derives all proof from the stored SQL on every call, using ZERO LLM in the path. Artifacts carry only a display SPEC (<code>x</code>, <code>y</code>, <code>chart_type</code>); the data rows come from the already-captured result, never from the agent.</p>
+                    <p class="adr-card-rationale">
+                      OWIsMind targets non-technical sales people who must be able to trust a revenue figure. Putting an LLM in the evidence path would make the evidence itself a generation - and false evidence is worse than no evidence. The trust level is a deterministic scale computed by pure static analysis of the stored SQL (levels: <code>declared</code> to <code>calc_decomposed</code>); the badge is NEVER green. For artifacts: binding the Chart.js payload to the single captured SQL result guarantees that the chart is by construction consistent with the Evidence tab. No duplication of sensitive data in a dedicated schema; everything is re-derived from <code>generated_sql</code> already stored in the chat row.
+                    </p>
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: result capture is best-effort</p>
+                        <p>The exact key of the rows in the tool span is not confirmed on the instance. Capture probes several candidate keys (<code>_ROW_KEYS</code>); if absent, the panel shows <code>result_captured: false</code> without guessing. The trust level remains valid independently (it only depends on the stored SQL text).</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Evidence can never over-assert: every degradation path lowers the level, never raises it.</li>
+                      <li class="con-pos">Chart and evidence are always consistent (same captured result rows).</li>
+                      <li class="con-neg">Without an admin dataset whitelist (MULTISELECT does not render in DSS Settings), any SQL dataset in the project whose table the agent queries is visible as raw rows in Evidence.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0008-evidence-trust-layer-et-artifacts.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0008-evidence-trust-layer-et-artifacts.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0009 -->
+                <p class="group-label">ADR-0009</p>
+                <article class="adr-card" aria-label="ADR-0009">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0009</p>
+                      <p class="adr-card-title">Per-mode model, no escalation (model-agnostic architecture)</p>
+                    </div>
+                    <span class="adr-status influx">Accepted (in flux)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: one model drives the entire turn, chosen by the user mode (<code>eco</code> = Gemini 3.1 Flash-Lite, <code>medium</code> = Gemini 3.5 Flash, <code>high</code> = Claude Sonnet 4.6). No escalation. The mode propagates to the sub-agent via a machine token <code>⟦owi:mode=...⟧</code> appended at the END of the message by the backend.</p>
+                    <p class="adr-card-rationale">
+                      The previous escalation architecture failed in DSS on gpt-5.4-mini: either the model escalated systematically (triggering a hardcoded transition message) or it narrated its intent then stopped without calling a single tool ("narrate-and-stop"). User instruction: stop the single-model hacks, aim for an architecture that works even on small models. A single model per mode is predictable and genuinely model-agnostic. Narration is OFF in eco mode (removes the "speak before acting" prompt that caused narrate-and-stop on the smallest tier). The token is read LAST by the orchestrator so that a user-typed fake mode token earlier in the message cannot force a more expensive model.
+                    </p>
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: Gemini model ids must be verified</p>
+                        <p>The constants <code>GEMINI_FLASH_LITE_ID</code> and <code>GEMINI_FLASH_ID</code> follow the format observed on the LLM-7064-revforecast connection but must match the target instance exactly. A wrong id breaks the corresponding mode. Eco is the DEFAULT - a wrong eco id means no response at all.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Predictable: orchestration logic is identical across all three modes, only the tier changes.</li>
+                      <li class="con-pos">The Semantic Model Query tool runs on Sonnet in ALL modes - SQL quality stays constant.</li>
+                      <li class="con-neg">Both Code Agents carry the same <code>LLM_BY_MODE</code> table. An id change must be reflected in BOTH files, then both re-pasted in env 3.11.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0009-modeles-par-mode.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0009-modeles-par-mode.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0010 -->
+                <p class="group-label">ADR-0010</p>
+                <article class="adr-card" aria-label="ADR-0010">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0010</p>
+                      <p class="adr-card-title">Grounding via value_index; Semantic Model owns the SQL (hybrid engine)</p>
+                    </div>
+                    <span class="adr-status influx">Accepted (in flux)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: the default engine is <code>SQL_ENGINE = "semantic_tool"</code>. The sub-agent runs UNDERSTAND/RESOLVE/COMPOSE then delegates SQL generation AND execution to the DSS Semantic Model Query tool (<code>v4oqA6R</code>). Term grounding is inline read-only SQL on the <code>DRIVE_Revenues_value_index</code> dataset (NOT a separate DSS tool call), via a three-stage cascade: exact match, fuzzy ILIKE, last-chance difflib scan.</p>
+                    <p class="adr-card-rationale">
+                      A user A/B test in DSS showed that the Semantic Model (Sonnet + semantic layer) "answers and understands much better" than our hand-written SQL templates. SOTA research confirms it: semantic-layer-guided SQL achieves 98-100% accuracy vs 84-90% for free LLM-generated SQL. The code's job is to give the model the best possible context. Grounding stays inline SQL (not a tool) because a tool would run the same SQL with no gain; keeping it inline means bounded, read-only, database-side matching with no extra tool surface. The direct SQL engine is retained as a technical fallback (<code>FALLBACK_TO_DIRECT = True</code>) but is never used for a legitimate empty result.
+                    </p>
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: attribute_lookup wiring</p>
+                        <p>The <code>attribute_lookup</code> tool (<code>tools/attribute_lookup_tool.py</code>) replaces the former <code>dataset_lookup</code> managed tool (removed 2026-06-18). It is wired as a built-in of the ORCHESTRATOR (<code>LOOKUP_TOOL_ID</code>, empty until the Custom Python tool is created in DSS). The sub-agent stays unchanged. Confirmation on the instance is pending.</p>
+                      </div>
+                    </aside>
+                    <aside class="callout callout-roadmap" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">Roadmap</p>
+                        <p><code>DRIVE_Revenues_Value_Catalog</code> and the Python resolver <code>Drive_Revenues_resolve_filter_value</code> are NOT wired in v3. They are superseded by <code>attribute_lookup</code> for the direct-lookup need.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Validated in DSS: the data engine works ("really well"). Grounding is safe and bounded with no hardcoded business value.</li>
+                      <li class="con-pos">Clean separation: code owns UNDERSTAND/RESOLVE/COMPOSE and instance safety; Sonnet owns SQL generation and the business hierarchy.</li>
+                      <li class="con-neg">The Semantic Model engine is opaque: anomalies are fixed in its config, not in the agent code. Alignment scripts: <code>tools/semantic_model/build_aligned_semantic_model.py</code>.</li>
+                      <li class="con-neg">The value_index can be stale after a dataset change; freshness depends on running the Flow recipe.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0010-grounding-et-semantic-model.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0010-grounding-et-semantic-model.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0011 -->
+                <p class="group-label">ADR-0011</p>
+                <article class="adr-card" aria-label="ADR-0011">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0011</p>
+                      <p class="adr-card-title">Assistive sub-agent (does not pin a column for an ambiguous offer term)</p>
+                    </div>
+                    <span class="adr-status influx">Accepted (in flux)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: when a user term appears in multiple offer hierarchy columns, the sub-agent emits an <code>AMBIGUOUS OFFER TERM</code> marker in the message to the Semantic Model and lets the model decide the hierarchy. It never pins the column itself. Single-column ambiguities (two distinct entities in one column) still trigger a clarification request.</p>
+                    <p class="adr-card-rationale">
+                      A concrete bug triggered this decision: "revenus YTD EVPL, actuals vs budget". The earlier sub-agent used <code>column_priority</code> (-distinct_count fallback) which ranked <code>sirano_product</code> (153 distinct values) over <code>Product</code> (42 distinct values) and pinned <code>sirano_product = 'EVPL'</code>. Budget rows carry no <code>sirano_product</code>, so the budget result was 0. The Semantic Model (Sonnet, Playground) resolved <code>Product = 'EVPL'</code> perfectly. The small sub-agent was dictating the wrong answer to a model that would have known better. The business hierarchy (<code>Product > Solution > SolutionLine > sirano_product</code>, "never default to sirano_product") lives in the model's instructions, not in the code (project rule P3: no business value hardcoded in agent logic).
+                    </p>
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: EVPL smoke test pending</p>
+                        <p>The EVPL case must be re-tested via the orchestrator in DSS: "revenus YTD EVPL, actuals vs budget" should resolve to <code>Product = 'EVPL'</code>, not <code>sirano_product</code>, and the budget result should not be zero. Validation pending.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Fixes the budget = 0 trap on multi-column offer terms.</li>
+                      <li class="con-pos">P3-clean: zero hardcoded column name or hierarchy in the agent code.</li>
+                      <li class="con-neg">The guarantee depends on the Semantic Model instructions. If "never default to sirano_product" is removed from the model config, the bug can return on the model side.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="05-agents.html" class="btn btn-sm">Agents page</a>
+                    </div>
+                    <a href="../08-decisions/0011-sous-agent-assistif.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0011-sous-agent-assistif.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ============================================================
+                     SECTION: PRODUCT IDENTITY
+                     ============================================================ -->
+                <h2>Product identity (ADR-0012 to 0015)</h2>
+
+                <p>
+                  Four decisions govern the non-functional identity of the product: the typographic rule that eliminates an AI signature from every surface, the admin-authored agent profiles system, the monthly budget enforcement layer, and the sober Orange design charter. The three decisions added in the 2026-06-18/19 sessions (ADR-0013, 0014, 0015) are the most recent in the repository.
+                </p>
+
+                <!-- ADR-0012 -->
+                <p class="group-label">ADR-0012</p>
+                <article class="adr-card" aria-label="ADR-0012">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0012</p>
+                      <p class="adr-card-title">Typographic rule: no em dash or en dash, anywhere, ever</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: U+2014 (em dash) and U+2013 (en dash) are banned on every surface of the project: i18n strings, UI text, source code, comments, project memory, commit messages, and chat responses. Use <code>-</code>, <code>:</code>, <code>,</code> or parentheses instead.</p>
+                    <p class="adr-card-rationale">
+                      Language models produce em dashes abundantly for asides and pauses; their presence in a project where AI assists the authoring betrays that origin and harms the project's identity. User decision of 2026-06-17, no functional exception. The verification is deterministic and inexpensive: <code>grep -rlP '\xe2\x80\x9[34]' .</code> (byte-safe, covers both glyphs). The sweep must be byte-safe using <code>LC_ALL=C</code> to avoid corrupting multibyte agent control tokens (<code>⟦owi:mode⟧</code>, logical symbols). A pre-commit git hook was proposed but is not yet installed; manual grep is the current barrier.
+                    </p>
+                    <div class="code-block mt">
+                      <div class="code-block-header">
+                        <span class="code-lang">Shell</span>
+                        <button class="code-copy" aria-label="Copy code">Copy</button>
+                      </div>
+                      <pre><code># Verify: zero em/en dashes anywhere in the repo
+grep -rlP '\xe2\x80\x9[34]' .
+
+# Verify: no U+FFFD corruption from a previous sweep
+grep -rlP '\xef\xbf\xbd' .</code></pre>
+                    </div>
+                    <ul class="con-list">
+                      <li class="con-pos">Homogeneous identity: the whole corpus (code, doc, memory, commits, chat) speaks the same typography.</li>
+                      <li class="con-pos">Verifiable in one command, integrable into any pre-commit check or review.</li>
+                      <li class="con-neg">No automatic guardrail yet (pre-commit hook not installed); discipline and manual grep act as the safety net.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="06-operations.html" class="btn btn-sm">Operations page</a>
+                    </div>
+                    <a href="../08-decisions/0012-regle-typographique-sans-tiret-cadratin.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0012-regle-typographique-sans-tiret-cadratin.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0013 - NEW -->
+                <p class="group-label">ADR-0013 - new (2026-06-18)</p>
+                <article class="adr-card" aria-label="ADR-0013">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0013 <span class="badge orange" style="font-size:10px;margin-left:6px;">New</span></p>
+                      <p class="adr-card-title">Agent profiles are admin-authored (no hardcoded copy)</p>
+                    </div>
+                    <span class="adr-status accepted">Accepted</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: agent display copy (tagline, description, capabilities, tools, icon, badge) is authored by an administrator through the Admin UI, validated by <code>validate_agent_meta</code> (pure, never raises, clamps to bounds), stored inside the <code>enabled_agents</code> JSON in <code>webapp_settings_v1</code>, and exposed via <code>GET /agents</code> without ever leaking a raw agent id.</p>
+                    <p class="adr-card-rationale">
+                      The previous <code>agentMeta.js</code> frontend module hardcoded descriptions that went stale whenever an agent was renamed or restructured, and required a full frontend rebuild + zip upload for any text update. Deriving copy from the DSS agent's own technical label ("OWIsMind_orchestrator") is correct for raw admin views but inadequate as a user-facing card. The server-side constraint: the frontend must never receive a raw <code>agent_id</code> (ADR-0004), so the profile must be keyed by the opaque <code>logical_key</code>. Piggybacking on the existing <code>webapp_settings_v1</code> avoids a new table, stays within the no-ALTER discipline, and keeps the enabled-agents lifecycle in one place. <code>validate_agent_meta</code> never raises so a malformed admin payload degrades gracefully without blocking the whitelist save.
+                    </p>
+                    <ul class="con-list">
+                      <li class="con-pos">Live copy editable by an admin with no code change, no rebuild, no deploy.</li>
+                      <li class="con-pos">An empty profile renders an honest "profile to complete" placeholder, never stale hardcoded text.</li>
+                      <li class="con-neg">The admin must fill in each profile before the library feels complete to users. Until then, the placeholder card is shown.</li>
+                      <li class="con-neg">Adding a new icon requires updating both <code>ALLOWED_AGENT_ICONS</code> in <code>validation.py</code> AND the frontend icon registry - one backend restart required.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0013-agent-profiles-admin-authored.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0013-agent-profiles-admin-authored.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0014 - NEW -->
+                <p class="group-label">ADR-0014 - new (2026-06-18)</p>
+                <article class="adr-card" aria-label="ADR-0014">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0014 <span class="badge orange" style="font-size:10px;margin-left:6px;">New</span></p>
+                      <p class="adr-card-title">Monthly rolling budget and per-user quota overrides</p>
+                    </div>
+                    <span class="adr-status influx">Accepted (in flux)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: a rolling 50 USD/month credit per user, enforced at <code>POST /chat/start</code> (HTTP 402, fail-open on storage error). The limit resolves via a two-layer cascade: per-user override in <code>webapp_user_quota_v1</code> (permanent or time-boxed) over a global default in <code>webapp_settings_v1</code>. Monthly spend accumulates in <code>webapp_usage_monthly_v1</code> as calendar-bucket rows - no reset cron job needed.</p>
+                    <p class="adr-card-rationale">
+                      Without a spending ceiling, a single user could exhaust the organization's LLM Mesh quota calling Sonnet in high mode indefinitely. The calendar-bucket approach (primary key = <code>(user_id, period_start)</code>, where <code>period_start = date_trunc('month', now())</code>) means a new month is simply a new row; no scheduled job can be missed. The fail-open contract - allowing the request through on a storage error - prioritizes chat availability over perfectly-timed enforcement; the spend is still recorded, so the next request is correctly gated. The 30-second in-process config cache removes one DB round-trip per <code>/chat/start</code> call. A new <code>_v1</code> table holds only the per-user exceptions (most users use the global default), preserving the no-ALTER discipline.
+                    </p>
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: backend restart required</p>
+                        <p>Not yet validated in DSS. A backend restart is required after uploading the plugin zip (python-lib changed). The <code>webapp_user_quota_v1</code> table is created lazily on the first budget-admin write - no migration required upfront.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Rolling monthly reset requires no cron job: new month = new bucket row.</li>
+                      <li class="con-pos">Budget card transparent to the user: shows spent, limit, source of the limit, and reset date.</li>
+                      <li class="con-neg">Fail-open means a user with an exhausted budget still gets an answer during a DB outage. This is the intended trade-off.</li>
+                      <li class="con-neg">Admin config changes propagate with up to 30s delay to other backend processes (if multi-process mode).</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="04-backend.html" class="btn btn-sm">Backend page</a>
+                    </div>
+                    <a href="../08-decisions/0014-monthly-budget-and-per-user-quotas.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0014-monthly-budget-and-per-user-quotas.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ADR-0015 - NEW -->
+                <p class="group-label">ADR-0015 - new (2026-06-18/19)</p>
+                <article class="adr-card" aria-label="ADR-0015">
+                  <div class="adr-card-header">
+                    <div>
+                      <p class="adr-card-num">ADR-0015 <span class="badge orange" style="font-size:10px;margin-left:6px;">New</span></p>
+                      <p class="adr-card-title">The Orange charter: sober design system for the OWIsMind UI</p>
+                    </div>
+                    <span class="adr-status influx">Accepted (in flux)</span>
+                  </div>
+                  <div class="adr-card-body">
+                    <p class="adr-card-decision">Decision: white and near-black carry the layout; a SINGLE orange (<code>#FF7900</code>) is used as a RARE accent only on active states, eyebrows, title-bars, KPI rules, and primary actions. Square geometry everywhere (<code>border-radius: 0</code>; only avatars are round). Flat fills, 1px borders, heavy headings. All colors through semantic tokens (<code>frontend/src/styles/tokens.css</code>). The brand logo is ALWAYS the real <code>orange-logo.png</code> image, never a CSS-generated substitute.</p>
+                    <p class="adr-card-rationale">
+                      Iterative UI work had accumulated rounded cards, glow effects, backdrop-filter blur, <code>color-mix()</code> that broke dark mode, and at one point a logo reconstructed in CSS. An Orange enterprise product must feel like the Orange brand: clean, authoritative, editorial, not decorated. The Orange charter formalizes this: a self-contained reference (<code>docs/cadrage/CHARTE_ORANGE_UI.md</code>) that replaces the original HTML mockup (now deleted). Key ban reasons: <code>color-mix()</code> produces invisible text in dark mode; blur is GPU-heavy on low-power devices; a CSS-generated logo scales poorly and requires maintenance; a global focus ring on the input container looks like an interactive brand element.
+                    </p>
+
+                    <!-- Hard bans table -->
+                    <div class="card mt">
+                      <table>
+                        <thead>
+                          <tr><th>Banned construct</th><th>Reason</th></tr>
+                        </thead>
+                        <tbody>
+                          <tr><td><code>color-mix()</code></td><td>Breaks dark mode; use <code>rgba()</code> + tokens</td></tr>
+                          <tr><td><code>blur</code> / <code>backdrop-filter</code></td><td>Decorative ban + GPU performance on low-power devices</td></tr>
+                          <tr><td><code>linear-gradient</code> / <code>radial-gradient</code></td><td>Flat surfaces only</td></tr>
+                          <tr><td>Glow / large soft shadows</td><td>Max shadow = 1px <code>var(--shadow)</code></td></tr>
+                          <tr><td>CSS-generated brand mark</td><td>Always use the real <code>orange-logo.png</code> (lesson L092)</td></tr>
+                          <tr><td><code>border-radius &gt; 0</code> on non-avatar surfaces</td><td>Square geometry is the brand posture</td></tr>
+                          <tr><td>Hardcoded hex values</td><td>Exception only: <code>#fff</code> on an orange background</td></tr>
+                          <tr><td>Global focus ring on the input container</td><td>Focus ring applies only to the actually-focused element</td></tr>
+                          <tr><td>Emoji in the UI</td><td>Not in the Orange brand tone</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <aside class="callout callout-influx" role="note">
+                      <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                      <div class="callout-body">
+                        <p class="callout-title">In Flux: zip built, not yet confirmed in DSS</p>
+                        <p>The refonte delivering this charter was built by 6 parallel Sonnet agents (2026-06-19) and is packaged as build <code>index-BHeG2NRY.js</code> (79 entries). Validated locally. Pending: upload the zip (frontend only, no backend restart unless the python-lib changes from the same session are not yet live); smoke-test the real logo in rail and sidebar, square geometry on cards and modals, light/dark theme.</p>
+                      </div>
+                    </aside>
+                    <ul class="con-list">
+                      <li class="con-pos">Dark mode robust by construction: token-driven, no per-component theme override needed for standard cases.</li>
+                      <li class="con-pos">Consistent, predictable UI that survives future contributions: bans are checkable by grep.</li>
+                      <li class="con-neg">Square geometry is a hard constraint: any external template or snippet must be un-rounded before use.</li>
+                      <li class="con-neg">The charter MUST be read before any styling task. Three incidents in the project history show what happens when it is skipped: rounded modals, a CSS-generated logo, a global focus ring.</li>
+                    </ul>
+                  </div>
+                  <div class="adr-card-footer">
+                    <div class="adr-links">
+                      <a href="03-frontend.html" class="btn btn-sm">Frontend page</a>
+                    </div>
+                    <a href="../08-decisions/0015-orange-charter-ui.md" class="source-ref">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Full ADR: 0015-orange-charter-ui.md
+                    </a>
+                  </div>
+                </article>
+
+                <!-- ============================================================
+                     SECTION: IN-FLUX SUMMARY
+                     ============================================================ -->
+                <h2>In-flux summary</h2>
+
+                <p>
+                  Five ADRs carry elements not yet confirmed in DSS. Here is the consolidated list of what remains to be done:
+                </p>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ADR</th>
+                        <th>In-flux point</th>
+                        <th>Pending action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>0001</code></td>
+                        <td><code>body.html</code> wiring step after build</td>
+                        <td>Follow the <code>/build-plugin</code> skill each time; never edit <code>body.html</code> by hand</td>
+                      </tr>
+                      <tr>
+                        <td><code>0002</code></td>
+                        <td>Single-process assumption (<code>_RUNS</code> in-memory)</td>
+                        <td>Multi-process scaling would require shared run storage (not implemented)</td>
+                      </tr>
+                      <tr>
+                        <td><code>0009</code></td>
+                        <td>Gemini model ids (<code>GEMINI_FLASH_LITE_ID</code>, <code>GEMINI_FLASH_ID</code>) not confirmed on instance</td>
+                        <td>Verify the exact ids on the Mesh connection; a wrong eco id = no response by default</td>
+                      </tr>
+                      <tr>
+                        <td><code>0010</code></td>
+                        <td><code>attribute_lookup</code> wiring in the orchestrator</td>
+                        <td>Create the Custom Python tool in DSS, fill <code>LOOKUP_TOOL_ID</code>, re-paste orchestrator only</td>
+                      </tr>
+                      <tr>
+                        <td><code>0011</code></td>
+                        <td>EVPL offer-hierarchy smoke test not re-validated via orchestrator</td>
+                        <td>Test "revenus YTD EVPL actuals vs budget" via the orchestrator - should give <code>Product = 'EVPL'</code>, non-zero budget</td>
+                      </tr>
+                      <tr>
+                        <td><code>0012</code></td>
+                        <td>Pre-commit hook not installed</td>
+                        <td>Run <code>grep -rlP '\xe2\x80\x9[34]' .</code> before every commit</td>
+                      </tr>
+                      <tr>
+                        <td><code>0014</code></td>
+                        <td>Monthly budget system not validated in DSS</td>
+                        <td>Upload zip, restart backend; <code>webapp_user_quota_v1</code> is created lazily on first write</td>
+                      </tr>
+                      <tr>
+                        <td><code>0015</code></td>
+                        <td>Orange charter UI build not confirmed in DSS</td>
+                        <td>Upload zip (<code>index-BHeG2NRY.js</code>), smoke-test logo + square geometry + dark theme</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ============================================================
+                     SECTION: ADDING AN ADR
+                     ============================================================ -->
+                <h2>Adding a new ADR</h2>
+
+                <p>
+                  Any future structuring decision deserves an ADR. A decision is structuring if it is durable, costly to reverse, or surprising (it runs counter to a reasonable expectation). Typically concerned are: a change of transport, a new <code>_vN</code> table, a new agent or DSS tool, a change of safety posture, a new LLM model or mode, or an evolution of the Evidence proof contract.
+                </p>
+
+                <h3>Procedure</h3>
+
+                <ol>
+                  <li>Create <code>08-decisions/00NN-short-title-in-kebab-case.md</code> with the next available number.</li>
+                  <li>Follow the template: Status, Context, Decision, Reasons, Consequences +/-, Rejected alternatives, See also.</li>
+                  <li>Do NOT duplicate a major diagram: an ADR illustrates a DECISION and points to the diagram in the relevant technical section.</li>
+                  <li>Add the corresponding line to the ADR table in <code>08-decisions/README.md</code>.</li>
+                  <li>If the decision corrects an earlier one, mark the old ADR "Superseded by ADR-NN" instead of deleting it.</li>
+                </ol>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">ADR golden rule</p>
+                    <p>An ADR records WHY, not a how-to. The how lives in the <code>02-architecture</code>, <code>04-backend</code>, and <code>05-agents</code> sections. An ADR that starts copying code or duplicating an operations guide has left its role.</p>
+                  </div>
+                </aside>
+
+                <!-- ============================================================
+                     SECTION: SEE ALSO
+                     ============================================================ -->
+                <h2>See also</h2>
+
+                <div class="grid-2 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Technical sections</p>
+                    <ul class="stack" style="margin:0;padding:0;list-style:none;">
+                      <li><a href="02-architecture.html">Architecture overview</a> - security model (ADR-0003, 0004)</li>
+                      <li><a href="03-frontend.html">Frontend</a> - hash router, build pipeline (ADR-0001, 0015)</li>
+                      <li><a href="04-backend.html">Backend</a> - streaming, SQL, Evidence (ADR-0002, 0003, 0008, 0013, 0014)</li>
+                      <li><a href="05-agents.html">Agents</a> - LangGraph, Mesh, modes, grounding (ADR-0005 to 0011)</li>
+                      <li><a href="06-operations.html">Operations</a> - conventions, typographic rule (ADR-0012)</li>
+                    </ul>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Canonical source files</p>
+                    <ul class="stack" style="margin:0;padding:0;list-style:none;">
+                      <li><a href="../08-decisions/README.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 08-decisions/README.md</a></li>
+                      <li><a href="../02-architecture/04-security-model.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 02-architecture/04-security-model.md</a></li>
+                      <li><a href="../04-backend/03-streaming-and-runs.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 04-backend/03-streaming-and-runs.md</a></li>
+                      <li><a href="../05-agents/01-agent-system-overview.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 05-agents/01-agent-system-overview.md</a></li>
+                      <li><a href="../09-maintenance/01-contributing-and-conventions.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 09-maintenance/01-contributing-and-conventions.md</a></li>
+                    </ul>
+                  </div>
+                </div>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <!-- Core site JS (rail, topbar, TOC, pager, theme, search, code copy) -->
+  <script src="assets/site.js"></script>
+
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

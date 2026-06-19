@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- STATION AGENTS: change the <title> to match your page -->
+  <title>CHANGE ME - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+    It reads localStorage and sets body[data-theme] before first paint.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      /* body is not yet available; site.js will set body[data-theme] on DOMContentLoaded */
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<!--
+  STATION AGENTS: set data-page to the slug for your page.
+  Valid values (must match the PAGES array in site.js):
+    welcome | experience | architecture | frontend | backend | agents | operations | decisions
+-->
+<body data-page="CHANGE_ME" data-theme="light">
+
+  <!-- SHELL: the 3-column layout the JS populates -->
+  <div class="shell">
+
+    <!-- Left icon rail - JS renders this from PAGES array -->
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <!-- Main content column -->
+    <div class="main">
+
+      <!-- Topbar: breadcrumb + depth meter + controls - JS renders this -->
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <!-- Scrollable content area -->
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <!--
+            Main content area.
+            STATION AGENTS: you author ONLY what goes inside <main>.
+            The rail, topbar, TOC, and pager are JS-rendered automatically.
+
+            Structure your content as:
+              - One <section> per major topic (optional grouping)
+              - <h2> for major sections  -> appears in the TOC
+              - <h3> for subsections     -> appears in the TOC indented
+              - <h4> for minor headings  -> does NOT appear in TOC
+          -->
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- ============================================================
+                     PAGE HEADER (copy this block, fill in the 3 fields)
+                     ============================================================ -->
+                <header class="page-header">
+                  <!-- eyebrow: a short category label in orange uppercase -->
+                  <p class="eyebrow">CHANGE ME - e.g. "Level 2 - Understand"</p>
+                  <!-- h1: the page title, 36px/800 weight -->
+                  <h1>CHANGE ME - Page Title</h1>
+                  <!-- title-bar: the orange 52x4px accent block (keep as-is) -->
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <!-- page-sub: one sentence describing this page -->
+                  <p class="page-sub">CHANGE ME - A sentence describing what this section covers and who it is for.</p>
+                </header>
+
+                <!-- ============================================================
+                     EXAMPLE COMPONENTS
+                     Delete everything below this line when authoring a real page.
+                     These are here to show you the available components.
+                     ============================================================ -->
+
+                <!-- CALLOUT: Note -->
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Note</p>
+                    <p>Use this for contextual information. Plain <strong>note</strong> style: grey left rule, soft background.</p>
+                  </div>
+                </aside>
+
+                <!-- CALLOUT: Warning -->
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Warning</p>
+                    <p>Use this for important caveats. Orange left rule.</p>
+                  </div>
+                </aside>
+
+                <!-- CALLOUT: In-Flux (something actively changing) -->
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux</p>
+                    <p>This component or behavior is actively changing. Expect updates.</p>
+                  </div>
+                </aside>
+
+                <!-- CALLOUT: Roadmap (future / not yet built) -->
+                <aside class="callout callout-roadmap" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Roadmap</p>
+                    <p>This feature is planned but not yet implemented.</p>
+                  </div>
+                </aside>
+
+                <!-- SECTION HEADING (becomes a TOC entry) -->
+                <h2>Code Block Examples</h2>
+
+                <!-- CODE BLOCK with filename caption and copy button -->
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-filename">python-lib/owismind/routes.py</span>
+                    <span class="code-lang">Python</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>@app.route("/owismind-api/ping")
+def ping():
+    return {"status": "ok"}</code></pre>
+                </div>
+
+                <!-- CODE BLOCK without filename (language + copy only) -->
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-lang">Shell</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>curl http://localhost:11200/owismind-api/ping</code></pre>
+                </div>
+
+                <!-- SECTION HEADING -->
+                <h2>KPI Cards</h2>
+
+                <div class="grid-3">
+                  <div class="card kpi">
+                    <p class="k-label">Total agents</p>
+                    <p class="k-val">2</p>
+                    <p class="k-sub">Deployed in DSS</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Tables (SQL)</p>
+                    <p class="k-val mono">8</p>
+                    <p class="k-sub">Direct PostgreSQL, no Flow</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Frontend pages</p>
+                    <p class="k-val">7</p>
+                    <p class="k-sub">Vue 3 + Vite, built to resource/</p>
+                  </div>
+                </div>
+
+                <!-- SECTION HEADING -->
+                <h2>Cards and Chips</h2>
+
+                <div class="card card-pad mb">
+                  <p class="card-label">Component status</p>
+                  <div class="chips">
+                    <span class="chip">SQL direct</span>
+                    <span class="chip accent">Validated DSS</span>
+                    <span class="chip">LangGraph 3.11</span>
+                    <span class="chip accent">LLM Mesh</span>
+                  </div>
+                </div>
+
+                <!-- SUBSECTION (h3 -> indented TOC) -->
+                <h3>Table example</h3>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Table</th>
+                        <th>Purpose</th>
+                        <th>Since</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>webapp_chat_v5</code></td>
+                        <td>Conversations, exchanges, usage tokens</td>
+                        <td>v5</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_users_v1</code></td>
+                        <td>User registry + lifetime token totals</td>
+                        <td>v1</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_artifacts_v1</code></td>
+                        <td>Chart/table artifacts from agents</td>
+                        <td>v1</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- SECTION HEADING -->
+                <h2>Diagram System</h2>
+
+                <p>Embed SVG diagrams using the <code>.diagram</code> class so they theme correctly in light and dark mode.</p>
+
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 500 160" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Lane background -->
+                    <rect class="lane" x="0" y="0" width="500" height="160"/>
+
+                    <!-- Node: Frontend -->
+                    <rect class="node" x="20" y="50" width="120" height="60" rx="0"/>
+                    <text x="80" y="85" text-anchor="middle" class="diagram">Vue 3 Frontend</text>
+
+                    <!-- Arrow -->
+                    <line class="edge" x1="140" y1="80" x2="188" y2="80"/>
+                    <polygon class="arrowhead" points="188,75 198,80 188,85"/>
+
+                    <!-- Node: Backend -->
+                    <rect class="node" x="200" y="50" width="120" height="60" rx="0"/>
+                    <text x="260" y="85" text-anchor="middle" class="diagram">Flask Backend</text>
+
+                    <!-- Accent arrow -->
+                    <line class="edge-accent" x1="320" y1="80" x2="368" y2="80"/>
+                    <polygon class="arrowhead-accent" points="368,75 378,80 368,85"/>
+
+                    <!-- Node: Agent (accent) -->
+                    <rect class="node-accent" x="380" y="50" width="100" height="60" rx="0"/>
+                    <text x="430" y="80" text-anchor="middle" fill="#fff" class="diagram">LangGraph</text>
+                    <text x="430" y="98" text-anchor="middle" fill="#fff" class="diagram">Agent</text>
+                  </svg>
+                  <p class="diagram-caption">Example: request flow from Frontend to Agent via Backend</p>
+                </figure>
+
+                <!-- SOURCE REFERENCE LINK -->
+                <p>
+                  <a href="../05-agents/01-agent-system-overview.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 05-agents/01-agent-system-overview.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     END EXAMPLE COMPONENTS
+                     ============================================================ -->
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <!-- Core site JS (rail, topbar, TOC, pager, theme, search, code copy) -->
+  <script src="assets/site.js"></script>
+
+  <!--
+    Search index (optional). If present, window.SEARCH_INDEX must be an array of:
+    { file: "02-architecture.html", page: "Architecture", anchor: "section-slug",
+      title: "Section heading text", text: "Plain text content of the section" }
+    If absent, the search box shows a "not loaded" message.
+  -->
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

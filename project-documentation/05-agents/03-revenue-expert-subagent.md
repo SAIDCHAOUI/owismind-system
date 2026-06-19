@@ -1,6 +1,6 @@
 # The revenue expert sub-agent (SalesDrive_revenue_expert)
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: how the revenue sub-agent
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the revenue sub-agent
 > turns a business question into a sourced figure, via the UNDERSTAND -> RESOLVE -> QUERY ->
 > RENDER pipeline, read-only inline grounding on `DRIVE_Revenues_value_index`, assistive disambiguation,
 > and the frozen contracts (the `semantic-model-query` span) on which the webapp and Evidence depend.

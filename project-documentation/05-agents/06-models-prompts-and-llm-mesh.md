@@ -1,6 +1,6 @@
 # Models, prompts and LLM Mesh
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: how the two Code Agents
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the two Code Agents
 > select an LLM Mesh model per mode, call it NATIVELY (never `as_langchain_chat_model`),
 > reserve reasoning for routing and contract-bound extraction (`with_json_output`), and how
 > control tokens drive mode and language end to end.

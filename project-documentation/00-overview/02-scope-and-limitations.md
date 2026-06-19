@@ -1,6 +1,6 @@
 # Scope and limitations
 
-> Audience: Product, business, support. Last updated: 2026-06-18. Summary: this document states
+> Audience: Product, business, support. Last updated: 2026-06-19. Summary: this document states
 > precisely what OWIsMind DOES and DOES NOT do today (a single staffed domain, the declared but
 > unequipped domains, the known technical limitations) and gives a snapshot of the roadmap.
 
@@ -29,7 +29,10 @@ revenues**, grounded on the `DRIVE_Revenues` source dataset.
 | Artifacts (chart / table / KPI) | The orchestrator calls `show_chart` / `show_table` / `show_kpi`: the data is rendered in the panel (interactive Chart.js charts) instead of being copied into the answer bubble. |
 | Token and cost tracking | A `tokens in / out + estimated cost` line under each answer. |
 | Feedback, branches, stop | Per-message feedback, conversation editing and branches (tree via `parent_exchange_id`), persistent agent per conversation, generation stop. |
-| Multilingual and theme | FR and EN in V1, every UI label translatable; light and dark theme. |
+| Admin-authored agent profiles | An admin writes each agent's tagline, description, capabilities, tools, icon and badge in the Administration panel (no hardcoded copy); validated and sanitized server-side by `validate_agent_meta` (pure, never raises); stored inside `enabled_agents` in `webapp_settings_v1`; served via `GET /agents` without leaking `agent_id` or project. An agent without a profile shows a "profile to complete" card. |
+| Monthly per-user budget | A configurable rolling monthly credit in USD (default $50); spend is `estimatedCost` from LLM Mesh, accumulated in `webapp_usage_monthly_v1` per calendar month. Enforcement: `/chat/start` returns HTTP 402 `monthly_quota_exceeded` when spent >= limit and enforcement is enabled; fails open (a read error lets the answer through). Admins set a global default, time-boxed global boost, or per-user overrides. Coded; not yet validated on DSS. |
+| Multilingual and theme | FR and EN; English is the default locale (FR kept). Every UI label translatable. Light and dark theme via `body[data-theme]` + semantic tokens. |
+| Orange charter UI | Sober Orange design system: white/black + rare `#FF7900` accent; square geometry (`border-radius: 0`, avatars round); flat fills, 1px rules, heavy titles; collapsed sidebar is a RAIL (logo + icon shortcuts). Spec: `docs/cadrage/CHARTE_ORANGE_UI.md`. |
 
 Target usage: a desktop workstation, from 12 inches to ultra-wide.
 
@@ -91,11 +94,11 @@ satisfaction, this is not a bug. It is the expected behavior as long as the doma
 staffed. The message stays honest (an agent is missing), it never claims the data is absent.
 The capability gap message closes by itself as soon as an agent is added for the domain.
 
-> Be careful not to confuse this with the "showcase" cards of the frontend registry `agentMeta.js` (for
-> example Cooper, Revenues). This registry is purely decorative: it enriches the presentation of an
-> agent whose label matches, but **the real list of activatable agents always comes from the
-> backend** (`GET /agents`). Only `revenue_expert` is actually deployed. The showcase cards are
-> therefore not delivered capabilities.
+> The real list of activatable agents always comes from the backend (`GET /agents`). The frontend file
+> `agentMeta.js` (which carried hardcoded showcase descriptions like "Cooper, Revenues") was DELETED
+> (2026-06-18): agent descriptions are now written by an admin via the Administration panel. Only
+> `revenue_expert` is actually deployed; all other entries are configuration placeholders, not
+> delivered capabilities.
 
 ---
 
@@ -123,14 +126,23 @@ usable "live" view is not text being written word by word, it is the **timeline*
 mechanics and [ADR-0002 - Polling-based streaming](../08-decisions/0002-streaming-par-polling.md) for the
 decision.
 
-### 4.3 Budget cap: stored but NOT enforced
+### 4.3 Budget cap: coded, not yet validated on DSS
 
-> IN FLUX: the **tracking** of tokens and costs is delivered (the `webapp_usage_monthly_v1` table aggregates a
-> counter per user and per calendar month, in a single transaction), but the **blocking** of a
-> monthly cap is NOT implemented. The `storage/usage.py` module records consumption and,
-> by design, "never blocks the user's answer". The specification provides for a configurable budget
-> (for example 50 EUR per user and per month) with thresholds, but this enforcement
-> remains to be done. Today, no question is refused because a budget has been reached.
+> IN FLUX: the monthly budget enforcement IS now coded. The `/chat/start` route calls
+> `budget.has_budget(user_id)` before starting a run; if the user has spent >= their effective limit
+> and enforcement is enabled, it returns HTTP 402 with `monthly_quota_exceeded`. Enforcement fails
+> OPEN by contract: a read error (DB unavailable, timeout) lets the answer through, and the spend is
+> still recorded so the next request is gated once the read recovers.
+>
+> Token and cost tracking were already in place (`webapp_usage_monthly_v1`). The new module
+> `storage/budget.py` adds: resolution of the effective limit (per-user override > global temp boost
+> > global default), the `webapp_user_quota_v1` table for per-user overrides (created lazily),
+> admin routes (`GET/POST /admin/budget`, `POST /admin/budget/users`), and a 30-second in-process
+> config cache to avoid a second DB round-trip per chat send.
+>
+> The blocking behavior has not yet been validated on the DSS instance. If a user asks why the
+> chat is refused, it is because they reached their monthly budget (HTTP 402). Admins can raise the
+> limit or grant a temporary boost via the Administration panel (Quotas tab).
 
 ### 4.4 Mobile out of V1 priority
 
@@ -159,14 +171,16 @@ trace, appended write-only to an optional Flow dataset. See
 > been entirely REMOVED from the code (they no longer appear in the sub-agent). Its replacement,
 > `attribute_lookup` (`tools/attribute_lookup_tool.py`), is built and tested: it is a standalone Custom
 > Python tool that filters in read-only SQL across all text columns of the dataset (case-insensitive
-> and accent-insensitive search, nothing loaded in memory).
+> and accent-insensitive search, nothing loaded in memory). The Custom Python tool object already
+> EXISTS in DSS.
 >
-> On the orchestrator side, `attribute_lookup` is now wired as a built-in tool (dispatched inline
-> in the `node_tools` node), BUT its DSS id is not yet filled in: `LOOKUP_TOOL_ID = ""`.
-> As long as this id stays empty, the call fails cleanly and the orchestrator degrades to the specialist
-> (the answer still succeeds, via the slower semantic path). An administrator must create the
-> Custom Python tool in DSS and fill in its id to activate the fast path. Since the repo is being edited
-> live, this status can change; check the state of `LOOKUP_TOOL_ID` at the time of testing.
+> On the orchestrator side, `attribute_lookup` is wired as a built-in tool (dispatched inline in
+> `node_tools`), but the built-in becomes operational only after the orchestrator is re-pasted into
+> DSS. `LOOKUP_TOOL_ID = ""` means the tool is resolved by name on each run (no direct id bind
+> needed). As long as the orchestrator has not been re-pasted, the call is never reached and the
+> orchestrator falls back to the specialist (the answer still succeeds, via the slower semantic path).
+> Since the repo is being edited live, this status can change; check the state of `LOOKUP_TOOL_ID`
+> and whether the orchestrator has been re-pasted at the time of testing.
 
 ### 4.8 Single-process assumption
 
@@ -202,10 +216,11 @@ For the detail of the parameters and the first commissioning, see
 
 This snapshot lists what is framed but not yet delivered. The order is not a date commitment.
 
-- **Wire `attribute_lookup`**: create the Custom Python tool in DSS and fill in `LOOKUP_TOOL_ID`,
-  to activate the fast path for attribute lookups (replacement for the removed `dataset_lookup`).
-- **Enforce the budget cap**: implement blocking at 100 percent (the storage is already
-  ready), with the planned alert thresholds.
+- **Wire `attribute_lookup` fully**: re-paste the orchestrator into DSS so the built-in dispatch
+  becomes live (the Custom Python tool already exists in DSS; `LOOKUP_TOOL_ID = ""` means name
+  resolution is used by default, no id update required).
+- **Validate the budget cap on DSS**: the enforcement is coded (HTTP 402, `storage/budget.py`,
+  `webapp_user_quota_v1`); a smoke-test on the live instance is still needed.
 - **Tickets agent**: add two recipes, a Code Agent and a registry entry; this unblocks
   the parallel multi-agent 360 analysis.
 - **Full Evidence Studio (six tabs)**: Evidence, Dataset explorer (lazy loading,

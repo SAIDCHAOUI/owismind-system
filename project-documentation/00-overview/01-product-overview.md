@@ -1,7 +1,7 @@
 # Product Overview
 
 > Audience: everyone (decision-makers, business users, technical newcomers). Last updated:
-> 2026-06-18. Summary: what OWIsMind solves, its business domain (Orange/OWI revenue analysis),
+> 2026-06-19. Summary: what OWIsMind solves, its business domain (Orange/OWI revenue analysis),
 > its users and its core value proposition, the trio of Conversation, live Timeline and Evidence
 > Studio.
 
@@ -191,7 +191,20 @@ green (solid = certified, dotted = partial, gray = declared), to avoid any false
   in the panel (interactive Chart.js charts).
 - Per-message feedback, conversation editing and branches, persistent agent per conversation,
   stop-generation, token and cost tracking under each answer.
-- FR and EN internationalization, light and dark theme, desktop-first responsive layout.
+- FR and EN internationalization, English as the default locale (FR kept), light and dark theme,
+  desktop-first responsive layout following the sober Orange charter (square geometry, white/black
+  palette, `#FF7900` as a rare accent; see `docs/cadrage/CHARTE_ORANGE_UI.md`).
+- Admin-authored agent profiles: an administrator writes each agent's tagline, description,
+  capabilities, tools, icon and badge via the Administration panel. There is no hardcoded copy;
+  an agent without a profile shows a "profile to complete" placeholder. Profiles are stored inside
+  the `enabled_agents` JSON in `webapp_settings_v1` and served via `GET /agents` without exposing
+  any raw `agent_id` or project key.
+- Monthly per-user budget (USD): the system enforces a configurable monthly spending cap (default
+  $50 per user, calendar-month rolling). The `/chat/start` route returns HTTP 402 with a
+  `monthly_quota_exceeded` error code when the user has exhausted their budget; enforcement
+  fails open by contract (a read error lets the answer through). Admins can set a global default,
+  a time-boxed global boost, or per-user overrides via `POST /admin/budget` and
+  `POST /admin/budget/users`. Budget enforcement is coded; DSS validation is still pending.
 
 The cost modes are a logical key chosen by the user that drives the loop model, with no escalation (a
 single model runs the whole loop):
@@ -220,9 +233,9 @@ single model runs the whole loop):
   backend every ~500 ms). The text answer often arrives in a block at the end; the usable live view
   remains the timeline.
 
-> IN FLUX: the monthly budget limit (for example 50 EUR per user per month) has its storage ready
-> (`webapp_usage_monthly_v1`), but the BLOCKING is not yet enforced. Token and cost tracking, on the
-> other hand, is fully in place.
+> IN FLUX: the monthly budget enforcement is coded (HTTP 402 at `/chat/start`, table
+> `webapp_user_quota_v1` for per-user overrides, `storage/budget.py` for the limit logic) but has
+> not yet been validated on the DSS instance. Token and cost tracking are fully in place.
 
 > IN FLUX: attribute lookups (for example "who is the account manager of account X?") are in transition.
 > The managed tool `dataset_lookup` (`9FEzVZk`) and the `lookup` intent were REMOVED on

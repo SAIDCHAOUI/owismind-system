@@ -1,6 +1,6 @@
 # Agent system - overview
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: how the OWIsMind
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the OWIsMind
 > agent layer is structured (a LangGraph orchestrator that routes to a revenue expert
 > sub-agent, both of them Dataiku Code Agents on a Python 3.11 env, called natively on the LLM
 > Mesh), the sub-agents-as-tools pattern, the honesty invariant, and the 3.9/3.11 dual path.
@@ -77,14 +77,13 @@ live in `BUSINESS_DOMAINS` (`revenue, tickets, satisfaction, opportunities, deli
 billing`); a domain becomes "staffed" when an active agent declares it, which automatically closes
 the capability gap message.
 
-> IN FLUX: a third built-in tool, `attribute_lookup`, is being wired up on the
-> orchestrator side. The code read on 2026-06-18 already declares it as a built-in tool (inline dispatch
-> in `node_tools`, like `show_table`/`current_date`), but its DSS id remains to be filled in
-> (`LOOKUP_TOOL_ID = ""`, to be filled after creating the Custom Python tool in DSS). The
-> agents' `README.md`, for its part, still lists the tools WITHOUT `attribute_lookup`: the reference
-> documentation is slightly behind the code. As long as `LOOKUP_TOOL_ID` is empty, the
-> fast path is not operational. See
-> [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
+> IN FLUX: the built-in `attribute_lookup` tool is wired on the orchestrator side (declared
+> in `build_tool_specs`, dispatched inline in `node_tools` like `show_table`/`current_date`). The
+> Custom Python tool object **already exists in DSS** (verified in `dataiku-agents/tools/README.md`
+> and `dataiku-agents/CLAUDE.md`). Two steps remain: re-paste the orchestrator so the built-in is
+> live, and optionally set `LOOKUP_TOOL_ID` (the name-based fallback `LOOKUP_TOOL_NAME =
+> "attribute_lookup"` resolves the tool even when `LOOKUP_TOOL_ID` is empty). The sub-agent is
+> UNCHANGED. See [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
 
 ## 4. Agent layer diagram
 
@@ -240,12 +239,11 @@ values) is NOT a tool either: it is read-only inline SQL on `DRIVE_Revenues_valu
 
 > IN FLUX: the managed tool `dataset_lookup` (`9FEzVZk`) and the entire `lookup` intent of the sub-agent
 > were REMOVED on 2026-06-18. Its replacement, the Custom Python tool `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`), is built and unit-tested but in the process of being
-> wired: on the sub-agent side it is NOT yet connected; on the orchestrator side the code read on
-> 2026-06-18 already declares it as a built-in tool but with `LOOKUP_TOOL_ID` empty (DSS id to be created).
-> The agents' READMEs remain partly behind the code (the `lookup` intent still appears
-> there). Follow [Agent tools and Semantic Model](04-tools-and-semantic-model.md) for the up-to-date
-> state.
+> (`tools/attribute_lookup_tool.py`), is built, unit-tested, RUN-TEST validated, and its DSS
+> tool object EXISTS on the instance (`dataiku-agents/tools/README.md`). The wiring (the
+> orchestrator built-in) becomes live after the next orchestrator re-paste. The sub-agent is
+> UNCHANGED and owns no `lookup` path. Follow [Agent tools and Semantic Model](04-tools-and-semantic-model.md)
+> for the current state and remaining steps.
 
 > ROADMAP: the dataset `DRIVE_Revenues_Value_Catalog` and the Python resolver
 > `Drive_Revenues_resolve_filter_value` are NOT wired in v3 (superseded by

@@ -1,9 +1,10 @@
 # Frontend - backend communication
 
-> Audience: frontend developer. Last updated: 2026-06-18. Summary: how the OWIsMind
-> frontend talks to the Flask backend (the `backend.js` client, the call catalogue, the
-> streaming-by-polling loop, applying normalized events to the reactive model, the stop flow, Evidence /
-> artifacts retrieval) and which stable error codes it consumes.
+> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the OWIsMind
+> frontend talks to the Flask backend (the `backend.js` client, the complete call catalogue
+> including budget and agent profile routes, the streaming-by-polling loop, applying normalized
+> events to the reactive model, the stop flow, Evidence / artifacts retrieval) and which stable
+> error codes it consumes.
 
 This page describes the transport layer on the frontend side: the thin HTTP client, the catalogue of backend
 calls, the polling loop that animates a live answer, and the separate channels for Evidence and artifacts.
@@ -57,6 +58,8 @@ Three design decisions shape everything else:
 
 All of these functions are exported from `backend.js`. The routes are relative to `/owismind-api`.
 
+### Core chat and identity
+
 | Function (export) | Method + route | Body / params | Response (shape) |
 |---|---|---|---|
 | `fetchMe()` | POST `/me` | none | `{status, user_id, display_name, groups, needs_config, is_admin}` |
@@ -66,17 +69,51 @@ All of these functions are exported from `backend.js`. The routes are relative t
 | `fetchConversations(cursor, limit)` | GET `/conversations` | optional query | `{status, conversations:[{session_id,title,last_at}], next_cursor, has_more}` |
 | `fetchConversation(sessionId)` | GET `/conversation?session_id=` | query | `{status, session_id, count, rows:[...]}` |
 | `submitFeedback(exchangeId, rating, reasons, comment)` | POST `/chat/feedback` | `{exchange_id, rating, reasons, comment}` | `{status:'ok'}` |
-| `fetchEvidenceMeta(exchangeId)` | GET `/evidence/meta?exchange_id=` | query | interactive meta (see 5) |
-| `fetchEvidenceRows(payload)` | POST `/evidence/rows` | structured payload (no SQL) | `{status, rows, page, has_more, ...}` |
-| `fetchEvidenceDistinct(exchangeId, column, excludeId)` | GET `/evidence/distinct?...` | query | `{status, values, truncated}` |
-| `fetchAgents()` | GET `/agents` | none | `{status, count, agents:[{key,label}]}` |
+
+### Evidence Studio
+
+| Function (export) | Method + route | Response (shape) |
+|---|---|---|
+| `fetchEvidenceMeta(exchangeId)` | GET `/evidence/meta?exchange_id=` | interactive meta (see section 5) |
+| `fetchEvidenceRows(payload)` | POST `/evidence/rows` | `{status, rows, page, has_more, ...}` |
+| `fetchEvidenceDistinct(exchangeId, column, excludeId)` | GET `/evidence/distinct?...` | `{status, values, truncated}` |
+
+### Agents and agent profiles
+
+| Function (export) | Method + route | Response (shape) |
+|---|---|---|
+| `fetchAgents()` | GET `/agents` | `{status, count, agents:[{key, label, tagline, description, capabilities, tools, icon, badge}]}` |
+
+`fetchAgents()` returns the admin-authored display profile for each agent alongside the opaque logical
+key and label. The raw `agent_id` and `project_key` NEVER appear in this response. This is the call that
+feeds `session.agents`, which in turn populates both the chat `AgentPicker` and the `AgentsView` library
+cards.
+
+### Monthly budget / usage
+
+| Function (export) | Method + route | Response (shape) |
+|---|---|---|
+| `fetchUsage()` | GET `/usage` | `{status, usage: {spent_usd, limit_usd, limit_source, enforced, blocked, remaining_usd, next_reset, period_start, lifetime_tokens, lifetime_cost}}` |
+
+`fetchUsage()` is strictly owner-scoped: it returns only the caller's own budget status. It is called
+once during `session.init()` and refreshed after every completed run (fire-and-forget in `chat.js`
+`_runExchange` `finally` block). On error, `session.usage` keeps its last known value; the server-side
+gate in `/chat/start` remains authoritative.
+
+### Admin endpoints (403 if not admin)
+
+| Function (export) | Method + route | Body / params | Response (shape) |
+|---|---|---|---|
 | `fetchAdminStorage()` | GET `/admin/storage` | none | `{connection, project_key, table_prefix, namespace, tables}` |
 | `fetchAdminUsers()` | GET `/admin/users` | none | `{users:[{user_id, is_admin, ...}]}` |
 | `setUserAdmin(userId, isAdmin)` | POST `/admin/users/set-admin` | `{user_id, is_admin}` | refreshed users list |
 | `fetchAdminProjects()` | GET `/admin/projects` | none | `{projects:["KEY",...]}` |
 | `fetchAdminProjectAgents(projectKey)` | GET `/admin/projects/<key>/agents` | path | `{project_key, agents:[{agent_id, description}]}` |
-| `fetchAdminAgents()` | GET `/admin/agents` | none | `{agents:[{logical_key, project_key, agent_id, label}]}` |
-| `saveAdminAgents(agents)` | POST `/admin/agents` | `{agents:[{project_key, agent_id}]}` | stored selection |
+| `fetchAdminAgents()` | GET `/admin/agents` | none | `{agents:[{logical_key, project_key, agent_id, label, profile:{tagline, description, capabilities, tools, icon, badge}}]}` |
+| `saveAdminAgents(agents)` | POST `/admin/agents` | `{agents:[{project_key, agent_id, profile?}]}` | stored selection |
+| `fetchAdminBudget()` | GET `/admin/budget` | none | `{status, config, period_start, next_reset, users:[...]}` |
+| `saveAdminBudget(config)` | POST `/admin/budget` | `{limit_usd, enabled, temp_limit_usd?, temp_days?}` | refreshed overview |
+| `saveAdminUserQuota(payload)` | POST `/admin/budget/users` | `{user_ids, clear, limit_usd?, expires_days?, note?}` | refreshed overview |
 
 Cross-cutting points that often surprise:
 
@@ -84,11 +121,20 @@ Cross-cutting points that often surprise:
   bootstrapping the first-admin election); as a POST, a prefetch or a scanner GET can neither create a user
   nor win the election. It is called exactly once at init.
 - The admin endpoints are gated server-side: 403 if the caller is not an admin. The frontend performs no
-  security check; it shows the admin views based on `is_admin`, but it is the server that decides.
-- Agent whitelist: on the chat side, the frontend NEVER sends or receives a raw `agent_id`. `fetchAgents()`
-  returns only opaque logical keys `{key, label}`; the resolution `agent_key -> (project_key, agent_id)` is
-  entirely server-side (see [Security model](../02-architecture/04-security-model.md)). The `agent_id` values
-  appear only in the admin endpoints.
+  security check; it shows the admin views based on `session.isAdmin`, but it is the server that decides.
+- Agent whitelist (chat side): the frontend NEVER sends or receives a raw `agent_id` on the chat flow.
+  `fetchAgents()` returns only opaque logical keys plus the admin-authored profile; the resolution
+  `agent_key -> (project_key, agent_id)` is entirely server-side (see
+  [Security model](../02-architecture/04-security-model.md)). The `agent_id` values only appear in the
+  admin endpoints.
+- `saveAdminAgents` sends `profile?` alongside `project_key` / `agent_id`. The server re-validates and
+  sanitizes the profile via `security/validation.py::validate_agent_meta` before persisting. The frontend
+  enforces soft limits (char count, icon whitelist) as a UX guard, but the server is authoritative.
+- `saveAdminBudget` accepts an optional temporary boost (`temp_limit_usd` + `temp_days`): if both are
+  present, the boost is stored (overriding the previous one); if either is absent or both are zero, the
+  existing boost is cleared. This preserves the permanent limit untouched when touching only the boost.
+- `saveAdminUserQuota` targets one, several, or all users (`user_ids: [...]`). `clear: true` removes
+  the per-user override; `expires_days` absent or `null` = permanent override.
 
 ### 2.1 The `startChat` payload
 
@@ -101,7 +147,7 @@ body: JSON.stringify({
   agent_key: agentKey,                  // OPAQUE logical key (resolved server-side)
   history_limit: historyLimit,          // re-clamped [10,50] server-side (default 20)
   parent_exchange_id: parentExchangeId || null,   // conversation-tree edge
-  mode: mode || undefined,              // eco / medium / high (server default: medium)
+  mode: mode || undefined,              // eco / medium / high (server default: eco)
   webapp_lang: webappLang || undefined, // fr / en (helps choose the answer language)
   screen_context: screenContext || undefined,     // pointer to "what is on screen"
 })
@@ -109,8 +155,9 @@ body: JSON.stringify({
 
 - `parent_exchange_id` attaches the new exchange into the conversation TREE and bounds the agent's context to
   that branch's ancestor chain. `null` creates a new branch at the root.
-- An unknown or absent `mode` (eco / medium / high) falls back to `medium` server-side. It is `ui.modelMode`
-  that supplies it.
+- An unknown or absent `mode` (eco / medium / high) falls back to `medium` server-side (the backend
+  conservative default, verified in `api/routes.py`). The frontend itself defaults to `eco` via
+  `ui.modelMode` (MODELMODE_DEFAULT), so an absent mode reaches the server only in edge cases.
 - `webapp_lang` (the UI language, `ui.lang`) serves only as a tie-break: the language of the message itself
   wins server-side.
 - `screen_context` is built only when the Evidence panel is open (see section 6). It is owner-scoped
@@ -319,10 +366,12 @@ run, as well as in `newConversation` and `openSession` (conversation switch).
 `token`, `onExchangeId` (reconciles `id`) and `onRunId` (sets `activeRunId`, triggers a deferred
 `stopPending`); (4) auto-opens Evidence (premium reveal) if the answer finished CLEANLY and produced at least
 one successful SQL (`version.sql.some(q => q && q.success)`), never on `stopped`/`error`; (5) in `catch`, if
-not cancelled, sets `version.status='error'`; in `finally`, resets `sending=false` and promotes the
-conversation to the top of the sidebar (data captured at the run entry, never the current store state which may
-have changed). The `canSend` guard blocks any send as long as the thread on screen is not that of the active
-session, which avoids a cross-conversation corruption. The detail of the conversation tree and the stores is in
+the error is `monthly_quota_exceeded`, drops the optimistic exchange from `exchanges` (no empty error bubble)
+instead of setting `version.status='error'`; otherwise sets `version.status='error'`; (6) in `finally`, resets
+`sending=false`, promotes the conversation to the top of the sidebar (data captured at the run entry), and calls
+`session.loadUsage()` (fire-and-forget) to refresh the budget status immediately after every run. The `canSend`
+guard blocks any send as long as the thread on screen is not that of the active session, which avoids a
+cross-conversation corruption. The detail of the conversation tree and the stores is in
 [Frontend - state and stores](02-state-and-stores.md).
 
 ## 7. The error-code surface
@@ -331,11 +380,15 @@ The stable codes emitted by the backend and consumed via `e.message` on the fron
 
 | Endpoint | Codes (with HTTP status) |
 |---|---|
-| `/chat/start` | `unauthenticated` (401), validation (400), `storage_not_configured` (409), `agent_not_enabled` (404), `rate_limited` (429), `busy` (503), `storage_unavailable` (500), `agent_unavailable` (500) |
+| `/chat/start` | `unauthenticated` (401), validation (400), `storage_not_configured` (409), `agent_not_enabled` (404), `rate_limited` (429), `busy` (503), `storage_unavailable` (500), `agent_unavailable` (500), `monthly_quota_exceeded` (402) |
 | `/chat/poll` | `unauthenticated` (401), `invalid_run_id` (400), `run_not_found` (404, mapped to `run_lost` when the run disappeared in mid-flight) |
 | `/chat/stop` | `unauthenticated` (401), `invalid_run_id` (400), `run_not_found` (404 = benign no-op) |
 | Terminal error events in the stream (not HTTP codes) | `run_timeout`, `run_abandoned`, `agent_unavailable`: arrive as `{type:'error', message:...}` and go through `applyEvent` (an `error` item + `status='error'`) |
 | Generic fallback | `http_<status>` when the body is not JSON |
+
+`monthly_quota_exceeded` (402) from `/chat/start` is the budget gate: no run was started, so the store
+drops the optimistic exchange and relies on the budget banner (refreshed via `session.loadUsage()`) to
+explain the situation. The server enforces this gate before the agent is even called.
 
 On the `useChatStream` side, the set `TERMINAL_CODES = {run_not_found, invalid_run_id, unauthenticated}`
 distinguishes the UNRECOVERABLE poll errors (the run is dead, exit cleanly) from the transient proxy blips
@@ -354,6 +407,11 @@ distinguishes the UNRECOVERABLE poll errors (the run is dead, exit cleanly) from
   `stopping=false`.
 - Unknown event types are ignored on both sides: adding a new event type is backward-compatible.
 - `narration` is transient: never in the persisted body nor in `answerText`, only live.
+- The `monthly_quota_exceeded` error (402) is a BUDGET GATE - not a validation error. The store handles it
+  specially (drops the optimistic exchange, no error bubble, refreshes usage).
+- `fetchAgents()` now returns profile fields (`tagline`, `description`, `capabilities`, `tools`, `icon`,
+  `badge`) alongside `key` and `label`. These are admin-authored; they may be empty strings/arrays if
+  the admin has not filled them in yet.
 
 > IN FLUX: the agent layer (`dataiku-agents/`) is being edited live. The LangGraph agents PRODUCE the raw
 > events that `streaming.py` normalizes, so their behavior may evolve; on the other hand, the CONTRACT of

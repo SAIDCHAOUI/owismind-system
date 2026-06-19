@@ -1,6 +1,6 @@
 # Frontend - state and Pinia stores
 
-> Audience: frontend developer. Last updated: 2026-06-18. Summary: how OWIsMind chat state
+> Audience: frontend developer. Last updated: 2026-06-19. Summary: how OWIsMind chat state
 > is organized (4 Pinia stores, pure Vue-free modules, composables) and how the
 > "version mutated in place via applyEvent" reactivity model enables live streaming.
 
@@ -22,7 +22,7 @@ The `src/stores/` directory mixes two kinds of files that must be clearly distin
 | File | Nature | Role |
 |---|---|---|
 | `chat.js` | Pinia store (`defineStore('chat')`) | Active conversation as a TREE of exchanges, sending, draft. |
-| `session.js` | Pinia store (`defineStore('session')`) | Identity, list of activatable agents, paginated list of conversations. |
+| `session.js` | Pinia store (`defineStore('session')`) | Identity, list of activatable agents, paginated conversation list, monthly usage/budget. |
 | `evidence.js` | Pinia store (`defineStore('evidence')`) | Evidence Studio panel: server meta, editable chips, row pagination. |
 | `ui.js` | Pinia store (`defineStore('ui')`) | SINGLE source of truth for preferences (theme, language, widths, mode, context window). |
 | `conversationTree.js` | PURE module (no `defineStore`) | Tree walks (`childrenOf`, `activeChildOf`, `buildActivePath`). |
@@ -33,7 +33,7 @@ The `src/stores/` directory mixes two kinds of files that must be clearly distin
 So there are EXACTLY 4 Pinia stores. The other four files in the folder are not stores:
 they are pure helpers, with no state and no Vue imports, imported by the stores. This boundary
 is intentional: the deterministic logic lives in pure modules covered by `node:test`
-(`test/*.test.js`, 8 files), which gives a non-regression guarantee without installing an
+(`test/*.test.js`), which gives a non-regression guarantee without installing an
 additional runner (NO INSTALL rule).
 
 ```mermaid
@@ -57,6 +57,7 @@ flowchart LR
     eproof["evidenceProof"]
     sql["sqlPretty"]
     md["useMarkdown"]
+    budget["budgetModel (PURE)"]
   end
   chat --> tree
   chat --> stream
@@ -148,10 +149,12 @@ delegated to the pure module `conversationTree.js` (section 6).
 - `activeVersion` holds the in-flight version so that an explicit stop can set the
   `stopping` flag.
 - `canSend` (computed) requires `!sending && !threadLoading && !threadError && !session.needsConfig &&
-  session.hasAgents && !!session.selectedAgentKey`. The `threadLoading`/`threadError` guards are
-  critical: after a failed or still-in-flight conversation switch, `exchanges` still holds the
-  OLD thread; a send would then persist under the NEW session id with a parent from the OLD one
-  (cross-conversation corruption).
+  !session.budgetBlocked && session.hasAgents && !!session.selectedAgentKey`. The
+  `threadLoading`/`threadError` guards are critical: after a failed or still-in-flight conversation
+  switch, `exchanges` still holds the OLD thread; a send would then persist under the NEW session id
+  with a parent from the OLD one (cross-conversation corruption). The `session.budgetBlocked` guard
+  disables sends proactively when the user has exhausted their monthly credit and enforcement is on
+  (the server-side gate in `/chat/start` is the real authority; this guard is a UI convenience).
 - `_runExchange(userText, parentId)` is the ONLY place where an exchange is created then run. It pushes
   a new exchange, removes the override set on the parent (the fresh branch stays active), captures
   the sidebar bump data (`runSessionId`/`runTitle`) AT THE START of the run (not in the
@@ -159,6 +162,10 @@ delegated to the pure module `conversationTree.js` (section 6).
   builds `screenContext` (Evidence screen awareness) when the panel is open, then calls
   `runChatStream`. At the end of a clean run that produced at least one successful SQL, it
   auto-opens Evidence via `evidence.openForExchange(exch.id, { auto: true })`.
+- Budget race handling. If `/chat/start` returns a 402 `monthly_quota_exceeded` error (the user's
+  budget gate flipped on between the send click and the actual start), the store drops the optimistic
+  exchange from `exchanges` (no empty error bubble in the thread) and refreshes the usage via
+  `session.loadUsage()` in the `finally` block, so the budget banner appears immediately.
 
 The three ways to create an exchange illustrate the tree nature of the model:
 
@@ -188,29 +195,41 @@ The three ways to create an exchange illustrate the tree nature of the model:
   a single block. This function also reloads the token usage (`usageFromRow`) and the feedback
   (rating 0/1, reasons, comment).
 
-## 4. The `session` store: identity, agents, conversation list
+After every completed run, `_runExchange`'s `finally` block calls `session.loadUsage()` (fire-and-forget)
+to refresh the monthly budget figures in the profile card and the chat banner.
 
-`session.js` carries three things: the identity of the logged-in user, the list of
-ACTIVATABLE agents (which feeds the picker), and the paginated list of conversations (names only). Everything
+## 4. The `session` store: identity, agents, conversation list, budget
+
+`session.js` carries four things: the identity of the logged-in user, the list of
+ACTIVATABLE agents (which feeds the picker and the agents library), the paginated list of conversations
+(names only), and the monthly budget/usage status. Everything
 degrades gracefully outside DSS (when `getWebAppBackendUrl` is absent), so that the shell
 always renders.
 
 State: `user` (`{ user_id, groups, display_name }`), `isAdmin`, `needsConfig`, `agents`
-(`[{ key, label }]` coming from `/agents`), `selectedAgentKey`, `loading`, `error`, then the
-paginated list `conversations` (`[{ id, title, lastAt }]`), `convCursor`, `convHasMore`, `convLoading`,
-`convError`.
+(`[{ key, label, tagline, description, capabilities, tools, icon, badge }]` coming from `/agents`),
+`selectedAgentKey`, `loading`, `error`, then `usage` (monthly budget status from `/usage`, `null` until
+loaded), then the paginated list `conversations` (`[{ id, title, lastAt }]`), `convCursor`,
+`convHasMore`, `convLoading`, `convError`.
 
-The frontend never receives a raw `agent_id`: `agents` carries only an opaque LOGICAL key and a
-label. Resolution to the real identifier happens server-side (whitelist, rule #4).
+The frontend never receives a raw `agent_id`: `agents` carries only an opaque LOGICAL key, a label, and
+the admin-authored profile fields (tagline, description, capabilities, tools, icon, badge). Resolution to
+the real identifier happens server-side (whitelist, rule #4). The profile fields are optional - an agent
+whose profile has not been filled in by the admin renders with honest fallbacks in `AgentsView`.
 
 Notable mechanics:
 - `LAST_AGENT_KEY = 'owismind.lastAgentKey'` (localStorage): a FRESH conversation defaults to the
   last explicitly chosen agent.
 - `ensureLoaded()` memoizes `init()` into a single promise, once (idempotent): the identity is loaded
-  first, then agents and the first page only if the webapp is configured.
+  first, then agents, the first page and `loadUsage()` only if the webapp is configured.
 - `loadFirstConversations(count)` shares a `_firstConvPromise` promise that DE-DUPLICATES the call
   triggered IN PARALLEL by `init()` and by the Sidebar: the first page is never fetched twice
   per load.
+- `loadUsage()` fetches `/usage` (the caller's monthly budget status: spend, effective limit, remaining,
+  reset date, lifetime counters, enforcement flag and blocked flag). Best-effort: a read failure leaves
+  `usage` as-is; the backend gate in `/chat/start` remains authoritative.
+- `budgetBlocked` (computed): `true` when `usage.value && usage.value.enforced !== false &&
+  usage.value.blocked`. Used by `chat.canSend` to disable the send button proactively.
 - `bumpCurrentConversation(item)` delegates to `upsertAndBump` to move a conversation to the top
   after a send.
 - `adoptAgentFromExchanges(rows)`: opening a conversation adopts the agent of the MOST RECENT exchange
@@ -299,7 +318,8 @@ in localStorage under ONE dedicated key.
 Important points:
 - `MODEL_MODES = ['eco', 'medium', 'high']`, default `eco`. The file comment indicates the
   mapping: `eco` = Gemini 3.1 Flash-Lite (the economical default), `medium` = Gemini 3.5
-  Flash, `high` = Claude Sonnet, and the backend also defaults to `eco`. The frontend sends ONLY the
+  Flash, `high` = Claude Sonnet. The frontend defaults to `eco`; the server defaults to `medium`
+  when `mode` is absent or unrecognized (verified in `api/routes.py`). The frontend sends ONLY the
   logical key `mode`, never a model id: the real id is resolved server-side.
   > IN FLUX: the mode -> model mapping lives on the agent side (currently being edited LIVE). The frontend
   > is sensitive only to the `mode` key, so it is insensitive to a Mesh id adjustment (for example
@@ -326,6 +346,7 @@ that consume them, see the components and views.
 | `evidenceModel.js` | PURE | Chip shape, `buildRowsPayload`, `buildDrillLabels`, `lastEvidenceExchangeId`. |
 | `evidenceProof.js` | PURE | Trust layer: `trustLevel`, `calcStepArgs`, `resultPreview`, `droppedNote`. |
 | `sqlPretty.js` | PURE | `formatSql`, `tokenizeSql`, `highlightSqlLines` for SAFE SQL coloring. |
+| `budgetModel.js` | PURE | Budget/usage display helpers: `formatMoney`, `formatTokens`, `formatShortDate`, `usagePct`, `gaugePct`, `usageLevel`. |
 | `useMarkdown.js` | Vue lifecycle | `renderMarkdown`: the ONLY LLM text -> HTML path, sanitized. |
 | `useTr.js` | Vue lifecycle | Resolves a `{ fr, en }` object to the current locale (DATA, not UI). |
 | `useToasts.js` | Vue lifecycle | Module-level reactive queue + auto-dismiss. |
@@ -396,14 +417,36 @@ unmappable (silent abort rather than lying about the scope), with a backend-mirr
 labels. `lastEvidenceExchangeId(turns)` returns the last turn of the active branch whose response
 has a successful SQL.
 
-### 8.4 `useMarkdown.js`: the ONLY v-html path
+### 8.4 `budgetModel.js`: pure budget display helpers
+
+`composables/budgetModel.js` is a PURE module (no Vue imports), testable with `node:test`, that
+contains all the presentation math for budget / usage data. It is used by `SettingsView`,
+`ChatView` (the budget banner) and `AdminView` (the Quotas tab).
+
+Key exports:
+- `toNum(value, fallback)`: safe numeric coercion (non-finite -> fallback).
+- `formatMoney(amount, locale, currency)`: locale-aware US-dollar string with dynamic precision
+  (tiny non-zero amounts use 4 decimal places so they never display as "$0.00").
+- `formatTokens(n, locale)`: locale-grouped integer token count.
+- `formatShortDate(iso, locale)`: short locale-aware date string (empty string when absent or
+  unparseable; callers hide the line rather than show "Invalid Date").
+- `usagePct(spent, limit)`: percentage consumed (can exceed 100; a zero limit reads as 100 once
+  anything was spent).
+- `gaugePct(spent, limit)`: same, clamped to [0, 100] for the visual gauge bar.
+- `usageLevel(usage)`: coarse severity `'off'` (enforcement disabled) / `'over'` (blocked or at/past
+  the limit) / `'warn'` (>= 80%) / `'ok'`.
+
+The backend is the single source of truth for the limit RESOLUTION and the blocked flag; these helpers
+only derive the presentational bits.
+
+### 8.5 `useMarkdown.js`: the ONLY v-html path
 
 `renderMarkdown(text)` is the ONLY place where LLM (untrusted) text becomes HTML. It uses
 markdown-it with `html: false` (never raw HTML from the model), then a DOMPurify pass (defense in
 depth). A hook hardens the links (`target=_blank` + `rel=noopener noreferrer`). This is a security point
 not to bypass: no other path may inject HTML coming from the model.
 
-### 8.5 `sqlPretty.js`, `evidenceProof.js`, `useTr.js`
+### 8.6 `sqlPretty.js`, `evidenceProof.js`, `useTr.js`
 
 - `sqlPretty.js` formats and tokenizes the SQL for display: `formatSql` (line breaks per
   clause), `tokenizeSql` (classification `kw`/`str`/`num`/`text`), `highlightSqlLines`. The
@@ -415,7 +458,7 @@ not to bypass: no other path may inject HTML coming from the model.
   `droppedNote` derive the calculation/result sections. The full deterministic scale of the
   levels lives on the backend side (see Backend - Evidence Studio and artifacts).
 - `useTr.js` resolves a `{ fr, en }` object to the current locale (fallback fr -> en -> first). It
-  serves for DATA (agent metadata, fixtures), not for the UI (which uses `$t`/`t`).
+  serves for DATA (FAQ content, fixtures), not for the UI (which uses `$t`/`t`).
 
 ## 9. Shared frontend / backend contracts (not to break)
 
@@ -428,6 +471,7 @@ consistency:
 | `evidence.MAX_PAGE = 20` | `stores/evidence.js` | `MAX_EVIDENCE_PAGE`. |
 | `buildDrillLabels` cap 8 | `composables/evidenceModel.js` | server refusal beyond 8 keys. |
 | Event label cap 300 chars | `timelineModel.js` (`pushEvent`) | `streaming.py`. |
+| Budget validation bounds | `TAGLINE_MAX=120`, `DESC_MAX=700` in `AdminView.vue` | `security/validation.py::validate_agent_meta` (tagline 120, desc 700, caps 8x120, tools 16x48). |
 
 Finally, the payload sent by the frontend to `/chat/start` contains only LOGICAL keys:
 `{ sessionId, message, agentKey, historyLimit, mode, webappLang, screenContext, parentExchangeId }`.
@@ -436,7 +480,7 @@ rule #4).
 
 ## 10. Points in flux
 
-> IN FLUX: the agent layer (`dataiku-agents/`) is being edited live by another engineer. The
+> IN FLUX: the agent layer (`dataiku-agents/`) is being edited live. The
 > `eventKind` values actually emitted (and therefore the displayed timeline labels) may diverge from the
 > `KNOWN` table of the `timelineSteps` registry. The code handles this case (`humanize` fallback and
 > priority to the backend label), but the exact list of kinds is not frozen. An `eventKind` never emitted just
@@ -447,6 +491,11 @@ rule #4).
 > panel knows how to display it), but its actual presence depends on the backend emitting an artifact of kind
 > `kpi`. This is not guaranteed in the frontend area; do not assume that a KPI will always be
 > rendered.
+
+> ENFORCEMENT STATUS: the monthly-budget block (402 `monthly_quota_exceeded` from `/chat/start`,
+> `session.budgetBlocked`, the budget banner in `ChatView`) is fully CODED. It has not yet been
+> validated on the DSS instance. The frontend correctly handles the 402 and refreshes the usage status
+> after every run.
 
 ## See also
 - [Frontend - overview and structure](01-overview-and-structure.md) - bootstrap, hash router, i18n, theme.

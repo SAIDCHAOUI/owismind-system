@@ -1,6 +1,6 @@
 # Security model (architecture)
 
-> Audience: developer, admin, security. Last updated: 2026-06-18. Summary: this document
+> Audience: developer, admin, security. Last updated: 2026-06-19. Summary: this document
 > frames OWIsMind's security posture at the architecture level (trust boundary, two identities,
 > agent whitelist, SQL safety, owner-scoping, admin gating, data sent to the LLM, log hygiene)
 > and points to the backend detail for the implementation rules.
@@ -92,7 +92,9 @@ On write (admin), `POST /admin/agents` RE-VALIDATES each requested agent against
 persisting: the project must be visible (`discovery.list_project_keys()`) AND the agent actually present
 in that project (`discovery.list_project_agents`). An `agent_id` forged from the front can therefore never
 be persisted (it is "skipped" with a warning). Defensive cap `MAX_ENABLED_AGENTS = 50`. The whitelist lives in
-the global settings table `webapp_settings_v1` under the key `enabled_agents`. The front-side router guard
+the global settings table `webapp_settings_v1` under the key `enabled_agents`. Each enabled agent entry
+also carries a `profile` dict (the admin-authored editorial copy: tagline, description, capabilities, tools,
+icon, badge), sanitized by `validate_agent_meta` before storage (see section 11). The front-side router guard
 (UI) is only cosmetic: the real enforcement is server-side.
 
 This decision is recorded in [ADR-0004 - Server-side agent whitelist](../08-decisions/0004-whitelist-agents-serveur.md).
@@ -241,8 +243,45 @@ injected into a message cannot make the database write nor read outside the proj
   webapp config, listing connections/projects/agents/datasets) plus agent execution; never
   `set_*`/`save`/`delete`/`set_variables`/`set_definition`. Discovery is strictly read-only and bounded.
 
-> IN FLUX: the monthly budget limit (50 EUR/user/month) is NOT implemented: only the STORAGE is ready
-> (`webapp_usage_monthly_v1`), the BLOCKING still has to be wired before `start_run`.
+> Budget enforcement is implemented (2026-06-18). See section 11 below for the detail.
+
+## 11. Agent-profile server-side validation and bounding
+
+When an admin saves the agent whitelist (`POST /admin/agents`), each agent's editorial profile (tagline,
+description, capabilities list, tools list, icon, badge) passes through `validate_agent_meta` in
+`security/validation.py` before being stored alongside the `enabled_agents` JSON in `webapp_settings_v1`.
+This function NEVER raises: every field is clamped to its character or item cap, the icon is validated
+against `ALLOWED_AGENT_ICONS` (fallback to `DEFAULT_AGENT_ICON`), and the badge against
+`ALLOWED_AGENT_BADGES`. An over-long or malformed field is silently truncated, never an error that would
+abort the whole whitelist save.
+
+`GET /agents` projects the stored profile onto the public `{key, label, tagline, description,
+capabilities, tools, icon, badge}` shape, never leaking `agent_id` or `project_key`. The agent-library
+cards in `AgentsView.vue` and the profile sheet are sourced entirely from this endpoint: no hardcoded
+descriptive copy exists client-side (the old `registries/agentMeta.js` was removed on 2026-06-18).
+
+## 12. Monthly budget enforcement (fail-open, 402 gate)
+
+The monthly credit (default 50 USD per user, calendar month, auto-reset on the 1st) is enforced by
+`storage/budget.py`. The gate is `budget.has_budget(user_id)`, called in `POST /chat/start` BEFORE any
+write, after admission but before `save_user_message`. It returns `(ok, status)` where `ok` is False only
+when enforcement is on (config key `enabled`) AND the user's month spend (from `webapp_usage_monthly_v1`)
+has reached their effective limit. A False result yields `402 monthly_quota_exceeded` with the current
+budget status in the body (the frontend uses it to build the transparent budget banner message).
+
+Fail-open contract: if `has_budget` RAISES (storage error), `within_budget` defaults to True and the run
+proceeds. The spend is still recorded afterwards, so the next request is gated once the read recovers.
+This prevents a storage blip from blocking users.
+
+The effective limit follows a two-layer resolution order: an active per-user override in
+`webapp_user_quota_v1` (NULL `expires_at` = permanent; a future timestamp = temporary boost) wins over a
+global temporary boost, which wins over the global default from `webapp_settings_v1`. The `storage/budget.py`
+module is the single source of truth for this resolution (`_resolve_limit`). The admin overview
+(`GET /admin/budget`) and per-user override management (`POST /admin/budget/users`) are admin-gated.
+
+On the frontend, `session.budgetBlocked` (computed from `session.usage`, read from `/usage`) feeds
+`chat.canSend` (which becomes False when blocked) and the transparent `.budget-banner` div in `ChatView`.
+The server-side gate remains authoritative; the client check is a proactive UI hint only.
 
 ## Summary: what is enforced, where and by whom
 
@@ -251,9 +290,11 @@ injected into a message cannot make the database write nor read outside the proj
 | Authentication | browser headers -> `resolve_identity` -> `401` otherwise | backend (all routes except `/ping`) |
 | Isolation between users | owner-scoping on `user_id` in every query | backend (storage + Evidence) |
 | Agent choice | opaque logical key -> `resolve_enabled_agent` -> `None` otherwise | backend (server whitelist) |
+| Agent profile bounding | `validate_agent_meta` (never raises, clamp + icon whitelist) before `enabled_agents` write | backend (`security/validation.py`, `api/routes.py`) |
 | SQL safety | parameterized + read-only + caps + COMMIT + no generic route | backend (`storage/`, `evidence/`) |
 | LLM confidentiality | no raw rows, control tokens stripped | backend (`agents/context.py`) + agents |
 | Admin gating | `_admin_guard` (401/409/403) + bootstrap lock + anti-lockout | backend (`api/routes.py`, `storage/admin.py`) |
+| Monthly budget | `budget.has_budget` -> `402` if blocked (fail-open); per-user override or global default | backend (`storage/budget.py`, `api/routes.py`) |
 | Instance safety | concurrency caps, TTL, deadlines (single-process) | backend (`agents/stream_manager.py`) |
 
 ## See also

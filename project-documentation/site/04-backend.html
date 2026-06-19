@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backend - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="backend" data-theme="light">
+
+  <div class="shell">
+
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <div class="main">
+
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- PAGE HEADER -->
+                <header class="page-header">
+                  <p class="eyebrow">Level 4 - Reference</p>
+                  <h1>Backend</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">The Flask layer that validates, routes, persists and streams: sub-package map, all 21 API endpoints, streaming-by-polling, SQL data model, Evidence Studio, and security invariants. Audience: backend developers.</p>
+                </header>
+
+                <!-- KPI strip -->
+                <div class="grid-3 mt">
+                  <div class="card kpi">
+                    <p class="k-label">Routes</p>
+                    <p class="k-val mono">21</p>
+                    <p class="k-sub">Mounted under /owismind-api</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">SQL tables</p>
+                    <p class="k-val mono">6</p>
+                    <p class="k-sub">Direct PostgreSQL, no Flow</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Python runtime</p>
+                    <p class="k-val">3.9</p>
+                    <p class="k-sub">Backend zip, Flask, SQLExecutor2</p>
+                  </div>
+                </div>
+
+                <!-- ============================================================
+                     SECTION 1 - OVERVIEW AND STRUCTURE
+                     ============================================================ -->
+                <h2>Overview and structure</h2>
+
+                <p>The OWIsMind backend is a standard DSS WebApp with a Python Flask backend (<code>hasBackend: "true"</code> in <code>webapp.json</code>). It acts as an intermediary between the Vue 3 frontend on one side and the LLM Mesh agents plus the PostgreSQL database on the other. It never reasons on its own: it validates, routes, persists, and normalizes events.</p>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Observed runtime</p>
+                    <p>The backend runs on <strong>Python 3.9.23</strong>. No FastAPI, no langchain. LangGraph lives in the Code Agents in a separate 3.11 env, outside the backend zip. Do not assume Python 3.11 features are available here.</p>
+                  </div>
+                </aside>
+
+                <h3>The thin bootstrap</h3>
+
+                <p>DSS injects the Flask <code>app</code> object via a star-import. The webapp's <code>backend.py</code> contains no logic - it only wires the plugin's routes:</p>
+
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-filename">webapps/webapp-owismind-ai-agents/backend.py</span>
+                    <span class="code-lang">Python</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>from dataiku.customwebapp import *   # provides the Flask app object
+from owismind.api.routes import register_routes
+register_routes(app)</code></pre>
+                </div>
+
+                <p><code>register_routes(app)</code> does four things at boot: (1) mounts the blueprint; (2) applies the admin log level; (3) logs the resolved <code>storage_status()</code>; (4) logs the live route table (a landmark in the DSS backend log confirming which build is running and how many routes are mounted). Steps 2 and 3 are wrapped in a <code>try/except</code> so that an unreadable storage config cannot prevent the app from starting.</p>
+
+                <h3>Sub-packages of python-lib/owismind/</h3>
+
+                <p>All logic lives in <code>python-lib/owismind/</code>, split into five thematic sub-packages. The dependency direction is fixed: <code>api/</code> calls everything; <code>agents/</code> and <code>evidence/</code> call <code>storage/</code>; nothing calls <code>api/</code> from below.</p>
+
+                <!-- Sub-package dependency diagram -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg">
+                    <!-- background lane -->
+                    <rect class="lane" x="0" y="0" width="700" height="320"/>
+
+                    <!-- bootstrap -->
+                    <rect class="node" x="20" y="20" width="160" height="44"/>
+                    <text x="100" y="38" text-anchor="middle" class="diagram" font-size="11">webapps/backend.py</text>
+                    <text x="100" y="55" text-anchor="middle" class="diagram" font-size="10">(thin bootstrap)</text>
+
+                    <!-- arrow bootstrap -> api -->
+                    <line class="edge" x1="180" y1="42" x2="228" y2="42"/>
+                    <polygon class="arrowhead" points="228,37 238,42 228,47"/>
+
+                    <!-- api box -->
+                    <rect class="node-accent" x="240" y="20" width="160" height="44"/>
+                    <text x="320" y="38" text-anchor="middle" fill="#fff" class="diagram" font-size="11">api/routes.py</text>
+                    <text x="320" y="55" text-anchor="middle" fill="#fff" class="diagram" font-size="10">Blueprint /owismind-api</text>
+
+                    <!-- api -> security -->
+                    <line class="edge" x1="280" y1="64" x2="140" y2="148"/>
+                    <polygon class="arrowhead" points="136,143 143,155 149,145"/>
+
+                    <!-- api -> agents -->
+                    <line class="edge" x1="320" y1="64" x2="320" y2="148"/>
+                    <polygon class="arrowhead" points="315,148 320,160 325,148"/>
+
+                    <!-- api -> evidence -->
+                    <line class="edge" x1="360" y1="64" x2="490" y2="148"/>
+                    <polygon class="arrowhead" points="484,144 494,152 488,142"/>
+
+                    <!-- api -> storage (right) -->
+                    <line class="edge" x1="400" y1="42" x2="570" y2="42"/>
+                    <line class="edge" x1="570" y1="42" x2="570" y2="148"/>
+                    <polygon class="arrowhead" points="565,148 570,160 575,148"/>
+
+                    <!-- security box -->
+                    <rect class="node" x="40" y="160" width="150" height="44"/>
+                    <text x="115" y="178" text-anchor="middle" class="diagram" font-size="11">security/</text>
+                    <text x="115" y="195" text-anchor="middle" class="diagram" font-size="10">identity + validation</text>
+
+                    <!-- agents box -->
+                    <rect class="node" x="240" y="160" width="160" height="44"/>
+                    <text x="320" y="178" text-anchor="middle" class="diagram" font-size="11">agents/</text>
+                    <text x="320" y="195" text-anchor="middle" class="diagram" font-size="10">stream_manager, streaming</text>
+
+                    <!-- evidence box -->
+                    <rect class="node" x="440" y="160" width="160" height="44"/>
+                    <text x="520" y="178" text-anchor="middle" class="diagram" font-size="11">evidence/</text>
+                    <text x="520" y="195" text-anchor="middle" class="diagram" font-size="10">service, capture, explain</text>
+
+                    <!-- storage box (wide, bottom) -->
+                    <rect class="node-soft" x="160" y="256" width="340" height="44"/>
+                    <text x="330" y="274" text-anchor="middle" class="diagram" font-size="11">storage/</text>
+                    <text x="330" y="291" text-anchor="middle" class="diagram" font-size="10">sql_config, chat_v5, budget, settings, usage, artifacts</text>
+
+                    <!-- agents -> storage -->
+                    <line class="edge" x1="310" y1="204" x2="290" y2="256"/>
+                    <polygon class="arrowhead" points="285,252 292,264 298,254"/>
+
+                    <!-- evidence -> storage -->
+                    <line class="edge" x1="510" y1="204" x2="440" y2="256"/>
+                    <polygon class="arrowhead" points="435,252 442,264 448,254"/>
+
+                    <!-- agents -> LLM Mesh (right) -->
+                    <line class="edge-accent" x1="400" y1="182" x2="620" y2="182"/>
+                    <polygon class="arrowhead-accent" points="620,177 630,182 620,187"/>
+                    <rect class="node" x="632" y="160" width="56" height="44"/>
+                    <text x="660" y="178" text-anchor="middle" class="diagram" font-size="10">LLM</text>
+                    <text x="660" y="195" text-anchor="middle" class="diagram" font-size="10">Mesh</text>
+
+                    <!-- storage -> PostgreSQL (bottom right) -->
+                    <line class="edge" x1="500" y1="278" x2="626" y2="278"/>
+                    <polygon class="arrowhead" points="626,273 636,278 626,283"/>
+                    <rect class="node-soft" x="638" y="256" width="52" height="44"/>
+                    <text x="664" y="274" text-anchor="middle" class="diagram" font-size="10">Post-</text>
+                    <text x="664" y="291" text-anchor="middle" class="diagram" font-size="10">greSQL</text>
+                  </svg>
+                  <p class="diagram-caption">Backend internal dependency flow: <code>api/</code> sits at the crossroads; <code>storage/</code> is the shared foundation; the agents layer lives outside the zip (Python 3.11, LLM Mesh).</p>
+                </figure>
+
+                <div class="grid-2 mt">
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">api/</p>
+                      <p class="block-note">Single blueprint in <code>routes.py</code>: blueprint-scoped before/after hooks (meta only, never message content), guards (<code>_evidence_guard</code>, <code>_admin_guard</code>), and all 21 handlers. No generic SQL route - the frontend never chooses a table, connection, or query.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-title">security/</p>
+                      <p class="block-note"><code>identity.py</code>: resolves caller from DSS auth headers, short TTL cache for poll load. <code>validation.py</code>: pure validators (no DSS dependency), stable error codes, NEVER trusts the frontend body.</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">agents/</p>
+                      <p class="block-note"><code>stream_manager.py</code>: run lifecycle, <code>_RUNS</code> dict, worker threads. <code>streaming.py</code>: native LLM Mesh call, event normalization. <code>context.py</code>: pure multi-turn payload builder. <code>discovery.py</code>: read-only project/agent listing for the admin picker.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-title">evidence/ and storage/</p>
+                      <p class="block-note">Evidence re-derives verification deterministically from stored SQL (zero LLM). Storage persists all state in direct SQL via <code>SQLExecutor2</code> - no Flow at runtime (single exception: the write-only trace dataset).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <h3>Cross-cutting conventions</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Convention</th><th>Rule</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Response shape</td><td><code>{"status": "ok", ...}</code> on success; <code>{"status": "error", "error": "&lt;code&gt;"}</code> on failure. Codes are stable, machine-readable strings the frontend maps to i18n messages.</td></tr>
+                      <tr><td>Identity</td><td>Always from DSS auth headers, never from the request body. Every route except <code>/ping</code> calls <code>resolve_identity()</code>.</td></tr>
+                      <tr><td>Storage guard</td><td>Except <code>/ping</code> and <code>/me</code>, any unconfigured storage returns <code>409 storage_not_configured</code> instead of guessing a connection.</td></tr>
+                      <tr><td>Agent whitelist</td><td>Frontend sends opaque key <code>ag_&lt;12 hex&gt;</code>; backend resolves it server-side to <code>(project_key, agent_id)</code>. A raw <code>agent_id</code> is never accepted.</td></tr>
+                      <tr><td>Owner-scoping</td><td>All chat and Evidence reads/writes carry <code>WHERE user_id = ...</code>. A forged id can at most reveal the caller's own data.</td></tr>
+                      <tr><td>Log hygiene</td><td>Message content is NEVER logged. Only meta flows: method, path, status, duration, user_id, msg_len. Credentials-bearing header values are never logged.</td></tr>
+                      <tr><td>Python 3.9 safety</td><td>Bounded/read-only/parameterized SQL, explicit COMMIT, fresh <code>SQLExecutor2</code> per call, caps everywhere, no heavy work in a request handler.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - agent layer</p>
+                    <p>The <code>dataiku-agents/</code> folder (Python 3.11, outside the backend zip) is edited live. The <code>eventKind</code> values emitted by Code Agents (NARRATION, AGENT_DONE, ARTIFACT) and the SQL correlation tags could evolve. The frozen span name <code>semantic-model-query</code> is a shared contract: any rename on the agent side would break trace extraction in the backend.</p>
+                  </div>
+                </aside>
+
+                <p>
+                  <a href="../04-backend/01-overview-and-structure.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/01-overview-and-structure.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 2 - API REFERENCE
+                     ============================================================ -->
+                <h2>API reference</h2>
+
+                <p>All 21 routes are mounted under <code>/owismind-api</code> (blueprint <code>owismind_api</code>, defined in <code>api/routes.py</code>). The tables below group them by domain with method, purpose, key fields, and applicable error codes. The frontend consumes ONLY logical keys and structured data: it never chooses a table, a connection, a SQL query, or a raw <code>agent_id</code>.</p>
+
+                <h3>Error codes: consolidated catalogue</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Code</th><th>HTTP</th><th>When</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>unauthenticated</code></td><td>401</td><td>Identity not resolved from headers (all routes except <code>/ping</code>)</td></tr>
+                      <tr><td><code>storage_not_configured</code></td><td>409</td><td>No SQL connection chosen (all except <code>/ping</code>, <code>/me</code>)</td></tr>
+                      <tr><td><code>forbidden</code></td><td>403</td><td><code>/admin/*</code> called by a non-admin</td></tr>
+                      <tr><td><code>agent_not_enabled</code></td><td>404</td><td>Forged or stale <code>agent_key</code> on <code>/chat/start</code></td></tr>
+                      <tr><td><code>rate_limited</code></td><td>429</td><td>Per-user 1 s spacing on chat start; Evidence/usage throttle bucket</td></tr>
+                      <tr><td><code>busy</code></td><td>503</td><td>Global concurrent-runs cap (8) reached</td></tr>
+                      <tr><td><code>monthly_quota_exceeded</code></td><td>402</td><td>Monthly budget spent &gt;= effective limit AND enforcement enabled; includes <code>budget</code> payload; gate evaluated BEFORE any write; fails OPEN on storage error</td></tr>
+                      <tr><td><code>storage_unavailable</code></td><td>500</td><td>SQL read/write failure on most storage-backed routes</td></tr>
+                      <tr><td><code>agent_unavailable</code></td><td>500</td><td>Worker start failure (not a capacity error)</td></tr>
+                      <tr><td><code>evidence_unavailable</code></td><td>500</td><td>Unexpected exception in <code>/evidence/*</code></td></tr>
+                      <tr><td>Validation codes (40+)</td><td>400</td><td>Shape/bound failures from <code>validation.py</code>; each has a stable string name (e.g. <code>empty_message</code>, <code>invalid_filter_op</code>, <code>invalid_drill</code>)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Health and identity</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Purpose and key fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/ping</code></td>
+                        <td>No</td>
+                        <td>Liveness. Returns <code>{status, python}</code>. Never exposes storage config (public endpoint).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET / POST</span></td>
+                        <td><code>/me</code></td>
+                        <td>Yes</td>
+                        <td>Caller identity: <code>{user_id, display_name, groups, needs_config, is_admin}</code>. GET is read-only. POST triggers <code>record_user</code> (upsert + first-admin election). Tolerates unconfigured storage (<code>needs_config: true</code>).</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Budget status</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose and key response fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/usage</code></td>
+                        <td>Owner-scoped monthly budget status: <code>{spent_usd, limit_usd, remaining_usd, enabled, blocked, limit_source, period_start, next_reset}</code>. <code>limit_source</code>: <code>default</code> / <code>global_temp</code> / <code>user_override</code>. Throttled by a separate usage bucket (capacity 12, refill 5/s). Powers the profile Budget card and the chat banner.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Agents (chat-side picker)</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose and key response fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/agents</code></td>
+                        <td>Public-safe list of enabled agents. Projects ONLY <code>{key, label, tagline, description, capabilities, tools, icon, badge}</code>. Never <code>agent_id</code> or <code>project_key</code>. Source of the agent-library cards. Empty profile fields render an honest "profile to complete" card (no hardcoded fallback).</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Chat</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose and key fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/chat/start</code></td>
+                        <td>Start an agent run. Body: <code>{session_id, message, agent_key, history_limit?, parent_exchange_id?, mode?, webapp_lang?, screen_context?}</code>. Server sequence: auth - validate - storage guard - whitelist resolve - rate gate (429) - concurrency gate (503) - <strong>budget gate (402, fail-open)</strong> - phase-1 write - start worker. Returns <code>{run_id, exchange_id}</code>. The <code>agent_id</code> stays server-side end to end.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/chat/poll</code></td>
+                        <td>Streaming-by-polling: returns new events since a cursor. Params: <code>run_id</code>, <code>cursor</code> (default 0). Response: <code>{events[], cursor, done, error}</code>. Owner-scoped: unknown/other-user run returns 404 without revealing which.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/chat/stop</code></td>
+                        <td>Cooperative stop of an in-flight run. Body: <code>{run_id}</code>. Sets <code>stop_requested=true</code>; worker sees it between chunks, persists partial reply, emits <code>stopped</code> event (not an error). Owner-scoped, idempotent.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/chat/feedback</code></td>
+                        <td>Persists thumbs up/down on an exchange. Body: <code>{exchange_id, rating (0/1/null), reasons[], comment}</code>. Owner-scoped UPDATE (no-op at 0 rows). Bool rating explicitly rejected (bool is a subtype of int in Python).</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Conversations</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose and key fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/conversations</code></td>
+                        <td>Paginated (keyset) list of the caller's conversations, names only. Params: <code>limit</code> (clamped 1-60), <code>cursor</code> (opaque base64). Never returns message bodies. Title is derived from the first message (cleaned, truncated to 56 chars). No <code>title</code> column in the DB yet.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/conversation</code></td>
+                        <td>All exchanges of one session, chronological. Param: <code>session_id</code>. Owner-scoped. Bounded to 500 rows. The <code>result</code> block of <code>generated_sql</code> is projected out (only <code>/evidence/meta</code> returns it, keeping the thread payload light).</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Evidence Studio</h3>
+
+                <p>All three routes share <code>_evidence_guard()</code>: auth (401) - storage guard (409) - table bootstrap (500) - per-user token-bucket (429, capacity 15, refill 10/s). The request body never carries SQL.</p>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose and key fields</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/evidence/meta</code></td>
+                        <td>Full descriptor: <code>{dataset, columns, chips, advanced, sql, source, sources, queries, verification, explanation, result, drilldown, artifacts}</code>. Param: <code>exchange_id</code>. Owner-scoped (returns 404 for another user). Table, SQL, and dataset matching resolved server-side. Artifacts enriched best-effort.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/evidence/rows</code></td>
+                        <td>Bounded page rebuilt from structured filters. Body: <code>{exchange_id, filters[], kept_ids[], include_advanced, page, sort, drill[], table?}</code>. NaN/Inf values rejected. Drill RAISES on malformed (scope honesty: silently dropped drill would show the wrong scope). Page clamped to [0, 20], never raises.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/evidence/distinct</code></td>
+                        <td>Bounded distinct values of one column (chip value picker). Params: <code>exchange_id</code>, <code>column</code>, <code>exclude_id?</code>. Cap: 100 values. The chip being edited (<code>exclude_id</code>) never scopes its own picker.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Admin</h3>
+
+                <p>All <code>/admin/*</code> routes share <code>_admin_guard()</code>: auth (401) - storage guard (409) - <code>is_admin()</code> check (403 on false, 500 on exception). The application admin flag is stored in <code>webapp_users_v1</code>, distinct from DSS rights.</p>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/admin/storage</code></td>
+                        <td>Resolved storage config: connection, project key, table prefix, physical table names. Only route that exposes the config (admin-only).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/admin/users</code></td>
+                        <td>User registry list (oldest-first, bounded to 1000).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/admin/users/set-admin</code></td>
+                        <td>Set/remove admin flag. Anti-lockout guard: cannot remove the last admin (<code>400 cannot_remove_last_admin</code>).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET / POST</span></td>
+                        <td><code>/admin/budget</code></td>
+                        <td>GET: global budget config + per-user spend overview. POST: update global default limit, enforcement switch, or temp boost. Editing the default limit never disturbs an active temp boost (three exclusive modes: <code>clear_temp</code>, arm new boost, or preserve existing).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">POST</span></td>
+                        <td><code>/admin/budget/users</code></td>
+                        <td>Set or clear per-user monthly limit overrides. Body: <code>{user_ids[], limit_usd, expires_days?, note?, clear?}</code>. All upserts in one committed transaction. Stored in <code>webapp_user_quota_v1</code> (lazy-created).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/admin/projects</code></td>
+                        <td>Lists visible DSS projects (discovery, read-only, bounded to 500).</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET</span></td>
+                        <td><code>/admin/projects/&lt;project_key&gt;/agents</code></td>
+                        <td>Lists agents of a project. <code>project_key</code> re-validated against visible projects before listing (an admin cannot probe an arbitrary or hidden key). Returns <code>{agent_id, description}</code>.</td>
+                      </tr>
+                      <tr>
+                        <td><span class="badge">GET / POST</span></td>
+                        <td><code>/admin/agents</code></td>
+                        <td>Reads or writes the enabled-agents whitelist. POST re-validates each agent against live DSS listings. Derives a stable opaque <code>logical_key</code> = <code>"ag_" + sha1(project_key:agent_id)[:12]</code>. Agent profile validated by <code>validate_agent_meta</code> (pure, never raises). Max 50 agents.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>
+                  <a href="../04-backend/02-api-reference.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/02-api-reference.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 3 - STREAMING AND RUNS
+                     ============================================================ -->
+                <h2>Streaming and runs</h2>
+
+                <p>OWIsMind does not push a long SSE stream. DSS places an internal nginx in front of every webapp backend: a long <code>text/event-stream</code> response would be buffered by the proxy and arrive all at once at the end. The chosen pattern (also used by the production Dash WebApp on the same instance) is: run the agent in a background daemon thread, accumulate progress in a module-level dict (<code>_RUNS</code>) guarded by a single <code>threading.Lock</code>, and let the frontend poll every ~500 ms. Each poll is a short request the proxy never buffers. This choice is formalized in ADR-0002.</p>
+
+                <h3>Vocabulary: run, exchange, session</h3>
+
+                <div class="card mt mb">
+                  <table>
+                    <thead>
+                      <tr><th>Term</th><th>Definition</th><th>Identifier</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><strong>run</strong></td><td>An in-flight generation cycle: one worker thread plus one entry in <code>_RUNS</code>. Ephemeral.</td><td><code>run_id</code> = <code>uuid4().hex</code>, opaque, never leaves the process</td></tr>
+                      <tr><td><strong>exchange</strong></td><td>The row persisted in <code>webapp_chat_v5</code>: one user turn plus the assistant reply.</td><td><code>exchange_id</code></td></tr>
+                      <tr><td><strong>session</strong></td><td>The conversation grouping several exchanges, stamped in the URL <code>/chat/&lt;sessionId&gt;</code>.</td><td><code>session_id</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Streaming-by-polling diagram</h3>
+
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg">
+                    <!-- lane backgrounds -->
+                    <rect class="lane" x="0" y="0" width="760" height="340"/>
+                    <rect class="node-soft" x="8" y="8" width="224" height="324"/>
+                    <text x="120" y="26" text-anchor="middle" class="diagram u-upper" font-size="9">Request thread (api/routes.py)</text>
+
+                    <rect class="node-soft" x="244" y="8" width="240" height="324"/>
+                    <text x="364" y="26" text-anchor="middle" class="diagram u-upper" font-size="9">agents/stream_manager.py</text>
+
+                    <rect class="node-soft" x="496" y="8" width="256" height="324"/>
+                    <text x="624" y="26" text-anchor="middle" class="diagram u-upper" font-size="9">streaming.py / LLM Mesh / Storage</text>
+
+                    <!-- POST /chat/start -->
+                    <rect class="node-accent" x="16" y="44" width="208" height="36"/>
+                    <text x="120" y="67" text-anchor="middle" fill="#fff" class="diagram" font-size="11">POST /chat/start</text>
+
+                    <!-- Arrow start -> can_accept -->
+                    <line class="edge" x1="224" y1="62" x2="252" y2="62"/>
+                    <polygon class="arrowhead" points="252,57 262,62 252,67"/>
+
+                    <!-- can_accept -->
+                    <rect class="node" x="254" y="44" width="220" height="36"/>
+                    <text x="364" y="62" text-anchor="middle" class="diagram" font-size="10">can_accept() - rate / concurrency gate</text>
+                    <text x="364" y="76" text-anchor="middle" class="diagram" font-size="9">429 rate_limited or 503 busy if rejected</text>
+
+                    <!-- down arrow: budget gate + phase 1 -->
+                    <line class="edge" x1="120" y1="80" x2="120" y2="108"/>
+                    <polygon class="arrowhead" points="115,108 120,120 125,108"/>
+                    <rect class="node" x="16" y="112" width="208" height="44"/>
+                    <text x="120" y="130" text-anchor="middle" class="diagram" font-size="10">Budget gate (402, fail-open)</text>
+                    <text x="120" y="146" text-anchor="middle" class="diagram" font-size="9">phase-1 write: save_user_message</text>
+
+                    <!-- _RUNS registration -->
+                    <line class="edge" x1="364" y1="80" x2="364" y2="108"/>
+                    <polygon class="arrowhead" points="359,108 364,120 369,108"/>
+                    <rect class="node" x="254" y="112" width="220" height="36"/>
+                    <text x="364" y="130" text-anchor="middle" class="diagram" font-size="10">_RUNS[run_id] = state</text>
+                    <text x="364" y="144" text-anchor="middle" class="diagram" font-size="9">spawn daemon thread, return run_id</text>
+
+                    <!-- 200 response -->
+                    <line class="edge" x1="120" y1="156" x2="120" y2="176"/>
+                    <polygon class="arrowhead" points="115,176 120,188 125,176"/>
+                    <rect class="node-soft" x="16" y="180" width="208" height="36"/>
+                    <text x="120" y="198" text-anchor="middle" class="diagram" font-size="10">200 {run_id, exchange_id}</text>
+                    <text x="120" y="212" text-anchor="middle" class="diagram" font-size="9">frontend begins polling</text>
+
+                    <!-- GET /chat/poll -->
+                    <rect class="node-accent" x="16" y="236" width="208" height="36"/>
+                    <text x="120" y="259" text-anchor="middle" fill="#fff" class="diagram" font-size="11">GET /chat/poll (cursor N)</text>
+
+                    <!-- arrow poll -> _RUNS slice -->
+                    <line class="edge" x1="224" y1="254" x2="252" y2="254"/>
+                    <polygon class="arrowhead" points="252,249 262,254 252,259"/>
+                    <rect class="node" x="254" y="236" width="220" height="36"/>
+                    <text x="364" y="254" text-anchor="middle" class="diagram" font-size="10">events[cursor:], done under _LOCK</text>
+                    <text x="364" y="268" text-anchor="middle" class="diagram" font-size="9">last_poll_at updated (heartbeat)</text>
+
+                    <!-- response back -->
+                    <line class="edge" x1="254" y1="284" x2="224" y2="284"/>
+                    <polygon class="arrowhead" points="230,279 220,284 230,289"/>
+                    <rect class="node-soft" x="16" y="290" width="208" height="36"/>
+                    <text x="120" y="308" text-anchor="middle" class="diagram" font-size="10">200 {events[], cursor, done}</text>
+                    <text x="120" y="322" text-anchor="middle" class="diagram" font-size="9">repeat every ~500 ms until done</text>
+
+                    <!-- worker box -->
+                    <rect class="node" x="504" y="44" width="236" height="120"/>
+                    <text x="622" y="64" text-anchor="middle" class="diagram" font-size="11">_worker (daemon thread)</text>
+                    <line x1="504" y1="72" x2="740" y2="72" stroke="var(--line)" stroke-width="1"/>
+                    <text x="622" y="88" text-anchor="middle" class="diagram" font-size="9">iterates streaming.run_agent_streamed()</text>
+                    <text x="622" y="104" text-anchor="middle" class="diagram" font-size="9">appends events under _LOCK</text>
+                    <text x="622" y="120" text-anchor="middle" class="diagram" font-size="9">checks _stop_reason between chunks</text>
+                    <text x="622" y="136" text-anchor="middle" class="diagram" font-size="9">phase-2 persistence (best-effort)</text>
+                    <text x="622" y="152" text-anchor="middle" class="diagram" font-size="9">sets done=true AFTER terminal events</text>
+
+                    <!-- arrow worker -> _RUNS -->
+                    <line class="edge-accent" x1="504" y1="96" x2="474" y2="128"/>
+                    <polygon class="arrowhead-accent" points="469,124 476,136 482,126"/>
+
+                    <!-- LLM Mesh -->
+                    <rect class="node-soft" x="504" y="188" width="236" height="48"/>
+                    <text x="622" y="208" text-anchor="middle" class="diagram" font-size="10">LLM Mesh</text>
+                    <text x="622" y="224" text-anchor="middle" class="diagram" font-size="9">project.get_llm(agent_id).execute_streamed()</text>
+
+                    <!-- worker -> mesh -->
+                    <line class="edge" x1="622" y1="164" x2="622" y2="188"/>
+                    <polygon class="arrowhead" points="617,188 622,200 627,188"/>
+
+                    <!-- Storage phase 2 -->
+                    <rect class="node-soft" x="504" y="256" width="236" height="60"/>
+                    <text x="622" y="276" text-anchor="middle" class="diagram" font-size="10">storage/* (phase 2, best-effort)</text>
+                    <text x="622" y="292" text-anchor="middle" class="diagram" font-size="9">chat_v5.save_assistant_message</text>
+                    <text x="622" y="308" text-anchor="middle" class="diagram" font-size="9">usage.record_usage, chat_traces, artifacts</text>
+
+                    <!-- mesh -> storage -->
+                    <line class="edge" x1="622" y1="236" x2="622" y2="256"/>
+                    <polygon class="arrowhead" points="617,256 622,268 627,256"/>
+                  </svg>
+                  <p class="diagram-caption">Streaming-by-polling: the worker WRITES into <code>_RUNS</code>, the poll READS from it - never the other way. A single <code>threading.Lock</code> guards all critical sections. The <code>done</code> flag is set AFTER the terminal events (no lost-final-frame race).</p>
+                </figure>
+
+                <h3>Instance-safety bounds</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Constant</th><th>Value</th><th>Role</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>MAX_CONCURRENT_RUNS</code></td><td>8</td><td>Hard cap on simultaneous in-flight runs across the whole process.</td></tr>
+                      <tr><td><code>MAX_RUN_SECONDS</code></td><td>300 s</td><td>Hard wall-clock deadline per run (5 min). Evaluated between chunks - not a true watchdog.</td></tr>
+                      <tr><td><code>ABANDON_AFTER_SECONDS</code></td><td>30 s</td><td>If the browser stops polling for 30 s after it had started, the run is cut as abandoned.</td></tr>
+                      <tr><td><code>FINISHED_TTL_SECONDS</code></td><td>60 s</td><td>A finished run stays readable for 60 s (covers a late/duplicate poll).</td></tr>
+                      <tr><td><code>HARD_TTL_SECONDS</code></td><td>600 s</td><td>Absolute lifetime; eviction runs on every <code>start_run</code> and <code>poll</code>.</td></tr>
+                      <tr><td><code>MAX_LIVE_EVENTS</code></td><td>5 000</td><td>Per-run bound on the polled event list.</td></tr>
+                      <tr><td><code>MAX_ANSWER_CHARS</code></td><td>1 000 000</td><td>Per-run bound on the accumulated reply.</td></tr>
+                      <tr><td><code>MIN_START_INTERVAL_SECONDS</code></td><td>1.0 s</td><td>Per-user spacing between two <code>/chat/start</code> calls (anti-spam pre-gate, advisory).</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Event types on the live timeline</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Type</th><th>Key payload fields</th><th>Persisted?</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>run_started</code></td><td><code>exchangeId</code></td><td>No</td></tr>
+                      <tr><td><code>agent_event</code></td><td><code>eventKind, blockId, nextBlockId, toolName, elapsedSeconds [+ whitelisted keys: label, stepIndex, stepCount, agentKey, status]</code></td><td>No</td></tr>
+                      <tr><td><code>answer_delta</code></td><td><code>text</code></td><td>Joined into <code>assistant_text</code> (phase 2)</td></tr>
+                      <tr><td><code>narration</code></td><td><code>text</code> (max 280 chars, transient)</td><td>No</td></tr>
+                      <tr><td><code>generated_sql</code></td><td><code>sqlIndex, success, rowCount, sql [+ optional: sqlId, stepIndex, agentKey, sourceUrl]</code>. The <code>result</code> key is removed from the live copy.</td><td>Yes (in <code>generated_sql</code> column)</td></tr>
+                      <tr><td><code>usage_summary</code></td><td><code>promptTokens, completionTokens, totalTokens, estimatedCost</code></td><td>Yes (4 usage columns)</td></tr>
+                      <tr><td><code>final_answer</code></td><td><code>exchangeId, text</code></td><td>Yes</td></tr>
+                      <tr><td><code>run_done</code> / <code>stopped</code> / <code>error</code></td><td><code>{status:"success"}</code> / <code>{exchangeId}</code> / <code>{message}</code></td><td>No</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">No LLM Mesh cancel API</p>
+                    <p>The stop is purely cooperative (ceasing to iterate the generator), evaluated between chunks. An upstream LLM call that is fully blocked is bounded only by the HARD_TTL eviction. A watchdog thread was deliberately not added (higher risk on a valid path). The official LLM Mesh stream exposes no cancel method.</p>
+                  </div>
+                </aside>
+
+                <p>
+                  <a href="../04-backend/03-streaming-and-runs.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/03-streaming-and-runs.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 4 - STORAGE AND DATA MODEL
+                     ============================================================ -->
+                <h2>Storage and data model</h2>
+
+                <p>The backend persists ALL application state in direct SQL via <code>SQLExecutor2</code> on a PostgreSQL connection (schema <code>public</code>). No Flow at runtime (single exception: the trace dataset, write-only). Every call creates a fresh <code>SQLExecutor2</code> instance. Writes always include an explicit <code>COMMIT</code>. All values are parameterized via <code>sql_value()</code>.</p>
+
+                <h3>The six tables (_vN naming)</h3>
+
+                <div class="card mb">
+                  <table>
+                    <thead>
+                      <tr><th>Logical name</th><th>Purpose</th><th>PK</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>webapp_chat_v5</code></td><td>One chat exchange per row. Written in two phases (user message first, assistant reply on run completion). Carries 4 usage columns: authoritative per-exchange token/cost record.</td><td><code>exchange_id</code></td></tr>
+                      <tr><td><code>webapp_users_v1</code></td><td>User/admin registry. Upserted on every <code>POST /me</code>. Holds lifetime token/cost counters (denormalized accelerator, reconstructible from <code>webapp_chat_v5</code>).</td><td><code>user_id</code></td></tr>
+                      <tr><td><code>webapp_settings_v1</code></td><td>Global key-value config. Carries the agents whitelist (key <code>enabled_agents</code>) and global budget config (key <code>monthly_budget</code>). NOT per-user.</td><td><code>setting_key</code></td></tr>
+                      <tr><td><code>webapp_usage_monthly_v1</code></td><td>Monthly usage bucket per (user, calendar month). Composite PK guarantees exactly one row per month without a reset job. Incremented by UPSERT on each run completion.</td><td><code>(user_id, period_start)</code></td></tr>
+                      <tr><td><code>webapp_artifacts_v1</code></td><td>Artifact specs (chart/table/kpi) per exchange. Only the SPEC is stored; data rows are reused from the captured <code>generated_sql.result</code> via <code>/evidence/meta</code>.</td><td><code>exchange_id</code></td></tr>
+                      <tr><td><code>webapp_user_quota_v1</code></td><td>Per-user monthly budget overrides. A row exists ONLY for users with a custom limit; absent row = global default applies. Created lazily on first write. Added 2026-06-18.</td><td><code>user_id</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">_vN strategy: no structural ALTER</p>
+                    <p>A new row format = a new <code>_vN</code> table (the old one is left inert, never dropped by the backend; old conversations simply stop surfacing). The only authorized relaxation: additive <code>ADD COLUMN IF NOT EXISTS</code> on <code>webapp_users_v1</code> for the lifetime usage counters (user-authorized 2026-06-11). Chat table history: v2 (+generated_sql), v3 (+feedback), v4 (+parent_exchange_id), v5 (+4 usage columns). Always reference <code>webapp_chat_v5</code>, never v4.</p>
+                  </div>
+                </aside>
+
+                <h3>SQL data model and conversation tree</h3>
+
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg">
+                    <rect class="lane" x="0" y="0" width="760" height="420"/>
+
+                    <!-- webapp_chat_v5 (accent, left) -->
+                    <rect class="node-accent" x="16" y="16" width="206" height="216"/>
+                    <text x="119" y="38" text-anchor="middle" fill="#fff" class="diagram" font-size="12" font-weight="bold">webapp_chat_v5</text>
+                    <line x1="16" y1="46" x2="222" y2="46" stroke="#fff" stroke-width="1" opacity="0.4"/>
+                    <text x="119" y="62" text-anchor="middle" fill="#fff" class="diagram" font-size="10">exchange_id (PK)</text>
+                    <text x="119" y="78" text-anchor="middle" fill="#fff" class="diagram" font-size="10">session_id</text>
+                    <text x="119" y="94" text-anchor="middle" fill="#fff" class="diagram" font-size="10">user_id</text>
+                    <text x="119" y="110" text-anchor="middle" fill="#fff" class="diagram" font-size="10">user_text / assistant_text</text>
+                    <text x="119" y="126" text-anchor="middle" fill="#fff" class="diagram" font-size="10">generated_sql (JSON list)</text>
+                    <text x="119" y="142" text-anchor="middle" fill="#fff" class="diagram" font-size="10">agent_key (opaque)</text>
+                    <text x="119" y="158" text-anchor="middle" fill="#fff" class="diagram" font-size="10">feedback_rating/reasons/comment</text>
+                    <text x="119" y="174" text-anchor="middle" fill="#fff" class="diagram" font-size="10">parent_exchange_id (tree edge)</text>
+                    <text x="119" y="190" text-anchor="middle" fill="#fff" class="diagram" font-size="10">created_at / answered_at</text>
+                    <text x="119" y="206" text-anchor="middle" fill="#fff" class="diagram" font-size="10">input/output/total_tokens, cost</text>
+                    <text x="119" y="222" text-anchor="middle" fill="#fff" class="diagram" font-size="9">Phase 1: user_text. Phase 2: rest.</text>
+
+                    <!-- self-reference arrow: tree -->
+                    <path class="edge-accent" d="M 16 174 Q -24 174 -24 124 Q -24 62 16 62" fill="none"/>
+                    <polygon class="arrowhead-accent" points="12,58 20,66 24,56"/>
+
+                    <!-- webapp_users_v1 -->
+                    <rect class="node" x="284" y="16" width="186" height="164"/>
+                    <text x="377" y="36" text-anchor="middle" class="diagram" font-size="11" font-weight="bold">webapp_users_v1</text>
+                    <line x1="284" y1="44" x2="470" y2="44" stroke="var(--line)" stroke-width="1"/>
+                    <text x="377" y="60" text-anchor="middle" class="diagram" font-size="10">user_id (PK)</text>
+                    <text x="377" y="76" text-anchor="middle" class="diagram" font-size="10">display_name</text>
+                    <text x="377" y="92" text-anchor="middle" class="diagram" font-size="10">is_admin (BOOLEAN)</text>
+                    <text x="377" y="108" text-anchor="middle" class="diagram" font-size="10">first_seen / last_seen</text>
+                    <text x="377" y="124" text-anchor="middle" class="diagram" font-size="10">total_input/output_tokens (BIGINT)</text>
+                    <text x="377" y="140" text-anchor="middle" class="diagram" font-size="10">total_cost (DOUBLE)</text>
+                    <text x="377" y="156" text-anchor="middle" class="diagram" font-size="10">last_usage_at</text>
+                    <text x="377" y="172" text-anchor="middle" class="diagram text-muted" font-size="9">+ADD COLUMN for usage cols (authorized)</text>
+
+                    <!-- webapp_settings_v1 -->
+                    <rect class="node" x="284" y="204" width="186" height="84"/>
+                    <text x="377" y="224" text-anchor="middle" class="diagram" font-size="11" font-weight="bold">webapp_settings_v1</text>
+                    <line x1="284" y1="232" x2="470" y2="232" stroke="var(--line)" stroke-width="1"/>
+                    <text x="377" y="248" text-anchor="middle" class="diagram" font-size="10">setting_key (PK)</text>
+                    <text x="377" y="264" text-anchor="middle" class="diagram" font-size="10">setting_value (JSON)</text>
+                    <text x="377" y="280" text-anchor="middle" class="diagram" font-size="9">keys: enabled_agents, monthly_budget</text>
+
+                    <!-- webapp_usage_monthly_v1 -->
+                    <rect class="node" x="522" y="16" width="220" height="124"/>
+                    <text x="632" y="36" text-anchor="middle" class="diagram" font-size="11" font-weight="bold">webapp_usage_monthly_v1</text>
+                    <line x1="522" y1="44" x2="742" y2="44" stroke="var(--line)" stroke-width="1"/>
+                    <text x="632" y="60" text-anchor="middle" class="diagram" font-size="10">user_id (PK)</text>
+                    <text x="632" y="76" text-anchor="middle" class="diagram" font-size="10">period_start DATE (PK)</text>
+                    <text x="632" y="92" text-anchor="middle" class="diagram" font-size="10">input/output_tokens (BIGINT)</text>
+                    <text x="632" y="108" text-anchor="middle" class="diagram" font-size="10">total_cost, request_count</text>
+                    <text x="632" y="124" text-anchor="middle" class="diagram" font-size="10">updated_at</text>
+                    <text x="632" y="134" text-anchor="middle" class="diagram text-muted" font-size="9">UPSERT increments, one row per month</text>
+
+                    <!-- webapp_user_quota_v1 -->
+                    <rect class="node" x="522" y="160" width="220" height="128"/>
+                    <text x="632" y="180" text-anchor="middle" class="diagram" font-size="11" font-weight="bold">webapp_user_quota_v1</text>
+                    <line x1="522" y1="188" x2="742" y2="188" stroke="var(--line)" stroke-width="1"/>
+                    <text x="632" y="204" text-anchor="middle" class="diagram" font-size="10">user_id (PK)</text>
+                    <text x="632" y="220" text-anchor="middle" class="diagram" font-size="10">limit_usd (DOUBLE NOT NULL)</text>
+                    <text x="632" y="236" text-anchor="middle" class="diagram" font-size="10">expires_at (NULL = permanent)</text>
+                    <text x="632" y="252" text-anchor="middle" class="diagram" font-size="10">note (280 chars)</text>
+                    <text x="632" y="268" text-anchor="middle" class="diagram" font-size="10">updated_at / updated_by</text>
+                    <text x="632" y="282" text-anchor="middle" class="diagram text-muted" font-size="9">Row exists ONLY if override set</text>
+
+                    <!-- webapp_artifacts_v1 -->
+                    <rect class="node" x="16" y="252" width="206" height="100"/>
+                    <text x="119" y="272" text-anchor="middle" class="diagram" font-size="11" font-weight="bold">webapp_artifacts_v1</text>
+                    <line x1="16" y1="280" x2="222" y2="280" stroke="var(--line)" stroke-width="1"/>
+                    <text x="119" y="296" text-anchor="middle" class="diagram" font-size="10">exchange_id (PK)</text>
+                    <text x="119" y="312" text-anchor="middle" class="diagram" font-size="10">user_id</text>
+                    <text x="119" y="328" text-anchor="middle" class="diagram" font-size="10">artifacts (JSON spec only)</text>
+                    <text x="119" y="344" text-anchor="middle" class="diagram" font-size="10">created_at</text>
+
+                    <!-- relation chat -> artifacts (1:0..1) -->
+                    <line class="edge" x1="119" y1="232" x2="119" y2="252"/>
+                    <polygon class="arrowhead" points="114,252 119,264 124,252"/>
+                    <text x="130" y="246" class="diagram text-muted" font-size="9">1:0..1</text>
+
+                    <!-- relation users -> quota (0..1) -->
+                    <line class="edge" x1="470" y1="88" x2="522" y2="220"/>
+                    <polygon class="arrowhead" points="518,216 525,228 531,218"/>
+                    <text x="508" y="156" class="diagram text-muted" font-size="9">0..1</text>
+
+                    <!-- no-FK note -->
+                    <text x="380" y="390" text-anchor="middle" class="diagram text-muted" font-size="9">No physical FK constraints - coupling is at application level. user_id is the owner-scoping key throughout.</text>
+                  </svg>
+                  <p class="diagram-caption">SQL data model: 6 tables, logical relationships only (no physical FK constraints). The self-referencing edge on <code>webapp_chat_v5</code> is the conversation tree. The <code>webapp_user_quota_v1</code> row exists only when an admin override is active.</p>
+                </figure>
+
+                <h3>Conversation tree</h3>
+
+                <p><code>parent_exchange_id</code> turns the flat <code>webapp_chat_v5</code> into a tree. Each exchange points to the exchange it branched from; <code>NULL</code> = root. Editing or regenerating a prompt creates a sibling exchange. The agent context of an exchange = its ancestors chain only: the backend walks up the <code>parent_exchange_id</code> chain from the parent to the root of this branch via a recursive CTE. A branch never sees messages that came after its branching point, nor other branches. The CTE carries <code>user_id</code> in BOTH the anchor and recursive members (owner-scope in both), bounded to depth 200 (anti-cycle).</p>
+
+                <h3>3-level usage accounting</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Level</th><th>Table</th><th>Granularity</th><th>Write</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>1 - source of truth</td><td><code>webapp_chat_v5</code> (4 usage cols)</td><td>Per exchange</td><td>Phase-2 UPDATE (atomic with <code>assistant_text</code>)</td></tr>
+                      <tr><td>2 - lifetime total</td><td><code>webapp_users_v1</code></td><td>Per user, all-time</td><td>Additive UPDATE in <code>record_usage()</code></td></tr>
+                      <tr><td>3 - monthly bucket</td><td><code>webapp_usage_monthly_v1</code></td><td>Per (user, month)</td><td>Incrementing UPSERT on composite PK</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>Levels 2 and 3 go out in one committed transaction (<code>pre_queries=[monthly_sql, users_sql], post_queries=["COMMIT"]</code>). Best-effort by contract. Level 1 is the only authoritative record; levels 2 and 3 are reconstructible by summing <code>webapp_chat_v5</code>.</p>
+
+                <h3>Monthly budget resolution (storage/budget.py)</h3>
+
+                <p><code>storage/budget.py</code> is the single source of truth for the monthly limit math. Default rolling credit: $50 USD/user. Resolution order (highest priority first):</p>
+
+                <ol>
+                  <li><strong>Active per-user override</strong> (<code>webapp_user_quota_v1</code>): row exists AND (<code>expires_at &gt; now()</code> OR <code>expires_at IS NULL</code>). Source tag: <code>user_permanent</code> or <code>user_temp</code>.</li>
+                  <li><strong>Active global temp boost</strong> (in <code>webapp_settings_v1</code>, key <code>monthly_budget</code>): evaluated against the app clock. Source tag: <code>global_temp</code>.</li>
+                  <li><strong>Global default</strong> (<code>limit_usd</code> in the same JSON). Source tag: <code>default</code>.</li>
+                </ol>
+
+                <p>An in-process config cache (TTL 30 s, lock-free under GIL, busted on write) keeps the <code>/chat/start</code> hot path to a single DB read. The enforcement gate (<code>has_budget()</code>) fails OPEN by design: a storage error lets the run proceed, and the spend is still recorded for next time.</p>
+
+                <h3>Agent profile stored in settings JSON</h3>
+
+                <p>The admin-authored agent profile (tagline, description, capabilities, tools, icon, badge) lives INSIDE the <code>enabled_agents</code> JSON of <code>webapp_settings_v1</code>, under the <code>profile</code> key of each agent entry. No separate table was created. The <code>logical_key</code> is derived from a stable SHA-1 hash of <code>project_key:agent_id</code> (re-saving keeps the same key; existing conversations referencing that key stay valid). The profile is validated/bounded by <code>validate_agent_meta</code> (pure, never raises) before storage.</p>
+
+                <p>
+                  <a href="../04-backend/04-storage-and-data-model.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/04-storage-and-data-model.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 5 - EVIDENCE AND ARTIFACTS
+                     ============================================================ -->
+                <h2>Evidence and artifacts</h2>
+
+                <p>Evidence Studio is the panel to the right of the chat. On the backend side, it <strong>never asks an LLM to justify an answer</strong>: it re-derives everything, in a purely deterministic way (zero LLM), from the single SQL statement the sub-agent stored. The stored SQL is the source of truth; at evidence time, nothing new is written (exception: artifact specs, persisted once at the end of the run). Sources: <code>python-lib/owismind/evidence/</code> and <code>storage/artifacts.py</code>.</p>
+
+                <h3>Core principle: separate signal from data</h3>
+
+                <p>An <code>ARTIFACT</code> event carries only the SPEC (<code>kind</code>, <code>title</code>, and for a chart <code>{type, x, y[]}</code>). It never carries the rows. The DATA is the <code>result</code> already captured on the stored <code>generated_sql</code> item, reused at read time via <code>/evidence/meta</code>. The Chart.js payload is shaped by trusted Python code (<code>chart_payload.py</code>), not by the agent ("the agent only says x/y, the backend builds the chart").</p>
+
+                <h3>Evidence and artifact pipeline</h3>
+
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg">
+                    <rect class="lane" x="0" y="0" width="760" height="200"/>
+
+                    <!-- Step 1 -->
+                    <rect class="node" x="8" y="36" width="136" height="72"/>
+                    <text x="76" y="56" text-anchor="middle" class="diagram" font-size="10" font-weight="bold">1. Run</text>
+                    <text x="76" y="72" text-anchor="middle" class="diagram text-muted" font-size="9">sub-agent executes</text>
+                    <text x="76" y="87" text-anchor="middle" class="diagram text-muted" font-size="9">SQL plan; items tagged</text>
+                    <text x="76" y="102" text-anchor="middle" class="diagram text-muted" font-size="9">sql_id, step_index, result</text>
+
+                    <line class="edge" x1="144" y1="72" x2="160" y2="72"/>
+                    <polygon class="arrowhead" points="160,67 170,72 160,77"/>
+
+                    <!-- Step 2 -->
+                    <rect class="node" x="170" y="36" width="136" height="72"/>
+                    <text x="238" y="56" text-anchor="middle" class="diagram" font-size="10" font-weight="bold">2. Capture</text>
+                    <text x="238" y="72" text-anchor="middle" class="diagram text-muted" font-size="9">streaming.py normalizes</text>
+                    <text x="238" y="87" text-anchor="middle" class="diagram text-muted" font-size="9">capture.cap_sql_list()</text>
+                    <text x="238" y="102" text-anchor="middle" class="diagram text-muted" font-size="9">re-bounds at write point</text>
+
+                    <line class="edge" x1="306" y1="72" x2="322" y2="72"/>
+                    <polygon class="arrowhead" points="322,67 332,72 322,77"/>
+
+                    <!-- Step 3 -->
+                    <rect class="node" x="332" y="36" width="136" height="72"/>
+                    <text x="400" y="56" text-anchor="middle" class="diagram" font-size="10" font-weight="bold">3. Persist</text>
+                    <text x="400" y="72" text-anchor="middle" class="diagram text-muted" font-size="9">JSON -&gt; webapp_chat_v5</text>
+                    <text x="400" y="87" text-anchor="middle" class="diagram text-muted" font-size="9">result removed from</text>
+                    <text x="400" y="102" text-anchor="middle" class="diagram text-muted" font-size="9">/conversation thread</text>
+
+                    <line class="edge-accent" x1="468" y1="72" x2="484" y2="72"/>
+                    <polygon class="arrowhead-accent" points="484,67 494,72 484,77"/>
+
+                    <!-- Step 4 -->
+                    <rect class="node-accent" x="494" y="36" width="136" height="72"/>
+                    <text x="562" y="56" text-anchor="middle" fill="#fff" class="diagram" font-size="10" font-weight="bold">4. Prove</text>
+                    <text x="562" y="72" text-anchor="middle" fill="#fff" class="diagram text-muted" font-size="9">GET /evidence/meta</text>
+                    <text x="562" y="87" text-anchor="middle" fill="#fff" class="diagram text-muted" font-size="9">re-derives everything</text>
+                    <text x="562" y="102" text-anchor="middle" fill="#fff" class="diagram text-muted" font-size="9">zero LLM, deterministic</text>
+
+                    <line class="edge" x1="630" y1="72" x2="646" y2="72"/>
+                    <polygon class="arrowhead" points="646,67 656,72 646,77"/>
+
+                    <!-- Step 5 -->
+                    <rect class="node" x="656" y="36" width="96" height="72"/>
+                    <text x="704" y="56" text-anchor="middle" class="diagram" font-size="10" font-weight="bold">5. Explore</text>
+                    <text x="704" y="72" text-anchor="middle" class="diagram text-muted" font-size="9">POST /evidence/rows</text>
+                    <text x="704" y="87" text-anchor="middle" class="diagram text-muted" font-size="9">read-only bounded</text>
+                    <text x="704" y="102" text-anchor="middle" class="diagram text-muted" font-size="9">page + drill</text>
+
+                    <!-- Artifact branch note -->
+                    <rect class="node-soft" x="8" y="130" width="744" height="56"/>
+                    <text x="380" y="150" text-anchor="middle" class="diagram" font-size="10" font-weight="bold">Artifact branch (parallel, signal-only)</text>
+                    <text x="380" y="167" text-anchor="middle" class="diagram text-muted" font-size="9">ARTIFACT event -&gt; streaming.py projects strict spec (no data) -&gt; worker accumulates (max 8) -&gt; end-of-run save to webapp_artifacts_v1 (best-effort)</text>
+                    <text x="380" y="181" text-anchor="middle" class="diagram text-muted" font-size="9">-&gt; GET /evidence/meta recombines spec (signal) + captured result (data) -&gt; build_chart_payload() shapes Chart.js payload server-side</text>
+                  </svg>
+                  <p class="diagram-caption">Evidence lifecycle: the stored SQL is the source of truth; everything is re-derived deterministically. The artifact branch stores only the spec, never the data.</p>
+                </figure>
+
+                <h3>Trust levels (verification scale)</h3>
+
+                <p>Computed deterministically by <code>verification_level()</code>. The UI badge can NEVER be green. Dropped or unmapped elements are listed, never hidden.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Level</th><th>Criterion</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>declared</code></td><td>Parse fails or no dataset matched. Agent claim only, no verification possible.</td></tr>
+                      <tr><td><code>source_identified</code></td><td>Dataset matched but WHERE not evaluable, or nothing mapped without completeness.</td></tr>
+                      <tr><td><code>scope_partial</code></td><td>Matched + at least 1 mapped predicate, broken completeness (drops listed).</td></tr>
+                      <tr><td><code>scope_exact</code></td><td>Every WHERE conjunct decomposed + single source + no set-op.</td></tr>
+                      <tr><td><code>calc_decomposed</code></td><td><code>scope_exact</code> + SELECT calculation fully understood (nothing opaque in the SELECT list).</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p><code>result_captured</code> is ORTHOGONAL to the trust level. A failing explainer can only LOWER the level. Drill is offered only when provably reliable: explain ok, no recursive CTE, no set-op, single source, complete reconstructed WHERE, at least one identity GROUP BY key resolved against the live schema. Drill beyond 8 keys is refused, not silently truncated.</p>
+
+                <h3>sql_parse and sql_explain: pure analysis</h3>
+
+                <p><code>sql_parse.parse_select(sql)</code> is best-effort (never fails on complex queries). It recovers source tables and WHERE predicates, marking editable ops (<code>=</code>, <code>IN</code>) and advanced fragments. <code>validate_fragment(text)</code> is the final defensive gate before re-execution: bans DDL words, <code>pg_*</code> functions, backslash, second statements, unbalanced parens; max 2000 chars.</p>
+
+                <p><code>sql_explain.explain_select(sql)</code> produces a structured business explanation. NEVER RAISES (whole body guarded). The honesty principle: anything not positively understood degrades a flag or produces an <code>opaque</code> step. A false explanation would be false evidence; an under-stated one is merely less useful.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - result capture</p>
+                    <p>The exact key of the tool span rows is NOT confirmed on the live instance. <code>capture.extract_result()</code> probes candidate keys in order: <code>rows</code>, <code>records</code>, <code>data</code>, <code>result_rows</code>, <code>values</code>. An absent capture yields <code>result_captured: false</code>; the panel stays useful (sources, chips, explanation, drill, SQL) but without a chart or a captured result table. This is the single most uncertain point in the whole Evidence area.</p>
+                  </div>
+                </aside>
+
+                <p>
+                  <a href="../04-backend/05-evidence-and-artifacts.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/05-evidence-and-artifacts.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 6 - SECURITY AND VALIDATION
+                     ============================================================ -->
+                <h2>Security and validation</h2>
+
+                <p>The trust boundary is the browser: everything from it is untrusted and must be validated AND bounded before reaching SQL. Two core invariants: (1) the caller's identity is NEVER read from the request body; (2) the frontend only sends logical data - it never chooses table, column, connection, query, or raw <code>agent_id</code>.</p>
+
+                <h3>Identity resolution (security/identity.py)</h3>
+
+                <p><code>resolve_identity(headers)</code> calls <code>dataiku.api_client().get_auth_info_from_browser_headers()</code> with a fresh DSS client per call. The <code>user_id</code> comes from <code>authIdentifier</code> (DSS login). DSS returns no display name, so it is derived: <code>said.chaoui</code> becomes <code>Said</code> (display name) or <code>Said Chaoui</code> (full name, used in the agent context suffix). Failure raises <code>IdentityError</code> mapped to <code>401 unauthenticated</code>.</p>
+
+                <p>A per-process identity cache (TTL 5 s, keyed on SHA-256 of the auth cookie) collapses the repeated resolutions of <code>/chat/poll</code> (~2 Hz per live chat). A different cookie produces a different fingerprint: the cache can never return another user's identity. Only successful lookups are cached.</p>
+
+                <h3>Payload validation (security/validation.py)</h3>
+
+                <p>PURE module (no DSS dependency, testable outside the runtime). Every function validates shape and bounds, then raises <code>ValidationError(code)</code> or returns a sanitized/clamped value. Codes are stable strings rendered as-is to the frontend for i18n mapping.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Validator / pattern</th><th>Behavior</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>validate_chat_start_request</code></td><td>Validates <code>{session_id, message, agent_key}</code>. Raises on missing/empty/too-long fields. Whether the agent key resolves to a real active agent is checked separately by the whitelist resolver.</td></tr>
+                      <tr><td>Clamps that NEVER raise</td><td><code>validate_history_limit</code> clamps [10, 50]; <code>validate_conversations_limit</code> clamps [1, 60]; <code>validate_optional_exchange_id</code> returns <code>None</code> on malformed. An invalid optional field must never block a valid send.</td></tr>
+                      <tr><td>Bool-as-int trap</td><td><code>validate_feedback</code> EXPLICITLY rejects bool rating before the int check (<code>True</code>/<code>False</code> are subclasses of int in Python and would otherwise pass <code>rating in (0, 1, None)</code>). Same pattern in <code>validate_budget_amount</code> and <code>validate_evidence_rows_request</code> (kept_ids).</td></tr>
+                      <tr><td>Drill vs sort</td><td>A malformed <code>drill</code> RAISES (<code>invalid_drill</code>); a malformed <code>sort</code> degrades to <code>None</code>. Scope honesty: a silently dropped drill would show the un-drilled (wider) page while the UI believes it is showing a single group.</td></tr>
+                      <tr><td><code>validate_agent_meta</code></td><td>PURE, never raises. Clamps all fields (tagline 120, description 700, capabilities 8 items, tools 16 items). Strips control characters (C0, NEL, U+2028/U+2029). Icon whitelist (20 curated names, unknown falls back to <code>robot</code>). Badge enum (<code>"" / default / new / beta</code>).</td></tr>
+                      <tr><td>Budget validators</td><td><code>validate_budget_amount</code>: finite float in [0, 1 000 000], 0 allowed ("hard block"). <code>validate_expires_days</code>: int [1, 3650] or <code>None</code> (permanent); value 0 maps to <code>None</code>. <code>validate_user_id_list</code>: de-duplicated, bounded to 1000. <code>validate_quota_note</code>: never raises.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Agent whitelist: server-side enforcement</h3>
+
+                <p>The opaque <code>agent_key</code> is derived as <code>"ag_" + sha1(f"{project_key}:{agent_id}").hexdigest()[:12]</code>. Stable (re-saving keeps the same key) and opaque (frontend never sees the raw <code>agent_id</code>). The enforcement point is <code>settings.resolve_enabled_agent(agent_key)</code> in <code>/chat/start</code>: returns <code>{logical_key, project_key, agent_id, label}</code> ONLY if the key matches a still-active agent, otherwise <code>None</code> - the run is never launched. The resolved <code>agent_id</code> stays server-side end to end.</p>
+
+                <p>On the admin write side, <code>POST /admin/agents</code> re-validates each requested agent against the live DSS listings (project visible AND agent actually present) before persisting. A defensive cap (<code>MAX_ENABLED_AGENTS = 50</code>) bounds the selection.</p>
+
+                <h3>SQL safety at point of use (defense in depth)</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Helper</th><th>Role</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>sql_value(v)</code></td><td><code>toSQL(Constant(v), dialect=POSTGRES)</code>. Every user value. NEVER use for identifiers.</td></tr>
+                      <tr><td><code>nullable_value(v)</code></td><td>Bare SQL <code>NULL</code> for <code>None</code>/<code>""</code>, otherwise <code>sql_value</code>. Stores a real NULL, not an empty string.</td></tr>
+                      <tr><td><code>bool_literal(v)</code></td><td>Bare <code>"true"</code>/<code>"false"</code> for a bool already type-checked server-side. Avoids depending on <code>Constant(bool)</code> escaping (undocumented behavior).</td></tr>
+                      <tr><td><code>pg_identifier(name)</code></td><td>Validates against <code>^[A-Za-z_][A-Za-z0-9_-]*$</code>, rejects more than 63 bytes (NAMEDATALEN, prevents silent PostgreSQL truncation), double-quotes. Built ONLY from constants, never from user input.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>Evidence re-execution runs with <code>SET LOCAL statement_timeout TO '30000'</code> and <code>SET LOCAL transaction_read_only TO on</code> (transaction-scoped: a pooled JDBC connection can never carry these to other workloads). These are pre-queries on the matched dataset's OWN connection, not the chat storage connection.</p>
+
+                <h3>Admin gating, bootstrap and anti-lockout</h3>
+
+                <p>All <code>/admin/*</code> routes chain: auth (401) - storage guard (409) - <code>admin.is_admin(user_id)</code> check (403 on false, 500 on exception). The APPLICATION admin (table flag in <code>webapp_users_v1</code>) is distinct from DSS rights.</p>
+
+                <p>The first user to issue <code>POST /me</code> after configuration becomes admin. Race-free: a <code>pg_advisory_xact_lock</code> (key <code>0x4F57494D</code>, "OWIM") serializes the election across concurrent connections (READ COMMITTED isolation would otherwise let two concurrent users both see "no admin"). GET <code>/me</code> is read-only (never creates a row or wins the election).</p>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">TOFU - first to open = admin</p>
+                    <p>The first user to open the app after configuration becomes admin. At deployment, ensure this is the intended deploying admin before anyone else opens the webapp. Anti-lockout guard in <code>POST /admin/users/set-admin</code> prevents removing the last admin (<code>400 cannot_remove_last_admin</code>).</p>
+                  </div>
+                </aside>
+
+                <h3>Log hygiene</h3>
+
+                <p>Message content is NEVER logged. The blueprint-scoped hooks trace only meta (method, path, status, duration in ms) for <code>/owismind-api/*</code> only (not DSS internal pings). Header values (credentials) are never logged. On an unexpected auth shape, only the KEY NAMES (<code>sorted(info.keys())</code>) are logged, never the values. <code>/ping</code> deliberately does not expose the storage config.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - single-process assumption</p>
+                    <p>All in-memory state (<code>_RUNS</code>, identity cache, rate-limit buckets, Evidence caches, budget config cache) assumes a SINGLE-PROCESS backend. In multi-process, the concurrency cap would be multiplied and cross-process poll would return 404. Force 1 process at deployment. The first-admin election stays protected by the PostgreSQL advisory lock (cross-connection, not process state).</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Correction - budget enforcement is active</p>
+                    <p>Earlier versions of the documentation stated that budget blocking was "not implemented". That is wrong. The <code>402 monthly_quota_exceeded</code> gate IS coded and enforced in <code>api/routes.py /chat/start</code> (fail-open on storage error). It has not yet been validated on the live DSS instance, but the code path is active.</p>
+                  </div>
+                </aside>
+
+                <p>
+                  <a href="../04-backend/06-security-and-validation.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 04-backend/06-security-and-validation.md
+                  </a>
+                </p>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <script src="assets/site.js"></script>
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

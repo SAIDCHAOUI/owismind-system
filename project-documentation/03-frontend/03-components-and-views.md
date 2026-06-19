@@ -1,8 +1,8 @@
 # Frontend - components and views
 
-> Audience: frontend developer. Last updated: 2026-06-18. Summary: the Vue 3 component hierarchy
-> (shell, chat, evidence, ui), the routed views and the three static registries
-> (`agentMeta`, `timelineSteps`, `faqContent`), with their contracts and their rendering guards.
+> Audience: frontend developer. Last updated: 2026-06-19. Summary: the Vue 3 component hierarchy
+> (shell, chat, evidence, ui), the routed views (including the new AgentsView + AdminView),
+> the registries, and the rendering guards that govern the sensitive components.
 
 This document maps the presentation layer: who renders what, how the tree is composed, and which
 non-obvious rendering rules govern the sensitive components (scroll, version navigation, Evidence
@@ -24,8 +24,8 @@ from `AppLayout.vue`.
 graph TD
   App["App.vue (thin shell)"] --> Layout["AppLayout.vue (CSS grid)"]
   App --> Toast["ToastHost.vue"]
-  Layout --> Sidebar["Sidebar.vue"]
-  Layout --> MainTop["MainTop.vue (top bar)"]
+  Layout --> Sidebar["Sidebar.vue (collapsed = RAIL)"]
+  Layout --> MainTop["MainTop.vue (top bar + expand button)"]
   Layout --> RV["RouterView (one view)"]
   Layout -. "v-if evidence.open" .-> EvPanel["EvidencePanel.vue"]
   RV --> ChatView["ChatView.vue"]
@@ -45,14 +45,33 @@ the layout level (see the shell section below).
 
 ## Shell family
 
-Four components lay out the application chrome.
+Four components lay out the application chrome. The design follows the Orange charter (square geometry,
+flat fills, 1px rules, orange used as a rare accent for the active sidebar item bar).
 
 | Component | File | Role |
 |---|---|---|
 | `App.vue` | `App.vue` | Root: `AppLayout` + `ToastHost`, `ensureLoaded()` at mount. |
-| `AppLayout.vue` | `components/shell/AppLayout.vue` | CSS grid `sidebar \| main \| evidence`, resize handles, opening/closing of the Evidence panel. |
-| `Sidebar.vue` | `components/shell/Sidebar.vue` | Brand, navigation, paginated conversation list (lazy via IntersectionObserver), footer menus (help, user). |
-| `MainTop.vue` | `components/shell/MainTop.vue` | Contextual top bar: page title, quick theme and language toggles, toggle for the collapsed sidebar. |
+| `AppLayout.vue` | `components/shell/AppLayout.vue` | CSS grid `sidebar | main | evidence`, resize handles, opening/closing of the Evidence panel. |
+| `Sidebar.vue` | `components/shell/Sidebar.vue` | Brand (real `orange-logo.png`), navigation, paginated conversation list (lazy via IntersectionObserver), footer menus. Collapsed = ICON RAIL. |
+| `MainTop.vue` | `components/shell/MainTop.vue` | Contextual top bar: page title, quick theme and language controls, sidebar expand button (shown when collapsed). |
+
+### Sidebar: full panel and ICON RAIL
+
+`Sidebar.vue` is ONE mounted component with TWO visual layouts - both driven by `ui.sidebarCollapsed`.
+It is never remounted on collapse/expand, so the conversation list is never re-fetched.
+
+- Full panel: brand logo image, new conversation button, Agents link, conversation list, footer help and
+  account menus.
+- Icon RAIL (collapsed): a thin `--rail-w: 60px` column with: the brand logo (real PNG, never a
+  CSS-reconstructed square), a "+" new-conversation button, a Agents/library button, then at the bottom
+  a help "?" button and the account avatar. The active route is indicated by a small inset orange bar
+  on the left edge of the icon.
+
+The expand button is in `MainTop.vue` (not in `Sidebar`). It becomes visible only when
+`ui.sidebarCollapsed` is true.
+
+The rail's conversation list is `v-show` (not `v-if`), so it is mounted once and never re-fetched.
+The `topUp` guard prevents sending `/conversations` queries while the rail is collapsed (height 0).
 
 `AppLayout.vue` carries two non-trivial behaviors worth knowing:
 
@@ -93,19 +112,22 @@ graph TD
 
 The view is thin: it reads `route.params.sessionId` and calls `chat.ensureSession(sid)` (or
 `chat.newConversation()` if there is no sessionId), with `immediate`. A second `watch` on
-`chat.exchanges.length` stamps the URL `/chat/<sid>` at the first exchange (this fixes the dead-button
-bug: pushing `/chat` when we are already there would be a no-op).
+`chat.exchanges.length` stamps the URL `/chat/<sid>` at the first exchange.
 
 The template has three mutually exclusive branches, in the order of `v-if` / `v-else-if` / `v-else`:
 
-1. `session.needsConfig`: administration card (the SQL connection is not configured). The text is
-   directly in French in the template ("Stockage non configure...").
+1. `session.needsConfig`: administration card (the SQL connection is not configured).
 2. `chat.hasMessages`: `ChatThread` plus the prompt area (`prompt-wrap` + `PromptBar`).
 3. Otherwise: the empty stage (`ChatEmpty` + `PromptBar` in `prompt-wrap in-empty`).
 
-A centered loading overlay (`thread-loading`) is shown on top during a conversation switch, so that the
-screen never flashes "new conversation" before the target rows arrive. Thread errors
+A centered loading overlay (`thread-loading`) is shown on top during a conversation switch. Thread errors
 (`chat.threadError`, `chat.errorMsg`) are rendered above the `PromptBar` in both branches that show it.
+
+**Budget banner**: when `session.budgetBlocked` is true, `ChatView` renders a transparent informational
+banner above the prompt explaining why sends are paused and when the budget resets (from
+`session.usage.next_reset`). The banner uses `budgetMsg` derived from `budgetModel.formatMoney` and
+`budgetModel.formatShortDate`. The stable error code `monthly_quota_exceeded` from `/chat/start` (a race
+where the gate flipped after the send click) is also translated to this human message via `friendlyError`.
 
 ### ChatThread.vue
 
@@ -130,7 +152,7 @@ scroll). A user who has already scrolled is never forcibly pulled down (`NEAR_BO
 
 ### MessageAgent.vue
 
-The most complex chat component (more than 700 lines). It renders an agent message in four zones, top
+The most complex chat component. It renders an agent message in four zones, top
 to bottom: the header, the grouped activity block (the agent's reasoning and tool steps), the response
 body (text and error blocks, in arrival order), then the collapsible SQL panel and the action footer.
 
@@ -149,9 +171,9 @@ Behaviors worth knowing:
   `stepStampDiff` (the backend stamps are authoritative). The tick is gated on `activityLive && chat.sending`
   to avoid a zombie interval.
 - Feedback. `like()` and `dislike()` persist immediately via `submitFeedback` and mutate
-  `v.feedbackRating`; `dislike` then opens the `FeedbackModal`. The `⋯` menu opens the detailed modal
+  `v.feedbackRating`; `dislike` then opens the `FeedbackModal`. The `...` menu opens the detailed modal
   for the current rating.
-- Usage. A line `↑ in · ↓ out tokens · ~$cost` is rendered, either live or reconstructed from the
+- Usage. A line `up in / down out tokens / ~$cost` is rendered, either live or reconstructed from the
   persisted row.
 - Honest stop states: `interruptedEmpty` (stop before any text), `stoppedWithText` (partial + marker)
   and a "Stopping..." banner while awaiting the terminal.
@@ -166,7 +188,7 @@ Behaviors worth knowing:
 | Component | File | Role |
 |---|---|---|
 | `MessageUser.vue` | `components/chat/MessageUser.vue` | User bubble; on hover, copy and edit. Editing creates a NEW sibling (`editTurn`), nothing is deleted. |
-| `PromptBar.vue` | `components/chat/PromptBar.vue` | Auto-grow textarea + `AgentPicker` + `ModelModePicker` + mic + send/stop button. |
+| `PromptBar.vue` | `components/chat/PromptBar.vue` | Auto-grow textarea + `AgentPicker` + `ModelModePicker` + mic + send/stop button. `canSend` from `chat` disables the button (budget blocked, sending, config missing). |
 | `AgentPicker.vue` | `components/chat/AgentPicker.vue` | `Menu` bound to `session.selectedAgentKey`. The list comes from `/agents` (opaque logical keys). |
 | `ModelModePicker.vue` | `components/chat/ModelModePicker.vue` | Mode pill + two-panel `Modal`. |
 | `ChatEmpty.vue` | `components/chat/ChatEmpty.vue` | Empty stage of a fresh conversation (suggestions, precision tip). |
@@ -177,7 +199,7 @@ Behaviors worth knowing:
 `COST = { eco: 1, medium: 3, high: 5 }`, `SPEED = { eco: 5, medium: 3, high: 2 }`, `PILL_LEVEL`
 (green/orange/red dot on the pill). Selection happens on CLICK (not on hover) with a Cancel / Confirm
 footer: the pending value (`selected`) is only applied on confirmation, via `ui.setModelMode`. Eco is
-the recommended option by default. The header comment documents the mapping (eco = Gemini 3.1
+the recommended default. The header comment documents the mapping (eco = Gemini 3.1
 Flash-Lite, medium = Gemini 3.5 Flash, high = Claude Sonnet), but the frontend sends ONLY the logical
 key `mode`: the real model id is resolved server-side (whitelist rule).
 
@@ -235,8 +257,8 @@ The full pipeline that produces these tabs (agent-side `ARTIFACT` event -> norma
 | `ArtifactKpi.vue` | `components/evidence/ArtifactKpi.vue` | KPI tile. |
 
 `EvidenceSources.vue` is gated on `meta.source` (a v1 meta without that block renders nothing). The
-clickable link only appears when `source.url` is filled in (Dataiku link configured on the agent, class
-`--orange-text` for AA contrast).
+clickable link only appears when `source.url` is filled in (Dataiku link configured on the agent, styled
+with `--orange-text` for AA contrast).
 
 > IN FLUX: the concrete presence of the `'kpi'` tab (and of the `source.url` link) depends on the
 > backend and the agent configuration. On the frontend side everything is wired, but the emission of a
@@ -247,62 +269,117 @@ clickable link only appears when `source.url` is filled in (Dataiku link configu
 The shared primitives are exported by a barrel: `components/ui/index.js`
 (`import { Button, Icon, Tabs, Menu, Modal, ToastHost } from '@/components/ui'`).
 
-| Primitive | File | Reused by |
+All primitives follow the Orange charter: flat/square styling, `border-radius: 0` on `Button` and
+`Modal`, 1px border rules, no gradients or blur.
+
+| Primitive | File | Variants / note |
 |---|---|---|
-| `Icon.vue` | `components/ui/Icon.vue` | Everywhere (icon registry `icons.js`). |
-| `Button.vue` | `components/ui/Button.vue` | Views, modals, action footers. |
-| `Menu.vue` | `components/ui/Menu.vue` | `AgentPicker`, `Sidebar` (help/user), `MessageAgent` (`⋯`). |
-| `Modal.vue` | `components/ui/Modal.vue` | `ModelModePicker`, `FeedbackModal`. |
-| `Tabs.vue` | `components/ui/Tabs.vue` | `EvidencePanel` (Evidence/Chart/Table/KPI tabs). |
+| `Icon.vue` | `components/ui/Icon.vue` | Icon registry `icons.js`. Used everywhere. |
+| `Button.vue` | `components/ui/Button.vue` | Variants: `primary`, `ghost`, `danger`, `link`, `icon`. Square and flat (Orange charter). Props: `variant`, `icon`, `disabled`, `type`, `block`. |
+| `Menu.vue` | `components/ui/Menu.vue` | `AgentPicker`, `Sidebar` (help/user menus), `MessageAgent` (`...`). |
+| `Modal.vue` | `components/ui/Modal.vue` | Square/flat overlay. Used by `ModelModePicker`, `FeedbackModal`, agent profile editor in `AdminView`. |
+| `Tabs.vue` | `components/ui/Tabs.vue` | `EvidencePanel` (Evidence/Chart/Table/KPI tabs), `AdminView` (admin navigation tabs). |
 | `ToastHost.vue` | `components/ui/ToastHost.vue` | Mounted once in `App.vue`, fed by `useToasts`. |
 
 There is also a second barrel for the building blocks of the secondary pages: `components/pages/index.js`
-exposes `PageShell`, `SettingCard` and `EmptyState` (`PageShell.vue`, `SettingCard.vue`, `EmptyState.vue`),
-used by the phase 3 views (Settings, FAQ, etc.).
+exposes `PageShell`, `SettingCard` and `EmptyState`.
+
+| Primitive | File | Used by |
+|---|---|---|
+| `PageShell.vue` | `components/pages/PageShell.vue` | Secondary views (Settings, Agents, Admin, FAQ, Feedback). Accepts `eyebrow`, `title`, `desc`, `wide` props; renders the Orange H1 + title-bar decoration. |
+| `SettingCard.vue` | `components/pages/SettingCard.vue` | A labelled settings section card. Used in `SettingsView` and `AdminView`. |
+| `EmptyState.vue` | `components/pages/EmptyState.vue` | Honest empty state (icon + title + optional description). Used throughout. |
 
 ## Views and routes
 
 The router (`router/index.js`) uses `createWebHashHistory`: a deliberate choice, because the DSS webapp
-is served at a fixed URL with no server-side SPA rewrite, so a path-based history would return 404 on
-reload or on a deep link. See the dedicated ADR:
+is served at a fixed URL with no server-side SPA rewrite. See the dedicated ADR:
 [ADR-0001 - Vue SPA served by DSS](../08-decisions/0001-vue-spa-servie-par-dss.md).
 
 | Route | Name | View | Note |
 |---|---|---|---|
 | `/` | (redirect) | -> `/chat` | |
 | `/chat/:sessionId?` | `chat` | `ChatView.vue` | Main view, optional `sessionId`. |
-| `/settings` | `settings` | `SettingsView.vue` | Lazy. |
+| `/settings` | `settings` | `SettingsView.vue` | Lazy. Renamed "My account" in the UI. |
 | `/feedback` | `feedback` | `FeedbackView.vue` | Lazy. |
-| `/faq` | `faq` | `FaqView.vue` | Lazy; fed by `faqContent`. |
-| `/agents/:agentId?` | `agents` | `AgentsView.vue` | Lazy; cards via `agentMeta`. |
+| `/faq` | `faq` | `FaqView.vue` | Lazy; fed by `faqContent.js`. |
+| `/agents/:agentId?` | `agents` | `AgentsView.vue` | Lazy. Profiles from backend, NOT from a static registry. |
 | `/project/:projectId` | `project` | `ProjectView.vue` | Lazy. |
 | `/support`, `/releases`, `/accessibility`, `/cgu`, `/privacy`, `/about` | (per target) | `PagePlaceholder.vue` | Help-menu targets, driven by `meta` i18n keys. |
 | `/admin` | `admin` | `AdminView.vue` | `meta.requiresAdmin: true`. |
 | `/:pathMatch(.*)*` | (catch-all) | -> `/chat` | |
 
-All dedicated views are lazy-imported (`() => import(...)`) to keep the chat bundle light; only
-`ChatView` and `PagePlaceholder` are loaded early. The `/admin` route is guarded by a `beforeEach` that
-resolves identity (memoized via `session.ensureLoaded()`) then redirects to `chat` if the user is not
-`isAdmin`.
+All dedicated views are lazy-imported (`() => import(...)`) to keep the chat bundle light. The `/admin`
+route is guarded by a `beforeEach` that resolves identity (memoized via `session.ensureLoaded()`) then
+redirects to `chat` if the user is not `isAdmin`.
+
+### SettingsView.vue ("My account")
+
+`SettingsView` is renamed "My account" in the UI (`set.title` key in i18n). It shows:
+- Profile card: display name, Dataiku user id, groups (from `/me`). The "edit profile" button is
+  disabled (no edit-name route yet).
+- Theme and language controls (wired to `ui.setTheme` / `ui.setLang`).
+- Context window slider (wired to `ui.setContextMessages`).
+- Budget card (REAL): monthly credit gauge (spent / limit), remaining, reset date, transparency line
+  explaining the source of the limit (default / global temp boost / per-user override). Uses
+  `composables/budgetModel.js` helpers for formatting. Refreshed on mount via `session.loadUsage()`.
+- Usage card (REAL): this-month tokens + spend and lifetime counters. No mock figures.
+
+### AgentsView.vue
+
+`AgentsView` is the public agents library. It is driven entirely by `session.agents` (the list from
+`/agents`), which already includes the admin-authored profile fields (`tagline`, `description`,
+`capabilities`, `tools`, `icon`, `badge`). There is NO static registry enrichment: `agentMeta.js` has
+been DELETED.
+
+- LIST mode (no `:agentId` param): search bar + square cards, one per agent. An agent whose admin has
+  not filled in a profile shows a minimal honest card (`hasProfile: false` renders a "profile to
+  complete" state - never invented capabilities).
+- DETAIL mode (`:agentId` param): full editorial profile card (tagline, description, capabilities list,
+  tools list, badge), with a CTA that preselects the agent and navigates to `/chat`.
+- Search filters on `name`, `tagline`, `desc`.
+- Count display (`ag.count` i18n key).
+
+Profile fields come from `session.agents[i]` which already carries the data from `GET /agents`. A field
+that the admin left empty degrades silently to `''` / `[]` (never shows an invented value).
+
+### AdminView.vue
+
+`AdminView` is the admin console (server-gated at 403 + client-guarded by `meta.requiresAdmin`).
+
+Navigation uses `Tabs.vue` with five tabs:
+- `overview`: storage info (connection, project_key, table list).
+- `agents`: enabled agent whitelist + profile editor (modal).
+- `users`: user list + admin flag toggle.
+- `quotas`: global monthly budget config + per-user override table.
+- `activity`: explicit empty state (no backend yet, never fake KPIs).
+
+**Agents tab - profile editor**: besides enabling/disabling agents, an admin authors each agent's
+display profile via a `Modal` editor. The editable fields:
+- Icon (dropdown from `AGENT_ICONS` list: `robot`, `sparkle`, `sparkles`, `trendUp`, `chart`, ..., 20 entries - must match the server-side whitelist in `security/validation.py::validate_agent_meta`).
+- Badge (one of `''`, `default`, `new`, `beta`).
+- Tagline (single line, max `TAGLINE_MAX = 120` chars).
+- Description (textarea, max `DESC_MAX = 700` chars).
+- Capabilities (multiline text - each line is one bullet, max 8 lines of 120 chars).
+- Tools (multiline text - each line is one tool label, max 16 lines of 48 chars).
+
+On save, `saveAdminAgents(agents)` posts `{ agents: [{ project_key, agent_id, profile? }] }`. The
+server re-validates each profile via `validate_agent_meta` (pure, never raises) and sanitizes it before
+storage. The profile is stored INSIDE the existing `enabled_agents` JSON in `webapp_settings_v1` (no
+new table). The label used in `AgentsView` comes back from `/agents` without ever leaking
+`agent_id` or `project_key`.
+
+**Quotas tab**: global budget config (`limit_usd`, `enabled` toggle, optional temporary boost with
+`temp_limit_usd` + `temp_days`) and a per-user override table (set or clear a limit override for one /
+several / all users, permanent or with an expiry in days). The backend routes are
+`GET/POST /admin/budget` (global config + overview) and `POST /admin/budget/users` (per-user set/clear).
+All budget math for display uses `composables/budgetModel.js`.
+
+Note: admins ARE subject to the monthly budget. There is no exemption for admin users.
 
 ## Registries (static metadata)
 
-Three static tables live under `registries/`. These are presentation data, not business sources of
-truth; the bilingual content is rendered via `useTr` (`{ fr, en }` objects).
-
-### agentMeta.js
-
-`agentMeta.js` carries OPTIONAL descriptive cards (icon, tagline, badge, desc, bullets, tools), all in
-`{ fr, en }`. Security point (rule F7): this registry is NOT the source of the agent LIST, which always
-comes from the backend `GET /agents` (opaque logical keys). The registry ENRICHES a backend agent when
-its label matches a known entry; otherwise the agent shows an honest generic card (we never invent
-capabilities for an unknown agent). There are six entries: `owismind`, `cooper`, `revenues`, `tickets`,
-`cx`, `opps`.
-
-Resolution happens via `resolveAgentMeta(label)`: normalization then exact match; failing that, a
-SUBSTRING fallback (the longest registry key contained in the label, minimum length 4, the most specific
-winning). This fallback lets a decorated label like `Agent - OWIsMind_orchestrator` resolve the
-`owismind` card via the substring `owismind`.
+Two static tables survive under `registries/`. The third (`agentMeta.js`) has been DELETED.
 
 ### timelineSteps.js
 
@@ -330,6 +407,15 @@ never seen never breaks the display.
 The structure is `[{ title: {fr,en}, qs: [{ q: {fr,en}, a: {fr,en} }] }]`, rendered by the `FaqView.vue`
 view, which adds a client-side search. The groups cover General, Data and Evidence, Budget and
 Troubleshooting.
+
+### Note: agentMeta.js has been DELETED
+
+The `agentMeta.js` registry that previously carried hardcoded agent descriptions (`owismind`, `cooper`,
+`revenues`, `tickets`, `cx`, `opps`) has been DELETED. Agent profiles are now ADMIN-AUTHORED via the
+profile editor in `AdminView` and stored server-side. `AgentsView` now reads exclusively from
+`session.agents` (the `/agents` backend response). The `resolveAgentMeta(label)` function (including its
+substring fallback) no longer exists. Any reference to `agentMeta` in existing code or documentation is
+STALE.
 
 ## See also
 - [Frontend - overview and structure](01-overview-and-structure.md) - bootstrap, hash router, i18n, theme.

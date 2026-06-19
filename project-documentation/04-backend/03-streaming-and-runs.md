@@ -1,9 +1,9 @@
 # Backend - streaming and run lifecycle
 
-> Audience: backend developer. Last updated: 2026-06-18. Summary: how the Flask backend streams an
+> Audience: backend developer. Last updated: 2026-06-19. Summary: how the Flask backend streams an
 > agent's progress to the browser without SSE (one bounded worker thread plus a module-level dict polled
 > by the client), including event normalization, cooperative stop handling and the instance-safety
-> guardrails.
+> guardrails. Reflects the 2026-06-18 monthly budget gate added to `/chat/start` (before any write).
 
 ## Why polling and not SSE
 
@@ -473,6 +473,7 @@ Normalized events on the live timeline (one per entry of the poll's `events[]`):
 `{sql, success, row_count[, sql_id, step_index, agent_key, source_url, result]}`.
 
 HTTP error codes of the `/chat/start` route: `429 rate_limited`, `503 busy`,
+`402 monthly_quota_exceeded` (budget gate, before any write, fails OPEN),
 `404 agent_not_enabled`/`run_not_found`, `409 storage_not_configured`,
 `500 storage_unavailable`/`agent_unavailable`, `401 unauthenticated`, `400 <ValidationError.code>`. The
 full catalog of endpoints is in [API reference](02-api-reference.md).

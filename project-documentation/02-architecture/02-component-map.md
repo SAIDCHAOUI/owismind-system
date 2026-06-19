@@ -1,6 +1,6 @@
 # Component map
 
-> Audience: developer. Last updated: 2026-06-18. Summary: the layer-by-layer inventory of every major
+> Audience: developer. Last updated: 2026-06-19. Summary: the layer-by-layer inventory of every major
 > OWIsMind component (frontend, Flask backend, agent layer, SQL storage), with its responsibility and its
 > exact file, so you know where everything lives before touching it.
 
@@ -29,10 +29,10 @@ flowchart TB
   end
   subgraph BE["Flask backend Python 3.9 (python-lib/owismind)"]
     BEapi["api/routes.py<br/>blueprint /owismind-api"]
-    BEsec["security/ (identity, validation)"]
+    BEsec["security/ (identity, validation + validate_agent_meta)"]
     BEagt["agents/ (stream_manager, streaming, context, discovery)"]
     BEev["evidence/ (service, capture, sql_parse, chart_payload)"]
-    BEsto["storage/ (chat_v5, migrations, usage, settings, admin)"]
+    BEsto["storage/ (chat_v5, migrations, usage, settings, admin, budget)"]
   end
   subgraph AG["LangGraph Code Agents Python 3.11 (dataiku-agents)"]
     AGorch["agents/OWIsMind_orchestrator.py"]
@@ -67,7 +67,7 @@ history, vue-i18n, markdown-it + DOMPurify, Chart.js. The detail lives in
 |---|---|---|
 | Backend client | `services/backend.js` | The ONLY network point: every call goes through `getWebAppBackendUrl('/owismind-api/...')`, never a hardcoded URL. |
 | Chat store | `stores/chat.js` | The active conversation as a TREE of exchanges, the sending state, the draft. `_runExchange` is the only place where an exchange is created and launched. |
-| Session store | `stores/session.js` | Identity, list of enabled agents (picker), paginated list of conversations. Degrades gracefully outside DSS. |
+| Session store | `stores/session.js` | Identity, list of enabled agents (with their full editorial profile), paginated list of conversations, monthly usage status (exposes `budgetBlocked` from `/usage`). Degrades gracefully outside DSS. |
 | Evidence store | `stores/evidence.js` | State of the Evidence Studio panel: current exchange, server meta, local editable chips, row pagination, drill. |
 | UI store | `stores/ui.js` | Single source of truth for preferences (theme, widths, language, `contextMessages`, `modelMode`), persisted in localStorage. |
 | Conversation tree | `stores/conversationTree.js` | PURE module: `childrenOf`, `activeChildOf`, `buildActivePath` (the active path follows the override or the last child). |
@@ -85,21 +85,26 @@ history, vue-i18n, markdown-it + DOMPurify, Chart.js. The detail lives in
 | Trust layer | `composables/evidenceProof.js` | `trustLevel(meta)` -> deterministic level (solid/dashed/muted, NEVER green); a v1 meta falls back to "declared". |
 | SQL coloring | `composables/sqlPretty.js` | `formatSql`/`tokenizeSql` (SAFE coloring, every token escaped, never v-html). Never throws. |
 | Markdown rendering | `composables/useMarkdown.js` | The ONLY v-html path: markdown-it `html:false` + DOMPurify. Hardens links (`target=_blank`, `rel=noopener`). |
+| Budget helpers | `composables/budgetModel.js` | PURE module: `formatMoney`, `usagePct`, `gaugePct`, `usageLevel`. Formatting and gauge math shared by the Budget card (Settings), the chat budget banner (ChatView) and the admin Quotas table (AdminView). No Vue dependency - pure functions. |
 | Miscellaneous | `composables/useToasts.js`, `useTr.js`, `useClickOutside.js`, `useReducedMotion.js` | Toast queue, `{fr,en}` -> locale resolution, click-outside listener, reduced-motion flag. |
 
 ### Views and components
 
 | Module | File(s) | Responsibility |
 |---|---|---|
-| Shell | `components/shell/AppLayout.vue`, `MainTop.vue`, `Sidebar.vue` | CSS grid `sidebar | main | evidence`, resize handles, contextual title, lazy-loaded conversation list. |
-| Chat view | `views/ChatView.vue` | Wires the route to the store: `chat.ensureSession(sid)`, stamps the `/chat/<sid>` URL on the first exchange, 3 states (needsConfig / hasMessages / empty). |
+| Shell | `components/shell/AppLayout.vue`, `MainTop.vue`, `Sidebar.vue` | CSS grid `sidebar | main | evidence`, resize handles, contextual title, lazy-loaded conversation list. The sidebar in its collapsed state is a narrow RAIL (+ button, agents nav, help icon and profile). |
+| Chat view | `views/ChatView.vue` | Wires the route to the store: `chat.ensureSession(sid)`, stamps the `/chat/<sid>` URL on the first exchange, 3 states (needsConfig / hasMessages / empty). Also owns the transparent budget banner (shown when `session.budgetBlocked` is true). |
+| Agents view | `views/AgentsView.vue` | Agent library: search, card grid and full editorial profile sheet (tagline, description, capabilities, tools) sourced entirely from the backend - no hardcoded copy. |
+| Admin view | `views/AdminView.vue` | Administration area: agent whitelist management (select agents, fill in their editorial profile via modal), user management, and the Quotas tab (global budget config + per-user override table). |
+| Settings view | `views/SettingsView.vue` | "My account" screen: real Budget card (gauge, spent/limit, remaining, reset date, limit-source transparency) and Usage card (tokens month + lifetime) powered by `/usage` through the session store. |
+| Pages | `components/pages/EmptyState.vue`, `PageShell.vue`, `SettingCard.vue` | Page-level layout primitives (empty state, page wrapper, settings card). |
 | Chat thread | `components/chat/ChatThread.vue` | Renders the `turns`, sticky-aware auto-scroll (F13 gate: never watches `turns`). |
 | Agent message | `components/chat/MessageAgent.vue` | The most complex component: activity (ticker), body, SQL, token usage, feedback footer, version navigation. |
 | Input | `components/chat/PromptBar.vue`, `AgentPicker.vue`, `ModelModePicker.vue` | Auto-grow textarea, agent picker (logical key), mode picker (eco/medium/high in a Modal). |
 | Evidence panel | `components/evidence/EvidencePanel.vue` + `EvidenceTrust/Sources/Chips/Calc/Result/Table/Sql.vue` | Evidence/Chart/Table/KPI tabs; badge, sources, editable chips, calculation, captured result, drill, and collapsed SQL sections. |
 | Artifacts | `components/evidence/ArtifactChart.vue`, `ArtifactTable.vue`, `ArtifactKpi.vue` | Chart.js rendering (payload built on the backend), captured table, KPI card. |
-| UI primitives | `components/ui/` (`Icon`, `Button`, `Tabs`, `Menu`, `Modal`, `ToastHost`) | Shared building blocks (`index.js` barrel). |
-| Registries | `registries/agentMeta.js`, `timelineSteps.js`, `faqContent.js` | OPTIONAL descriptive metadata (agent cards), `eventKind` -> label/icon mapping, static bilingual FAQ. |
+| UI primitives | `components/ui/` (`Icon`, `Button`, `Tabs`, `Menu`, `Modal`, `ToastHost`) | Shared building blocks (`index.js` barrel). Square, flat, Orange-charter-compliant primitives that all views reuse. |
+| Registries | `registries/timelineSteps.js`, `registries/faqContent.js` | `eventKind` -> label/icon mapping (timeline), static bilingual FAQ. NOTE: `registries/agentMeta.js` was REMOVED (2026-06-18): agent cards are now fed entirely from the `/agents` backend endpoint (admin-authored editorial profiles), with no hardcoded description client-side. |
 
 ## Flask backend layer
 
@@ -118,7 +123,7 @@ is a thin bootstrap that calls `register_routes(app)`. Everything lives in sub-p
 | Module | File | Responsibility |
 |---|---|---|
 | Identity | `security/identity.py` | `resolve_identity(headers)` -> `{user_id, display_name, groups}` via `get_auth_info_from_browser_headers`. 5 s TTL cache keyed on the Cookie (perf of `/chat/poll`). Derives the display name from the login. |
-| Validation | `security/validation.py` | PURE validators (no DSS): `validate_chat_start_request`, `validate_feedback`, `validate_evidence_rows_request`, clamps that never raise. Bounds (`MAX_MESSAGE_LENGTH`, `MAX_EVIDENCE_PAGE`...) shared with the frontend. |
+| Validation | `security/validation.py` | PURE validators (no DSS): `validate_chat_start_request`, `validate_feedback`, `validate_evidence_rows_request`, `validate_agent_meta`, `validate_budget_amount`, `validate_quota_note`, clamps that never raise. `validate_agent_meta` sanitizes and bounds the admin-authored agent editorial profile (tagline, description, capabilities, tools, icon, badge) against the allowed icon set and hard character caps. All bounds are shared with or mirrored by the frontend. |
 
 ### agents (backend side, distinct from the Code Agents)
 
@@ -150,9 +155,16 @@ detailed, with a diagram, in
 
 Root: `Plugin/owismind/python-lib/owismind/storage/`. All application state is persisted in direct SQL
 via `SQLExecutor2` on the `SQL_owi` connection (PostgreSQL, schema `public`), without Flow at runtime (except
-the write-only trace). The data model (the five tables, the `parent_exchange_id` tree) is detailed, with
+the write-only trace). The data model (the six tables plus the `parent_exchange_id` tree) is detailed, with
 its canonical diagram, in
 [Backend - storage and data model](../04-backend/04-storage-and-data-model.md).
+
+The six application tables are: `webapp_chat_v5` (conversations and messages), `webapp_users_v1` (user
+registry with lifetime usage accumulators), `webapp_settings_v1` (global key-value store, holding the
+agent whitelist and the global budget config under key `monthly_budget`), `webapp_usage_monthly_v1`
+(monthly usage buckets, one row per `(user_id, month)`, resets naturally on the 1st),
+`webapp_artifacts_v1` (artifact specs), and `webapp_user_quota_v1` (per-user monthly budget overrides).
+All are created lazily on first use (`CREATE TABLE IF NOT EXISTS`), never `ALTER`-ed structurally.
 
 | Module | File | Responsibility |
 |---|---|---|
@@ -166,6 +178,7 @@ its canonical diagram, in
 | Artifacts | `storage/artifacts.py` | Persistence of artifact specs (chart/table/kpi), never the data rows. Table `webapp_artifacts_v1`. |
 | Pagination | `storage/pagination.py` | Opaque keyset cursor (encode/decode `(last_at, session_id)`), defensive decoding (malformed token -> first page). |
 | Serialization | `storage/serialization.py` | `rows_to_json_safe` (pandas DataFrames -> serializable JSON, NaN -> None), `parse_json_list`. |
+| Budget / quota | `storage/budget.py` | Monthly credit enforcement: `get_budget_config` (30 s in-process TTL cache), `has_budget` (the enforcement gate called by `/chat/start`; fail-open: a storage error lets the run through), `usage_status` (the caller's current-month spend + effective limit + remaining), `set_budget_config` and `set_user_quotas` / `clear_user_quotas` (admin writes). Two-layer limit resolution: per-user override in `webapp_user_quota_v1` > global temp boost > global default. Default 50 USD/month. |
 | Traces | `storage/chat_traces.py` | The ONLY exception to "no Flow": write-only append of the raw trace to a Flow dataset (`write_with_schema`, never query-logging). Best-effort. |
 
 ## Agent layer (LangGraph Code Agents)

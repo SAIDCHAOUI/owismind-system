@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Operations &amp; Maintenance - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="operations" data-theme="light">
+
+  <div class="shell">
+
+    <nav id="rail" aria-label="Documentation sections">
+    </nav>
+
+    <div class="main">
+
+      <header id="topbar" role="banner">
+      </header>
+
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <header class="page-header">
+                  <p class="eyebrow">Level 6 - Operate</p>
+                  <h1>Operations &amp; Maintenance</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">Everything an admin, operator, or maintainer needs: installation, the full plugin lifecycle (build, package, deploy), monitoring, runbooks, testing, and contributing conventions.</p>
+                </header>
+
+                <!-- ============================================================
+                     SECTION 1: INSTALLATION AND CONFIGURATION
+                     ============================================================ -->
+                <h2>Installation and configuration</h2>
+
+                <p>OWIsMind is deployed as three independent building blocks: a <strong>DSS plugin zip</strong> (Flask backend + built Vue frontend), two <strong>LangGraph Code Agents</strong> pasted by hand (outside the zip), and a small <strong>runtime configuration</strong> in the webapp Settings. This section walks through the complete sequence, from the first upload to the first conversation.</p>
+
+                <dl class="kv mt">
+                  <dt>Plugin ID</dt>
+                  <dd><code>owismind</code> (version <code>0.0.1</code>)</dd>
+                  <dt>Webapp component</dt>
+                  <dd><code>webapp-owismind-ai-agents</code></dd>
+                  <dt>Python package</dt>
+                  <dd><code>python-lib/owismind</code></dd>
+                  <dt>API prefix</dt>
+                  <dd><code>/owismind-api</code> (health: <code>/owismind-api/ping</code>)</dd>
+                  <dt>SQL connection</dt>
+                  <dd><code>SQL_owi</code> (PostgreSQL, schema <code>public</code>)</dd>
+                  <dt>Default project key</dt>
+                  <dd><code>OWISMIND_DEV</code></dd>
+                  <dt>DSS platform</dt>
+                  <dd>14.4.x</dd>
+                </dl>
+
+                <h3>Prerequisites</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Prerequisite</th><th>Detail</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>DSS instance</td><td>Version 14.4.x, able to host plugins and STANDARD webapps.</td></tr>
+                      <tr><td>PostgreSQL connection</td><td>A DSS connection of type <code>PostgreSQL</code> (schema <code>public</code>). The backend only accepts PostgreSQL.</td></tr>
+                      <tr><td>Python 3.9 code env</td><td>For the Flask backend (<code>python-lib/owismind</code>). No langchain - Flask + direct SQL only. Observed in DSS: <code>3.9.23</code>.</td></tr>
+                      <tr><td>Python 3.11 code env</td><td>For the two LangGraph Code Agents. LangGraph v1 requires Python &gt;= 3.10; langchain/langgraph installed by the operator.</td></tr>
+                      <tr><td>LLM Mesh connection</td><td>Exposing the per-mode models (Gemini Flash-Lite, Gemini Flash, Claude Sonnet) and the <code>revenue_semantic_query</code> tool (<code>v4oqA6R</code>).</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Two code environments: intentional</p>
+                    <p>The Flask backend runs on Python 3.9 (no langchain). The two Code Agents need Python 3.11 (LangGraph). These two envs are separate by design - you cannot put langgraph in the 3.9 backend. The agents never enter the zip; they are deployed by copy-paste onto the 3.11 env. See <a href="../08-decisions/0005-langgraph-code-agents-python-311.md">ADR-0005</a>.</p>
+                  </div>
+                </aside>
+
+                <h3>Install the plugin</h3>
+
+                <p>The plugin is distributed as <code>owismind-upload.zip</code> (canonical content: <code>plugin.json</code> at root + <code>python-lib/</code> + <code>resource/</code> + <code>webapps/</code>). Upload is a manual operator action.</p>
+
+                <ol>
+                  <li>In DSS, open <strong>Plugins</strong> (plugin administration).</li>
+                  <li>Click <strong>Add plugin &gt; Upload</strong>, choose <code>owismind-upload.zip</code>, set <strong>Origin = Uploaded</strong>.</li>
+                  <li>Let DSS install (plugin id <code>owismind</code>).</li>
+                </ol>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Development plugin trap</p>
+                    <p>A <strong>Development</strong> plugin carrying the same id <code>owismind</code> cannot be updated by a ZIP upload. To keep the same id (and therefore the Vite asset paths already wired in <code>body.html</code>): <strong>delete</strong> the existing Development plugin first, then upload the ZIP with Origin = Uploaded.</p>
+                  </div>
+                </aside>
+
+                <h3>Webapp settings</h3>
+
+                <p>Once the plugin is installed, create a webapp from the <code>webapp-owismind-ai-agents</code> component and attach the <strong>Python 3.9 code env</strong>. Then configure four parameters in the webapp's <strong>Settings</strong> tab.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Parameter</th><th>Type</th><th>Required</th><th>Role</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>sql_connection</code></td>
+                        <td>Dynamic SELECT</td>
+                        <td>Yes (app does not function without it)</td>
+                        <td>The PostgreSQL connection where the backend stores its tables. Only PostgreSQL connections are listed.</td>
+                      </tr>
+                      <tr>
+                        <td><code>table_prefix</code></td>
+                        <td>STRING</td>
+                        <td>No</td>
+                        <td>Optional prefix (max 16 chars, <code>[A-Za-z0-9_-]</code>) - allows several OWIsMind instances on the same connection. An invalid prefix is silently ignored.</td>
+                      </tr>
+                      <tr>
+                        <td><code>traces_dataset</code></td>
+                        <td>Dynamic SELECT</td>
+                        <td>No</td>
+                        <td>SQL-table-backed dataset (3 columns: <code>exchange_id</code>, <code>trace</code>, <code>created_at</code>) for offline trace analysis. <code>(none)</code> disables it. Best-effort write - a failure never breaks the conversation.</td>
+                      </tr>
+                      <tr>
+                        <td><code>log_level</code></td>
+                        <td>SELECT</td>
+                        <td>No (default <code>INFO</code>)</td>
+                        <td>Verbosity of the webapp backend log. Choices: <code>DEBUG</code> / <code>INFO</code> / <code>WARNING</code>. Requires backend restart to apply.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Storage is lazy</p>
+                    <p>Tables (<code>webapp_chat_v5</code>, <code>webapp_users_v1</code>, <code>webapp_settings_v1</code>, <code>webapp_usage_monthly_v1</code>, <code>webapp_user_quota_v1</code>, <code>webapp_artifacts_v1</code>) are created on first use via <code>CREATE TABLE IF NOT EXISTS</code>. No manual DDL is needed once the connection is chosen. MULTISELECT-type params do NOT render in DSS Settings - none of OWIsMind's parameters use that type.</p>
+                  </div>
+                </aside>
+
+                <h3>Paste the two Code Agents (3.11 env)</h3>
+
+                <p>The two LangGraph agents live in <code>dataiku-agents/agents/</code> (the repository is the source of truth) and must be pasted manually into DSS Code Agents on the <strong>Python 3.11 env</strong>. Always re-paste both when one changes.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Source file (repo)</th><th>Target DSS Code Agent</th><th>Env</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>dataiku-agents/agents/OWIsMind_orchestrator.py</code></td><td>OWIsMind_orchestrator</td><td>Python 3.11</td></tr>
+                      <tr><td><code>dataiku-agents/agents/SalesDrive_revenue_expert.py</code></td><td>SalesDrive_revenue_expert (<code>agent:bHrWLyOL</code>)</td><td>Python 3.11</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p class="mt">After pasting, verify the LLM Mesh ids in both files match exactly what your instance exposes:</p>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr><th>Constant</th><th>Mode / role</th><th>Observed format</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>GEMINI_FLASH_LITE_ID</code></td><td>Eco (default)</td><td><code>openai:LLM-...:vertex_ai/gemini-3.1-flash-lite</code></td></tr>
+                      <tr><td><code>GEMINI_FLASH_ID</code></td><td>Medium</td><td><code>openai:LLM-...:vertex_ai/gemini-3.5-flash</code></td></tr>
+                      <tr><td><code>SONNET_ID</code></td><td>High + Semantic Model (all modes)</td><td><code>openai:LLM-...:vertex_ai/claude-sonnet-4-6</code></td></tr>
+                      <tr><td><code>SEMANTIC_TOOL_ID</code></td><td><code>revenue_semantic_query</code> tool</td><td><code>v4oqA6R</code></td></tr>
+                      <tr><td><code>agent_id</code> (sub-agent)</td><td>Orchestrator resolves the sub-agent</td><td><code>agent:bHrWLyOL</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - agent layer</p>
+                    <p>The <code>dataiku-agents/</code> layer is being edited live. The managed tool <code>dataset_lookup</code> (<code>9FEzVZk</code>) and the <code>lookup</code> intent were REMOVED on 2026-06-18. Their replacement <code>attribute_lookup</code> (<code>tools/attribute_lookup_tool.py</code>) is wired as a built-in of the orchestrator (dispatched inline in <code>node_tools</code>, DSS test-run validated). The Custom Python tool <code>Drive_Revenues_resolve_filter_value</code> is SUPERSEDED and pending deletion from DSS.</p>
+                  </div>
+                </aside>
+
+                <h3>First admin, agent whitelist, and budget</h3>
+
+                <p><strong>First admin (TOFU):</strong> the very first user who POSTs <code>/owismind-api/me</code> after storage is configured becomes the application admin. The election is serialized by a PostgreSQL advisory lock. Ensure it is the deploying admin who opens the app first.</p>
+
+                <p class="mt"><strong>Agent whitelist:</strong> pasting Code Agents is not enough. An admin must explicitly activate each agent via the <strong>Administration</strong> page. The frontend only sends an opaque logical key (<code>ag_&lt;hash&gt;</code>); the backend resolves <code>(project_key, agent_id)</code> only if the agent is enabled. Activate at minimum the orchestrator <code>OWIsMind_orchestrator</code>.</p>
+
+                <p class="mt"><strong>Budget:</strong> the default credit is <strong>$50 USD per calendar month per user</strong> (<code>DEFAULT_MONTHLY_LIMIT_USD = 50.0</code> in <code>storage/budget.py</code>). It is live immediately after deploy. Adjust via the Quotas tab in the admin space. The gate returns HTTP 402 (<code>monthly_quota_exceeded</code>) when a user's limit is reached; enforcement can be disabled globally.</p>
+
+                <h3>Agent profiles</h3>
+
+                <p>Agent descriptions are <strong>never hardcoded</strong> (the legacy <code>agentMeta.js</code> was removed). An admin authors each agent's library card via <strong>Administration &gt; Agents &gt; Edit profile</strong>. Until filled, the card shows a "profile to complete" placeholder. The profile is validated and sanitized server-side (<code>validate_agent_meta</code> in <code>security/validation.py</code>, pure, never raises, icon whitelist-checked) and stored in the <code>enabled_agents</code> JSON of <code>webapp_settings_v1</code> - no new table. No restart is needed after saving.</p>
+
+                <h3>Installation checklist</h3>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Complete sequence - zero to first conversation</p>
+                  <ol>
+                    <li>Build a Python 3.9 code env (backend) and a Python 3.11 code env (agents, with langchain/langgraph installed by the operator).</li>
+                    <li>Ensure a PostgreSQL DSS connection exists (by convention <code>SQL_owi</code>) and the backend run-as-user can write to it.</li>
+                    <li>Upload <code>owismind-upload.zip</code> with Origin = Uploaded (delete any Development plugin of the same id first).</li>
+                    <li>Create the webapp from <code>webapp-owismind-ai-agents</code>, attach the 3.9 code env.</li>
+                    <li>In Settings: select <code>sql_connection</code>; optionally fill <code>table_prefix</code>, <code>traces_dataset</code>, <code>log_level</code>.</li>
+                    <li>Start/Restart the backend, then force-refresh the browser.</li>
+                    <li>Paste the 2 Code Agents (<code>OWIsMind_orchestrator</code> + <code>SalesDrive_revenue_expert</code>) on the 3.11 env; verify all LLM Mesh ids.</li>
+                    <li>Open the app as the deploying admin (POST <code>/me</code> -&gt; TOFU election).</li>
+                    <li>Via the admin space, activate at minimum the orchestrator <code>OWIsMind_orchestrator</code>.</li>
+                    <li>Review or adjust the default $50 USD/month budget via the Quotas tab.</li>
+                    <li>In Administration &gt; Agents, click Edit profile on each enabled agent and fill in the library card.</li>
+                    <li>Smoke test: <code>GET /owismind-api/ping</code> must return <code>{"status":"ok","python":"3.9.23"}</code>; <code>/admin/storage</code> must show <code>configured: true</code>.</li>
+                  </ol>
+                </div>
+
+                <p class="mt">
+                  <a href="../06-operations/01-installation-and-configuration.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 06-operations/01-installation-and-configuration.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 2: PLUGIN LIFECYCLE - BUILD, PACKAGE, DEPLOY
+                     ============================================================ -->
+                <h2>The plugin lifecycle: build, package, deploy</h2>
+
+                <p>This is the most operationally critical section. The Vue/Vite frontend compiles into static assets, the Flask backend and the webapp ship in a plugin zip, and the two LangGraph Code Agents are pasted by hand (Python 3.11 env). Three independent flows, one cardinal rule:</p>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Cardinal rule</p>
+                    <p>Building does not package. Packaging does not upload. The agent never uploads. Uploading the zip and pasting the Code Agents are <strong>manual operations performed by the operator</strong>.</p>
+                  </div>
+                </aside>
+
+                <h3>The build-to-zip pipeline</h3>
+
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" aria-label="Build to zip pipeline diagram">
+                    <!-- Background lane -->
+                    <rect class="lane" x="0" y="0" width="760" height="200"/>
+
+                    <!-- Step 1: Edit frontend -->
+                    <rect class="node" x="12" y="70" width="110" height="60"/>
+                    <text x="67" y="96" text-anchor="middle" class="diagram" font-size="11">Edit</text>
+                    <text x="67" y="112" text-anchor="middle" class="diagram" font-size="11">frontend/src/</text>
+
+                    <!-- Arrow 1 -->
+                    <line class="edge-accent" x1="122" y1="100" x2="150" y2="100"/>
+                    <polygon class="arrowhead-accent" points="150,95 160,100 150,105"/>
+
+                    <!-- Step 2: /build-plugin -->
+                    <rect class="node-accent" x="162" y="70" width="120" height="60"/>
+                    <text x="222" y="93" text-anchor="middle" fill="#fff" class="diagram" font-size="11">/build-plugin</text>
+                    <text x="222" y="109" text-anchor="middle" fill="#fff" class="diagram" font-size="10">npm run build</text>
+                    <text x="222" y="122" text-anchor="middle" fill="#fff" class="diagram" font-size="10">+ rewire body.html</text>
+
+                    <!-- Arrow 2 -->
+                    <line class="edge" x1="282" y1="100" x2="310" y2="100"/>
+                    <polygon class="arrowhead" points="310,95 320,100 310,105"/>
+
+                    <!-- Step 3: resource/ output -->
+                    <rect class="node" x="322" y="60" width="120" height="40"/>
+                    <text x="382" y="84" text-anchor="middle" class="diagram" font-size="11">resource/owismind-app/</text>
+
+                    <!-- Also edit python-lib box -->
+                    <rect class="node-soft" x="322" y="112" width="120" height="40"/>
+                    <text x="382" y="128" text-anchor="middle" class="diagram" font-size="10">Edit python-lib/</text>
+                    <text x="382" y="144" text-anchor="middle" class="diagram" font-size="10">or backend.py</text>
+
+                    <!-- Arrow 3 (both lead to package) -->
+                    <line class="edge" x1="442" y1="80" x2="476" y2="100"/>
+                    <line class="edge" x1="442" y1="132" x2="476" y2="110"/>
+                    <polygon class="arrowhead" points="474,95 484,100 474,105"/>
+
+                    <!-- Step 4: /package-plugin -->
+                    <rect class="node-accent" x="486" y="70" width="120" height="60"/>
+                    <text x="546" y="93" text-anchor="middle" fill="#fff" class="diagram" font-size="11">/package-plugin</text>
+                    <text x="546" y="109" text-anchor="middle" fill="#fff" class="diagram" font-size="10">stage runtime</text>
+                    <text x="546" y="122" text-anchor="middle" fill="#fff" class="diagram" font-size="10">plugin.json + 3 dirs</text>
+
+                    <!-- Arrow 4 -->
+                    <line class="edge" x1="606" y1="100" x2="634" y2="100"/>
+                    <polygon class="arrowhead" points="634,95 644,100 634,105"/>
+
+                    <!-- Step 5: ZIP -->
+                    <rect class="node" x="646" y="70" width="100" height="60"/>
+                    <text x="696" y="93" text-anchor="middle" class="diagram" font-size="11">owismind-</text>
+                    <text x="696" y="109" text-anchor="middle" class="diagram" font-size="11">upload.zip</text>
+                    <text x="696" y="125" text-anchor="middle" class="diagram text-accent" font-size="10">MANUAL upload</text>
+
+                    <!-- Labels below -->
+                    <text x="222" y="155" text-anchor="middle" class="diagram text-accent" font-size="9">FRONTEND ONLY</text>
+                    <text x="546" y="155" text-anchor="middle" class="diagram text-muted" font-size="9">BACKEND OR BOTH</text>
+
+                    <!-- Agents path (separate, bottom) -->
+                    <rect class="node-soft" x="12" y="16" width="200" height="30"/>
+                    <text x="112" y="35" text-anchor="middle" class="diagram" font-size="10">Edit dataiku-agents/agents/*.py</text>
+
+                    <line class="edge" x1="212" y1="31" x2="310" y2="31"/>
+                    <polygon class="arrowhead" points="310,26 320,31 310,36"/>
+
+                    <rect class="node" x="322" y="16" width="200" height="30"/>
+                    <text x="422" y="35" text-anchor="middle" class="diagram text-accent" font-size="10">Re-paste BOTH Code Agents - env 3.11 - NO ZIP</text>
+                  </svg>
+                  <p class="diagram-caption">The build-to-zip pipeline. Frontend changes go through /build-plugin then /package-plugin. Backend-only changes skip /build-plugin. Agent-only changes bypass the zip entirely.</p>
+                </figure>
+
+                <h3>Step 1: /build-plugin (compile the frontend)</h3>
+
+                <p>The <code>/build-plugin</code> skill chains five steps and never installs anything:</p>
+                <ol>
+                  <li><strong>Preflight</strong>: verify <code>Plugin/owismind/frontend/node_modules/</code> exists. If missing, STOP - only the user installs (NO INSTALL policy).</li>
+                  <li><strong>Build</strong>: <code>npm --prefix Plugin/owismind/frontend run build</code> (= <code>vite build</code>).</li>
+                  <li><strong>Rewire <code>body.html</code></strong>: copy the built <code>index.html</code> to <code>webapps/webapp-owismind-ai-agents/body.html</code>.</li>
+                  <li><strong>Verify</strong>: confirm the asset base <code>/plugins/owismind/resource/owismind-app/</code> is present in <code>body.html</code>.</li>
+                  <li><strong>Report</strong>: remind the operator that packaging is a separate step.</li>
+                </ol>
+
+                <p class="mt">The canonical Vite config (<code>Plugin/owismind/frontend/vite.config.js</code>) sets three values that must never change without a full rebuild:</p>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr><th>Vite key</th><th>Value</th><th>Role</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>base</code></td><td><code>/plugins/owismind/resource/owismind-app/</code></td><td>URL prefix of assets served by DSS</td></tr>
+                      <tr><td><code>build.outDir</code></td><td><code>../resource/owismind-app</code></td><td>Output (relative to <code>frontend/</code>)</td></tr>
+                      <tr><td><code>build.emptyOutDir</code></td><td><code>true</code></td><td>Purges the output folder before writing</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">body.html must be rewired on EVERY build</p>
+                    <p>The bundle filename is HASHED and changes on every build. Without the copy of <code>index.html</code> to <code>body.html</code>, DSS serves a <code>body.html</code> pointing to an old hash and assets return 404. The <code>cp</code> may be refused by harness permissions - fallback is to rewrite <code>body.html</code> via the Write tool (gotcha F10). <strong>NEVER build into <code>resource/</code> outside the skill</strong>: <code>emptyOutDir: true</code> would overwrite the deployed app.</p>
+                  </div>
+                </aside>
+
+                <p class="mt">For a <strong>compile-check only</strong> (without touching the deployed app):</p>
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-lang">Shell</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code># Throwaway compile-check - NEVER build to resource/ outside /build-plugin
+./node_modules/.bin/vite build --outDir /tmp/owi_buildcheck --emptyOutDir
+rm -rf /tmp/owi_buildcheck</code></pre>
+                </div>
+
+                <h3>Step 2: /package-plugin (stage the runtime and zip)</h3>
+
+                <p>The <code>/package-plugin</code> skill stages the runtime ONLY. Precondition: the frontend must already be built and <code>body.html</code> wired. The skill never uploads.</p>
+
+                <ol>
+                  <li>Reset the staging folder (<code>ready-for-dataiku/owismind-upload/</code> and zip).</li>
+                  <li>Stage the runtime: <code>plugin.json</code> at the root, then <code>python-lib/</code>, <code>resource/</code>, <code>webapps/</code> copied via <code>cp -R</code>.</li>
+                  <li>Zip from the staging folder so that <code>plugin.json</code> is at the root.</li>
+                  <li>Verify the archive is clean and contains the required files.</li>
+                </ol>
+
+                <h3>What is in the zip</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Element</th><th>In zip?</th><th>Note</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>plugin.json</code></td><td><span class="badge orange">YES</span></td><td>At the ROOT of the archive (id <code>owismind</code>, version <code>0.0.1</code>)</td></tr>
+                      <tr><td><code>python-lib/owismind/**</code></td><td><span class="badge orange">YES</span></td><td>6 sub-packages: <code>agents</code>, <code>api</code>, <code>evidence</code>, <code>security</code>, <code>storage</code> + root</td></tr>
+                      <tr><td><code>resource/owismind-app/**</code></td><td><span class="badge orange">YES</span></td><td>The built frontend payload served by DSS</td></tr>
+                      <tr><td><code>resource/compute_available_connections.py</code></td><td><span class="badge orange">YES</span></td><td>Populates the Settings dropdowns (READ-ONLY)</td></tr>
+                      <tr><td><code>webapps/webapp-owismind-ai-agents/**</code></td><td><span class="badge orange">YES</span></td><td><code>webapp.json</code>, <code>body.html</code>, <code>backend.py</code>, <code>app.js</code>, <code>style.css</code></td></tr>
+                      <tr><td><code>frontend/**</code> (Vue + Vite sources)</td><td><span class="badge">NO</span></td><td>Excluded: never travels in the zip</td></tr>
+                      <tr><td><code>node_modules/</code></td><td><span class="badge">NO</span></td><td>Reinstallable toolchain, excluded</td></tr>
+                      <tr><td><code>CLAUDE.md</code>, <code>README.md</code></td><td><span class="badge">NO</span></td><td>Excluded by name</td></tr>
+                      <tr><td><code>__pycache__/</code>, <code>*.pyc</code></td><td><span class="badge">NO</span></td><td>Python bytecode, excluded</td></tr>
+                      <tr><td><code>dataiku-agents/**</code></td><td><span class="badge">NO</span></td><td>Third path - pasted by hand, not in the zip</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Exclusion glob trap (lesson L002)</p>
+                    <p>Zip exclusions are done BY NAME only (<code>CLAUDE.md</code>, <code>README.md</code>, <code>__pycache__/</code>, <code>*.pyc</code>). A broad glob like <code>*.py</code> or <code>*.md</code> would sweep up the <code>python-lib/owismind/**/__init__.py</code> files and break the <code>from owismind.api.routes import register_routes</code> import at runtime.</p>
+                  </div>
+                </aside>
+
+                <aside class="callout callout-note mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Why the built frontend is versioned in git</p>
+                    <p>The built payload (<code>resource/owismind-app/</code>) is tracked in git - a deliberate exception to the "regenerable outputs = ignored" philosophy. The NO INSTALL policy means a fresh clone cannot reinstall npm and rebuild. So the payload must travel inside the repository to stay packageable from any clone. Never edit it by hand; never commit it outside of a <code>/build-plugin</code> run.</p>
+                  </div>
+                </aside>
+
+                <h3>Decision matrix: what to rebuild, restart, re-paste</h3>
+
+                <p>This is the table to remember for every type of change.</p>
+
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 780 300" xmlns="http://www.w3.org/2000/svg" aria-label="Decision matrix: what to do per change type">
+                    <rect class="lane" x="0" y="0" width="780" height="300"/>
+
+                    <!-- Header row -->
+                    <rect class="node-accent" x="0" y="0" width="300" height="36"/>
+                    <text x="150" y="23" text-anchor="middle" fill="#fff" class="diagram" font-size="11" font-weight="700">Change type</text>
+
+                    <rect class="node-accent" x="302" y="0" width="90" height="36"/>
+                    <text x="347" y="15" text-anchor="middle" fill="#fff" class="diagram" font-size="9">/build-</text>
+                    <text x="347" y="28" text-anchor="middle" fill="#fff" class="diagram" font-size="9">plugin</text>
+
+                    <rect class="node-accent" x="394" y="0" width="90" height="36"/>
+                    <text x="439" y="15" text-anchor="middle" fill="#fff" class="diagram" font-size="9">/package-</text>
+                    <text x="439" y="28" text-anchor="middle" fill="#fff" class="diagram" font-size="9">plugin</text>
+
+                    <rect class="node-accent" x="486" y="0" width="90" height="36"/>
+                    <text x="531" y="15" text-anchor="middle" fill="#fff" class="diagram" font-size="9">Upload</text>
+                    <text x="531" y="28" text-anchor="middle" fill="#fff" class="diagram" font-size="9">zip</text>
+
+                    <rect class="node-accent" x="578" y="0" width="90" height="36"/>
+                    <text x="623" y="15" text-anchor="middle" fill="#fff" class="diagram" font-size="9">Restart</text>
+                    <text x="623" y="28" text-anchor="middle" fill="#fff" class="diagram" font-size="9">backend</text>
+
+                    <rect class="node-accent" x="670" y="0" width="110" height="36"/>
+                    <text x="725" y="15" text-anchor="middle" fill="#fff" class="diagram" font-size="9">Re-paste</text>
+                    <text x="725" y="28" text-anchor="middle" fill="#fff" class="diagram" font-size="9">agents (both)</text>
+
+                    <!-- Row 1: frontend -->
+                    <rect class="node" x="0" y="38" width="300" height="40"/>
+                    <text x="10" y="62" class="diagram" font-size="10">frontend/src/** (Vue, CSS, i18n)</text>
+                    <rect class="node-soft" x="302" y="38" width="90" height="40"/>
+                    <text x="347" y="63" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="394" y="38" width="90" height="40"/>
+                    <text x="439" y="63" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="486" y="38" width="90" height="40"/>
+                    <text x="531" y="63" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="578" y="38" width="90" height="40"/>
+                    <text x="623" y="63" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="670" y="38" width="110" height="40"/>
+                    <text x="725" y="63" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+
+                    <!-- Row 2: python-lib -->
+                    <rect class="node" x="0" y="80" width="300" height="40"/>
+                    <text x="10" y="104" class="diagram" font-size="10">python-lib/owismind/** or backend.py</text>
+                    <rect class="node-soft" x="302" y="80" width="90" height="40"/>
+                    <text x="347" y="105" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="394" y="80" width="90" height="40"/>
+                    <text x="439" y="105" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="486" y="80" width="90" height="40"/>
+                    <text x="531" y="105" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="578" y="80" width="90" height="40"/>
+                    <text x="623" y="98" text-anchor="middle" class="diagram text-accent" font-size="11" font-weight="700">MANDATORY</text>
+                    <rect class="node-soft" x="670" y="80" width="110" height="40"/>
+                    <text x="725" y="105" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+
+                    <!-- Row 3: webapp json -->
+                    <rect class="node" x="0" y="122" width="300" height="40"/>
+                    <text x="10" y="146" class="diagram" font-size="10">webapps/webapp.json or app.js/style.css</text>
+                    <rect class="node-soft" x="302" y="122" width="90" height="40"/>
+                    <text x="347" y="147" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="394" y="122" width="90" height="40"/>
+                    <text x="439" y="147" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="486" y="122" width="90" height="40"/>
+                    <text x="531" y="147" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="578" y="122" width="90" height="40"/>
+                    <text x="623" y="140" text-anchor="middle" class="diagram text-muted" font-size="10">if webapp.json</text>
+                    <text x="623" y="155" text-anchor="middle" class="diagram text-muted" font-size="10">touches backend</text>
+                    <rect class="node-soft" x="670" y="122" width="110" height="40"/>
+                    <text x="725" y="147" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+
+                    <!-- Row 4: plugin.json -->
+                    <rect class="node" x="0" y="164" width="300" height="40"/>
+                    <text x="10" y="188" class="diagram" font-size="10">plugin.json (version/meta only)</text>
+                    <rect class="node-soft" x="302" y="164" width="90" height="40"/>
+                    <text x="347" y="189" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="394" y="164" width="90" height="40"/>
+                    <text x="439" y="189" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="486" y="164" width="90" height="40"/>
+                    <text x="531" y="189" text-anchor="middle" class="diagram text-accent" font-size="14" font-weight="700">Y</text>
+                    <rect class="node-soft" x="578" y="164" width="90" height="40"/>
+                    <text x="623" y="189" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="670" y="164" width="110" height="40"/>
+                    <text x="725" y="189" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+
+                    <!-- Row 5: agents only -->
+                    <rect class="node" x="0" y="206" width="300" height="40"/>
+                    <text x="10" y="230" class="diagram" font-size="10">dataiku-agents/agents/** (agent only)</text>
+                    <rect class="node-soft" x="302" y="206" width="90" height="40"/>
+                    <text x="347" y="231" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="394" y="206" width="90" height="40"/>
+                    <text x="439" y="231" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="486" y="206" width="90" height="40"/>
+                    <text x="531" y="231" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="578" y="206" width="90" height="40"/>
+                    <text x="623" y="231" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="670" y="206" width="110" height="40"/>
+                    <text x="725" y="224" text-anchor="middle" class="diagram text-accent" font-size="11" font-weight="700">BOTH</text>
+                    <text x="725" y="238" text-anchor="middle" class="diagram text-accent" font-size="9">3.11 env - NO ZIP</text>
+
+                    <!-- Row 6: flow recipes -->
+                    <rect class="node" x="0" y="248" width="300" height="40"/>
+                    <text x="10" y="272" class="diagram" font-size="10">dataiku-agents/recipes/** (Flow)</text>
+                    <rect class="node-soft" x="302" y="248" width="90" height="40"/>
+                    <text x="347" y="273" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="394" y="248" width="90" height="40"/>
+                    <text x="439" y="273" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="486" y="248" width="90" height="40"/>
+                    <text x="531" y="273" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="578" y="248" width="90" height="40"/>
+                    <text x="623" y="273" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
+                    <rect class="node-soft" x="670" y="248" width="110" height="40"/>
+                    <text x="725" y="266" text-anchor="middle" class="diagram text-muted" font-size="9">refresh by</text>
+                    <text x="725" y="280" text-anchor="middle" class="diagram text-muted" font-size="9">scenario</text>
+                  </svg>
+                  <p class="diagram-caption">Decision matrix: Y = required, - = not needed. Backend restart is MANDATORY when python-lib or backend.py changes. Re-paste BOTH agents together when either changes.</p>
+                </figure>
+
+                <div class="grid-3 mt">
+                  <div class="card card-pad">
+                    <p class="card-label">Frontend-only change</p>
+                    <p>Build + package + upload + <strong>browser refresh</strong>. No backend restart needed.</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Backend/python-lib change</p>
+                    <p>Package + upload + <strong>RESTART backend</strong> (mandatory - old code runs until restart).</p>
+                  </div>
+                  <div class="card card-pad">
+                    <p class="card-label">Agent-only change</p>
+                    <p>Re-paste <strong>BOTH Code Agents</strong> (3.11 env). No zip, no upload, no restart.</p>
+                  </div>
+                </div>
+
+                <p class="mt">
+                  <a href="../06-operations/02-build-package-deploy.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 06-operations/02-build-package-deploy.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 3: MONITORING AND LOGS
+                     ============================================================ -->
+                <h2>Monitoring and logs</h2>
+
+                <p>OWIsMind does not ship a dedicated observability stack. Monitoring relies on two sources: the <strong>DSS webapp backend log</strong> (primary, real-time) and an optional <strong>traces dataset</strong> (offline analysis, write-only).</p>
+
+                <h3>The webapp backend log</h3>
+
+                <p>The Flask backend writes all logs to the DSS webapp backend log for the <code>webapp-owismind-ai-agents</code> webapp (accessible via the Log / View backend log button in DSS). Each module logs as <code>owismind.&lt;module&gt;</code>. Two structuring lines appear at startup:</p>
+
+                <ul>
+                  <li><code>OWIsMind storage status: {...}</code> - the full <code>storage_status()</code> dictionary (connection, project key, namespace, table names). This is the first thing to check after any deploy.</li>
+                  <li><code>OWIsMind API ready - N routes: [...]</code> - the live route table. If an expected route is missing, the wrong build is running.</li>
+                </ul>
+
+                <p class="mt">Two blueprint-scoped hooks trace every <code>/owismind-api/*</code> request:</p>
+
+                <div class="code-block mt">
+                  <div class="code-block-header">
+                    <span class="code-lang">Log format</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>→ GET /owismind-api/agents              # request starts
+← GET /owismind-api/agents -> 200 (14 ms)  # request ends with duration</code></pre>
+                </div>
+
+                <h3>Content-free by design</h3>
+
+                <p>The content of user messages and agent responses is <strong>never logged</strong>. Only metadata (length, identifiers, statuses) appears. This allows sharing log extracts without exposing business conversation content.</p>
+
+                <ul>
+                  <li><code>/chat/start</code> logs: <code>/chat/start - user_id=... session_id=... agent_key=... msg_len=...</code> - message length only, never the text.</li>
+                  <li>Authentication header values are never logged. Only the names of keys present are logged on identity failure.</li>
+                  <li>When a run fails, internal details stay in the backend log server-side; the client only receives a stable error code.</li>
+                </ul>
+
+                <h3>Identifiers for correlation</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Identifier</th><th>Scope</th><th>Where it appears</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>user_id</code></td><td>DSS login of the caller (from browser auth headers)</td><td><code>/chat/start</code>, run start line, Evidence observability</td></tr>
+                      <tr><td><code>session_id</code></td><td>One conversation (groups multiple exchanges)</td><td><code>/chat/start</code></td></tr>
+                      <tr><td><code>exchange_id</code></td><td>One user turn + response, one DB row (<code>uuid4().hex</code>)</td><td><code>/chat/start</code> return, run end lines, Evidence observability</td></tr>
+                      <tr><td><code>run_id</code></td><td>In-flight generation cycle (ephemeral, in-memory only)</td><td>All <code>stream_manager - ...</code> lines</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Evidence observability</h3>
+
+                <p>Each call to <code>/evidence/meta</code> writes a structured observability line:</p>
+                <div class="code-block mt">
+                  <div class="code-block-header">
+                    <span class="code-lang">Log format</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>/evidence/meta - user_id=... exchange_id=... available=... reason=... level=... result_captured=... drill_available=... artifacts=N</code></pre>
+                </div>
+                <p><code>result_captured=false</code> is a normal possible state (best-effort capture), not necessarily an incident.</p>
+
+                <h3>Run concurrency caps</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Guardrail</th><th>Value</th><th>HTTP code</th><th>Log line</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Global concurrent runs</td><td><code>MAX_CONCURRENT_RUNS = 8</code></td><td>503 <code>busy</code></td><td><code>concurrency cap reached, rejected</code></td></tr>
+                      <tr><td>Per-user spacing</td><td><code>MIN_START_INTERVAL_SECONDS = 1.0 s</code></td><td>429 <code>rate_limited</code></td><td><code>rejected before write: rate_limited</code></td></tr>
+                      <tr><td>Wall-clock deadline</td><td><code>MAX_RUN_SECONDS = 300.0 s</code></td><td>terminal event</td><td><code>ended ... early (...)</code></td></tr>
+                      <tr><td>Abandon (tab closed)</td><td><code>ABANDON_AFTER_SECONDS = 30.0 s</code></td><td>terminal event</td><td><code>ended ... early (...)</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Single-process assumption</p>
+                    <p>All state (<code>_RUNS</code>, identity cache, rate-limit buckets) is per-process. The backend MUST run as a single process. In multi-process mode, the concurrency cap would be multiplied by N and a cross-process <code>/chat/poll</code> would return 404. Verify at deployment.</p>
+                  </div>
+                </aside>
+
+                <p class="mt">
+                  <a href="../06-operations/03-monitoring-and-logs.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 06-operations/03-monitoring-and-logs.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 4: RUNBOOKS
+                     ============================================================ -->
+                <h2>Runbooks</h2>
+
+                <p>Nine incident procedures, each following the same structure: symptom, checks, resolution, checklist. The most important cross-cutting reminders:</p>
+
+                <ul>
+                  <li>Transport = <strong>polling by thread</strong> (no SSE). The frontend polls <code>/chat/poll</code> every 500 ms. The text answer often arrives in one block at the end; the live signal is the timeline, not the prose.</li>
+                  <li>The Flask backend (Python 3.9) and the two Code Agents (Python 3.11) are <strong>two distinct processes</strong>. A change in <code>python-lib/</code> requires Restart backend; an agent change requires re-pasting the two Code Agents.</li>
+                </ul>
+
+                <h3>Runbook 1: agent no longer answers</h3>
+
+                <p><strong>Symptom:</strong> timeline shows "Parsing the request" and does not advance, or the spinner keeps turning without a final answer.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead><tr><th>#</th><th>Check</th><th>Interpretation</th></tr></thead>
+                    <tbody>
+                      <tr><td>1</td><td>Mode High?</td><td>A long Sonnet call is normal. Wait at least 20-30 s before concluding failure.</td></tr>
+                      <tr><td>2</td><td>Backend restarted recently?</td><td>A restart kills in-memory state <code>_RUNS</code>; the in-flight run is lost.</td></tr>
+                      <tr><td>3</td><td>Browser console: <code>run_not_found</code>?</td><td>Terminal code - the run has disappeared. User can simply resend the question.</td></tr>
+                      <tr><td>4</td><td>Backend log: <code>agent_unavailable</code>?</td><td>The agent raised, or the deadline <code>MAX_RUN_SECONDS</code> (300 s) cut it off.</td></tr>
+                      <tr><td>5</td><td>All runs blocked?</td><td>Check <code>GET /owismind-api/ping</code>; if backend does not answer, do Restart backend.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Runbook 2: "storage not configured" (HTTP 409)</h3>
+
+                <p><strong>Symptom:</strong> the app refuses to send messages or list conversations; backend returns <code>storage_not_configured</code> (HTTP 409).</p>
+                <p><strong>Cause:</strong> no SQL connection is selected in webapp Settings. The backend never guesses a connection.</p>
+                <p><strong>Resolution:</strong> open webapp Settings, select <code>sql_connection</code> (preferably <code>SQL_owi</code>), restart the backend, force-refresh the browser.</p>
+
+                <h3>Runbook 3: "agent not enabled" (HTTP 404)</h3>
+
+                <p><strong>Symptom:</strong> backend returns <code>agent_not_enabled</code> (HTTP 404); backend log shows <code>/chat/start - agent_key not enabled: &lt;key&gt;</code>.</p>
+                <p><strong>Cause:</strong> the opaque logical key sent by the frontend does not resolve to an enabled agent in the server whitelist.</p>
+                <p><strong>Resolution:</strong> reload the picker (browser refresh) and re-enable the agent via the admin whitelist if needed.</p>
+
+                <h3>Runbook 4: a mode does not answer (wrong LLM Mesh id)</h3>
+
+                <p><strong>Symptom:</strong> a specific mode fails systematically (often <strong>Eco</strong>, which is the default).</p>
+                <p><strong>Cause:</strong> a model id in <code>LOOP_LLM_BY_MODE</code> does not match any model exposed by the instance's LLM Mesh connection. Since <code>DEFAULT_MODE = "eco"</code>, a wrong <code>GEMINI_FLASH_LITE_ID</code> breaks almost all requests.</p>
+                <p><strong>Resolution:</strong> fix the offending id in <strong>both</strong> agent files, then re-paste both Code Agents on the Python 3.11 env.</p>
+
+                <aside class="callout callout-influx mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - model ids</p>
+                    <p>The LLM Mesh ids migrated in Run 6 (2026-06-17). They are best-effort in the observed format and must be re-verified against the instance on every re-paste. A wrong id breaks the corresponding mode silently.</p>
+                  </div>
+                </aside>
+
+                <h3>Runbook 5: slow answers in High mode</h3>
+
+                <p><strong>This is not necessarily a failure.</strong> High drives Claude Sonnet 4.6 end to end; Sonnet reasons longer. The polling transport does not stream word-by-word: the prose arrives in one block at the end. If latency exceeds ~5 min, <code>MAX_RUN_SECONDS = 300 s</code> cuts the run off (<code>run_timeout</code>). For speed, advise Eco (Gemini Flash-Lite, the default) or Medium (Gemini Flash).</p>
+
+                <h3>Runbook 6: empty chart in Evidence</h3>
+
+                <p><strong>Cause:</strong> an artifact spec (<code>show_chart</code> / <code>show_table</code>) carries only the display spec, never the data rows. The Chart.js payload is built from the captured <code>result</code> of <code>generated_sql</code>. No captured result = empty chart. <code>result_captured=false</code> is a normal best-effort limitation.</p>
+                <p><strong>Resolution:</strong> if every chart is empty since an agents edit, verify the tool span is still called <code>semantic-model-query</code> in both agent files and re-paste both.</p>
+
+                <h3>Runbook 7: non-clickable Evidence source</h3>
+
+                <p><strong>Cause:</strong> the <code>source_url</code> field on the <code>revenue_expert</code> capability of the orchestrator registry defaults to an empty string. Fill it in (<code>OWIsMind_orchestrator.py</code>) with the Dataiku dataset URL, then re-paste both agents.</p>
+
+                <h3>Runbook 8: user blocked by monthly budget (HTTP 402)</h3>
+
+                <p><strong>Symptom:</strong> a user sees a banner indicating the budget is exhausted; all <code>/chat/start</code> calls return HTTP 402 <code>monthly_quota_exceeded</code>. Reading and Evidence still work.</p>
+                <p><strong>Resolution:</strong> from the admin Quotas tab, choose one of:</p>
+                <ul>
+                  <li>Per-user override (permanent or temporary, via <code>POST /admin/budget/users</code>)</li>
+                  <li>Global temporary boost (<code>POST /admin/budget</code> with <code>temp_limit_usd</code>)</li>
+                  <li>Raise the global default (<code>POST /admin/budget</code> with <code>limit_usd</code>)</li>
+                  <li>Disable enforcement entirely (<code>{enabled: false}</code> - spend is still recorded)</li>
+                </ul>
+                <p>The budget auto-resets on the 1st of each calendar month (new DB row, no manual action).</p>
+
+                <h3>Runbook 9: agent profile shows "profile to complete"</h3>
+
+                <p><strong>Cause:</strong> no admin has filled in the profile yet. This is the <strong>intended</strong> post-deploy state - there is no hardcoded fallback. Navigate to Administration &gt; Agents &gt; Edit profile, fill in all fields (tagline, description, capabilities, tools, icon, badge) and save. The change is effective immediately; no restart needed.</p>
+
+                <p class="mt">
+                  <a href="../06-operations/04-runbooks.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 06-operations/04-runbooks.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 5: TESTING
+                     ============================================================ -->
+                <h2>Testing</h2>
+
+                <p>OWIsMind is tested in three places, one per layer. All three suites share the same philosophy: <strong>pure-logic</strong>, run with the language's native runner, without a DSS environment and without any installation. They lock down the invariants testable off-instance but do NOT replace validation in DSS.</p>
+
+                <aside class="callout callout-warning mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">NO INSTALL - non-negotiable rule #1</p>
+                    <p>The agent never installs a dependency. The commands below use only <code>python3</code> and <code>npm</code> with built-in runners. If <code>node_modules/</code> is missing for the build, the user installs, not the agent.</p>
+                  </div>
+                </aside>
+
+                <h3>The three test suites</h3>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>Suite</th><th>Location</th><th>Runner</th><th>Count (verified 2026-06-19)</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Backend</td><td><code>Plugin/owismind/tests/</code></td><td><code>python3 -m unittest</code></td><td>438 test_ functions (21 files)</td></tr>
+                      <tr><td>Frontend</td><td><code>Plugin/owismind/frontend/test/</code></td><td><code>node --test</code></td><td>124 test() calls (9 files)</td></tr>
+                      <tr><td>Agents</td><td><code>dataiku-agents/tests/</code></td><td><code>python3 -m unittest</code></td><td>267 test_ functions (4 files)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="code-block mt">
+                  <div class="code-block-header">
+                    <span class="code-lang">Shell</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code># Backend (from the repository root)
+python3 -m unittest discover -s Plugin/owismind/tests -v
+
+# Frontend (from the repository root)
+npm --prefix Plugin/owismind/frontend test
+
+# Agents (from the repository root)
+python3 -m unittest discover -s dataiku-agents/tests</code></pre>
+                </div>
+
+                <h3>Backend suite (438 tests)</h3>
+
+                <p>Located outside <code>python-lib/</code> so it is never packaged. Inserts <code>python-lib/</code> onto <code>sys.path</code> so that <code>owismind.*</code> imports resolve. Covers: payload validation, budget and quotas, pure SQL builders, pagination, agent context assembly, identity derivation, Evidence SQL parsing/explanation/capture, artifacts and usage accounting.</p>
+
+                <h3>Frontend suite (124 tests)</h3>
+
+                <p>Uses Node's built-in test runner (<code>node --test test/*.test.js</code>) - no Vitest, no Jest. Tests stay without Vue or <code>dataiku</code>, forcing pure logic into testable modules. Covers: timeline reducer (<code>applyEvent</code>, 42 tests), Evidence model (23), Evidence proof derivation (28), budget/usage helpers (8), conversation tree/list (8), SQL pretty-printing (7), agent selection (3), preferences (5).</p>
+
+                <h3>Agents suite (267 tests) and the anti-drift test</h3>
+
+                <p>Stubs <code>dataiku</code> AND <code>langgraph</code> before the agent files are loaded, so only pure logic is exercised. The graph itself is NOT executed (needs DSS). The most important test is the <strong>anti-drift test</strong>:</p>
+
+                <div class="card card-pad mt">
+                  <p class="card-label">Anti-drift invariant</p>
+                  <p>The <code>block_labels</code> and <code>tool_labels</code> declared in the orchestrator registry (<code>CAPABILITIES</code>) must exactly match the <code>KNOWN_BLOCK_IDS</code> and <code>KNOWN_TOOL_NAMES</code> of the sub-agent. If someone renames an event, adds a tool, or changes the sub-agent id without keeping both files synchronized, this test breaks. It is what makes re-pasting both Code Agents safely possible: orchestrator-to-sub-agent consistency is verified locally before deployment.</p>
+                </div>
+
+                <h3>Compile-check (frontend)</h3>
+
+                <div class="code-block mt">
+                  <div class="code-block-header">
+                    <span class="code-lang">Shell</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code># NEVER build into resource/ outside /build-plugin
+# Use a throwaway /tmp directory for compile-check only
+./node_modules/.bin/vite build --outDir /tmp/owi_buildcheck --emptyOutDir
+rm -rf /tmp/owi_buildcheck</code></pre>
+                </div>
+
+                <h3>What requires DSS (not covered by the suites)</h3>
+
+                <p>Some backend modules import <code>dataiku</code> or <code>pandas</code> at load time and are therefore not covered off-instance. Validation in DSS covers:</p>
+
+                <ul>
+                  <li>Real LLM Mesh calls and per-mode model behavior</li>
+                  <li>PostgreSQL SQL execution (actual storage)</li>
+                  <li>Evidence panel rendering (chart, table, KPI)</li>
+                  <li>The actual execution of the LangGraph graph</li>
+                  <li>Orchestrator routing decisions (LLM decisions)</li>
+                </ul>
+
+                <aside class="callout callout-roadmap mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Roadmap: TEST-01</p>
+                    <p>Recommended but not yet done: add DSS-free tests based on a <code>dataiku</code>/<code>pandas</code> stub for the already-hardened but uncovered invariants (<code>sql_config.pg_identifier</code>, <code>stream_manager</code>, <code>resolve_enabled_agent</code>). A minimal CI pipeline: lint + <code>py_compile</code> + backend unittest + <code>vite build</code>. There is NO CI today.</p>
+                  </div>
+                </aside>
+
+                <h3>Agent evaluation and golden queries</h3>
+
+                <p>Beyond the pure-logic suites, agent quality is evaluated in DSS via the <strong>DSS Agent Review</strong>. Both agents open named sub-spans via <code>trace.subspan(...)</code> that feed both the Agent Review and the webapp Evidence panel. Key spans:</p>
+
+                <ul>
+                  <li>Orchestrator: <code>orchestrator:llm</code>, <code>semantic-model-query</code></li>
+                  <li>Sub-agent: <code>dataset-expert:understand</code>, <code>dataset-expert:resolve-values</code>, <code>dataset-expert:semantic-tool</code>, <code>dataset-expert:sqlgen</code>, <code>dataset-expert:headline</code>, and one <code>semantic-model-query</code> per executed SQL (with <code>{sql, success, row_count}</code>)</li>
+                </ul>
+
+                <p class="mt">The Semantic Model has <strong>9 golden queries</strong> (versioned in <code>tools/semantic_model/build_aligned_semantic_model.py</code>) that serve as few-shot examples and accuracy reference. The canonical pitfall case: "YTD revenue EVPL, actuals vs budget" - EVPL exists at Product, Solution and sirano_product levels; a naive pin on sirano_product gives budget = 0 (BUDGET rows may not carry it). Golden query 4 anchors the correct resolution at the Product level.</p>
+
+                <p class="mt">
+                  <a href="../07-testing/01-test-strategy.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 07-testing/01-test-strategy.md
+                  </a>
+                </p>
+                <p>
+                  <a href="../07-testing/02-agent-evaluation.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 07-testing/02-agent-evaluation.md
+                  </a>
+                </p>
+
+                <!-- ============================================================
+                     SECTION 6: MAINTENANCE
+                     ============================================================ -->
+                <h2>Maintenance</h2>
+
+                <h3>Contributing conventions and the non-negotiable rules</h3>
+
+                <p>OWIsMind runs on a shared Dataiku instance. Most rules below exist for a single reason: never harm that instance or users' trust. These ten rules are enforced by convention, harness configuration, and deterministic hooks.</p>
+
+                <div class="card mt">
+                  <table>
+                    <thead>
+                      <tr><th>#</th><th>Rule</th><th>Why</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>1</td><td><strong>NO INSTALL</strong>: the agent never installs a dependency</td><td>Only the user controls the instance environment</td></tr>
+                      <tr><td>2</td><td><strong>Dataiku instance safety</strong>: no heavy, blocking or overloading code</td><td>The instance is shared; an expensive handler slows it for everyone</td></tr>
+                      <tr><td>3</td><td><strong>Direct parameterized SQL</strong> + COMMIT, no Flow at runtime, no generic SQL route</td><td>Predictable, auditable storage, zero injection surface</td></tr>
+                      <tr><td>4</td><td><strong>Server-side agent whitelist</strong>: the front end only sends an opaque logical key</td><td>Prevents execution of a forged <code>agent_id</code></td></tr>
+                      <tr><td>5</td><td><strong>Frontend NEVER in the zip</strong>: <code>frontend/</code> and <code>node_modules/</code> excluded</td><td>The zip is the plugin runtime only</td></tr>
+                      <tr><td>6</td><td><strong>Never edit generated folders by hand</strong>: <code>resource/owismind-app/</code>, <code>ready-for-dataiku/</code>, <code>body.html</code></td><td>Any manual edit is overwritten at the next build/package</td></tr>
+                      <tr><td>7</td><td><strong>Code and documentation in English</strong></td><td>Professional standard; legacy <code>docs/</code> and <code>memory/</code> are in French for historical reasons</td></tr>
+                      <tr><td>8</td><td><strong>Do not assume Python 3.11 / FastAPI on the backend</strong> without proof</td><td>Observed backend = Python 3.9.23 (Flask, without langchain)</td></tr>
+                      <tr><td>9</td><td><strong>No em dash (U+2014) or en dash (U+2013)</strong>, anywhere</td><td>An AI typographic signature, forbidden by user decision</td></tr>
+                      <tr><td>10</td><td><strong>Orange charter mandatory</strong> for every styling task</td><td>Every page/component follows <code>docs/cadrage/CHARTE_ORANGE_UI.md</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p class="mt">NO INSTALL is enforced at three levels: harness permissions (<code>.claude/settings.json</code> explicitly denies all install commands), the PreToolUse hook (<code>.claude/hooks/guardrail.sh</code> blocks any Bash whose command field matches an install pattern), and documentation (recalled at every session start).</p>
+
+                <p class="mt">
+                  <a href="../09-maintenance/01-contributing-and-conventions.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 09-maintenance/01-contributing-and-conventions.md
+                  </a>
+                </p>
+
+                <h3>Repository map</h3>
+
+                <p>Five zones, three Git statuses. The central exception: <code>Plugin/owismind/resource/owismind-app/</code> (built frontend) IS versioned - a deliberate exception to the "regenerable outputs = ignored" philosophy, required by the NO INSTALL policy.</p>
+
+                <figure class="diagram-wrap mt">
+                  <svg class="diagram diagram-svg" viewBox="0 0 740 620" xmlns="http://www.w3.org/2000/svg" aria-label="Repository map tree diagram">
+                    <rect class="lane" x="0" y="0" width="740" height="620"/>
+
+                    <!-- Root -->
+                    <rect class="node-accent" x="20" y="20" width="200" height="32"/>
+                    <text x="120" y="41" text-anchor="middle" fill="#fff" class="diagram" font-size="11" font-weight="700">owismind/ (repo root)</text>
+
+                    <!-- Plugin/owismind/ -->
+                    <line class="edge" x1="120" y1="52" x2="120" y2="78"/>
+                    <rect class="node" x="20" y="78" width="200" height="30"/>
+                    <text x="120" y="97" text-anchor="middle" class="diagram" font-size="10">Plugin/owismind/ (DSS plugin)</text>
+
+                    <!-- Children of Plugin: vertical bar spans all plugin children -->
+                    <line class="edge" x1="50" y1="108" x2="50" y2="336"/>
+                    <!-- frontend -->
+                    <line class="edge" x1="50" y1="128" x2="80" y2="128"/>
+                    <rect class="node-soft" x="80" y="112" width="220" height="28"/>
+                    <text x="190" y="130" text-anchor="middle" class="diagram" font-size="10">frontend/src/ - Vue SPA sources</text>
+
+                    <!-- python-lib -->
+                    <line class="edge" x1="50" y1="162" x2="80" y2="162"/>
+                    <rect class="node-soft" x="80" y="146" width="220" height="28"/>
+                    <text x="190" y="164" text-anchor="middle" class="diagram" font-size="10">python-lib/owismind/ - Flask backend</text>
+
+                    <!-- webapps -->
+                    <line class="edge" x1="50" y1="196" x2="80" y2="196"/>
+                    <rect class="node-soft" x="80" y="180" width="220" height="28"/>
+                    <text x="190" y="198" text-anchor="middle" class="diagram" font-size="10">webapps/ - DSS component + body.html</text>
+
+                    <!-- resource (exception): 2-line box, taller to avoid overlap -->
+                    <line class="edge" x1="50" y1="236" x2="80" y2="236"/>
+                    <rect class="node" x="80" y="216" width="220" height="36"/>
+                    <text x="190" y="231" text-anchor="middle" class="diagram text-accent" font-size="9">resource/owismind-app/ (tracked exception)</text>
+                    <text x="190" y="245" text-anchor="middle" class="diagram text-muted" font-size="8">built frontend - NEVER edit by hand</text>
+
+                    <!-- tests -->
+                    <line class="edge" x1="50" y1="278" x2="80" y2="278"/>
+                    <rect class="node-soft" x="80" y="262" width="220" height="28"/>
+                    <text x="190" y="280" text-anchor="middle" class="diagram" font-size="10">tests/ - backend unittest (not packaged)</text>
+
+                    <!-- ready-for-dataiku: 2-line box, taller to avoid overlap -->
+                    <line class="edge" x1="50" y1="320" x2="80" y2="320"/>
+                    <rect class="node-soft" x="80" y="300" width="220" height="36"/>
+                    <text x="190" y="315" text-anchor="middle" class="diagram text-muted" font-size="9">ready-for-dataiku/ (IGNORED - generated)</text>
+                    <text x="190" y="329" text-anchor="middle" class="diagram text-muted" font-size="8">owismind-upload.zip output</text>
+
+                    <!-- dataiku-agents -->
+                    <line class="edge" x1="120" y1="52" x2="430" y2="52"/>
+                    <line class="edge" x1="430" y1="52" x2="430" y2="78"/>
+                    <rect class="node" x="340" y="78" width="200" height="30"/>
+                    <text x="440" y="97" text-anchor="middle" class="diagram" font-size="10">dataiku-agents/ (Code Agents)</text>
+                    <line class="edge" x1="370" y1="108" x2="370" y2="250"/>
+                    <!-- agents/ -->
+                    <line class="edge" x1="370" y1="128" x2="400" y2="128"/>
+                    <rect class="node-soft" x="400" y="112" width="200" height="28"/>
+                    <text x="500" y="130" text-anchor="middle" class="diagram" font-size="10">agents/ - orchestrator + sub-agent</text>
+                    <!-- tools/ -->
+                    <line class="edge" x1="370" y1="162" x2="400" y2="162"/>
+                    <rect class="node-soft" x="400" y="146" width="200" height="28"/>
+                    <text x="500" y="164" text-anchor="middle" class="diagram" font-size="10">tools/ - attribute_lookup + semantic model</text>
+                    <!-- recipes/ -->
+                    <line class="edge" x1="370" y1="196" x2="400" y2="196"/>
+                    <rect class="node-soft" x="400" y="180" width="200" height="28"/>
+                    <text x="500" y="198" text-anchor="middle" class="diagram" font-size="10">recipes/ - Flow design-time recipes</text>
+                    <!-- tests -->
+                    <line class="edge" x1="370" y1="230" x2="400" y2="230"/>
+                    <rect class="node-soft" x="400" y="214" width="200" height="28"/>
+                    <text x="500" y="232" text-anchor="middle" class="diagram" font-size="10">tests/ - agents unittest (267 tests)</text>
+
+                    <!-- .claude: 2-line box, direct child of repo root (horizontal branch off root vertical bar) -->
+                    <line class="edge" x1="120" y1="370" x2="230" y2="370"/>
+                    <rect class="node-soft" x="230" y="354" width="220" height="36"/>
+                    <text x="340" y="369" text-anchor="middle" class="diagram" font-size="9">.claude/ - skills, hooks, permissions</text>
+                    <text x="340" y="383" text-anchor="middle" class="diagram text-muted" font-size="8">guardrail.sh, session-start.sh, settings.json</text>
+
+                    <!-- docs, memory, project-documentation: root vertical bar extends to y=448 -->
+                    <line class="edge" x1="120" y1="52" x2="120" y2="448"/>
+                    <line class="edge" x1="120" y1="448" x2="660" y2="448"/>
+
+                    <!-- docs: 2-line box -->
+                    <line class="edge" x1="250" y1="448" x2="250" y2="468"/>
+                    <rect class="node-soft" x="160" y="468" width="180" height="36"/>
+                    <text x="250" y="483" text-anchor="middle" class="diagram" font-size="9">docs/ - French eng. reference</text>
+                    <text x="250" y="497" text-anchor="middle" class="diagram text-muted" font-size="8">(cadrage/, superpowers/, ...)</text>
+
+                    <!-- memory: 2-line box -->
+                    <line class="edge" x1="440" y1="448" x2="440" y2="468"/>
+                    <rect class="node-soft" x="355" y="468" width="170" height="36"/>
+                    <text x="440" y="483" text-anchor="middle" class="diagram" font-size="9">memory/ - project living memory</text>
+                    <text x="440" y="497" text-anchor="middle" class="diagram text-muted" font-size="8">CONTEXT.md, LESSONS.md, PROJECT_STATE.md</text>
+
+                    <!-- project-documentation: 2-line box -->
+                    <line class="edge" x1="620" y1="448" x2="620" y2="468"/>
+                    <rect class="node-soft" x="540" y="468" width="180" height="36"/>
+                    <text x="630" y="483" text-anchor="middle" class="diagram" font-size="9">project-documentation/ (English)</text>
+                    <text x="630" y="497" text-anchor="middle" class="diagram text-muted" font-size="8">00-09 + ADRs + maintenance</text>
+
+                    <!-- legend -->
+                    <rect class="node-accent" x="20" y="558" width="14" height="14"/>
+                    <text x="40" y="570" class="diagram text-accent" font-size="9">Root / plugin</text>
+                    <rect class="node" x="130" y="558" width="14" height="14"/>
+                    <text x="150" y="570" class="diagram" font-size="9">Source (tracked)</text>
+                    <rect class="node-soft" x="260" y="558" width="14" height="14"/>
+                    <text x="280" y="570" class="diagram text-muted" font-size="9">Source (tracked) or ignored output</text>
+                  </svg>
+                  <p class="diagram-caption">Repository map - five zones. Edit SOURCE only, never the generated outputs. The only versioned generated output is <code>resource/owismind-app/</code> (built frontend).</p>
+                </figure>
+
+                <p class="mt">
+                  <a href="../09-maintenance/02-repository-map.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 09-maintenance/02-repository-map.md
+                  </a>
+                </p>
+
+                <h3>Known gotchas and lessons</h3>
+
+                <p>A synthesis of the cross-cutting gotchas that genuinely cost time. Each comes from a real failure in DSS or review. Reintroducing a banned pattern replays a bug already paid for.</p>
+
+                <div class="grid-2 mt">
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Frontend: key gotchas</p>
+                      <p class="block-note"><strong>F-3</strong>: <code>:global</code> theme selector must wrap the ENTIRE selector: <code>:global(body[data-theme="dark"] .x)</code>, not just <code>:global(.x)</code>.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>F-4</strong>: hardcoded <code>rgba</code> colors are invisible in dark mode. Use semantic tokens from <code>styles/tokens.css</code>. No <code>color-mix</code>.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>F-8</strong>: the real logo (<code>orange-logo.png</code>) must always be used as an <code>&lt;img&gt;</code>. Never reconstruct it as a CSS shape. Rule #10.</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Backend: key gotchas</p>
+                      <p class="block-note"><strong>B-1</strong>: no <code>ALTER TABLE</code> ever. Schema evolution = new <code>_vN</code> table via <code>CREATE TABLE IF NOT EXISTS</code>. Current chat table = <code>webapp_chat_v5</code>.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>B-5</strong>: after any <code>python-lib/</code> or <code>backend.py</code> change, RESTART the webapp backend in DSS. The old code runs until restart.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>B-6</strong>: the <code>cp</code> to <code>body.html</code> may be refused by harness permissions. Fallback: rewrite via the Write tool (gotcha F10).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="grid-2 mt">
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Agent: key gotchas</p>
+                      <p class="block-note"><strong>A-1</strong>: never use <code>as_langchain_chat_model</code>. Always call LLM Mesh natively in the nodes (reasoning + tool-calling preserved).</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>A-3</strong>: force <code>with_json_output</code> on any output consumed by code (UNDERSTAND step). Reasoning reserved for routing and verified prose only.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>A-8</strong>: the orchestrator emits zero business facts. The only "no" allowed = "no AGENT yet for this domain". When in doubt, ROUTE. Never assert "the data does not exist".</p>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="block">
+                      <p class="block-title">Packaging: key gotchas</p>
+                      <p class="block-note"><strong>P-1</strong>: <code>frontend/</code> and <code>node_modules/</code> must NEVER be packaged. Only runtime is staged: <code>plugin.json</code> + <code>python-lib/</code> + <code>resource/</code> + <code>webapps/</code>.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>P-2</strong>: NEVER build into <code>resource/</code> outside <code>/build-plugin</code>. <code>emptyOutDir: true</code> would overwrite the deployed app.</p>
+                    </div>
+                    <div class="block">
+                      <p class="block-note"><strong>P-5</strong>: em dash (U+2014) and en dash (U+2013) are banned everywhere. The sweep must be byte-safe (<code>LC_ALL=C</code>; never <code>perl -CSD</code> on files with multibyte glyphs like <code>owi:mode</code> tokens).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="mt">Four reflexes that prevent the majority of regressions:</p>
+                <ol>
+                  <li>When you change <code>python-lib</code>, RESTART the webapp backend - otherwise your fix does not run.</li>
+                  <li>When you change a Code Agent, RE-PASTE both files into DSS (env 3.11) - the repository is the source of truth.</li>
+                  <li>Never reintroduce a banned pattern: hardcoded color, <code>ALTER</code>, <code>as_langchain_chat_model</code>, narrate-first, em dash, CSS-generated logo.</li>
+                  <li>Before any styling task, read <code>docs/cadrage/CHARTE_ORANGE_UI.md</code>. Orange is a rare accent; do not add glow, gradient, or global focus rings; use the real logo image; do not remove existing affordances.</li>
+                </ol>
+
+                <p class="mt">
+                  <a href="../09-maintenance/03-known-gotchas-and-lessons.md" class="source-ref">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Source: 09-maintenance/03-known-gotchas-and-lessons.md
+                  </a>
+                </p>
+
+                <h3>The memory protocol</h3>
+
+                <p>OWIsMind keeps a project memory under <code>memory/</code> that takes precedence over the guides in <code>docs/cadrage/</code>. Three files structure it:</p>
+
+                <dl class="kv mt">
+                  <dt><code>memory/CONTEXT.md</code></dt>
+                  <dd>Short-term memory (current focus, last session, active gotchas). Read at EVERY session start.</dd>
+                  <dt><code>memory/LESSONS.md</code></dt>
+                  <dd><code>L0xx</code> lessons: what diverged from the guides, what failed then worked. Read when looking for the "why" of a non-obvious solution.</dd>
+                  <dt><code>memory/PROJECT_STATE.md</code></dt>
+                  <dd>Durable state: architecture, canonical ids, validated/not-validated matrix in DSS.</dd>
+                </dl>
+
+                <p class="mt">At the end of each session, run the <code>/log-session</code> skill: it writes memory files, appends a lesson if there is a divergence, updates the knowledge graph (<code>graphify --update</code>), and creates a session commit. It never pushes (the user pushes).</p>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <aside id="toc" aria-label="On this page">
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <footer id="pager" aria-label="Page navigation">
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <script src="assets/site.js"></script>
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Technology stack and dependencies
 
-> Audience: Developer. Last updated: 2026-06-18. Summary: an exact inventory of the languages,
+> Audience: Developer. Last updated: 2026-06-19. Summary: an exact inventory of the languages,
 > frameworks and versions across OWIsMind's four layers (Vue/Vite frontend, Flask Python 3.9 backend,
 > LangGraph Python 3.11 agents, PostgreSQL storage), an explanation of the dual 3.9/3.11 code environment
 > and of the NO INSTALL rule that governs all dependency management.

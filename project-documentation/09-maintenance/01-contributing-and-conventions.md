@@ -1,6 +1,6 @@
 # Contributing - conventions and rules
 
-> Audience: every contributor (developer, documentation writer, maintainer). Last updated: 2026-06-18. Summary: this document gathers the project's NON-NEGOTIABLE rules, the memory protocol, the "repository = source of truth" principle for the agents, and the end-to-end contribution workflow (edit the source, build/package, deploy).
+> Audience: every contributor (developer, documentation writer, maintainer). Last updated: 2026-06-19. Summary: this document gathers the project's NON-NEGOTIABLE rules, the memory protocol, the "repository = source of truth" principle for the agents, and the end-to-end contribution workflow (edit the source, build/package, deploy).
 
 OWIsMind is a Dataiku DSS plugin running on a SHARED instance. Most of the rules below exist for a single reason: never harm that instance, nor users' trust. Before you touch the code, read this page in full. It does not replace the architecture or backend documentation; it sets the working invariants that every change must respect.
 
@@ -8,7 +8,7 @@ OWIsMind is a Dataiku DSS plugin running on a SHARED instance. Most of the rules
 
 ## 1. The NON-NEGOTIABLE rules
 
-These nine rules are enforced at once by convention, by the Claude Code harness configuration, and by deterministic hooks. They are not up for negotiation: a change that violates them is a change to refuse, not to discuss.
+These ten rules are enforced at once by convention, by the Claude Code harness configuration, and by deterministic hooks. They are not up for negotiation: a change that violates them is a change to refuse, not to discuss.
 
 | # | Rule | Why |
 |---|---|---|
@@ -18,9 +18,10 @@ These nine rules are enforced at once by convention, by the Claude Code harness 
 | 4 | Server-side agent whitelist: the front end only sends an opaque logical key | Prevent the execution of a forged `agent_id`. |
 | 5 | The frontend NEVER goes into the zip | The zip is the plugin runtime; `frontend/` and `node_modules/` have no business being there. |
 | 6 | Never edit the generated folders by hand | Any manual edit is overwritten at the next build/package. |
-| 7 | Code in English, communication and documentation in English | Standard professional code; prose readable by the team. |
+| 7 | Code and documentation in English | All code, comments, and this documentation set are in English. The legacy `docs/` and `memory/` folders are in French (historical). Code identifiers stay VERBATIM in English, never translated. |
 | 8 | Do not assume Python 3.11 / FastAPI on the backend without proof | The backend observed in DSS is Python 3.9.23 (Flask, without langchain). |
-| 9 | No em dash `—` (U+2014) nor en dash `–` (U+2013), anywhere | An AI typographic signature, forbidden by user decision. |
+| 9 | No em dash (U+2014) nor en dash (U+2013), anywhere | An AI typographic signature, forbidden by user decision. |
+| 10 | Orange charter is MANDATORY for every styling task | Every page, component, or style touch follows `docs/cadrage/CHARTE_ORANGE_UI.md`. Read it BEFORE any styling work. |
 
 ### 1.1 NO INSTALL (rule #1): defense in depth
 
@@ -48,13 +49,26 @@ The front end only receives and sends an OPAQUE logical key (form `ag_<hash>`); 
 
 The deliverable zip (`Plugin/ready-for-dataiku/owismind-upload.zip`) contains only the RUNTIME: `plugin.json`, `python-lib/`, `resource/`, `webapps/`. Never `frontend/` nor `node_modules/`. And we NEVER edit the generated outputs by hand: `Plugin/owismind/resource/owismind-app/`, `Plugin/ready-for-dataiku/`, nor `body.html` (which is re-wired at build time). Any manual edit of these paths is overwritten, and the `guardrail.sh` hook already blocks it for `resource/owismind-app/` and `ready-for-dataiku/`. We edit the SOURCE (`frontend/src`, `python-lib`, `webapps`) then rebuild.
 
-### 1.6 Language: code in English, prose in English (rule #7)
+### 1.6 Language: code and documentation in English (rule #7)
 
-All code and its comments are in English (professional standard, optimized, well commented). All user communication and the legacy `docs/` and `memory/` folders remain in French, while this documentation set is written in English (the owner's decision). Code identifiers (file names, functions, tables, columns, config ids such as `agent:bHrWLyOL` or `v4oqA6R`) stay VERBATIM in English, never translated.
+All code and its comments are in English (professional standard, optimized, well commented). This documentation set (`project-documentation/`) is written in English, the owner's final decision. The legacy `docs/` and `memory/` folders are in French for historical reasons; in case of conflict, the CODE and the project memory (`memory/`) take precedence over any document. Note: `project-documentation/.workdir/CONVENTIONS.md` section 1.3 says the prose is French - that is stale; the prose is English. Code identifiers (file names, functions, tables, columns, config ids such as `agent:bHrWLyOL` or `v4oqA6R`) stay VERBATIM in English, never translated.
 
 ### 1.7 No em dash (rule #9)
 
-The em dash `—` (U+2014) and the en dash `–` (U+2013) are BANNED everywhere: code, comments, i18n strings, UI text, memory, commit messages AND chat replies. We replace them with `-`, `:`, `,` or parentheses. This rule has its own ADR, which is the only document allowed to cite these two glyphs (between backticks, to name them). For any cleanup sweep, stay byte-safe (`LC_ALL=C`): never use `perl -CSD` on files with multibyte glyphs (risk of corrupting tokens such as `⟦owi:mode⟧`).
+The em dash (U+2014) and the en dash (U+2013) are BANNED everywhere: code, comments, i18n strings, UI text, memory, commit messages AND chat replies. We replace them with `-`, `:`, `,` or parentheses. The only document allowed to display these glyphs literally is [ADR-0012](../08-decisions/0012-regle-typographique-sans-tiret-cadratin.md), where they are named between backticks to identify them. For any cleanup sweep, stay byte-safe (`LC_ALL=C`): never use `perl -CSD` on files with multibyte glyphs (risk of corrupting tokens such as `⟦owi:mode⟧`).
+
+### 1.8 Orange charter: mandatory for every styling task (rule #10)
+
+The Orange brand charter is MANDATORY on every page, component, or CSS touch. The authoritative, self-contained spec lives in `docs/cadrage/CHARTE_ORANGE_UI.md`. READ IT before any styling work; it supersedes any older mock or guide. Essential constraints:
+
+- **Palette**: white background + black text + **a single accent `#FF7900`** used sparingly (primary actions, active state, headline detail). Access it via the semantic tokens in `frontend/src/styles/tokens.css` (never a bare hex in component CSS). For readable orange text on white use `--orange-text` (confirmed AA contrast).
+- **Geometry**: square (`border-radius: 0`); only avatars/icons are round. Flat surfaces, 1px hairlines, no blur, no gradient, no glow, no large shadow.
+- **Typography**: H1 at 36 px/800, orange ALL-CAPS eyebrow, 52x4px orange title-bar accent below H1. Heavy weight via `--fw-heavy: 800`.
+- **Real brand assets**: always use the real logo image (`frontend/src/assets/orange-logo.png`, imported as `<img :src="logoUrl">`). NEVER reconstruct a brand mark with CSS shapes, even if a mock does so (mocks simulate assets).
+- **Theme**: dark mode via `body[data-theme]` + tokens. Never `color-mix`.
+- **Banned unconditionally**: `color-mix`, `backdrop-filter`/blur, gradients, glow/large shadows, emoji in UI, a global `:focus-visible` override on inputs, and any CSS-generated brand visual.
+
+Violating the charter - including adding unsolicited orange accents, focus rings, glows, or replacing the real logo with CSS - is treated the same as violating any other non-negotiable rule. Decision logged in `memory/LESSONS.md` L091-L092.
 
 ---
 
@@ -187,3 +201,4 @@ Every contribution to `project-documentation/` follows the shared conventions fi
 - [Backend - security and validation](../04-backend/06-security-and-validation.md) - payload validation, SQL safety, read-only guards.
 - [Test strategy](../07-testing/01-test-strategy.md) - pure-logic suites, NO INSTALL, what requires DSS.
 - [ADR-0012 - Typographic rule: no em dash](../08-decisions/0012-regle-typographique-sans-tiret-cadratin.md) - the decision behind rule #9.
+- Orange charter (external, not in project-documentation): `docs/cadrage/CHARTE_ORANGE_UI.md` - the self-contained UI brand spec (rule #10).

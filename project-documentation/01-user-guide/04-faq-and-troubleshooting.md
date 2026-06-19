@@ -1,9 +1,9 @@
 # FAQ and troubleshooting (user)
 
 > Audience: OWI/Orange business user, first-level support team. Last updated:
-> 2026-06-18. Summary: practical answers to frequently asked questions and the right course of action when
+> 2026-06-19. Summary: practical answers to frequently asked questions and the right course of action when
 > facing common situations (an uncovered domain, a long answer, a stopped generation, an empty result, slowness
-> in High mode), including the moment when an administrator should be involved.
+> in High mode, a budget reached), including the moment when an administrator should be involved.
 
 OWIsMind is a business-oriented agentic chat portal. You ask a question in natural language about
 revenue (the `DRIVE_Revenues` dataset), the agent works in front of you (the timeline), and every figure is
@@ -22,13 +22,17 @@ routes your request to the appropriate specialist. In v3, a single domain is gen
 revenue figure in the `DRIVE_Revenues` dataset, across all Phases: `ACTUALS` (the default), `BUDGET`, `FORECAST`,
 `Q3F`, `HLF`.
 
-The agent selector (discreetly placed at the bottom) only shows the agents enabled by your administrator. The list
-always comes from the server: if an agent does not appear there, it is not enabled on your instance.
+The agent selector only shows the agents enabled by your administrator. The list always comes from the
+server: if an agent does not appear there, it is not enabled on your instance. To browse the agents that
+are available to you and read what each one can do, open the **Agents** page from the sidebar. Each agent
+card shows a tagline, a description, capabilities and tools, all written by an administrator (not
+hardcoded in the application). If the profile of an agent has not been filled in yet, its card shows an
+honest "This agent's profile has not been filled in by an administrator yet." message rather than
+invented text.
 
-> IN FLUX: some descriptive cards in the interface (for example Cooper, or a Tickets agent mentioned
-> in the embedded FAQ) are decorative and do not necessarily reflect an actually deployed agent. The
-> only authoritative list is the one in the agent selector, fed by the server. If you select
-> or target a domain without an agent, the orchestrator will answer you honestly (see section 2.1).
+> IN FLUX: if only the orchestrator is listed in the selector and no specialist appears, it means no
+> specialist agent has been enabled by your administrator yet. The orchestrator will honestly say so if
+> you target an uncovered domain (see section 2.1).
 
 ### Why trust an answer?
 
@@ -67,14 +71,28 @@ wording and the cost.
 
 ### Is there a monthly budget?
 
-The product specification provides for a per-user monthly budget (for example 50 EUR/month, with alerts at
-50%, 80% and 100%). Consumption (tokens and estimated cost) is shown under each answer, and the
-tracking storage already exists on the server side.
+Yes. Every user gets a rolling **monthly credit in US dollars** (default $50) that resets automatically
+on the 1st of each month - no reset job is required. Consumption (LLM-Mesh estimated cost, also shown as
+tokens and dollar amount under each response) accumulates in the current monthly bucket.
 
-> IN FLUX: the **blocking** at budget overrun is NOT yet enforced. Cost tracking is
-> stored, but no request is currently blocked because a budget has been reached. The budget management
-> screens show an honest "coming soon" state (`set.budget.empty`). So, for now, do not expect
-> an automatic block.
+Your current spend, limit, remaining amount and reset date are visible on the **My account** page
+(sidebar avatar, then "My account"). A transparency line below the gauge tells you the origin of your
+limit: the global default, a temporary global boost an admin applied, or a personal override an admin
+set specifically for you.
+
+When your monthly budget is exhausted, the input bar is **blocked**: a banner appears with the exact
+amounts (key `chat.quota_banner`) and sending is prevented until the 1st-of-month reset. The blocking
+is enforced server-side at `/chat/start` (HTTP 402 `monthly_quota_exceeded`); it fails open by
+contract (a backend read error lets the request through rather than blocking you incorrectly). If you
+need a higher limit, contact your administrator.
+
+> IN FLUX: this enforcement is coded and validated in code but has not yet been confirmed on the
+> live DSS instance. If you do not see a budget gauge on your My account page, the budget feature
+> may not yet be deployed on your instance.
+
+Admins are subject to the same budget rules as regular users. They can adjust the global limit and
+per-user limits from the Administration console. For details, see
+[Agents and administration](06-agents-and-administration.md).
 
 ### Are my conversations private?
 
@@ -156,6 +174,27 @@ accuracy of the figure does not change, because the SQL is always written by the
 If the slowness persists **in all modes**, it is probably not a model problem but
 an instance or backend problem: see section 4.
 
+### 2.6 The send is blocked with a budget banner
+
+When your monthly budget is reached, the input bar greys out and a transparent banner appears above it
+(key `chat.quota_banner`) showing what you spent, your limit and the reset date. You cannot send new
+requests until the 1st of the following month. What to do:
+
+- Wait for the automatic reset on the 1st of the month.
+- If you need to keep using the application before then, contact your administrator: they can raise
+  your limit temporarily or permanently from the Administration console.
+
+The "My account" page (sidebar avatar) always shows the current state of your budget (spent,
+remaining, reset date).
+
+### 2.7 An agent appears in the list but seems to do nothing useful
+
+If an agent card in the library shows no description - only "This agent's profile has not been filled
+in by an administrator yet." - it means the administrator has enabled that agent but has not yet
+authored its profile (tagline, description, capabilities, tools). This is expected and honest: no
+content is ever invented. Contact your administrator to ask them to complete the profile in the
+Administration console.
+
 ## 3. Error messages you may encounter
 
 When the send fails on the server side, the interface surfaces a stable error code. Here is how to
@@ -165,6 +204,7 @@ interpret them.
 |---|---|---|---|
 | The send is refused, "storage not configured" | `storage_not_configured` (HTTP 409) | The webapp has no chosen SQL connection: it can neither store nor read conversations. | Configuration problem: contact an administrator (see 4). |
 | The chosen agent is not available | `agent_not_enabled` (HTTP 404) | The targeted agent is not (or no longer) enabled, or its key is obsolete. | Reselect an agent in the picker; if the right agent is missing, ask an admin to enable it. |
+| Monthly budget reached, send blocked | `monthly_quota_exceeded` (HTTP 402) | The user's monthly budget is exhausted. The frontend shows a banner with the amounts and the reset date. | Wait for the 1st-of-month reset, or ask an admin to raise your limit. |
 | "Service busy, try again" | `busy` (HTTP 503) | Too many simultaneous generations on the server (concurrency limit reached). | Wait a few seconds and resend your request. |
 | The generation interrupts and resumes once | `run_not_found` / `run_lost` | The current run disappeared on the server side (often after a backend restart). | Recoverable, non-blocking case: relaunch your request. |
 | "not authenticated" | `unauthenticated` | Your browser session is not recognized. | Reload the page (assets cache); if the problem persists, contact an admin. |
@@ -181,6 +221,10 @@ Call an administrator (rather than simply reloading the page) in these cases:
 - **"storage not configured" / `storage_not_configured`**: the SQL connection is not chosen. Only an
   admin configures it in the webapp Settings.
 - **An agent you need does not appear** in the selector: enabling it is an admin setting.
+- **An agent's profile card shows "profile to complete"**: the agent is enabled but its profile has
+  not been authored yet - ask the admin to fill it in from Administration > Agents > Edit profile.
+- **Your monthly budget is exhausted before the end of the month**: an admin can raise your limit
+  temporarily or permanently from Administration > Quotas & budgets.
 - **Generalized slowness in all modes**, or repeated `busy` errors: may signal a backend
   to restart or a loaded instance.
 - **The orchestrator claims that data "does not exist"** instead of consulting the specialist, or invents
@@ -210,8 +254,10 @@ configuration:
 - [Using the chat](02-using-the-chat.md) - prompt, agent selector, mode, timeline, versions, stop.
 - [Understanding evidence](03-understanding-evidence.md) - reading the Evidence panel (badge, chips, drill,
   chart) on the user side.
+- [My account and budget](05-account-and-budget.md) - the budget gauge, usage history, and what happens when the limit is reached.
+- [Agents and administration](06-agents-and-administration.md) - the agents library; for admins: managing agents, profiles and quotas.
 - [Getting started](01-getting-started.md) - opening the application and asking a first question.
 - [Scope and limitations](../00-overview/02-scope-and-limitations.md) - what the product does and does not do
-  (a single staffed domain, non-blocking budget, no word-by-word streaming).
+  (a single staffed domain, enforced budget, no word-by-word streaming).
 - [Runbooks](../06-operations/04-runbooks.md) - incident procedures for the operator (backend restart,
   unresponsive mode, storage not configured).

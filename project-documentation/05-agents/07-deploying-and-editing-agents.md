@@ -1,6 +1,6 @@
 # Deploying and editing agents
 
-> Audience: agent engineer. Last updated: 2026-06-18. Summary: how to edit the two Code
+> Audience: agent engineer. Last updated: 2026-06-19. Summary: how to edit the two Code
 > Agents in the repository (source of truth), re-paste them into a Python 3.11 env in DSS, verify the config
 > ids, and never break the frozen contracts the webapp depends on.
 
@@ -12,8 +12,9 @@ ids to verify, the frozen contracts that must never be renamed, and the redeploy
 depending on what changed (agent only, Flow recipes, plugin backend).
 
 > IN FLUX: the `dataiku-agents/` layer is being edited live by another engineer. The names and ids
-> cited here were verified in the code on 2026-06-18, but the `attribute_lookup` tool is in the process of
-> being wired (see the dedicated section). Always check the actual state of the file before relying on it.
+> cited here were verified in the code on 2026-06-18. The `attribute_lookup` wiring is present in the
+> orchestrator source; it goes live on the next re-paste (see the dedicated section). Always check the
+> actual state of the file before relying on it.
 
 ## 1. The mental model: one repository, two Code Agents, one 3.11 env
 
@@ -117,7 +118,7 @@ modes and the propagation is in
 |---|---|---|---|
 | `SEMANTIC_TOOL_ID` | `v4oqA6R` | sub-agent | Semantic Model Query tool (`revenue_semantic_query`), the only real DSS tool called at runtime; writes and executes the analytical SQL on Sonnet in all modes. |
 | `agent_id` (capability `revenue_expert`) | `agent:bHrWLyOL` | orchestrator | resolution of the sub-agent by id (never exposed to the model). |
-| `LOOKUP_TOOL_ID` | `""` (empty) | orchestrator | id of the Custom Python tool `attribute_lookup` (to be created in DSS, see section 6). |
+| `LOOKUP_TOOL_ID` | `""` (empty) | orchestrator | id of the Custom Python tool `attribute_lookup`. Tool object EXISTS in DSS; filling this is optional (name-based fallback resolves `attribute_lookup`). See section 6. |
 
 `SEMANTIC_TOOL_ID_BY_MODE` is constant across the three modes (the tool has its own DSS model, Sonnet).
 The detail of the Semantic Model Query tool is in
@@ -209,9 +210,11 @@ when a recipe reruns. The manufacturing of expertise (profile, value index, grou
 in [05-flow-recipes-and-grounding.md](05-flow-recipes-and-grounding.md) and
 [ADR-0010](../08-decisions/0010-grounding-et-semantic-model.md).
 
-> ROADMAP: `DRIVE_Revenues_Value_Catalog` (recipe `build_value_catalog_recipe.py`) and the Python resolver
-> `Drive_Revenues_resolve_filter_value` are **NOT wired in v3**. The sub-agent grounds on
-> `value_index` (inline read-only SQL), not on the Value_Catalog.
+> Note: the sub-agent grounds on `value_index` (inline read-only SQL), NOT on the Value_Catalog.
+> `DRIVE_Revenues_Value_Catalog` (recipe `build_value_catalog_recipe.py`) is used only as an alias
+> fallback by `attribute_lookup` (orchestrator fast-lookup path), not by the sub-agent.
+> `Drive_Revenues_resolve_filter_value` is **being deleted** in DSS (called by nobody; superseded by
+> `attribute_lookup`). See [04-tools-and-semantic-model.md](04-tools-and-semantic-model.md).
 
 To add a domain (tickets, satisfaction): wire the same recipes onto the new dataset,
 review the profile via an overrides dataset, duplicate the sub-agent Code Agent by changing the two
@@ -219,37 +222,36 @@ dataset names in its config, then add **one** entry to `CAPABILITIES`. The domai
 `satisfaction`, etc. already exist in `BUSINESS_DOMAINS`, so the capability gap message closes
 on its own once the agent is activated.
 
-## 6. In-flux point: the wiring of `attribute_lookup`
+## 6. In-flux point: activating `attribute_lookup`
 
-> IN FLUX (verified in the code on 2026-06-18): the managed tool `dataset_lookup` (`9FEzVZk`) and the
-> entire `lookup` intent of the sub-agent were **REMOVED on 2026-06-18**. Its replacement `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`, a standalone Custom Python tool) is **built and unit-tested**
-> (`tests/test_attribute_lookup.py`), but the DSS tool does NOT yet exist on the instance.
+> IN FLUX: the managed tool `dataset_lookup` (`9FEzVZk`) and the entire `lookup` intent of the sub-agent
+> were **REMOVED on 2026-06-18**. The replacement `attribute_lookup`
+> (`tools/attribute_lookup_tool.py`) is built, unit-tested, RUN-TEST validated in DSS, and its **Custom
+> Python tool object already exists on the instance** (`dataiku-agents/tools/README.md`, confirmed in
+> `dataiku-agents/CLAUDE.md`).
 
-The actual state is subtle and deserves to be read carefully before any deployment:
+The current state:
 
-- The **scaffolding is present in the orchestrator**: `attribute_lookup` is wired as a **built-in
-  tool** (and not as a sub-agent capability). It is appended in `build_tool_specs` and dispatched
-  inline in `node_tools` (`_run_lookup`), like `show_table` or `current_date`. As such it touches
-  **no frozen `KNOWN_*` contract**, and the **sub-agent remains unchanged**.
-- The constant `LOOKUP_TOOL_ID` is `""` (empty). Deployment therefore requires you to **create the Custom
-  Python tool `attribute_lookup` in DSS**, then set `LOOKUP_TOOL_ID` with the resulting id (a fallback
-  by `LOOKUP_TOOL_NAME = "attribute_lookup"` can recover a recreated id).
-- Deployment specificity: since this wiring lives on the **orchestrator only**, it deploys by
-  **re-pasting the orchestrator alone** (after creating the DSS tool), an exception to the "re-paste
-  both" rule that applies only because this change does not touch the collaboration contract.
+- The **wiring is present in the orchestrator**: `attribute_lookup` is declared as a **built-in
+  tool** (not a sub-agent capability). It is appended in `build_tool_specs` and dispatched
+  inline in `node_tools` (`_run_lookup`), like `show_table` or `current_date`. It touches
+  **no frozen `KNOWN_*` contract**, and the **sub-agent is unchanged**.
+- `LOOKUP_TOOL_ID = ""` (empty). The name-based fallback (`LOOKUP_TOOL_NAME = "attribute_lookup"`)
+  resolves the tool without a code change, so filling `LOOKUP_TOOL_ID` is OPTIONAL (useful for a
+  direct bind and slightly faster resolution).
+- Activation requires only: **re-paste the ORCHESTRATOR alone** (env 3.11). This is an exception to
+  the "re-paste both" rule that applies only because this change does not touch the collaboration contract.
 
-> Doc-vs-code divergence to be aware of: `dataiku-agents/CLAUDE.md` describes `attribute_lookup` as already
-> wired (decision board 2026-06-18), while `dataiku-agents/README.md` still lists it under "Roadmap
-> (decided, deferred)". The code confirms the scaffolding is present but the id is not set: as long as
-> `LOOKUP_TOOL_ID` is empty AND the DSS tool does not exist, the lookup is not operational. Follow the
-> code, and flag this state in everything you produce.
+After re-pasting, additionally: (1) update the `revenue_semantic_query` "Description for LLM" in DSS
+(drop the stale precondition about `resolve_filter_value`; the corrected text is in
+`dataiku-agents/tools/README.md`); (2) delete the `Drive_Revenues_resolve_filter_value` tool object
+(called by nobody, loads catalog into pandas RAM).
 
 ## 7. Recap of the traps
 
 | Trap | Symptom | Guardrail |
 |---|---|---|
-| Pasting only one of the two agents | contract drift (label / span) | re-paste BOTH (except the built-in `attribute_lookup` case, orchestrator only) |
+| Pasting only one of the two agents | contract drift (label / span) | re-paste BOTH; exception: a change to the `attribute_lookup` built-in only (orchestrator) |
 | Wrong Python env | langgraph import fails | assign the **3.11** env to the Code Agent in DSS |
 | Obsolete LLM Mesh id | the mode does not respond, `ERROR` event naming `loop_llm` | verify `GEMINI_*_ID` / `SONNET_ID` after each paste |
 | Renaming an event kind / the span | timeline or Evidence silent, with no error | frozen contracts: add, never rename |

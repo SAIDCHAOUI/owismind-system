@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADR) - index
 
-> Audience: developer, architect. Last updated: 2026-06-18. Summary: this document explains what an ADR
-> is, the format adopted in OWIsMind, and indexes the 14 structuring decisions of the project with their
+> Audience: developer, architect. Last updated: 2026-06-19. Summary: this document explains what an ADR
+> is, the format adopted in OWIsMind, and indexes the 15 structuring decisions of the project with their
 > status and a link to the detailed record.
 
 ## What this section is for
@@ -57,12 +57,15 @@ Status convention used in the index table:
 | 0010 | Grounding via value_index, the Semantic Model owns the SQL (hybrid engine) | Accepted (in flux) | [0010](0010-grounding-et-semantic-model.md) |
 | 0011 | Assistive sub-agent (does not impose a column for an ambiguous term) | Accepted (in flux) | [0011](0011-sous-agent-assistif.md) |
 | 0012 | Typographic rule: no em dash | Accepted | [0012](0012-regle-typographique-sans-tiret-cadratin.md) |
+| 0013 | Agent profiles are admin-authored (no hardcoded copy) | Accepted | [0013](0013-agent-profiles-admin-authored.md) |
+| 0014 | Monthly rolling budget and per-user quota overrides | Accepted (in flux) | [0014](0014-monthly-budget-and-per-user-quotas.md) |
+| 0015 | The Orange charter: sober design system for the UI | Accepted (in flux) | [0015](0015-orange-charter-ui.md) |
 
-> Numbering: the index table follows the file numbering `0001` to `0012`. The research material
+> Numbering: the index table follows the file numbering `0001` to `0015`. The research material
 > (`.workdir/research/decisions-history.md`) numbers from `ADR-01` to `ADR-14` because it groups some
 > neighboring decisions under two records (for example the hybrid data engine and the grounding, or the
 > orchestrator "route, do not deny"). The content is the same; only the split into delivered files
-> differs. See the correspondence below.
+> differs. ADRs 0013-0015 post-date the research material. See the correspondence below.
 
 ### Correspondence with the research material
 
@@ -80,6 +83,9 @@ Status convention used in the index table:
 | ADR-12 per-mode model | 0009 |
 | ADR-13 Evidence trust layer + artifacts | 0008 |
 | ADR-14 typographic rule | 0012 |
+| Agent profiles - admin authored (2026-06-18) | 0013 |
+| Monthly budget + per-user quotas (2026-06-18) | 0014 |
+| Orange charter UI (2026-06-18/19) | 0015 |
 
 ## In-flux points (to confirm in DSS)
 
@@ -104,8 +110,11 @@ the instance; each record frames them explicitly. In summary:
 > orchestrator in DSS.
 
 Other non-blocking elements are in flux and documented in the technical sections: the monthly budget quota
-(50 EUR/user/month) whose STORAGE is ready (`webapp_usage_monthly_v1`) but whose BLOCKING is not
-implemented, and the capture of the Evidence `result` which remains best-effort.
+(50 USD/user/month) is fully implemented - storage (`webapp_usage_monthly_v1`, `webapp_user_quota_v1`) AND
+server-side enforcement (HTTP 402 gate at `/chat/start`, fail-open, see ADR-0014) - but not yet validated
+in DSS (backend restart required after python-lib upload). The capture of the Evidence `result` remains
+best-effort (see ADR-0008). The Orange charter UI (ADR-0015) is built and packaged but not yet confirmed
+in DSS (zip `index-BHeG2NRY.js`, 79 entries).
 
 ## Adding an ADR
 
@@ -136,7 +145,9 @@ an operations guide has left its role.
 - [Security model (architecture)](../02-architecture/04-security-model.md) - frames the safety decisions
   (ADR-0003, ADR-0004).
 - [Backend - security and validation](../04-backend/06-security-and-validation.md) - details the
-  implementation of the guardrails referenced by ADR-0003 and ADR-0004.
+  implementation of the guardrails referenced by ADR-0003 and ADR-0004; also covers the validation
+  helpers for ADR-0013 (agent profiles: `validate_agent_meta`) and ADR-0014 (budget amounts:
+  `validate_budget_amount`, `validate_expires_days`).
 - [Backend - streaming and run lifecycle](../04-backend/03-streaming-and-runs.md) - the home of the
   polling diagram referenced by ADR-0002.
 - [Backend - Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md) - goes deeper into
@@ -146,7 +157,8 @@ an operations guide has left its role.
 - [Flow recipes and expertise building](../05-agents/05-flow-recipes-and-grounding.md) - details the
   grounding and the hybrid engine of ADR-0010.
 - [Contributing - conventions and rules](../09-maintenance/01-contributing-and-conventions.md) - the
-  project's non-negotiable rules, including the typographic rule of ADR-0012.
+  project's non-negotiable rules, including the typographic rule of ADR-0012 and the Orange charter
+  of ADR-0015.
 - [Known gotchas and lessons](../09-maintenance/03-known-gotchas-and-lessons.md) - the cross-cutting
-  gotchas that fed several of these decisions.
+  gotchas that fed several of these decisions (L084, L091, L092 for ADR-0015; L087 for ADR-0010).
 - [Documentation portal](../README.md) - back to the general table of contents.

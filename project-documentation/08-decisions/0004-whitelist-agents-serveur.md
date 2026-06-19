@@ -179,4 +179,4 @@ flowchart TD
 - [Backend - API reference](../04-backend/02-api-reference.md) - endpoints `/agents`, `/chat/start`, `/admin/agents` and their error codes.
 - [The orchestrator (`OWIsMind_orchestrator`)](../05-agents/02-orchestrator.md) - the internal `CAPABILITIES` registry, distinct from the server whitelist.
 - [ADR-0003 - Direct SQL, no Flow at runtime](0003-sql-direct-sans-flow.md) - the SQL safety posture that frames the persistence of the whitelist.
-- [Architecture Decision Records (ADR) - index](README.md) - list of the twelve ADRs.
+- [Architecture Decision Records (ADR) - index](README.md) - list of all architecture decisions.

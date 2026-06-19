@@ -1,0 +1,1197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Frontend - OWIsMind Docs</title>
+  <link rel="stylesheet" href="assets/site.css">
+
+  <!--
+    THEME FLASH GUARD - prevents a white flash before JS sets the theme.
+    This tiny inline script MUST stay in <head> - do not move it.
+    It reads localStorage and sets body[data-theme] before first paint.
+  -->
+  <script>
+    (function(){
+      var t = localStorage.getItem('owi-theme');
+      document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
+      /* body is not yet available; site.js will set body[data-theme] on DOMContentLoaded */
+      document.addEventListener('DOMContentLoaded', function() {
+        var stored = localStorage.getItem('owi-theme') || 'light';
+        document.body.dataset.theme = stored;
+      });
+    })();
+  </script>
+</head>
+
+<body data-page="frontend" data-theme="light">
+
+  <!-- SHELL: the 3-column layout the JS populates -->
+  <div class="shell">
+
+    <!-- Left icon rail - JS renders this from PAGES array -->
+    <nav id="rail" aria-label="Documentation sections">
+      <!-- Rendered by site.js renderRail() -->
+    </nav>
+
+    <!-- Main content column -->
+    <div class="main">
+
+      <!-- Topbar: breadcrumb + depth meter + controls - JS renders this -->
+      <header id="topbar" role="banner">
+        <!-- Rendered by site.js renderTopbar() -->
+      </header>
+
+      <!-- Scrollable content area -->
+      <div class="scroll">
+        <div class="doc-layout">
+
+          <div class="doc-content">
+            <main id="main-content" aria-label="Page content">
+              <div class="wrap">
+
+                <!-- PAGE HEADER -->
+                <header class="page-header">
+                  <p class="eyebrow">Level 3 - Build</p>
+                  <h1>Frontend</h1>
+                  <span class="title-bar" aria-hidden="true"></span>
+                  <p class="page-sub">The Vue 3 + Vite SPA: structure, state management, component tree, backend communication, and the Vite build chain that produces the DSS-served bundles.</p>
+                </header>
+
+                <!-- KPI summary -->
+                <div class="grid-3">
+                  <div class="card kpi">
+                    <p class="k-label">Framework</p>
+                    <p class="k-val">Vue 3</p>
+                    <p class="k-sub">Composition API, script setup, Pinia 3</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Pinia stores</p>
+                    <p class="k-val mono">4</p>
+                    <p class="k-sub">chat, session, evidence, ui</p>
+                  </div>
+                  <div class="card kpi">
+                    <p class="k-label">Routed views</p>
+                    <p class="k-val mono">6+</p>
+                    <p class="k-sub">All lazy-imported (code-split by Vite)</p>
+                  </div>
+                </div>
+
+                <!-- ============================================================
+                     SECTION 1: OVERVIEW AND STRUCTURE
+                     ============================================================ -->
+                <h2>Overview and structure</h2>
+
+                <p>The OWIsMind frontend is a Vue 3 + Vite SPA that lives under <code>Plugin/owismind/frontend/</code>. It is compiled once into hashed static bundles served by Dataiku DSS from the plugin resource folder. There is no Node server at runtime.</p>
+
+                <h3>Stack and dependencies</h3>
+
+                <p>All versions are pinned in <code>frontend/package.json</code>. Key packages:</p>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Package</th>
+                        <th>Version</th>
+                        <th>Role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>vue</code></td><td>^3.5.34</td><td>Composition API, <code>&lt;script setup&gt;</code></td></tr>
+                      <tr><td><code>pinia</code></td><td>^3.0.4</td><td>Setup stores (reactive state)</td></tr>
+                      <tr><td><code>vue-router</code></td><td>^5.1.0</td><td>HASH mode router</td></tr>
+                      <tr><td><code>vue-i18n</code></td><td>^11.4.4</td><td>i18n, <code>legacy:false</code>, EN default</td></tr>
+                      <tr><td><code>vite</code></td><td>^8.0.12</td><td>Build tool + <code>@vitejs/plugin-vue</code></td></tr>
+                      <tr><td><code>chart.js</code></td><td>pinned</td><td>Interactive charts in Evidence panel</td></tr>
+                      <tr><td><code>markdown-it</code> + <code>dompurify</code></td><td>pinned</td><td>Safe LLM text rendering (the only <code>v-html</code> path)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">NO INSTALL - Project rule #1</p>
+                    <p>The agent never runs <code>npm install</code>, <code>npm ci</code>, or any package manager command. Only the user installs. This is enforced by harness deny-list and the <code>guardrail.sh</code> pre-tool hook. Tests use the native <code>node:test</code> runner (no Vitest installed).</p>
+                  </div>
+                </aside>
+
+                <h3>Source tree</h3>
+
+                <!-- SOURCE TREE DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 340" xmlns="http://www.w3.org/2000/svg">
+                    <!-- root node -->
+                    <rect class="node-accent" x="10" y="140" width="90" height="36" rx="0"/>
+                    <text x="55" y="163" text-anchor="middle" fill="#fff" class="diagram" font-weight="600">src/</text>
+
+                    <!-- vertical trunk -->
+                    <line class="edge" x1="100" y1="158" x2="120" y2="158"/>
+
+                    <!-- branches from trunk -->
+                    <!-- main.js -->
+                    <line class="edge" x1="120" y1="22" x2="120" y2="318"/>
+                    <line class="edge" x1="120" y1="22" x2="145" y2="22"/>
+                    <rect class="node" x="145" y="8" width="140" height="28" rx="0"/>
+                    <text x="215" y="26" text-anchor="middle" class="diagram">main.js</text>
+                    <text x="295" y="26" text-anchor="start" class="diagram text-muted" font-size="10">bootstrap, theme, mount</text>
+
+                    <!-- App.vue -->
+                    <line class="edge" x1="120" y1="58" x2="145" y2="58"/>
+                    <rect class="node" x="145" y="44" width="140" height="28" rx="0"/>
+                    <text x="215" y="62" text-anchor="middle" class="diagram">App.vue</text>
+                    <text x="295" y="62" text-anchor="start" class="diagram text-muted" font-size="10">thin shell, ToastHost</text>
+
+                    <!-- router/ -->
+                    <line class="edge" x1="120" y1="94" x2="145" y2="94"/>
+                    <rect class="node" x="145" y="80" width="140" height="28" rx="0"/>
+                    <text x="215" y="98" text-anchor="middle" class="diagram">router/</text>
+                    <text x="295" y="98" text-anchor="start" class="diagram text-muted" font-size="10">HASH history, admin guard</text>
+
+                    <!-- i18n/ -->
+                    <line class="edge" x1="120" y1="130" x2="145" y2="130"/>
+                    <rect class="node" x="145" y="116" width="140" height="28" rx="0"/>
+                    <text x="215" y="134" text-anchor="middle" class="diagram">i18n/</text>
+                    <text x="295" y="134" text-anchor="start" class="diagram text-muted" font-size="10">messages.json + extra.js</text>
+
+                    <!-- styles/ -->
+                    <line class="edge" x1="120" y1="166" x2="145" y2="166"/>
+                    <rect class="node" x="145" y="152" width="140" height="28" rx="0"/>
+                    <text x="215" y="170" text-anchor="middle" class="diagram">styles/</text>
+                    <text x="295" y="170" text-anchor="start" class="diagram text-muted" font-size="10">tokens.css + base.css</text>
+
+                    <!-- stores/ -->
+                    <line class="edge" x1="120" y1="202" x2="145" y2="202"/>
+                    <rect class="node" x="145" y="188" width="140" height="28" rx="0"/>
+                    <text x="215" y="206" text-anchor="middle" class="diagram">stores/</text>
+                    <text x="295" y="206" text-anchor="start" class="diagram text-muted" font-size="10">4 Pinia stores + pure modules</text>
+
+                    <!-- composables/ -->
+                    <line class="edge" x1="120" y1="238" x2="145" y2="238"/>
+                    <rect class="node" x="145" y="224" width="140" height="28" rx="0"/>
+                    <text x="215" y="242" text-anchor="middle" class="diagram">composables/</text>
+                    <text x="295" y="242" text-anchor="start" class="diagram text-muted" font-size="10">timelineModel, budgetModel...</text>
+
+                    <!-- components/ -->
+                    <line class="edge" x1="120" y1="274" x2="145" y2="274"/>
+                    <rect class="node" x="145" y="260" width="140" height="28" rx="0"/>
+                    <text x="215" y="278" text-anchor="middle" class="diagram">components/</text>
+                    <text x="295" y="278" text-anchor="start" class="diagram text-muted" font-size="10">chat, evidence, shell, ui, pages</text>
+
+                    <!-- views/ -->
+                    <line class="edge" x1="120" y1="318" x2="145" y2="318"/>
+                    <rect class="node" x="145" y="304" width="140" height="28" rx="0"/>
+                    <text x="215" y="322" text-anchor="middle" class="diagram">views/</text>
+                    <text x="295" y="322" text-anchor="start" class="diagram text-muted" font-size="10">ChatView, AdminView, AgentsView...</text>
+                  </svg>
+                  <p class="diagram-caption">Source tree under <code>src/</code> - each folder owns one responsibility layer.</p>
+                </figure>
+
+                <h3>Bootstrap: <code>main.js</code> sequence</h3>
+
+                <p>The order of operations in <code>src/main.js</code> is load-bearing. Reversing any step breaks the app in production.</p>
+
+                <div class="card">
+                  <div class="block">
+                    <p class="block-title">1. Import styles in order</p>
+                    <p class="block-note"><code>tokens.css</code> THEN <code>base.css</code>. The order is required because <code>base.css</code> consumes the CSS variables defined by <code>tokens.css</code>. Reversing them yields unresolved values at first paint.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">2. Set theme on <code>&lt;body&gt;</code> BEFORE mount</p>
+                    <p class="block-note">Reads <code>localStorage.getItem('owismind.theme')</code>, validates to <code>'dark'</code> or <code>'light'</code>, falls back to <code>'light'</code>, and writes <code>document.body.dataset.theme</code>. Critical: the semantic tokens (<code>--bg</code>, <code>--surface</code>, <code>--text</code>...) only exist under <code>body[data-theme]</code>. Skipping this step produces a flash of unresolved tokens.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">3. Create and configure the app</p>
+                    <p class="block-note"><code>createApp(App).use(pinia).use(i18n).use(router)</code> with <code>pinia = createPinia()</code>.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">4. DEV-only window hook (tree-shaken in production)</p>
+                    <p class="block-note"><code>if (import.meta.env.DEV) window.__pinia = pinia</code>. Exposes the store for manual seeding outside DSS.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">5. Mount</p>
+                    <p class="block-note"><code>app.mount('#app')</code>. The <code>#app</code> target is declared in the source <code>index.html</code>.</p>
+                  </div>
+                </div>
+
+                <h3>HASH router</h3>
+
+                <p><code>router/index.js</code> uses <code>createWebHashHistory()</code>. This is an explicit, documented choice: DSS serves the webapp at a fixed URL with no server-side SPA rewriting. A path-based history (<code>createWebHistory</code>) would return a 404 on page reload or a deep link, because DSS cannot rewrite <code>/chat/&lt;id&gt;</code> to <code>index.html</code>. See <a href="../08-decisions/0001-vue-spa-servie-par-dss.md" class="source-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>ADR-0001</a>. All views are lazy-imported to keep the initial chat bundle small.</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Route name</th><th>Path</th><th>View</th><th>Note</th></tr></thead>
+                    <tbody>
+                      <tr><td>(redirect)</td><td><code>/</code></td><td>-</td><td>Redirects to <code>/chat</code></td></tr>
+                      <tr><td><code>chat</code></td><td><code>/chat/:sessionId?</code></td><td><code>ChatView</code></td><td>Main view; <code>sessionId</code> stamped on first exchange</td></tr>
+                      <tr><td><code>settings</code></td><td><code>/settings</code></td><td><code>SettingsView</code></td><td>Labeled "My account" in the UI</td></tr>
+                      <tr><td><code>agents</code></td><td><code>/agents/:agentId?</code></td><td><code>AgentsView</code></td><td>Profiles from backend, not from a static registry</td></tr>
+                      <tr><td><code>admin</code></td><td><code>/admin</code></td><td><code>AdminView</code></td><td><code>meta.requiresAdmin: true</code>; UX guard + server 403</td></tr>
+                      <tr><td><code>feedback</code></td><td><code>/feedback</code></td><td><code>FeedbackView</code></td><td>Lazy</td></tr>
+                      <tr><td><code>faq</code></td><td><code>/faq</code></td><td><code>FaqView</code></td><td>Lazy; client-side search</td></tr>
+                      <tr><td>(help targets)</td><td><code>/support</code> etc.</td><td><code>PagePlaceholder</code></td><td>Shared view driven by <code>meta</code> i18n keys</td></tr>
+                      <tr><td>(catch-all)</td><td><code>/:pathMatch(.*)*</code></td><td>-</td><td>Redirects to <code>/chat</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>The <code>beforeEach</code> admin guard runs <code>await session.ensureLoaded()</code> (memoized) then redirects to <code>chat</code> if <code>session.isAdmin</code> is false. This guard is a UX convenience only - the real authorization is always server-side (403 on admin routes).</p>
+
+                <h3>i18n: pristine <code>messages.json</code> + <code>extra.js</code></h3>
+
+                <p>The i18n instance: <code>createI18n({ legacy:false, globalInjection:true, locale:detectLocale(), fallbackLocale:'en', messages })</code>. English is the default locale and the fallback. <code>warnHtmlMessage:false</code> allows a few trusted canned-HTML keys (such as <code>default.answer_html</code>).</p>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Never edit <code>messages.json</code> by hand</p>
+                    <p><code>messages.json</code> is a 1:1 port of the original mockup's <code>window.OWI_I18N</code> and stays PRISTINE. Every new string or override goes into <code>i18n/extra.js</code> (flat key per locale: <code>export const extraMessages = { fr: {...}, en: {...} }</code>). The <code>extra.js</code> merge runs AFTER <code>messages.json</code>, so it can intentionally mask a key of <code>messages.json</code>.</p>
+                  </div>
+                </aside>
+
+                <p>Two domain catalogs are merged at setup via <code>i18n.global.mergeLocaleMessage</code>: <code>timelineMessages</code> from <code>registries/timelineSteps.js</code> (live timeline labels), and <code>extraMessages</code> from <code>i18n/extra.js</code>. Key families in <code>extra.js</code>: <code>x.*</code>, <code>set.*</code>, <code>chat.*</code>, <code>ag.*</code>, <code>admin.*</code> (including <code>admin.quotas.*</code>), <code>ev.*</code>, <code>art.*</code>, <code>mode.*</code>, <code>ev.exp.*</code> (trust layer steps). Positional placeholders use list interpolation: <code>t('key', [arg0, arg1])</code>.</p>
+
+                <h3>Theming: Orange charter + <code>body[data-theme]</code></h3>
+
+                <p><code>src/styles/tokens.css</code> is the single source of the theme layer. It provides two blocks: theme-independent tokens under <code>:root</code>, and semantic tokens under <code>body[data-theme="light"]</code> / <code>body[data-theme="dark"]</code> (the swap on <code>body[data-theme]</code> is the entire light/dark mechanism).</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Token category</th><th>Key tokens</th><th>Note</th></tr></thead>
+                    <tbody>
+                      <tr><td>Orange brand</td><td><code>--orange: #ff7900</code>, <code>--orange-deep</code>, <code>--orange-soft</code></td><td>Orange is a RARE accent - never a fill</td></tr>
+                      <tr><td>Spacing (8px grid)</td><td><code>--s-1</code> to <code>--s-12</code></td><td>All spacing uses these tokens</td></tr>
+                      <tr><td>Typography</td><td><code>--font-sans</code>, <code>--fs-xs</code> to <code>--fs-3xl</code></td><td>Helvetica Neue stack</td></tr>
+                      <tr><td>Weight scale</td><td><code>--fw-regular</code>, <code>--fw-medium</code>, <code>--fw-bold</code>, <code>--fw-heavy: 800</code></td><td><code>--fw-heavy</code> for H1 36px headings</td></tr>
+                      <tr><td>Chat layout</td><td><code>--chat-col: 90%</code>, <code>--chat-col-max: 1200px</code></td><td>Shared by thread, prompt and empty state</td></tr>
+                      <tr><td>z-index scale</td><td><code>--z-menu:60</code>, <code>--z-overlay:200</code>, <code>--z-modal:201</code>, <code>--z-toast:2100</code></td><td>Never hardcode z-index values</td></tr>
+                      <tr><td>Semantic (per theme)</td><td><code>--bg</code>, <code>--surface</code>, <code>--text</code>, <code>--border</code>, <code>--orange-text</code></td><td>Only exist under <code>body[data-theme]</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Orange charter bans (rule #10)</p>
+                    <p><code>color-mix()</code>, blur / <code>backdrop-filter</code>, gradients, glow / large soft shadows, emoji in UI, a global orange focus-ring, and any CSS-reconstructed brand mark. The brand logo is always the REAL image <code>src/assets/orange-logo.png</code>, imported as a module, never a colored CSS square.</p>
+                  </div>
+                </aside>
+
+                <p>The <code>--orange-text</code> token is a darkened orange (<code>#b85700</code> in light mode) to pass WCAG AA 4.5:1 contrast on white. In dark mode it shifts to <code>#ffb066</code>. The status tints (<code>--success-soft</code>, <code>--danger-soft</code>) are more saturated in dark mode to avoid washing out on dark surfaces.</p>
+
+                <p>Theming gotcha (F2): a <code>&lt;style scoped&gt;</code> theme override must place the ENTIRE selector inside <code>:global(body[data-theme="dark"] .x)</code> - otherwise the scoped descendant combinator is lost.</p>
+
+                <a href="../03-frontend/01-overview-and-structure.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 03-frontend/01-overview-and-structure.md
+                </a>
+
+                <!-- ============================================================
+                     SECTION 2: STATE AND STORES
+                     ============================================================ -->
+                <h2>State and stores</h2>
+
+                <p>The frontend state is organized as a strict two-layer architecture: four REACTIVE Pinia stores hold application state, and around them orbit PURE modules (zero Vue imports, fully testable with <code>node:test</code>) that contain all deterministic logic.</p>
+
+                <h3>Store and module map</h3>
+
+                <!-- STORE MAP DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Lane: Pinia stores -->
+                    <rect class="lane" x="10" y="10" width="300" height="200"/>
+                    <text x="160" y="28" text-anchor="middle" class="diagram text-muted" font-size="11" font-weight="600">PINIA STORES (reactive)</text>
+
+                    <rect class="node-accent" x="30" y="36" width="100" height="36"/>
+                    <text x="80" y="58" text-anchor="middle" fill="#fff" class="diagram" font-weight="600">chat</text>
+
+                    <rect class="node" x="180" y="36" width="100" height="36"/>
+                    <text x="230" y="58" text-anchor="middle" class="diagram">session</text>
+
+                    <rect class="node" x="30" y="106" width="100" height="36"/>
+                    <text x="80" y="128" text-anchor="middle" class="diagram">evidence</text>
+
+                    <rect class="node" x="180" y="106" width="100" height="36"/>
+                    <text x="230" y="128" text-anchor="middle" class="diagram">ui</text>
+
+                    <!-- Lane: Pure modules -->
+                    <rect class="lane" x="10" y="224" width="300" height="86"/>
+                    <text x="160" y="242" text-anchor="middle" class="diagram text-muted" font-size="11" font-weight="600">PURE MODULES (Vue-free, node:test)</text>
+
+                    <rect class="node" x="30" y="250" width="110" height="30"/>
+                    <text x="85" y="270" text-anchor="middle" class="diagram">conversationTree</text>
+
+                    <rect class="node" x="155" y="250" width="110" height="30"/>
+                    <text x="210" y="270" text-anchor="middle" class="diagram">conversationList</text>
+
+                    <rect class="node" x="30" y="290" width="100" height="14"/>
+                    <text x="80" y="301" text-anchor="middle" class="diagram" font-size="10">agentPick + prefs</text>
+
+                    <!-- Lane: Composables -->
+                    <rect class="lane" x="330" y="10" width="360" height="300"/>
+                    <text x="510" y="28" text-anchor="middle" class="diagram text-muted" font-size="11" font-weight="600">COMPOSABLES</text>
+
+                    <rect class="node-accent" x="350" y="36" width="130" height="32"/>
+                    <text x="415" y="57" text-anchor="middle" fill="#fff" class="diagram">timelineModel (PURE)</text>
+
+                    <rect class="node" x="350" y="82" width="130" height="32"/>
+                    <text x="415" y="103" text-anchor="middle" class="diagram">useChatStream</text>
+
+                    <rect class="node" x="350" y="130" width="130" height="32"/>
+                    <text x="415" y="151" text-anchor="middle" class="diagram">evidenceModel (PURE)</text>
+
+                    <rect class="node" x="350" y="176" width="130" height="32"/>
+                    <text x="415" y="197" text-anchor="middle" class="diagram">budgetModel (PURE)</text>
+
+                    <rect class="node" x="350" y="222" width="130" height="32"/>
+                    <text x="415" y="243" text-anchor="middle" class="diagram">evidenceProof (PURE)</text>
+
+                    <rect class="node" x="350" y="268" width="130" height="32"/>
+                    <text x="415" y="289" text-anchor="middle" class="diagram">useMarkdown</text>
+
+                    <!-- Arrows from chat to composables -->
+                    <line class="edge-accent" x1="310" y1="54" x2="348" y2="54"/>
+                    <polygon class="arrowhead-accent" points="348,50 356,54 348,58"/>
+
+                    <line class="edge" x1="310" y1="90" x2="348" y2="90"/>
+                    <polygon class="arrowhead" points="348,86 356,90 348,94"/>
+
+                    <!-- chat -> conversationTree arrow -->
+                    <line class="edge" x1="80" y1="172" x2="80" y2="222"/>
+                    <polygon class="arrowhead" points="76,222 80,230 84,222"/>
+
+                    <!-- session -> conversationList -->
+                    <line class="edge" x1="230" y1="172" x2="210" y2="222"/>
+                    <polygon class="arrowhead" points="206,222 210,230 214,222"/>
+
+                    <!-- ui -> prefs -->
+                    <line class="edge" x1="230" y1="172" x2="230" y2="288"/>
+                  </svg>
+                  <p class="diagram-caption">4 Pinia stores + pure modules + composables. The <code>chat</code> store drives <code>timelineModel</code> via <code>useChatStream</code>; pure modules are tested independently with <code>node:test</code>.</p>
+                </figure>
+
+                <h3>The central reactivity model</h3>
+
+                <p>This is the key mechanism behind all live streaming. Each chat exchange owns a "response version" object created as <code>reactive(createAnswerState())</code> in <code>chat.js</code>. The pure reducer <code>applyEvent</code> (in <code>composables/timelineModel.js</code>) receives the stream of backend events and MUTATES this object in place: <code>state.timeline.push(...)</code>, <code>last.text += delta</code>, <code>state.status = 'done'</code>.</p>
+
+                <p>The subtle point: <code>applyEvent</code> imports nothing from Vue (it is fully pure and testable outside the browser), but because the object it mutates is a <code>reactive()</code> proxy, each nested mutation triggers a fine-grained, live Vue re-render. The same pure function drives both the <code>node:test</code> tests and the real-time display.</p>
+
+                <!-- REACTIVITY SEQUENCE DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 600 160" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Participants -->
+                    <rect class="node" x="10" y="10" width="120" height="34"/>
+                    <text x="70" y="31" text-anchor="middle" class="diagram">useChatStream</text>
+                    <line class="edge" x1="70" y1="44" x2="70" y2="150"/>
+
+                    <rect class="node-accent" x="185" y="10" width="120" height="34"/>
+                    <text x="245" y="31" text-anchor="middle" fill="#fff" class="diagram">applyEvent (PURE)</text>
+                    <line class="edge-accent" x1="245" y1="44" x2="245" y2="150"/>
+
+                    <rect class="node" x="380" y="10" width="110" height="34"/>
+                    <text x="435" y="31" text-anchor="middle" class="diagram">reactive() version</text>
+                    <line class="edge" x1="435" y1="44" x2="435" y2="150"/>
+
+                    <rect class="node" x="520" y="10" width="70" height="34"/>
+                    <text x="555" y="31" text-anchor="middle" class="diagram">Vue render</text>
+                    <line class="edge" x1="555" y1="44" x2="555" y2="150"/>
+
+                    <!-- Sequence arrows -->
+                    <line class="edge-accent" x1="70" y1="74" x2="243" y2="74"/>
+                    <polygon class="arrowhead-accent" points="243,70 251,74 243,78"/>
+                    <text x="155" y="68" text-anchor="middle" class="diagram" font-size="10">applyEvent(target, evt)</text>
+
+                    <line class="edge" x1="245" y1="104" x2="433" y2="104"/>
+                    <polygon class="arrowhead" points="433,100 441,104 433,108"/>
+                    <text x="338" y="98" text-anchor="middle" class="diagram" font-size="10">timeline.push / text += / status =</text>
+
+                    <line class="edge" x1="435" y1="130" x2="553" y2="130"/>
+                    <polygon class="arrowhead" points="553,126 561,130 553,134"/>
+                    <text x="493" y="124" text-anchor="middle" class="diagram" font-size="10">fine-grained re-render</text>
+                  </svg>
+                  <p class="diagram-caption">The pure reducer mutates the reactive proxy; Vue's fine-grained reactivity propagates changes to the render tree without any Vue import in the reducer.</p>
+                </figure>
+
+                <h3>The <code>chat</code> store</h3>
+
+                <p><code>chat.js</code> models the active conversation as a TREE of exchanges (not a flat list). Its key responsibilities:</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Mechanism</th><th>Detail</th></tr></thead>
+                    <tbody>
+                      <tr><td>Exchange shape</td><td><code>reactive({ uid, id, parentId, userText, version, createdAt })</code>. <code>uid</code> is the stable render key (never changes); <code>id</code> is <code>null</code> during a live run then reconciled.</td></tr>
+                      <tr><td>Active path</td><td><code>turns = computed(() =&gt; buildActivePath(exchanges, overrides))</code>. Pure read of the tree, delegated to <code>conversationTree.js</code>.</td></tr>
+                      <tr><td><code>canSend</code></td><td>Requires <code>!sending &amp;&amp; !threadLoading &amp;&amp; !threadError &amp;&amp; !session.needsConfig &amp;&amp; !session.budgetBlocked &amp;&amp; session.hasAgents &amp;&amp; !!session.selectedAgentKey</code>.</td></tr>
+                      <tr><td>Cancellation token</td><td>A closure <code>{ cancelled }</code> checked before and after each <code>await</code> in the poll loop. Prevents stale events from corrupting a newer conversation.</td></tr>
+                      <tr><td>Stop race</td><td><code>stopPending</code> covers the case where the user clicks Stop BEFORE <code>/chat/start</code> returned the <code>run_id</code>.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>Three ways to create an exchange, illustrating the tree model:</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Action</th><th>Tree effect</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>send(text)</code></td><td>Child of the last turn (conversation continuation)</td></tr>
+                      <tr><td><code>editTurn(turn, newText)</code></td><td>New sibling, same parent - nothing is deleted</td></tr>
+                      <tr><td><code>regenerateTurn(turn)</code></td><td>New sibling, same prompt (a new response version)</td></tr>
+                      <tr><td><code>setTurnVersion(turn, idx)</code></td><td>Pins a sibling via <code>overrides</code>; ignores a still-live sibling (<code>id === null</code>)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>The <code>session</code> store</h3>
+
+                <p><code>session.js</code> carries four concerns: user identity, the list of activatable agents (feeding the picker and agents library), the paginated conversation list, and the monthly budget/usage status. The frontend never receives a raw <code>agent_id</code>: <code>agents</code> carries only an opaque logical key, a label, and admin-authored profile fields.</p>
+
+                <p>Key computed: <code>budgetBlocked</code> is <code>true</code> when <code>usage.enforced !== false &amp;&amp; usage.blocked</code>, which disables <code>canSend</code> proactively. The server gate in <code>/chat/start</code> (402) is the real authority; this is a UI convenience.</p>
+
+                <h3>The <code>evidence</code> store</h3>
+
+                <p><code>evidence.js</code> manages the Evidence Studio panel: the current exchange, the <code>/evidence/meta</code> response, editable chip state, and row pagination. Three sequence guards prevent stale responses from overwriting fresh state: <code>seq</code> for open/close, <code>rowsSeq</code> for out-of-order row responses, and <code>userChipSeq</code> for user-added chips.</p>
+
+                <p>Key invariant (rule F13): <code>setActiveTab(key)</code> NEVER touches <code>open</code>. The <code>ChatThread</code> auto-scroll gate observes <code>evidence.open</code>, not <code>activeTab</code>; changing the tab must never re-trigger the scroll.</p>
+
+                <h3>The <code>ui</code> store: preferences</h3>
+
+                <p><code>ui.js</code> is the single source of truth for all user preferences. It replaces the <code>window.STATE</code> of the original mockup. The header (<code>MainTop</code>) and Settings page (<code>SettingsView</code>) both read and write it, so a change in one is reflected immediately in the other.</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Preference</th><th>localStorage key</th><th>Default</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>theme</code></td><td><code>owismind.theme</code></td><td><code>'light'</code></td></tr>
+                      <tr><td><code>sidebarCollapsed</code></td><td><code>owismind.sidebarCollapsed</code></td><td>false</td></tr>
+                      <tr><td><code>sidebarW</code></td><td><code>owi.sidebarW</code></td><td>260 (clamp 200..420)</td></tr>
+                      <tr><td><code>evidenceW</code></td><td><code>owi.evidenceW</code></td><td>480 (clamp min 360)</td></tr>
+                      <tr><td><code>contextMessages</code></td><td><code>owismind.contextMessages</code></td><td>20 (clamp 10..50)</td></tr>
+                      <tr><td><code>modelMode</code></td><td><code>owismind.modelMode</code></td><td><code>'eco'</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>Model modes: <code>eco</code> = Gemini 3.1 Flash-Lite (fast, low-cost, default), <code>medium</code> = Gemini 3.5 Flash, <code>high</code> = Claude Sonnet. The frontend sends only the logical key <code>mode</code>; the real model id is resolved server-side.</p>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - mode/model mapping</p>
+                    <p>The mode-to-model mapping (<code>GEMINI_FLASH_LITE_ID</code>, <code>GEMINI_FLASH_ID</code>, <code>SONNET_ID</code>) is resolved on the agent layer and must match the DSS instance's LLM Mesh connections. Document the exact IDs on the Agents page, not here. The frontend is insensitive to Mesh id changes; it only carries the logical key.</p>
+                  </div>
+                </aside>
+
+                <p>Important: <code>setSidebarCollapsed(v, persistChoice = true)</code>. The second argument <code>false</code> means the collapse is AUTOMATIC (e.g. when Evidence opens) and NEVER overwrites the persisted user preference. Only an explicit toggle from the user updates what will be restored in the next session.</p>
+
+                <h3>Pure modules</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Module</th><th>Key exports</th><th>Role</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>conversationTree.js</code></td><td><code>childrenOf</code>, <code>activeChildOf</code>, <code>buildActivePath</code></td><td>Tree walks; active path follows the override child, or the last child by <code>createdAt</code></td></tr>
+                      <tr><td><code>conversationList.js</code></td><td><code>mergeConversations</code>, <code>upsertAndBump</code></td><td>Dedup by id; bump to top after a send</td></tr>
+                      <tr><td><code>agentPick.js</code></td><td><code>pickDefaultAgent(agents, lastKey)</code></td><td>Last used if still active, otherwise first in list</td></tr>
+                      <tr><td><code>prefs.js</code></td><td><code>clampContextMessages</code>, <code>CONTEXT_MESSAGES_MIN/MAX/DEFAULT</code></td><td>Mirrors <code>security/validation.py</code> on the server; bounds 10..50</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Key composables</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Composable</th><th>Family</th><th>Role</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>timelineModel.js</code></td><td>PURE</td><td>Reducer <code>applyEvent</code> + read-only selectors; the core of streaming</td></tr>
+                      <tr><td><code>useChatStream.js</code></td><td>Vue lifecycle</td><td><code>/chat/poll</code> polling loop, pushes events into <code>applyEvent</code></td></tr>
+                      <tr><td><code>evidenceModel.js</code></td><td>PURE</td><td>Chip shape, <code>buildRowsPayload</code>, <code>buildDrillLabels</code>, <code>lastEvidenceExchangeId</code></td></tr>
+                      <tr><td><code>budgetModel.js</code></td><td>PURE</td><td><code>formatMoney</code>, <code>formatTokens</code>, <code>usagePct</code>, <code>gaugePct</code>, <code>usageLevel</code></td></tr>
+                      <tr><td><code>evidenceProof.js</code></td><td>PURE</td><td>Trust layer: <code>trustLevel</code>, <code>calcStepArgs</code>, <code>resultPreview</code> - badge NEVER green</td></tr>
+                      <tr><td><code>sqlPretty.js</code></td><td>PURE</td><td><code>formatSql</code>, <code>tokenizeSql</code> - SAFE coloring (never via <code>v-html</code>)</td></tr>
+                      <tr><td><code>useMarkdown.js</code></td><td>Vue lifecycle</td><td><code>renderMarkdown</code>: the ONLY <code>v-html</code> path, DOMPurify-sanitized</td></tr>
+                      <tr><td><code>useTr.js</code></td><td>Vue lifecycle</td><td>Resolves <code>{ fr, en }</code> data objects to the current locale (not for UI strings)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Security: the only <code>v-html</code> path</p>
+                    <p><code>useMarkdown.js renderMarkdown(text)</code> is the ONLY place where LLM (untrusted) text becomes HTML. It uses markdown-it with <code>html: false</code> then a DOMPurify pass. No other component may inject HTML that comes from the model.</p>
+                  </div>
+                </aside>
+
+                <h3>Frontend/backend shared contracts</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Frontend constant</th><th>File</th><th>Backend mirror</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>clampContextMessages</code> bounds 10..50</td><td><code>stores/prefs.js</code></td><td><code>security/validation.py</code> (SQL LIMIT)</td></tr>
+                      <tr><td><code>evidence.MAX_PAGE = 20</code></td><td><code>stores/evidence.js</code></td><td><code>MAX_EVIDENCE_PAGE</code></td></tr>
+                      <tr><td><code>buildDrillLabels</code> cap 8</td><td><code>composables/evidenceModel.js</code></td><td>Server refusal beyond 8 keys</td></tr>
+                      <tr><td><code>TAGLINE_MAX = 120</code>, <code>DESC_MAX = 700</code></td><td><code>views/AdminView.vue</code></td><td><code>validate_agent_meta</code> (tagline 120, desc 700, caps 8x120, tools 16x48)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <a href="../03-frontend/02-state-and-stores.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 03-frontend/02-state-and-stores.md
+                </a>
+
+                <!-- ============================================================
+                     SECTION 3: COMPONENTS AND VIEWS
+                     ============================================================ -->
+                <h2>Components and views</h2>
+
+                <p>All components are Vue 3 Composition API (<code>&lt;script setup&gt;</code>), single-file <code>.vue</code> components under <code>src/components/</code> and <code>src/views/</code>. They follow the Orange charter: flat/square styling, <code>border-radius: 0</code> on <code>Button</code> and <code>Modal</code>, 1px rules, orange as a rare accent only.</p>
+
+                <h3>Component tree</h3>
+
+                <!-- COMPONENT TREE DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 720 480" xmlns="http://www.w3.org/2000/svg">
+                    <!-- App.vue -->
+                    <rect class="node-accent" x="300" y="10" width="120" height="34"/>
+                    <text x="360" y="32" text-anchor="middle" fill="#fff" class="diagram" font-weight="600">App.vue</text>
+
+                    <!-- Lines from App -->
+                    <line class="edge-accent" x1="360" y1="44" x2="360" y2="62"/>
+                    <polygon class="arrowhead-accent" points="356,62 360,70 364,62"/>
+
+                    <!-- AppLayout -->
+                    <rect class="node" x="270" y="70" width="180" height="34"/>
+                    <text x="360" y="92" text-anchor="middle" class="diagram">AppLayout.vue</text>
+
+                    <!-- ToastHost (sibling) -->
+                    <line class="edge" x1="420" y1="27" x2="480" y2="27"/>
+                    <polygon class="arrowhead" points="480,23 488,27 480,31"/>
+                    <rect class="node" x="488" y="10" width="120" height="34"/>
+                    <text x="548" y="32" text-anchor="middle" class="diagram">ToastHost.vue</text>
+
+                    <!-- From AppLayout: 4 branches -->
+                    <!-- Sidebar -->
+                    <line class="edge" x1="270" y1="87" x2="160" y2="87"/>
+                    <line class="edge" x1="160" y1="87" x2="160" y2="152"/>
+                    <polygon class="arrowhead" points="156,152 160,160 164,152"/>
+                    <rect class="node" x="80" y="160" width="160" height="34"/>
+                    <text x="160" y="182" text-anchor="middle" class="diagram">Sidebar.vue (rail)</text>
+
+                    <!-- MainTop -->
+                    <line class="edge" x1="360" y1="104" x2="360" y2="152"/>
+                    <polygon class="arrowhead" points="356,152 360,160 364,152"/>
+                    <rect class="node" x="280" y="160" width="160" height="34"/>
+                    <text x="360" y="182" text-anchor="middle" class="diagram">MainTop.vue</text>
+
+                    <!-- RouterView -->
+                    <line class="edge" x1="450" y1="87" x2="540" y2="87"/>
+                    <line class="edge" x1="540" y1="87" x2="540" y2="152"/>
+                    <polygon class="arrowhead" points="536,152 540,160 544,152"/>
+                    <rect class="node" x="460" y="160" width="160" height="34"/>
+                    <text x="540" y="182" text-anchor="middle" class="diagram">RouterView</text>
+
+                    <!-- EvidencePanel (conditional) -->
+                    <line class="edge" x1="450" y1="104" x2="670" y2="104"/>
+                    <line class="edge" x1="670" y1="104" x2="670" y2="152"/>
+                    <polygon class="arrowhead" points="666,152 670,160 674,152"/>
+                    <rect class="node" x="610" y="160" width="100" height="34"/>
+                    <text x="660" y="178" text-anchor="middle" class="diagram" font-size="10">EvidencePanel</text>
+                    <text x="660" y="190" text-anchor="middle" class="diagram text-muted" font-size="9">(v-if open)</text>
+
+                    <!-- ChatView from RouterView -->
+                    <line class="edge" x1="540" y1="194" x2="540" y2="240"/>
+                    <polygon class="arrowhead" points="536,240 540,248 544,240"/>
+                    <rect class="node-accent" x="460" y="248" width="160" height="34"/>
+                    <text x="540" y="270" text-anchor="middle" fill="#fff" class="diagram">ChatView.vue</text>
+
+                    <!-- ChatThread -->
+                    <line class="edge" x1="460" y1="265" x2="360" y2="265"/>
+                    <line class="edge" x1="360" y1="265" x2="360" y2="310"/>
+                    <polygon class="arrowhead" points="356,310 360,318 364,310"/>
+                    <rect class="node" x="270" y="318" width="180" height="34"/>
+                    <text x="360" y="340" text-anchor="middle" class="diagram">ChatThread.vue</text>
+
+                    <!-- MessageAgent + MessageUser from ChatThread -->
+                    <line class="edge" x1="270" y1="335" x2="160" y2="335"/>
+                    <line class="edge" x1="160" y1="335" x2="160" y2="378"/>
+                    <polygon class="arrowhead" points="156,378 160,386 164,378"/>
+                    <rect class="node" x="70" y="386" width="140" height="34"/>
+                    <text x="140" y="408" text-anchor="middle" class="diagram">MessageAgent.vue</text>
+
+                    <line class="edge" x1="270" y1="348" x2="230" y2="348"/>
+                    <line class="edge" x1="230" y1="348" x2="230" y2="430"/>
+                    <polygon class="arrowhead" points="226,430 230,438 234,430"/>
+                    <rect class="node" x="150" y="438" width="140" height="34"/>
+                    <text x="220" y="460" text-anchor="middle" class="diagram">MessageUser.vue</text>
+
+                    <!-- PromptBar -->
+                    <line class="edge" x1="620" y1="265" x2="690" y2="265"/>
+                    <line class="edge" x1="690" y1="265" x2="690" y2="318"/>
+                    <polygon class="arrowhead" points="686,318 690,326 694,318"/>
+                    <rect class="node" x="610" y="326" width="130" height="34"/>
+                    <text x="675" y="348" text-anchor="middle" class="diagram">PromptBar.vue</text>
+
+                    <!-- AgentPicker + ModelModePicker from PromptBar -->
+                    <line class="edge" x1="675" y1="360" x2="675" y2="402"/>
+                    <rect class="node-soft" x="615" y="402" width="120" height="28"/>
+                    <text x="675" y="420" text-anchor="middle" class="diagram" font-size="10">AgentPicker</text>
+                    <rect class="node-soft" x="615" y="440" width="120" height="28"/>
+                    <text x="675" y="458" text-anchor="middle" class="diagram" font-size="10">ModelModePicker</text>
+                  </svg>
+                  <p class="diagram-caption">Full component tree. <code>EvidencePanel</code> is mounted at the layout level (not inside <code>ChatView</code>) so the polling loop survives navigation between chat and non-chat routes. The <code>RouterView</code> renders any routed view; <code>ChatView</code> is shown here as the primary one.</p>
+                </figure>
+
+                <h3>Shell family</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Component</th><th>Role</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>App.vue</code></td><td>Root shell: mounts <code>AppLayout</code> + <code>ToastHost</code>, calls <code>session.ensureLoaded()</code> once at mount.</td></tr>
+                      <tr><td><code>AppLayout.vue</code></td><td>CSS grid <code>sidebar | main | evidence</code>; resize handles with pointer capture; opens/closes the Evidence panel; collapses sidebar automatically when Evidence opens (without overwriting the persisted preference).</td></tr>
+                      <tr><td><code>Sidebar.vue</code></td><td>ONE mounted component with two visual layouts driven by <code>ui.sidebarCollapsed</code>. Full panel: logo, navigation, conversation list, footer menus. Icon RAIL (60px): real <code>orange-logo.png</code>, "+", Agents, help "?", avatar. Conversation list is <code>v-show</code> (never re-fetched on collapse).</td></tr>
+                      <tr><td><code>MainTop.vue</code></td><td>Contextual top bar: page title, theme/language toggles, sidebar expand button (shown only when collapsed).</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p><code>AppLayout</code> has two non-trivial behaviors: leaving the chat route (Settings, FAQ, Agents) closes Evidence (plugs async leaks from auto-opens that arrive after navigation); and opening Evidence automatically collapses the sidebar (<code>setSidebarCollapsed(true, false)</code>, the <code>false</code> preserving the persisted preference).</p>
+
+                <h3>Chat family</h3>
+
+                <p><code>ChatView.vue</code> has three mutually exclusive branches:</p>
+
+                <div class="card">
+                  <div class="block">
+                    <p class="block-title">1. <code>session.needsConfig</code></p>
+                    <p class="block-note">Renders an administration card. The SQL connection is not yet configured by an admin.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">2. <code>chat.hasMessages</code></p>
+                    <p class="block-note"><code>ChatThread</code> + prompt area (<code>prompt-wrap</code> + <code>PromptBar</code>). Also renders the budget banner when <code>session.budgetBlocked</code> is true.</p>
+                  </div>
+                  <div class="block">
+                    <p class="block-title">3. Otherwise (empty stage)</p>
+                    <p class="block-note"><code>ChatEmpty</code> + <code>PromptBar</code> inside <code>prompt-wrap in-empty</code>.</p>
+                  </div>
+                </div>
+
+                <p><code>ChatThread.vue</code> has critical rendering rules:</p>
+                <ul>
+                  <li>The <code>v-for</code> key is <code>turn.exchange.uid</code> (stable from creation), NEVER <code>id</code> (which is <code>null</code> during a live run and changes to the backend id when reconciled). Using <code>id</code> as key would cause a remount mid-stream.</li>
+                  <li>Auto-scroll is gated on <code>chat.sending</code>: otherwise version navigation would recompute the signature and pull the view to the bottom. It NEVER watches <code>chat.turns</code> directly (every stream tick would re-trigger the scroll).</li>
+                  <li>A user who has already scrolled up is never forcibly pulled down (<code>NEAR_BOTTOM_PX = 120</code> threshold).</li>
+                </ul>
+
+                <p><code>MessageAgent.vue</code> renders an agent message in four zones: header, grouped activity block (steps/tool calls), response body (text/error blocks in arrival order), and the collapsible SQL panel + action footer. Its entire display model derives from pure selectors imported from <code>timelineModel.js</code> - it never mutates the state. While live, it renders in chronological segments with a ticker bounded to the last 5 lines (<code>LIVE_WINDOW = 5</code>). When terminal, all activity collapses to a single header line.</p>
+
+                <h3>Evidence family</h3>
+
+                <p><code>EvidencePanel.vue</code> is mounted at the layout level (not inside <code>ChatView</code>). It has four states: skeleton, error, degraded (badge "declared" + reason), and interactive. Tabs are derived from <code>meta.artifacts</code>: the <code>evidence</code> tab is always present; <code>chart</code>, <code>table</code>, or <code>kpi</code> tabs appear only when an artifact of that kind exists.</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Sub-component</th><th>Role</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>EvidenceTrust.vue</code></td><td>Verification-level badge. Never green; tone is <code>solid</code>, <code>dashed</code>, or <code>muted</code>. Only shown when <code>meta.verification</code> is present (enriched meta).</td></tr>
+                      <tr><td><code>EvidenceSources.vue</code></td><td>Source dataset name; becomes a clickable <code>&lt;a target="_blank"&gt;</code> when <code>meta.source.url</code> is filled in, styled with <code>--orange-text</code> for AA contrast.</td></tr>
+                      <tr><td><code>EvidenceChips.vue</code></td><td>Editable filters (<code>=</code> / <code>IN</code> picker, add, reset). All chips are editable.</td></tr>
+                      <tr><td><code>EvidenceCalc.vue</code></td><td>i18n calculation steps (trust layer).</td></tr>
+                      <tr><td><code>EvidenceResult.vue</code></td><td>Exact captured result + per-row drill-down.</td></tr>
+                      <tr><td><code>EvidenceTable.vue</code></td><td>Lazy source rows (infinite scroll, capped at 500).</td></tr>
+                      <tr><td><code>EvidenceSql.vue</code></td><td>Agent SQL, collapsed by default, syntax-highlighted via <code>sqlPretty</code>.</td></tr>
+                      <tr><td><code>ArtifactChart.vue</code></td><td>Chart.js chart; payload built server-side in <code>chart_payload.py</code>. Re-renders on theme change.</td></tr>
+                      <tr><td><code>ArtifactTable.vue</code></td><td>Artifact table (captured result rows).</td></tr>
+                      <tr><td><code>ArtifactKpi.vue</code></td><td>KPI tile.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>UI primitives</h3>
+
+                <p>Exported from a barrel <code>components/ui/index.js</code> (<code>import { Button, Icon, Tabs, Menu, Modal, ToastHost } from '@/components/ui'</code>). All follow the Orange charter: flat/square, <code>border-radius: 0</code> on <code>Button</code> and <code>Modal</code>, 1px rules, no gradients or blur.</p>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Primitive</th><th>Variants / note</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>Button.vue</code></td><td>Variants: <code>primary</code>, <code>ghost</code>, <code>danger</code>, <code>link</code>, <code>icon</code>. Square/flat (Orange charter).</td></tr>
+                      <tr><td><code>Modal.vue</code></td><td>Square/flat overlay; Escape closes; <code>aria-label</code> on close button via <code>t('x.close')</code>.</td></tr>
+                      <tr><td><code>Tabs.vue</code></td><td>Used by <code>EvidencePanel</code> and <code>AdminView</code>. This component is PRISTINE - do not modify it.</td></tr>
+                      <tr><td><code>Menu.vue</code></td><td>Used by <code>AgentPicker</code>, <code>Sidebar</code> (help/user menus), <code>MessageAgent</code> (<code>...</code>).</td></tr>
+                      <tr><td><code>Icon.vue</code></td><td>Icon registry <code>icons.js</code>. Used everywhere.</td></tr>
+                      <tr><td><code>ToastHost.vue</code></td><td>Mounted once in <code>App.vue</code>, fed by <code>useToasts</code>.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <p>A second barrel <code>components/pages/index.js</code> exposes: <code>PageShell.vue</code> (secondary views shell, renders Orange H1 + title-bar), <code>SettingCard.vue</code> (labeled settings section card), <code>EmptyState.vue</code> (honest empty state).</p>
+
+                <h3>Views</h3>
+
+                <p><strong>SettingsView ("My account")</strong>: profile card (name, user id, groups), theme and language controls, context window slider, REAL budget gauge card (monthly spend/limit/remaining, reset date, limit source), and REAL usage card (this-month and lifetime tokens). No mock figures.</p>
+
+                <p><strong>AgentsView</strong>: public agents library driven by <code>session.agents</code> from <code>/agents</code>. No static registry. In LIST mode: search bar + square cards. In DETAIL mode (<code>:agentId</code> param): full editorial profile (tagline, description, capabilities, tools, badge), with a CTA to start a chat. An agent whose admin has not yet filled in a profile renders an honest "profile to complete" card - never an invented description.</p>
+
+                <p><strong>AdminView</strong>: admin console with five tabs (<code>Tabs.vue</code>): Overview, Agents (whitelist + profile editor modal), Users (admin flag toggle), Quotas (global config + per-user override table), and Activity (honest empty state - no backend yet). The Agents tab profile editor fields are bounded server-side by <code>validate_agent_meta</code>. Note: admins ARE subject to the monthly budget; there is no admin exemption.</p>
+
+                <aside class="callout callout-warning" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title"><code>agentMeta.js</code> has been DELETED</p>
+                    <p>The file that previously carried hardcoded agent descriptions (<code>owismind</code>, <code>cooper</code>, <code>revenues</code>, etc.) and the <code>resolveAgentMeta(label)</code> function (including its substring fallback) no longer exists. Any reference to it in code or documentation is stale. Agent profiles are now admin-authored via the profile editor in <code>AdminView</code> and stored server-side.</p>
+                  </div>
+                </aside>
+
+                <h3>Registries</h3>
+
+                <p>Two static registries remain under <code>registries/</code>:</p>
+                <ul>
+                  <li><code>timelineSteps.js</code>: maps an <code>agent_event.eventKind</code> to <code>{ i18n key, icon }</code>. Resolution rule: when the backend provides a non-empty <code>label</code>, that label WINS over the registry (the orchestrator knows the business phrasing better). An unknown <code>eventKind</code> is humanized (strips <code>SUB_AGENT_AGENT_</code>, <code>SUB_AGENT_</code>, <code>AGENT_</code> prefixes); a kind never emitted simply stays unused and never breaks the display.</li>
+                  <li><code>faqContent.js</code>: static bilingual Q/A structure <code>[{ title: {fr,en}, qs: [...] }]</code>; no FAQ backend. Rendered by <code>FaqView.vue</code> with client-side search.</li>
+                </ul>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - agent layer and timeline kinds</p>
+                    <p>The agent layer (<code>dataiku-agents/</code>) is being edited live. The <code>eventKind</code> values actually emitted may diverge from the <code>KNOWN</code> table in <code>timelineSteps.js</code>. The <code>ESCALATING</code> entry remains in the registry as a harmless leftover; escalation has been removed on the agent side. The display handles unknown kinds via the <code>humanize</code> fallback or the backend label.</p>
+                  </div>
+                </aside>
+
+                <a href="../03-frontend/03-components-and-views.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 03-frontend/03-components-and-views.md
+                </a>
+
+                <!-- ============================================================
+                     SECTION 4: BACKEND COMMUNICATION
+                     ============================================================ -->
+                <h2>Backend communication</h2>
+
+                <p>All backend traffic goes through <code>services/backend.js</code>. The frontend never hardcodes a URL: DSS injects <code>window.getWebAppBackendUrl</code> globally, and the helper <code>backendUrl(path)</code> resolves it lazily. If the resolver is absent (app launched outside the DSS webapp context), it throws immediately with a clear message.</p>
+
+                <h3>The HTTP client</h3>
+
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-filename">src/services/backend.js - request()</span>
+                    <span class="code-lang">JavaScript</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>const res = await fetch(backendUrl(path), {
+  credentials: 'same-origin',     // DSS auth cookies travel with every request
+  ...opts,
+  headers: { Accept: 'application/json', ...(opts.headers || {}) },
+});
+if (!res.ok) {
+  let code = 'http_' + res.status;
+  try { const data = await res.json(); if (data && data.error) code = data.error; } catch (e) {}
+  throw new Error(code);          // e.message IS the stable error code
+}
+return res.json();</code></pre>
+                </div>
+
+                <p>Three key design decisions: <code>credentials: 'same-origin'</code> (the DSS auth cookies identify the caller - no separate app token); stable error codes (on non-2xx, <code>request()</code> reads <code>{ error: "code" }</code> from the JSON body and throws it; callers compare <code>e.message</code>); and <code>Content-Type: application/json</code> added only on POSTs (never on GETs).</p>
+
+                <h3>Call catalogue</h3>
+
+                <h4>Core chat and identity</h4>
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Function</th><th>Method + route</th><th>Key notes</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>fetchMe()</code></td><td>POST <code>/me</code></td><td>POST (not GET): side effect is creating the user row + first-admin election. Called once.</td></tr>
+                      <tr><td><code>startChat(...)</code></td><td>POST <code>/chat/start</code></td><td>Returns <code>{ run_id, exchange_id }</code>. See payload detail below.</td></tr>
+                      <tr><td><code>pollChat(runId, cursor)</code></td><td>GET <code>/chat/poll?run_id=&amp;cursor=</code></td><td>Returns <code>{ events, cursor, done }</code>. Cursor is a server counter.</td></tr>
+                      <tr><td><code>stopChat(runId)</code></td><td>POST <code>/chat/stop</code></td><td>404 <code>run_not_found</code> is benign (run already done).</td></tr>
+                      <tr><td><code>fetchConversations(cursor, limit)</code></td><td>GET <code>/conversations</code></td><td>Paginated list of conversations.</td></tr>
+                      <tr><td><code>fetchConversation(sessionId)</code></td><td>GET <code>/conversation?session_id=</code></td><td>Full line rows for history rebuild.</td></tr>
+                      <tr><td><code>submitFeedback(...)</code></td><td>POST <code>/chat/feedback</code></td><td>Rating 0/1, reasons array, comment string.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h4>Agents and profile</h4>
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Function</th><th>Route</th><th>Response</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>fetchAgents()</code></td><td>GET <code>/agents</code></td><td><code>{ count, agents: [{ key, label, tagline, description, capabilities, tools, icon, badge }] }</code>. NO <code>agent_id</code> or <code>project_key</code> in this response.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h4>Budget and usage</h4>
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Function</th><th>Route</th><th>Response</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>fetchUsage()</code></td><td>GET <code>/usage</code></td><td><code>{ usage: { spent_usd, limit_usd, limit_source, enforced, blocked, remaining_usd, next_reset, period_start, lifetime_tokens, lifetime_cost } }</code>. Owner-scoped.</td></tr>
+                      <tr><td><code>fetchAdminBudget()</code></td><td>GET <code>/admin/budget</code></td><td>Global config + period summary + per-user overview.</td></tr>
+                      <tr><td><code>saveAdminBudget(config)</code></td><td>POST <code>/admin/budget</code></td><td>Global limit: <code>{ limit_usd, enabled, temp_limit_usd?, temp_days? }</code>.</td></tr>
+                      <tr><td><code>saveAdminUserQuota(payload)</code></td><td>POST <code>/admin/budget/users</code></td><td>Per-user override: <code>{ user_ids, clear, limit_usd?, expires_days?, note? }</code>. Supports one, several, or all users.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h4>Admin endpoints (403 if not admin)</h4>
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Function</th><th>Route</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>fetchAdminStorage()</code></td><td>GET <code>/admin/storage</code></td></tr>
+                      <tr><td><code>fetchAdminUsers()</code></td><td>GET <code>/admin/users</code></td></tr>
+                      <tr><td><code>setUserAdmin(userId, isAdmin)</code></td><td>POST <code>/admin/users/set-admin</code></td></tr>
+                      <tr><td><code>fetchAdminProjects()</code></td><td>GET <code>/admin/projects</code></td></tr>
+                      <tr><td><code>fetchAdminProjectAgents(key)</code></td><td>GET <code>/admin/projects/&lt;key&gt;/agents</code></td></tr>
+                      <tr><td><code>fetchAdminAgents()</code></td><td>GET <code>/admin/agents</code></td></tr>
+                      <tr><td><code>saveAdminAgents(agents)</code></td><td>POST <code>/admin/agents</code></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>The <code>startChat</code> payload</h3>
+
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-filename">startChat payload (logical data only)</span>
+                    <span class="code-lang">JavaScript</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>body: JSON.stringify({
+  session_id: sessionId,
+  message,
+  agent_key: agentKey,                // opaque logical key, resolved server-side
+  history_limit: historyLimit,        // re-clamped [10,50] server-side
+  parent_exchange_id: parentId|null,  // tree edge; null = new root branch
+  mode: mode || undefined,            // 'eco'|'medium'|'high'; server default = eco
+  webapp_lang: webappLang || undefined,  // 'fr'|'en' (tie-break; message language wins)
+  screen_context: screenContext || undefined,  // built only when Evidence panel is open
+})</code></pre>
+                </div>
+
+                <h3>The polling loop</h3>
+
+                <!-- POLLING LOOP DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 380" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Participants -->
+                    <rect class="node" x="20" y="10" width="110" height="32"/>
+                    <text x="75" y="30" text-anchor="middle" class="diagram">chat store</text>
+                    <line class="edge" x1="75" y1="42" x2="75" y2="370"/>
+
+                    <rect class="node-accent" x="175" y="10" width="130" height="32"/>
+                    <text x="240" y="30" text-anchor="middle" fill="#fff" class="diagram">useChatStream</text>
+                    <line class="edge-accent" x1="240" y1="42" x2="240" y2="370"/>
+
+                    <rect class="node" x="365" y="10" width="130" height="32"/>
+                    <text x="430" y="30" text-anchor="middle" class="diagram">Backend (Flask)</text>
+                    <line class="edge" x1="430" y1="42" x2="430" y2="370"/>
+
+                    <rect class="node" x="540" y="10" width="120" height="32"/>
+                    <text x="600" y="30" text-anchor="middle" class="diagram">applyEvent (PURE)</text>
+                    <line class="edge" x1="600" y1="42" x2="600" y2="370"/>
+
+                    <!-- send() -->
+                    <line class="edge" x1="75" y1="72" x2="238" y2="72"/>
+                    <polygon class="arrowhead" points="238,68 246,72 238,76"/>
+                    <text x="155" y="66" text-anchor="middle" class="diagram" font-size="10">chat.send(text)</text>
+
+                    <!-- POST /chat/start -->
+                    <line class="edge-accent" x1="240" y1="100" x2="428" y2="100"/>
+                    <polygon class="arrowhead-accent" points="428,96 436,100 428,104"/>
+                    <text x="334" y="94" text-anchor="middle" class="diagram" font-size="10">POST /chat/start</text>
+
+                    <!-- run_id, exchange_id -->
+                    <line class="edge" x1="430" y1="124" x2="242" y2="124" stroke-dasharray="4,3"/>
+                    <polygon class="arrowhead" points="242,120 234,124 242,128"/>
+                    <text x="334" y="118" text-anchor="middle" class="diagram text-muted" font-size="10">{ run_id, exchange_id }</text>
+
+                    <!-- loop label -->
+                    <rect class="lane" x="185" y="140" width="310" height="30"/>
+                    <text x="340" y="160" text-anchor="middle" class="diagram" font-size="10" font-style="italic">loop every 500ms (POLL_INTERVAL_MS)</text>
+
+                    <!-- GET /chat/poll -->
+                    <line class="edge-accent" x1="240" y1="184" x2="428" y2="184"/>
+                    <polygon class="arrowhead-accent" points="428,180 436,184 428,188"/>
+                    <text x="334" y="178" text-anchor="middle" class="diagram" font-size="10">GET /chat/poll?run_id=&amp;cursor=</text>
+
+                    <!-- events response -->
+                    <line class="edge" x1="430" y1="208" x2="242" y2="208" stroke-dasharray="4,3"/>
+                    <polygon class="arrowhead" points="242,204 234,208 242,212"/>
+                    <text x="334" y="202" text-anchor="middle" class="diagram text-muted" font-size="10">{ events, cursor, done }</text>
+
+                    <!-- apply events -->
+                    <line class="edge" x1="240" y1="234" x2="598" y2="234"/>
+                    <polygon class="arrowhead" points="598,230 606,234 598,238"/>
+                    <text x="418" y="228" text-anchor="middle" class="diagram" font-size="10">applyEvent(target, evt) per event</text>
+
+                    <!-- reactive re-render -->
+                    <line class="edge" x1="600" y1="258" x2="242" y2="258" stroke-dasharray="4,3"/>
+                    <polygon class="arrowhead" points="242,254 234,258 242,262"/>
+                    <text x="418" y="252" text-anchor="middle" class="diagram text-muted" font-size="10">reactive() mutations trigger Vue re-render</text>
+
+                    <!-- done / break -->
+                    <line class="edge" x1="240" y1="290" x2="428" y2="290"/>
+                    <text x="334" y="284" text-anchor="middle" class="diagram" font-size="10">if done: break</text>
+
+                    <!-- sleep -->
+                    <text x="240" y="314" text-anchor="middle" class="diagram text-muted" font-size="10">else sleep 500ms</text>
+
+                    <!-- terminal event -->
+                    <line class="edge" x1="430" y1="340" x2="242" y2="340" stroke-dasharray="4,3"/>
+                    <polygon class="arrowhead" points="242,336 234,340 242,344"/>
+                    <text x="334" y="334" text-anchor="middle" class="diagram text-muted" font-size="10">run_done / stopped / error</text>
+                  </svg>
+                  <p class="diagram-caption">Frontend polling loop. The cursor is a server counter re-posted verbatim. The token cancellation check (for conversation switch) runs before and after each <code>await</code>. Up to 5 transient failures are retried with exponential backoff before a hard failure.</p>
+                </figure>
+
+                <h4>Loop constants and behavior</h4>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Constant</th><th>Value</th><th>Meaning</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>POLL_INTERVAL_MS</code></td><td>500 ms</td><td>Nominal cadence between polls</td></tr>
+                      <tr><td><code>MAX_POLL_FAILURES</code></td><td>5</td><td>Tolerance for transient proxy blips before hard failure</td></tr>
+                      <tr><td><code>MAX_BACKOFF_MS</code></td><td>5000 ms</td><td>Exponential backoff ceiling: <code>min(500 * 2^failures, 5000)</code></td></tr>
+                      <tr><td><code>TERMINAL_CODES</code></td><td><code>run_not_found</code>, <code>invalid_run_id</code>, <code>unauthenticated</code></td><td>Unrecoverable codes: exit cleanly (apply <code>run_lost</code> error event if <code>status === 'running'</code>)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>Event types consumed by <code>applyEvent</code></h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th><code>evt.type</code></th><th>Effect on the reactive version</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>run_started</code></td><td><code>status = 'running'</code>; reconciles <code>exchangeId</code></td></tr>
+                      <tr><td><code>agent_event</code></td><td>Pushes an <code>event</code> timeline item; seals the preceding event</td></tr>
+                      <tr><td><code>answer_delta</code></td><td>Merges into the open text block (<code>last.text += delta</code>), or creates a new block</td></tr>
+                      <tr><td><code>narration</code></td><td>Pushes a TRANSIENT item (live only, never persisted, excluded from <code>answerText</code>)</td></tr>
+                      <tr><td><code>generated_sql</code></td><td>Pushes into <code>state.sql</code> (outside the timeline; dedicated SQL panel)</td></tr>
+                      <tr><td><code>usage_summary</code></td><td>Sets <code>state.usage</code> (tokens + estimated cost)</td></tr>
+                      <tr><td><code>final_answer</code></td><td>Materializes text ONLY if nothing has already streamed (never duplicates)</td></tr>
+                      <tr><td><code>run_done</code></td><td>Seals; <code>running -&gt; done</code></td></tr>
+                      <tr><td><code>stopped</code></td><td>Seals; <code>running -&gt; stopped</code> (user stop, not an error; no red toast)</td></tr>
+                      <tr><td><code>error</code></td><td><code>status = 'error'</code>, pushes an error timeline item</td></tr>
+                      <tr><td>(unknown)</td><td>Silently ignored - adding a new event type is backward-compatible</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>The Stop flow</h3>
+
+                <p><code>stopGeneration()</code> posts <code>/chat/stop</code>, KEEPS polling (cooperative stop), and sets <code>activeVersion.stopping = true</code> (shows the "Stopping..." banner). The backend stop is cooperative: the LLM Mesh stream has no cancel API; the worker can only break between two chunks. The frontend waits for the terminal <code>stopped</code> event, which arrives after the backend emits <code>final_answer</code> then <code>stopped</code>. Every terminal event (including <code>run_done</code> and <code>error</code>) resets <code>stopping = false</code>.</p>
+
+                <h3>Error codes surface</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Endpoint</th><th>Error codes</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>/chat/start</code></td><td><code>unauthenticated</code> (401), <code>storage_not_configured</code> (409), <code>agent_not_enabled</code> (404), <code>rate_limited</code> (429), <code>busy</code> (503), <code>storage_unavailable</code> (500), <code>agent_unavailable</code> (500), <code>monthly_quota_exceeded</code> (402)</td></tr>
+                      <tr><td><code>/chat/poll</code></td><td><code>unauthenticated</code> (401), <code>invalid_run_id</code> (400), <code>run_not_found</code> (404, mapped to <code>run_lost</code>)</td></tr>
+                      <tr><td><code>/chat/stop</code></td><td><code>run_not_found</code> (404) = benign no-op</td></tr>
+                      <tr><td>Stream terminal events</td><td><code>run_timeout</code>, <code>run_abandoned</code>, <code>agent_unavailable</code> arrive as <code>{ type:'error', message:... }</code></td></tr>
+                      <tr><td>Generic fallback</td><td><code>http_&lt;status&gt;</code> when the body is not JSON</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Budget gate: <code>monthly_quota_exceeded</code> (402)</p>
+                    <p>When <code>/chat/start</code> returns 402 (budget gate flipped between send click and actual start), the store DROPS the optimistic exchange from <code>exchanges</code> (no empty error bubble in the thread) and refreshes usage via <code>session.loadUsage()</code> so the budget banner appears immediately. No run was started, so no event will ever arrive.</p>
+                  </div>
+                </aside>
+
+                <a href="../03-frontend/04-backend-communication.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 03-frontend/04-backend-communication.md
+                </a>
+
+                <!-- ============================================================
+                     SECTION 5: BUILD AND ASSETS
+                     ============================================================ -->
+                <h2>Build and assets</h2>
+
+                <p>The frontend is not served by a Node server. Vite compiles it once into hashed static bundles; those files travel inside the plugin and are served by DSS from the plugin resource folder.</p>
+
+                <h3>Build chain</h3>
+
+                <!-- BUILD CHAIN DIAGRAM -->
+                <figure class="diagram-wrap">
+                  <svg class="diagram diagram-svg" viewBox="0 0 680 120" xmlns="http://www.w3.org/2000/svg">
+                    <rect class="lane" x="0" y="0" width="680" height="120"/>
+
+                    <!-- Source -->
+                    <rect class="node" x="10" y="36" width="140" height="48"/>
+                    <text x="80" y="58" text-anchor="middle" class="diagram" font-weight="600">frontend/src</text>
+                    <text x="80" y="74" text-anchor="middle" class="diagram text-muted" font-size="10">Vue, CSS, i18n, registries</text>
+
+                    <!-- Arrow 1 -->
+                    <line class="edge-accent" x1="150" y1="60" x2="188" y2="60"/>
+                    <polygon class="arrowhead-accent" points="188,56 196,60 188,64"/>
+                    <text x="170" y="50" text-anchor="middle" class="diagram text-muted" font-size="9">vite build</text>
+
+                    <!-- resource/ -->
+                    <rect class="node-accent" x="196" y="28" width="170" height="64"/>
+                    <text x="281" y="54" text-anchor="middle" fill="#fff" class="diagram" font-weight="600">resource/owismind-app/</text>
+                    <text x="281" y="70" text-anchor="middle" fill="#fff" class="diagram" font-size="10">index.html + assets/index-HASH.js</text>
+                    <text x="281" y="84" text-anchor="middle" fill="#fff" class="diagram" font-size="10">+ lazy chunks + orange-logo-HASH.png</text>
+
+                    <!-- Arrow 2 -->
+                    <line class="edge" x1="366" y1="60" x2="404" y2="60"/>
+                    <polygon class="arrowhead" points="404,56 412,60 404,64"/>
+                    <text x="386" y="50" text-anchor="middle" class="diagram text-muted" font-size="9">cp index.html</text>
+
+                    <!-- body.html -->
+                    <rect class="node" x="412" y="36" width="130" height="48"/>
+                    <text x="477" y="56" text-anchor="middle" class="diagram" font-weight="600">webapps/.../body.html</text>
+                    <text x="477" y="72" text-anchor="middle" class="diagram text-muted" font-size="10">DSS entry point</text>
+
+                    <!-- Arrow 3 -->
+                    <line class="edge" x1="542" y1="60" x2="580" y2="60"/>
+                    <polygon class="arrowhead" points="580,56 588,60 580,64"/>
+                    <text x="560" y="50" text-anchor="middle" class="diagram text-muted" font-size="9">DSS serves</text>
+
+                    <!-- Browser -->
+                    <rect class="node" x="588" y="36" width="82" height="48"/>
+                    <text x="629" y="56" text-anchor="middle" class="diagram" font-weight="600">Browser</text>
+                    <text x="629" y="72" text-anchor="middle" class="diagram text-muted" font-size="10">loads hashed bundles</text>
+                  </svg>
+                  <p class="diagram-caption">Build chain: <code>vite build</code> writes into <code>resource/owismind-app/</code>, then <code>body.html</code> is refreshed with the new hash. Both steps are part of the <code>/build-plugin</code> skill.</p>
+                </figure>
+
+                <h3>Vite configuration</h3>
+
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-filename">frontend/vite.config.js</span>
+                    <span class="code-lang">JavaScript</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code>export default defineConfig({
+  plugins: [vue()],
+  base: '/plugins/owismind/resource/owismind-app/',
+  build: {
+    outDir: '../resource/owismind-app',
+    emptyOutDir: true,
+  },
+})</code></pre>
+                </div>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Setting</th><th>Value</th><th>Why it matters</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>base</code></td><td><code>/plugins/owismind/resource/owismind-app/</code></td><td>The URL where DSS exposes the plugin's resource folder. Vite prefixes every asset path with this base in the generated <code>index.html</code>. CANONICAL - never change.</td></tr>
+                      <tr><td><code>build.outDir</code></td><td><code>../resource/owismind-app</code></td><td>Relative to <code>frontend/</code>; points to <code>Plugin/owismind/resource/owismind-app/</code>. CANONICAL - never change.</td></tr>
+                      <tr><td><code>build.emptyOutDir</code></td><td><code>true</code></td><td>Purges old hashed files before writing. A rogue build OUTSIDE the <code>/build-plugin</code> skill would overwrite the deployed app. Always use the skill.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h3>From <code>index.html</code> to <code>body.html</code></h3>
+
+                <p>DSS serves the webapp (descriptor <code>webapp.json</code>, <code>"baseType": "STANDARD"</code>) via <code>body.html</code>, not <code>index.html</code>. The final build step copies the built <code>index.html</code> to the webapp's <code>body.html</code>. Because the hash changes with every build, this copy MUST be done on every build - a stale <code>body.html</code> points to nonexistent assets (404).</p>
+
+                <p>The <code>/build-plugin</code> skill validates the copy by checking that the prefix <code>/plugins/owismind/resource/owismind-app/</code> is present in <code>body.html</code>. Two companion files (<code>app.js</code>, <code>style.css</code>) are present alongside <code>body.html</code> but EMPTY of logic; DSS requires them and they must never be deleted.</p>
+
+                <h3>Build output</h3>
+
+                <p><code>npm run build</code> writes into <code>Plugin/owismind/resource/owismind-app/</code>:</p>
+                <ul>
+                  <li>A rewritten <code>index.html</code> (all asset paths prefixed with <code>base</code>).</li>
+                  <li>An <code>assets/</code> folder with content-hashed bundles: the entry chunk <code>assets/index-&lt;hash&gt;.js</code> + CSS, lazy view chunks (<code>ChatView-*.js</code>, <code>AdminView-*.js</code>, etc.), shared chunks (<code>Icon-*.js</code>, <code>session-*.js</code>, <code>budgetModel-*.js</code>), and the bundled <code>orange-logo-&lt;hash&gt;.png</code>.</li>
+                  <li>The <code>favicon.svg</code> copied from <code>public/</code>.</li>
+                </ul>
+
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">The logo is bundled, not path-referenced</p>
+                    <p><code>Sidebar.vue</code> imports the logo as <code>import logoUrl from '../../assets/orange-logo.png'</code>. Vite bundles it with a content hash. This is the ONLY correct way to include the logo: the bundled URL carries the correct <code>base</code>-prefixed path in production. A hardcoded path or a CSS-reconstructed placeholder violates the Orange charter (rule #10).</p>
+                  </div>
+                </aside>
+
+                <h3>Throwaway compile-check</h3>
+
+                <p>To verify a change to <code>frontend/src</code> compiles without touching the deployed output folder:</p>
+
+                <div class="code-block">
+                  <div class="code-block-header">
+                    <span class="code-lang">Shell</span>
+                    <button class="code-copy" aria-label="Copy code">Copy</button>
+                  </div>
+                  <pre><code># Safe: never overwrites resource/owismind-app/
+./node_modules/.bin/vite build --outDir /tmp/owi_buildcheck --emptyOutDir
+rm -rf /tmp/owi_buildcheck</code></pre>
+                </div>
+
+                <h3>Build invariants</h3>
+
+                <div class="card">
+                  <table>
+                    <thead><tr><th>Invariant</th><th>Enforced by</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>base</code> and <code>outDir</code> are canonical, never change</td><td><code>vite.config.js</code>, <code>/build-plugin</code> skill</td></tr>
+                      <tr><td><code>body.html</code> copied from built <code>index.html</code> on EVERY build</td><td><code>/build-plugin</code> skill (steps 3-4)</td></tr>
+                      <tr><td><code>resource/owismind-app/</code> tracked in git (exception) but never edited by hand</td><td><code>.gitignore</code> comment + <code>guardrail.sh</code> rule 2</td></tr>
+                      <tr><td>Build toward <code>resource/</code> ONLY via <code>/build-plugin</code>; otherwise compile-check toward <code>/tmp</code></td><td><code>emptyOutDir: true</code> overwrites the deployed app</td></tr>
+                      <tr><td>Frontend never in the zip (<code>frontend/</code> + <code>node_modules/</code> excluded)</td><td><code>/package-plugin</code> skill exclusions</td></tr>
+                      <tr><td>NO INSTALL: agent never installs a dependency</td><td><code>settings.json</code> deny-list + <code>guardrail.sh</code> hook + <code>/build-plugin</code> preflight</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <aside class="callout callout-influx" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">In Flux - bundle hashes are not stable identifiers</p>
+                    <p>The content hash of each bundle (e.g. <code>index-BHeG2NRY.js</code>) changes with every build. Project documentation may cite specific hashes from past sessions; none of these are stable references. The only stable invariant is the <code>base</code> prefix.</p>
+                  </div>
+                </aside>
+
+                <a href="../03-frontend/05-build-and-assets.md" class="source-ref">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Source: 03-frontend/05-build-and-assets.md
+                </a>
+
+              </div><!-- /.wrap -->
+            </main><!-- /main -->
+          </div><!-- /.doc-content -->
+
+          <!-- In-page TOC sidebar - JS populates this from h2/h3 in <main> -->
+          <aside id="toc" aria-label="On this page">
+            <!-- Rendered by site.js buildToc() -->
+          </aside>
+
+        </div><!-- /.doc-layout -->
+
+        <!-- Prev/Next pager - JS renders this from PAGES array -->
+        <footer id="pager" aria-label="Page navigation">
+          <!-- Rendered by site.js renderPager() -->
+        </footer>
+
+      </div><!-- /.scroll -->
+    </div><!-- /.main -->
+  </div><!-- /.shell -->
+
+  <!-- Core site JS (rail, topbar, TOC, pager, theme, search, code copy) -->
+  <script src="assets/site.js"></script>
+  <script src="assets/search-index.js"></script>
+
+</body>
+</html>
