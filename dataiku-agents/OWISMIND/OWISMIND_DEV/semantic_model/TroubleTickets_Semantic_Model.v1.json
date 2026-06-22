@@ -1,9 +1,345 @@
+Versions : ['v1']
+Version active : v1
 {
-  "_placeholder": "Replace this ENTIRE file with the output of dump_tickets_semantic_model.py (run in a DSS notebook on this project). It dumps the live model get_raw() JSON. Committing it here means the model config lives in the repo: paste it ONCE here, then reference this file instead of pasting the config in chat every time.",
-  "_model_name": "TroubleTickets_Semantic_Model",
-  "_model_id": "dM4jA4G",
-  "_project": "OWISMIND_DEV",
-  "_bound_tool": "tickets_semantic_query (nEirlso)",
-  "_refresh_with": "semantic_model/dump_tickets_semantic_model.py (MODEL_ID already set to dM4jA4G)",
-  "_status": "PLACEHOLDER - being built in DEV; paste the real dump here once the model brain is injected"
+  "id": "v1",
+  "description": "",
+  "created": {
+    "on": "2026-06-19T13:48:41.552977+00:00",
+    "by": "said.chaoui"
+  },
+  "entities": [
+    {
+      "name": "trouble_ticket",
+      "description": "Trouble ticket records tracking incident lifecycle, status, timing, customer, and product details, with yearly partitions reflecting tickets opened, closed, or updated in each year (excluding proactive tickets on Router and International Supervision products).",
+      "tags": [],
+      "type": "DATASET",
+      "datasetRef": "OWISMIND_DEV.TroubleTickets_year",
+      "attributes": [
+        {
+          "name": "Duration_ticket_total",
+          "description": "Total ticket duration in minutes, from opening to closure (OCEANE).",
+          "dssType": "bigint",
+          "type": "COLUMN",
+          "column": "Duration_ticket_total",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "priority",
+          "description": "Ticket processing priority level.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "priority",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "CurrentStatus_Reason",
+          "description": "Short label explaining the current status; empty for ongoing or frozen tickets.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "CurrentStatus_Reason",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "id",
+          "description": "Unique ticket identifier, persistent from creation through closure and archiving.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "CurrentStatus",
+          "description": "Current state of the ticket at extraction time.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "CurrentStatus",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "creationDate",
+          "description": "Date the ticket was created.",
+          "dssType": "date",
+          "type": "COLUMN",
+          "column": "creationDate",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Customer_id",
+          "description": "MARINE customer identifier.",
+          "dssType": "bigint",
+          "type": "COLUMN",
+          "column": "Customer_id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "category",
+          "description": "Ticket nature (initial or final).",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "category",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Latest_Closed_Date",
+          "description": "Date the ticket was closed.",
+          "dssType": "date",
+          "type": "COLUMN",
+          "column": "Latest_Closed_Date",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "detectionDate",
+          "description": "Date the underlying incident was detected.",
+          "dssType": "date",
+          "type": "COLUMN",
+          "column": "detectionDate",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Account_name",
+          "description": "Name of the customer account associated with the ticket.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Account_name",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "origin",
+          "description": "Origin or source of the ticket.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "origin",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Service_Specification_id",
+          "description": "Product type identifier.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Service_Specification_id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "CustomerRepresentative_Name",
+          "description": "Name of the ticket initiator.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "CustomerRepresentative_Name",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "ticketEntry",
+          "description": "Channel through which the ticket was created (WEB if externalId=s999999999, RPA if initiator is a robot (MMMMxxxx), otherwise OCEANE).",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "ticketEntry",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "lastUpdate",
+          "description": "Date of the last detected change on the ticket; used as the extraction reference.",
+          "dssType": "date",
+          "type": "COLUMN",
+          "column": "lastUpdate",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Service_id_1",
+          "description": "Primary product identifier (variant 1).",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Service_id_1",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Service_id",
+          "description": "MARINE product identifier.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Service_id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Product",
+          "description": "Name of the product associated with the ticket.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Product",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "ticketType",
+          "description": "Type classification of the ticket.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "ticketType",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "problemCategory",
+          "description": "Responsibility category for the reported problem.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "problemCategory",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Total Tickets",
+          "description": "Total number of trouble tickets",
+          "pseudoSQLExpression": "COUNT(id)",
+          "created": {}
+        },
+        {
+          "name": "Total Ticket Duration",
+          "description": "Sum of all ticket durations",
+          "pseudoSQLExpression": "SUM(Duration_ticket_total)",
+          "created": {}
+        },
+        {
+          "name": "Average Ticket Duration",
+          "description": "Average duration to resolve a ticket",
+          "pseudoSQLExpression": "AVG(Duration_ticket_total)",
+          "created": {}
+        },
+        {
+          "name": "Unique Customers with Tickets",
+          "description": "Number of distinct customers who have raised tickets",
+          "pseudoSQLExpression": "COUNT(DISTINCT Customer_id)",
+          "created": {}
+        },
+        {
+          "name": "Max Ticket Duration",
+          "description": "Longest ticket duration recorded",
+          "pseudoSQLExpression": "MAX(Duration_ticket_total)",
+          "created": {}
+        }
+      ],
+      "filters": [
+        {
+          "name": "Open Tickets",
+          "description": "Tickets that are not yet closed",
+          "pseudoSQLExpression": "Latest_Closed_Date IS NULL",
+          "created": {}
+        },
+        {
+          "name": "Created in Last 30 Days",
+          "description": "Tickets created within the last 30 days",
+          "pseudoSQLExpression": "creationDate >= CURRENT_DATE - INTERVAL '30 days'",
+          "created": {}
+        }
+      ],
+      "primaryKey": {
+        "attributes": [
+          "id"
+        ]
+      },
+      "foreignKeys": []
+    }
+  ],
+  "relationships": [],
+  "goldenQueries": [],
+  "glossaryTerms": [],
+  "glossaryBindings": [],
+  "indexingSettings": {
+    "maxDistinctValuesPerAttribute": 1000,
+    "maxScannedRowsForSQLDatasets": -1,
+    "maxScannedRowsForNonSQLDatasets": 1000000
+  },
+  "privateEditorData": {
+    "indexingStale": false,
+    "pendingCreationMethod": "auto_generated",
+    "embeddingLlmId": "openai:LLM-7064-revforecast:vertex_ai/text-embedding-005",
+    "lastSavedAt": "2026-06-19T13:50:25.697764+00:00",
+    "lastIndexedAt": "2026-06-19T13:50:49.667637+00:00",
+    "lastIndexedEmbeddingLlmId": "openai:LLM-7064-revforecast:vertex_ai/text-embedding-005"
+  },
+  "sqlGenerationConfig": {
+    "vocabularyTermIds": []
+  }
 }
