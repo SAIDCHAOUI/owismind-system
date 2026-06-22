@@ -81,7 +81,7 @@ def _install_stubs():
 _install_stubs()
 
 _AGENT_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV",
+    os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", "agents",
     "OWISMIND_DEV_SalesDrive_revenue_expert.py"))
 _SPEC = importlib.util.spec_from_file_location("dataset_expert_under_test",
                                                _AGENT_PATH)

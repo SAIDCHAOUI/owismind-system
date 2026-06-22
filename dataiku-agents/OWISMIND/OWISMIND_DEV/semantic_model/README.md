@@ -1,7 +1,7 @@
 # semantic_model/ - the SQL brain that revenue_semantic_query queries
 
-> Part of the OWIsMind agent system: see [`../../README.md`](../../README.md) (master guide) and
-> [`../README.md`](../README.md) (tools). The Semantic Model Query tool `revenue_semantic_query`
+> Part of the OWIsMind agent system: see [`../../../README.md`](../../../README.md) (master guide) and
+> the tool's deploy-target header (`../tools/`) (tools). The Semantic Model Query tool `revenue_semantic_query`
 > (`v4oqA6R`), called by the sub-agent, points at the model documented here.
 
 This folder holds the **scripts** that build/iterate the aligned semantic model, plus a
@@ -18,10 +18,12 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | `migrate_semantic_model_to_project.py` | COPY a model to another project (e.g. DEV -> PROD), remapping dataset refs + table names automatically from the project keys. Creates a new model in the target. |
 | `remap_semantic_model.py` | Rewrite an EXISTING model's dataset refs / table literals IN PLACE (no copy), then re-index. Fixes a botched migration or repoints a model at a different table. |
 
-> **Not versioned as JSON yet.** Only the scripts + `MODEL.md` are in the repo. The canonical
-> SQL-generation rules live verbatim in `build_aligned_semantic_model.py` (`NEW_INSTRUCTIONS`,
-> byte-identical to `update_aligned_semantic_model.py`). Run `dump_semantic_model.py` to commit the
-> full machine config.
+> **The model config is versioned here as JSON.** Each model's full `get_raw()` config lives in
+> `<ModelName>.v1.json` in this folder (e.g. `Drive_Revenues_Model.v1.json` /
+> `Drive_Revenues_Semantic_Model.v1.json`). Paste a fresh `dump_*.py` output into it after every
+> model change, so the config is in the repo and never needs pasting in chat. The canonical
+> SQL-generation rules also live verbatim in `build_aligned_semantic_model.py` (`NEW_INSTRUCTIONS`,
+> byte-identical to `update_aligned_semantic_model.py`).
 
 ## Live model and tool (source of truth = DSS)
 
@@ -141,11 +143,11 @@ valid shapes), then the brain is injected by script:
    bound to the model; put its id in `agents/TroubleTickets_expert.py`
    (`SEMANTIC_TOOL_ID`) and in `registry.json`.
 
-Full runbook: [`../../PLAYBOOK_ADD_AGENT.md`](../../PLAYBOOK_ADD_AGENT.md).
+Full runbook: [`../../../PLAYBOOK_ADD_AGENT.md`](../../../PLAYBOOK_ADD_AGENT.md).
 
 ## DSS housekeeping tied to the model
 
-- **Update the tool's "Description for LLM"** (see [`../README.md`](../README.md)): drop the stale
+- **Update the tool's "Description for LLM"** (see the tool's deploy-target header (`../tools/`)): drop the stale
   *"only after Drive_Revenues_resolve_filter_value ..."* precondition (that tool is being deleted;
   grounding is now inline).
 - Keep the OLD model (`2O2KcHw`) as rollback; do NOT delete it.

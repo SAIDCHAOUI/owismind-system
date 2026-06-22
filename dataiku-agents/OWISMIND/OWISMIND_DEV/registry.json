@@ -8,9 +8,9 @@
   "project": {
     "key": "OWISMIND_DEV",
     "orchestrator_agent_id": "agent:038G7mlF",
-    "orchestrator_file": "OWISMIND_DEV_OWIsMind_orchestrator.py",
+    "orchestrator_file": "agents/OWISMIND_DEV_OWIsMind_orchestrator.py",
     "attribute_lookup_tool_id": "UUoynaL",
-    "attribute_lookup_file": "OWISMIND_DEV_attribute_lookup_tool.py"
+    "attribute_lookup_file": "tools/OWISMIND_DEV_attribute_lookup_tool.py"
   },
   "capabilities": {
     "revenue_expert": {
@@ -18,7 +18,7 @@
       "domain": "revenue",
       "enabled": true,
       "agent_id": "agent:bHrWLyOL",
-      "agent_file": "OWISMIND_DEV_SalesDrive_revenue_expert.py",
+      "agent_file": "agents/OWISMIND_DEV_SalesDrive_revenue_expert.py",
       "tool_name": "ask_revenue_expert",
       "label_fr": "Expert revenus (Drive)",
       "label_en": "Revenue expert (Drive)",
@@ -31,6 +31,7 @@
       "semantic_model": {
         "name": "Drive_Revenues_Semantic_Model",
         "model_id": "AHUh9hb",
+        "config_json": "semantic_model/Drive_Revenues_Semantic_Model.v1.json",
         "tool_id": "v4oqA6R",
         "tool_name": "revenue_semantic_query",
         "agent_mode": false,
@@ -54,7 +55,7 @@
       "domain": "tickets",
       "enabled": true,
       "agent_id": "agent:NcE9LD2i",
-      "agent_file": "OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py",
+      "agent_file": "agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py",
       "tool_name": "ask_tickets_expert",
       "label_fr": "Expert tickets (incidents)",
       "label_en": "Tickets expert (incidents)",
@@ -67,6 +68,7 @@
       "semantic_model": {
         "name": "TroubleTickets_Semantic_Model",
         "model_id": "dM4jA4G",
+        "config_json": "semantic_model/TroubleTickets_Semantic_Model.v1.json",
         "tool_id": "nEirlso",
         "tool_name": "tickets_semantic_query",
         "agent_mode": false,

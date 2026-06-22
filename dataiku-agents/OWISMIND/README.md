@@ -17,23 +17,44 @@ Each project folder is self-contained and every deployable file is **prefixed
 with the project key** so the file you open is unambiguous:
 
 ```
-OWISMIND_DEV/
-  OWISMIND_DEV_OWIsMind_orchestrator.py        -> Code Agent 038G7mlF
-  OWISMIND_DEV_SalesDrive_revenue_expert.py    -> Code Agent bHrWLyOL
-  OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py  -> Code Agent NcE9LD2i  (being built)
-  OWISMIND_DEV_attribute_lookup_tool.py        -> Custom Python tool UUoynaL
-  registry.json                                 the DEV id manifest
+OWISMIND_DEV/                          (revenue + tickets-being-built)
+  agents/
+    OWISMIND_DEV_OWIsMind_orchestrator.py        -> Code Agent 038G7mlF
+    OWISMIND_DEV_SalesDrive_revenue_expert.py    -> Code Agent bHrWLyOL
+    OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py  -> Code Agent NcE9LD2i  (being built)
+  tools/
+    OWISMIND_DEV_attribute_lookup_tool.py        -> Custom Python tool UUoynaL
   recipes/         profile + value_index + value_catalog (identical across projects)
   semantic_model/  build/update/dump/drop scripts (DEV ids) + MODEL.md
+                   + <ModelName>.v1.json   <- paste the live model config here (see below)
+  registry.json    the DEV id manifest
 
-OWISMIND_PROD_V1/
-  OWISMIND_PROD_V1_OWIsMind_orchestrator.py        -> Code Agent Xrv7GvfG
-  OWISMIND_PROD_V1_SalesDrive_revenue_expert.py    -> Code Agent uO5hEzAs
-  OWISMIND_PROD_V1_attribute_lookup_tool.py        -> Custom Python tool szOZCoU
-  registry.json                                     the PROD id manifest
+OWISMIND_PROD_V1/                      (revenue only)
+  agents/
+    OWISMIND_PROD_V1_OWIsMind_orchestrator.py        -> Code Agent Xrv7GvfG
+    OWISMIND_PROD_V1_SalesDrive_revenue_expert.py    -> Code Agent uO5hEzAs
+  tools/
+    OWISMIND_PROD_V1_attribute_lookup_tool.py        -> Custom Python tool szOZCoU
   recipes/         (identical to DEV)
-  semantic_model/  update/dump/drop scripts (PROD ids) + MODEL.md   (NO tickets yet)
+  semantic_model/  update/dump/drop scripts (PROD ids) + MODEL.md
+                   + Drive_Revenues_Model.v1.json   <- paste the live model config here
+  registry.json    the PROD id manifest
 ```
+
+## Semantic model config lives in the repo (no more pasting it in chat)
+
+Each model's full config (`get_raw()`) is committed as
+`semantic_model/<ModelName>.v1.json` so you never have to paste it in a prompt
+again. To refresh it: run the matching `dump_*.py` in a DSS notebook on that
+project and paste its output over the file.
+
+| Project | File | Refresh with |
+|---|---|---|
+| OWISMIND_DEV | `semantic_model/Drive_Revenues_Semantic_Model.v1.json` | `dump_semantic_model.py` (MODEL_ID `AHUh9hb`) |
+| OWISMIND_DEV | `semantic_model/TroubleTickets_Semantic_Model.v1.json` | `dump_tickets_semantic_model.py` (MODEL_ID `dM4jA4G`) |
+| OWISMIND_PROD_V1 | `semantic_model/Drive_Revenues_Model.v1.json` | `dump_semantic_model.py` (MODEL_ID `a7K9jYk`) |
+
+They currently hold a placeholder; paste a fresh dump to populate them.
 
 ## The golden rule: develop in DEV, then promote to PROD
 

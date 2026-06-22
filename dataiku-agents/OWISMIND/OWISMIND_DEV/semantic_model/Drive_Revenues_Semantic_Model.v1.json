@@ -1,0 +1,9 @@
+{
+  "_placeholder": "Replace this ENTIRE file with the output of dump_semantic_model.py (run in a DSS notebook on this project). It dumps the live model get_raw() JSON. Committing it here means the model config lives in the repo: paste it ONCE here, then reference this file instead of pasting the config in chat every time.",
+  "_model_name": "Drive_Revenues_Semantic_Model",
+  "_model_id": "AHUh9hb",
+  "_project": "OWISMIND_DEV",
+  "_bound_tool": "revenue_semantic_query (v4oqA6R)",
+  "_refresh_with": "semantic_model/dump_semantic_model.py (MODEL_ID already set to AHUh9hb)",
+  "_status": "PLACEHOLDER - paste the real dump here"
+}

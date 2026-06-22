@@ -1,0 +1,9 @@
+{
+  "_placeholder": "Replace this ENTIRE file with the output of dump_tickets_semantic_model.py (run in a DSS notebook on this project). It dumps the live model get_raw() JSON. Committing it here means the model config lives in the repo: paste it ONCE here, then reference this file instead of pasting the config in chat every time.",
+  "_model_name": "TroubleTickets_Semantic_Model",
+  "_model_id": "dM4jA4G",
+  "_project": "OWISMIND_DEV",
+  "_bound_tool": "tickets_semantic_query (nEirlso)",
+  "_refresh_with": "semantic_model/dump_tickets_semantic_model.py (MODEL_ID already set to dM4jA4G)",
+  "_status": "PLACEHOLDER - being built in DEV; paste the real dump here once the model brain is injected"
+}

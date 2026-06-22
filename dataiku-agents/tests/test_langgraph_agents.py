@@ -83,7 +83,7 @@ _install_stubs()
 def _load(mod_name, filename):
     # Tests run against the DEV copies (the development source of truth).
     path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", filename))
+        os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", "agents", filename))
     spec = importlib.util.spec_from_file_location(mod_name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

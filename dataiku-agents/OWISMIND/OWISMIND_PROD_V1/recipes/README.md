@@ -77,7 +77,7 @@ matched_value, display_value, normalized_value, frequency,
 canonical_account_name, canonical_carrier_code, parent_group, is_alias`.
 
 This catalog is read **at runtime** by the `attribute_lookup` tool
-([`../tools/attribute_lookup_tool.py`](../tools/attribute_lookup_tool.py),
+(the `attribute_lookup` tool (`../tools/`),
 `CATALOG_DATASET`): when the fast search finds no exact match, the tool queries
 the catalog (`search_domain` in account / account_group / alias) to return close
 **suggestions** ("did you mean ..."). It is the tool's alias fallback, NOT the
@@ -98,8 +98,8 @@ which otherwise raises "Integer column has NA values"). `build_value_catalog_rec
 is **dataset-adaptive**: the revenue-shaped dataset gets the rich curated catalog;
 any other dataset gets a generic per-value catalog (search_domain "value") that
 feeds the `attribute_lookup` "did you mean" fallback. Worked example + the column
-inventory: [`../PLAYBOOK_ADD_AGENT.md`](../PLAYBOOK_ADD_AGENT.md) and
-[`../DATASETS.md`](../DATASETS.md).
+inventory: [`../../../PLAYBOOK_ADD_AGENT.md`](../../../PLAYBOOK_ADD_AGENT.md) and
+[`../../../DATASETS.md`](../../../DATASETS.md).
 
 ## Deploy a recipe
 

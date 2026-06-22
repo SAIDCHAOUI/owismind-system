@@ -8,9 +8,9 @@
   "project": {
     "key": "OWISMIND_PROD_V1",
     "orchestrator_agent_id": "agent:Xrv7GvfG",
-    "orchestrator_file": "OWISMIND_PROD_V1_OWIsMind_orchestrator.py",
+    "orchestrator_file": "agents/OWISMIND_PROD_V1_OWIsMind_orchestrator.py",
     "attribute_lookup_tool_id": "szOZCoU",
-    "attribute_lookup_file": "OWISMIND_PROD_V1_attribute_lookup_tool.py"
+    "attribute_lookup_file": "tools/OWISMIND_PROD_V1_attribute_lookup_tool.py"
   },
   "capabilities": {
     "revenue_expert": {
@@ -18,7 +18,7 @@
       "domain": "revenue",
       "enabled": true,
       "agent_id": "agent:uO5hEzAs",
-      "agent_file": "OWISMIND_PROD_V1_SalesDrive_revenue_expert.py",
+      "agent_file": "agents/OWISMIND_PROD_V1_SalesDrive_revenue_expert.py",
       "tool_name": "ask_revenue_expert",
       "label_fr": "Expert revenus (Drive)",
       "label_en": "Revenue expert (Drive)",
@@ -31,6 +31,7 @@
       "semantic_model": {
         "name": "Drive_Revenues_Model",
         "model_id": "a7K9jYk",
+        "config_json": "semantic_model/Drive_Revenues_Model.v1.json",
         "tool_id": "sgk5pfln",
         "tool_name": "revenue_semantic_query",
         "agent_mode": false,

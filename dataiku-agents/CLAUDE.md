@@ -28,13 +28,14 @@ every deployable file **prefixed with the project key**:
 OWISMIND/
   README.md                 <- the DEV->PROD workflow + the full id map (read this)
   OWISMIND_DEV/             develop + validate HERE first  (revenue + tickets)
-    OWISMIND_DEV_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py /
-    _CSSO_Trouble_Tickets_Expert.py / _attribute_lookup_tool.py
-    registry.json  recipes/  semantic_model/
+    agents/          OWISMIND_DEV_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py /
+                     _CSSO_Trouble_Tickets_Expert.py
+    tools/           OWISMIND_DEV_attribute_lookup_tool.py
+    recipes/  semantic_model/ (scripts + MODEL.md + <ModelName>.v1.json config)  registry.json
   OWISMIND_PROD_V1/         promote here once DEV is good  (revenue only, no tickets yet)
-    OWISMIND_PROD_V1_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py /
-    _attribute_lookup_tool.py
-    registry.json  recipes/  semantic_model/
+    agents/          OWISMIND_PROD_V1_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py
+    tools/           OWISMIND_PROD_V1_attribute_lookup_tool.py
+    recipes/  semantic_model/  registry.json
   migrate_semantic_model_to_project.py  remap_semantic_model.py   (cross-project utils)
 ```
 
@@ -153,10 +154,11 @@ stays on Sonnet in every mode.
 |---|---|
 | `README.md` | Master guide: architecture, Flow, models, deploy, extend, roadmap, contracts. |
 | [`OWISMIND/README.md`](OWISMIND/README.md) | The DEV->PROD workflow + the full per-project id map. **Start here for deploy.** |
-| `OWISMIND/OWISMIND_DEV/` , `OWISMIND/OWISMIND_PROD_V1/` | One complete, prefixed, ready-to-paste copy per project: the 3-or-4 deployable files + `registry.json` + `recipes/` + `semantic_model/`. |
-| `OWISMIND/<PROJ>/registry.json` | Per-project DEV-OWNED manifest: ids, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
+| `OWISMIND/<PROJ>/agents/` | The Code Agent files (orchestrator + sub-agents), prefixed, per-project ids baked in + a deploy-target header. Paste each into its DSS Code Agent (env 3.11). |
+| `OWISMIND/<PROJ>/tools/` | The `attribute_lookup` Custom Python tool, prefixed, per-project id. |
 | `OWISMIND/<PROJ>/recipes/` | The three Flow recipes (profile, value index, value catalog). Dataset-agnostic, identical across projects. |
-| `OWISMIND/<PROJ>/semantic_model/` | Build/update/dump/drop scripts (per-project ids) + `MODEL.md` (readable live model). |
+| `OWISMIND/<PROJ>/semantic_model/` | Build/update/dump/drop scripts (per-project ids) + `MODEL.md` (readable live model) + `<ModelName>.v1.json` (the live model config, paste a `dump_*.py` output here so it never needs pasting in chat). |
+| `OWISMIND/<PROJ>/registry.json` | Per-project DEV-OWNED manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
 | `OWISMIND/migrate_…` , `remap_…` | Cross-project promotion utilities (copy / repoint a semantic model DEV->PROD). |
 | `DATASETS.md` | Canonical column inventory per dataset. |
 | `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). |
