@@ -861,7 +861,7 @@ def refine_ambiguous(profile, raw_value, candidates, preferred_column=None):
             c.get("target_column") or ""))
         chosen = cands[0]
         # Transparency: the SAME value also lives in other columns (e.g. an
-        # offer name that is both a Product and a Solution). Record them so
+        # offer name that is both a Product and a SolutionLine). Record them so
         # RENDER can disclose the pick - we still keep the priority column.
         alts, seen = [], {chosen.get("target_column")}
         for c in cands[1:]:
@@ -905,7 +905,7 @@ def defer_multicolumn_offer_terms(resolutions):
         must not trigger a clarification: the resolver should not interrogate the
         user on the offer hierarchy. It is reclassified 'deferred' and the raw term
         is passed to the semantic model, which resolves it from its own full catalog
-        (most granular business level - Product, then Solution; never sirano by
+        (most granular business level - Product, then SolutionLine; never sirano by
         default) and discloses the level. This avoids pinning the wrong column,
         which would drop scenarios the column does not carry (e.g. budget).
       - a mono-column ambiguity (two distinct entities in one column, e.g. two
