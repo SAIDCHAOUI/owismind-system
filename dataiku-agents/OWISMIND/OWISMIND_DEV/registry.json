@@ -1,10 +1,16 @@
 {
   "_meta": {
-    "what": "Single, versioned, DEV-OWNED source of truth for the per-domain agent spec: ids, the four design-time dataset names, the semantic model + tool binding, the fast-lookup config and the guardrails. One object per capability, mirroring CAPABILITIES in agents/OWIsMind_orchestrator.py.",
-    "how_it_is_used": "Human + machine reference and a BUILD-TIME / codegen input (PLAN_AGENTS.md A1.1). It is NOT imported at runtime: the Code Agent files must stay standalone-pasteable (no plugin import), so CAPABILITIES stays inlined in the orchestrator. Keep this file in sync with that dict by hand until a gen_capabilities.py codegen lands.",
-    "governance": "agent_id, semantic ids, lookup_dataset, guardrails.allowed_tables are DEV-OWNED here only. They are NEVER admin-editable and NEVER reachable by validate_agent_meta (which governs only the editorial enabled_agents JSON: label/desc/icon/badge/enabled/source_url). The webapp sends a logical capability key; the backend resolves the id (rule #4).",
-    "column_inventory": "Per-dataset columns + types + which are searchable / returnable live in DATASETS.md (one canonical place; do not duplicate column lists in the READMEs).",
-    "last_reviewed": "2026-06-19"
+    "what": "DEV-OWNED source of truth for the OWISMIND_DEV agent system: project key, real DSS ids, dataset names, semantic model + tool bindings, fast-lookup config, guardrails. Mirrors CAPABILITIES in OWISMIND_DEV_OWIsMind_orchestrator.py.",
+    "project_is": "the DEVELOPMENT project. Build and validate everything HERE first, then promote the same change to OWISMIND_PROD_V1 (see ../OWISMIND_PROD_V1/registry.json and ../README.md) with the PROD ids.",
+    "not_runtime": "NOT imported at runtime. The Code Agent files stay standalone-pasteable; CAPABILITIES is inlined in the orchestrator. Keep this file in sync by hand.",
+    "last_reviewed": "2026-06-22"
+  },
+  "project": {
+    "key": "OWISMIND_DEV",
+    "orchestrator_agent_id": "agent:038G7mlF",
+    "orchestrator_file": "OWISMIND_DEV_OWIsMind_orchestrator.py",
+    "attribute_lookup_tool_id": "UUoynaL",
+    "attribute_lookup_file": "OWISMIND_DEV_attribute_lookup_tool.py"
   },
   "capabilities": {
     "revenue_expert": {
@@ -12,7 +18,7 @@
       "domain": "revenue",
       "enabled": true,
       "agent_id": "agent:bHrWLyOL",
-      "agent_file": "agents/SalesDrive_revenue_expert.py",
+      "agent_file": "OWISMIND_DEV_SalesDrive_revenue_expert.py",
       "tool_name": "ask_revenue_expert",
       "label_fr": "Expert revenus (Drive)",
       "label_en": "Revenue expert (Drive)",
@@ -24,6 +30,7 @@
       },
       "semantic_model": {
         "name": "Drive_Revenues_Semantic_Model",
+        "model_id": "AHUh9hb",
         "tool_id": "v4oqA6R",
         "tool_name": "revenue_semantic_query",
         "agent_mode": false,
@@ -46,8 +53,8 @@
       "kind": "agent",
       "domain": "tickets",
       "enabled": true,
-      "agent_id": "agent:TODO_TICKETS",
-      "agent_file": "agents/TroubleTickets_expert.py",
+      "agent_id": "agent:NcE9LD2i",
+      "agent_file": "OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py",
       "tool_name": "ask_tickets_expert",
       "label_fr": "Expert tickets (incidents)",
       "label_en": "Tickets expert (incidents)",
@@ -59,7 +66,8 @@
       },
       "semantic_model": {
         "name": "TroubleTickets_Semantic_Model",
-        "tool_id": "TODO_TICKETS_SEMANTIC_TOOL_ID",
+        "model_id": "dM4jA4G",
+        "tool_id": "nEirlso",
         "tool_name": "tickets_semantic_query",
         "agent_mode": false,
         "sql_engine": "semantic_tool"
@@ -83,13 +91,13 @@
         "max_rows": 500,
         "allowed_tables": ["TroubleTickets_year"]
       },
-      "status": "CODED in repo - NOT YET deployed to DSS (create datasets + model + tool + Code Agent, fill the TODO ids)"
+      "status": "BEING BUILT in DEV - finalize per PLAYBOOK (semantic model brain + COUNT metric override), then validate, then promote to PROD"
     }
   },
   "business_domains": {
-    "note": "Domains OWI cares about. A domain is 'staffed' when an enabled agent declares it; otherwise the orchestrator says honestly 'no agent for it yet'. Mirrors BUSINESS_DOMAINS in the orchestrator.",
+    "note": "Domains OWI cares about. A domain is 'staffed' when an enabled agent declares it; otherwise the orchestrator says honestly 'no agent for it yet'.",
     "revenue": "staffed (revenue_expert)",
-    "tickets": "staffed (tickets_expert, pending DSS deploy)",
+    "tickets": "staffed (tickets_expert, finishing in DEV)",
     "satisfaction": "unstaffed",
     "opportunities": "unstaffed",
     "delivery": "unstaffed",

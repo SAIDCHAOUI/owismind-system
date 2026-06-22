@@ -51,7 +51,8 @@ def _install_stubs():
 _install_stubs()
 
 _TOOL_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "tools", "attribute_lookup_tool.py"))
+    os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV",
+    "OWISMIND_DEV_attribute_lookup_tool.py"))
 _SPEC = importlib.util.spec_from_file_location("attribute_lookup_under_test",
                                                _TOOL_PATH)
 al = importlib.util.module_from_spec(_SPEC)

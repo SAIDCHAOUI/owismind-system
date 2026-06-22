@@ -1,5 +1,15 @@
 # dataiku-agents - the OWIsMind agent system
 
+> **STRUCTURE (2026-06-22, L099): the code is split per DSS project** under
+> [`OWISMIND/`](OWISMIND/README.md): `OWISMIND/OWISMIND_DEV/` and
+> `OWISMIND/OWISMIND_PROD_V1/`, one complete ready-to-paste copy each, every
+> deployable file prefixed with the project key, ids baked in per project.
+> **Develop in DEV, validate, then promote to PROD.** The DEV->PROD workflow and
+> the full per-project **id map** live in [`OWISMIND/README.md`](OWISMIND/README.md)
+> and each `registry.json`. The architecture / contracts below are unchanged; where
+> this guide says `agents/` or `tools/` read it as the file now living under
+> `OWISMIND/<PROJECT>/`.
+>
 > **What this folder is.** The complete, self-contained source of the OWIsMind
 > agentic system that runs inside Dataiku DSS: an **orchestrator** + a **revenue
 > sub-agent**, the **Flow recipes** that build the sub-agent's knowledge, and the

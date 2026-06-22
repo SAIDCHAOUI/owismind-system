@@ -1,5 +1,12 @@
 # PLAYBOOK - add a specialist sub-agent (worked for: tickets)
 
+> **Per-project layout (2026-06-22, L099):** agent files now live under
+> `OWISMIND/OWISMIND_DEV/` (develop here) and `OWISMIND/OWISMIND_PROD_V1/` (promote
+> here), prefixed with the project key, with per-project ids. Build a new specialist
+> in **DEV** first; once validated, promote it to PROD with the PROD ids. Id map +
+> workflow: [`OWISMIND/README.md`](OWISMIND/README.md). Below, read `registry.json`
+> as the **DEV** project's `OWISMIND/OWISMIND_DEV/registry.json`.
+>
 > The concrete, ordered runbook to take a new domain from a base dataset to a live
 > specialist routed by the orchestrator. The architecture is built for this: the
 > sub-agent engine is dataset-agnostic (its expertise lives in the Flow recipes +

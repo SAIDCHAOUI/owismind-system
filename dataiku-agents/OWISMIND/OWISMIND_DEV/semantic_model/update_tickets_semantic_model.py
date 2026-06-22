@@ -30,7 +30,7 @@ import dataiku
 # ----------------------------------------------------------------------------
 # PARAMETERS
 # ----------------------------------------------------------------------------
-NEW_MODEL_ID = ""                              # <-- REQUIRED: id of YOUR tickets model
+NEW_MODEL_ID = "dM4jA4G"                              # <-- REQUIRED: id of YOUR tickets model
 TICKETS_DATASET = "TroubleTickets_year"        # used to resolve the physical table
 # Physical table literal used inside the golden-query SQL. Leave empty to derive
 # it from the dataset at runtime (recommended - avoids guessing the resolved name).

@@ -21,7 +21,7 @@ import dataiku
 # The semantic model the tickets_semantic_query tool points at. Fill MODEL_ID
 # with the model's technical id (DSS: the tool's "Semantic Model" setting), or
 # leave it empty to resolve by name.
-MODEL_ID = ""                                       # e.g. "AbCdEf01"
+MODEL_ID = "dM4jA4G"                                       # e.g. "AbCdEf01"
 MODEL_NAME = "TroubleTickets_Semantic_Model"        # used only when MODEL_ID is empty
 OUTPUT_PATH = "TroubleTickets_Semantic_Model.v1.json"
 

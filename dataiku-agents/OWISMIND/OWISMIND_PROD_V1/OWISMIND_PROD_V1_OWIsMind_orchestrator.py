@@ -1,3 +1,10 @@
+# ============================================================
+# DEPLOY TARGET: project OWISMIND_PROD_V1
+# Code Agent: OWIsMind_orchestrator = Xrv7GvfG
+# Source of truth = this repo. Edit the DEV copy first, validate,
+# then promote to PROD with the PROD ids. Paste into the DSS object
+# above (env 3.11 for Code Agents).
+# ============================================================
 # =============================================================================
 # OWIsMind - ORCHESTRATOR AGENT (LangGraph, Dataiku Code Agent)
 # -----------------------------------------------------------------------------
@@ -14,7 +21,7 @@
 #
 # Tools exposed to the model (generated from the registry + built-ins):
 #   - ask_<capability>  : delegate a self-contained task to a specialist
-#                         sub-agent (e.g. ask_revenue_expert -> agent:bHrWLyOL).
+#                         sub-agent (e.g. ask_revenue_expert -> agent:uO5hEzAs).
 #   - attribute_lookup  : fast value lookup BUILT-IN (does a named value exist,
 #                         in which column, its exact spelling, a named record's
 #                         plain attribute). NOT a sub-agent; dispatched inline.
@@ -165,7 +172,7 @@ ARTIFACT_KINDS = ("chart", "table", "kpi")
 # so it touches NO frozen KNOWN_* contract. The Custom Python tool already EXISTS
 # in DSS; set LOOKUP_TOOL_ID to its real id for a direct bind, otherwise the
 # name fallback (LOOKUP_TOOL_NAME) resolves it by name on each run.
-LOOKUP_TOOL_ID = ""                       # "" -> resolve by name; else e.g. "ab12CdEf"
+LOOKUP_TOOL_ID = "szOZCoU"                       # "" -> resolve by name; else e.g. "ab12CdEf"
 LOOKUP_TOOL_NAME = "attribute_lookup"
 # The dataset the lookup tool reads (only used to attach an Evidence source link;
 # the tool itself owns its FACT_DATASET config). Mirrors the revenue capability.
@@ -188,7 +195,7 @@ CAPABILITIES = {
     # --- Revenue / billing / budget / forecast (the live revenue expert) ----
     "revenue_expert": {
         "kind": "agent",
-        "agent_id": "agent:bHrWLyOL",          # SalesDrive_revenue_expert (DRIVE_Revenues)
+        "agent_id": "agent:uO5hEzAs",          # SalesDrive_revenue_expert (DRIVE_Revenues)
         "domain": "revenue",
         "label_fr": "Expert revenus (Drive)",
         "label_en": "Revenue expert (Drive)",
@@ -232,58 +239,6 @@ CAPABILITIES = {
         # domain (server-side; "" / absent = search every text column, today's
         # behaviour). Revenue keeps the full search (validated); see tickets below.
         "lookup_search_columns": [],
-        "pass_context": True,
-        "enabled": True,
-    },
-    # --- Incident tickets (TroubleTickets_year) -----------------------------
-    # Second specialist. The engine file agents/TroubleTickets_expert.py mirrors
-    # the revenue sub-agent's frozen KNOWN_BLOCK_IDS / KNOWN_TOOL_NAMES, so the
-    # block_labels / tool_labels below are the same keys (anti-drift test). Fill
-    # agent_id with the new DSS Code Agent id once created (env 3.11).
-    "tickets_expert": {
-        "kind": "agent",
-        "agent_id": "agent:TODO_TICKETS",       # TroubleTickets_expert (TroubleTickets_year)
-        "domain": "tickets",                     # already a BUSINESS_DOMAINS key
-        "label_fr": "Expert tickets (incidents)",
-        "label_en": "Tickets expert (incidents)",
-        "tool_name": "ask_tickets_expert",
-        "planner_description": (
-            "The OWI incident-tickets expert. Owns ALL figures of the "
-            "TroubleTickets dataset: ticket counts and breakdowns by status, "
-            "priority, category, problem category, origin and type; resolution "
-            "durations; open vs closed; rankings and top-N; trends over "
-            "creation / detection / closed dates; per customer, account, service "
-            "or product; distinct values; and 'what does this data contain' "
-            "questions. Route here ANY question about tickets, incidents, "
-            "support, problems, outages, SLAs or resolution times."),
-        "block_labels": {
-            "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
-            "run_sql": {"fr": "interrogation des données", "en": "querying the data"},
-            "format_output": {"fr": "mise en forme du résultat", "en": "formatting the result"},
-            "clarify_user": {"fr": "demande de précision", "en": "asking for clarification"},
-            "out_of_scope_msg": None,
-            "about_data": {"fr": "description des données", "en": "describing the data"},
-        },
-        "tool_labels": {
-            "resolve_filter_value": {"fr": "résolution des noms exacts", "en": "resolving exact names"},
-            "dataset_sql_query": {"fr": "génération et exécution du SQL", "en": "generating and running SQL"},
-        },
-        "dataset_label_fr": "Base des tickets d'incidents OWI (TroubleTickets_year)",
-        "dataset_label_en": "OWI incident tickets base (TroubleTickets_year)",
-        "source_url": "",
-        "lookup_dataset": "TroubleTickets_year",
-        # The generic value catalog (build_value_catalog_recipe on the non-revenue
-        # path) feeds the lookup's "did you mean" fallback for tickets. Without it
-        # the tool would fall back to the revenue catalog (wrong suggestions).
-        "lookup_catalog": "TroubleTickets_year_value_catalogue",
-        # Search ONLY the named-entity / identifier text columns, never the long
-        # free-text columns (ticketEntry, CurrentStatus_Reason) - those would make
-        # a short needle match noisily. Any column is still returnable as an
-        # attribute; this only restricts what the broad search scans.
-        "lookup_search_columns": [
-            "Account_name", "CustomerRepresentative_Name", "Service_id",
-            "Service_Specification_id", "Service_id_1", "Product", "id",
-        ],
         "pass_context": True,
         "enabled": True,
     },

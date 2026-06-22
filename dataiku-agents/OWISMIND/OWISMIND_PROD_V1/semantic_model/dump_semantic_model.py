@@ -4,7 +4,7 @@
 # Exports the LIVE semantic model config to a JSON file so the SQL brain is
 # versioned in the repo (entities, metric, named filters, golden queries,
 # glossary, sqlGenerationConfig.instructions). Run it in a DSS notebook on the
-# OWISMIND_DEV project after every change to the model, then commit the JSON.
+# OWISMIND_PROD_V1 project after every change to the model, then commit the JSON.
 #
 # Why a dump script instead of a hand-written JSON: the model config is machine
 # state. Exporting get_raw() keeps the snapshot byte-faithful to DSS and avoids
@@ -23,9 +23,9 @@ import dataiku
 # The semantic model the revenue_semantic_query tool (v4oqA6R) points at.
 # Fill MODEL_ID with the model's technical id (DSS: the tool's "Semantic Model"
 # setting), or leave it empty to resolve by name.
-MODEL_ID = ""                                   # e.g. "AbCdEf01"
-MODEL_NAME = "Drive_Revenues_Semantic_Model"    # used only when MODEL_ID is empty
-OUTPUT_PATH = "Drive_Revenues_Semantic_Model.v1.json"
+MODEL_ID = "a7K9jYk"                                   # e.g. "AbCdEf01"
+MODEL_NAME = "Drive_Revenues_Model"    # used only when MODEL_ID is empty
+OUTPUT_PATH = "Drive_Revenues_Model.v1.json"
 
 
 def resolve_model(project):

@@ -25,7 +25,7 @@ import dataiku
 # ----------------------------------------------------------------------------
 # PARAMETERS
 # ----------------------------------------------------------------------------
-NEW_MODEL_ID = ""                              # <-- REQUIRED: id of YOUR model
+NEW_MODEL_ID = "AHUh9hb"                              # <-- REQUIRED: id of YOUR model
 PHYSICAL_TABLE = '"OWISMIND_DEV_drive_revenues"'
 INDIRECT_VALUE = "Indirect_distribution/Resseler"
 

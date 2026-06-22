@@ -51,8 +51,10 @@ def _load(name, rel_path):
     return mod
 
 
-prof = _load("profiler_under_test", "recipes/profile_dataset_recipe.py")
-vidx = _load("value_index_under_test", "recipes/build_value_index_recipe.py")
+prof = _load("profiler_under_test",
+             "OWISMIND/OWISMIND_DEV/recipes/profile_dataset_recipe.py")
+vidx = _load("value_index_under_test",
+             "OWISMIND/OWISMIND_DEV/recipes/build_value_index_recipe.py")
 
 try:
     import pandas  # noqa: F401

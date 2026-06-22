@@ -19,6 +19,22 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🗂️ SESSION 2026-06-22 (agents DUPLIQUÉS PAR PROJET DSS + modèle sémantique : `Solution` retiré) - repo only.**
+**(1) Réorg agents par projet (L099)** : `dataiku-agents/` -> **`OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`**,
+**une copie complète + auto-suffisante par projet**, fichiers **préfixés** par le projet, IDs câblés par projet,
+en-tête deploy-target. **Workflow gravé : développer en DEV, valider, PUIS promouvoir en PROD** (copier dans le
+jumeau `OWISMIND_PROD_V1_*`, IDs prod déjà en place). PROD **sans tickets** (pas fini en DEV). Carte des IDs =
+**`OWISMIND/README.md`** + `registry.json` par projet. **DEV** : orch `038G7mlF`/rev `agent:bHrWLyOL`/tickets
+`agent:NcE9LD2i`/lookup `UUoynaL`/rev-tool `v4oqA6R`/tickets-tool `nEirlso`/modèle rev `AHUh9hb`/modèle tickets
+`dM4jA4G`. **PROD** : orch `Xrv7GvfG`/rev `agent:uO5hEzAs`/lookup `szOZCoU`/rev-tool `sgk5pfln`/modèle rev
+`a7K9jYk` (**`Drive_Revenues_Model`**). 283 tests verts (repointés sur DEV), 0 contamination croisée
+(asserts), 0 tiret. **À balayer séparément** (suivi) : `project-documentation/05-agents/*`, `docs/scaling/
+PLAN_AGENTS.md`, skill `agentique-python-dataiku` (anciens chemins). **(2) Modèle sémantique `Solution`
+supprimé** (colonne droppée du dataset, user a déjà mis à jour les modèles DEV+PROD) : scripts repo
+`build_aligned_`/`update_aligned_`/`MODEL.md`/`drop_column_and_reindex.py` + prompts des agents + docs nettoyés
+(`SolutionLine > Product`). **À FAIRE DSS** : re-coller le sous-agent revenus pour que le prompt prenne effet ;
+re-runner les 3 recipes. **AUCUN commit de ma part avant `/log-session`.**
+
 **🎫 SESSION 2026-06-19 Run 4 (2e sous-agent "tickets d'incidents" + factory repo) - ✅ TESTÉ DSS
 (« marche plutôt bien »), à pofiner.** 2e expert sur `TroubleTickets_year` (83 738 l., 21 col.) à côté
 des revenus. **Moteur ~95% générique** : `agents/TroubleTickets_expert.py` = copie revenus, corps

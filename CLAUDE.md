@@ -25,9 +25,13 @@ convertie, a été supprimée du repo le 2026-06-11).
 - Racine plugin sur disque : `Plugin/owismind/` · staging zip : `Plugin/ready-for-dataiku/owismind-upload/`
 - Vite `base` `/plugins/owismind/resource/owismind-app/` → `outDir ../resource/owismind-app`
 - SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key `OWISMIND_DEV` (via `default_project_key()`)
-- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) :
-  orchestrateur **OWIsMind_orchestrator** (`dataiku-agents/agents/OWIsMind_orchestrator.py`) →
-  sous-agent revenus **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, fichier `…/SalesDrive_revenue_expert.py`).
+- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) **dupliqués
+  par projet DSS** sous `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/` (fichiers préfixés
+  par le projet ; **on développe en DEV puis on promeut en PROD**). Carte des IDs + workflow :
+  **`dataiku-agents/OWISMIND/README.md`** (et chaque `registry.json`). Orchestrateur **OWIsMind_orchestrator**
+  (DEV `038G7mlF` / PROD `Xrv7GvfG`) → sous-agent revenus **SalesDrive_revenue_expert** (DEV `agent:bHrWLyOL`
+  / PROD `agent:uO5hEzAs`) ; 2e sous-agent **CSSO_Trouble_Tickets_Expert** (DEV `agent:NcE9LD2i`, en cours,
+  pas encore en PROD).
 - API `/owismind-api/*` (santé `/owismind-api/ping`)
 - ⚠️ Les guides de `docs/cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) - **ne pas les recopier**.
 

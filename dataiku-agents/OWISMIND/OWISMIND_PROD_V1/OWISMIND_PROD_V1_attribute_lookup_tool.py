@@ -1,3 +1,10 @@
+# ============================================================
+# DEPLOY TARGET: project OWISMIND_PROD_V1
+# Custom Python tool: attribute_lookup = szOZCoU
+# Source of truth = this repo. Edit the DEV copy first, validate,
+# then promote to PROD with the PROD ids. Paste into the DSS object
+# above (env 3.11 for Code Agents).
+# ============================================================
 # -*- coding: utf-8 -*-
 """attribute_lookup - Custom Python agent tool.
 

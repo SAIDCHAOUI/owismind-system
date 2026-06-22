@@ -1,13 +1,13 @@
+# ============================================================
+# DEPLOY TARGET: project OWISMIND_PROD_V1
+# Code Agent: SalesDrive_revenue_expert = uO5hEzAs
+# Source of truth = this repo. Edit the DEV copy first, validate,
+# then promote to PROD with the PROD ids. Paste into the DSS object
+# above (env 3.11 for Code Agents).
+# ============================================================
 # =============================================================================
-# OWIsMind - DATASET EXPERT AGENT (generic engine) - TICKETS instance
+# OWIsMind - DATASET EXPERT AGENT (generic, Dataiku Code Agent)
 # -----------------------------------------------------------------------------
-# This is the TroubleTickets (incident tickets) expert: the SAME dataset-agnostic
-# engine as the revenue sub-agent, configured (CONFIG below) for the tickets
-# datasets. Paste it into its OWN DSS Code Agent (env 3.11). The engine body is
-# kept identical to SalesDrive_revenue_expert.py on purpose (frozen contracts +
-# anti-drift test); only the CONFIG header and a few domain-neutral wordings
-# differ.
-#
 # A dataset-agnostic sub-agent: point it at a PROFILE dataset (built by
 # recipes/profile_dataset_recipe.py) and a VALUE INDEX dataset (built by
 # recipes/build_value_index_recipe.py) and it becomes an expert of that
@@ -22,11 +22,11 @@
 #   2. RESOLVE     User terms are grounded against the value index by INLINE SQL
 #                  (exact -> normalized -> fuzzy). Ambiguity policy and the
 #                  "VALUE (Column)" round-trip are deterministic code. Grounding
-#                  is NOT a tool - it is read-only SQL on the value index dataset.
+#                  is NOT a tool - it is read-only SQL on DRIVE_Revenues_value_index.
 #   3. QUERY       Default SQL_ENGINE = "semantic_tool": the agent COMPOSEs a
 #                  maximally grounded natural-language question and hands it to
-#                  the DSS Semantic Model Query tool (the tickets semantic model
-#                  query tool), which WRITES AND RUNS the SQL. The semantic model
+#                  the DSS Semantic Model Query tool (revenue_semantic_query,
+#                  sgk5pfln), which WRITES AND RUNS the SQL. The semantic model
 #                  owns the SQL; every upstream layer feeds it the best context.
 #                  On a TECHNICAL failure (not an empty result) it FALLS BACK to
 #                  the "direct" engine: DETERMINISTIC SQL templates per structured
@@ -89,9 +89,9 @@ logger = logging.getLogger("owismind.dataset_expert")
 # 1. CONFIGURATION (fill before pasting into the DSS Code Agent)
 # =============================================================================
 
-# The two knowledge datasets produced by the Flow recipes (tickets instance):
-PROFILE_DATASET = "TroubleTickets_year_profile"
-VALUE_INDEX_DATASET = "TroubleTickets_year_value_index"
+# The two knowledge datasets produced by the Flow recipes:
+PROFILE_DATASET = "DRIVE_Revenues_profile"
+VALUE_INDEX_DATASET = "DRIVE_Revenues_value_index"
 # Optional override of the queried dataset (default: profile's dataset_name).
 TARGET_DATASET = ""
 
@@ -135,13 +135,8 @@ SUBAGENT_LLM_HEADLINE = False
 # FALLBACK_TO_DIRECT is True (an empty result is a valid answer, not a failure).
 SQL_ENGINE = "semantic_tool"
 FALLBACK_TO_DIRECT = True
-# Fill SEMANTIC_TOOL_ID with the TICKETS Semantic Model Query tool id once you
-# create it in DSS (a NEW tool bound to the tickets semantic model). Until it is
-# set to a real id, the agent falls back to its own read-only direct-SQL engine
-# (FALLBACK_TO_DIRECT=True), which already works from the profile alone - so the
-# tickets expert is useful from day one and gets stronger once the model is wired.
-SEMANTIC_TOOL_ID = "TODO_TICKETS_SEMANTIC_TOOL_ID"   # Semantic Model Query tool id (instance)
-SEMANTIC_TOOL_NAME = "tickets_semantic_query"
+SEMANTIC_TOOL_ID = "sgk5pfln"        # Semantic Model Query tool id (instance)
+SEMANTIC_TOOL_NAME = "revenue_semantic_query"
 SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
 # Semantic Model Query tool id per mode. The tool's underlying LLM is configured in
 # DSS, not from code; all modes share the one tool. To back a mode with a different
@@ -1442,22 +1437,23 @@ def _pretty_col(name):
 
 
 DISCLOSE_NOTE = {
-    "fr": ("ℹ️ « {value} » existe dans plusieurs colonnes ({cols}) ; la colonne "
-           "la plus pertinente est choisie par défaut - précisez si vous vouliez "
-           "une autre colonne."),
-    "en": ("ℹ️ \"{value}\" exists in several columns ({cols}); the most relevant "
-           "column is used by default - tell me if you meant another column."),
+    "fr": ("ℹ️ « {value} » existe à plusieurs niveaux de l'offre ({cols}) ; le "
+           "niveau le plus précis est privilégié par défaut - précisez si vous "
+           "vouliez un autre niveau."),
+    "en": ("ℹ️ \"{value}\" exists at several offer levels ({cols}); the most "
+           "granular level is used by default - tell me if you meant another "
+           "level."),
 }
 
 
 def build_disclosure_notes(filters, lang, offer_terms=None):
-    """Deterministic transparency lines for terms that span several columns,
-    disclosing the ambiguity and the default policy WITHOUT asserting which column
+    """Deterministic transparency lines for offer terms that span several columns,
+    disclosing the ambiguity and the default policy WITHOUT asserting which level
     the semantic model picked (it decides). Two sources:
-      - resolved filters that carry alt_columns (a value also present in another
-        column);
-      - terms the resolver could NOT confidently ground and DEFERRED to the
-        semantic model (multi-column ambiguity) - same wording.
+      - resolved filters that carry alt_columns (a value also present at another
+        offer level, e.g. a Product that is also a SolutionLine);
+      - offer terms the resolver could NOT confidently ground and DEFERRED to the
+        semantic model (multi-column ambiguity, e.g. 'Roaming Hub') - same wording.
     Pure; carries no figures, so it never affects the verified headline."""
     lines = []
     for f in filters or []:
@@ -1488,8 +1484,8 @@ def build_semantic_question(u, profile, filters):
     it with hints: a deterministic intent shape, the values and columns the resolver
     matched in the live catalog, the preferred presentation, scenario and period.
     Hints assist, they do not order - the tool keeps the final say. A column choice
-    is never forced: when a value spans several columns the resolver flags it and
-    leaves the column choice to the semantic model and the user."""
+    is never forced: when a value spans offer levels the most granular is suggested
+    and the alternative is flagged for the tool and the user."""
     intent = u["intent"]
     metric = profile.metric(u["metric"] or "") or profile.default_metric
     parts = ['USER QUESTION (this is the source of truth - answer THIS): "%s"'
@@ -1568,11 +1564,12 @@ def build_semantic_question(u, profile, filters):
         parts.append("EXPECTED SHAPE (guidance, use your judgment): " + hint)
 
     # Resolver findings, presented as hints (not orders). A value matched to a
-    # single column is a confident, catalog-exact spelling (e.g. an account name)
+    # single column is a confident, catalog-exact spelling (e.g. a customer name)
     # and is suggested directly. A value present in several columns (an ambiguous
-    # term spanning columns) is not pinned to a column: the semantic model resolves
-    # it with its own rules and the user's intent, which is more reliable than a
-    # fixed column pick (a fixed pick can be wrong).
+    # offer term like 'EVPL', both a Product and a sirano_product) is not pinned to a
+    # column: the semantic model resolves it with its own hierarchy rules and the
+    # user's intent, which is more reliable than a fixed column pick (a fixed pick
+    # can be wrong - e.g. defaulting to sirano_product).
     if filters:
         confident = [f for f in filters if not f.get("alt_columns")]
         ambiguous = [f for f in filters if f.get("alt_columns")]
@@ -1600,32 +1597,33 @@ def build_semantic_question(u, profile, filters):
         for f in ambiguous:
             cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])]
             parts.append(
-                "AMBIGUOUS TERM - \"%s\" is a real data value present in "
+                "AMBIGUOUS OFFER TERM - \"%s\" is a real data value present in "
                 "SEVERAL columns (%s). Do NOT take a pinned column from the "
-                "helper here: YOU resolve it, using the semantic model's rules "
-                "and the user's intent, then disclose the column you picked."
+                "helper here: YOU resolve it, using your offer-hierarchy rules "
+                "and the user's intent, then disclose the level you picked."
                 % (f["value"], ", ".join(cols)))
         if len(confident) > 1:
             parts.append(
                 "If the question ENUMERATES several of these as items to report, "
                 "treat them independently (OR) and return ONE ROW PER ITEM with a "
                 "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
-                "priority + a category) with AND. (Guidance - your judgment.)")
+                "sales channel + an offer) with AND. (Guidance - your judgment.)")
 
-    # Terms the resolver could NOT confidently ground and DEFERRED to you
-    # (multi-column ambiguity, no single confident match). You have the full
-    # catalog and the semantic model - resolve them yourself from the data.
+    # Offer terms the resolver could NOT confidently ground and DEFERRED to you
+    # (multi-column ambiguity, no single confident match). You have the full catalog
+    # and the hierarchy - resolve them yourself; never default to sirano_product.
     for ot in (u.get("offer_terms_for_model") or []):
         samples = "; ".join("%s: '%s'" % (s.get("column", ""),
                                           str(s.get("value", "")).replace("'", "''"))
                             for s in (ot.get("samples") or []))
         parts.append(
-            "AMBIGUOUS TERM (no confident match) - the user named \"%s\". "
+            "AMBIGUOUS OFFER TERM (no confident match) - the user named \"%s\". "
             "The grounding helper found only PARTIAL, cross-column matches (%s) and "
-            "did NOT pin a column. Resolve \"%s\" yourself from YOUR catalog and the "
-            "semantic model's rules, choosing the column that best fits the user's "
-            "intent, then DISCLOSE the column you used so the user can ask for "
-            "another." % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
+            "did NOT pin a column. Resolve \"%s\" yourself from YOUR catalog using "
+            "the offer hierarchy (prefer the most granular BUSINESS level - Product, "
+            "then SolutionLine; NEVER default to sirano_product), then "
+            "DISCLOSE the level you used so the user can ask for another."
+            % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
 
     if scen and intent not in ("list_values",):
         parts.append("SCENARIO (guidance): unless the question implies "

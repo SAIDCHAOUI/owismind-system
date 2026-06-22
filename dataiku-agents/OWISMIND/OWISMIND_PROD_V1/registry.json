@@ -1,0 +1,62 @@
+{
+  "_meta": {
+    "what": "DEV-OWNED source of truth for the OWISMIND_PROD_V1 agent system: project key, real DSS ids, dataset names, semantic model + tool bindings, fast-lookup config, guardrails. Mirrors CAPABILITIES in OWISMIND_PROD_V1_OWIsMind_orchestrator.py.",
+    "project_is": "the PRODUCTION project. Do NOT develop here. Build + validate in OWISMIND_DEV, then promote the SAME change here with the PROD ids in this file. See ../README.md for the promotion runbook.",
+    "not_runtime": "NOT imported at runtime. CAPABILITIES is inlined in the orchestrator; keep this file in sync by hand.",
+    "last_reviewed": "2026-06-22"
+  },
+  "project": {
+    "key": "OWISMIND_PROD_V1",
+    "orchestrator_agent_id": "agent:Xrv7GvfG",
+    "orchestrator_file": "OWISMIND_PROD_V1_OWIsMind_orchestrator.py",
+    "attribute_lookup_tool_id": "szOZCoU",
+    "attribute_lookup_file": "OWISMIND_PROD_V1_attribute_lookup_tool.py"
+  },
+  "capabilities": {
+    "revenue_expert": {
+      "kind": "agent",
+      "domain": "revenue",
+      "enabled": true,
+      "agent_id": "agent:uO5hEzAs",
+      "agent_file": "OWISMIND_PROD_V1_SalesDrive_revenue_expert.py",
+      "tool_name": "ask_revenue_expert",
+      "label_fr": "Expert revenus (Drive)",
+      "label_en": "Revenue expert (Drive)",
+      "datasets": {
+        "base": "DRIVE_Revenues",
+        "profile": "DRIVE_Revenues_profile",
+        "value_index": "DRIVE_Revenues_value_index",
+        "value_catalog": "DRIVE_Revenues_Value_Catalog"
+      },
+      "semantic_model": {
+        "name": "Drive_Revenues_Model",
+        "model_id": "a7K9jYk",
+        "tool_id": "sgk5pfln",
+        "tool_name": "revenue_semantic_query",
+        "agent_mode": false,
+        "sql_engine": "semantic_tool"
+      },
+      "lookup": {
+        "dataset": "DRIVE_Revenues",
+        "catalog": "DRIVE_Revenues_Value_Catalog",
+        "search_columns": []
+      },
+      "source_url": "",
+      "guardrails": {
+        "read_only": true,
+        "max_rows": 500,
+        "allowed_tables": ["DRIVE_Revenues"]
+      },
+      "status": "LIVE - validated in DSS"
+    }
+  },
+  "business_domains": {
+    "note": "Domains OWI cares about. A domain is 'staffed' when an enabled agent declares it; otherwise the orchestrator says honestly 'no agent for it yet'. tickets is intentionally UNSTAFFED in PROD until the DEV tickets agent is finished and promoted.",
+    "revenue": "staffed (revenue_expert)",
+    "tickets": "unstaffed (built in DEV, not yet promoted to PROD)",
+    "satisfaction": "unstaffed",
+    "opportunities": "unstaffed",
+    "delivery": "unstaffed",
+    "billing": "unstaffed"
+  }
+}
