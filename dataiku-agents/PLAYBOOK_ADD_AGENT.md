@@ -39,8 +39,8 @@ the steps below.
 - `recipes/build_value_catalog_recipe.py` - now auto-IO + NA-safe +
   dataset-adaptive (revenue keeps its curated catalog; any other dataset gets a
   generic per-value catalog). The profile + value_index recipes are also NA-safe.
-- `tools/semantic_model/update_tickets_semantic_model.py` +
-  `dump_tickets_semantic_model.py` - the tickets semantic-model brain + snapshot.
+- `semantic_model/update_tickets_semantic_model.py` (brain) +
+  `semantic_model/dump_semantic_model.py` (generic snapshot, TICKETS CONFIG).
 - `registry.json` + `DATASETS.md` - the spec + column inventory.
 - Tests are green: `python3 -m unittest discover -s dataiku-agents/tests`.
 
@@ -78,22 +78,41 @@ Run these as a **scheduled scenario, off-peak** (never from the webapp UI). 83,7
 rows is small; no OOM risk. The three recipes auto-detect INPUT/OUTPUT from the
 Flow wiring (no hardcoded dataset names) and are NA-safe.
 
-### 2. [curate] Pin the COUNT default metric (overrides dataset)
+### 2. [curate] Pin the profile overrides (overrides dataset)
 
-The profile recipe infers metrics generically, but its deterministic fallback
-would pick `SUM(first measure)` = `SUM(Duration_ticket_total)`, which is wrong for
-tickets. In `TroubleTickets_year_profile_overrides` set:
+The profile recipe infers metrics/axes generically; tickets need a few human
+overrides (they always win). In `TroubleTickets_year_profile_overrides` set:
+
+**a) COUNT(DISTINCT id) default metric.** Each ticket id appears on SEVERAL rows
+(historical snapshots: an update adds a new row, old rows are kept). `COUNT(*)`
+over-counts updated tickets, so the count must be `COUNT(DISTINCT id)`:
 
 - `key=__dataset__`, `field=metrics`, `value=` a JSON array including
-  `{"name":"ticket_count","agg":"COUNT","column":null,"format":"count","label_en":"Ticket count","label_fr":"Nombre de tickets"}`
+  `{"name":"ticket_count","agg":"COUNT_DISTINCT","column":"id","format":"count","label_en":"Ticket count","label_fr":"Nombre de tickets"}`
   and
-  `{"name":"avg_duration","agg":"AVG","column":"Duration_ticket_total","format":"number","label_en":"Average resolution duration","label_fr":"Duree moyenne de resolution"}`.
+  `{"name":"avg_duration","agg":"AVG","column":"Duration_ticket_total","format":"number","label_en":"Average resolution time (minutes)","label_fr":"Duree moyenne de resolution (minutes)"}`.
 - `key=__dataset__`, `field=default_metric`, `value=ticket_count`.
 
-Do NOT give any tickets metric `format:"amount"` and do NOT name a column
-`*_eur/_usd` (that would make the engine infer a phantom currency). Confirm the
-**unit** of `Duration_ticket_total` (seconds / minutes / hours) and put it in the
-metric label.
+`agg=COUNT_DISTINCT` makes `metric_expr` emit `COUNT(DISTINCT "id")` in the
+sub-agent's compose hint and direct-SQL fallback. Do NOT give any tickets metric
+`format:"amount"` and do NOT name a column `*_eur/_usd` (that would make the engine
+infer a phantom currency). `Duration_ticket_total` is in MINUTES - keep it in the
+label.
+
+**b) Default time axis = `creationDate`.** The profiler elects the first date
+column alphabetically (`Latest_Closed_Date`), which is wrong. Force creation:
+
+- `key=__dataset__`, `field=time`, `value={"column":"creationDate","format":"date"}`.
+
+**c) Display Account_name for the customer id.** So a per-customer breakdown groups
+by the stable key and shows the human label, id de-emphasized:
+
+- `key=Customer_id`, `field=display_column`, `value=Account_name`.
+
+**d) LD synonyms on `Service_id_1`** (the dominant lookup key) so the UNDERSTAND
+model maps "LD" to the right column:
+
+- `key=Service_id_1`, `field=synonyms`, `value=["LD","ld","ligne","line"]`.
 
 ### 3. [curate] Review the profile
 
@@ -107,13 +126,15 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 - In DSS, create a semantic model on `TroubleTickets_year` (the UI auto-discovers
   entities/attributes from the schema, with valid shapes). Name it
   `TroubleTickets_Semantic_Model`. Let it index distinct values once.
-- [curate] Run `tools/semantic_model/update_tickets_semantic_model.py` in a
-  notebook (set `NEW_MODEL_ID`) to inject the tickets instructions + golden
-  queries. Then refine the `[CONFIRM]` items in the instructions (duration unit,
-  exact `CurrentStatus` values). Optionally add named filters / glossary synonyms
-  in the model UI.
-- Snapshot it: run `tools/semantic_model/dump_tickets_semantic_model.py` and
-  commit `TroubleTickets_Semantic_Model.v1.json`.
+- [curate] Run `semantic_model/update_tickets_semantic_model.py` in a notebook
+  (set `NEW_MODEL_ID`) to inject the tickets instructions + golden queries + the
+  entity / attribute descriptions + the metrics (`COUNT(DISTINCT id)`). The
+  duration unit (minutes) is already baked in; only the exact `CurrentStatus`
+  open/closed values are data-dependent (read them from the value index, the
+  instructions already tell the model to use the exact catalog values). Optionally
+  add named filters / glossary synonyms in the model UI.
+- Snapshot it: run `semantic_model/dump_semantic_model.py` with the TICKETS config
+  (see its CONFIG comment) and commit `TroubleTickets_Semantic_Model.v1.json`.
 
 ### 5. [DSS] Create the tickets Semantic Model Query tool
 

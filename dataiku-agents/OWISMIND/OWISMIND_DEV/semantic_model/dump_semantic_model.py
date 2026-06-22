@@ -20,9 +20,13 @@ import json
 import dataiku
 
 # CONFIG ----------------------------------------------------------------------
-# The semantic model the revenue_semantic_query tool (v4oqA6R) points at.
-# Fill MODEL_ID with the model's technical id (DSS: the tool's "Semantic Model"
-# setting), or leave it empty to resolve by name.
+# Generic dump - point it at whichever model you want to snapshot, then commit
+# the JSON. Fill MODEL_ID with the model's technical id (DSS: the tool's
+# "Semantic Model" setting), or leave it empty to resolve by name.
+#   REVENUE  : MODEL_ID="AHUh9hb", MODEL_NAME="Drive_Revenues_Semantic_Model",
+#              OUTPUT_PATH="Drive_Revenues_Semantic_Model.v1.json"
+#   TICKETS  : MODEL_ID="dM4jA4G", MODEL_NAME="TroubleTickets_Semantic_Model",
+#              OUTPUT_PATH="TroubleTickets_Semantic_Model.v1.json"
 MODEL_ID = "AHUh9hb"                                   # e.g. "AbCdEf01"
 MODEL_NAME = "Drive_Revenues_Semantic_Model"    # used only when MODEL_ID is empty
 OUTPUT_PATH = "Drive_Revenues_Semantic_Model.v1.json"

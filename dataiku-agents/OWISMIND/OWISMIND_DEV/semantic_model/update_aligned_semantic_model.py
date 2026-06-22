@@ -144,6 +144,19 @@ Parent_Group, state it explicitly in the answer.
   Account_partner; otherwise keep it out of the output. Be transparent about which side (end
   customer vs partner) you grouped on.
 
+## Exact values, NEVER ILIKE on names / offers / codes (CRITICAL)
+
+Entity values reach you already grounded to the EXACT catalog spelling by a grounding helper
+(see HELPER FINDINGS) - resolving real values is the whole point of this stack (three datasets
+plus a lookup tool exist precisely so you never have to guess a spelling). Filter on those
+exact values with "=" (or IN for several), e.g. "Account_name" = 'HALYS', "Product" =
+'IP Transit', "diamond_id" = '5373'. Do NOT write ILIKE '%...%' on an account name, product,
+offer or any named entity: it is imprecise and silently matches the wrong rows (e.g.
+"Algerie Telecom" must become the exact "ALGERIE TELECOM SPA", not ILIKE '%Algerie Telecom%').
+Prefer the stable id for aggregation: GROUP BY "diamond_id" and display MAX("Account_name").
+Only fall back to a pattern when NO exact value is available and you truly must approximate -
+and then say so and state the exact pattern you used.
+
 ## Hints from the grounding helper - assistance, NOT orders
 
 Some requests arrive with "HELPER FINDINGS" / "Suggested" values and columns produced by a

@@ -51,7 +51,7 @@ project and paste its output over the file.
 | Project | File | Refresh with |
 |---|---|---|
 | OWISMIND_DEV | `semantic_model/Drive_Revenues_Semantic_Model.v1.json` | `dump_semantic_model.py` (MODEL_ID `AHUh9hb`) |
-| OWISMIND_DEV | `semantic_model/TroubleTickets_Semantic_Model.v1.json` | `dump_tickets_semantic_model.py` (MODEL_ID `dM4jA4G`) |
+| OWISMIND_DEV | `semantic_model/TroubleTickets_Semantic_Model.v1.json` | `dump_semantic_model.py` (TICKETS CONFIG, MODEL_ID `dM4jA4G`) |
 | OWISMIND_PROD_V1 | `semantic_model/Drive_Revenues_Model.v1.json` | `dump_semantic_model.py` (MODEL_ID `a7K9jYk`) |
 
 DEV (revenue + tickets) now hold the live dump; PROD still holds a placeholder

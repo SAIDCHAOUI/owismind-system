@@ -258,11 +258,13 @@ CAPABILITIES = {
             "The OWI incident-tickets expert. Owns ALL figures of the "
             "TroubleTickets dataset: ticket counts and breakdowns by status, "
             "priority, category, problem category, origin and type; resolution "
-            "durations; open vs closed; rankings and top-N; trends over "
+            "durations (minutes); open vs closed; rankings and top-N; trends over "
             "creation / detection / closed dates; per customer, account, service "
-            "or product; distinct values; and 'what does this data contain' "
+            "or product; LD lookups (the status of an LD, whether an LD is "
+            "closed, the account of an LD, or the LDs of a customer - LD codes "
+            "like 'LD016835'); distinct values; and 'what does this data contain' "
             "questions. Route here ANY question about tickets, incidents, "
-            "support, problems, outages, SLAs or resolution times."),
+            "support, problems, outages, LDs, SLAs or resolution times."),
         "block_labels": {
             "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
             "run_sql": {"fr": "interrogation des données", "en": "querying the data"},

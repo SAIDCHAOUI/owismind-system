@@ -12,9 +12,8 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | [`MODEL.md`](MODEL.md) | Human-readable snapshot of the LIVE model (entities, metric, filters, golden queries, glossary, instructions, tool config). **Read this first.** |
 | `build_aligned_semantic_model.py` | One-time CREATE of the aligned model from a read-only copy of the old one (corrections, golden queries, instructions, index). |
 | `update_aligned_semantic_model.py` | In-place MODIFY of an existing aligned model: refresh instructions + golden queries on the active version (no create, no re-index). The going-forward iteration path. |
-| `dump_semantic_model.py` | Export the live model `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json` (refresh the snapshot, no transcription drift). |
-| `update_tickets_semantic_model.py` | In-place MODIFY of the TICKETS model: inject the tickets instructions + golden queries on the active version (no create, no re-index). The iteration path for tickets. |
-| `dump_tickets_semantic_model.py` | Export the live tickets model to `TroubleTickets_Semantic_Model.v1.json`. |
+| `dump_semantic_model.py` | Generic export of a live model `get_raw()` to its `*.v1.json` snapshot (no transcription drift). Set the CONFIG block for REVENUE or TICKETS (both id sets are documented in the comment). |
+| `update_tickets_semantic_model.py` | In-place MODIFY of the TICKETS model: inject the tickets instructions + golden queries + entity/attribute descriptions + metrics (`COUNT(DISTINCT id)`) on the active version (no create, no re-index). The iteration path for tickets. |
 | `migrate_semantic_model_to_project.py` | COPY a model to another project (e.g. DEV -> PROD), remapping dataset refs + table names automatically from the project keys. Creates a new model in the target. |
 | `remap_semantic_model.py` | Rewrite an EXISTING model's dataset refs / table literals IN PLACE (no copy), then re-index. Fixes a botched migration or repoints a model at a different table. |
 
@@ -135,9 +134,12 @@ valid shapes), then the brain is injected by script:
 1. DSS UI: create `TroubleTickets_Semantic_Model` on `TroubleTickets_year`; index
    distinct values once.
 2. `update_tickets_semantic_model.py` (set `NEW_MODEL_ID`): inject the tickets
-   `TICKETS_INSTRUCTIONS` + golden queries (in place, no re-index). Refine the
-   `[CONFIRM]` items (Duration_ticket_total unit; exact `CurrentStatus` values).
-3. `dump_tickets_semantic_model.py`: snapshot to
+   `TICKETS_INSTRUCTIONS` + golden queries + entity/attribute descriptions +
+   metrics (`COUNT(DISTINCT id)`), in place, no re-index. The duration unit
+   (minutes) and the count-DISTINCT / latest-snapshot rules are already baked in;
+   only the exact `CurrentStatus` open/closed values are data-dependent (the
+   instructions tell the model to use the exact catalog values from the index).
+3. `dump_semantic_model.py` (TICKETS CONFIG): snapshot to
    `TroubleTickets_Semantic_Model.v1.json`.
 4. Create the `tickets_semantic_query` tool (Agent OFF, Sonnet, access-as-user)
    bound to the model; put its id in `agents/TroubleTickets_expert.py`

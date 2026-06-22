@@ -74,6 +74,11 @@
         "agent_mode": false,
         "sql_engine": "semantic_tool"
       },
+      "metric": {
+        "default": "ticket_count",
+        "sql": "COUNT(DISTINCT id)",
+        "note": "id has historical-snapshot duplicates (an update adds a new row, old rows kept). Volume = COUNT(DISTINCT id); a ticket's current state (status, duration, close date) = its latest snapshot (max lastUpdate). Duration_ticket_total is in minutes (AVG, never SUM by default). Set via the profile overrides too (agg COUNT_DISTINCT on id)."
+      },
       "lookup": {
         "dataset": "TroubleTickets_year",
         "catalog": "TroubleTickets_year_value_catalogue",
@@ -93,7 +98,7 @@
         "max_rows": 500,
         "allowed_tables": ["TroubleTickets_year"]
       },
-      "status": "BEING BUILT in DEV - finalize per PLAYBOOK (semantic model brain + COUNT metric override), then validate, then promote to PROD"
+      "status": "BEING BUILT in DEV - brain ready in repo (semantic_model/update_tickets_semantic_model.py: instructions + golden queries + descriptions + COUNT(DISTINCT id) metrics). Remaining DSS steps per PLAYBOOK: run the update script on model dM4jA4G, apply the profile overrides (COUNT_DISTINCT id, time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the v1.json, then validate and promote to PROD"
     }
   },
   "business_domains": {
