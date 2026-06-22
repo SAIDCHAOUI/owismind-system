@@ -8,14 +8,14 @@
   "entities": [
     {
       "name": "trouble_ticket",
-      "description": "One incident / trouble ticket, identified by its ticket id. The dataset covers the current year and the three preceding years and is refreshed on the 1st of every month. IMPORTANT: the table keeps HISTORICAL SNAPSHOTS - the same ticket id appears on several rows because each update adds a new row and old rows are kept (often only lastUpdate changes). Always count tickets with COUNT(DISTINCT id) and read a ticket's current state from its latest snapshot (greatest lastUpdate). There is no scenario column: every row is a real ticket.",
+      "description": "Trouble ticket records tracking incident lifecycle, status, timing, customer, and product details, with yearly partitions reflecting tickets opened, closed, or updated in each year (excluding proactive tickets on Router and International Supervision products).",
       "tags": [],
       "type": "DATASET",
       "datasetRef": "OWISMIND_DEV.TroubleTickets_year",
       "attributes": [
         {
           "name": "Duration_ticket_total",
-          "description": "Total ticket duration IN MINUTES, between the opening date and the closing date. Empty while the ticket is still open. Report it from the latest snapshot per id (AVG by default, in minutes); SUM of durations is rarely meaningful.",
+          "description": "Total ticket duration in minutes, from opening to closure (OCEANE).",
           "dssType": "bigint",
           "type": "COLUMN",
           "column": "Duration_ticket_total",
@@ -27,7 +27,7 @@
         },
         {
           "name": "priority",
-          "description": "Processing priority, from P1 (highest, fastest handling, e.g. a full outage) to P4 (lowest, e.g. a minor degradation).",
+          "description": "Ticket processing priority level.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "priority",
@@ -39,7 +39,7 @@
         },
         {
           "name": "CurrentStatus_Reason",
-          "description": "Short free-text label explaining the status, usually the reason recorded when the ticket is closed or archived (sometimes updated while still open); empty for ongoing or frozen tickets. Free text - do not group by it.",
+          "description": "Short label explaining the current status; empty for ongoing or frozen tickets.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "CurrentStatus_Reason",
@@ -51,7 +51,7 @@
         },
         {
           "name": "id",
-          "description": "Unique ticket identifier, stable from creation through closure and archiving. The table keeps historical snapshots, so the SAME id appears on several rows; count tickets with COUNT(DISTINCT id), never COUNT(*), and read a ticket's current state from its latest snapshot (greatest lastUpdate).",
+          "description": "Unique ticket identifier, persistent from creation through closure and archiving.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "id",
@@ -63,7 +63,7 @@
         },
         {
           "name": "CurrentStatus",
-          "description": "The ticket's current (last known) lifecycle state: in progress, closed, etc. Read it from the latest snapshot per id.",
+          "description": "Current state of the ticket at extraction time.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "CurrentStatus",
@@ -75,7 +75,7 @@
         },
         {
           "name": "creationDate",
-          "description": "Date the ticket was created (opened). DEFAULT time axis for 'tickets in <year>', trends and 'created this year'.",
+          "description": "Date the ticket was created.",
           "dssType": "date",
           "type": "COLUMN",
           "column": "creationDate",
@@ -87,7 +87,7 @@
         },
         {
           "name": "Customer_id",
-          "description": "Stable, precise unique identifier of the customer / account in the ticketing database. GROUP BY this id when aggregating by customer, but keep it de-emphasized in the output (a technical key).",
+          "description": "MARINE customer identifier.",
           "dssType": "bigint",
           "type": "COLUMN",
           "column": "Customer_id",
@@ -99,7 +99,7 @@
         },
         {
           "name": "category",
-          "description": "Nature of the incident, i.e. its motive (service interrupted, service degraded, etc.).",
+          "description": "Ticket nature (initial or final).",
           "dssType": "string",
           "type": "COLUMN",
           "column": "category",
@@ -111,7 +111,7 @@
         },
         {
           "name": "Latest_Closed_Date",
-          "description": "Date the ticket was closed, if it has been closed. Use it for closed-ticket timing and resolution-over-time questions; a ticket is closed when it is not null.",
+          "description": "Date the ticket was closed.",
           "dssType": "date",
           "type": "COLUMN",
           "column": "Latest_Closed_Date",
@@ -123,7 +123,7 @@
         },
         {
           "name": "detectionDate",
-          "description": "Date the underlying incident or disturbance was detected. Use it only when the user explicitly asks about detection.",
+          "description": "Date the underlying incident was detected.",
           "dssType": "date",
           "type": "COLUMN",
           "column": "detectionDate",
@@ -135,7 +135,7 @@
         },
         {
           "name": "Account_name",
-          "description": "Name of the customer account concerned by the incident / ticket. The human label to DISPLAY; its spelling can vary, so group on Customer_id and display MAX(Account_name).",
+          "description": "Name of the customer account associated with the ticket.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "Account_name",
@@ -147,7 +147,7 @@
         },
         {
           "name": "origin",
-          "description": "Where the ticket comes from, i.e. who reported the incident (the customer, or detected internally by us, etc.).",
+          "description": "Origin or source of the ticket.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "origin",
@@ -159,7 +159,7 @@
         },
         {
           "name": "Service_Specification_id",
-          "description": "Identifier of the product specification (the product type) concerned by the incident.",
+          "description": "Product type identifier.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "Service_Specification_id",
@@ -171,7 +171,7 @@
         },
         {
           "name": "CustomerRepresentative_Name",
-          "description": "Name of the customer's representative: an employee of the customer who opened the ticket or was designated to follow it. Not an OWI agent.",
+          "description": "Name of the ticket initiator.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "CustomerRepresentative_Name",
@@ -183,7 +183,7 @@
         },
         {
           "name": "ticketEntry",
-          "description": "Entry channel: the way the ticket was created.",
+          "description": "Channel through which the ticket was created (WEB if externalId=s999999999, RPA if initiator is a robot (MMMMxxxx), otherwise OCEANE).",
           "dssType": "string",
           "type": "COLUMN",
           "column": "ticketEntry",
@@ -195,7 +195,7 @@
         },
         {
           "name": "lastUpdate",
-          "description": "Date of the last update to the ticket (a follow-up, a status change, etc.). Used to pick the latest snapshot per ticket id; query by it only when the user explicitly asks about the last update.",
+          "description": "Date of the last detected change on the ticket; used as the extraction reference.",
           "dssType": "date",
           "type": "COLUMN",
           "column": "lastUpdate",
@@ -207,7 +207,7 @@
         },
         {
           "name": "Service_id_1",
-          "description": "Primary product identifier, commonly called the LD - the key identifier of the affected product/line in ticketing. VERY IMPORTANT and very frequently queried: users ask for the status of an LD, whether an LD is closed, the account of an LD, or the LDs of a customer. 'LD' followed by a code maps to this column.",
+          "description": "Primary product identifier (variant 1).",
           "dssType": "string",
           "type": "COLUMN",
           "column": "Service_id_1",
@@ -219,7 +219,7 @@
         },
         {
           "name": "Service_id",
-          "description": "Identifier of the product / service concerned by the incident.",
+          "description": "MARINE product identifier.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "Service_id",
@@ -231,7 +231,7 @@
         },
         {
           "name": "Product",
-          "description": "Exact name of the product concerned by the incident.",
+          "description": "Name of the product associated with the ticket.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "Product",
@@ -255,7 +255,7 @@
         },
         {
           "name": "problemCategory",
-          "description": "Responsibility for the problem: which side is responsible (sometimes OWI, sometimes the customer, etc.).",
+          "description": "Responsibility category for the reported problem.",
           "dssType": "string",
           "type": "COLUMN",
           "column": "problemCategory",
@@ -268,33 +268,33 @@
       ],
       "metrics": [
         {
-          "name": "Ticket count",
-          "description": "Number of distinct tickets (COUNT DISTINCT id, dedup of historical snapshots).",
-          "pseudoSQLExpression": "COUNT(DISTINCT id)",
+          "name": "Total Tickets",
+          "description": "Total number of trouble tickets",
+          "pseudoSQLExpression": "COUNT(id)",
           "created": {}
         },
         {
-          "name": "Average resolution time (minutes)",
-          "description": "Average ticket resolution time in minutes, over the latest snapshot per ticket.",
+          "name": "Total Ticket Duration",
+          "description": "Sum of all ticket durations",
+          "pseudoSQLExpression": "SUM(Duration_ticket_total)",
+          "created": {}
+        },
+        {
+          "name": "Average Ticket Duration",
+          "description": "Average duration to resolve a ticket",
           "pseudoSQLExpression": "AVG(Duration_ticket_total)",
           "created": {}
         },
         {
-          "name": "Max resolution time (minutes)",
-          "description": "Longest ticket resolution time in minutes.",
-          "pseudoSQLExpression": "MAX(Duration_ticket_total)",
-          "created": {}
-        },
-        {
-          "name": "Distinct customers with tickets",
-          "description": "Number of distinct customers that raised at least one ticket.",
+          "name": "Unique Customers with Tickets",
+          "description": "Number of distinct customers who have raised tickets",
           "pseudoSQLExpression": "COUNT(DISTINCT Customer_id)",
           "created": {}
         },
         {
-          "name": "Distinct LDs with tickets",
-          "description": "Number of distinct LDs (Service_id_1) with at least one ticket.",
-          "pseudoSQLExpression": "COUNT(DISTINCT Service_id_1)",
+          "name": "Max Ticket Duration",
+          "description": "Longest ticket duration recorded",
+          "pseudoSQLExpression": "MAX(Duration_ticket_total)",
           "created": {}
         }
       ],
@@ -321,63 +321,7 @@
     }
   ],
   "relationships": [],
-  "goldenQueries": [
-    {
-      "name": "Tickets created in a year (DISTINCT id)",
-      "question": "How many tickets were created in 2025?",
-      "generatedSql": "SELECT COUNT(DISTINCT \"id\") AS ticket_count\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE EXTRACT(YEAR FROM \"creationDate\") = 2025;"
-    },
-    {
-      "name": "Tickets for a customer this year (bare year -> creationDate, FR/EN)",
-      "question": "How many tickets this year for a given customer? / combien de tickets cette annee pour un client ?",
-      "generatedSql": "SELECT MAX(\"Account_name\")  AS \"Account_name\",\n       COUNT(DISTINCT \"id\") AS ticket_count,\n       \"Customer_id\"\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE \"Account_name\" = 'EXAMPLE CUSTOMER'\n  AND EXTRACT(YEAR FROM \"creationDate\") = EXTRACT(YEAR FROM CURRENT_DATE)\nGROUP BY \"Customer_id\";"
-    },
-    {
-      "name": "Ticket count by priority (DISTINCT id)",
-      "question": "How many tickets per priority?",
-      "generatedSql": "SELECT \"priority\", COUNT(DISTINCT \"id\") AS ticket_count\nFROM \"OWISMIND_DEV_troubletickets_year\"\nGROUP BY \"priority\"\nORDER BY ticket_count DESC;"
-    },
-    {
-      "name": "Status of an LD (latest snapshot)",
-      "question": "What is the status of a given LD?",
-      "generatedSql": "SELECT DISTINCT ON (\"id\")\n       \"id\", \"Account_name\", \"CurrentStatus\", \"priority\",\n       \"creationDate\", \"Latest_Closed_Date\", \"Product\", \"Service_id_1\"\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE \"Service_id_1\" = 'LD000123'\nORDER BY \"id\", \"lastUpdate\" DESC NULLS LAST;"
-    },
-    {
-      "name": "LDs of a customer (exact name, DISTINCT)",
-      "question": "What are the LDs of a given customer?",
-      "generatedSql": "SELECT DISTINCT \"Service_id_1\", \"Product\"\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE \"Account_name\" = 'EXAMPLE CUSTOMER'\n  AND \"Service_id_1\" IS NOT NULL\nORDER BY \"Service_id_1\";"
-    },
-    {
-      "name": "Tickets for a named customer (exact value, not ILIKE)",
-      "question": "How many tickets did a given customer open in a given year?",
-      "generatedSql": "SELECT MAX(\"Account_name\")  AS \"Account_name\",\n       COUNT(DISTINCT \"id\") AS ticket_count,\n       \"Customer_id\"\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE \"Account_name\" = 'EXAMPLE CUSTOMER'\n  AND EXTRACT(YEAR FROM \"creationDate\") = 2026\nGROUP BY \"Customer_id\";"
-    },
-    {
-      "name": "Top customers by ticket volume (Year)",
-      "question": "Top 20 customers by number of tickets in 2025",
-      "generatedSql": "SELECT MAX(\"Account_name\")  AS \"Account_name\",\n       COUNT(DISTINCT \"id\") AS ticket_count,\n       \"Customer_id\"\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE EXTRACT(YEAR FROM \"creationDate\") = 2025\nGROUP BY \"Customer_id\"\nORDER BY ticket_count DESC\nLIMIT 20;"
-    },
-    {
-      "name": "Ticket count by current status (latest snapshot)",
-      "question": "How many tickets in each status?",
-      "generatedSql": "WITH latest AS (\n  SELECT DISTINCT ON (\"id\") *\n  FROM \"OWISMIND_DEV_troubletickets_year\"\n  ORDER BY \"id\", \"lastUpdate\" DESC NULLS LAST\n)\nSELECT \"CurrentStatus\", COUNT(*) AS ticket_count\nFROM latest\nGROUP BY \"CurrentStatus\"\nORDER BY ticket_count DESC;"
-    },
-    {
-      "name": "Open tickets count (latest snapshot)",
-      "question": "How many tickets are still open?",
-      "generatedSql": "WITH latest AS (\n  SELECT DISTINCT ON (\"id\") *\n  FROM \"OWISMIND_DEV_troubletickets_year\"\n  ORDER BY \"id\", \"lastUpdate\" DESC NULLS LAST\n)\nSELECT COUNT(*) AS open_tickets\nFROM latest\nWHERE \"Latest_Closed_Date\" IS NULL;"
-    },
-    {
-      "name": "Average resolution time by category (minutes, latest snapshot)",
-      "question": "Average resolution time by category, in minutes",
-      "generatedSql": "WITH latest AS (\n  SELECT DISTINCT ON (\"id\") *\n  FROM \"OWISMIND_DEV_troubletickets_year\"\n  ORDER BY \"id\", \"lastUpdate\" DESC NULLS LAST\n)\nSELECT \"category\",\n       AVG(\"Duration_ticket_total\") AS avg_duration_minutes,\n       COUNT(*)                      AS ticket_count\nFROM latest\nWHERE \"Duration_ticket_total\" IS NOT NULL\nGROUP BY \"category\"\nORDER BY avg_duration_minutes DESC;"
-    },
-    {
-      "name": "Monthly ticket trend (Year, DISTINCT id)",
-      "question": "Monthly number of tickets created in 2025",
-      "generatedSql": "SELECT date_trunc('month', \"creationDate\") AS month,\n       COUNT(DISTINCT \"id\") AS ticket_count\nFROM \"OWISMIND_DEV_troubletickets_year\"\nWHERE EXTRACT(YEAR FROM \"creationDate\") = 2025\nGROUP BY date_trunc('month', \"creationDate\")\nORDER BY month;"
-    }
-  ],
+  "goldenQueries": [],
   "glossaryTerms": [],
   "glossaryBindings": [],
   "indexingSettings": {
@@ -394,7 +338,6 @@
     "lastIndexedEmbeddingLlmId": "openai:LLM-7064-revforecast:vertex_ai/text-embedding-005"
   },
   "sqlGenerationConfig": {
-    "vocabularyTermIds": [],
-    "instructions": "## Physical model - ONE table, NEVER join\n\nThe trouble_ticket entity maps to a SINGLE physical table (the incident-tickets\nbase). Select every needed column directly from it. NEVER emit a JOIN, and in\nparticular NEVER self-join the table - there is nothing to join.\n\n## What this data is - incident / trouble tickets\n\nOne row is a SNAPSHOT of one incident ticket. There is NO scenario column (no\nactual/budget/forecast): every row is a real ticket. The data covers the current\nyear and the three preceding years and is refreshed on the 1st of every month.\nNever state a row count or invent a total volume.\n\n## CRITICAL - duplicate rows: count DISTINCT ids, read the LATEST snapshot\n\nThe table keeps HISTORICAL SNAPSHOTS of each ticket: the SAME \"id\" appears on\nSEVERAL rows because every update adds a NEW row and the old rows are kept (often\nonly \"lastUpdate\" changes, sometimes also \"CurrentStatus\", \"Latest_Closed_Date\",\n\"Duration_ticket_total\" or \"CurrentStatus_Reason\"). You MUST always apply two\nrules:\n\n1. VOLUME = COUNT(DISTINCT \"id\"). NEVER COUNT(*): it over-counts updated tickets.\n   \"How many tickets\", \"number of incidents\", and every ranking / breakdown by\n   volume use COUNT(DISTINCT \"id\"). Write COUNT(DISTINCT \"id\") DIRECTLY on the\n   table; do NOT build a latest-snapshot CTE just to count (the dedup CTE in rule 2\n   is ONLY for reading a ticket's current state, not for counting).\n\n2. CURRENT STATE of a ticket (its status, closing date, duration, reason, and any\n   \"what is the status / is it closed\" question) must come from its LATEST\n   snapshot only = the row with the greatest \"lastUpdate\" for that \"id\".\n   Deduplicate first, then aggregate:\n\n       WITH latest AS (\n         SELECT DISTINCT ON (\"id\") *\n         FROM <the table>\n         ORDER BY \"id\", \"lastUpdate\" DESC NULLS LAST\n       )\n       SELECT ... FROM latest ...\n\n   COUNT(*) over the deduplicated \"latest\" set equals COUNT(DISTINCT \"id\"). Apply\n   this dedup for status breakdowns, open/closed splits, duration aggregates and\n   single-ticket / single-LD lookups.\n\n\"creationDate\" is constant across a ticket's snapshots, so a pure \"created in year\nY\" count needs only COUNT(DISTINCT \"id\") WHERE EXTRACT(YEAR FROM \"creationDate\") =\nY - no dedup CTE required.\n\n## The LD (\"Service_id_1\") - the dominant lookup key (VERY IMPORTANT)\n\n\"Service_id_1\" is the primary product identifier, universally called the LD. It is\nthe field ticketing revolves around and the most frequently queried one. Map \"LD\"\nfollowed by a code (e.g. \"LD000123\") to \"Service_id_1\". Frequent shapes:\n- \"status of LD000123\" / \"is LD000123 closed?\": filter \"Service_id_1\" = 'LD000123',\n  take the LATEST snapshot, and return the ticket \"id\", \"Account_name\",\n  \"CurrentStatus\", \"creationDate\", \"Latest_Closed_Date\" and \"Product\" (lead with\n  these). If the LD carries several tickets, return the latest snapshot of EACH,\n  most recent first.\n- \"who is the account of LD000123\": filter \"Service_id_1\" = 'LD000123', return\n  \"Account_name\" (+ ticket \"id\"), latest snapshot.\n- \"the LDs of <customer>\": resolve the customer (see identity below), then\n  SELECT DISTINCT \"Service_id_1\" (with \"Product\"), excluding empty LDs.\nWhen the question is about an LD, always LEAD the output with the LD.\n\n## Exact values, NEVER ILIKE on names / LDs / products / accounts (CRITICAL)\n\nEntity values reach you already grounded to the EXACT catalog spelling by a\ngrounding helper (see HELPER FINDINGS) - resolving real values is the whole point\nof this stack. Filter on those exact values with \"=\" (or IN for several), e.g.\n\"Account_name\" = '<exact account from the catalog>', \"Service_id_1\" = '<exact LD\ncode>'. Do NOT write\nILIKE '%...%' on an account name, LD, product or any named entity: it is imprecise\nand silently matches the wrong rows. Only fall back to a pattern when NO exact\nvalue is available and you truly must approximate - and then say so and state the\nexact pattern you used.\n\nNEVER FABRICATE A NAME. If you were given NO grounded value for a named entity (no\nHELPER FINDING for it), do NOT invent or complete a name from your own knowledge\n(do not expand a partial customer or product name into a fuller, made-up one).\nFilter only on values you actually have; if the entity cannot be resolved, return no\ndata and NAME the entity you could not resolve, so the user can give the exact value.\nA guessed name that returns zero rows is the worst outcome - refuse to guess.\n\n## Related / group accounts - disclose, never merge\n\nThere is NO customer-group hierarchy in this data: a corporate group's separate\nentities (for example a fixed-line arm and a mobile arm) are DISTINCT accounts with\ndifferent \"Account_name\" and \"Customer_id\" values. When the user names a customer,\nstate the EXACT account you matched. If several accounts plausibly match the wording\n(e.g. several entities of the same group), report the one you used AND list the\nother close matches so the user can pick - never silently merge group entities into\none figure.\n\n## Customer / account identity - GROUP BY Customer_id, DISPLAY Account_name\n\n\"Customer_id\" is the stable, precise customer key; \"Account_name\" is the human\nlabel and its spelling can vary for the same customer. When grouping or ranking by\ncustomer:\n-> GROUP BY \"Customer_id\" ONLY (never by \"Account_name\", which would split one\n   customer into several rows).\n-> For DISPLAY, return MAX(\"Account_name\") AS \"Account_name\"; LEAD with\n   Account_name and keep \"Customer_id\" as the LAST, de-emphasized column.\nWhen the user names a customer, prefer the exact resolved value and aggregate on\n\"Customer_id\". \"CustomerRepresentative_Name\" is the CUSTOMER's representative (an\nemployee of the customer), not an OWI agent - group by it only when the user\nexplicitly asks about representatives.\n\n## What to put forward in the output\n\nLead with the business-meaningful fields: the ticket \"id\", \"Account_name\", the\nrelevant dates (\"creationDate\", \"Latest_Closed_Date\"), the LD (\"Service_id_1\") and\n\"Product\". Keep \"Customer_id\" present but as the LAST, de-emphasized column (a\ntechnical key). Always return a clean tabular result with explicit column aliases.\n\n## Dates - DEFAULT to creationDate (CRITICAL)\n\nThe DEFAULT time axis is \"creationDate\". ANY question with a time window but NO\nexplicit lifecycle verb - \"tickets this year\", \"tickets cette annee\", \"tickets en\n2025\", \"combien de tickets ... cette annee\", \"tickets de janvier\", a trend, \"X\ntickets created / crees / ouverts\" - filters on \"creationDate\". Do NOT use\n\"Latest_Closed_Date\" for these: it silently drops every still-open ticket\n(open tickets have a NULL closing date), which is exactly how a real count returns\nzero.\n- \"creationDate\": when the ticket was opened. The default for volumes, trends and\n  any unqualified year window.\n- \"Latest_Closed_Date\": when the ticket was closed. Use it ONLY when the question\n  is explicitly about CLOSING / RESOLUTION (\"tickets closed in 2025\", \"resolved\n  last month\", closure timing).\n- \"detectionDate\": only when the user explicitly asks about detection.\n- \"lastUpdate\": only when the user explicitly asks about the last update (it also\n  picks the latest snapshot, rule 2 above).\nFor a year window, filter EXTRACT(YEAR FROM \"creationDate\") = <year> (or the date\ncolumn the question explicitly implies), rather than comparing to today's date.\n\n## Open vs closed\n\n\"open / ongoing / pending / unresolved\" vs \"closed / resolved\" must be read from\nthe LATEST snapshot per id. A ticket is CLOSED when \"Latest_Closed_Date\" IS NOT\nNULL (and its \"CurrentStatus\" is a closed-family value); OPEN when\n\"Latest_Closed_Date\" IS NULL. Use the EXACT \"CurrentStatus\" values from the data\n(HELPER FINDINGS / value index); never invent a status string.\n\n## Metrics\n\n- Ticket count = COUNT(DISTINCT \"id\"). The primary measure.\n- Resolution duration = \"Duration_ticket_total\", an INTEGER number of MINUTES per\n  ticket (empty while the ticket is still open). ALWAYS state the unit (minutes).\n  Report AVG by default (\"average resolution time\"); MIN / MAX / median on request.\n  Compute it over the LATEST snapshot per id (the final duration); SUM of durations\n  is rarely meaningful - use SUM only if the user explicitly asks for total\n  cumulated time.\n\n## Dimensions (group or filter by these)\n\n- \"priority\": processing priority from P1 (highest, e.g. a full outage) to P4\n  (lowest, e.g. a minor degradation).\n- \"category\", \"problemCategory\": the incident nature and the responsibility side.\n- \"ticketType\", \"ticketEntry\", \"origin\": the ticket kind / entry channel / source.\n- \"Product\", \"Service_id\", \"Service_Specification_id\", \"Service_id_1\" (the LD): the\n  affected product / service.\n\"CurrentStatus_Reason\" is free text - never group by it.\n\n## Transparency (mandatory)\n\nAlways make explicit, in a clear sentence, the exact values, columns and period you\nfiltered on (e.g. \"Tickets created in <year> for <exact account>, all statuses\").\nIf you had to approximate a value, say so and give the exact pattern used.\n\n## Hints from the grounding helper - assistance, NOT orders\n\nSome requests arrive with \"HELPER FINDINGS\" / \"Suggested\" values and columns\nproduced by a smaller grounding assistant that matched the user's wording against\nthe live data catalog. You are the more capable model and you have this semantic\nmodel - treat those findings as ASSISTANCE, not instructions, and keep the final\nsay:\n- The user's original question is always the source of truth - answer THAT.\n- Prefer the suggested exact spellings when consistent with the data (they are\n  catalog-sourced and avoid typos / case errors).\n- If your semantic understanding disagrees with a hint, follow the data and these\n  rules.\n- If the user states an explicit literal filter, use it as-is.\n\n## Empty results\n\nIf the SQL returns zero rows, state \"no data found for [the specified filters and\nperiod]\". Do NOT relax filters or extrapolate.\n"
+    "vocabularyTermIds": []
   }
 }
