@@ -1,9 +1,1240 @@
+Versions : ['v1']
+Version active : v1
 {
-  "_placeholder": "Replace this ENTIRE file with the output of dump_semantic_model.py (run in a DSS notebook on this project). It dumps the live model get_raw() JSON. Committing it here means the model config lives in the repo: paste it ONCE here, then reference this file instead of pasting the config in chat every time.",
-  "_model_name": "Drive_Revenues_Semantic_Model",
-  "_model_id": "AHUh9hb",
-  "_project": "OWISMIND_DEV",
-  "_bound_tool": "revenue_semantic_query (v4oqA6R)",
-  "_refresh_with": "semantic_model/dump_semantic_model.py (MODEL_ID already set to AHUh9hb)",
-  "_status": "PLACEHOLDER - paste the real dump here"
+  "id": "v1",
+  "description": "Aligned with the OWIsMind sub-agent: one-table no-join, ACTUALS default, Product>Solution>SolutionLine>sirano_product priority + transparency, Account_name+carrier_code display (diamond_id discreet), Parent_Group restraint, indirect/Account_partner semantics.",
+  "created": {},
+  "entities": [
+    {
+      "name": "revenue_record",
+      "description": "Monthly revenue fact table. Each row records one revenue amount (amount_eur) for a specific customer (diamond_id), product, reporting month (year_month), and financial scenario defined by Phase and booking_type. Every revenue query MUST filter or group by Phase and booking_type; when the user does not specify a scenario, default to Phase = 'ACTUALS'. The table also carries distribution_type to distinguish direct from indirect sales, and Account_partner to identify the intermediary in indirect flows.",
+      "tags": [],
+      "type": "DATASET",
+      "datasetRef": "OWISMIND_DEV.DRIVE_Revenues",
+      "attributes": [
+        {
+          "name": "amount_eur",
+          "description": "Revenue amount in euros. The business meaning depends on the combination of Phase and booking_type (e.g., billed actuals, accrued revenue, budget, forecast). Use SUM(amount_eur) for total revenue and always apply a Phase filter.",
+          "dssType": "double",
+          "type": "COLUMN",
+          "column": "amount_eur",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Product",
+          "description": "Most granular commercial offer or service sold. Maps to the Product level of the commercial_offer hierarchy (SolutionLine > Product). Used as the join key to the commercial_offer dimension.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Product",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "booking_type",
+          "description": "Detailed financial booking or estimation category for the amount (e.g., billed, accrued, indirect adjustment, pipeline estimate). Must be used together with Phase to correctly interpret the nature of the revenue figure.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "booking_type",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 8
+          }
+        },
+        {
+          "name": "Phase",
+          "description": "High-level reporting scenario: ACTUAL (realized revenue), BUDGET, FORECAST, or another planning-cycle version. This is the primary filter for any revenue analysis; default to 'ACTUALS' when no scenario is specified.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Phase",
+          "distinctValuesHandlingMode": "MANUAL",
+          "manualValues": [
+            "ACTUALS",
+            "BUDGET",
+            "Q3F",
+            "HLF",
+            "FORECAST"
+          ],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "distribution_type",
+          "description": "Sales channel type: 'direct' when the offer is sold straight to the end customer, 'indirect' when routed through a distributor or reseller (see Account_partner).",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "distribution_type",
+          "distinctValuesHandlingMode": "MANUAL",
+          "manualValues": [
+            "Direct_distribution",
+            "Indirect_distribution/Resseler"
+          ],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Account_partner",
+          "description": "Reseller / distributor in an INDIRECT deal (distribution_type = 'Indirect_distribution/Resseler'). The customer (diamond_id / Account_name) is the END customer; Account_partner is the intermediary who resells to them. Example: we sell to Airbus, who resells to Maroc Telecom -> end customer = Maroc Telecom, Account_partner = Airbus. Populated only for indirect sales.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Account_partner",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 10
+          }
+        },
+        {
+          "name": "year_month",
+          "description": "Reporting month of the revenue entry (date, month granularity). Each row represents one customer-product revenue record for a single month.",
+          "dssType": "dateonly",
+          "type": "COLUMN",
+          "column": "year_month",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "diamond_id",
+          "description": "Unique customer identifier from the Diamond master database. Join key to the customer_account dimension; all customer-level revenue aggregations must be anchored on this field.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "diamond_id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Total Revenue (EUR)",
+          "description": "Total revenue amount in EUR across all records",
+          "pseudoSQLExpression": "SUM(amount_eur)",
+          "llmInstructions": "Total revenue in EUR. ALWAYS combine with a Phase filter.",
+          "created": {}
+        }
+      ],
+      "filters": [
+        {
+          "name": "HLF Only",
+          "description": "Half-year forecast scenario. Use when user explicitly mentions HLF, half-year forecast, or mid-year re-estimate.",
+          "pseudoSQLExpression": "Phase = 'HLF'",
+          "created": {}
+        },
+        {
+          "name": "Q3F Only",
+          "description": "Q3 re-forecast scenario. Use when user explicitly mentions Q3F, Q3 forecast, or Q3 re-estimate.",
+          "pseudoSQLExpression": "Phase = 'Q3F'",
+          "created": {}
+        },
+        {
+          "name": "Expected Billing Only",
+          "pseudoSQLExpression": "Phase = 'FORECAST' AND booking_type LIKE 'To Bill%'",
+          "created": {}
+        },
+        {
+          "name": "Pipeline Only",
+          "pseudoSQLExpression": "Phase = 'FORECAST' AND booking_type = 'New customer Open in Pipe'",
+          "created": {}
+        },
+        {
+          "name": "Accrual Only",
+          "pseudoSQLExpression": "booking_type = 'Accrual'",
+          "created": {}
+        },
+        {
+          "name": "Billed Only",
+          "pseudoSQLExpression": "booking_type LIKE 'Bill%'",
+          "created": {}
+        },
+        {
+          "name": "Indirect Sales Only",
+          "pseudoSQLExpression": "distribution_type = 'Indirect_distribution/Resseler'",
+          "created": {}
+        },
+        {
+          "name": "Direct Sales Only",
+          "pseudoSQLExpression": "distribution_type = 'Direct_distribution'",
+          "created": {}
+        },
+        {
+          "name": "Forecast Only",
+          "pseudoSQLExpression": "Phase = 'FORECAST'",
+          "created": {}
+        },
+        {
+          "name": "Budget Only",
+          "pseudoSQLExpression": "Phase = 'BUDGET'",
+          "created": {}
+        },
+        {
+          "name": "Actual Revenue Only",
+          "description": "Filters to only actual/realized revenue records (Phase = 'ACTUALS'), which is the default for generic revenue analysis",
+          "pseudoSQLExpression": "Phase = 'ACTUALS'",
+          "created": {}
+        }
+      ],
+      "primaryKey": {
+        "attributes": []
+      },
+      "foreignKeys": []
+    },
+    {
+      "name": "customer_account",
+      "description": "Customer identity dimension. diamond_id is the master unique customer identifier — use it as the primary key for customer-level revenue aggregation. Account_name is for display only. Customer revenue computations MUST anchor on diamond_id, not Account_name.",
+      "tags": [],
+      "type": "DATASET",
+      "datasetRef": "OWISMIND_DEV.DRIVE_Revenues",
+      "attributes": [
+        {
+          "name": "Parent_Group",
+          "description": "Group-level parent entity linked to the account. Do NOT group, aggregate or split by Parent_Group unless the user explicitly asks for the parent / corporate group level; the default customer granularity is the individual account (diamond_id). When used, state it explicitly.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Parent_Group",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "sales_zone",
+          "description": "Commercial geographic zone associated with the account. Represents the business region used for sales ownership and reporting.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "sales_zone",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 19
+          }
+        },
+        {
+          "name": "sales_entity",
+          "description": "Sales organization to which the account is attributed, distinguishing internal group business from external customer business.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "sales_entity",
+          "distinctValuesHandlingMode": "MANUAL",
+          "manualValues": [
+            "GCS",
+            "GCP"
+          ],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "Account_name",
+          "description": "Legal name of the end customer. Used for display purposes only — never use Account_name as a join key or unique identifier; always use diamond_id instead.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Account_name",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 5
+          }
+        },
+        {
+          "name": "carrier_code",
+          "description": "Billing account code used to identify the customer account in revenue reporting. Should always be interpreted together with Account_name for context.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "carrier_code",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {}
+        },
+        {
+          "name": "diamond_id",
+          "description": "Unique customer identifier from the Diamond database. This is the master primary key for customer-level joins and aggregations across all entities.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "diamond_id",
+          "distinctValuesHandlingMode": "NONE",
+          "manualValues": [],
+          "indexDistinctValues": false,
+          "resolveInUserRequests": false,
+          "sqlGenerationConfig": {}
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Total Customer Accounts",
+          "description": "Total number of unique customer accounts based on the master identifier diamond_id",
+          "pseudoSQLExpression": "COUNT(DISTINCT diamond_id)",
+          "created": {}
+        },
+        {
+          "name": "Total Account Names",
+          "description": "Total number of distinct account names across all customer records",
+          "pseudoSQLExpression": "COUNT(DISTINCT Account_name)",
+          "created": {}
+        },
+        {
+          "name": "Total Parent Groups",
+          "description": "Total number of distinct parent groups in the customer base",
+          "pseudoSQLExpression": "COUNT(DISTINCT Parent_Group)",
+          "created": {}
+        },
+        {
+          "name": "Accounts per Parent Group",
+          "description": "Average number of unique customer accounts per parent group, useful for understanding group consolidation",
+          "pseudoSQLExpression": "COUNT(DISTINCT diamond_id) * 1.0 / NULLIF(COUNT(DISTINCT Parent_Group), 0)",
+          "created": {}
+        },
+        {
+          "name": "Total Carrier Codes",
+          "description": "Total number of distinct carrier codes associated with customer accounts",
+          "pseudoSQLExpression": "COUNT(DISTINCT carrier_code)",
+          "created": {}
+        }
+      ],
+      "filters": [],
+      "primaryKey": {
+        "attributes": [
+          "diamond_id"
+        ]
+      },
+      "foreignKeys": []
+    },
+    {
+      "name": "commercial_offer",
+      "description": "Commercial offer hierarchy, broadest to most granular: SolutionLine > Product (sirano_product is a secondary technical code). When a user term (e.g. 'IPL', 'IP Transit', 'Roaming Sponsor', 'IP') could match several levels, resolve it to the MOST GRANULAR level that contains it, in strict order: Product first, then SolutionLine, then sirano_product. When the value also exists at another level (when a value exists at more than one offer level), filter the most granular level (Product) and say so explicitly so the user can ask for the other level.",
+      "tags": [],
+      "type": "DATASET",
+      "datasetRef": "OWISMIND_DEV.DRIVE_Revenues",
+      "attributes": [
+        {
+          "name": "Product",
+          "description": "Most granular commercial offer identifier representing the exact service sold or delivered (e.g., 'LTE Signalling', 'Roaming Sponsor'). Primary join key to revenue_record.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "Product",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 42
+          }
+        },
+        {
+          "name": "sirano_product",
+          "description": "Product code from the Sirano application used to track and classify revenue at the product level.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "sirano_product",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 153
+          }
+        },
+        {
+          "name": "SolutionLine",
+          "description": "Highest-level business solution family grouping offers into broad domains such as Roaming, IP, Bandwidth, or Virtual Networks.",
+          "dssType": "string",
+          "type": "COLUMN",
+          "column": "SolutionLine",
+          "distinctValuesHandlingMode": "AUTO_INDEX",
+          "manualValues": [],
+          "indexDistinctValues": true,
+          "resolveInUserRequests": true,
+          "sqlGenerationConfig": {
+            "autoValuesLimit": 5
+          }
+        }
+      ],
+      "metrics": [
+        {
+          "name": "Distinct Products",
+          "description": "Number of unique products across all commercial offers",
+          "pseudoSQLExpression": "COUNT(DISTINCT Product)",
+          "created": {}
+        },
+        {
+          "name": "Distinct Solution Lines",
+          "description": "Number of unique solution lines across all commercial offers",
+          "pseudoSQLExpression": "COUNT(DISTINCT SolutionLine)",
+          "created": {}
+        }
+      ],
+      "filters": [],
+      "primaryKey": {
+        "attributes": [
+          "Product"
+        ]
+      },
+      "foreignKeys": []
+    }
+  ],
+  "relationships": [
+    {
+      "firstEntity": "revenue_record",
+      "secondEntity": "customer_account",
+      "pseudoSQLExpression": "revenue_record.diamond_id = customer_account.diamond_id"
+    },
+    {
+      "firstEntity": "revenue_record",
+      "secondEntity": "commercial_offer",
+      "pseudoSQLExpression": "revenue_record.Product = commercial_offer.Product"
+    }
+  ],
+  "goldenQueries": [
+    {
+      "name": "Revenue by Customer (Year)",
+      "question": "Revenue of diamond_id 5373 in 2025",
+      "generatedSql": "SELECT SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"diamond_id\" = '5373'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025;"
+    },
+    {
+      "name": "Revenue with a named customer (Year)",
+      "question": "How much revenue did we make with HALYS last year (2025)?",
+      "generatedSql": "SELECT MAX(r.\"Account_name\") AS \"Account_name\",\n       MAX(r.\"carrier_code\")  AS \"carrier_code\",\n       SUM(r.\"amount_eur\")    AS total_revenue,\n       r.\"diamond_id\"\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Account_name\" = 'HALYS'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025\nGROUP BY r.\"diamond_id\";"
+    },
+    {
+      "name": "Top Customers by Revenue (Product, Year)",
+      "question": "Top 20 customers for IP Transit in 2025",
+      "generatedSql": "SELECT MAX(r.\"Account_name\") AS \"Account_name\",\n       MAX(r.\"carrier_code\")  AS \"carrier_code\",\n       SUM(r.\"amount_eur\")    AS total_revenue,\n       r.\"diamond_id\"\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Product\" = 'IP Transit'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025\nGROUP BY r.\"diamond_id\"\nORDER BY total_revenue DESC\nLIMIT 20;"
+    },
+    {
+      "name": "Offer term ambiguous across levels — prefer Product",
+      "question": "How much revenue on IP Transit in 2026? (IP Transit may exist at more than one offer level; prefer the Product level)",
+      "generatedSql": "SELECT SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Product\" = 'IP Transit'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2026;"
+    },
+    {
+      "name": "Budget vs Actuals Comparison (Monthly, Product)",
+      "question": "Compare budget vs actuals 2026 for Roaming Sponsor by month",
+      "generatedSql": "SELECT r.\"year_month\",\n       r.\"Phase\",\n       SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Product\" = 'Roaming Sponsor'\n  AND r.\"Phase\" IN ('BUDGET', 'ACTUALS')\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2026\nGROUP BY r.\"year_month\", r.\"Phase\"\nORDER BY r.\"year_month\", r.\"Phase\";"
+    },
+    {
+      "name": "Revenue Actuals YTD (SolutionLine)",
+      "question": "Revenue actuals YTD 2026 for the Roaming solution line",
+      "generatedSql": "SELECT SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Phase\" = 'ACTUALS'\n  AND r.\"SolutionLine\" = 'ROAMING'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2026;"
+    },
+    {
+      "name": "Indirect Customers by Product (Year)",
+      "question": "Indirect customers on EVPL in 2025",
+      "generatedSql": "SELECT MAX(r.\"Account_name\") AS \"Account_name\",\n       MAX(r.\"carrier_code\")  AS \"carrier_code\",\n       SUM(r.\"amount_eur\")    AS total_revenue,\n       r.\"diamond_id\"\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"Product\" = 'EVPL'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND r.\"distribution_type\" = 'Indirect_distribution/Resseler'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025\nGROUP BY r.\"diamond_id\"\nORDER BY total_revenue DESC;"
+    },
+    {
+      "name": "Total revenue from indirect customers (Year)",
+      "question": "How much revenue did we generate with all indirect customers last year (2025)?",
+      "generatedSql": "SELECT SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"distribution_type\" = 'Indirect_distribution/Resseler'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025;"
+    },
+    {
+      "name": "Revenue by partner / reseller (indirect, Year)",
+      "question": "Revenue per partner (reseller) for indirect sales in 2025",
+      "generatedSql": "SELECT r.\"Account_partner\",\n       SUM(r.\"amount_eur\") AS total_revenue\nFROM \"OWISMIND_DEV_drive_revenues\" r\nWHERE r.\"distribution_type\" = 'Indirect_distribution/Resseler'\n  AND r.\"Phase\" = 'ACTUALS'\n  AND EXTRACT(YEAR FROM r.\"year_month\") = 2025\nGROUP BY r.\"Account_partner\"\nORDER BY total_revenue DESC;"
+    }
+  ],
+  "glossaryTerms": [
+    {
+      "id": "852faf82-b898-46ad-a32b-ae5f276fe455",
+      "term": "LTE Signalling",
+      "source": "MANUAL",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T10:08:30.507Z"
+      },
+      "synonyms": [
+        "LTE",
+        "Diameter",
+        "LTE signaling"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "6b860fc8-1b5e-4ef0-a4ca-1d76c626e53e",
+      "term": "IPL",
+      "description": "IPL",
+      "source": "MANUAL",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T10:08:11.241Z"
+      },
+      "synonyms": [
+        "IP Leased Line",
+        "IP leased"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "13d299d3-2aa4-438d-88fd-aec2e8a972a3",
+      "term": "Revenue",
+      "description": "Revenue amount in euros measured with amount_eur, always interpreted together with Phase and booking_type.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.588904+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "revenues",
+        "turnover",
+        "sales",
+        "CA",
+        "chiffre d'affaires",
+        "chiffre d'affaire",
+        "business generated",
+        "generated revenue"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "2c5748c9-8c6e-48b8-9e59-33da8be967e7",
+      "term": "Actuals",
+      "description": "Realized revenue scenario. Corresponds to rows where Phase = ACTUALS.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.590799+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "actual revenue",
+        "realized",
+        "realised",
+        "réalisé",
+        "generated",
+        "made",
+        "revenue made"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "17526091-e76c-49d7-8531-81ab1a0978c7",
+      "term": "Budget",
+      "description": "Planned budget revenue scenario. Corresponds to rows where Phase = BUDGET.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.592669+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "planned budget",
+        "budgeted revenue"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "15debdac-62a7-4d3c-8973-692822ec5a1f",
+      "term": "Forecast",
+      "description": "Forecasted revenue scenario. Corresponds to rows where Phase = FORECAST.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.594434+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "projected revenue",
+        "expected revenue",
+        "prévision",
+        "forecasted revenue"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "8740291e-6390-4005-bcf5-bafc53f2e71b",
+      "term": "Q3F",
+      "description": "Internal planning or forecast scenario identified by Phase = Q3F.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.596238+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "2b790d03-5d88-46fc-a3fe-05da9fef40d3",
+      "term": "HLF",
+      "description": "Internal planning or forecast scenario identified by Phase = HLF.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.598080+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "c6fe87f2-2971-42ad-bccf-9d12eb9a182f",
+      "term": "Booking type",
+      "description": "Financial booking classification refining how the amount should be interpreted, for example billed revenue, accrual, indirect adjustment, or another internal booking logic.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.599760+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "booking",
+        "financial classification",
+        "booking logic"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "9a2a69e3-6c5a-4303-b9e4-482369010cce",
+      "term": "Reporting month",
+      "description": "Reporting month stored in year_month.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.601616+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "month",
+        "period",
+        "accounting month",
+        "reporting period"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "ed22f144-2c37-4e87-b98d-6ff542c667ff",
+      "term": "YTD",
+      "description": "Year-to-date aggregation from January of the target year up to the latest available reporting month in that year.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.603372+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:11:34.736Z"
+      },
+      "synonyms": [
+        "year-to-date",
+        "year to date",
+        "cumul annuel"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "bc882850-04d2-4412-ac17-239ad4e2e04c",
+      "term": "FY",
+      "description": "Full-year aggregation over all reporting months of the selected year.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.605154+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "full year",
+        "annual",
+        "yearly total"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "8886d18f-c849-47c5-b813-3d89ce6aefd1",
+      "term": "Monthly trend",
+      "description": "Revenue evolution across year_month periods.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.607049+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "trend",
+        "evolution",
+        "month by month",
+        "revenue evolution"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "bf175ce5-d3af-4efc-a5ee-79fc12ef15b3",
+      "term": "Customer",
+      "description": "End customer receiving the service, identified primarily by diamond_id, and displayed by Account_name.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.608833+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "client",
+        "account",
+        "end customer"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "c22df2c5-0068-4939-8a58-7294782ac300",
+      "term": "Account name",
+      "description": "Legal name of the end customer receiving the service.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.610586+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "customer name",
+        "client name",
+        "legal customer name"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "7bd2246f-18cf-445d-9f37-3189b96f9bf3",
+      "term": "Diamond ID",
+      "description": "Primary unique customer identifier from the Diamond master database.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.612268+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "diamond_id",
+        "customer id",
+        "unique customer id",
+        "diamond identifier"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "80b8d4bd-9f0b-4c69-bd35-dd154b46f394",
+      "term": "Carrier code",
+      "description": "Billing account code used to identify the customer account in revenue reporting.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.614104+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "billing code",
+        "account code",
+        "billing account code"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "5d306795-c363-46b5-b62e-53de41be6d22",
+      "term": "Parent group",
+      "description": "Group-level parent entity linked to the customer account.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.616029+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "group",
+        "parent company",
+        "corporate group"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "23c058d7-284a-4bae-b09d-b78aa2f67050",
+      "term": "Direct business",
+      "description": "Revenue where the end customer is sold directly, typically with no intermediary partner.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.617810+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "direct",
+        "direct sales"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "465ef678-440e-49d8-9429-41639339685c",
+      "term": "Indirect business",
+      "description": "Revenue where the sale is routed through an intermediary partner or reseller.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.619450+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "indirect",
+        "indirect sales",
+        "partner business",
+        "reseller business"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "9efac756-01fb-44b9-a471-de97c55552dc",
+      "term": "Account partner",
+      "description": "Distributor or reseller involved in an indirect sales flow.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.621130+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "partner",
+        "reseller",
+        "distributor",
+        "intermediary"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "9320adae-dd24-4aaf-be22-cde80a57ce45",
+      "term": "Distribution type",
+      "description": "Sales relationship type indicating direct or indirect commercial routing.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.622942+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "channel type",
+        "direct or indirect"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "5a866395-edfe-45bb-88a9-ac33f5f0d872",
+      "term": "SolutionLine",
+      "description": "Highest-level business offer family.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.624606+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "offer family",
+        "business family",
+        "by solution line",
+        "solution line",
+        "top-level offer family"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "abaca8ec-2206-47ce-8bca-a4b696cbeae1",
+      "term": "Product",
+      "description": "Most granular commercial offer or service item.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.628191+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "per product",
+        "sold product",
+        "split by product",
+        "by product",
+        "offer",
+        "service item"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "db65810d-15c4-499b-80a8-f3d14ec9b4e2",
+      "term": "Sirano product",
+      "description": "Product code used in the Sirano application for product-level tracking.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.629837+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "sirano code",
+        "sirano identifier"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "bb9dd4c2-9653-4b0a-b5d8-c128d2ab9f65",
+      "term": "Commercial hierarchy",
+      "description": "Offer structure interpreted as SolutionLine > Product.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.631639+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "offer hierarchy",
+        "product hierarchy"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "044f487a-72d8-4988-80ce-d752bc1c2497",
+      "term": "Roaming",
+      "description": "Revenue related to the Roaming business family or related products.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.633550+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "e4969835-1655-47f7-af23-d9a6ebe065bc",
+      "term": "Roaming Sponsor",
+      "description": "Revenue related to the product Roaming Sponsor.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.635288+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:07:18.949Z"
+      },
+      "synonyms": [
+        "ORS",
+        "sponsor roaming"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "40516cef-d582-4f5c-9f43-3e19f1c70cc4",
+      "term": "IPX",
+      "description": "Revenue related to IPX products or solutions.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.637190+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:05:09.799Z"
+      },
+      "synonyms": [
+        "IP Exchange",
+        "IP Peering",
+        "IPX transport"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "97c9e6b6-bb5d-4e1e-89e6-a4731edc25f1",
+      "term": "SS7",
+      "description": "Revenue related to SS7 signalling services.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.639098+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:05:24.550Z"
+      },
+      "synonyms": [
+        "SS7",
+        "signalisation SS7",
+        "SS7 signaling"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "fe91be17-5214-42f9-8a3b-2877bb82abfc",
+      "term": "LTE",
+      "description": "Revenue related to LTE signalling services.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.641013+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "6f6ca6d8-4799-4607-92e4-f262f9407e21",
+      "term": "IP Transit",
+      "description": "Revenue related to IP Transit offers.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.643238+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:07:33.341Z"
+      },
+      "synonyms": [
+        "IPT",
+        "transit IP"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "9f4efec9-0f27-4163-a9c1-1d7ddb7942f2",
+      "term": "Virtual Network",
+      "description": "Revenue related to Virtual Network offers.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.645457+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "virtual network"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "def10760-cd85-42e6-946e-ac3c4bd4999d",
+      "term": "Bandwidth",
+      "description": "Revenue related to bandwidth-oriented offers and solution families.",
+      "source": "EXTRACTED",
+      "userModified": true,
+      "created": {
+        "on": "2026-04-17T09:07:52.647514+00:00",
+        "by": "said.chaoui"
+      },
+      "modified": {
+        "on": "2026-04-17T10:07:47.831Z"
+      },
+      "synonyms": [
+        "BW",
+        "bande passante",
+        "capacity"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "2e57b79e-ea1b-4a71-ae69-88b49be3bad1",
+      "term": "Sales entity",
+      "description": "Sales organization to which the revenue is attributed.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.649335+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "by sales entity",
+        "business entity",
+        "entity"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "bbbf109f-712b-46a7-9185-9d31d8ff7380",
+      "term": "Sales zone",
+      "description": "Commercial geographic zone associated with the revenue record.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.651160+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "commercial region",
+        "by sales zone",
+        "region",
+        "geography",
+        "zone"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "c7120897-fdb6-40fb-96b9-2755ce55906a",
+      "term": "Account manager",
+      "description": "Person responsible for managing the customer account.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.653051+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "AM"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "5b3bda20-0811-4e9f-8e13-6d0f73d7ead2",
+      "term": "Area manager",
+      "description": "Area manager responsible for the account.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.654979+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "1976f64c-fb0b-4d29-a63e-3d4dfdc86929",
+      "term": "Sales director",
+      "description": "Sales director responsible for the account.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.656895+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [],
+      "privateEditorData": {}
+    },
+    {
+      "id": "7d25900e-fea0-4e85-8a3d-e1ac5a44a9c5",
+      "term": "Total Revenue",
+      "description": "The total amount of revenue in EUR.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.660533+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "how much did we make",
+        "how much did we generate",
+        "what is the revenue",
+        "revenue"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "26864ce9-79fc-4a2b-adab-0d2007cd7693",
+      "term": "Actual Revenue",
+      "description": "Revenue that has been realized or booked, as opposed to budgeted or forecasted revenue.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.662359+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "actuals",
+        "actual"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "dbb6cc2c-7ca6-47ca-b01a-f7840e57630d",
+      "term": "Top Customers",
+      "description": "Ranking of customers by revenue or other metrics.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.664181+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "top 20 customers",
+        "top customer"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "79c87599-4bf4-467e-b1e5-1e3daea5d251",
+      "term": "Revenue Trend",
+      "description": "Analysis of revenue over time periods to identify patterns and changes.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.666066+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "month by month",
+        "trend"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "e89897e4-f314-4326-a788-52a1f5b3fd8a",
+      "term": "Indirect Customer",
+      "description": "Customers acquired or serviced through partners or intermediaries rather than directly.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.668006+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "partner business",
+        "indirect"
+      ],
+      "privateEditorData": {}
+    },
+    {
+      "id": "a166dad0-ccb4-4fc4-b011-c3b25921974e",
+      "term": "Carrier",
+      "description": "A telecommunications carrier or service provider.",
+      "source": "EXTRACTED",
+      "userModified": false,
+      "created": {
+        "on": "2026-04-17T09:07:52.669874+00:00",
+        "by": "said.chaoui"
+      },
+      "synonyms": [
+        "by carrier",
+        "carrier code"
+      ],
+      "privateEditorData": {}
+    }
+  ],
+  "glossaryBindings": [],
+  "indexingSettings": {
+    "maxDistinctValuesPerAttribute": 100,
+    "maxScannedRowsForSQLDatasets": -1,
+    "maxScannedRowsForNonSQLDatasets": 10000
+  },
+  "privateEditorData": {
+    "embeddingLlmId": "openai:LLM-7064-revforecast:vertex_ai/text-embedding-005",
+    "indexingStale": false,
+    "lastIndexedAt": "2026-06-22T11:49:04.247863+00:00",
+    "lastIndexedEmbeddingLlmId": "openai:LLM-7064-revforecast:vertex_ai/text-embedding-005",
+    "lastSavedAt": "2026-06-15T15:41:15.046318+00:00",
+    "playgroundAgentMode": false
+  },
+  "sqlGenerationConfig": {
+    "instructions": "## Physical model — ONE table, NEVER join\n\nAll three entities (revenue_record, customer_account, commercial_offer) map to the SAME\nphysical table. Treat them as a single denormalized table and select every needed column\ndirectly from it. NEVER emit a JOIN, and in particular NEVER self-join the table to itself —\nthere is nothing to join.\n\n## Revenue semantics — Phase and booking_type\n\namount_eur is bucketed along two axes:\n- Phase: the scenario. Allowed values, EXACTLY: ACTUALS, BUDGET, FORECAST, Q3F, HLF.\n  The realized-revenue scenario is the PLURAL 'ACTUALS' — never write 'ACTUAL'.\n- booking_type: the financial bucket within a scenario.\n\nFor a given (diamond_id, Product, year_month) within one Phase, several booking_type rows\nmay exist (e.g. Bill + Accrual). They are ADDITIVE: SUM(amount_eur) across all booking_types\nwithin a Phase gives the total recognized revenue.\n\n## Default scenario rule\n\nWhen the user asks for \"revenue\", \"chiffre d'affaires\", \"CA\", \"turnover\" or \"sales\" WITHOUT\nnaming a scenario → apply Phase = 'ACTUALS'. Do not add a booking_type filter (sum across\nall booking_types in ACTUALS).\n\n## Explicit booking_type qualifiers\n- \"billed\", \"invoiced\", \"facturé\"               → booking_type LIKE 'Bill%'\n- \"accrual\", \"accrued\", \"provision\"             → booking_type = 'Accrual'\n- \"pipeline\", \"open opportunities\"              → Phase = 'FORECAST' AND booking_type = 'New customer Open in Pipe'\n- \"expected billing\", \"to bill\", \"à facturer\"   → Phase = 'FORECAST' AND booking_type LIKE 'To Bill%'\n\n## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)\n\nThe offer is a hierarchy, broadest to most granular:\n    SolutionLine  >  Product      (sirano_product is a secondary technical code).\n\nThe 'Solution' level was REMOVED from the dataset: there are now only SolutionLine,\nProduct and sirano_product. NEVER reference a 'Solution' column.\n\nWhen a user term (e.g. \"IPL\", \"IP Transit\", \"Roaming Sponsor\", \"IP\") could match a value in\nseveral of these columns, resolve it to the MOST GRANULAR level that contains it, in this\nSTRICT order of preference:\n    1. Product           (default: most users speak at the product level)\n    2. SolutionLine\n    3. sirano_product    (last resort only)\n\nSo: filter on Product if the term is a Product value; else SolutionLine; else sirano_product.\nExample: \"IP\" is a SolutionLine -> filter on SolutionLine. \"IPL\" and \"Roaming Sponsor\" are\nProducts -> filter on Product.\n\nsirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use\nsirano_product ONLY if the user explicitly gives a sirano code. In particular, BUDGET rows\nmay not carry a sirano_product, so resolving an offer term to sirano_product can wrongly drop\nthe budget (returning budget = 0): always prefer Product.\n\nWhen a request flags a term as an \"AMBIGUOUS OFFER TERM\" (a value present in several offer\ncolumns), YOU resolve it: pick the level from this hierarchy and the user's intent.\n\nTRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g. a value\npresent both as a Product and as a SolutionLine), filter on the most granular level (Product)\nAND say so explicitly. Never silently choose a level when the term is ambiguous across levels.\n\n## Customer / account identity — what to GROUP BY vs what to DISPLAY (CRITICAL)\n\ndiamond_id is the master unique customer key and is REQUIRED for correct aggregation, but it\nis a technical id that means nothing to the business. The business identifies an account by\nits NAME (Account_name) and its CARRIER CODE (carrier_code).\n\nWhen grouping or ranking by customer:\n→ ALWAYS GROUP BY diamond_id ONLY (never by Account_name, never by carrier_code).\n→ For DISPLAY, return MAX(Account_name) AS Account_name and MAX(carrier_code) AS carrier_code.\n→ LEAD with Account_name and carrier_code as the first columns. diamond_id may be returned,\n  but ONLY as the LAST column and de-emphasized — never as the leading/identifying column.\n\nCanonical pattern (single table, no join):\n    SELECT MAX(\"Account_name\") AS \"Account_name\",\n           MAX(\"carrier_code\")  AS \"carrier_code\",\n           SUM(\"amount_eur\")    AS total_revenue,\n           \"diamond_id\"\n    FROM <the table>\n    WHERE \"Phase\" = 'ACTUALS'\n    GROUP BY \"diamond_id\"\n    ORDER BY total_revenue DESC\n\nRationale: Account_name spelling varies for the same customer, so grouping by it would split\none customer into several rows; diamond_id is stable. Group by the stable id, show the human\nlabels.\n\n## Parent_Group — do NOT use unless explicitly asked\n\nParent_Group is the group-level parent of an account. Do NOT group, aggregate or split by\nParent_Group unless the user explicitly asks for the parent group / corporate group level.\nThe default customer granularity is the individual account (diamond_id). When you do use\nParent_Group, state it explicitly in the answer.\n\n## distribution_type and Account_partner — indirect sales\n\n- distribution_type tells direct vs indirect: 'Direct_distribution' (direct) /\n  'Indirect_distribution/Resseler' (indirect).\n- Account_partner is the reseller / distributor in an INDIRECT deal. In indirect sales the\n  customer (diamond_id / Account_name) is the END customer and Account_partner is the\n  intermediary who resells to them. Example: we sell to Airbus, who resells to Maroc Telecom\n  → end customer (diamond_id) = Maroc Telecom, Account_partner = Airbus.\n- \"indirect customers / clients indirects\" → distribution_type = 'Indirect_distribution/Resseler'.\n- When the user asks about a partner / reseller / distributor, filter or group by\n  Account_partner; otherwise keep it out of the output. Be transparent about which side (end\n  customer vs partner) you grouped on.\n\n## Hints from the grounding helper — assistance, NOT orders\n\nSome requests arrive with \"HELPER FINDINGS\" / \"Suggested\" values and columns produced by a\nsmaller grounding assistant that matched the user's wording against the live data catalog.\nYou are the more capable model and you have this semantic model — treat those findings as\nASSISTANCE, not instructions, and keep the final say:\n- The user's original question is always the source of truth — answer that question.\n- Prefer the suggested exact spellings when they are consistent with the data (they are\n  catalog-sourced and avoid typos / case errors).\n- If your semantic understanding disagrees with a hint, follow the data and the rules here.\n- If the user states an explicit literal filter (e.g. diamond_id = '5373'), use it as-is.\n\n## Empty results\n\nIf the SQL returns zero rows, state \"no data found for [the specified filters and period]\".\nDo NOT relax filters or extrapolate.\n\n## YTD / FY\n- YTD of a year = from January 1 up to the latest available reporting month of that year. For\n  ACTUALS this is simply all rows of that year (no future ACTUALS exist), so filter\n  EXTRACT(YEAR FROM year_month) = <year> rather than comparing to today's calendar date (which\n  would create a partial / empty current month).\n- FY = all reporting months of the target year.\n",
+    "vocabularyTermIds": []
+  }
 }
