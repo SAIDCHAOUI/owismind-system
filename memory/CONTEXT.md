@@ -19,7 +19,26 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-**🗂️ SESSION 2026-06-22 (agents DUPLIQUÉS PAR PROJET DSS + modèle sémantique : `Solution` retiré) - repo only.**
+**🎫 SESSION 2026-06-22 Run 2 (MODÈLE SÉMANTIQUE TICKETS ultra-explicite + DEBUG "l'agent invente le nom /
+0 ligne") - repo only, NON validé DSS.** Cerveau tickets réécrit (`update_tickets_semantic_model.py`) :
+**COUNT(DISTINCT id)** (snapshots dupliqués), **dernier snapshot via `DISTINCT ON (id) ORDER BY lastUpdate
+DESC`** pour l'état courant, **LD = `Service_id_1`** au 1er plan, **exact-value/anti-ILIKE + anti-fabrication**,
+**dates DEFAULT creationDate** (clôture only sur `Latest_Closed_Date`), identité GROUP BY Customer_id +
+display Account_name, durée en **minutes**, **21 descriptions de colonnes + métriques + 11 golden queries**
+(génériques, placeholders). **DEBUG racine (2 sous-agents audit + 1 critique) = profileur écrivait
+`indexed=False` pour TOUTE colonne -> UNDERSTAND « labels of: (none) » -> terme jamais extrait -> grounding
+sauté -> le modèle DEVINE le nom.** FIX **L100** : `profile_dataset_recipe.py` **dérive `indexed`**
+(`should_index_value_column`, parité value_index) + **`time_name_rank`** (creationDate gagne sur
+Latest_Closed_Date). Miroir PROD. **+3 tests = 286 verts.** **"Description for LLM"** (oubliée) :
+`semantic_model/TOOL_DESCRIPTIONS.md` (tickets + revenus). Revenus : anti-fabrication + no-ILIKE renforcés.
+Cleanup : `dump_tickets_*` fusionné dans `dump_semantic_model.py`. **⚠️ `.v1.json` = DUMP à sens unique
+(je LIS, je n'ÉCRIS jamais)** : restaurés au dump user (`6d813c6`) ; le cerveau vit dans les SCRIPTS. **À
+FAIRE DSS (ordre)** : (1) **re-runner la recette de profilage** (active `indexed`, sinon le bug revient) ;
+(2) overrides profil (PLAYBOOK §2) ; (3) exécuter `update_tickets_semantic_model.py` (modèle `dM4jA4G`) +
+re-dump ; (4) coller la Description for LLM ; (5) re-coller le sous-agent (env 3.11), tester en **eco**.
+Limite : pas de colonne groupe -> "ATM MOBILIS" non déductible (mapping de groupe = option future).
+
+**🗂️ SESSION 2026-06-22 Run 1 (agents DUPLIQUÉS PAR PROJET DSS + modèle sémantique : `Solution` retiré) - repo only.**
 **(1) Réorg agents par projet (L099)** : `dataiku-agents/` -> **`OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`**,
 **une copie complète + auto-suffisante par projet**, fichiers **préfixés** par le projet, IDs câblés par projet,
 en-tête deploy-target. **Workflow gravé : développer en DEV, valider, PUIS promouvoir en PROD** (copier dans le
@@ -462,7 +481,13 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-22 (`Solution` retiré du modèle + agents dupliqués par projet DSS) → détail `sessions/2026-06-22.md`
+## 🧭 Dernière session - 2026-06-22 Run 2 (modèle sémantique tickets ultra-explicite + DEBUG "agent invente le nom") → détail `sessions/2026-06-22.md` (Run 2)
+- **Repo only, NON validé DSS.** Cerveau tickets réécrit (`update_tickets_semantic_model.py`) : **COUNT(DISTINCT id)** (snapshots dupliqués) + **dernier snapshot `DISTINCT ON (id)`** pour l'état, **LD `Service_id_1`** au 1er plan, **anti-ILIKE + anti-fabrication**, **dates DEFAULT creationDate**, identité GROUP BY Customer_id, durée en minutes, **21 descriptions + métriques + 11 golden** (génériques).
+- **Cause racine de l'échec DSS (« algerie telecom » -> nom inventé, 0 ligne)** = profileur écrivait `indexed=False` partout -> terme jamais extrait -> grounding sauté -> le modèle devine. **FIX L100** : `profile_dataset_recipe.py` **dérive `indexed`** (parité value_index) + **`time_name_rank`** (creationDate > Latest_Closed_Date). Miroir PROD. **+3 tests = 286 verts.** "Description for LLM" : `TOOL_DESCRIPTIONS.md`. Revenus : anti-fabrication/no-ILIKE renforcés.
+- **⚠️ `.v1.json` = DUMP à sens unique (je LIS, je n'ÉCRIS jamais ; restaurés au dump user).** Le cerveau vit dans les SCRIPTS.
+- **À FAIRE DSS (ordre)** : (1) **re-runner la recette de profilage** (active `indexed`, sinon le bug revient) ; (2) overrides profil (PLAYBOOK §2) ; (3) exécuter `update_tickets_semantic_model.py` + re-dump ; (4) coller la Description for LLM ; (5) re-coller le sous-agent (env 3.11), **tester en eco**.
+
+## Avant - 2026-06-22 Run 1 (`Solution` retiré du modèle + agents dupliqués par projet DSS) → détail `sessions/2026-06-22.md` (Run 1)
 - **Repo only** (aucune action DSS de ma part). `dataiku-agents/` -> **`OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`**, copie complète par projet, sous-dossiers `agents/`/`tools/`/`recipes/`/`semantic_model/`, **fichiers préfixés**, IDs câblés par projet (0 contamination, asserts). **Workflow gravé : dev en DEV puis promotion en PROD.** PROD sans tickets. Carte IDs = `OWISMIND/README.md`.
 - **Config des modèles versionnée** en `semantic_model/<ModelName>.v1.json` (dumps DEV collés + nettoyés ; PROD = placeholder). **`Solution` (colonne droppée) retiré** des scripts du modèle + prompts agents + docs. 283 tests verts, 0 tiret. **L099**.
 - **À FAIRE DSS** : re-coller le sous-agent revenus (prompt sans `Solution`) ; re-runner les 3 recipes ; coller le dump PROD. **Sweep doc restant** (anciens chemins) : `project-documentation/05-agents/*`, `docs/scaling/PLAN_AGENTS.md`, skill agentique (signalé, non fait).
