@@ -80,7 +80,16 @@ Flow wiring (no hardcoded dataset names) and are NA-safe.
 
 ### 2. [curate] Pin the profile overrides (overrides dataset)
 
-The profile recipe infers metrics/axes generically; tickets need a few human
+**FIRST, re-run the profile recipe.** `profile_dataset_recipe.py` now DERIVES the
+`indexed` flag from the value-index rule (`should_index_value_column`), so
+groundable columns (Account_name, the enums, etc.) are advertised to UNDERSTAND and
+RESOLVE can match named entities. This is mandatory: if `indexed` is empty, the
+UNDERSTAND prompt says "labels of: (none)", the model never extracts a customer name
+as a term, grounding is skipped and the SQL writer GUESSES the value (the
+"Algerie Telecom" -> fabricated name bug). Re-running the recipe fixes it; no manual
+`indexed` override is needed anymore (overrides still win if you want to force one).
+
+The profile recipe infers metrics/axes generically; tickets still need a few human
 overrides (they always win). In `TroubleTickets_year_profile_overrides` set:
 
 **a) COUNT(DISTINCT id) default metric.** Each ticket id appears on SEVERAL rows
@@ -141,6 +150,9 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 Create a NEW agent tool of type **Semantic Model Query** bound to
 `TroubleTickets_Semantic_Model`: **Agent mode OFF** (linear pipeline), LLM
 `vertex_ai/claude-sonnet-4-6`, access datasets as the calling user. Note its id.
+Paste the **Description for LLM** from
+`semantic_model/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
+tool's "Description for LLM" field - do NOT leave it empty.
 
 - Put that id in `agents/TroubleTickets_expert.py` -> `SEMANTIC_TOOL_ID`
   (replace `TODO_TICKETS_SEMANTIC_TOOL_ID`).

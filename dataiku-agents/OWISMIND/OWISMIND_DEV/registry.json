@@ -72,7 +72,8 @@
         "tool_id": "nEirlso",
         "tool_name": "tickets_semantic_query",
         "agent_mode": false,
-        "sql_engine": "semantic_tool"
+        "sql_engine": "semantic_tool",
+        "tool_description_for_llm": "semantic_model/TOOL_DESCRIPTIONS.md (paste the tickets_semantic_query block into the DSS tool 'Description for LLM')"
       },
       "metric": {
         "default": "ticket_count",

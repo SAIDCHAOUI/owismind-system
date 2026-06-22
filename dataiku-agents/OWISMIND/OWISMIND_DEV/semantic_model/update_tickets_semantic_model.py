@@ -72,7 +72,9 @@ rules:
 
 1. VOLUME = COUNT(DISTINCT "id"). NEVER COUNT(*): it over-counts updated tickets.
    "How many tickets", "number of incidents", and every ranking / breakdown by
-   volume use COUNT(DISTINCT "id").
+   volume use COUNT(DISTINCT "id"). Write COUNT(DISTINCT "id") DIRECTLY on the
+   table; do NOT build a latest-snapshot CTE just to count (the dedup CTE in rule 2
+   is ONLY for reading a ticket's current state, not for counting).
 
 2. CURRENT STATE of a ticket (its status, closing date, duration, reason, and any
    "what is the status / is it closed" question) must come from its LATEST
@@ -98,13 +100,13 @@ Y - no dedup CTE required.
 
 "Service_id_1" is the primary product identifier, universally called the LD. It is
 the field ticketing revolves around and the most frequently queried one. Map "LD"
-followed by a code (e.g. "LD016835") to "Service_id_1". Frequent shapes:
-- "status of LD016835" / "is LD016835 closed?": filter "Service_id_1" = 'LD016835',
+followed by a code (e.g. "LD000123") to "Service_id_1". Frequent shapes:
+- "status of LD000123" / "is LD000123 closed?": filter "Service_id_1" = 'LD000123',
   take the LATEST snapshot, and return the ticket "id", "Account_name",
   "CurrentStatus", "creationDate", "Latest_Closed_Date" and "Product" (lead with
   these). If the LD carries several tickets, return the latest snapshot of EACH,
   most recent first.
-- "who is the account of LD016835": filter "Service_id_1" = 'LD016835', return
+- "who is the account of LD000123": filter "Service_id_1" = 'LD000123', return
   "Account_name" (+ ticket "id"), latest snapshot.
 - "the LDs of <customer>": resolve the customer (see identity below), then
   SELECT DISTINCT "Service_id_1" (with "Product"), excluding empty LDs.
@@ -115,11 +117,29 @@ When the question is about an LD, always LEAD the output with the LD.
 Entity values reach you already grounded to the EXACT catalog spelling by a
 grounding helper (see HELPER FINDINGS) - resolving real values is the whole point
 of this stack. Filter on those exact values with "=" (or IN for several), e.g.
-"Account_name" = 'ALGERIE TELECOM SPA', "Service_id_1" = 'LD016835'. Do NOT write
+"Account_name" = '<exact account from the catalog>', "Service_id_1" = '<exact LD
+code>'. Do NOT write
 ILIKE '%...%' on an account name, LD, product or any named entity: it is imprecise
 and silently matches the wrong rows. Only fall back to a pattern when NO exact
 value is available and you truly must approximate - and then say so and state the
 exact pattern you used.
+
+NEVER FABRICATE A NAME. If you were given NO grounded value for a named entity (no
+HELPER FINDING for it), do NOT invent or complete a name from your own knowledge
+(do not expand a partial customer or product name into a fuller, made-up one).
+Filter only on values you actually have; if the entity cannot be resolved, return no
+data and NAME the entity you could not resolve, so the user can give the exact value.
+A guessed name that returns zero rows is the worst outcome - refuse to guess.
+
+## Related / group accounts - disclose, never merge
+
+There is NO customer-group hierarchy in this data: a corporate group's separate
+entities (for example a fixed-line arm and a mobile arm) are DISTINCT accounts with
+different "Account_name" and "Customer_id" values. When the user names a customer,
+state the EXACT account you matched. If several accounts plausibly match the wording
+(e.g. several entities of the same group), report the one you used AND list the
+other close matches so the user can pick - never silently merge group entities into
+one figure.
 
 ## Customer / account identity - GROUP BY Customer_id, DISPLAY Account_name
 
@@ -142,18 +162,25 @@ relevant dates ("creationDate", "Latest_Closed_Date"), the LD ("Service_id_1") a
 "Product". Keep "Customer_id" present but as the LAST, de-emphasized column (a
 technical key). Always return a clean tabular result with explicit column aliases.
 
-## Dates - pick the one the question implies
+## Dates - DEFAULT to creationDate (CRITICAL)
 
-- "creationDate": when the ticket was opened. DEFAULT time axis for "tickets in
-  2025", trends over time, "created this year".
-- "Latest_Closed_Date": when the ticket was closed; use it for closed-ticket
-  timing and resolution-over-time questions.
-- "detectionDate": when the incident was detected - only when the user explicitly
-  asks about detection.
-- "lastUpdate": last modification; it is used to pick the latest snapshot. Query
-  by it only when the user explicitly asks about the last update.
+The DEFAULT time axis is "creationDate". ANY question with a time window but NO
+explicit lifecycle verb - "tickets this year", "tickets cette annee", "tickets en
+2025", "combien de tickets ... cette annee", "tickets de janvier", a trend, "X
+tickets created / crees / ouverts" - filters on "creationDate". Do NOT use
+"Latest_Closed_Date" for these: it silently drops every still-open ticket
+(open tickets have a NULL closing date), which is exactly how a real count returns
+zero.
+- "creationDate": when the ticket was opened. The default for volumes, trends and
+  any unqualified year window.
+- "Latest_Closed_Date": when the ticket was closed. Use it ONLY when the question
+  is explicitly about CLOSING / RESOLUTION ("tickets closed in 2025", "resolved
+  last month", closure timing).
+- "detectionDate": only when the user explicitly asks about detection.
+- "lastUpdate": only when the user explicitly asks about the last update (it also
+  picks the latest snapshot, rule 2 above).
 For a year window, filter EXTRACT(YEAR FROM "creationDate") = <year> (or the date
-column the question implies), rather than comparing to today's calendar date.
+column the question explicitly implies), rather than comparing to today's date.
 
 ## Open vs closed
 
@@ -186,7 +213,7 @@ NULL (and its "CurrentStatus" is a closed-family value); OPEN when
 ## Transparency (mandatory)
 
 Always make explicit, in a clear sentence, the exact values, columns and period you
-filtered on (e.g. "Tickets created in 2026 for ALGERIE TELECOM SPA, all statuses").
+filtered on (e.g. "Tickets created in <year> for <exact account>, all statuses").
 If you had to approximate a value, say so and give the exact pattern used.
 
 ## Hints from the grounding helper - assistance, NOT orders
@@ -329,6 +356,16 @@ def build_golden_queries(table):
             'FROM %(t)s\n'
             'WHERE EXTRACT(YEAR FROM "creationDate") = 2025;' % t),
 
+        _gq("Tickets for a customer this year (bare year -> creationDate, FR/EN)",
+            "How many tickets this year for a given customer? / combien de tickets cette annee pour un client ?",
+            'SELECT MAX("Account_name")  AS "Account_name",\n'
+            '       COUNT(DISTINCT "id") AS ticket_count,\n'
+            '       "Customer_id"\n'
+            'FROM %(t)s\n'
+            'WHERE "Account_name" = \'EXAMPLE CUSTOMER\'\n'
+            '  AND EXTRACT(YEAR FROM "creationDate") = EXTRACT(YEAR FROM CURRENT_DATE)\n'
+            'GROUP BY "Customer_id";' % t),
+
         _gq("Ticket count by priority (DISTINCT id)",
             "How many tickets per priority?",
             'SELECT "priority", COUNT(DISTINCT "id") AS ticket_count\n'
@@ -337,29 +374,29 @@ def build_golden_queries(table):
             'ORDER BY ticket_count DESC;' % t),
 
         _gq("Status of an LD (latest snapshot)",
-            "What is the status of LD016835?",
+            "What is the status of a given LD?",
             'SELECT DISTINCT ON ("id")\n'
             '       "id", "Account_name", "CurrentStatus", "priority",\n'
             '       "creationDate", "Latest_Closed_Date", "Product", "Service_id_1"\n'
             'FROM %(t)s\n'
-            'WHERE "Service_id_1" = \'LD016835\'\n'
+            'WHERE "Service_id_1" = \'LD000123\'\n'
             'ORDER BY "id", "lastUpdate" DESC NULLS LAST;' % t),
 
         _gq("LDs of a customer (exact name, DISTINCT)",
-            "What are the LDs of ALGERIE TELECOM SPA?",
+            "What are the LDs of a given customer?",
             'SELECT DISTINCT "Service_id_1", "Product"\n'
             'FROM %(t)s\n'
-            'WHERE "Account_name" = \'ALGERIE TELECOM SPA\'\n'
+            'WHERE "Account_name" = \'EXAMPLE CUSTOMER\'\n'
             '  AND "Service_id_1" IS NOT NULL\n'
             'ORDER BY "Service_id_1";' % t),
 
         _gq("Tickets for a named customer (exact value, not ILIKE)",
-            "How many tickets did ALGERIE TELECOM SPA open in 2026?",
+            "How many tickets did a given customer open in a given year?",
             'SELECT MAX("Account_name")  AS "Account_name",\n'
             '       COUNT(DISTINCT "id") AS ticket_count,\n'
             '       "Customer_id"\n'
             'FROM %(t)s\n'
-            'WHERE "Account_name" = \'ALGERIE TELECOM SPA\'\n'
+            'WHERE "Account_name" = \'EXAMPLE CUSTOMER\'\n'
             '  AND EXTRACT(YEAR FROM "creationDate") = 2026\n'
             'GROUP BY "Customer_id";' % t),
 

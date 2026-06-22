@@ -51,6 +51,17 @@ MAX_ROWS_IN_MEMORY = 2_000_000   # safety cap for get_dataframe()
 FREE_TEXT_AVG_LEN = 120     # avg length above which a string column = free text
 PROFILE_VERSION = 1
 
+# Value-index parity: the profile `indexed` flag MUST match which columns the
+# value-index recipe actually grounds, because UNDERSTAND advertises groundable
+# columns from `indexed` and RESOLVE filters its catalog candidates to them. If
+# `indexed` stays empty, UNDERSTAND is told "labels of: (none)", the model never
+# extracts a named entity (e.g. a customer name) as a term, grounding is skipped
+# and the SQL writer is left to GUESS the value. Keep INDEX_MAX_DISTINCT /
+# INDEX_ID_UNIQUENESS_RATIO and should_index_value_column() in sync with
+# build_value_index_recipe.py (same rule, intentionally duplicated like norm_value).
+INDEX_MAX_DISTINCT = 20000
+INDEX_ID_UNIQUENESS_RATIO = 0.95
+
 KNOWN_ROLES = ("dimension", "measure", "time", "scenario", "identifier",
                "free_text", "other")
 KNOWN_AGGS = ("SUM", "AVG", "COUNT", "COUNT_DISTINCT", "MIN", "MAX")
@@ -126,6 +137,22 @@ def looks_like_time_name(name):
     low = str(name).lower()
     return any(tok in low for tok in ("date", "month", "year", "period",
                                       "time", "annee", "mois", "jour"))
+
+
+def time_name_rank(name):
+    """Tie-break rank for the default time axis when several date columns exist.
+    Prefer a CREATION / OPENED column (the natural event time axis) and avoid a
+    close / update / detection column - otherwise a raw alphabetical sort can elect
+    e.g. Latest_Closed_Date over creationDate, and a bare 'this year' window would
+    silently drop every still-open record. Lower rank wins."""
+    low = str(name).lower()
+    if any(tok in low for tok in ("creat", "open", "start", "begin", "ouvert",
+                                  "creation", "debut")):
+        return 0
+    if any(tok in low for tok in ("clos", "closed", "end", "resol", "ferm",
+                                  "updat", "modif", "detect", "last")):
+        return 2
+    return 1
 
 
 def _coerce_str_list(raw, cap=12, item_cap=60):
@@ -265,6 +292,25 @@ def safe_json_parse(text):
     return None
 
 
+def should_index_value_column(dss_type, distinct_count, row_count, avg_len):
+    """Whether this column will be grounded in the value index. MUST mirror
+    build_value_index_recipe.should_index_column (minus the per-recipe
+    INCLUDE/EXCLUDE allowlists). Drives the profile `indexed` flag so UNDERSTAND
+    advertises the right groundable columns and RESOLVE filters candidates to
+    them. Skips numbers, dates, free text and quasi-unique long ids."""
+    if dss_type in _NUMERIC_DSS_TYPES or dss_type in _DATE_DSS_TYPES:
+        return False
+    if distinct_count == 0 or distinct_count > INDEX_MAX_DISTINCT:
+        return False
+    if avg_len and avg_len > FREE_TEXT_AVG_LEN:
+        return False
+    if (row_count and distinct_count >= INDEX_ID_UNIQUENESS_RATIO * row_count
+            and row_count > 1000):
+        if avg_len and avg_len > 24:
+            return False
+    return True
+
+
 def default_role(dss_type, distinct_count, row_count, avg_len, time_format, name):
     """Deterministic role when the LLM pass is skipped or silent."""
     if time_format:
@@ -343,9 +389,10 @@ def profile_dataframe(df, schema_columns):
         if tfmt is None:
             tfmt = detect_time_format(dss_type, sample_values)
         if tfmt and not looks_like_time_name(name) and dss_type not in _DATE_DSS_TYPES:
-            time_candidates.append((1, name, tfmt))   # plausible but unnamed: low priority
+            # plausible but unnamed: low priority. (priority, name_rank, name, tfmt)
+            time_candidates.append((1, time_name_rank(name), name, tfmt))
         elif tfmt:
-            time_candidates.append((0, name, tfmt))
+            time_candidates.append((0, time_name_rank(name), name, tfmt))
 
         # Numeric columns get full stats; time columns get min/max only.
         if dss_type in _NUMERIC_DSS_TYPES and not tfmt:
@@ -385,14 +432,19 @@ def profile_dataframe(df, schema_columns):
         payload["role"] = default_role(dss_type, distinct, row_count, avg_len, tfmt, name)
         if payload["role"] in ("free_text", "measure"):
             payload["groupable"] = False
+        # Derive the value-index parity flag so UNDERSTAND advertises groundable
+        # columns and RESOLVE can match named entities (human overrides still win).
+        payload["indexed"] = should_index_value_column(dss_type, distinct, row_count,
+                                                       avg_len) and not tfmt
         if tfmt:
             payload["_time_format"] = tfmt   # promoted below, then dropped
         columns[name] = payload
 
-    # Deterministic time election (the LLM may override). Named candidates win.
+    # Deterministic time election (the LLM may override). Named candidates win;
+    # within them a creation/opened column beats a close/update column (time_name_rank).
     if time_candidates:
         time_candidates.sort()
-        _, tname, tfmt = time_candidates[0]
+        _, _, tname, tfmt = time_candidates[0]
         dataset_payload["time"] = {
             "column": tname, "format": tfmt,
             "min": (columns[tname].get("stats") or {}).get("min"),

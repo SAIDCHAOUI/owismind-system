@@ -10,6 +10,7 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | File | What |
 |---|---|
 | [`MODEL.md`](MODEL.md) | Human-readable snapshot of the LIVE model (entities, metric, filters, golden queries, glossary, instructions, tool config). **Read this first.** |
+| [`TOOL_DESCRIPTIONS.md`](TOOL_DESCRIPTIONS.md) | Ready-to-paste "Description for LLM" text for each Semantic Model Query tool (tickets + revenue). Paste into the DSS tool settings. |
 | `build_aligned_semantic_model.py` | One-time CREATE of the aligned model from a read-only copy of the old one (corrections, golden queries, instructions, index). |
 | `update_aligned_semantic_model.py` | In-place MODIFY of an existing aligned model: refresh instructions + golden queries on the active version (no create, no re-index). The going-forward iteration path. |
 | `dump_semantic_model.py` | Generic export of a live model `get_raw()` to its `*.v1.json` snapshot (no transcription drift). Set the CONFIG block for REVENUE or TICKETS (both id sets are documented in the comment). |

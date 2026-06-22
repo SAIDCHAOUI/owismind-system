@@ -325,5 +325,54 @@ class TestPandasPaths(unittest.TestCase):
         self.assertTrue(all(r["column_name"] == "customer" for r in rows))
 
 
+# ==========================================================================
+# indexed-flag parity: the profiler MUST mark the same columns the value index
+# grounds, or UNDERSTAND advertises the wrong groundable columns and named
+# entities never resolve (the "fabricated account name" failure).
+# ==========================================================================
+class TestIndexParity(unittest.TestCase):
+
+    CASES = [
+        ("string", 3000, 84000, 15),    # account-name-like -> indexed
+        ("string", 5, 84000, 4),        # enum -> indexed
+        ("string", 60000, 84000, 8),    # LD-like high cardinality -> skipped
+        ("string", 84000, 84000, 40),   # quasi-unique long id -> skipped
+        ("string", 1000, 84000, 200),   # free text -> skipped
+        ("bigint", 5000, 84000, 6),     # numeric -> skipped
+        ("date", 1000, 84000, 10),      # date -> skipped
+        ("string", 0, 84000, 0),        # empty -> skipped
+    ]
+
+    def test_profiler_matches_value_index_rule(self):
+        for dss_type, distinct, rows, avg_len in self.CASES:
+            a = prof.should_index_value_column(dss_type, distinct, rows, avg_len)
+            b = vidx.should_index_column("x", dss_type, distinct, rows, avg_len)
+            self.assertEqual(a, b, "%s distinct=%s avg=%s" % (dss_type, distinct, avg_len))
+
+
+# ==========================================================================
+# time-axis election: a creation/opened column must beat a close/update one,
+# so a bare "this year" window defaults to creationDate (not Latest_Closed_Date,
+# which silently drops every open ticket).
+# ==========================================================================
+class TestTimeNameRank(unittest.TestCase):
+
+    def test_creation_beats_closed_and_update(self):
+        self.assertLess(prof.time_name_rank("creationDate"),
+                        prof.time_name_rank("Latest_Closed_Date"))
+        self.assertLess(prof.time_name_rank("creationDate"),
+                        prof.time_name_rank("lastUpdate"))
+        self.assertLess(prof.time_name_rank("creationDate"),
+                        prof.time_name_rank("detectionDate"))
+
+    def test_creation_wins_among_ticket_dates(self):
+        # Same priority/format -> the sort key (priority, name_rank, name) must
+        # elect creationDate over the alphabetically-first Latest_Closed_Date.
+        cands = [(0, prof.time_name_rank(n), n, "date") for n in
+                 ("Latest_Closed_Date", "creationDate", "detectionDate", "lastUpdate")]
+        cands.sort()
+        self.assertEqual(cands[0][2], "creationDate")
+
+
 if __name__ == "__main__":
     unittest.main()
