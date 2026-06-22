@@ -24,7 +24,7 @@ The four design-time datasets per domain (built by the Flow recipes): `<base>`
 
 ---
 
-## DRIVE_Revenues  (revenue_expert)  -  175,780 rows, 20 cols, connection SQL_owi
+## DRIVE_Revenues  (revenue_expert)  -  175,780 rows, 19 cols, connection SQL_owi
 
 Base table of the revenue domain. Read by the semantic model (SQL) and by
 `attribute_lookup`. The business meaning lives in `DRIVE_Revenues_profile` and the
@@ -35,8 +35,7 @@ semantic model `Drive_Revenues_Semantic_Model`.
 | `Phase` | string | dimension | yes | no | scenario: ACTUALS / BUDGET / FORECAST / Q3F / HLF (default ACTUALS) |
 | `booking_type` | string | dimension | yes | no | financial bucket within a Phase (additive) |
 | `SolutionLine` | string | dimension | yes | no | offer hierarchy (broadest) |
-| `Solution` | string | dimension | yes | no | offer hierarchy |
-| `Product` | string | dimension | yes | no | offer hierarchy (most granular business level) |
+| `Product` | string | dimension | yes | no | offer hierarchy (most granular business level; the `Solution` level was removed) |
 | `Account_name` | string | dimension | yes | no | customer display name (group by diamond_id, display this) |
 | `Account_partner` | string | dimension | yes | no | reseller in an indirect deal |
 | `distribution_type` | string | dimension | yes | no | Direct_distribution / Indirect_distribution/Resseler |

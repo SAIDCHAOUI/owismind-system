@@ -75,8 +75,8 @@ exact: trust them and the user question.
 DEFAULT BEHAVIOR (encoded in the semantic model):
 - One physical table, NEVER JOIN.
 - Phase = 'ACTUALS' when no scenario is named; sum all booking_types within a Phase.
-- Offer terms resolve to the most granular level (Product > Solution >
-  SolutionLine), NEVER default to sirano_product; disclose when a term spans levels.
+- Offer terms resolve to the most granular level (Product > SolutionLine),
+  NEVER default to sirano_product; disclose when a term spans levels.
 - GROUP BY diamond_id and display MAX(Account_name) + MAX(carrier_code), diamond_id last.
 
 OUTPUT: aggregated revenue data (totals, breakdowns, time series, rankings) with
@@ -166,13 +166,13 @@ the repo.
 
 | Dataset | Role | Read by |
 |---|---|---|
-| `DRIVE_Revenues` | the revenue base (175,780 rows, 20 cols) | the semantic model (SQL), `attribute_lookup` (fact search) |
+| `DRIVE_Revenues` | the revenue base (175,780 rows, 19 cols) | the semantic model (SQL), `attribute_lookup` (fact search) |
 | `DRIVE_Revenues_profile` | the business brain (`{key, payload}`) | the **sub-agent** (UNDERSTAND, about_data) |
 | `DRIVE_Revenues_value_index` | exact-value grounding index | the **sub-agent** (RESOLVE, inline SQL) |
 | `DRIVE_Revenues_Value_Catalog` | rich alias/variant catalog | `attribute_lookup` (alias fallback only) |
 
-`DRIVE_Revenues` columns (20): `Phase`, `booking_type`, `SolutionLine`,
-`Solution`, `Product`, `Account_name`, `Account_partner`, `distribution_type`,
+`DRIVE_Revenues` columns (19): `Phase`, `booking_type`, `SolutionLine`,
+`Product`, `Account_name`, `Account_partner`, `distribution_type`,
 `Parent_Group`, `carrier_code`, `year_month` (date), `amount_eur` (decimal),
 `sales_entity`, `sales_zone`, `account_manager` (email), `area_manager` (email),
 `sales_director` (email), `diamond_id`, `sirano_product`, `original_dataset`.

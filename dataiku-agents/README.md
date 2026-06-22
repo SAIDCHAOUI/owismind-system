@@ -94,7 +94,7 @@ different consumer.
 
 | Dataset | Built by | Shape | Read at runtime by | Role |
 |---|---|---|---|---|
-| `DRIVE_Revenues` | source (Flow input) | 175,780 rows, 20 cols | semantic model (SQL); `attribute_lookup` (fact search) | The revenue base: Phase, offer hierarchy, account, amount_eur, year_month, ... |
+| `DRIVE_Revenues` | source (Flow input) | 175,780 rows, 19 cols | semantic model (SQL); `attribute_lookup` (fact search) | The revenue base: Phase, offer hierarchy, account, amount_eur, year_month, ... |
 | `DRIVE_Revenues_profile` | `recipes/profile_dataset_recipe.py` | `{key, payload}` (JSON, contract v1) | the **sub-agent** (UNDERSTAND + about_data) | The business brain: metrics, scenario column, time column, axes, synonyms, display pairs. Human-reviewable via an editable overrides dataset. |
 | `DRIVE_Revenues_value_index` | `recipes/build_value_index_recipe.py` | `{column_name, value, value_norm, occurrences}` (approx. 3.6 k rows) | the **sub-agent** (RESOLVE, inline SQL) | Every distinct groundable value + normalized form. **Must live on the source SQL connection** (`SQL_owi`). |
 | `DRIVE_Revenues_Value_Catalog` | `recipes/build_value_catalog_recipe.py` | 12 cols, approx. 4.9 k rows | `attribute_lookup` (alias fallback) | Rich alias/variant catalog (business concepts, short account names). Queried for "suggestions" when the fast search finds no exact match. |
@@ -102,8 +102,8 @@ different consumer.
 The profile recipe sends the LLM **aggregated metadata only** (schema, stats,
 low-cardinality enum values, a few samples), never raw rows.
 
-**`DRIVE_Revenues` columns (20)**: `Phase`, `booking_type`, `SolutionLine`,
-`Solution`, `Product`, `Account_name`, `Account_partner`, `distribution_type`,
+**`DRIVE_Revenues` columns (19)**: `Phase`, `booking_type`, `SolutionLine`,
+`Product`, `Account_name`, `Account_partner`, `distribution_type`,
 `Parent_Group`, `carrier_code`, `year_month` (date), `amount_eur` (decimal),
 `sales_entity`, `sales_zone`, `account_manager` (email), `area_manager` (email),
 `sales_director` (email), `diamond_id`, `sirano_product`, `original_dataset`.

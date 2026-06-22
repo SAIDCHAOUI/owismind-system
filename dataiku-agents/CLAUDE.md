@@ -98,7 +98,7 @@ updated (corrected text in [`tools/README.md`](tools/README.md)).
 
 | Dataset | Built by | Read at runtime by | Role |
 |---|---|---|---|
-| `DRIVE_Revenues` | source (175,780 rows, 20 cols) | semantic model (SQL); `attribute_lookup` (fact search) | the revenue base |
+| `DRIVE_Revenues` | source (175,780 rows, 19 cols) | semantic model (SQL); `attribute_lookup` (fact search) | the revenue base |
 | `DRIVE_Revenues_profile` | `recipes/profile_dataset_recipe.py` | the **sub-agent** (UNDERSTAND, about_data) | the business brain (`{key, payload}`, contract v1) |
 | `DRIVE_Revenues_value_index` | `recipes/build_value_index_recipe.py` | the **sub-agent** (RESOLVE, inline SQL) | exact-value grounding; MUST be on the SQL connection |
 | `DRIVE_Revenues_Value_Catalog` | `recipes/build_value_catalog_recipe.py` | `attribute_lookup` (alias fallback) | rich alias / suggestions catalog |
@@ -114,8 +114,8 @@ updated (corrected text in [`tools/README.md`](tools/README.md)).
 (`DRIVE_Revenues`, never JOIN), a `Total Revenue (EUR)` metric, named filters,
 9 golden queries, a glossary, and the SQL-generation instructions (Phase=ACTUALS
 default; offer **resolution priority** = most granular first, Product then
-Solution then SolutionLine then sirano_product, i.e. the reverse of the breadth
-order SolutionLine to Product, with never-default-sirano + transparency; GROUP BY
+SolutionLine then sirano_product (the `Solution` level was removed from the
+dataset), with never-default-sirano + transparency; GROUP BY
 diamond_id displaying Account_name + carrier_code). Readable snapshot: [`tools/semantic_model/MODEL.md`](tools/semantic_model/MODEL.md).
 It was built as the aligned rebuild of the old model `2O2KcHw` (kept as rollback).
 

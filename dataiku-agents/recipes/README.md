@@ -20,7 +20,7 @@ itself is read by the semantic model (SQL) and by `attribute_lookup` (fact searc
 
 ## The four datasets
 
-### `DRIVE_Revenues` (source, ~175 k rows, 20 columns)
+### `DRIVE_Revenues` (source, ~175 k rows, 19 columns)
 
 The revenue base. Grain: roughly one row per (Phase, offer, account, month).
 
@@ -28,7 +28,7 @@ The revenue base. Grain: roughly one row per (Phase, offer, account, month).
 |---|---|---|
 | `Phase` | text | **scenario** column: ACTUALS / BUDGET / FORECAST / Q3F / HLF (never sum across) |
 | `booking_type` | text | booking type |
-| `SolutionLine`, `Solution`, `Product`, `sirano_product` | text | the **offer hierarchy** (most granular = Product, then Solution, then SolutionLine; `sirano_product` is the lowest technical level, never the default) |
+| `SolutionLine`, `Product`, `sirano_product` | text | the **offer hierarchy** (most granular = Product, then SolutionLine; `sirano_product` is the lowest technical level, never the default; the `Solution` level was removed) |
 | `Account_name` | text | customer name |
 | `Account_partner` | text | indirect reseller / partner |
 | `distribution_type` | text | Direct_distribution / Indirect_distribution/Resseler |

@@ -67,18 +67,20 @@ all booking_types in ACTUALS).
 ## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)
 
 The offer is a hierarchy, broadest to most granular:
-    SolutionLine  >  Solution  >  Product      (sirano_product is a secondary technical code).
+    SolutionLine  >  Product      (sirano_product is a secondary technical code).
+
+The 'Solution' level was removed from the dataset: there are now only SolutionLine, Product
+and sirano_product. NEVER reference a 'Solution' column.
 
 When a user term (e.g. "IPL", "IP Transit", "Roaming Sponsor", "IP") could match a value in
 several of these columns, resolve it to the MOST GRANULAR level that contains it, in this
 STRICT order of preference:
     1. Product           (default - most users speak at the product level)
-    2. Solution
-    3. SolutionLine
-    4. sirano_product    (last resort only)
+    2. SolutionLine
+    3. sirano_product    (last resort only)
 
-So: filter on Product if the term is a Product value; else Solution; else SolutionLine; else
-sirano_product. Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL" and
+So: filter on Product if the term is a Product value; else SolutionLine; else sirano_product.
+Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL" and
 "Roaming Sponsor" are Products → filter on Product.
 
 sirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use
@@ -90,10 +92,10 @@ When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in sev
 columns), YOU resolve it - pick the level from this hierarchy and the user's intent; do not
 assume the helper's column.
 
-TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g.
-"IP Transit" is both a Product AND a Solution), filter on the most granular level (Product)
-AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: IP Transit
-also exists as a Solution - tell me if you meant the Solution level." Never silently choose a
+TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g. a value
+present both as a Product AND a SolutionLine), filter on the most granular level (Product)
+AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: it also exists
+at the SolutionLine level - tell me if you meant that level." Never silently choose a
 level when the term is ambiguous across levels.
 
 ## Customer / account identity - what to GROUP BY vs what to DISPLAY (CRITICAL)
@@ -211,7 +213,7 @@ GOLDEN_QUERIES = [
         'LIMIT 20;' % {"t": PHYSICAL_TABLE}),
 
     _gq("Offer term ambiguous across levels - prefer Product",
-        "How much revenue on IP Transit in 2026? (IP Transit is both a Product and a Solution; prefer the Product level)",
+        "How much revenue on IP Transit in 2026? (IP Transit may exist at more than one offer level; prefer the Product level)",
         'SELECT SUM(r."amount_eur") AS total_revenue\n'
         'FROM %(t)s r\n'
         'WHERE r."Product" = \'IP Transit\'\n'

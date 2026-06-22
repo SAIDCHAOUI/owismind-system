@@ -5,7 +5,8 @@
 > canonical SQL-generation rules live verbatim in
 > [`build_aligned_semantic_model.py`](build_aligned_semantic_model.py)
 > (`NEW_INSTRUCTIONS`); the full machine config can be exported with
-> [`dump_semantic_model.py`](dump_semantic_model.py). Last reviewed 2026-06-18.
+> [`dump_semantic_model.py`](dump_semantic_model.py). Last reviewed 2026-06-22
+> (the `Solution` offer level was removed from the dataset).
 
 ## Where it sits in the system
 
@@ -102,14 +103,13 @@ group by `Parent_Group` unless the user explicitly asks for the group level.
 
 ### entity `commercial_offer` (the offer hierarchy)
 
-Primary key `Product`. Attributes: `SolutionLine`, `Solution`, `Product`,
-`sirano_product`. The hierarchy, broadest to most granular:
-**SolutionLine > Solution > Product** (`sirano_product` is a secondary technical
-code). Resolve a user term to the **most granular** level that contains it, in
-strict order Product > Solution > SolutionLine > sirano_product, and **never
-default to `sirano_product`** (BUDGET rows can lack it, so doing so can drop the
-budget to 0). When a term exists at several levels, pick the most granular AND
-disclose it.
+Primary key `Product`. Attributes: `SolutionLine`, `Product`, `sirano_product`
+(the `Solution` level was removed from the dataset). The hierarchy, broadest to
+most granular: **SolutionLine > Product** (`sirano_product` is a secondary
+technical code). Resolve a user term to the **most granular** level that contains
+it, in strict order Product > SolutionLine > sirano_product, and **never default
+to `sirano_product`** (BUDGET rows can lack it, so doing so can drop the budget to
+0). When a term exists at several levels, pick the most granular AND disclose it.
 
 ## The SQL-generation instructions (the brain)
 

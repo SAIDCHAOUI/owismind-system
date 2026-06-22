@@ -28,6 +28,7 @@
 
 import copy
 import json
+import re
 
 import dataiku
 
@@ -91,18 +92,20 @@ all booking_types in ACTUALS).
 ## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)
 
 The offer is a hierarchy, broadest to most granular:
-    SolutionLine  >  Solution  >  Product      (sirano_product is a secondary technical code).
+    SolutionLine  >  Product      (sirano_product is a secondary technical code).
+
+The 'Solution' level was removed from the dataset: there are now only SolutionLine, Product
+and sirano_product. NEVER reference a 'Solution' column.
 
 When a user term (e.g. "IPL", "IP Transit", "Roaming Sponsor", "IP") could match a value in
 several of these columns, resolve it to the MOST GRANULAR level that contains it, in this
 STRICT order of preference:
     1. Product           (default - most users speak at the product level)
-    2. Solution
-    3. SolutionLine
-    4. sirano_product    (last resort only)
+    2. SolutionLine
+    3. sirano_product    (last resort only)
 
-So: filter on Product if the term is a Product value; else Solution; else SolutionLine; else
-sirano_product. Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL" and
+So: filter on Product if the term is a Product value; else SolutionLine; else sirano_product.
+Example: "IP" is a SolutionLine → filter on SolutionLine. "IPL" and
 "Roaming Sponsor" are Products → filter on Product.
 
 sirano_product is a SECONDARY TECHNICAL CODE: NEVER default an offer term to it. Use
@@ -114,10 +117,10 @@ When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in sev
 columns), YOU resolve it - pick the level from this hierarchy and the user's intent; do not
 assume the helper's column.
 
-TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g.
-"IP Transit" is both a Product AND a Solution), filter on the most granular level (Product)
-AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: IP Transit
-also exists as a Solution - tell me if you meant the Solution level." Never silently choose a
+TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g. a value
+present both as a Product AND a SolutionLine), filter on the most granular level (Product)
+AND say so explicitly, e.g.: "Revenue for the IP Transit product was X. Note: it also exists
+at the SolutionLine level - tell me if you meant that level." Never silently choose a
 level when the term is ambiguous across levels.
 
 ## Customer / account identity - what to GROUP BY vs what to DISPLAY (CRITICAL)
@@ -239,9 +242,9 @@ GOLDEN_QUERIES = [
         'ORDER BY total_revenue DESC\n'
         'LIMIT 20;' % {"t": PHYSICAL_TABLE}),
 
-    # 4. Term that is BOTH a Product and a Solution -> prefer Product.
+    # 4. Term that exists at more than one offer level -> prefer Product.
     _gq("Offer term ambiguous across levels - prefer Product",
-        "How much revenue on IP Transit in 2026? (IP Transit is both a Product and a Solution; prefer the Product level)",
+        "How much revenue on IP Transit in 2026? (IP Transit may exist at more than one offer level; prefer the Product level)",
         'SELECT SUM(r."amount_eur") AS total_revenue\n'
         'FROM %(t)s r\n'
         'WHERE r."Product" = \'IP Transit\'\n'
@@ -371,15 +374,28 @@ def apply_corrections(raw):
     if co:
         co["description"] = (
             "Commercial offer hierarchy, broadest to most granular: "
-            "SolutionLine > Solution > Product (sirano_product is a secondary technical "
-            "code). When a user term (e.g. 'IPL', 'IP Transit', 'Roaming Sponsor', 'IP') "
-            "could match several levels, resolve it to the MOST GRANULAR level that contains "
-            "it, in strict order: Product first, then Solution, then SolutionLine, then "
-            "sirano_product. When the value also exists at another level (e.g. 'IP Transit' "
-            "is both a Product and a Solution), filter the most granular level (Product) and "
-            "say so explicitly so the user can ask for the other level.")
+            "SolutionLine > Product (sirano_product is a secondary technical code; the "
+            "Solution level was removed from the dataset). When a user term (e.g. 'IPL', "
+            "'IP Transit', 'Roaming Sponsor', 'IP') could match several levels, resolve it "
+            "to the MOST GRANULAR level that contains it, in strict order: Product first, "
+            "then SolutionLine, then sirano_product. When the value also exists at another "
+            "level (e.g. a value that is both a Product and a SolutionLine), filter the most "
+            "granular level (Product) and say so explicitly so the user can ask for the "
+            "other level.")
         changes.append("commercial_offer.description: hierarchy priority + sirano_product "
                        "fallback + transparency rule")
+
+        # The 'Solution' offer level was removed from the dataset (column deleted).
+        # Strip its attribute and the metrics that reference it so a rebuild from the
+        # old model does not reintroduce a column that no longer exists.
+        co["attributes"] = [a for a in (co.get("attributes") or [])
+                            if a.get("column") != "Solution"
+                            and a.get("name") != "Solution"]
+        co["metrics"] = [m for m in (co.get("metrics") or [])
+                         if not re.search(r"\bSolution\b",
+                                          m.get("pseudoSQLExpression") or "")]
+        changes.append("commercial_offer: dropped the removed 'Solution' attribute and its "
+                       "metrics (Distinct Solutions, Average Products per Solution)")
 
     # --- 3 + 5. customer_account: Account_partner example + Parent_Group rule --
     ca = _entity(raw, "customer_account")
@@ -499,7 +515,7 @@ for key in ("entities", "relationships", "goldenQueries", "glossaryTerms",
     if key in corrected:
         new_raw[key] = copy.deepcopy(corrected[key])
 new_raw["description"] = ("Aligned with the OWIsMind sub-agent: one-table no-join, "
-                          "ACTUALS default, Product>Solution>SolutionLine>sirano_product "
+                          "ACTUALS default, Product>SolutionLine>sirano_product "
                           "priority + transparency, Account_name+carrier_code display "
                           "(diamond_id discreet), Parent_Group restraint, "
                           "indirect/Account_partner semantics.")

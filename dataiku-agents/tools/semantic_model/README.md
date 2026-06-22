@@ -48,15 +48,16 @@ The business rules below live in **both** places: as firm rules in the model ins
 tool enforces them) and as supportive hints from the sub-agent.
 
 1. **Offer hierarchy priority + transparency.** A term is resolved to the most granular level
-   that contains it: **Product > Solution > SolutionLine > sirano_product**. "IP" is a
-   SolutionLine; "IPL" / "Roaming Sponsor" are Products. When a value exists at several levels
-   (e.g. *IP Transit* / *EVPL* are both a Product and a Solution) the most granular (Product) is
-   used **and disclosed** ("... also exists as a Solution, tell me if you meant that level").
+   that contains it: **Product > SolutionLine > sirano_product** (the `Solution` level was
+   removed from the dataset). "IP" is a SolutionLine; "IPL" / "Roaming Sponsor" are Products.
+   When a value exists at several levels (e.g. a value that is both a Product and a SolutionLine)
+   the most granular (Product) is used **and disclosed** ("... also exists as a SolutionLine,
+   tell me if you meant that level").
    - **The semantic model owns this decision** (hierarchy rules in
      `sqlGenerationConfig.instructions` + `commercial_offer` description, incl. *never default to
      sirano_product*).
    - **The sub-agent does NOT pin a column for an ambiguous offer term**: it flags
-     `AMBIGUOUS OFFER TERM - "EVPL" is present in (Product, Solution, sirano_product); YOU
+     `AMBIGUOUS OFFER TERM - "EVPL" is present in (Product, sirano_product); YOU
      resolve it` and leaves the choice to the model. (Regression that motivated this: pinning
      `sirano_product = 'EVPL'` while BUDGET rows have no sirano_product, so budget = 0.)
      Confident single-column values (e.g. a customer name) are still suggested as typo-free hints.
@@ -99,7 +100,7 @@ below are the iteration path, not a first-time deploy.
 1. **Iterate the rules.** Edit `NEW_INSTRUCTIONS` / `GOLDEN_QUERIES`, set `NEW_MODEL_ID` to the
    live model id, run `update_aligned_semantic_model.py` in a DSS notebook (project OWISMIND_DEV).
    In place, no re-index.
-2. **Test in the model's Playground**: a Product that is also a Solution (*IP Transit*), "IP" at
+2. **Test in the model's Playground**: a Product that overlaps another level (*IP Transit*), "IP" at
    SolutionLine, "top customers" (name + carrier_code, diamond_id last), indirect / per-partner,
    a named customer ("HALYS").
 3. **Refresh the repo snapshot**: run `dump_semantic_model.py` and commit
@@ -113,9 +114,8 @@ below are the iteration path, not a first-time deploy.
    |---|---|---|---|
    | `diamond_id` | `display_columns` | `["Account_name","carrier_code"]` | recommended (reinforces name + carrier display) |
    | `Product` | `ambiguity_priority` | `0` | optional (the model already resolves ambiguity) |
-   | `Solution` | `ambiguity_priority` | `1` | optional |
-   | `SolutionLine` | `ambiguity_priority` | `2` | optional |
-   | `sirano_product` | `ambiguity_priority` | `3` | optional |
+   | `SolutionLine` | `ambiguity_priority` | `1` | optional |
+   | `sirano_product` | `ambiguity_priority` | `2` | optional |
 
 5. **No sub-agent re-paste needed for a model-only change** (the sub-agent references the tool by
    id). Re-paste `SalesDrive_revenue_expert.py` into its Code Agent (`agent:bHrWLyOL`, env 3.11)
