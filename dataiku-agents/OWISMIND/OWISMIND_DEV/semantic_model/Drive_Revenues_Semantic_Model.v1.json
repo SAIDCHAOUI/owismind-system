@@ -1,5 +1,3 @@
-Versions : ['v1']
-Version active : v1
 {
   "id": "v1",
   "description": "Aligned with the OWIsMind sub-agent: one-table no-join, ACTUALS default, Product>Solution>SolutionLine>sirano_product priority + transparency, Account_name+carrier_code display (diamond_id discreet), Parent_Group restraint, indirect/Account_partner semantics.",

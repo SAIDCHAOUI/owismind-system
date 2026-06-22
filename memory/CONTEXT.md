@@ -462,7 +462,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-19 Run 4 (2e sous-agent "tickets d'incidents" + factory repo) → détail `sessions/2026-06-19.md` Run 4
+## 🧭 Dernière session - 2026-06-22 (`Solution` retiré du modèle + agents dupliqués par projet DSS) → détail `sessions/2026-06-22.md`
+- **Repo only** (aucune action DSS de ma part). `dataiku-agents/` -> **`OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`**, copie complète par projet, sous-dossiers `agents/`/`tools/`/`recipes/`/`semantic_model/`, **fichiers préfixés**, IDs câblés par projet (0 contamination, asserts). **Workflow gravé : dev en DEV puis promotion en PROD.** PROD sans tickets. Carte IDs = `OWISMIND/README.md`.
+- **Config des modèles versionnée** en `semantic_model/<ModelName>.v1.json` (dumps DEV collés + nettoyés ; PROD = placeholder). **`Solution` (colonne droppée) retiré** des scripts du modèle + prompts agents + docs. 283 tests verts, 0 tiret. **L099**.
+- **À FAIRE DSS** : re-coller le sous-agent revenus (prompt sans `Solution`) ; re-runner les 3 recipes ; coller le dump PROD. **Sweep doc restant** (anciens chemins) : `project-documentation/05-agents/*`, `docs/scaling/PLAN_AGENTS.md`, skill agentique (signalé, non fait).
+
+## Avant - 2026-06-19 Run 4 (2e sous-agent "tickets d'incidents" + factory repo) → détail `sessions/2026-06-19.md` Run 4
 - **✅ TESTÉ DSS « marche plutôt bien »** (à pofiner plus tard). 2e expert `TroubleTickets_year` à côté des revenus : `agents/TroubleTickets_expert.py` (copie moteur, corps byte-identique, CONFIG + textes offre neutralisés) + 1 entrée `CAPABILITIES["tickets_expert"]` + allowlist `lookup_search_columns`.
 - **Modèle sémantique DÉDIÉ séparé** (décision user) ; scripts `update_tickets_semantic_model.py`/`dump_tickets_semantic_model.py`. **Recipes auto-IO + NA-safe** (fix int nullable `Duration_ticket_total`, **L097**) ; `value_catalog` dataset-adaptatif (générique `value`). **Factory** : `registry.json` + `DATASETS.md` + `PLAYBOOK_ADD_AGENT.md`. 283 tests, revue 4-dim = 0 finding (**L098**).
 - **À finaliser (PLAYBOOK)** : override COUNT, modèle sémantique DSS, tool `tickets_semantic_query`, Code Agent + `agent_id` réel AVANT re-coll orchestrateur. Pas de zip (python-lib inchangé). **AUCUN commit de ma part avant `/log-session`.**

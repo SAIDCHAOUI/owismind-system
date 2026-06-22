@@ -54,7 +54,8 @@ project and paste its output over the file.
 | OWISMIND_DEV | `semantic_model/TroubleTickets_Semantic_Model.v1.json` | `dump_tickets_semantic_model.py` (MODEL_ID `dM4jA4G`) |
 | OWISMIND_PROD_V1 | `semantic_model/Drive_Revenues_Model.v1.json` | `dump_semantic_model.py` (MODEL_ID `a7K9jYk`) |
 
-They currently hold a placeholder; paste a fresh dump to populate them.
+DEV (revenue + tickets) now hold the live dump; PROD still holds a placeholder
+(paste a fresh `dump_semantic_model.py` output to populate it).
 
 ## The golden rule: develop in DEV, then promote to PROD
 
