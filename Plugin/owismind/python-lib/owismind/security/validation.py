@@ -531,8 +531,8 @@ def validate_agent_meta(raw):
 
     Never raises: every field is clamped/dropped to its bound so an over-long or
     malformed field degrades gracefully instead of failing the whole whitelist save.
-    Returns ``{tagline, description, capabilities, tools, icon, badge}``; absent input
-    yields the empty profile (all fields blank, default icon).
+    Returns ``{tagline, description, capabilities, tools, icon, badge, modes}``; absent
+    input yields the empty profile (all fields blank, default icon, modes off).
     """
     if not isinstance(raw, dict):
         raw = {}
@@ -546,6 +546,13 @@ def validate_agent_meta(raw):
     badge = raw.get("badge")
     if not isinstance(badge, str) or badge not in ALLOWED_AGENT_BADGES:
         badge = ""
+    # Whether this agent supports the chat "response modes" dial (Smart / Pro / Claude).
+    # Only an agent whose backend actually understands the per-turn ⟦owi:mode=…⟧ control
+    # token (the OWIsMind code orchestrator) should enable this. For any other agent
+    # (e.g. a plain DSS visual agent) the dial is hidden and the token is never appended
+    # server-side, so a meaningless control string never leaks into its prompt. Coerced
+    # to a strict bool so a malformed value defaults to off (dial hidden).
+    modes = bool(raw.get("modes"))
     return {
         "tagline": _clean_str(raw.get("tagline"), MAX_AGENT_TAGLINE_CHARS),
         "description": _clean_str(raw.get("description"), MAX_AGENT_DESC_CHARS),
@@ -557,4 +564,5 @@ def validate_agent_meta(raw):
         ),
         "icon": icon,
         "badge": badge,
+        "modes": modes,
     }

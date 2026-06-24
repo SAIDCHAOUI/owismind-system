@@ -271,6 +271,10 @@ export const extraMessages = {
     'admin.agents.f_tools': 'Outils exposés',
     'admin.agents.f_tools_ph': 'Un outil par ligne',
     'admin.agents.f_tools_hint': 'Noms affichés aux utilisateurs (un par ligne, 16 maximum).',
+    'admin.agents.f_modes': 'Modes de réponse',
+    'admin.agents.f_modes_opt': 'Cet agent gère les modes de réponse (Smart / Pro / Claude)',
+    'admin.agents.f_modes_hint':
+      "À cocher uniquement pour un agent de code OWI qui sait interpréter les modes (ex. l'orchestrateur OWIsMind). Pour un agent visuel standard, laissez décoché : le sélecteur de mode reste alors masqué dans le chat.",
     'admin.agents.badge.none': 'Aucun',
     'admin.agents.badge.default': 'Par défaut',
     'admin.agents.badge.new': 'Nouveau',
@@ -356,29 +360,31 @@ export const extraMessages = {
     'art.kpi.empty': "Impossible d'afficher l'indicateur pour ces données.",
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
-    'mode.label': 'Mode du modèle',
-    'mode.eco': 'Éco',
-    'mode.medium': 'Medium',
-    'mode.high': 'High',
-    'mode.eco_hint': 'Éco : rapide, économique et recommandé par défaut. Cliquez pour changer de mode.',
-    'mode.medium_hint': 'Medium : équilibré, qualité supérieure. Cliquez pour changer de mode.',
-    'mode.high_hint': 'High : qualité maximale, plus coûteux. Cliquez pour changer de mode.',
+    'mode.label': 'Mode de réponse',
+    'mode.eco': 'Smart',
+    'mode.medium': 'Pro',
+    'mode.high': 'Claude',
+    'mode.eco_hint': 'Smart : rapide, économique et recommandé pour presque toutes vos questions. Cliquez pour changer de mode.',
+    'mode.medium_hint': 'Pro : plus puissant, pour les analyses qui demandent davantage de finesse (plus coûteux). Cliquez pour changer de mode.',
+    'mode.high_hint': 'Claude : le plus puissant et de loin le plus coûteux. À réserver aux questions très complexes. Cliquez pour changer de mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Mode de réponse',
     'mode.modal_intro':
-      'Choisissez la puissance du modèle selon votre question. Plus de puissance affine l\'analyse, pour un coût plus élevé.',
+      'Choisissez la puissance du modèle selon votre question. Pour la très grande majorité des cas, Smart suffit largement : les modes supérieurs sont plus puissants, mais nettement plus coûteux.',
     'mode.recommended': 'Recommandé',
     'mode.cancel': 'Annuler',
     'mode.validate': 'Valider',
-    'mode.reco_line': 'Notre recommandation : rapide, économique et de très bonne qualité pour la grande majorité des questions.',
+    'mode.reco_line': 'Commencez toujours par Smart : rapide, économique et déjà de très bonne qualité pour la grande majorité de vos questions.',
     'mode.cost_label': 'Coût',
     'mode.speed_label': 'Vitesse',
     'mode.eco_desc':
-      'Le meilleur équilibre performances / qualité, et le plus économique. Idéal pour les recherches et les questions du quotidien.',
+      'Le mode à utiliser par défaut. Rapide, économique et de très bonne qualité : il couvre la quasi-totalité des recherches et des questions du quotidien. Dans le doute, restez sur Smart.',
     'mode.medium_desc':
-      'Un cran au-dessus pour les analyses qui demandent un peu plus de finesse.',
+      'Un cran au-dessus de Smart : plus puissant pour les analyses qui demandent un peu plus de finesse. Sensiblement plus coûteux que Smart, à réserver aux cas où Smart ne suffit pas.',
     'mode.high_desc':
-      'Raisonnement et analyse approfondis, pour les questions complexes.',
+      'Le modèle le plus puissant (Claude), pour le raisonnement et les analyses en profondeur. À réserver aux questions vraiment complexes : soignez votre demande et expliquez précisément ce que vous attendez.',
+    'mode.high_warning':
+      'Beaucoup plus cher : Claude épuise bien plus vite votre enveloppe mensuelle de 50 $. À n\'utiliser que pour des analyses complexes, avec une demande bien construite.',
     'mode.eco_cost': 'Faible',
     'mode.medium_cost': 'Modéré',
     'mode.high_cost': 'Élevé',
@@ -386,7 +392,7 @@ export const extraMessages = {
     'mode.medium_speed': 'Rapide',
     'mode.high_speed': 'Plus posé',
     'mode.envelope_note':
-      'Les modes plus puissants consomment plus vite votre enveloppe mensuelle de 50 $. Réservez High aux questions qui le justifient vraiment.',
+      'Les modes Pro et surtout Claude consomment beaucoup plus vite votre enveloppe mensuelle de 50 $. Gardez Claude pour les questions qui le justifient vraiment ; Smart suffit pour le reste.',
 
     // Calculation steps - frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.
@@ -714,6 +720,10 @@ export const extraMessages = {
     'admin.agents.f_tools': 'Exposed tools',
     'admin.agents.f_tools_ph': 'One tool per line',
     'admin.agents.f_tools_hint': 'Names shown to users (one per line, 16 max).',
+    'admin.agents.f_modes': 'Response modes',
+    'admin.agents.f_modes_opt': 'This agent supports the response modes (Smart / Pro / Claude)',
+    'admin.agents.f_modes_hint':
+      'Tick this only for an OWI code agent that can interpret the modes (e.g. the OWIsMind orchestrator). For a plain visual agent, leave it off: the mode picker then stays hidden in chat.',
     'admin.agents.badge.none': 'None',
     'admin.agents.badge.default': 'Default',
     'admin.agents.badge.new': 'New',
@@ -798,29 +808,31 @@ export const extraMessages = {
     'art.kpi.empty': 'Cannot display the KPI for this data.',
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
-    'mode.label': 'Model mode',
-    'mode.eco': 'Eco',
-    'mode.medium': 'Medium',
-    'mode.high': 'High',
-    'mode.eco_hint': 'Eco: fast, economical and recommended by default. Click to change mode.',
-    'mode.medium_hint': 'Medium: balanced, higher quality. Click to change mode.',
-    'mode.high_hint': 'High: maximum quality, more expensive. Click to change mode.',
+    'mode.label': 'Response mode',
+    'mode.eco': 'Smart',
+    'mode.medium': 'Pro',
+    'mode.high': 'Claude',
+    'mode.eco_hint': 'Smart: fast, economical and recommended for almost every question. Click to change mode.',
+    'mode.medium_hint': 'Pro: more powerful, for analyses that need extra finesse (more expensive). Click to change mode.',
+    'mode.high_hint': 'Claude: the most powerful and by far the most expensive. Reserve it for very complex questions. Click to change mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Response mode',
     'mode.modal_intro':
-      'Choose the model power to match your question. More power sharpens the analysis, for a higher cost.',
+      'Choose the model power to match your question. For the vast majority of cases, Smart is more than enough: the higher modes are more powerful but noticeably more expensive.',
     'mode.recommended': 'Recommended',
     'mode.cancel': 'Cancel',
     'mode.validate': 'Apply',
-    'mode.reco_line': 'Our recommendation: fast, economical and very good quality for the vast majority of questions.',
+    'mode.reco_line': 'Always start with Smart: fast, economical and already very good quality for the vast majority of your questions.',
     'mode.cost_label': 'Cost',
     'mode.speed_label': 'Speed',
     'mode.eco_desc':
-      'The best performance / quality balance, and the most economical. Ideal for lookups and everyday questions.',
+      'The mode to use by default. Fast, economical and very good quality: it covers almost all lookups and everyday questions. When in doubt, stay on Smart.',
     'mode.medium_desc':
-      'A step up for analyses that need a bit more finesse.',
+      'A step up from Smart: more powerful for analyses that need a bit more finesse. Noticeably more expensive than Smart, for when Smart is not enough.',
     'mode.high_desc':
-      'Deeper reasoning and analysis, for complex questions.',
+      'The most powerful model (Claude), for deep reasoning and analysis. Reserve it for genuinely complex questions: craft your request and explain precisely what you expect.',
+    'mode.high_warning':
+      'Much more expensive: Claude burns through your $50/month envelope far faster. Use it only for complex analyses, with a well-crafted request.',
     'mode.eco_cost': 'Low',
     'mode.medium_cost': 'Moderate',
     'mode.high_cost': 'High',
@@ -828,7 +840,7 @@ export const extraMessages = {
     'mode.medium_speed': 'Fast',
     'mode.high_speed': 'More deliberate',
     'mode.envelope_note':
-      'More powerful modes use up your $50/month envelope faster. Reserve High for questions that genuinely warrant it.',
+      'The Pro and especially Claude modes use up your $50/month envelope much faster. Keep Claude for questions that genuinely warrant it; Smart is enough for the rest.',
 
     // Calculation steps - frozen `kind` enum (spec §2). Params are display
     // strings ({0}/{1}/{2}, list interpolation); column names stay verbatim.

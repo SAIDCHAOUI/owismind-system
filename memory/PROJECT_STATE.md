@@ -319,9 +319,13 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   - `OWISMIND_DEV_owismind_webapp_settings_v1` (logique `webapp_settings_v1`) : `setting_key` PK,
     `setting_value` (JSON), `updated_at`, `updated_by`. **Config globale webapp** (clé `enabled_agents` =
     whitelist `[{logical_key,project_key,agent_id,label,profile}]`). **`profile`** (2026-06-18, L091) = fiche
-    d'affichage **rédigée par l'admin** (tagline/description/capabilities/tools/icon/badge), validée+bornée
-    serveur par `validate_agent_meta` (pur, ne lève jamais ; whitelist icônes = registre front) et **stockée
-    DANS ce JSON, PAS de nouvelle table**. Via `storage/settings.py`. Voir L017 + L091.
+    d'affichage **rédigée par l'admin** (tagline/description/capabilities/tools/icon/badge **+ `modes`**,
+    booléen 2026-06-24/L101), validée+bornée serveur par `validate_agent_meta` (pur, ne lève jamais ;
+    whitelist icônes = registre front) et **stockée DANS ce JSON, PAS de nouvelle table**. Le flag
+    **`modes`** (défaut OFF) indique que l'agent gère le sélecteur de modes Smart/Pro/Claude : `/agents`
+    l'expose, le front masque le picker si OFF, et **`/chat/start` ne relaie le token `⟦owi:mode=…⟧` que si
+    `profile.modes`** (sinon aucun token, plus de fuite chez un agent visuel). Via `storage/settings.py`.
+    Voir L017 + L091 + L101.
 - **Connexion configurable** (plus de hardcode) : params webapp `sql_connection`/`table_prefix`/`log_level`
   (`hideWebAppConfig=false`), lus via `get_webapp_config()`. ⚠️ dropdown Settings KO (L012) → champ texte.
   Nommage `{PROJECT_KEY}_{prefix-}owismind_{logical}` (préfixe optionnel après le project key).

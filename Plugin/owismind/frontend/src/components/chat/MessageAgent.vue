@@ -440,8 +440,8 @@ function nextVersion() {
         :title="t('ev.open')"
         @click="openEvidence"
       ><Icon name="shield" />{{ t('ev.open') }}</button>
-      <button :class="{ primary: isUp }" :title="t('msg.like')" @click="like"><Icon name="thumbsUp" /></button>
-      <button :class="{ danger: isDown }" :title="t('msg.dislike')" @click="dislike"><Icon name="thumbsDown" /></button>
+      <button class="fb-btn" :class="{ primary: isUp }" :title="t('msg.like')" :aria-label="t('msg.like')" :aria-pressed="isUp" @click="like"><Icon name="thumbsUp" :size="15" /></button>
+      <button class="fb-btn" :class="{ danger: isDown }" :title="t('msg.dislike')" :aria-label="t('msg.dislike')" :aria-pressed="isDown" @click="dislike"><Icon name="thumbsDown" :size="15" /></button>
       <!-- ⋯ detailed feedback - works for either rating (comment a 👍 or a 👎). -->
       <Menu align="left" placement="top" :items="moreItems" @select="onMoreSelect">
         <template #trigger="{ toggle }">

@@ -382,6 +382,14 @@ def chat_start():
     mode = body.get("mode")
     if mode not in context.MODEL_MODES:
         mode = "medium"
+    # Per-agent gate (the real enforcement behind the hidden picker): only relay the
+    # mode control token to an agent that actually supports the response-mode dial
+    # (its admin profile opted in). For any other agent the orchestrator-only token
+    # would just leak into the prompt as visible text, so drop it entirely - the agent
+    # then runs with no mode token, exactly as before this feature existed.
+    agent_profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
+    if not agent_profile.get("modes"):
+        mode = None
 
     # Web-app configured language (fr / en) the user is currently running the UI in.
     # Validated like the mode; absent/unknown -> None. The reply language of THIS turn
@@ -687,6 +695,11 @@ def agents_available():
                 "tools": profile.get("tools", []),
                 "icon": profile.get("icon", "robot"),
                 "badge": profile.get("badge", ""),
+                # Whether the chat should offer the response-mode dial (Smart / Pro /
+                # Claude) for this agent. Only agents whose backend understands the
+                # ⟦owi:mode=…⟧ token (the orchestrator) set this; the picker is hidden
+                # otherwise. Default off so a plain visual agent never shows it.
+                "modes": bool(profile.get("modes", False)),
             }
         )
     logger.info(

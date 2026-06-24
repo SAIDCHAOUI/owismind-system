@@ -64,6 +64,15 @@ export const useSessionStore = defineStore('session', () => {
   let _initPromise = null
 
   const hasAgents = computed(() => agents.value.length > 0)
+  // The full profile object of the currently-picked agent (or null). Lets the chat
+  // read per-agent display flags without re-deriving from the key everywhere.
+  const selectedAgent = computed(
+    () => agents.value.find((a) => a.key === selectedAgentKey.value) || null,
+  )
+  // Whether the picked agent supports the response-mode dial (Smart / Pro / Claude).
+  // Admin-authored per agent (only the OWIsMind orchestrator); the chat hides the mode
+  // picker when false, and the backend skips the mode token for that agent regardless.
+  const selectedAgentSupportsModes = computed(() => !!(selectedAgent.value && selectedAgent.value.modes))
   // The user has hit their monthly credit AND enforcement is on -> sends are paused.
   // A null/unenforced/under-limit status leaves sending fully enabled.
   const budgetBlocked = computed(
@@ -254,6 +263,8 @@ export const useSessionStore = defineStore('session', () => {
     convLoading,
     convError,
     hasAgents,
+    selectedAgent,
+    selectedAgentSupportsModes,
     displayName,
     initials,
     loadMe,

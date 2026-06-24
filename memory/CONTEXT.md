@@ -19,6 +19,26 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🎨 SESSION 2026-06-24 (FIX UI : pouces feedback + MODES PAR AGENT Smart/Pro/Claude) - repo only,
+DEV packagé, considéré OK par l'user en fin de séance.** (1) **Pouces 👍/👎** illisibles (« carré ») :
+glyphes **pleins** (`icons.js` thumbsUp/thumbsDown filled) + `MessageAgent.vue` boutons à `:size=15` +
+aria (cause prouvée navigateur : outline filiforme + `Icon.vue` force `width:1em` qui écrase le CSS 13px).
+(2) **Sélecteur de mode par agent** : flag booléen `modes` dans le profil d'agent -> `validate_agent_meta`
+(défaut OFF, bool), exposé par `/agents`, **gate `/chat/start`** (token `⟦owi:mode⟧` relayé SEULEMENT si
+`profile.modes`, sinon `mode=None` = plus de fuite du token), toggle admin dans la fiche (`AdminView`),
+picker masqué via `session.selectedAgentSupportsModes` (`PromptBar v-if`). Pas d'auto-détection « magique »
+(non fiable) -> toggle admin + enforcement serveur. (3) **Renommage** eco/medium/high (clés internes
+INCHANGÉES) -> **Smart / Pro / Claude** + couleurs (`ModelModePicker`) : badge **vert** RECOMMANDÉ + callout
+vert (Smart poussé à fond), callout **rouge** d'avertissement + jauge coût rouge (Claude = complexe only,
+soigner le prompt, **bien plus cher, épuise vite l'enveloppe 50 $**) ; copies FR+EN `extra.js`. **456 back +
+124 front + build OK, 0 tiret, rendu vérifié clair/sombre.** **⚠️ INCIDENT** : j'ai packagé la PROD par
+erreur -> **annulé** (`git checkout` resource+body.html, prod restaurée à `index-CApWkAm7.js`) ; seul le
+**DEV** est packagé (`owismind_dev-upload.zip`, entry `index-BKICdg4x.js`). Zip prod régénéré à l'identique de
+l'état déployé (via `git stash`). **Règle gravée : en dev, packager UNIQUEMENT le DEV ; jamais toucher la prod
+avant validation + demande de promotion** (mémoire `dev-first-never-touch-prod-artifacts`). **À FAIRE DSS** :
+upload DEV (Uploaded, pas Development) + redémarrer backend + cocher « gère les modes » sur OWIsMind dans
+Administration > Agents. Détail -> `sessions/2026-06-24.md`.
+
 **🎫 SESSION 2026-06-22 Run 2 (MODÈLE SÉMANTIQUE TICKETS ultra-explicite + DEBUG "l'agent invente le nom /
 0 ligne") - repo only, NON validé DSS.** Cerveau tickets réécrit (`update_tickets_semantic_model.py`) :
 **COUNT(DISTINCT id)** (snapshots dupliqués), **dernier snapshot via `DISTINCT ON (id) ORDER BY lastUpdate
@@ -481,7 +501,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-22 Run 2 (modèle sémantique tickets ultra-explicite + DEBUG "agent invente le nom") → détail `sessions/2026-06-22.md` (Run 2)
+## 🧭 Dernière session - 2026-06-24 (fix UI : pouces feedback + modes par agent Smart/Pro/Claude) → détail `sessions/2026-06-24.md`
+- **Repo only ; DEV packagé.** Pouces 👍/👎 illisibles -> glyphes **pleins** (`icons.js`) + `MessageAgent` `:size=15`. Modes **par agent** : flag `modes` (profil), `/agents` l'expose, **`/chat/start` ne relaie le token que si l'agent le supporte** (plus de fuite), toggle admin (`AdminView`), picker masqué sinon (`session.selectedAgentSupportsModes` + `PromptBar v-if`). Renommage **Smart/Pro/Claude** (clés internes eco/medium/high gardées) + code couleur (vert RECOMMANDÉ Smart, rouge avertissement Claude « bien plus cher, épuise le quota 50 $ »).
+- **456 back + 124 front + build OK, 0 tiret**, rendu vérifié navigateur (clair/sombre).
+- **⚠️ Incident** : PROD packagée par erreur -> annulée, prod restaurée à `index-CApWkAm7.js`. Seul le **DEV** est packagé (`owismind_dev-upload.zip`, `index-BKICdg4x.js`). **Règle : en dev, packager UNIQUEMENT le DEV** (mémoire `dev-first-never-touch-prod-artifacts`). À FAIRE DSS : upload DEV (Uploaded) + redémarrer backend + cocher « gère les modes » sur OWIsMind.
+
+## Avant - 2026-06-22 Run 2 (modèle sémantique tickets ultra-explicite + DEBUG "agent invente le nom") → détail `sessions/2026-06-22.md` (Run 2)
 - **Repo only, NON validé DSS.** Cerveau tickets réécrit (`update_tickets_semantic_model.py`) : **COUNT(DISTINCT id)** (snapshots dupliqués) + **dernier snapshot `DISTINCT ON (id)`** pour l'état, **LD `Service_id_1`** au 1er plan, **anti-ILIKE + anti-fabrication**, **dates DEFAULT creationDate**, identité GROUP BY Customer_id, durée en minutes, **21 descriptions + métriques + 11 golden** (génériques).
 - **Cause racine de l'échec DSS (« algerie telecom » -> nom inventé, 0 ligne)** = profileur écrivait `indexed=False` partout -> terme jamais extrait -> grounding sauté -> le modèle devine. **FIX L100** : `profile_dataset_recipe.py` **dérive `indexed`** (parité value_index) + **`time_name_rank`** (creationDate > Latest_Closed_Date). Miroir PROD. **+3 tests = 286 verts.** "Description for LLM" : `TOOL_DESCRIPTIONS.md`. Revenus : anti-fabrication/no-ILIKE renforcés.
 - **⚠️ `.v1.json` = DUMP à sens unique (je LIS, je n'ÉCRIS jamais ; restaurés au dump user).** Le cerveau vit dans les SCRIPTS.

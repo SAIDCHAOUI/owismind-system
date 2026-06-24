@@ -82,7 +82,7 @@ const TAGLINE_MAX = 120
 const DESC_MAX = 700
 
 function emptyProfile() {
-  return { tagline: '', description: '', capabilities: [], tools: [], icon: 'robot', badge: '' }
+  return { tagline: '', description: '', capabilities: [], tools: [], icon: 'robot', badge: '', modes: false }
 }
 
 // --- Profile editor (modal) ---------------------------------------------------
@@ -97,6 +97,8 @@ const editForm = reactive({
   description: '',
   capsText: '',
   toolsText: '',
+  // Whether this agent supports the chat response-mode dial (Smart / Pro / Claude).
+  modes: false,
 })
 
 function linesToList(text, max) {
@@ -120,6 +122,7 @@ function openEditor(i) {
   editForm.description = p.description || ''
   editForm.capsText = (p.capabilities || []).join('\n')
   editForm.toolsText = (p.tools || []).join('\n')
+  editForm.modes = !!p.modes
   editorOpen.value = true
 }
 
@@ -133,6 +136,7 @@ function applyEditor() {
       description: editForm.description.trim().slice(0, DESC_MAX),
       capabilities: linesToList(editForm.capsText, 8),
       tools: linesToList(editForm.toolsText, 16),
+      modes: !!editForm.modes,
     }
     profilesDirty.value = true
   }
@@ -785,6 +789,15 @@ if (import.meta.env.DEV) {
                 </button>
               </div>
             </div>
+          </div>
+
+          <div class="ed-field">
+            <label class="field-label">{{ t('admin.agents.f_modes') }}</label>
+            <label class="ed-check">
+              <input type="checkbox" v-model="editForm.modes" />
+              <span>{{ t('admin.agents.f_modes_opt') }}</span>
+            </label>
+            <p class="ed-hint">{{ t('admin.agents.f_modes_hint') }}</p>
           </div>
 
           <div class="ed-field">
@@ -1442,6 +1455,40 @@ if (import.meta.env.DEV) {
 .ed-input::placeholder { color: var(--text-3); }
 .ed-textarea { resize: vertical; line-height: 1.5; min-height: 78px; }
 .ed-hint { font-size: 13px; color: var(--text-2); margin: 0; }
+
+/* Square checkbox toggle (response-mode support) - same flat/square treatment as the
+   quota checkboxes (18px box, 1.5px border, checked = orange fill + white check). */
+.ed-check { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+.ed-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text);
+  background: var(--bg);
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.ed-check input[type="checkbox"]:checked { background: var(--orange); border-color: var(--orange); }
+.ed-check input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  display: none;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+.ed-check input[type="checkbox"]:checked::after { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .ed-check input[type="checkbox"] { transition: none; }
+}
 
 /* Icon picker: square grid buttons, selected = orange fill */
 .pf-lab {

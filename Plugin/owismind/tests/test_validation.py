@@ -174,6 +174,18 @@ class TestAgentMeta(unittest.TestCase):
         self.assertNotIn("\x00", meta["tagline"])
         self.assertNotIn("\x07", meta["tagline"])
 
+    def test_modes_flag_defaults_off_and_coerces_to_bool(self):
+        # Absent / garbage profile -> modes off (the picker stays hidden, no token sent).
+        self.assertIs(validate_agent_meta(None)["modes"], False)
+        self.assertIs(validate_agent_meta({})["modes"], False)
+        # Explicit truthy/falsey values coerce to a strict bool.
+        self.assertIs(validate_agent_meta({"modes": True})["modes"], True)
+        self.assertIs(validate_agent_meta({"modes": False})["modes"], False)
+        self.assertIs(validate_agent_meta({"modes": 1})["modes"], True)
+        self.assertIs(validate_agent_meta({"modes": "yes"})["modes"], True)
+        self.assertIs(validate_agent_meta({"modes": 0})["modes"], False)
+        self.assertIs(validate_agent_meta({"modes": ""})["modes"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

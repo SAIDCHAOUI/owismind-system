@@ -69,7 +69,10 @@ const placeholder = () =>
     <div class="prompt-row">
       <div class="prompt-left">
         <AgentPicker />
-        <ModelModePicker />
+        <!-- Response-mode dial: shown ONLY for agents whose admin profile opted into
+             modes (the OWIsMind orchestrator). A plain agent that cannot act on the
+             mode never shows it. -->
+        <ModelModePicker v-if="session.selectedAgentSupportsModes" />
       </div>
       <div class="prompt-right">
         <!-- Mic sits with the send action on the right (voice → send grouping). No STT

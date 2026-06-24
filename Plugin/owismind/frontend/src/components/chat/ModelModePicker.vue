@@ -89,12 +89,24 @@ function cancel() {
             <span v-if="selected === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
           </div>
           <p class="detail-desc">{{ t('mode.' + selected + '_desc') }}</p>
-          <p v-if="selected === 'eco'" class="detail-reco">{{ t('mode.reco_line') }}</p>
+
+          <!-- Smart: strong green "recommended" callout - push the safe default hard. -->
+          <p v-if="selected === 'eco'" class="callout callout-reco">
+            <Icon name="check" :size="15" class="callout-ico" />
+            <span>{{ t('mode.reco_line') }}</span>
+          </p>
+          <!-- Claude: red cost warning - expensive, reserved for complex analysis. -->
+          <p v-else-if="selected === 'high'" class="callout callout-warn">
+            <Icon name="alert" :size="15" class="callout-ico" />
+            <span>{{ t('mode.high_warning') }}</span>
+          </p>
 
           <div class="meters">
             <div class="meter-row">
               <span class="meter-label">{{ t('mode.cost_label') }}</span>
-              <span class="meter5" aria-hidden="true">
+              <!-- Cost gauge tinted by severity: green (Smart) -> orange (Pro) -> red
+                   (Claude), reinforcing that the higher modes cost much more. -->
+              <span class="meter5" :class="'cost-' + selected" aria-hidden="true">
                 <i v-for="n in 5" :key="n" :class="{ on: n <= COST[selected] }" />
               </span>
               <span class="meter-val">{{ t('mode.' + selected + '_cost') }} ({{ COST[selected] }}/5)</span>
@@ -172,10 +184,13 @@ function cancel() {
 
 .row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .row-name { font-size: 15px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }
-/* RECOMMENDED label: uppercase, orange, tight tracking. */
+/* RECOMMENDED tag: a green chip (status colour) so Smart visibly stands out as the
+   safe default - separate from the orange "selected" accent. Square, theme-safe
+   (soft green fill + green border/text, AA in light and dark). */
 .reco-badge {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--orange-text); white-space: nowrap;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--success); background: var(--success-soft);
+  border: 1px solid var(--success); padding: 2px 6px; white-space: nowrap;
 }
 /* Check shown only when active; orange. */
 .row-check { color: var(--orange); flex-shrink: 0; }
@@ -190,8 +205,19 @@ function cancel() {
 .detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .detail-name { font-size: 16px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }
 .detail-desc { font-size: 14px; color: var(--text-2); line-height: 1.55; margin: 0 0 12px; }
-/* Recommendation line: slightly bolder, near-black (not orange). */
-.detail-reco { font-size: 14px; color: var(--text); font-weight: 600; line-height: 1.5; margin: 0; }
+
+/* Callouts: a flat tinted box with a 3px status bar (no glow/gradient, charter-safe).
+   Smart = green "recommended", Claude = red "expensive" warning. */
+.callout {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; line-height: 1.5; color: var(--text);
+  margin: 0; padding: 10px 12px; border-left: 3px solid transparent;
+}
+.callout-ico { flex-shrink: 0; margin-top: 1px; }
+.callout-reco { background: var(--success-soft); border-left-color: var(--success); }
+.callout-reco .callout-ico { color: var(--success); }
+.callout-warn { background: var(--danger-soft); border-left-color: var(--danger); }
+.callout-warn .callout-ico { color: var(--danger); }
 
 /* Cost / Speed meter rows with 5-dot gauges. */
 .meters { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -206,6 +232,10 @@ function cancel() {
 .meter5 { display: inline-flex; gap: 5px; }
 .meter5 i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
 .meter5 i.on { background: var(--text); }
+/* Cost gauge tinted by severity (the speed gauge stays neutral). */
+.meter5.cost-eco i.on { background: var(--success); }
+.meter5.cost-medium i.on { background: var(--orange); }
+.meter5.cost-high i.on { background: var(--danger); }
 .meter-val { font-size: var(--fs-xs); color: var(--text-2); }
 
 /* Envelope note: flat surface, thin border, square, wallet icon + quiet text. */
