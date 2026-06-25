@@ -20,6 +20,7 @@ const FaqView = () => import('../views/FaqView.vue')
 const AgentsView = () => import('../views/AgentsView.vue')
 const ProjectView = () => import('../views/ProjectView.vue')
 const AdminView = () => import('../views/AdminView.vue')
+const BenchmarkSuggestView = () => import('../views/BenchmarkSuggestView.vue')
 
 // Secondary pages still rendered as labeled placeholders (i18n meta keys).
 // Only the help-menu targets remain generic placeholders now.
@@ -40,6 +41,8 @@ const routes = [
   { path: '/feedback', name: 'feedback', component: FeedbackView, meta: { eyebrow: 'fb.eyebrow', title: 'fb.title' } },
   { path: '/faq', name: 'faq', component: FaqView, meta: { eyebrow: 'faq.eyebrow', title: 'faq.title' } },
   { path: '/agents/:agentId?', name: 'agents', component: AgentsView, meta: { eyebrow: 'ag.eyebrow', title: 'ag.title' } },
+  // Benchmark suggestions - ALL users (no admin guard): propose golden questions.
+  { path: '/benchmark', name: 'benchmark', component: BenchmarkSuggestView, meta: { eyebrow: 'bench.eyebrow', title: 'bench.title' } },
   { path: '/project/:projectId', name: 'project', component: ProjectView, meta: { eyebrow: 'pj.eyebrow', title: 'sb.projects' } },
   ...placeholderPages,
   {

@@ -18,6 +18,7 @@ Never build SQL with raw f-strings around user content: use ``sql_value`` for va
 and ``pg_identifier`` for identifiers (table/column/schema names).
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -226,6 +227,24 @@ def pg_identifier(name):
     return '"' + name.replace('"', '""') + '"'
 
 
+def safe_index_name(physical_name, suffix):
+    """A safely-quoted index identifier for ``{physical_name}_{suffix}``, length-safe.
+
+    A secondary-index name must be unique per table, not human-readable. The natural name
+    ``{physical_name}_{suffix}`` can exceed PostgreSQL's 63-byte NAMEDATALEN limit once a long
+    project key / table prefix meets a long logical name; ``pg_identifier`` REJECTS (raises) an
+    over-long identifier, which would abort the whole CREATE-TABLE-and-indexes transaction. So
+    when the natural name is too long we fall back to a short, collision-safe hashed name
+    (``idx_<suffix>_<sha1[:16]>``) that always fits. Short names are unchanged, so existing
+    indexes keep their readable names.
+    """
+    natural = "{}_{}".format(physical_name, suffix)
+    if len(natural.encode("utf-8")) <= _MAX_IDENTIFIER_BYTES:
+        return pg_identifier(natural)
+    digest = hashlib.sha1(natural.encode("utf-8")).hexdigest()[:16]
+    return pg_identifier("idx_{}_{}".format(suffix, digest))
+
+
 def sql_value(value):
     """Escape a value for safe inlining in a PostgreSQL statement (dataiku.sql)."""
     return toSQL(Constant(value), dialect=DIALECT)
@@ -300,5 +319,8 @@ def storage_status():
             "settings": physical_table("webapp_settings_v1"),
             "usage_monthly": physical_table("webapp_usage_monthly_v1"),
             "user_quota": physical_table("webapp_user_quota_v1"),
+            # Exposed so the admin can paste the EXACT physical name into the LAB benchmark
+            # webapp's `benchmark.suggestions.table` config (it reads this table cross-project).
+            "golden_suggestions": physical_table("webapp_golden_suggestions_v1"),
         },
     }

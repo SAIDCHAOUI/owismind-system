@@ -433,6 +433,29 @@ webapp HTTP (isolé, prod-safe, vraie latence agent).
   (L102)** + run complet + summary/breakdown + dashboard = **NON re-validés DSS**. Commits poussés origin/main
   `6eb1cb4`..`b4b3816`. Détail → `sessions/2026-06-25.md`.
 
+## 8d. Intégration benchmark dans le système - 2 pôles (2026-06-26, ⏳ repo only, NON validé DSS)
+**Archi (spec `docs/superpowers/specs/2026-06-25-benchmark-integration-design.md`)** : les 2 pôles vivent à des
+endroits DIFFÉRENTS, ce qui tranche le choix de techno.
+- **Pôle utilisateur (capture) = DANS le plugin Vue** (produit). Nouvelle table owner-stamped
+  **`webapp_golden_suggestions_v1`** (superset du golden lean-9 ; `storage/suggestions.py`,
+  `chat_v5.read_exchange`, validateurs, 3 routes `POST /benchmark/suggest`, `POST /benchmark/suggest-from-chat`,
+  `GET /benchmark/suggestions` ; 2 WRITE bloquées en impersonation). Front : action menu « ... » -> page
+  **`/benchmark` (TOUS users, pas de garde admin)** = `BenchmarkSuggestView` (bi-mode chat/manuel + « mes
+  suggestions »), `stores/benchmark.js`. `sql_config.safe_index_name` (length-safe, **L103**).
+- **Pôle admin (config + lancement + restitution) = webapp DSS STANDARD séparée dans `OWIsMind_LAB`**, PAS le
+  plugin (zéro Vite/zip/restart). Package repo **`benchmark_webapp/`** (= source de vérité ; `views.py` recollé
+  en project-library `python/benchmark_webapp/`, `backend.py`/`body.html`/`style.css`/`script.js` = 4 panes de la
+  webapp standard). `backend.py` : config GET/POST (écrit la variable `benchmark` en Local variables), run async
+  single-flight, results bornés, suggestions cross-projet read-only + promote idempotent au golden. Montage :
+  `benchmark_webapp/README.md`.
+- **Config** : bloc additif **`benchmark.suggestions`** = `{connection: "SQL_owi", table: "<nom physique exact de
+  webapp_golden_suggestions_v1>", promoted_dataset: "benchmark_suggestions_promoted"}` (vide -> onglet Suggestions
+  « non configuré »). Le nom physique exact est exposé par Admin > Storage (`golden_suggestions`).
+- **État** : 681 tests Python + 124 node ; build Vite OK ; **QA visuelle Playwright** du webapp LAB (clair+sombre) ;
+  revue adversariale 4-dim **0 crit/0 high** (corrigés + tests) ; 0 tiret. **DEV packagé** (`index-BoETXxLb.js`,
+  72 entrées), prod intacte. **NON validé DSS** (upload DEV + créer la webapp standard en LAB). Détail →
+  `sessions/2026-06-26.md`, **L103**.
+
 ---
 
 ## 9. Maquette cible - SUPPRIMÉE du repo (2026-06-11, conversion terminée)

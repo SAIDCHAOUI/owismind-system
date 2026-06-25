@@ -70,6 +70,10 @@ DEFAULTS = {
     "judge_llm_id": config.JUDGE_LLM_ID,
     "score_all_runs": False,
     "aggregate_all_runs": False,
+    # Optional: where the LAB benchmark webapp reads the webapp's user-suggested questions
+    # (cross-project, read-only) and where it records promoted ids. Empty -> the suggestions
+    # tab is simply "not configured". Additive; nothing else changes when absent.
+    "suggestions": {},
 }
 
 _CONCURRENCY_MIN = 1
@@ -102,8 +106,39 @@ def resolve(variables):
     cfg["judge_llm_id"] = _str_or(raw.get("judge_llm_id"), DEFAULTS["judge_llm_id"])
     cfg["score_all_runs"] = _coerce_bool(raw.get("score_all_runs"))
     cfg["aggregate_all_runs"] = _coerce_bool(raw.get("aggregate_all_runs"))
+    cfg["suggestions"] = _resolve_suggestions(raw.get("suggestions"))
     cfg["agents"] = _resolve_agents(raw.get("agents"))
     return cfg
+
+
+def _resolve_suggestions(value):
+    """Normalize the optional ``suggestions`` block (the LAB webapp's cross-project source).
+
+    Keys (all optional strings): ``connection`` (the SQL connection holding the webapp's
+    suggestion table, e.g. SQL_owi), ``table`` (the EXACT physical table name to read,
+    e.g. OWISMIND_DEV_owismind_webapp_golden_suggestions_v1), ``promoted_dataset`` (a LAB
+    dataset where promoted suggestion ids are recorded so they are never promoted twice).
+    Returns ``{}`` when absent or malformed (the suggestions tab then reports not-configured).
+    Never raises.
+    """
+    value = _coerce_obj(value)
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for key in ("connection", "table", "promoted_dataset"):
+        cleaned = _clean(value.get(key))
+        if cleaned:
+            out[key] = cleaned
+    return out
+
+
+def suggestions_config(cfg):
+    """Return the resolved ``suggestions`` block of a config dict (``{}`` when absent)."""
+    if isinstance(cfg, dict):
+        sug = cfg.get("suggestions")
+        if isinstance(sug, dict):
+            return sug
+    return {}
 
 
 def _resolve_agents(value):

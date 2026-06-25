@@ -2305,5 +2305,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   Python et obtenir de vrais None, faire **`astype(object)` AVANT** le `where(pd.notnull(...), None)`, et rendre
   le code pur **NaN-safe** (`v != v`), ne jamais supposer qu'une cellule vide est None. **Date** : 2026-06-25.
 
+## L103 - Une nouvelle table SQL au nom logique long + index secondaire -> nom d'index > 63 octets (NAMEDATALEN) -> `pg_identifier` LÈVE -> table jamais créée (sous `table_prefix` / clé PROD) [repo, fix + tests, 2026-06-26]
+- **Contexte** : intégration benchmark, ajout de la table owner-stamped `webapp_golden_suggestions_v1`
+  (28 car., le plus long nom logique du repo) AVEC 2 index secondaires. `migrations._ensure_table`
+  construisait le nom d'index par `pg_identifier("{physical}_{suffix}")`.
+- **Ce qui a échoué** : `pg_identifier` **rejette** (lève `ValueError`, il ne tronque pas) un identifiant
+  > `_MAX_IDENTIFIER_BYTES` (63, NAMEDATALEN). `{PROJECT_KEY}_{prefix}-owismind_webapp_golden_suggestions_v1_uc_idx`
+  dépasse 63 octets dès qu'un `table_prefix` est configuré (ex. `bidule`) ou avec la clé PROD longue
+  (`OWISMIND_PROD_V1` + prefix `dev` = 65 o). L'exception remonte AVANT toute requête, dans le même
+  `pre_queries` que le `CREATE TABLE` -> **toute la table échoue** (writes -> 500 `storage_unavailable`,
+  reads -> []), erreur opaque, difficile à diagnostiquer. Les tables existantes (`chat_v5`...) ne touchaient
+  jamais la limite (noms courts) : c'était la 1re longue table AVEC index.
+- **Solution qui marche** : `sql_config.safe_index_name(physical, suffix)` -> nom naturel quand il tient
+  (<= 63 o, identique aux noms lisibles existants), sinon **fallback haché** `idx_<suffix>_<sha1[:16]>`
+  (un nom d'index doit juste être unique par table, pas lisible). `CREATE INDEX IF NOT EXISTS` -> idempotent ;
+  les noms courts inchangés -> aucun doublon sur les tables existantes. Protège toute future longue table.
+- **Preuve-vérification** : 2 tests (`test_suggestions_storage.SafeIndexNameTests`) - nom court = lisible,
+  nom forcé long = `idx_uc_idx_<hex>` <= 63 o ; 484 tests plugin verts. Trouvé par la revue adversariale
+  (workflow 4-dim) sur le diff de session.
+- **Source** : session 2026-06-26 (`sessions/2026-06-26.md`). Règle : **toute nouvelle table au nom logique
+  long + index secondaire = vérifier la longueur dérivée du nom d'index** (clé projet + prefix + namespace +
+  logique + suffixe), ou passer par `safe_index_name`. **Date** : 2026-06-26.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

@@ -24,6 +24,7 @@ const chat = useChatStore()
 const collapsed = computed(() => ui.sidebarCollapsed)
 const activeSession = computed(() => route.params.sessionId || '')
 const isAgents = computed(() => route.name === 'agents')
+const isBenchmark = computed(() => route.name === 'benchmark')
 
 function newConversation() {
   router.push('/chat')
@@ -158,6 +159,9 @@ function onUser(key) {
       </button>
       <RouterLink class="side-item" :class="{ active: isAgents }" to="/agents" :title="t('rail.agents')">
         <Icon name="agents" /><span class="side-label">{{ t('sb.agents') }}</span>
+      </RouterLink>
+      <RouterLink class="side-item" :class="{ active: isBenchmark }" to="/benchmark" :title="t('rail.benchmark')">
+        <Icon name="bookOpen" /><span class="side-label">{{ t('sb.benchmark') }}</span>
       </RouterLink>
     </nav>
 

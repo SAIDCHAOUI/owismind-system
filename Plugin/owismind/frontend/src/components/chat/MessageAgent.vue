@@ -10,8 +10,10 @@
 // timelineBodyItems - the stored timeline stays chronological). Text blocks are the
 // only v-html path (sanitized markdown, D7).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
+import { useBenchmarkStore } from '../../stores/benchmark.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { renderMarkdown } from '../../composables/useMarkdown.js'
 import {
@@ -33,7 +35,9 @@ const props = defineProps({
 })
 
 const { t, locale } = useI18n()
+const router = useRouter()
 const chat = useChatStore()
+const benchmark = useBenchmarkStore()
 const { push } = useToasts()
 const evidence = useEvidenceStore()
 
@@ -42,9 +46,16 @@ const showFeedback = ref(false)
 // the modal's adaptive title/reasons/comment and the rating persisted on submit.
 const feedbackMode = ref(0)
 
-// The ⋯ "more options" menu - one entry that opens the detailed-feedback modal for the
-// CURRENT rating (so a user can also add a comment to a 👍, not just a 👎).
-const moreItems = computed(() => [{ key: 'feedback', label: t('msg.give_feedback'), icon: 'message' }])
+// The ⋯ "more options" menu: detailed feedback (always) + "suggest this Q/A for the
+// benchmark" (only on a persisted answer that actually carries text - the collaborative
+// golden-set intake, opened on the Benchmark page pre-filled).
+const moreItems = computed(() => {
+  const items = [{ key: 'feedback', label: t('msg.give_feedback'), icon: 'message' }]
+  if (v.value.exchangeId && hasAnswerText.value) {
+    items.push({ key: 'benchmark', label: t('msg.suggest_benchmark'), icon: 'bookOpen' })
+  }
+  return items
+})
 
 // The active version of this turn = the version object on the turn's active exchange.
 // Turn-level version navigation walks the exchange's SIBLINGS (branches), not in-memory
@@ -276,8 +287,19 @@ function openDetailedFeedback() {
   feedbackMode.value = v.value.feedbackRating === 0 ? 0 : 1
   showFeedback.value = true
 }
+// Stash the prefill (question + agent answer + exchange id) and open the Benchmark page,
+// which reads it to pre-fill the from-chat suggestion form (the user confirms or corrects).
+function openBenchmarkSuggest() {
+  benchmark.setPrefill({
+    exchangeId: v.value.exchangeId,
+    question: props.turn.exchange.userText,
+    agentAnswer: answerText(v.value),
+  })
+  router.push('/benchmark')
+}
 function onMoreSelect(key) {
   if (key === 'feedback') openDetailedFeedback()
+  else if (key === 'benchmark') openBenchmarkSuggest()
 }
 function onFeedbackSubmit(reasons, comment) {
   showFeedback.value = false

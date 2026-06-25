@@ -95,11 +95,18 @@ Si `generated_sql_json` reste `[]` sur une question chiffree : voir Depannage.
 
 ---
 
-## Etape 4 : le tableau de bord (le beau resultat)
+## Etape 4 : la restitution (le beau resultat)
 
-Recabler le dashboard sur les nouveaux datasets, en 3 bandes. Regles de lisibilite :
-formater `accuracy` en **pourcentage**, une **couleur fixe par mode**, et un filtre
-`run_id` fixe au dernier run.
+**Recommande : la webapp benchmark** (`benchmark_webapp/`). Une webapp DSS Standard dans
+`OWIsMind_LAB` qui fait les 3 pages : **Resultats** (taux de bonnes reponses, latence,
+cout par agent x mode + detail par question + filtre `needs_review`), **Lancer** (editer la
+variable `benchmark` + lancer `Run_Benchmark`) et **Suggestions** (promouvoir les questions
+suggerees par les utilisateurs dans le golden). Pas de plugin, pas de build : on colle 4
+panes dans le navigateur DSS. Montage complet : **`benchmark_webapp/README.md`**.
+
+**Alternative (zero code)** : un dashboard DSS natif sur les memes datasets, en 3 bandes.
+Regles de lisibilite : formater `accuracy` en **pourcentage**, une **couleur fixe par mode**,
+un filtre `run_id` fixe au dernier run.
 
 - **Chiffres cles** (tuiles metric, `benchmark_summary`) : taux de bonnes reponses
   global, nombre de questions, configurations testees, cout total.

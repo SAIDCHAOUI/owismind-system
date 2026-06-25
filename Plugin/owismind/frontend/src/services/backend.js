@@ -141,6 +141,38 @@ export function submitFeedback(exchangeId, rating, reasons, comment) {
   });
 }
 
+// --- Benchmark suggestions (collaborative golden-set intake) -------------------
+
+// Suggest a brand-new benchmark Q/A from scratch. `fields` =
+// { question, reference_answer, expected_value?, expected_value_type?, category?, language? }.
+// Returns { status:'ok', suggestion_id }; throws the backend error code on a non-2xx.
+export function suggestBenchmarkManual(fields) {
+  return request('/owismind-api/benchmark/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+}
+
+// Suggest a benchmark Q/A built from one of the caller's own chat answers. The backend
+// reconstructs the question / agent answer / SQL from the persisted exchange (owner-scoped);
+// the client only sends the verdict + the correction. `payload` =
+// { exchange_id, answer_is_correct, reference_answer?, missing_explanation?, category? }.
+export function suggestBenchmarkFromChat(payload) {
+  return request('/owismind-api/benchmark/suggest-from-chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// The caller's own benchmark suggestions (newest first). Returns
+// { status, count, suggestions: [{ suggestion_id, source, question, reference_answer,
+// answer_is_correct, category, language, status, created_at }] }. Owner-scoped server-side.
+export function fetchMySuggestions() {
+  return request('/owismind-api/benchmark/suggestions', { method: 'GET' });
+}
+
 // --- Evidence Studio ----------------------------------------------------------
 
 // Interactive descriptor of one exchange's evidence: columns, filter chips

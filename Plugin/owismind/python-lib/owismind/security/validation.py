@@ -201,6 +201,127 @@ def validate_optional_exchange_id(value):
     return value
 
 
+# --- Benchmark suggestions (the collaborative golden-set intake) ---------------
+# A signed-in user proposes a benchmark question + the answer they vouch for, either from a
+# chat answer (keyed by exchange_id) or as a brand-new manual Q/A. The frontend only sends
+# logical display text (question, reference, an optional crisp value + its type, a category):
+# never a table/query/connection/raw agent id. Bounds keep a single suggestion small.
+MAX_SUGGEST_TEXT_CHARS = 8_000        # question / reference answer
+MAX_SUGGEST_MISSING_CHARS = 4_000     # "what was wrong/missing" explanation
+MAX_SUGGEST_EXPECTED_CHARS = 500      # the crisp anchor fact
+MAX_SUGGEST_CATEGORY_CHARS = 120
+SUGGEST_EXPECTED_VALUE_TYPES = ("numeric", "currency", "date", "string", "list")
+SUGGEST_LANGUAGES = ("fr", "en")
+
+
+def _required_suggest_text(payload, key, max_chars, code):
+    """A required, non-empty, length-bounded display string. Raises ``code`` otherwise."""
+    value = payload.get(key)
+    if not isinstance(value, str):
+        raise ValidationError(code)
+    value = value.strip()
+    if not value or len(value) > max_chars:
+        raise ValidationError(code)
+    return value
+
+
+def _optional_suggest_text(payload, key, max_chars):
+    """An optional display string -> trimmed + capped, or None when blank/absent. Never raises."""
+    value = payload.get(key)
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return value[:max_chars]
+
+
+def _suggest_language(value):
+    """A suggestion language: 'fr'/'en' (default 'fr'). Never raises."""
+    if isinstance(value, str) and value.strip().lower() in SUGGEST_LANGUAGES:
+        return value.strip().lower()
+    return "fr"
+
+
+def _suggest_expected(payload):
+    """Validate the optional ``(expected_value, expected_value_type)`` pair.
+
+    When a crisp value is given its type is REQUIRED and must be a known enum (the objective
+    anchor needs the type to normalize - mirrors the golden schema rule). Returns
+    ``(expected_value, expected_value_type)``, both None when absent.
+    """
+    expected_value = _optional_suggest_text(payload, "expected_value", MAX_SUGGEST_EXPECTED_CHARS)
+    raw_type = payload.get("expected_value_type")
+    expected_type = None
+    if isinstance(raw_type, str) and raw_type.strip():
+        expected_type = raw_type.strip().lower()
+        if expected_type not in SUGGEST_EXPECTED_VALUE_TYPES:
+            raise ValidationError("invalid_expected_type")
+    if expected_value is not None and expected_type is None:
+        raise ValidationError("missing_expected_type")
+    return expected_value, expected_type
+
+
+def validate_suggestion_manual(payload):
+    """Validate a standalone (manual) benchmark suggestion. Returns a normalized dict.
+
+    Required: ``question`` + ``reference_answer``. Optional: ``expected_value`` (+ its type),
+    ``category``, ``language`` (default 'fr'). Raises ``ValidationError`` (stable code) on a
+    structurally invalid payload.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    question = _required_suggest_text(payload, "question", MAX_SUGGEST_TEXT_CHARS, "invalid_question")
+    reference = _required_suggest_text(
+        payload, "reference_answer", MAX_SUGGEST_TEXT_CHARS, "invalid_reference"
+    )
+    expected_value, expected_type = _suggest_expected(payload)
+    return {
+        "question": question,
+        "reference_answer": reference,
+        "expected_value": expected_value,
+        "expected_value_type": expected_type,
+        "category": _optional_suggest_text(payload, "category", MAX_SUGGEST_CATEGORY_CHARS),
+        "language": _suggest_language(payload.get("language")),
+    }
+
+
+def validate_suggestion_from_chat(payload):
+    """Validate a from-chat benchmark suggestion. Returns a normalized dict.
+
+    Required: ``exchange_id`` + ``answer_is_correct`` (a strict bool). When the agent answer
+    is judged INCORRECT, ``reference_answer`` is required (the correct answer the user
+    vouches for); when judged correct, the agent answer itself is stored as the reference
+    server-side, so no reference text is required from the user. Optional:
+    ``missing_explanation``, ``category``. The question / agent answer / agent_key / SQL are
+    NOT taken from the client - they are reconstructed from the persisted exchange server-side.
+    Raises ``ValidationError`` (stable code) on a structurally invalid payload.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
+    answer_is_correct = payload.get("answer_is_correct")
+    if not isinstance(answer_is_correct, bool):
+        raise ValidationError("invalid_verdict")
+    # A "No" verdict must carry the correct answer; a "Yes" verdict needs none (the agent
+    # answer becomes the reference downstream), but an optional note is still accepted.
+    if not answer_is_correct:
+        reference = _required_suggest_text(
+            payload, "reference_answer", MAX_SUGGEST_TEXT_CHARS, "missing_reference"
+        )
+    else:
+        reference = _optional_suggest_text(payload, "reference_answer", MAX_SUGGEST_TEXT_CHARS)
+    return {
+        "exchange_id": exchange_id,
+        "answer_is_correct": answer_is_correct,
+        "reference_answer": reference,
+        "missing_explanation": _optional_suggest_text(
+            payload, "missing_explanation", MAX_SUGGEST_MISSING_CHARS
+        ),
+        "category": _optional_suggest_text(payload, "category", MAX_SUGGEST_CATEGORY_CHARS),
+    }
+
+
 # --- Evidence Studio -----------------------------------------------------------
 # The frontend NEVER sends SQL to /evidence/*: only an exchange_id, structured
 # {column, op, values} filters (the editable chips), kept locked-chip ids, a

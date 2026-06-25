@@ -16,8 +16,8 @@ import threading
 from owismind.storage.sql_config import (
     full_table,
     new_executor,
-    pg_identifier,
     physical_table,
+    safe_index_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,13 @@ ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"
 # job - the active test is a plain ``expires_at > now()``). Brand new _v1 table per the
 # no-ALTER rule; the existing usage_monthly / users / settings tables are untouched.
 USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"
+# One row per benchmark question/answer a USER suggested for the golden set (either from a
+# chat answer via the message "..." menu, or from the standalone Benchmark page). The columns
+# are a SUPERSET of the golden lean-9 schema (benchmark/schemas.py GOLDEN_COLUMNS), so an
+# accepted suggestion maps cleanly onto a golden row at promotion time (the admin pole, the
+# OWIsMind_LAB benchmark webapp, reads this table cross-project read-only and promotes). Brand
+# new _v1 table per the no-ALTER rule; owner-scoped on the "my suggestions" read.
+GOLDEN_SUGGESTIONS_V1_LOGICAL = "webapp_golden_suggestions_v1"
 # Note: raw agent traces are NO LONGER stored in a backend-managed SQL table. They are
 # appended to an admin-selected Flow dataset via the Dataset API (see storage/chat_traces.py),
 # which keeps the large JSON out of any SQL statement text (and out of DSS CRU logs).
@@ -179,6 +186,38 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# One user-suggested benchmark question/answer per row. ``source`` is 'chat' (suggested from
+# an answer, carrying the exchange + agent + captured SQL) or 'manual' (a brand-new Q/A from
+# the Benchmark page). ``answer_is_correct`` is the user verdict on a chat answer (NULL for a
+# manual suggestion). ``reference_answer`` is the answer the user vouches for; the optional
+# ``expected_value`` (+ its type) is a crisp anchor fact. ``status`` is the review state
+# (pending/accepted/rejected) updated by the LAB admin pole. All user-supplied text is bounded
+# before write (storage/suggestions.py); values are escaped, never inlined raw.
+_GOLDEN_SUGGESTIONS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    suggestion_id        TEXT       PRIMARY KEY,
+    user_id              TEXT,
+    source               TEXT,
+    exchange_id          TEXT,
+    session_id           TEXT,
+    agent_key            TEXT,
+    question             TEXT,
+    agent_answer         TEXT,
+    answer_is_correct    BOOLEAN,
+    reference_answer     TEXT,
+    missing_explanation  TEXT,
+    expected_value       TEXT,
+    expected_value_type  TEXT,
+    category             TEXT,
+    language             TEXT,
+    generated_sql_json   TEXT,
+    status               TEXT       NOT NULL DEFAULT 'pending',
+    created_at           TIMESTAMP  NOT NULL DEFAULT now(),
+    reviewed_by          TEXT,
+    reviewed_at          TIMESTAMP
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -188,6 +227,7 @@ _DDL_BY_LOGICAL = {
     USAGE_MONTHLY_V1_LOGICAL: _USAGE_MONTHLY_V1_DDL,
     ARTIFACTS_V1_LOGICAL: _ARTIFACTS_V1_DDL,
     USER_QUOTA_V1_LOGICAL: _USER_QUOTA_V1_DDL,
+    GOLDEN_SUGGESTIONS_V1_LOGICAL: _GOLDEN_SUGGESTIONS_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -218,6 +258,12 @@ _INDEXES_BY_LOGICAL = {
         ("uc_idx", "(user_id, created_at DESC)"),
         # Per-session reads (agent-context window + /conversation): (user_id, session_id, created_at).
         ("usc_idx", "(user_id, session_id, created_at DESC)"),
+    ],
+    GOLDEN_SUGGESTIONS_V1_LOGICAL: [
+        # "My suggestions" read = WHERE user_id ORDER BY created_at DESC.
+        ("uc_idx", "(user_id, created_at DESC)"),
+        # Admin / LAB cross-project read = WHERE status ORDER BY created_at DESC.
+        ("sc_idx", "(status, created_at DESC)"),
     ],
 }
 
@@ -250,7 +296,7 @@ def _ensure_table(logical):
             pre.append("ALTER TABLE {tbl} {clause}".format(tbl=table, clause=clause))
             logger.info("ensure_table - ALTER TABLE %s %s", table, clause)
         for suffix, columns in _INDEXES_BY_LOGICAL.get(logical, []):
-            index_name = pg_identifier("{}_{}".format(physical_table(logical), suffix))
+            index_name = safe_index_name(physical_table(logical), suffix)
             pre.append(
                 "CREATE INDEX IF NOT EXISTS {idx} ON {tbl} {cols}".format(
                     idx=index_name, tbl=table, cols=columns
@@ -299,3 +345,8 @@ def ensure_artifacts_table():
 def ensure_user_quota_table():
     """Ensure the per-user budget-override table exists (create-if-missing), once per process."""
     _ensure_table(USER_QUOTA_V1_LOGICAL)
+
+
+def ensure_golden_suggestions_table():
+    """Ensure the user benchmark-suggestions table exists (create-if-missing), once per process."""
+    _ensure_table(GOLDEN_SUGGESTIONS_V1_LOGICAL)

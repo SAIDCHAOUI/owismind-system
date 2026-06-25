@@ -30,6 +30,7 @@ agent_key is an opaque logical key resolved server-side against the whitelist.
 """
 
 import hashlib
+import json
 import logging
 import sys
 import time
@@ -58,9 +59,12 @@ from owismind.security.validation import (
     validate_optional_exchange_id,
     validate_quota_note,
     validate_required_exchange_id,
+    validate_suggestion_from_chat,
+    validate_suggestion_manual,
     validate_user_id_list,
 )
 from owismind.storage import admin, budget, chat_v5, settings, sql_config
+from owismind.storage import suggestions as suggestions_storage
 from owismind.storage.migrations import ensure_chat_table
 # --- BEGIN impersonation (temporary, removable) ---
 # Admin "act as user" (read-only). The whole feature lives in security/impersonation.py
@@ -870,6 +874,167 @@ def evidence_distinct():
         logger.exception("/evidence/distinct - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     return jsonify({"status": "ok", **result})
+
+
+# --- benchmark suggestions (the collaborative golden-set intake) -------------
+# Any signed-in user proposes a benchmark question + the answer they vouch for. The
+# proposal is stored owner-stamped in webapp_golden_suggestions_v1; the admin pole (the
+# OWIsMind_LAB benchmark webapp) later reads it cross-project and promotes accepted rows
+# into the golden dataset. The two WRITE routes are blocked while impersonating (read-only),
+# mirroring /chat/feedback; the "my suggestions" read scopes to the effective user.
+
+
+@api.route("/benchmark/suggest", methods=["POST"])
+def benchmark_suggest():
+    """Persist a standalone (manual) benchmark suggestion from the caller.
+
+    Body: ``{question, reference_answer, expected_value?, expected_value_type?, category?,
+    language?}``. Validated/bounded server-side; identity comes from the auth headers; the row
+    is owner-stamped. Returns ``{status:'ok', suggestion_id}``.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/benchmark/suggest - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
+    # submit a suggestion under the inspected user's name; checked before any work.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/benchmark/suggest - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/benchmark/suggest - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    try:
+        fields = validate_suggestion_manual(request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/benchmark/suggest - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    try:
+        suggestion_id = suggestions_storage.save_suggestion(
+            identity["user_id"], "manual",
+            fields["question"], fields["reference_answer"],
+            expected_value=fields["expected_value"],
+            expected_value_type=fields["expected_value_type"],
+            category=fields["category"], language=fields["language"],
+        )
+    except Exception:
+        logger.exception("/benchmark/suggest - save failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    logger.info(
+        "/benchmark/suggest - user_id=%s suggestion_id=%s (manual)",
+        identity["user_id"], suggestion_id,
+    )
+    return jsonify({"status": "ok", "suggestion_id": suggestion_id})
+
+
+@api.route("/benchmark/suggest-from-chat", methods=["POST"])
+def benchmark_suggest_from_chat():
+    """Persist a benchmark suggestion built from one of the caller's own chat answers.
+
+    Body: ``{exchange_id, answer_is_correct, reference_answer?, missing_explanation?,
+    category?}``. The question, agent answer, agent_key and generated SQL are reconstructed
+    from the PERSISTED exchange server-side (owner-scoped), never trusted from the client. A
+    "Yes" verdict stores the agent answer as the reference (a positive example); a "No"
+    verdict requires the correct answer. Returns ``{status:'ok', suggestion_id}``.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/benchmark/suggest-from-chat - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/benchmark/suggest-from-chat - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/benchmark/suggest-from-chat - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    try:
+        fields = validate_suggestion_from_chat(request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/benchmark/suggest-from-chat - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    # Reconstruct the authoritative Q/A from the persisted exchange (owner-scoped). A forged
+    # or someone-else's exchange returns None -> 404 (without revealing which).
+    try:
+        ensure_chat_table()
+        exchange = chat_v5.read_exchange(identity["user_id"], fields["exchange_id"])
+    except Exception:
+        logger.exception("/benchmark/suggest-from-chat - exchange read failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+    if not exchange:
+        return jsonify({"status": "error", "error": "exchange_not_found"}), 404
+
+    agent_answer = exchange.get("assistant_text")
+    # A "Yes" verdict vouches for the agent answer itself; a "No" verdict carries the
+    # correction the user supplied. Either way the reference is what the golden set will hold.
+    reference = fields["reference_answer"]
+    if fields["answer_is_correct"] and not reference:
+        reference = agent_answer
+    sql_items = exchange.get("generated_sql")
+    sql_json = json.dumps(sql_items) if sql_items else None
+
+    try:
+        suggestion_id = suggestions_storage.save_suggestion(
+            identity["user_id"], "chat",
+            exchange.get("user_text"), reference,
+            exchange_id=fields["exchange_id"],
+            session_id=exchange.get("session_id"),
+            agent_key=exchange.get("agent_key"),
+            agent_answer=agent_answer,
+            answer_is_correct=fields["answer_is_correct"],
+            missing_explanation=fields["missing_explanation"],
+            category=fields["category"],
+            generated_sql_json=sql_json,
+        )
+    except Exception:
+        logger.exception("/benchmark/suggest-from-chat - save failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    logger.info(
+        "/benchmark/suggest-from-chat - user_id=%s exchange_id=%s correct=%s suggestion_id=%s",
+        identity["user_id"], fields["exchange_id"], fields["answer_is_correct"], suggestion_id,
+    )
+    return jsonify({"status": "ok", "suggestion_id": suggestion_id})
+
+
+@api.route("/benchmark/suggestions", methods=["GET"])
+def benchmark_my_suggestions():
+    """List the caller's OWN benchmark suggestions (newest first, owner-scoped + bounded)."""
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/benchmark/suggestions - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # READ route: list the EFFECTIVE user's suggestions (the impersonated target for an admin).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/benchmark/suggestions - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    suggestions = suggestions_storage.list_my_suggestions(identity["user_id"])
+    logger.info(
+        "/benchmark/suggestions - user_id=%s returned %d",
+        identity["user_id"], len(suggestions),
+    )
+    return jsonify({"status": "ok", "count": len(suggestions), "suggestions": suggestions})
 
 
 # --- admin space (server-gated; visible in the UI only to admins) ------------

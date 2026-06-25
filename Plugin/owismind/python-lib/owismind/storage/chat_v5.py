@@ -388,6 +388,39 @@ def _project_sql_items(items):
     return projected
 
 
+# Single-exchange owner-scoped read columns (lean: what a benchmark suggestion needs).
+_EXCHANGE_COLUMNS = (
+    "exchange_id, session_id, user_text, assistant_text, generated_sql, agent_key"
+)
+
+
+def read_exchange(user_id, exchange_id):
+    """Return ONE exchange the caller OWNS (lean projection), or None.
+
+    Owner-scoped (WHERE exchange_id AND user_id): a forged or someone-else's exchange yields
+    None. Used by the benchmark-suggestion route to reconstruct the AUTHORITATIVE question +
+    agent answer + agent_key + generated SQL server-side (instead of trusting client-sent
+    text). ``generated_sql`` is decoded and projected onto its public keys - the captured
+    result rows are dropped (a suggestion only needs the SQL as proof, not the rows). The
+    lookup is a PRIMARY-KEY hit on exchange_id (O(1)); user_id is the owner-scope check.
+    """
+    table = full_table(CHAT_V5_LOGICAL)
+    sql = (
+        "SELECT {cols} FROM {table} "
+        "WHERE exchange_id = {exchange} AND user_id = {user} LIMIT 1"
+    ).format(
+        cols=_EXCHANGE_COLUMNS, table=table,
+        exchange=sql_value(exchange_id), user=sql_value(user_id),
+    )
+    df = new_executor().query_to_df(sql)
+    rows = rows_to_json_safe(df)
+    if not rows:
+        return None
+    row = rows[0]
+    row["generated_sql"] = _project_sql_items(parse_json_list(row.get("generated_sql")))
+    return row
+
+
 def messages_for_session(user_id, session_id, cap=SESSION_MESSAGES_CAP):
     """All exchanges of ONE session (chronological), user+session scoped, bounded.
 

@@ -19,6 +19,33 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🔬 SESSION 2026-06-26 (INTÉGRATION DU BENCHMARK DANS LE SYSTÈME - 2 pôles : capture utilisateur + webapp
+admin) - repo only, DEV packagé, NON validé DSS. Session autonome (« tu vas tout implémenter »).** Le
+benchmark passe de standalone à brique du système. **Décision d'archi** : les 2 pôles vivent à des endroits
+différents -> **Pôle utilisateur = DANS le plugin Vue** (produit) ; **Pôle admin = webapp DSS STANDARD
+SÉPARÉE dans `OWIsMind_LAB`** (HTML/CSS/JS + backend Python ; lit les datasets en direct, édite la variable
+`benchmark`, lance le scénario ; **zéro Vite/zip/restart**). PAS Dash, PAS dashboard natif, PAS dans le
+plugin (validé par le user via AskUserQuestion). Le clic « Suggérer pour le benchmark » du chat **OUVRE la
+page Benchmark préremplie** (1 seule surface). Spec :
+`docs/superpowers/specs/2026-06-25-benchmark-integration-design.md`.
+**Lot 2 (plugin) COMPLET + testé + build + DEV packagé** : table owner-stamped `webapp_golden_suggestions_v1`
+(migrations) + `storage/suggestions.py` + `chat_v5.read_exchange` (reconstruction Q/R autoritative) +
+validateurs + 3 routes `/benchmark/*` (2 WRITE bloquées en impersonation) + `sql_config.safe_index_name`
+(**fix L103**) ; action menu « ... » + page **`/benchmark` TOUS users** (`BenchmarkSuggestView`, formulaire
+bi-mode + « mes suggestions ») + store/service/router/sidebar/i18n (~54 clés `bench.*` fr+en). **484 back +
+124 front.** Zip DEV : **72 entrées, `index-BoETXxLb.js`**, prod intacte.
+**Lot 1+3 (webapp LAB) repo artefacts + QA visuelle Playwright OK** : package **`benchmark_webapp/`** =
+`views.py` PUR (restitution + `validate_config` + mapping promotion ; **24 tests**), `backend.py` (pane DSS :
+config GET/POST écrit la variable, run async single-flight, results bornés, suggestions **cross-projet
+read-only** + promote idempotent au golden ; **décorateur `_safe` jamais-de-500**), `body.html`/`style.css`/
+`script.js`/`preview.html` (framework-free, 3 onglets Resultats/Lancer/Suggestions, charte Orange, MOCK pour
+QA, tout échappé), `README.md` + tests. `run_params` : bloc **`suggestions` additif**. SETUP étape 4 -> webapp.
+**Revue adversariale 4-dim = 0 crit/0 high** ; 2 medium (nom d'index NAMEDATALEN **L103** ; run invisible après
+lancement) + lows **tous corrigés + verrouillés par tests**. **681 tests Python + 124 node, 0 tiret (28
+fichiers).** **À FAIRE DSS** : (Lot 2) upload DEV + **redémarrer backend** ; (Lot 1+3) créer la webapp standard
+en LAB (4 panes + project-library `views.py`) + permissions + bloc `suggestions` (voir `benchmark_webapp/README.md`).
+Voir **L103** + `sessions/2026-06-26.md`.
+
 **🧪 SESSION 2026-06-25 (SYSTÈME DE BENCHMARK / ÉVALUATION DES AGENTS - nouveau package `benchmark/`) -
 repo poussé origin/main ; MATRIX ✅ DSS, JUDGE corrigé NON re-validé DSS.** Vrai système d'ingénieur de
 test des agents (précision/latence/coût **par agent ET par mode**), remplace le bricolage stagiaires
@@ -523,7 +550,18 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-25 (système de benchmark / évaluation des agents) → détail `sessions/2026-06-25.md`
+## 🧭 Dernière session - 2026-06-26 (intégration benchmark : capture utilisateur + webapp admin LAB) → détail `sessions/2026-06-26.md`
+- **2 pôles** : capture utilisateur **dans le plugin Vue** (table `webapp_golden_suggestions_v1` + 3 routes
+  `/benchmark/*` + action menu « ... » -> page `/benchmark` préremplie, tous users) ; admin/restitution =
+  **webapp DSS standard SÉPARÉE dans `OWIsMind_LAB`** (`benchmark_webapp/`, 3 onglets, lit datasets + édite
+  variable + lance scénario, zéro build). Décision validée par le user (AskUserQuestion).
+- **Vérifs** : 681 tests Python (484 plugin + 173 benchmark + 24 webapp) + 124 node ; build Vite + **DEV
+  packagé** (`index-BoETXxLb.js`, 72 entrées, prod intacte) ; **QA visuelle Playwright** du webapp LAB (clair+
+  sombre) ; revue adversariale **0 crit/0 high** (2 medium + lows corrigés + tests) ; **0 tiret**. **L103**.
+- **À FAIRE DSS** : (Lot 2) upload DEV + redémarrer backend ; (Lot 1+3) créer la webapp standard en LAB
+  (`benchmark_webapp/README.md` : 4 panes + project-library `views.py` + permissions + bloc `suggestions`).
+
+## Avant - 2026-06-25 (système de benchmark / évaluation des agents) → détail `sessions/2026-06-25.md`
 - **Nouveau package `benchmark/`** (repo = source de vérité, recollé en project-library `OWIsMind_LAB`) : vrai système d'ingénieur de test des agents, **par agent ET par mode** (précision/latence/coût). Appel **direct** de l'orchestrateur via Mesh + reconstruction de la réponse **COMPLÈTE** (texte + SQL + lignes + artefacts) depuis le footer (`agent_capture.py`). Juge = **ancre objective déterministe + LLM structuré** (`needs_review` sur désaccord). **Config UNIQUE** = variable projet `benchmark` (zéro hardcode). **Modes Smart/Pro/Claude** (token interne eco/medium/high traduit), **flag `modes` par agent** (sinon 1 appel simple `default`). Datasets managés `golden_questions_v1_prepared` -> raw -> scored -> summary + breakdown. **173 tests, 0 tiret**, poussé origin/main (`6eb1cb4`..`b4b3816`).
 - ✅ **DSS : step matrix tourne** (capture complète OK). ⏳ Judge corrigé (NaN, **L102**), run complet, dashboard = **NON re-validés DSS**.
 - **À FAIRE DSS (prochaine session)** : re-coller `judge.py`+`schemas.py` + les 3 corps de step ; relancer **Judge + Aggregate** sur le raw existant ; vérifier scored/summary/breakdown ; run complet (3 modes) + dashboard. Livrables : `SETUP_GUIDE.md` (4 étapes), `GOLDEN_IMPORT_PROMPT.md`.
@@ -791,6 +829,19 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🔬NEW. **DÉPLOYER + VALIDER l'intégration benchmark (2026-06-26).** **Lot 2 (plugin)** : upload
+   `owismind_dev-upload.zip` (**72 entrées, `index-BoETXxLb.js`**, Uploaded) + **REDÉMARRER backend**
+   (python-lib changé). Smoke : sous une réponse, menu « ... » -> « Suggérer pour le benchmark » -> page
+   `/benchmark` préremplie (question + réponse agent + Oui/Non) ; page grand public (suggestion manuelle) ;
+   « mes suggestions ». La table `webapp_golden_suggestions_v1` se crée à la 1re suggestion ; copier son nom
+   physique exact via Admin > Storage (`golden_suggestions`). **Lot 1+3 (webapp LAB)** : suivre
+   **`benchmark_webapp/README.md`** : recoller `views.py` en project-library `python/benchmark_webapp/` ;
+   créer une **webapp Standard** dans `OWIsMind_LAB` + coller les 4 panes (`body.html`/`style.css`/`script.js`/
+   `backend.py`) ; créer le dataset `benchmark_suggestions_promoted` ; ajouter le bloc `benchmark.suggestions`
+   (connection `SQL_owi` + table physique exacte + promoted_dataset) à la variable ; permissions (LAB write +
+   lecture connexion SQL). **Vérifier sur l'instance la méthode async de lancement de scénario** (dataikuapi
+   `run_scenario`/`run` - best-effort, dégrade en `launch_unsupported`). Puis : lire le dernier run, lancer un
+   run, promouvoir des suggestions. Voir **L103** + `sessions/2026-06-26.md`.
 0🧪NEW. **FINIR LE BENCHMARK EN DSS (2026-06-25) - suivre `benchmark/SETUP_GUIDE.md` (4 étapes).** (1) Re-coller
    `judge.py` + `schemas.py` (lib) + re-coller les 3 corps de step (`dss_steps/*` ont la lecture NaN-safe) ;
    (2) relancer **Judge + Aggregate** sur le `benchmark_runs_raw` déjà rempli (pas besoin de rappeler l'agent) ;

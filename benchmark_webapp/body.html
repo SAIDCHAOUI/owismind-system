@@ -1,0 +1,91 @@
+<!-- OWIsMind Benchmark - DSS standard webapp body content.
+     This file is the BODY pane only (DSS provides the page chrome). style.css is the
+     CSS pane, script.js is the JS pane. All markup lives inside #benchRoot so the theme
+     attribute and the CSS tokens scope to the app. No external fonts or libraries. -->
+<div id="benchRoot" data-theme="light">
+
+  <!-- Top bar: wordmark, editorial heading, run selector, theme toggle. -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="wordmark">OWIsMind <span>Benchmark</span></div>
+        <div class="eyebrow">Banc d'essai des agents</div>
+        <h1 class="h1">Benchmark</h1>
+        <div class="titlebar" aria-hidden="true"></div>
+      </div>
+      <div class="topbar-controls">
+        <label class="field" for="runSelect">
+          <span class="field-label">Run</span>
+          <select id="runSelect" class="select" aria-label="Choisir un run"></select>
+        </label>
+        <button id="themeToggle" class="btn btn-ghost" type="button"
+                aria-label="Basculer le theme clair / sombre">Mode sombre</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs. -->
+  <nav class="tabs" aria-label="Sections">
+    <div class="tabs-inner wrap" role="tablist">
+      <button class="tab is-active" type="button" role="tab" data-tab="results"
+              aria-controls="tab-results" aria-selected="true">Resultats</button>
+      <button class="tab" type="button" role="tab" data-tab="launch"
+              aria-controls="tab-launch" aria-selected="false">Lancer</button>
+      <button class="tab" type="button" role="tab" data-tab="suggestions"
+              aria-controls="tab-suggestions" aria-selected="false">Suggestions</button>
+    </div>
+  </nav>
+
+  <!-- Content. -->
+  <main class="content">
+    <div class="wrap">
+
+      <!-- Tab 1: Results (restitution). -->
+      <section id="tab-results" class="tabpanel is-active" role="tabpanel" aria-label="Resultats">
+        <div id="resultsStatus" class="status"></div>
+        <div id="kpis" class="kpi-row"></div>
+
+        <h2 class="h2">Comparaison agent x mode</h2>
+        <div id="summaryTableWrap"></div>
+
+        <h2 class="h2">Precision par categorie</h2>
+        <div id="breakdownWrap"></div>
+
+        <h2 class="h2">Detail par question</h2>
+        <label class="check">
+          <input type="checkbox" id="needsReviewOnly"> A relire uniquement
+        </label>
+        <div id="detailWrap"></div>
+      </section>
+
+      <!-- Tab 2: Launch (config and run). -->
+      <section id="tab-launch" class="tabpanel" role="tabpanel" aria-label="Lancer">
+        <h2 class="h2 first">Configuration courante</h2>
+        <div id="configSummary" class="card"></div>
+
+        <h2 class="h2">Editer la configuration</h2>
+        <p class="note">Modifiez le JSON ci-dessous, puis validez. Le JSON est verifie avant l'envoi.</p>
+        <textarea id="configEditor" class="editor mono" spellcheck="false"
+                  aria-label="Configuration JSON"></textarea>
+        <div class="actions">
+          <button type="button" id="saveConfig" class="btn">Valider et enregistrer</button>
+        </div>
+        <div id="configMsg" class="msg"></div>
+
+        <h2 class="h2">Lancer le benchmark</h2>
+        <p class="note">Le lancement declenche le scenario Run_Benchmark. Il peut necessiter des permissions de scenario.</p>
+        <button type="button" id="runBtn" class="btn btn-primary">Lancer Run_Benchmark</button>
+        <div id="runMsg" class="msg"></div>
+      </section>
+
+      <!-- Tab 3: Suggestions (review and promote). -->
+      <section id="tab-suggestions" class="tabpanel" role="tabpanel" aria-label="Suggestions">
+        <h2 class="h2 first">Suggestions en attente</h2>
+        <p class="note">Relisez les questions proposees, puis promouvez celles a ajouter au golden.</p>
+        <div id="suggestionsWrap"></div>
+      </section>
+
+    </div>
+  </main>
+
+</div>
