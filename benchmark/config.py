@@ -13,19 +13,40 @@ orchestrator strips every ``⟦owi:...⟧`` token before the model sees it,
 so appending the token forces the mode without leaking text into the question.
 """
 
-# --- modes (Smart / Pro / Claude = eco / medium / high) ---------------------
-# Internal keys are UNCHANGED (eco/medium/high); the webapp display renames them
-# to Smart/Pro/Claude. The benchmark measures one model per mode (design section 1).
-MODES = ("eco", "medium", "high")
-DEFAULT_MODE = "eco"
+# --- modes (Smart / Pro / Claude) -------------------------------------------
+# Canonical mode names = the webapp's display names. The benchmark speaks
+# Smart/Pro/Claude everywhere (config input, run rows, dashboard). The deployed
+# orchestrator's control token still uses the original internal keys (eco/medium/
+# high were only renamed for display, not changed in the orchestrator), so we
+# translate friendly -> internal at the wire boundary in build_mode_token only.
+MODES = ("Smart", "Pro", "Claude")
+DEFAULT_MODE = "Smart"
+
+# friendly mode -> the internal token key the orchestrator's parse_mode expects.
+_MODE_TOKEN_KEY = {"Smart": "eco", "Pro": "medium", "Claude": "high"}
+
+# Accept either the display name or the legacy internal key in config input
+# (case-insensitive), so older configs and habits still resolve.
+MODE_ALIASES = {
+    "smart": "Smart", "pro": "Pro", "claude": "Claude",
+    "eco": "Smart", "medium": "Pro", "high": "Claude",
+}
 
 # Human-facing model name per mode (display only; verify on instance). Mirrors the
 # orchestrator LOOP_LLM_BY_MODE tiers (Gemini Flash-Lite / Gemini Flash / Sonnet).
 MODE_LABELS = {
-    "eco": "Gemini 3.1 Flash-Lite",
-    "medium": "Gemini 3.5 Flash",
-    "high": "Claude Sonnet 4.6",
+    "Smart": "Gemini 3.1 Flash-Lite",
+    "Pro": "Gemini 3.5 Flash",
+    "Claude": "Claude Sonnet 4.6",
 }
+
+
+def normalize_mode(mode):
+    """Map a config mode (display name or legacy key, any case) to the canonical
+    display name (Smart / Pro / Claude), or None when unrecognized. Pure."""
+    if mode is None:
+        return None
+    return MODE_ALIASES.get(str(mode).strip().lower())
 
 # --- control-token brackets (U+27E6 / U+27E7), mirrored from production --------
 # Kept as named constants so the exact code points are explicit and greppable.
@@ -53,12 +74,16 @@ _LANG_LABEL = {"fr": "French", "en": "English"}
 def build_mode_token(mode):
     """Return the exact mode control token, or '' for an unknown / absent mode.
 
-    Mirrors context.py build_user_suffix: ``⟦owi:mode=<mode>⟧``. Only the
-    three known modes produce a token; anything else yields '' (the orchestrator
-    then defaults to 'eco').
+    Mirrors context.py build_user_suffix: ``⟦owi:mode=<key>⟧`` where ``key`` is the
+    INTERNAL token key (eco/medium/high). A friendly mode (Smart/Pro/Claude) is
+    translated to its key; a legacy internal key passed directly is tolerated.
+    Anything else yields '' (the orchestrator then defaults to its own default).
     """
-    if mode in MODES:
-        return "{lb}owi:mode={mode}{rb}".format(lb=_LB, mode=mode, rb=_RB)
+    key = _MODE_TOKEN_KEY.get(mode)
+    if key is None and mode in _MODE_TOKEN_KEY.values():
+        key = mode  # tolerate a legacy internal key passed directly
+    if key:
+        return "{lb}owi:mode={key}{rb}".format(lb=_LB, key=key, rb=_RB)
     return ""
 
 

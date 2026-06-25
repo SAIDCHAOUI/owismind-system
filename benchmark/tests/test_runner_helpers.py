@@ -143,23 +143,23 @@ class TestExpandMatrix(unittest.TestCase):
     def test_cartesian_product_size(self):
         questions = [_golden("q1"), _golden("q2")]
         agents = [_agent("a"), _agent("b")]
-        modes = ["eco", "medium", "high"]
+        modes = ["Smart", "Pro", "Claude"]
         tasks = agent_runner.expand_matrix(questions, agents, modes)
         self.assertEqual(len(tasks), 2 * 2 * 3)
 
     def test_task_shape(self):
-        tasks = agent_runner.expand_matrix([_golden("q1")], [_agent("a")], ["eco"])
+        tasks = agent_runner.expand_matrix([_golden("q1")], [_agent("a")], ["Smart"])
         self.assertEqual(len(tasks), 1)
         task = tasks[0]
         self.assertEqual(set(task.keys()), {"question_row", "agent", "mode"})
         self.assertEqual(task["question_row"]["question_id"], "q1")
         self.assertEqual(task["agent"]["agent_key"], "a")
-        self.assertEqual(task["mode"], "eco")
+        self.assertEqual(task["mode"], "Smart")
 
     def test_iteration_order_is_question_major_then_agent_then_mode(self):
         questions = [_golden("q1"), _golden("q2")]
         agents = [_agent("a"), _agent("b")]
-        modes = ["eco", "high"]
+        modes = ["Smart", "Claude"]
         tasks = agent_runner.expand_matrix(questions, agents, modes)
         triples = [
             (t["question_row"]["question_id"], t["agent"]["agent_key"], t["mode"])
@@ -168,35 +168,35 @@ class TestExpandMatrix(unittest.TestCase):
         self.assertEqual(
             triples,
             [
-                ("q1", "a", "eco"),
-                ("q1", "a", "high"),
-                ("q1", "b", "eco"),
-                ("q1", "b", "high"),
-                ("q2", "a", "eco"),
-                ("q2", "a", "high"),
-                ("q2", "b", "eco"),
-                ("q2", "b", "high"),
+                ("q1", "a", "Smart"),
+                ("q1", "a", "Claude"),
+                ("q1", "b", "Smart"),
+                ("q1", "b", "Claude"),
+                ("q2", "a", "Smart"),
+                ("q2", "a", "Claude"),
+                ("q2", "b", "Smart"),
+                ("q2", "b", "Claude"),
             ],
         )
 
     def test_empty_inputs_yield_empty(self):
-        self.assertEqual(agent_runner.expand_matrix([], [_agent()], ["eco"]), [])
-        self.assertEqual(agent_runner.expand_matrix([_golden()], [], ["eco"]), [])
+        self.assertEqual(agent_runner.expand_matrix([], [_agent()], ["Smart"]), [])
+        self.assertEqual(agent_runner.expand_matrix([_golden()], [], ["Smart"]), [])
         self.assertEqual(agent_runner.expand_matrix([_golden()], [_agent()], []), [])
 
     def test_inputs_not_mutated(self):
         questions = [_golden("q1")]
         agents = [_agent("a")]
-        modes = ["eco"]
+        modes = ["Smart"]
         agent_runner.expand_matrix(questions, agents, modes)
         self.assertEqual(len(questions), 1)
         self.assertEqual(len(agents), 1)
-        self.assertEqual(modes, ["eco"])
+        self.assertEqual(modes, ["Smart"])
 
     def test_no_modes_agent_yields_single_default_task(self):
         # A non-mode agent gets ONE task tagged "default", whatever the modes list.
         tasks = agent_runner.expand_matrix(
-            [_golden("q1")], [_visual_agent()], ["eco", "medium", "high"])
+            [_golden("q1")], [_visual_agent()], ["Smart", "Pro", "Claude"])
         self.assertEqual(len(tasks), 1)
         self.assertEqual(tasks[0]["mode"], "default")
 
@@ -204,15 +204,15 @@ class TestExpandMatrix(unittest.TestCase):
         orch = _agent("orch")        # modes True -> one task per mode
         viz = _visual_agent("viz")   # modes False -> one default task
         tasks = agent_runner.expand_matrix(
-            [_golden("q1")], [orch, viz], ["eco", "high"])
+            [_golden("q1")], [orch, viz], ["Smart", "Claude"])
         pairs = [(t["agent"]["agent_key"], t["mode"]) for t in tasks]
         self.assertEqual(
-            pairs, [("orch", "eco"), ("orch", "high"), ("viz", "default")])
+            pairs, [("orch", "Smart"), ("orch", "Claude"), ("viz", "default")])
 
     def test_modes_absent_defaults_to_no_modes(self):
         # An agent descriptor without a "modes" key is treated as non-mode.
         plain = {"agent_key": "x", "project_key": "P", "agent_id": "agent:x"}
-        tasks = agent_runner.expand_matrix([_golden("q1")], [plain], ["eco", "high"])
+        tasks = agent_runner.expand_matrix([_golden("q1")], [plain], ["Smart", "Claude"])
         self.assertEqual(len(tasks), 1)
         self.assertEqual(tasks[0]["mode"], "default")
 
@@ -221,9 +221,10 @@ class TestExpandMatrix(unittest.TestCase):
 # message building path used by the runner
 # ---------------------------------------------------------------------------
 class TestMessageBuilding(unittest.TestCase):
-    def test_build_message_appends_exact_tokens(self):
-        msg = config.build_message("revenu du compte X", "high", "fr")
-        # The token brackets are U+27E6 / U+27E7 (mirrored from production).
+    def test_build_message_translates_friendly_mode_to_internal_token(self):
+        # Friendly "Claude" -> internal token key "high" (the orchestrator's wire
+        # contract). The brackets are U+27E6 / U+27E7 (mirrored from production).
+        msg = config.build_message("revenu du compte X", "Claude", "fr")
         self.assertEqual(
             msg,
             "revenu du compte X "
@@ -231,13 +232,27 @@ class TestMessageBuilding(unittest.TestCase):
             + "⟦owi:lang=fr⟧",
         )
 
+    def test_smart_maps_to_eco_token(self):
+        msg = config.build_message("hi", "Smart", "fr")
+        self.assertIn("⟦owi:mode=eco⟧", msg)
+
+    def test_legacy_internal_key_still_tolerated(self):
+        msg = config.build_message("hi", "high", "fr")
+        self.assertIn("⟦owi:mode=high⟧", msg)
+
+    def test_plain_message_has_no_token(self):
+        msg = config.build_plain_message("just the question")
+        self.assertEqual(msg, "just the question")
+        self.assertNotIn("owi:mode=", msg)
+        self.assertNotIn("owi:lang=", msg)
+
     def test_unknown_mode_emits_no_mode_token(self):
         msg = config.build_message("hi", "turbo", "fr")
         self.assertNotIn("owi:mode=", msg)
         self.assertIn("owi:lang=fr", msg)
 
     def test_none_question_is_safe(self):
-        msg = config.build_message(None, "eco", "en")
+        msg = config.build_message(None, "Smart", "en")
         self.assertTrue(msg.endswith("⟦owi:lang=en⟧"))
 
 
@@ -258,7 +273,7 @@ class TestRunOne(unittest.TestCase):
         project = _FakeProject(completion=completion)
 
         row = agent_runner.run_one(
-            project, _agent(), _golden(), "high", "fr", timeout=120,
+            project, _agent(), _golden(), "Claude", "fr", timeout=120,
             run_id="run1", run_timestamp="2026-06-24T00:00:00Z",
             config_json="{}",
         )
@@ -290,7 +305,7 @@ class TestRunOne(unittest.TestCase):
         # Denormalized golden fields.
         self.assertEqual(row["question_id"], "q001")
         self.assertEqual(row["category"], "revenus")
-        self.assertEqual(row["mode"], "high")
+        self.assertEqual(row["mode"], "Claude")
         self.assertEqual(row["agent_id"], "agent:038G7mlF")
         # The agent id reached the (fake) project.
         self.assertEqual(project.requested_agent_ids, ["agent:038G7mlF"])
@@ -317,7 +332,7 @@ class TestRunOne(unittest.TestCase):
         )
         project = _FakeProject(completion=completion)
         row = agent_runner.run_one(
-            project, _agent(), _golden(), "high", "fr", timeout=120)
+            project, _agent(), _golden(), "Claude", "fr", timeout=120)
         artifacts = json.loads(row["artifacts_json"])
         self.assertEqual(len(artifacts), 1)
         self.assertEqual(artifacts[0]["kind"], "chart")
@@ -328,7 +343,7 @@ class TestRunOne(unittest.TestCase):
         completion = _FakeCompletion([_footer_chunk(trace)])
         project = _FakeProject(completion=completion)
         row = agent_runner.run_one(
-            project, _agent(), _golden(), "eco", "fr", timeout=120)
+            project, _agent(), _golden(), "Smart", "fr", timeout=120)
         self.assertEqual(row["status"], "ok")
         self.assertIsNone(row["time_to_first_token_s"])
         self.assertEqual(row["answer_text"], "")
@@ -336,7 +351,7 @@ class TestRunOne(unittest.TestCase):
     def test_agent_exception_becomes_error_row(self):
         project = _FakeProject(raise_exc=RuntimeError("agent boom"))
         row = agent_runner.run_one(
-            project, _agent(), _golden(), "medium", "fr", timeout=120)
+            project, _agent(), _golden(), "Pro", "fr", timeout=120)
         self.assertEqual(set(row.keys()), set(schemas.RAW_COLUMNS))
         self.assertEqual(row["status"], "error")
         self.assertEqual(row["error_type"], "RuntimeError")
@@ -347,19 +362,19 @@ class TestRunOne(unittest.TestCase):
         self.assertIsInstance(row["latency_total_s"], float)
         # Golden / agent context still populated on a failure.
         self.assertEqual(row["question_id"], "q001")
-        self.assertEqual(row["mode"], "medium")
+        self.assertEqual(row["mode"], "Pro")
 
     def test_inline_timeout_becomes_timeout_row(self):
         project = _FakeProject(raise_exc=TimeoutError("too slow"))
         row = agent_runner.run_one(
-            project, _agent(), _golden(), "high", "fr", timeout=1)
+            project, _agent(), _golden(), "Claude", "fr", timeout=1)
         self.assertEqual(row["status"], "timeout")
         self.assertEqual(row["error_type"], "TimeoutError")
 
     def test_run_one_never_raises_on_bad_inputs(self):
         # A None project would normally explode; run_one folds it into a row.
         row = agent_runner.run_one(
-            None, _agent(), _golden(), "eco", "fr", timeout=120)
+            None, _agent(), _golden(), "Smart", "fr", timeout=120)
         self.assertEqual(row["status"], "error")
         self.assertEqual(set(row.keys()), set(schemas.RAW_COLUMNS))
 

@@ -126,12 +126,21 @@ class TestAgents(unittest.TestCase):
 
 class TestModes(unittest.TestCase):
     def test_subset_and_canonical_order(self):
-        cfg = run_params.resolve(_vars({"modes": ["high", "eco"]}))
-        self.assertEqual(cfg["modes"], ["eco", "high"])  # canonical order kept
+        cfg = run_params.resolve(_vars({"modes": ["Claude", "Smart"]}))
+        self.assertEqual(cfg["modes"], ["Smart", "Claude"])  # Smart/Pro/Claude order
 
     def test_comma_string(self):
-        cfg = run_params.resolve(_vars({"modes": "eco, high"}))
-        self.assertEqual(cfg["modes"], ["eco", "high"])
+        cfg = run_params.resolve(_vars({"modes": "Claude, Smart"}))
+        self.assertEqual(cfg["modes"], ["Smart", "Claude"])
+
+    def test_legacy_internal_keys_aliased(self):
+        # eco/medium/high still accepted, mapped to the display names.
+        cfg = run_params.resolve(_vars({"modes": ["high", "eco"]}))
+        self.assertEqual(cfg["modes"], ["Smart", "Claude"])
+
+    def test_friendly_aliases_case_insensitive(self):
+        cfg = run_params.resolve(_vars({"modes": ["smart", "PRO"]}))
+        self.assertEqual(cfg["modes"], ["Smart", "Pro"])
 
     def test_unknown_only_falls_back_to_all(self):
         cfg = run_params.resolve(_vars({"modes": ["turbo"]}))

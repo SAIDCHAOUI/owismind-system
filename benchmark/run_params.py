@@ -26,7 +26,7 @@ The ``benchmark`` object (every key optional except ``agents`` for the run step)
          "modes": true}        // true: test across modes ; false/absent: ONE plain call
       ],
 
-      "modes":        ["eco", "medium", "high"],  // modes tried on mode-aware agents
+      "modes":        ["Smart", "Pro", "Claude"], // modes tried on mode-aware agents
       "language":     "fr",
       "concurrency":  3,                          // bounded thread pool (clamped 1..8)
       "question_filter": {},                      // {"categories":[...],"question_ids":[...],"languages":[...]}
@@ -139,8 +139,9 @@ def _resolve_agents(value):
 def _resolve_modes(value):
     """Resolve the modes subset (list, JSON list, or comma string).
 
-    Returns the known modes in canonical eco/medium/high order; an empty or
-    all-unknown selection falls back to every mode.
+    Accepts the display names (Smart/Pro/Claude) or the legacy keys (eco/medium/
+    high), any case, and returns the canonical display names in Smart/Pro/Claude
+    order. An empty or all-unknown selection falls back to every mode.
     """
     parsed = _coerce_obj(value)
     if isinstance(parsed, list):
@@ -151,7 +152,11 @@ def _resolve_modes(value):
         items = None
     if not items:
         return list(config.MODES)
-    requested = {str(m).strip() for m in items}
+    requested = set()
+    for m in items:
+        canon = config.normalize_mode(m)
+        if canon:
+            requested.add(canon)
     modes = [m for m in config.MODES if m in requested]
     return modes or list(config.MODES)
 
