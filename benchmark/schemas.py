@@ -24,26 +24,22 @@ from benchmark.agent_capture import (
 # --- enum tuples (frozen vocabulary shared across the package) --------------
 MODES = ("eco", "medium", "high")
 EXPECTED_VALUE_TYPES = ("numeric", "currency", "date", "string", "list")
-ANSWER_TYPES = ("number", "fact", "list", "explanation")
-DIFFICULTIES = ("easy", "medium", "hard")
 LANGUAGES = ("fr", "en")
 
 # --- golden_questions (section 5) -------------------------------------------
-# The human-authored / Excel-fed golden set. ``question_id`` is the stable key.
+# The human-authored / Excel-fed golden set, kept deliberately lean: the
+# question, the human-validated true answer, and (when a crisp fact exists) the
+# exact value to anchor on. ``question_id`` is the stable key.
 GOLDEN_COLUMNS = (
     "question_id",
     "question",
-    "reference_answer",
-    "expected_value",        # nullable
-    "expected_value_type",   # nullable enum (EXPECTED_VALUE_TYPES)
-    "category",
-    "answer_type",           # enum (ANSWER_TYPES)
-    "difficulty",            # enum (DIFFICULTIES)
-    "expected_mode",         # nullable enum (MODES)
-    "target_agent",          # nullable
-    "language",              # enum (LANGUAGES)
-    "active",                # boolean
-    "notes",                 # nullable
+    "reference_answer",      # the human-validated true answer
+    "expected_value",        # nullable: the crisp fact/number for the objective anchor
+    "expected_value_type",   # nullable enum (EXPECTED_VALUE_TYPES), required iff expected_value set
+    "category",              # nullable: theme for the breakdown (revenus, tickets, ...)
+    "language",              # enum (LANGUAGES), default 'fr'
+    "active",                # boolean, default True
+    "notes",                 # nullable: free human note
 )
 
 # Columns that must be present and non-empty on every golden row.
@@ -51,10 +47,6 @@ _REQUIRED_GOLDEN = (
     "question_id",
     "question",
     "reference_answer",
-    "category",
-    "answer_type",
-    "difficulty",
-    "language",
 )
 
 # --- benchmark_runs_raw (section 4) -----------------------------------------
@@ -66,8 +58,6 @@ RAW_COLUMNS = (
     "question_id",
     "question",
     "category",
-    "answer_type",
-    "difficulty",
     "language",
     "reference_answer",
     "expected_value",
@@ -143,7 +133,7 @@ BREAKDOWN_COLUMNS = (
     "agent_key",
     "agent_label",
     "mode",
-    "dimension",             # category / answer_type / difficulty
+    "dimension",             # category (the one breakdown axis kept)
     "bucket",
     "n",
     "accuracy",
@@ -151,7 +141,7 @@ BREAKDOWN_COLUMNS = (
 )
 
 # Dimensions broken down in benchmark_breakdown (must exist as golden columns).
-BREAKDOWN_DIMENSIONS = ("category", "answer_type", "difficulty")
+BREAKDOWN_DIMENSIONS = ("category",)
 
 
 def _is_blank(value):
@@ -183,9 +173,9 @@ def _as_bool(value, default=True):
 def validate_golden_row(row):
     """Validate one golden_questions row against the canonical schema.
 
-    Checks: required fields present and non-blank; enums valid (answer_type,
-    difficulty, language always; expected_value_type / expected_mode only when
-    provided). When ``expected_value`` is provided, ``expected_value_type`` must be
+    Checks: required fields present and non-blank (question_id, question,
+    reference_answer); ``language`` and ``expected_value_type`` valid when
+    provided. When ``expected_value`` is provided, ``expected_value_type`` must be
     too (the objective anchor needs the type to normalize).
 
     Returns ``(ok: bool, errors: list[str])``. Pure, never raises.
@@ -198,14 +188,6 @@ def validate_golden_row(row):
         if _is_blank(row.get(field)):
             errors.append("missing required field: {0}".format(field))
 
-    answer_type = row.get("answer_type")
-    if not _is_blank(answer_type) and answer_type not in ANSWER_TYPES:
-        errors.append("invalid answer_type: {0!r}".format(answer_type))
-
-    difficulty = row.get("difficulty")
-    if not _is_blank(difficulty) and difficulty not in DIFFICULTIES:
-        errors.append("invalid difficulty: {0!r}".format(difficulty))
-
     language = row.get("language")
     if not _is_blank(language) and language not in LANGUAGES:
         errors.append("invalid language: {0!r}".format(language))
@@ -213,10 +195,6 @@ def validate_golden_row(row):
     evt = row.get("expected_value_type")
     if not _is_blank(evt) and evt not in EXPECTED_VALUE_TYPES:
         errors.append("invalid expected_value_type: {0!r}".format(evt))
-
-    expected_mode = row.get("expected_mode")
-    if not _is_blank(expected_mode) and expected_mode not in MODES:
-        errors.append("invalid expected_mode: {0!r}".format(expected_mode))
 
     if not _is_blank(row.get("expected_value")) and _is_blank(evt):
         errors.append("expected_value set without expected_value_type")

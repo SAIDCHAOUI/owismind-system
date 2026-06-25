@@ -18,10 +18,6 @@ def _valid_golden_row():
         "expected_value": "1234567.89",
         "expected_value_type": "currency",
         "category": "revenus",
-        "answer_type": "number",
-        "difficulty": "medium",
-        "expected_mode": "eco",
-        "target_agent": "revenue_expert",
         "language": "fr",
         "active": True,
         "notes": "",
@@ -35,10 +31,6 @@ class TestEnums(unittest.TestCase):
             schemas.EXPECTED_VALUE_TYPES,
             ("numeric", "currency", "date", "string", "list"),
         )
-        self.assertEqual(
-            schemas.ANSWER_TYPES, ("number", "fact", "list", "explanation")
-        )
-        self.assertEqual(schemas.DIFFICULTIES, ("easy", "medium", "hard"))
         self.assertEqual(schemas.LANGUAGES, ("fr", "en"))
 
 
@@ -46,8 +38,11 @@ class TestColumnLists(unittest.TestCase):
     def test_golden_columns_present(self):
         for col in ("question_id", "question", "reference_answer",
                     "expected_value", "expected_value_type", "category",
-                    "answer_type", "difficulty", "language", "active"):
+                    "language", "active", "notes"):
             self.assertIn(col, schemas.GOLDEN_COLUMNS)
+        # The over-engineered fields were deliberately dropped (lean schema).
+        for col in ("answer_type", "difficulty", "expected_mode", "target_agent"):
+            self.assertNotIn(col, schemas.GOLDEN_COLUMNS)
 
     def test_scored_extends_raw(self):
         # Every raw column is also a scored column (scored = detail table).
@@ -107,14 +102,11 @@ class TestValidateGoldenRow(unittest.TestCase):
 
     def test_invalid_enums(self):
         row = _valid_golden_row()
-        row["answer_type"] = "essay"
-        row["difficulty"] = "trivial"
         row["language"] = "de"
         row["expected_value_type"] = "money"
-        row["expected_mode"] = "turbo"
         ok, errors = schemas.validate_golden_row(row)
         self.assertFalse(ok)
-        self.assertEqual(len(errors), 5)
+        self.assertEqual(len(errors), 2)
 
     def test_expected_value_requires_type(self):
         row = _valid_golden_row()
@@ -143,8 +135,6 @@ class TestNormalizeGoldenRow(unittest.TestCase):
             "question": " hi ",
             "reference_answer": "ans",
             "category": "c",
-            "answer_type": "fact",
-            "difficulty": "easy",
             # language omitted -> default 'fr'
             # active omitted -> default True
             "notes": "   ",

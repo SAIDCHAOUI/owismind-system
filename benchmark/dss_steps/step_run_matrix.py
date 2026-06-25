@@ -19,8 +19,7 @@ Scenario variables read (all optional except ``bench_agents``):
   - ``bench_concurrency``   : int, bounded thread pool size. Default config.DEFAULT_CONCURRENCY.
   - ``bench_question_filter``: JSON object, optional filter applied on top of
                               active=True. Recognised keys:
-                                {"categories": [...], "difficulties": [...],
-                                 "answer_types": [...], "question_ids": [...],
+                                {"categories": [...], "question_ids": [...],
                                  "languages": [...]}
                               A question is kept when, for each provided key, its
                               value is in the listed set (AND across keys, OR within).
@@ -151,8 +150,6 @@ def _matches_filter(row, question_filter):
         return True
     checks = (
         ("categories", "category"),
-        ("difficulties", "difficulty"),
-        ("answer_types", "answer_type"),
         ("languages", "language"),
         ("question_ids", "question_id"),
     )

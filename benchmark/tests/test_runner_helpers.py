@@ -109,8 +109,6 @@ def _golden(qid="q001", question="Quel est le revenu du compte X ?"):
         "expected_value": "1234",
         "expected_value_type": "currency",
         "category": "revenus",
-        "answer_type": "number",
-        "difficulty": "medium",
         "language": "fr",
         "active": True,
     }

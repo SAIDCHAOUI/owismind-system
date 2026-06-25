@@ -22,8 +22,6 @@ def _row(**over):
         "agent_label": "OWIsMind orchestrator",
         "mode": "eco",
         "category": "revenus",
-        "answer_type": "number",
-        "difficulty": "easy",
         "status": "ok",
         "judge_score": 5,
         "correct": True,
@@ -266,8 +264,9 @@ class TestBreakdown(unittest.TestCase):
         return None
 
     def test_dimensions_covered(self):
+        # Lean schema: category is the single breakdown axis.
         dims = {r["dimension"] for r in self.rows}
-        self.assertEqual(dims, {"category", "answer_type", "difficulty"})
+        self.assertEqual(dims, {"category"})
 
     def test_eco_category_revenus(self):
         # eco/revenus ok rows: scores 5,4,2 ; correct True,True,False.

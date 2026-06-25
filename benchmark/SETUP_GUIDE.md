@@ -64,8 +64,8 @@ complete que voit le juge.
                                       |
                                       v
    step 4  step_aggregate.py   ->  benchmark_summary      benchmark_breakdown
-                                    (KPI par run x         (precision par categorie /
-                                     agent x mode)          answer_type / difficulty)
+                                    (KPI par run x         (precision par categorie)
+                                     agent x mode)
                                       |
                                       v
                               Dashboard DSS (summary + detail + breakdown)
@@ -190,6 +190,9 @@ exacte attendue pour l'ancre objective.
 
 ### 3.1 Schema EXACT (depuis `benchmark/schemas.py`, `GOLDEN_COLUMNS`)
 
+Schema volontairement LEAN : la question, la vraie reponse, et de quoi verifier
+objectivement quand un fait net existe. Rien d'autre.
+
 | colonne | type DSS | requis | role / enum |
 |---|---|---|---|
 | `question_id` | string | oui | identifiant stable (clef) |
@@ -197,19 +200,18 @@ exacte attendue pour l'ancre objective.
 | `reference_answer` | string | oui | la bonne reponse validee par un humain |
 | `expected_value` | string | non | valeur / fait exact pour l'ancre objective |
 | `expected_value_type` | string (enum) | non* | numeric / currency / date / string / list |
-| `category` | string | oui | theme (revenus, tickets, ...) |
-| `answer_type` | string (enum) | oui | number / fact / list / explanation |
-| `difficulty` | string (enum) | oui | easy / medium / hard |
-| `expected_mode` | string (enum) | non | eco / medium / high (mode vise, metadonnee) |
-| `target_agent` | string | non | clef logique de l'agent cible (metadonnee) |
-| `language` | string (enum) | oui | fr / en (defaut fr si vide) |
-| `active` | boolean | oui | inclure la question dans les runs |
+| `category` | string | non | theme pour le decoupage (revenus, tickets, ...) |
+| `language` | string (enum) | non | fr / en (defaut fr si vide) |
+| `active` | boolean | non | inclure la question dans les runs (defaut true) |
 | `notes` | string | non | commentaire libre |
 
-*Regle de validation (depuis `validate_golden_row`) : si `expected_value` est
-rempli, alors `expected_value_type` DOIT l'etre aussi (l'ancre objective a besoin
-du type pour normaliser). Les enums exacts vivent dans `schemas.py` :
-`EXPECTED_VALUE_TYPES`, `ANSWER_TYPES`, `DIFFICULTIES`, `MODES`, `LANGUAGES`.
+*Regle de validation (depuis `validate_golden_row`) : seuls `question_id`,
+`question` et `reference_answer` sont requis. Si `expected_value` est rempli,
+alors `expected_value_type` DOIT l'etre aussi (l'ancre objective a besoin du type
+pour normaliser). `category` est facultatif mais recommande (il alimente le
+decoupage "precision par categorie") : le laisser vide met simplement la ligne
+hors decoupage. Les enums exacts vivent dans `schemas.py` :
+`EXPECTED_VALUE_TYPES`, `LANGUAGES`, `MODES`.
 
 ### 3.2 Initialiser depuis l'Excel des stagiaires (mapping de colonnes)
 
@@ -222,14 +224,14 @@ a adapter aux vrais en-tetes du fichier :
 | `question_text` | `question` |
 | `id` ou ligne sans id | `question_id` (generer si absent, ex. `Q001`, `Q002`, ...) |
 | `theme` | `category` |
-| (absent) | `answer_type` (a remplir : number / fact / list / explanation) |
-| (absent) | `difficulty` (a remplir : easy / medium / hard) |
 | (absent) | `expected_value` + `expected_value_type` (a enrichir, voir 3.4) |
 | (absent) | `language` (defaut `fr`) |
 | (absent) | `active` (defaut `true`) |
 
-Les colonnes absentes de l'Excel sont a enrichir a la main : c'est tout l'interet
-du golden set enrichi (categorie, type, difficulte, valeur exacte attendue).
+La seule vraie valeur ajoutee a remplir est `expected_value` (+ son type) quand la
+reponse contient un fait net (un nombre, un montant, une date, une courte liste).
+Le reste se mappe ou se met par defaut. Le prompt d'import (section 3.5) fait ce
+travail automatiquement.
 
 ### 3.3 Le dataset editable + la recette d'intake
 
@@ -279,28 +281,38 @@ l'editable l'emporte sur l'upload en cas de collision (defaut propose par le
 design ; a affiner si besoin). Au depart, un seul `golden_questions` editable
 suffit.
 
-### 3.4 Exemple de 3-4 questions enrichies (revenus + tickets)
+### 3.4 Exemple de questions (revenus + tickets)
 
-`expected_value` rempli = l'ancre objective deterministe peut trancher sans LLM.
+Regle simple : `expected_value` rempli quand la reponse contient UN fait net
+(nombre, montant, date, courte liste) ; laisse-le vide pour une question
+ouverte / explicative (le juge LLM tranche alors seul). Les valeurs ci-dessous
+sont fictives, a remplacer par tes vraies reponses.
 
-| question_id | question | reference_answer | expected_value | expected_value_type | category | answer_type | difficulty | language | active |
-|---|---|---|---|---|---|---|---|---|---|
-| `Q001` | Quel est le revenu actuals YTD du compte Airbus ? | Le revenu actuals YTD d'Airbus est de 1 234 567 EUR. | `1234567` | `currency` | `revenus` | `number` | `medium` | `fr` | `true` |
-| `Q002` | Combien de tickets ouverts pour le service X ? | Il y a 42 tickets actuellement ouverts pour le service X. | `42` | `numeric` | `tickets` | `number` | `easy` | `fr` | `true` |
-| `Q003` | Quelle est la date de cloture du dernier ticket du client Y ? | Le dernier ticket du client Y a ete clos le 2025-12-31. | `2025-12-31` | `date` | `tickets` | `fact` | `medium` | `fr` | `true` |
-| `Q004` | Cite les 3 principales SolutionLine en revenu pour le client Z. | Les 3 principales sont IP, Voice et Roaming. | `IP; Voice; Roaming` | `list` | `revenus` | `list` | `hard` | `fr` | `true` |
+| question_id | question | reference_answer | expected_value | expected_value_type | category | language | active |
+|---|---|---|---|---|---|---|---|
+| `Q001` | Quel est le revenu actuals YTD du compte Airbus ? | Le revenu actuals YTD d'Airbus est de 1 234 567 EUR. | `1234567` | `currency` | `revenus` | `fr` | `true` |
+| `Q002` | Combien de tickets ouverts pour le service X ? | Il y a 42 tickets actuellement ouverts pour le service X. | `42` | `numeric` | `tickets` | `fr` | `true` |
+| `Q003` | Cite les 3 principales SolutionLine en revenu pour le client Z. | Les 3 principales sont IP, Voice et Roaming. | `IP; Voice; Roaming` | `list` | `revenus` | `fr` | `true` |
+| `Q004` | Pourquoi le revenu du compte W a-t-il baisse au T3 ? | La baisse vient de la fin du contrat roaming et d'un churn sur la voix. | _(vide)_ | _(vide)_ | `revenus` | `fr` | `true` |
 
-Notes :
-- `currency` et `numeric` tolerent les separateurs de milliers, la devise et la
-  virgule decimale ; la comparaison se fait avec une tolerance relative de 0.5 %
-  (`config.NUMERIC_TOLERANCE`). Donc `1234567` matchera "1 234 567 EUR".
-- `date` parse plusieurs formats usuels (`2025-12-31`, `31/12/2025`, ...) et
-  compare la date exacte.
-- `list` exige que CHAQUE item attendu soit present (match d'ensemble,
-  insensible a la casse et aux accents). Le delimiteur peut etre `;`, `,`, `|` ou
-  un retour ligne.
-- Une question SANS `expected_value` est notee uniquement par le juge LLM (ancre =
-  `n/a`). Privilegier l'ancre objective quand un fait exact existe.
+Comment l'ancre objective compare (sur la reponse COMPLETE : texte + lignes SQL) :
+- `currency` / `numeric` : tolerent devise, separateurs de milliers et virgule
+  decimale ; comparaison avec une tolerance relative de 0.5 % (`config.NUMERIC_TOLERANCE`).
+  Donc `1234567` matche "1 234 567 EUR", meme si le chiffre n'est que dans le tableau.
+- `date` : parse plusieurs formats usuels (`2025-12-31`, `31/12/2025`, ...).
+- `list` : exige que CHAQUE item attendu soit present (match d'ensemble, insensible
+  a la casse / aux accents). Delimiteur `;`, `,`, `|` ou retour ligne.
+- `string` : contains normalise.
+- Pas d'`expected_value` (Q004) : ancre = `n/a`, la ligne est notee par le juge LLM seul.
+
+### 3.5 Remplir le golden automatiquement (prompt pour votre IA interne)
+
+Pour eviter de transformer le dataset ground-truth a la main, utilisez le prompt
+pret a l'emploi `benchmark/GOLDEN_IMPORT_PROMPT.md` : vous le collez dans votre IA
+interne avec votre dataset existant (questions + bonnes reponses), elle produit le
+CSV au schema `golden_questions` ci-dessus (y compris l'extraction de
+`expected_value` + `expected_value_type` quand un fait net existe). Vous importez
+ensuite ce CSV via la section 3.3.
 
 ---
 
@@ -314,9 +326,9 @@ defaut du projet). Les colonnes ci-dessous viennent de `benchmark/schemas.py`.
 
 ### 4.1 benchmark_runs_raw (ecrit par step_run_matrix, `RAW_COLUMNS`)
 
-Une ligne par (run_id, question_id, agent_key, mode). Colonnes (33) :
+Une ligne par (run_id, question_id, agent_key, mode). Colonnes (30) :
 `run_id`, `run_timestamp`, `config_json`, `question_id`, `question`, `category`,
-`answer_type`, `difficulty`, `language`, `reference_answer`, `expected_value`,
+`language`, `reference_answer`, `expected_value`,
 `expected_value_type`, `agent_key`, `agent_label`, `project_key`, `agent_id`,
 `mode`, `status` (ok/error/timeout), `error_type`, `error_message`, `answer_text`
 (texte final seul), `full_answer` (texte + tables SQL + artefacts : l'entree du
@@ -346,7 +358,7 @@ Une ligne par (run_id, agent_key, mode) :
 
 Une ligne par (run_id, agent_key, mode, dimension, bucket) :
 `run_id`, `run_timestamp`, `agent_key`, `agent_label`, `mode`, `dimension`
-(category / answer_type / difficulty), `bucket`, `n`, `accuracy`, `mean_score`.
+(category), `bucket`, `n`, `accuracy`, `mean_score`.
 
 ---
 
@@ -424,8 +436,7 @@ connus et impose l'ordre canonique eco -> medium -> high.
 `bench_question_filter` (optionnel, AND entre clefs, OR a l'interieur d'une clef) :
 
 ```json
-{"categories": ["revenus"], "difficulties": ["easy", "medium"],
- "answer_types": ["number"], "question_ids": ["Q001", "Q002"],
+{"categories": ["revenus"], "question_ids": ["Q001", "Q002"],
  "languages": ["fr"]}
 ```
 
@@ -506,9 +517,8 @@ trompe, soit l'agent a un vrai bug. Filtrer `needs_review = true` et trier par l
 
 ### Lire benchmark_breakdown (par categorie)
 
-Une ligne par (agent x mode x dimension x bucket). Permet de dire "l'agent est bon
-en revenus mais faible en tickets", ou "il rate les questions `hard`". Filtrer par
-`dimension` (category / answer_type / difficulty).
+Une ligne par (agent x mode x categorie). Permet de dire "l'agent est bon en
+revenus mais faible en tickets". Filtrer par `bucket` (la categorie).
 
 ### run_id : comparer des runs (regression)
 
@@ -698,8 +708,8 @@ bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Corrig
       step texte-seul + `benchmark_raw_results` + recette juge visuelle desactives
       (pas supprimes avant validation).
 - [ ] Dataset `golden_questions` cree (schema `GOLDEN_COLUMNS`), initialise depuis
-      l'Excel mappe, enrichi (expected_value + type, category, answer_type,
-      difficulty).
+      l'Excel mappe, avec `expected_value` + `expected_value_type` remplis quand un
+      fait net existe (via le prompt d'import section 3.5).
 - [ ] (optionnel) Recette d'intake `golden_intake -> golden_questions` avec
       `schemas.validate_golden_row`.
 - [ ] Datasets de sortie prets : `benchmark_runs_raw`, `benchmark_runs_scored`,

@@ -128,8 +128,6 @@ def _denormalized_golden(question_row):
         "question_id": row.get("question_id"),
         "question": row.get("question"),
         "category": row.get("category"),
-        "answer_type": row.get("answer_type"),
-        "difficulty": row.get("difficulty"),
         "language": row.get("language"),
         "reference_answer": row.get("reference_answer"),
         "expected_value": row.get("expected_value"),

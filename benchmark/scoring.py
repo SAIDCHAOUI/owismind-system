@@ -7,8 +7,8 @@ Stdlib only, no dataiku / pandas. Turns the readable detail table
   (accuracy, mean score, score distribution, latency p50/p95/max, ttft p50,
   cost per question, tokens, error rate, needs-review count, judge cost).
 - ``benchmark_breakdown`` : one row per (run_id, agent_key, mode, dimension,
-  bucket) for dimension in (category, answer_type, difficulty), with the count,
-  accuracy and mean score inside each bucket.
+  bucket) for each dimension in ``BREAKDOWN_DIMENSIONS`` (category), with the
+  count, accuracy and mean score inside each bucket.
 
 Robustness contract: a scored row may carry None / missing fields. Errored rows
 (``status`` other than "ok") have no score and no latency: they are counted in
@@ -88,8 +88,8 @@ def breakdown(scored_rows):
     """Aggregate scored rows into ``benchmark_breakdown`` rows.
 
     For each (run_id, agent_key, mode) group and each dimension in
-    ``BREAKDOWN_DIMENSIONS`` (category / answer_type / difficulty), emits one row
-    per non-blank bucket with the keys of ``BREAKDOWN_COLUMNS``: the bucket size
+    ``BREAKDOWN_DIMENSIONS`` (category), emits one row per non-blank bucket with
+    the keys of ``BREAKDOWN_COLUMNS``: the bucket size
     ``n`` (scored ok rows only), the ``accuracy`` (fraction in [0, 1]) and the
     ``mean_score`` over that bucket. Errored rows are excluded from the buckets
     (they carry no score / correctness). Pure, never raises. Output is ordered by
