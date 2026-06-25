@@ -217,5 +217,32 @@ class TestNaAndUnknownType(unittest.TestCase):
             judge.objective_anchor(None, None, None, None), judge.NA)
 
 
+class TestNanInputs(unittest.TestCase):
+    """Pandas renders an empty cell as a float NaN; the anchor must not crash."""
+
+    def test_nan_expected_value_is_na(self):
+        nan = float("nan")
+        self.assertEqual(
+            judge.objective_anchor(nan, nan, "the answer is 42", []), judge.NA)
+
+    def test_nan_type_with_value_uses_string_rule(self):
+        nan = float("nan")
+        self.assertEqual(
+            judge.objective_anchor("Paris", nan, "the city is Paris", []),
+            judge.HIT)
+
+    def test_float_expected_value_numeric(self):
+        # An expected_value read as a float (numeric column) still matches.
+        self.assertEqual(
+            judge.objective_anchor(42.0, "numeric", "there are 42 tickets", []),
+            judge.HIT)
+
+    def test_nan_full_answer_does_not_crash(self):
+        nan = float("nan")
+        item = _sql_item(["amount"], [[1234]])
+        self.assertEqual(
+            judge.objective_anchor("1234", "numeric", nan, [item]), judge.HIT)
+
+
 if __name__ == "__main__":
     unittest.main()

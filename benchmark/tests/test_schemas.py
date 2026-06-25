@@ -161,6 +161,21 @@ class TestNormalizeGoldenRow(unittest.TestCase):
     def test_non_dict_returns_empty(self):
         self.assertEqual(schemas.normalize_golden_row(None), {})
 
+    def test_nan_cells_become_none(self):
+        # Pandas renders an empty cell as a float NaN; it must normalize to None
+        # (not propagate into benchmark_runs_raw and crash the judge later).
+        nan = float("nan")
+        out = schemas.normalize_golden_row({
+            "question_id": "q1", "question": "q", "reference_answer": "a",
+            "expected_value": nan, "expected_value_type": nan, "category": nan,
+        })
+        self.assertIsNone(out["expected_value"])
+        self.assertIsNone(out["expected_value_type"])
+        self.assertIsNone(out["category"])
+        # And a NaN expected_value no longer trips the "value without type" rule.
+        ok, errors = schemas.validate_golden_row(out)
+        self.assertTrue(ok, errors)
+
 
 if __name__ == "__main__":
     unittest.main()

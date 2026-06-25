@@ -43,8 +43,10 @@ def _get_variables():
 def _load_golden_rows(golden_dataset):
     """Read the golden dataset, normalize, keep active rows. Returns list[dict]."""
     df = dataiku.Dataset(golden_dataset).get_dataframe()
-    # NaN -> None so the pure normalizer / validator see real blanks.
-    df = df.where(pd.notnull(df), None)
+    # NaN -> None so the pure normalizer / validator see real blanks. astype(object)
+    # first: on a numeric column, where(..., None) would otherwise re-coerce None
+    # back to NaN (pandas keeps the float dtype).
+    df = df.astype(object).where(pd.notnull(df), None)
     rows = []
     for record in df.to_dict(orient="records"):
         norm = schemas.normalize_golden_row(record)

@@ -133,7 +133,9 @@ def run():
     judge_llm_id = cfg["judge_llm_id"]
 
     df = dataiku.Dataset(cfg["raw_dataset"]).get_dataframe()
-    df = df.where(pd.notnull(df), None)
+    # astype(object) first so NaN -> None actually sticks on numeric columns
+    # (an all-empty column reads as float64; None would otherwise revert to NaN).
+    df = df.astype(object).where(pd.notnull(df), None)
 
     if not score_all:
         run_id = _latest_run_id(df)

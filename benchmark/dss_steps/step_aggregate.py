@@ -57,7 +57,8 @@ def run():
     aggregate_all = cfg["aggregate_all_runs"]
 
     df = dataiku.Dataset(cfg["scored_dataset"]).get_dataframe()
-    df = df.where(pd.notnull(df), None)
+    # astype(object) first so NaN -> None actually sticks on numeric columns.
+    df = df.astype(object).where(pd.notnull(df), None)
 
     if not aggregate_all:
         run_id = _latest_run_id(df)

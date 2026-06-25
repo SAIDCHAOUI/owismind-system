@@ -38,6 +38,18 @@ HIT = "hit"
 MISS = "miss"
 NA = "n/a"
 
+
+def _is_nan(value):
+    """True for a float NaN (how pandas renders an empty cell). Stdlib only."""
+    return isinstance(value, float) and value != value
+
+
+def _blank_value(value):
+    """True when a cell is absent: None, a float NaN, or a blank string."""
+    if value is None or _is_nan(value):
+        return True
+    return isinstance(value, str) and not value.strip()
+
 # Currency / grouping symbols stripped before numeric parsing. Both the comma and
 # the dot can be a decimal separator OR a thousands separator depending on locale,
 # so they are handled by ``normalize_number`` rather than blindly stripped here.
@@ -278,26 +290,32 @@ def objective_anchor(expected_value, expected_value_type, full_answer, sql_items
       - ``list``: every expected item present (set-style match).
     An unknown type falls back to the ``string`` rule.
     """
-    if expected_value is None or (isinstance(expected_value, str)
-                                  and not expected_value.strip()):
+    # Inputs may arrive from pandas as a float NaN (an all-empty column reads as
+    # float64), so guard against non-strings, not just None / blank strings.
+    if _blank_value(expected_value):
         return NA
+    expected = expected_value if isinstance(expected_value, str) else str(expected_value)
 
     try:
         cells = flatten_result_cells(sql_items)
     except Exception:
         cells = []
-    haystacks = [full_answer or ""] + [c for c in cells if c is not None]
+    answer = "" if _blank_value(full_answer) else (
+        full_answer if isinstance(full_answer, str) else str(full_answer))
+    haystacks = [answer] + [c for c in cells if c]
 
-    vtype = (expected_value_type or "string").strip().lower()
+    vtype = expected_value_type if (
+        isinstance(expected_value_type, str) and expected_value_type.strip()) else "string"
+    vtype = vtype.strip().lower()
     try:
         if vtype in ("numeric", "currency"):
-            hit = _numeric_hit(expected_value, haystacks, tolerance)
+            hit = _numeric_hit(expected, haystacks, tolerance)
         elif vtype == "date":
-            hit = _date_hit(expected_value, haystacks)
+            hit = _date_hit(expected, haystacks)
         elif vtype == "list":
-            hit = _list_hit(expected_value, haystacks)
+            hit = _list_hit(expected, haystacks)
         else:  # string + unknown
-            hit = _string_hit(expected_value, haystacks)
+            hit = _string_hit(expected, haystacks)
     except Exception:
         return MISS
     return HIT if hit else MISS

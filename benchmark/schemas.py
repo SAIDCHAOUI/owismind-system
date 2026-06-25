@@ -145,8 +145,10 @@ BREAKDOWN_DIMENSIONS = ("category",)
 
 
 def _is_blank(value):
-    """True when a cell is missing or an empty/whitespace string."""
+    """True when a cell is missing, a float NaN (pandas empty), or a blank string."""
     if value is None:
+        return True
+    if isinstance(value, float) and value != value:  # NaN
         return True
     if isinstance(value, str) and not value.strip():
         return True
@@ -214,7 +216,9 @@ def normalize_golden_row(row):
     out = {}
     for col in GOLDEN_COLUMNS:
         value = row.get(col)
-        if isinstance(value, str):
+        if isinstance(value, float) and value != value:  # pandas NaN -> None
+            value = None
+        elif isinstance(value, str):
             value = value.strip()
             if value == "":
                 value = None
