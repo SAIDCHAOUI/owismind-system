@@ -446,48 +446,62 @@ def run_matrix(run_config, write_row):
             )
             future_meta[future] = (task, time.perf_counter())
 
-        for future in concurrent.futures.as_completed(future_meta):
-            task, started = future_meta[future]
-            try:
-                raw = future.result(timeout=timeout)
-            except concurrent.futures.TimeoutError:
-                # Hard per-call timeout: the underlying agent call may still be
-                # winding down, but we never block the run on it. The bounded pool
-                # plus the absence of retries keeps the instance load capped.
-                raw = _timeout_row(
-                    run_id, run_timestamp, config_json,
-                    task["question_row"], task["agent"], task["mode"],
-                    timeout, time.perf_counter() - started,
-                )
-            except Exception as exc:
-                # run_one already swallows its own exceptions; this is a last-ditch
-                # guard so a single bad future never aborts the whole matrix.
-                raw = _base_raw_row(
-                    run_id, run_timestamp, config_json,
-                    task["question_row"], task["agent"], task["mode"])
-                raw.update(
-                    {
-                        "status": "error",
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc)[:2000],
-                        "full_answer": "",
-                        "generated_sql_json": json.dumps([]),
-                        "artifacts_json": json.dumps([]),
-                        "n_sql": 0,
-                        "total_rows": 0,
-                        "latency_total_s": round(time.perf_counter() - started, 3),
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0,
-                        "estimated_cost": 0.0,
-                    }
-                )
-            try:
-                write_row(raw)
-            except Exception:
-                # A write failure for one row must not lose the rest of the run.
-                # The step logs / surfaces it; the runner stays resilient.
-                pass
+        # Overall wall-clock budget for the whole matrix (instance safety: a bounded step
+        # duration). as_completed only yields a future AFTER it has finished, so a per-future
+        # result(timeout=...) can never fire - the timeout MUST live on as_completed itself.
+        # Budget = at most one full "wave" of the bounded pool per per-call timeout. A
+        # ThreadPoolExecutor cannot interrupt a running thread, so a hung agent call keeps
+        # winding down on its own, but the run stops WAITING on it (the goal: bounded wall-clock).
+        waves = (len(tasks) + concurrency - 1) // max(1, concurrency)
+        overall_budget = max(1.0, waves * timeout)
+        try:
+            for future in concurrent.futures.as_completed(future_meta, timeout=overall_budget):
+                task, started = future_meta[future]
+                try:
+                    raw = future.result()  # already complete here (as_completed yields it)
+                except Exception as exc:
+                    # run_one already swallows its own exceptions; this is a last-ditch
+                    # guard so a single bad future never aborts the whole matrix.
+                    raw = _base_raw_row(
+                        run_id, run_timestamp, config_json,
+                        task["question_row"], task["agent"], task["mode"])
+                    raw.update(
+                        {
+                            "status": "error",
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc)[:2000],
+                            "full_answer": "",
+                            "generated_sql_json": json.dumps([]),
+                            "artifacts_json": json.dumps([]),
+                            "n_sql": 0,
+                            "total_rows": 0,
+                            "latency_total_s": round(time.perf_counter() - started, 3),
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0,
+                            "estimated_cost": 0.0,
+                        }
+                    )
+                try:
+                    write_row(raw)
+                except Exception:
+                    # A write failure for one row must not lose the rest of the run.
+                    # The step logs / surfaces it; the runner stays resilient.
+                    pass
+        except concurrent.futures.TimeoutError:
+            # The overall budget elapsed with calls still running: record a timeout row for
+            # each unfinished call (it cannot be interrupted; cancel_futures below drops the
+            # un-started ones) so the raw dataset shows the timeout instead of missing rows.
+            for fut, (task, started) in future_meta.items():
+                if not fut.done():
+                    try:
+                        write_row(_timeout_row(
+                            run_id, run_timestamp, config_json,
+                            task["question_row"], task["agent"], task["mode"],
+                            timeout, time.perf_counter() - started,
+                        ))
+                    except Exception:
+                        pass
     finally:
         # Do not wait on stragglers beyond the pool teardown: the futures already
         # carry their own per-call timeout, and a hung agent call must not pin the

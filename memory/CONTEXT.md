@@ -19,8 +19,27 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-**🔬 SESSION 2026-06-26 (INTÉGRATION DU BENCHMARK DANS LE SYSTÈME - 2 pôles : capture utilisateur + webapp
-admin) - repo only, DEV packagé, NON validé DSS. Session autonome (« tu vas tout implémenter »).** Le
+**🔬 SESSION 2026-06-26 + RÉVISION (b) (INTÉGRATION DU BENCHMARK DANS LE SYSTÈME - 2 pôles : capture
+utilisateur + webapps admin) - repo only, DEV re-packagé, NON validé DSS. Session autonome.**
+**⮕ RÉVISION 2026-06-26b (retour user en cours de nuit) :** le webapp LAB unique est SPLITé en **DEUX
+webapps DSS standard** : `benchmark_webapp/results/` (consultation **publique, lecture seule, langage clair
+grand public**, verdict « X sur Y », donut de confiance) et `benchmark_webapp/launcher/` (config + lancement
++ revue suggestions, **VRAIE interface formulaire**, plus de JSON). Les DEUX **bilingues EN défaut + FR**
+(toggle, nombres localisés). Lib partagée `views.py` (pur) + **`dss.py` = chokepoint UNIQUE I/O dataiku/SQL**
+(« READ + APPEND only » : SELECT seul sur connexion partagée, écritures = append Flow via Dataset API). Build
+des 2 frontends par **workflow (build -> critique panel -> correction -> re-critique -> re-correction, x2)**,
+**QA visuelle Playwright** OK (EN/FR x clair/sombre). **Système benchmark + suggestions durcis** (workflow
+critique : timeout runner non-fonctionnel **réparé** = vraie borne wall-clock ; validate_golden_row appelé en
+prod ; schemas.MODES=config.MODES ; judge needs_review si verdict sans score ; etc.). **AUDIT SÉCURITÉ/DANGER
+dédié** (workflow audit + **vérification adversariale** par finding) = 0 crit/0 high ; corrigés : log promus
+non-tronquant (**golden = source de vérité** de « déjà promu », fail-open), **verrous** promotion + lancement
+single-flight (+ doc « Prevent concurrent executions »), **projection colonnes à la lecture** (plus de RAM sur
+la table scored), **prérequis golden = dataset managé autonome** (sinon promotion effacée au rebuild). **688
+tests Python + 124 node, 0 tiret (31 fichiers), DEV re-packagé (python-lib à jour, `index-BoETXxLb.js`).**
+Détail -> `sessions/2026-06-26.md` section « REVISION 2026-06-26b ». **⚠️ Bien lire l'archi à DEUX webapps avant
+de déployer le LAB** (`benchmark_webapp/README.md`).
+
+Le
 benchmark passe de standalone à brique du système. **Décision d'archi** : les 2 pôles vivent à des endroits
 différents -> **Pôle utilisateur = DANS le plugin Vue** (produit) ; **Pôle admin = webapp DSS STANDARD
 SÉPARÉE dans `OWIsMind_LAB`** (HTML/CSS/JS + backend Python ; lit les datasets en direct, édite la variable
@@ -550,16 +569,20 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-26 (intégration benchmark : capture utilisateur + webapp admin LAB) → détail `sessions/2026-06-26.md`
+## 🧭 Dernière session - 2026-06-26 (+ révision b) : intégration benchmark - capture utilisateur (plugin) + 2 webapps admin LAB → détail `sessions/2026-06-26.md`
 - **2 pôles** : capture utilisateur **dans le plugin Vue** (table `webapp_golden_suggestions_v1` + 3 routes
   `/benchmark/*` + action menu « ... » -> page `/benchmark` préremplie, tous users) ; admin/restitution =
-  **webapp DSS standard SÉPARÉE dans `OWIsMind_LAB`** (`benchmark_webapp/`, 3 onglets, lit datasets + édite
-  variable + lance scénario, zéro build). Décision validée par le user (AskUserQuestion).
-- **Vérifs** : 681 tests Python (484 plugin + 173 benchmark + 24 webapp) + 124 node ; build Vite + **DEV
-  packagé** (`index-BoETXxLb.js`, 72 entrées, prod intacte) ; **QA visuelle Playwright** du webapp LAB (clair+
-  sombre) ; revue adversariale **0 crit/0 high** (2 medium + lows corrigés + tests) ; **0 tiret**. **L103**.
-- **À FAIRE DSS** : (Lot 2) upload DEV + redémarrer backend ; (Lot 1+3) créer la webapp standard en LAB
-  (`benchmark_webapp/README.md` : 4 panes + project-library `views.py` + permissions + bloc `suggestions`).
+  **DEUX webapps DSS standard SÉPARÉES dans `OWIsMind_LAB`** (révision b) : `benchmark_webapp/results/`
+  (publique, lecture seule, **langage clair grand public**) + `benchmark_webapp/launcher/` (config **formulaire**
+  + lancement + suggestions). **Bilingues EN/FR.** Lib partagée `views.py` (pur) + `dss.py` (chokepoint SQL
+  read+append-only).
+- **Vérifs** : **688 tests Python** (484 plugin + 174 benchmark + 30 webapp) + 124 node ; build Vite + **DEV
+  re-packagé** (`index-BoETXxLb.js`, 72 entrées, **prod intacte**) ; **QA visuelle Playwright** des 2 webapps
+  (EN/FR x clair/sombre) ; revues adversariales (4-dim + système + **sécurité/danger dédié avec vérif
+  adversariale**) = **0 crit/0 high** (corrigés + tests) ; **0 tiret (31 fichiers)**. **L103 + L104**.
+- **À FAIRE DSS** : (plugin) upload DEV + redémarrer backend ; (LAB) créer **2 webapps standard**
+  (`benchmark_webapp/README.md` : project-library `views.py`+`dss.py` + 4 panes/webapp + permissions + bloc
+  `suggestions` + **« Prevent concurrent executions »** sur le scénario). **golden_dataset = managé autonome.**
 
 ## Avant - 2026-06-25 (système de benchmark / évaluation des agents) → détail `sessions/2026-06-25.md`
 - **Nouveau package `benchmark/`** (repo = source de vérité, recollé en project-library `OWIsMind_LAB`) : vrai système d'ingénieur de test des agents, **par agent ET par mode** (précision/latence/coût). Appel **direct** de l'orchestrateur via Mesh + reconstruction de la réponse **COMPLÈTE** (texte + SQL + lignes + artefacts) depuis le footer (`agent_capture.py`). Juge = **ancre objective déterministe + LLM structuré** (`needs_review` sur désaccord). **Config UNIQUE** = variable projet `benchmark` (zéro hardcode). **Modes Smart/Pro/Claude** (token interne eco/medium/high traduit), **flag `modes` par agent** (sinon 1 appel simple `default`). Datasets managés `golden_questions_v1_prepared` -> raw -> scored -> summary + breakdown. **173 tests, 0 tiret**, poussé origin/main (`6eb1cb4`..`b4b3816`).

@@ -185,6 +185,11 @@ def summary_view(summary_rows, run_id=None):
         "kpis": {
             "accuracy": global_acc,
             "accuracy_pct": fmt_pct(global_acc),
+            # Plain-language "X of Y answered correctly" (n_correct over the scored questions),
+            # so the public page can state the verdict in words, not just a percentage.
+            "n_correct": int(round(total_correct)),
+            "n_ok_total": total_ok,
+            "band": confidence_band(global_acc),
             "n_questions": n_questions,
             "n_configs": len(shaped),
             "total_cost": total_cost,
@@ -194,6 +199,19 @@ def summary_view(summary_rows, run_id=None):
         },
         "rows": shaped,
     }
+
+
+def confidence_band(accuracy):
+    """A plain confidence band for an accuracy fraction: 'high' / 'medium' / 'low'.
+
+    Drives the public results color + verdict wording (>=85% high, >=60% medium, else low). The
+    thresholds are deliberately simple so a non-technical reader gets one clear signal."""
+    a = _num(accuracy) or 0.0
+    if a >= 0.85:
+        return "high"
+    if a >= 0.60:
+        return "medium"
+    return "low"
 
 
 # --- restitution: breakdown (accuracy per category) -------------------------
@@ -324,6 +342,17 @@ _TABLE_RE = _re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 _EXPECTED_VALUE_TYPES = ("numeric", "currency", "date", "string", "list")
 
 
+def minted_question_id(suggestion_id):
+    """The deterministic golden question_id a suggestion would get when promoted.
+
+    Stable + idempotent (same suggestion_id -> same question_id). The GOLDEN is the source of
+    truth for "already promoted": a suggestion is already in the golden iff this id is one of the
+    golden's question_ids (so the review list / dedup never depend on a separate corruptible log).
+    """
+    sid = _str(suggestion_id).strip()
+    return ("u_" + sid[:24]) if sid else ""
+
+
 def safe_table_name(name):
     """The physical table name when it is a plain identifier, else None. Never raises."""
     if isinstance(name, str) and _TABLE_RE.match(name.strip()):
@@ -331,15 +360,21 @@ def safe_table_name(name):
     return None
 
 
-def suggestions_view(rows):
+def suggestions_view(rows, exclude_ids=None):
     """Shape pending user-suggestion rows (cross-project read) for the review table.
 
-    Keeps a light projection (no heavy agent answer / SQL body). Pure, never raises.
+    Keeps a light projection (no heavy agent answer / SQL body). ``exclude_ids`` drops rows whose
+    suggestion_id was already promoted (their source row stays status='pending' forever, so the
+    LAB promoted-ids log is what filters them out of the review list). Pure, never raises.
     """
+    excl = set(str(x) for x in (exclude_ids or []))
     out = []
     for r in _rows(rows):
+        sid = _str(r.get("suggestion_id"))
+        if sid and sid in excl:
+            continue
         out.append({
-            "suggestion_id": _str(r.get("suggestion_id")),
+            "suggestion_id": sid,
             "user_id": _str(r.get("user_id")),
             "source": _str(r.get("source")),
             "question": _str(r.get("question")),
@@ -383,7 +418,7 @@ def suggestion_to_golden(sug):
         language = "fr"
     category = _str(sug.get("category")).strip() or None
     return {
-        "question_id": "u_" + sid[:24],
+        "question_id": minted_question_id(sid),
         "question": question,
         "reference_answer": reference,
         "expected_value": expected_value,
@@ -420,6 +455,62 @@ def promotable_golden_rows(suggestions, already_promoted_ids):
         golden_rows.append(row)
         used_ids.append(sid)
     return golden_rows, used_ids
+
+
+def build_config_object(existing, form):
+    """Merge the launcher FORM fields into the existing ``benchmark`` variable object.
+
+    The launcher is a real form, not a JSON editor: it only manages ``agents``, ``modes``,
+    ``language``, ``concurrency`` and ``question_filter``. EVERY other key (dataset names,
+    ``judge_llm_id``, the ``suggestions`` block, score/aggregate flags) is PRESERVED from
+    ``existing`` so saving the form never clobbers them. Returns the merged object (dict).
+    Pure, never raises; the caller validates the result with ``validate_config``.
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    if not isinstance(form, dict):
+        return out
+
+    agents = []
+    for a in (form.get("agents") or []):
+        if not isinstance(a, dict):
+            continue
+        key = _str(a.get("agent_key")).strip()
+        project_key = _str(a.get("project_key")).strip()
+        agent_id = _str(a.get("agent_id")).strip()
+        if not (key and project_key and agent_id):
+            continue
+        agents.append({
+            "agent_key": key,
+            "agent_label": _str(a.get("agent_label")).strip() or key,
+            "project_key": project_key,
+            "agent_id": agent_id,
+            "modes": bool(a.get("modes")),
+        })
+    out["agents"] = agents
+
+    modes = [m for m in (form.get("modes") or []) if isinstance(m, str) and m.strip()]
+    if modes:
+        out["modes"] = modes
+
+    lang = _str(form.get("language")).strip().lower()
+    if lang in ("fr", "en"):
+        out["language"] = lang
+
+    try:
+        out["concurrency"] = max(1, min(int(form.get("concurrency")), 8))
+    except (TypeError, ValueError):
+        pass
+
+    qf = form.get("question_filter")
+    if isinstance(qf, dict):
+        clean = {}
+        for k in ("categories", "question_ids", "languages"):
+            v = qf.get(k)
+            if isinstance(v, list) and v:
+                clean[k] = [str(x) for x in v]
+        out["question_filter"] = clean
+
+    return out
 
 
 def config_view(resolved):

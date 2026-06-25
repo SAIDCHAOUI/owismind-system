@@ -2327,5 +2327,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   long + index secondaire = vérifier la longueur dérivée du nom d'index** (clé projet + prefix + namespace +
   logique + suffixe), ou passer par `safe_index_name`. **Date** : 2026-06-26.
 
+## L104 - Une lecture qui AVALE les erreurs (return [] on except) ne doit JAMAIS alimenter une RÉÉCRITURE de dataset : un blip transitoire devient une troncature silencieuse [repo, audit sécurité + fix, 2026-06-26]
+- **Contexte** : webapp benchmark LAB, promotion des suggestions. `read_dataset` (helper de lecture) attrape
+  toute exception et renvoie `[]` (correct pour un AFFICHAGE : dégrade en vide). La promotion réécrivait le log
+  des ids promus par `write_with_schema(union(read_promoted_ids(), used_ids))` où `read_promoted_ids` passe par
+  ce helper avaleur.
+- **Ce qui a échoué (trouvé par l'audit sécu dédié + vérif adversariale)** : une lecture qui échoue
+  transitoirement (timeout SQL, rebuild concurrent) est **indistinguable d'un dataset réellement vide** ->
+  `before=[]` -> la réécriture **écrase** le log avec seulement le lot courant = **troncature silencieuse**, 200 OK,
+  aucune erreur. C'est l'anti-pattern « read-failure-feeds-a-rewrite » que l'user interdit (« read et append très
+  prudent »), ici appliqué au log (le golden, lui, était déjà durci avec une lecture **qui lève**). Variante
+  instance : `concurrent.futures.as_completed(futures)` **sans timeout** ne yield qu'une future DÉJÀ finie ->
+  `future.result(timeout=t)` ne lève jamais -> le timeout par-appel est **mort** (pas de borne wall-clock).
+- **Solution qui marche (2 principes)** :
+  1. **Sur un chemin d'ÉCRITURE, ne jamais lire avec un helper qui avale** : soit une lecture **qui lève**
+     (un échec -> abort/500, jamais d'écrasement), soit **dériver de la source de vérité** plutôt que d'un log
+     séparé corruptible. Ici : le **golden devient la source de vérité** de « déjà promu » (`read_golden_question_ids`
+     + `minted_question_id`, **fail-open** = montrer plus, jamais masquer/corrompre) ; le log promus devient un
+     **audit best-effort non-tronquant** (lecture qui lève, **skip** sur échec). + verrou `_PROMOTE_LOCK` (anti
+     lost-update concurrent) + `RUN_LOCK` single-flight (anti TOCTOU double-run) + « Prevent concurrent executions »
+     côté scénario DSS.
+  2. **Borne wall-clock réelle** : timeout sur `as_completed(futures, timeout=budget)` + lignes timeout pour les
+     futures non finies (un ThreadPoolExecutor ne peut pas interrompre le thread, mais on **arrête d'attendre**).
+  Aussi : **projeter les colonnes À LA LECTURE** (`get_dataframe(columns=, limit=)`) au lieu de tout charger en RAM
+  puis jeter les colonnes lourdes. **Connexion partagée du projet = SELECT seul** ; écritures = append Flow (Dataset
+  API), jamais d'UPDATE/DELETE/DROP/INSERT raw.
+- **Preuve-vérification** : audit sécurité (workflow 4 audits + 1 vérificateur adversarial par finding, refute par
+  défaut) = 0 crit/0 high, faux positifs réfutés (auth = gérée au niveau DSS) ; 688 tests Python verts ; fix
+  appliqués dans `benchmark_webapp/dss.py` + `launcher/backend.py` + `benchmark/agent_runner.py`.
+- **Source** : session 2026-06-26 révision b (`sessions/2026-06-26.md`). **Règle générale** : un helper de lecture
+  « best-effort -> [] » est sûr pour AFFICHER, **dangereux pour RÉÉCRIRE**. Sur tout chemin read-modify-write d'un
+  dataset : lecture qui lève OU dérivation de la source de vérité, + verrou si concurrence. **Date** : 2026-06-26.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

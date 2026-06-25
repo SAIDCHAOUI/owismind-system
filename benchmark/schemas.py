@@ -13,6 +13,7 @@ sections 5 (golden schema), 7 (summary / breakdown columns).
 # Caps mirrored from agent_capture (single source of truth: those values come
 # from the webapp evidence/capture.py). Re-exported here so dependent modules can
 # read them from the schema layer too.
+from benchmark import config
 from benchmark.agent_capture import (
     MAX_RESULT_ROWS,
     MAX_RESULT_COLS,
@@ -22,7 +23,11 @@ from benchmark.agent_capture import (
 )
 
 # --- enum tuples (frozen vocabulary shared across the package) --------------
-MODES = ("eco", "medium", "high")
+# Single source of truth: the canonical mode names live in config (Smart / Pro / Claude),
+# which is what is actually written to the 'mode' column. Re-export rather than duplicate, so
+# a future membership check against schemas.MODES matches the real stored values (the old
+# ("eco","medium","high") copy here was the pre-rename internal keys and contradicted that).
+MODES = config.MODES
 EXPECTED_VALUE_TYPES = ("numeric", "currency", "date", "string", "list")
 LANGUAGES = ("fr", "en")
 

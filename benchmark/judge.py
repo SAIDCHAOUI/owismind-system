@@ -57,7 +57,7 @@ _CURRENCY_CHARS = "$€£¥₽₩₤"  # $ EUR GBP JPY RUB KRW lira
 
 # A run of digits with optional dot / comma group separators and an optional
 # decimal tail. Used to harvest number-looking substrings from a free-text answer.
-_NUMBER_RE = re.compile(r"[-+]?\d[\d\.,   ]*\d|\d")
+_NUMBER_RE = re.compile(r"[-+]?\d[\d.,\xa0\u202f]*\d|\d")
 
 # Common date formats accepted by the date anchor (parsed without dateutil).
 _DATE_FORMATS = (
@@ -612,8 +612,10 @@ def final_correctness(objective_match, judge):
         needs_review = disagree or judge_error
         return {"correct": correct, "needs_review": needs_review}
 
-    # No anchor: lean on the judge. A missing / failed judge cannot confirm.
+    # No anchor: lean on the judge. A missing / failed judge cannot confirm. A verdict that
+    # carries NO usable score (the prompt-only judge fallback does not enforce the schema's
+    # required score) is ambiguous - flag it for a human rather than silently scoring it wrong.
     has_score = isinstance(score, int)
     correct = (verdict == "correct" and has_score and score >= 4)
-    needs_review = judge_error or verdict is None
+    needs_review = judge_error or verdict is None or not has_score
     return {"correct": correct, "needs_review": needs_review}

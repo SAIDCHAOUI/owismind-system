@@ -26,7 +26,9 @@ def _valid_golden_row():
 
 class TestEnums(unittest.TestCase):
     def test_enum_tuples(self):
-        self.assertEqual(schemas.MODES, ("eco", "medium", "high"))
+        # schemas.MODES re-exports the canonical config.MODES (Smart/Pro/Claude), the values
+        # actually stored in the 'mode' column - not the old pre-rename internal keys.
+        self.assertEqual(schemas.MODES, ("Smart", "Pro", "Claude"))
         self.assertEqual(
             schemas.EXPECTED_VALUE_TYPES,
             ("numeric", "currency", "date", "string", "list"),

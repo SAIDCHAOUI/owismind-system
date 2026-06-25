@@ -37,7 +37,10 @@ logger = logging.getLogger(__name__)
 # text (which DSS logs in full) stays bounded. The agent answer + captured SQL come from the
 # already-bounded exchange row; cap them again here as defense in depth.
 MAX_QUESTION_CHARS = 8_000
-MAX_REFERENCE_CHARS = 8_000
+# Aligned with the agent-answer cap: a "Yes" chat verdict stores the agent's OWN answer as the
+# reference, so a long-but-correct answer must not be silently truncated (it would degrade the
+# golden the judge later scores against). Manual references are far shorter in practice.
+MAX_REFERENCE_CHARS = 100_000
 MAX_AGENT_ANSWER_CHARS = 100_000
 MAX_MISSING_CHARS = 4_000
 MAX_EXPECTED_VALUE_CHARS = 500

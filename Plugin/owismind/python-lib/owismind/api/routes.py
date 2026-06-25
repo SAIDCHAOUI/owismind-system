@@ -984,6 +984,11 @@ def benchmark_suggest_from_chat():
     reference = fields["reference_answer"]
     if fields["answer_is_correct"] and not reference:
         reference = agent_answer
+    # A "Yes" on an exchange with no stored answer (early-stopped / never-answered) would
+    # persist a reference-less, un-promotable suggestion (dead data the reviewer can never
+    # vouch for). Reject it cleanly instead of storing it.
+    if fields["answer_is_correct"] and not (reference and reference.strip()):
+        return jsonify({"status": "error", "error": "empty_agent_answer"}), 400
     sql_items = exchange.get("generated_sql")
     sql_json = json.dumps(sql_items) if sql_items else None
 

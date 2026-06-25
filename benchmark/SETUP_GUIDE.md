@@ -97,12 +97,15 @@ Si `generated_sql_json` reste `[]` sur une question chiffree : voir Depannage.
 
 ## Etape 4 : la restitution (le beau resultat)
 
-**Recommande : la webapp benchmark** (`benchmark_webapp/`). Une webapp DSS Standard dans
-`OWIsMind_LAB` qui fait les 3 pages : **Resultats** (taux de bonnes reponses, latence,
-cout par agent x mode + detail par question + filtre `needs_review`), **Lancer** (editer la
-variable `benchmark` + lancer `Run_Benchmark`) et **Suggestions** (promouvoir les questions
-suggerees par les utilisateurs dans le golden). Pas de plugin, pas de build : on colle 4
-panes dans le navigateur DSS. Montage complet : **`benchmark_webapp/README.md`**.
+**Recommande : les webapps benchmark** (`benchmark_webapp/`). DEUX webapps DSS Standard dans
+`OWIsMind_LAB` (pas de plugin, pas de build : on colle 4 panes par webapp dans le navigateur) :
+- **Results** (publique, lecture seule) : restitution en langage clair (verdict de confiance,
+  taux de bonnes reponses, temps de reponse, cout, a relire, par agent x mode / par theme /
+  par question). Bilingue EN/FR.
+- **Launcher** (interne) : **vrai formulaire** de configuration (agents/modes/filtre/concurrence/
+  langue) + bouton Lancer + revue/promotion des questions suggerees par les utilisateurs.
+Montage complet (project-library `views.py`+`dss.py`, permissions, bloc `suggestions`) :
+**`benchmark_webapp/README.md`**.
 
 **Alternative (zero code)** : un dashboard DSS natif sur les memes datasets, en 3 bandes.
 Regles de lisibilite : formater `accuracy` en **pourcentage**, une **couleur fixe par mode**,

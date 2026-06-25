@@ -442,12 +442,16 @@ endroits DIFFÉRENTS, ce qui tranche le choix de techno.
   `GET /benchmark/suggestions` ; 2 WRITE bloquées en impersonation). Front : action menu « ... » -> page
   **`/benchmark` (TOUS users, pas de garde admin)** = `BenchmarkSuggestView` (bi-mode chat/manuel + « mes
   suggestions »), `stores/benchmark.js`. `sql_config.safe_index_name` (length-safe, **L103**).
-- **Pôle admin (config + lancement + restitution) = webapp DSS STANDARD séparée dans `OWIsMind_LAB`**, PAS le
-  plugin (zéro Vite/zip/restart). Package repo **`benchmark_webapp/`** (= source de vérité ; `views.py` recollé
-  en project-library `python/benchmark_webapp/`, `backend.py`/`body.html`/`style.css`/`script.js` = 4 panes de la
-  webapp standard). `backend.py` : config GET/POST (écrit la variable `benchmark` en Local variables), run async
-  single-flight, results bornés, suggestions cross-projet read-only + promote idempotent au golden. Montage :
-  `benchmark_webapp/README.md`.
+- **Pôle admin (révision 2026-06-26b) = DEUX webapps DSS STANDARD séparées dans `OWIsMind_LAB`**, PAS le plugin
+  (zéro Vite/zip/restart). Package repo **`benchmark_webapp/`** (source de vérité ; recollé en project-library) :
+  **`views.py`** (PUR, testé) + **`dss.py` = chokepoint UNIQUE I/O dataiku/SQL** (« READ + APPEND only » : SELECT
+  seul sur la connexion partagée ; écritures = append Flow via Dataset API ; verrous promotion/lancement). Deux
+  dossiers = deux webapps standard (4 panes chacune) : **`results/`** (consultation **publique, lecture seule**,
+  restitution langage clair grand public, verdict « X sur Y », donut de confiance) et **`launcher/`** (config
+  **VRAI formulaire** -> `build_config_object` préserve datasets/juge/suggestions + lancement async single-flight
+  + revue/promotion des suggestions). **Les deux bilingues EN défaut + FR** (i18n JS, nombres localisés). « Déjà
+  promu » dérivé du **golden (source de vérité)**, pas d'un log corruptible (L104). Montage : `benchmark_webapp/README.md`.
+  **Prérequis : `golden_dataset` = dataset managé autonome (pas de recette en amont).**
 - **Config** : bloc additif **`benchmark.suggestions`** = `{connection: "SQL_owi", table: "<nom physique exact de
   webapp_golden_suggestions_v1>", promoted_dataset: "benchmark_suggestions_promoted"}` (vide -> onglet Suggestions
   « non configuré »). Le nom physique exact est exposé par Admin > Storage (`golden_suggestions`).

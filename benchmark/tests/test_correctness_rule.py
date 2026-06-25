@@ -92,6 +92,13 @@ class TestWithoutAnchor(unittest.TestCase):
         self.assertFalse(out["correct"])
         self.assertTrue(out["needs_review"])
 
+    def test_verdict_without_score_flags_review(self):
+        # The prompt-only judge fallback can return a verdict with no usable score; that
+        # ambiguity must flag review, not be silently scored wrong.
+        out = judge.final_correctness(judge.NA, _judge("correct", None))
+        self.assertFalse(out["correct"])
+        self.assertTrue(out["needs_review"])
+
     def test_none_anchor_treated_as_no_anchor(self):
         # A missing objective_match value behaves like n/a.
         out = judge.final_correctness(None, _judge("correct", 5))

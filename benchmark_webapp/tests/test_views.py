@@ -197,6 +197,15 @@ class PromotionTests(unittest.TestCase):
         self.assertIsNone(views.suggestion_to_golden(
             {"suggestion_id": "s1", "question": "", "reference_answer": "r"}))
 
+    def test_minted_question_id_stable_and_matches_golden(self):
+        sid = "abc123def4567890aaaabbbbcccc"  # 28-char id
+        qid = views.minted_question_id(sid)
+        self.assertEqual(qid, "u_" + sid[:24])
+        # Idempotent + consistent with what suggestion_to_golden writes as the golden question_id.
+        g = views.suggestion_to_golden({"suggestion_id": sid, "question": "q", "reference_answer": "r"})
+        self.assertEqual(g["question_id"], qid)
+        self.assertEqual(views.minted_question_id(""), "")
+
     def test_suggestion_to_golden_maps(self):
         g = views.suggestion_to_golden({
             "suggestion_id": "abc123def456", "question": "  Quel revenu ?  ",
@@ -239,6 +248,82 @@ class PromotionTests(unittest.TestCase):
         ])
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["suggestion_id"], "s1")
+
+    def test_suggestions_view_excludes_promoted(self):
+        rows = [
+            {"suggestion_id": "s1", "source": "manual", "question": "q1", "created_at": "t1"},
+            {"suggestion_id": "s2", "source": "chat", "question": "q2", "created_at": "t2"},
+        ]
+        out = views.suggestions_view(rows, exclude_ids=["s1"])
+        self.assertEqual([s["suggestion_id"] for s in out], ["s2"])
+
+
+class PlainLanguageTests(unittest.TestCase):
+    def test_confidence_band(self):
+        self.assertEqual(views.confidence_band(0.9), "high")
+        self.assertEqual(views.confidence_band(0.85), "high")
+        self.assertEqual(views.confidence_band(0.7), "medium")
+        self.assertEqual(views.confidence_band(0.6), "medium")
+        self.assertEqual(views.confidence_band(0.4), "low")
+        self.assertEqual(views.confidence_band(None), "low")
+
+    def test_summary_kpis_plain_counts(self):
+        rows = [
+            {"run_id": "r1", "agent_label": "A", "mode": "Smart", "n_questions": 10,
+             "n_ok": 10, "accuracy": 0.8, "total_cost": 0.1},
+            {"run_id": "r1", "agent_label": "A", "mode": "Claude", "n_questions": 10,
+             "n_ok": 10, "accuracy": 0.5, "total_cost": 0.5},
+        ]
+        k = views.summary_view(rows, run_id="r1")["kpis"]
+        # 8 + 5 correct over 20 scored = 13/20.
+        self.assertEqual(k["n_correct"], 13)
+        self.assertEqual(k["n_ok_total"], 20)
+        self.assertEqual(k["band"], "medium")  # 0.65
+
+
+class BuildConfigTests(unittest.TestCase):
+    def _existing(self):
+        return {
+            "golden_dataset": "golden_questions_v1_prepared",
+            "judge_llm_id": "anthropic:x",
+            "suggestions": {"connection": "SQL_owi", "table": "T", "promoted_dataset": "P"},
+            "score_all_runs": True,
+        }
+
+    def test_form_overwrites_managed_preserves_rest(self):
+        form = {
+            "agents": [{"agent_key": "orch", "agent_label": "Orch",
+                        "project_key": "OWISMIND_DEV", "agent_id": "agent:x", "modes": True}],
+            "modes": ["Smart", "Pro"],
+            "language": "en",
+            "concurrency": 5,
+            "question_filter": {"categories": ["revenus"], "question_ids": []},
+        }
+        out = views.build_config_object(self._existing(), form)
+        # Managed keys set from the form.
+        self.assertEqual(len(out["agents"]), 1)
+        self.assertEqual(out["modes"], ["Smart", "Pro"])
+        self.assertEqual(out["language"], "en")
+        self.assertEqual(out["concurrency"], 5)
+        self.assertEqual(out["question_filter"], {"categories": ["revenus"]})  # empty list dropped
+        # Unmanaged keys PRESERVED (the whole point - no clobber).
+        self.assertEqual(out["golden_dataset"], "golden_questions_v1_prepared")
+        self.assertEqual(out["judge_llm_id"], "anthropic:x")
+        self.assertEqual(out["suggestions"]["table"], "T")
+        self.assertTrue(out["score_all_runs"])
+        # And the merged object validates.
+        ok, cfg, errors = views.validate_config(out)
+        self.assertTrue(ok, errors)
+
+    def test_form_drops_incomplete_agents_and_clamps_concurrency(self):
+        form = {
+            "agents": [{"agent_key": "ok", "project_key": "P", "agent_id": "agent:x"},
+                       {"agent_key": "bad", "project_key": "", "agent_id": "agent:y"}],
+            "concurrency": 99,
+        }
+        out = views.build_config_object({}, form)
+        self.assertEqual(len(out["agents"]), 1)
+        self.assertEqual(out["concurrency"], 8)
 
 
 if __name__ == "__main__":

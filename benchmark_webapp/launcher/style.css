@@ -1,0 +1,789 @@
+/* OWIsMind Benchmark - Launcher webapp styles.
+ *
+ * Orange charter: white / near-black + a single orange (#FF7900) used as a rare accent.
+ * Square geometry (border-radius: 0 everywhere), flat surfaces, 1px solid borders.
+ * No gradient, no blur, no glow/soft shadow, no color-mix, no emoji. Heavy editorial
+ * headings (orange uppercase eyebrow, 32px/800 H1, a 52x4px orange bar under it).
+ * Light + dark via a [data-theme] attribute on the root (the iframe <html>).
+ * Semantic tokens are local to this standalone webapp (no external tokens file). */
+
+:root {
+  /* Orange brand (theme independent). */
+  --orange: #ff7900;
+  --orange-deep: #cc6100;
+
+  /* Light theme defaults. */
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-2: #f5f5f5;
+  --surface-hover: #f0f0f0;
+  --border: #ececec;
+  --border-strong: #d8d8d8;
+  --text: #111111;
+  --text-2: #5e5e5e;
+  --text-3: #9a9a9a;
+  /* Orange for small text on --bg: darkened to clear WCAG AA on white. */
+  --orange-text: #b85700;
+  --success: #15803d;
+  --danger: #b91c1c;
+  --warn: #d97706;
+  --info: #2563eb;
+  --success-soft: rgba(34, 197, 94, 0.10);
+  --danger-soft: rgba(239, 68, 68, 0.08);
+  --info-soft: rgba(37, 99, 235, 0.08);
+
+  --font-sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
+
+  /* Spacing (8px anchored). */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d0d0d;
+  --surface: #161616;
+  --surface-2: #1c1c1c;
+  --surface-hover: #222222;
+  --border: #232323;
+  --border-strong: #2e2e2e;
+  --text: #f0f0f0;
+  --text-2: #a0a0a0;
+  --text-3: #6e6e6e;
+  --orange-text: #ffb066;
+  --success: #4ade80;
+  --danger: #f87171;
+  --warn: #fb923c;
+  --info: #93c5fd;
+  --success-soft: rgba(74, 222, 128, 0.14);
+  --danger-soft: rgba(248, 113, 113, 0.13);
+  --info-soft: rgba(147, 197, 253, 0.12);
+}
+
+/* --- reset --- */
+* {
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#bench-app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-6) var(--s-6) var(--s-8);
+}
+
+/* numbers, ids, dataset names, codes use the mono family */
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* --- top bar --- */
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-bottom: var(--s-6);
+  margin-bottom: var(--s-7);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.eyebrow {
+  display: block;
+  color: var(--orange);
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 0 0 var(--s-2);
+}
+
+.h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+
+.title-bar {
+  display: block;
+  width: 52px;
+  height: 4px;
+  background: var(--orange);
+  margin: var(--s-4) 0 0;
+}
+
+.brand-desc {
+  margin: var(--s-4) 0 0;
+  color: var(--text-2);
+  font-size: 15px;
+  max-width: 56ch;
+}
+
+.toggles {
+  display: flex;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+}
+
+.toggle {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  padding: var(--s-2) var(--s-3);
+  min-width: 64px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
+/* --- section / card --- */
+.card {
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  padding: var(--s-6);
+  margin-bottom: var(--s-6);
+}
+
+.sec-eyebrow {
+  display: block;
+  color: var(--orange);
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  margin: 0 0 var(--s-2);
+}
+
+.sec-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.sec-bar {
+  display: block;
+  width: 52px;
+  height: 4px;
+  background: var(--orange);
+  margin: var(--s-3) 0 var(--s-3);
+}
+
+.sec-desc {
+  margin: 0 0 var(--s-5);
+  color: var(--text-2);
+  font-size: 14px;
+  max-width: 72ch;
+}
+
+/* --- field blocks --- */
+.field {
+  margin-bottom: var(--s-6);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--border);
+}
+
+.field:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.field-label {
+  display: block;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+  margin: 0 0 var(--s-2);
+}
+
+.field-help {
+  margin: 0 0 var(--s-3);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.field-help .count {
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* --- inputs --- */
+.inp,
+.sel {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  padding: var(--s-2) var(--s-3);
+  width: 100%;
+}
+
+.inp.mono {
+  font-family: var(--font-mono);
+}
+
+.inp:focus,
+.sel:focus {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+  border-color: var(--orange);
+}
+
+.inp-num {
+  width: 96px;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+
+/* --- square checkbox (no emoji, pure CSS check) --- */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--text);
+  background: var(--bg);
+  cursor: pointer;
+  position: relative;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:checked {
+  background: var(--orange);
+  border-color: var(--orange);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
+.cb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3) var(--s-5);
+}
+
+.check-grid.col {
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+/* --- agents table-like rows --- */
+.agent-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto;
+  gap: var(--s-3);
+  align-items: end;
+  padding: var(--s-4);
+  border: 1px solid var(--border);
+  margin-bottom: var(--s-3);
+}
+
+.agent-row .af-modes,
+.agent-row .af-actions {
+  grid-column: span 2;
+}
+
+.af {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.af-lab {
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+.af-modes {
+  justify-content: flex-end;
+}
+
+.af-actions {
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+/* --- buttons --- */
+.btn {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 2px solid var(--text);
+  padding: var(--s-2) var(--s-4);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+
+.btn-sm {
+  border-width: 1px;
+  font-size: 13px;
+  padding: var(--s-1) var(--s-3);
+}
+
+.btn-primary {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+  font-size: 15px;
+  padding: var(--s-3) var(--s-6);
+}
+
+.btn-primary:hover {
+  background: var(--orange-deep);
+  border-color: var(--orange-deep);
+  color: #fff;
+}
+
+.btn-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg);
+}
+
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.btn-primary:disabled:hover {
+  background: var(--orange);
+  color: #fff;
+}
+
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin-top: var(--s-4);
+}
+
+/* --- preserved settings (read-only) --- */
+.preserved {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: var(--s-4);
+}
+
+.preserved-note {
+  margin: 0 0 var(--s-4);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--s-2) var(--s-4);
+}
+
+.kv dt {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
+
+.kv dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.tag-on,
+.tag-off {
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px var(--s-2);
+  border: 1px solid var(--border-strong);
+}
+
+.tag-on {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.tag-off {
+  color: var(--text-2);
+}
+
+/* --- notes (calm, bordered, not alarming) --- */
+.note {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: var(--s-3) var(--s-4);
+  font-size: 13px;
+  margin-top: var(--s-4);
+}
+
+.note-ok {
+  border-left: 4px solid var(--success);
+}
+
+.note-info {
+  border-left: 4px solid var(--info);
+}
+
+.note-warn {
+  border-left: 4px solid var(--warn);
+}
+
+.note-error {
+  border-left: 4px solid var(--danger);
+}
+
+.note ul {
+  margin: var(--s-2) 0 0;
+  padding-left: var(--s-5);
+}
+
+.note li {
+  margin-bottom: var(--s-1);
+}
+
+.caveat {
+  margin: var(--s-4) 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* Unsaved-changes hint under the launch button (warn-toned, not alarming). */
+.launch-hint {
+  margin: var(--s-3) 0 0;
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.launch-hint[hidden] {
+  display: none;
+}
+
+/* "Last run" timestamp line in the launch section. */
+.last-run {
+  margin: var(--s-3) 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* Inline (no-modal) confirm panel for launch / promote, charter-styled. */
+.confirm-row {
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--orange);
+  background: var(--surface);
+  padding: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.confirm-msg {
+  margin: 0 0 var(--s-3);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.confirm-row .actions-row {
+  margin-top: 0;
+}
+
+/* --- run status + animated dots (CSS only) --- */
+.run-msg {
+  margin: var(--s-4) 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 20px;
+}
+
+.run-msg.is-running {
+  color: var(--orange-text);
+}
+
+.run-msg.is-done {
+  color: var(--success);
+}
+
+.run-msg.is-error {
+  color: var(--danger);
+}
+
+.dots {
+  display: inline-block;
+}
+
+.dots span {
+  display: inline-block;
+  animation: bench-blink 1.2s infinite both;
+}
+
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bench-blink {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots span {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* --- tables --- */
+.tbl-wrap {
+  overflow-x: auto;
+}
+
+table.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.tbl th {
+  text-align: left;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+table.tbl td {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+table.tbl tr:hover td {
+  background: var(--surface-hover);
+}
+
+.col-check {
+  width: 36px;
+}
+
+.cell-q {
+  max-width: 360px;
+}
+
+.cell-expected {
+  max-width: 320px;
+  color: var(--text-2);
+}
+
+/* Deterministic judge anchor (expected_value + type) shown next to the prose answer. */
+.cell-anchor {
+  white-space: nowrap;
+}
+
+.anchor-val {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.anchor-type {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.anchor-none {
+  color: var(--text-3);
+}
+
+.cell-date {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.src {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px var(--s-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+}
+
+/* --- suggestion review verdict (text, bordered, no emoji) --- */
+.cell-review {
+  max-width: 300px;
+  white-space: normal;
+}
+
+.rev {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px var(--s-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+}
+
+.rev-correct {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.rev-incorrect {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.rev-unverified {
+  color: var(--text-2);
+}
+
+.rev-note {
+  display: block;
+  margin-top: var(--s-1);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.loading {
+  color: var(--text-3);
+  font-size: 13px;
+  padding: var(--s-3) 0;
+}
+
+@media (max-width: 720px) {
+  .agent-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .agent-row .af-modes,
+  .agent-row .af-actions {
+    grid-column: span 2;
+  }
+  .kv {
+    grid-template-columns: 1fr;
+  }
+}

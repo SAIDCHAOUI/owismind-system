@@ -40,7 +40,9 @@ def _latest_run_id(df):
     """Return the run_id of the most recent run (by run_timestamp, then run_id)."""
     if df.empty:
         return None
-    sub = df[["run_id", "run_timestamp"]].dropna(subset=["run_id"])
+    # Require BOTH a run_id AND a run_timestamp: a row with a null timestamp would otherwise
+    # sort last (na_position='last') and be wrongly selected as the latest run.
+    sub = df[["run_id", "run_timestamp"]].dropna(subset=["run_id", "run_timestamp"])
     if sub.empty:
         return None
     # run_timestamp is ISO-8601, so lexical max == chronological max.

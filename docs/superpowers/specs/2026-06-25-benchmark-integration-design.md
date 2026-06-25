@@ -3,6 +3,34 @@
 Status: design approved verbally (user delegated full autonomous implementation overnight).
 Builds on the frozen benchmark contract `2026-06-24-agent-benchmark-evaluation-design.md`.
 
+## REVISION 2026-06-26b (user feedback after the first build; user asleep, "tu prends les decisions")
+
+The single 3-tab LAB webapp is SPLIT into TWO separate DSS standard webapps in `OWIsMind_LAB`,
+so the launch/config surface is simply not exposed to consultation users (no admin gating):
+- **`benchmark_webapp/results/`** - PUBLIC results display ONLY. Read-only backend (zero write
+  routes). Must be CREATIVE and understandable by a NON-technical person ("Bernadette de la
+  finance"): no unexplained jargon (no bare "p50", "taux d'erreur", "n=12"); a plain-language
+  confidence verdict ("OWIsMind answered X of Y questions correctly"), simple labels + short
+  explanations / info tooltips. Goal: build TRUST in the tool.
+- **`benchmark_webapp/launcher/`** - configure + launch + review-and-promote suggestions. A REAL
+  FORM interface (pick agents / modes / question filter / concurrency / language via controls),
+  NOT a raw JSON editor. The form merges into the `benchmark` variable server-side, PRESERVING
+  every key it does not manage (dataset names, judge_llm_id, suggestions block, score/aggregate).
+
+Both webapps are **bilingual: English default, French available** (a language toggle persisted
+client-side); code + comments stay English. Numbers are formatted client-side per locale.
+
+**SQL safety (user emphasis): READ + APPEND ONLY, extremely prudent.** The LAB project's SQL
+connection can see ALL tables on it (incl. the webapp's chat/suggestion tables). Therefore: every
+statement on the shared connection is a bounded, read-only `SELECT` (the suggestion read);
+NEVER an UPDATE / DELETE / DROP / TRUNCATE / INSERT on the shared connection. The only writes are
+APPEND-style writes to LAB Flow datasets (the golden + a promoted-ids log) via the Dataset API,
+never raw SQL. A dedicated security/danger audit workflow runs at the very end.
+
+Process (user request): iterate each webapp build -> critic panel -> correct -> re-critique ->
+re-correct; then critique+improve the benchmark system + the suggestion storage + their
+appearance; then the final SQL/instance security audit.
+
 ## 1. Goal
 
 Turn the standalone benchmark (datasets + project library + scenario in `OWIsMind_LAB`)

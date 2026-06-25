@@ -41,18 +41,51 @@ def _get_variables():
 
 
 def _load_golden_rows(golden_dataset):
-    """Read the golden dataset, normalize, keep active rows. Returns list[dict]."""
+    """Read the golden dataset, normalize, validate, keep active+valid rows. Returns list[dict].
+
+    Invalid rows are SKIPPED with a step-log line (not run): a mis-authored row (e.g. an
+    expected_value with no expected_value_type) would otherwise reach the objective anchor as a
+    silent 'string' containment and corrupt the deterministic ground truth (a wrong answer could
+    be scored 'hit'). The validator never raises, so this only filters - it cannot fail the run.
+    """
     df = dataiku.Dataset(golden_dataset).get_dataframe()
     # NaN -> None so the pure normalizer / validator see real blanks. astype(object)
     # first: on a numeric column, where(..., None) would otherwise re-coerce None
     # back to NaN (pandas keeps the float dtype).
     df = df.astype(object).where(pd.notnull(df), None)
     rows = []
+    skipped = 0
     for record in df.to_dict(orient="records"):
         norm = schemas.normalize_golden_row(record)
-        if norm.get("active"):
-            rows.append(norm)
+        if not norm.get("active"):
+            continue
+        ok, errors = schemas.validate_golden_row(norm)
+        if not ok:
+            skipped += 1
+            print("benchmark: skipping invalid golden row {0}: {1}".format(
+                norm.get("question_id"), "; ".join(errors)))
+            continue
+        rows.append(norm)
+    if skipped:
+        print("benchmark: skipped {0} invalid golden row(s)".format(skipped))
     return rows
+
+
+# The only keys question_filter recognizes; anything else is a typo that would silently
+# widen the run to the WHOLE golden set (one real agent call per question x agent x mode).
+_KNOWN_FILTER_KEYS = ("categories", "languages", "question_ids")
+
+
+def _warn_unknown_filter_keys(question_filter):
+    """Log any unrecognized question_filter key so a typo (e.g. 'category' / 'ids') is visible
+    in the step log instead of silently running the full matrix. Never raises."""
+    if not isinstance(question_filter, dict):
+        return
+    unknown = [k for k in question_filter if k not in _KNOWN_FILTER_KEYS]
+    if unknown:
+        print("benchmark: ignoring unknown question_filter key(s) {0} "
+              "(known: {1}) - the filter on those keys is NOT applied".format(
+                  sorted(unknown), list(_KNOWN_FILTER_KEYS)))
 
 
 def _matches_filter(row, question_filter):
@@ -88,6 +121,7 @@ def run():
     run_id = uuid.uuid4().hex
     run_timestamp = datetime.now().isoformat()
 
+    _warn_unknown_filter_keys(cfg["question_filter"])
     golden = [
         row for row in _load_golden_rows(cfg["golden_dataset"])
         if _matches_filter(row, cfg["question_filter"])
