@@ -90,3 +90,13 @@ def build_message(question, mode, language):
     if tokens:
         return base + " " + tokens
     return base
+
+
+def build_plain_message(question):
+    """Return the bare question, with NO control token at all.
+
+    Used for an agent that does not support the Smart/Pro/Claude modes (a plain
+    visual agent): a single simple call, the agent answers in its default mode.
+    Pure, never raises.
+    """
+    return (question or "").strip()

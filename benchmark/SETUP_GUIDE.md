@@ -46,13 +46,14 @@ complete que voit le juge.
 ### Le Flow cible (dans OWIsMind_LAB)
 
 ```
-  golden_intake (upload Excel/CSV)  --+
-                                      |  (recette d'intake : validation + normalisation)
-                                      v
-                              golden_questions   (dataset editable DSS, canonique)
-                                      |
-                                      |  scenario Run_Benchmark
-                                      v
+  golden_questions_v1 (questions + reponses) --+
+                                               |  (recette de preparation: validation / normalisation)
+                                               v
+                   golden_questions_v1_prepared   (le dataset que le benchmark LIT)
+                                               |
+                                               |  scenario Run_Benchmark
+                                               |  (config = variable projet `benchmark`, section 5.3)
+                                               v
    step 2  step_run_matrix.py  ->  benchmark_runs_raw
                                     (capture complete : answer_text, full_answer,
                                      generated_sql_json, latence, ttft, tokens, cout)
@@ -71,9 +72,10 @@ complete que voit le juge.
                               Dashboard DSS (summary + detail + breakdown)
 ```
 
-Les 3 steps sont de minces entrypoints : ils lisent les variables de scenario,
-chargent les datasets, appellent la logique pure du package recolle, et ecrivent
-les datasets de sortie via `write_with_schema`.
+Les 3 steps sont de minces entrypoints : ils lisent UNE variable de projet
+(`benchmark`, section 5.3), chargent les datasets, appellent la logique pure du
+package recolle, et ecrivent les datasets de sortie via `write_with_schema`. Rien
+n'est code en dur (pas meme les noms de datasets) : tu ne touches jamais au code.
 
 ### Les 3 prerequis DSS a verifier (detail pratique en section 9)
 
@@ -117,6 +119,7 @@ python/
     agent_capture.py        (pur : footer -> reponse complete)
     config.py               (pur : ids LLM juge, modes, caps, tokens, build_message)
     schemas.py              (pur : colonnes + enums + validate/normalize golden)
+    run_params.py           (pur : LA config de run, lue depuis la variable `benchmark`)
     agent_runner.py         (dataiku lazy : run matrice, capture, latence, concurrence)
     judge.py                (dataiku lazy : ancre objective + juge LLM + correctness)
     scoring.py              (pur : summarize + breakdown)
@@ -158,8 +161,8 @@ on REMPLACE ce qui est casse. Important : ne rien supprimer avant d'avoir valide
 que le nouveau pipeline marche. Renommer / desactiver d'abord, supprimer ensuite.
 
 A GARDER (graine) :
-- **Le golden Excel des stagiaires** : il sert de graine pour initialiser
-  `golden_questions` (section 3, avec un mapping de colonnes).
+- **Le golden Excel des stagiaires** : il sert de graine pour remplir
+  `golden_questions_v1_prepared` (section 3, avec un mapping de colonnes).
 - **Le dashboard existant** : on le RECABLE sur les nouveaux datasets (section 8),
   on ne le refait pas de zero.
 
@@ -183,10 +186,14 @@ n'est pas vert (lecon repo L087 : on conseille avant de supprimer).
 
 ---
 
-## 3. Creer le dataset golden_questions
+## 3. Le dataset des questions (golden_questions_v1_prepared)
 
-C'est le golden set enrichi : les questions, les bonnes reponses, et la valeur
-exacte attendue pour l'ancre objective.
+C'est le golden set : les questions, les bonnes reponses, et la valeur exacte
+attendue pour l'ancre objective. Le dataset que le benchmark LIT est celui pointe
+par `benchmark.golden_dataset` (defaut `golden_questions_v1_prepared`). Peu importe
+comment tu le remplis (dataset editable, ou un brut `golden_questions_v1` + une
+recette de preparation -> `golden_questions_v1_prepared`) : ce qui compte est que
+le dataset lu porte les colonnes du schema 3.1.
 
 ### 3.1 Schema EXACT (depuis `benchmark/schemas.py`, `GOLDEN_COLUMNS`)
 
@@ -233,28 +240,27 @@ reponse contient un fait net (un nombre, un montant, une date, une courte liste)
 Le reste se mappe ou se met par defaut. Le prompt d'import (section 3.5) fait ce
 travail automatiquement.
 
-### 3.3 Le dataset editable + la recette d'intake
+### 3.3 Remplir / preparer le dataset
 
-Deux chemins convergent vers `golden_questions`. Choisir la mise en place :
+Deux mises en place possibles (au choix) ; le benchmark lit toujours le dataset
+nomme dans `benchmark.golden_dataset` :
 
-- **Dataset editable DSS** (recommande pour iterer) : Flow -> **+ Dataset** ->
-  **Editable**. Le nommer `golden_questions`. Definir les colonnes du schema 3.1.
-  L'initialiser en collant les lignes de l'Excel mappe. Edition en ligne,
-  versionnable.
-- **Intake Excel/CSV** (pour reimporter en lot) :
-  1. Uploader l'Excel comme dataset `golden_intake` (Flow -> + Dataset -> Upload).
-  2. Creer une recette **Python** `golden_intake -> golden_questions` qui valide et
-     normalise. Corps de recette a ecrire (court), s'appuyant sur le package :
+- **Dataset editable DSS** (simple) : un dataset editable nomme directement
+  `golden_questions_v1_prepared`, colonnes du schema 3.1, edite en ligne.
+- **Brut + recette de preparation** (ton montage actuel) : un dataset brut
+  `golden_questions_v1` (upload Excel ou editable) -> une recette **Python** ->
+  `golden_questions_v1_prepared`. La recette valide / normalise contre le schema
+  via le package. Corps de recette (court) :
 
 ```python
 import dataiku
 import pandas as pd
 from benchmark import schemas
 
-df = dataiku.Dataset("golden_intake").get_dataframe()
+df = dataiku.Dataset("golden_questions_v1").get_dataframe()
 df = df.where(pd.notnull(df), None)
 
-# Mapping des colonnes stagiaire -> canonique (adapter aux vrais en-tetes).
+# Mapping des colonnes source -> canonique (adapter aux vrais en-tetes).
 RENAME = {"reference_answer_matben": "reference_answer", "question_text": "question",
           "theme": "category"}
 df = df.rename(columns=RENAME)
@@ -270,16 +276,15 @@ for i, record in enumerate(df.to_dict(orient="records")):
 
 if errors:
     # Echec clair, jamais d'ecriture partielle silencieuse.
-    raise ValueError("golden intake validation failed:\n" + "\n".join(errors))
+    raise ValueError("golden validation failed:\n" + "\n".join(errors))
 
 out = pd.DataFrame(clean, columns=list(schemas.GOLDEN_COLUMNS))
-dataiku.Dataset("golden_questions").write_with_schema(out)
+dataiku.Dataset("golden_questions_v1_prepared").write_with_schema(out)
 ```
 
-Regle de merge (si vous gardez les deux sources) : union par `question_id`,
-l'editable l'emporte sur l'upload en cas de collision (defaut propose par le
-design ; a affiner si besoin). Au depart, un seul `golden_questions` editable
-suffit.
+Le plus rapide : faire produire directement `golden_questions_v1_prepared` au bon
+schema par le prompt d'import (section 3.5), et ne garder cette recette que si tu
+veux revalider un import en lot.
 
 ### 3.4 Exemple de questions (revenus + tickets)
 
@@ -310,9 +315,10 @@ Comment l'ancre objective compare (sur la reponse COMPLETE : texte + lignes SQL)
 Pour eviter de transformer le dataset ground-truth a la main, utilisez le prompt
 pret a l'emploi `benchmark/GOLDEN_IMPORT_PROMPT.md` : vous le collez dans votre IA
 interne avec votre dataset existant (questions + bonnes reponses), elle produit le
-CSV au schema `golden_questions` ci-dessus (y compris l'extraction de
-`expected_value` + `expected_value_type` quand un fait net existe). Vous importez
-ensuite ce CSV via la section 3.3.
+CSV au schema 3.1 ci-dessus (y compris l'extraction de `expected_value` +
+`expected_value_type` quand un fait net existe). Vous chargez ce CSV dans
+`golden_questions_v1_prepared` (ou dans le brut `golden_questions_v1` + recette de
+preparation, section 3.3).
 
 ---
 
@@ -395,53 +401,85 @@ Chaque step importe le package recolle (`from benchmark import ...`). Les steps
 sont sequentiels : step 3 lit ce que step 2 a ecrit (par defaut le dernier
 `run_id`), step 4 lit ce que step 3 a ecrit.
 
-### 5.3 Les VARIABLES de scenario (noms EXACTS lus par step_run_matrix.py)
+### 5.3 LA configuration : une seule variable projet `benchmark`
 
-A definir dans **Scenario -> Settings -> Variables** (ou dans les variables
-projet). Les noms ci-dessous sont ceux que le code lit (ne pas en inventer
-d'autres). Les variables arrivent comme des chaines : les listes / objets se
-passent en JSON.
+IMPORTANT : selon les versions de DSS, le scenario n'a PAS d'onglet "Variables".
+Toute la config vit donc dans les **variables de projet** (lues par le code via
+`dataiku.get_custom_variables()`). Et tout est regroupe dans UN seul objet, pour
+ne JAMAIS toucher au code : tu n'edites que le dataset des questions et cet objet.
 
-| variable | lue par | role | exemple |
+Ou : `OWIsMind_LAB` -> menu projet (engrenage) -> **Variables**. Dans la section
+**Local variables** (overrides, non exportes au bundle ; c'est la qu'on met la
+config de run), AJOUTE une clef `benchmark` a l'objet JSON existant (ne remplace
+PAS le reste, fusionne) :
+
+```json
+{
+  "...tes variables existantes...": "...",
+  "benchmark": {
+    "golden_dataset": "golden_questions_v1_prepared",
+
+    "agents": [
+      {"agent_key": "orchestrator",
+       "agent_label": "OWIsMind Orchestrator (DEV)",
+       "project_key": "OWISMIND_DEV",
+       "agent_id": "agent:038G7mlF",
+       "modes": true}
+    ],
+
+    "modes": ["eco", "medium", "high"],
+    "language": "fr",
+    "concurrency": 3,
+    "question_filter": {}
+  }
+}
+```
+
+Toutes les clefs de l'objet `benchmark` (defaut applique si absente) :
+
+| clef | lue par | role | defaut |
 |---|---|---|---|
-| `bench_agents` | step 2 (REQUISE) | liste JSON des agents a benchmarker | voir ci-dessous |
-| `bench_modes` | step 2 | sous-ensemble de eco/medium/high (liste JSON ou chaine virgule) | `["eco","medium","high"]` |
-| `bench_language` | step 2 | `fr` ou `en` (defaut `fr`) | `fr` |
-| `bench_concurrency` | step 2 | taille du pool borne (defaut 3, plafonne a 8) | `3` |
-| `bench_question_filter` | step 2 | filtre JSON optionnel par-dessus active=True | voir ci-dessous |
-| `bench_score_all_runs` | step 3 | `true` pour re-juger tous les run_id (defaut : dernier run) | `false` |
-| `bench_judge_llm_id` | step 3 | override de l'id du modele juge (defaut `config.JUDGE_LLM_ID`) | (vide) |
-| `bench_aggregate_all_runs` | step 4 | `true` pour agreger tous les run_id (defaut : dernier) | `false` |
+| `agents` | step 2 (REQUISE) | liste des agents a benchmarker (voir plus bas) | aucun (erreur claire si vide) |
+| `golden_dataset` | step 2 | dataset des questions | `golden_questions_v1_prepared` |
+| `modes` | step 2 | modes testes sur les agents qui les supportent | `["eco","medium","high"]` |
+| `language` | step 2 | `fr` ou `en` | `fr` |
+| `concurrency` | step 2 | pool borne (clampe 1..8) | `3` |
+| `question_filter` | step 2 | filtre optionnel (voir plus bas) | `{}` |
+| `raw_dataset` | step 2 | dataset de sortie brut | `benchmark_runs_raw` |
+| `scored_dataset` | step 3 | dataset de detail note | `benchmark_runs_scored` |
+| `summary_dataset` | step 4 | dataset de synthese | `benchmark_summary` |
+| `breakdown_dataset` | step 4 | dataset par categorie | `benchmark_breakdown` |
+| `judge_llm_id` | step 3 | override du modele juge | `config.JUDGE_LLM_ID` (Sonnet) |
+| `score_all_runs` | step 3 | `true` = re-juger tous les run_id | `false` (dernier run) |
+| `aggregate_all_runs` | step 4 | `true` = agreger tous les run_id | `false` (dernier run) |
 
-`bench_agents` (REQUISE) : une liste d'objets, chacun avec `agent_key`,
-`agent_label`, `project_key`, `agent_id`. Cible par defaut = l'orchestrateur DEV de
-bout en bout (l'experience utilisateur reelle) :
+**Les agents (`agents`)** : une liste d'objets `{agent_key, agent_label,
+project_key, agent_id, modes}`. La cible par defaut = l'orchestrateur DEV de bout
+en bout (l'experience reelle). Tous les agents d'un meme run doivent partager le
+MEME `project_key` (un melange leve une erreur claire qui dit de scinder le run).
+Pour isoler un sous-agent (DEV) : revenue `agent:bHrWLyOL`, tickets `agent:NcE9LD2i`.
+
+**Le flag `modes` PAR agent** (ta precision) :
+- `"modes": true` : l'agent supporte le Smart/Pro/Claude (l'orchestrateur). Il est
+  teste une fois par mode de la liste `modes`, avec le token de mode ajoute.
+- `"modes": false` ou absent : l'agent ne les supporte pas (un visual agent
+  simple). Un SEUL appel "nu" (sans token), l'agent repond dans son mode par
+  defaut. C'est suffisant. La ligne de resultat porte `mode = "default"`.
+
+Donc on melange sans souci des agents a modes et des agents simples dans la meme
+liste : chacun est appele comme il faut.
+
+**Le filtre (`question_filter`)**, optionnel (AND entre clefs, OR a l'interieur) :
 
 ```json
-[
-  {"agent_key": "orchestrator", "agent_label": "OWIsMind Orchestrator (DEV)",
-   "project_key": "OWISMIND_DEV", "agent_id": "agent:038G7mlF"}
-]
+{"categories": ["revenus"], "question_ids": ["Q001", "Q002"], "languages": ["fr"]}
 ```
 
-Tous les agents d'un meme run doivent partager le MEME `project_key` (le step ouvre
-une seule poignee de projet pour resoudre les LLM ; un melange de project_key leve
-une erreur claire qui vous dit de scinder en plusieurs runs). Pour isoler un
-sous-agent precis au lieu de l'orchestrateur (DEV) : revenue
-`agent:bHrWLyOL`, tickets `agent:NcE9LD2i`.
+Il s'applique PAR-DESSUS `active=True` : une question doit etre active ET passer le
+filtre. Filtre vide = toutes les questions actives.
 
-`bench_modes` exemple : `["eco","medium","high"]`. Le code ne garde que les modes
-connus et impose l'ordre canonique eco -> medium -> high.
-
-`bench_question_filter` (optionnel, AND entre clefs, OR a l'interieur d'une clef) :
-
-```json
-{"categories": ["revenus"], "question_ids": ["Q001", "Q002"],
- "languages": ["fr"]}
-```
-
-Le filtre s'applique PAR-DESSUS `active=True` : une question doit etre active ET
-passer le filtre. Filtre vide = toutes les questions actives.
+Note : apres avoir change une variable de projet, relance simplement le scenario
+(les steps relisent les variables a chaque run).
 
 ---
 
@@ -451,11 +489,9 @@ But : prouver la chaine de capture AVANT de lancer la matrice complete. On verif
 le point cle : `generated_sql` et les LIGNES de resultat sont bien captures, pas
 juste le texte.
 
-1. Reduire le perimetre via les variables :
-   - `bench_question_filter` = `{"question_ids": ["Q001"]}` (ou Q001 + Q002).
-   - `bench_modes` = `["eco"]`.
-   - `bench_concurrency` = `1`.
-   - `bench_agents` = l'orchestrateur DEV (section 5.3).
+1. Reduire le perimetre dans la variable `benchmark` (section 5.3) :
+   `"question_filter": {"question_ids": ["Q001"]}`, `"modes": ["eco"]`,
+   `"concurrency": 1`, et `agents` = l'orchestrateur DEV (`modes: true`).
 2. Lancer : ouvrir le scenario `Run_Benchmark`, bouton **Run** (Run now). Au depart
    on peut ne lancer QUE le step 2 (`Run matrix`) pour isoler la capture, puis
    ajouter juge + aggregate.
@@ -483,9 +519,9 @@ juste le texte.
 
 ## 7. Run complet + lecture des resultats
 
-1. Elargir le perimetre : `bench_question_filter` = `{}` (toutes les questions
-   actives), `bench_modes` = `["eco","medium","high"]`, `bench_concurrency` = `3`,
-   `bench_agents` = l'agent (ou les agents) voulu(s).
+1. Elargir le perimetre dans la variable `benchmark` : `"question_filter": {}`
+   (toutes les questions actives), `"modes": ["eco","medium","high"]`,
+   `"concurrency": 3`, et `agents` = l'agent (ou les agents) voulu(s).
 2. Lancer le scenario complet (Run now). Chaque run = un resultat complet identifie
    par un `run_id` unique (stampe par le step). Les 3 steps s'enchainent.
 
@@ -525,8 +561,8 @@ revenus mais faible en tickets". Filtrer par `bucket` (la categorie).
 Chaque run porte un `run_id` + `run_timestamp` + un snapshot de config
 (`config_json`). Par defaut, step 3 et step 4 ne traitent QUE le dernier `run_id`.
 Pour comparer plusieurs runs dans le temps (regression / evolution apres un recoll
-d'agent) : mettre `bench_score_all_runs` = `true` et `bench_aggregate_all_runs` =
-`true`, et empiler les `benchmark_runs_raw` de plusieurs runs (union par `run_id`).
+d'agent) : mettre `score_all_runs` et `aggregate_all_runs` a `true` dans la variable
+`benchmark`, et empiler les `benchmark_runs_raw` de plusieurs runs (union par `run_id`).
 Le summary aura alors une ligne par (run_id x agent x mode) : on lit la difference
 d'`accuracy` / latence / cout entre deux `run_id` pour mesurer une regression.
 
@@ -677,9 +713,9 @@ print(out)
 
 Attendu : un dict avec `verdict` = `correct`, `score` >= 4, `error` = None. Si
 `error` est rempli (`get_llm failed` / `json_mode_unavailable`) -> l'id n'est pas le
-bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Corriger
-`config.JUDGE_LLM_ID` au repo (ou passer `bench_judge_llm_id` en variable), recoller
-`config.py`.
+bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Le plus
+simple : poser `benchmark.judge_llm_id` (variable projet) sur un modele qui supporte
+le JSON. Sinon corriger le defaut `config.JUDGE_LLM_ID` au repo et recoller `config.py`.
 
 ---
 
@@ -701,14 +737,14 @@ bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Corrig
   et ne plante jamais (footer illisible -> `[]`).
 - **Timeouts.** `status="timeout"` : l'appel a depasse `per_call_timeout_s` (120 s,
   `config.PER_CALL_TIMEOUT_S`). Le run continue (pas de retry, instance protegee).
-  Si beaucoup de timeouts : baisser `bench_concurrency`, ou augmenter le timeout au
-  repo (`config.PER_CALL_TIMEOUT_S`) en restant raisonnable pour l'instance.
+  Si beaucoup de timeouts : baisser `benchmark.concurrency`, ou augmenter
+  `benchmark.per_call_timeout_s` (en restant raisonnable pour l'instance).
 - **Le juge renvoie un JSON invalide.** Le juge ne plante jamais le run : il rend un
   dict sur avec `verdict=None` et un `error` rempli, la ligne est marquee
   `needs_review`. Le code tente d'abord `with_json_output`, puis un parse tolerant
   (fence ```json, premier bloc `{...}`). Si l'`error` persiste : le modele juge ne
-  supporte pas le JSON mode -> changer `bench_judge_llm_id` pour un modele qui le
-  supporte (Sonnet le fait).
+  supporte pas le JSON mode -> changer `benchmark.judge_llm_id` pour un modele qui
+  le supporte (Sonnet le fait).
 - **Le mode n'est pas pris en compte.** L'agent semble repondre pareil quel que soit
   le mode. Verifier le token : `config.build_message(q, "high", "fr")` doit finir par
   le token exact `⟦owi:mode=high⟧` (avec les vrais crochets U+27E6 / U+27E7). Le
@@ -731,7 +767,7 @@ bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Corrig
 ## 11. Promotion DEV -> PROD + evolutions (pointeurs, hors scope maintenant)
 
 - **Promotion.** Une fois le benchmark valide sur DEV (orchestrateur
-  `agent:038G7mlF`), benchmarker la PROD = changer `bench_agents` pour
+  `agent:038G7mlF`), benchmarker la PROD = changer `benchmark.agents` pour
   l'orchestrateur PROD :
   `{"agent_key":"orchestrator","agent_label":"OWIsMind Orchestrator (PROD)",
   "project_key":"OWISMIND_PROD_V1","agent_id":"agent:Xrv7GvfG"}`. Meme discipline
@@ -755,17 +791,15 @@ bon ou le mode JSON n'est pas dispo sur ce modele dans la connexion Mesh. Corrig
 - [ ] OWIsMind_LAB assaini : golden Excel garde comme graine, dashboard garde, vieux
       step texte-seul + `benchmark_raw_results` + recette juge visuelle desactives
       (pas supprimes avant validation).
-- [ ] Dataset `golden_questions` cree (schema `GOLDEN_COLUMNS`), initialise depuis
-      l'Excel mappe, avec `expected_value` + `expected_value_type` remplis quand un
-      fait net existe (via le prompt d'import section 3.5).
-- [ ] (optionnel) Recette d'intake `golden_intake -> golden_questions` avec
-      `schemas.validate_golden_row`.
+- [ ] Dataset des questions pret : `golden_questions_v1_prepared` (schema
+      `GOLDEN_COLUMNS`), avec `expected_value` + `expected_value_type` remplis quand
+      un fait net existe (via le prompt d'import section 3.5).
 - [ ] Datasets de sortie prets : `benchmark_runs_raw`, `benchmark_runs_scored`,
       `benchmark_summary`, `benchmark_breakdown` (crees / ecrits par les steps).
 - [ ] Scenario `Run_Benchmark` : step 2 (`step_run_matrix.py`), step 3
       (`step_judge.py`), step 4 (`step_aggregate.py`), code env 3.x avec pandas.
-- [ ] Variables de scenario reglees : `bench_agents` (REQUISE),
-      `bench_modes`, `bench_language`, `bench_concurrency`, `bench_question_filter`.
+- [ ] Variable projet `benchmark` reglee (section 5.3) : `agents` (REQUISE, avec le
+      flag `modes` par agent), `golden_dataset`, `modes`, `language`, `concurrency`.
 - [ ] Prerequis DSS verifies : footer trace cross-projet recu, footer reel fige en
       fixture, id du LLM juge confirme.
 - [ ] Smoke run OK (1-2 questions, eco, concurrence 1) : `generated_sql_json` et les

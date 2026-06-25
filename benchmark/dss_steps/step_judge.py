@@ -8,14 +8,12 @@ Mesh, Sonnet, with_json_output) - combines them with the deterministic
 correctness rule, and writes ``benchmark_runs_scored`` (the readable detail
 table).
 
-Scenario variables read (optional):
-  - ``bench_score_all_runs`` : "true" to re-judge every run_id in the raw dataset.
-                               Default false (judge only the latest run_id, the
-                               common case right after step_run_matrix).
-  - ``bench_judge_llm_id``   : override the judge model id. Default config.JUDGE_LLM_ID.
-
-Input dataset : benchmark_runs_raw
-Output dataset: benchmark_runs_scored
+Config read from the single ``benchmark`` project variable (run_params.py):
+  - ``score_all_runs`` : true to re-judge every run_id in the raw dataset.
+                         Default false (judge only the latest run_id, the common
+                         case right after step_run_matrix).
+  - ``judge_llm_id``   : override the judge model id. Default config.JUDGE_LLM_ID.
+  - ``raw_dataset`` / ``scored_dataset`` : input / output dataset names.
 
 Instance safety: the judge is one bounded LLM call per row over a small golden
 set; agent answers are already captured, so this step makes no agent calls.
@@ -26,12 +24,8 @@ import json
 import dataiku
 import pandas as pd
 
-from benchmark import config, schemas
+from benchmark import config, schemas, run_params
 from benchmark import judge
-
-
-RAW_DATASET = "benchmark_runs_raw"
-SCORED_DATASET = "benchmark_runs_scored"
 
 
 def _get_variables():
@@ -40,15 +34,6 @@ def _get_variables():
         return dataiku.get_custom_variables() or {}
     except Exception:
         return {}
-
-
-def _as_bool(value):
-    """Coerce a string-ish scenario variable to bool."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes", "y", "oui")
-    return bool(value)
 
 
 def _latest_run_id(df):
@@ -143,11 +128,11 @@ def _score_row(project, row, judge_llm_id):
 
 def run():
     """Judge benchmark_runs_raw and write benchmark_runs_scored."""
-    variables = _get_variables()
-    score_all = _as_bool(variables.get("bench_score_all_runs"))
-    judge_llm_id = variables.get("bench_judge_llm_id") or config.JUDGE_LLM_ID
+    cfg = run_params.resolve(_get_variables())
+    score_all = cfg["score_all_runs"]
+    judge_llm_id = cfg["judge_llm_id"]
 
-    df = dataiku.Dataset(RAW_DATASET).get_dataframe()
+    df = dataiku.Dataset(cfg["raw_dataset"]).get_dataframe()
     df = df.where(pd.notnull(df), None)
 
     if not score_all:
@@ -164,7 +149,7 @@ def run():
         for row in df.to_dict(orient="records")
     ]
 
-    out = dataiku.Dataset(SCORED_DATASET)
+    out = dataiku.Dataset(cfg["scored_dataset"])
     if scored_rows:
         frame = pd.DataFrame(
             [{col: r.get(col) for col in schemas.SCORED_COLUMNS} for r in scored_rows],

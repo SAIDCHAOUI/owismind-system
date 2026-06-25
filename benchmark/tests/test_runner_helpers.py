@@ -115,11 +115,24 @@ def _golden(qid="q001", question="Quel est le revenu du compte X ?"):
 
 
 def _agent(key="orchestrator", agent_id="agent:038G7mlF"):
+    # Mode-aware agent (the orchestrator): tested across modes.
     return {
         "agent_key": key,
         "agent_label": "OWIsMind orchestrator",
         "project_key": "OWISMIND_DEV",
         "agent_id": agent_id,
+        "modes": True,
+    }
+
+
+def _visual_agent(key="viz", agent_id="agent:viz"):
+    # Plain agent without modes: a single default call, no token.
+    return {
+        "agent_key": key,
+        "agent_label": "Visual agent",
+        "project_key": "OWISMIND_DEV",
+        "agent_id": agent_id,
+        "modes": False,
     }
 
 
@@ -179,6 +192,29 @@ class TestExpandMatrix(unittest.TestCase):
         self.assertEqual(len(questions), 1)
         self.assertEqual(len(agents), 1)
         self.assertEqual(modes, ["eco"])
+
+    def test_no_modes_agent_yields_single_default_task(self):
+        # A non-mode agent gets ONE task tagged "default", whatever the modes list.
+        tasks = agent_runner.expand_matrix(
+            [_golden("q1")], [_visual_agent()], ["eco", "medium", "high"])
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["mode"], "default")
+
+    def test_mixed_mode_and_plain_agents(self):
+        orch = _agent("orch")        # modes True -> one task per mode
+        viz = _visual_agent("viz")   # modes False -> one default task
+        tasks = agent_runner.expand_matrix(
+            [_golden("q1")], [orch, viz], ["eco", "high"])
+        pairs = [(t["agent"]["agent_key"], t["mode"]) for t in tasks]
+        self.assertEqual(
+            pairs, [("orch", "eco"), ("orch", "high"), ("viz", "default")])
+
+    def test_modes_absent_defaults_to_no_modes(self):
+        # An agent descriptor without a "modes" key is treated as non-mode.
+        plain = {"agent_key": "x", "project_key": "P", "agent_id": "agent:x"}
+        tasks = agent_runner.expand_matrix([_golden("q1")], [plain], ["eco", "high"])
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["mode"], "default")
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +362,20 @@ class TestRunOne(unittest.TestCase):
             None, _agent(), _golden(), "eco", "fr", timeout=120)
         self.assertEqual(row["status"], "error")
         self.assertEqual(set(row.keys()), set(schemas.RAW_COLUMNS))
+
+    def test_no_modes_agent_sends_plain_message_no_token(self):
+        # A non-mode agent on the "default" label gets the bare question, no token:
+        # a simple call, the agent answers in its default mode.
+        trace = _trace_with_sql("SELECT 1", rows=[[1]], columns=["n"])
+        completion = _FakeCompletion([_text_chunk("ok"), _footer_chunk(trace)])
+        project = _FakeProject(completion=completion)
+        row = agent_runner.run_one(
+            project, _visual_agent(), _golden(), "default", "fr", timeout=120)
+        self.assertEqual(row["status"], "ok")
+        self.assertEqual(row["mode"], "default")
+        sent, role = completion.messages[0]
+        self.assertNotIn("owi:mode=", sent)
+        self.assertNotIn("owi:lang=", sent)
 
     def test_footer_recognised_by_isinstance_fallback(self):
         # Some SDKs deliver the footer as a dedicated chunk class WITHOUT stamping

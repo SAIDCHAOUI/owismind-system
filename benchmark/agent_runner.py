@@ -83,26 +83,50 @@ def _is_footer_chunk(chunk, data, footer_cls):
     return False
 
 
+def _agent_supports_modes(agent):
+    """True when an agent descriptor opts into the Smart/Pro/Claude modes.
+
+    Driven by the per-agent ``modes`` boolean (default False). A mode-aware agent
+    (the orchestrator) is tested across every requested mode with the mode token;
+    an agent without it (a plain visual agent) gets ONE bare call in its default
+    mode. Mirrors the webapp's ``profile.modes`` gate.
+    """
+    return bool(agent.get("modes")) if isinstance(agent, dict) else False
+
+
+# Mode label written on a run row for an agent that does not support modes (a
+# single plain call). Kept distinct from the real eco/medium/high keys.
+DEFAULT_MODE_LABEL = "default"
+
+
 def expand_matrix(questions, agents, modes):
-    """Return the flat list of run tasks = questions x agents x modes (PURE).
+    """Return the flat list of run tasks (PURE), honoring each agent's modes flag.
 
     ``questions`` is a list of golden rows (dicts), ``agents`` a list of agent
-    descriptors (dicts with at least ``agent_key`` / ``project_key`` / ``agent_id``),
-    ``modes`` an iterable of mode keys. Iteration order is question-major, then
-    agent, then mode, which keeps the emitted rows grouped per question for easy
-    reading. Each task is ``{"question_row": <dict>, "agent": <dict>, "mode": <str>}``.
+    descriptors (dicts with ``agent_key`` / ``project_key`` / ``agent_id`` and an
+    optional ``modes`` bool), ``modes`` the requested mode keys. For an agent that
+    supports modes, one task per requested mode; for an agent that does not, ONE
+    task tagged ``mode = "default"`` (a single plain call). Iteration order is
+    question-major, then agent, then mode, keeping rows grouped per question. Each
+    task is ``{"question_row": <dict>, "agent": <dict>, "mode": <str>}``.
 
     Pure and deterministic: no DSS, no mutation of the inputs, never raises on a
-    well-formed list of dicts. Empty inputs yield ``[]``.
+    well-formed list of dicts. Empty questions / agents yield ``[]``.
     """
     tasks = []
-    if not questions or not agents or not modes:
+    if not questions or not agents:
         return tasks
     for question_row in questions:
         for agent in agents:
-            for mode in modes:
+            if _agent_supports_modes(agent):
+                for mode in (modes or []):
+                    tasks.append(
+                        {"question_row": question_row, "agent": agent, "mode": mode}
+                    )
+            else:
                 tasks.append(
-                    {"question_row": question_row, "agent": agent, "mode": mode}
+                    {"question_row": question_row, "agent": agent,
+                     "mode": DEFAULT_MODE_LABEL}
                 )
     return tasks
 
@@ -230,7 +254,12 @@ def run_one(project, agent, question_row, mode, language, timeout,
                         question_row, agent, mode)
     qrow = question_row if isinstance(question_row, dict) else {}
     agent_dict = agent if isinstance(agent, dict) else {}
-    message = config.build_message(qrow.get("question"), mode, language)
+    # Mode-aware agent on a real mode: append the control token. Otherwise (plain
+    # visual agent, or the "default" label): send the bare question (simple call).
+    if _agent_supports_modes(agent_dict) and mode in config.MODES:
+        message = config.build_message(qrow.get("question"), mode, language)
+    else:
+        message = config.build_plain_message(qrow.get("question"))
 
     t0 = time.perf_counter()
     ttft = None
@@ -386,6 +415,7 @@ def run_matrix(run_config, write_row):
                     "agent_label": (a or {}).get("agent_label"),
                     "project_key": (a or {}).get("project_key"),
                     "agent_id": (a or {}).get("agent_id"),
+                    "modes": _agent_supports_modes(a or {}),
                 }
                 for a in agents
             ],

@@ -8,8 +8,9 @@ Mode d'emploi :
 1. Copiez tout le bloc "PROMPT A COLLER" ci-dessous dans votre IA interne.
 2. A la fin, remplacez `<<COLLEZ ICI VOTRE DATASET>>` par vos donnees (CSV, table
    collee, ou export brut : peu importe les noms de colonnes, l'IA s'adapte).
-3. Recuperez le CSV produit et importez-le comme `golden_intake` (section 3.3 du
-   SETUP_GUIDE), ou collez-le directement dans le dataset editable `golden_questions`.
+3. Recuperez le CSV produit et chargez-le dans le dataset lu par le benchmark,
+   `golden_questions_v1_prepared` (ou dans le brut `golden_questions_v1` + recette
+   de preparation, section 3.3 du SETUP_GUIDE).
 
 ---
 
