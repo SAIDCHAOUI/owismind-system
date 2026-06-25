@@ -1,0 +1,92 @@
+"""Benchmark configuration: LLM ids, modes, caps, tolerances, message assembly.
+
+No ``dataiku`` import at top level (kept pure so tests load it stdlib-only). The
+mode / language control tokens are mirrored EXACTLY from the production code, not
+guessed:
+  - the literal: Plugin/owismind/python-lib/owismind/agents/context.py
+    build_user_suffix -> ``"⟦owi:mode={0}⟧".format(mode)``
+  - the parser:  dataiku-agents/OWISMIND/OWISMIND_DEV/agents/
+    OWISMIND_DEV_OWIsMind_orchestrator.py line 137 ->
+    ``_MODE_TOKEN_RE = re.compile(r"⟦owi:mode=([a-z]+)⟧")``
+The brackets are U+27E6 (left white square bracket) and U+27E7 (right). The
+orchestrator strips every ``⟦owi:...⟧`` token before the model sees it,
+so appending the token forces the mode without leaking text into the question.
+"""
+
+# --- modes (Smart / Pro / Claude = eco / medium / high) ---------------------
+# Internal keys are UNCHANGED (eco/medium/high); the webapp display renames them
+# to Smart/Pro/Claude. The benchmark measures one model per mode (design section 1).
+MODES = ("eco", "medium", "high")
+DEFAULT_MODE = "eco"
+
+# Human-facing model name per mode (display only; verify on instance). Mirrors the
+# orchestrator LOOP_LLM_BY_MODE tiers (Gemini Flash-Lite / Gemini Flash / Sonnet).
+MODE_LABELS = {
+    "eco": "Gemini 3.1 Flash-Lite",
+    "medium": "Gemini 3.5 Flash",
+    "high": "Claude Sonnet 4.6",
+}
+
+# --- control-token brackets (U+27E6 / U+27E7), mirrored from production --------
+# Kept as named constants so the exact code points are explicit and greppable.
+_LB = "⟦"  # MATHEMATICAL LEFT WHITE SQUARE BRACKET
+_RB = "⟧"  # MATHEMATICAL RIGHT WHITE SQUARE BRACKET
+
+# --- LLM ids -----------------------------------------------------------------
+# The judge runs on a strong, constant model: the Sonnet id the orchestrator uses
+# as its "high" tier (SONNET_ID in OWISMIND_DEV_OWIsMind_orchestrator.py line 104).
+# verify on instance
+JUDGE_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
+
+# --- run knobs (instance safety: low bounded concurrency, hard timeout) ------
+DEFAULT_CONCURRENCY = 3
+PER_CALL_TIMEOUT_S = 120
+
+# --- scoring ----------------------------------------------------------------
+# Relative tolerance for the numeric / currency objective anchor (0.5%).
+NUMERIC_TOLERANCE = 0.005
+
+# Language names supported by the language token (parity with context.py).
+_LANG_LABEL = {"fr": "French", "en": "English"}
+
+
+def build_mode_token(mode):
+    """Return the exact mode control token, or '' for an unknown / absent mode.
+
+    Mirrors context.py build_user_suffix: ``⟦owi:mode=<mode>⟧``. Only the
+    three known modes produce a token; anything else yields '' (the orchestrator
+    then defaults to 'eco').
+    """
+    if mode in MODES:
+        return "{lb}owi:mode={mode}{rb}".format(lb=_LB, mode=mode, rb=_RB)
+    return ""
+
+
+def build_lang_token(language):
+    """Return the exact language control token, or '' when unknown / absent.
+
+    Mirrors context.py: ``⟦owi:lang=<language>⟧`` (parsed by the
+    orchestrator _LANG_TOKEN_RE and stripped before the model sees it).
+    """
+    if language in _LANG_LABEL:
+        return "{lb}owi:lang={lang}{rb}".format(lb=_LB, lang=language, rb=_RB)
+    return ""
+
+
+def build_message(question, mode, language):
+    """Assemble the message sent to the agent for a benchmark call.
+
+    = the raw question + the machine-only control tokens appended at the END (mode
+    first, then language), matching the recency-anchored placement of the webapp's
+    build_user_suffix. The orchestrator parses and strips both tokens, so the model
+    sees only the question. In this direct-Mesh path there is no profile.modes gate
+    (that lives in the webapp /chat/start): the orchestrator honors the mode token
+    unconditionally, which is exactly what we want to force a mode per run.
+
+    Returns the message string. Pure, never raises.
+    """
+    base = (question or "").strip()
+    tokens = build_mode_token(mode) + build_lang_token(language)
+    if tokens:
+        return base + " " + tokens
+    return base
