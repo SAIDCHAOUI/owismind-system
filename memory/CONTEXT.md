@@ -19,6 +19,28 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🧪 SESSION 2026-06-25 (SYSTÈME DE BENCHMARK / ÉVALUATION DES AGENTS - nouveau package `benchmark/`) -
+repo poussé origin/main ; MATRIX ✅ DSS, JUDGE corrigé NON re-validé DSS.** Vrai système d'ingénieur de
+test des agents (précision/latence/coût **par agent ET par mode**), remplace le bricolage stagiaires
+texte-seul. **Archi Option 1** : projet dédié **`OWIsMind_LAB`** + scénario **`Run_Benchmark`** + librairie
+partagée ; on appelle l'orchestrateur **direct via Mesh** et on reconstruit la réponse COMPLÈTE (texte +
+SQL + lignes + artefacts) depuis le **footer trace** (PAS le chemin webapp). Package repo **`benchmark/`**
+(source de vérité, recollé en project-library) : **`agent_capture.py`** (la clé, réimplémente la capture
+de `streaming.py`/`evidence/capture.py`), `schemas.py` (golden **lean 9 col**), `config.py` (modes
+**Smart/Pro/Claude** traduits en token interne eco/medium/high + juge Sonnet), **`run_params.py`**
+(config UNIQUE depuis la variable projet `benchmark`, **zéro hardcode** noms de datasets inclus),
+`judge.py` (**ancre objective déterministe + juge LLM structuré + needs_review**), `scoring.py`,
+`agent_runner.py` (matrice agent×mode, concurrence bornée, latence/tokens/coût), `dss_steps/` (3 steps).
+**Flag `modes` PAR agent** : mode-aware -> testé sur les modes + token ; sinon **1 appel simple, mode
+`default`**. Datasets managés : `golden_questions_v1_prepared` (lu) -> `benchmark_runs_raw` -> `_scored`
+-> `benchmark_summary` + `benchmark_breakdown`. **Agent cible = orchestrateur DEV `agent:038G7mlF`**
+(cross-projet via `project_key`, pas de préfixe dans l'id). Livrables doc : `SETUP_GUIDE.md` (4 étapes),
+`README.md`, **`GOLDEN_IMPORT_PROMPT.md`** (prompt IA interne -> golden). **173 tests, 0 tiret.** Commits
+poussés : `6eb1cb4` (spec) ... `b4b3816` (fix NaN). **À FAIRE DSS (prochaine session)** : re-coller
+`judge.py`+`schemas.py` + les 3 corps de step ; relancer **Judge + Aggregate** sur le raw existant ;
+vérifier scored/summary/breakdown ; run complet + dashboard. Voir **L102** (piège NaN pandas) +
+`sessions/2026-06-25.md`.
+
 **🎨 SESSION 2026-06-24 (FIX UI : pouces feedback + MODES PAR AGENT Smart/Pro/Claude) - repo only,
 DEV packagé, considéré OK par l'user en fin de séance.** (1) **Pouces 👍/👎** illisibles (« carré ») :
 glyphes **pleins** (`icons.js` thumbsUp/thumbsDown filled) + `MessageAgent.vue` boutons à `:size=15` +
@@ -501,7 +523,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-24 (fix UI : pouces feedback + modes par agent Smart/Pro/Claude) → détail `sessions/2026-06-24.md`
+## 🧭 Dernière session - 2026-06-25 (système de benchmark / évaluation des agents) → détail `sessions/2026-06-25.md`
+- **Nouveau package `benchmark/`** (repo = source de vérité, recollé en project-library `OWIsMind_LAB`) : vrai système d'ingénieur de test des agents, **par agent ET par mode** (précision/latence/coût). Appel **direct** de l'orchestrateur via Mesh + reconstruction de la réponse **COMPLÈTE** (texte + SQL + lignes + artefacts) depuis le footer (`agent_capture.py`). Juge = **ancre objective déterministe + LLM structuré** (`needs_review` sur désaccord). **Config UNIQUE** = variable projet `benchmark` (zéro hardcode). **Modes Smart/Pro/Claude** (token interne eco/medium/high traduit), **flag `modes` par agent** (sinon 1 appel simple `default`). Datasets managés `golden_questions_v1_prepared` -> raw -> scored -> summary + breakdown. **173 tests, 0 tiret**, poussé origin/main (`6eb1cb4`..`b4b3816`).
+- ✅ **DSS : step matrix tourne** (capture complète OK). ⏳ Judge corrigé (NaN, **L102**), run complet, dashboard = **NON re-validés DSS**.
+- **À FAIRE DSS (prochaine session)** : re-coller `judge.py`+`schemas.py` + les 3 corps de step ; relancer **Judge + Aggregate** sur le raw existant ; vérifier scored/summary/breakdown ; run complet (3 modes) + dashboard. Livrables : `SETUP_GUIDE.md` (4 étapes), `GOLDEN_IMPORT_PROMPT.md`.
+
+## Avant - 2026-06-24 (fix UI : pouces feedback + modes par agent Smart/Pro/Claude) → détail `sessions/2026-06-24.md`
 - **Repo only ; DEV packagé.** Pouces 👍/👎 illisibles -> glyphes **pleins** (`icons.js`) + `MessageAgent` `:size=15`. Modes **par agent** : flag `modes` (profil), `/agents` l'expose, **`/chat/start` ne relaie le token que si l'agent le supporte** (plus de fuite), toggle admin (`AdminView`), picker masqué sinon (`session.selectedAgentSupportsModes` + `PromptBar v-if`). Renommage **Smart/Pro/Claude** (clés internes eco/medium/high gardées) + code couleur (vert RECOMMANDÉ Smart, rouge avertissement Claude « bien plus cher, épuise le quota 50 $ »).
 - **456 back + 124 front + build OK, 0 tiret**, rendu vérifié navigateur (clair/sombre).
 - **⚠️ Incident** : PROD packagée par erreur -> annulée, prod restaurée à `index-CApWkAm7.js`. Seul le **DEV** est packagé (`owismind_dev-upload.zip`, `index-BKICdg4x.js`). **Règle : en dev, packager UNIQUEMENT le DEV** (mémoire `dev-first-never-touch-prod-artifacts`). À FAIRE DSS : upload DEV (Uploaded) + redémarrer backend + cocher « gère les modes » sur OWIsMind.
@@ -764,6 +791,15 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🧪NEW. **FINIR LE BENCHMARK EN DSS (2026-06-25) - suivre `benchmark/SETUP_GUIDE.md` (4 étapes).** (1) Re-coller
+   `judge.py` + `schemas.py` (lib) + re-coller les 3 corps de step (`dss_steps/*` ont la lecture NaN-safe) ;
+   (2) relancer **Judge + Aggregate** sur le `benchmark_runs_raw` déjà rempli (pas besoin de rappeler l'agent) ;
+   (3) vérifier `benchmark_runs_scored` (objective_match/judge_score/correct/needs_review) + `benchmark_summary`
+   (accuracy, latence p50/p95, coût, par agent×mode) + `benchmark_breakdown` ; (4) **run complet** (Smart/Pro/Claude,
+   concurrency 3) + **recâbler le dashboard** (3 bandes). Config = variable projet `benchmark` (Local variables,
+   modes `["Smart","Pro","Claude"]`, agent `agent:038G7mlF` `modes:true`). Prérequis : figer un **vrai footer**
+   en fixture + confirmer l'id du LLM juge. Plus tard : section webapp, juge en panel, runs planifiés, promotion
+   PROD (`agent:Xrv7GvfG`). Voir **L102** + `sessions/2026-06-25.md`. Le user a dit « on ira plus loin une autre session ».
 0🎫NEW. **FINALISER + POFINER le 2e agent TICKETS (2026-06-19 Run 4) - suivre `dataiku-agents/PLAYBOOK_ADD_AGENT.md`.**
    Recipes (profil + value_index + value_catalogue) ✅ construites en DSS (NA-safe). Reste : (1) **override
    métrique COUNT** (`__dataset__/default_metric=ticket_count` + `avg_duration` AVG, JAMAIS SUM durée ni

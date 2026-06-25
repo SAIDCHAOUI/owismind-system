@@ -398,6 +398,43 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
 
 ---
 
+## 8c. Système de benchmark / évaluation des agents (2026-06-25, ⏳ matrix ✅ DSS / juge non re-validé)
+
+But : mesurer précision (taux de bonnes réponses), latence, coût, tokens **par agent ET par mode**, restitution
+lisible. **Archi (spec `docs/superpowers/specs/2026-06-24-agent-benchmark-evaluation-design.md`)** : projet DSS
+dédié **`OWIsMind_LAB`** (assaini) + scénario **`Run_Benchmark`** (3 steps Python) + **librairie partagée**
+(package repo **`benchmark/` = source de vérité**, recollé en project-library, comme les Code Agents). On appelle
+l'orchestrateur **direct via Mesh** (`get_project(project_key).get_llm(agent_id).execute_streamed()`) et on
+reconstruit la **réponse COMPLÈTE** (texte + SQL + lignes + artefacts) depuis le **footer trace** - PAS le chemin
+webapp HTTP (isolé, prod-safe, vraie latence agent).
+
+- **Package `benchmark/`** : `agent_capture.py` (clé ; réimplémente la capture de `streaming.py` +
+  `evidence/capture.py` ; `assemble_full_answer` = la seule chaîne vue par le juge), `schemas.py` (golden **lean
+  9 col**, RAW/SCORED/SUMMARY/BREAKDOWN, `BREAKDOWN_DIMENSIONS=("category",)`), `config.py` (modes
+  **Smart/Pro/Claude** ; token interne **eco/medium/high** traduit par `build_mode_token` ; `JUDGE_LLM_ID` = Sonnet ;
+  `build_plain_message`), **`run_params.py`** (résolveur de config UNIQUE), `judge.py` (**ancre objective
+  déterministe** numeric/currency/date/string/list + **juge LLM structuré** `with_json_output` + `final_correctness`
+  + `needs_review` sur désaccord), `scoring.py` (`summarize`/`breakdown`, percentiles), `agent_runner.py`
+  (`expand_matrix`/`run_one`/`run_matrix` ; concurrence bornée ; erreurs = lignes), `dss_steps/`
+  (`step_run_matrix`/`step_judge`/`step_aggregate`). Tests : **173 verts** (`python3 -m unittest discover -s
+  benchmark/tests`), NO INSTALL (modules purs stdlib-only ; pandas/dataiku lazy). Doc : `SETUP_GUIDE.md` (4
+  étapes), `README.md`, `GOLDEN_IMPORT_PROMPT.md` (prompt IA interne -> golden).
+- **Config = UNE variable projet `benchmark`** (section Local variables ; le scénario n'a pas d'onglet Variables) :
+  `golden_dataset` (défaut `golden_questions_v1_prepared`), `agents` (liste `{agent_key,agent_label,project_key,
+  agent_id,modes}`), `modes`, `language`, `concurrency`, `question_filter`, datasets de sortie, `judge_llm_id`,
+  `score_all_runs`/`aggregate_all_runs`. **Zéro hardcode** (noms de datasets inclus). **Flag `modes` PAR agent** :
+  `true` = testé sur chaque mode + token ; `false`/absent = **1 appel simple, mode `default`, sans token** (visual agents).
+- **Datasets managés** (dans `OWIsMind_LAB`) : `golden_questions_v1` -> (recette prepare) -> **`golden_questions_v1_prepared`**
+  (lu) -> `benchmark_runs_raw` -> `benchmark_runs_scored` (= détail) -> `benchmark_summary` + `benchmark_breakdown`.
+  Schémas pensés **compatibles SQL `benchmark_*_v1`** pour une future section webapp.
+- **Cible** : orchestrateur **DEV `agent:038G7mlF`** (cross-projet via `project_key=OWISMIND_DEV`, **pas de préfixe
+  dans l'id** ; condition = droits du compte d'exécution sur l'agent). PROD = `agent:Xrv7GvfG` (promotion future).
+- **État** : ✅ **step matrix validé DSS** (capture complète fonctionne) ; ⏳ step **Judge corrigé du crash NaN
+  (L102)** + run complet + summary/breakdown + dashboard = **NON re-validés DSS**. Commits poussés origin/main
+  `6eb1cb4`..`b4b3816`. Détail → `sessions/2026-06-25.md`.
+
+---
+
 ## 9. Maquette cible - SUPPRIMÉE du repo (2026-06-11, conversion terminée)
 
 La maquette (SPA HTML/JS/CSS sans framework, `maquette/` + son paquet de docs de transmission) a servi de

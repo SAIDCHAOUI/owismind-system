@@ -2280,5 +2280,30 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve / vérification** : 456 tests backend + 124 frontend verts (+3 sur le flag `modes`) ; build Vite OK ; 0 tiret (scan Python) ; parité i18n FR/EN ; rendu pouces + picker vérifié au **navigateur réel** (clair + sombre, contrastes AA) ; contenu du zip DEV vérifié (glyphe plein + Smart/Pro/Claude + flag `modes`, base `/plugins/owismind_dev/`). **NON validé DSS au log** (user a dit « ok all good » après ré-upload DEV).
 - **Source** : session 2026-06-24 ; `sessions/2026-06-24.md`. Affine **L091/L092** (discipline UI) + **L094** (DEV/PROD source unique). **Date** : 2026-06-24.
 
+### L102 - Piège pandas NaN : `df.where(pd.notnull(df), None)` ne convertit PAS les NaN en None sur colonne numérique
+- **Contexte** : système de benchmark (`benchmark/`, 2026-06-25). Le step **Judge** a planté en DSS :
+  `AttributeError: 'float' object has no attribute 'strip'` sur `(expected_value_type or "string").strip()`.
+- **Ce qui a échoué / le piège** : une colonne entièrement vide (ex. `expected_value_type` quand aucune
+  question n'a de valeur attendue) est relue par pandas en **`float64 NaN`**. Le pattern habituel
+  `df = df.where(pd.notnull(df), None)` **NE convertit PAS** ces NaN en None : sur une colonne de dtype
+  float, réécrire `None` est **re-coercé en NaN** (le dtype reste float). Et **`float('nan')` est *truthy*** en
+  Python -> `nan or "string"` renvoie `nan` -> `.strip()` casse. (Idem pour `expected_value` numérique relue
+  en float, et pour des `full_answer`/`category` vides.)
+- **Solution qui marche** (3 couches, défense en profondeur) :
+  1. **Code pur défensif** (contrat « ne lève jamais ») : traiter un `float` NaN comme une valeur ABSENTE.
+     Helper `_is_nan(v) = isinstance(v, float) and v != v` ; `judge.objective_anchor` -> NaN = `n/a` + coercition
+     sûre de `expected_value`/type/`full_answer` ; `schemas._is_blank` + `normalize_golden_row` -> NaN -> None
+     (donc le step matrix n'écrit plus de NaN dans `benchmark_runs_raw`).
+  2. **Lecture des datasets** (les 3 `dss_steps/`) : **`df.astype(object).where(pd.notnull(df), None)`** -
+     l'`astype(object)` rend le None « collant » (la colonne n'est plus float), donc NaN -> None pour de vrai.
+  3. Conséquence : le juge corrigé gère même les lignes NaN DÉJÀ écrites dans le raw (pas besoin de refaire le matrix).
+- **Preuve / vérification** : `objective_anchor(nan, nan, "...", [])` -> `n/a` ; `objective_anchor("42", nan, "42 tickets", [])`
+  -> `hit` ; `normalize_golden_row({...,"expected_value_type":nan})["expected_value_type"]` -> `None`. **+5 tests
+  (173 total), 0 tiret.** Crash reproduit dans le log DSS du step Judge, corrigé au repo (commit `b4b3816`).
+  **NON encore re-validé DSS** (user re-collera la prochaine session).
+- **Source** : session 2026-06-25 ; `sessions/2026-06-25.md`. Règle générale : pour relire un dataset DSS en
+  Python et obtenir de vrais None, faire **`astype(object)` AVANT** le `where(pd.notnull(...), None)`, et rendre
+  le code pur **NaN-safe** (`v != v`), ne jamais supposer qu'une cellule vide est None. **Date** : 2026-06-25.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
