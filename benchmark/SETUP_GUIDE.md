@@ -532,21 +532,69 @@ d'`accuracy` / latence / cout entre deux `run_id` pour mesurer une regression.
 
 ---
 
-## 8. Recabler le dashboard existant
+## 8. Le tableau de bord (le beau resultat)
 
-On reutilise le dashboard des stagiaires en le repointant sur les nouveaux
-datasets :
-- Une tuile **Summary** sur `benchmark_summary` (table ou bar chart : `accuracy`,
-  `latency_p50_s`, `avg_cost_per_q` par `agent_label` x `mode`).
-- Une tuile **Detail** sur `benchmark_runs_scored` (table : question,
-  `full_answer`, `judge_verdict`, `judge_score`, `needs_review`) avec un filtre
-  `needs_review = true` en evidence.
-- Une tuile **Breakdown** sur `benchmark_breakdown` (bar chart : `accuracy` par
-  `bucket`, facette par `dimension`).
+Objectif : une page qui parle a n'importe qui en dix secondes. Voici mes agents,
+voici le taux de bonnes reponses, voici les delais par modele, voici le cout, et le
+detail des questions / reponses dessous. On recable le dashboard des stagiaires (ou
+on en cree un neuf : Dashboard -> + New) sur les nouveaux datasets, en 3 bandes.
 
-Editer chaque tuile -> source -> choisir le nouveau dataset -> remapper les
-colonnes. C'est provisoire (restitution webapp differee, hors scope) mais ca donne
-tout de suite la lecture "agents x modes" demandee.
+Regle d'or de lisibilite (a appliquer partout) :
+- `accuracy` est une fraction [0, 1] : la formater en **pourcentage** (axe ou
+  colonne en %, 0 decimale). C'est le chiffre que tout le monde regarde.
+- Une **couleur fixe par mode** sur TOUS les graphiques (ex. Smart/eco, Pro/medium,
+  Claude/high), pour que l'oeil compare les modes d'un coup.
+- Si plusieurs runs sont empiles, ajouter un **filtre `run_id`** sur la page et le
+  fixer au dernier run (sinon les chiffres se melangent entre runs).
+- Titres en clair (pas de noms de colonnes bruts) ; trier les barres par valeur
+  decroissante.
+
+### Bande 1 : les chiffres cles (tuiles "metric", source `benchmark_summary`)
+
+- **Taux de bonnes reponses global** : moyenne de `accuracy` (formatee en %). Le
+  chiffre phare.
+- **Questions testees** : `n_questions` (sur une ligne agent x mode), ou un compte
+  distinct de `question_id` sur `benchmark_runs_scored`.
+- **Configurations testees** : compte de lignes de `benchmark_summary` (= agents x
+  modes).
+- **Cout total** : somme de `total_cost` (+ a cote, somme de `judge_total_cost` pour
+  le cout d'evaluation).
+
+### Bande 2 : la comparaison agent x mode (le coeur)
+
+Trois graphiques cote a cote, tous sur `benchmark_summary`, X = `agent_label`,
+serie / couleur = `mode` :
+
+- **Precision par agent et mode** : barres groupees, Y = `accuracy` (en %). La
+  reponse directe a "quel agent / mode repond le mieux".
+- **Latence par agent et mode** : barres, Y = `latency_p50_s` (mediane) et
+  `latency_p95_s` (queue lente) cote a cote. La reponse a "les delais par modele".
+- **Cout par question** : barres, Y = `avg_cost_per_q`. La reponse a "combien ca
+  coute".
+
+### Bande 3 : detail et qualite
+
+- **Tableau de synthese** (`benchmark_summary`, trie par `accuracy` desc) :
+  `agent_label`, `mode`, `accuracy` (%), `mean_score`, `latency_p50_s`,
+  `latency_p95_s`, `avg_cost_per_q`, `error_rate` (%), `needs_review_count`. C'est
+  la photo complete "agents x modes" sur une ligne chacun.
+- **Precision par categorie** (`benchmark_breakdown`) : barres, X = `bucket`
+  (la categorie), Y = `accuracy` (%), couleur = `mode`. Montre "bon en revenus,
+  faible en tickets".
+- **Tableau de detail** (`benchmark_runs_scored`) : `question`, `category`,
+  `reference_answer`, `full_answer`, `judge_verdict`, `judge_score`,
+  `objective_match`, `correct`, `latency_total_s`, `estimated_cost`,
+  `needs_review`. Ajouter un **filtre `needs_review = true`** bien visible : c'est la
+  pile a relire (desaccords ancre vs juge ou agent en erreur).
+- (Quand plusieurs runs existent) **Evolution dans le temps** : courbe, X =
+  `run_timestamp`, Y = `accuracy` (%), une serie par (`agent_label` x `mode`). Lit
+  une regression d'un run a l'autre.
+
+Pour chaque tuile : editer -> source -> choisir le dataset -> mapper les colonnes
+ci-dessus -> regler l'agregation (les datasets summary / breakdown ont deja une
+ligne par groupe, donc `MAX` ou `AVG` rendent la valeur telle quelle). Ce dashboard
+DSS est la restitution immediate ; la version webapp grand public viendra plus tard
+(les memes datasets la nourriront).
 
 ---
 
