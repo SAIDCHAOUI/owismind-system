@@ -104,8 +104,8 @@ Si `generated_sql_json` reste `[]` sur une question chiffree : voir Depannage.
   par question). Bilingue EN/FR.
 - **Launcher** (interne) : **vrai formulaire** de configuration (agents/modes/filtre/concurrence/
   langue) + bouton Lancer + revue/promotion des questions suggerees par les utilisateurs.
-Montage complet (project-library `views.py`+`dss.py`, permissions, bloc `suggestions`) :
-**`benchmark_webapp/README.md`**.
+**Guide de deploiement pas a pas (le plugin + les 2 webapps + config + tests) :
+`benchmark_webapp/DEPLOY_GUIDE.md`** (reference courte : `benchmark_webapp/README.md`).
 
 **Alternative (zero code)** : un dashboard DSS natif sur les memes datasets, en 3 bandes.
 Regles de lisibilite : formater `accuracy` en **pourcentage**, une **couleur fixe par mode**,

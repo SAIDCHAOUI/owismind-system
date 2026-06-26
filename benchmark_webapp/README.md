@@ -7,6 +7,11 @@ restitution surfaces of the benchmark. No plugin, no Vite, no zip: edited in the
 Design contract: `docs/superpowers/specs/2026-06-25-benchmark-integration-design.md` (see the
 "REVISION 2026-06-26b" section: the surface is SPLIT into two webapps).
 
+> **Deploiement pas a pas (le guide a suivre) : [`DEPLOY_GUIDE.md`](DEPLOY_GUIDE.md).** Il prend
+> par la main pour tout mettre en place (le plugin de capture + les 2 webapps LAB + permissions +
+> variable + tests), avec les explications. Ce README-ci reste la reference courte (mapping
+> fichiers, permissions, caveats).
+
 ## Two webapps, on purpose
 
 - **Results** (`results/`) - PUBLIC consultation, READ-ONLY. Plain-language, trust-building
