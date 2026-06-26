@@ -13,7 +13,6 @@ graphify-out/
 .claude/
 
 # Binary / image assets (no extractable text knowledge)
-docs/screenshots/
 *.png
 *.svg
 *.ico
@@ -21,5 +20,8 @@ docs/screenshots/
 # Temp research corpus for the agentique skill (provenance, not project knowledge)
 docs/agentic-research/
 
-# Style mockup reference (transient: extracted into docs/cadrage/CHARTE_ORANGE_UI.md, then deleted)
-style-reference/
+# Heavy English documentation set: kept on disk for on-demand reading only, but
+# excluded from the graph so it never auto-enters Claude Code agent context
+# (user decision 2026-06-26). Source of truth = memory/ + docs/cadrage/. Stale,
+# to be refreshed in a future session.
+project-documentation/

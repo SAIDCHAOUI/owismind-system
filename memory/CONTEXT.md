@@ -5,6 +5,18 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧹 SESSION 2026-06-26 (NETTOYAGE) - GRAND MENAGE DU REPO + DOC SORTIE DU CONTEXTE AUTO (L108). Repo
+only, 0 code touche, 1132 tests verts.** Reconnaissance multi-agents (7 scouts + verif adversariale, 16
+agents) = **ZERO code mort** (tout le frontend/backend/agents DEV+PROD/recettes/tools/modeles/benchmark/2
+webapps est cable). Supprime : **junk** (16 `.DS_Store` + 31 `__pycache__`, gitignore/regenerable) +
+**56 fichiers suivis** docs/scratch/maquettes (`docs/scaling/.workdir` + `project-documentation/.workdir`,
+`style-reference/`, `benchmark_webapp/mockup/`, plan orphelin `docs/superpowers/plans/...`, `docs/screenshots/`,
+`docs/scaling/PLAN_*`). **DOC JAMAIS SUPPRIMEE (regle user)** : `project-documentation/` + tout `docs/` GARDES,
+juste **`project-documentation/` ajoutee a `.graphifyignore`** (hors graphe = hors contexte auto, lisible a la
+demande) + note `CLAUDE.md` (« on-demand only, perimee, MAJ future »). `docs/agentic-research/` gardee.
+Suppressions non-committees (rm simple, revisables). **A MAJ plus tard : `project-documentation/` est perimee.**
+Voir **L108**.
+
 **⛔ RÈGLE NON NÉGOCIABLE #9 (2026-06-17) : tiret cadratin `—` (U+2014) et demi-cadratin `–` (U+2013)
 BANNIS À TOUT JAMAIS, PARTOUT** (i18n/UI, code, commentaires, mémoire, commits, réponses chat). Signature
 d'IA, interdiction user absolue. Utiliser `-`, `:`, `,`, parenthèses. Sweep byte-safe (`LC_ALL=C`, jamais
@@ -601,7 +613,16 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-26 (Run UI) : re-skin des 2 webapps LAB sur le mockup Orange (Launcher + Results, rail retiré) → détail `sessions/2026-06-26.md` + **L107**
+## 🧭 Dernière session - 2026-06-26 (NETTOYAGE) : grand ménage du repo + doc sortie du contexte auto → détail `sessions/2026-06-26.md` (Run nettoyage) + **L108**
+- **Recon multi-agents (Workflow ultracode, 7 scouts + vérif adversariale)** = **0 code mort** ; le gras = junk
+  OS, scratch de workflows, maquettes consommées, doc EN périmée. **Code fonctionnel 100% conservé.**
+- **Supprimé** : 16 `.DS_Store` + 31 `__pycache__` (junk) ; **56 fichiers suivis** docs/scratch/maquettes
+  (les 2 `.workdir`, `style-reference/`, `benchmark_webapp/mockup/`, plan orphelin, `docs/screenshots/`,
+  `docs/scaling/PLAN_*`). **Doc JAMAIS supprimée** (règle user) : `project-documentation/` + `docs/` gardés,
+  juste `project-documentation/` exclue du graphe (`.graphifyignore`) + note `CLAUDE.md` -> hors contexte auto,
+  lisible à la demande. **1132 tests verts**, 0 code touché, suppressions non-committées (revisables). Voir **L108**.
+
+## Avant - 2026-06-26 (Run UI) : re-skin des 2 webapps LAB sur le mockup Orange (Launcher + Results, rail retiré) → détail `sessions/2026-06-26.md` + **L107**
 - **Frontend SEUL** (repo only, NON déployé) : `launcher/{style.css,script.js}` + `results/{style.css,script.js,
   body.html,preview.html}` refaits « de cette manière » d'après `benchmark_webapp/mockup/OWIsMind_benchmark/`,
   **rail retiré**. Branchés au VRAI backend (routes `api/*` + formes `views.py` inchangées), MOCK conservé,

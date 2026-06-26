@@ -83,5 +83,6 @@ convertie, a été supprimée du repo le 2026-06-11).
 - `docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
 - `docs/cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).
 - `docs/` - référence d'ingénierie (architecture, API, frontend, data model, sécurité, build/deploy) ; `docs/superpowers/specs/` = specs de conception gelées.
+- `project-documentation/` - doc d'ingénierie EN ultra-complète (arbre 00-09 + site HTML + pitch). **À lire UNIQUEMENT à la demande explicite** : exclue du graphe de connaissances (`.graphifyignore`) pour ne jamais entrer en contexte auto, et **potentiellement périmée** (à mettre à jour dans une future session). Source de vérité = `memory/` + `docs/cadrage/`, pas ce dossier. (Décision user 2026-06-26.)
 
 > À lire **à la demande** (ne pas recopier leur contenu ici). En cas de conflit guides ↔ mémoire : la mémoire fait foi.

@@ -3,7 +3,14 @@
 > Référence canonique de l'état du projet. Mise à jour à la demande / en fin de session.
 > En cas de conflit avec les guides de `docs/cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
-> Dernière mise à jour : **2026-06-14 - SKILL AGENTIQUE** : skill projet `.claude/skills/agentique-python-dataiku/`
+> Dernière mise à jour : **2026-06-26 - NETTOYAGE REPO** (L108) : grand ménage (0 code touché). Supprimés :
+> junk (16 `.DS_Store` + 31 `__pycache__`) + 56 fichiers suivis docs/scratch/maquettes (`docs/scaling/.workdir`
+> + `project-documentation/.workdir`, `style-reference/`, `benchmark_webapp/mockup/`, plan orphelin
+> `docs/superpowers/plans/`, `docs/screenshots/`, `docs/scaling/PLAN_*` -> dossiers `docs/scaling/` et
+> `docs/superpowers/plans/` retirés). **Doc jamais supprimée** : `project-documentation/` + `docs/` gardés ;
+> `project-documentation/` exclue du graphe (`.graphifyignore`) + note `CLAUDE.md` = hors contexte auto des
+> agents, lisible à la demande (périmée, à MAJ future). 1132 tests verts. `docs/agentic-research/` gardée.
+> Antérieur : **2026-06-14 - SKILL AGENTIQUE** : skill projet `.claude/skills/agentique-python-dataiku/`
 > (`SKILL.md` + **15 références**, ~70k mots) créé/réconcilié (corpus recherche multi-agents + source ChatGPT) /
 > validé local (6/6 scénarios, 0 piège) - **référence d'ingénierie, pas du code déployé** (claims DSS-réels marqués
 > `UNVERIFIED`). Corpus `docs/agentic-research/` **gitignoré** (provenance, hors git). **Python : DEUX code envs

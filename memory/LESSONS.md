@@ -2442,5 +2442,28 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   golden via modale, lancement run simulé, table Results + déplier détail + filtre « à revérifier » + sélecteur
   de run), **0 erreur console**, 49 tests webapp verts, **0 tiret (7 fichiers)**. **Date** : 2026-06-26.
 
+## L108 - Garder la doc lourde mais hors du contexte auto : l'exclure du graphe (`.graphifyignore`) au lieu de la supprimer ; et le code fonctionnel de ce repo est propre (0 mort) [repo, 2026-06-26]
+- **Contexte** : grand nettoyage du plan de travail. Une reconnaissance multi-agents (7 scouts + verification
+  adversariale) a montre que **tout le code fonctionnel est cable** (frontend, backend, agents DEV+PROD,
+  recettes, tools, modeles, benchmark, 2 webapps) : **aucun code mort**. Le poids inutile est ailleurs (junk OS,
+  scratch de workflows, maquettes consommees, doc EN perimee/redondante).
+- **Ce qui aurait ete une erreur** : supprimer la documentation perimee pour « alleger ». L'user a tranche :
+  **on ne supprime JAMAIS la doc** ; elle se met a jour, elle ne se jette pas. Le vrai probleme n'etait pas
+  qu'elle existe mais qu'elle **entre automatiquement dans le contexte des agents** (via le graphe de connaissances,
+  interroge par defaut pour naviguer) tout en etant perimee.
+- **Solution qui marche** : (1) ne rien supprimer cote doc ; (2) ajouter `project-documentation/` au
+  **`.graphifyignore`** -> elle sort du graphe, donc du contexte auto, mais reste sur disque, lisible **a la
+  demande explicite** ; (3) note durable dans `CLAUDE.md` (section Reference) : « a lire a la demande, exclue du
+  graphe, potentiellement perimee, source de verite = memory/ + docs/cadrage/ ». Au passage, nettoyer les entrees
+  mortes du `.graphifyignore` (cibles supprimees). Le junk pur (`.DS_Store`, `__pycache__`) se purge a part
+  (`find ... -delete`, regenerable, gitignore -> 0 impact repo) ; les fichiers SUIVIS supprimes en `rm` simple
+  restent non-stages = revisables/restaurables avant commit.
+- **Preuve-verification** : 56 fichiers suivis supprimes (tous docs/scratch/maquettes, controle de surete = 0
+  fichier de code/test) ; **1132 tests verts** apres coup (484 plugin + 286 agents + 189 benchmark + 49
+  benchmark_webapp + 124 node). `.graphifyignore` + `CLAUDE.md` modifies.
+- **Source** : session 2026-06-26 « Run nettoyage » ; decision user (« la documentation faut jamais la supprimer,
+  on va la mettre a jour dans une future session ; juste fais en sorte que ca vienne pas automatiquement dans le
+  contexte des agents »).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
