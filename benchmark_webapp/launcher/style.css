@@ -775,6 +775,71 @@ table.tbl tr:hover td {
   padding: var(--s-3) 0;
 }
 
+/* --- golden questions management --- */
+textarea.inp,
+.inp.ta {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.5;
+  min-height: 2.4em;
+}
+
+.q-count {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0 0 var(--s-3);
+}
+
+.cell-q-actions {
+  white-space: nowrap;
+}
+
+.q-actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+/* Inline delete confirm inside a question row: message + the two buttons. */
+.q-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.q-confirm-msg {
+  font-size: 12px;
+  color: var(--danger);
+}
+.q-confirm-btns {
+  display: flex;
+  gap: var(--s-2);
+}
+
+/* The add/edit form (shown in place of the table). */
+.q-editor {
+  border: 1px solid var(--border-strong);
+  padding: var(--s-4);
+  background: var(--surface);
+}
+.q-editor-title {
+  font-size: 16px;
+  font-weight: var(--fw-heavy, 800);
+  margin: 0 0 var(--s-4);
+  color: var(--text);
+}
+.q-editor .field {
+  margin-bottom: var(--s-4);
+}
+.q-field {
+  display: block;
+}
+/* Two fields side by side (value + type, category + language); stacks on narrow screens. */
+.q-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4);
+}
+
 @media (max-width: 720px) {
   .agent-row {
     grid-template-columns: 1fr 1fr;
@@ -784,6 +849,9 @@ table.tbl tr:hover td {
     grid-column: span 2;
   }
   .kv {
+    grid-template-columns: 1fr;
+  }
+  .q-grid {
     grid-template-columns: 1fr;
   }
 }

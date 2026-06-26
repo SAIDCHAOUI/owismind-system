@@ -2385,5 +2385,35 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   0 résidu `eco/medium/high` mode (grep) ; 0 tiret ; DEV re-packagé (`index-pktQ-ICh.js`). **Annule** la partie
   « garder les clés internes » de **L080**. **Date** : 2026-06-26.
 
+## L106 - Historique des benchmarks (append, pas overwrite) + gestion CRUD du golden depuis le Launcher : écrire dans les datasets PROPRES du LAB via l'API Dataset, jamais en SQL brut [repo, 2026-06-26]
+- **Contexte** : l'user : « chaque benchmark écrase l'ancien, je veux garder l'historique » + « gérer les
+  questions (voir/ajouter/modifier/supprimer les réponses attendues) depuis la webapp Launcher ». Tension
+  apparente avec sa règle « SQL = read + append only, très prudent ».
+- **Clé qui lève la tension** : la règle read+append ne vise QUE la **connexion SQL partagée** (tables prod :
+  conversations, suggestions). Le **golden** et les **datasets de résultats** sont des **datasets managés
+  PROPRES au projet `OWIsMind_LAB`** : les éditer via l'**API Dataset** (`get_dataframe`/`write_with_schema`)
+  est légitime (c'est le motif déjà prouvé de la promotion). Donc CRUD golden = read-modify-write sous verrou,
+  via l'API Dataset, **jamais** de UPDATE/DELETE SQL.
+- **Historique (le piège)** : le modèle portait déjà `run_id`/`run_timestamp` partout + des flags
+  `score_all_runs`/`aggregate_all_runs` + un filtre « dernier run » : les 4 steps `write_with_schema`
+  écrasaient juste tout. Fix = `dss_steps/history_io.write_history_dataset` (read existant + drop les lignes
+  du même `run_id` + concat + cap optionnel). **Idempotent par run** ; `score_all`/`aggregate_all` (frame =
+  tous les run_id) dégénère proprement en overwrite. Pur : `history.merge_run_history`/`runs_to_keep`.
+- **Sûreté données (lecture qui LÈVE, gardée par le schéma)** : pour un read-modify-write, ne JAMAIS partir
+  d'une lecture qui avale (L104). Motif airtight (golden ET history) : `read_schema()` ; schéma **vide** =
+  jamais construit -> frame vide (permet de créer la 1re question / le 1er run) ; sinon (construit OU
+  `read_schema` qui échoue = **ambigu**) -> `get_dataframe()` **qui LÈVE** -> un blip ABORTE le step/route au
+  lieu de tronquer. **Ne jamais supposer vide sur un échec de lecture de schéma.**
+- **Sécurité instance (revue adversariale dédiée : 4 confirmés / 5 réfutés)** : (1) **cap par défaut borné**
+  sur les tables LOURDES (`raw`+`scored` portent réponses+SQL, réécrites en entier) = `history_keep_runs: 50` ;
+  les tables LÉGÈRES (`summary`+`breakdown`) gardent TOUT (c'est l'historique que lit Results) ; `0` = illimité.
+  (2) **bug du flag dirty** : un chemin de succès CRUD qui appelle `loadConfig()` (reset `dirty=false`) puis
+  `render()->syncFormFromDom()` **réinjecte les édits config NON sauvés** du DOM -> Launch réactivé sur une
+  config STALE. Fix : `refreshConfigMeta()` (metadata seule, ne touche ni `state.form` ni `dirty`).
+- **Preuve-vérification** : 189 benchmark + 49 webapp + 484 plugin + 286 agents tests ; QA Playwright (CRUD
+  save, EN/FR, sombre, confirm suppression, **dirty préservé après save**) ; revue adversariale 0 crit/0 high,
+  4 medium/low corrigés + re-vérifiés ; 0 tiret. **Plugin NON touché** (tout en `benchmark/` + `benchmark_webapp/`).
+  **Date** : 2026-06-26.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

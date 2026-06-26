@@ -32,8 +32,27 @@ class TestDefaults(unittest.TestCase):
         self.assertEqual(cfg["judge_llm_id"], config.JUDGE_LLM_ID)
         self.assertFalse(cfg["score_all_runs"])
         self.assertFalse(cfg["aggregate_all_runs"])
+        self.assertEqual(cfg["history_keep_runs"], 50)   # bounded default on the heavy tables
         self.assertEqual(cfg["agents"], [])
         self.assertEqual(cfg["question_filter"], {})
+
+
+class TestHistoryKeepRuns(unittest.TestCase):
+    def test_default_is_bounded(self):
+        self.assertEqual(run_params.resolve({})["history_keep_runs"], 50)
+
+    def test_explicit_zero_means_unlimited(self):
+        self.assertIsNone(run_params.resolve(_vars({"history_keep_runs": 0}))["history_keep_runs"])
+
+    def test_explicit_positive_cap(self):
+        self.assertEqual(run_params.resolve(_vars({"history_keep_runs": 10}))["history_keep_runs"], 10)
+
+    def test_numeric_string_cap(self):
+        self.assertEqual(run_params.resolve(_vars({"history_keep_runs": "25"}))["history_keep_runs"], 25)
+
+    def test_negative_and_garbage_uncapped(self):
+        self.assertIsNone(run_params.resolve(_vars({"history_keep_runs": -3}))["history_keep_runs"])
+        self.assertIsNone(run_params.resolve(_vars({"history_keep_runs": "abc"}))["history_keep_runs"])
 
     def test_non_dict_variables_safe(self):
         self.assertEqual(run_params.resolve(None)["agents"], [])

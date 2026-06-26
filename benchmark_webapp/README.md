@@ -18,11 +18,17 @@ Design contract: `docs/superpowers/specs/2026-06-25-benchmark-integration-design
   display of the latest (or any) run: a clear confidence verdict, accuracy, response time,
   cost, what to double-check, per-configuration and per-topic and per-question views. Built so a
   NON-technical person understands everything. Its backend has NO write route at all.
-- **Launcher** (`launcher/`) - the internal config + launch + suggestion-review tool. A REAL
+- **Launcher** (`launcher/`) - the internal config + launch + golden management tool. A REAL
   FORM (pick agents / modes / question filter / concurrency / language, no JSON editing), a
-  Launch button, and a panel to review user-suggested questions and promote them into the
-  golden set. Keep this webapp's URL to the people who run benchmarks; the public consults the
-  Results app.
+  Launch button, a **Questions** card to manage the golden set directly (create / edit /
+  enable-disable / delete a question with its expected answer + anchor), and a panel to review
+  user-suggested questions and promote them. Keep this webapp's URL to the people who run
+  benchmarks; the public consults the Results app.
+
+The golden-management routes (`api/golden`, `api/golden/save`, `api/golden/delete`) and the run
+history both write the LAB's OWN managed Flow datasets via the Dataset API only - see SQL safety
+below. Each run now APPENDS (keyed by `run_id`) instead of overwriting, so Results browses history;
+an optional `benchmark.history_keep_runs` caps it.
 
 Splitting into two webapps is how the launch surface stays out of consultation users' hands -
 no in-app admin gating needed.
@@ -39,8 +45,10 @@ single module `benchmark_webapp/dss.py`):
   READ-ONLY `SELECT` (read-only + statement_timeout pre-queries, explicit column list, a guarded
   physical table name, `status='pending'` literal, `LIMIT 500`).
 - NO UPDATE / DELETE / DROP / TRUNCATE / INSERT / raw DML on the shared connection, anywhere.
-- The only WRITES are APPEND-preserving rewrites of LAB Flow datasets (the golden + a
-  promoted-ids log) via the dataiku Dataset API, never raw SQL.
+- The only WRITES are rewrites of the LAB's own Flow datasets (the golden, via promotion AND the
+  Questions card; the result datasets, via the run-history append; a promoted-ids log) through the
+  dataiku Dataset API, never raw SQL. Every write path uses a RAISING existing-read (a transient
+  read failure aborts rather than truncating) and the golden writes share one process lock.
 
 ## Repo layout (what goes where in DSS)
 

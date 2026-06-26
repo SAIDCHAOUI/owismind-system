@@ -26,6 +26,7 @@ import pandas as pd
 
 from benchmark import config, schemas, run_params
 from benchmark import judge
+from benchmark.dss_steps.history_io import write_history_dataset
 
 
 def _get_variables():
@@ -153,7 +154,6 @@ def run():
         for row in df.to_dict(orient="records")
     ]
 
-    out = dataiku.Dataset(cfg["scored_dataset"])
     if scored_rows:
         frame = pd.DataFrame(
             [{col: r.get(col) for col in schemas.SCORED_COLUMNS} for r in scored_rows],
@@ -161,7 +161,11 @@ def run():
         )
     else:
         frame = pd.DataFrame(columns=list(schemas.SCORED_COLUMNS))
-    out.write_with_schema(frame)
+    # APPEND the scored rows of this run (judge scopes to the latest run_id unless
+    # score_all_runs); prior runs stay, and a re-judge of the same run_id replaces just
+    # its rows. When score_all_runs re-scores every run, the new frame holds all run_ids
+    # so the merge degenerates to a full overwrite - exactly the intended semantics.
+    write_history_dataset(cfg["scored_dataset"], frame, cfg.get("history_keep_runs"))
 
 
 run()

@@ -70,6 +70,13 @@ DEFAULTS = {
     "judge_llm_id": config.JUDGE_LLM_ID,
     "score_all_runs": False,
     "aggregate_all_runs": False,
+    # Cap on the run history kept in the HEAVY result datasets (benchmark_runs_raw +
+    # benchmark_runs_scored): keep only the N most-recent runs. A BOUNDED default (instance
+    # safety: those tables carry full agent answers + SQL/artifact JSON and are rewritten in
+    # full each run, so unbounded growth would balloon RAM + write amplification). Set 0 to keep
+    # ALL runs on the heavy tables too. The LIGHT summary / breakdown datasets are NEVER capped
+    # here (one tiny row per run x agent x mode), so the Results app keeps the full run history.
+    "history_keep_runs": 50,
     # Optional: where the LAB benchmark webapp reads the webapp's user-suggested questions
     # (cross-project, read-only) and where it records promoted ids. Empty -> the suggestions
     # tab is simply "not configured". Additive; nothing else changes when absent.
@@ -106,6 +113,8 @@ def resolve(variables):
     cfg["judge_llm_id"] = _str_or(raw.get("judge_llm_id"), DEFAULTS["judge_llm_id"])
     cfg["score_all_runs"] = _coerce_bool(raw.get("score_all_runs"))
     cfg["aggregate_all_runs"] = _coerce_bool(raw.get("aggregate_all_runs"))
+    cfg["history_keep_runs"] = _resolve_keep_runs(
+        raw.get("history_keep_runs", DEFAULTS["history_keep_runs"]))
     cfg["suggestions"] = _resolve_suggestions(raw.get("suggestions"))
     cfg["agents"] = _resolve_agents(raw.get("agents"))
     return cfg
@@ -130,6 +139,21 @@ def _resolve_suggestions(value):
         if cleaned:
             out[key] = cleaned
     return out
+
+
+def _resolve_keep_runs(value):
+    """Normalize ``history_keep_runs`` -> a positive int (cap) or None (keep all heavy runs).
+
+    Accepts an int or a numeric string; 0 / negative / blank / malformed -> None (= uncapped).
+    Absence is handled by the caller (it passes the bounded DEFAULT). Never raises.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def suggestions_config(cfg):

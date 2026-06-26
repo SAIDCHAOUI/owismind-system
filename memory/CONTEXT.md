@@ -46,6 +46,17 @@ backend medium->smart) + ~32 clés i18n + tous les tests + docs. **À DÉPLOYER 
 (orchestrateur + sous-agents, env 3.11) + recoller `benchmark/config.py`+`run_params.py` + re-upload plugin DEV
 (`index-pktQ-ICh.js`) + redémarrer backend, sinon le mode est ignoré. **974 tests verts, 0 résidu eco, 0 tiret.**
 Guide refait : **`benchmark_webapp/DEPLOY_GUIDE.md`** (liste TOUT : agents + plugin + 2 webapps + tests). Voir **L105**.
+**⮕ RÉVISION (d) - HISTORIQUE DES RUNS (append) + CRUD GOLDEN DEPUIS LE LAUNCHER (L106). Repo only,
+benchmark/ + benchmark_webapp/, plugin NON touché.** (1) Les 4 steps n'écrasent plus : `history.py` (pur) +
+`dss_steps/history_io.py` (read-merge-write, lecture **schema-gated qui LÈVE** = abort-safe L104) -> les runs
+s'accumulent (Results montre l'historique). `history_keep_runs` (défaut **50**) borne les tables LOURDES
+(raw+scored) ; summary+breakdown gardent TOUT ; `0`=illimité. Idempotent par run_id. (2) Carte **Questions**
+dans le Launcher (add/edit/active/delete + réponse attendue, bilingue) -> écrit le golden PROPRE du LAB via
+l'**API Dataset** (jamais de SQL brut) sous `_PROMOTE_LOCK` + `_golden_existing` schema-gated. **Revue
+adversariale dédiée = 4 confirmés/5 réfutés, tous corrigés** (cap défaut, bug flag `dirty`->`refreshConfigMeta`,
+1re écriture golden jamais-construit). **189 benchmark + 49 webapp + 484 plugin + 286 agents tests, QA
+Playwright OK, 0 tiret.** À FAIRE DSS : re-coller la lib `benchmark/` (2 fichiers NEUFS + 3 steps) +
+`views.py`/`dss.py` + les 4 panes Launcher. Pas de zip plugin. Voir **L106**.
 
 Le
 benchmark passe de standalone à brique du système. **Décision d'archi** : les 2 pôles vivent à des endroits

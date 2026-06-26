@@ -78,6 +78,55 @@ def api_config_post():
     return jsonify({"status": "ok", "config": views.config_view(dss.config())})
 
 
+# --- golden questions: manage the golden set (read + create/update/delete) ---
+
+@app.route("/api/golden", methods=["GET"])
+@_safe
+def api_golden_get():
+    """All golden questions for the management table (read-only)."""
+    cfg = dss.config()
+    return jsonify({"status": "ok", "questions": dss.read_golden_rows(cfg)})
+
+
+@app.route("/api/golden/save", methods=["POST"])
+@_safe
+def api_golden_save():
+    """Create (no question_id) or update (with question_id) one golden question.
+
+    Validation lives in views.prepare_golden_save; the read-modify-write of the golden Flow
+    dataset is locked + RAISING (a read blip aborts to a 500 rather than truncating the golden).
+    """
+    cfg = dss.config()
+    payload = request.get_json(silent=True) or {}
+    try:
+        result, errors = dss.save_golden_question(cfg, payload)
+    except Exception:
+        logger.error("api_golden_save failed\n%s", traceback.format_exc())
+        return _err("golden_write_failed", 500)
+    if errors:
+        return _err("invalid_question", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/golden/delete", methods=["POST"])
+@_safe
+def api_golden_delete():
+    """Hard-delete one golden question by id (past run results are untouched)."""
+    cfg = dss.config()
+    body = request.get_json(silent=True) or {}
+    qid = body.get("question_id")
+    if not isinstance(qid, str) or not qid.strip():
+        return _err("no_question_id", 400)
+    try:
+        result, errors = dss.delete_golden_question(cfg, qid)
+    except Exception:
+        logger.error("api_golden_delete failed\n%s", traceback.format_exc())
+        return _err("golden_write_failed", 500)
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
 # --- run (launch async + single-flight, status poll) -------------------------
 
 @app.route("/api/run", methods=["POST"])

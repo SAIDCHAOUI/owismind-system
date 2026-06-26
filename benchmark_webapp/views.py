@@ -9,9 +9,10 @@ raises - the webapp must degrade to an empty view, not a 500.
 Design contract: docs/superpowers/specs/2026-06-25-benchmark-integration-design.md (section 4.1).
 """
 
+import hashlib
 import json
 
-from benchmark import run_params
+from benchmark import run_params, schemas
 
 
 # --- scalar coercion / formatting -------------------------------------------
@@ -455,6 +456,102 @@ def promotable_golden_rows(suggestions, already_promoted_ids):
         golden_rows.append(row)
         used_ids.append(sid)
     return golden_rows, used_ids
+
+
+# --- golden question management (admin CRUD from the launcher) ---------------
+
+def golden_view(rows):
+    """Shape golden rows for the management table (all 9 columns, normalized, sorted).
+
+    Rows missing a question_id are skipped (they cannot be edited/deleted without a key).
+    ``active`` is surfaced as a real bool (default True when absent). Sorted by category then
+    question_id for a stable, grouped list. Pure, never raises.
+    """
+    out = []
+    for r in _rows(rows):
+        qid = _str(r.get("question_id")).strip()
+        if not qid:
+            continue
+        act = r.get("active")
+        out.append({
+            "question_id": qid,
+            "question": _str(r.get("question")),
+            "reference_answer": _str(r.get("reference_answer")),
+            "expected_value": _str(r.get("expected_value")),
+            "expected_value_type": _str(r.get("expected_value_type")),
+            "category": _str(r.get("category")),
+            "language": _str(r.get("language")) or "fr",
+            "active": True if act is None else _truthy(act),
+            "notes": _str(r.get("notes")),
+        })
+    out.sort(key=lambda g: ((g["category"] or "~"), g["question_id"]))
+    return out
+
+
+def mint_admin_question_id(question, existing_ids):
+    """A stable, unique golden question_id for an admin-authored question.
+
+    Prefix ``a_`` (distinct from the ``u_`` user-suggestion ids), derived from a hash of the
+    question text so the same question yields the same id; a numeric suffix breaks the (rare)
+    collision against ``existing_ids``. Pure, never raises.
+    """
+    digest = hashlib.sha1(_str(question).strip().encode("utf-8")).hexdigest()[:16]
+    base = "a_" + digest
+    existing = set(str(x) for x in (existing_ids or []))
+    if base not in existing:
+        return base
+    n = 2
+    while "{0}_{1}".format(base, n) in existing:
+        n += 1
+    return "{0}_{1}".format(base, n)
+
+
+def prepare_golden_save(payload, existing_ids):
+    """Validate + normalize an admin create/update of a golden question.
+
+    Returns ``(clean_row, errors, is_new)``. A payload WITHOUT a question_id is a create: a
+    fresh ``a_`` id is minted (unique vs ``existing_ids``). A payload WITH a question_id is an
+    update of that row. ``clean_row`` carries the 9 golden columns; ``errors`` is a list of
+    human messages ([] when valid, via schemas.validate_golden_row). Pure, never raises.
+    """
+    row = schemas.normalize_golden_row(payload if isinstance(payload, dict) else {})
+    qid = _str(row.get("question_id")).strip()
+    is_new = not qid
+    if is_new:
+        row["question_id"] = mint_admin_question_id(row.get("question"), existing_ids)
+    ok, errors = schemas.validate_golden_row(row)
+    return row, errors, is_new
+
+
+def apply_golden_upsert(existing_rows, clean_row):
+    """Return the full golden list with ``clean_row`` inserted or replacing its question_id.
+
+    On update, the existing row's EXTRA columns (any the prepared golden carries beyond the
+    lean 9) are preserved and only the 9 golden fields are overwritten, so editing never
+    narrows the dataset. Pure, never raises.
+    """
+    qid = _str(clean_row.get("question_id")).strip()
+    out = []
+    replaced = False
+    for r in (existing_rows or []):
+        if _str(r.get("question_id")).strip() == qid and qid:
+            merged = dict(r)
+            merged.update(clean_row)
+            out.append(merged)
+            replaced = True
+        else:
+            out.append(r)
+    if not replaced:
+        out.append(dict(clean_row))
+    return out
+
+
+def apply_golden_delete(existing_rows, question_id):
+    """Return the golden list without the row whose question_id matches. Pure, never raises."""
+    qid = _str(question_id).strip()
+    if not qid:
+        return list(existing_rows or [])
+    return [r for r in (existing_rows or []) if _str(r.get("question_id")).strip() != qid]
 
 
 def build_config_object(existing, form):

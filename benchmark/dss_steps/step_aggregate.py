@@ -20,6 +20,7 @@ import pandas as pd
 
 from benchmark import schemas, run_params
 from benchmark import scoring
+from benchmark.dss_steps.history_io import write_history_dataset
 
 
 def _get_variables():
@@ -72,12 +73,16 @@ def run():
     summary_rows = scoring.summarize(scored_rows)
     breakdown_rows = scoring.breakdown(scored_rows)
 
-    dataiku.Dataset(cfg["summary_dataset"]).write_with_schema(
-        _to_frame(summary_rows, schemas.SUMMARY_COLUMNS)
-    )
-    dataiku.Dataset(cfg["breakdown_dataset"]).write_with_schema(
-        _to_frame(breakdown_rows, schemas.BREAKDOWN_COLUMNS)
-    )
+    # APPEND this run's per-(run_id, agent, mode) summary + breakdown rows to the history
+    # (aggregate scopes to the latest run unless aggregate_all_runs), so the Results app
+    # keeps every past run's KPIs. A re-aggregate of the same run replaces just its rows.
+    # These two datasets are LIGHT (one tiny row per run x agent x mode), so they are NEVER
+    # capped (keep_runs=None) - the full run history stays available to the dashboard even
+    # when the heavy raw/scored tables are bounded by history_keep_runs.
+    write_history_dataset(
+        cfg["summary_dataset"], _to_frame(summary_rows, schemas.SUMMARY_COLUMNS), None)
+    write_history_dataset(
+        cfg["breakdown_dataset"], _to_frame(breakdown_rows, schemas.BREAKDOWN_COLUMNS), None)
 
 
 run()

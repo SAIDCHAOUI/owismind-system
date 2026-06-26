@@ -128,6 +128,58 @@
       "sug.go": "Confirm promotion",
       "sug.cancel": "Cancel",
 
+      "q.eyebrow": "Golden set",
+      "q.title": "Questions",
+      "q.desc": "The reference questions the benchmark scores the agents against, with the answer you expect. Add, edit, enable/disable or remove them. Changes apply to the next run.",
+      "q.count": "{count} question(s), {active} active",
+      "q.add": "Add a question",
+      "q.empty": "No question yet. Add the first one, or promote a user suggestion below.",
+      "q.loadError": "Could not load the questions.",
+      "q.col.question": "Question",
+      "q.col.expected": "Expected answer",
+      "q.col.anchor": "Anchor",
+      "q.col.category": "Category",
+      "q.col.language": "Language",
+      "q.col.status": "Status",
+      "q.col.actions": "Actions",
+      "q.status.active": "Active",
+      "q.status.inactive": "Inactive",
+      "q.edit": "Edit",
+      "q.delete": "Delete",
+      "q.addTitle": "New question",
+      "q.editTitle": "Edit the question",
+      "q.f.question": "Question",
+      "q.f.question.ph": "e.g. What is the actual revenue of account Maroc Telecom this year?",
+      "q.f.reference": "Expected answer (the validated truth)",
+      "q.f.reference.ph": "e.g. The actual revenue of Maroc Telecom this year is 4,218,540 euros, all periods.",
+      "q.f.value": "Expected value (optional)",
+      "q.f.value.ph": "e.g. 4218540",
+      "q.f.valueHelp": "When set, the judge checks the agent's answer contains this exact value (within tolerance for numbers). Leave empty for a free-text answer.",
+      "q.f.valueType": "Value type",
+      "q.f.category": "Category",
+      "q.f.category.ph": "e.g. revenue",
+      "q.f.language": "Language",
+      "q.f.active": "Active (tested in the next run)",
+      "q.f.notes": "Notes (optional)",
+      "q.f.notes.ph": "Anything a reviewer should know.",
+      "q.vt.none": "(none / free text)",
+      "q.vt.numeric": "Number",
+      "q.vt.currency": "Amount (currency)",
+      "q.vt.date": "Date",
+      "q.vt.string": "Exact text",
+      "q.vt.list": "List",
+      "q.save": "Save the question",
+      "q.saving": "Saving...",
+      "q.saved": "Question saved.",
+      "q.cancel": "Cancel",
+      "q.invalidTitle": "The question could not be saved:",
+      "q.saveError": "Could not save the question. Check your write access to the LAB project.",
+      "q.deleteConfirm": "Delete this question from the golden set? Past run results keep it. This cannot be undone.",
+      "q.deleteGo": "Confirm delete",
+      "q.deleteCancel": "Cancel",
+      "q.deleted": "Question deleted.",
+      "q.deleteError": "Could not delete the question.",
+
       "common.loading": "Loading...",
       "common.retry": "Retry",
       "common.dash": "-"
@@ -243,6 +295,58 @@
       "sug.confirm": "Promouvoir {count} suggestion(s) dans le golden set ? Ce changement est definitif.",
       "sug.go": "Confirmer la promotion",
       "sug.cancel": "Annuler",
+
+      "q.eyebrow": "Golden set",
+      "q.title": "Questions",
+      "q.desc": "Les questions de reference sur lesquelles le benchmark note les agents, avec la reponse que vous attendez. Ajoutez, modifiez, activez/desactivez ou supprimez-les. Les changements s'appliquent au prochain run.",
+      "q.count": "{count} question(s), {active} active(s)",
+      "q.add": "Ajouter une question",
+      "q.empty": "Aucune question pour l'instant. Ajoutez la premiere, ou promouvez une suggestion d'utilisateur ci-dessous.",
+      "q.loadError": "Impossible de charger les questions.",
+      "q.col.question": "Question",
+      "q.col.expected": "Reponse attendue",
+      "q.col.anchor": "Ancre",
+      "q.col.category": "Categorie",
+      "q.col.language": "Langue",
+      "q.col.status": "Statut",
+      "q.col.actions": "Actions",
+      "q.status.active": "Active",
+      "q.status.inactive": "Inactive",
+      "q.edit": "Modifier",
+      "q.delete": "Supprimer",
+      "q.addTitle": "Nouvelle question",
+      "q.editTitle": "Modifier la question",
+      "q.f.question": "Question",
+      "q.f.question.ph": "ex. Quel est le revenu reel du compte Maroc Telecom cette annee ?",
+      "q.f.reference": "Reponse attendue (la verite validee)",
+      "q.f.reference.ph": "ex. Le revenu reel de Maroc Telecom cette annee est de 4 218 540 euros, toutes periodes.",
+      "q.f.value": "Valeur attendue (optionnelle)",
+      "q.f.value.ph": "ex. 4218540",
+      "q.f.valueHelp": "Si renseignee, le juge verifie que la reponse de l'agent contient cette valeur exacte (avec tolerance pour les nombres). Laissez vide pour une reponse en texte libre.",
+      "q.f.valueType": "Type de valeur",
+      "q.f.category": "Categorie",
+      "q.f.category.ph": "ex. revenue",
+      "q.f.language": "Langue",
+      "q.f.active": "Active (testee au prochain run)",
+      "q.f.notes": "Notes (optionnel)",
+      "q.f.notes.ph": "Tout ce qu'un relecteur devrait savoir.",
+      "q.vt.none": "(aucune / texte libre)",
+      "q.vt.numeric": "Nombre",
+      "q.vt.currency": "Montant (devise)",
+      "q.vt.date": "Date",
+      "q.vt.string": "Texte exact",
+      "q.vt.list": "Liste",
+      "q.save": "Enregistrer la question",
+      "q.saving": "Enregistrement...",
+      "q.saved": "Question enregistree.",
+      "q.cancel": "Annuler",
+      "q.invalidTitle": "La question n'a pas pu etre enregistree :",
+      "q.saveError": "Impossible d'enregistrer la question. Verifiez votre acces en ecriture au projet LAB.",
+      "q.deleteConfirm": "Supprimer cette question du golden set ? Les resultats des runs passes la conservent. Action irreversible.",
+      "q.deleteGo": "Confirmer la suppression",
+      "q.deleteCancel": "Annuler",
+      "q.deleted": "Question supprimee.",
+      "q.deleteError": "Impossible de supprimer la question.",
 
       "common.loading": "Chargement...",
       "common.retry": "Reessayer",
@@ -371,6 +475,18 @@
       confirm: false,
       confirmCount: 0
     },
+    golden: {
+      loaded: false,
+      loadError: false,
+      list: [],
+      // Inline editor: when open, the add/edit FORM replaces the table; `row` is the
+      // working copy and `isNew` distinguishes create from update. `error` carries a
+      // validation/save failure shown above the form.
+      editor: { open: false, isNew: false, row: null, error: null },
+      // Inline (no-modal) delete confirm: the question_id pending confirmation, or null.
+      confirmDelete: null,
+      msg: null
+    },
     msg: {
       save: null,
       promote: null
@@ -443,6 +559,41 @@
     question_count: 42,
     mode_options: ["Smart", "Pro", "Claude"],
     runs: [{ run_id: "run_20260625_2241", run_timestamp: "2026-06-25 22:41:03" }],
+    golden: [
+      {
+        question_id: "a_revenue001",
+        question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
+        reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.",
+        expected_value: "4218540",
+        expected_value_type: "currency",
+        category: "revenue",
+        language: "fr",
+        active: true,
+        notes: ""
+      },
+      {
+        question_id: "u_sug_d4e5f6",
+        question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
+        reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
+        expected_value: "37",
+        expected_value_type: "numeric",
+        category: "tickets",
+        language: "en",
+        active: true,
+        notes: "promoted from user suggestion sug_d4e5f6 (source=manual)"
+      },
+      {
+        question_id: "a_offer002",
+        question: "Quelle est la hierarchie d'offre pour le produit IPL ?",
+        reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).",
+        expected_value: "",
+        expected_value_type: "",
+        category: "offre",
+        language: "fr",
+        active: false,
+        notes: "desactivee le temps de valider la reponse"
+      }
+    ],
     suggestions: [
       {
         suggestion_id: "sug_a1b2c3",
@@ -552,6 +703,41 @@
         }
       });
       data = { status: "ok", promoted: promoted, recorded: ids.length };
+    } else if (method === "GET" && path === "golden") {
+      data = { status: "ok", questions: MOCK.golden.slice() };
+    } else if (method === "POST" && path === "golden/save") {
+      var q = (body && body.question || "").trim();
+      var ref = (body && body.reference_answer || "").trim();
+      if (!q || !ref) {
+        status = 400;
+        data = { status: "error", error: "invalid_question",
+          messages: ["question and reference_answer are required"] };
+      } else {
+        var qid = (body && body.question_id || "").trim();
+        var isNew = !qid;
+        if (isNew) { qid = "a_mock_" + (MOCK.golden.length + 1); }
+        var nrow = {
+          question_id: qid, question: q, reference_answer: ref,
+          expected_value: (body.expected_value || ""),
+          expected_value_type: (body.expected_value_type || ""),
+          category: (body.category || ""),
+          language: (body.language === "en") ? "en" : "fr",
+          active: body.active !== false,
+          notes: (body.notes || "")
+        };
+        var found = false;
+        MOCK.golden = MOCK.golden.map(function (g) {
+          if (g.question_id === qid) { found = true; return nrow; }
+          return g;
+        });
+        if (!found) { MOCK.golden.push(nrow); }
+        data = { status: "ok", question_id: qid, created: isNew, count: MOCK.golden.length };
+      }
+    } else if (method === "POST" && path === "golden/delete") {
+      var delId = (body && body.question_id || "").trim();
+      var before = MOCK.golden.length;
+      MOCK.golden = MOCK.golden.filter(function (g) { return g.question_id !== delId; });
+      data = { status: "ok", deleted: MOCK.golden.length < before, count: MOCK.golden.length };
     } else {
       status = 404;
       data = { status: "error", error: "not_found" };
@@ -678,6 +864,7 @@
 
   function render() {
     syncFormFromDom();
+    syncEditorFromDom();
     var root = byId("bench-app");
     if (!root) {
       return;
@@ -686,6 +873,7 @@
       topbarHtml() +
       configHtml() +
       launchHtml() +
+      questionsHtml() +
       suggestionsHtml();
     // A full render writes the run line inline (via runMsgHtml), so the targeted
     // updater is now in sync with the current state.
@@ -1227,6 +1415,215 @@
     box.indeterminate = checked > 0 && checked < total;
   }
 
+  /* --- golden questions (manage the golden set) --- */
+
+  var VALUE_TYPES = ["numeric", "currency", "date", "string", "list"];
+
+  function questionsHtml() {
+    var inner;
+    if (state.golden.editor.open) {
+      inner = questionEditorHtml();
+    } else if (state.golden.loadError) {
+      inner = '' +
+        '<div class="note note-error" role="alert">' + esc(t("q.loadError")) + '</div>' +
+        '<div class="actions-row">' +
+          '<button type="button" class="btn" data-action="retry-golden">' +
+            esc(t("common.retry")) + '</button>' +
+        '</div>';
+    } else if (!state.golden.loaded) {
+      inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
+    } else {
+      inner = questionsListHtml();
+    }
+    return '' +
+      '<section class="card">' +
+        '<span class="sec-eyebrow">' + esc(t("q.eyebrow")) + '</span>' +
+        '<h2 class="sec-title">' + esc(t("q.title")) + '</h2>' +
+        '<span class="sec-bar"></span>' +
+        '<p class="sec-desc">' + esc(t("q.desc")) + '</p>' +
+        inner +
+        goldenMsgHtml() +
+      '</section>';
+  }
+
+  function goldenMsgHtml() {
+    var m = state.golden.msg;
+    if (!m) { return ""; }
+    var cls = (m.kind === "ok") ? "note-ok" : "note-error";
+    var role = (m.kind === "ok") ? "status" : "alert";
+    return '<div class="note ' + cls + '" role="' + role + '">' + esc(m.text) + '</div>';
+  }
+
+  function questionsListHtml() {
+    var list = state.golden.list;
+    var count = list.length;
+    var activeCount = list.filter(function (g) { return g.active; }).length;
+    var countLine = '<p class="q-count">' +
+      esc(t("q.count", { count: fmtNum(count), active: fmtNum(activeCount) })) + '</p>';
+    var addBtn = '<div class="actions-row">' +
+      '<button type="button" class="btn btn-primary" data-action="q-add">' +
+        esc(t("q.add")) + '</button></div>';
+    if (!count) {
+      return countLine +
+        '<div class="note note-info" role="status">' + esc(t("q.empty")) + '</div>' + addBtn;
+    }
+    var head = '<thead><tr>' +
+      '<th scope="col">' + esc(t("q.col.question")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.expected")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.anchor")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.category")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.language")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.status")) + '</th>' +
+      '<th scope="col">' + esc(t("q.col.actions")) + '</th>' +
+    '</tr></thead>';
+    var body = list.map(qRowHtml).join("");
+    return countLine +
+      '<div class="tbl-wrap"><table class="tbl">' + head + '<tbody>' + body + '</tbody></table></div>' +
+      addBtn;
+  }
+
+  function qRowHtml(g) {
+    var confirming = state.golden.confirmDelete === g.question_id;
+    var statusCls = g.active ? "rev-correct" : "rev-unverified";
+    var statusKey = g.active ? "q.status.active" : "q.status.inactive";
+    var actions;
+    if (confirming) {
+      actions = '<div class="q-confirm" role="group">' +
+        '<span class="q-confirm-msg">' + esc(t("q.deleteConfirm")) + '</span>' +
+        '<span class="q-confirm-btns">' +
+          '<button type="button" class="btn btn-sm btn-danger" data-action="q-delete-go" ' +
+            'data-id="' + esc(g.question_id) + '">' + esc(t("q.deleteGo")) + '</button>' +
+          '<button type="button" class="btn btn-sm" data-action="q-delete-cancel">' +
+            esc(t("q.deleteCancel")) + '</button>' +
+        '</span>' +
+      '</div>';
+    } else {
+      actions = '<div class="q-actions">' +
+        '<button type="button" class="btn btn-sm" data-action="q-edit" ' +
+          'data-id="' + esc(g.question_id) + '">' + esc(t("q.edit")) + '</button>' +
+        '<button type="button" class="btn btn-sm btn-danger" data-action="q-delete" ' +
+          'data-id="' + esc(g.question_id) + '">' + esc(t("q.delete")) + '</button>' +
+      '</div>';
+    }
+    return '<tr>' +
+      '<td class="cell-q">' + esc(g.question) + '</td>' +
+      '<td class="cell-expected">' + esc(truncate(g.reference_answer, 120)) + '</td>' +
+      '<td class="cell-anchor">' + qAnchorHtml(g) + '</td>' +
+      '<td>' + esc(g.category || t("common.dash")) + '</td>' +
+      '<td>' + esc(g.language) + '</td>' +
+      '<td><span class="rev ' + statusCls + '">' + esc(t(statusKey)) + '</span></td>' +
+      '<td class="cell-q-actions">' + actions + '</td>' +
+    '</tr>';
+  }
+
+  function qAnchorHtml(g) {
+    var v = (g.expected_value == null) ? "" : String(g.expected_value).trim();
+    if (!v) {
+      return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>';
+    }
+    var html = '<span class="anchor-val mono">' + esc(v) + '</span>';
+    var ty = (g.expected_value_type == null) ? "" : String(g.expected_value_type).trim();
+    if (ty) { html += '<span class="anchor-type">' + esc(ty) + '</span>'; }
+    return html;
+  }
+
+  function qField(label, control) {
+    // Implicit label association: the control sits INSIDE the <label>, so no fragile id wiring.
+    return '<label class="field q-field">' +
+      '<span class="field-label">' + esc(label) + '</span>' +
+      control +
+    '</label>';
+  }
+
+  function questionEditorHtml() {
+    var r = state.golden.editor.row || {};
+    var title = state.golden.editor.isNew ? t("q.addTitle") : t("q.editTitle");
+    var err = "";
+    if (state.golden.editor.error) {
+      var e = state.golden.editor.error;
+      if (e.kind === "invalid") {
+        err = '<div class="note note-error" role="alert"><strong>' +
+          esc(t("q.invalidTitle")) + '</strong><ul>' +
+          (e.messages || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join("") +
+          '</ul></div>';
+      } else {
+        err = '<div class="note note-error" role="alert">' + esc(e.text) + '</div>';
+      }
+    }
+    var typeOpts = '<option value=""' + (!r.expected_value_type ? " selected" : "") + '>' +
+      esc(t("q.vt.none")) + '</option>' +
+      VALUE_TYPES.map(function (vt) {
+        var sel = (r.expected_value_type === vt) ? " selected" : "";
+        return '<option value="' + esc(vt) + '"' + sel + '>' + esc(t("q.vt." + vt)) + '</option>';
+      }).join("");
+    return '' +
+      '<div class="q-editor">' +
+        '<h3 class="q-editor-title">' + esc(title) + '</h3>' +
+        err +
+        qField(t("q.f.question"),
+          '<textarea class="inp ta" data-q="question" rows="2" placeholder="' +
+            esc(t("q.f.question.ph")) + '">' + esc(r.question || "") + '</textarea>') +
+        qField(t("q.f.reference"),
+          '<textarea class="inp ta" data-q="reference_answer" rows="3" placeholder="' +
+            esc(t("q.f.reference.ph")) + '">' + esc(r.reference_answer || "") + '</textarea>') +
+        '<div class="q-grid">' +
+          qField(t("q.f.value"),
+            '<input class="inp mono" type="text" data-q="expected_value" value="' +
+              esc(r.expected_value || "") + '" placeholder="' + esc(t("q.f.value.ph")) + '">') +
+          qField(t("q.f.valueType"),
+            '<select class="sel" data-q="expected_value_type">' + typeOpts + '</select>') +
+        '</div>' +
+        '<p class="field-help">' + esc(t("q.f.valueHelp")) + '</p>' +
+        '<div class="q-grid">' +
+          qField(t("q.f.category"),
+            '<input class="inp" type="text" data-q="category" value="' +
+              esc(r.category || "") + '" placeholder="' + esc(t("q.f.category.ph")) + '">') +
+          qField(t("q.f.language"),
+            '<select class="sel" data-q="language">' +
+              '<option value="fr"' + (r.language !== "en" ? " selected" : "") + '>' +
+                esc(t("cfg.benchlang.fr")) + '</option>' +
+              '<option value="en"' + (r.language === "en" ? " selected" : "") + '>' +
+                esc(t("cfg.benchlang.en")) + '</option>' +
+            '</select>') +
+        '</div>' +
+        '<div class="field">' +
+          '<label class="cb"><input type="checkbox" data-q="active"' +
+            ((r.active === false) ? "" : " checked") + '>' +
+            '<span class="cb-text">' + esc(t("q.f.active")) + '</span></label>' +
+        '</div>' +
+        qField(t("q.f.notes"),
+          '<textarea class="inp ta" data-q="notes" rows="2" placeholder="' +
+            esc(t("q.f.notes.ph")) + '">' + esc(r.notes || "") + '</textarea>') +
+        '<div class="actions-row">' +
+          '<button type="button" class="btn btn-primary" data-action="q-save" id="qSaveBtn">' +
+            esc(t("q.save")) + '</button>' +
+          '<button type="button" class="btn" data-action="q-cancel">' +
+            esc(t("q.cancel")) + '</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Read the open editor's inputs back into state so a re-render (theme/language toggle)
+  // never loses what the operator typed.
+  function syncEditorFromDom() {
+    if (!state.golden.editor.open) {
+      return;
+    }
+    var root = byId("bench-app");
+    if (!root) {
+      return;
+    }
+    var row = state.golden.editor.row || {};
+    ["question", "reference_answer", "expected_value", "expected_value_type",
+     "category", "language", "notes"].forEach(function (f) {
+      var el = root.querySelector('[data-q="' + f + '"]');
+      if (el) { row[f] = el.value; }
+    });
+    var act = root.querySelector('[data-q="active"]');
+    if (act) { row.active = act.checked; }
+    state.golden.editor.row = row;
+  }
+
   /* ============================ actions ============================ */
 
   function loadConfig() {
@@ -1549,6 +1946,137 @@
     });
   }
 
+  /* --- golden questions actions --- */
+
+  // Refresh ONLY the golden-derived config metadata (category list / active count / run list)
+  // after a question change, WITHOUT touching state.form or state.dirty. A full loadConfig()
+  // here would reset dirty=false while render()'s syncFormFromDom re-reads the operator's still
+  // un-saved config edits from the DOM, silently re-enabling Launch against the stale SAVED
+  // config. A metadata-only refresh keeps the categories/count fresh and the dirty guard intact.
+  function refreshConfigMeta() {
+    return callApi("GET", "config").then(function (res) {
+      var d = res.data || {};
+      if (d.status !== "ok") { return; }
+      state.meta.categories = (d.categories || []).slice();
+      state.meta.questionCount = Number(d.question_count) || 0;
+      state.meta.runs = (d.runs || []).slice();
+      render();
+    }).catch(function () { /* a stale category list is harmless; keep current meta on a blip */ });
+  }
+
+  function loadGolden() {
+    return callApi("GET", "golden").then(function (res) {
+      var d = res.data || {};
+      if (d.status !== "ok") {
+        state.golden.loaded = true;
+        state.golden.loadError = true;
+        render();
+        return;
+      }
+      state.golden.loaded = true;
+      state.golden.loadError = false;
+      state.golden.list = (d.questions || []);
+      // A pending delete confirm whose question vanished (deleted elsewhere) is cleared.
+      if (state.golden.confirmDelete &&
+          !state.golden.list.some(function (g) { return g.question_id === state.golden.confirmDelete; })) {
+        state.golden.confirmDelete = null;
+      }
+      render();
+    }).catch(function () {
+      state.golden.loaded = true;
+      state.golden.loadError = true;
+      render();
+    });
+  }
+
+  function blankQuestionRow() {
+    return {
+      question_id: "", question: "", reference_answer: "",
+      expected_value: "", expected_value_type: "", category: "",
+      language: state.form.language || "fr", active: true, notes: ""
+    };
+  }
+
+  function openQuestionEditor(qid) {
+    var row;
+    var isNew;
+    if (qid) {
+      var found = null;
+      state.golden.list.forEach(function (g) { if (g.question_id === qid) { found = g; } });
+      if (!found) { return; }
+      row = deepCopy(found);
+      isNew = false;
+    } else {
+      row = blankQuestionRow();
+      isNew = true;
+    }
+    state.golden.editor = { open: true, isNew: isNew, row: row, error: null };
+    state.golden.msg = null;
+    state.golden.confirmDelete = null;
+    render();
+  }
+
+  function closeQuestionEditor() {
+    state.golden.editor = { open: false, isNew: false, row: null, error: null };
+    render();
+  }
+
+  function saveQuestion() {
+    syncEditorFromDom();
+    var row = state.golden.editor.row || {};
+    var payload = {
+      question_id: (row.question_id || "").trim(),
+      question: (row.question || "").trim(),
+      reference_answer: (row.reference_answer || "").trim(),
+      expected_value: (row.expected_value || "").trim(),
+      expected_value_type: (row.expected_value_type || "").trim(),
+      category: (row.category || "").trim(),
+      language: (row.language === "en") ? "en" : "fr",
+      active: row.active !== false,
+      notes: (row.notes || "").trim()
+    };
+    var btn = byId("qSaveBtn");
+    if (btn) { btn.disabled = true; btn.textContent = t("q.saving"); }
+    callApi("POST", "golden/save", payload).then(function (res) {
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        state.golden.editor = { open: false, isNew: false, row: null, error: null };
+        state.golden.msg = { kind: "ok", text: t("q.saved") };
+        // Refresh the question list + the golden-derived config metadata (categories/count),
+        // WITHOUT clobbering any unsaved config edits or the dirty flag (see refreshConfigMeta).
+        refreshConfigMeta();
+        return loadGolden();
+      }
+      if (d.error === "invalid_question") {
+        state.golden.editor.error = { kind: "invalid", messages: d.messages || [] };
+      } else {
+        state.golden.editor.error = { kind: "error", text: t("q.saveError") };
+      }
+      render();
+    }).catch(function () {
+      state.golden.editor.error = { kind: "error", text: t("q.saveError") };
+      render();
+    });
+  }
+
+  function deleteQuestion(qid) {
+    callApi("POST", "golden/delete", { question_id: qid }).then(function (res) {
+      var d = res.data || {};
+      state.golden.confirmDelete = null;
+      if (res.status === 200 && d.status === "ok") {
+        state.golden.msg = { kind: "ok", text: t("q.deleted") };
+        refreshConfigMeta();
+        return loadGolden();
+      }
+      state.golden.msg = { kind: "error", text: t("q.deleteError") };
+      render();
+    }).catch(function () {
+      state.golden.confirmDelete = null;
+      state.golden.msg = { kind: "error", text: t("q.deleteError") };
+      render();
+    });
+  }
+
   /* ============================ events ============================ */
 
   function onClick(e) {
@@ -1615,6 +2143,27 @@
       promoteSelection();
     } else if (action === "promote-cancel") {
       state.suggestions.confirm = false;
+      render();
+    } else if (action === "retry-golden") {
+      state.golden.loadError = false;
+      render();
+      loadGolden();
+    } else if (action === "q-add") {
+      openQuestionEditor("");
+    } else if (action === "q-edit") {
+      openQuestionEditor(actionEl.getAttribute("data-id"));
+    } else if (action === "q-cancel") {
+      closeQuestionEditor();
+    } else if (action === "q-save") {
+      saveQuestion();
+    } else if (action === "q-delete") {
+      state.golden.confirmDelete = actionEl.getAttribute("data-id");
+      state.golden.msg = null;
+      render();
+    } else if (action === "q-delete-go") {
+      deleteQuestion(actionEl.getAttribute("data-id"));
+    } else if (action === "q-delete-cancel") {
+      state.golden.confirmDelete = null;
       render();
     }
   }
@@ -1713,6 +2262,7 @@
     root.addEventListener("input", onInput);
     render();
     loadConfig();
+    loadGolden();
     loadSuggestions();
     checkRunStatus();
   }

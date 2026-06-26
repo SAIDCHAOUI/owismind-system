@@ -130,9 +130,15 @@ Copie la valeur (ex. `OWISMIND_DEV_owismind_webapp_golden_suggestions_v1`). Gard
 
 ### C1. Re-coller la librairie partagee
 1. `OWIsMind_LAB` -> menu **"</> "** (Code) -> **Libraries**, partie **python/**.
-2. Le package `benchmark/` doit etre present et A JOUR (recolle `config.py` + `run_params.py` si tu
-   ne l'as pas fait : ils ont change avec le renommage des modes).
+2. Le package `benchmark/` doit etre present et A JOUR. Recolle ce qui a change :
+   - `config.py` + `run_params.py` (renommage des modes + le nouveau cap `history_keep_runs`) ;
+   - **`history.py`** (NOUVEAU) + **`dss_steps/history_io.py`** (NOUVEAU) : la brique qui fait que les
+     runs s'ACCUMULENT au lieu de s'ecraser (voir le bloc Historique plus bas) ;
+   - les **3 corps de step** `dss_steps/step_run_matrix.py` / `step_judge.py` / `step_aggregate.py`
+     (ils appellent maintenant l'append au lieu de l'overwrite) -> re-colle-les aussi dans les steps
+     du scenario `Run_Benchmark`.
 3. Cree `python/benchmark_webapp/` et place-y `__init__.py`, `views.py`, `dss.py` (depuis le repo).
+   (`views.py` + `dss.py` ont gagne la gestion des questions golden, voir C3.)
 
 Verification (en local sur le repo, jamais sur l'instance) :
 `python3 -m unittest discover -s benchmark_webapp/tests` doit passer.
@@ -150,8 +156,16 @@ chiffres cles, par configuration / par sujet / par question. En haut a droite : 
 
 ### C3. Creer la webapp "Benchmark - Launcher"
 Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les 4 panes depuis
-`benchmark_webapp/launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, et une
-section Suggestions.
+`benchmark_webapp/launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, une carte
+**Questions** (gerer le golden : ajouter / modifier / activer-desactiver / supprimer une question avec
+sa reponse attendue) et une section Suggestions.
+
+> **Carte Questions (gestion du golden).** C'est la pour editer directement le jeu de questions de
+> reference sans passer par un dataset : un formulaire (question, reponse attendue, valeur attendue +
+> type, categorie, langue, active) ecrit dans le dataset golden via l'API Dataset (jamais de SQL brut).
+> Desactiver une question (decocher "Active") la retire des prochains runs sans la perdre ; la supprimer
+> l'enleve du golden mais laisse intacts les resultats des runs passes. Les permissions C4 (ecriture
+> projet LAB) suffisent ; aucune permission supplementaire.
 
 ### C4. Permissions
 - **Results** : lecture sur les datasets de resultats (automatique, meme projet). Rien d'autre.
@@ -179,10 +193,26 @@ ajoute (sans toucher au reste) :
 Suggestions affiche "Source des suggestions non configuree" (aucune erreur).
 
 ### C7. Deux reglages de securite / donnees a ne PAS oublier
-- **`golden_dataset` doit etre un dataset manage AUTONOME** (sans recette en amont). La promotion
-  ecrit dedans ; si c'etait la sortie d'une recette, un rebuild effacerait les questions promues.
+- **`golden_dataset` doit etre un dataset manage AUTONOME** (sans recette en amont). La promotion ET
+  la carte Questions ecrivent dedans ; si c'etait la sortie d'une recette, un rebuild effacerait les
+  questions ajoutees/modifiees.
 - **Active "Prevent concurrent executions"** sur le scenario `Run_Benchmark` (Scenario -> Settings) :
   le garde-fou autoritaire contre un double lancement.
+
+### C8. Historique des runs (ils s'accumulent maintenant)
+Depuis cette version, chaque run **s'ajoute** aux datasets de resultats au lieu d'ecraser le precedent
+(chaque ligne porte deja son `run_id` / `run_timestamp`). Tu n'as RIEN a configurer pour ca : c'est le
+comportement par defaut une fois les 3 steps + les 2 nouveaux fichiers recolles (C1). Concretement, le
+selecteur de run de **Results** liste desormais tous les runs passes et tu peux les comparer.
+- **Re-lancer un meme run est idempotent** : re-jouer Judge/Aggregate sur un `run_id` deja present
+  remplace ses lignes au lieu de les dupliquer (les autres runs sont preserves).
+- **Borne par defaut (securite instance)** : les 2 tables LOURDES (`benchmark_runs_raw` et
+  `benchmark_runs_scored`, qui portent les reponses completes + SQL) ne gardent que les **50 runs
+  les plus recents** par defaut (`history_keep_runs: 50`). Les tables LEGERES (`benchmark_summary`
+  et `benchmark_breakdown`, une mini-ligne par run x agent x mode) gardent **TOUS** les runs : c'est
+  elles que lit le selecteur de run de Results, donc l'historique complet reste consultable.
+  - Pour changer la borne : `"history_keep_runs": 100` (par ex.) dans la variable `benchmark` ;
+    `"history_keep_runs": 0` = ne rien borner (garder tout, meme les tables lourdes).
 
 ---
 
@@ -207,6 +237,17 @@ Astuce premier test : restreins a une categorie + mode Smart seulement (rapide, 
 
 Verifie : ouvre `golden_questions_v1_prepared` ; la question promue y est, `question_id` en `u_...`.
 
+### D4. Gerer les questions (carte Questions du Launcher)
+1. Dans **Launcher** -> carte **Questions** -> **Ajouter une question** : remplis le formulaire
+   (question + reponse attendue obligatoires ; valeur attendue + type optionnels pour l'ancre du juge ;
+   categorie, langue, active) -> **Enregistrer**. Elle apparait dans la liste (id en `a_...`).
+2. **Modifier** une ligne -> change la reponse attendue -> Enregistrer.
+3. **Decocher "Active"** sur une question -> elle reste listee mais ne sera plus testee au prochain run.
+4. **Supprimer** -> confirmation -> elle quitte le golden (les resultats des runs passes la gardent).
+
+Verifie : `golden_questions_v1_prepared` reflete tes ajouts/modifs ; et apres un nouveau run, **Results**
+montre PLUSIEURS runs dans le selecteur (l'historique s'accumule, cf. C8).
+
 ---
 
 ## 6. Depannage (cas frequents)
@@ -225,6 +266,11 @@ Verifie : ouvre `golden_questions_v1_prepared` ; la question promue y est, `ques
 - **Results : page vide / "get_dataframe" en erreur** : aucun run passe (lance-en un, D2).
 - **Le menu "..." n'a pas "Suggerer pour le benchmark"** : backend du plugin pas redemarre (B3), ou
   reponse en cours / sans texte.
+- **Carte Questions : "Impossible d'enregistrer/supprimer la question"** : l'identite de la webapp n'a
+  pas le droit d'ecrire sur le projet LAB (C4), ou le `golden_dataset` n'est pas un dataset manage
+  autonome (C7). Une erreur de lecture transitoire fait echouer proprement (500) sans toucher au golden.
+- **Results ne montre qu'UN run** alors que tu en as lance plusieurs : les 3 steps + les 2 fichiers
+  d'historique ne sont pas recolles (C1), donc les steps ecrasent encore. Re-colle-les.
 
 ---
 
@@ -235,8 +281,12 @@ Verifie : ouvre `golden_questions_v1_prepared` ; la question promue y est, `ques
   golden, le journal des promus) via l'API Dataset, jamais de UPDATE/DELETE/DROP/INSERT brut. Tout
   cet acces est concentre dans `benchmark_webapp/dss.py`.
 - **Results n'a aucune capacite d'ecriture** (aucune route d'ecriture).
-- **La promotion ne peut pas ecraser le golden** : lecture qui leve en cas d'echec (abort propre),
-  verrou de promotion, et "deja promu" deduit du golden (pas d'un journal fragile).
+- **La promotion ET la gestion des questions ne peuvent pas ecraser le golden par accident** :
+  lecture qui LEVE en cas d'echec (abort propre, jamais d'ecriture tronquee), meme verrou que la
+  promotion (pas de perte d'update concurrent), edition qui preserve les colonnes existantes.
+- **L'historique ne peut pas etre tronque par un blip** : les steps lisent l'existant avec une lecture
+  qui leve (gardee par le schema) ; une erreur de lecture sur un dataset deja construit fait echouer le
+  step au lieu d'ecraser l'historique avec le seul run courant.
 - **Le lancement est single-flight** (verrou interne + "Prevent concurrent executions" cote scenario).
 
 ---

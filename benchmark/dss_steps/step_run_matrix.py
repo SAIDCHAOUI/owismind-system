@@ -30,6 +30,7 @@ import pandas as pd
 
 from benchmark import config, schemas, run_params
 from benchmark import agent_runner
+from benchmark.dss_steps.history_io import write_history_dataset
 
 
 def _get_variables():
@@ -169,9 +170,8 @@ def run():
 
     agent_runner.run_matrix(run_config, write_row)
 
-    # Write the raw dataset with the canonical RAW_COLUMNS schema. Missing keys
+    # Build the raw frame with the canonical RAW_COLUMNS schema. Missing keys
     # default to None so partial rows (errors / timeouts) still conform.
-    out = dataiku.Dataset(cfg["raw_dataset"])
     if collected:
         frame = pd.DataFrame(
             [{col: row.get(col) for col in schemas.RAW_COLUMNS} for row in collected],
@@ -179,7 +179,9 @@ def run():
         )
     else:
         frame = pd.DataFrame(columns=list(schemas.RAW_COLUMNS))
-    out.write_with_schema(frame)
+    # APPEND this run to the raw history (every row carries the fresh run_id), instead of
+    # overwriting, so past runs are preserved and the Results app can compare them.
+    write_history_dataset(cfg["raw_dataset"], frame, cfg.get("history_keep_runs"))
 
 
 run()

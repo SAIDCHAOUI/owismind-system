@@ -92,9 +92,17 @@ Si `generated_sql_json` reste `[]` sur une question chiffree : voir Depannage.
      la pile a relire en priorite (desaccord ancre vs juge, ou agent en erreur).
    - **`benchmark_breakdown`** : `accuracy` par categorie (bon en revenus / faible en
      tickets).
-4. Regression : pour comparer plusieurs runs, mettre `"score_all_runs": true` et
-   `"aggregate_all_runs": true` dans la variable ; le summary aura une ligne par
-   (run_id x agent x mode).
+4. **Historique (par defaut).** Chaque run **s'ajoute** aux 4 datasets de resultats au lieu
+   d'ecraser le precedent : le summary a deja une ligne par (run_id x agent x mode), et la webapp
+   Results liste tous les runs passes. Re-jouer Judge/Aggregate sur un meme `run_id` remplace ses
+   lignes (idempotent), sans toucher aux autres runs. (Requiert d'avoir recolle les 3 steps + les
+   nouveaux `history.py` / `dss_steps/history_io.py`, cf. `benchmark_webapp/DEPLOY_GUIDE.md`.)
+   - **Borne par defaut** : les tables LOURDES (`benchmark_runs_raw` + `benchmark_runs_scored`)
+     gardent les **50 runs** les plus recents (`history_keep_runs: 50`) ; les tables LEGERES
+     (`benchmark_summary` + `benchmark_breakdown`) gardent **tout** (c'est l'historique que lit
+     Results). Mettre `"history_keep_runs": 0` pour ne rien borner ; un entier pour une autre borne.
+   - `"score_all_runs"` / `"aggregate_all_runs"` (defaut `false`) re-traitent TOUS les `run_id`
+     d'un coup au lieu du dernier (rarement utile maintenant que l'historique est conserve).
 
 ---
 

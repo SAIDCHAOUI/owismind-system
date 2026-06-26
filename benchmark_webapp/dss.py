@@ -251,6 +251,26 @@ def read_golden_question_ids(cfg):
     return {str(r.get("question_id")) for r in rows if r.get("question_id")}
 
 
+def _golden_existing(ds):
+    """Existing golden frame for a read-modify-write, schema-gated + abort-safe (NaN -> None).
+
+    A never-built golden (its schema reads back empty) returns an EMPTY frame so the FIRST
+    question can be created through the launcher (parity with the history step's gate). A BUILT
+    golden is read with a RAISING get_dataframe so a transient blip ABORTS the write (lesson
+    L104: never overwrite the human-authored golden with a truncated set). A schema-read failure
+    is AMBIGUOUS, so it falls through to the raising read - it never assumes empty on a blip.
+    """
+    schema = None
+    try:
+        schema = ds.read_schema()
+    except Exception:
+        schema = None  # ambiguous -> fall through to the raising read (never assume empty)
+    if schema is not None and not schema:
+        return pd.DataFrame()  # definitively never built: legitimate empty start
+    df = ds.get_dataframe()  # RAISES on a transient error -> abort (no truncation)
+    return df.astype(object).where(pd.notnull(df), None)
+
+
 # --- promotion: APPEND to LAB Flow datasets ONLY (Dataset API, never raw SQL) ----
 
 def append_golden_and_record(cfg, golden_rows, used_ids):
@@ -274,8 +294,7 @@ def append_golden_and_record(cfg, golden_rows, used_ids):
     with _PROMOTE_LOCK:
         golden_name = cfg["golden_dataset"]
         ds = dataiku.Dataset(golden_name)
-        df_existing = ds.get_dataframe()  # RAISES on failure -> aborts (never overwrites on a blip)
-        df_existing = df_existing.astype(object).where(pd.notnull(df_existing), None)
+        df_existing = _golden_existing(ds)  # schema-gated RAISING read (abort on a blip, not truncate)
         existing_qids = set()
         if "question_id" in df_existing.columns:
             existing_qids = {str(v) for v in df_existing["question_id"].tolist() if v is not None}
@@ -305,3 +324,69 @@ def append_golden_and_record(cfg, golden_rows, used_ids):
                 logger.warning("benchmark promote: promoted-ids audit log update skipped "
                                "(read/write failed); the golden question_ids stay the source of truth")
         return {"promoted": len(new_rows), "recorded": len(used_ids)}
+
+
+# --- golden CRUD: admin management of the golden dataset (Dataset API only) ------
+
+def read_golden_rows(cfg):
+    """All golden rows shaped for the management table (views.golden_view). Never raises -> []."""
+    return views.golden_view(read_dataset(cfg["golden_dataset"]))
+
+
+def _write_golden(ds, rows):
+    """Write the full golden row list via the Dataset API, preserving any extra columns.
+
+    Columns = the canonical lean-9 GOLDEN_COLUMNS first, then any extra columns the prepared
+    golden carries (kept after the canonical ones), so a rewrite never narrows the dataset.
+    """
+    cols = list(schemas.GOLDEN_COLUMNS)
+    extra = []
+    for r in rows:
+        for key in r.keys():
+            if key not in cols and key not in extra:
+                extra.append(key)
+    all_cols = cols + extra
+    df = pd.DataFrame([{c: r.get(c) for c in all_cols} for r in rows], columns=all_cols)
+    ds.write_with_schema(df)
+
+
+def save_golden_question(cfg, payload):
+    """Create or update one golden question. Returns ``(result_or_None, errors)``.
+
+    Read-modify-write under the SAME promote lock with a RAISING existing-read: a transient
+    read failure aborts (api returns 500) rather than overwriting the human-authored golden
+    with a truncated set. A payload without a question_id is a create (minted ``a_`` id);
+    one with a question_id updates that row (extra columns preserved). The write goes through
+    the Dataset API (a LAB Flow dataset), NEVER raw SQL on the shared connection.
+    """
+    with _PROMOTE_LOCK:
+        ds = dataiku.Dataset(cfg["golden_dataset"])
+        df = _golden_existing(ds)  # schema-gated: empty on a never-built golden, RAISES on a blip
+        existing = df.to_dict("records")
+        existing_ids = [r.get("question_id") for r in existing if r.get("question_id") is not None]
+        clean_row, errors, is_new = views.prepare_golden_save(payload, existing_ids)
+        if errors:
+            return None, errors
+        rows = views.apply_golden_upsert(existing, clean_row)
+        _write_golden(ds, rows)
+        return {"question_id": clean_row["question_id"], "created": is_new, "count": len(rows)}, []
+
+
+def delete_golden_question(cfg, question_id):
+    """Hard-delete one golden question by id. Returns ``(result_or_None, errors)``.
+
+    Locked + RAISING read (same data-safety as save). Removing a question never touches the
+    PAST run results (raw/scored keep their own rows by question_id), only the golden set.
+    """
+    qid = question_id.strip() if isinstance(question_id, str) else ""
+    if not qid:
+        return None, ["question_id is required"]
+    with _PROMOTE_LOCK:
+        ds = dataiku.Dataset(cfg["golden_dataset"])
+        df = _golden_existing(ds)  # schema-gated RAISING read (abort on a blip, not truncate)
+        existing = df.to_dict("records")
+        rows = views.apply_golden_delete(existing, qid)
+        if len(rows) == len(existing):
+            return {"deleted": False, "count": len(rows)}, []
+        _write_golden(ds, rows)
+        return {"deleted": True, "count": len(rows)}, []
