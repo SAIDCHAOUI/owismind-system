@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OWIsMind — Results · Orange</title>
+<link rel="stylesheet" href="results/results.css">
+<link rel="stylesheet" href="results/results-extra.css">
+</head>
+<body data-theme="light">
+
+<div class="shell">
+
+  <!-- LEFT RAIL -->
+  <nav class="rail">
+    <div class="logo"><span></span></div>
+    <button class="rail-btn" title="Launcher"><i data-rail="rocket"></i></button>
+    <button class="rail-btn on" title="Results"><i data-rail="chart"></i></button>
+    <div class="rail-sp"></div>
+    <button class="rail-btn" title="Settings"><i data-rail="gear"></i></button>
+    <div class="rail-avatar">JD</div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <div class="util">
+      <a href="#"><i id="icLogs"></i><span data-i18n="util.logs">Logs</span></a>
+      <a href="#"><i id="icSettings"></i><span data-i18n="util.settings">Settings</span></a>
+      <span class="util-sp"></span>
+    </div>
+
+    <header class="header">
+      <div>
+        <p class="eyebrow" data-i18n="hdr.eyebrow">Agent benchmark</p>
+        <h1 data-i18n="hdr.h1">How well do the OWIsMind agents answer?</h1>
+        <div class="title-bar"></div>
+        <p class="header-sub" data-i18n="hdr.sub"></p>
+      </div>
+      <div class="controls">
+        <div class="run-select">
+          <span class="lbl" data-i18n="run.label">Test run</span>
+          <select><option id="runId">2026-06-26 09:02</option></select>
+        </div>
+        <div class="seg" id="langSeg">
+          <button data-lang="en" class="on">EN</button>
+          <button data-lang="fr">FR</button>
+        </div>
+        <div class="seg" id="themeSeg">
+          <button data-theme="light" class="on">LIGHT</button>
+          <button data-theme="dark">DARK</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="body">
+
+      <!-- CONTENT -->
+      <main class="content">
+
+        <!-- HERO -->
+        <section class="section">
+          <div class="hero">
+            <div class="donut" id="donut"></div>
+            <div>
+              <h2 class="hero-head" id="heroHead"></h2>
+              <span class="verdict bad" id="verdict"></span>
+              <p class="hero-note" id="heroNote"></p>
+              <p class="hero-meta" id="heroMeta"></p>
+            </div>
+          </div>
+          <div class="kpis" id="kpis"></div>
+        </section>
+
+        <!-- BY CONFIGURATION -->
+        <section class="section">
+          <div class="section-h"><h2 data-i18n="sec.cfg">By configuration</h2></div>
+          <p class="section-sub" data-i18n="sec.cfg.sub"></p>
+          <div id="configs"></div>
+        </section>
+
+        <!-- BY TOPIC -->
+        <section class="section">
+          <div class="section-h"><h2 data-i18n="sec.topic">Correct answers by topic</h2></div>
+          <div id="topics" style="margin-top:14px"></div>
+        </section>
+
+        <!-- QUESTION BY QUESTION -->
+        <section class="section">
+          <div class="section-h"><h2 data-i18n="sec.qq">Question by question</h2></div>
+          <div class="qq-controls">
+            <button type="button" class="chk" id="dcOnly">
+              <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+              <span class="chk-txt"><b data-i18n="qq.filter">Show only items to double-check</b></span>
+            </button>
+            <span class="shown" id="shownCount"></span>
+          </div>
+          <table class="rtable">
+            <thead><tr>
+              <th data-i18n="th.q">Question</th>
+              <th data-i18n="th.topic">Topic</th>
+              <th data-i18n="th.cfg">Configuration</th>
+              <th data-i18n="th.result">Result</th>
+              <th data-i18n="th.judge">AI judge score</th>
+              <th class="num" data-i18n="th.rt">Response time</th>
+              <th class="num" data-i18n="th.cost">Cost</th>
+              <th data-i18n="th.dc">To double-check</th>
+            </tr></thead>
+            <tbody id="qtbody"></tbody>
+          </table>
+        </section>
+
+      </main>
+
+      <!-- ASIDE: reference -->
+      <aside class="aside">
+        <div class="ref-block">
+          <p class="ref-h" data-i18n="ref.measure.h">How we measure this</p>
+          <p class="ref-p" data-i18n="ref.measure.p"></p>
+        </div>
+        <div class="ref-block">
+          <p class="ref-h" data-i18n="ref.score.h">How to read the scores</p>
+          <dl class="ref-dl">
+            <div class="r"><dt data-i18n="ref.score.judge.t">AI judge score</dt><dd data-i18n="ref.score.judge.d"></dd></div>
+            <div class="r"><dt data-i18n="ref.score.plaus.t">Plausible</dt><dd data-i18n="ref.score.plaus.d"></dd></div>
+            <div class="r"><dt data-i18n="ref.score.dc.t">To double-check</dt><dd data-i18n="ref.score.dc.d"></dd></div>
+          </dl>
+        </div>
+        <div class="ref-block">
+          <p class="ref-h" data-i18n="ref.modes.h">What the modes mean</p>
+          <p class="ref-p" data-i18n="ref.modes.p"></p>
+          <div class="legend">
+            <div class="l"><span class="dot" style="background:var(--m-smart)"></span>Smart</div>
+            <div class="l"><span class="dot" style="background:var(--m-pro)"></span>Pro</div>
+            <div class="l"><span class="dot" style="background:var(--m-claude)"></span>Claude</div>
+            <div class="l"><span class="dot" style="background:var(--m-std)"></span>Standard</div>
+          </div>
+          <p class="ref-p" style="margin-top:12px" data-i18n="ref.modes.std"></p>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect width="100" height="100" fill="#111"/>
+    <circle cx="50" cy="48" r="22" fill="none" stroke="#444" stroke-width="8"/>
+    <path d="M50 26 a22 22 0 0 1 19 11" fill="none" stroke="#ff7900" stroke-width="8"/>
+    <rect x="30" y="70" width="40" height="5" rx="1" fill="#fff"/>
+  </svg>
+</template>
+
+<script src="results/results.js"></script>
+</body>
+</html>

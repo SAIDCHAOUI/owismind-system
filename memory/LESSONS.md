@@ -2415,5 +2415,32 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   4 medium/low corrigés + re-vérifiés ; 0 tiret. **Plugin NON touché** (tout en `benchmark/` + `benchmark_webapp/`).
   **Date** : 2026-06-26.
 
+## L107 - Les 2 webapps LAB (Launcher + Results) re-skinnées sur le mockup Orange fourni (rail retiré) : port du frontend SEUL, backend intact, render dans `#bench-app` ; gotcha `var()` en attribut SVG [repo, QA Playwright, 2026-06-26]
+- **Contexte** : l'user fournit un mockup HTML/CSS/JS charté (`benchmark_webapp/mockup/OWIsMind_benchmark/`)
+  pour le Launcher puis pour Results, « implémente de cette manière sans tenir compte de la barre latérale ».
+- **Méthode qui marche** : porter le mockup (look + structure : header segments EN/FR + clair/sombre, onglets/
+  hero/donut/cartes/tables, modale, toast) mais **garder le contrat backend existant** (mêmes routes
+  `getWebAppBackendUrl('api/...')`, mêmes formes de `views.py`) et le **MOCK** pour la preview hors-ligne. On
+  ne réécrit QUE les 3-4 fichiers de pane (`body.html`/`style.css`/`script.js`), **0 Python touché** -> 49 tests
+  webapp restent verts, pas de build/zip (webapps DSS Standard).
+- **Rail retiré** (« pour le moment ») : la nav inter-webapps Launcher/Results/Settings est une feature future ;
+  on garde seulement `.main`. Thème porté sur `<html>` (pas `<body>`) -> sélecteurs CSS `[data-theme=...]`
+  (pas `body[data-theme=...]`), posé avant le 1er paint.
+- **Pattern de rendu** : tout le shell est construit UNE fois dans `#bench-app` (les 2 webapps montent au même
+  endroit), puis re-render ciblé ; la branche d'erreur de chargement doit passer AVANT `ensureShell()` et
+  remettre `built=false`, sinon le shell est reconstruit puis écrasé et le retry casse l'UI.
+- **GOTCHA `var()` en attribut SVG** : `stroke="var(--orange)"` en **attribut de présentation** SVG n'est PAS
+  résolu par le navigateur (les custom properties ne valent qu'en **CSS**). Mettre la couleur via
+  `style="stroke:var(--orange)"` (propriété CSS) -> résolue + réactive au thème live. Pareil pour les pastilles
+  de mode (couleur via `style="background:var(--m-smart)"`).
+- **Justesse préservée malgré le mockup-démo** : modale golden = mockup + champs requis par le backend (ancre =
+  `expected_value` **+** type, catégorie en datalist des catégories live, `notes` préservées) ; `agent_key`
+  logique géré en coulisse (3 champs visibles seulement) ; Results mappe `summary`/`breakdown`/`detail` (classif
+  résultat OK/Non OK/Plausible, sous-métriques p50/p95/coût/échecs, sujets par dimension=category, nombres
+  **localisés** EN/US vs FR). Tiret cadratin du mockup (`agent — mode`) **retiré** (règle #9) ; ellipses en `...`.
+- **Preuve-vérification** : QA Playwright des 2 preview (EN/FR x clair/sombre, save config + toast, création
+  golden via modale, lancement run simulé, table Results + déplier détail + filtre « à revérifier » + sélecteur
+  de run), **0 erreur console**, 49 tests webapp verts, **0 tiret (7 fichiers)**. **Date** : 2026-06-26.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

@@ -19,6 +19,19 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
+**🎨 SESSION 2026-06-26 (RUN UI) - RE-SKIN DES 2 WEBAPPS LAB SUR LE MOCKUP ORANGE (Launcher + Results),
+RAIL RETIRÉ - repo only, frontend SEUL, NON déployé. ✅ QA Playwright OK.** L'user a fourni un mockup
+HTML/CSS/JS charté (`benchmark_webapp/mockup/OWIsMind_benchmark/`). **Launcher** (`launcher/style.css`+
+`script.js`) + **Results** (`results/style.css`+`script.js`+`body.html`+`preview.html`) refaits « de cette
+manière » (header EN/FR + clair/sombre, Launcher = onglets Config/Golden/Suggestions + aside Run + modale +
+toast ; Results = donut + hero verdict + KPIs + cartes par config + barres par sujet + table Q-par-Q +
+détails dépliables + aside référence), **branchés au VRAI backend** (mêmes routes `api/*`, formes `views.py`),
+MOCK conservé, justesse golden 9-col préservée (ancre valeur+type, notes), nombres localisés FR. **0 Python
+touché** (49 tests webapp verts, pas de build/zip - webapps DSS Standard). **GOTCHA `var()` en attribut SVG**
+(non résolu) -> couleurs via `style="stroke:var()"`. Tiret du mockup retiré (règle #9), ellipses `...`. QA
+Playwright des 2 preview (EN/FR x clair/sombre, save/toast, création golden, run simulé, table+détails+filtre+
+sélecteur de run) = **0 erreur console, 0 tiret (7 fichiers)**. **Rail (nav inter-webapps) = différé.** Voir **L107**.
+
 **🔬 SESSION 2026-06-26 + RÉVISION (b) (INTÉGRATION DU BENCHMARK DANS LE SYSTÈME - 2 pôles : capture
 utilisateur + webapps admin) - repo only, DEV re-packagé, NON validé DSS. Session autonome.**
 **⮕ RÉVISION 2026-06-26b (retour user en cours de nuit) :** le webapp LAB unique est SPLITé en **DEUX
@@ -588,7 +601,17 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-26 (+ révision b) : intégration benchmark - capture utilisateur (plugin) + 2 webapps admin LAB → détail `sessions/2026-06-26.md`
+## 🧭 Dernière session - 2026-06-26 (Run UI) : re-skin des 2 webapps LAB sur le mockup Orange (Launcher + Results, rail retiré) → détail `sessions/2026-06-26.md` + **L107**
+- **Frontend SEUL** (repo only, NON déployé) : `launcher/{style.css,script.js}` + `results/{style.css,script.js,
+  body.html,preview.html}` refaits « de cette manière » d'après `benchmark_webapp/mockup/OWIsMind_benchmark/`,
+  **rail retiré**. Branchés au VRAI backend (routes `api/*` + formes `views.py` inchangées), MOCK conservé,
+  justesse golden 9-col + nombres localisés FR préservés. **0 Python touché** (49 tests webapp verts, pas de
+  build/zip). Gotcha `var()` en attribut SVG -> couleurs via `style="stroke:var()"`.
+- **QA Playwright** des 2 preview (EN/FR x clair/sombre + interactions : save/toast, création golden, run
+  simulé, table Results + détails + filtre + sélecteur de run) = **0 erreur console, 0 tiret (7 fichiers)**.
+  **À FAIRE DSS** : au déploiement des 2 webapps Standard, coller les panes mis à jour (guide inchangé). Rail différé.
+
+## Avant - 2026-06-26 (+ révision b) : intégration benchmark - capture utilisateur (plugin) + 2 webapps admin LAB
 - **2 pôles** : capture utilisateur **dans le plugin Vue** (table `webapp_golden_suggestions_v1` + 3 routes
   `/benchmark/*` + action menu « ... » -> page `/benchmark` préremplie, tous users) ; admin/restitution =
   **DEUX webapps DSS standard SÉPARÉES dans `OWIsMind_LAB`** (révision b) : `benchmark_webapp/results/`

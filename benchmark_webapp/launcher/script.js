@@ -1,527 +1,363 @@
 /* OWIsMind Benchmark - Launcher webapp (framework-free vanilla JS, no build).
  *
- * A REAL configuration FORM (never a raw JSON editor): edit agents, response modes, the
- * question filter, concurrency and the benchmark language, then save (POST api/config) and
- * launch the Run_Benchmark scenario (POST api/run + poll api/run/status). It also reviews and
- * promotes user-suggested questions. Talks to the Python backend via getWebAppBackendUrl.
+ * A REAL configuration FORM (never a raw JSON editor): edit the agents under test, the response
+ * modes, the question filter, the concurrency and the benchmark language, then save (POST
+ * api/config) and launch the Run_Benchmark scenario (POST api/run + poll api/run/status). It also
+ * manages the golden set (add/edit/enable/delete) and reviews/promotes user-suggested questions.
+ * Talks to the Python backend via getWebAppBackendUrl.
  *
- * Bilingual: English is the default, French via the top-right toggle (persisted). Every visible
- * string goes through t(). Numbers are formatted client-side per the active locale. Orange
- * charter styling lives in style.css. MOCK mode (no getWebAppBackendUrl) serves sample data so
- * preview.html renders a full representative page offline. */
+ * UI ported from the OWIsMind benchmark mockup (tabs + aside + cards + golden table + modal +
+ * toast), minus the left rail. The whole interface is rendered by this script into #bench-app, so
+ * the language / theme toggles re-render in place. Bilingual: English default, French via the
+ * top-right toggle (persisted). Orange charter styling lives in style.css. MOCK mode (no
+ * getWebAppBackendUrl) serves sample data so preview.html renders a full page offline. */
 
 (function () {
   "use strict";
 
+  /* ============================ icons ============================ */
+
+  var I = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16v4zM14 6l4 4"/></svg>',
+    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>',
+    bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1.5 1.5 1.5 3h5c0-1.5.5-2 1.5-3a6 6 0 0 0-4-10z"/></svg>',
+    rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c3 1 5 4 5 8l-2 4H9l-2-4c0-4 2-7 5-8zM9 15l-2 3M15 15l2 3"/><circle cx="12" cy="9" r="1.4"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+  };
+
   /* ============================ i18n ============================ */
 
-  var I18N = {
-    en: {
-      "brand.eyebrow": "OWIsMind Benchmark",
-      "brand.h1": "Launcher",
-      "brand.desc": "Configure the benchmark, launch a run, and promote the questions your users suggested. Results are read in the separate Results app.",
-      "toggle.theme.aria": "Toggle light or dark theme",
-      "toggle.theme.toLight": "Light",
-      "toggle.theme.toDark": "Dark",
-      "toggle.lang.aria": "Switch language",
-
-      "cfg.eyebrow": "Setup",
-      "cfg.title": "Configuration",
-      "cfg.desc": "This is the live configuration. Saving only changes the agents, modes, question filter, concurrency and language. The preserved settings below are kept untouched.",
-
-      "cfg.agents.label": "Agents under test",
-      "cfg.agents.helper": "The agent id (like agent:038G7mlF) lives inside its own DSS project: do not prefix it. The project key tells the benchmark which project to call it in.",
-      "cfg.agents.col.label": "Label",
-      "cfg.agents.col.project": "Project key",
-      "cfg.agents.col.agentid": "Agent id",
-      "cfg.agents.modesShort": "Supports response modes (Smart / Pro / Claude)",
-      "cfg.agents.add": "Add agent",
-      "cfg.agents.remove": "Remove",
-      "cfg.agents.removeAria": "Remove agent {name}",
-      "cfg.agents.ph.label": "e.g. OWIsMind Orchestrator",
-      "cfg.agents.ph.project": "e.g. OWISMIND_DEV",
-      "cfg.agents.ph.agentid": "e.g. agent:038G7mlF",
-      "cfg.agents.empty": "No agent yet. Add at least one to run the benchmark.",
-
-      "cfg.modes.label": "Response modes",
-      "cfg.modes.helper": "Only mode-aware agents are tested across the checked modes. Other agents get a single default call.",
-
-      "cfg.questions.label": "Questions to test",
-      "cfg.questions.helper": "Pick the categories to test. Empty selection = all {count} active questions.",
-      "cfg.questions.nocats": "No category found in the golden set yet.",
-      "cfg.questions.langfilter": "Language filter",
-      "cfg.questions.lang.all": "All",
-      "cfg.questions.lang.fr": "French",
-      "cfg.questions.lang.en": "English",
-
-      "cfg.concurrency.label": "Concurrency",
-      "cfg.concurrency.helper": "How many questions run in parallel (1-8, kept low for instance safety). Values outside the range are clamped.",
-
-      "cfg.benchlang.label": "Benchmark language",
-      "cfg.benchlang.helper": "Language used for the run report and the agent prompts. To choose which golden questions are tested, use the Language filter above.",
-      "cfg.benchlang.fr": "French (fr)",
-      "cfg.benchlang.en": "English (en)",
-
-      "cfg.preserved.label": "Preserved settings",
-      "cfg.preserved.note": "These are not editable here and are kept untouched when you save.",
-      "cfg.preserved.golden": "Golden dataset",
-      "cfg.preserved.judge": "Judge model",
-      "cfg.preserved.suggestions": "Suggestions source",
-      "cfg.preserved.configured": "Configured",
-      "cfg.preserved.notConfigured": "Not configured",
-      "cfg.preserved.none": "(none)",
-
-      "cfg.save": "Save configuration",
-      "cfg.saving": "Saving...",
-      "cfg.saved": "Configuration saved.",
-      "cfg.invalidTitle": "The configuration could not be saved:",
-      "cfg.saveError": "Could not save the configuration. Check your write access to the LAB project.",
-      "cfg.loadError": "Could not load the configuration. Check your access to the LAB project.",
-      "cfg.modesRequired": "Select at least one response mode, or turn off mode support on the mode-aware agents.",
-
-      "launch.eyebrow": "Run",
-      "launch.title": "Launch",
-      "launch.desc": "Launch the Run_Benchmark scenario asynchronously. Only one run can be in progress at a time.",
-      "launch.btn": "Launch the benchmark",
-      "launch.caveat": "Launching may require scenario permissions. If it is unsupported, run the Run_Benchmark scenario from the DSS scenario UI.",
-      "launch.runsLast": "Launching runs the last saved configuration. Save your edits first.",
-      "launch.dirty": "Unsaved changes - save the configuration before launching.",
-      "launch.lastRun": "Last run: {when}",
-      "launch.confirm": "This will run {combos} agent/mode combination(s) across up to {questions} question(s). Launch now?",
-      "launch.go": "Confirm launch",
-      "launch.cancel": "Cancel",
-      "launch.starting": "Starting the run...",
-      "launch.running": "Running",
-      "launch.finished": "Finished - open the Results app to read it.",
-      "launch.already": "A run is already in progress.",
-      "launch.unsupported": "Launch is not supported here. Run the Run_Benchmark scenario from the DSS scenario UI.",
-      "launch.error": "Could not launch the run.",
-      "launch.failed": "The run did not finish successfully. Check the DSS scenario log.",
-      "launch.lostContact": "Lost contact with the run. Check the DSS scenario log.",
-
-      "sug.eyebrow": "Golden set",
-      "sug.title": "User suggestions",
-      "sug.desc": "Questions your users suggested, pending review. Select the good ones and promote them into the golden set.",
-      "sug.notConfigured": "Suggestion source not configured (add the benchmark.suggestions block to the project variable).",
-      "sug.empty": "No pending suggestion right now.",
-      "sug.col.question": "Question",
-      "sug.col.expected": "Expected answer",
-      "sug.col.anchor": "Anchor",
-      "sug.col.review": "Review",
-      "sug.col.source": "Source",
-      "sug.col.category": "Category",
-      "sug.col.date": "Date",
-      "sug.answer.correct": "Correct",
-      "sug.answer.incorrect": "Incorrect",
-      "sug.answer.unverified": "Unverified",
-      "sug.selectAll": "Select all suggestions",
-      "sug.selectOne": "Select this suggestion",
-      "sug.source.chat": "Conversation",
-      "sug.source.manual": "Manual",
-      "sug.promote": "Promote selection",
-      "sug.promoting": "Promoting...",
-      "sug.promoted": "{count} question(s) added to the golden set.",
-      "sug.promotedNone": "No new question added (already in the golden set).",
-      "sug.promoteError": "Could not promote the selection.",
-      "sug.loadError": "Could not load the suggestions.",
-      "sug.confirm": "Promote {count} suggestion(s) into the golden set? This change is permanent.",
-      "sug.go": "Confirm promotion",
-      "sug.cancel": "Cancel",
-
-      "q.eyebrow": "Golden set",
-      "q.title": "Questions",
-      "q.desc": "The reference questions the benchmark scores the agents against, with the answer you expect. Add, edit, enable/disable or remove them. Changes apply to the next run.",
-      "q.count": "{count} question(s), {active} active",
-      "q.add": "Add a question",
-      "q.empty": "No question yet. Add the first one, or promote a user suggestion below.",
-      "q.loadError": "Could not load the questions.",
-      "q.col.question": "Question",
-      "q.col.expected": "Expected answer",
-      "q.col.anchor": "Anchor",
-      "q.col.category": "Category",
-      "q.col.language": "Language",
-      "q.col.status": "Status",
-      "q.col.actions": "Actions",
-      "q.status.active": "Active",
-      "q.status.inactive": "Inactive",
-      "q.edit": "Edit",
-      "q.delete": "Delete",
-      "q.addTitle": "New question",
-      "q.editTitle": "Edit the question",
-      "q.f.question": "Question",
-      "q.f.question.ph": "e.g. What is the actual revenue of account Maroc Telecom this year?",
-      "q.f.reference": "Expected answer (the validated truth)",
-      "q.f.reference.ph": "e.g. The actual revenue of Maroc Telecom this year is 4,218,540 euros, all periods.",
-      "q.f.value": "Expected value (optional)",
-      "q.f.value.ph": "e.g. 4218540",
-      "q.f.valueHelp": "When set, the judge checks the agent's answer contains this exact value (within tolerance for numbers). Leave empty for a free-text answer.",
-      "q.f.valueType": "Value type",
-      "q.f.category": "Category",
-      "q.f.category.ph": "e.g. revenue",
-      "q.f.language": "Language",
-      "q.f.active": "Active (tested in the next run)",
-      "q.f.notes": "Notes (optional)",
-      "q.f.notes.ph": "Anything a reviewer should know.",
-      "q.vt.none": "(none / free text)",
-      "q.vt.numeric": "Number",
-      "q.vt.currency": "Amount (currency)",
-      "q.vt.date": "Date",
-      "q.vt.string": "Exact text",
-      "q.vt.list": "List",
-      "q.save": "Save the question",
-      "q.saving": "Saving...",
-      "q.saved": "Question saved.",
-      "q.cancel": "Cancel",
-      "q.invalidTitle": "The question could not be saved:",
-      "q.saveError": "Could not save the question. Check your write access to the LAB project.",
-      "q.deleteConfirm": "Delete this question from the golden set? Past run results keep it. This cannot be undone.",
-      "q.deleteGo": "Confirm delete",
-      "q.deleteCancel": "Cancel",
-      "q.deleted": "Question deleted.",
-      "q.deleteError": "Could not delete the question.",
-
-      "common.loading": "Loading...",
-      "common.retry": "Retry",
-      "common.dash": "-"
+  var DICT = {
+    "hdr.eyebrow": { en: "OWIsMind Benchmark", fr: "OWIsMind Benchmark" },
+    "hdr.h1": { en: "Launcher", fr: "Lanceur" },
+    "hdr.sub": {
+      en: "Configure the benchmark, launch a run, and promote the questions your users suggested. Results are read in the separate Results app.",
+      fr: "Configurez le benchmark, lancez une execution et promouvez les questions suggerees par vos utilisateurs. Les resultats se consultent dans l'application Resultats."
     },
-    fr: {
-      "brand.eyebrow": "OWIsMind Benchmark",
-      "brand.h1": "Lanceur",
-      "brand.desc": "Configurez le benchmark, lancez un run, et promouvez les questions suggerees par vos utilisateurs. Les resultats se lisent dans l'application Resultats separee.",
-      "toggle.theme.aria": "Basculer le theme clair ou sombre",
-      "toggle.theme.toLight": "Clair",
-      "toggle.theme.toDark": "Sombre",
-      "toggle.lang.aria": "Changer de langue",
 
-      "cfg.eyebrow": "Reglage",
-      "cfg.title": "Configuration",
-      "cfg.desc": "Voici la configuration en vigueur. L'enregistrement ne modifie que les agents, les modes, le filtre de questions, la concurrence et la langue. Les reglages preserves ci-dessous restent intacts.",
+    "status.idle": { en: "Idle", fr: "En attente" },
+    "status.running": { en: "Running", fr: "En cours" },
+    "status.done": { en: "Completed", fr: "Termine" },
 
-      "cfg.agents.label": "Agents testes",
-      "cfg.agents.helper": "L'identifiant d'agent (comme agent:038G7mlF) vit dans son propre projet DSS : ne le prefixez pas. La cle de projet indique au benchmark dans quel projet l'appeler.",
-      "cfg.agents.col.label": "Libelle",
-      "cfg.agents.col.project": "Cle de projet",
-      "cfg.agents.col.agentid": "Identifiant d'agent",
-      "cfg.agents.modesShort": "Gere les modes de reponse (Smart / Pro / Claude)",
-      "cfg.agents.add": "Ajouter un agent",
-      "cfg.agents.remove": "Retirer",
-      "cfg.agents.removeAria": "Retirer l'agent {name}",
-      "cfg.agents.ph.label": "ex. OWIsMind Orchestrator",
-      "cfg.agents.ph.project": "ex. OWISMIND_DEV",
-      "cfg.agents.ph.agentid": "ex. agent:038G7mlF",
-      "cfg.agents.empty": "Aucun agent pour l'instant. Ajoutez-en au moins un pour lancer le benchmark.",
+    "tab.config": { en: "Configuration", fr: "Configuration" },
+    "tab.golden": { en: "Golden set", fr: "Jeu de reference" },
+    "tab.suggest": { en: "Suggestions", fr: "Suggestions" },
 
-      "cfg.modes.label": "Modes de reponse",
-      "cfg.modes.helper": "Seuls les agents qui gerent les modes sont testes sur les modes coches. Les autres recoivent un seul appel par defaut.",
+    "cfg.eyebrow": { en: "Setup", fr: "Parametrage" },
+    "cfg.title": { en: "Configuration", fr: "Configuration" },
+    "cfg.note": {
+      en: "This is the live configuration. Saving only changes the agents, modes, question filter, concurrency and language. The preserved settings are kept untouched.",
+      fr: "Ceci est la configuration active. L'enregistrement ne modifie que les agents, les modes, le filtre de questions, la concurrence et la langue. Les reglages preserves ne sont pas touches."
+    },
 
-      "cfg.questions.label": "Questions a tester",
-      "cfg.questions.helper": "Choisissez les categories a tester. Selection vide = les {count} questions actives.",
-      "cfg.questions.nocats": "Aucune categorie trouvee dans le golden set pour l'instant.",
-      "cfg.questions.langfilter": "Filtre de langue",
-      "cfg.questions.lang.all": "Toutes",
-      "cfg.questions.lang.fr": "Francais",
-      "cfg.questions.lang.en": "Anglais",
+    "ag.label": { en: "Agents under test", fr: "Agents testes" },
+    "ag.help": {
+      en: "The agent id (like agent:038G7mlF) lives inside its own DSS project: do not prefix it. The project key tells the benchmark which project to call it in.",
+      fr: "L'identifiant de l'agent (ex. agent:038G7mlF) vit dans son propre projet DSS : ne le prefixez pas. La cle de projet indique au benchmark dans quel projet l'appeler."
+    },
+    "ag.f.label": { en: "Label", fr: "Libelle" },
+    "ag.f.key": { en: "Project key", fr: "Cle de projet" },
+    "ag.f.id": { en: "Agent id", fr: "Identifiant d'agent" },
+    "ag.modes": {
+      en: "Supports response modes (Smart / Pro / Claude)",
+      fr: "Gere les modes de reponse (Smart / Pro / Claude)"
+    },
+    "ag.remove": { en: "Remove", fr: "Retirer" },
+    "ag.add": { en: "Add agent", fr: "Ajouter un agent" },
+    "ag.empty": {
+      en: "No agent yet. Add at least one to run the benchmark.",
+      fr: "Aucun agent. Ajoutez-en au moins un pour lancer le benchmark."
+    },
 
-      "cfg.concurrency.label": "Concurrence",
-      "cfg.concurrency.helper": "Combien de questions tournent en parallele (1-8, volontairement bas pour la securite de l'instance). Les valeurs hors plage sont ramenees dans les bornes.",
+    "rm.title": { en: "Response modes", fr: "Modes de reponse" },
+    "rm.help": {
+      en: "Only mode-aware agents are tested across the checked modes. Other agents get a single default call.",
+      fr: "Seuls les agents compatibles sont testes sur les modes coches. Les autres recoivent un appel par defaut."
+    },
 
-      "cfg.benchlang.label": "Langue du benchmark",
-      "cfg.benchlang.helper": "Langue utilisee pour le rapport du run et les prompts des agents. Pour choisir quelles questions golden sont testees, utilisez le filtre de langue ci-dessus.",
-      "cfg.benchlang.fr": "Francais (fr)",
-      "cfg.benchlang.en": "Anglais (en)",
+    "qt.title": { en: "Questions to test", fr: "Questions a tester" },
+    "qt.help": {
+      en: "Pick the categories to test. Empty selection = all {n} active questions.",
+      fr: "Choisissez les categories a tester. Aucune selection = les {n} questions actives."
+    },
+    "qt.nocats": {
+      en: "No category in the golden set yet.",
+      fr: "Aucune categorie dans le jeu de reference pour l'instant."
+    },
+    "qt.langfilter": { en: "Language filter", fr: "Filtre de langue" },
 
-      "cfg.preserved.label": "Reglages preserves",
-      "cfg.preserved.note": "Non modifiables ici, et gardes intacts lors de l'enregistrement.",
-      "cfg.preserved.golden": "Dataset golden",
-      "cfg.preserved.judge": "Modele juge",
-      "cfg.preserved.suggestions": "Source des suggestions",
-      "cfg.preserved.configured": "Configuree",
-      "cfg.preserved.notConfigured": "Non configuree",
-      "cfg.preserved.none": "(aucun)",
+    "rp.title": { en: "Run parameters", fr: "Parametres d'execution" },
+    "rp.conc": { en: "Concurrency", fr: "Concurrence" },
+    "rp.conc.help": {
+      en: "Questions run in parallel (1-8, kept low for instance safety). Out-of-range values are clamped.",
+      fr: "Questions en parallele (1-8, faible pour la securite de l'instance). Les valeurs hors plage sont bornees."
+    },
+    "rp.lang": { en: "Benchmark language", fr: "Langue du benchmark" },
+    "rp.lang.help": {
+      en: "Language used for the run report and the agent prompts. To choose which golden questions are tested, use the language filter.",
+      fr: "Langue du rapport d'execution et des prompts d'agent. Pour choisir les questions testees, utilisez le filtre de langue."
+    },
 
-      "cfg.save": "Enregistrer la configuration",
-      "cfg.saving": "Enregistrement...",
-      "cfg.saved": "Configuration enregistree.",
-      "cfg.invalidTitle": "La configuration n'a pas pu etre enregistree :",
-      "cfg.saveError": "Impossible d'enregistrer la configuration. Verifiez votre acces en ecriture au projet LAB.",
-      "cfg.loadError": "Impossible de charger la configuration. Verifiez votre acces au projet LAB.",
-      "cfg.modesRequired": "Selectionnez au moins un mode de reponse, ou desactivez la gestion des modes sur les agents concernes.",
+    "opt.all": { en: "All", fr: "Toutes" },
+    "opt.en": { en: "English (en)", fr: "Anglais (en)" },
+    "opt.fr": { en: "French (fr)", fr: "Francais (fr)" },
 
-      "launch.eyebrow": "Run",
-      "launch.title": "Lancer",
-      "launch.desc": "Lance le scenario Run_Benchmark de maniere asynchrone. Un seul run peut etre en cours a la fois.",
-      "launch.btn": "Lancer le benchmark",
-      "launch.caveat": "Le lancement peut necessiter des permissions de scenario. Si ce n'est pas supporte, lancez le scenario Run_Benchmark depuis l'interface des scenarios DSS.",
-      "launch.runsLast": "Le lancement utilise la derniere configuration enregistree. Enregistrez d'abord vos modifications.",
-      "launch.dirty": "Modifications non enregistrees - enregistrez la configuration avant de lancer.",
-      "launch.lastRun": "Dernier run : {when}",
-      "launch.confirm": "Ceci lancera {combos} combinaison(s) agent/mode sur jusqu'a {questions} question(s). Lancer maintenant ?",
-      "launch.go": "Confirmer le lancement",
-      "launch.cancel": "Annuler",
-      "launch.starting": "Demarrage du run...",
-      "launch.running": "En cours",
-      "launch.finished": "Termine - ouvrez l'application Resultats pour le lire.",
-      "launch.already": "Un run est deja en cours.",
-      "launch.unsupported": "Le lancement n'est pas supporte ici. Lancez le scenario Run_Benchmark depuis l'interface des scenarios DSS.",
-      "launch.error": "Impossible de lancer le run.",
-      "launch.failed": "Le run ne s'est pas termine correctement. Consultez le journal du scenario DSS.",
-      "launch.lostContact": "Contact perdu avec le run. Consultez le journal du scenario DSS.",
+    "save.btn": { en: "Save configuration", fr: "Enregistrer la configuration" },
+    "save.saving": { en: "Saving...", fr: "Enregistrement..." },
+    "save.hint": {
+      en: "Live config - applies to the next run.",
+      fr: "Config active - s'applique a la prochaine execution."
+    },
+    "save.invalidTitle": { en: "The configuration could not be saved:", fr: "La configuration n'a pas pu etre enregistree :" },
+    "save.error": {
+      en: "Could not save the configuration. Check your write access to the LAB project.",
+      fr: "Impossible d'enregistrer la configuration. Verifiez votre acces en ecriture au projet LAB."
+    },
+    "save.loadError": {
+      en: "Could not load the configuration. Check your access to the LAB project.",
+      fr: "Impossible de charger la configuration. Verifiez votre acces au projet LAB."
+    },
 
-      "sug.eyebrow": "Golden set",
-      "sug.title": "Suggestions des utilisateurs",
-      "sug.desc": "Questions suggerees par vos utilisateurs, en attente de revue. Selectionnez les bonnes et promouvez-les dans le golden set.",
-      "sug.notConfigured": "Source des suggestions non configuree (ajoutez le bloc benchmark.suggestions a la variable de projet).",
-      "sug.empty": "Aucune suggestion en attente pour l'instant.",
-      "sug.col.question": "Question",
-      "sug.col.expected": "Reponse attendue",
-      "sug.col.anchor": "Ancre",
-      "sug.col.review": "Revue",
-      "sug.col.source": "Source",
-      "sug.col.category": "Categorie",
-      "sug.col.date": "Date",
-      "sug.answer.correct": "Correct",
-      "sug.answer.incorrect": "Incorrect",
-      "sug.answer.unverified": "Non verifie",
-      "sug.selectAll": "Tout selectionner",
-      "sug.selectOne": "Selectionner cette suggestion",
-      "sug.source.chat": "Conversation",
-      "sug.source.manual": "Manuelle",
-      "sug.promote": "Promouvoir la selection",
-      "sug.promoting": "Promotion...",
-      "sug.promoted": "{count} question(s) ajoutee(s) au golden set.",
-      "sug.promotedNone": "Aucune nouvelle question ajoutee (deja dans le golden set).",
-      "sug.promoteError": "Impossible de promouvoir la selection.",
-      "sug.loadError": "Impossible de charger les suggestions.",
-      "sug.confirm": "Promouvoir {count} suggestion(s) dans le golden set ? Ce changement est definitif.",
-      "sug.go": "Confirmer la promotion",
-      "sug.cancel": "Annuler",
+    "run.eyebrow": { en: "Run", fr: "Execution" },
+    "run.title": { en: "Launch", fr: "Lancer" },
+    "run.note": {
+      en: "Launch the Run_Benchmark scenario asynchronously. Only one run can be in progress at a time.",
+      fr: "Lance le scenario Run_Benchmark de facon asynchrone. Une seule execution a la fois."
+    },
+    "run.btn": { en: "Launch the benchmark", fr: "Lancer le benchmark" },
+    "run.btn.running": { en: "Run in progress...", fr: "Execution en cours..." },
+    "run.last": { en: "Last run", fr: "Derniere execution" },
+    "run.never": { en: "never", fr: "jamais" },
+    "run.save1": {
+      en: "Launching runs the last saved configuration - save your edits first.",
+      fr: "Le lancement utilise la derniere configuration enregistree - enregistrez d'abord vos modifications."
+    },
+    "run.save2": {
+      en: "Launching may require scenario permissions. If unsupported, run Run_Benchmark from the DSS scenario UI.",
+      fr: "Le lancement peut necessiter des permissions de scenario. Si indisponible, lancez Run_Benchmark depuis l'UI scenario DSS."
+    },
+    "run.dirty": {
+      en: "Unsaved changes - save the configuration before launching.",
+      fr: "Modifications non enregistrees - enregistrez la configuration avant de lancer."
+    },
+    "run.launched": { en: "Benchmark launched.", fr: "Benchmark lance." },
+    "run.already": { en: "A run is already in progress.", fr: "Une execution est deja en cours." },
+    "run.unsupported": {
+      en: "Launch is not supported here. Run the Run_Benchmark scenario from the DSS scenario UI.",
+      fr: "Le lancement n'est pas supporte ici. Lancez le scenario Run_Benchmark depuis l'UI scenario DSS."
+    },
+    "run.error": { en: "Could not launch the run.", fr: "Impossible de lancer l'execution." },
+    "run.finished": { en: "Run completed - open the Results app to read it.", fr: "Execution terminee - ouvrez l'application Resultats pour la consulter." },
+    "run.lostContact": { en: "Lost contact with the run. Check the DSS scenario log.", fr: "Contact perdu avec l'execution. Consultez le log du scenario DSS." },
 
-      "q.eyebrow": "Golden set",
-      "q.title": "Questions",
-      "q.desc": "Les questions de reference sur lesquelles le benchmark note les agents, avec la reponse que vous attendez. Ajoutez, modifiez, activez/desactivez ou supprimez-les. Les changements s'appliquent au prochain run.",
-      "q.count": "{count} question(s), {active} active(s)",
-      "q.add": "Ajouter une question",
-      "q.empty": "Aucune question pour l'instant. Ajoutez la premiere, ou promouvez une suggestion d'utilisateur ci-dessous.",
-      "q.loadError": "Impossible de charger les questions.",
-      "q.col.question": "Question",
-      "q.col.expected": "Reponse attendue",
-      "q.col.anchor": "Ancre",
-      "q.col.category": "Categorie",
-      "q.col.language": "Langue",
-      "q.col.status": "Statut",
-      "q.col.actions": "Actions",
-      "q.status.active": "Active",
-      "q.status.inactive": "Inactive",
-      "q.edit": "Modifier",
-      "q.delete": "Supprimer",
-      "q.addTitle": "Nouvelle question",
-      "q.editTitle": "Modifier la question",
-      "q.f.question": "Question",
-      "q.f.question.ph": "ex. Quel est le revenu reel du compte Maroc Telecom cette annee ?",
-      "q.f.reference": "Reponse attendue (la verite validee)",
-      "q.f.reference.ph": "ex. Le revenu reel de Maroc Telecom cette annee est de 4 218 540 euros, toutes periodes.",
-      "q.f.value": "Valeur attendue (optionnelle)",
-      "q.f.value.ph": "ex. 4218540",
-      "q.f.valueHelp": "Si renseignee, le juge verifie que la reponse de l'agent contient cette valeur exacte (avec tolerance pour les nombres). Laissez vide pour une reponse en texte libre.",
-      "q.f.valueType": "Type de valeur",
-      "q.f.category": "Categorie",
-      "q.f.category.ph": "ex. revenue",
-      "q.f.language": "Langue",
-      "q.f.active": "Active (testee au prochain run)",
-      "q.f.notes": "Notes (optionnel)",
-      "q.f.notes.ph": "Tout ce qu'un relecteur devrait savoir.",
-      "q.vt.none": "(aucune / texte libre)",
-      "q.vt.numeric": "Nombre",
-      "q.vt.currency": "Montant (devise)",
-      "q.vt.date": "Date",
-      "q.vt.string": "Texte exact",
-      "q.vt.list": "Liste",
-      "q.save": "Enregistrer la question",
-      "q.saving": "Enregistrement...",
-      "q.saved": "Question enregistree.",
-      "q.cancel": "Annuler",
-      "q.invalidTitle": "La question n'a pas pu etre enregistree :",
-      "q.saveError": "Impossible d'enregistrer la question. Verifiez votre acces en ecriture au projet LAB.",
-      "q.deleteConfirm": "Supprimer cette question du golden set ? Les resultats des runs passes la conservent. Action irreversible.",
-      "q.deleteGo": "Confirmer la suppression",
-      "q.deleteCancel": "Annuler",
-      "q.deleted": "Question supprimee.",
-      "q.deleteError": "Impossible de supprimer la question.",
+    "pr.eyebrow": { en: "Preserved settings", fr: "Reglages preserves" },
+    "pr.title": { en: "Not editable here", fr: "Non modifiable ici" },
+    "pr.golden": { en: "Golden dataset", fr: "Jeu de reference" },
+    "pr.judge": { en: "Judge model", fr: "Modele juge" },
+    "pr.suggest": { en: "Suggestions source", fr: "Source des suggestions" },
+    "pr.na": { en: "Not configured", fr: "Non configuree" },
 
-      "common.loading": "Chargement...",
-      "common.retry": "Reessayer",
-      "common.dash": "-"
-    }
+    "gs.eyebrow": { en: "Golden set", fr: "Jeu de reference" },
+    "gs.title": { en: "Questions", fr: "Questions" },
+    "gs.note": {
+      en: "The reference questions the benchmark scores the agents against, with the answer you expect. Add, edit, enable/disable or remove them. Changes apply to the next run.",
+      fr: "Les questions de reference sur lesquelles le benchmark evalue les agents, avec la reponse attendue. Ajoutez, modifiez, activez/desactivez ou retirez-les. Les changements s'appliquent a la prochaine execution."
+    },
+    "gs.count": { en: "{n} question(s), {a} active", fr: "{n} question(s), {a} active(s)" },
+    "gs.add": { en: "Add a question", fr: "Ajouter une question" },
+    "gs.empty": {
+      en: "No question yet. Add the first one, or promote a user suggestion.",
+      fr: "Aucune question pour l'instant. Ajoutez la premiere, ou promouvez une suggestion."
+    },
+    "gs.loadError": { en: "Could not load the golden questions.", fr: "Impossible de charger les questions de reference." },
+
+    "th.status": { en: "On", fr: "Actif" },
+    "th.q": { en: "Question", fr: "Question" },
+    "th.a": { en: "Expected answer", fr: "Reponse attendue" },
+    "th.anchor": { en: "Anchor", fr: "Ancre" },
+    "th.cat": { en: "Category", fr: "Categorie" },
+    "th.lang": { en: "Lang", fr: "Langue" },
+    "th.act": { en: "Actions", fr: "Actions" },
+
+    "q.status.active": { en: "Active", fr: "Active" },
+    "q.status.inactive": { en: "Inactive", fr: "Inactive" },
+    "q.edit": { en: "Edit", fr: "Modifier" },
+    "q.delete": { en: "Delete", fr: "Supprimer" },
+    "q.deleteConfirm": { en: "Delete this question?", fr: "Supprimer cette question ?" },
+    "q.deleteGo": { en: "Delete", fr: "Supprimer" },
+    "q.deleteCancel": { en: "Cancel", fr: "Annuler" },
+    "q.saved": { en: "Question updated", fr: "Question mise a jour" },
+    "q.added": { en: "Question added", fr: "Question ajoutee" },
+    "q.removed": { en: "Question removed", fr: "Question retiree" },
+    "q.toggled": { en: "Question updated", fr: "Question mise a jour" },
+    "q.saveError": { en: "Could not save the question.", fr: "Impossible d'enregistrer la question." },
+    "q.deleteError": { en: "Could not delete the question.", fr: "Impossible de supprimer la question." },
+
+    "md.add": { en: "Add a question", fr: "Ajouter une question" },
+    "md.edit": { en: "Edit question", fr: "Modifier la question" },
+    "md.q": { en: "Question", fr: "Question" },
+    "md.a": { en: "Expected answer", fr: "Reponse attendue" },
+    "md.anchor": { en: "Anchor value (optional)", fr: "Valeur d'ancre (optionnel)" },
+    "md.anchorType": { en: "Anchor type", fr: "Type d'ancre" },
+    "md.valueHelp": {
+      en: "The anchor is the exact value the judge checks against (a number, currency, date, or list). Leave it empty for an open answer.",
+      fr: "L'ancre est la valeur exacte que le juge controle (un nombre, une devise, une date ou une liste). Laissez vide pour une reponse ouverte."
+    },
+    "md.cat": { en: "Category", fr: "Categorie" },
+    "md.lang": { en: "Language", fr: "Langue" },
+    "md.active": { en: "Active in the next run", fr: "Active a la prochaine execution" },
+    "md.cancel": { en: "Cancel", fr: "Annuler" },
+    "md.save": { en: "Save question", fr: "Enregistrer" },
+
+    "vt.none": { en: "(none)", fr: "(aucun)" },
+    "vt.numeric": { en: "Number", fr: "Nombre" },
+    "vt.currency": { en: "Currency", fr: "Devise" },
+    "vt.date": { en: "Date", fr: "Date" },
+    "vt.string": { en: "Text", fr: "Texte" },
+    "vt.list": { en: "List", fr: "Liste" },
+
+    "sg.eyebrow": { en: "Golden set", fr: "Jeu de reference" },
+    "sg.title": { en: "User suggestions", fr: "Suggestions utilisateurs" },
+    "sg.note": {
+      en: "Questions your users suggested, pending review. Select the good ones and promote them into the golden set.",
+      fr: "Questions suggerees par vos utilisateurs, en attente de revue. Selectionnez les bonnes et promouvez-les dans le jeu de reference."
+    },
+    "sg.empty.h": { en: "Suggestions source not configured", fr: "Source de suggestions non configuree" },
+    "sg.empty.p": {
+      en: "Add the benchmark.suggestions block to the project variable to start collecting user suggestions.",
+      fr: "Ajoutez le bloc benchmark.suggestions a la variable de projet pour collecter les suggestions."
+    },
+    "sg.none": { en: "No pending suggestion right now.", fr: "Aucune suggestion en attente pour l'instant." },
+    "sg.loadError": { en: "Could not load the suggestions.", fr: "Impossible de charger les suggestions." },
+    "sg.col.q": { en: "Question", fr: "Question" },
+    "sg.col.a": { en: "Expected answer", fr: "Reponse attendue" },
+    "sg.col.anchor": { en: "Anchor", fr: "Ancre" },
+    "sg.col.review": { en: "Review", fr: "Revue" },
+    "sg.col.source": { en: "Source", fr: "Source" },
+    "sg.col.cat": { en: "Category", fr: "Categorie" },
+    "sg.col.date": { en: "Date", fr: "Date" },
+    "sg.review.correct": { en: "Correct", fr: "Correcte" },
+    "sg.review.incorrect": { en: "Incorrect", fr: "Incorrecte" },
+    "sg.review.unverified": { en: "Unverified", fr: "Non verifiee" },
+    "sg.source.chat": { en: "Conversation", fr: "Conversation" },
+    "sg.source.manual": { en: "Manual", fr: "Manuel" },
+    "sg.selectAll": { en: "Select all suggestions", fr: "Tout selectionner" },
+    "sg.selectOne": { en: "Select this suggestion", fr: "Selectionner cette suggestion" },
+    "sg.promote": { en: "Promote selection", fr: "Promouvoir la selection" },
+    "sg.confirm": { en: "Promote {n} question(s) into the golden set? This is permanent.", fr: "Promouvoir {n} question(s) dans le jeu de reference ? Cette action est definitive." },
+    "sg.go": { en: "Confirm promotion", fr: "Confirmer la promotion" },
+    "sg.cancel": { en: "Cancel", fr: "Annuler" },
+    "sg.promoted": { en: "{n} question(s) added to the golden set.", fr: "{n} question(s) ajoutee(s) au jeu de reference." },
+    "sg.promotedNone": { en: "No new question added (already in the golden set).", fr: "Aucune nouvelle question ajoutee (deja dans le jeu de reference)." },
+    "sg.promoteError": { en: "Could not promote the selection.", fr: "Impossible de promouvoir la selection." },
+
+    "ag.added": { en: "Agent added", fr: "Agent ajoute" },
+    "ag.removed": { en: "Agent removed", fr: "Agent retire" },
+    "cfg.saved": { en: "Configuration saved", fr: "Configuration enregistree" },
+
+    "common.dash": { en: "-", fr: "-" },
+    "common.loading": { en: "Loading...", fr: "Chargement..." },
+    "common.retry": { en: "Retry", fr: "Reessayer" }
   };
 
   function t(key, vars) {
-    var table = I18N[ui.lang] || I18N.en;
-    var s = table[key];
-    if (s == null) {
-      s = (I18N.en[key] != null) ? I18N.en[key] : key;
-    }
+    var entry = DICT[key];
+    var s = entry ? (entry[ui.lang] || entry.en) : key;
     if (vars) {
-      Object.keys(vars).forEach(function (k) {
-        s = s.split("{" + k + "}").join(String(vars[k]));
-      });
+      for (var k in vars) {
+        if (Object.prototype.hasOwnProperty.call(vars, k)) {
+          s = s.replace("{" + k + "}", vars[k]);
+        }
+      }
     }
     return s;
   }
 
-  function locale() {
-    return ui.lang === "fr" ? "fr-FR" : "en-US";
-  }
-
-  function fmtNum(n) {
-    var v = Number(n);
-    if (!isFinite(v)) {
-      return t("common.dash");
-    }
-    try {
-      return v.toLocaleString(locale());
-    } catch (e) {
-      return String(v);
-    }
-  }
-
-  /* ============================ utils ============================ */
-
-  function esc(value) {
-    var s = (value == null) ? "" : String(value);
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  function byId(id) {
-    return document.getElementById(id);
-  }
-
-  function truncate(value, max) {
-    var s = (value == null) ? "" : String(value);
-    if (s.length <= max) {
-      return s;
-    }
-    return s.slice(0, max).replace(/\s+\S*$/, "") + "...";
-  }
-
-  function clampInt(value, lo, hi, fallback) {
-    var n = parseInt(value, 10);
-    if (isNaN(n)) {
-      return fallback;
-    }
-    return Math.max(lo, Math.min(hi, n));
-  }
-
-  function slugify(value) {
-    return String(value || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-  }
+  var VALUE_TYPES = ["numeric", "currency", "date", "string", "list"];
 
   /* ============================ state ============================ */
 
-  var ui = {
-    lang: "en",
-    theme: "light"
-  };
+  var ui = { theme: "light", lang: "en" };
 
-  var state = {
+  var S = {
+    tab: "config",
     loaded: false,
-    // True when GET api/config failed and we have nothing to show yet (the config form
-    // renders a retry note instead of an endless "Loading..." line).
     loadError: false,
-    // True when the on-screen config diverges from the last saved config. Launch runs the
-    // SAVED config, so while dirty the launch button is disabled with an explicit hint.
+    // config form
+    agents: [],
+    modes: [],
+    modeOptions: ["Smart", "Pro", "Claude"],
+    categories: [],
+    filterCategories: [],
+    filterCategoriesLoaded: [],
+    filterQuestionIds: [],
+    filterLanguage: "all",
+    concurrency: 1,
+    benchLang: "en",
+    questionCount: 0,
+    runs: [],
+    preserved: { golden: "", judge: "", suggestions: {} },
     dirty: false,
-    form: {
-      agents: [],
-      modes: [],
-      language: "fr",
-      concurrency: 3,
-      filterCategories: [],
-      // The categories the server last returned in question_filter: preserved across saves
-      // even when a configured category has no checkbox (drift vs the dataset categories).
-      filterCategoriesLoaded: [],
-      filterLanguage: "all",
-      // Opaque server-configured question id filter: never edited in the UI, but
-      // preserved verbatim across saves so saving does not wipe it.
-      filterQuestionIds: []
-    },
-    meta: {
-      categories: [],
-      questionCount: 0,
-      modeOptions: ["Smart", "Pro", "Claude"],
-      goldenDataset: "",
-      judgeLlmId: "",
-      suggestions: {},
-      // Most recent runs (run_id, run_timestamp) from GET api/config: used to surface the
-      // "Last run" line in the Launch section (no Results URL in the contract).
-      runs: []
-    },
-    suggestions: {
-      loaded: false,
-      loadError: false,
-      configured: false,
-      list: [],
-      // Reviewer selection kept in state (map of suggestion_id -> true) so a full
-      // re-render (theme/language toggle, save, add/remove agent) preserves it.
-      selected: {},
-      // Inline (no-modal) promotion confirm: a permanent write to the golden set.
-      confirm: false,
-      confirmCount: 0
-    },
-    golden: {
-      loaded: false,
-      loadError: false,
-      list: [],
-      // Inline editor: when open, the add/edit FORM replaces the table; `row` is the
-      // working copy and `isNew` distinguishes create from update. `error` carries a
-      // validation/save failure shown above the form.
-      editor: { open: false, isNew: false, row: null, error: null },
-      // Inline (no-modal) delete confirm: the question_id pending confirmation, or null.
-      confirmDelete: null,
-      msg: null
-    },
-    msg: {
-      save: null,
-      promote: null
-    },
-    run: {
-      stateName: "idle",
-      key: null,
-      // Inline (no-modal) launch confirm: a benchmark run is costly and instance-loading.
-      confirm: false
-    }
+    saving: false,
+    saveError: null,
+    // run
+    running: false,
+    runDone: false,
+    progress: 0,
+    runMsg: null,
+    // golden
+    golden: { loaded: false, loadError: false, list: [], confirmDelete: null },
+    // modal editor
+    editor: { open: false, isNew: false, qid: "", error: null },
+    // suggestions
+    suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 }
   };
 
-  var pollTimer = null;
-  // Consecutive failed status polls. After a few in a row we stop polling and surface a
-  // "lost contact" message instead of leaving the UI stuck on "Running" forever.
-  var pollErrors = 0;
-  // Last run state the targeted updater wrote, so polling does not re-announce an
-  // unchanged "Running" line to assistive tech every few seconds (aria-live).
-  var lastRunRendered = null;
+  var newAgentSeq = 0;
+  function genKey() {
+    newAgentSeq += 1;
+    return "agent_" + newAgentSeq;
+  }
+
+  /* ============================ dom helpers ============================ */
+
+  function byId(id) { return document.getElementById(id); }
+  function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function setHTML(id, html) { var e = byId(id); if (e) { e.innerHTML = html; } }
+  function setText(id, txt) { var e = byId(id); if (e) { e.textContent = txt; } }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function truncate(s, n) {
+    s = String(s == null ? "" : s);
+    return (s.length > n) ? (s.slice(0, n).replace(/\s+\S*$/, "") + "...") : s;
+  }
+  function clampInt(v, lo, hi, dflt) {
+    var n = parseInt(v, 10);
+    if (isNaN(n)) { return dflt; }
+    return Math.max(lo, Math.min(hi, n));
+  }
+  function fmtNum(n) {
+    var v = Number(n);
+    if (isNaN(v)) { return String(n); }
+    try { return v.toLocaleString(ui.lang === "fr" ? "fr-FR" : "en-US"); }
+    catch (e) { return String(v); }
+  }
 
   /* ============================ API ============================ */
 
-  function hasBackend() {
-    return typeof getWebAppBackendUrl === "function";
-  }
+  function hasBackend() { return typeof getWebAppBackendUrl === "function"; }
 
-  // Returns a Promise of { status: <httpCode>, data: <parsedJson> }.
   function callApi(method, path, body) {
-    if (!hasBackend()) {
-      return mockApi(method, path, body);
-    }
+    if (!hasBackend()) { return mockApi(method, path, body); }
     var opts = { method: method, headers: { "Content-Type": "application/json" } };
-    if (body !== undefined) {
-      opts.body = JSON.stringify(body);
-    }
+    if (body !== undefined) { opts.body = JSON.stringify(body); }
     return fetch(getWebAppBackendUrl("api/" + path), opts).then(function (res) {
       return res.json().then(
         function (data) { return { status: res.status, data: data }; },
@@ -534,132 +370,38 @@
 
   var MOCK = {
     config: {
-      agents: [
-        {
-          agent_key: "orchestrator",
-          agent_label: "OWIsMind Orchestrator",
-          project_key: "OWISMIND_DEV",
-          agent_id: "agent:038G7mlF",
-          modes: true
-        }
-      ],
+      agents: [{ agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }],
       modes: ["Smart", "Claude"],
       language: "fr",
       concurrency: 3,
       golden_dataset: "golden_questions_v1_prepared",
       question_filter: { categories: ["revenue"], question_ids: [], languages: [] },
       judge_llm_id: "anthropic:claude-sonnet-4-6",
-      suggestions: {
-        connection: "SQL_owi",
-        table: "OWISMIND_DEV_owismind_webapp_golden_suggestions_v1",
-        promoted_dataset: "benchmark_suggestions_promoted"
-      }
+      suggestions: { connection: "SQL_owi", table: "OWISMIND_DEV_owismind_webapp_golden_suggestions_v1", promoted_dataset: "benchmark_suggestions_promoted" }
     },
-    categories: ["revenue", "tickets"],
+    categories: ["revenue", "tickets", "offre"],
     question_count: 42,
     mode_options: ["Smart", "Pro", "Claude"],
-    runs: [{ run_id: "run_20260625_2241", run_timestamp: "2026-06-25 22:41:03" }],
+    runs: [{ run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" }],
     golden: [
-      {
-        question_id: "a_revenue001",
-        question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
-        reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.",
-        expected_value: "4218540",
-        expected_value_type: "currency",
-        category: "revenue",
-        language: "fr",
-        active: true,
-        notes: ""
-      },
-      {
-        question_id: "u_sug_d4e5f6",
-        question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
-        reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
-        expected_value: "37",
-        expected_value_type: "numeric",
-        category: "tickets",
-        language: "en",
-        active: true,
-        notes: "promoted from user suggestion sug_d4e5f6 (source=manual)"
-      },
-      {
-        question_id: "a_offer002",
-        question: "Quelle est la hierarchie d'offre pour le produit IPL ?",
-        reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).",
-        expected_value: "",
-        expected_value_type: "",
-        category: "offre",
-        language: "fr",
-        active: false,
-        notes: "desactivee le temps de valider la reponse"
-      }
+      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "" },
+      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)" },
+      { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse" }
     ],
     suggestions: [
-      {
-        suggestion_id: "sug_a1b2c3",
-        user_id: "marie.dupont",
-        source: "chat",
-        question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
-        reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.",
-        answer_is_correct: true,
-        missing_explanation: "",
-        expected_value: "4218540",
-        expected_value_type: "currency",
-        category: "revenue",
-        language: "fr",
-        created_at: "2026-06-24 14:09:22"
-      },
-      {
-        suggestion_id: "sug_d4e5f6",
-        user_id: "john.smith",
-        source: "manual",
-        question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
-        reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
-        answer_is_correct: true,
-        missing_explanation: "",
-        expected_value: "37",
-        expected_value_type: "numeric",
-        category: "tickets",
-        language: "en",
-        created_at: "2026-06-24 11:51:40"
-      },
-      {
-        suggestion_id: "sug_g7h8i9",
-        user_id: "sara.benali",
-        source: "chat",
-        question: "Quel est le budget 2026 du produit Roaming Hub pour le client Airbus ?",
-        reference_answer: "Le budget 2026 du produit Roaming Hub pour Airbus est de 1 050 000 euros (scenario BUDGET, periode 2026).",
-        answer_is_correct: null,
-        missing_explanation: "L'agent a confondu Roaming Hub avec Roaming Sponsor.",
-        expected_value: "1050000",
-        expected_value_type: "currency",
-        category: "revenue",
-        language: "fr",
-        created_at: "2026-06-23 17:30:05"
-      }
+      { suggestion_id: "sug_a1b2c3", user_id: "marie.dupont", source: "chat", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_is_correct: true, missing_explanation: "", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-24 14:09:22" },
+      { suggestion_id: "sug_g7h8i9", user_id: "sara.benali", source: "chat", question: "Quel est le budget 2026 du produit Roaming Hub pour le client Airbus ?", reference_answer: "Le budget 2026 du produit Roaming Hub pour Airbus est de 1 050 000 euros (scenario BUDGET, periode 2026).", answer_is_correct: null, missing_explanation: "L'agent a confondu Roaming Hub avec Roaming Sponsor.", expected_value: "1050000", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-23 17:30:05" }
     ]
   };
-
-  // A mutable mock run that finishes after ~2 status polls.
   var mockRun = { remaining: 0 };
-  // Mock promotion log (so promoted suggestions drop out of the pending list).
   var mockPromoted = {};
 
   function mockApi(method, path, body) {
     var status = 200;
     var data = {};
-
     if (method === "GET" && path === "config") {
-      data = {
-        status: "ok",
-        config: deepCopy(MOCK.config),
-        categories: MOCK.categories.slice(),
-        question_count: MOCK.question_count,
-        mode_options: MOCK.mode_options.slice(),
-        runs: MOCK.runs.slice()
-      };
+      data = { status: "ok", config: deepCopy(MOCK.config), categories: MOCK.categories.slice(), question_count: MOCK.question_count, mode_options: MOCK.mode_options.slice(), runs: MOCK.runs.slice() };
     } else if (method === "POST" && path === "config") {
-      // Echo back a resolved-looking config (mirrors the server preserving the rest).
       var merged = deepCopy(MOCK.config);
       if (body) {
         if (body.agents) { merged.agents = body.agents; }
@@ -669,12 +411,8 @@
         if (body.question_filter) { merged.question_filter = body.question_filter; }
       }
       if (!merged.agents || !merged.agents.length) {
-        data = {
-          status: "error",
-          error: "invalid_config",
-          messages: ["no valid agent: 'agents' must list at least one {agent_key, project_key, agent_id}"]
-        };
         status = 400;
+        data = { status: "error", error: "invalid_config", messages: ["no valid agent: 'agents' must list at least one {agent_key, project_key, agent_id}"] };
       } else {
         MOCK.config = merged;
         data = { status: "ok", config: deepCopy(merged) };
@@ -684,24 +422,15 @@
       data = { status: "ok", launched: true };
     } else if (method === "GET" && path === "run/status") {
       var running = mockRun.remaining > 0;
-      if (running) {
-        mockRun.remaining -= 1;
-      }
+      if (running) { mockRun.remaining -= 1; }
       data = { status: "ok", running: running, last: running ? null : "SUCCESS" };
     } else if (method === "GET" && path === "suggestions") {
-      var pending = MOCK.suggestions.filter(function (s) {
-        return !mockPromoted[s.suggestion_id];
-      });
+      var pending = MOCK.suggestions.filter(function (s) { return !mockPromoted[s.suggestion_id]; });
       data = { status: "ok", configured: true, suggestions: pending };
     } else if (method === "POST" && path === "suggestions/promote") {
       var ids = (body && body.suggestion_ids) || [];
       var promoted = 0;
-      ids.forEach(function (id) {
-        if (!mockPromoted[id]) {
-          mockPromoted[id] = true;
-          promoted += 1;
-        }
-      });
+      ids.forEach(function (id) { if (!mockPromoted[id]) { mockPromoted[id] = true; promoted += 1; } });
       data = { status: "ok", promoted: promoted, recorded: ids.length };
     } else if (method === "GET" && path === "golden") {
       data = { status: "ok", questions: MOCK.golden.slice() };
@@ -710,26 +439,14 @@
       var ref = (body && body.reference_answer || "").trim();
       if (!q || !ref) {
         status = 400;
-        data = { status: "error", error: "invalid_question",
-          messages: ["question and reference_answer are required"] };
+        data = { status: "error", error: "invalid_question", messages: ["question and reference_answer are required"] };
       } else {
         var qid = (body && body.question_id || "").trim();
         var isNew = !qid;
         if (isNew) { qid = "a_mock_" + (MOCK.golden.length + 1); }
-        var nrow = {
-          question_id: qid, question: q, reference_answer: ref,
-          expected_value: (body.expected_value || ""),
-          expected_value_type: (body.expected_value_type || ""),
-          category: (body.category || ""),
-          language: (body.language === "en") ? "en" : "fr",
-          active: body.active !== false,
-          notes: (body.notes || "")
-        };
+        var nrow = { question_id: qid, question: q, reference_answer: ref, expected_value: (body.expected_value || ""), expected_value_type: (body.expected_value_type || ""), category: (body.category || ""), language: (body.language === "en") ? "en" : "fr", active: body.active !== false, notes: (body.notes || "") };
         var found = false;
-        MOCK.golden = MOCK.golden.map(function (g) {
-          if (g.question_id === qid) { found = true; return nrow; }
-          return g;
-        });
+        MOCK.golden = MOCK.golden.map(function (g) { if (g.question_id === qid) { found = true; return nrow; } return g; });
         if (!found) { MOCK.golden.push(nrow); }
         data = { status: "ok", question_id: qid, created: isNew, count: MOCK.golden.length };
       }
@@ -742,1509 +459,1060 @@
       status = 404;
       data = { status: "error", error: "not_found" };
     }
-
-    return new Promise(function (resolve) {
-      setTimeout(function () { resolve({ status: status, data: data }); }, 120);
-    });
+    return new Promise(function (resolve) { setTimeout(function () { resolve({ status: status, data: data }); }, 120); });
   }
 
-  function deepCopy(obj) {
-    return JSON.parse(JSON.stringify(obj));
-  }
+  function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
   /* ============================ theme + language ============================ */
 
   function loadPrefs() {
-    try {
-      var th = localStorage.getItem("bench-theme");
-      if (th === "light" || th === "dark") {
-        ui.theme = th;
-      }
-    } catch (e) { /* storage unavailable */ }
-    try {
-      var lg = localStorage.getItem("bench-lang");
-      if (lg === "en" || lg === "fr") {
-        ui.lang = lg;
-      }
-    } catch (e2) { /* storage unavailable */ }
+    try { var th = localStorage.getItem("bench-theme"); if (th === "light" || th === "dark") { ui.theme = th; } } catch (e) { /* */ }
+    try { var lg = localStorage.getItem("bench-lang"); if (lg === "en" || lg === "fr") { ui.lang = lg; } } catch (e2) { /* */ }
   }
+  function applyTheme() { document.documentElement.setAttribute("data-theme", ui.theme); }
+  function applyLang() { document.documentElement.setAttribute("lang", ui.lang); }
 
-  function applyTheme() {
-    document.documentElement.setAttribute("data-theme", ui.theme);
-  }
+  /* ============================ shell (built once) ============================ */
 
-  // Keep the document language in sync so assistive tech pronounces the UI correctly.
-  function applyLang() {
-    document.documentElement.setAttribute("lang", ui.lang);
-  }
-
-  function toggleTheme() {
-    ui.theme = (ui.theme === "light") ? "dark" : "light";
-    applyTheme();
-    try { localStorage.setItem("bench-theme", ui.theme); } catch (e) { /* ignore */ }
-    render();
-  }
-
-  function toggleLang() {
-    syncFormFromDom();
-    ui.lang = (ui.lang === "en") ? "fr" : "en";
-    applyLang();
-    try { localStorage.setItem("bench-lang", ui.lang); } catch (e) { /* ignore */ }
-    render();
-  }
-
-  /* ============================ DOM -> state sync ============================ */
-
-  // Read the current form inputs back into state so a re-render never loses typed values.
-  function syncFormFromDom() {
+  var built = false;
+  function ensureShell() {
+    if (built) { return; }
     var root = byId("bench-app");
-    if (!root || !state.loaded) {
-      return;
-    }
-    var rows = root.querySelectorAll("[data-agent-row]");
-    if (rows.length) {
-      var agents = [];
-      rows.forEach(function (r) {
-        agents.push({
-          agent_key: r.getAttribute("data-agent-key") || "",
-          agent_label: fieldVal(r, "agent_label"),
-          project_key: fieldVal(r, "project_key"),
-          agent_id: fieldVal(r, "agent_id"),
-          modes: !!(r.querySelector('[data-af="modes"]') || {}).checked
-        });
-      });
-      state.form.agents = agents;
-    }
-
-    var modeBoxes = root.querySelectorAll("[data-mode-cb]");
-    if (modeBoxes.length) {
-      state.form.modes = toArray(modeBoxes)
-        .filter(function (c) { return c.checked; })
-        .map(function (c) { return c.value; });
-    }
-
-    var catBoxes = root.querySelectorAll("[data-cat-cb]");
-    if (catBoxes.length) {
-      state.form.filterCategories = toArray(catBoxes)
-        .filter(function (c) { return c.checked; })
-        .map(function (c) { return c.value; });
-    }
-
-    var fl = root.querySelector('[data-field="filter_language"]');
-    if (fl) { state.form.filterLanguage = fl.value; }
-
-    var cc = root.querySelector('[data-field="concurrency"]');
-    if (cc) { state.form.concurrency = clampInt(cc.value, 1, 8, state.form.concurrency); }
-
-    var lg = root.querySelector('[data-field="language"]');
-    if (lg) { state.form.language = lg.value; }
-
-    // Capture the reviewer's suggestion selection (the whole pending list is always
-    // rendered, so the checked boxes are the complete, authoritative selection).
-    var sugBoxes = root.querySelectorAll("[data-sug-cb]");
-    if (sugBoxes.length) {
-      var sel = {};
-      toArray(sugBoxes).forEach(function (c) {
-        if (c.checked) { sel[c.value] = true; }
-      });
-      state.suggestions.selected = sel;
-    }
+    if (!root) { return; }
+    root.innerHTML = shellHtml();
+    built = true;
+    wireStatic();
   }
 
-  function fieldVal(rowEl, name) {
-    var el = rowEl.querySelector('[data-af="' + name + '"]');
-    return el ? el.value : "";
+  function shellHtml() {
+    return '' +
+      '<div class="main">' +
+        '<div class="util"><span class="util-sp"></span>' +
+          '<span class="run-pill idle" id="runPill"><span class="dot"></span><span id="runStatusTxt"></span></span>' +
+        '</div>' +
+        '<header class="header">' +
+          '<div>' +
+            '<p class="eyebrow" data-i18n="hdr.eyebrow"></p>' +
+            '<h1 data-i18n="hdr.h1"></h1>' +
+            '<div class="title-bar"></div>' +
+            '<p class="header-sub" data-i18n="hdr.sub"></p>' +
+          '</div>' +
+          '<div class="controls">' +
+            '<div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>' +
+            '<div class="seg" id="themeSeg"><button data-theme="light">LIGHT</button><button data-theme="dark">DARK</button></div>' +
+          '</div>' +
+        '</header>' +
+        '<nav class="tabs">' +
+          '<button class="tab" data-tab="config"><span data-i18n="tab.config"></span></button>' +
+          '<button class="tab" data-tab="golden"><span data-i18n="tab.golden"></span><span class="count" id="tabGoldenCount"></span></button>' +
+          '<button class="tab" data-tab="suggest"><span data-i18n="tab.suggest"></span></button>' +
+        '</nav>' +
+        '<div class="body">' +
+          '<main class="content">' +
+            configPanelHtml() +
+            '<section class="panel" data-panel="golden"><div id="goldenContent"></div></section>' +
+            '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
+          '</main>' +
+          asideHtml() +
+        '</div>' +
+      '</div>' +
+      modalHtml() +
+      '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>';
   }
 
-  function toArray(nodeList) {
-    return Array.prototype.slice.call(nodeList);
+  function configPanelHtml() {
+    return '' +
+      '<section class="panel" data-panel="config">' +
+        '<div class="sec-head">' +
+          '<p class="sec-eyebrow" data-i18n="cfg.eyebrow"></p>' +
+          '<h2 class="sec-title" data-i18n="cfg.title"></h2>' +
+          '<p class="sec-note" data-i18n="cfg.note"></p>' +
+        '</div>' +
+        '<p class="glabel" data-i18n="ag.label"></p>' +
+        '<p class="ghelp" data-i18n="ag.help"></p>' +
+        '<div id="agentsList"></div>' +
+        '<div style="margin-top:14px"><button class="btn btn-ghost" id="addAgent"><span data-i18n="ag.add"></span></button></div>' +
+        '<div class="config-cols">' +
+          '<div class="card"><div class="card-pad">' +
+            '<p class="glabel" data-i18n="rm.title"></p>' +
+            '<p class="ghelp" data-i18n="rm.help"></p>' +
+            '<div class="chk-stack" id="modesGroup"></div>' +
+          '</div></div>' +
+          '<div class="card"><div class="card-pad">' +
+            '<p class="glabel" data-i18n="qt.title"></p>' +
+            '<p class="ghelp" id="qtHelp"></p>' +
+            '<div class="chk-wrap" id="catsGroup"></div>' +
+            '<div class="subgroup"><label class="field"><span class="field-label" data-i18n="qt.langfilter"></span>' +
+              '<select class="input" id="langFilter">' +
+                '<option value="all" data-i18n="opt.all"></option>' +
+                '<option value="en" data-i18n="opt.en"></option>' +
+                '<option value="fr" data-i18n="opt.fr"></option>' +
+              '</select></label></div>' +
+          '</div></div>' +
+          '<div class="card"><div class="card-pad">' +
+            '<p class="glabel" data-i18n="rp.title"></p>' +
+            '<label class="field"><span class="field-label" data-i18n="rp.conc"></span>' +
+              '<input class="input num" id="concurrency" type="number" min="1" max="8" value="1"></label>' +
+            '<p class="ghelp" style="margin-top:10px" data-i18n="rp.conc.help"></p>' +
+            '<div class="subgroup"><label class="field"><span class="field-label" data-i18n="rp.lang"></span>' +
+              '<select class="input" id="benchLang">' +
+                '<option value="en" data-i18n="opt.en"></option>' +
+                '<option value="fr" data-i18n="opt.fr"></option>' +
+              '</select></label>' +
+              '<p class="ghelp" style="margin-top:10px" data-i18n="rp.lang.help"></p></div>' +
+          '</div></div>' +
+        '</div>' +
+        '<div id="saveErr"></div>' +
+        '<div class="save-bar">' +
+          '<button class="btn btn-primary" id="saveBtn"><span id="icSave"></span><span id="saveBtnTxt" data-i18n="save.btn"></span></button>' +
+          '<span class="dirty-dot"></span>' +
+          '<span class="hint" data-i18n="save.hint"></span>' +
+        '</div>' +
+      '</section>';
+  }
+
+  function asideHtml() {
+    return '' +
+      '<aside class="aside">' +
+        '<div class="aside-block">' +
+          '<p class="aside-eyebrow" data-i18n="run.eyebrow"></p>' +
+          '<h3 class="aside-h"><span id="icRun" style="display:inline-flex;vertical-align:-3px;margin-right:8px;color:var(--orange)"></span><span data-i18n="run.title"></span></h3>' +
+          '<p class="aside-note" data-i18n="run.note"></p>' +
+          '<div style="margin-top:18px"><button class="btn btn-primary btn-block" id="launchBtn"><span id="launchBtnTxt" data-i18n="run.btn"></span></button></div>' +
+          '<div class="progress" id="progress"><i id="progressBar"></i></div>' +
+          '<div class="progress-meta" id="progressMeta"></div>' +
+          '<div id="runMsg"></div>' +
+          '<div class="lastrun"><span data-i18n="run.last"></span>: <b id="lastRunVal"></b></div>' +
+          '<p class="aside-note" data-i18n="run.save1"></p>' +
+          '<p class="aside-note" data-i18n="run.save2"></p>' +
+        '</div>' +
+        '<div class="aside-block">' +
+          '<p class="aside-eyebrow" data-i18n="pr.eyebrow"></p>' +
+          '<h3 class="aside-h" data-i18n="pr.title"></h3>' +
+          '<dl class="kv">' +
+            '<div class="kv-row"><dt data-i18n="pr.golden"></dt><dd id="prGolden"></dd></div>' +
+            '<div class="kv-row"><dt data-i18n="pr.judge"></dt><dd id="prJudge"></dd></div>' +
+            '<div class="kv-row"><dt data-i18n="pr.suggest"></dt><dd id="prSuggest"></dd></div>' +
+          '</dl>' +
+        '</div>' +
+      '</aside>';
+  }
+
+  function modalHtml() {
+    return '' +
+      '<div class="overlay" id="overlay"><div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-head"><h3 class="modal-title" id="mdTitle"></h3>' +
+          '<button class="modal-x" id="mdClose" aria-label="Close">' + I.x + '</button></div>' +
+        '<div class="modal-err" id="mdErr"></div>' +
+        '<div class="modal-body">' +
+          '<label class="field full"><span class="field-label" data-i18n="md.q"></span><textarea class="input" id="mq"></textarea></label>' +
+          '<label class="field full"><span class="field-label" data-i18n="md.a"></span><textarea class="input" id="ma"></textarea></label>' +
+          '<label class="field"><span class="field-label" data-i18n="md.anchor"></span><input class="input mono" id="manchor"></label>' +
+          '<label class="field"><span class="field-label" data-i18n="md.anchorType"></span><select class="input" id="mtype"></select></label>' +
+          '<p class="field-help" data-i18n="md.valueHelp" style="grid-column:1 / -1;margin:0"></p>' +
+          '<label class="field"><span class="field-label" data-i18n="md.cat"></span><input class="input" id="mcat" list="catList" autocomplete="off"><datalist id="catList"></datalist></label>' +
+          '<label class="field"><span class="field-label" data-i18n="md.lang"></span><select class="input" id="mlang"><option value="en">en</option><option value="fr">fr</option></select></label>' +
+          '<div class="field full"><button type="button" class="chk on" id="mActive" data-on="1">' +
+            '<span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="md.active"></b></span></button></div>' +
+        '</div>' +
+        '<div class="modal-foot"><button class="btn btn-ghost" id="mdCancel" data-i18n="md.cancel"></button>' +
+          '<button class="btn btn-primary" id="mdSave" data-i18n="md.save"></button></div>' +
+      '</div></div>';
+  }
+
+  /* ============================ i18n apply ============================ */
+
+  function applyI18n() {
+    qsa("[data-i18n]").forEach(function (e) { e.textContent = t(e.getAttribute("data-i18n")); });
   }
 
   /* ============================ render ============================ */
 
   function render() {
-    syncFormFromDom();
-    syncEditorFromDom();
-    var root = byId("bench-app");
-    if (!root) {
+    applyTheme();
+    applyLang();
+
+    if (S.loadError && !S.loaded) {
+      built = false;
+      var root = byId("bench-app");
+      if (root) {
+        root.classList.remove("dirty");
+        root.innerHTML = '' +
+          '<div class="main"><div class="content">' +
+          '<div class="note note-error" role="alert">' + esc(t("save.loadError")) + '</div>' +
+          '<div class="actions-row"><button type="button" class="btn" id="retryConfig">' + esc(t("common.retry")) + '</button></div>' +
+          '</div></div>';
+        var rc = byId("retryConfig");
+        if (rc) { rc.addEventListener("click", function () { loadConfig(); }); }
+      }
       return;
     }
-    root.innerHTML =
-      topbarHtml() +
-      configHtml() +
-      launchHtml() +
-      questionsHtml() +
-      suggestionsHtml();
-    // A full render writes the run line inline (via runMsgHtml), so the targeted
-    // updater is now in sync with the current state.
-    lastRunRendered = state.run.stateName;
-    // The "select all" indeterminate state cannot be expressed as an HTML attribute,
-    // so reflect a partial selection right after the table is (re)built.
-    syncSelectAllState();
+
+    ensureShell();
+    applyI18n();
+    syncSeg("langSeg", "data-lang", ui.lang);
+    syncSeg("themeSeg", "data-theme", ui.theme);
+    setTabUI(S.tab);
+
+    renderAgents();
+    renderModes();
+    renderCats();
+    byId("langFilter").value = S.filterLanguage;
+    byId("benchLang").value = S.benchLang;
+    byId("concurrency").value = S.concurrency;
+    setText("qtHelp", t("qt.help", { n: fmtNum(S.questionCount) }));
+    setDirtyUI();
+    renderSaveError();
+
+    renderAside();
+    setText("tabGoldenCount", S.golden.loaded ? String(S.golden.list.length) : String(S.questionCount || 0));
+
+    renderGolden();
+    renderSuggestions();
+
+    setStatus(S.running ? "running" : (S.runDone ? "done" : "idle"));
+    setHTML("icSave", I.save);
+    setHTML("icRun", I.rocket);
   }
 
-  function topbarHtml() {
-    var themeLabel = (ui.theme === "light")
-      ? t("toggle.theme.toDark")
-      : t("toggle.theme.toLight");
-    var langLabel = (ui.lang === "en") ? "FR" : "EN";
-    return '' +
-      '<header class="topbar">' +
-        '<div class="brand">' +
-          '<span class="eyebrow">' + esc(t("brand.eyebrow")) + '</span>' +
-          '<h1 class="h1">' + esc(t("brand.h1")) + '</h1>' +
-          '<span class="title-bar"></span>' +
-          '<p class="brand-desc">' + esc(t("brand.desc")) + '</p>' +
-        '</div>' +
-        '<div class="toggles">' +
-          '<button type="button" class="toggle" id="langToggle" ' +
-            'aria-label="' + esc(t("toggle.lang.aria")) + '">' + esc(langLabel) + '</button>' +
-          '<button type="button" class="toggle" id="themeToggle" ' +
-            'aria-label="' + esc(t("toggle.theme.aria")) + '">' + esc(themeLabel) + '</button>' +
-        '</div>' +
-      '</header>';
+  function syncSeg(segId, attr, value) {
+    qsa("#" + segId + " button").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute(attr) === value);
+    });
   }
 
-  /* --- configuration form --- */
-
-  function configHtml() {
-    // A failed load with nothing to show yet: an explicit error + retry, never an
-    // endless "Loading...". A transient refresh error after a good load keeps the form.
-    if (state.loadError && !state.loaded) {
-      return '' +
-        '<section class="card">' +
-          '<div class="note note-error" role="alert">' + esc(t("cfg.loadError")) + '</div>' +
-          '<div class="actions-row">' +
-            '<button type="button" class="btn" data-action="retry-load">' +
-              esc(t("common.retry")) + '</button>' +
-          '</div>' +
-        '</section>';
-    }
-    if (!state.loaded) {
-      return '<section class="card"><p class="loading">' + esc(t("common.loading")) + '</p></section>';
-    }
-    return '' +
-      '<section class="card">' +
-        '<span class="sec-eyebrow">' + esc(t("cfg.eyebrow")) + '</span>' +
-        '<h2 class="sec-title">' + esc(t("cfg.title")) + '</h2>' +
-        '<span class="sec-bar"></span>' +
-        '<p class="sec-desc">' + esc(t("cfg.desc")) + '</p>' +
-        agentsField() +
-        modesField() +
-        questionsField() +
-        concurrencyField() +
-        benchLangField() +
-        preservedField() +
-        saveBlock() +
-      '</section>';
+  function setTabUI(tab) {
+    qsa(".tab").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-tab") === tab); });
+    qsa(".panel").forEach(function (p) { p.classList.toggle("on", p.getAttribute("data-panel") === tab); });
   }
 
-  function agentsField() {
-    var rows;
-    if (!state.form.agents.length) {
-      rows = '<p class="field-help">' + esc(t("cfg.agents.empty")) + '</p>';
+  function setDirtyUI() {
+    var root = byId("bench-app");
+    if (root) { root.classList.toggle("dirty", !!S.dirty); }
+  }
+
+  function renderSaveError() {
+    var box = byId("saveErr");
+    if (!box) { return; }
+    if (!S.saveError) { box.innerHTML = ""; return; }
+    if (S.saveError.messages) {
+      box.innerHTML = '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
+        S.saveError.messages.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>';
     } else {
-      rows = state.form.agents.map(agentRowHtml).join("");
+      box.innerHTML = '<div class="note note-error" role="alert">' + esc(S.saveError.text) + '</div>';
     }
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.agents.label")) + '</span>' +
-        '<p class="field-help">' + esc(t("cfg.agents.helper")) + '</p>' +
-        rows +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn btn-sm" data-action="add-agent">' +
-            esc(t("cfg.agents.add")) + '</button>' +
-        '</div>' +
-      '</div>';
   }
 
-  function agentRowHtml(a, idx) {
-    var nameForAria = (a.agent_label && a.agent_label.trim())
-      || a.agent_key || String(idx + 1);
-    return '' +
-      '<div class="agent-row" data-agent-row data-agent-key="' + esc(a.agent_key) + '">' +
-        '<div class="af">' +
-          '<label class="af-lab" for="ag-label-' + idx + '">' + esc(t("cfg.agents.col.label")) + '</label>' +
-          '<input class="inp" id="ag-label-' + idx + '" type="text" data-af="agent_label" ' +
-            'value="' + esc(a.agent_label) + '" placeholder="' + esc(t("cfg.agents.ph.label")) + '">' +
-        '</div>' +
-        '<div class="af">' +
-          '<label class="af-lab" for="ag-proj-' + idx + '">' + esc(t("cfg.agents.col.project")) + '</label>' +
-          '<input class="inp mono" id="ag-proj-' + idx + '" type="text" data-af="project_key" ' +
-            'value="' + esc(a.project_key) + '" placeholder="' + esc(t("cfg.agents.ph.project")) + '">' +
-        '</div>' +
-        '<div class="af">' +
-          '<label class="af-lab" for="ag-id-' + idx + '">' + esc(t("cfg.agents.col.agentid")) + '</label>' +
-          '<input class="inp mono" id="ag-id-' + idx + '" type="text" data-af="agent_id" ' +
-            'value="' + esc(a.agent_id) + '" placeholder="' + esc(t("cfg.agents.ph.agentid")) + '">' +
-        '</div>' +
-        '<div class="af af-actions">' +
-          '<button type="button" class="btn btn-sm btn-danger" data-action="remove-agent" ' +
-            'data-idx="' + idx + '" ' +
-            'aria-label="' + esc(t("cfg.agents.removeAria", { name: nameForAria })) + '">' +
-            esc(t("cfg.agents.remove")) + '</button>' +
-        '</div>' +
-        '<div class="af af-modes">' +
-          '<label class="cb"><input type="checkbox" data-af="modes"' +
-            (a.modes ? " checked" : "") + '>' +
-            '<span class="cb-text">' + esc(t("cfg.agents.modesShort")) + '</span></label>' +
-        '</div>' +
-      '</div>';
-  }
+  /* --- agents --- */
 
-  function modesField() {
-    var boxes = state.meta.modeOptions.map(function (m) {
-      var on = state.form.modes.indexOf(m) !== -1;
-      return '<label class="cb"><input type="checkbox" data-mode-cb value="' + esc(m) + '"' +
-        (on ? " checked" : "") + '><span class="cb-text">' + esc(m) + '</span></label>';
-    }).join("");
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.modes.label")) + '</span>' +
-        '<p class="field-help">' + esc(t("cfg.modes.helper")) + '</p>' +
-        '<div class="check-grid">' + boxes + '</div>' +
-      '</div>';
-  }
-
-  function questionsField() {
-    var cats;
-    if (!state.meta.categories.length) {
-      cats = '<p class="field-help">' + esc(t("cfg.questions.nocats")) + '</p>';
-    } else {
-      cats = '<div class="check-grid">' + state.meta.categories.map(function (c) {
-        var on = state.form.filterCategories.indexOf(c) !== -1;
-        return '<label class="cb"><input type="checkbox" data-cat-cb value="' + esc(c) + '"' +
-          (on ? " checked" : "") + '><span class="cb-text">' + esc(c) + '</span></label>';
-      }).join("") + '</div>';
+  function renderAgents() {
+    var box = byId("agentsList");
+    if (!box) { return; }
+    box.innerHTML = "";
+    if (!S.agents.length) {
+      box.innerHTML = '<div class="agent-empty">' + esc(t("ag.empty")) + '</div>';
+      return;
     }
-    var langSel = '' +
-      '<div class="af" style="max-width:240px;margin-top:' + 'var(--s-4)' + '">' +
-        '<label class="af-lab" for="filter-lang">' + esc(t("cfg.questions.langfilter")) + '</label>' +
-        '<select class="sel" id="filter-lang" data-field="filter_language">' +
-          langOpt("all", t("cfg.questions.lang.all")) +
-          langOpt("fr", t("cfg.questions.lang.fr")) +
-          langOpt("en", t("cfg.questions.lang.en")) +
-        '</select>' +
-      '</div>';
-    var help = t("cfg.questions.helper", { count: fmtNum(state.meta.questionCount) });
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.questions.label")) + '</span>' +
-        '<p class="field-help">' + escWithCount(help) + '</p>' +
-        cats +
-        langSel +
-      '</div>';
+    S.agents.forEach(function (a, i) {
+      var card = document.createElement("div");
+      card.className = "agent";
+      card.innerHTML = '' +
+        '<div class="agent-grid">' +
+          '<label class="field"><span class="field-label">' + esc(t("ag.f.label")) + '</span>' +
+            '<input class="input" data-f="agent_label" value="' + esc(a.agent_label) + '"></label>' +
+          '<label class="field"><span class="field-label">' + esc(t("ag.f.key")) + '</span>' +
+            '<input class="input mono" data-f="project_key" value="' + esc(a.project_key) + '"></label>' +
+          '<label class="field"><span class="field-label">' + esc(t("ag.f.id")) + '</span>' +
+            '<input class="input mono" data-f="agent_id" value="' + esc(a.agent_id) + '"></label>' +
+        '</div>' +
+        '<div class="agent-foot">' +
+          '<button type="button" class="chk ' + (a.modes ? "on" : "") + '" data-modes>' +
+            '<span class="box">' + I.check + '</span><span class="chk-txt">' + esc(t("ag.modes")) + '</span></button>' +
+          '<button type="button" class="btn btn-danger btn-sm" data-remove>' + esc(t("ag.remove")) + '</button>' +
+        '</div>';
+      qsa("input", card).forEach(function (inp) {
+        inp.addEventListener("input", function () { a[inp.getAttribute("data-f")] = inp.value; markDirty(); });
+      });
+      card.querySelector("[data-modes]").addEventListener("click", function () {
+        a.modes = !a.modes; this.classList.toggle("on", a.modes); markDirty();
+      });
+      card.querySelector("[data-remove]").addEventListener("click", function () {
+        S.agents.splice(i, 1); markDirty(); renderAgents(); toast(t("ag.removed"));
+      });
+      box.appendChild(card);
+    });
   }
 
-  // The helper has a {count} number we want to render in the mono accent style; everything
-  // else is escaped. The count value came from fmtNum (digits + locale separators only).
-  function escWithCount(text) {
-    var parts = String(text).split(fmtNum(state.meta.questionCount));
-    if (parts.length === 2) {
-      return esc(parts[0]) + '<span class="count">' + esc(fmtNum(state.meta.questionCount)) +
-        '</span>' + esc(parts[1]);
+  function chkBtn(label, on) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "chk" + (on ? " on" : "");
+    b.innerHTML = '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(label) + '</b></span>';
+    return b;
+  }
+
+  function renderModes() {
+    var box = byId("modesGroup");
+    if (!box) { return; }
+    box.innerHTML = "";
+    S.modeOptions.forEach(function (m) {
+      var on = S.modes.indexOf(m) !== -1;
+      var b = chkBtn(m, on);
+      b.addEventListener("click", function () {
+        var idx = S.modes.indexOf(m);
+        if (idx === -1) { S.modes.push(m); } else { S.modes.splice(idx, 1); }
+        b.classList.toggle("on", S.modes.indexOf(m) !== -1);
+        markDirty();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function renderCats() {
+    var box = byId("catsGroup");
+    if (!box) { return; }
+    box.innerHTML = "";
+    if (!S.categories.length) {
+      box.innerHTML = '<p class="field-help" style="margin:0">' + esc(t("qt.nocats")) + '</p>';
+      return;
     }
-    return esc(text);
+    S.categories.forEach(function (c) {
+      var on = S.filterCategories.indexOf(c) !== -1;
+      var b = chkBtn(c, on);
+      b.addEventListener("click", function () {
+        var idx = S.filterCategories.indexOf(c);
+        if (idx === -1) { S.filterCategories.push(c); } else { S.filterCategories.splice(idx, 1); }
+        b.classList.toggle("on", S.filterCategories.indexOf(c) !== -1);
+        markDirty();
+      });
+      box.appendChild(b);
+    });
   }
 
-  function langOpt(value, label) {
-    var sel = (state.form.filterLanguage === value) ? " selected" : "";
-    return '<option value="' + esc(value) + '"' + sel + '>' + esc(label) + '</option>';
-  }
+  /* --- aside (run + preserved) --- */
 
-  function concurrencyField() {
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.concurrency.label")) + '</span>' +
-        '<p class="field-help">' + esc(t("cfg.concurrency.helper")) + '</p>' +
-        '<input class="inp inp-num mono" type="number" min="1" max="8" step="1" ' +
-          'data-field="concurrency" value="' + esc(state.form.concurrency) + '" ' +
-          'aria-label="' + esc(t("cfg.concurrency.label")) + '">' +
-      '</div>';
-  }
+  function renderAside() {
+    var btn = byId("launchBtnTxt");
+    if (btn) { btn.textContent = S.running ? t("run.btn.running") : t("run.btn"); }
+    var lbtn = byId("launchBtn");
+    if (lbtn) { lbtn.disabled = !!S.running; }
 
-  function benchLangField() {
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.benchlang.label")) + '</span>' +
-        '<p class="field-help">' + esc(t("cfg.benchlang.helper")) + '</p>' +
-        '<div class="af" style="max-width:240px">' +
-          '<select class="sel" data-field="language" aria-label="' +
-            esc(t("cfg.benchlang.label")) + '">' +
-            benchLangOpt("fr", t("cfg.benchlang.fr")) +
-            benchLangOpt("en", t("cfg.benchlang.en")) +
-          '</select>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function benchLangOpt(value, label) {
-    var sel = (state.form.language === value) ? " selected" : "";
-    return '<option value="' + esc(value) + '"' + sel + '>' + esc(label) + '</option>';
-  }
-
-  function preservedField() {
-    var sug = state.meta.suggestions || {};
-    var configured = !!sug.table;
-    var sugTag = configured
-      ? '<span class="tag-on">' + esc(t("cfg.preserved.configured")) + '</span>'
-      : '<span class="tag-off">' + esc(t("cfg.preserved.notConfigured")) + '</span>';
-    var none = t("cfg.preserved.none");
-    return '' +
-      '<div class="field">' +
-        '<span class="field-label">' + esc(t("cfg.preserved.label")) + '</span>' +
-        '<div class="preserved">' +
-          '<p class="preserved-note">' + esc(t("cfg.preserved.note")) + '</p>' +
-          '<dl class="kv">' +
-            '<dt>' + esc(t("cfg.preserved.golden")) + '</dt>' +
-            '<dd>' + esc(state.meta.goldenDataset || none) + '</dd>' +
-            '<dt>' + esc(t("cfg.preserved.judge")) + '</dt>' +
-            '<dd>' + esc(state.meta.judgeLlmId || none) + '</dd>' +
-            '<dt>' + esc(t("cfg.preserved.suggestions")) + '</dt>' +
-            '<dd>' + sugTag + '</dd>' +
-          '</dl>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function saveBlock() {
-    var msg = state.msg.save;
-    var note = "";
-    if (msg) {
-      if (msg.kind === "ok") {
-        note = '<div class="note note-ok" role="status">' + esc(msg.text) + '</div>';
-      } else if (msg.kind === "invalid") {
-        note = '<div class="note note-error" role="alert"><strong>' +
-          esc(t("cfg.invalidTitle")) + '</strong><ul>' +
-          (msg.messages || []).map(function (m) {
-            return '<li>' + esc(m) + '</li>';
-          }).join("") + '</ul></div>';
+    var pr = byId("progress");
+    var bar = byId("progressBar");
+    var meta = byId("progressMeta");
+    if (pr && bar && meta) {
+      pr.classList.toggle("on", !!S.running);
+      bar.style.width = (S.running ? S.progress : 0) + "%";
+      meta.textContent = S.running ? (Math.round(S.progress) + "%") : "";
+    }
+    var rm = byId("runMsg");
+    if (rm) {
+      if (S.runMsg) {
+        rm.innerHTML = '<div class="run-msg ' + (S.runMsg.kind === "ok" ? "ok" : "err") + '">' + esc(S.runMsg.text) + '</div>';
+      } else if (S.dirty) {
+        rm.innerHTML = '<div class="run-msg err">' + esc(t("run.dirty")) + '</div>';
       } else {
-        note = '<div class="note note-error" role="alert">' + esc(msg.text) + '</div>';
+        rm.innerHTML = "";
       }
     }
-    return '' +
-      '<div class="actions-row">' +
-        '<button type="button" class="btn btn-primary" data-action="save-config" id="saveBtn">' +
-          esc(t("cfg.save")) + '</button>' +
-      '</div>' +
-      note;
+    var last = (S.runs && S.runs.length) ? (S.runs[0].run_timestamp || S.runs[0].run_id) : "";
+    setText("lastRunVal", last || t("run.never"));
+
+    setText("prGolden", S.preserved.golden || t("pr.na"));
+    setText("prJudge", S.preserved.judge || t("pr.na"));
+    var sg = byId("prSuggest");
+    if (sg) {
+      var src = S.preserved.suggestions || {};
+      var label = src.table || src.connection || "";
+      if (label) { sg.textContent = label; sg.className = ""; }
+      else { sg.innerHTML = '<span class="tag-na">' + esc(t("pr.na")) + '</span>'; }
+    }
   }
 
-  /* --- launch --- */
+  /* --- golden table --- */
 
-  // Launch is disabled while a run is starting/in progress, and while the form is dirty
-  // (a save must land first, since launching uses the last SAVED config, not the screen).
-  function launchDisabled() {
-    var s = state.run.stateName;
-    return state.dirty || s === "starting" || s === "running";
-  }
-
-  // Approximate scope of the next run, from the last saved form: agent x mode combinations
-  // and the active question count (an upper bound, before the category/language filter).
-  function launchScope() {
-    var agents = state.form.agents.filter(function (a) {
-      return (a.agent_id && a.agent_id.trim()) ||
-        (a.agent_key && a.agent_key.trim()) ||
-        (a.agent_label && a.agent_label.trim());
-    });
-    var modeCount = state.form.modes.length;
-    var combos = 0;
-    agents.forEach(function (a) {
-      combos += a.modes ? Math.max(1, modeCount) : 1;
-    });
-    if (combos === 0) { combos = agents.length; }
-    return { combos: combos, questions: state.meta.questionCount };
-  }
-
-  function launchHtml() {
-    var primary;
-    if (state.run.confirm) {
-      // Inline (no-modal) confirm: a benchmark run is costly and loads the instance.
-      var sc = launchScope();
-      primary = '' +
-        '<div class="confirm-row" role="group">' +
-          '<p class="confirm-msg">' +
-            esc(t("launch.confirm", {
-              combos: fmtNum(sc.combos),
-              questions: fmtNum(sc.questions)
-            })) + '</p>' +
-          '<div class="actions-row">' +
-            '<button type="button" class="btn btn-primary" data-action="launch-go">' +
-              esc(t("launch.go")) + '</button>' +
-            '<button type="button" class="btn" data-action="launch-cancel">' +
-              esc(t("launch.cancel")) + '</button>' +
-          '</div>' +
-        '</div>';
-    } else {
-      primary = '' +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn btn-primary" data-action="launch" id="launchBtn"' +
-            (launchDisabled() ? " disabled" : "") + '>' +
-            esc(t("launch.btn")) + '</button>' +
-        '</div>';
-    }
-    var dirtyHint = '<p class="launch-hint" id="benchDirtyHint" role="status"' +
-      (state.dirty ? "" : " hidden") + '>' + esc(t("launch.dirty")) + '</p>';
-    var lastRun = "";
-    var runs = state.meta.runs || [];
-    if (runs.length && runs[0] && runs[0].run_timestamp) {
-      lastRun = '<p class="last-run">' +
-        esc(t("launch.lastRun", { when: runs[0].run_timestamp })) + '</p>';
-    }
-    return '' +
-      '<section class="card">' +
-        '<span class="sec-eyebrow">' + esc(t("launch.eyebrow")) + '</span>' +
-        '<h2 class="sec-title">' + esc(t("launch.title")) + '</h2>' +
-        '<span class="sec-bar"></span>' +
-        '<p class="sec-desc">' + esc(t("launch.desc")) + '</p>' +
-        primary +
-        dirtyHint +
-        '<p class="run-msg ' + runMsgClass() + '" id="benchRunMsg" aria-live="polite">' +
-          runMsgHtml() + '</p>' +
-        lastRun +
-        '<p class="caveat">' + esc(t("launch.runsLast")) + '</p>' +
-        '<p class="caveat">' + esc(t("launch.caveat")) + '</p>' +
-      '</section>';
-  }
-
-  // Targeted refresh of just the launch button + dirty hint (no full re-render, so typing
-  // in the config form keeps focus while the launch availability updates live).
-  function refreshLaunchAvail() {
-    var btn = byId("launchBtn");
-    if (btn) { btn.disabled = launchDisabled(); }
-    var hint = byId("benchDirtyHint");
-    if (hint) { hint.hidden = !state.dirty; }
-  }
-
-  function runMsgClass() {
-    var s = state.run.stateName;
-    if (s === "running" || s === "starting") { return "is-running"; }
-    if (s === "done") { return "is-done"; }
-    if (s === "error") { return "is-error"; }
-    return "";
-  }
-
-  function runMsgHtml() {
-    var s = state.run.stateName;
-    if (s === "starting") {
-      return esc(t("launch.starting"));
-    }
-    if (s === "running") {
-      return esc(t("launch.running")) +
-        '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
-    }
-    if (s === "done") {
-      return esc(t("launch.finished"));
-    }
-    if (s === "error") {
-      return esc(state.run.key ? t(state.run.key) : t("launch.error"));
-    }
-    return "";
-  }
-
-  // Targeted update of just the run line (used during polling, to keep form focus).
-  // Skips the rewrite when the run state is unchanged, so an aria-live region is not
-  // re-announced on every poll (the "Running" dots keep animating via CSS regardless).
-  function updateRunMsg() {
-    var el = byId("benchRunMsg");
-    if (!el) {
-      lastRunRendered = null;
-      return;
-    }
-    if (state.run.stateName === lastRunRendered) {
-      return;
-    }
-    lastRunRendered = state.run.stateName;
-    el.className = "run-msg " + runMsgClass();
-    el.innerHTML = runMsgHtml();
-  }
-
-  /* --- suggestions --- */
-
-  function suggestionsHtml() {
+  function renderGolden() {
+    var box = byId("goldenContent");
+    if (!box) { return; }
     var inner;
-    if (state.suggestions.loadError) {
-      inner = '' +
-        '<div class="note note-error" role="alert">' + esc(t("sug.loadError")) + '</div>' +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn" data-action="retry-suggestions">' +
-            esc(t("common.retry")) + '</button>' +
-        '</div>';
-    } else if (!state.suggestions.loaded) {
-      inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
-    } else if (!state.suggestions.configured) {
-      inner = '<div class="note note-info" role="status">' +
-        esc(t("sug.notConfigured")) + '</div>';
-    } else if (!state.suggestions.list.length) {
-      inner = '<div class="note note-info" role="status">' + esc(t("sug.empty")) + '</div>';
-    } else {
-      inner = suggestionsTableHtml();
-    }
-    var note = "";
-    if (state.msg.promote) {
-      var m = state.msg.promote;
-      var cls = (m.kind === "ok") ? "note-ok" : "note-error";
-      // Success is announced politely (status); a failure is announced assertively (alert).
-      var role = (m.kind === "ok") ? "status" : "alert";
-      note = '<div class="note ' + cls + '" role="' + role + '">' + esc(m.text) + '</div>';
-    }
-    return '' +
-      '<section class="card">' +
-        '<span class="sec-eyebrow">' + esc(t("sug.eyebrow")) + '</span>' +
-        '<h2 class="sec-title">' + esc(t("sug.title")) + '</h2>' +
-        '<span class="sec-bar"></span>' +
-        '<p class="sec-desc">' + esc(t("sug.desc")) + '</p>' +
-        inner +
-        note +
-      '</section>';
-  }
-
-  // Render the verification verdict the backend supplies (answer_is_correct), plus the
-  // reviewer note (missing_explanation) when present. Text only, no emoji (charter).
-  function reviewCellHtml(s) {
-    var ic = s.answer_is_correct;
-    var key;
-    var cls;
-    if (ic === true) {
-      key = "sug.answer.correct";
-      cls = "rev-correct";
-    } else if (ic === false) {
-      key = "sug.answer.incorrect";
-      cls = "rev-incorrect";
-    } else {
-      key = "sug.answer.unverified";
-      cls = "rev-unverified";
-    }
-    var html = '<span class="rev ' + cls + '">' + esc(t(key)) + '</span>';
-    var note = (s.missing_explanation == null) ? "" : String(s.missing_explanation).trim();
-    if (note) {
-      html += '<span class="rev-note">' + esc(truncate(note, 160)) + '</span>';
-    }
-    return html;
-  }
-
-  // The deterministic anchor the judge uses to gate correctness (expected_value plus its
-  // type). Surfaced so a reviewer can sanity-check it before the question joins the golden set.
-  function anchorCellHtml(s) {
-    var v = (s.expected_value == null) ? "" : String(s.expected_value).trim();
-    if (!v) {
-      return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>';
-    }
-    var ty = (s.expected_value_type == null) ? "" : String(s.expected_value_type).trim();
-    var html = '<span class="anchor-val mono">' + esc(v) + '</span>';
-    if (ty) {
-      html += '<span class="anchor-type">' + esc(ty) + '</span>';
-    }
-    return html;
-  }
-
-  function suggestionsTableHtml() {
-    var selected = state.suggestions.selected || {};
-    var list = state.suggestions.list;
-    var hasSelection = list.some(function (s) { return !!selected[s.suggestion_id]; });
-    var allSelected = list.length > 0 && list.every(function (s) {
-      return !!selected[s.suggestion_id];
-    });
-    var head = '' +
-      '<thead><tr>' +
-        '<th class="col-check" scope="col"><input type="checkbox" id="sugSelectAll" ' +
-          'aria-label="' + esc(t("sug.selectAll")) + '"' + (allSelected ? " checked" : "") + '></th>' +
-        '<th scope="col">' + esc(t("sug.col.question")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.expected")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.anchor")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.review")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.source")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.category")) + '</th>' +
-        '<th scope="col">' + esc(t("sug.col.date")) + '</th>' +
-      '</tr></thead>';
-    var body = list.map(function (s) {
-      var srcKey = (s.source === "chat") ? "sug.source.chat" : "sug.source.manual";
-      var checked = selected[s.suggestion_id] ? " checked" : "";
-      return '<tr>' +
-        '<td class="col-check"><input type="checkbox" data-sug-cb ' +
-          'value="' + esc(s.suggestion_id) + '"' + checked + ' ' +
-          'aria-label="' + esc(t("sug.selectOne")) + '"></td>' +
-        '<td class="cell-q">' + esc(s.question) + '</td>' +
-        '<td class="cell-expected">' + esc(truncate(s.reference_answer, 140)) + '</td>' +
-        '<td class="cell-anchor">' + anchorCellHtml(s) + '</td>' +
-        '<td class="cell-review">' + reviewCellHtml(s) + '</td>' +
-        '<td><span class="src">' + esc(t(srcKey)) + '</span></td>' +
-        '<td>' + esc(s.category || t("common.dash")) + '</td>' +
-        '<td class="cell-date">' + esc(s.created_at) + '</td>' +
-      '</tr>';
-    }).join("");
-    var actions;
-    if (state.suggestions.confirm) {
-      // Inline (no-modal) confirm: promotion permanently writes into the golden set.
-      actions = '' +
-        '<div class="confirm-row" role="group">' +
-          '<p class="confirm-msg">' +
-            esc(t("sug.confirm", { count: fmtNum(state.suggestions.confirmCount) })) + '</p>' +
-          '<div class="actions-row">' +
-            '<button type="button" class="btn btn-primary" data-action="promote-go">' +
-              esc(t("sug.go")) + '</button>' +
-            '<button type="button" class="btn" data-action="promote-cancel">' +
-              esc(t("sug.cancel")) + '</button>' +
-          '</div>' +
-        '</div>';
-    } else {
-      actions = '' +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn btn-primary" data-action="promote" id="promoteBtn"' +
-            (hasSelection ? "" : " disabled") + '>' +
-            esc(t("sug.promote")) + '</button>' +
-        '</div>';
-    }
-    return '' +
-      '<div class="tbl-wrap"><table class="tbl">' + head + '<tbody>' + body + '</tbody></table></div>' +
-      actions;
-  }
-
-  // Reflect a partial suggestion selection on the header "select all" box. The
-  // indeterminate flag cannot be set via an HTML attribute, so it is set here in JS.
-  function syncSelectAllState() {
-    var box = byId("sugSelectAll");
-    if (!box) {
-      return;
-    }
-    var boxes = toArray(document.querySelectorAll("[data-sug-cb]"));
-    var total = boxes.length;
-    var checked = boxes.filter(function (c) { return c.checked; }).length;
-    box.checked = total > 0 && checked === total;
-    box.indeterminate = checked > 0 && checked < total;
-  }
-
-  /* --- golden questions (manage the golden set) --- */
-
-  var VALUE_TYPES = ["numeric", "currency", "date", "string", "list"];
-
-  function questionsHtml() {
-    var inner;
-    if (state.golden.editor.open) {
-      inner = questionEditorHtml();
-    } else if (state.golden.loadError) {
-      inner = '' +
-        '<div class="note note-error" role="alert">' + esc(t("q.loadError")) + '</div>' +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn" data-action="retry-golden">' +
-            esc(t("common.retry")) + '</button>' +
-        '</div>';
-    } else if (!state.golden.loaded) {
+    if (S.golden.loadError) {
+      inner = '<div class="note note-error" role="alert">' + esc(t("gs.loadError")) + '</div>' +
+        '<div class="actions-row"><button type="button" class="btn" data-g="retry">' + esc(t("common.retry")) + '</button></div>';
+    } else if (!S.golden.loaded) {
       inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
     } else {
-      inner = questionsListHtml();
+      inner = goldenTableHtml();
     }
-    return '' +
-      '<section class="card">' +
-        '<span class="sec-eyebrow">' + esc(t("q.eyebrow")) + '</span>' +
-        '<h2 class="sec-title">' + esc(t("q.title")) + '</h2>' +
-        '<span class="sec-bar"></span>' +
-        '<p class="sec-desc">' + esc(t("q.desc")) + '</p>' +
-        inner +
-        goldenMsgHtml() +
-      '</section>';
+    box.innerHTML = '' +
+      '<div class="sec-head">' +
+        '<p class="sec-eyebrow">' + esc(t("gs.eyebrow")) + '</p>' +
+        '<h2 class="sec-title">' + esc(t("gs.title")) + '</h2>' +
+        '<div class="title-bar"></div>' +
+        '<p class="sec-note">' + esc(t("gs.note")) + '</p>' +
+      '</div>' + inner;
+    wireGolden();
   }
 
-  function goldenMsgHtml() {
-    var m = state.golden.msg;
-    if (!m) { return ""; }
-    var cls = (m.kind === "ok") ? "note-ok" : "note-error";
-    var role = (m.kind === "ok") ? "status" : "alert";
-    return '<div class="note ' + cls + '" role="' + role + '">' + esc(m.text) + '</div>';
-  }
-
-  function questionsListHtml() {
-    var list = state.golden.list;
-    var count = list.length;
-    var activeCount = list.filter(function (g) { return g.active; }).length;
-    var countLine = '<p class="q-count">' +
-      esc(t("q.count", { count: fmtNum(count), active: fmtNum(activeCount) })) + '</p>';
-    var addBtn = '<div class="actions-row">' +
-      '<button type="button" class="btn btn-primary" data-action="q-add">' +
-        esc(t("q.add")) + '</button></div>';
-    if (!count) {
-      return countLine +
-        '<div class="note note-info" role="status">' + esc(t("q.empty")) + '</div>' + addBtn;
+  function goldenTableHtml() {
+    var list = S.golden.list;
+    var active = list.filter(function (g) { return g.active; }).length;
+    var head = '<div class="table-head">' +
+      '<span class="count-line">' + t("gs.count", { n: "<b>" + fmtNum(list.length) + "</b>", a: "<b>" + fmtNum(active) + "</b>" }) + '</span>' +
+      '<button class="btn btn-primary btn-sm" data-g="add"><span class="ic-plus"></span>' + esc(t("gs.add")) + '</button>' +
+      '</div>';
+    if (!list.length) {
+      return head + '<div class="note note-info" role="status">' + esc(t("gs.empty")) + '</div>';
     }
-    var head = '<thead><tr>' +
-      '<th scope="col">' + esc(t("q.col.question")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.expected")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.anchor")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.category")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.language")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.status")) + '</th>' +
-      '<th scope="col">' + esc(t("q.col.actions")) + '</th>' +
-    '</tr></thead>';
-    var body = list.map(qRowHtml).join("");
-    return countLine +
-      '<div class="tbl-wrap"><table class="tbl">' + head + '<tbody>' + body + '</tbody></table></div>' +
-      addBtn;
+    var rows = list.map(qRowHtml).join("");
+    return head +
+      '<table class="gtable"><colgroup>' +
+        '<col class="c-status"><col class="c-q"><col class="c-a"><col class="c-anchor"><col class="c-cat"><col class="c-lang"><col class="c-act">' +
+      '</colgroup><thead><tr>' +
+        '<th>' + esc(t("th.status")) + '</th><th>' + esc(t("th.q")) + '</th><th>' + esc(t("th.a")) + '</th>' +
+        '<th>' + esc(t("th.anchor")) + '</th><th>' + esc(t("th.cat")) + '</th><th>' + esc(t("th.lang")) + '</th><th>' + esc(t("th.act")) + '</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function qRowHtml(g) {
-    var confirming = state.golden.confirmDelete === g.question_id;
-    var statusCls = g.active ? "rev-correct" : "rev-unverified";
-    var statusKey = g.active ? "q.status.active" : "q.status.inactive";
-    var actions;
+    var confirming = S.golden.confirmDelete === g.question_id;
+    var act;
     if (confirming) {
-      actions = '<div class="q-confirm" role="group">' +
-        '<span class="q-confirm-msg">' + esc(t("q.deleteConfirm")) + '</span>' +
+      act = '<div class="q-confirm"><span class="q-confirm-msg">' + esc(t("q.deleteConfirm")) + '</span>' +
         '<span class="q-confirm-btns">' +
-          '<button type="button" class="btn btn-sm btn-danger" data-action="q-delete-go" ' +
-            'data-id="' + esc(g.question_id) + '">' + esc(t("q.deleteGo")) + '</button>' +
-          '<button type="button" class="btn btn-sm" data-action="q-delete-cancel">' +
-            esc(t("q.deleteCancel")) + '</button>' +
-        '</span>' +
-      '</div>';
+          '<button class="btn btn-sm btn-danger" data-g="delete-go" data-id="' + esc(g.question_id) + '">' + esc(t("q.deleteGo")) + '</button>' +
+          '<button class="btn btn-sm" data-g="delete-cancel">' + esc(t("q.deleteCancel")) + '</button>' +
+        '</span></div>';
     } else {
-      actions = '<div class="q-actions">' +
-        '<button type="button" class="btn btn-sm" data-action="q-edit" ' +
-          'data-id="' + esc(g.question_id) + '">' + esc(t("q.edit")) + '</button>' +
-        '<button type="button" class="btn btn-sm btn-danger" data-action="q-delete" ' +
-          'data-id="' + esc(g.question_id) + '">' + esc(t("q.delete")) + '</button>' +
-      '</div>';
+      act = '<div class="row-act">' +
+        '<button class="icon-btn" data-g="edit" data-id="' + esc(g.question_id) + '" title="' + esc(t("q.edit")) + '" aria-label="' + esc(t("q.edit")) + '">' + I.edit + '</button>' +
+        '<button class="icon-btn danger" data-g="delete" data-id="' + esc(g.question_id) + '" title="' + esc(t("q.delete")) + '" aria-label="' + esc(t("q.delete")) + '">' + I.trash + '</button>' +
+        '</div>';
     }
-    return '<tr>' +
-      '<td class="cell-q">' + esc(g.question) + '</td>' +
-      '<td class="cell-expected">' + esc(truncate(g.reference_answer, 120)) + '</td>' +
-      '<td class="cell-anchor">' + qAnchorHtml(g) + '</td>' +
-      '<td>' + esc(g.category || t("common.dash")) + '</td>' +
-      '<td>' + esc(g.language) + '</td>' +
-      '<td><span class="rev ' + statusCls + '">' + esc(t(statusKey)) + '</span></td>' +
-      '<td class="cell-q-actions">' + actions + '</td>' +
+    return '<tr class="' + (g.active ? "" : "off") + '">' +
+      '<td data-l="' + esc(t("th.status")) + '"><div class="tog ' + (g.active ? "on" : "") + '" role="switch" aria-checked="' + (g.active ? "true" : "false") + '" data-g="toggle" data-id="' + esc(g.question_id) + '"></div></td>' +
+      '<td data-l="' + esc(t("th.q")) + '"><div class="cell-q clamp">' + esc(g.question) + '</div></td>' +
+      '<td data-l="' + esc(t("th.a")) + '"><div class="cell-a clamp">' + esc(g.reference_answer) + '</div></td>' +
+      '<td data-l="' + esc(t("th.anchor")) + '">' + qAnchorHtml(g) + '</td>' +
+      '<td data-l="' + esc(t("th.cat")) + '">' + (g.category ? '<span class="cat-tag">' + esc(g.category) + '</span>' : '<span class="anchor-none">' + esc(t("common.dash")) + '</span>') + '</td>' +
+      '<td data-l="' + esc(t("th.lang")) + '"><span class="lang-tag">' + esc(g.language) + '</span></td>' +
+      '<td data-l="' + esc(t("th.act")) + '">' + act + '</td>' +
     '</tr>';
   }
 
   function qAnchorHtml(g) {
     var v = (g.expected_value == null) ? "" : String(g.expected_value).trim();
-    if (!v) {
-      return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>';
-    }
-    var html = '<span class="anchor-val mono">' + esc(v) + '</span>';
+    if (!v) { return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>'; }
+    var html = '<span class="anchor-val">' + esc(truncate(v, 60)) + '</span>';
     var ty = (g.expected_value_type == null) ? "" : String(g.expected_value_type).trim();
     if (ty) { html += '<span class="anchor-type">' + esc(ty) + '</span>'; }
     return html;
   }
 
-  function qField(label, control) {
-    // Implicit label association: the control sits INSIDE the <label>, so no fragile id wiring.
-    return '<label class="field q-field">' +
-      '<span class="field-label">' + esc(label) + '</span>' +
-      control +
-    '</label>';
-  }
-
-  function questionEditorHtml() {
-    var r = state.golden.editor.row || {};
-    var title = state.golden.editor.isNew ? t("q.addTitle") : t("q.editTitle");
-    var err = "";
-    if (state.golden.editor.error) {
-      var e = state.golden.editor.error;
-      if (e.kind === "invalid") {
-        err = '<div class="note note-error" role="alert"><strong>' +
-          esc(t("q.invalidTitle")) + '</strong><ul>' +
-          (e.messages || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join("") +
-          '</ul></div>';
-      } else {
-        err = '<div class="note note-error" role="alert">' + esc(e.text) + '</div>';
-      }
-    }
-    var typeOpts = '<option value=""' + (!r.expected_value_type ? " selected" : "") + '>' +
-      esc(t("q.vt.none")) + '</option>' +
-      VALUE_TYPES.map(function (vt) {
-        var sel = (r.expected_value_type === vt) ? " selected" : "";
-        return '<option value="' + esc(vt) + '"' + sel + '>' + esc(t("q.vt." + vt)) + '</option>';
-      }).join("");
-    return '' +
-      '<div class="q-editor">' +
-        '<h3 class="q-editor-title">' + esc(title) + '</h3>' +
-        err +
-        qField(t("q.f.question"),
-          '<textarea class="inp ta" data-q="question" rows="2" placeholder="' +
-            esc(t("q.f.question.ph")) + '">' + esc(r.question || "") + '</textarea>') +
-        qField(t("q.f.reference"),
-          '<textarea class="inp ta" data-q="reference_answer" rows="3" placeholder="' +
-            esc(t("q.f.reference.ph")) + '">' + esc(r.reference_answer || "") + '</textarea>') +
-        '<div class="q-grid">' +
-          qField(t("q.f.value"),
-            '<input class="inp mono" type="text" data-q="expected_value" value="' +
-              esc(r.expected_value || "") + '" placeholder="' + esc(t("q.f.value.ph")) + '">') +
-          qField(t("q.f.valueType"),
-            '<select class="sel" data-q="expected_value_type">' + typeOpts + '</select>') +
-        '</div>' +
-        '<p class="field-help">' + esc(t("q.f.valueHelp")) + '</p>' +
-        '<div class="q-grid">' +
-          qField(t("q.f.category"),
-            '<input class="inp" type="text" data-q="category" value="' +
-              esc(r.category || "") + '" placeholder="' + esc(t("q.f.category.ph")) + '">') +
-          qField(t("q.f.language"),
-            '<select class="sel" data-q="language">' +
-              '<option value="fr"' + (r.language !== "en" ? " selected" : "") + '>' +
-                esc(t("cfg.benchlang.fr")) + '</option>' +
-              '<option value="en"' + (r.language === "en" ? " selected" : "") + '>' +
-                esc(t("cfg.benchlang.en")) + '</option>' +
-            '</select>') +
-        '</div>' +
-        '<div class="field">' +
-          '<label class="cb"><input type="checkbox" data-q="active"' +
-            ((r.active === false) ? "" : " checked") + '>' +
-            '<span class="cb-text">' + esc(t("q.f.active")) + '</span></label>' +
-        '</div>' +
-        qField(t("q.f.notes"),
-          '<textarea class="inp ta" data-q="notes" rows="2" placeholder="' +
-            esc(t("q.f.notes.ph")) + '">' + esc(r.notes || "") + '</textarea>') +
-        '<div class="actions-row">' +
-          '<button type="button" class="btn btn-primary" data-action="q-save" id="qSaveBtn">' +
-            esc(t("q.save")) + '</button>' +
-          '<button type="button" class="btn" data-action="q-cancel">' +
-            esc(t("q.cancel")) + '</button>' +
-        '</div>' +
-      '</div>';
-  }
-
-  // Read the open editor's inputs back into state so a re-render (theme/language toggle)
-  // never loses what the operator typed.
-  function syncEditorFromDom() {
-    if (!state.golden.editor.open) {
-      return;
-    }
-    var root = byId("bench-app");
-    if (!root) {
-      return;
-    }
-    var row = state.golden.editor.row || {};
-    ["question", "reference_answer", "expected_value", "expected_value_type",
-     "category", "language", "notes"].forEach(function (f) {
-      var el = root.querySelector('[data-q="' + f + '"]');
-      if (el) { row[f] = el.value; }
+  function wireGolden() {
+    var box = byId("goldenContent");
+    if (!box) { return; }
+    qsa(".ic-plus", box).forEach(function (e) { e.innerHTML = I.plus; });
+    qsa("[data-g]", box).forEach(function (el) {
+      var kind = el.getAttribute("data-g");
+      var id = el.getAttribute("data-id");
+      el.addEventListener("click", function () {
+        if (kind === "add") { openModal(null); }
+        else if (kind === "edit") { openModal(findGolden(id)); }
+        else if (kind === "toggle") { toggleActive(id); }
+        else if (kind === "delete") { S.golden.confirmDelete = id; renderGolden(); }
+        else if (kind === "delete-cancel") { S.golden.confirmDelete = null; renderGolden(); }
+        else if (kind === "delete-go") { deleteQuestion(id); }
+        else if (kind === "retry") { loadGolden(); }
+      });
     });
-    var act = root.querySelector('[data-q="active"]');
-    if (act) { row.active = act.checked; }
-    state.golden.editor.row = row;
   }
 
-  /* ============================ actions ============================ */
+  function findGolden(id) {
+    var found = null;
+    S.golden.list.forEach(function (g) { if (g.question_id === id) { found = g; } });
+    return found;
+  }
+
+  /* --- suggestions --- */
+
+  function renderSuggestions() {
+    var box = byId("suggestContent");
+    if (!box) { return; }
+    var inner;
+    if (S.suggestions.loadError) {
+      inner = '<div class="note note-error" role="alert">' + esc(t("sg.loadError")) + '</div>' +
+        '<div class="actions-row"><button type="button" class="btn" data-s="retry">' + esc(t("common.retry")) + '</button></div>';
+    } else if (!S.suggestions.loaded) {
+      inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
+    } else if (!S.suggestions.configured) {
+      inner = '<div class="empty"><div class="ei"><span class="ic-bulb"></span></div>' +
+        '<h4>' + esc(t("sg.empty.h")) + '</h4><p>' + esc(t("sg.empty.p")) + '</p></div>';
+    } else if (!S.suggestions.list.length) {
+      inner = '<div class="empty"><div class="ei"><span class="ic-bulb"></span></div><h4>' + esc(t("sg.none")) + '</h4></div>';
+    } else {
+      inner = suggestionsTableHtml();
+    }
+    box.innerHTML = '' +
+      '<div class="sec-head">' +
+        '<p class="sec-eyebrow">' + esc(t("sg.eyebrow")) + '</p>' +
+        '<h2 class="sec-title">' + esc(t("sg.title")) + '</h2>' +
+        '<div class="title-bar"></div>' +
+        '<p class="sec-note">' + esc(t("sg.note")) + '</p>' +
+      '</div>' + inner;
+    wireSuggestions();
+  }
+
+  function suggestionsTableHtml() {
+    var sel = S.suggestions.selected || {};
+    var list = S.suggestions.list;
+    var hasSel = list.some(function (s) { return !!sel[s.suggestion_id]; });
+    var allSel = list.length > 0 && list.every(function (s) { return !!sel[s.suggestion_id]; });
+    var head = '<thead><tr>' +
+      '<th><input type="checkbox" id="sugAll" aria-label="' + esc(t("sg.selectAll")) + '"' + (allSel ? " checked" : "") + '></th>' +
+      '<th>' + esc(t("sg.col.q")) + '</th><th>' + esc(t("sg.col.a")) + '</th><th>' + esc(t("sg.col.anchor")) + '</th>' +
+      '<th>' + esc(t("sg.col.review")) + '</th><th>' + esc(t("sg.col.cat")) + '</th><th>' + esc(t("sg.col.date")) + '</th>' +
+    '</tr></thead>';
+    var body = list.map(function (s) {
+      var srcKey = (s.source === "chat") ? "sg.source.chat" : "sg.source.manual";
+      var checked = sel[s.suggestion_id] ? " checked" : "";
+      return '<tr>' +
+        '<td data-l=""><input type="checkbox" data-sug="' + esc(s.suggestion_id) + '"' + checked + ' aria-label="' + esc(t("sg.selectOne")) + '"></td>' +
+        '<td data-l="' + esc(t("sg.col.q")) + '"><div class="cell-q clamp">' + esc(s.question) + '</div></td>' +
+        '<td data-l="' + esc(t("sg.col.a")) + '"><div class="cell-a clamp">' + esc(truncate(s.reference_answer, 160)) + '</div></td>' +
+        '<td data-l="' + esc(t("sg.col.anchor")) + '">' + qAnchorHtml({ expected_value: s.expected_value, expected_value_type: s.expected_value_type }) + '</td>' +
+        '<td data-l="' + esc(t("sg.col.review")) + '">' + reviewCellHtml(s) + '<span class="src">' + esc(t(srcKey)) + '</span></td>' +
+        '<td data-l="' + esc(t("sg.col.cat")) + '">' + (s.category ? '<span class="cat-tag">' + esc(s.category) + '</span>' : '<span class="anchor-none">' + esc(t("common.dash")) + '</span>') + '</td>' +
+        '<td data-l="' + esc(t("sg.col.date")) + '"><span class="cell-date">' + esc(s.created_at) + '</span></td>' +
+      '</tr>';
+    }).join("");
+    var actions;
+    if (S.suggestions.confirm) {
+      actions = '<div class="confirm-row">' +
+        '<p class="confirm-msg">' + esc(t("sg.confirm", { n: fmtNum(S.suggestions.confirmCount) })) + '</p>' +
+        '<div class="actions-row" style="margin-top:0">' +
+          '<button class="btn btn-primary" data-s="promote-go">' + esc(t("sg.go")) + '</button>' +
+          '<button class="btn" data-s="promote-cancel">' + esc(t("sg.cancel")) + '</button>' +
+        '</div></div>';
+    } else {
+      actions = '<div class="actions-row">' +
+        '<button class="btn btn-primary" id="promoteBtn" data-s="promote"' + (hasSel ? "" : " disabled") + '>' + esc(t("sg.promote")) + '</button>' +
+      '</div>';
+    }
+    return '<table class="gtable"><colgroup>' +
+      '<col class="c-check"><col class="c-q"><col class="c-a"><col class="c-anchor"><col class="c-review"><col class="c-cat"><col class="c-date">' +
+      '</colgroup>' + head + '<tbody>' + body + '</tbody></table>' + actions;
+  }
+
+  function reviewCellHtml(s) {
+    var ic = s.answer_is_correct;
+    var key, cls;
+    if (ic === true) { key = "sg.review.correct"; cls = "rev-correct"; }
+    else if (ic === false) { key = "sg.review.incorrect"; cls = "rev-incorrect"; }
+    else { key = "sg.review.unverified"; cls = "rev-unverified"; }
+    var html = '<span class="rev ' + cls + '">' + esc(t(key)) + '</span>';
+    var note = (s.missing_explanation == null) ? "" : String(s.missing_explanation).trim();
+    if (note) { html += '<span class="rev-note">' + esc(truncate(note, 160)) + '</span>'; }
+    return html;
+  }
+
+  function wireSuggestions() {
+    var box = byId("suggestContent");
+    if (!box) { return; }
+    qsa(".ic-bulb", box).forEach(function (e) { e.innerHTML = I.bulb; });
+    qsa("[data-sug]", box).forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        S.suggestions.selected[cb.getAttribute("data-sug")] = cb.checked;
+        var pb = byId("promoteBtn");
+        if (pb) { pb.disabled = !S.suggestions.list.some(function (s) { return !!S.suggestions.selected[s.suggestion_id]; }); }
+        syncSelectAll();
+      });
+    });
+    var all = byId("sugAll");
+    if (all) {
+      all.addEventListener("change", function () {
+        S.suggestions.list.forEach(function (s) { S.suggestions.selected[s.suggestion_id] = all.checked; });
+        renderSuggestions();
+      });
+      syncSelectAll();
+    }
+    qsa("[data-s]", box).forEach(function (el) {
+      var kind = el.getAttribute("data-s");
+      el.addEventListener("click", function () {
+        if (kind === "promote") { startPromote(); }
+        else if (kind === "promote-go") { doPromote(); }
+        else if (kind === "promote-cancel") { S.suggestions.confirm = false; renderSuggestions(); }
+        else if (kind === "retry") { loadSuggestions(); }
+      });
+    });
+  }
+
+  function syncSelectAll() {
+    var all = byId("sugAll");
+    if (!all) { return; }
+    var boxes = qsa("[data-sug]");
+    var total = boxes.length;
+    var checked = boxes.filter(function (c) { return c.checked; }).length;
+    all.checked = total > 0 && checked === total;
+    all.indeterminate = checked > 0 && checked < total;
+  }
+
+  /* ============================ modal ============================ */
+
+  function openModal(g) {
+    S.editor.open = true;
+    S.editor.isNew = !g;
+    S.editor.qid = g ? g.question_id : "";
+    S.editor.error = null;
+    setText("mdTitle", g ? t("md.edit") : t("md.add"));
+    setHTML("mdErr", "");
+    byId("mq").value = g ? (g.question || "") : "";
+    byId("ma").value = g ? (g.reference_answer || "") : "";
+    byId("manchor").value = g ? (g.expected_value || "") : "";
+    // anchor type select (rebuilt to apply the live language + selected value)
+    var sel = byId("mtype");
+    var cur = g ? (g.expected_value_type || "") : "";
+    sel.innerHTML = '<option value="">' + esc(t("vt.none")) + '</option>' +
+      VALUE_TYPES.map(function (vt) {
+        return '<option value="' + vt + '"' + (cur === vt ? " selected" : "") + '>' + esc(t("vt." + vt)) + '</option>';
+      }).join("");
+    sel.value = cur;
+    // category datalist (live categories)
+    byId("catList").innerHTML = S.categories.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
+    byId("mcat").value = g ? (g.category || "") : "";
+    byId("mlang").value = (g && g.language === "en") ? "en" : (g ? "fr" : (ui.lang === "en" ? "en" : "fr"));
+    var at = byId("mActive");
+    var on = g ? (g.active !== false) : true;
+    at.classList.toggle("on", on);
+    at.setAttribute("data-on", on ? "1" : "0");
+    byId("overlay").classList.add("on");
+    setTimeout(function () { byId("mq").focus(); }, 50);
+  }
+
+  function closeModal() {
+    S.editor.open = false;
+    byId("overlay").classList.remove("on");
+  }
+
+  function submitModal() {
+    var question = byId("mq").value.trim();
+    var reference = byId("ma").value.trim();
+    var payload = {
+      question: question,
+      reference_answer: reference,
+      expected_value: byId("manchor").value.trim(),
+      expected_value_type: byId("mtype").value,
+      category: byId("mcat").value.trim(),
+      language: (byId("mlang").value === "en") ? "en" : "fr",
+      active: byId("mActive").getAttribute("data-on") === "1",
+      notes: editorNotes()
+    };
+    if (!S.editor.isNew && S.editor.qid) { payload.question_id = S.editor.qid; }
+    setHTML("mdErr", "");
+    var btn = byId("mdSave");
+    if (btn) { btn.disabled = true; }
+    callApi("POST", "golden/save", payload).then(function (res) {
+      if (btn) { btn.disabled = false; }
+      var d = res.data || {};
+      if (d.status === "ok") {
+        var wasNew = S.editor.isNew;
+        closeModal();
+        toast(wasNew ? t("q.added") : t("q.saved"));
+        loadGolden();
+        refreshConfigMeta();
+      } else {
+        var msgs = d.messages || [t("q.saveError")];
+        setHTML("mdErr", '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
+          msgs.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>');
+      }
+    }, function () {
+      if (btn) { btn.disabled = false; }
+      setHTML("mdErr", '<div class="note note-error" role="alert">' + esc(t("q.saveError")) + '</div>');
+    });
+  }
+
+  // Preserve the edited row's notes (the modal has no notes field, but the golden carries one).
+  function editorNotes() {
+    if (S.editor.isNew || !S.editor.qid) { return ""; }
+    var g = findGolden(S.editor.qid);
+    return (g && g.notes) ? g.notes : "";
+  }
+
+  function toggleActive(id) {
+    var g = findGolden(id);
+    if (!g) { return; }
+    var payload = {
+      question_id: g.question_id, question: g.question, reference_answer: g.reference_answer,
+      expected_value: g.expected_value || "", expected_value_type: g.expected_value_type || "",
+      category: g.category || "", language: (g.language === "en") ? "en" : "fr",
+      active: !g.active, notes: g.notes || ""
+    };
+    callApi("POST", "golden/save", payload).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        g.active = !g.active;
+        renderGolden();
+        refreshConfigMeta();
+        toast(t("q.toggled"));
+      } else {
+        toast(t("q.saveError"));
+      }
+    }, function () { toast(t("q.saveError")); });
+  }
+
+  function deleteQuestion(id) {
+    callApi("POST", "golden/delete", { question_id: id }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        S.golden.confirmDelete = null;
+        S.golden.list = S.golden.list.filter(function (g) { return g.question_id !== id; });
+        renderGolden();
+        setText("tabGoldenCount", String(S.golden.list.length));
+        refreshConfigMeta();
+        toast(t("q.removed"));
+      } else {
+        toast(t("q.deleteError"));
+      }
+    }, function () { toast(t("q.deleteError")); });
+  }
+
+  /* ============================ toast / status / dirty ============================ */
+
+  var toastT;
+  function toast(msg) {
+    var el = byId("toast");
+    if (!el) { return; }
+    setText("toastMsg", msg);
+    el.classList.add("on");
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
+  }
+
+  function setStatus(kind) {
+    var p = byId("runPill");
+    if (p) { p.className = "run-pill " + kind; }
+    setText("runStatusTxt", t("status." + kind));
+  }
+
+  function markDirty() {
+    S.dirty = true;
+    S.saveError = null;
+    setDirtyUI();
+    renderSaveError();
+    renderAside();
+  }
+  function clearDirty() {
+    S.dirty = false;
+    setDirtyUI();
+    renderAside();
+  }
+
+  /* ============================ actions: config ============================ */
 
   function loadConfig() {
-    return callApi("GET", "config").then(function (res) {
+    S.loadError = false;
+    render();
+    callApi("GET", "config").then(function (res) {
       var d = res.data || {};
-      if (d.status !== "ok") {
-        state.loadError = true;
-        render();
-        return;
-      }
+      if (d.status !== "ok") { S.loadError = true; render(); return; }
       var cfg = d.config || {};
-      state.form.agents = (cfg.agents || []).map(function (a) {
+      S.agents = (cfg.agents || []).map(function (a) {
         return {
-          agent_key: a.agent_key || "",
+          agent_key: a.agent_key || genKey(),
           agent_label: a.agent_label || "",
           project_key: a.project_key || "",
           agent_id: a.agent_id || "",
           modes: !!a.modes
         };
       });
-      state.form.modes = (cfg.modes || []).slice();
-      state.form.language = (cfg.language === "en") ? "en" : "fr";
-      state.form.concurrency = clampInt(cfg.concurrency, 1, 8, 3);
+      S.modes = (cfg.modes || []).slice();
+      S.benchLang = (cfg.language === "en") ? "en" : "fr";
+      S.concurrency = clampInt(cfg.concurrency, 1, 8, 1);
       var qf = cfg.question_filter || {};
-      state.form.filterCategories = (qf.categories || []).slice();
-      // Remember the saved categories so a configured one with no checkbox (drift vs the
-      // dataset categories) is not silently wiped on the next save.
-      state.form.filterCategoriesLoaded = (qf.categories || []).slice();
-      state.form.filterQuestionIds = (qf.question_ids || []).slice();
+      S.filterCategories = (qf.categories || []).slice();
+      S.filterCategoriesLoaded = (qf.categories || []).slice();
+      S.filterQuestionIds = (qf.question_ids || []).slice();
       var langs = qf.languages || [];
-      state.form.filterLanguage = (langs.length === 1 && (langs[0] === "fr" || langs[0] === "en"))
-        ? langs[0] : "all";
-
-      state.meta.categories = (d.categories || []).slice();
-      state.meta.questionCount = Number(d.question_count) || 0;
-      state.meta.modeOptions = (d.mode_options && d.mode_options.length)
-        ? d.mode_options.slice() : ["Smart", "Pro", "Claude"];
-      state.meta.goldenDataset = cfg.golden_dataset || "";
-      state.meta.judgeLlmId = cfg.judge_llm_id || "";
-      state.meta.suggestions = cfg.suggestions || {};
-      state.meta.runs = (d.runs || []).slice();
-      state.loaded = true;
-      state.loadError = false;
-      // The form now mirrors the saved config: clear the dirty flag (re-enables launch).
-      state.dirty = false;
+      S.filterLanguage = (langs.length === 1 && (langs[0] === "en" || langs[0] === "fr")) ? langs[0] : "all";
+      S.categories = (d.categories || []).slice();
+      S.modeOptions = (d.mode_options && d.mode_options.length) ? d.mode_options.slice() : ["Smart", "Pro", "Claude"];
+      S.questionCount = d.question_count || 0;
+      S.runs = (d.runs || []).slice();
+      S.preserved = { golden: cfg.golden_dataset || "", judge: cfg.judge_llm_id || "", suggestions: cfg.suggestions || {} };
+      S.loaded = true;
+      S.loadError = false;
+      S.dirty = false;
       render();
-    }).catch(function () {
-      state.loadError = true;
-      render();
-    });
+    }, function () { S.loadError = true; render(); });
   }
 
-  function loadSuggestions() {
-    return callApi("GET", "suggestions").then(function (res) {
+  // Refresh ONLY the config META (categories / question_count / runs / preserved) after a golden
+  // change, WITHOUT touching the form state or the dirty flag (so an unsaved edit is not lost and
+  // Launch is not silently re-enabled against a stale saved config).
+  function refreshConfigMeta() {
+    callApi("GET", "config").then(function (res) {
       var d = res.data || {};
-      if (d.status && d.status !== "ok") {
-        state.suggestions.loaded = true;
-        state.suggestions.loadError = true;
-        render();
-        return;
-      }
-      state.suggestions.loaded = true;
-      state.suggestions.loadError = false;
-      state.suggestions.configured = !!d.configured;
-      state.suggestions.list = (d.suggestions || []);
-      // Keep only selections that still exist in the freshly loaded list (promoted or
-      // removed suggestions drop out instead of lingering as stale ids).
-      var present = {};
-      state.suggestions.list.forEach(function (s) { present[s.suggestion_id] = true; });
-      var pruned = {};
-      Object.keys(state.suggestions.selected || {}).forEach(function (id) {
-        if (present[id]) { pruned[id] = true; }
-      });
-      state.suggestions.selected = pruned;
-      render();
-    }).catch(function () {
-      state.suggestions.loaded = true;
-      state.suggestions.loadError = true;
-      render();
-    });
-  }
-
-  function buildConfigPayload() {
-    syncFormFromDom();
-    var agents = state.form.agents
-      .filter(function (a) {
-        return (a.agent_label || a.agent_id || a.project_key || a.agent_key);
-      })
-      .map(function (a, i) {
-        var key = (a.agent_key || "").trim();
-        if (!key) {
-          key = slugify(a.agent_label) || ("agent_" + (i + 1));
-        }
-        return {
-          agent_key: key,
-          agent_label: (a.agent_label || "").trim() || key,
-          project_key: (a.project_key || "").trim(),
-          agent_id: (a.agent_id || "").trim(),
-          modes: !!a.modes
-        };
-      });
-    // Benchmark results are keyed by agent_key, so collisions (two agents with the same
-    // label, or a derived key that clashes) would merge distinct agents into one bucket.
-    // Disambiguate by suffixing later duplicates (_2, _3, ...).
-    var seenKeys = {};
-    agents.forEach(function (a) {
-      var base = a.agent_key;
-      if (seenKeys[a.agent_key]) {
-        var n = 2;
-        while (seenKeys[base + "_" + n]) { n += 1; }
-        a.agent_key = base + "_" + n;
-      }
-      seenKeys[a.agent_key] = true;
-    });
-    var languages = [];
-    if (state.form.filterLanguage === "fr" || state.form.filterLanguage === "en") {
-      languages = [state.form.filterLanguage];
-    }
-    // Union the checkbox-derived categories with any saved category that has no checkbox
-    // (not in the current dataset categories), so a save never silently drops it.
-    var categories = state.form.filterCategories.slice();
-    (state.form.filterCategoriesLoaded || []).forEach(function (c) {
-      if (state.meta.categories.indexOf(c) === -1 && categories.indexOf(c) === -1) {
-        categories.push(c);
-      }
-    });
-    return {
-      agents: agents,
-      modes: state.form.modes.slice(),
-      language: state.form.language,
-      concurrency: clampInt(state.form.concurrency, 1, 8, 3),
-      question_filter: {
-        categories: categories,
-        // Preserved verbatim: the UI never edits question ids, so re-send what the
-        // server gave us instead of wiping a configured id filter.
-        question_ids: state.form.filterQuestionIds.slice(),
-        languages: languages
-      }
-    };
+      if (d.status !== "ok") { return; }
+      var cfg = d.config || {};
+      S.categories = (d.categories || []).slice();
+      S.questionCount = d.question_count || 0;
+      S.runs = (d.runs || []).slice();
+      S.preserved = { golden: cfg.golden_dataset || "", judge: cfg.judge_llm_id || "", suggestions: cfg.suggestions || {} };
+      renderCats();
+      setText("qtHelp", t("qt.help", { n: fmtNum(S.questionCount) }));
+      renderAside();
+    }, function () { /* meta refresh is best-effort */ });
   }
 
   function saveConfig() {
-    var payload = buildConfigPayload();
-    // A mode-aware agent with no checked mode would run on zero mode variants (an empty
-    // matrix). Block the save with a clear message rather than persist a useless config.
-    var modeAware = payload.agents.some(function (a) { return a.modes === true; });
-    if (modeAware && payload.modes.length === 0) {
-      state.msg.save = { kind: "invalid", messages: [t("cfg.modesRequired")] };
-      render();
-      return;
-    }
+    if (S.saving) { return; }
+    var cats = S.filterCategories.slice();
+    // Keep a configured category that has no checkbox (drift vs the live category list).
+    S.filterCategoriesLoaded.forEach(function (c) {
+      if (S.categories.indexOf(c) === -1 && cats.indexOf(c) === -1) { cats.push(c); }
+    });
+    var qf = {};
+    if (cats.length) { qf.categories = cats; }
+    if (S.filterQuestionIds.length) { qf.question_ids = S.filterQuestionIds.slice(); }
+    if (S.filterLanguage === "en" || S.filterLanguage === "fr") { qf.languages = [S.filterLanguage]; }
+    var payload = {
+      agents: S.agents.map(function (a) {
+        return { agent_key: a.agent_key || genKey(), agent_label: a.agent_label, project_key: a.project_key, agent_id: a.agent_id, modes: !!a.modes };
+      }),
+      modes: S.modes.slice(),
+      language: S.benchLang,
+      concurrency: S.concurrency,
+      question_filter: qf
+    };
+    S.saving = true;
+    S.saveError = null;
+    setText("saveBtnTxt", t("save.saving"));
     var btn = byId("saveBtn");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = t("cfg.saving");
-    }
+    if (btn) { btn.disabled = true; }
     callApi("POST", "config", payload).then(function (res) {
+      S.saving = false;
+      if (btn) { btn.disabled = false; }
+      setText("saveBtnTxt", t("save.btn"));
       var d = res.data || {};
-      if (res.status === 200 && d.status === "ok") {
-        state.msg.save = { kind: "ok", text: t("cfg.saved") };
-        // Refresh from the server so the form mirrors the saved (resolved) config.
-        return loadConfig();
-      }
-      if (d.error === "invalid_config") {
-        state.msg.save = { kind: "invalid", messages: d.messages || [] };
+      if (d.status === "ok") {
+        clearDirty();
+        S.saveError = null;
+        renderSaveError();
+        var cfg = d.config || {};
+        if (cfg.suggestions || cfg.golden_dataset || cfg.judge_llm_id) {
+          S.preserved = { golden: cfg.golden_dataset || S.preserved.golden, judge: cfg.judge_llm_id || S.preserved.judge, suggestions: cfg.suggestions || S.preserved.suggestions };
+          renderAside();
+        }
+        toast(t("cfg.saved"));
+      } else if (res.status === 400 && d.messages) {
+        S.saveError = { messages: d.messages };
+        renderSaveError();
       } else {
-        state.msg.save = { kind: "error", text: t("cfg.saveError") };
+        S.saveError = { text: t("save.error") };
+        renderSaveError();
       }
-      render();
-    }).catch(function () {
-      state.msg.save = { kind: "error", text: t("cfg.saveError") };
-      render();
+    }, function () {
+      S.saving = false;
+      if (btn) { btn.disabled = false; }
+      setText("saveBtnTxt", t("save.btn"));
+      S.saveError = { text: t("save.error") };
+      renderSaveError();
     });
   }
 
-  function launchRun() {
-    // Swap the confirm panel back to the (now disabled) launch button via a full render,
-    // then keep the run line in sync with targeted updates while polling.
-    state.run.confirm = false;
-    state.run.stateName = "starting";
-    state.run.key = null;
-    render();
+  /* ============================ actions: run ============================ */
+
+  function launch() {
+    if (S.running) { return; }
+    S.running = true;
+    S.runDone = false;
+    S.progress = 6;
+    S.runMsg = null;
+    setStatus("running");
+    renderAside();
     callApi("POST", "run").then(function (res) {
       var d = res.data || {};
-      if (res.status === 200 && d.status === "ok") {
-        state.run.stateName = "running";
-        updateRunMsg();
-        startPolling();
-        return;
-      }
-      if (res.status === 409 || d.error === "already_running") {
-        state.run.stateName = "error";
-        state.run.key = "launch.already";
+      if (d.status === "ok" && d.launched) {
+        S.runMsg = { kind: "ok", text: t("run.launched") };
+        renderAside();
+        toast(t("run.launched"));
+        pollStatus();
+      } else if (res.status === 409 || d.error === "already_running") {
+        S.runMsg = { kind: "err", text: t("run.already") };
+        renderAside();
+        pollStatus();
       } else if (d.error === "launch_unsupported") {
-        state.run.stateName = "error";
-        state.run.key = "launch.unsupported";
+        endRun({ kind: "err", text: t("run.unsupported") });
       } else {
-        state.run.stateName = "error";
-        state.run.key = "launch.error";
+        endRun({ kind: "err", text: t("run.error") });
       }
-      // Re-render so the launch button reappears enabled (an error state is not disabled).
-      render();
-    }).catch(function () {
-      state.run.stateName = "error";
-      state.run.key = "launch.error";
-      render();
-    });
+    }, function () { endRun({ kind: "err", text: t("run.error") }); });
   }
 
-  function startPolling() {
-    stopPolling();
-    pollErrors = 0;
-    pollTimer = setInterval(pollStatus, 5000);
-  }
-
-  function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
-  // Decide from the opaque `last` outcome whether a finished run actually failed, so a
-  // FAILED/ABORTED scenario is not reported with success styling. Empty/clear success
-  // (e.g. "SUCCESS") stays "done".
-  function runFailed(last) {
-    if (!last) {
-      return false;
-    }
-    var s;
-    if (typeof last === "string") {
-      s = last;
-    } else if (typeof last === "object") {
-      s = String(last.outcome || last.result || last.status || "");
-    } else {
-      s = String(last);
-    }
-    return /FAIL|ABORT|ERROR/i.test(s);
-  }
-
-  // A poll that failed (non-ok body or a rejected fetch). A transient blip is retried on
-  // the next tick; after a few in a row we give up and surface a "lost contact" message
-  // (so the UI never stays stuck on "Running" with launch permanently disabled).
-  function handlePollError() {
-    pollErrors += 1;
-    if (pollErrors < 3) {
-      return;
-    }
-    stopPolling();
-    state.run.stateName = "error";
-    state.run.key = "launch.lostContact";
-    render();
-  }
-
+  var pollErrors = 0;
   function pollStatus() {
-    callApi("GET", "run/status").then(function (res) {
-      var d = res.data || {};
-      if (d.status !== "ok") {
-        handlePollError();
-        return;
-      }
-      pollErrors = 0;
-      if (d.running) {
-        state.run.stateName = "running";
-        updateRunMsg();
-      } else {
-        stopPolling();
-        if (runFailed(d.last)) {
-          state.run.stateName = "error";
-          state.run.key = "launch.failed";
+    if (!S.running) { return; }
+    setTimeout(function () {
+      callApi("GET", "run/status").then(function (res) {
+        pollErrors = 0;
+        var d = res.data || {};
+        if (d.running) {
+          S.progress = Math.min(92, S.progress + 11);
+          renderAside();
+          pollStatus();
         } else {
-          state.run.stateName = "done";
-          state.run.key = null;
+          endRun({ kind: "ok", text: t("run.finished") });
+          loadConfigQuiet();
         }
-        // Re-render so the launch button reappears enabled now the run is over.
-        render();
-      }
-    }).catch(function () {
-      handlePollError();
-    });
+      }, function () {
+        pollErrors += 1;
+        if (pollErrors >= 4) { endRun({ kind: "err", text: t("run.lostContact") }); }
+        else { pollStatus(); }
+      });
+    }, 2500);
   }
 
-  function refreshPromoteEnabled() {
-    var root = byId("bench-app");
-    if (!root) { return; }
-    var any = root.querySelector("[data-sug-cb]:checked");
-    var btn = byId("promoteBtn");
-    if (btn) {
-      btn.disabled = !any;
-    }
+  function endRun(msg) {
+    S.running = false;
+    S.runDone = true;
+    S.progress = 0;
+    S.runMsg = msg || null;
+    setStatus("done");
+    renderAside();
   }
 
-  function promoteSelection() {
-    var root = byId("bench-app");
-    if (!root) { return; }
-    var ids = toArray(root.querySelectorAll("[data-sug-cb]:checked"))
-      .map(function (c) { return c.value; });
-    if (!ids.length) {
-      return;
-    }
-    var btn = byId("promoteBtn");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = t("sug.promoting");
-    }
-    callApi("POST", "suggestions/promote", { suggestion_ids: ids }).then(function (res) {
-      var d = res.data || {};
-      if (res.status === 200 && d.status === "ok") {
-        var promoted = Number(d.promoted) || 0;
-        state.msg.promote = (promoted > 0)
-          ? { kind: "ok", text: t("sug.promoted", { count: fmtNum(promoted) }) }
-          : { kind: "ok", text: t("sug.promotedNone") };
-        return loadSuggestions();
-      }
-      state.msg.promote = { kind: "error", text: t("sug.promoteError") };
-      render();
-    }).catch(function () {
-      state.msg.promote = { kind: "error", text: t("sug.promoteError") };
-      render();
-    });
-  }
-
-  /* --- golden questions actions --- */
-
-  // Refresh ONLY the golden-derived config metadata (category list / active count / run list)
-  // after a question change, WITHOUT touching state.form or state.dirty. A full loadConfig()
-  // here would reset dirty=false while render()'s syncFormFromDom re-reads the operator's still
-  // un-saved config edits from the DOM, silently re-enabling Launch against the stale SAVED
-  // config. A metadata-only refresh keeps the categories/count fresh and the dirty guard intact.
-  function refreshConfigMeta() {
-    return callApi("GET", "config").then(function (res) {
+  // Refresh runs / last-run after a run finishes, without disrupting the form.
+  function loadConfigQuiet() {
+    callApi("GET", "config").then(function (res) {
       var d = res.data || {};
       if (d.status !== "ok") { return; }
-      state.meta.categories = (d.categories || []).slice();
-      state.meta.questionCount = Number(d.question_count) || 0;
-      state.meta.runs = (d.runs || []).slice();
-      render();
-    }).catch(function () { /* a stale category list is harmless; keep current meta on a blip */ });
+      S.runs = (d.runs || []).slice();
+      renderAside();
+    }, function () { /* best-effort */ });
   }
+
+  /* ============================ actions: golden / suggestions ============================ */
 
   function loadGolden() {
-    return callApi("GET", "golden").then(function (res) {
+    S.golden.loadError = false;
+    if (!S.golden.loaded) { renderGolden(); }
+    callApi("GET", "golden").then(function (res) {
       var d = res.data || {};
-      if (d.status !== "ok") {
-        state.golden.loaded = true;
-        state.golden.loadError = true;
-        render();
-        return;
-      }
-      state.golden.loaded = true;
-      state.golden.loadError = false;
-      state.golden.list = (d.questions || []);
-      // A pending delete confirm whose question vanished (deleted elsewhere) is cleared.
-      if (state.golden.confirmDelete &&
-          !state.golden.list.some(function (g) { return g.question_id === state.golden.confirmDelete; })) {
-        state.golden.confirmDelete = null;
-      }
-      render();
-    }).catch(function () {
-      state.golden.loaded = true;
-      state.golden.loadError = true;
-      render();
-    });
-  }
-
-  function blankQuestionRow() {
-    return {
-      question_id: "", question: "", reference_answer: "",
-      expected_value: "", expected_value_type: "", category: "",
-      language: state.form.language || "fr", active: true, notes: ""
-    };
-  }
-
-  function openQuestionEditor(qid) {
-    var row;
-    var isNew;
-    if (qid) {
-      var found = null;
-      state.golden.list.forEach(function (g) { if (g.question_id === qid) { found = g; } });
-      if (!found) { return; }
-      row = deepCopy(found);
-      isNew = false;
-    } else {
-      row = blankQuestionRow();
-      isNew = true;
-    }
-    state.golden.editor = { open: true, isNew: isNew, row: row, error: null };
-    state.golden.msg = null;
-    state.golden.confirmDelete = null;
-    render();
-  }
-
-  function closeQuestionEditor() {
-    state.golden.editor = { open: false, isNew: false, row: null, error: null };
-    render();
-  }
-
-  function saveQuestion() {
-    syncEditorFromDom();
-    var row = state.golden.editor.row || {};
-    var payload = {
-      question_id: (row.question_id || "").trim(),
-      question: (row.question || "").trim(),
-      reference_answer: (row.reference_answer || "").trim(),
-      expected_value: (row.expected_value || "").trim(),
-      expected_value_type: (row.expected_value_type || "").trim(),
-      category: (row.category || "").trim(),
-      language: (row.language === "en") ? "en" : "fr",
-      active: row.active !== false,
-      notes: (row.notes || "").trim()
-    };
-    var btn = byId("qSaveBtn");
-    if (btn) { btn.disabled = true; btn.textContent = t("q.saving"); }
-    callApi("POST", "golden/save", payload).then(function (res) {
-      var d = res.data || {};
-      if (res.status === 200 && d.status === "ok") {
-        state.golden.editor = { open: false, isNew: false, row: null, error: null };
-        state.golden.msg = { kind: "ok", text: t("q.saved") };
-        // Refresh the question list + the golden-derived config metadata (categories/count),
-        // WITHOUT clobbering any unsaved config edits or the dirty flag (see refreshConfigMeta).
-        refreshConfigMeta();
-        return loadGolden();
-      }
-      if (d.error === "invalid_question") {
-        state.golden.editor.error = { kind: "invalid", messages: d.messages || [] };
+      if (d.status === "ok") {
+        S.golden.list = (d.questions || []).slice();
+        S.golden.loaded = true;
+        S.golden.loadError = false;
       } else {
-        state.golden.editor.error = { kind: "error", text: t("q.saveError") };
+        S.golden.loadError = true;
       }
-      render();
-    }).catch(function () {
-      state.golden.editor.error = { kind: "error", text: t("q.saveError") };
-      render();
-    });
+      setText("tabGoldenCount", String(S.golden.loaded ? S.golden.list.length : (S.questionCount || 0)));
+      renderGolden();
+    }, function () { S.golden.loadError = true; renderGolden(); });
   }
 
-  function deleteQuestion(qid) {
-    callApi("POST", "golden/delete", { question_id: qid }).then(function (res) {
+  function loadSuggestions() {
+    S.suggestions.loadError = false;
+    if (!S.suggestions.loaded) { renderSuggestions(); }
+    callApi("GET", "suggestions").then(function (res) {
       var d = res.data || {};
-      state.golden.confirmDelete = null;
-      if (res.status === 200 && d.status === "ok") {
-        state.golden.msg = { kind: "ok", text: t("q.deleted") };
+      if (d.status === "ok") {
+        S.suggestions.configured = !!d.configured;
+        S.suggestions.list = (d.suggestions || []).slice();
+        S.suggestions.selected = {};
+        S.suggestions.confirm = false;
+        S.suggestions.loaded = true;
+        S.suggestions.loadError = false;
+      } else {
+        S.suggestions.loadError = true;
+      }
+      renderSuggestions();
+    }, function () { S.suggestions.loadError = true; renderSuggestions(); });
+  }
+
+  function startPromote() {
+    var ids = S.suggestions.list.filter(function (s) { return !!S.suggestions.selected[s.suggestion_id]; });
+    if (!ids.length) { return; }
+    S.suggestions.confirm = true;
+    S.suggestions.confirmCount = ids.length;
+    renderSuggestions();
+  }
+
+  function doPromote() {
+    var ids = S.suggestions.list
+      .filter(function (s) { return !!S.suggestions.selected[s.suggestion_id]; })
+      .map(function (s) { return s.suggestion_id; });
+    if (!ids.length) { S.suggestions.confirm = false; renderSuggestions(); return; }
+    callApi("POST", "suggestions/promote", { suggestion_ids: ids }).then(function (res) {
+      var d = res.data || {};
+      S.suggestions.confirm = false;
+      if (d.status === "ok") {
+        var n = d.promoted || 0;
+        toast(n > 0 ? t("sg.promoted", { n: fmtNum(n) }) : t("sg.promotedNone"));
+        loadSuggestions();
+        if (S.golden.loaded) { loadGolden(); }
         refreshConfigMeta();
-        return loadGolden();
+      } else {
+        toast(t("sg.promoteError"));
+        renderSuggestions();
       }
-      state.golden.msg = { kind: "error", text: t("q.deleteError") };
-      render();
-    }).catch(function () {
-      state.golden.confirmDelete = null;
-      state.golden.msg = { kind: "error", text: t("q.deleteError") };
-      render();
-    });
+    }, function () { S.suggestions.confirm = false; toast(t("sg.promoteError")); renderSuggestions(); });
   }
 
-  /* ============================ events ============================ */
+  /* ============================ tabs ============================ */
 
-  function onClick(e) {
-    var target = e.target;
-    if (target.id === "themeToggle") { toggleTheme(); return; }
-    if (target.id === "langToggle") { toggleLang(); return; }
-
-    var actionEl = closestAttr(target, "data-action");
-    if (!actionEl) { return; }
-    var action = actionEl.getAttribute("data-action");
-
-    if (action === "add-agent") {
-      syncFormFromDom();
-      state.form.agents.push({
-        agent_key: "", agent_label: "", project_key: "", agent_id: "", modes: false
-      });
-      state.msg.save = null;
-      state.dirty = true;
-      state.run.confirm = false;
-      render();
-    } else if (action === "remove-agent") {
-      syncFormFromDom();
-      var idx = parseInt(actionEl.getAttribute("data-idx"), 10);
-      if (!isNaN(idx)) {
-        state.form.agents.splice(idx, 1);
-      }
-      state.msg.save = null;
-      state.dirty = true;
-      state.run.confirm = false;
-      render();
-    } else if (action === "save-config") {
-      saveConfig();
-    } else if (action === "retry-load") {
-      state.loadError = false;
-      render();
-      loadConfig();
-    } else if (action === "retry-suggestions") {
-      state.suggestions.loadError = false;
-      render();
-      loadSuggestions();
-    } else if (action === "launch") {
-      // First click asks for confirmation (scope + cost); the second click launches.
-      state.run.confirm = true;
-      render();
-    } else if (action === "launch-go") {
-      launchRun();
-    } else if (action === "launch-cancel") {
-      state.run.confirm = false;
-      render();
-    } else if (action === "promote") {
-      // First click asks for confirmation (count + permanence); the second promotes.
-      syncFormFromDom();
-      var sel = state.suggestions.selected || {};
-      var cnt = Object.keys(sel).length;
-      if (!cnt) {
-        return;
-      }
-      state.suggestions.confirm = true;
-      state.suggestions.confirmCount = cnt;
-      render();
-    } else if (action === "promote-go") {
-      state.suggestions.confirm = false;
-      render();
-      promoteSelection();
-    } else if (action === "promote-cancel") {
-      state.suggestions.confirm = false;
-      render();
-    } else if (action === "retry-golden") {
-      state.golden.loadError = false;
-      render();
-      loadGolden();
-    } else if (action === "q-add") {
-      openQuestionEditor("");
-    } else if (action === "q-edit") {
-      openQuestionEditor(actionEl.getAttribute("data-id"));
-    } else if (action === "q-cancel") {
-      closeQuestionEditor();
-    } else if (action === "q-save") {
-      saveQuestion();
-    } else if (action === "q-delete") {
-      state.golden.confirmDelete = actionEl.getAttribute("data-id");
-      state.golden.msg = null;
-      render();
-    } else if (action === "q-delete-go") {
-      deleteQuestion(actionEl.getAttribute("data-id"));
-    } else if (action === "q-delete-cancel") {
-      state.golden.confirmDelete = null;
-      render();
-    }
+  function setTab(tab) {
+    S.tab = tab;
+    setTabUI(tab);
+    if (tab === "golden" && !S.golden.loaded && !S.golden.loadError) { loadGolden(); }
+    if (tab === "suggest" && !S.suggestions.loaded && !S.suggestions.loadError) { loadSuggestions(); }
   }
 
-  // A config control is anything whose change should mark the form dirty (and so disable
-  // launch until saved). Suggestion checkboxes are deliberately excluded.
-  function isConfigControl(el) {
-    if (!el || el.nodeType !== 1) {
-      return false;
-    }
-    return el.hasAttribute("data-af") ||
-      el.hasAttribute("data-mode-cb") ||
-      el.hasAttribute("data-cat-cb") ||
-      el.hasAttribute("data-field");
-  }
+  /* ============================ static wiring ============================ */
 
-  // Flag the form as diverged from the saved config and refresh launch availability
-  // without a full re-render (so a text field keeps focus while typing).
-  function markDirty() {
-    if (state.dirty) {
-      return;
-    }
-    state.dirty = true;
-    state.run.confirm = false;
-    refreshLaunchAvail();
-  }
-
-  function onInput(e) {
-    if (isConfigControl(e.target)) {
-      markDirty();
-    }
-  }
-
-  function onChange(e) {
-    var target = e.target;
-    if (target.id === "sugSelectAll") {
-      var root = byId("bench-app");
-      var checked = target.checked;
-      toArray(root.querySelectorAll("[data-sug-cb]")).forEach(function (c) {
-        c.checked = checked;
-      });
-      target.indeterminate = false;
-      refreshPromoteEnabled();
-      return;
-    }
-    if (target.hasAttribute("data-sug-cb")) {
-      refreshPromoteEnabled();
-      syncSelectAllState();
-      return;
-    }
-    if (isConfigControl(target)) {
-      // Give immediate feedback that out-of-range concurrency is clamped to 1-8.
-      if (target.getAttribute("data-field") === "concurrency") {
-        target.value = String(clampInt(target.value, 1, 8, state.form.concurrency));
-      }
-      markDirty();
-    }
-  }
-
-  function closestAttr(el, attr) {
-    while (el && el.nodeType === 1) {
-      if (el.hasAttribute(attr)) {
-        return el;
-      }
-      el = el.parentNode;
-    }
-    return null;
-  }
-
-  // Reflect an already-running benchmark on load (started in another tab, by another
-  // operator, or from the DSS scenario UI), so the page is not misleadingly idle.
-  function checkRunStatus() {
-    return callApi("GET", "run/status").then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok" && d.running) {
-        state.run.stateName = "running";
-        state.run.key = null;
+  function wireStatic() {
+    qsa("#langSeg button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        ui.lang = b.getAttribute("data-lang");
+        try { localStorage.setItem("bench-lang", ui.lang); } catch (e) { /* */ }
         render();
-        startPolling();
-      }
-    }).catch(function () { /* a failed probe just leaves the launcher idle */ });
+      });
+    });
+    qsa("#themeSeg button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        ui.theme = b.getAttribute("data-theme");
+        applyTheme();
+        try { localStorage.setItem("bench-theme", ui.theme); } catch (e) { /* */ }
+        syncSeg("themeSeg", "data-theme", ui.theme);
+      });
+    });
+    qsa(".tab").forEach(function (b) {
+      b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
+    });
+    byId("addAgent").addEventListener("click", function () {
+      S.agents.push({ agent_key: genKey(), agent_label: "", project_key: "", agent_id: "", modes: false });
+      markDirty();
+      renderAgents();
+      toast(t("ag.added"));
+    });
+    byId("langFilter").addEventListener("change", function (e) { S.filterLanguage = e.target.value; markDirty(); });
+    byId("benchLang").addEventListener("change", function (e) { S.benchLang = (e.target.value === "en") ? "en" : "fr"; markDirty(); });
+    byId("concurrency").addEventListener("change", function (e) {
+      var v = clampInt(e.target.value, 1, 8, S.concurrency);
+      S.concurrency = v; e.target.value = v; markDirty();
+    });
+    byId("saveBtn").addEventListener("click", saveConfig);
+    byId("launchBtn").addEventListener("click", launch);
+
+    byId("mdClose").addEventListener("click", closeModal);
+    byId("mdCancel").addEventListener("click", closeModal);
+    byId("mdSave").addEventListener("click", submitModal);
+    byId("mActive").addEventListener("click", function () {
+      var on = this.getAttribute("data-on") !== "1";
+      this.setAttribute("data-on", on ? "1" : "0");
+      this.classList.toggle("on", on);
+    });
+    byId("overlay").addEventListener("click", function (e) { if (e.target === byId("overlay")) { closeModal(); } });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && S.editor.open) { closeModal(); } });
   }
 
   /* ============================ init ============================ */
@@ -2253,23 +1521,9 @@
     loadPrefs();
     applyTheme();
     applyLang();
-    var root = byId("bench-app");
-    if (!root) {
-      return;
-    }
-    root.addEventListener("click", onClick);
-    root.addEventListener("change", onChange);
-    root.addEventListener("input", onInput);
-    render();
     loadConfig();
-    loadGolden();
-    loadSuggestions();
-    checkRunStatus();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }
+  else { init(); }
 })();

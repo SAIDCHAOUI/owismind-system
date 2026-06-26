@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OWIsMind — Benchmark Launcher · Orange</title>
+<link rel="stylesheet" href="benchmark/benchmark.css">
+</head>
+<body data-theme="light">
+
+<div class="shell">
+
+  <!-- LEFT RAIL -->
+  <nav class="rail">
+    <div class="logo"><span></span></div>
+    <button class="rail-btn on" title="Launcher"><i data-rail="rocket"></i></button>
+    <button class="rail-btn" title="Results"><i data-rail="list"></i></button>
+    <div class="rail-sp"></div>
+    <button class="rail-btn" title="Settings"><i data-rail="gear"></i></button>
+    <div class="rail-avatar">JD</div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- utility bar -->
+    <div class="util">
+      <a href="#"><i id="icLogs"></i><span data-i18n="util.logs">Logs</span></a>
+      <a href="#"><i id="icSettings"></i><span data-i18n="util.settings">Settings</span></a>
+      <span class="util-sp"></span>
+      <span class="run-pill idle" id="runPill"><span class="dot"></span><span id="runStatusTxt">Idle</span></span>
+    </div>
+
+    <!-- header -->
+    <header class="header">
+      <div>
+        <p class="eyebrow" data-i18n="hdr.eyebrow">OWIsMind Benchmark</p>
+        <h1 data-i18n="hdr.h1">Launcher</h1>
+        <div class="title-bar"></div>
+        <p class="header-sub" data-i18n="hdr.sub"></p>
+      </div>
+      <div class="controls">
+        <div class="seg" id="langSeg">
+          <button data-lang="en" class="on">EN</button>
+          <button data-lang="fr">FR</button>
+        </div>
+        <div class="seg" id="themeSeg">
+          <button data-theme="light" class="on">LIGHT</button>
+          <button data-theme="dark">DARK</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- tabs -->
+    <nav class="tabs">
+      <button class="tab on" data-tab="config"><span data-i18n="tab.config">Configuration</span></button>
+      <button class="tab" data-tab="golden"><span data-i18n="tab.golden">Golden set</span><span class="count" id="tabGoldenCount">3</span></button>
+      <button class="tab" data-tab="suggest"><span data-i18n="tab.suggest">Suggestions</span></button>
+    </nav>
+
+    <!-- body: content + aside -->
+    <div class="body">
+
+      <!-- ============ CONTENT ============ -->
+      <main class="content">
+
+        <!-- CONFIG PANEL -->
+        <section class="panel on" data-panel="config">
+          <div class="sec-head">
+            <p class="sec-eyebrow" data-i18n="cfg.eyebrow">Setup</p>
+            <h2 class="sec-title" data-i18n="cfg.title">Configuration</h2>
+            <p class="sec-note" data-i18n="cfg.note"></p>
+          </div>
+
+          <!-- agents -->
+          <p class="glabel" data-i18n="ag.label">Agents under test</p>
+          <p class="ghelp" data-i18n="ag.help"></p>
+          <div id="agentsList"></div>
+          <div style="margin-top:14px">
+            <button class="btn btn-ghost" id="addAgent"><i id="icAddAgent"></i><span data-i18n="ag.add">Add agent</span></button>
+          </div>
+
+          <!-- tri-column settings -->
+          <div class="config-cols">
+            <div class="card"><div class="card-pad">
+              <p class="glabel" data-i18n="rm.title">Response modes</p>
+              <p class="ghelp" data-i18n="rm.help"></p>
+              <div class="chk-stack" id="modesGroup"></div>
+            </div></div>
+
+            <div class="card"><div class="card-pad">
+              <p class="glabel" data-i18n="qt.title">Questions to test</p>
+              <p class="ghelp" id="qtHelp"></p>
+              <div class="chk-wrap" id="catsGroup"></div>
+              <div class="subgroup">
+                <label class="field">
+                  <span class="field-label" data-i18n="qt.langfilter">Language filter</span>
+                  <select class="input" id="langFilter">
+                    <option value="all" data-i18n="opt.all">All</option>
+                    <option value="en" data-i18n="opt.en">English (en)</option>
+                    <option value="fr" data-i18n="opt.fr">French (fr)</option>
+                  </select>
+                </label>
+              </div>
+            </div></div>
+
+            <div class="card"><div class="card-pad">
+              <p class="glabel" data-i18n="rp.title">Run parameters</p>
+              <label class="field">
+                <span class="field-label" data-i18n="rp.conc">Concurrency</span>
+                <input class="input num" id="concurrency" type="number" min="1" max="8" value="1">
+              </label>
+              <p class="ghelp" style="margin-top:10px" data-i18n="rp.conc.help"></p>
+              <div class="subgroup">
+                <label class="field">
+                  <span class="field-label" data-i18n="rp.lang">Benchmark language</span>
+                  <select class="input" id="benchLang">
+                    <option value="en" data-i18n="opt.en">English (en)</option>
+                    <option value="fr" data-i18n="opt.fr">French (fr)</option>
+                  </select>
+                </label>
+                <p class="ghelp" style="margin-top:10px" data-i18n="rp.lang.help"></p>
+              </div>
+            </div></div>
+          </div>
+
+          <!-- save -->
+          <div class="save-bar">
+            <button class="btn btn-primary" id="saveBtn"><i id="icSave"></i><span data-i18n="save.btn">Save configuration</span></button>
+            <span class="dirty-dot"></span>
+            <span class="hint" data-i18n="save.hint"></span>
+          </div>
+        </section>
+
+        <!-- GOLDEN PANEL -->
+        <section class="panel" data-panel="golden">
+          <div class="sec-head">
+            <p class="sec-eyebrow" data-i18n="gs.eyebrow">Golden set</p>
+            <h2 class="sec-title" data-i18n="gs.title">Questions</h2>
+            <p class="sec-note" data-i18n="gs.note"></p>
+          </div>
+          <div class="table-head">
+            <span class="count-line" id="qCount"></span>
+            <button class="btn btn-primary btn-sm" id="addQ"><i id="icAddQ"></i><span data-i18n="gs.add">Add a question</span></button>
+          </div>
+          <table class="gtable">
+            <colgroup>
+              <col class="c-status"><col class="c-q"><col class="c-a"><col class="c-anchor">
+              <col class="c-cat"><col class="c-lang"><col class="c-act">
+            </colgroup>
+            <thead><tr>
+              <th data-i18n="th.status">On</th>
+              <th data-i18n="th.q">Question</th>
+              <th data-i18n="th.a">Expected answer</th>
+              <th data-i18n="th.anchor">Anchor</th>
+              <th data-i18n="th.cat">Category</th>
+              <th data-i18n="th.lang">Lang</th>
+              <th data-i18n="th.act">Actions</th>
+            </tr></thead>
+            <tbody id="qtbody"></tbody>
+          </table>
+        </section>
+
+        <!-- SUGGESTIONS PANEL -->
+        <section class="panel" data-panel="suggest">
+          <div class="sec-head">
+            <p class="sec-eyebrow" data-i18n="sg.eyebrow">Golden set</p>
+            <h2 class="sec-title" data-i18n="sg.title">User suggestions</h2>
+            <p class="sec-note" data-i18n="sg.note"></p>
+          </div>
+          <div class="notice" style="margin-bottom:18px">
+            <i id="icNotice"></i>
+            <span><span data-i18n="sg.empty.p"></span></span>
+          </div>
+          <div class="empty">
+            <div class="ei"><i id="icEmpty"></i></div>
+            <h4 data-i18n="sg.empty.h">Suggestions source not configured</h4>
+            <p data-i18n="sg.empty.p"></p>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- ============ ASIDE ============ -->
+      <aside class="aside">
+        <div class="aside-block">
+          <p class="aside-eyebrow" data-i18n="run.eyebrow">Run</p>
+          <h3 class="aside-h"><i id="icRun" style="display:inline-flex;vertical-align:-3px;margin-right:8px;color:var(--orange)"></i><span data-i18n="run.title">Launch</span></h3>
+          <p class="aside-note" data-i18n="run.note"></p>
+          <div style="margin-top:18px">
+            <button class="btn btn-primary btn-block" id="launchBtn"><span data-i18n="run.btn">Launch the benchmark</span></button>
+          </div>
+          <div class="progress" id="progress"><i id="progressBar"></i></div>
+          <div class="progress-meta" id="progressMeta"></div>
+          <div class="lastrun"><span data-i18n="run.last">Last run</span>: <b id="lastRunVal"></b></div>
+          <p class="aside-note" data-i18n="run.save1"></p>
+          <p class="aside-note" data-i18n="run.save2"></p>
+        </div>
+
+        <div class="aside-block">
+          <p class="aside-eyebrow" data-i18n="pr.eyebrow">Preserved settings</p>
+          <h3 class="aside-h" data-i18n="pr.title">Not editable here</h3>
+          <dl class="kv">
+            <div class="kv-row"><dt data-i18n="pr.golden">Golden dataset</dt><dd id="prGolden"></dd></div>
+            <div class="kv-row"><dt data-i18n="pr.judge">Judge model</dt><dd id="prJudge"></dd></div>
+            <div class="kv-row"><dt data-i18n="pr.suggest">Suggestions source</dt><dd id="prSuggest"></dd></div>
+          </dl>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: add / edit question -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 class="modal-title" id="mdTitle">Add a question</h3>
+      <button class="modal-x" id="mdClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <label class="field full"><span class="field-label" data-i18n="md.q">Question</span>
+        <textarea class="input" id="mq"></textarea></label>
+      <label class="field full"><span class="field-label" data-i18n="md.a">Expected answer</span>
+        <textarea class="input" id="ma"></textarea></label>
+      <label class="field full"><span class="field-label" data-i18n="md.anchor">Anchor (optional)</span>
+        <input class="input mono" id="manchor"></label>
+      <label class="field"><span class="field-label" data-i18n="md.cat">Category</span>
+        <select class="input" id="mcat">
+          <option value="compare">compare</option>
+          <option value="revenus">revenus</option>
+          <option value="top_n">top_n</option>
+        </select></label>
+      <label class="field"><span class="field-label" data-i18n="md.lang">Language</span>
+        <select class="input" id="mlang">
+          <option value="en">en</option>
+          <option value="fr">fr</option>
+        </select></label>
+      <div class="field full">
+        <button type="button" class="chk on" id="mActive" data-on="1">
+          <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg></span>
+          <span class="chk-txt"><b data-i18n="md.active">Active in the next run</b></span>
+        </button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="mdCancel" data-i18n="md.cancel">Cancel</button>
+      <button class="btn btn-primary" id="mdSave" data-i18n="md.save">Save question</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5 9-10"/></svg>
+  <span id="toastMsg"></span>
+</div>
+
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect width="100" height="100" fill="#111"/>
+    <rect x="30" y="44" width="40" height="12" rx="2" fill="#ff7900"/>
+    <rect x="30" y="30" width="26" height="6" rx="1" fill="#fff"/>
+    <rect x="30" y="64" width="34" height="6" rx="1" fill="#888"/>
+  </svg>
+</template>
+
+<script src="benchmark/benchmark.js"></script>
+</body>
+</html>
