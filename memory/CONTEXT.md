@@ -5,6 +5,22 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🗂️ SESSION 2026-06-26 (RUN FINAL) - FIX NOM DE TABLE TROP LONG (NAMEDATALEN, L110) + REORG ARCHI DU
+BENCHMARK SOUS `OWIsMind_LAB/` (L109). 726 tests Python verts.** (1) **Fix table-name (✅ VALIDE DSS)** :
+`webapp_golden_suggestions_v1` + prefixe DEV `webapp_devtest` = nom physique **65 octets > 63** -> `pg_identifier`
+levait -> 500 sur `/benchmark/suggest-from-chat`. L103 avait corrige les INDEX, pas le nom de TABLE. Fix
+`sql_config._shorten_identifier` (passe par `physical_table`) : **<=63 inchange** (0 donnee orpheline), **>63 =
+tete lisible + hash 10c** (deterministe, anti-collision). DEV re-package (`index-pktQ-ICh.js`) -> uploade ->
+**table creee `..._webapp_golden_s_90f625c2f8` (63 octets) + INSERT committe, suggestion visible** (la grille SQL
+"vide" = juste le filtre "alge" du notebook). (2) **Reorg (✅ local)** : tout le benchmark sous **`OWIsMind_LAB/`**
+= miroir du projet DSS separe. `git mv` (46 renommages, historique garde) : `benchmark/` ->
+`OWIsMind_LAB/project-library/python/benchmark/` ; `benchmark_webapp/` (lib) idem ; panes web ->
+`OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}/`. **Packages inchanges = ZERO recoll DSS.** Nouveaux :
+**`OWIsMind_LAB/README.md`** (carte repo<->DSS) + **`local-variables.example.json`** (variable `benchmark` complete).
+Docs/CLAUDE.md/PROJECT_STATE.md/commande de test (`-t` lib root) mis a jour. **726 tests verts (238 LAB + 488
+plugin), 0 tiret.** A FAIRE DSS (LAB) : creer les 2 webapps + coller le nom de table **raccourci** dans
+`benchmark.suggestions.table`. Voir **L109 + L110**.
+
 **🧹 SESSION 2026-06-26 (NETTOYAGE) - GRAND MENAGE DU REPO + DOC SORTIE DU CONTEXTE AUTO (L108). Repo
 only, 0 code touche, 1132 tests verts.** Reconnaissance multi-agents (7 scouts + verif adversariale, 16
 agents) = **ZERO code mort** (tout le frontend/backend/agents DEV+PROD/recettes/tools/modeles/benchmark/2
@@ -613,7 +629,18 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-26 (NETTOYAGE) : grand ménage du repo + doc sortie du contexte auto → détail `sessions/2026-06-26.md` (Run nettoyage) + **L108**
+## 🧭 Dernière session - 2026-06-26 (RUN FINAL) : fix nom de table trop long (L110) + réorg archi benchmark sous `OWIsMind_LAB/` (L109) → détail `sessions/2026-06-26.md` (Run final)
+- **Fix table-name (✅ VALIDÉ DSS)** : nom physique 65 octets > 63 (logique longue + préfixe DEV) -> `pg_identifier`
+  levait -> 500. `sql_config._shorten_identifier` (via `physical_table`) : ≤63 inchangé (0 donnée orpheline), >63 =
+  tête lisible + hash 10c. DEV re-packagé (`index-pktQ-ICh.js`) -> table créée + INSERT committé en DSS. Étend L103.
+- **Réorg (✅ local)** : `git mv` (46 renommages) -> tout le benchmark sous **`OWIsMind_LAB/`** (miroir du projet DSS) :
+  `project-library/python/{benchmark, benchmark_webapp}` + `webapps/{benchmark_launcher, benchmark_results}` +
+  `local-variables.example.json` + **`README.md` maître**. **Packages inchangés = 0 recoll DSS.** CLAUDE.md +
+  PROJECT_STATE.md + guides + commande de test (`-t` lib root) à jour. **726 tests Python verts, 0 tiret.** Voir **L109**.
+- **À FAIRE DSS (LAB)** : créer les 2 webapps Standard + recoller la lib + bloc `suggestions` avec le nom de table
+  **raccourci** (`benchmark.suggestions.table`) -> l'onglet Suggestions du Launcher verra la suggestion `pending`.
+
+## Avant - 2026-06-26 (NETTOYAGE) : grand ménage du repo + doc sortie du contexte auto → détail `sessions/2026-06-26.md` (Run nettoyage) + **L108**
 - **Recon multi-agents (Workflow ultracode, 7 scouts + vérif adversariale)** = **0 code mort** ; le gras = junk
   OS, scratch de workflows, maquettes consommées, doc EN périmée. **Code fonctionnel 100% conservé.**
 - **Supprimé** : 16 `.DS_Store` + 31 `__pycache__` (junk) ; **56 fichiers suivis** docs/scratch/maquettes
@@ -915,19 +942,22 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🔬NEW. **DÉPLOYER + VALIDER l'intégration benchmark (2026-06-26).** **Lot 2 (plugin)** : upload
-   `owismind_dev-upload.zip` (**72 entrées, `index-BoETXxLb.js`**, Uploaded) + **REDÉMARRER backend**
-   (python-lib changé). Smoke : sous une réponse, menu « ... » -> « Suggérer pour le benchmark » -> page
-   `/benchmark` préremplie (question + réponse agent + Oui/Non) ; page grand public (suggestion manuelle) ;
-   « mes suggestions ». La table `webapp_golden_suggestions_v1` se crée à la 1re suggestion ; copier son nom
-   physique exact via Admin > Storage (`golden_suggestions`). **Lot 1+3 (webapp LAB)** : suivre
-   **`benchmark_webapp/README.md`** : recoller `views.py` en project-library `python/benchmark_webapp/` ;
-   créer une **webapp Standard** dans `OWIsMind_LAB` + coller les 4 panes (`body.html`/`style.css`/`script.js`/
-   `backend.py`) ; créer le dataset `benchmark_suggestions_promoted` ; ajouter le bloc `benchmark.suggestions`
-   (connection `SQL_owi` + table physique exacte + promoted_dataset) à la variable ; permissions (LAB write +
-   lecture connexion SQL). **Vérifier sur l'instance la méthode async de lancement de scénario** (dataikuapi
-   `run_scenario`/`run` - best-effort, dégrade en `launch_unsupported`). Puis : lire le dernier run, lancer un
-   run, promouvoir des suggestions. Voir **L103** + `sessions/2026-06-26.md`.
+0🗂️NEW. **RÉORG FAITE (2026-06-26)** : tout le benchmark est sous **`OWIsMind_LAB/`** (carte = `OWIsMind_LAB/README.md`).
+   Les chemins ci-dessous sont les NOUVEAUX : `OWIsMind_LAB/project-library/python/{benchmark, benchmark_webapp}` (lib),
+   `OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}` (panes), `OWIsMind_LAB/local-variables.example.json`
+   (variable). Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`.
+0🔬NEW. **DÉPLOYER + VALIDER l'intégration benchmark (2026-06-26).** **Lot 2 (plugin) ✅ FIX TABLE-NAME VALIDÉ DSS** :
+   le 500 « nom de table trop long » est corrigé (L110) ; DEV uploadé (`index-pktQ-ICh.js`), suggestion écrite + relue.
+   La table `webapp_golden_suggestions_v1` est créée sous son nom **RACCOURCI** (préfixe DEV) ; copier le nom EXACT via
+   Admin > Storage (ligne `golden_suggestions`, ex. `OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_s_90f625c2f8`).
+   **Lot 1+3 (webapp LAB)** : suivre **`OWIsMind_LAB/project-library/python/benchmark_webapp/DEPLOY_GUIDE.md`** :
+   recoller `views.py`+`dss.py` en project-library `python/benchmark_webapp/` ; créer les **2 webapps Standard** dans
+   `OWIsMind_LAB` + coller les 4 panes de chaque (`OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}/`) ;
+   créer le dataset `benchmark_suggestions_promoted` ; ajouter le bloc `benchmark.suggestions` (connection `SQL_owi` +
+   **table physique RACCOURCIE exacte** + promoted_dataset) à la variable ; permissions (LAB write + lecture connexion
+   SQL). **Vérifier sur l'instance la méthode async de lancement de scénario** (dataikuapi `run_scenario`/`run` -
+   best-effort, dégrade en `launch_unsupported`). Puis : lire le dernier run, lancer un run, promouvoir des suggestions.
+   Voir **L103/L109/L110** + `sessions/2026-06-26.md` (Run final). **Promotion prod du fix sql_config** = rebuild + package prod + upload quand voulu.
 0🧪NEW. **FINIR LE BENCHMARK EN DSS (2026-06-25) - suivre `benchmark/SETUP_GUIDE.md` (4 étapes).** (1) Re-coller
    `judge.py` + `schemas.py` (lib) + re-coller les 3 corps de step (`dss_steps/*` ont la lecture NaN-safe) ;
    (2) relancer **Judge + Aggregate** sur le `benchmark_runs_raw` déjà rempli (pas besoin de rappeler l'agent) ;

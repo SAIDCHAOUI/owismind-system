@@ -280,13 +280,42 @@ def _namespace():
     return "{}-{}".format(prefix, APP_NAMESPACE) if prefix else APP_NAMESPACE
 
 
+def _shorten_identifier(natural):
+    """Return ``natural`` unchanged when it fits NAMEDATALEN, else a deterministic,
+    collision-safe shortened form that fits.
+
+    A physical table name is ``{PROJECT_KEY}_{namespace}_{logical}``. A long project key
+    plus an admin ``table_prefix`` (up to 16 chars) meeting a long logical name (e.g. the
+    28-char ``webapp_golden_suggestions_v1``) can exceed PostgreSQL's 63-byte identifier
+    limit - and ``pg_identifier`` then REJECTS (raises) the name, aborting the whole
+    create-table transaction. So we keep a readable head and append a short hash of the
+    FULL natural name: same input -> same output (required, tables are create-if-not-exist
+    so the name must be stable) and collision-safe (two distinct logical names cannot land
+    on one physical name). Names that already fit are returned UNCHANGED, so every table
+    that was creatable under the old code keeps the exact same name - no data is orphaned.
+    """
+    raw = natural.encode("utf-8")
+    if len(raw) <= _MAX_IDENTIFIER_BYTES:
+        return natural
+    digest = hashlib.sha1(raw).hexdigest()[:10]
+    keep = _MAX_IDENTIFIER_BYTES - 1 - len(digest)  # room for "_" + digest
+    head = raw[:keep].decode("utf-8", "ignore").rstrip("_-")
+    return "{}_{}".format(head, digest)
+
+
 def physical_table(logical):
-    """Physical table name: ``{PROJECT_KEY}_{namespace}_{logical}``.
+    """Physical table name: ``{PROJECT_KEY}_{namespace}_{logical}`` (length-safe).
 
     e.g. ``webapp_chat_v5`` -> ``OWISMIND_DEV_owismind_webapp_chat_v5`` (no prefix)
     or ``OWISMIND_DEV_bidule-owismind_webapp_chat_v5`` (prefix "bidule").
+
+    When the natural name would exceed PostgreSQL's 63-byte limit (a long project key +
+    admin prefix + long logical name), it is deterministically shortened so it always fits
+    and ``pg_identifier`` never raises (see ``_shorten_identifier``). Names that fit are
+    unchanged. This same name is what ``storage_status`` exposes for the admin to paste
+    into the LAB benchmark config, so the cross-project read stays consistent.
     """
-    return "{}_{}_{}".format(PROJECT_KEY, _namespace(), logical)
+    return _shorten_identifier("{}_{}_{}".format(PROJECT_KEY, _namespace(), logical))
 
 
 def full_table(logical):

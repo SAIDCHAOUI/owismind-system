@@ -153,8 +153,8 @@ un filtre `run_id` fixe au dernier run.
   `profile.modes` : l'orchestrateur honore le token. Verifier que l'agent a bien
   `"modes": true`.
 - **Import qui echoue en librairie** : un module pur ne doit pas importer pandas /
-  dataiku au top-level. `python3 -m unittest discover -s benchmark/tests` doit
-  passer en stdlib seul ; si oui, re-coller. Les `dss_steps/` importent dataiku /
+  dataiku au top-level. `python3 -m unittest discover -s OWIsMind_LAB/project-library/python/benchmark/tests -t OWIsMind_LAB/project-library/python`
+  doit passer en stdlib seul ; si oui, re-coller. Les `dss_steps/` importent dataiku /
   pandas au top : normal, ils ne tournent que dans DSS.
 
 ---

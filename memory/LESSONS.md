@@ -2465,5 +2465,46 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   on va la mettre a jour dans une future session ; juste fais en sorte que ca vienne pas automatiquement dans le
   contexte des agents »).
 
+## L109 - Faire refléter par le repo l'archi Dataiku du projet benchmark SÉPARÉ : tout sous `OWIsMind_LAB/`, packages inchangés (zéro recoll DSS), tests via `-t` sur la lib root [repo, 2026-06-26]
+- **Contexte** : `benchmark/` et `benchmark_webapp/` vivaient en 2 dossiers RACINE séparés ; rien ne disait
+  qu'ils forment **le même projet DSS séparé `OWIsMind_LAB`** (≠ le plugin `OWISMIND_DEV/PROD`). L'user : « lundi
+  je ne saurai plus qui est quoi et où » ; il veut que l'arborescence des fichiers **reflète l'archi Dataiku**,
+  **sans changer le code**.
+- **Clé qui débloque** : les libs s'importent par **NOM de package** (`from benchmark import ...`,
+  `from benchmark_webapp import ...`), **jamais par chemin** -> on peut **déplacer les dossiers sans renommer les
+  packages** = **zéro recoll DSS**, zéro code déployé touché. Vérifié par grep avant de bouger.
+- **Solution** : créer `OWIsMind_LAB/` en **miroir 1:1 du projet DSS** : `project-library/python/{benchmark,
+  benchmark_webapp}` (= Libraries > python/), `webapps/{benchmark_launcher, benchmark_results}` (= 2 webapps
+  Standard ; **panes SORTIS de la lib**, fidèle au découpage DSS lib≠webapp), `local-variables.example.json`
+  (= la variable projet `benchmark`), et un **`README.md` maître = la carte repo↔DSS** (+ mapping fichier->objet
+  DSS, dont `benchmark/dss_steps/step_*.py` = les 3 steps du scénario `Run_Benchmark`). `git mv` (historique gardé).
+- **Piège tests** : les 2 packages s'importent depuis la **racine de lib** `OWIsMind_LAB/project-library/python`.
+  Commande unique : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`
+  (le `-t` met la lib root sur le path). `test_views.py` (`_HERE/../..`) **s'auto-ajuste** à la lib root tant que
+  les 2 packages restent frères. Mettre à jour les commandes/chemins **repo** dans les guides (pas les chemins
+  **DSS** `python/benchmark/...` qui, eux, sont inchangés).
+- **Preuve** : 238 tests verts (189 benchmark + 49 webapp) après déplacement + edits docs ; `CLAUDE.md`
+  (Identifiants + Référence) et `PROJECT_STATE.md` pointent vers `OWIsMind_LAB/README.md`.
+- **Source** : session 2026-06-26 (réorg de fin de semaine) ; décision user via AskUserQuestion (option « dossier
+  `OWIsMind_LAB/` fidèle »). Précédent du même esprit : `dataiku-agents/OWISMIND/<projet>/` (L099).
+
+## L110 - NAMEDATALEN ne frappe pas que les index : un nom de TABLE physique peut aussi dépasser 63 octets -> rendre `physical_table` length-safe, pas seulement `safe_index_name` [repo, observé DSS, 2026-06-26]
+- **Contexte** : nom logique long `webapp_golden_suggestions_v1` (28 c.) + préfixe DEV `webapp_devtest` + project
+  key -> nom physique **65 octets > 63**. `pg_identifier` LÈVE (à raison : anti-troncature silencieuse Postgres
+  + anti-collision), donc `ensure_golden_suggestions_table` plantait -> **500 sur `/benchmark/suggest-from-chat`**.
+  Invisible en prod (sans préfixe = 50 octets) : **se voit seulement en DEV** (préfixe `table_prefix`).
+- **Ce qui manquait** : L103 avait rendu length-safe les **INDEX** (`safe_index_name`), mais **pas le nom de
+  table** lui-même. Même cause (NAMEDATALEN), surface différente.
+- **Solution** : `_shorten_identifier` dans `sql_config` ; `physical_table` y passe. **≤63 octets = inchangé**
+  (toutes les tables existantes gardent leur nom exact -> **0 donnée orpheline**) ; **>63 = tête lisible + hash
+  10 c. du nom COMPLET** (déterministe, requis car create-if-not-exist ; anti-collision entre 2 noms logiques).
+  Cohérent de bout en bout : `full_table` (reads/writes), `storage_status` (le nom exposé à l'admin pour le coller
+  dans `benchmark.suggestions.table` du LAB), et `safe_index_name` reçoit déjà le nom raccourci -> retombe sur son
+  propre hash. **Piège déploiement** : l'admin doit coller le nom **raccourci** (Admin > Storage), pas l'ancien
+  nom long du guide.
+- **Preuve** : nom DEV `OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_s_90f625c2f8` (63 octets) ; table créée
+  + INSERT committé en DSS (logs user) ; **488 tests plugin verts** (+4 de régression length-safe).
+- **Source** : session 2026-06-26, log DSS user (« nom de table trop long »).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

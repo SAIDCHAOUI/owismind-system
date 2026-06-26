@@ -1,14 +1,19 @@
 """benchmark_webapp.views - pure shaping + config validation (no DSS runtime).
 
-Run from the repo root: ``python3 -m unittest discover -s benchmark_webapp/tests``.
+Run from the repo root: ``python3 -m unittest discover \
+-s OWIsMind_LAB/project-library/python/benchmark_webapp/tests \
+-t OWIsMind_LAB/project-library/python``.
 """
 import os
 import sys
 import unittest
 
+# Two levels up from this test file is the library root that holds both the `benchmark` and
+# `benchmark_webapp` packages (mirrors the DSS project library `python/`), so it self-bootstraps
+# wherever the package tree is moved, as long as the two packages stay siblings.
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_REPO = os.path.abspath(os.path.join(_HERE, "..", ".."))
-sys.path.insert(0, _REPO)
+_LIB_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
+sys.path.insert(0, _LIB_ROOT)
 
 from benchmark_webapp import views  # noqa: E402
 

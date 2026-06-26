@@ -35,11 +35,11 @@ Tableau "quel fichier du repo va ou dans DSS" :
 | `..._SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (DEV, env 3.11) |
 | `..._CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (DEV, env 3.11) si deploye |
 | `Plugin/ready-for-dataiku/owismind_dev-upload.zip` | Plugin DSS `owismind_dev` |
-| `benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
-| `benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
-| `benchmark_webapp/results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
-| `benchmark_webapp/launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
-| `benchmark_webapp/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
+| `OWIsMind_LAB/project-library/python/benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
+| `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
+| `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
+| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
+| `OWIsMind_LAB/webapps/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
 
 ---
 
@@ -137,18 +137,20 @@ Copie la valeur (ex. `OWISMIND_DEV_owismind_webapp_golden_suggestions_v1`). Gard
    - les **3 corps de step** `dss_steps/step_run_matrix.py` / `step_judge.py` / `step_aggregate.py`
      (ils appellent maintenant l'append au lieu de l'overwrite) -> re-colle-les aussi dans les steps
      du scenario `Run_Benchmark`.
-3. Cree `python/benchmark_webapp/` et place-y `__init__.py`, `views.py`, `dss.py` (depuis le repo).
+3. Cree `python/benchmark_webapp/` et place-y `__init__.py`, `views.py`, `dss.py` (depuis
+   `OWIsMind_LAB/project-library/python/benchmark_webapp/`).
    (`views.py` + `dss.py` ont gagne la gestion des questions golden, voir C3.)
 
-Verification (en local sur le repo, jamais sur l'instance) :
-`python3 -m unittest discover -s benchmark_webapp/tests` doit passer.
+Verification (en local sur le repo, jamais sur l'instance), depuis la racine du repo :
+`python3 -m unittest discover -s OWIsMind_LAB/project-library/python/benchmark_webapp/tests -t OWIsMind_LAB/project-library/python`
+doit passer.
 
 ### C2. Creer la webapp "Benchmark - Results"
 1. `OWIsMind_LAB` -> **"</> "** (Code) -> **Webapps** -> **+ New webapp** -> **Code webapp** ->
    **Standard**.
 2. Nomme-la **"Benchmark - Results"** ; active le backend Python (Settings de la webapp).
-3. Colle, depuis `benchmark_webapp/results/` : `body.html` -> onglet **HTML**, `style.css` ->
-   **CSS**, `script.js` -> **JS**, `backend.py` -> **Python**. Save, puis ouvre (View).
+3. Colle, depuis `OWIsMind_LAB/webapps/benchmark_results/` : `body.html` -> onglet **HTML**,
+   `style.css` -> **CSS**, `script.js` -> **JS**, `backend.py` -> **Python**. Save, puis ouvre (View).
 
 Ce que tu vois : "How well do the OWIsMind agents answer?", un score de confiance (donut), des
 chiffres cles, par configuration / par sujet / par question. En haut a droite : toggle **theme** et
@@ -156,7 +158,7 @@ chiffres cles, par configuration / par sujet / par question. En haut a droite : 
 
 ### C3. Creer la webapp "Benchmark - Launcher"
 Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les 4 panes depuis
-`benchmark_webapp/launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, une carte
+`OWIsMind_LAB/webapps/benchmark_launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, une carte
 **Questions** (gerer le golden : ajouter / modifier / activer-desactiver / supprimer une question avec
 sa reponse attendue) et une section Suggestions.
 

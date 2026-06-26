@@ -33,6 +33,12 @@ convertie, a été supprimée du repo le 2026-06-11).
   / PROD `agent:uO5hEzAs`) ; 2e sous-agent **CSSO_Trouble_Tickets_Expert** (DEV `agent:NcE9LD2i`, en cours,
   pas encore en PROD).
 - API `/owismind-api/*` (santé `/owismind-api/ping`)
+- **Benchmark / éval des agents = projet DSS SÉPARÉ `OWIsMind_LAB`** (≠ le plugin), miroir repo
+  **`OWIsMind_LAB/`** : `project-library/python/{benchmark, benchmark_webapp}` (recollés en project-library,
+  packages importés `from benchmark ...` / `from benchmark_webapp ...`), `webapps/{benchmark_launcher,
+  benchmark_results}` (2 webapps Standard), `local-variables.example.json` (la variable `benchmark`),
+  scénario `Run_Benchmark` (3 steps = `benchmark/dss_steps/step_*.py`). **Carte repo↔DSS : `OWIsMind_LAB/README.md`.**
+  Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`.
 - ⚠️ Les guides de `docs/cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) - **ne pas les recopier**.
 
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
@@ -82,6 +88,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 - `docs/cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` - cahier des charges fonctionnel (produit ; Evidence Studio = intention future différée).
 - `docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
 - `docs/cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).
+- `OWIsMind_LAB/README.md` - **carte du projet benchmark** (projet DSS séparé `OWIsMind_LAB`) : layout repo↔DSS, mapping fichier→objet DSS, comment ça se connecte au plugin + aux agents, et les 2 guides de déploiement (`benchmark/SETUP_GUIDE.md` moteur, `benchmark_webapp/DEPLOY_GUIDE.md` complet). À lire pour tout travail sur le benchmark.
 - `docs/` - référence d'ingénierie (architecture, API, frontend, data model, sécurité, build/deploy) ; `docs/superpowers/specs/` = specs de conception gelées.
 - `project-documentation/` - doc d'ingénierie EN ultra-complète (arbre 00-09 + site HTML + pitch). **À lire UNIQUEMENT à la demande explicite** : exclue du graphe de connaissances (`.graphifyignore`) pour ne jamais entrer en contexte auto, et **potentiellement périmée** (à mettre à jour dans une future session). Source de vérité = `memory/` + `docs/cadrage/`, pas ce dossier. (Décision user 2026-06-26.)
 

@@ -14,11 +14,11 @@ Design contract: `docs/superpowers/specs/2026-06-25-benchmark-integration-design
 
 ## Two webapps, on purpose
 
-- **Results** (`results/`) - PUBLIC consultation, READ-ONLY. Plain-language, trust-building
-  display of the latest (or any) run: a clear confidence verdict, accuracy, response time,
-  cost, what to double-check, per-configuration and per-topic and per-question views. Built so a
+- **Results** (`../../webapps/benchmark_results/`) - PUBLIC consultation, READ-ONLY. Plain-language,
+  trust-building display of the latest (or any) run: a clear confidence verdict, accuracy, response
+  time, cost, what to double-check, per-configuration and per-topic and per-question views. Built so a
   NON-technical person understands everything. Its backend has NO write route at all.
-- **Launcher** (`launcher/`) - the internal config + launch + golden management tool. A REAL
+- **Launcher** (`../../webapps/benchmark_launcher/`) - the internal config + launch + golden management tool. A REAL
   FORM (pick agents / modes / question filter / concurrency / language, no JSON editing), a
   Launch button, a **Questions** card to manage the golden set directly (create / edit /
   enable-disable / delete a question with its expected answer + anchor), and a panel to review
@@ -52,23 +52,28 @@ single module `benchmark_webapp/dss.py`):
 
 ## Repo layout (what goes where in DSS)
 
+Repo paths below are relative to the repo root. This package mirrors the LAB project library; the
+webapp panes live in a sibling `webapps/` folder (mirroring DSS, where the panes are webapp objects,
+not library files).
+
 | Repo file | DSS destination |
 | --- | --- |
-| `benchmark_webapp/views.py` (+ `__init__.py`) | LAB **project library** `python/benchmark_webapp/` (PURE, unit-tested). |
-| `benchmark_webapp/dss.py` | LAB **project library** `python/benchmark_webapp/` (the single dataiku/SQL I/O module). |
-| `benchmark_webapp/results/{body.html,style.css,script.js}` | the RESULTS Standard webapp's HTML / CSS / JS panes |
-| `benchmark_webapp/results/backend.py` | the RESULTS Standard webapp's Python backend pane |
-| `benchmark_webapp/launcher/{body.html,style.css,script.js}` | the LAUNCHER Standard webapp's HTML / CSS / JS panes |
-| `benchmark_webapp/launcher/backend.py` | the LAUNCHER Standard webapp's Python backend pane |
-| `benchmark_webapp/*/preview.html` | DEV ONLY - offline visual QA (mock data). Do NOT paste into DSS. |
+| `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` (+ `__init__.py`) | LAB **project library** `python/benchmark_webapp/` (PURE, unit-tested). |
+| `OWIsMind_LAB/project-library/python/benchmark_webapp/dss.py` | LAB **project library** `python/benchmark_webapp/` (the single dataiku/SQL I/O module). |
+| `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js}` | the RESULTS Standard webapp's HTML / CSS / JS panes |
+| `OWIsMind_LAB/webapps/benchmark_results/backend.py` | the RESULTS Standard webapp's Python backend pane |
+| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,script.js}` | the LAUNCHER Standard webapp's HTML / CSS / JS panes |
+| `OWIsMind_LAB/webapps/benchmark_launcher/backend.py` | the LAUNCHER Standard webapp's Python backend pane |
+| `OWIsMind_LAB/webapps/*/preview.html` | DEV ONLY - offline visual QA (mock data). Do NOT paste into DSS. |
 
 The repo is the source of truth (same model as `benchmark/`). Re-collect changed files when they
-evolve. Run the pure tests first: `python3 -m unittest discover -s benchmark_webapp/tests`.
+evolve. Run the pure tests first (from the repo root):
+`python3 -m unittest discover -s OWIsMind_LAB/project-library/python/benchmark_webapp/tests -t OWIsMind_LAB/project-library/python`.
 
 ## Setup (one time)
 
-1. **Project library**: copy `benchmark_webapp/views.py`, `benchmark_webapp/dss.py` (+
-   `__init__.py`) into the LAB project library under `python/benchmark_webapp/` (they import
+1. **Project library**: copy `views.py`, `dss.py` (+ `__init__.py`) from this package into the LAB
+   project library under `python/benchmark_webapp/` (they import
    `benchmark.run_params` / `benchmark.schemas` / `benchmark.config`, already LAB libraries).
 2. **Create the two webapps**: `OWIsMind_LAB` -> Code -> Webapps -> New -> **Standard**, twice.
    For each, paste its `body.html` / `style.css` / `script.js` / `backend.py` into the four panes.

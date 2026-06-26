@@ -407,6 +407,14 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
 
 ## 8c. Système de benchmark / évaluation des agents (2026-06-25, ⏳ matrix ✅ DSS / juge non re-validé)
 
+> 📁 **Emplacement repo (réorg 2026-06-26)** : tout le benchmark vit désormais sous **`OWIsMind_LAB/`** (miroir
+> du projet DSS séparé). `benchmark/` -> `OWIsMind_LAB/project-library/python/benchmark/` ; `benchmark_webapp/`
+> -> `OWIsMind_LAB/project-library/python/benchmark_webapp/` (lib `views.py`+`dss.py`) ; les panes web ->
+> `OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}/` ; variable -> `OWIsMind_LAB/local-variables.example.json`.
+> **Packages inchangés** (`from benchmark ...` / `from benchmark_webapp ...`), zéro recoll DSS. Carte : `OWIsMind_LAB/README.md`.
+> Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`. Voir **L109**.
+> (Les chemins `benchmark/...` / `benchmark_webapp/...` cités plus bas dans 8c/8d = anciens, lire sous `OWIsMind_LAB/...`.)
+
 But : mesurer précision (taux de bonnes réponses), latence, coût, tokens **par agent ET par mode**, restitution
 lisible. **Archi (spec `docs/superpowers/specs/2026-06-24-agent-benchmark-evaluation-design.md`)** : projet DSS
 dédié **`OWIsMind_LAB`** (assaini) + scénario **`Run_Benchmark`** (3 steps Python) + **librairie partagée**

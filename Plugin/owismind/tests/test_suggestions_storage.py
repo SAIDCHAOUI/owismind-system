@@ -63,6 +63,51 @@ class SafeIndexNameTests(unittest.TestCase):
         self.assertLessEqual(len(out.strip('"').encode("utf-8")), 63)
 
 
+class ShortenIdentifierTests(unittest.TestCase):
+    """Length-safe PHYSICAL TABLE naming (regression: a long admin table_prefix meeting the
+    28-char ``webapp_golden_suggestions_v1`` produced a 65-byte name and pg_identifier RAISED,
+    so the suggestions table could never be created - reported live on the DEV plugin)."""
+
+    def test_short_name_is_unchanged(self):
+        # A name that already fits NAMEDATALEN is returned byte-for-byte (existing tables keep
+        # their exact name - no data orphaned).
+        name = "OWISMIND_DEV_owismind_webapp_golden_suggestions_v1"
+        self.assertLessEqual(len(name.encode("utf-8")), 63)
+        self.assertEqual(sql_config._shorten_identifier(name), name)
+
+    def test_overlong_name_is_shortened_deterministically_and_fits(self):
+        # The exact reported case: 65 bytes (DEV prefix "webapp_devtest").
+        natural = "OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_suggestions_v1"
+        self.assertEqual(len(natural.encode("utf-8")), 65)
+        out = sql_config._shorten_identifier(natural)
+        # Fits, is a VALID identifier (so pg_identifier never raises), keeps a readable head,
+        # and is deterministic (same input -> same output, required for create-if-not-exist).
+        self.assertLessEqual(len(out.encode("utf-8")), 63)
+        sql_config.pg_identifier(out)  # would raise if invalid/over-long
+        self.assertTrue(out.startswith("OWISMIND_DEV_webapp_devtest-owismind_webapp_golden"))
+        self.assertEqual(out, sql_config._shorten_identifier(natural))
+
+    def test_distinct_overlong_names_do_not_collide(self):
+        # Two logical names sharing the same truncated head must NOT collide on one physical
+        # name (the hash is of the FULL natural name).
+        a = "OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_suggestions_v1"
+        b = "OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_suggestions_v2"
+        self.assertNotEqual(sql_config._shorten_identifier(a), sql_config._shorten_identifier(b))
+
+    def test_physical_table_is_length_safe_under_a_long_prefix(self):
+        # Drive it through the real builder with a long prefix configured: full_table() must
+        # not raise (it used to abort the whole CREATE TABLE transaction).
+        orig_prefix_cache = sql_config._prefix_cache
+        try:
+            sql_config._prefix_cache = ("webapp_devtest", "webapp_devtest", False)
+            physical = sql_config.physical_table("webapp_golden_suggestions_v1")
+            self.assertLessEqual(len(physical.encode("utf-8")), 63)
+            # full_table quotes it via pg_identifier; this is the call that raised live.
+            sql_config.full_table("webapp_golden_suggestions_v1")
+        finally:
+            sql_config._prefix_cache = orig_prefix_cache
+
+
 class _FakeExecutor:
     """Records the pre/post queries instead of touching a database."""
 

@@ -28,8 +28,11 @@ dashboard sits directly on them).
 
 ## Tests
 
+From the repo root (the library root must be on the path, hence `-t`):
+
 ```
-python3 -m unittest discover -s benchmark/tests
+python3 -m unittest discover -s OWIsMind_LAB/project-library/python/benchmark/tests \
+  -t OWIsMind_LAB/project-library/python
 ```
 
 Pure-logic only, no DSS calls. The fixtures lock capture parity with the webapp.
