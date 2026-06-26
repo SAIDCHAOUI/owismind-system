@@ -361,12 +361,12 @@ export const extraMessages = {
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
     'mode.label': 'Mode de réponse',
-    'mode.eco': 'Smart',
-    'mode.medium': 'Pro',
-    'mode.high': 'Claude',
-    'mode.eco_hint': 'Smart : rapide, économique et recommandé pour presque toutes vos questions. Cliquez pour changer de mode.',
-    'mode.medium_hint': 'Pro : plus puissant, pour les analyses qui demandent davantage de finesse (plus coûteux). Cliquez pour changer de mode.',
-    'mode.high_hint': 'Claude : le plus puissant et de loin le plus coûteux. À réserver aux questions très complexes. Cliquez pour changer de mode.',
+    'mode.smart': 'Smart',
+    'mode.pro': 'Pro',
+    'mode.claude': 'Claude',
+    'mode.smart_hint': 'Smart : rapide, économique et recommandé pour presque toutes vos questions. Cliquez pour changer de mode.',
+    'mode.pro_hint': 'Pro : plus puissant, pour les analyses qui demandent davantage de finesse (plus coûteux). Cliquez pour changer de mode.',
+    'mode.claude_hint': 'Claude : le plus puissant et de loin le plus coûteux. À réserver aux questions très complexes. Cliquez pour changer de mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Mode de réponse',
     'mode.modal_intro':
@@ -377,20 +377,20 @@ export const extraMessages = {
     'mode.reco_line': 'Commencez toujours par Smart : rapide, économique et déjà de très bonne qualité pour la grande majorité de vos questions.',
     'mode.cost_label': 'Coût',
     'mode.speed_label': 'Vitesse',
-    'mode.eco_desc':
+    'mode.smart_desc':
       'Le mode à utiliser par défaut. Rapide, économique et de très bonne qualité : il couvre la quasi-totalité des recherches et des questions du quotidien. Dans le doute, restez sur Smart.',
-    'mode.medium_desc':
+    'mode.pro_desc':
       'Un cran au-dessus de Smart : plus puissant pour les analyses qui demandent un peu plus de finesse. Sensiblement plus coûteux que Smart, à réserver aux cas où Smart ne suffit pas.',
-    'mode.high_desc':
+    'mode.claude_desc':
       'Le modèle le plus puissant (Claude), pour le raisonnement et les analyses en profondeur. À réserver aux questions vraiment complexes : soignez votre demande et expliquez précisément ce que vous attendez.',
-    'mode.high_warning':
+    'mode.claude_warning':
       'Beaucoup plus cher : Claude épuise bien plus vite votre enveloppe mensuelle de 50 $. À n\'utiliser que pour des analyses complexes, avec une demande bien construite.',
-    'mode.eco_cost': 'Faible',
-    'mode.medium_cost': 'Modéré',
-    'mode.high_cost': 'Élevé',
-    'mode.eco_speed': 'Très rapide',
-    'mode.medium_speed': 'Rapide',
-    'mode.high_speed': 'Plus posé',
+    'mode.smart_cost': 'Faible',
+    'mode.pro_cost': 'Modéré',
+    'mode.claude_cost': 'Élevé',
+    'mode.smart_speed': 'Très rapide',
+    'mode.pro_speed': 'Rapide',
+    'mode.claude_speed': 'Plus posé',
     'mode.envelope_note':
       'Les modes Pro et surtout Claude consomment beaucoup plus vite votre enveloppe mensuelle de 50 $. Gardez Claude pour les questions qui le justifient vraiment ; Smart suffit pour le reste.',
 
@@ -871,12 +871,12 @@ export const extraMessages = {
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
     'mode.label': 'Response mode',
-    'mode.eco': 'Smart',
-    'mode.medium': 'Pro',
-    'mode.high': 'Claude',
-    'mode.eco_hint': 'Smart: fast, economical and recommended for almost every question. Click to change mode.',
-    'mode.medium_hint': 'Pro: more powerful, for analyses that need extra finesse (more expensive). Click to change mode.',
-    'mode.high_hint': 'Claude: the most powerful and by far the most expensive. Reserve it for very complex questions. Click to change mode.',
+    'mode.smart': 'Smart',
+    'mode.pro': 'Pro',
+    'mode.claude': 'Claude',
+    'mode.smart_hint': 'Smart: fast, economical and recommended for almost every question. Click to change mode.',
+    'mode.pro_hint': 'Pro: more powerful, for analyses that need extra finesse (more expensive). Click to change mode.',
+    'mode.claude_hint': 'Claude: the most powerful and by far the most expensive. Reserve it for very complex questions. Click to change mode.',
     // Mode-explanation popup
     'mode.modal_title': 'Response mode',
     'mode.modal_intro':
@@ -887,20 +887,20 @@ export const extraMessages = {
     'mode.reco_line': 'Always start with Smart: fast, economical and already very good quality for the vast majority of your questions.',
     'mode.cost_label': 'Cost',
     'mode.speed_label': 'Speed',
-    'mode.eco_desc':
+    'mode.smart_desc':
       'The mode to use by default. Fast, economical and very good quality: it covers almost all lookups and everyday questions. When in doubt, stay on Smart.',
-    'mode.medium_desc':
+    'mode.pro_desc':
       'A step up from Smart: more powerful for analyses that need a bit more finesse. Noticeably more expensive than Smart, for when Smart is not enough.',
-    'mode.high_desc':
+    'mode.claude_desc':
       'The most powerful model (Claude), for deep reasoning and analysis. Reserve it for genuinely complex questions: craft your request and explain precisely what you expect.',
-    'mode.high_warning':
+    'mode.claude_warning':
       'Much more expensive: Claude burns through your $50/month envelope far faster. Use it only for complex analyses, with a well-crafted request.',
-    'mode.eco_cost': 'Low',
-    'mode.medium_cost': 'Moderate',
-    'mode.high_cost': 'High',
-    'mode.eco_speed': 'Very fast',
-    'mode.medium_speed': 'Fast',
-    'mode.high_speed': 'More deliberate',
+    'mode.smart_cost': 'Low',
+    'mode.pro_cost': 'Moderate',
+    'mode.claude_cost': 'High',
+    'mode.smart_speed': 'Very fast',
+    'mode.pro_speed': 'Fast',
+    'mode.claude_speed': 'More deliberate',
     'mode.envelope_note':
       'The Pro and especially Claude modes use up your $50/month envelope much faster. Keep Claude for questions that genuinely warrant it; Smart is enough for the rest.',
 

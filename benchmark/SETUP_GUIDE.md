@@ -9,10 +9,13 @@ Reference complete (schemas, modules) : `benchmark/README.md`. Il reste 4 etapes
 
 ## Etape 1 : corriger la variable `benchmark` (modes Smart/Pro/Claude) + recoller 2 fichiers
 
-Les modes s'ecrivent **Smart / Pro / Claude** (plus "eco"). En interne le token
-envoye a l'orchestrateur reste `eco/medium/high` (renommage d'affichage cote
-webapp, cles internes inchangees) : la traduction est faite par le code, tu ne vois
-que Smart/Pro/Claude (config ET resultats).
+Les modes s'ecrivent **Smart / Pro / Claude** PARTOUT. Le token envoye a
+l'orchestrateur est la forme minuscule du meme nom (`smart` / `pro` / `claude`) :
+plus aucun `eco/medium/high` nulle part. Smart = Gemini 3.1 Flash-Lite (defaut),
+Pro = Gemini 3.5 Flash, Claude = Sonnet (les modeles sont inchanges, seul le nom du
+token a change). **IMPORTANT** : ce renommage touche AUSSI l'orchestrateur et les
+sous-agents (qui parsent ce token), donc il faut **recoller les Code Agents** (voir
+`benchmark_webapp/DEPLOY_GUIDE.md` qui liste tout ce qu'il faut redeployer).
 
 Comme le code a evolue depuis ton dernier recoll, **recolle ces 2 fichiers** dans
 `python/benchmark/` : `config.py` et `run_params.py` (les autres sont inchangies).

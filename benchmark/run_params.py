@@ -174,9 +174,9 @@ def _resolve_agents(value):
 def _resolve_modes(value):
     """Resolve the modes subset (list, JSON list, or comma string).
 
-    Accepts the display names (Smart/Pro/Claude) or the legacy keys (eco/medium/
-    high), any case, and returns the canonical display names in Smart/Pro/Claude
-    order. An empty or all-unknown selection falls back to every mode.
+    Accepts the display names (Smart/Pro/Claude) or their lowercase tokens
+    (smart/pro/claude), any case, and returns the canonical display names in
+    Smart/Pro/Claude order. An empty or all-unknown selection falls back to every mode.
     """
     parsed = _coerce_obj(value)
     if isinstance(parsed, list):

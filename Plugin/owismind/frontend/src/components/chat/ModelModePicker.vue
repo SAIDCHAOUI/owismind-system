@@ -3,10 +3,10 @@
 // opens a chooser modeled on the DSS "conversation settings" dialog: a sober
 // two-pane layout (the three modes listed on the left, a detail panel on the
 // right with cost + speed meters) plus an Annuler / Valider footer. Selection is
-// click-based (no hover preview) so switching rows never reflows the dialog. Eco
+// click-based (no hover preview) so switching rows never reflows the dialog. Smart
 // is surfaced as the recommended default. The choice is a per-turn preference (ui
-// store) applied only on Valider; the backend defaults to eco.
-//   eco = Gemini 3.1 Flash-Lite (default) . medium = Gemini 3.5 Flash . high = Claude Sonnet.
+// store) applied only on Valider; the backend defaults to smart.
+//   smart = Gemini 3.1 Flash-Lite (default) . pro = Gemini 3.5 Flash . claude = Claude Sonnet.
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUiStore, MODEL_MODES } from '../../stores/ui.js'
@@ -18,15 +18,15 @@ const ui = useUiStore()
 
 const open = ref(false)
 const current = computed(() => ui.modelMode)
-const modes = MODEL_MODES // ['eco', 'medium', 'high']
+const modes = MODEL_MODES // ['smart', 'pro', 'claude']
 
-// Cost and speed on a 0..5 scale (mirrors the DSS dialog's "n/5" meters). Eco is
-// the cheapest AND fastest, which is why it is the recommended default; high trades
+// Cost and speed on a 0..5 scale (mirrors the DSS dialog's "n/5" meters). Smart is
+// the cheapest AND fastest, which is why it is the recommended default; Claude trades
 // speed/cost for depth of reasoning.
-const COST = { eco: 1, medium: 3, high: 5 }
-const SPEED = { eco: 5, medium: 3, high: 2 }
+const COST = { smart: 1, pro: 3, claude: 5 }
+const SPEED = { smart: 5, pro: 3, claude: 2 }
 // Small trigger-pill dot: a calm cost cue (green = the safe recommended default).
-const PILL_LEVEL = { eco: 1, medium: 2, high: 3 }
+const PILL_LEVEL = { smart: 1, pro: 2, claude: 3 }
 
 // Pending selection inside the dialog (applied only on Valider). Reset to the
 // active mode every time the dialog opens.
@@ -76,7 +76,7 @@ function cancel() {
           >
             <span class="row-main">
               <span class="row-name">{{ t('mode.' + m) }}</span>
-              <span v-if="m === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
+              <span v-if="m === 'smart'" class="reco-badge">{{ t('mode.recommended') }}</span>
             </span>
             <Icon v-if="selected === m" name="check" :size="16" class="row-check" />
           </button>
@@ -86,19 +86,19 @@ function cancel() {
         <div class="mode-detail">
           <div class="detail-head">
             <span class="detail-name">{{ t('mode.' + selected) }}</span>
-            <span v-if="selected === 'eco'" class="reco-badge">{{ t('mode.recommended') }}</span>
+            <span v-if="selected === 'smart'" class="reco-badge">{{ t('mode.recommended') }}</span>
           </div>
           <p class="detail-desc">{{ t('mode.' + selected + '_desc') }}</p>
 
           <!-- Smart: strong green "recommended" callout - push the safe default hard. -->
-          <p v-if="selected === 'eco'" class="callout callout-reco">
+          <p v-if="selected === 'smart'" class="callout callout-reco">
             <Icon name="check" :size="15" class="callout-ico" />
             <span>{{ t('mode.reco_line') }}</span>
           </p>
           <!-- Claude: red cost warning - expensive, reserved for complex analysis. -->
-          <p v-else-if="selected === 'high'" class="callout callout-warn">
+          <p v-else-if="selected === 'claude'" class="callout callout-warn">
             <Icon name="alert" :size="15" class="callout-ico" />
-            <span>{{ t('mode.high_warning') }}</span>
+            <span>{{ t('mode.claude_warning') }}</span>
           </p>
 
           <div class="meters">
@@ -233,9 +233,9 @@ function cancel() {
 .meter5 i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
 .meter5 i.on { background: var(--text); }
 /* Cost gauge tinted by severity (the speed gauge stays neutral). */
-.meter5.cost-eco i.on { background: var(--success); }
-.meter5.cost-medium i.on { background: var(--orange); }
-.meter5.cost-high i.on { background: var(--danger); }
+.meter5.cost-smart i.on { background: var(--success); }
+.meter5.cost-pro i.on { background: var(--orange); }
+.meter5.cost-claude i.on { background: var(--danger); }
 .meter-val { font-size: var(--fs-xs); color: var(--text-2); }
 
 /* Envelope note: flat surface, thin border, square, wallet icon + quiet text. */

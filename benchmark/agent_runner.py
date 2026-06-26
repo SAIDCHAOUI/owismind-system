@@ -95,7 +95,7 @@ def _agent_supports_modes(agent):
 
 
 # Mode label written on a run row for an agent that does not support modes (a
-# single plain call). Kept distinct from the real eco/medium/high keys.
+# single plain call). Kept distinct from the real Smart/Pro/Claude modes.
 DEFAULT_MODE_LABEL = "default"
 
 
@@ -364,7 +364,7 @@ def run_matrix(run_config, write_row):
           "project",                 # a DSS project handle (built by the step)
           "agents":   [ {agent_key, agent_label, project_key, agent_id}, ... ],
           "questions":[ <golden row dict>, ... ],
-          "modes":    ["eco", ...],
+          "modes":    ["Smart", ...],
           "language": "fr",
           "concurrency": 3,          # bounded; defaults to config.DEFAULT_CONCURRENCY
           "per_call_timeout_s": 120, # defaults to config.PER_CALL_TIMEOUT_S

@@ -134,8 +134,8 @@ class TestModes(unittest.TestCase):
         self.assertEqual(cfg["modes"], ["Smart", "Claude"])
 
     def test_legacy_internal_keys_aliased(self):
-        # eco/medium/high still accepted, mapped to the display names.
-        cfg = run_params.resolve(_vars({"modes": ["high", "eco"]}))
+        # smart/pro/claude still accepted, mapped to the display names.
+        cfg = run_params.resolve(_vars({"modes": ["claude", "smart"]}))
         self.assertEqual(cfg["modes"], ["Smart", "Claude"])
 
     def test_friendly_aliases_case_insensitive(self):

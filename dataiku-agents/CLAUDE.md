@@ -57,7 +57,7 @@ python-lib Flask backend  (repo root, not this folder)
    │  invokes it over LLM Mesh, streams timeline events back (polling-via-thread)
    ▼
 OWIsMind_orchestrator  (LangGraph Code Agent, "sub-agents as tools")
-   │  ONE model drives the whole turn (picked by the user's mode: eco/medium/high).
+   │  ONE model drives the whole turn (picked by the user's mode: smart/pro/claude).
    │  It REASONS, then on the SAME turn either:
    │    - calls attribute_lookup (built-in)  for a fast value read, OR
    │    - calls ask_revenue_expert           to delegate a computed figure, OR
@@ -142,8 +142,8 @@ datasets as the calling user. Its DSS "Description for LLM" must drop the stale
 
 ### Modes (model per turn)
 
-`eco` (default) = `vertex_ai/gemini-3.1-flash-lite`; `medium` =
-`vertex_ai/gemini-3.5-flash`; `high` = `vertex_ai/claude-sonnet-4-6` (all with the
+`smart` (default) = `vertex_ai/gemini-3.1-flash-lite`; `pro` =
+`vertex_ai/gemini-3.5-flash`; `claude` = `vertex_ai/claude-sonnet-4-6` (all with the
 connection prefix `openai:LLM-7064-revforecast:`). One model drives the whole
 turn (no escalation); the mode is propagated to the sub-agent; the semantic tool
 stays on Sonnet in every mode.

@@ -380,12 +380,12 @@ def chat_start():
         logger.exception("/chat/start - failed to persist user message")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
-    # Optional model mode (eco / medium / high) chosen in the web app. Unknown or
-    # absent -> medium (the conservative default). Relayed to the orchestrator via
+    # Optional model mode (smart / pro / claude) chosen in the web app. Unknown or
+    # absent -> smart (the recommended default). Relayed to the orchestrator via
     # the per-turn suffix token; it never picks a raw model id from the front.
     mode = body.get("mode")
     if mode not in context.MODEL_MODES:
-        mode = "medium"
+        mode = "smart"
     # Per-agent gate (the real enforcement behind the hidden picker): only relay the
     # mode control token to an agent that actually supports the response-mode dial
     # (its admin profile opted in). For any other agent the orchestrator-only token

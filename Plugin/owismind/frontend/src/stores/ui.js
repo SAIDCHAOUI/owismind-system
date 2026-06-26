@@ -18,10 +18,10 @@ const CTXMSG_KEY = 'owismind.contextMessages'
 const MODELMODE_KEY = 'owismind.modelMode'
 
 // Model mode the chat sends with each turn. One model per mode (no escalation):
-// eco = Gemini 3.1 Flash-Lite (the cheap, fast DEFAULT), medium = Gemini 3.5 Flash,
-// high = Claude Sonnet. The strong model is opt-in. The backend also defaults to eco.
-export const MODEL_MODES = ['eco', 'medium', 'high']
-const MODELMODE_DEFAULT = 'eco'
+// smart = Gemini 3.1 Flash-Lite (the cheap, fast DEFAULT), pro = Gemini 3.5 Flash,
+// claude = Claude Sonnet. The strong model is opt-in. The backend also defaults to smart.
+export const MODEL_MODES = ['smart', 'pro', 'claude']
+const MODELMODE_DEFAULT = 'smart'
 
 // Sidebar width clamp (maquette default 260; keep a sane drag range).
 const SIDEBAR_MIN = 200
@@ -72,7 +72,7 @@ export const useUiStore = defineStore('ui', () => {
   const contextMessages = ref(
     clampContextMessages(readNum(CTXMSG_KEY, CONTEXT_MESSAGES_DEFAULT)),
   )
-  // Model mode (eco / medium / high) sent with each chat turn.
+  // Model mode (smart / pro / claude) sent with each chat turn.
   const modelMode = ref((() => {
     try {
       const v = localStorage.getItem(MODELMODE_KEY)

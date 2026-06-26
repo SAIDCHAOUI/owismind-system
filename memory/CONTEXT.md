@@ -38,6 +38,14 @@ la table scored), **prérequis golden = dataset managé autonome** (sinon promot
 tests Python + 124 node, 0 tiret (31 fichiers), DEV re-packagé (python-lib à jour, `index-BoETXxLb.js`).**
 Détail -> `sessions/2026-06-26.md` section « REVISION 2026-06-26b ». **⚠️ Bien lire l'archi à DEUX webapps avant
 de déployer le LAB** (`benchmark_webapp/README.md`).
+**⮕ RÉVISION (c) - MODES RENOMMÉS `eco/medium/high` -> `smart/pro/claude` PARTOUT (L105).** L'user : « plus
+entendre parler de eco ». Le token `⟦owi:mode=X⟧` est un **protocole de bout en bout** : webapp (`context.py`),
+**orchestrateur** (`_MODE_TOKEN_RE`/`LOOP_LLM_BY_MODE`), **sous-agents** (`MODE:`/`LLM_BY_MODE`), benchmark
+(`config.py`). Renommé partout (modèles inchangés : smart=Flash-Lite défaut, pro=Flash, claude=Sonnet ; défaut
+backend medium->smart) + ~32 clés i18n + tous les tests + docs. **À DÉPLOYER ENSEMBLE** : recoller les Code Agents
+(orchestrateur + sous-agents, env 3.11) + recoller `benchmark/config.py`+`run_params.py` + re-upload plugin DEV
+(`index-pktQ-ICh.js`) + redémarrer backend, sinon le mode est ignoré. **974 tests verts, 0 résidu eco, 0 tiret.**
+Guide refait : **`benchmark_webapp/DEPLOY_GUIDE.md`** (liste TOUT : agents + plugin + 2 webapps + tests). Voir **L105**.
 
 Le
 benchmark passe de standalone à brique du système. **Décision d'archi** : les 2 pôles vivent à des endroits

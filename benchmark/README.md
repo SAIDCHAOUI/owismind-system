@@ -2,8 +2,8 @@
 
 Agent benchmark and evaluation for OWIsMind. Measures quality (accuracy via a
 deterministic objective anchor plus a structured LLM judge), latency, cost and
-tokens for each agent on each response mode (eco / medium / high = Smart / Pro /
-Claude), with a per-question detail table anyone can read.
+tokens for each agent on each response mode (Smart / Pro / Claude), with a
+per-question detail table anyone can read.
 
 This repo package is the single source of truth. It is recolled into the DSS
 project `OWIsMind_LAB` as a project library; the scenario steps in `dss_steps/`

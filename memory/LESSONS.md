@@ -2359,5 +2359,31 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   « best-effort -> [] » est sûr pour AFFICHER, **dangereux pour RÉÉCRIRE**. Sur tout chemin read-modify-write d'un
   dataset : lecture qui lève OU dérivation de la source de vérité, + verrou si concurrence. **Date** : 2026-06-26.
 
+## L105 - Modes de réponse renommés `eco/medium/high` -> `smart/pro/claude` PARTOUT (token interne compris) ; c'est un protocole de bout en bout à redéployer ensemble [repo, 2026-06-26]
+- **Contexte** : décision passée (L080/2026-06-24) = afficher Smart/Pro/Claude mais GARDER les clés internes
+  `eco/medium/high` (token `⟦owi:mode=eco⟧`) pour ne pas recoller les agents. L'user a tranché l'inverse :
+  « je veux plus entendre parler de eco, on change partout vers smart ».
+- **Le piège (pourquoi c'est délicat)** : le mode est un **protocole filaire de bout en bout**, pas juste un
+  libellé. Le token `⟦owi:mode=X⟧` est émis par la webapp (`agents/context.py MODEL_MODES` + `build_user_suffix`),
+  **parsé par l'orchestrateur** (`_MODE_TOKEN_RE`, `ORCH_MODES`, `LOOP_LLM_BY_MODE`, `narration_enabled`), **propagé
+  au sous-agent** via un 2e protocole interne `MODE: X` (`_MODE_RE`, `LLM_BY_MODE`, `pick_subagent_llm`,
+  `SEMANTIC_TOOL_ID_BY_MODE`), et **émis aussi par le benchmark** (`config.build_mode_token`). Renommer un seul
+  bout sans les autres = le mode est ignoré (l'agent retombe sur son défaut), silencieusement.
+- **Solution qui marche** : renommage COORDONNÉ `eco->smart, medium->pro, high->claude` (les MODÈLES inchangés :
+  smart=Gemini Flash-Lite défaut, pro=Gemini Flash, claude=Sonnet ; défaut backend passé de `medium` à `smart`).
+  Fichiers : back (`context.py`, `routes.py`), front (`stores/ui.js`, `ModelModePicker.vue`, ~32 clés i18n
+  `mode.eco*`->`mode.smart*` etc.), **agents DEV+PROD** (orchestrateur + 2 sous-agents), benchmark (`config.py`
+  `_MODE_TOKEN_KEY`/`MODE_ALIASES`, alias eco/medium/high retirés), + tous les tests + docs. **Méthode sûre** :
+  remplacement par **limite de mot** `\b(eco|medium|high)\b` UNIQUEMENT après avoir vérifié par grep qu'aucun
+  « medium »/« high » anglais non-mode ne traîne dans ces fichiers (les agents : confirmé 0 ; les docs : édition
+  ciblée car elles ont du « high quality » etc.). Piège de tri : le scoring trie les modes alphabétiquement
+  (`eco<high` devient `claude<smart`, l'ordre s'inverse -> 1 test d'ordre à corriger).
+- **À DÉPLOYER ENSEMBLE** (sinon mode ignoré) : recoller les **Code Agents** (orchestrateur `038G7mlF` + sous-agents,
+  env 3.11) + recoller `benchmark/config.py`+`run_params.py` en project-library + re-upload du **plugin DEV** +
+  redémarrer le backend. Guide complet : `benchmark_webapp/DEPLOY_GUIDE.md` (refait pour tout lister).
+- **Preuve-vérification** : 974 tests (286 agents + 174 benchmark + 484 plugin + 30 webapp) + node + build Vite ;
+  0 résidu `eco/medium/high` mode (grep) ; 0 tiret ; DEV re-packagé (`index-pktQ-ICh.js`). **Annule** la partie
+  « garder les clés internes » de **L080**. **Date** : 2026-06-26.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

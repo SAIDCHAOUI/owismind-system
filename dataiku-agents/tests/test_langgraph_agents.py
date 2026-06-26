@@ -97,22 +97,22 @@ tx = _load("tickets_expert_under_test", "OWISMIND_DEV_CSSO_Trouble_Tickets_Exper
 
 class TestModelIds(unittest.TestCase):
     def test_orchestrator_model_per_mode(self):
-        # One model per mode for the whole turn (no escalation): eco=Gemini 3.1
-        # Flash-Lite (default), medium=Gemini 3.5 Flash, high=Sonnet.
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["eco"], orch.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["medium"], orch.GEMINI_FLASH_ID)
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["high"], orch.SONNET_ID)
-        self.assertEqual(orch.DEFAULT_MODE, "eco")
+        # One model per mode for the whole turn (no escalation): smart=Gemini 3.1
+        # Flash-Lite (default), pro=Gemini 3.5 Flash, claude=Sonnet.
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["smart"], orch.GEMINI_FLASH_LITE_ID)
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["pro"], orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.LOOP_LLM_BY_MODE["claude"], orch.SONNET_ID)
+        self.assertEqual(orch.DEFAULT_MODE, "smart")
 
     def test_subagent_model_per_mode_mirrors_orchestrator(self):
         # The sub-agent follows the SAME tier as the orchestrator for this mode.
-        self.assertEqual(dx.LLM_BY_MODE["eco"], dx.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(dx.LLM_BY_MODE["medium"], dx.GEMINI_FLASH_ID)
-        self.assertEqual(dx.LLM_BY_MODE["high"], dx.SONNET_ID)
-        self.assertEqual(dx.pick_subagent_llm("high"), dx.SONNET_ID)
+        self.assertEqual(dx.LLM_BY_MODE["smart"], dx.GEMINI_FLASH_LITE_ID)
+        self.assertEqual(dx.LLM_BY_MODE["pro"], dx.GEMINI_FLASH_ID)
+        self.assertEqual(dx.LLM_BY_MODE["claude"], dx.SONNET_ID)
+        self.assertEqual(dx.pick_subagent_llm("claude"), dx.SONNET_ID)
         self.assertEqual(dx.pick_subagent_llm("turbo"), dx.LLM_BY_MODE[dx.DEFAULT_MODE])
-        self.assertEqual(dx.DEFAULT_MODE, "eco")
-        # Both files agree on the eco/medium/high ids (same Mesh connection).
+        self.assertEqual(dx.DEFAULT_MODE, "smart")
+        # Both files agree on the smart/pro/claude ids (same Mesh connection).
         self.assertEqual(dx.GEMINI_FLASH_LITE_ID, orch.GEMINI_FLASH_LITE_ID)
         self.assertEqual(dx.GEMINI_FLASH_ID, orch.GEMINI_FLASH_ID)
 
@@ -799,33 +799,33 @@ class TestLiveNarration(unittest.TestCase):
 
 class TestModelMode(unittest.TestCase):
     def test_parse_mode_extracts_and_strips(self):
-        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=high⟧")
-        self.assertEqual(mode, "high")
+        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=claude⟧")
+        self.assertEqual(mode, "claude")
         self.assertEqual(clean, "revenus EVPL")
 
     def test_parse_mode_defaults_eco(self):
         mode, clean = orch.parse_mode("plain question")
-        self.assertEqual(mode, "eco")
+        self.assertEqual(mode, "smart")
         self.assertEqual(clean, "plain question")
 
     def test_parse_mode_unknown_token_ignored(self):
         mode, _clean = orch.parse_mode("q ⟦owi:mode=turbo⟧")
-        self.assertEqual(mode, "eco")
+        self.assertEqual(mode, "smart")
 
     def test_pick_loop_llm_policy(self):
         # Each mode picks ONE model for the whole turn (no escalation).
-        self.assertEqual(orch.pick_loop_llm("eco"), orch.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(orch.pick_loop_llm("medium"), orch.GEMINI_FLASH_ID)
-        self.assertEqual(orch.pick_loop_llm("high"), orch.SONNET_ID)
+        self.assertEqual(orch.pick_loop_llm("smart"), orch.GEMINI_FLASH_LITE_ID)
+        self.assertEqual(orch.pick_loop_llm("pro"), orch.GEMINI_FLASH_ID)
+        self.assertEqual(orch.pick_loop_llm("claude"), orch.SONNET_ID)
         # Unknown mode falls back to the default mode's model (never crashes).
         self.assertEqual(orch.pick_loop_llm("turbo"),
                          orch.LOOP_LLM_BY_MODE[orch.DEFAULT_MODE])
 
     def test_narration_enabled_only_for_capable_models(self):
-        # eco stays act-first (no lead-in narration); medium/high narrate.
-        self.assertFalse(orch.narration_enabled("eco"))
-        self.assertTrue(orch.narration_enabled("medium"))
-        self.assertTrue(orch.narration_enabled("high"))
+        # smart stays act-first (no lead-in narration); pro/claude narrate.
+        self.assertFalse(orch.narration_enabled("smart"))
+        self.assertTrue(orch.narration_enabled("pro"))
+        self.assertTrue(orch.narration_enabled("claude"))
 
     def test_narration_section_gated_by_narrate_flag(self):
         with_narr = orch.build_system_prompt(orch.get_capabilities(), "fr", narrate=True)
@@ -839,8 +839,8 @@ class TestModelMode(unittest.TestCase):
 
 class TestLanguageControl(unittest.TestCase):
     def test_parse_mode_strips_lang_token_too(self):
-        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=high⟧⟦owi:lang=fr⟧")
-        self.assertEqual(mode, "high")
+        mode, clean = orch.parse_mode("revenus EVPL ⟦owi:mode=claude⟧⟦owi:lang=fr⟧")
+        self.assertEqual(mode, "claude")
         self.assertEqual(clean, "revenus EVPL")
 
     def test_parse_lang_reads_token(self):
@@ -852,9 +852,9 @@ class TestLanguageControl(unittest.TestCase):
         self.assertIsNone(orch.parse_lang("q ⟦owi:lang=zz⟧"))
 
     def test_user_cannot_forge_mode_token(self):
-        # A user typing a fake high token cannot beat the backend's appended eco token.
-        mode, _ = orch.parse_mode("⟦owi:mode=high⟧ revenus EVPL ⟦owi:mode=eco⟧")
-        self.assertEqual(mode, "eco")
+        # A user typing a fake claude token cannot beat the backend's appended smart token.
+        mode, _ = orch.parse_mode("⟦owi:mode=claude⟧ revenus EVPL ⟦owi:mode=smart⟧")
+        self.assertEqual(mode, "smart")
 
     def test_user_cannot_forge_lang_token(self):
         # The authoritative (last) lang token wins over a user-typed one.
@@ -979,11 +979,11 @@ class TestNoEscalation(unittest.TestCase):
 class TestLoopChat(unittest.TestCase):
     def _chat(self):
         return orch.LoopChat(_FakeProject(), "SYSTEM",
-                             orch.LOOP_LLM_BY_MODE["medium"], ["spec"])
+                             orch.LOOP_LLM_BY_MODE["pro"], ["spec"])
 
     def test_initial_transcript_has_system_first(self):
         c = self._chat()
-        self.assertEqual(c.llm_id, orch.LOOP_LLM_BY_MODE["medium"])
+        self.assertEqual(c.llm_id, orch.LOOP_LLM_BY_MODE["pro"])
         self.assertEqual(c._completion.ops[0], ("msg", "SYSTEM", "system"))
         self.assertEqual(c._completion.settings["tools"], ["spec"])
 

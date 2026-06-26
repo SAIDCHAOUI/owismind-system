@@ -22,11 +22,11 @@ _DATE_FMT = "%A, %B %d, %Y at %H:%M"
 _LANG_LABEL = {"fr": "French", "en": "English"}
 
 
-# Model modes the front can request (Eco / Medium / High). Relayed to the agent
+# Model modes the front can request (Smart / Pro / Claude). Relayed to the agent
 # as a compact control token APPENDED to the current turn (the orchestrator parses
 # and strips it, so it never reaches the model as part of the question). Unknown /
-# absent -> the orchestrator defaults to "medium".
-MODEL_MODES = ("eco", "medium", "high")
+# absent -> the orchestrator defaults to "smart" (the recommended tier).
+MODEL_MODES = ("smart", "pro", "claude")
 
 
 # Lightweight, deterministic language guess of a RAW user message. Ported into the

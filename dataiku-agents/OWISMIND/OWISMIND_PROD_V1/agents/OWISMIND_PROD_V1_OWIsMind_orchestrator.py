@@ -39,7 +39,7 @@
 #     a native JSON output (with_json_output) on the orchestrator - in DSS 14 that
 #     silently disables reasoning. The model emits tool calls (function calling)
 #     and free text; reasoning stays on.
-#   - MODEL-AGNOSTIC BY DESIGN: each user mode (eco/medium/high) maps to ONE model
+#   - MODEL-AGNOSTIC BY DESIGN: each user mode (smart/pro/claude) maps to ONE model
 #     for the WHOLE turn - no mid-turn model switching, no escalation. The system
 #     must shine on a small/fast model and excel on a large one; it never depends
 #     on a single model's quirks. Pick the model per mode in LOOP_LLM_BY_MODE below.
@@ -99,38 +99,38 @@ except Exception:                               # pragma: no cover
 # Model-agnostic: one model drives the whole turn, chosen by the mode. Each id
 # matches an id exposed by the LLM Mesh connection, in the form
 # "<connection-prefix>:<provider>/<model>".
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # eco
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # claude
 
 # Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
-# token on the current turn; default "eco" when absent). Each mode picks ONE
+# token on the current turn; default "smart" when absent). Each mode picks ONE
 # model that drives the ENTIRE turn - no escalation, no mid-turn switching. The
 # quality difference between modes is purely the model tier; the orchestration
 # logic is identical for all of them.
-#   eco    : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
+#   smart    : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
 #            Its lead-in narration is kept OFF (smallest tier; the deterministic
 #            ticker covers the wait) - see narration_enabled.
-#   medium : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
-#   high   : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
+#   pro : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
+#   claude   : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
 #            the semantic model. Max quality; the most expensive.
 # The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
 # The DSS-configured Semantic Model Query tool (which actually writes the SQL) stays
 # on its own strong model (Sonnet) in EVERY mode, so offer/column resolution is
 # consistent regardless of the orchestration tier.
-ORCH_MODES = ("eco", "medium", "high")
-DEFAULT_MODE = "eco"
+ORCH_MODES = ("smart", "pro", "claude")
+DEFAULT_MODE = "smart"
 LOOP_LLM_BY_MODE = {
-    "eco": GEMINI_FLASH_LITE_ID,
-    "medium": GEMINI_FLASH_ID,
-    "high": SONNET_ID,
+    "smart": GEMINI_FLASH_LITE_ID,
+    "pro": GEMINI_FLASH_ID,
+    "claude": SONNET_ID,
 }
 
 # Whether the model writes a one-sentence lead-in alongside its tool call (live
-# narration). On for medium/high; off for eco, which stays strictly act-first so
+# narration). On for pro/claude; off for smart, which stays strictly act-first so
 # the wait is covered by the deterministic ticker instead.
 def narration_enabled(mode):
-    return mode != "eco"
+    return mode != "smart"
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -941,11 +941,11 @@ def _lookup_evidence_item(payload, step_index, n, source_url="",
 def parse_mode(text):
     """(mode, clean_text): extract the ⟦owi:mode=…⟧ control token the backend
     appends to the current turn, strip every ⟦owi:…⟧ control token from the text.
-    Defaults to 'eco'. (The human [Context -…] block is left in place.)
+    Defaults to 'smart'. (The human [Context -…] block is left in place.)
 
     Security: read the LAST valid token, not the first. The backend always appends
     its authoritative token at the end of the message, so reading the last
-    occurrence means a user typing a fake ⟦owi:mode=high⟧ earlier in their message
+    occurrence means a user typing a fake ⟦owi:mode=claude⟧ earlier in their message
     cannot force a more expensive model - the backend's appended token wins."""
     mode = DEFAULT_MODE
     if not text:
@@ -1171,8 +1171,8 @@ def build_system_prompt(caps, lang_hint, narrate=True):
         "5. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user - do not invent an answer.\n")
     # Live narration is a SEPARATE instruction, enabled only for capable models
-    # (medium/high). The mini (eco) skips it: it tends to write the lead-in then
-    # STOP without the tool call, so eco stays strictly act-first (the deterministic
+    # (pro/claude). The mini (smart) skips it: it tends to write the lead-in then
+    # STOP without the tool call, so smart stays strictly act-first (the deterministic
     # ticker narrates instead). This block is the ONLY place that asks the model to
     # speak alongside its tool call.
     if narrate:
@@ -1889,7 +1889,7 @@ class MyLLM(BaseLLM):
             project = dataiku.api_client().get_default_project()
             history, last_user, prev_assistant = self._conversation(query)
             # Control tokens the backend appends to the current turn: model mode
-            # (eco/medium/high) + the AUTHORITATIVE reply language (detected on the
+            # (smart/pro/claude) + the AUTHORITATIVE reply language (detected on the
             # clean raw message server-side). Read both, then strip every ⟦owi:…⟧
             # token. The reply language comes from the token when present (fallback:
             # local detection); the model also sees the human [Context -…] block in
@@ -1902,10 +1902,10 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # One model drives the whole turn - the mode picks it (eco=Gemini
-            # Flash-Lite, medium=Gemini Flash, high=Sonnet). The same model routes,
+            # One model drives the whole turn - the mode picks it (smart=Gemini
+            # Flash-Lite, pro=Gemini Flash, claude=Sonnet). The same model routes,
             # calls tools and writes the final answer; narration alongside tool calls
-            # is enabled for medium/high only.
+            # is enabled for pro/claude only.
             loop_llm = pick_loop_llm(mode)
             system_prompt = build_system_prompt(self._caps, lang,
                                                 narrate=narration_enabled(mode))
@@ -1916,8 +1916,8 @@ class MyLLM(BaseLLM):
             # no-data / out-of-scope message in the user's language (it no longer
             # self-guesses). Plus conversational continuity (the specialist is stateless,
             # so we hand it the previous turn too for disambiguation).
-            # MODE is propagated so the sub-agent uses the SAME tier (eco=Gemini
-            # Flash-Lite, medium=Gemini Flash, high=Sonnet) for its own LLM calls.
+            # MODE is propagated so the sub-agent uses the SAME tier (smart=Gemini
+            # Flash-Lite, pro=Gemini Flash, claude=Sonnet) for its own LLM calls.
             context_msg = (
                 "MODE: %s\n"
                 "USER LANGUAGE: %s - write any message addressed to the user "

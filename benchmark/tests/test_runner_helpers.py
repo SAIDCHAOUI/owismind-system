@@ -222,23 +222,23 @@ class TestExpandMatrix(unittest.TestCase):
 # ---------------------------------------------------------------------------
 class TestMessageBuilding(unittest.TestCase):
     def test_build_message_translates_friendly_mode_to_internal_token(self):
-        # Friendly "Claude" -> internal token key "high" (the orchestrator's wire
+        # Friendly "Claude" -> internal token key "claude" (the orchestrator's wire
         # contract). The brackets are U+27E6 / U+27E7 (mirrored from production).
         msg = config.build_message("revenu du compte X", "Claude", "fr")
         self.assertEqual(
             msg,
             "revenu du compte X "
-            + "⟦owi:mode=high⟧"
+            + "⟦owi:mode=claude⟧"
             + "⟦owi:lang=fr⟧",
         )
 
-    def test_smart_maps_to_eco_token(self):
+    def test_smart_maps_to_smart_token(self):
         msg = config.build_message("hi", "Smart", "fr")
-        self.assertIn("⟦owi:mode=eco⟧", msg)
+        self.assertIn("⟦owi:mode=smart⟧", msg)
 
     def test_legacy_internal_key_still_tolerated(self):
-        msg = config.build_message("hi", "high", "fr")
-        self.assertIn("⟦owi:mode=high⟧", msg)
+        msg = config.build_message("hi", "claude", "fr")
+        self.assertIn("⟦owi:mode=claude⟧", msg)
 
     def test_plain_message_has_no_token(self):
         msg = config.build_plain_message("just the question")
@@ -313,7 +313,7 @@ class TestRunOne(unittest.TestCase):
         self.assertEqual(len(completion.messages), 1)
         sent, role = completion.messages[0]
         self.assertEqual(role, "user")
-        self.assertIn("⟦owi:mode=high⟧", sent)
+        self.assertIn("⟦owi:mode=claude⟧", sent)
 
     def test_artifact_event_is_captured(self):
         trace = _trace_with_sql("SELECT 1", rows=[[1]], columns=["n"])
@@ -412,7 +412,7 @@ class TestRunOne(unittest.TestCase):
         agent_runner._footer_chunk_class = lambda: _FooterChunk
         try:
             row = agent_runner.run_one(
-                project, _agent(), _golden(), "eco", "fr", timeout=120)
+                project, _agent(), _golden(), "smart", "fr", timeout=120)
         finally:
             agent_runner._footer_chunk_class = original
 
@@ -447,7 +447,7 @@ class TestRunMatrix(unittest.TestCase):
             "project": self._project(),
             "agents": [_agent("a"), _agent("b", "agent:zzz")],
             "questions": [_golden("q1"), _golden("q2")],
-            "modes": ["eco", "high"],
+            "modes": ["smart", "claude"],
             "language": "fr",
             "concurrency": 2,
             "per_call_timeout_s": 30,
@@ -468,7 +468,7 @@ class TestRunMatrix(unittest.TestCase):
         written = []
         agent_runner.run_matrix(
             {"project": self._project(), "agents": [], "questions": [],
-             "modes": ["eco"]},
+             "modes": ["smart"]},
             write_row=written.append,
         )
         self.assertEqual(written, [])
@@ -481,7 +481,7 @@ class TestRunMatrix(unittest.TestCase):
             "project": self._project(),
             "agents": [_agent("a")],
             "questions": [_golden("q1")],
-            "modes": ["eco"],
+            "modes": ["smart"],
             "concurrency": "not-a-number",
         }
         agent_runner.run_matrix(run_config, write_row=written.append)
@@ -500,7 +500,7 @@ class TestRunMatrix(unittest.TestCase):
             "project": self._project(),
             "agents": [_agent("a")],
             "questions": [_golden("q1"), _golden("q2")],
-            "modes": ["eco"],
+            "modes": ["smart"],
             "concurrency": 1,
         }
         # Must not raise even though the first write throws.

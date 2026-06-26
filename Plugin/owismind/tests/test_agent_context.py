@@ -25,8 +25,8 @@ class SuffixTests(unittest.TestCase):
 
     def test_suffix_adds_valid_mode_and_lang_tokens(self):
         s = build_user_suffix("X", datetime(2026, 6, 9, 14, 30),
-                              webapp_lang="en", prompt_lang="fr", mode="high")
-        self.assertIn("⟦owi:mode=high⟧", s)
+                              webapp_lang="en", prompt_lang="fr", mode="claude")
+        self.assertIn("⟦owi:mode=claude⟧", s)
         self.assertIn("⟦owi:lang=fr⟧", s)
         self.assertIn("Web app language: English", s)
 

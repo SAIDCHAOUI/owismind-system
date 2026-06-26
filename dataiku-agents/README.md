@@ -155,14 +155,14 @@ mode. No mid-turn escalation. The same mode is propagated to the sub-agent.
 
 | Mode | Model id (LLM Mesh) | Notes |
 |---|---|---|
-| `eco` (default) | `...vertex_ai/gemini-3.1-flash-lite` | Cheap, fast, good. Live narration OFF (the deterministic ticker covers the wait). |
-| `medium` | `...vertex_ai/gemini-3.5-flash` | Stronger; narrates alongside tool calls. |
-| `high` | `...vertex_ai/claude-sonnet-4-6` | Orchestrator AND sub-agent. Max quality. |
+| `smart` (default) | `...vertex_ai/gemini-3.1-flash-lite` | Cheap, fast, good. Live narration OFF (the deterministic ticker covers the wait). |
+| `pro` | `...vertex_ai/gemini-3.5-flash` | Stronger; narrates alongside tool calls. |
+| `claude` | `...vertex_ai/claude-sonnet-4-6` | Orchestrator AND sub-agent. Max quality. |
 
 All ids carry the connection prefix `openai:LLM-7064-revforecast:`. Configure them
 in `LOOP_LLM_BY_MODE` (orchestrator) and `LLM_BY_MODE` (sub-agent) - they must
 match an id exposed by the LLM Mesh connection; **verify `GEMINI_FLASH_LITE_ID`
-and `GEMINI_FLASH_ID` before deploy** (a wrong eco id breaks the default mode).
+and `GEMINI_FLASH_ID` before deploy** (a wrong smart id breaks the default mode).
 
 The **Semantic Model Query tool** keeps writing the SQL on Sonnet in EVERY mode
 (`SEMANTIC_TOOL_ID_BY_MODE` maps all three to `v4oqA6R`), so offer/column

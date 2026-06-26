@@ -15,21 +15,19 @@ so appending the token forces the mode without leaking text into the question.
 
 # --- modes (Smart / Pro / Claude) -------------------------------------------
 # Canonical mode names = the webapp's display names. The benchmark speaks
-# Smart/Pro/Claude everywhere (config input, run rows, dashboard). The deployed
-# orchestrator's control token still uses the original internal keys (eco/medium/
-# high were only renamed for display, not changed in the orchestrator), so we
-# translate friendly -> internal at the wire boundary in build_mode_token only.
+# Smart/Pro/Claude everywhere (config input, run rows, dashboard). The control
+# token sent to the orchestrator uses the LOWERCASE form of the same names
+# (smart/pro/claude), so build_mode_token just lower-cases at the wire boundary.
 MODES = ("Smart", "Pro", "Claude")
 DEFAULT_MODE = "Smart"
 
-# friendly mode -> the internal token key the orchestrator's parse_mode expects.
-_MODE_TOKEN_KEY = {"Smart": "eco", "Pro": "medium", "Claude": "high"}
+# friendly mode -> the lowercase internal token the orchestrator's parse_mode expects.
+_MODE_TOKEN_KEY = {"Smart": "smart", "Pro": "pro", "Claude": "claude"}
 
-# Accept either the display name or the legacy internal key in config input
-# (case-insensitive), so older configs and habits still resolve.
+# Accept the display name or the lowercase token in config input (case-insensitive),
+# so both "Smart" and "smart" resolve.
 MODE_ALIASES = {
     "smart": "Smart", "pro": "Pro", "claude": "Claude",
-    "eco": "Smart", "medium": "Pro", "high": "Claude",
 }
 
 # Human-facing model name per mode (display only; verify on instance). Mirrors the
@@ -75,13 +73,13 @@ def build_mode_token(mode):
     """Return the exact mode control token, or '' for an unknown / absent mode.
 
     Mirrors context.py build_user_suffix: ``⟦owi:mode=<key>⟧`` where ``key`` is the
-    INTERNAL token key (eco/medium/high). A friendly mode (Smart/Pro/Claude) is
-    translated to its key; a legacy internal key passed directly is tolerated.
+    lowercase token (smart/pro/claude). A friendly mode (Smart/Pro/Claude) is
+    lower-cased to its token; the lowercase token passed directly is tolerated.
     Anything else yields '' (the orchestrator then defaults to its own default).
     """
     key = _MODE_TOKEN_KEY.get(mode)
     if key is None and mode in _MODE_TOKEN_KEY.values():
-        key = mode  # tolerate a legacy internal key passed directly
+        key = mode  # tolerate the lowercase token passed directly
     if key:
         return "{lb}owi:mode={key}{rb}".format(lb=_LB, key=key, rb=_RB)
     return ""

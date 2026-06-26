@@ -42,7 +42,7 @@ technical fallback (`FALLBACK_TO_DIRECT=True`).
 | **Agent mode** | **OFF (unchecked)** = the faster **linear** SQL pipeline, NOT a multi-step agent |
 | Access datasets as | User calling the tool |
 
-The tool runs on Sonnet **in every orchestration mode** (eco/medium/high all map
+The tool runs on Sonnet **in every orchestration mode** (smart/pro/claude all map
 to the same tool id), so offer and column resolution stay strong regardless of
 the model driving the chat. The model is configured **in DSS**, not in code: the
 repo only references the tool by id, so this table is the source of truth for the

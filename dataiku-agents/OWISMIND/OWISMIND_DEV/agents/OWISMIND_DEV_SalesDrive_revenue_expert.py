@@ -99,15 +99,15 @@ TARGET_DATASET = ""
 # a fast, cheap model parses it reliably; SQLGEN runs only on the long-tail "custom"
 # intent. These mirror the orchestrator (same connection) - each id must match an id
 # exposed by the LLM Mesh connection.
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # eco
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # medium
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # high
+GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
+GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # claude
 # Model tier per mode, propagated by the orchestrator through the injected context.
-# In high mode the whole stack is Sonnet. The Semantic Model Query tool that writes
+# In claude mode the whole stack is Sonnet. The Semantic Model Query tool that writes
 # the SQL runs on its own DSS-configured model (Sonnet) in every mode, so offer and
 # column resolution stay strong regardless of the orchestration tier.
-LLM_BY_MODE = {"eco": GEMINI_FLASH_LITE_ID, "medium": GEMINI_FLASH_ID, "high": SONNET_ID}
-DEFAULT_MODE = "eco"
+LLM_BY_MODE = {"smart": GEMINI_FLASH_LITE_ID, "pro": GEMINI_FLASH_ID, "claude": SONNET_ID}
+DEFAULT_MODE = "smart"
 # Fallback ids when no mode is injected (batch / stand-alone use).
 UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
 SQLGEN_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
@@ -141,8 +141,8 @@ SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
 # Semantic Model Query tool id per mode. The tool's underlying LLM is configured in
 # DSS, not from code; all modes share the one tool. To back a mode with a different
 # model, create a second semantic-model tool and set its id for that mode here.
-SEMANTIC_TOOL_ID_BY_MODE = {"eco": SEMANTIC_TOOL_ID, "medium": SEMANTIC_TOOL_ID,
-                            "high": SEMANTIC_TOOL_ID}
+SEMANTIC_TOOL_ID_BY_MODE = {"smart": SEMANTIC_TOOL_ID, "pro": SEMANTIC_TOOL_ID,
+                            "claude": SEMANTIC_TOOL_ID}
 
 
 def pick_semantic_tool_id(mode):
@@ -482,7 +482,7 @@ def _validate_period(raw):
 # USER's actual message, which the orchestrator knows; the sub-agent only sees the
 # (possibly English) self-contained task, so its own guess is unreliable.
 _FORCED_LANG_RE = re.compile(r"USER LANGUAGE:\s*(fr|en)\b", re.IGNORECASE)
-_MODE_RE = re.compile(r"\bMODE:\s*(eco|medium|high)\b", re.IGNORECASE)
+_MODE_RE = re.compile(r"\bMODE:\s*(smart|pro|claude)\b", re.IGNORECASE)
 
 
 def forced_language(context):
@@ -494,7 +494,7 @@ def forced_language(context):
 
 
 def forced_mode(context):
-    """Model tier (eco/medium/high) the orchestrator pinned in the injected context,
+    """Model tier (smart/pro/claude) the orchestrator pinned in the injected context,
     or None when absent (batch / stand-alone -> DEFAULT_MODE)."""
     if not context:
         return None
@@ -2148,7 +2148,7 @@ class ExpertState(TypedDict, total=False):
     reducers are needed - every channel is last-write."""
     instruction: str
     context: str
-    llm_id: str                 # mode-resolved model for this run (eco/medium/high)
+    llm_id: str                 # mode-resolved model for this run (smart/pro/claude)
     semantic_tool_id: str       # mode-resolved semantic-model tool id
     lang: str
     u: dict
@@ -2485,7 +2485,7 @@ class MyLLM(BaseLLM):
                 yield _agent_result("error", None)
                 return
             # Model tier for THIS run, propagated by the orchestrator
-            # (eco=Gemini Flash-Lite, medium=Gemini Flash, high=Sonnet). Threaded
+            # (smart=Gemini Flash-Lite, pro=Gemini Flash, claude=Sonnet). Threaded
             # through the graph state so node closures never read per-request state
             # off `self` (concurrency-safe).
             mode = forced_mode(conversation_context) or DEFAULT_MODE

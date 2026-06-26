@@ -20,7 +20,7 @@ def _row(**over):
         "run_timestamp": "2026-06-24T10:00:00Z",
         "agent_key": "orchestrator",
         "agent_label": "OWIsMind orchestrator",
-        "mode": "eco",
+        "mode": "smart",
         "category": "revenus",
         "status": "ok",
         "judge_score": 5,
@@ -40,44 +40,44 @@ def _row(**over):
 def _dataset():
     """Synthetic scored set: one run, two modes, two categories, mixed outcomes.
 
-    eco mode (5 questions):
+    smart mode (5 questions):
       - 3 correct (scores 5, 4, 4), 1 incorrect (score 2), 1 errored.
       categories: revenus x3 (2 ok-correct + 1 ok-incorrect), tickets x2
         (1 ok-correct + 1 errored).
-    high mode (2 questions):
+    claude mode (2 questions):
       - 1 correct (score 5), 1 needs_review correct (score 3), both revenus.
     """
     return [
-        # --- eco / revenus ---
-        _row(mode="eco", category="revenus", judge_score=5, correct=True,
+        # --- smart / revenus ---
+        _row(mode="smart", category="revenus", judge_score=5, correct=True,
              latency_total_s=1.0, time_to_first_token_s=0.5,
              estimated_cost=0.01, prompt_tokens=100, completion_tokens=50,
              judge_estimated_cost=0.002),
-        _row(mode="eco", category="revenus", judge_score=4, correct=True,
+        _row(mode="smart", category="revenus", judge_score=4, correct=True,
              latency_total_s=2.0, time_to_first_token_s=0.7,
              estimated_cost=0.02, prompt_tokens=200, completion_tokens=80,
              judge_estimated_cost=0.002),
-        _row(mode="eco", category="revenus", judge_score=2, correct=False,
+        _row(mode="smart", category="revenus", judge_score=2, correct=False,
              latency_total_s=3.0, time_to_first_token_s=0.9,
              estimated_cost=0.03, prompt_tokens=300, completion_tokens=120,
              judge_estimated_cost=0.002),
-        # --- eco / tickets ---
-        _row(mode="eco", category="tickets", judge_score=4, correct=True,
+        # --- smart / tickets ---
+        _row(mode="smart", category="tickets", judge_score=4, correct=True,
              latency_total_s=4.0, time_to_first_token_s=1.1,
              estimated_cost=0.04, prompt_tokens=400, completion_tokens=200,
              judge_estimated_cost=0.002),
-        # errored eco/tickets row: no score, no latency, still counted in n
-        _row(mode="eco", category="tickets", status="error",
+        # errored smart/tickets row: no score, no latency, still counted in n
+        _row(mode="smart", category="tickets", status="error",
              judge_score=None, correct=False, needs_review=True,
              latency_total_s=None, time_to_first_token_s=None,
              estimated_cost=None, prompt_tokens=None, completion_tokens=None,
              judge_estimated_cost=0.0),
-        # --- high / revenus ---
-        _row(mode="high", category="revenus", judge_score=5, correct=True,
+        # --- claude / revenus ---
+        _row(mode="claude", category="revenus", judge_score=5, correct=True,
              latency_total_s=10.0, time_to_first_token_s=2.0,
              estimated_cost=0.50, prompt_tokens=1000, completion_tokens=400,
              judge_estimated_cost=0.01),
-        _row(mode="high", category="revenus", judge_score=3, correct=True,
+        _row(mode="claude", category="revenus", judge_score=3, correct=True,
              needs_review=True, latency_total_s=20.0, time_to_first_token_s=3.0,
              estimated_cost=0.70, prompt_tokens=1200, completion_tokens=500,
              judge_estimated_cost=0.01),
@@ -119,82 +119,82 @@ class TestSummarize(unittest.TestCase):
 
     def test_one_row_per_mode(self):
         self.assertEqual(len(self.rows), 2)
-        self.assertIn("eco", self.by_mode)
-        self.assertIn("high", self.by_mode)
+        self.assertIn("smart", self.by_mode)
+        self.assertIn("claude", self.by_mode)
 
     def test_columns_exact(self):
         for r in self.rows:
             self.assertEqual(list(r.keys()), list(SUMMARY_COLUMNS))
 
     def test_ordered_by_key(self):
-        # eco < high alphabetically on the mode part of the key.
-        self.assertEqual([r["mode"] for r in self.rows], ["eco", "high"])
+        # claude < smart alphabetically on the mode part of the key (output is sorted).
+        self.assertEqual([r["mode"] for r in self.rows], ["claude", "smart"])
 
-    def test_eco_counts(self):
-        eco = self.by_mode["eco"]
-        self.assertEqual(eco["n_questions"], 5)
-        self.assertEqual(eco["n_ok"], 4)
-        self.assertEqual(eco["n_error"], 1)
-        self.assertAlmostEqual(eco["error_rate"], 1 / 5.0)
+    def test_smart_counts(self):
+        smart = self.by_mode["smart"]
+        self.assertEqual(smart["n_questions"], 5)
+        self.assertEqual(smart["n_ok"], 4)
+        self.assertEqual(smart["n_error"], 1)
+        self.assertAlmostEqual(smart["error_rate"], 1 / 5.0)
 
-    def test_eco_accuracy_over_scored_only(self):
+    def test_smart_accuracy_over_scored_only(self):
         # 4 ok rows, 3 correct -> 0.75 (errored row excluded from denominator).
-        eco = self.by_mode["eco"]
-        self.assertAlmostEqual(eco["accuracy"], 0.75)
+        smart = self.by_mode["smart"]
+        self.assertAlmostEqual(smart["accuracy"], 0.75)
 
-    def test_eco_mean_score(self):
+    def test_smart_mean_score(self):
         # ok scores: 5, 4, 2, 4 -> mean 3.75 (errored row has no score).
-        eco = self.by_mode["eco"]
-        self.assertAlmostEqual(eco["mean_score"], 3.75)
+        smart = self.by_mode["smart"]
+        self.assertAlmostEqual(smart["mean_score"], 3.75)
 
-    def test_eco_score_dist(self):
-        eco = self.by_mode["eco"]
-        dist = json.loads(eco["score_dist_json"])
+    def test_smart_score_dist(self):
+        smart = self.by_mode["smart"]
+        dist = json.loads(smart["score_dist_json"])
         self.assertEqual(dist, {"1": 0, "2": 1, "3": 0, "4": 2, "5": 1})
 
-    def test_eco_latency_percentiles_exclude_errored(self):
+    def test_smart_latency_percentiles_exclude_errored(self):
         # ok latencies sorted: 1, 2, 3, 4.
-        eco = self.by_mode["eco"]
-        self.assertAlmostEqual(eco["latency_p50_s"], 2.5)   # mid of 2 and 3
-        self.assertAlmostEqual(eco["latency_max_s"], 4.0)
+        smart = self.by_mode["smart"]
+        self.assertAlmostEqual(smart["latency_p50_s"], 2.5)   # mid of 2 and 3
+        self.assertAlmostEqual(smart["latency_max_s"], 4.0)
         # p95: pos = 0.95 * 3 = 2.85 -> between 3 and 4 -> 3.85
-        self.assertAlmostEqual(eco["latency_p95_s"], 3.85)
+        self.assertAlmostEqual(smart["latency_p95_s"], 3.85)
 
-    def test_eco_ttft_p50(self):
+    def test_smart_ttft_p50(self):
         # ok ttfts sorted: 0.5, 0.7, 0.9, 1.1 -> p50 mid of 0.7 and 0.9 = 0.8
-        eco = self.by_mode["eco"]
-        self.assertAlmostEqual(eco["ttft_p50_s"], 0.8)
+        smart = self.by_mode["smart"]
+        self.assertAlmostEqual(smart["ttft_p50_s"], 0.8)
 
-    def test_eco_costs_and_tokens(self):
-        eco = self.by_mode["eco"]
+    def test_smart_costs_and_tokens(self):
+        smart = self.by_mode["smart"]
         # ok costs: 0.01 + 0.02 + 0.03 + 0.04 = 0.10 over 4 -> 0.025 avg.
-        self.assertAlmostEqual(eco["total_cost"], 0.10)
-        self.assertAlmostEqual(eco["avg_cost_per_q"], 0.025)
+        self.assertAlmostEqual(smart["total_cost"], 0.10)
+        self.assertAlmostEqual(smart["avg_cost_per_q"], 0.025)
         # ok input tokens: 100, 200, 300, 400 -> avg 250.
-        self.assertAlmostEqual(eco["avg_input_tokens"], 250.0)
+        self.assertAlmostEqual(smart["avg_input_tokens"], 250.0)
         # ok output tokens: 50, 80, 120, 200 -> avg 112.5.
-        self.assertAlmostEqual(eco["avg_output_tokens"], 112.5)
+        self.assertAlmostEqual(smart["avg_output_tokens"], 112.5)
 
-    def test_eco_needs_review_and_judge_cost(self):
-        eco = self.by_mode["eco"]
+    def test_smart_needs_review_and_judge_cost(self):
+        smart = self.by_mode["smart"]
         # only the errored row has needs_review True.
-        self.assertEqual(eco["needs_review_count"], 1)
+        self.assertEqual(smart["needs_review_count"], 1)
         # judge cost summed over ALL rows (incl. errored 0.0): 4 * 0.002 + 0.0.
-        self.assertAlmostEqual(eco["judge_total_cost"], 0.008)
+        self.assertAlmostEqual(smart["judge_total_cost"], 0.008)
 
     def test_high_counts_and_accuracy(self):
-        high = self.by_mode["high"]
-        self.assertEqual(high["n_questions"], 2)
-        self.assertEqual(high["n_ok"], 2)
-        self.assertEqual(high["n_error"], 0)
-        self.assertAlmostEqual(high["error_rate"], 0.0)
-        self.assertAlmostEqual(high["accuracy"], 1.0)
-        self.assertEqual(high["needs_review_count"], 1)
+        claude = self.by_mode["claude"]
+        self.assertEqual(claude["n_questions"], 2)
+        self.assertEqual(claude["n_ok"], 2)
+        self.assertEqual(claude["n_error"], 0)
+        self.assertAlmostEqual(claude["error_rate"], 0.0)
+        self.assertAlmostEqual(claude["accuracy"], 1.0)
+        self.assertEqual(claude["needs_review_count"], 1)
 
     def test_high_total_cost(self):
-        high = self.by_mode["high"]
-        self.assertAlmostEqual(high["total_cost"], 1.20)
-        self.assertAlmostEqual(high["latency_max_s"], 20.0)
+        claude = self.by_mode["claude"]
+        self.assertAlmostEqual(claude["total_cost"], 1.20)
+        self.assertAlmostEqual(claude["latency_max_s"], 20.0)
 
 
 class TestSummarizeEdgeCases(unittest.TestCase):
@@ -268,34 +268,34 @@ class TestBreakdown(unittest.TestCase):
         dims = {r["dimension"] for r in self.rows}
         self.assertEqual(dims, {"category"})
 
-    def test_eco_category_revenus(self):
-        # eco/revenus ok rows: scores 5,4,2 ; correct True,True,False.
-        r = self._find("eco", "category", "revenus")
+    def test_smart_category_revenus(self):
+        # smart/revenus ok rows: scores 5,4,2 ; correct True,True,False.
+        r = self._find("smart", "category", "revenus")
         self.assertIsNotNone(r)
         self.assertEqual(r["n"], 3)
         self.assertAlmostEqual(r["accuracy"], 2 / 3.0)
         self.assertAlmostEqual(r["mean_score"], (5 + 4 + 2) / 3.0)
 
-    def test_eco_category_tickets_excludes_errored(self):
-        # eco/tickets: 1 ok-correct (score 4) + 1 errored (excluded).
-        r = self._find("eco", "category", "tickets")
+    def test_smart_category_tickets_excludes_errored(self):
+        # smart/tickets: 1 ok-correct (score 4) + 1 errored (excluded).
+        r = self._find("smart", "category", "tickets")
         self.assertIsNotNone(r)
         self.assertEqual(r["n"], 1)
         self.assertAlmostEqual(r["accuracy"], 1.0)
         self.assertAlmostEqual(r["mean_score"], 4.0)
 
     def test_high_category_revenus(self):
-        r = self._find("high", "category", "revenus")
+        r = self._find("claude", "category", "revenus")
         self.assertIsNotNone(r)
         self.assertEqual(r["n"], 2)
         self.assertAlmostEqual(r["accuracy"], 1.0)
         self.assertAlmostEqual(r["mean_score"], 4.0)
 
     def test_buckets_ordered(self):
-        # within eco/category, buckets are alphabetical: revenus before tickets.
-        eco_cat = [r["bucket"] for r in self.rows
-                   if r["mode"] == "eco" and r["dimension"] == "category"]
-        self.assertEqual(eco_cat, sorted(eco_cat))
+        # within smart/category, buckets are alphabetical: revenus before tickets.
+        smart_cat = [r["bucket"] for r in self.rows
+                   if r["mode"] == "smart" and r["dimension"] == "category"]
+        self.assertEqual(smart_cat, sorted(smart_cat))
 
     def test_blank_bucket_skipped(self):
         rows = [_row(category=None), _row(category="revenus")]
@@ -307,7 +307,7 @@ class TestBreakdown(unittest.TestCase):
         self.assertEqual(scoring.breakdown([]), [])
 
     def test_meta_propagated(self):
-        r = self._find("eco", "category", "revenus")
+        r = self._find("smart", "category", "revenus")
         self.assertEqual(r["run_id"], "run1")
         self.assertEqual(r["agent_key"], "orchestrator")
         self.assertEqual(r["agent_label"], "OWIsMind orchestrator")

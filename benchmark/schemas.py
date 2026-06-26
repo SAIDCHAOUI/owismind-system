@@ -25,8 +25,7 @@ from benchmark.agent_capture import (
 # --- enum tuples (frozen vocabulary shared across the package) --------------
 # Single source of truth: the canonical mode names live in config (Smart / Pro / Claude),
 # which is what is actually written to the 'mode' column. Re-export rather than duplicate, so
-# a future membership check against schemas.MODES matches the real stored values (the old
-# ("eco","medium","high") copy here was the pre-rename internal keys and contradicted that).
+# a future membership check against schemas.MODES matches the real stored values.
 MODES = config.MODES
 EXPECTED_VALUE_TYPES = ("numeric", "currency", "date", "string", "list")
 LANGUAGES = ("fr", "en")

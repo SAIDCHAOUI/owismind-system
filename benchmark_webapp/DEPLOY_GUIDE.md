@@ -1,206 +1,171 @@
-# Guide de deploiement pas a pas - Benchmark OWIsMind (integration dans le systeme)
+# Guide de deploiement pas a pas - Benchmark OWIsMind + modes Smart/Pro/Claude
 
-Ce guide te prend par la main pour mettre en place, sur ton instance Dataiku DSS, tout ce qu'on
-a construit autour du benchmark. Il est volontairement detaille : chaque etape explique QUOI
-faire, POURQUOI, et COMMENT verifier que ca marche.
+Ce guide te prend par la main pour mettre en place, sur ton instance Dataiku DSS, TOUT ce qu'on
+a change autour du benchmark ET du renommage des modes de reponse. Chaque etape explique QUOI
+faire, POURQUOI, et COMMENT verifier. Tu ne codes rien : tu copies/colles des fichiers du repo
+dans DSS, tu coches des permissions, tu remplis une variable.
 
-Tu n'as RIEN a coder. Tu copies/colles des fichiers du repo dans DSS, tu coches des permissions,
-et tu remplis une variable. Le code est la source de verite dans le repo (comme pour les agents).
+Suis les parties DANS L'ORDRE (A -> B -> C -> D). A la fin, tout fonctionne.
 
 ---
 
-## 0. Vue d'ensemble : ce qu'on deploie et pourquoi
+## 0. Vue d'ensemble : ce qu'on deploie
 
-Le benchmark mesure, en grandeur reelle, si les agents OWIsMind repondent bien (taux de bonnes
-reponses, vitesse, cout). On l'integre au systeme via **deux poles** qui vivent a deux endroits :
+Trois blocs, qui doivent etre coherents entre eux :
 
-- **Pole utilisateur (dans la webapp OWIsMind = le plugin)** : n'importe quel utilisateur peut
-  **suggerer une question de test avec la bonne reponse**, soit depuis une reponse de chat (menu
-  "..." sous la reponse), soit depuis une page dediee. Ces suggestions alimentent le golden
-  (le jeu de questions/reponses de reference) au fil du temps.
+1. **Les Code Agents** (orchestrateur + sous-agents) - PARTIE A. On a renomme les modes de
+   reponse : avant le token interne etait `eco/medium/high`, maintenant c'est **`smart/pro/claude`**
+   PARTOUT. Ce token circule entre la webapp, l'orchestrateur, les sous-agents et le benchmark,
+   donc il faut redeployer tous ces morceaux ENSEMBLE (sinon le selecteur de mode n'a plus d'effet).
+2. **Le plugin (webapp OWIsMind)** - PARTIE B. Capture des suggestions par les utilisateurs +
+   le selecteur de mode renomme Smart/Pro/Claude.
+3. **Les deux webapps du projet `OWIsMind_LAB`** - PARTIE C : `results/` (consultation publique,
+   langage clair) et `launcher/` (configurer + lancer + promouvoir les suggestions).
 
-- **Pole admin (dans le projet `OWIsMind_LAB` = DEUX petites webapps DSS standard)** :
-  - **Results** : page **publique, lecture seule**, qui affiche le resultat du benchmark en
-    langage clair (pour inspirer confiance, comprehensible par tout le monde).
-  - **Launcher** : outil interne pour **configurer + lancer** un benchmark (vrai formulaire,
-    pas de JSON a editer) et **relire + promouvoir** les questions suggerees par les utilisateurs
-    dans le golden.
+Important sur les modes : Smart = Gemini 3.1 Flash-Lite (le defaut, rapide et economique),
+Pro = Gemini 3.5 Flash, Claude = Sonnet. Les MODELES n'ont pas change ; seul le NOM du mode a
+change (plus de "eco"). Le selecteur affiche deja Smart/Pro/Claude ; desormais c'est aussi ce que
+le code envoie de bout en bout.
 
-Pourquoi deux webapps separees plutot qu'une ? Pour que la page de lancement ne soit pas
-accessible aux gens qui consultent juste les resultats : on partage l'URL de Results a tout le
-monde, et on garde l'URL de Launcher pour ceux qui pilotent le benchmark.
-
-Tableau de ce qui se trouve ou :
+Tableau "quel fichier du repo va ou dans DSS" :
 
 | Fichier du repo | Va dans DSS |
 | --- | --- |
-| Le zip `Plugin/ready-for-dataiku/owismind_dev-upload.zip` | Plugin DSS (capture des suggestions) |
-| `benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (sous `python/benchmark_webapp/`) |
-| `benchmark_webapp/results/{body.html, style.css, script.js, backend.py}` | Webapp standard "Benchmark - Results" |
-| `benchmark_webapp/launcher/{body.html, style.css, script.js, backend.py}` | Webapp standard "Benchmark - Launcher" |
-| `benchmark_webapp/*/preview.html` | NE PAS coller dans DSS (sert juste a la previsualisation locale) |
+| `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (DEV, env 3.11) |
+| `..._SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (DEV, env 3.11) |
+| `..._CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (DEV, env 3.11) si deploye |
+| `Plugin/ready-for-dataiku/owismind_dev-upload.zip` | Plugin DSS `owismind_dev` |
+| `benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
+| `benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
+| `benchmark_webapp/results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
+| `benchmark_webapp/launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
+| `benchmark_webapp/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
 
 ---
 
-## 1. Prerequis (a faire AVANT ce guide)
+## 1. Prerequis
 
-Le moteur du benchmark (datasets, scenario, variable) doit deja exister dans `OWIsMind_LAB`.
-Si ce n'est pas encore fait, suis d'abord **`benchmark/SETUP_GUIDE.md`** (etapes 1 a 3), qui met
-en place :
+Le moteur du benchmark (datasets, scenario, variable) doit deja exister dans `OWIsMind_LAB`. Si
+ce n'est pas le cas, fais d'abord **`benchmark/SETUP_GUIDE.md`** (etapes 1 a 3), qui cree les 5
+datasets (`golden_questions_v1_prepared`, `benchmark_runs_raw`, `_scored`, `benchmark_summary`,
+`benchmark_breakdown`), le scenario `Run_Benchmark` et la variable de projet `benchmark`.
 
-- les datasets manages : `golden_questions_v1_prepared`, `benchmark_runs_raw`,
-  `benchmark_runs_scored`, `benchmark_summary`, `benchmark_breakdown` ;
-- la librairie partagee `benchmark/` (recollee sous `python/benchmark/`) ;
-- le scenario `Run_Benchmark` (3 steps Python) ;
-- la variable de projet `benchmark` (Local variables).
-
-Verification rapide que le prerequis est bon : dans `OWIsMind_LAB`, ouvre `benchmark_summary` ;
-s'il contient au moins une ligne (un run deja passe), le moteur tourne. Sinon, lance d'abord un
-run via le scenario (ou via le Launcher une fois ce guide termine).
-
-Droits : tu dois etre administrateur (ou avoir les droits d'ecriture) sur `OWIsMind_LAB`, et avoir
-acces a la connexion SQL `SQL_owi`.
+Droits : etre administrateur (ou avoir l'ecriture) sur `OWIsMind_LAB`, acces a la connexion SQL
+`SQL_owi`, et droit de modifier les Code Agents (DEV).
 
 ---
 
-## 2. PARTIE A - Le plugin (capture des suggestions par les utilisateurs)
+## 2. PARTIE A - Re-coller les Code Agents (renommage des modes Smart/Pro/Claude)
 
-C'est la partie "produit" : on met a jour la webapp OWIsMind (le plugin) pour ajouter la page de
-suggestion et le bouton dans le menu "...".
+POURQUOI : le selecteur de mode (Smart/Pro/Claude) envoie un petit token a l'orchestrateur, qui
+le lit pour choisir le modele et le transmet au sous-agent. On a renomme ce token de `eco/medium/
+high` vers `smart/pro/claude`. Si tu deploies la webapp (qui envoie `smart`) sans recoller les
+agents (qui attendent encore `eco`), le mode est ignore et l'agent retombe sur son modele par
+defaut. Donc on recolle les agents EN MEME TEMPS que le plugin (Partie B).
 
-### A1. Recuperer le zip DEV
-Le zip est deja construit dans le repo :
+Ce qui a change dans les agents (tu n'as qu'a coller, c'est deja fait dans le repo) :
+`ORCH_MODES`, `DEFAULT_MODE`, `LOOP_LLM_BY_MODE`, `narration_enabled` (orchestrateur), et
+`LLM_BY_MODE`, `_MODE_RE`, `pick_subagent_llm`, `SEMANTIC_TOOL_ID_BY_MODE` (sous-agents) parlent
+maintenant `smart/pro/claude`. Les MODELES sont identiques.
 
-    Plugin/ready-for-dataiku/owismind_dev-upload.zip
+### A1. Re-coller l'orchestrateur (DEV)
+1. Ouvre le fichier repo
+   `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py`.
+2. Dans DSS, projet `OWISMIND_DEV` -> le Code Agent **OWIsMind_orchestrator** (id `038G7mlF`,
+   code env **3.11**) -> remplace tout son code par le contenu du fichier repo -> Save.
 
-C'est le plugin **DEV** (id `owismind_dev`), qui s'installe A COTE du plugin de prod sans
-l'ecraser. On deploie toujours en DEV d'abord, on valide, puis on promeut en prod.
+### A2. Re-coller le sous-agent revenus (DEV)
+Pareil avec `OWISMIND_DEV_SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
+(id `bHrWLyOL`, env 3.11).
 
-### A2. Uploader le plugin dans DSS
-1. Menu DSS (en haut a gauche) -> **Plugins** -> onglet **Installed** (ou **Store**) ->
-   **Add plugin** -> **Upload**.
-2. Choisis le fichier `owismind_dev-upload.zip`. Installe-le comme plugin **Uploaded**
-   (PAS "Development").
-3. Si une version `owismind_dev` existe deja en "Development", supprime-la d'abord (un plugin
-   Development ne se met pas a jour par simple re-upload : il faut le supprimer puis re-uploader).
-4. A l'installation, DSS peut demander de construire/choisir un code environnement pour le plugin :
-   prends celui que la prod utilise deja (meme version Python). On n'installe jamais de dependance
-   ici ; si DSS reclame un paquet manquant, c'est a toi de l'ajouter au code env (cote DSS).
+### A3. Re-coller le sous-agent tickets (DEV), s'il est deploye
+Si le Code Agent **CSSO_Trouble_Tickets_Expert** (id `NcE9LD2i`) existe deja dans `OWISMIND_DEV`,
+recolle aussi `OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
+cette etape.)
 
-### A3. Redemarrer le backend de la webapp
-Le backend Python a change (nouvelles routes de suggestion). Apres l'upload :
-- Va sur la webapp OWIsMind du plugin DEV (Administration de la webapp ou la liste des webapps).
-- **Stop puis Start** (ou "Restart backend") du backend de la webapp.
+Pas de zip ni de redemarrage backend pour les agents : un Code Agent prend effet des qu'il est
+sauvegarde. (PROD : les fichiers `OWISMIND_PROD_V1_*` du repo sont deja a jour ; on promeut en PROD
+plus tard, une fois le DEV valide.)
 
-Pourquoi : le backend ne recharge pas le code Python a chaud ; sans redemarrage, les nouvelles
-routes `/owismind-api/benchmark/*` n'existent pas encore.
-
-### A4. Smoke-test cote utilisateur
-Ouvre la webapp OWIsMind (DEV) et verifie :
-1. **Depuis une conversation** : pose une question, attends la reponse de l'agent. Sous la
-   reponse, clique le menu **"..."** -> tu dois voir **"Suggerer pour le benchmark"**. Clique :
-   ca ouvre la page **Benchmark** prereremplie (la question, la reponse de l'agent, et un choix
-   **Oui / Non** "la reponse de l'agent est-elle correcte ?"). Si Non, tu donnes la bonne reponse.
-   Envoie : un message de remerciement s'affiche.
-2. **Page grand public** : dans le menu lateral, l'entree **"Benchmark"** ouvre la meme page. Sans
-   pre-remplissage, tu peux proposer une nouvelle question de zero (question + bonne reponse +
-   eventuellement une valeur clef a verifier + categorie).
-3. **Mes suggestions** : en bas de la page, la liste de tes propres suggestions avec leur statut
-   ("en attente" tant qu'un admin ne les a pas promues).
-
-### A5. La table se cree toute seule
-La table SQL des suggestions (`webapp_golden_suggestions_v1`) est creee automatiquement a la
-PREMIERE suggestion envoyee. Tu n'as rien a creer a la main. (Fais donc au moins une suggestion
-en A4 pour qu'elle existe avant la Partie B.)
-
-### A6. Noter le nom physique exact de la table (necessaire pour la Partie B)
-Le Launcher (Partie B) lit cette table cross-projet, et il a besoin de son nom physique EXACT.
-Pour l'obtenir : webapp OWIsMind (DEV) -> **Administration** -> onglet **Storage** -> dans la
-liste des tables, repere la ligne **`golden_suggestions`** et copie sa valeur. Elle ressemble a :
-
-    OWISMIND_DEV_owismind_webapp_golden_suggestions_v1
-
-(le prefixe `OWISMIND_DEV` peut differer selon ton projet/prefixe ; copie ce que TON instance
-affiche). Garde cette chaine sous la main pour l'etape B6.
+Verification : ouvre une conversation dans la webapp (apres la Partie B), ouvre le selecteur de
+mode, choisis Claude sur une vraie question complexe ; la reponse doit etre traitee par Sonnet
+(plus lente, plus posee). En Smart (defaut), c'est rapide.
 
 ---
 
-## 3. PARTIE B - Les deux webapps dans `OWIsMind_LAB`
+## 3. PARTIE B - Le plugin (capture des suggestions + selecteur de mode)
 
-### B1. Recoller la librairie partagee (`views.py` + `dss.py`)
-Les deux webapps partagent deux modules Python qui doivent vivre dans la **librairie du projet**
-(comme le package `benchmark/`).
+### B1. Recuperer le zip DEV
+`Plugin/ready-for-dataiku/owismind_dev-upload.zip` (deja construit dans le repo). C'est le plugin
+**DEV** (id `owismind_dev`), qui s'installe a cote de la prod sans l'ecraser.
 
-1. Dans `OWIsMind_LAB`, ouvre l'editeur de librairie du projet : menu **"</> "** (Code) ->
-   **Libraries** (ou "Library"), partie **python/**.
-2. Cree le dossier `python/benchmark_webapp/` et place-y, depuis le repo, les fichiers :
-   - `benchmark_webapp/__init__.py`
-   - `benchmark_webapp/views.py`
-   - `benchmark_webapp/dss.py`
-   (Tu peux copier/coller le contenu de chaque fichier dans un nouveau fichier du meme nom.)
-3. Le package `benchmark/` doit deja etre la (prerequis). `views.py` importe `benchmark.run_params`
-   et `benchmark.schemas` ; `dss.py` importe aussi `benchmark`. Si `benchmark/` est present, c'est bon.
+### B2. Uploader le plugin
+1. Menu DSS -> **Plugins** -> **Add plugin** -> **Upload** -> choisis `owismind_dev-upload.zip`,
+   installe-le comme plugin **Uploaded** (PAS "Development").
+2. Si une version `owismind_dev` existe deja en "Development", supprime-la d'abord puis re-uploade.
+3. Si DSS demande un code env pour le plugin, prends celui de la prod (meme version Python). On
+   n'installe jamais de dependance ; si un paquet manque, c'est a toi de l'ajouter cote DSS.
 
-Pourquoi une librairie et pas le code de la webapp : `views.py` est PUR (teste hors DSS) et `dss.py`
-centralise tout l'acces dataiku/SQL en UN seul endroit (plus facile a auditer). Les deux webapps
-les importent.
+### B3. Redemarrer le backend de la webapp
+Le backend Python a change (nouvelles routes de suggestion + le defaut de mode passe a `smart`).
+Va sur la webapp OWIsMind (DEV) -> **Stop** puis **Start** (ou "Restart backend"). Sans ca, les
+nouvelles routes `/owismind-api/benchmark/*` n'existent pas et le mode reste sur l'ancien defaut.
 
-Verification (optionnel, en local sur le repo, jamais sur l'instance) :
-`python3 -m unittest discover -s benchmark_webapp/tests` doit passer (30 tests verts).
+### B4. Smoke-test
+1. Sous une reponse d'agent, le menu **"..."** -> **"Suggerer pour le benchmark"** -> ouvre la
+   page **Benchmark** prereremplie (question + reponse de l'agent + Oui/Non).
+2. Le menu lateral **"Benchmark"** ouvre la meme page (suggestion manuelle + "Mes suggestions").
+3. Le selecteur de mode affiche Smart (recommande) / Pro / Claude.
 
-### B2. Creer la webapp "Benchmark - Results" (publique, lecture seule)
-1. Dans `OWIsMind_LAB` : menu **"</> "** (Code) -> **Webapps** -> **+ New webapp** ->
-   **Code webapp** -> **Standard** (HTML / CSS / JS, avec backend Python).
-2. Nomme-la **"Benchmark - Results"**.
-3. Active le **backend Python** de la webapp (dans Settings de la webapp, si ce n'est pas deja le cas).
-4. Colle, depuis `benchmark_webapp/results/`, chaque fichier dans son onglet :
-   - `body.html` -> onglet **HTML**
-   - `style.css` -> onglet **CSS**
-   - `script.js` -> onglet **JS**
-   - `backend.py` -> onglet **Python** (le backend)
-5. **Save**, puis ouvre la webapp (View).
+### B5. La table se cree toute seule
+La table SQL des suggestions est creee a la 1ere suggestion envoyee. Fais-en au moins une.
 
-Ce que tu dois voir : un titre "How well do the OWIsMind agents answer?", un grand pourcentage de
-confiance (donut), des chiffres cles, une comparaison par configuration, le detail par question.
-En haut a droite, deux boutons : **theme clair/sombre** et **langue EN/FR** (anglais par defaut).
-Si aucun run n'existe encore, la page affichera "Aucun run disponible" : c'est normal, lance un
-run via le Launcher (B3 + Partie C).
+### B6. Noter le nom physique exact de la table (pour la Partie C)
+Webapp OWIsMind (DEV) -> **Administration** -> onglet **Storage** -> ligne **`golden_suggestions`**.
+Copie la valeur (ex. `OWISMIND_DEV_owismind_webapp_golden_suggestions_v1`). Garde-la pour C6.
 
-### B3. Creer la webapp "Benchmark - Launcher" (config + lancement + suggestions)
-Recommence exactement B2, mais :
-- Nomme-la **"Benchmark - Launcher"**.
-- Colle les 4 panes depuis `benchmark_webapp/launcher/` (et non `results/`).
+---
 
-Ce que tu dois voir : un formulaire de **Configuration** (agents, modes, questions a tester,
-concurrence, langue, plus un bloc "Reglages preserves" en lecture seule), un bouton **Lancer**,
-et une section **Suggestions des utilisateurs**.
+## 4. PARTIE C - Les deux webapps dans `OWIsMind_LAB`
 
-### B4. Permissions (important)
-Une webapp standard s'execute avec TON identite (l'utilisateur qui l'ouvre, ou l'identite
-configuree). Verifie que cette identite a :
-- **Results** : lecture sur les datasets de resultats (automatique, meme projet). Rien de plus.
-- **Launcher** :
-  - **ecriture sur le projet `OWIsMind_LAB`** (pour enregistrer la config dans la variable et
-    lancer le scenario) ;
-  - **lecture sur la connexion `SQL_owi`** (pour lire les suggestions des utilisateurs, qui vivent
-    dans une table du projet de la webapp OWIsMind, sur cette meme connexion) ;
-  - acces a l'agent teste (ex. l'orchestrateur DEV `agent:038G7mlF` dans `OWISMIND_DEV`) si tu
-    relances un run depuis le Launcher.
+### C1. Re-coller la librairie partagee
+1. `OWIsMind_LAB` -> menu **"</> "** (Code) -> **Libraries**, partie **python/**.
+2. Le package `benchmark/` doit etre present et A JOUR (recolle `config.py` + `run_params.py` si tu
+   ne l'as pas fait : ils ont change avec le renommage des modes).
+3. Cree `python/benchmark_webapp/` et place-y `__init__.py`, `views.py`, `dss.py` (depuis le repo).
 
-### B5. Creer le dataset de log des promotions
-Le Launcher tient un petit journal des suggestions deja promues (pour ne pas les re-proposer).
-1. Dans `OWIsMind_LAB`, cree un **dataset manage vide** nomme **`benchmark_suggestions_promoted`**
-   (laisse-le sans schema : il se remplira a la premiere promotion, une seule colonne
-   `suggestion_id`).
+Verification (en local sur le repo, jamais sur l'instance) :
+`python3 -m unittest discover -s benchmark_webapp/tests` doit passer.
 
-Note : ce journal est seulement un "filet" d'audit. La source de verite de "deja promu", c'est le
-golden lui-meme (une suggestion promue y apparait sous un `question_id` qui commence par `u_`). Donc
-meme si ce journal est vide ou en retard, rien n'est casse.
+### C2. Creer la webapp "Benchmark - Results"
+1. `OWIsMind_LAB` -> **"</> "** (Code) -> **Webapps** -> **+ New webapp** -> **Code webapp** ->
+   **Standard**.
+2. Nomme-la **"Benchmark - Results"** ; active le backend Python (Settings de la webapp).
+3. Colle, depuis `benchmark_webapp/results/` : `body.html` -> onglet **HTML**, `style.css` ->
+   **CSS**, `script.js` -> **JS**, `backend.py` -> **Python**. Save, puis ouvre (View).
 
-### B6. Configurer le bloc `suggestions` dans la variable `benchmark`
-Pour que le Launcher sache OU lire les suggestions, ajoute un bloc a la variable de projet.
-1. `OWIsMind_LAB` -> menu projet -> **Variables** -> **Local variables**.
-2. Dans l'objet `benchmark` existant, ajoute la cle `"suggestions"` (sans toucher au reste) :
+Ce que tu vois : "How well do the OWIsMind agents answer?", un score de confiance (donut), des
+chiffres cles, par configuration / par sujet / par question. En haut a droite : toggle **theme** et
+**langue EN/FR** (anglais par defaut). Sans run encore : "Aucun run disponible" (normal).
+
+### C3. Creer la webapp "Benchmark - Launcher"
+Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les 4 panes depuis
+`benchmark_webapp/launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, et une
+section Suggestions.
+
+### C4. Permissions
+- **Results** : lecture sur les datasets de resultats (automatique, meme projet). Rien d'autre.
+- **Launcher** : ecriture sur le projet `OWIsMind_LAB` (enregistrer la config + lancer le scenario)
+  + lecture sur la connexion `SQL_owi` (lire les suggestions) + acces a l'agent teste si tu relances.
+
+### C5. Creer le dataset de log des promotions
+Cree un dataset manage VIDE nomme **`benchmark_suggestions_promoted`** (sans schema ; il se remplit
+a la 1ere promotion). Note : ce n'est qu'un journal d'audit ; la source de verite de "deja promu",
+c'est le golden lui-meme (une suggestion promue y apparait sous un `question_id` en `u_...`).
+
+### C6. Configurer le bloc `suggestions` dans la variable `benchmark`
+`OWIsMind_LAB` -> menu projet -> **Variables** -> **Local variables**. Dans l'objet `benchmark`,
+ajoute (sans toucher au reste) :
 
 ```json
 "suggestions": {
@@ -210,99 +175,80 @@ Pour que le Launcher sache OU lire les suggestions, ajoute un bloc a la variable
 }
 ```
 
-- `connection` : la connexion SQL ou vit la table des suggestions (la meme que la webapp OWIsMind,
-  par defaut `SQL_owi`).
-- `table` : le nom physique EXACT note en A6 (adapte-le a ton instance).
-- `promoted_dataset` : le dataset cree en B5.
+`table` = le nom physique EXACT note en B6 (adapte-le a ton instance). Sans ce bloc, l'onglet
+Suggestions affiche "Source des suggestions non configuree" (aucune erreur).
 
-Si tu oublies ce bloc, le Launcher affichera simplement "Source des suggestions non configuree"
-dans l'onglet Suggestions (aucune erreur). Une fois le bloc en place, recharge le Launcher.
-
-### B7. Deux reglages de securite a ne PAS oublier
+### C7. Deux reglages de securite / donnees a ne PAS oublier
 - **`golden_dataset` doit etre un dataset manage AUTONOME** (sans recette en amont). La promotion
-  ecrit DANS ce dataset ; si c'etait la sortie d'une recette (ex. un `prepare`), un simple rebuild
-  de la recette effacerait les questions promues. Verifie que `benchmark.golden_dataset` (par
-  defaut `golden_questions_v1_prepared`) pointe sur le golden autonome que le benchmark LIT.
-- **Active "Prevent concurrent executions"** sur le scenario `Run_Benchmark` (Scenario ->
-  Settings). C'est le garde-fou autoritaire contre un double lancement (le Launcher a deja un
-  verrou interne, mais il ne protege qu'un seul processus backend).
+  ecrit dedans ; si c'etait la sortie d'une recette, un rebuild effacerait les questions promues.
+- **Active "Prevent concurrent executions"** sur le scenario `Run_Benchmark` (Scenario -> Settings) :
+  le garde-fou autoritaire contre un double lancement.
 
 ---
 
-## 4. PARTIE C - Tester de bout en bout
+## 5. PARTIE D - Tester de bout en bout
 
-### C1. Lire un resultat (Results)
-Ouvre la webapp **Results**. Tu dois voir le dernier run en langage clair. Teste le selecteur de
-run (en haut), le bouton **FR** (la page passe en francais, les nombres aussi : "88,7 %"), et le
-bouton **theme**. Le filtre "A relire uniquement" en bas ne montre que les questions a re-verifier.
+### D1. Lire un resultat (Results)
+Ouvre **Results** : le dernier run en langage clair. Teste le selecteur de run, le bouton **FR**
+(la page passe en francais, les nombres aussi : "88,7 %"), et le **theme**.
 
-### C2. Configurer et lancer (Launcher)
-1. Ouvre la webapp **Launcher**. Le formulaire est pre-rempli depuis la variable.
-2. Ajuste si besoin : coche/decoche des modes, choisis les categories de questions (vide = toutes),
-   ajoute/retire un agent, regle la concurrence (reste bas, 1 a 3, pour ne pas surcharger).
-3. Clique **Enregistrer la configuration** (ca ecrit la variable `benchmark`, en preservant
-   datasets/juge/suggestions).
-4. Clique **Lancer le benchmark**. Le statut passe a "En cours...", puis "Termine". Quand c'est
-   fini, retourne sur **Results** et recharge : le nouveau run apparait dans le selecteur.
+### D2. Configurer et lancer (Launcher)
+1. Ouvre **Launcher** (formulaire pre-rempli). Ajuste modes/categories/concurrence/agents.
+2. **Enregistrer la configuration** (ecrit la variable, en preservant datasets/juge/suggestions).
+3. **Lancer le benchmark** -> statut "En cours..." puis "Termine" -> retourne sur **Results** et
+   recharge : le nouveau run apparait.
 
-Astuce : pour un premier test rapide, restreins a une categorie ou peu de questions, et lance en
-mode Smart seulement (rapide et peu couteux).
+Astuce premier test : restreins a une categorie + mode Smart seulement (rapide, peu couteux).
 
-### C3. Promouvoir une suggestion (la boucle collaborative)
-1. Depuis la webapp OWIsMind (un utilisateur), suggere une question (Partie A4).
-2. Dans le **Launcher**, section **Suggestions des utilisateurs**, la suggestion apparait.
-3. Coche-la, clique **Promouvoir la selection** : elle est ajoutee au golden (et disparait de la
-   liste). Au prochain run, cette question sera testee.
+### D3. Promouvoir une suggestion (boucle collaborative)
+1. Un utilisateur suggere une question depuis la webapp OWIsMind (B4).
+2. Dans **Launcher** -> section **Suggestions** -> elle apparait.
+3. Coche-la, **Promouvoir la selection** -> ajoutee au golden (et disparait de la liste).
 
-Verifie : ouvre le dataset `golden_questions_v1_prepared` ; la question promue y est, avec un
-`question_id` commencant par `u_`.
+Verifie : ouvre `golden_questions_v1_prepared` ; la question promue y est, `question_id` en `u_...`.
 
 ---
 
-## 5. Depannage (les cas frequents)
+## 6. Depannage (cas frequents)
 
-- **La webapp s'ouvre blanche / erreur backend au demarrage** : la librairie `python/benchmark_webapp/`
-  n'a pas ete recollee (l'import `from benchmark_webapp import views, dss` echoue), ou le package
-  `benchmark/` manque. Recolle B1, puis recharge le backend de la webapp.
-- **Onglet Suggestions : "Source des suggestions non configuree"** : le bloc `benchmark.suggestions`
-  manque dans la variable, ou le nom de `table` est faux. Re-verifie A6 + B6 (nom physique exact).
-- **Suggestions : aucune ligne alors qu'il y en a** : le nom de table est faux, ou l'identite de la
-  webapp n'a pas le droit de lire `SQL_owi`. Verifie B4 + B6.
-- **Le bouton Lancer echoue** : l'identite n'a pas le droit de lancer le scenario, ou la methode
-  d'API de lancement differe selon la version DSS (le code degrade proprement). Dans ce cas, lance
-  `Run_Benchmark` directement depuis l'interface des scenarios DSS ; la lecture des resultats marche
-  pareil.
-- **Results : "get_dataframe" en erreur / page vide** : un dataset de resultat n'existe pas encore
-  (aucun run passe). Lance un run d'abord (C2), ou suis `benchmark/SETUP_GUIDE.md`.
-- **Le menu "..." ne montre pas "Suggerer pour le benchmark"** : tu n'as pas redemarre le backend du
-  plugin (A3), ou tu testes sur une reponse encore en cours / sans texte (l'entree n'apparait que sur
-  une reponse terminee avec du texte).
+- **Le selecteur de mode "n'a aucun effet" / Claude se comporte comme Smart** : tu as deploye le
+  plugin sans recoller les agents (Partie A), ou l'inverse. Recolle les Code Agents ET re-uploade le
+  plugin + redemarre le backend, ensemble.
+- **La webapp LAB s'ouvre blanche / erreur backend** : la librairie `python/benchmark_webapp/` (ou
+  `python/benchmark/`) n'est pas recollee. Recolle C1 + recharge le backend de la webapp.
+- **Onglet Suggestions : "non configuree"** : bloc `benchmark.suggestions` manquant ou `table` faux
+  (B6 + C6).
+- **Suggestions : aucune ligne** : nom de table faux, ou pas de droit de lire `SQL_owi` (C4 + C6).
+- **Le bouton Lancer echoue** : pas le droit de lancer le scenario, ou methode dataikuapi differente
+  selon la version DSS (le code degrade proprement). Lance alors `Run_Benchmark` depuis l'interface
+  des scenarios DSS.
+- **Results : page vide / "get_dataframe" en erreur** : aucun run passe (lance-en un, D2).
+- **Le menu "..." n'a pas "Suggerer pour le benchmark"** : backend du plugin pas redemarre (B3), ou
+  reponse en cours / sans texte.
 
 ---
 
-## 6. Rappels de securite (pourquoi c'est sur)
+## 7. Rappels de securite (pourquoi c'est sur)
 
 - **SQL = lecture + append uniquement.** Sur la connexion partagee, le code ne fait que des SELECT
-  (lecture seule, bornee, avec timeout) ; les seules ecritures sont des ajouts a des datasets Flow
-  (le golden, le journal des promus) via l'API Dataset, jamais de UPDATE/DELETE/DROP/INSERT brut.
-  Tout cet acces est concentre dans `benchmark_webapp/dss.py`.
-- **La page Results n'a aucune capacite d'ecriture** (aucune route d'ecriture cote backend).
-- **La promotion ne peut pas ecraser le golden** : elle lit le golden avec une lecture qui LEVE en
-  cas d'echec (donc elle s'interrompt proprement au lieu d'ecraser sur un incident), elle est
-  serialisee par un verrou, et "deja promu" se deduit du golden lui-meme (pas d'un journal fragile).
-- **Le lancement est single-flight** (verrou interne + "Prevent concurrent executions" cote scenario)
-  pour ne jamais lancer deux fois la meme matrice et surcharger l'instance.
+  (lecture seule, bornee, timeout) ; les seules ecritures sont des ajouts a des datasets Flow (le
+  golden, le journal des promus) via l'API Dataset, jamais de UPDATE/DELETE/DROP/INSERT brut. Tout
+  cet acces est concentre dans `benchmark_webapp/dss.py`.
+- **Results n'a aucune capacite d'ecriture** (aucune route d'ecriture).
+- **La promotion ne peut pas ecraser le golden** : lecture qui leve en cas d'echec (abort propre),
+  verrou de promotion, et "deja promu" deduit du golden (pas d'un journal fragile).
+- **Le lancement est single-flight** (verrou interne + "Prevent concurrent executions" cote scenario).
 
 ---
 
-## 7. Plus tard (hors de ce guide)
+## 8. Plus tard (hors de ce guide)
 
-- Promotion en PROD : refaire la Partie A avec le zip de prod (`/build-plugin` + `/package-plugin`)
-  une fois le DEV valide, et pointer le benchmark sur l'orchestrateur PROD.
-- Synchroniser le statut "acceptee/refusee" vers la table du plugin (aujourd'hui l'utilisateur voit
-  "en attente" cote OWIsMind meme apres promotion).
-- Garde-fou programmatique anti-recette sur `golden_dataset` (aujourd'hui c'est un prerequis
-  documente, pas une verification automatique).
+- Promotion en PROD : recoller les `OWISMIND_PROD_V1_*` (agents) une fois le DEV valide, refaire la
+  Partie B avec le zip de prod (`/build-plugin` + `/package-plugin`), pointer le benchmark sur
+  l'orchestrateur PROD.
+- Synchroniser le statut "acceptee/refusee" vers la table du plugin (l'utilisateur voit "en attente").
+- Garde-fou programmatique anti-recette sur `golden_dataset`.
 
 Reference technique courte (mapping fichiers, permissions, caveats) : `benchmark_webapp/README.md`.
-Reference du moteur (datasets, scenario, variable) : `benchmark/SETUP_GUIDE.md`.
+Reference du moteur benchmark : `benchmark/SETUP_GUIDE.md`. Carte des ids d'agents :
+`dataiku-agents/OWISMIND/README.md`.
