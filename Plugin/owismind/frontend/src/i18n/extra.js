@@ -598,6 +598,28 @@ export const extraMessages = {
     'bench.verdict.unknown': 'Indéterminé',
     'bench.verdict.overridden': 'Ajusté',
 
+    // Consultation hero + reference (LAB results parity)
+    'bench.consult.correct_label': 'Bonnes réponses',
+    'bench.consult.hero_note': "À quelle fréquence l'IA donne la bonne réponse.",
+    'bench.consult.hero_meta': '{0} question(s) de référence, {1} configuration(s) testée(s)',
+    'bench.cfg.questions_n': '{0} question(s)',
+    'bench.detail.col_result': 'Résultat',
+    'bench.detail.col_score': 'Score',
+    'bench.detail.show': 'Voir les détails',
+    'bench.detail.hide': 'Masquer les détails',
+    'bench.ref.measure_h': "Comment c'est mesuré",
+    'bench.ref.measure_p':
+      "Chaque agent répond à une liste de questions de référence validées par un humain. La justesse est la part de réponses correctes.",
+    'bench.ref.score_h': 'Score et verdict',
+    'bench.ref.judge_t': 'Juge IA',
+    'bench.ref.judge_d':
+      'Un modèle note chaque réponse en tenant compte de la note humaine de sévérité.',
+    'bench.ref.dc_t': 'À revoir',
+    'bench.ref.dc_d': 'Réponses où le contrôle automatique et le juge IA sont en désaccord.',
+    'bench.ref.modes_h': 'Modes',
+    'bench.ref.modes_p': 'Un agent peut tourner en plusieurs modes ; chacun est une configuration.',
+    'bench.ref.modes_std': 'Standard : agent sans sélecteur de mode.',
+
     // Admin review + override
     'bench.review.title': 'Revue administrateur',
     'bench.review.mark_correct': 'Marquer correct',
@@ -1221,6 +1243,28 @@ export const extraMessages = {
     'bench.verdict.review': 'Needs review',
     'bench.verdict.unknown': 'Undetermined',
     'bench.verdict.overridden': 'Overridden',
+
+    // Consultation hero + reference (LAB results parity)
+    'bench.consult.correct_label': 'Correct answers',
+    'bench.consult.hero_note': 'How often the AI gives the right answer.',
+    'bench.consult.hero_meta': '{0} reference question(s), {1} configuration(s) tested',
+    'bench.cfg.questions_n': '{0} question(s)',
+    'bench.detail.col_result': 'Result',
+    'bench.detail.col_score': 'Score',
+    'bench.detail.show': 'Show details',
+    'bench.detail.hide': 'Hide details',
+    'bench.ref.measure_h': 'How this is measured',
+    'bench.ref.measure_p':
+      'Each agent answers a list of human-validated reference questions. Accuracy is the share of correct answers.',
+    'bench.ref.score_h': 'Score and verdict',
+    'bench.ref.judge_t': 'AI judge',
+    'bench.ref.judge_d':
+      'A model scores each answer, taking the human strictness note into account.',
+    'bench.ref.dc_t': 'To double-check',
+    'bench.ref.dc_d': 'Answers where the automatic check and the AI judge disagreed.',
+    'bench.ref.modes_h': 'Modes',
+    'bench.ref.modes_p': 'An agent can run in several modes; each one is a configuration.',
+    'bench.ref.modes_std': 'Standard: an agent with no mode selector.',
 
     // Admin review + override
     'bench.review.title': 'Admin review',

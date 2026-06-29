@@ -332,7 +332,13 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
     **`modes`** (défaut OFF) indique que l'agent gère le sélecteur de modes Smart/Pro/Claude : `/agents`
     l'expose, le front masque le picker si OFF, et **`/chat/start` ne relaie le token `⟦owi:mode=…⟧` que si
     `profile.modes`** (sinon aucun token, plus de fuite chez un agent visuel). Via `storage/settings.py`.
-    Voir L017 + L091 + L101.
+    Voir L017 + L091 + L101. **`profile.benchmark`** (2026-06-29/L111) = bloc `{enabled, connection, table,
+    agent_key}` validé/borné par `validate_agent_meta` (table invalide -> "") qui relie un agent à SA table
+    `scored` (le LAB), lue en cross-projet par le plugin pour la consultation. `/agents` n'expose que
+    `has_benchmark` (jamais la table/connexion). **Package PUR `python-lib/owismind/benchmark_view/`**
+    (`schemas` effective_correct, `aggregate` view-model consultation, `schema_check`, `agent_profile`,
+    `lab_io` lecture/UPDATE SQL cross-projet) = côté LECTURE du benchmark dans le plugin (modules purs
+    portés du LAB, source de vérité = `OWIsMind_LAB/`). Plugin = **consultation seule**, pas de launcher.
 - **Connexion configurable** (plus de hardcode) : params webapp `sql_connection`/`table_prefix`/`log_level`
   (`hideWebAppConfig=false`), lus via `get_webapp_config()`. ⚠️ dropdown Settings KO (L012) → champ texte.
   Nommage `{PROJECT_KEY}_{prefix-}owismind_{logical}` (préfixe optionnel après le project key).

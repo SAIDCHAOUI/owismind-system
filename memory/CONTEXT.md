@@ -5,6 +5,33 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🔬 SESSION 2026-06-29 (BENCHMARK PHASE FINALE : juge contextuel + override humain + CONSULTATION
+dans le plugin) - repo only, DEV repackagé, NON validé DSS.** Spec :
+`docs/superpowers/specs/2026-06-29-benchmark-final-phase-design.md`. **(A) Juge contextuel** (`judge.py`,
+TDD) : `normalize_number` conscient des magnitudes (« 36 millions » -> 36e6 ; k/M/Md FR+EN ; garde `\b`
+anti « 36 minutes ») + harvesting magnitude ; **ancre = SIGNAL** (`final_correctness` : HIT confirme, MISS
+**ne force plus faux** -> le juge tranche ; désaccord -> needs_review) ; **note humaine = contrat de
+sévérité** dans le prompt ; colonne **`judge_comment`** (<=200c). **(B) Override humain** : colonnes
+`human_*` + `judge_comment` dans `SCORED_COLUMNS` ; `effective_correct` (override prime) ; `scoring._accuracy`
+sur le verdict effectif ; `step_judge` initialise les colonnes ; `benchmark_webapp` (views `apply_override`/
+`validate_override` purs + `dss.write_override` read-modify-write verrouillé, survit aux runs car scored
+empile par run_id) ; **launcher LAB gagne un onglet Review/override** (sous-agent, QA navigateur OK). **(C)
+Plugin** : NOUVEAU package PUR `owismind/benchmark_view/` (`schemas` effective_correct, `aggregate` view-model
+consultation + override, `schema_check` colonnes manquantes, `agent_profile` validation bloc, `lab_io` lecture
+SQL cross-projet bornée + listing tables + **UPDATE override paramétré**) ; `validate_agent_meta` gagne le bloc
+**`benchmark {enabled, connection, table, agent_key}`** ; `/agents` expose `has_benchmark` ; routes
+`GET /benchmark/results` (tous) + admin `tables`/`validate-table`/`override` (fence impersonation). Frontend :
+onglet Benchmark = **consultation pour tous** (dropdown agent) + suggest + override admin par question ;
+**AdminView** section Benchmark (sélecteur de table + validation de schéma). **DÉCISION USER : plugin =
+CONSULTATION uniquement, AUCUN launcher embarqué** (le lancement reste sur les webapps LAB). **Consultation
+RESTYLÉE en reproduction NATIVE (pas d'iframe) de la webapp LAB `results`** (hero donut + verdict pill + note
++ meta ; 5 KPIs ; cartes par config badge+barre+4 sous-métriques ; bloc topic ; table rtable + détails boîtes
+réponse attendue/agent + commentaire juge ; aside référence) sur tokens du plugin. **276 LAB + 508 plugin +
+133 node verts, 0 tiret, build OK, zip DEV `index-BK29Kqtv.js` (78 entrées), PROD INTACTE.** À FAIRE DSS :
+recoller lib+launcher LAB + relancer un run (matérialise les colonnes) ; uploader DEV + redémarrer backend ;
+câbler le bloc benchmark sur une fiche d'agent (table physique du scored LAB + valider schéma + agent_key) ;
+smoke-tests. Voir **L111** + `sessions/2026-06-29.md`.
+
 **🗂️ SESSION 2026-06-26 (RUN FINAL) - FIX NOM DE TABLE TROP LONG (NAMEDATALEN, L110) + REORG ARCHI DU
 BENCHMARK SOUS `OWIsMind_LAB/` (L109). 726 tests Python verts.** (1) **Fix table-name (✅ VALIDE DSS)** :
 `webapp_golden_suggestions_v1` + prefixe DEV `webapp_devtest` = nom physique **65 octets > 63** -> `pg_identifier`
@@ -629,7 +656,21 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-26 (RUN FINAL) : fix nom de table trop long (L110) + réorg archi benchmark sous `OWIsMind_LAB/` (L109) → détail `sessions/2026-06-26.md` (Run final)
+## 🧭 Dernière session - 2026-06-29 : benchmark phase finale (juge contextuel + override humain + consultation native dans le plugin) → détail `sessions/2026-06-29.md` + **L111**
+- **Juge contextuel** (`judge.py`, TDD) : magnitudes (« 36 millions » -> 36e6), **ancre = signal** (MISS ne
+  force plus faux, le juge tranche), **note humaine = contrat de sévérité**, colonne `judge_comment`.
+- **Override humain** : colonnes `human_*` dans `scored` (survivent aux runs, scored empile par run_id),
+  `effective_correct` (override prime), KPIs recalculés dessus ; write-back verrouillé (`dss.write_override`) ;
+  onglet Review/override sur le **launcher LAB**.
+- **Plugin = CONSULTATION uniquement** (décision user, **aucun launcher** ; le launch reste sur les webapps
+  LAB) : package pur `benchmark_view/` + routes (`/benchmark/results` tous, admin tables/validate/override) +
+  fiche d'agent (bloc `benchmark` + **sélecteur de table + validation de schéma**) + onglet Benchmark Vue.
+  Consultation **restylée en reproduction NATIVE (pas d'iframe) de la webapp LAB `results`**.
+- **276 LAB + 508 plugin + 133 node verts, 0 tiret, build OK, zip DEV `index-BK29Kqtv.js` (78 entrées),
+  PROD INTACTE. NON validé DSS.** À FAIRE : recoller lib+launcher LAB (+ relancer un run) ; upload DEV +
+  redémarrer backend ; câbler le bloc benchmark sur une fiche d'agent ; smoke-tests.
+
+## Avant - 2026-06-26 (RUN FINAL) : fix nom de table trop long (L110) + réorg archi benchmark sous `OWIsMind_LAB/` (L109) → détail `sessions/2026-06-26.md` (Run final)
 - **Fix table-name (✅ VALIDÉ DSS)** : nom physique 65 octets > 63 (logique longue + préfixe DEV) -> `pg_identifier`
   levait -> 500. `sql_config._shorten_identifier` (via `physical_table`) : ≤63 inchangé (0 donnée orpheline), >63 =
   tête lisible + hash 10c. DEV re-packagé (`index-pktQ-ICh.js`) -> table créée + INSERT committé en DSS. Étend L103.

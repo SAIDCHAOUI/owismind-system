@@ -255,27 +255,22 @@ benchmark", select connexion (alimente par les connexions PostgreSQL), select ta
 - Etats : agent sans benchmark -> carte "pas de benchmark configure pour cet agent" ; table
   illisible -> message degrade (jamais de 500).
 
-### 7.2 Launcher admin embarque (pole E) - PERIMETRE LIVRE = revue + override
+### 7.2 Launcher (pole E) - DECISION FINALE UTILISATEUR : AUCUN launch dans le plugin
 
-Decision de cadrage (prise pour tenir le MVP, c'est la reduction proposee a l'utilisateur lors du
-brainstorm) : le launcher admin EMBARQUE dans le plugin se limite a la partie a forte valeur
-"humain dans la boucle", et lit l'agent via la table que la fiche d'agent a deja cablee (donc PAS
-de cross-project dataikuapi a configurer pour ce pole). L'edition lourde de config + le CRUD golden
-+ le LANCEMENT d'un run restent sur la webapp LAB `benchmark_launcher` (qui a recu la meme UI de
-revue/override), atteignable par un lien depuis le plugin.
+Decision de l'utilisateur (2026-06-29, apres une premiere demo) : on garde le plugin SIMPLE -
+**aucune interface de lancement dans la webapp owismind**. Le plugin n'integre QUE la
+**consultation** ; tout le LANCEMENT (config + golden + suggestions + run) reste sur les webapps
+LAB du projet `OWISMIND_LAB`. Pas de cross-project dataikuapi a configurer cote plugin.
 
-- Visible UNIQUEMENT pour un admin de la webapp (gate `_admin_guard` + cloture impersonation : en
-  impersonation, lecture seule, pas d'override).
-- REVUE + OVERRIDE (pole B), in-plugin, sans config supplementaire :
-  - La revue reutilise `GET /benchmark/results` (les lignes `detail` portent deja le verdict du
-    juge, le commentaire, le verdict effectif et les champs d'override).
-  - `POST /admin/benchmark/override` : resout l'agent (cle opaque -> bloc benchmark) puis ecrit les
-    colonnes human_* par un UPDATE parametre borne sur la table de l'agent (`lab_io.write_override`).
-    Survit aux re-runs (le scored s'accumule par run_id). Reserve : re-juger le MEME run_id efface
-    ses overrides (rare, l'UI previent).
-- LANCEMENT + edition config/golden : DIFFERE en plugin, fait sur la webapp LAB (lien). Le branchement
-  cross-project (run scenario + ecriture variable + CRUD golden depuis le plugin) est laisse a une
-  iteration ulterieure quand l'archi des droits sera prete.
+- Le plugin reste fonctionnellement EN L'ETAT ("laisser tel quel") : consultation pour tous +
+  l'override admin par question deja en place (pole B, via `lab_io.write_override`) + le formulaire
+  de suggestion. On n'AJOUTE pas le launcher.
+- La REVUE + OVERRIDE complete (avec config/golden/run) vit sur la webapp LAB `benchmark_launcher`
+  (qui a recu sa propre UI de revue/override). C'est la surface admin de reference.
+- Le seul travail restant cote plugin est du DESIGN : la consultation est restylee pour avoir
+  exactement la meme disposition que la webapp LAB `benchmark_results` (hero donut + verdict, 5 KPIs,
+  cartes par config avec barre + sous-metriques, lignes par sujet, table Q-par-Q + details, aside
+  reference), avec les tokens semantiques du plugin (pas de hex en dur).
 
 ### 7.3 Le clic "suggerer pour le benchmark" depuis le chat
 Conserve : l'action menu "..." ouvre l'onglet Benchmark sur la sous-section "suggerer une

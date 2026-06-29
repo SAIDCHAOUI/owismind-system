@@ -146,6 +146,43 @@ function expectedText(row) {
   return String(row.expected_value) + ty
 }
 
+// --- LAB results parity helpers (verdict pill / mode badge / meter widths) ---
+// Confidence band -> hero verdict pill class (good/mid/bad), like the LAB results hero.
+function bandPill() {
+  const b = String((kpis.value && kpis.value.band) || '').toLowerCase()
+  if (b === 'high') return 'good'
+  if (b === 'medium') return 'mid'
+  if (b === 'low') return 'bad'
+  return 'plaus'
+}
+// Mode name -> badge class (Smart green, Pro orange, Claude red, anything else standard grey).
+function modeClass(mode) {
+  const m = String(mode || '').toLowerCase()
+  if (m === 'smart') return 'mode-smart'
+  if (m === 'pro') return 'mode-pro'
+  if (m === 'claude') return 'mode-claude'
+  return 'mode-default'
+}
+// Mode name -> dot color token expression (used via :style, never an SVG/HTML color attribute).
+function modeColor(mode) {
+  const m = String(mode || '').toLowerCase()
+  if (m === 'smart') return 'var(--success)'
+  if (m === 'pro') return 'var(--orange)'
+  if (m === 'claude') return 'var(--danger)'
+  return 'var(--text-3)'
+}
+// Accuracy fraction -> meter bar width.
+function meterWidth(acc) {
+  return pctFromAccuracy(acc) + '%'
+}
+// Per-question result pill kind, from the EFFECTIVE verdict: ok / bad / plaus.
+function resultPillKind(row) {
+  const k = verdictKind(row)
+  if (k === 'correct') return 'ok'
+  if (k === 'incorrect') return 'bad'
+  return 'plaus'
+}
+
 async function applyOverride(row, verdict) {
   const k = rowKey(row)
   if (bench.overrideBusyKey) return
@@ -368,174 +405,179 @@ function fmtDate(value) {
             <span>{{ t('bench.consult.read_error') }}</span>
           </div>
 
-          <!-- Hero: donut + verdict + KPI tiles -->
-          <div class="hero">
-            <div class="donut-wrap">
-              <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
-                <circle class="donut-track" cx="60" cy="60" r="52" />
-                <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
-              </svg>
-              <div class="donut-center">
-                <span class="donut-pct">{{ centerText }}</span>
-                <span class="donut-band">{{ bandLabel }}</span>
-              </div>
-            </div>
-
-            <div class="hero-body">
-              <p class="hero-verdict">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
-              <div class="kpi-row">
-                <div class="kpi-tile">
-                  <span class="kpi-k">{{ t('bench.kpi.accuracy') }}</span>
-                  <span class="kpi-v">{{ centerText }}</span>
+          <!-- content (1fr) + reference aside (360px), like the LAB results webapp -->
+          <div class="consult-body">
+            <div class="consult-content">
+              <!-- HERO: donut + verdict pill + note + meta -->
+              <div class="hero">
+                <div class="donut-wrap">
+                  <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
+                    <circle class="donut-track" cx="60" cy="60" r="52" />
+                    <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
+                  </svg>
+                  <div class="donut-center">
+                    <span class="donut-pct">{{ centerText }}</span>
+                    <span class="donut-band">{{ t('bench.consult.correct_label') }}</span>
+                  </div>
                 </div>
-                <div class="kpi-tile">
-                  <span class="kpi-k">{{ t('bench.kpi.questions') }}</span>
-                  <span class="kpi-v">{{ kpis.n_questions }}</span>
-                </div>
-                <div class="kpi-tile">
-                  <span class="kpi-k">{{ t('bench.kpi.configs') }}</span>
-                  <span class="kpi-v">{{ kpis.n_configs }}</span>
-                </div>
-                <div class="kpi-tile">
-                  <span class="kpi-k">{{ t('bench.kpi.cost') }}</span>
-                  <span class="kpi-v mono">{{ kpis.total_cost_str || formatMoney(kpis.total_cost, locale) }}</span>
-                </div>
-                <div class="kpi-tile" :class="{ 'kpi-tile--warn': kpis.needs_review > 0 }">
-                  <span class="kpi-k">{{ t('bench.kpi.needs_review') }}</span>
-                  <span class="kpi-v">{{ kpis.needs_review }}</span>
+                <div class="hero-body">
+                  <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
+                  <span class="verdict" :class="bandPill()"><span class="sq" /><span>{{ bandLabel }}</span></span>
+                  <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
+                  <p class="hero-meta">{{ t('bench.consult.hero_meta', [kpis.n_questions, kpis.n_configs]) }}</p>
                 </div>
               </div>
+
+              <!-- KPI row (5 tiles, orange top border) -->
+              <div class="kpis">
+                <div class="kpi">
+                  <span class="k-lab">{{ t('bench.kpi.accuracy') }}</span>
+                  <span class="k-val">{{ centerText }}</span>
+                </div>
+                <div class="kpi">
+                  <span class="k-lab">{{ t('bench.kpi.questions') }}</span>
+                  <span class="k-val">{{ kpis.n_questions }}</span>
+                </div>
+                <div class="kpi">
+                  <span class="k-lab">{{ t('bench.kpi.configs') }}</span>
+                  <span class="k-val">{{ kpis.n_configs }}</span>
+                </div>
+                <div class="kpi">
+                  <span class="k-lab">{{ t('bench.kpi.cost') }}</span>
+                  <span class="k-val sm">{{ kpis.total_cost_str || formatMoney(kpis.total_cost, locale) }}</span>
+                </div>
+                <div class="kpi">
+                  <span class="k-lab">{{ t('bench.kpi.needs_review') }}</span>
+                  <span class="k-val" :class="{ flag: kpis.needs_review > 0 }">{{ kpis.needs_review }}</span>
+                </div>
+              </div>
+
+          <!-- Per agent x mode: one performance card each -->
+          <div v-if="results.configs.length" class="section">
+            <div class="section-h"><h3>{{ t('bench.cfg.title') }}</h3></div>
+            <div v-for="(c, i) in results.configs" :key="i" class="cfg-card">
+              <div class="cfg-top">
+                <span class="cfg-name">{{ c.agent_label || c.agent_key }}</span>
+                <span class="mode-badge" :class="modeClass(c.mode)"><span class="dot" />{{ c.mode }}</span>
+                <span class="cfg-q">{{ t('bench.cfg.questions_n', [c.n_questions]) }}</span>
+              </div>
+              <div class="meter-row">
+                <span class="meter-lab">{{ t('bench.cfg.col_accuracy') }}</span>
+                <span class="meter"><i :style="{ width: meterWidth(c.accuracy) }" /></span>
+                <span class="meter-val">{{ pctText(c.accuracy_pct) }}</span>
+              </div>
+              <div class="submetrics">
+                <div class="submetric">
+                  <div class="sl">{{ t('bench.cfg.col_score') }}</div>
+                  <div class="sv">{{ fmtScore(c.mean_score) }}</div>
+                </div>
+                <div class="submetric">
+                  <div class="sl">{{ t('bench.cfg.col_latency') }}</div>
+                  <div class="sv">{{ c.avg_latency_str || '-' }}</div>
+                </div>
+                <div class="submetric">
+                  <div class="sl">{{ t('bench.cfg.col_cost') }}</div>
+                  <div class="sv">{{ c.avg_cost_str || '-' }}</div>
+                </div>
+                <div class="submetric">
+                  <div class="sl">{{ t('bench.cfg.col_review') }}</div>
+                  <div class="sv" :class="{ bad: c.needs_review > 0 }">{{ c.needs_review }}</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Per agent x mode -->
-          <div v-if="results.configs.length" class="block">
-            <h3 class="block-title">{{ t('bench.cfg.title') }}</h3>
-            <div class="table-scroll">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>{{ t('bench.cfg.col_config') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_questions') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_ok') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_error') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_accuracy') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_score') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_latency') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_cost') }}</th>
-                    <th class="num">{{ t('bench.cfg.col_review') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(c, i) in results.configs" :key="i">
-                    <td>
-                      <span class="cfg-agent">{{ c.agent_label || c.agent_key }}</span>
-                      <span class="cfg-mode">{{ c.mode }}</span>
-                    </td>
-                    <td class="num">{{ c.n_questions }}</td>
-                    <td class="num">{{ c.n_ok }}</td>
-                    <td class="num" :class="{ 'cell-bad': c.n_error > 0 }">{{ c.n_error }}</td>
-                    <td class="num strong">{{ pctText(c.accuracy_pct) }}</td>
-                    <td class="num mono">{{ fmtScore(c.mean_score) }}</td>
-                    <td class="num mono">{{ c.avg_latency_str || '-' }}</td>
-                    <td class="num mono">{{ c.avg_cost_str || '-' }}</td>
-                    <td class="num" :class="{ 'cell-warn': c.needs_review > 0 }">{{ c.needs_review }}</td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- Accuracy by topic -->
+          <div v-if="results.categories.length" class="section">
+            <div class="section-h"><h3>{{ t('bench.cat.title') }}</h3></div>
+            <div class="topic">
+              <div class="topic-h">{{ t('bench.cat.title') }}</div>
+              <div v-for="(cat, i) in results.categories" :key="i" class="topic-row">
+                <div class="topic-agent">{{ cat.bucket || t('bench.cat.uncategorized') }}</div>
+                <span class="meter"><i :style="{ width: meterWidth(cat.accuracy) }" /></span>
+                <span class="meter-val">{{ pctText(cat.accuracy_pct) }}</span>
+                <span class="tq">{{ t('bench.cat.count', [cat.n]) }}</span>
+              </div>
             </div>
           </div>
 
-          <!-- Per category -->
-          <div v-if="results.categories.length" class="block">
-            <h3 class="block-title">{{ t('bench.cat.title') }}</h3>
-            <ul class="cat-list">
-              <li v-for="(cat, i) in results.categories" :key="i" class="cat-row">
-                <span class="cat-name">{{ cat.bucket || t('bench.cat.uncategorized') }}</span>
-                <span class="cat-bar"><span class="cat-fill" :style="{ width: catWidth(cat) }" /></span>
-                <span class="cat-val">
-                  <span class="strong">{{ pctText(cat.accuracy_pct) }}</span>
-                  <span class="cat-n">{{ t('bench.cat.count', [cat.n]) }}</span>
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <!-- Per question -->
-          <div v-if="results.detail.length" class="block">
-            <h3 class="block-title">{{ t('bench.detail.title') }}</h3>
+          <!-- Question by question (results table + expandable evidence) -->
+          <div v-if="results.detail.length" class="section">
+            <div class="section-h"><h3>{{ t('bench.detail.title') }}</h3></div>
             <p v-if="isAdmin" class="detail-admin-note">
               <Icon name="info" />{{ t('bench.review.reset_note') }}
             </p>
-            <div class="table-scroll">
-              <table class="data-table detail-table">
-                <thead>
+            <table class="rtable">
+              <thead>
+                <tr>
+                  <th>{{ t('bench.detail.col_question') }}</th>
+                  <th>{{ t('bench.detail.col_agent') }}</th>
+                  <th>{{ t('bench.detail.col_result') }}</th>
+                  <th class="num">{{ t('bench.detail.col_score') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="row in results.detail" :key="rowKey(row)">
                   <tr>
-                    <th class="th-expand"></th>
-                    <th>{{ t('bench.detail.col_question') }}</th>
-                    <th>{{ t('bench.detail.col_category') }}</th>
-                    <th>{{ t('bench.detail.col_agent') }}</th>
-                    <th>{{ t('bench.detail.col_judge') }}</th>
-                    <th>{{ t('bench.detail.col_verdict') }}</th>
+                    <td data-l="Question">
+                      <div class="q-main">{{ row.question }}</div>
+                      <div class="q-id">{{ row.question_id }}</div>
+                      <button type="button" class="show-details" @click="toggleRow(rowKey(row))">
+                        <Icon :name="expanded[rowKey(row)] ? 'chevronUp' : 'chevronDown'" />
+                        {{ expanded[rowKey(row)] ? t('bench.detail.hide') : t('bench.detail.show') }}
+                      </button>
+                    </td>
+                    <td data-l="Agent">
+                      <span class="cfg-cell">
+                        <span class="dot" :style="{ background: modeColor(row.mode) }" />
+                        {{ row.agent_label || row.agent_key }} . {{ row.mode }}
+                      </span>
+                    </td>
+                    <td data-l="Result">
+                      <span class="result-pill" :class="'result-' + resultPillKind(row)"><span class="sq" />{{ verdictLabel(row) }}</span>
+                      <span v-if="row.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
+                    </td>
+                    <td class="num" data-l="Score">
+                      <span class="score">{{ fmtScore(row.judge_score) }}<small>/ 5</small></span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  <template v-for="row in results.detail" :key="rowKey(row)">
-                    <tr class="detail-row" :class="{ open: expanded[rowKey(row)] }" @click="toggleRow(rowKey(row))">
-                      <td class="th-expand">
-                        <Icon :name="expanded[rowKey(row)] ? 'chevronDown' : 'chevronRight'" />
-                      </td>
-                      <td class="cell-question" :title="row.question">{{ row.question }}</td>
-                      <td class="cell-cat">{{ row.category || '-' }}</td>
-                      <td>
-                        <span class="cfg-agent">{{ row.agent_label || row.agent_key }}</span>
-                        <span class="cfg-mode">{{ row.mode }}</span>
-                      </td>
-                      <td>
-                        <span class="judge-verdict">{{ row.judge_verdict || '-' }}</span>
-                        <span v-if="row.judge_score != null" class="judge-score mono">{{ fmtScore(row.judge_score) }}</span>
-                      </td>
-                      <td>
-                        <span class="vbadge" :class="'v-' + verdictKind(row)">{{ verdictLabel(row) }}</span>
-                        <span v-if="row.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
-                      </td>
-                    </tr>
-                    <tr v-if="expanded[rowKey(row)]" class="detail-expand">
-                      <td></td>
-                      <td colspan="5">
-                        <dl class="exp-grid">
-                          <template v-if="row.reference_answer">
-                            <dt>{{ t('bench.detail.reference') }}</dt>
-                            <dd>{{ row.reference_answer }}</dd>
+                  <tr v-if="expanded[rowKey(row)]" class="detail-row">
+                    <td colspan="4">
+                      <div class="detail">
+                        <div class="d-full">
+                          <template v-if="row.category">
+                            <dt>{{ t('bench.detail.col_category') }}</dt>
+                            <dd>{{ row.category }}</dd>
                           </template>
                           <template v-if="row.expected_value">
                             <dt>{{ t('bench.detail.expected') }}</dt>
                             <dd class="mono">{{ expectedText(row) }}</dd>
                           </template>
-                          <template v-if="row.answer_preview">
-                            <dt>{{ t('bench.detail.answer') }}</dt>
-                            <dd class="exp-answer">{{ row.answer_preview }}</dd>
-                          </template>
-                          <template v-if="row.judge_comment">
-                            <dt>{{ t('bench.detail.judge_comment') }}</dt>
-                            <dd>{{ row.judge_comment }}</dd>
-                          </template>
                           <template v-if="row.notes">
                             <dt>{{ t('bench.detail.notes') }}</dt>
                             <dd>{{ row.notes }}</dd>
-                          </template>
-                          <template v-if="row.objective_match != null">
-                            <dt>{{ t('bench.detail.objective') }}</dt>
-                            <dd>{{ row.objective_match ? t('bench.detail.objective_yes') : t('bench.detail.objective_no') }}</dd>
                           </template>
                           <template v-if="row.reviewed_by">
                             <dt>{{ t('bench.detail.reviewed') }}</dt>
                             <dd>{{ t('bench.review.reviewed_by', [row.reviewed_by, fmtDate(row.reviewed_at)]) }}</dd>
                           </template>
-                        </dl>
+                        </div>
+                        <div class="answers">
+                          <div class="ans-box expected">
+                            <div class="ans-l">{{ t('bench.detail.reference') }}</div>
+                            <div class="ans-t">{{ row.reference_answer || '-' }}</div>
+                          </div>
+                          <div class="ans-box agent">
+                            <div class="ans-l">{{ t('bench.detail.answer') }}</div>
+                            <div class="ans-t">{{ row.answer_preview || '-' }}</div>
+                          </div>
+                        </div>
+                        <p v-if="row.judge_comment" class="judge-note">
+                          <b>{{ t('bench.detail.judge_comment') }} : </b>{{ row.judge_comment }}
+                        </p>
 
                         <!-- Admin override controls -->
-                        <div v-if="isAdmin" class="override" @click.stop>
+                        <div v-if="isAdmin" class="override">
                           <div class="override-head">{{ t('bench.review.title') }}</div>
                           <input
                             v-model="comments[rowKey(row)]"
@@ -571,12 +613,40 @@ function fmtDate(value) {
                             </button>
                           </div>
                         </div>
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
             </div>
+
+            <!-- Reference aside (how it is measured + legends) -->
+            <aside class="consult-aside">
+              <div class="ref-block">
+                <p class="ref-h">{{ t('bench.ref.measure_h') }}</p>
+                <p class="ref-p">{{ t('bench.ref.measure_p') }}</p>
+              </div>
+              <div class="ref-block">
+                <p class="ref-h">{{ t('bench.ref.score_h') }}</p>
+                <dl class="ref-dl">
+                  <div class="r"><dt>{{ t('bench.ref.judge_t') }}</dt><dd>{{ t('bench.ref.judge_d') }}</dd></div>
+                  <div class="r"><dt>{{ t('bench.ref.dc_t') }}</dt><dd>{{ t('bench.ref.dc_d') }}</dd></div>
+                </dl>
+              </div>
+              <div class="ref-block">
+                <p class="ref-h">{{ t('bench.ref.modes_h') }}</p>
+                <p class="ref-p">{{ t('bench.ref.modes_p') }}</p>
+                <div class="legend">
+                  <div class="l"><span class="dot" style="background:var(--success)" />Smart</div>
+                  <div class="l"><span class="dot" style="background:var(--orange)" />Pro</div>
+                  <div class="l"><span class="dot" style="background:var(--danger)" />Claude</div>
+                  <div class="l"><span class="dot" style="background:var(--text-3)" />Standard</div>
+                </div>
+                <p class="ref-p" style="margin-top:12px">{{ t('bench.ref.modes_std') }}</p>
+              </div>
+            </aside>
           </div>
         </template>
       </template>
@@ -862,27 +932,62 @@ function fmtDate(value) {
   border-color: var(--border);
 }
 
-/* --- Hero: donut + verdict + KPI tiles --- */
-.hero {
+/* --- Content + reference aside (LAB results two-column) --- */
+.consult-body {
   display: flex;
-  align-items: center;
-  gap: var(--s-7);
+  align-items: flex-start;
   flex-wrap: wrap;
+}
+.consult-content {
+  flex: 1;
+  min-width: 0;
+}
+.consult-aside {
+  width: 320px;
+  flex: 0 0 320px;
+  border-left: 1px solid var(--border);
+  padding-left: var(--s-6);
+  margin-left: var(--s-6);
+}
+
+/* sections inside the consultation content */
+.section {
+  margin-top: var(--s-7);
+}
+.section:first-child {
+  margin-top: 0;
+}
+.section-h {
+  margin-bottom: var(--s-4);
+}
+.section-h h3 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-heavy);
+  color: var(--text);
+  margin: 0;
+}
+
+/* --- Hero: donut + verdict + note + meta --- */
+.hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-7);
+  align-items: center;
   padding: var(--s-6);
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-top: 3px solid var(--orange);
   background: var(--bg);
-  margin-bottom: var(--s-6);
+  margin-bottom: var(--s-5);
 }
 .donut-wrap {
   position: relative;
-  width: 140px;
-  height: 140px;
+  width: 160px;
+  height: 160px;
   flex-shrink: 0;
 }
 .donut {
-  width: 140px;
-  height: 140px;
+  width: 160px;
+  height: 160px;
 }
 /* Track + fill colored via CSS / inline style (never via SVG presentation attribute). */
 .donut-track {
@@ -908,8 +1013,9 @@ function fmtDate(value) {
   text-align: center;
 }
 .donut-pct {
-  font-size: 30px;
+  font-size: 34px;
   font-weight: var(--fw-heavy);
+  font-family: var(--font-mono);
   color: var(--text);
   line-height: 1;
 }
@@ -919,175 +1025,293 @@ function fmtDate(value) {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-2);
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .hero-body {
-  flex: 1;
-  min-width: 260px;
+  min-width: 0;
 }
-.hero-verdict {
-  font-size: var(--fs-xl);
+.hero-head {
+  font-size: var(--fs-2xl);
   font-weight: var(--fw-heavy);
   color: var(--text);
   line-height: 1.2;
   margin: 0 0 var(--s-4);
 }
-.kpi-row {
-  display: flex;
-  gap: var(--s-3);
-  flex-wrap: wrap;
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1.5px solid;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.kpi-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 96px;
-  padding: 12px 14px;
+.verdict .sq {
+  width: 11px;
+  height: 11px;
+}
+.verdict.good {
+  border-color: var(--success);
+  color: var(--success);
+}
+.verdict.good .sq {
+  background: var(--success);
+}
+.verdict.mid {
+  border-color: var(--orange);
+  color: var(--orange-text);
+}
+.verdict.mid .sq {
+  background: var(--orange);
+}
+.verdict.bad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.verdict.bad .sq {
+  background: var(--danger);
+}
+.verdict.plaus {
+  border-color: var(--text-3);
+  color: var(--text-2);
+}
+.verdict.plaus .sq {
+  background: var(--text-3);
+}
+.hero-note {
+  color: var(--text);
+  font-size: var(--fs-base);
+  margin: var(--s-4) 0 6px;
+}
+.hero-meta {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+/* --- KPI row (5 tiles, orange top border) --- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--s-4);
+}
+.kpi {
   border: 1px solid var(--border);
   border-top: 3px solid var(--orange);
   background: var(--bg);
+  padding: 16px;
 }
-.kpi-tile--warn {
-  border-top-color: var(--warn);
-}
-.kpi-k {
-  font-size: 10px;
+.kpi .k-lab {
+  display: block;
+  font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-2);
+  margin-bottom: 12px;
 }
-.kpi-v {
-  font-size: 22px;
+.kpi .k-val {
+  display: block;
+  font-size: 26px;
   font-weight: var(--fw-heavy);
+  font-family: var(--font-mono);
   color: var(--text);
   line-height: 1;
 }
-.kpi-v.mono {
-  font-family: var(--font-mono);
-  font-size: 18px;
+.kpi .k-val.sm {
+  font-size: 20px;
+}
+.kpi .k-val.flag {
+  color: var(--danger);
 }
 
-/* --- Generic block --- */
-.block {
-  margin-bottom: var(--s-6);
+/* --- Configuration performance cards --- */
+.cfg-card {
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  padding: var(--s-5) var(--s-6);
 }
-.block-title {
+.cfg-card + .cfg-card {
+  margin-top: var(--s-3);
+}
+.cfg-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-4);
+}
+.cfg-name {
   font-size: var(--fs-md);
   font-weight: var(--fw-heavy);
   color: var(--text);
-  margin: 0 0 var(--s-4);
 }
-
-/* --- Tables --- */
-.table-scroll {
-  overflow-x: auto;
-  border: 1px solid var(--border-strong);
-}
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--fs-sm);
-}
-.data-table th {
-  text-align: left;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.cfg-q {
+  margin-left: auto;
+  font-size: var(--fs-xs);
   color: var(--text-3);
-  font-weight: 700;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-strong);
-  background: var(--surface);
-  white-space: nowrap;
+  font-family: var(--font-mono);
 }
-.data-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-2);
-  vertical-align: middle;
-}
-.data-table tbody tr:last-child td {
-  border-bottom: none;
-}
-.data-table .num {
-  text-align: right;
-  white-space: nowrap;
-}
-.data-table .strong {
-  color: var(--text);
-  font-weight: 700;
-}
-.cell-bad {
-  color: var(--danger);
-  font-weight: 700;
-}
-.cell-warn {
-  color: var(--warn);
-  font-weight: 700;
-}
-.cfg-agent {
-  color: var(--text);
-  font-weight: var(--fw-semibold);
-}
-.cfg-mode {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border: 1px solid var(--border-strong);
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1.5px solid var(--border-strong);
+  padding: 3px 9px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.mode-badge .dot {
+  width: 9px;
+  height: 9px;
+  background: var(--text-3);
+}
+.mode-badge.mode-smart {
+  border-color: var(--success);
+  color: var(--success);
+}
+.mode-badge.mode-smart .dot {
+  background: var(--success);
+}
+.mode-badge.mode-pro {
+  border-color: var(--orange);
+  color: var(--orange-text);
+}
+.mode-badge.mode-pro .dot {
+  background: var(--orange);
+}
+.mode-badge.mode-claude {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.mode-badge.mode-claude .dot {
+  background: var(--danger);
+}
+.mode-badge.mode-default {
+  border-color: var(--border-strong);
   color: var(--text-2);
 }
 
-/* --- Category bars --- */
-.cat-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+/* meter bar (shared by cfg cards + topic rows) */
+.meter-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.cat-row {
-  display: grid;
-  grid-template-columns: 180px 1fr 130px;
   align-items: center;
   gap: var(--s-4);
 }
-.cat-name {
-  font-size: var(--fs-sm);
-  color: var(--text);
-  font-weight: var(--fw-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.meter-lab {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
   white-space: nowrap;
+  width: 110px;
+  flex: 0 0 110px;
 }
-.cat-bar {
-  height: 8px;
+.meter {
+  flex: 1;
+  height: 12px;
   background: var(--surface-2);
   overflow: hidden;
 }
-.cat-fill {
+.meter i {
   display: block;
   height: 100%;
   background: var(--orange);
 }
-.cat-val {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  justify-content: flex-end;
+.meter-val {
+  font-family: var(--font-mono);
   font-size: var(--fs-sm);
-}
-.cat-n {
-  font-size: var(--fs-xs);
-  color: var(--text-3);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  width: 54px;
+  text-align: right;
+  color: var(--text);
 }
 
-/* --- Detail table --- */
+/* submetric mini-cards */
+.submetrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+.submetric {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.submetric .sl {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.submetric .sv {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-heavy);
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.submetric .sv.bad {
+  color: var(--danger);
+}
+
+/* --- Topic (accuracy by category) --- */
+.topic {
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+}
+.topic-h {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  padding: 14px var(--s-5);
+  border-bottom: 1px solid var(--border);
+}
+.topic-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 13px var(--s-5);
+  border-bottom: 1px solid var(--border);
+}
+.topic-row:last-child {
+  border-bottom: none;
+}
+.topic-agent {
+  width: 200px;
+  flex: 0 0 200px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topic-row .meter-val {
+  width: 48px;
+}
+.topic-row .tq {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  width: 90px;
+  text-align: right;
+  flex: 0 0 90px;
+}
+
+/* --- Results table (question by question) --- */
 .detail-admin-note {
   display: flex;
   align-items: center;
@@ -1102,63 +1326,130 @@ function fmtDate(value) {
   flex-shrink: 0;
   color: var(--text-3);
 }
-.th-expand {
-  width: 30px;
-}
-.detail-row {
-  cursor: pointer;
-  transition: background var(--dur) var(--ease);
-}
-.detail-row:hover {
-  background: var(--surface);
-}
-.detail-row.open {
-  background: var(--surface);
-}
-.detail-row .th-expand :deep(.ui-icon) {
-  width: 14px;
-  height: 14px;
-  color: var(--text-3);
-}
-.cell-question {
-  color: var(--text);
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cell-cat {
-  white-space: nowrap;
-}
-.judge-verdict {
-  color: var(--text-2);
-}
-.judge-score {
-  margin-left: 8px;
-  color: var(--text-3);
-}
-.vbadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 0;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid var(--border-strong);
-  color: var(--text-2);
+.rtable {
+  width: 100%;
+  border-collapse: collapse;
   background: var(--bg);
+  border: 1px solid var(--border-strong);
+}
+.rtable thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+}
+.rtable thead th.num {
+  text-align: right;
+}
+.rtable td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  vertical-align: top;
+  color: var(--text-2);
+}
+.rtable tbody tr:last-child td {
+  border-bottom: none;
+}
+.rtable td.num {
+  text-align: right;
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
-.vbadge.v-correct {
+.q-main {
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+.q-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+.cfg-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.cfg-cell .dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+}
+.result-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1.5px solid;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.result-pill .sq {
+  width: 10px;
+  height: 10px;
+}
+.result-ok {
   border-color: var(--success);
   color: var(--success);
 }
-.vbadge.v-incorrect {
+.result-ok .sq {
+  background: var(--success);
+}
+.result-bad {
   border-color: var(--danger);
   color: var(--danger);
 }
-.vbadge.v-review {
-  border-color: var(--warn);
-  color: var(--warn);
+.result-bad .sq {
+  background: var(--danger);
+}
+.result-plaus {
+  border-color: var(--text-3);
+  color: var(--text-2);
+}
+.result-plaus .sq {
+  background: var(--text-3);
+}
+.score {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+.score small {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: 2px;
+}
+.show-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--text-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.show-details:hover {
+  color: var(--orange-text);
+}
+.show-details :deep(.ui-icon) {
+  width: 13px;
+  height: 13px;
 }
 .v-over {
   display: inline-block;
@@ -1170,38 +1461,183 @@ function fmtDate(value) {
   color: var(--orange-text);
 }
 
-/* --- Expanded detail row --- */
-.detail-expand td {
+/* --- Expanded detail panel (reference / agent answer / judge note) --- */
+.detail-row td {
   background: var(--surface);
   padding: var(--s-5);
 }
-.exp-grid {
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.d-full {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 8px 20px;
   margin: 0;
 }
-.exp-grid dt {
-  font-size: 11px;
+.d-full dt {
+  font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-3);
 }
-.exp-grid dd {
+.d-full dd {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text);
-  line-height: 1.55;
-  white-space: pre-wrap;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.exp-answer {
-  max-height: 200px;
+.answers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-5);
+}
+.ans-box {
+  padding-left: 14px;
+  border-left: 3px solid var(--border-strong);
+}
+.ans-box.expected {
+  border-left-color: var(--success);
+}
+.ans-box.agent {
+  border-left-color: var(--danger);
+}
+.ans-box .ans-l {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.ans-box .ans-t {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  padding: 10px 12px;
-  background: var(--bg);
+}
+.judge-note {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  margin: 0;
+}
+.judge-note b {
+  font-weight: var(--fw-bold);
+}
+
+/* --- Reference aside --- */
+.ref-block + .ref-block {
+  margin-top: var(--s-5);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--border);
+}
+.ref-h {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--orange-text);
+  margin: 0 0 10px;
+}
+.ref-p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+.ref-dl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+.ref-dl .r {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ref-dl dt {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.ref-dl dd {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.legend .l {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+.legend .dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+}
+
+/* suggest table cell truncation (kept for the my-suggestions table) */
+.cell-question {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+/* --- consultation responsive --- */
+@media (max-width: 1080px) {
+  .consult-aside {
+    width: auto;
+    flex: none;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    margin-left: 0;
+    margin-top: var(--s-6);
+    padding-top: var(--s-6);
+  }
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .submetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .answers {
+    grid-template-columns: 1fr;
+  }
+  .topic-agent {
+    width: auto;
+    flex: 1;
+  }
 }
 
 /* --- Admin override --- */

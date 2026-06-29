@@ -2506,5 +2506,39 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   + INSERT committé en DSS (logs user) ; **488 tests plugin verts** (+4 de régression length-safe).
 - **Source** : session 2026-06-26, log DSS user (« nom de table trop long »).
 
+## L111 - Juge contextuel : l'ancre déterministe est un SIGNAL, pas la vérité-terrain ; + le plugin LIT le scored du LAB en cross-projet via la fiche d'agent (pas de couplage projet) [repo, TDD, 2026-06-29]
+- **Contexte** : le benchmark marquait « faux » une bonne réponse. Cas réel : attendu « 36 millions »,
+  l'agent répond le chiffre exact `36456876` -> classé incorrect.
+- **Ce qui a échoué (cause racine)** : (1) `normalize_number("36 millions")` **ignorait** le mot « millions »
+  (parse `36`, pas `36 000 000`) ; (2) `NUMERIC_TOLERANCE=0.005` très serré ; (3) surtout, `final_correctness`
+  faisait **primer l'ancre objective** sur le juge -> un MISS forçait `correct=False` même quand le juge
+  (avec contexte) aurait raison. L'ancre déterministe ne « comprend » ni l'ordre de grandeur ni la note humaine.
+- **Solution qui marche** : (a) `normalize_number` **conscient des magnitudes** (k/M/Md, FR+EN ; le mot doit
+  être un token de magnitude connu en fin de chaîne, garde `\b` pour ne pas confondre « 36 minutes ») +
+  harvesting des « X millions » dans le texte ; (b) **ancre = SIGNAL** : un HIT confirme `correct`, un MISS
+  **ne force plus** `incorrect` -> on délègue au juge (`verdict==correct and score>=4`), et tout désaccord
+  ancre/juge lève `needs_review` ; (c) la **note humaine** (`golden.notes`) est passée au juge comme **contrat
+  de sévérité** (« si la note exige l'exact, exige-le ; sinon l'équivalence d'ordre de grandeur suffit ») ;
+  (d) colonne **`judge_comment`** concise (le « tout petit commentaire » du juge), surfacée partout.
+- **Override humain durable sans nouvelle table** : colonnes `human_*` ajoutées à `SCORED_COLUMNS` + helper
+  pur `effective_correct` (override prime) utilisé par `scoring._accuracy`. Comme `scored` **empile** par
+  `run_id` (`merge_run_history`), un override écrit dans la table survit à chaque run suivant ; SEUL re-juger
+  le **même** `run_id` le réécrase (rare, documenté). Write-back = read-modify-write verrouillé côté LAB
+  (`dss.write_override`) ou **UPDATE paramétré** côté plugin (`benchmark_view/lab_io.write_override`).
+- **Plugin découplé du projet LAB** : la consultation LIT directement la table `scored` du LAB **en
+  cross-projet** (même connexion `SQL_owi`, nom physique de table posé par l'admin dans la fiche d'agent =
+  bloc `benchmark {enabled, connection, table, agent_key}` validé serveur). L'utilisateur n'envoie qu'une clé
+  d'agent ; table/connexion résolues serveur (rule #3 OK). Modules purs **portés** dans `owismind/benchmark_view/`
+  (LAB reste source de vérité, en-têtes « ported, keep in sync »). Agrégateur de consultation **purpose-built**
+  (pas une copie de `scoring.py`). **Décision archi : plugin = consultation seule, AUCUN launcher** (le
+  lancement reste sur les webapps LAB) ; et la consultation **reproduit NATIVEMENT** le design de la webapp LAB
+  `results` (pas d'iframe), CSS porté + mappé sur les tokens du plugin.
+- **Preuve-vérification** : 276 tests LAB + 508 plugin + 133 node verts (tests TDD pour magnitude, ancre-signal,
+  comment, effective_correct, override, schema_check, agent_profile) ; build Vite OK ; zip DEV `index-BK29Kqtv.js`,
+  prod intacte ; 0 tiret. **NON validé DSS** (intestable hors instance : juge LLM réel + rendu Vue avec backend).
+- **Process** : un sous-agent de restyle est tombé sur une **529 Overloaded** transitoire (0 action) -> fait au
+  1er plan. Leçon : pour une tâche de design critique au résultat, prévoir le fallback « je le fais moi-même ».
+- **Source** : `docs/superpowers/specs/2026-06-29-benchmark-final-phase-design.md` ; `sessions/2026-06-29.md`. Date : 2026-06-29.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
