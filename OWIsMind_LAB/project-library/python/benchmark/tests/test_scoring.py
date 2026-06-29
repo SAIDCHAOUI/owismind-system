@@ -13,11 +13,25 @@ from benchmark import scoring
 from benchmark.schemas import SUMMARY_COLUMNS, BREAKDOWN_COLUMNS
 
 
+_QID_COUNTER = [0]
+
+
 def _row(**over):
-    """A scored row with sensible defaults; override what each test needs."""
+    """A scored row with sensible defaults; override what each test needs.
+
+    v2: every row carries a benchmark dimension. Each call gets a DISTINCT ``question_id`` by default
+    (so summarize, which reduces to the latest attempt per question, does not collapse separate
+    questions) and ``attempt_no=1``. Tests that exercise multi-attempt evolution pass an explicit
+    shared question_id + attempt_no.
+    """
+    _QID_COUNTER[0] += 1
     base = {
         "run_id": "run1",
         "run_timestamp": "2026-06-24T10:00:00Z",
+        "benchmark_id": "B1",
+        "benchmark_name": "bench one",
+        "attempt_no": 1,
+        "question_id": "Q{0}".format(_QID_COUNTER[0]),
         "agent_key": "orchestrator",
         "agent_label": "OWIsMind orchestrator",
         "mode": "smart",
@@ -126,8 +140,16 @@ class TestSummarize(unittest.TestCase):
         for r in self.rows:
             self.assertEqual(list(r.keys()), list(SUMMARY_COLUMNS))
 
+    def test_benchmark_meta_present(self):
+        smart = self.by_mode["smart"]
+        self.assertEqual(smart["benchmark_id"], "B1")
+        self.assertEqual(smart["benchmark_name"], "bench one")
+        self.assertEqual(smart["last_run_id"], "run1")
+        self.assertEqual(smart["last_run_timestamp"], "2026-06-24T10:00:00Z")
+        self.assertEqual(smart["n_runs"], 1)
+
     def test_ordered_by_key(self):
-        # claude < smart alphabetically on the mode part of the key (output is sorted).
+        # claude < smart alphabetically on the mode part of the (benchmark_id, agent, mode) key.
         self.assertEqual([r["mode"] for r in self.rows], ["claude", "smart"])
 
     def test_smart_counts(self):
@@ -308,10 +330,11 @@ class TestBreakdown(unittest.TestCase):
 
     def test_meta_propagated(self):
         r = self._find("smart", "category", "revenus")
-        self.assertEqual(r["run_id"], "run1")
+        self.assertEqual(r["benchmark_id"], "B1")
+        self.assertEqual(r["benchmark_name"], "bench one")
         self.assertEqual(r["agent_key"], "orchestrator")
         self.assertEqual(r["agent_label"], "OWIsMind orchestrator")
-        self.assertEqual(r["run_timestamp"], "2026-06-24T10:00:00Z")
+        self.assertEqual(r["last_run_timestamp"], "2026-06-24T10:00:00Z")
 
 
 class TestEffectiveOverrideAccuracy(unittest.TestCase):
@@ -343,6 +366,64 @@ class TestEffectiveOverrideAccuracy(unittest.TestCase):
         revenus = [r for r in bd if r["bucket"] == "revenus"]
         self.assertEqual(len(revenus), 1)
         self.assertEqual(revenus[0]["accuracy"], 1.0)
+
+
+class TestLatestAttempts(unittest.TestCase):
+    """v2: summarize/breakdown score the LATEST attempt of each question."""
+
+    def test_latest_attempt_wins_in_accuracy(self):
+        # Same question, two attempts: attempt 1 incorrect, attempt 2 correct -> the benchmark
+        # counts only attempt 2, so accuracy is 1.0 over 1 question.
+        rows = [
+            _row(question_id="Q1", attempt_no=1, run_id="r1", run_timestamp="2026-06-29T09:00:00Z",
+                 correct=False, judge_score=2),
+            _row(question_id="Q1", attempt_no=2, run_id="r2", run_timestamp="2026-06-30T09:00:00Z",
+                 correct=True, judge_score=5),
+        ]
+        out = scoring.summarize(rows)
+        self.assertEqual(len(out), 1)
+        g = out[0]
+        self.assertEqual(g["n_questions"], 1)
+        self.assertAlmostEqual(g["accuracy"], 1.0)
+        self.assertEqual(g["n_runs"], 2)             # two runs contributed
+        self.assertEqual(g["last_run_id"], "r2")      # most recent
+
+    def test_attempt_tie_broken_by_timestamp(self):
+        # Equal attempt_no -> the later run_timestamp wins (defensive against a re-stamp).
+        rows = [
+            _row(question_id="Q1", attempt_no=1, run_id="r1", run_timestamp="2026-06-29T09:00:00Z",
+                 correct=True),
+            _row(question_id="Q1", attempt_no=1, run_id="r2", run_timestamp="2026-06-30T09:00:00Z",
+                 correct=False),
+        ]
+        out = scoring.summarize(rows)
+        self.assertAlmostEqual(out[0]["accuracy"], 0.0)
+
+    def test_latest_attempts_reducer(self):
+        rows = [
+            _row(question_id="Q1", attempt_no=1),
+            _row(question_id="Q1", attempt_no=3),
+            _row(question_id="Q1", attempt_no=2),
+            _row(question_id="Q2", attempt_no=1),
+        ]
+        kept = scoring.latest_attempts(rows)
+        by_q = {}
+        for r in kept:
+            by_q.setdefault(r["question_id"], []).append(r["attempt_no"])
+        self.assertEqual(sorted(by_q.keys()), ["Q1", "Q2"])
+        self.assertEqual(by_q["Q1"], [3])
+        self.assertEqual(by_q["Q2"], [1])
+
+    def test_two_benchmarks_kept_separate(self):
+        rows = [
+            _row(benchmark_id="B1", benchmark_name="one", question_id="Q1", mode="smart"),
+            _row(benchmark_id="B2", benchmark_name="two", question_id="Q1", mode="smart"),
+        ]
+        out = scoring.summarize(rows)
+        ids = sorted(r["benchmark_id"] for r in out)
+        self.assertEqual(ids, ["B1", "B2"])
+        self.assertEqual({r["benchmark_id"]: r["benchmark_name"] for r in out},
+                         {"B1": "one", "B2": "two"})
 
 
 if __name__ == "__main__":

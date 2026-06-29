@@ -37,14 +37,50 @@ def _existing_history(ds):
     return ds.get_dataframe()  # RAISES on a transient error -> abort (no truncation)
 
 
-def write_history_dataset(name, new_frame, keep_runs=None):
-    """Append ``new_frame`` to dataset ``name``, preserving prior runs; idempotent per run.
+def read_history_rows(name, columns=None):
+    """Read a result dataset as a list of dicts for the run resolver. [] when never built / unreadable.
 
-    Rows of any run_id present in ``new_frame`` replace the matching prior rows (so a re-run of
-    judge/aggregate for the same run is idempotent), every other historical run is kept, then the
-    new rows are appended. When ``keep_runs`` is a positive int, the accumulated history is capped
-    to that many most-recent runs (instance safety; applied by the caller only to the HEAVY raw /
-    scored datasets - summary / breakdown are light and keep every run).
+    Used by step_run_matrix to know which questions of a benchmark were already attempted (done) and
+    at which attempt number. Schema-gated like ``_existing_history`` but FAIL-OPEN here (a read blip
+    returns [] -> the launch falls back to running the resolved-pending set as if no prior history;
+    it never aborts the run and never truncates anything, since this read does not write). Only the
+    light resolver columns are needed, so pass ``columns`` to project at the source.
+    """
+    ds = dataiku.Dataset(name)
+    try:
+        schema = ds.read_schema()
+    except Exception:
+        schema = None
+    if schema is not None and not schema:
+        return []  # never built: no prior attempts
+    try:
+        if columns:
+            df = ds.get_dataframe(columns=list(columns))
+        else:
+            df = ds.get_dataframe()
+    except TypeError:
+        try:
+            df = ds.get_dataframe()
+        except Exception:
+            return []
+    except Exception:
+        return []
+    if df is None or len(df) == 0:
+        return []
+    df = df.astype(object).where(pd.notnull(df), None)
+    return df.to_dict("records")
+
+
+def write_history_dataset(name, new_frame, keep_runs=None, key="run_id"):
+    """Append ``new_frame`` to dataset ``name``, preserving prior blocks; idempotent per ``key``.
+
+    Rows of any ``key`` value present in ``new_frame`` replace the matching prior rows, every other
+    historical block is kept, then the new rows are appended. ``key`` is ``run_id`` for the raw /
+    scored history (a re-run of the same run replaces just its rows) and ``benchmark_id`` for the v2
+    benchmark-level summary / breakdown (re-aggregating a benchmark replaces just its block, keeping
+    other benchmarks). When ``keep_runs`` is a positive int the accumulated history is capped to that
+    many most-recent runs (instance safety; only the HEAVY raw / scored datasets pass it - summary /
+    breakdown are light and keep everything; capping is always by run_id).
 
     Writes go through the Dataset API (write_with_schema), never raw SQL. Only ``new_frame`` is
     NaN-normalized (it is small and built from dicts already); the existing frame is concatenated
@@ -52,13 +88,13 @@ def write_history_dataset(name, new_frame, keep_runs=None):
     """
     ds = dataiku.Dataset(name)
     new_ids = set()
-    if "run_id" in getattr(new_frame, "columns", []):
-        new_ids = {v for v in new_frame["run_id"].tolist() if v is not None}
+    if key in getattr(new_frame, "columns", []):
+        new_ids = {v for v in new_frame[key].tolist() if v is not None}
 
     existing = _existing_history(ds)
     if existing is not None:
-        if "run_id" in existing.columns and new_ids:
-            existing = existing[~existing["run_id"].isin(list(new_ids))]
+        if key in existing.columns and new_ids:
+            existing = existing[~existing[key].isin(list(new_ids))]
         combined = pd.concat([existing, new_frame], ignore_index=True, sort=False)
     else:
         combined = new_frame  # first ever write: no prior history

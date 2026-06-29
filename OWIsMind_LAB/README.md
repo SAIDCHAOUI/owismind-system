@@ -59,6 +59,36 @@ Managed datasets the scenario reads/writes (created during setup, NOT in the rep
 `golden_questions_v1_prepared` (input) -> `benchmark_runs_raw` -> `benchmark_runs_scored` ->
 `benchmark_summary` + `benchmark_breakdown`, plus `benchmark_suggestions_promoted` (promotion log).
 
+## v2: named per-agent benchmarks + append mode (2026-06-30)
+
+Spec: `docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md`.
+
+The benchmark is no longer "set all the questions, run them all, every launch re-runs everything". Now:
+
+- A **benchmark** is a NAMED, unique campaign pinned to ONE agent (unique `benchmark_id` + name). Runs
+  ACCUMULATE into the same benchmark (**append mode**): a launch runs only the not-yet-done questions;
+  the global score is over ALL questions ever added, using the LATEST attempt of each. You grow a
+  benchmark question by question up to a statistically meaningful size. Buttons: **Run pending**
+  (append), **Re-run entire benchmark** (full = new attempt for every question -> evolution), and
+  **New benchmark** (a fresh, unlinked campaign). A "redo at next run" flag re-includes a done question.
+- **No new dataset**: the registry (benchmarks) + per-benchmark question membership + the redo flags
+  live in the `benchmark` project variable (`benchmarks` map + `run_request`); the launcher writes them.
+- Result tables gained `benchmark_id`, `benchmark_name`, `attempt_no`; the golden + raw/scored gained
+  `expected_sql` + `expected_tool` (a soft signal to the judge + training data) and scored gained
+  `actual_tools`. `benchmark_summary` / `benchmark_breakdown` are now **benchmark-level** (one block per
+  benchmark, over the latest attempt of each question), keyed by `benchmark_id` (not `run_id`).
+- The Results app + the plugin consultation select BY BENCHMARK (not by run) and show per-question
+  EVOLUTION (attempt history + improved/regressed delta) and expected-vs-actual SQL/tool.
+
+What to do in DSS to deploy v2: re-collect the `benchmark` library (NEW `registry.py`; changed
+`schemas.py` / `run_params.py` / `scoring.py` / `judge.py` / `agent_runner.py` / the 3 `dss_steps/*`),
+re-collect `benchmark_webapp` (`views.py` + `dss.py`), re-paste the launcher panes (new "Benchmarks"
+tab) and the results panes (benchmark selector). In the `benchmark` variable add `"benchmarks": {}` +
+`"run_request": null` (both empty; see `local-variables.example.json`). A fresh **run** materializes
+the new columns on the result datasets (managed datasets auto-evolve their schema on write); legacy
+pre-v2 rows are tolerated everywhere. The plugin consultation reads the new columns when the table has
+them and degrades gracefully on an un-migrated table (it reads the intersection of the live columns).
+
 ## How it connects to the rest of the repo
 
 - The run engine calls the **orchestrator agent cross-project** (in `OWISMIND_DEV` / `OWISMIND_PROD_V1`)

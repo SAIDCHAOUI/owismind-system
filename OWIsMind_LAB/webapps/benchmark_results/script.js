@@ -21,7 +21,10 @@
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>',
     minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/></svg>',
     flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4h12l-2 4 2 4H5"/></svg>',
-    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>'
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+    eq: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 9h14M5 15h14"/></svg>'
   };
 
   /* ============================ i18n ============================ */
@@ -36,16 +39,17 @@
       en: "An independent, repeatable test of our AI agents. It measures, in plain language, how often they are right, how fast they answer, and what each answer costs.",
       fr: "Un test independant et reproductible de nos agents IA. Il mesure, en clair, a quelle frequence ils ont raison, leur rapidite de reponse et le cout de chaque reponse."
     },
-    "run.label": { en: "Test run", fr: "Execution" },
+    "bench.label": { en: "Benchmark", fr: "Benchmark" },
 
-    "state.loading": { en: "Loading the latest benchmark run...", fr: "Chargement de la derniere execution..." },
+    "state.loading": { en: "Loading the benchmark...", fr: "Chargement du benchmark..." },
     "state.error": { en: "Could not load the benchmark results. Check your access to the LAB project.", fr: "Impossible de charger les resultats. Verifiez votre acces au projet LAB." },
-    "state.empty": { en: "No benchmark run has been recorded yet. Launch one from the Launcher app.", fr: "Aucune execution n'a encore ete enregistree. Lancez-en une depuis l'application Lanceur." },
+    "state.empty": { en: "No benchmark has been recorded yet. Create one from the Launcher app.", fr: "Aucun benchmark n'a encore ete enregistre. Creez-en un depuis l'application Lanceur." },
 
     "hero.head": {
       en: "OWIsMind gave the right answer in {r} of {t} answers produced, across all configurations",
       fr: "OWIsMind a donne la bonne reponse {r} fois sur {t} reponses produites, toutes configurations confondues"
     },
+    "hero.bench": { en: "Benchmark: {n}", fr: "Benchmark : {n}" },
     "hero.correct": { en: "Correct answers", fr: "Bonnes reponses" },
     "hero.note": { en: "How often the AI gives the right answer.", fr: "A quelle frequence l'IA donne la bonne reponse." },
     "hero.meta": {
@@ -84,7 +88,7 @@
     "sec.qq": { en: "Question by question", fr: "Question par question" },
     "qq.filter": { en: "Show only items to double-check", fr: "Afficher seulement les elements a reverifier" },
     "qq.shown": { en: "{n} answer(s) shown", fr: "{n} reponse(s) affichee(s)" },
-    "qq.empty": { en: "No question-by-question results are available for this run.", fr: "Aucun resultat question par question pour cette execution." },
+    "qq.empty": { en: "No question-by-question results are available for this benchmark.", fr: "Aucun resultat question par question pour ce benchmark." },
     "qq.emptyFilter": { en: "Nothing to double-check here. Every answer passed both checks.", fr: "Rien a reverifier ici. Toutes les reponses ont passe les deux controles." },
 
     "th.q": { en: "Question", fr: "Question" },
@@ -110,6 +114,30 @@
     "det.agent": { en: "Agent answer", fr: "Reponse de l'agent" },
     "det.noRef": { en: "(no expected answer for this question)", fr: "(pas de reponse attendue pour cette question)" },
     "det.noAns": { en: "(the agent produced no answer)", fr: "(l'agent n'a produit aucune reponse)" },
+
+    "th.evo": { en: "Evolution", fr: "Evolution" },
+    "th.evo.i": { en: "How this question's latest result compares to its previous attempt.", fr: "Comparaison du dernier resultat de cette question avec la tentative precedente." },
+    "evo.up": { en: "Improved", fr: "Amelioration" },
+    "evo.down": { en: "Regressed", fr: "Regression" },
+    "evo.flat": { en: "Stable", fr: "Stable" },
+    "evo.first": { en: "First attempt", fr: "1re tentative" },
+    "evo.attempts": { en: "{n} attempts", fr: "{n} tentatives" },
+    "evo.h": { en: "Attempt history", fr: "Historique des tentatives" },
+    "evo.th.no": { en: "Attempt", fr: "Tentative" },
+    "evo.th.when": { en: "When", fr: "Date" },
+    "evo.th.cfg": { en: "Mode", fr: "Mode" },
+    "evo.th.result": { en: "Result", fr: "Resultat" },
+    "evo.th.score": { en: "Score", fr: "Score" },
+    "evo.latest": { en: "Latest", fr: "Dernier" },
+
+    "ref.vs.h": { en: "Reference vs produced", fr: "Reference et production" },
+    "ref.vs.note": { en: "The reference is a soft hint for the judge, not a requirement. A different but correct query or tool is fully valid.", fr: "La reference est un indice non contraignant pour le juge, pas une obligation. Une requete ou un outil different mais correct reste pleinement valide." },
+    "ref.sql": { en: "Reference SQL", fr: "SQL de reference" },
+    "ref.tool": { en: "Suggested tool", fr: "Outil suggere" },
+    "act.tools": { en: "Tools used by the agent", fr: "Outils utilises par l'agent" },
+    "ref.none": { en: "(none)", fr: "(aucun)" },
+
+    "det.human": { en: "Reviewer adjustment", fr: "Ajustement du relecteur" },
 
     "ref.measure.h": { en: "How we measure this", fr: "Comment nous mesurons" },
     "ref.measure.p": {
@@ -145,8 +173,9 @@
 
   var ui = { theme: "light", lang: "en" };
   var state = {
-    runs: [],
-    runId: null,
+    benchmarks: [],
+    benchmarkId: null,
+    benchmarkName: "",
     summary: null,
     breakdown: null,
     detail: null,
@@ -234,51 +263,76 @@
 
   function MOCK(path) {
     var clean = path.split("?")[0];
-    if (clean === "api/results/runs") { return MOCK_RUNS; }
+    if (clean === "api/results/benchmarks") { return MOCK_BENCHMARKS; }
     if (clean === "api/results/summary") { return MOCK_SUMMARY; }
     if (clean === "api/results/breakdown") { return MOCK_BREAKDOWN; }
     if (clean === "api/results/detail") { return MOCK_DETAIL; }
     return { status: "ok" };
   }
 
-  var MOCK_RUN_ID = "run_2026-06-25_22-14";
-  var MOCK_RUNS = {
+  var MOCK_BID = "bm_3f1a9c2e";
+  var MOCK_BENCHMARKS = {
     status: "ok",
-    runs: [
-      { run_id: MOCK_RUN_ID, run_timestamp: "2026-06-25 22:14:03" },
-      { run_id: "run_2026-06-24_18-02", run_timestamp: "2026-06-24 18:02:41" }
+    benchmarks: [
+      { benchmark_id: MOCK_BID, benchmark_name: "said", last_run_timestamp: "2026-06-29 22:14:03" },
+      { benchmark_id: "bm_8b07d551", benchmark_name: "tickets-deep-dive", last_run_timestamp: "2026-06-27 09:41:17" }
     ]
   };
   var MOCK_SUMMARY = {
-    status: "ok", run_id: MOCK_RUN_ID,
-    kpis: { accuracy: 0.8868, n_correct: 47, n_ok_total: 53, band: "high", n_questions: 18, n_configs: 3, total_cost: 2.34, needs_review: 4 },
+    status: "ok", benchmark_id: MOCK_BID, benchmark_name: "said",
+    kpis: { accuracy: 0.8868, accuracy_pct: "88.7 %", n_correct: 47, n_ok_total: 53, band: "high", n_questions: 18, n_configs: 3, total_cost: 2.34, total_cost_str: "$2.34", judge_cost_str: "$0.18", needs_review: 4 },
     rows: [
-      { agent_label: "OWIsMind orchestrator", mode: "Claude", n_questions: 18, n_ok: 18, n_error: 0, error_rate: 0.0, accuracy: 0.9444, mean_score: 4.6, latency_p50_s: 12.4, latency_p95_s: 28.9, avg_cost_per_q: 0.0892, total_cost: 1.53, needs_review_count: 1 },
-      { agent_label: "OWIsMind orchestrator", mode: "Pro", n_questions: 18, n_ok: 17, n_error: 1, error_rate: 0.0556, accuracy: 0.8824, mean_score: 4.1, latency_p50_s: 6.8, latency_p95_s: 18.4, avg_cost_per_q: 0.0345, total_cost: 0.59, needs_review_count: 1 },
-      { agent_label: "OWIsMind orchestrator", mode: "Smart", n_questions: 18, n_ok: 18, n_error: 0, error_rate: 0.0, accuracy: 0.8333, mean_score: 3.9, latency_p50_s: 4.2, latency_p95_s: 11.8, avg_cost_per_q: 0.0123, total_cost: 0.22, needs_review_count: 2 }
+      { agent_label: "OWIsMind orchestrator", mode: "Claude", n_questions: 18, n_ok: 18, n_error: 0, error_rate: 0.0, error_rate_str: "0.0 %", accuracy: 0.9444, accuracy_pct: "94.4 %", mean_score: 4.6, latency_p50_s: 12.4, latency_p50_str: "12.4 s", latency_p95_s: 28.9, latency_p95_str: "28.9 s", avg_cost_per_q: 0.0892, avg_cost_per_q_str: "$0.0892", total_cost: 1.53, needs_review_count: 1 },
+      { agent_label: "OWIsMind orchestrator", mode: "Pro", n_questions: 18, n_ok: 17, n_error: 1, error_rate: 0.0556, error_rate_str: "5.6 %", accuracy: 0.8824, accuracy_pct: "88.2 %", mean_score: 4.1, latency_p50_s: 6.8, latency_p50_str: "6.8 s", latency_p95_s: 18.4, latency_p95_str: "18.4 s", avg_cost_per_q: 0.0345, avg_cost_per_q_str: "$0.0345", total_cost: 0.59, needs_review_count: 1 },
+      { agent_label: "OWIsMind orchestrator", mode: "Smart", n_questions: 18, n_ok: 18, n_error: 0, error_rate: 0.0, error_rate_str: "0.0 %", accuracy: 0.8333, accuracy_pct: "83.3 %", mean_score: 3.9, latency_p50_s: 4.2, latency_p50_str: "4.2 s", latency_p95_s: 11.8, latency_p95_str: "11.8 s", avg_cost_per_q: 0.0123, avg_cost_per_q_str: "$0.0123", total_cost: 0.22, needs_review_count: 2 }
     ]
   };
   var MOCK_BREAKDOWN = {
-    status: "ok", run_id: MOCK_RUN_ID,
+    status: "ok", benchmark_id: MOCK_BID,
     rows: [
-      { agent_label: "OWIsMind orchestrator", mode: "Smart", dimension: "category", bucket: "Revenue", n: 10, accuracy: 0.90, mean_score: 4.2 },
-      { agent_label: "OWIsMind orchestrator", mode: "Smart", dimension: "category", bucket: "Trouble tickets", n: 8, accuracy: 0.75, mean_score: 3.5 },
-      { agent_label: "OWIsMind orchestrator", mode: "Pro", dimension: "category", bucket: "Revenue", n: 10, accuracy: 0.90, mean_score: 4.3 },
-      { agent_label: "OWIsMind orchestrator", mode: "Pro", dimension: "category", bucket: "Trouble tickets", n: 7, accuracy: 0.857, mean_score: 3.9 },
-      { agent_label: "OWIsMind orchestrator", mode: "Claude", dimension: "category", bucket: "Revenue", n: 10, accuracy: 1.0, mean_score: 4.8 },
-      { agent_label: "OWIsMind orchestrator", mode: "Claude", dimension: "category", bucket: "Trouble tickets", n: 8, accuracy: 0.875, mean_score: 4.4 }
+      { agent_label: "OWIsMind orchestrator", mode: "Smart", dimension: "category", bucket: "Revenue", n: 10, accuracy: 0.90, accuracy_pct: "90.0 %", mean_score: 4.2 },
+      { agent_label: "OWIsMind orchestrator", mode: "Smart", dimension: "category", bucket: "Trouble tickets", n: 8, accuracy: 0.75, accuracy_pct: "75.0 %", mean_score: 3.5 },
+      { agent_label: "OWIsMind orchestrator", mode: "Pro", dimension: "category", bucket: "Revenue", n: 10, accuracy: 0.90, accuracy_pct: "90.0 %", mean_score: 4.3 },
+      { agent_label: "OWIsMind orchestrator", mode: "Pro", dimension: "category", bucket: "Trouble tickets", n: 7, accuracy: 0.857, accuracy_pct: "85.7 %", mean_score: 3.9 },
+      { agent_label: "OWIsMind orchestrator", mode: "Claude", dimension: "category", bucket: "Revenue", n: 10, accuracy: 1.0, accuracy_pct: "100.0 %", mean_score: 4.8 },
+      { agent_label: "OWIsMind orchestrator", mode: "Claude", dimension: "category", bucket: "Trouble tickets", n: 8, accuracy: 0.875, accuracy_pct: "87.5 %", mean_score: 4.4 }
     ]
   };
   var MOCK_DETAIL = {
-    status: "ok", run_id: MOCK_RUN_ID, count: 7,
+    status: "ok", benchmark_id: MOCK_BID, count: 7,
     rows: [
-      { question_id: "q_rev_01", question: "What was the total actual revenue in 2025?", category: "Revenue", agent_label: "OWIsMind orchestrator", mode: "Claude", status: "ok", objective_match: "hit", judge_score: 5, judge_verdict: "Exact match with the reference figure.", correct: true, needs_review: false, reference_answer: "EUR 1,284,300,000", answer_preview: "The total actual revenue for 2025 was EUR 1.28 billion (1,284,300,000), all scenarios actuals.", latency_total_s: 11.2, estimated_cost: 0.0812 },
-      { question_id: "q_rev_02", question: "Which are the top 5 customers by revenue year to date?", category: "Revenue", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "hit", judge_score: 4, judge_verdict: "Correct ranking, minor rounding on amounts.", correct: true, needs_review: false, reference_answer: "Airbus, Maroc Telecom, Orange, Vodafone, MTN", answer_preview: "The top 5 customers year to date are Airbus, Maroc Telecom, Orange, Vodafone and MTN.", latency_total_s: 4.6, estimated_cost: 0.0121 },
-      { question_id: "q_tic_01", question: "How many open trouble tickets does customer Airbus have?", category: "Trouble tickets", agent_label: "OWIsMind orchestrator", mode: "Pro", status: "ok", objective_match: "miss", judge_score: 2, judge_verdict: "Wrong count: the agent used all snapshots, not the latest state.", correct: false, needs_review: false, reference_answer: "12 open tickets", answer_preview: "Airbus currently has 47 open trouble tickets across all services.", latency_total_s: 7.1, estimated_cost: 0.0301 },
-      { question_id: "q_tic_02", question: "What was the average resolution time last quarter?", category: "Trouble tickets", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "hit", judge_score: 3, judge_verdict: "Right number but the agent mixed minutes and hours in the wording.", correct: true, needs_review: true, reference_answer: "318 minutes", answer_preview: "The average resolution time last quarter was about 318 minutes (5.3 hours).", latency_total_s: 5.3, estimated_cost: 0.0114 },
-      { question_id: "q_rev_03", question: "What was the revenue from the Roaming Sponsor offer in Q3?", category: "Revenue", agent_label: "OWIsMind orchestrator", mode: "Claude", status: "ok", objective_match: "n/a", judge_score: 4, judge_verdict: "Plausible and well sourced, but no objective reference to compare against.", correct: true, needs_review: true, reference_answer: "", answer_preview: "Q3 revenue from the Roaming Sponsor offer was EUR 18.4 million, actuals scenario.", latency_total_s: 13.8, estimated_cost: 0.0903 },
-      { question_id: "q_tic_03", question: "Which account has had the most incidents this year?", category: "Trouble tickets", agent_label: "OWIsMind orchestrator", mode: "Pro", status: "error", objective_match: "error", judge_score: 1, judge_verdict: "The agent returned a connection error and produced no answer.", correct: false, needs_review: false, reference_answer: "Maroc Telecom", answer_preview: "", latency_total_s: 30.0, estimated_cost: 0.0 },
-      { question_id: "q_rev_04", question: "What is the budget versus actual for the EVPL product?", category: "Revenue", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "miss", judge_score: 2, judge_verdict: "Budget reported as zero: the agent pinned the wrong offer column.", correct: false, needs_review: false, reference_answer: "Budget EUR 42.0M, Actual EUR 39.7M", answer_preview: "EVPL shows an actual of EUR 39.7M and a budget of EUR 0, so it is fully over budget.", latency_total_s: 6.2, estimated_cost: 0.0131 }
+      { question_id: "q_rev_01", question: "What was the total actual revenue in 2025?", category: "Revenue", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Claude", status: "ok", objective_match: "hit", judge_score: 5, judge_verdict: "Exact match with the reference figure.", judge_comment: "Figure and scenario both correct.", correct: true, needs_review: false, reference_answer: "EUR 1,284,300,000", answer_preview: "The total actual revenue for 2025 was EUR 1.28 billion (1,284,300,000), all scenarios actuals.", latency_str: "11.2 s", estimated_cost: 0.0812, notes: "", expected_value: "1284300000", expected_value_type: "amount", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE phase='ACTUALS' AND year=2025", expected_tool: "show_table", actual_tools: "table", effective_correct: true, effective_verdict: "OK", overridden: false, n_attempts: 2, delta: "improved",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-28 17:02", mode: "Claude", status: "ok", judge_score: 3, judge_verdict: "Right total but wrong scenario wording.", verdict: "OK", correct: true, overridden: false },
+          { attempt_no: 2, run_timestamp: "2026-06-29 22:14", mode: "Claude", status: "ok", judge_score: 5, judge_verdict: "Exact match with the reference figure.", verdict: "OK", correct: true, overridden: false }
+        ] },
+      { question_id: "q_rev_02", question: "Which are the top 5 customers by revenue year to date?", category: "Revenue", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "hit", judge_score: 4, judge_verdict: "Correct ranking, minor rounding on amounts.", judge_comment: "", correct: true, needs_review: false, reference_answer: "Airbus, Maroc Telecom, Orange, Vodafone, MTN", answer_preview: "The top 5 customers year to date are Airbus, Maroc Telecom, Orange, Vodafone and MTN.", latency_str: "4.6 s", estimated_cost: 0.0121, notes: "", expected_value: "", expected_value_type: "", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT customer, SUM(amount_eur) AS rev FROM drive_revenues GROUP BY customer ORDER BY rev DESC LIMIT 5", expected_tool: "show_chart", actual_tools: "chart,table", effective_correct: true, effective_verdict: "OK", overridden: false, n_attempts: 1, delta: "first",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-29 22:14", mode: "Smart", status: "ok", judge_score: 4, judge_verdict: "Correct ranking, minor rounding on amounts.", verdict: "OK", correct: true, overridden: false }
+        ] },
+      { question_id: "q_tic_01", question: "How many open trouble tickets does customer Airbus have?", category: "Trouble tickets", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Pro", status: "ok", objective_match: "miss", judge_score: 2, judge_verdict: "Wrong count: the agent used all snapshots, not the latest state.", judge_comment: "Did not deduplicate snapshots.", correct: false, needs_review: false, reference_answer: "12 open tickets", answer_preview: "Airbus currently has 47 open trouble tickets across all services.", latency_str: "7.1 s", estimated_cost: 0.0301, notes: "", expected_value: "12", expected_value_type: "count", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT COUNT(DISTINCT id) FROM (SELECT DISTINCT ON (id) id, CurrentStatus FROM trouble_tickets ORDER BY id, lastUpdate DESC) s WHERE CurrentStatus='OPEN'", expected_tool: "none", actual_tools: "", effective_correct: false, effective_verdict: "Not OK", overridden: false, n_attempts: 2, delta: "regressed",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-28 17:02", mode: "Pro", status: "ok", judge_score: 4, judge_verdict: "Right count from the latest snapshot.", verdict: "OK", correct: true, overridden: false },
+          { attempt_no: 2, run_timestamp: "2026-06-29 22:14", mode: "Pro", status: "ok", judge_score: 2, judge_verdict: "Wrong count: used all snapshots.", verdict: "Not OK", correct: false, overridden: false }
+        ] },
+      { question_id: "q_tic_02", question: "What was the average resolution time last quarter?", category: "Trouble tickets", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "hit", judge_score: 3, judge_verdict: "Right number but the agent mixed minutes and hours in the wording.", judge_comment: "", correct: true, needs_review: true, reference_answer: "318 minutes", answer_preview: "The average resolution time last quarter was about 318 minutes (5.3 hours).", latency_str: "5.3 s", estimated_cost: 0.0114, notes: "", expected_value: "318", expected_value_type: "duration", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 1, expected_sql: "", expected_tool: "", actual_tools: "table", effective_correct: true, effective_verdict: "OK", overridden: false, n_attempts: 1, delta: "first",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-29 22:14", mode: "Smart", status: "ok", judge_score: 3, judge_verdict: "Right number, mixed units in wording.", verdict: "OK", correct: true, overridden: false }
+        ] },
+      { question_id: "q_rev_03", question: "What was the revenue from the Roaming Sponsor offer in Q3?", category: "Revenue", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Claude", status: "ok", objective_match: "n/a", judge_score: 4, judge_verdict: "Plausible and well sourced, but no objective reference to compare against.", judge_comment: "", correct: true, needs_review: true, reference_answer: "", answer_preview: "Q3 revenue from the Roaming Sponsor offer was EUR 18.4 million, actuals scenario.", latency_str: "13.8 s", estimated_cost: 0.0903, notes: "", expected_value: "", expected_value_type: "", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 1, expected_sql: "", expected_tool: "show_chart", actual_tools: "chart", effective_correct: true, effective_verdict: "OK", overridden: false, n_attempts: 1, delta: "first",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-29 22:14", mode: "Claude", status: "ok", judge_score: 4, judge_verdict: "Plausible, no objective reference.", verdict: "Plausible", correct: true, overridden: false }
+        ] },
+      { question_id: "q_tic_03", question: "Which account has had the most incidents this year?", category: "Trouble tickets", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Pro", status: "error", objective_match: "error", judge_score: 1, judge_verdict: "The agent returned a connection error and produced no answer.", judge_comment: "", correct: false, needs_review: false, reference_answer: "Maroc Telecom", answer_preview: "", latency_str: "30.0 s", estimated_cost: 0.0, notes: "connection timeout", expected_value: "", expected_value_type: "", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 1, expected_sql: "", expected_tool: "", actual_tools: "", effective_correct: false, effective_verdict: "Not OK", overridden: false, n_attempts: 1, delta: "first",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-29 22:14", mode: "Pro", status: "error", judge_score: 1, judge_verdict: "Connection error, no answer.", verdict: "Not OK", correct: false, overridden: false }
+        ] },
+      { question_id: "q_rev_04", question: "What is the budget versus actual for the EVPL product?", category: "Revenue", run_id: "run_2026-06-29_22-14", run_timestamp: "2026-06-29 22:14", agent_key: "orchestrator", agent_label: "OWIsMind orchestrator", mode: "Smart", status: "ok", objective_match: "miss", judge_score: 2, judge_verdict: "Budget reported as zero: the agent pinned the wrong offer column.", judge_comment: "", correct: false, needs_review: false, reference_answer: "Budget EUR 42.0M, Actual EUR 39.7M", answer_preview: "EVPL shows an actual of EUR 39.7M and a budget of EUR 0, so it is fully over budget.", latency_str: "6.2 s", estimated_cost: 0.0131, notes: "", expected_value: "42000000", expected_value_type: "amount", benchmark_id: MOCK_BID, benchmark_name: "said", attempt_no: 3, expected_sql: "SELECT phase, SUM(amount_eur) FROM drive_revenues WHERE product='EVPL' GROUP BY phase", expected_tool: "show_table", actual_tools: "table", human_verdict: "Not OK", human_comment: "Confirmed wrong: budget column was misread.", reviewed_by: "admin", reviewed_at: "2026-06-29 23:01", effective_correct: false, effective_verdict: "Not OK", overridden: true, n_attempts: 3, delta: "same",
+        attempts: [
+          { attempt_no: 1, run_timestamp: "2026-06-27 10:00", mode: "Smart", status: "ok", judge_score: 2, judge_verdict: "Budget zero.", verdict: "Not OK", correct: false, overridden: false },
+          { attempt_no: 2, run_timestamp: "2026-06-28 17:02", mode: "Smart", status: "ok", judge_score: 2, judge_verdict: "Budget zero again.", verdict: "Not OK", correct: false, overridden: false },
+          { attempt_no: 3, run_timestamp: "2026-06-29 22:14", mode: "Smart", status: "ok", judge_score: 2, judge_verdict: "Budget zero, wrong column.", verdict: "Not OK", correct: false, overridden: true }
+        ] }
     ]
   };
 
@@ -315,7 +369,7 @@
             '<p class="header-sub" data-i18n="hdr.sub"></p>' +
           '</div>' +
           '<div class="controls">' +
-            '<div class="run-select"><span class="lbl" data-i18n="run.label"></span><select id="runSelect"></select></div>' +
+            '<div class="run-select"><span class="lbl" data-i18n="bench.label"></span><select id="benchSelect"></select></div>' +
             '<div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>' +
             '<div class="seg" id="themeSeg"><button data-theme="light">LIGHT</button><button data-theme="dark">DARK</button></div>' +
           '</div>' +
@@ -369,7 +423,7 @@
     applyI18n();
     syncSeg("langSeg", "data-lang", ui.lang);
     syncSeg("themeSeg", "data-theme", ui.theme);
-    renderRunSelect();
+    renderBenchSelect();
     renderContent();
   }
 
@@ -377,13 +431,14 @@
     qsa("#" + segId + " button").forEach(function (b) { b.classList.toggle("on", b.getAttribute(attr) === value); });
   }
 
-  function renderRunSelect() {
-    var sel = byId("runSelect");
+  function renderBenchSelect() {
+    var sel = byId("benchSelect");
     if (!sel) { return; }
-    sel.innerHTML = state.runs.map(function (r) {
-      var on = r.run_id === state.runId ? " selected" : "";
-      var label = r.run_timestamp || r.run_id;
-      return '<option value="' + esc(r.run_id) + '"' + on + ' title="' + esc(r.run_id) + '">' + esc(label) + '</option>';
+    sel.innerHTML = state.benchmarks.map(function (b) {
+      var on = b.benchmark_id === state.benchmarkId ? " selected" : "";
+      var name = b.benchmark_name || b.benchmark_id;
+      var label = name + (b.last_run_timestamp ? " - " + b.last_run_timestamp : "");
+      return '<option value="' + esc(b.benchmark_id) + '"' + on + ' title="' + esc(b.benchmark_id) + '">' + esc(label) + '</option>';
     }).join("");
   }
 
@@ -429,8 +484,14 @@
       .replace("@@C@@", '<b>' + esc(fmtInt(k.n_configs)) + '</b>')
       .replace("@@A@@", '<b>' + esc(fmtInt(attempts)) + '</b>');
 
+    var benchName = state.benchmarkName || (state.summary && state.summary.benchmark_name) || "";
+    var benchLine = benchName
+      ? '<p class="hero-bench">' + esc(t("hero.bench", { n: benchName })) + '</p>'
+      : "";
+
     var hero = '<div class="hero">' + donut +
       '<div>' +
+        benchLine +
         '<h2 class="hero-head">' + head + '</h2>' +
         '<span class="verdict ' + vkind + '"><span class="sq"></span>' + esc(t(vkey)) + '</span>' +
         '<p class="hero-note">' + esc(t("hero.note")) + '</p>' +
@@ -525,10 +586,32 @@
 
   /* --- question by question --- */
 
+  /* The effective verdict prefers a human override when present. */
+  function isCorrect(r) {
+    if (r && r.overridden && r.effective_correct != null) { return !!r.effective_correct; }
+    return !!(r && r.correct);
+  }
+
   function classifyResult(r) {
+    var ok = isCorrect(r);
     if (r.objective_match === "error" || r.status === "error") { return ["result-bad", "r.bad"]; }
-    if (r.objective_match === "n/a") { return r.correct ? ["result-plaus", "r.plaus"] : ["result-bad", "r.bad"]; }
-    return r.correct ? ["result-ok", "r.ok"] : ["result-bad", "r.bad"];
+    if (r.objective_match === "n/a") { return ok ? ["result-plaus", "r.plaus"] : ["result-bad", "r.bad"]; }
+    return ok ? ["result-ok", "r.ok"] : ["result-bad", "r.bad"];
+  }
+
+  /* Evolution delta badge: improved (green) / regressed (red) / stable or first (neutral). */
+  function evoBadge(r) {
+    var d = String(r.delta || "first");
+    var map = {
+      improved: ["evo-up", I.up, "evo.up"],
+      regressed: ["evo-down", I.down, "evo.down"],
+      same: ["evo-flat", I.eq, "evo.flat"],
+      first: ["evo-flat", I.eq, "evo.first"]
+    };
+    var m = map[d] || map.first;
+    var n = toNum(r.n_attempts) || 1;
+    var count = n > 1 ? '<span class="evo-n">' + esc(t("evo.attempts", { n: fmtInt(n) })) + '</span>' : "";
+    return '<span class="evo ' + m[0] + '">' + m[1] + '<span>' + esc(t(m[2])) + '</span></span>' + count;
   }
 
   function qqSection() {
@@ -548,7 +631,9 @@
     } else {
       var head = '<thead><tr>' +
         '<th>' + esc(t("th.q")) + '</th><th>' + esc(t("th.topic")) + '</th><th>' + esc(t("th.cfg")) + '</th>' +
-        '<th>' + esc(t("th.result")) + '</th><th>' + esc(t("th.judge")) + ' <span class="info-i" title="' + esc(t("th.judge.i")) + '">i</span></th>' +
+        '<th>' + esc(t("th.result")) + '</th>' +
+        '<th>' + esc(t("th.evo")) + ' <span class="info-i" title="' + esc(t("th.evo.i")) + '">i</span></th>' +
+        '<th>' + esc(t("th.judge")) + ' <span class="info-i" title="' + esc(t("th.judge.i")) + '">i</span></th>' +
         '<th class="num">' + esc(t("th.rt")) + '</th><th class="num">' + esc(t("th.cost")) + '</th><th>' + esc(t("th.dc")) + '</th>' +
       '</tr></thead>';
       var rows = list.map(qRowHtml).join("");
@@ -569,6 +654,8 @@
       ? '<span class="dc-flag">' + I.flag + esc(t("dc.flag")) + '</span>'
       : '<span class="dc-clear">' + esc(t("dc.clear")) + '</span>';
 
+    var latency = r.latency_str ? esc(r.latency_str) : esc(fmtSecs(r.latency_total_s));
+
     var main = '<tr>' +
       '<td data-l="' + esc(t("th.q")) + '">' +
         '<div class="q-main">' + esc(r.question) + '</div><div class="q-id">' + esc(r.question_id) + '</div>' +
@@ -577,24 +664,87 @@
       '<td data-l="' + esc(t("th.topic")) + '"><span class="lang-tag">' + esc(r.category) + '</span></td>' +
       '<td data-l="' + esc(t("th.cfg")) + '"><span class="cfg-cell"><span class="dot" style="background:' + modeColor(r.mode) + '"></span>' + esc(r.agent_label) + ' ' + esc(modeLabel(r.mode)) + '</span></td>' +
       '<td data-l="' + esc(t("th.result")) + '">' + pill + '</td>' +
+      '<td data-l="' + esc(t("th.evo")) + '">' + evoBadge(r) + '</td>' +
       '<td data-l="' + esc(t("th.judge")) + '">' + judge + '</td>' +
-      '<td class="num" data-l="' + esc(t("th.rt")) + '">' + esc(fmtSecs(r.latency_total_s)) + '</td>' +
+      '<td class="num" data-l="' + esc(t("th.rt")) + '">' + latency + '</td>' +
       '<td class="num" data-l="' + esc(t("th.cost")) + '">' + esc(fmtMoney(r.estimated_cost, 4)) + '</td>' +
       '<td data-l="' + esc(t("th.dc")) + '">' + dc + '</td>' +
     '</tr>';
 
     var ref = r.reference_answer ? esc(r.reference_answer) : esc(t("det.noRef"));
     var ans = r.answer_preview ? esc(r.answer_preview) : esc(t("det.noAns"));
-    var detail = '<tr class="detail-row" style="display:none"><td colspan="8">' +
+    var detail = '<tr class="detail-row" style="display:none"><td colspan="9">' +
       '<div class="detail">' +
         '<div class="d-full"><dt>' + esc(t("det.judge")) + '</dt><div class="judge-note">' + esc(r.judge_verdict || "-") + '</div></div>' +
+        humanBlock(r) +
         '<div class="answers">' +
           '<div class="ans-box expected"><div class="ans-l">' + esc(t("det.expected")) + '</div><div class="ans-t">' + ref + '</div></div>' +
           '<div class="ans-box agent"><div class="ans-l">' + esc(t("det.agent")) + '</div><div class="ans-t">' + ans + '</div></div>' +
         '</div>' +
+        refVsProduced(r) +
+        attemptsBlock(r) +
       '</div>' +
     '</td></tr>';
     return main + detail;
+  }
+
+  /* Reviewer override note, only when a human adjusted the verdict. */
+  function humanBlock(r) {
+    if (!r.overridden) { return ""; }
+    var v = r.human_verdict || r.effective_verdict || "-";
+    var note = r.human_comment ? '<div class="judge-note">' + esc(r.human_comment) + '</div>' : "";
+    return '<div class="d-full human"><dt>' + esc(t("det.human")) + '</dt>' +
+      '<div><b>' + esc(v) + '</b>' + note + '</div></div>';
+  }
+
+  /* Reference SQL / suggested tool (a soft judge hint) beside the tools the agent actually used. */
+  function refVsProduced(r) {
+    var hasSql = r.expected_sql && String(r.expected_sql).trim() !== "";
+    var hasTool = r.expected_tool && String(r.expected_tool).trim() !== "" && String(r.expected_tool).toLowerCase() !== "none";
+    var hasActual = r.actual_tools && String(r.actual_tools).trim() !== "";
+    if (!hasSql && !hasTool && !hasActual) { return ""; }
+    var refSql = hasSql
+      ? '<div class="rv-l">' + esc(t("ref.sql")) + '</div><pre class="rv-sql">' + esc(r.expected_sql) + '</pre>'
+      : "";
+    var refTool = '<div class="rv-pair"><span class="rv-k">' + esc(t("ref.tool")) + '</span>' +
+      '<span class="rv-v">' + (hasTool ? '<code>' + esc(r.expected_tool) + '</code>' : esc(t("ref.none"))) + '</span></div>';
+    var actTool = '<div class="rv-pair"><span class="rv-k">' + esc(t("act.tools")) + '</span>' +
+      '<span class="rv-v">' + (hasActual ? '<code>' + esc(r.actual_tools) + '</code>' : esc(t("ref.none"))) + '</span></div>';
+    return '<div class="refvs">' +
+      '<div class="rv-h">' + esc(t("ref.vs.h")) + '</div>' +
+      '<p class="rv-note">' + esc(t("ref.vs.note")) + '</p>' +
+      refSql +
+      '<div class="rv-tools">' + refTool + actTool + '</div>' +
+    '</div>';
+  }
+
+  /* Attempt history table, only when the question has been run more than once. */
+  function attemptsBlock(r) {
+    var att = (r.attempts || []).slice();
+    if (att.length < 2) { return ""; }
+    var rows = att.map(function (a, i) {
+      var ok = (a.overridden && a.correct != null) ? !!a.correct : !!a.correct;
+      var cls = a.status === "error" ? "result-bad" : (ok ? "result-ok" : "result-bad");
+      var key = a.status === "error" ? "r.bad" : (ok ? "r.ok" : "r.bad");
+      var vk = a.verdict ? esc(a.verdict) : esc(t(key));
+      var sc = toNum(a.judge_score);
+      var score = sc == null ? "-" : (esc(fmtInt(sc)) + " / 5");
+      var latest = (i === att.length - 1) ? ' <span class="evo-latest">' + esc(t("evo.latest")) + '</span>' : "";
+      return '<tr>' +
+        '<td>#' + esc(fmtInt(a.attempt_no)) + latest + '</td>' +
+        '<td class="mono">' + esc(a.run_timestamp || "-") + '</td>' +
+        '<td><span class="cfg-cell"><span class="dot" style="background:' + modeColor(a.mode) + '"></span>' + esc(modeLabel(a.mode)) + '</span></td>' +
+        '<td><span class="result-pill ' + cls + '"><span class="sq"></span>' + vk + '</span></td>' +
+        '<td class="mono">' + score + '</td>' +
+      '</tr>';
+    }).join("");
+    return '<div class="attempts">' +
+      '<div class="att-h">' + esc(t("evo.h")) + '</div>' +
+      '<table class="att-table"><thead><tr>' +
+        '<th>' + esc(t("evo.th.no")) + '</th><th>' + esc(t("evo.th.when")) + '</th>' +
+        '<th>' + esc(t("evo.th.cfg")) + '</th><th>' + esc(t("evo.th.result")) + '</th><th>' + esc(t("evo.th.score")) + '</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '</div>';
   }
 
   function wireContent() {
@@ -627,18 +777,19 @@
   function loadAll() {
     state.status = "loading";
     render();
-    api("api/results/runs").then(function (d) {
-      state.runs = (d.runs || []).slice();
-      if (!state.runs.length) { state.status = "empty"; render(); return; }
-      state.runId = state.runs[0].run_id;
-      loadRun(state.runId);
+    api("api/results/benchmarks").then(function (d) {
+      state.benchmarks = (d.benchmarks || []).slice();
+      if (!state.benchmarks.length) { state.status = "empty"; render(); return; }
+      state.benchmarkId = state.benchmarks[0].benchmark_id;
+      state.benchmarkName = state.benchmarks[0].benchmark_name || "";
+      loadBenchmark(state.benchmarkId);
     }, function () { state.status = "error"; render(); });
   }
 
-  function loadRun(runId) {
+  function loadBenchmark(benchmarkId) {
     state.status = "loading";
     render();
-    var q = "?run_id=" + encodeURIComponent(runId);
+    var q = "?benchmark_id=" + encodeURIComponent(benchmarkId);
     Promise.all([
       api("api/results/summary" + q),
       api("api/results/breakdown" + q),
@@ -647,6 +798,7 @@
       state.summary = res[0];
       state.breakdown = res[1];
       state.detail = res[2];
+      if (state.summary && state.summary.benchmark_name) { state.benchmarkName = state.summary.benchmark_name; }
       var hasRows = state.summary && state.summary.rows && state.summary.rows.length;
       state.status = hasRows ? "ok" : "empty";
       render();
@@ -671,10 +823,15 @@
         syncSeg("themeSeg", "data-theme", ui.theme);
       });
     });
-    var sel = byId("runSelect");
+    var sel = byId("benchSelect");
     if (sel) {
       sel.addEventListener("change", function () {
-        if (sel.value && sel.value !== state.runId) { state.runId = sel.value; loadRun(state.runId); }
+        if (sel.value && sel.value !== state.benchmarkId) {
+          state.benchmarkId = sel.value;
+          var found = state.benchmarks.filter(function (b) { return b.benchmark_id === sel.value; })[0];
+          state.benchmarkName = (found && found.benchmark_name) || "";
+          loadBenchmark(state.benchmarkId);
+        }
       });
     }
   }

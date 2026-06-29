@@ -30,7 +30,13 @@ import pandas as pd
 
 from benchmark import config, schemas, run_params
 from benchmark import agent_runner
-from benchmark.dss_steps.history_io import write_history_dataset
+from benchmark import registry
+from benchmark.dss_steps.history_io import write_history_dataset, read_history_rows
+
+# Light columns the run resolver needs from the raw history (done detection + attempt numbering).
+# Projected at the source so the heavy answer / SQL / artifact JSON is never loaded just to count.
+_RESOLVER_COLUMNS = ("benchmark_id", "question_id", "agent_key", "mode", "attempt_no",
+                     "run_id", "run_timestamp")
 
 
 def _get_variables():
@@ -72,106 +78,111 @@ def _load_golden_rows(golden_dataset):
     return rows
 
 
-# The only keys question_filter recognizes; anything else is a typo that would silently
-# widen the run to the WHOLE golden set (one real agent call per question x agent x mode).
-_KNOWN_FILTER_KEYS = ("categories", "languages", "question_ids")
+def _benchmark_agent(entity):
+    """Return ``(agent_descriptor, run_modes)`` for the runner from a registry entity.
 
-
-def _warn_unknown_filter_keys(question_filter):
-    """Log any unrecognized question_filter key so a typo (e.g. 'category' / 'ids') is visible
-    in the step log instead of silently running the full matrix. Never raises."""
-    if not isinstance(question_filter, dict):
-        return
-    unknown = [k for k in question_filter if k not in _KNOWN_FILTER_KEYS]
-    if unknown:
-        print("benchmark: ignoring unknown question_filter key(s) {0} "
-              "(known: {1}) - the filter on those keys is NOT applied".format(
-                  sorted(unknown), list(_KNOWN_FILTER_KEYS)))
-
-
-def _matches_filter(row, question_filter):
-    """True when a golden row passes the optional question filter (AND across keys)."""
-    if not isinstance(question_filter, dict) or not question_filter:
-        return True
-    checks = (
-        ("categories", "category"),
-        ("languages", "language"),
-        ("question_ids", "question_id"),
-    )
-    for filter_key, column in checks:
-        allowed = question_filter.get(filter_key)
-        if allowed:
-            allowed_set = {str(v) for v in allowed}
-            if str(row.get(column)) not in allowed_set:
-                return False
-    return True
+    The descriptor carries the runner's per-agent ``modes`` BOOL (derived from the entity's mode
+    LIST): a benchmark whose modes are exactly ["default"] (or empty) is a single plain call; any
+    other mode list is mode-aware (one call per mode with the control token).
+    """
+    entity = entity if isinstance(entity, dict) else {}
+    modes = [m for m in (entity.get("modes") or []) if m]
+    supports = bool(modes) and modes != [agent_runner.DEFAULT_MODE_LABEL]
+    agent = {
+        "agent_key": entity.get("agent_key"),
+        "agent_label": entity.get("agent_label") or entity.get("agent_key"),
+        "project_key": entity.get("project_key"),
+        "agent_id": entity.get("agent_id"),
+        "modes": supports,
+    }
+    run_modes = modes if supports else [agent_runner.DEFAULT_MODE_LABEL]
+    return agent, run_modes
 
 
 def run():
-    """Execute the benchmark matrix and write the configured raw dataset."""
+    """Execute ONE benchmark launch (the run_request) and append to the raw dataset.
+
+    v2: a launch targets ONE named benchmark (its pinned agent + modes). It runs only the questions
+    resolved from the benchmark membership + the launch mode (append = pending + redo ; full = every
+    member), stamping benchmark_id / benchmark_name / attempt_no on each row so runs ACCUMULATE into
+    the same benchmark. The launcher writes ``run_request`` into the variable before firing this step.
+    """
     cfg = run_params.resolve(_get_variables())
 
-    agents = cfg["agents"]
-    if not agents:
+    req = cfg.get("run_request")
+    if not req:
         raise ValueError(
-            "no valid agent in the 'benchmark' project variable: set "
-            "benchmark.agents = a list of {agent_key, project_key, agent_id, modes}"
+            "no run_request in the 'benchmark' project variable: launch from the benchmark launcher "
+            "(it writes run_request = {benchmark_id, launch_mode} before firing the run)."
         )
+    benchmark_id = req["benchmark_id"]
+    launch_mode = req["launch_mode"]
+    entity = (cfg.get("benchmarks") or {}).get(benchmark_id)
+    if not entity:
+        raise ValueError(
+            "run_request points at an unknown benchmark_id {0!r}; it is not in benchmark.benchmarks"
+            .format(benchmark_id)
+        )
+
+    agent, run_modes = _benchmark_agent(entity)
+    if not (agent["agent_key"] and agent["project_key"] and agent["agent_id"]):
+        raise ValueError("benchmark {0!r} has an incomplete pinned agent".format(benchmark_id))
 
     # Stamp the run identity here (allowed in a step; not in the agent loop).
     run_id = uuid.uuid4().hex
     run_timestamp = datetime.now().isoformat()
 
-    _warn_unknown_filter_keys(cfg["question_filter"])
-    golden = [
-        row for row in _load_golden_rows(cfg["golden_dataset"])
-        if _matches_filter(row, cfg["question_filter"])
-    ]
-    if not golden:
-        raise ValueError(
-            "no active golden question matched the filter in '{0}'; nothing to run"
-            .format(cfg["golden_dataset"])
-        )
+    # Active + valid golden rows, indexed by id (the gate for membership + the question payloads).
+    golden_rows = _load_golden_rows(cfg["golden_dataset"])
+    golden_by_id = {r.get("question_id"): r for r in golden_rows if r.get("question_id")}
+    golden_active_ids = set(golden_by_id.keys())
 
-    # The runner resolves every agent's LLM through ONE project handle
-    # (project.get_llm(agent_id)); it does not re-open a project per agent. All
-    # agents in one run must share the same project_key; when they differ we surface
-    # a clear error so the run is split per project rather than failing opaquely.
-    project_keys = {a["project_key"] for a in agents}
-    if len(project_keys) > 1:
+    # Prior attempts of THIS benchmark from the raw history (fail-open []): used to skip already-done
+    # questions (append mode) and to compute the next attempt number per (question, mode).
+    prior = read_history_rows(cfg["raw_dataset"], columns=_RESOLVER_COLUMNS)
+    to_run_ids = registry.resolve_to_run(entity, prior, golden_active_ids, launch_mode)
+    if not to_run_ids:
         raise ValueError(
-            "all benchmark.agents must share one project_key per run (got {0}); "
-            "run them in separate benchmark runs".format(sorted(project_keys))
+            "nothing to run for benchmark {0!r} ({1}): every member question is already done. "
+            "Use the full re-run, add questions, or flag some 'redo at next run'."
+            .format(entity.get("name") or benchmark_id, launch_mode)
         )
-    project = dataiku.api_client().get_project(agents[0]["project_key"])
+    attempt_map = registry.attempt_numbers(prior, benchmark_id, agent["agent_key"])
+    questions = [golden_by_id[qid] for qid in to_run_ids if qid in golden_by_id]
+
+    project = dataiku.api_client().get_project(agent["project_key"])
 
     run_config = {
         "run_id": run_id,
         "run_timestamp": run_timestamp,
-        "project": project,           # DSS handle the runner uses to reach the agents
-        "agents": agents,
-        "modes": cfg["modes"],
+        "project": project,           # DSS handle the runner uses to reach the agent
+        "agents": [agent],            # a benchmark pins exactly ONE agent
+        "modes": run_modes,
         "language": cfg["language"],
         "concurrency": cfg["concurrency"],
         "per_call_timeout_s": cfg["per_call_timeout_s"],
-        "questions": golden,
+        "questions": questions,
     }
 
-    # Incremental capture: the runner calls write_row(raw) per finished call so a
-    # crash mid-run keeps the completed work (each row already carries run_id /
-    # run_timestamp / config_json, stamped by the runner). For this small golden
-    # set we buffer in memory and write once at the end; for a larger set, swap
-    # this buffer for a streaming writer (dataset.get_writer()) keyed on run_id to
-    # checkpoint each row as it lands.
+    bench_name = entity.get("name") or ""
     collected = []
 
     def write_row(raw):
+        # Stamp the benchmark dimension + the per-(question, mode) attempt number on every row. The
+        # runner already filled run_id / run_timestamp / config_json / the denormalized golden +
+        # expected_sql / expected_tool / actual_tools.
+        raw["benchmark_id"] = benchmark_id
+        raw["benchmark_name"] = bench_name
+        raw["attempt_no"] = registry.next_attempt_no(
+            attempt_map, raw.get("question_id"), raw.get("mode"))
         collected.append(raw)
 
+    print("benchmark: run {0} on benchmark {1!r} ({2}) - {3} question(s) x {4} mode(s)".format(
+        run_id, bench_name, launch_mode, len(questions), len(run_modes)))
     agent_runner.run_matrix(run_config, write_row)
 
-    # Build the raw frame with the canonical RAW_COLUMNS schema. Missing keys
-    # default to None so partial rows (errors / timeouts) still conform.
+    # Build the raw frame with the canonical RAW_COLUMNS schema (missing keys -> None so error /
+    # timeout rows still conform), then APPEND this run to the raw history (idempotent by run_id).
     if collected:
         frame = pd.DataFrame(
             [{col: row.get(col) for col in schemas.RAW_COLUMNS} for row in collected],
@@ -179,8 +190,6 @@ def run():
         )
     else:
         frame = pd.DataFrame(columns=list(schemas.RAW_COLUMNS))
-    # APPEND this run to the raw history (every row carries the fresh run_id), instead of
-    # overwriting, so past runs are preserved and the Results app can compare them.
     write_history_dataset(cfg["raw_dataset"], frame, cfg.get("history_keep_runs"))
 
 

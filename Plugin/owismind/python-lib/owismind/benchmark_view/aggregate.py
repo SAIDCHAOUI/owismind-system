@@ -122,6 +122,86 @@ def runs_view(rows):
     return items
 
 
+# --- v2: benchmark selection + latest-attempt reduction + evolution ----------
+
+def _attempt(r):
+    n = _num(r.get("attempt_no"))
+    return int(n) if n is not None else 0
+
+
+def latest_attempts(rows):
+    """Keep the latest attempt of each (benchmark_id, question_id, agent_key, mode). Pure, never raises.
+
+    Mirrors the LAB scoring.latest_attempts: a question re-run several times counts only by its most
+    recent attempt, so the consultation's accuracy reflects the agent's current state.
+    """
+    best = {}
+    for r in _rows(rows):
+        key = (_str(r.get("benchmark_id")), _str(r.get("question_id")),
+               _str(r.get("agent_key")), _str(r.get("mode")))
+        rank = (_attempt(r), _str(r.get("run_timestamp")), _str(r.get("run_id")))
+        if key not in best or rank > best[key][0]:
+            best[key] = (rank, r)
+    return [v[1] for v in best.values()]
+
+
+def benchmarks_list(rows):
+    """Distinct (benchmark_id, benchmark_name) for the consultation selector, newest first. Pure.
+
+    Carries the last run timestamp and the question count so the picker can show recency + size.
+    Rows without a benchmark_id collapse into a single '' bucket (a legacy table not yet v2-run).
+    """
+    acc = {}
+    for r in _rows(rows):
+        bid = _str(r.get("benchmark_id"))
+        entry = acc.setdefault(bid, {"benchmark_id": bid, "benchmark_name": "",
+                                     "last_run_timestamp": "", "questions": set()})
+        name = _str(r.get("benchmark_name"))
+        if name and not entry["benchmark_name"]:
+            entry["benchmark_name"] = name
+        ts = _str(r.get("run_timestamp"))
+        if ts > entry["last_run_timestamp"]:
+            entry["last_run_timestamp"] = ts
+        qid = _str(r.get("question_id"))
+        if qid:
+            entry["questions"].add(qid)
+    out = [{"benchmark_id": e["benchmark_id"],
+            "benchmark_name": e["benchmark_name"] or e["benchmark_id"] or "(default)",
+            "last_run_timestamp": e["last_run_timestamp"],
+            "n_questions": len(e["questions"])} for e in acc.values()]
+    out.sort(key=lambda b: (b["last_run_timestamp"], b["benchmark_id"]), reverse=True)
+    return out
+
+
+def _attempt_brief(r):
+    eff = schemas.effective_correct(r)
+    return {
+        "attempt_no": _int(r.get("attempt_no")),
+        "run_timestamp": _str(r.get("run_timestamp")),
+        "judge_score": _int(r.get("judge_score")),
+        "verdict": eff["verdict"],
+        "correct": eff["correct"],
+        "overridden": eff["overridden"],
+    }
+
+
+def _evolution_map(rows):
+    """Map ``(question_id, mode) -> {attempts: [brief...], n, delta}`` for the per-question history."""
+    by_key = {}
+    for r in _rows(rows):
+        key = (_str(r.get("question_id")), _str(r.get("mode")))
+        by_key.setdefault(key, []).append(_attempt_brief(r))
+    out = {}
+    for key, briefs in by_key.items():
+        briefs.sort(key=lambda a: (a["attempt_no"], a["run_timestamp"]))
+        delta = "first"
+        if len(briefs) >= 2:
+            prev, cur = briefs[-2]["correct"], briefs[-1]["correct"]
+            delta = "same" if prev == cur else ("improved" if cur and not prev else "regressed")
+        out[key] = {"attempts": briefs, "n": len(briefs), "delta": delta}
+    return out
+
+
 # --- detail (per-question) --------------------------------------------------
 
 def _detail_row(r):
@@ -155,29 +235,49 @@ def _detail_row(r):
         "overridden": eff["overridden"],
         "latency_str": fmt_secs(r.get("latency_total_s")),
         "estimated_cost": _num(r.get("estimated_cost")) or 0.0,
+        # v2: the run identity of THIS attempt (the override key) + the benchmark dimension + the
+        # reference SQL/tool vs the tools the agent actually used (the training-data comparison).
+        "run_id": _str(r.get("run_id")),
+        "run_timestamp": _str(r.get("run_timestamp")),
+        "benchmark_id": _str(r.get("benchmark_id")),
+        "attempt_no": _int(r.get("attempt_no")),
+        "expected_sql": _str(r.get("expected_sql")),
+        "expected_tool": _str(r.get("expected_tool")),
+        "actual_tools": _str(r.get("actual_tools")),
     }
 
 
 # --- the consultation view-model --------------------------------------------
 
-def results_view(scored_rows, run_id=None, detail_limit=500):
-    """Build the full consultation view-model for ONE run. Pure, never raises.
+def results_view(scored_rows, benchmark_id=None, detail_limit=500):
+    """Build the consultation view-model for ONE benchmark (v2). Pure, never raises.
 
-    ``{run_id, runs, kpis, configs, categories, detail}``. KPIs and breakdowns use the EFFECTIVE
-    verdict (a human override wins). Errored rows (status != ok) are excluded from accuracy but
-    counted as errors. ``run_id`` selects the run (latest by default).
+    ``{benchmark_id, benchmark_name, benchmarks, kpis, configs, categories, detail}``. A benchmark is
+    selected (the most recent by default); its rows are reduced to the LATEST attempt of each question
+    (so accuracy reflects the current state), and each detail row carries its per-(question, mode)
+    ``evolution`` (the attempt history). KPIs / breakdowns use the EFFECTIVE verdict (a human override
+    wins). Errored rows are excluded from accuracy but counted as errors.
     """
     all_rows = _rows(scored_rows)
-    rid = _str(run_id) or latest_run_id(all_rows)
-    rows = [r for r in all_rows if _str(r.get("run_id")) == rid] if rid else []
+    benchmarks = benchmarks_list(all_rows)
+    bid = _str(benchmark_id)
+    if not bid:
+        bid = benchmarks[0]["benchmark_id"] if benchmarks else ""
+    bench_rows = [r for r in all_rows if _str(r.get("benchmark_id")) == bid]
+    bench_name = next((_str(r.get("benchmark_name")) for r in bench_rows
+                       if _str(r.get("benchmark_name"))), "")
 
-    ok_rows = [r for r in rows if _str(r.get("status")) == _OK]
+    # The CURRENT state = the latest attempt of each question x mode; the full history feeds evolution.
+    latest = latest_attempts(bench_rows)
+    evolution = _evolution_map(bench_rows)
+
+    ok_rows = [r for r in latest if _str(r.get("status")) == _OK]
     n_correct = sum(1 for r in ok_rows if schemas.effective_correct(r)["correct"])
     n_scored = len(ok_rows)
     accuracy = (float(n_correct) / n_scored) if n_scored else 0.0
     total_cost = sum(_num(r.get("estimated_cost")) or 0.0 for r in ok_rows)
-    needs_review = sum(1 for r in rows if _truthy(r.get("needs_review")))
-    question_ids = {_str(r.get("question_id")) for r in rows if _str(r.get("question_id"))}
+    needs_review = sum(1 for r in latest if _truthy(r.get("needs_review")))
+    question_ids = {_str(r.get("question_id")) for r in latest if _str(r.get("question_id"))}
 
     kpis = {
         "accuracy": accuracy,
@@ -186,19 +286,20 @@ def results_view(scored_rows, run_id=None, detail_limit=500):
         "n_scored": n_scored,
         "band": confidence_band(accuracy),
         "n_questions": len(question_ids),
-        "n_configs": len({(_str(r.get("agent_key")), _str(r.get("mode"))) for r in rows}),
+        "n_configs": len({(_str(r.get("agent_key")), _str(r.get("mode"))) for r in latest}),
         "total_cost": total_cost,
         "total_cost_str": fmt_money2(total_cost),
         "needs_review": needs_review,
     }
 
     return {
-        "run_id": rid,
-        "runs": runs_view(all_rows),
+        "benchmark_id": bid,
+        "benchmark_name": bench_name or bid,
+        "benchmarks": benchmarks,
         "kpis": kpis,
-        "configs": _configs_view(rows),
+        "configs": _configs_view(latest),
         "categories": _categories_view(ok_rows),
-        "detail": _detail_view(rows, detail_limit),
+        "detail": _detail_view(latest, detail_limit, evolution),
     }
 
 
@@ -259,12 +360,21 @@ def _categories_view(ok_rows):
     return out
 
 
-def _detail_view(rows, limit):
+def _detail_view(rows, limit, evolution=None):
     try:
         cap = max(1, min(int(limit), 2000))
     except (TypeError, ValueError):
         cap = 500
-    out = [_detail_row(r) for r in rows]
+    evolution = evolution or {}
+    out = []
+    for r in rows:
+        row = _detail_row(r)
+        ev = evolution.get((_str(r.get("question_id")), _str(r.get("mode"))))
+        # Attach the per-(question, mode) attempt history so the table can show the evolution inline.
+        row["n_attempts"] = ev["n"] if ev else 1
+        row["delta"] = ev["delta"] if ev else "first"
+        row["attempts"] = ev["attempts"] if ev else []
+        out.append(row)
     # needs-review first, then effective-incorrect, then by question id; sort BEFORE the cap.
     out.sort(key=lambda s: (not s["needs_review"], s["effective_correct"], s["question_id"]))
     return out[:cap]

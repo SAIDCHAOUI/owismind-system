@@ -70,33 +70,56 @@ def percentile(values, p):
     return nums[low] + (nums[high] - nums[low]) * frac
 
 
-def summarize(scored_rows):
-    """Aggregate scored rows into ``benchmark_summary`` rows.
+def latest_attempts(rows):
+    """Reduce scored rows to the LATEST attempt of each question (v2). Pure, never raises.
 
-    Groups by (run_id, agent_key, mode) and returns one dict per group with the
-    keys of ``SUMMARY_COLUMNS``. Pure, never raises. The output is ordered by
-    (run_id, agent_key, mode) for stable, comparable runs.
+    Keeps, for each ``(benchmark_id, question_id, agent_key, mode)``, the row with the highest
+    ``attempt_no`` (ties broken by ``run_timestamp`` then ``run_id``). This is the heart of the
+    benchmark-level score: a question re-run several times counts only by its most recent attempt,
+    so the global accuracy reflects the current state of the agent. Rows without a benchmark_id fall
+    into a single legacy bucket so pre-v2 / per-run data still reduces sanely.
     """
-    groups = _group_by(scored_rows, _summary_key)
+    best = {}
+    for r in (rows or []):
+        if not isinstance(r, dict):
+            continue
+        key = (_str(r.get("benchmark_id")), _str(r.get("question_id")),
+               _str(r.get("agent_key")), _str(r.get("mode")))
+        rank = (_attempt(r), _str(r.get("run_timestamp")), _str(r.get("run_id")))
+        if key not in best or rank > best[key][0]:
+            best[key] = (rank, r)
+    return [v[1] for v in best.values()]
+
+
+def summarize(scored_rows):
+    """Aggregate scored rows into BENCHMARK-level ``benchmark_summary`` rows (v2).
+
+    Reduces to the latest attempt per question, then groups by (benchmark_id, agent_key, mode) and
+    returns one dict per group with the keys of ``SUMMARY_COLUMNS`` (KPIs over the latest attempts;
+    last_run_* + n_runs over ALL attempts of the group). Pure, never raises. Ordered by
+    (benchmark_id, agent_key, mode) for a stable, comparable table.
+    """
+    all_rows = [r for r in (scored_rows or []) if isinstance(r, dict)]
+    latest = latest_attempts(all_rows)
+    groups_latest = _group_by(latest, _bench_key)
+    groups_all = _group_by(all_rows, _bench_key)
     out = []
-    for key in sorted(groups, key=_sort_key):
-        rows = groups[key]
-        out.append(_summarize_group(key, rows))
+    for key in sorted(groups_latest, key=_sort_key):
+        out.append(_summarize_group(key, groups_latest[key], groups_all.get(key, [])))
     return out
 
 
 def breakdown(scored_rows):
-    """Aggregate scored rows into ``benchmark_breakdown`` rows.
+    """Aggregate scored rows into BENCHMARK-level ``benchmark_breakdown`` rows (v2).
 
-    For each (run_id, agent_key, mode) group and each dimension in
-    ``BREAKDOWN_DIMENSIONS`` (category), emits one row per non-blank bucket with
-    the keys of ``BREAKDOWN_COLUMNS``: the bucket size
-    ``n`` (scored ok rows only), the ``accuracy`` (fraction in [0, 1]) and the
-    ``mean_score`` over that bucket. Errored rows are excluded from the buckets
-    (they carry no score / correctness). Pure, never raises. Output is ordered by
-    (run_id, agent_key, mode, dimension, bucket).
+    Reduces to the latest attempt per question, then for each (benchmark_id, agent_key, mode) group
+    and each dimension in ``BREAKDOWN_DIMENSIONS`` (category), emits one row per non-blank bucket with
+    the keys of ``BREAKDOWN_COLUMNS``. Errored rows are excluded from the buckets (no score). Pure,
+    never raises. Ordered by (benchmark_id, agent_key, mode, dimension, bucket).
     """
-    groups = _group_by(scored_rows, _summary_key)
+    all_rows = [r for r in (scored_rows or []) if isinstance(r, dict)]
+    latest = latest_attempts(all_rows)
+    groups = _group_by(latest, _bench_key)
     out = []
     for key in sorted(groups, key=_sort_key):
         rows = groups[key]
@@ -109,8 +132,9 @@ def breakdown(scored_rows):
                     continue  # rows with no value for this dimension are skipped
                 brows = buckets[bucket]
                 out.append({
-                    "run_id": key[0],
-                    "run_timestamp": meta["run_timestamp"],
+                    "benchmark_id": key[0],
+                    "benchmark_name": meta["benchmark_name"],
+                    "last_run_timestamp": meta["run_timestamp"],
                     "agent_key": key[1],
                     "agent_label": meta["agent_label"],
                     "mode": key[2],
@@ -125,13 +149,17 @@ def breakdown(scored_rows):
 
 # --- group summary ----------------------------------------------------------
 
-def _summarize_group(key, rows):
-    """Build one summary dict for a (run_id, agent_key, mode) group."""
-    run_id, agent_key, mode = key
-    meta = _group_meta(rows)
+def _summarize_group(key, latest_rows, all_rows):
+    """Build one benchmark-level summary dict for a (benchmark_id, agent_key, mode) group.
 
-    n_questions = len(rows)
-    ok_rows = [r for r in rows if _status(r) == _OK_STATUS]
+    ``latest_rows`` = the latest attempt of each question (the KPIs are over these); ``all_rows`` =
+    every attempt of the group (used only for last_run_* and n_runs).
+    """
+    benchmark_id, agent_key, mode = key
+    meta = _group_meta(all_rows or latest_rows)
+
+    n_questions = len(latest_rows)
+    ok_rows = [r for r in latest_rows if _status(r) == _OK_STATUS]
     n_ok = len(ok_rows)
     n_error = n_questions - n_ok
 
@@ -140,11 +168,13 @@ def _summarize_group(key, rows):
     costs = [_num(r.get("estimated_cost")) for r in ok_rows]
     in_tokens = [_num(r.get("prompt_tokens")) for r in ok_rows]
     out_tokens = [_num(r.get("completion_tokens")) for r in ok_rows]
-    judge_costs = [_num(r.get("judge_estimated_cost")) for r in rows]
+    judge_costs = [_num(r.get("judge_estimated_cost")) for r in latest_rows]
+
+    run_ids = {_str(r.get("run_id")) for r in (all_rows or []) if not _blank(r.get("run_id"))}
 
     summary = {
-        "run_id": run_id,
-        "run_timestamp": meta["run_timestamp"],
+        "benchmark_id": benchmark_id,
+        "benchmark_name": meta["benchmark_name"],
         "agent_key": agent_key,
         "agent_label": meta["agent_label"],
         "mode": mode,
@@ -163,22 +193,40 @@ def _summarize_group(key, rows):
         "total_cost": _sum(_drop_none(costs)),
         "avg_input_tokens": _mean(_drop_none(in_tokens)),
         "avg_output_tokens": _mean(_drop_none(out_tokens)),
-        "needs_review_count": sum(1 for r in rows if _truthy(r.get("needs_review"))),
+        "needs_review_count": sum(1 for r in latest_rows if _truthy(r.get("needs_review"))),
         "judge_total_cost": _sum(_drop_none(judge_costs)),
+        "last_run_id": meta["last_run_id"],
+        "last_run_timestamp": meta["run_timestamp"],
+        "n_runs": len(run_ids),
     }
     return _order_one(summary, SUMMARY_COLUMNS)
 
 
 def _group_meta(rows):
-    """Pick a representative run_timestamp and agent_label for a group."""
-    run_timestamp = None
+    """Pick the benchmark_name, agent_label, and the MOST RECENT (run_id, run_timestamp) of a group.
+
+    last_run_* are the latest by run_timestamp (lexical == chronological on ISO-8601), so a summary
+    can name the run that most recently touched the benchmark even though it spans many runs.
+    """
+    benchmark_name = None
     agent_label = None
+    best_ts = None
+    best_run = None
     for r in rows:
-        if run_timestamp is None and not _blank(r.get("run_timestamp")):
-            run_timestamp = r.get("run_timestamp")
+        if benchmark_name is None and not _blank(r.get("benchmark_name")):
+            benchmark_name = r.get("benchmark_name")
         if agent_label is None and not _blank(r.get("agent_label")):
             agent_label = r.get("agent_label")
-    return {"run_timestamp": run_timestamp, "agent_label": agent_label}
+        ts = _str(r.get("run_timestamp"))
+        if not _blank(ts) and (best_ts is None or ts > best_ts):
+            best_ts = ts
+            best_run = _str(r.get("run_id"))
+    return {
+        "benchmark_name": benchmark_name,
+        "agent_label": agent_label,
+        "run_timestamp": best_ts,
+        "last_run_id": best_run,
+    }
 
 
 # --- per-bucket statistics --------------------------------------------------
@@ -225,8 +273,15 @@ def _score(row):
 
 # --- grouping helpers -------------------------------------------------------
 
-def _summary_key(row):
-    return (_str(row.get("run_id")), _str(row.get("agent_key")), _str(row.get("mode")))
+def _bench_key(row):
+    """The benchmark-level group key: (benchmark_id, agent_key, mode)."""
+    return (_str(row.get("benchmark_id")), _str(row.get("agent_key")), _str(row.get("mode")))
+
+
+def _attempt(row):
+    """The attempt number of a scored row as an int (0 when absent / unparseable)."""
+    n = _num(row.get("attempt_no"))
+    return int(n) if n is not None else 0
 
 
 def _bucket(row, dimension):

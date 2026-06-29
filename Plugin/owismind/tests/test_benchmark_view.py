@@ -21,6 +21,7 @@ from owismind.benchmark_view import schemas, aggregate, agent_profile, schema_ch
 def _scored(**over):
     base = {
         "run_id": "r1", "run_timestamp": "2026-06-29T10:00:00Z",
+        "benchmark_id": "B1", "benchmark_name": "bench one", "attempt_no": 1,
         "question_id": "Q1", "question": "q", "category": "revenus",
         "agent_key": "owismind", "agent_label": "OWIsMind", "mode": "Smart",
         "status": "ok", "objective_match": "hit", "judge_score": 5,
@@ -30,6 +31,7 @@ def _scored(**over):
         "expected_value_type": "numeric", "human_verdict": "", "human_correct": None,
         "human_comment": "", "reviewed_by": "", "reviewed_at": "",
         "latency_total_s": 1.2, "estimated_cost": 0.01,
+        "expected_sql": "SELECT 1", "expected_tool": "show_table", "actual_tools": "table",
     }
     base.update(over)
     return base
@@ -63,46 +65,76 @@ class ResultsViewTests(unittest.TestCase):
         ]
 
     def test_kpis_use_effective_verdict(self):
-        out = aggregate.results_view(self._rows(), run_id="r1")
+        out = aggregate.results_view(self._rows())
         k = out["kpis"]
         # Scored ok rows: Q1 (correct), Q2 (incorrect), Q3 (override->correct). Q4 errored.
         self.assertEqual(k["n_scored"], 3)
         self.assertEqual(k["n_correct"], 2)
         self.assertAlmostEqual(k["accuracy"], 2.0 / 3.0, places=4)
         self.assertIn(k["band"], ("high", "medium", "low"))
+        self.assertEqual(out["benchmark_id"], "B1")
+        self.assertEqual(out["benchmark_name"], "bench one")
 
     def test_configs_per_agent_mode(self):
-        out = aggregate.results_view(self._rows(), run_id="r1")
+        out = aggregate.results_view(self._rows())
         # two configs: owismind/Smart (3 q) and owismind/Pro (1 q, errored)
         labels = {(c["agent_label"], c["mode"]) for c in out["configs"]}
         self.assertIn(("OWIsMind", "Smart"), labels)
         self.assertIn(("OWIsMind", "Pro"), labels)
 
     def test_categories_breakdown_effective(self):
-        out = aggregate.results_view(self._rows(), run_id="r1")
+        out = aggregate.results_view(self._rows())
         buckets = {c["bucket"]: c for c in out["categories"]}
         # tickets bucket has Q3 (override correct); Q4 errored excluded -> accuracy 1.0
         self.assertIn("tickets", buckets)
         self.assertEqual(buckets["tickets"]["accuracy"], 1.0)
 
-    def test_detail_carries_override_and_comment_fields(self):
-        out = aggregate.results_view(self._rows(), run_id="r1")
+    def test_detail_carries_override_and_reference_fields(self):
+        out = aggregate.results_view(self._rows())
         row = next(r for r in out["detail"] if r["question_id"] == "Q3")
-        for key in ("agent_key", "judge_comment", "human_verdict", "effective_verdict",
-                    "overridden", "notes", "expected_value"):
+        for key in ("agent_key", "run_id", "judge_comment", "human_verdict", "effective_verdict",
+                    "overridden", "notes", "expected_value", "expected_sql", "expected_tool",
+                    "actual_tools", "attempt_no", "n_attempts", "delta", "attempts"):
             self.assertIn(key, row)
         self.assertTrue(row["overridden"])
         self.assertEqual(row["effective_verdict"], "correct")
 
-    def test_runs_listed_newest_first(self):
-        rows = self._rows() + [_scored(run_id="r0", run_timestamp="2026-06-01T00:00:00Z")]
-        out = aggregate.results_view(rows, run_id="r1")
-        self.assertEqual(out["runs"][0]["run_id"], "r1")
+    def test_benchmarks_selector(self):
+        rows = self._rows() + [
+            _scored(benchmark_id="B2", benchmark_name="bench two", question_id="Q9",
+                    run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        out = aggregate.results_view(rows)
+        ids = {b["benchmark_id"] for b in out["benchmarks"]}
+        self.assertEqual(ids, {"B1", "B2"})
+        # Default selection = most recent benchmark (B2's row is newer).
+        self.assertEqual(out["benchmark_id"], "B2")
+        # Explicit selection honored.
+        out_b1 = aggregate.results_view(rows, benchmark_id="B1")
+        self.assertEqual(out_b1["benchmark_id"], "B1")
+
+    def test_evolution_in_detail(self):
+        rows = [
+            _scored(question_id="Q1", attempt_no=1, correct=False, judge_score=2,
+                    judge_verdict="incorrect", run_id="r1", run_timestamp="2026-06-29T10:00:00Z"),
+            _scored(question_id="Q1", attempt_no=2, correct=True, judge_score=5,
+                    run_id="r2", run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        out = aggregate.results_view(rows, benchmark_id="B1")
+        # latest attempt wins -> 1 question, correct
+        self.assertEqual(out["kpis"]["n_questions"], 1)
+        self.assertEqual(out["kpis"]["n_correct"], 1)
+        row = out["detail"][0]
+        self.assertEqual(row["attempt_no"], 2)
+        self.assertEqual(row["n_attempts"], 2)
+        self.assertEqual(row["delta"], "improved")
+        self.assertEqual([a["attempt_no"] for a in row["attempts"]], [1, 2])
 
     def test_empty_is_safe(self):
-        out = aggregate.results_view([], run_id=None)
+        out = aggregate.results_view([])
         self.assertEqual(out["kpis"]["n_scored"], 0)
         self.assertEqual(out["detail"], [])
+        self.assertEqual(out["benchmarks"], [])
 
 
 class OverrideTests(unittest.TestCase):

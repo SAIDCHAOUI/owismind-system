@@ -53,6 +53,7 @@ Design contract: docs/superpowers/specs/2026-06-24-agent-benchmark-evaluation-de
 import json
 
 from benchmark import config
+from benchmark import registry
 
 # Default value for every tunable key. Dataset defaults match what the setup guide
 # tells the user to create in OWIsMind_LAB.
@@ -81,6 +82,12 @@ DEFAULTS = {
     # (cross-project, read-only) and where it records promoted ids. Empty -> the suggestions
     # tab is simply "not configured". Additive; nothing else changes when absent.
     "suggestions": {},
+    # v2 (append mode): the named per-agent benchmark registry + membership lives IN this variable
+    # (no new dataset). ``benchmarks`` maps benchmark_id -> entity (see benchmark.registry); empty
+    # until the launcher creates the first one. ``run_request`` is written by the launcher right
+    # before firing the scenario ({benchmark_id, launch_mode}); None when no launch is pending.
+    "benchmarks": {},
+    "run_request": None,
 }
 
 _CONCURRENCY_MIN = 1
@@ -117,6 +124,9 @@ def resolve(variables):
         raw.get("history_keep_runs", DEFAULTS["history_keep_runs"]))
     cfg["suggestions"] = _resolve_suggestions(raw.get("suggestions"))
     cfg["agents"] = _resolve_agents(raw.get("agents"))
+    # v2: the benchmark registry + the pending launch request (benchmark.registry parses both).
+    cfg["benchmarks"] = registry.parse_registry(raw.get("benchmarks"))
+    cfg["run_request"] = registry.parse_run_request(raw.get("run_request"))
     return cfg
 
 

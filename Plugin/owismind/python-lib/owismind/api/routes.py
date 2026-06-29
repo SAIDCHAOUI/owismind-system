@@ -1077,9 +1077,10 @@ def _benchmark_block_for_key(agent_key):
 def benchmark_results():
     """Consult one agent's benchmark results (any signed-in user). Read-only, bounded.
 
-    ``agent`` is the opaque logical key (resolved server-side to the admin-set table); ``run_id``
-    selects the run (latest by default). Returns the consultation view-model (verdict, KPIs, per
-    agent x mode, per category, per-question detail) recomputed on the EFFECTIVE verdict.
+    ``agent`` is the opaque logical key (resolved server-side to the admin-set table); ``benchmark_id``
+    selects the named benchmark (the most recent by default). Returns the consultation view-model
+    (verdict, KPIs, per agent x mode, per category, per-question detail with attempt evolution +
+    expected vs actual SQL/tool, plus the ``benchmarks`` selector) recomputed on the EFFECTIVE verdict.
     """
     try:
         resolve_identity(request.headers)
@@ -1093,15 +1094,15 @@ def benchmark_results():
     block = _benchmark_block_for_key(agent_key)
     if block is None:
         return jsonify({"status": "ok", "configured": False,
-                        "results": bench_aggregate.results_view([], run_id=None)})
+                        "results": bench_aggregate.results_view([], benchmark_id=None)})
 
     rows, err = bench_io.read_scored(block)
     if err:
         logger.warning("/benchmark/results - read failed (%s) agent=%s", err, agent_key)
         return jsonify({"status": "ok", "configured": True, "read_error": err,
-                        "results": bench_aggregate.results_view([], run_id=None)})
-    run_id = request.args.get("run_id") or None
-    results = bench_aggregate.results_view(rows, run_id=run_id)
+                        "results": bench_aggregate.results_view([], benchmark_id=None)})
+    benchmark_id = request.args.get("benchmark_id") or None
+    results = bench_aggregate.results_view(rows, benchmark_id=benchmark_id)
     return jsonify({"status": "ok", "configured": True, "results": results})
 
 

@@ -175,14 +175,19 @@ export function fetchMySuggestions() {
 
 // --- Benchmark results (consultation, ALL users) ------------------------------
 
-// Benchmark scoring for ONE agent (its logical key) and an OPTIONAL run id (omit for
-// the newest run). Returns { status, configured:bool, read_error?:str, results } where
-// results = { run_id, runs, kpis, configs, categories, detail }. `configured:false`
+// Benchmark scoring for ONE agent (its logical key) and an OPTIONAL benchmark id (omit
+// for the agent's newest benchmark). A benchmark is a named, unique evaluation campaign
+// that ACCUMULATES runs over time; the score is over ALL questions ever added, using the
+// latest attempt of each. Returns { status, configured:bool, read_error?:str, results }
+// where results = { benchmark_id, benchmark_name, benchmarks, kpis, configs, categories,
+// detail }. `benchmarks` is the selector (one entry per benchmark of this agent); each
+// `detail` row now carries its own run_id, attempt_no, delta, attempts[], expected_sql,
+// expected_tool and actual_tools (latest attempt per question x config). `configured:false`
 // means no benchmark is wired for that agent; `read_error` is a soft degraded read.
-export function fetchBenchmarkResults(agentKey, runId) {
+export function fetchBenchmarkResults(agentKey, benchmarkId) {
   const qs = new URLSearchParams();
   qs.set('agent', agentKey);
-  if (runId) qs.set('run_id', runId);
+  if (benchmarkId) qs.set('benchmark_id', benchmarkId);
   return request('/owismind-api/benchmark/results?' + qs.toString(), { method: 'GET' });
 }
 

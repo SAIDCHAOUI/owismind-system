@@ -9,6 +9,34 @@ Suis les parties DANS L'ORDRE (A -> B -> C -> D). A la fin, tout fonctionne.
 
 ---
 
+## v2 (2026-06-30) : benchmarks nommes par agent + mode append - A LIRE D'ABORD
+
+Le benchmark est passe en **mode append** : un benchmark est une campagne NOMMEE et unique attachee a
+UN agent ; relancer ne rejoue que les questions PAS ENCORE faites et ACCUMULE dans le meme benchmark
+(score global sur la derniere tentative de chaque question). Detail + modele : section "v2" du
+`OWIsMind_LAB/README.md` et la spec `docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md`.
+
+Ce que ce guide implique EN PLUS, pour la v2 (le reste des parties A-D reste valable) :
+- **Re-coller la librairie `benchmark/`** : fichier NEUF `registry.py` + fichiers changes
+  `schemas.py`, `run_params.py`, `scoring.py`, `judge.py`, `agent_runner.py`, et les 3 corps de step
+  `dss_steps/step_run_matrix.py` / `step_judge.py` / `step_aggregate.py`.
+- **Re-coller `benchmark_webapp/`** : `views.py` + `dss.py` (registre dans la variable + lancement par
+  benchmark + selecteurs benchmark).
+- **Re-coller les panes** des 2 webapps : le launcher gagne un onglet **Benchmarks** (creer / ouvrir /
+  lancer un benchmark, membership + evolution + "refaire au prochain") et l'onglet Golden gagne 2 champs
+  `expected_sql` / `expected_tool` ; le results passe son selecteur de RUN en selecteur de BENCHMARK.
+- **Variable `benchmark`** : ajouter `"benchmarks": {}` et `"run_request": null` (les deux vides ; le
+  launcher les remplit, tu n'y touches pas a la main). Voir `local-variables.example.json`.
+- **Colonnes neuves** : `benchmark_id` / `benchmark_name` / `attempt_no` (raw+scored), `expected_sql` /
+  `expected_tool` (golden+raw+scored), `actual_tools` (scored). Elles se materialisent toutes seules au
+  PROCHAIN run (les datasets manages font evoluer leur schema a l'ecriture). `benchmark_summary` /
+  `benchmark_breakdown` deviennent **par benchmark** (plus par run) : un run frais les recree proprement.
+- **Lancement** : il ne se fait PLUS globalement. On cree/ouvre un benchmark dans l'onglet Benchmarks du
+  launcher et on clique "Run pending" (append) / "Re-run entire benchmark" (full). L'ancien bouton de
+  lancement global a ete retire.
+
+---
+
 ## 0. Vue d'ensemble : ce qu'on deploie
 
 Trois blocs, qui doivent etre coherents entre eux :

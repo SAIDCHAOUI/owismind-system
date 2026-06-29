@@ -173,25 +173,175 @@ def api_run_status():
     return jsonify({"status": "ok", **dss.last_status(dss.scenario())})
 
 
+# --- v2: named per-agent benchmarks (registry + append-mode launch) ----------
+
+def _scored_light(cfg):
+    """The scored dataset projected to the light columns (for done / evolution). [] when absent."""
+    return dss.read_dataset(cfg["scored_dataset"], keep_cols=dss.SCORED_KEEP)
+
+
+@app.route("/api/benchmarks", methods=["GET"])
+@_safe
+def api_benchmarks():
+    """The benchmark list + the agent catalog + the golden pool (for creating / adding questions)."""
+    cfg = dss.config()
+    summary = dss.read_dataset(cfg["summary_dataset"])
+    scored = _scored_light(cfg)
+    return jsonify({
+        "status": "ok",
+        "benchmarks": views.benchmarks_view(cfg.get("benchmarks") or {}, summary, scored),
+        "agents": dss.benchmark_agents_catalog(cfg),
+        "modes": list(bench_config.MODES),
+        "golden": dss.read_golden_rows(cfg),
+    })
+
+
+@app.route("/api/benchmark/detail", methods=["GET"])
+@_safe
+def api_benchmark_detail():
+    """One benchmark's membership table + per-question evolution (latest attempt + history)."""
+    cfg = dss.config()
+    bid = request.args.get("benchmark_id") or ""
+    entity = (cfg.get("benchmarks") or {}).get(bid)
+    if not entity:
+        return _err("unknown_benchmark", 404)
+    golden = dss.read_golden_rows(cfg)
+    scored = _scored_light(cfg)
+    detail = views.benchmark_detail_view(entity, golden, scored)
+    return jsonify({"status": "ok", **detail})
+
+
+def _find_catalog_agent(cfg, agent_key):
+    for a in dss.benchmark_agents_catalog(cfg):
+        if a.get("agent_key") == agent_key:
+            return a
+    return None
+
+
+@app.route("/api/benchmark/create", methods=["POST"])
+@_safe
+def api_benchmark_create():
+    """Create a named benchmark pinned to one agent (from the catalog), seeded with questions.
+
+    Body: ``{name, agent_key, question_ids?, seed_all?}``. ``seed_all`` seeds every active golden
+    question; otherwise ``question_ids`` (may be empty -> an empty benchmark you add to later). The
+    benchmark's modes derive from the agent's modes flag (all modes when mode-aware, else ['default']).
+    """
+    cfg = dss.config()
+    body = request.get_json(silent=True) or {}
+    name = body.get("name")
+    agent = _find_catalog_agent(cfg, body.get("agent_key"))
+    if not agent:
+        return _err("unknown_agent", 400)
+    modes = list(bench_config.MODES) if agent.get("modes") else ["default"]
+    if body.get("seed_all"):
+        question_ids = [g["question_id"] for g in dss.read_golden_rows(cfg)
+                        if g.get("active") and g.get("question_id")]
+    else:
+        question_ids = [str(q) for q in (body.get("question_ids") or []) if str(q).strip()]
+    result, errors = dss.create_benchmark(name, agent, modes, question_ids, _reviewer())
+    if errors:
+        return _err("invalid_benchmark", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/benchmark/add-questions", methods=["POST"])
+@_safe
+def api_benchmark_add_questions():
+    body = request.get_json(silent=True) or {}
+    bid = body.get("benchmark_id") or ""
+    qids = [str(q) for q in (body.get("question_ids") or []) if str(q).strip()]
+    if not qids:
+        return _err("no_questions", 400)
+    result, errors = dss.add_questions_to_benchmark(bid, qids)
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/benchmark/remove-question", methods=["POST"])
+@_safe
+def api_benchmark_remove_question():
+    body = request.get_json(silent=True) or {}
+    result, errors = dss.remove_question_from_benchmark(
+        body.get("benchmark_id") or "", body.get("question_id") or "")
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/benchmark/redo", methods=["POST"])
+@_safe
+def api_benchmark_redo():
+    """Set / clear the 'redo at next run' flag on one member question."""
+    body = request.get_json(silent=True) or {}
+    result, errors = dss.set_question_redo(
+        body.get("benchmark_id") or "", body.get("question_id") or "", bool(body.get("include_next")))
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/benchmark/rename", methods=["POST"])
+@_safe
+def api_benchmark_rename():
+    body = request.get_json(silent=True) or {}
+    result, errors = dss.rename_benchmark(body.get("benchmark_id") or "", body.get("name") or "")
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/benchmark/archive", methods=["POST"])
+@_safe
+def api_benchmark_archive():
+    body = request.get_json(silent=True) or {}
+    result, errors = dss.archive_benchmark(body.get("benchmark_id") or "")
+    if errors:
+        return _err("invalid_request", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+# Map a launch error code to an HTTP status (409 for the single-flight conflict, else 400/500).
+_LAUNCH_STATUS = {"already_running": 409, "unknown_benchmark": 404, "bad_request": 400,
+                  "launch_unsupported": 500}
+
+
+@app.route("/api/benchmark/launch", methods=["POST"])
+@_safe
+def api_benchmark_launch():
+    """Launch a benchmark: write the run_request (benchmark_id + mode), consume redo flags, fire.
+
+    Body: ``{benchmark_id, launch_mode}`` where launch_mode is 'append' (pending + redo, default) or
+    'full' (re-run every member question). The redo flags are consumed by this launch.
+    """
+    body = request.get_json(silent=True) or {}
+    result, err = dss.launch_benchmark(
+        body.get("benchmark_id") or "", body.get("launch_mode") or "append")
+    if err:
+        return _err(err, _LAUNCH_STATUS.get(err, 400))
+    return jsonify({"status": "ok", **result})
+
+
 # --- review + override: human-in-the-loop correction of the judge verdict ----
 
 @app.route("/api/review", methods=["GET"])
 @_safe
 def api_review():
-    """The per-question detail of ONE run for human review (judge verdict + comment + override).
+    """Every attempt of ONE benchmark for human review (judge verdict + comment + per-attempt override).
 
-    Reuses the shaped detail rows (views.detail_view) that already surface the judge comment, the
-    effective verdict and the human override fields. ``run_id`` selects the run (latest by default);
+    v2: a reviewer overrides a SPECIFIC attempt, so this lists ALL attempts of the benchmark (not the
+    latest only) via views.review_view. ``benchmark_id`` selects the benchmark (latest by default);
     ``only_needs_review=1`` keeps the priority pile."""
     cfg = dss.config()
-    run_id = request.args.get("run_id") or None
+    benchmark_id = request.args.get("benchmark_id") or None
     only_nr = request.args.get("only_needs_review") in ("1", "true", "yes")
     scored = dss.read_dataset(cfg["scored_dataset"], keep_cols=dss.SCORED_KEEP)
-    detail = views.detail_view(scored, run_id=run_id, only_needs_review=only_nr, limit=2000)
+    review = views.review_view(scored, benchmark_id=benchmark_id, only_needs_review=only_nr, limit=2000)
     return jsonify({
         "status": "ok",
-        "runs": views.runs_view(dss.read_dataset(cfg["summary_dataset"])),
-        **detail,
+        "benchmarks": views.benchmark_options(scored),
+        **review,
     })
 
 

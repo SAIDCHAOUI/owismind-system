@@ -632,6 +632,22 @@ export const extraMessages = {
       'Relancer la MÊME exécution réinitialise les ajustements ; les ajustements des exécutions passées sont conservés.',
     'bench.review.reviewed_by': '{0} le {1}',
 
+    // Benchmark v2: selector, per-question evolution, reference vs produced
+    'bench.consult.benchmark_label': 'Benchmark',
+    'bench.consult.benchmark_caption': 'Benchmark : {0}',
+    'bench.evo.improved': 'En progrès',
+    'bench.evo.regressed': 'En recul',
+    'bench.evo.same': 'Stable',
+    'bench.evo.first': 'Première tentative',
+    'bench.evo.attempts_n': '{0} tentatives',
+    'bench.evo.attempt_n': 'Tentative {0}',
+    'bench.evo.history_title': 'Évolution des tentatives',
+    'bench.refprod.title': 'Référence et production',
+    'bench.refprod.reference_sql': 'SQL de référence',
+    'bench.refprod.suggested_tool': 'Outil suggéré',
+    'bench.refprod.tools_used': 'Outils utilisés',
+    'bench.refprod.none': '- aucun -',
+
     // Suggest sub-section (accordion)
     'bench.section.suggest_title': 'Suggérer une question de test',
     'bench.section.suggest_desc':
@@ -1277,6 +1293,22 @@ export const extraMessages = {
     'bench.review.reset_note':
       'Re-running the SAME run resets overrides; overrides on past runs are kept.',
     'bench.review.reviewed_by': '{0} on {1}',
+
+    // Benchmark v2: selector, per-question evolution, reference vs produced
+    'bench.consult.benchmark_label': 'Benchmark',
+    'bench.consult.benchmark_caption': 'Benchmark: {0}',
+    'bench.evo.improved': 'Improved',
+    'bench.evo.regressed': 'Regressed',
+    'bench.evo.same': 'Unchanged',
+    'bench.evo.first': 'First attempt',
+    'bench.evo.attempts_n': '{0} attempts',
+    'bench.evo.attempt_n': 'Attempt {0}',
+    'bench.evo.history_title': 'Attempt history',
+    'bench.refprod.title': 'Reference and produced',
+    'bench.refprod.reference_sql': 'Reference SQL',
+    'bench.refprod.suggested_tool': 'Suggested tool',
+    'bench.refprod.tools_used': 'Tools used',
+    'bench.refprod.none': '- none -',
 
     // Suggest sub-section (accordion)
     'bench.section.suggest_title': 'Suggest a test question',

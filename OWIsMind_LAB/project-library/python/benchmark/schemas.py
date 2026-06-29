@@ -44,6 +44,12 @@ GOLDEN_COLUMNS = (
     "language",              # enum (LANGUAGES), default 'fr'
     "active",                # boolean, default True
     "notes",                 # nullable: free human note
+    # --- reference SQL / tool (v2): a soft signal for the judge + training data ----------
+    # Nullable. NOT scored as a hard metric: stored, displayed beside the agent's ACTUAL
+    # generated SQL / tool, and passed to the judge as a non-binding hint (the assistant may
+    # legitimately use a different but equally valid query / tool). See judge.build_judge_prompt.
+    "expected_sql",          # nullable: a reference SQL that could answer the question
+    "expected_tool",         # nullable: a reference tool key (e.g. show_chart / show_table / none)
 )
 
 # Columns that must be present and non-empty on every golden row.
@@ -54,11 +60,17 @@ _REQUIRED_GOLDEN = (
 )
 
 # --- benchmark_runs_raw (section 4) -----------------------------------------
-# One row per (run_id, question_id, agent_key, mode): the captured run + metrics.
+# One row per (run_id, question_id, agent_key, mode): the captured run + metrics. v2 adds the
+# benchmark dimension (benchmark_id / benchmark_name / attempt_no) so runs accumulate into a named,
+# per-agent benchmark; plus the denormalized reference SQL / tool and the agent's actual tools used.
 RAW_COLUMNS = (
     "run_id",
     "run_timestamp",
     "config_json",           # snapshot of the run config (json string)
+    # --- benchmark dimension (v2): the named, per-agent benchmark this run belongs to ---------
+    "benchmark_id",          # the benchmark container id (uuid hex); blank on legacy rows
+    "benchmark_name",        # the benchmark's human label
+    "attempt_no",            # 1-based attempt index per (benchmark_id, question_id, agent_key, mode)
     "question_id",
     "question",
     "category",
@@ -67,6 +79,8 @@ RAW_COLUMNS = (
     "expected_value",
     "expected_value_type",
     "notes",                 # human strictness note (governs the judge's numeric exactness)
+    "expected_sql",          # reference SQL (soft judge signal + display), denormalized from golden
+    "expected_tool",         # reference tool key (soft judge signal + display)
     "agent_key",
     "agent_label",
     "project_key",
@@ -79,6 +93,7 @@ RAW_COLUMNS = (
     "full_answer",           # text + serialized SQL tables + artifacts (judge input)
     "generated_sql_json",    # json of the sql_items list (proof / debug)
     "artifacts_json",        # json of the artifacts list
+    "actual_tools",          # comma list of artifact kinds the agent actually used (e.g. "chart,table")
     "n_sql",
     "total_rows",
     "latency_total_s",
@@ -112,10 +127,12 @@ SCORED_COLUMNS = RAW_COLUMNS + (
     "reviewed_at",           # ISO timestamp of the review
 )
 
-# --- benchmark_summary (section 7) - one row per (run_id, agent_key, mode) ----
+# --- benchmark_summary (section 7) - one row per (benchmark_id, agent_key, mode) ----
+# v2: a summary row is BENCHMARK-level (over the LATEST attempt of every question in the benchmark),
+# not per single run. ``last_run_*`` + ``n_runs`` describe the runs that built the benchmark.
 SUMMARY_COLUMNS = (
-    "run_id",
-    "run_timestamp",
+    "benchmark_id",
+    "benchmark_name",
     "agent_key",
     "agent_label",
     "mode",
@@ -123,7 +140,7 @@ SUMMARY_COLUMNS = (
     "n_ok",
     "n_error",
     "error_rate",
-    "accuracy",              # % correct among scored questions
+    "accuracy",              # % correct among scored questions (latest attempt each)
     "mean_score",
     "score_dist_json",       # json of the 1..5 counts
     "latency_p50_s",
@@ -136,12 +153,16 @@ SUMMARY_COLUMNS = (
     "avg_output_tokens",
     "needs_review_count",
     "judge_total_cost",
+    "last_run_id",           # most recent run that contributed to this benchmark
+    "last_run_timestamp",
+    "n_runs",                # distinct runs that contributed to this benchmark
 )
 
 # --- benchmark_breakdown (section 7) - one row per dimension bucket -----------
 BREAKDOWN_COLUMNS = (
-    "run_id",
-    "run_timestamp",
+    "benchmark_id",
+    "benchmark_name",
+    "last_run_timestamp",
     "agent_key",
     "agent_label",
     "mode",

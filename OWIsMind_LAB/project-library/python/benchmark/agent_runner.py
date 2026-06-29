@@ -157,7 +157,24 @@ def _denormalized_golden(question_row):
         "expected_value": row.get("expected_value"),
         "expected_value_type": row.get("expected_value_type"),
         "notes": row.get("notes"),
+        # v2: the reference SQL / tool carried verbatim for the judge's soft signal + display.
+        "expected_sql": row.get("expected_sql"),
+        "expected_tool": row.get("expected_tool"),
     }
+
+
+def _actual_tools(artifacts):
+    """Comma list of the distinct artifact kinds the agent actually produced (e.g. "chart,table").
+
+    Lets the consultation show what the agent USED, beside the golden's reference tool. '' when none.
+    """
+    kinds = []
+    for art in (artifacts or []):
+        if isinstance(art, dict):
+            kind = art.get("kind")
+            if kind and kind not in kinds:
+                kinds.append(kind)
+    return ",".join(kinds)
 
 
 def _base_raw_row(run_id, run_timestamp, config_json, question_row, agent, mode):
@@ -289,6 +306,7 @@ def run_one(project, agent, question_row, mode, language, timeout,
                 "full_answer": full_answer,
                 "generated_sql_json": json.dumps(sql_items, default=str),
                 "artifacts_json": json.dumps(artifacts, default=str),
+                "actual_tools": _actual_tools(artifacts),
                 "n_sql": len(sql_items),
                 "total_rows": total_rows,
                 "latency_total_s": round(t1 - t0, 3),

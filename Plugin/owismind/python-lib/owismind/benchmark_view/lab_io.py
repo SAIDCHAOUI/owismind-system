@@ -21,7 +21,7 @@ from dataiku import SQLExecutor2
 
 from owismind.storage.serialization import rows_to_json_safe
 from owismind.storage.sql_config import pg_identifier, sql_value, nullable_value
-from owismind.benchmark_view import schema_check
+from owismind.benchmark_view import schema_check, schemas
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,11 @@ _WRITE_TIMEOUT_PRE = "SET LOCAL statement_timeout TO '30000'"
 MAX_SCORED_ROWS = 5000
 MAX_TABLES = 2000
 
-# The columns read for the consultation (a subset guaranteed present once the schema validates).
+# The columns read for the consultation. The REQUIRED set is guaranteed present once the admin
+# validates the schema; the v2 columns are OPTIONAL (benchmark dimension + reference SQL/tool), read
+# only when the table actually has them - so an older table that predates a v2 re-run still reads.
 _READ_COLUMNS = tuple(schema_check.REQUIRED_COLUMNS)
+_DESIRED_COLUMNS = tuple(schema_check.REQUIRED_COLUMNS) + tuple(schemas.OPTIONAL_V2_COLUMNS)
 _HUMAN_COLUMNS = ("human_verdict", "human_correct", "human_comment", "reviewed_by", "reviewed_at")
 
 
@@ -102,7 +105,19 @@ def read_scored(block, max_rows=MAX_SCORED_ROWS):
         ident = pg_identifier(table)  # validates charset + length, double-quotes
     except ValueError:
         return None, "bad_table"
-    cols = ", ".join(pg_identifier(c) for c in _READ_COLUMNS)
+    # Read the INTERSECTION of the desired columns and the table's LIVE columns: the required set is
+    # guaranteed (the admin validated it), and the v2 columns are read only when present, so a table
+    # that predates the v2 re-run never makes the SELECT fail on a missing column. A failed column
+    # probe falls back to the required-only set (the previous, always-safe behavior).
+    present, cerr = table_columns(connection, table)
+    if cerr or present is None:
+        read_cols = list(_READ_COLUMNS)
+    else:
+        have = {c.strip().lower() for c in present if isinstance(c, str) and c.strip()}
+        read_cols = [c for c in _DESIRED_COLUMNS if c.lower() in have]
+        if not read_cols:
+            read_cols = list(_READ_COLUMNS)  # defensive: never read zero columns
+    cols = ", ".join(pg_identifier(c) for c in read_cols)
     where = ""
     if agent_key:
         where = " WHERE {0} = {1}".format(pg_identifier("agent_key"), sql_value(agent_key))

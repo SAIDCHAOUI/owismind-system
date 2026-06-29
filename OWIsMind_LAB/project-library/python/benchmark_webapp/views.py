@@ -13,6 +13,8 @@ import hashlib
 import json
 
 from benchmark import run_params, schemas
+from benchmark import registry
+from benchmark import scoring
 
 
 # --- scalar coercion / formatting -------------------------------------------
@@ -115,7 +117,7 @@ def latest_run_id(rows):
 
 
 def runs_view(rows):
-    """Distinct (run_id, run_timestamp) for the run selector, newest first."""
+    """Distinct (run_id, run_timestamp) for a run selector, newest first (legacy / debug)."""
     seen = {}
     for r in _rows(rows):
         rid = _str(r.get("run_id"))
@@ -127,19 +129,66 @@ def runs_view(rows):
     return items
 
 
+# --- v2: benchmark selector (the Results / Review picker is BY BENCHMARK now) ----
+
+def _row_ts(r):
+    """The recency timestamp of a row: the summary's last_run_timestamp or the scored run_timestamp."""
+    return _str(r.get("last_run_timestamp")) or _str(r.get("run_timestamp"))
+
+
+def latest_benchmark_id(rows):
+    """The most-recent benchmark_id across rows (by recency ts, then id). '' when none. Pure."""
+    best_key = None
+    best = ""
+    for r in _rows(rows):
+        bid = _str(r.get("benchmark_id"))
+        if not bid:
+            continue
+        key = (_row_ts(r), bid)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = bid
+    return best
+
+
+def benchmark_options(rows):
+    """Distinct (benchmark_id, benchmark_name, last_run_timestamp) for the selector, newest first.
+
+    Accepts summary OR scored rows (reads benchmark_name + a recency timestamp from either). A row
+    with no benchmark_id collapses into a single '' bucket (a legacy run predating v2). Pure.
+    """
+    acc = {}
+    for r in _rows(rows):
+        bid = _str(r.get("benchmark_id"))
+        entry = acc.setdefault(bid, {"benchmark_id": bid, "benchmark_name": "", "last_run_timestamp": ""})
+        name = _str(r.get("benchmark_name"))
+        if name and not entry["benchmark_name"]:
+            entry["benchmark_name"] = name
+        ts = _row_ts(r)
+        if ts > entry["last_run_timestamp"]:
+            entry["last_run_timestamp"] = ts
+    items = [{"benchmark_id": e["benchmark_id"],
+              "benchmark_name": e["benchmark_name"] or e["benchmark_id"] or "(default)",
+              "last_run_timestamp": e["last_run_timestamp"]} for e in acc.values()]
+    items.sort(key=lambda it: (it["last_run_timestamp"], it["benchmark_id"]), reverse=True)
+    return items
+
+
 # --- restitution: summary (KPIs + agent x mode table) -----------------------
 
-def summary_view(summary_rows, run_id=None):
-    """Shape benchmark_summary rows for ONE run into KPI tiles + an agent x mode table.
+def summary_view(summary_rows, benchmark_id=None):
+    """Shape benchmark_summary rows for ONE benchmark into KPI tiles + an agent x mode table (v2).
 
-    KPIs: global accuracy (correct over scored across the run), question count, configurations
-    (agent x mode) tested, total cost, total needs-review. The per-row table carries the raw
-    numbers (for bar widths) and the formatted strings (for labels). Pure, never raises.
+    KPIs: global accuracy (correct over scored across the benchmark, latest attempt each), question
+    count, configurations (agent x mode) tested, total cost, total needs-review. The per-row table
+    carries the raw numbers (for bar widths) and the formatted strings (for labels). Pure, never raises.
     """
     rows = _rows(summary_rows)
-    rid = _str(run_id) or latest_run_id(rows)
-    if rid:
-        rows = [r for r in rows if _str(r.get("run_id")) == rid]
+    bid = _str(benchmark_id) or latest_benchmark_id(rows)
+    if bid:
+        rows = [r for r in rows if _str(r.get("benchmark_id")) == bid]
+    bench_name = next((_str(r.get("benchmark_name")) for r in rows
+                       if _str(r.get("benchmark_name"))), "")
 
     shaped = []
     total_correct = 0.0
@@ -182,7 +231,8 @@ def summary_view(summary_rows, run_id=None):
     shaped.sort(key=lambda s: (-s["accuracy"], s["agent_label"], s["mode"]))
     global_acc = (total_correct / total_ok) if total_ok else 0.0
     return {
-        "run_id": rid,
+        "benchmark_id": bid,
+        "benchmark_name": bench_name or bid,
         "kpis": {
             "accuracy": global_acc,
             "accuracy_pct": fmt_pct(global_acc),
@@ -217,12 +267,12 @@ def confidence_band(accuracy):
 
 # --- restitution: breakdown (accuracy per category) -------------------------
 
-def breakdown_view(breakdown_rows, run_id=None):
-    """Shape benchmark_breakdown rows for ONE run into per (agent x mode, bucket) accuracy."""
+def breakdown_view(breakdown_rows, benchmark_id=None):
+    """Shape benchmark_breakdown rows for ONE benchmark into per (agent x mode, bucket) accuracy (v2)."""
     rows = _rows(breakdown_rows)
-    rid = _str(run_id) or latest_run_id(rows)
-    if rid:
-        rows = [r for r in rows if _str(r.get("run_id")) == rid]
+    bid = _str(benchmark_id) or latest_benchmark_id(rows)
+    if bid:
+        rows = [r for r in rows if _str(r.get("benchmark_id")) == bid]
     out = []
     for r in rows:
         out.append({
@@ -236,7 +286,7 @@ def breakdown_view(breakdown_rows, run_id=None):
             "mean_score": _num(r.get("mean_score")) or 0.0,
         })
     out.sort(key=lambda s: (s["agent_label"], s["mode"], s["bucket"]))
-    return {"run_id": rid, "rows": out}
+    return {"benchmark_id": bid, "rows": out}
 
 
 # --- restitution: per-question detail ---------------------------------------
@@ -245,68 +295,112 @@ def breakdown_view(breakdown_rows, run_id=None):
 _ANSWER_PREVIEW_CHARS = 280
 
 
-def detail_view(scored_rows, run_id=None, only_needs_review=False, limit=200):
-    """Shape benchmark_runs_scored rows for ONE run into the per-question table.
+def _shape_detail_row(r):
+    """Shape one scored row into a per-question table row (effective verdict + the v2 fields)."""
+    answer = _str(r.get("answer_text"))
+    eff = schemas.effective_correct(r)
+    return {
+        "question_id": _str(r.get("question_id")),
+        "question": _str(r.get("question")),
+        "category": _str(r.get("category")),
+        # The override match key = (run_id, question_id, agent_key, mode); agent_label is display.
+        "run_id": _str(r.get("run_id")),
+        "run_timestamp": _str(r.get("run_timestamp")),
+        "agent_key": _str(r.get("agent_key")),
+        "agent_label": _str(r.get("agent_label")) or _str(r.get("agent_key")),
+        "mode": _str(r.get("mode")),
+        "status": _str(r.get("status")),
+        "objective_match": _str(r.get("objective_match")),
+        "judge_score": _int(r.get("judge_score")),
+        "judge_verdict": _str(r.get("judge_verdict")),
+        "judge_comment": _str(r.get("judge_comment")),
+        "correct": _truthy(r.get("correct")),
+        "needs_review": _truthy(r.get("needs_review")),
+        "reference_answer": _str(r.get("reference_answer")),
+        "answer_preview": answer[:_ANSWER_PREVIEW_CHARS],
+        "latency_total_s": _num(r.get("latency_total_s")) or 0.0,
+        "latency_str": fmt_secs(r.get("latency_total_s")),
+        "estimated_cost": _num(r.get("estimated_cost")) or 0.0,
+        # Strictness note + crisp expected value (so the review panel shows the contract).
+        "notes": _str(r.get("notes")),
+        "expected_value": _str(r.get("expected_value")),
+        "expected_value_type": _str(r.get("expected_value_type")),
+        # v2: the benchmark dimension + the reference SQL/tool vs what the agent actually used.
+        "benchmark_id": _str(r.get("benchmark_id")),
+        "benchmark_name": _str(r.get("benchmark_name")),
+        "attempt_no": _int(r.get("attempt_no")),
+        "expected_sql": _str(r.get("expected_sql")),
+        "expected_tool": _str(r.get("expected_tool")),
+        "actual_tools": _str(r.get("actual_tools")),
+        # Human-in-the-loop override (the effective verdict is what KPIs already use).
+        "human_verdict": _str(r.get("human_verdict")),
+        "human_comment": _str(r.get("human_comment")),
+        "reviewed_by": _str(r.get("reviewed_by")),
+        "reviewed_at": _str(r.get("reviewed_at")),
+        "effective_correct": eff["correct"],
+        "effective_verdict": eff["verdict"],
+        "overridden": eff["overridden"],
+    }
 
-    The heavy ``full_answer`` / ``generated_sql_json`` columns are dropped (a short answer
-    preview is kept). ``only_needs_review`` keeps the priority re-read pile; ``limit`` bounds
-    the returned rows. Pure, never raises.
+
+def detail_view(scored_rows, benchmark_id=None, only_needs_review=False, limit=200):
+    """Shape benchmark_runs_scored rows for ONE benchmark into the per-question table (v2).
+
+    Reduces to the LATEST attempt of each question x mode (the benchmark's current state) and attaches
+    each row's ``evolution`` (per-mode attempt history + delta) so the consultation can show progress.
+    The heavy ``full_answer`` / ``generated_sql_json`` columns are not present (light read).
+    ``only_needs_review`` keeps the priority pile; ``limit`` bounds the returned rows. Pure, never raises.
     """
     rows = _rows(scored_rows)
-    rid = _str(run_id) or latest_run_id(rows)
-    if rid:
-        rows = [r for r in rows if _str(r.get("run_id")) == rid]
+    bid = _str(benchmark_id) or latest_benchmark_id(rows)
+    bench_rows = [r for r in rows if _str(r.get("benchmark_id")) == bid] if bid else rows
     try:
         cap = max(1, min(int(limit), 2000))
     except (TypeError, ValueError):
         cap = 200
 
+    latest = scoring.latest_attempts(bench_rows)
     out = []
-    for r in rows:
-        needs_review = _truthy(r.get("needs_review"))
-        if only_needs_review and not needs_review:
+    for r in latest:
+        shaped = _shape_detail_row(r)
+        if only_needs_review and not shaped["needs_review"]:
             continue
-        answer = _str(r.get("answer_text"))
-        eff = schemas.effective_correct(r)
-        out.append({
-            "question_id": _str(r.get("question_id")),
-            "question": _str(r.get("question")),
-            "category": _str(r.get("category")),
-            # agent_key is the override match key (with run_id, question_id, mode); agent_label is display.
-            "agent_key": _str(r.get("agent_key")),
-            "agent_label": _str(r.get("agent_label")) or _str(r.get("agent_key")),
-            "mode": _str(r.get("mode")),
-            "status": _str(r.get("status")),
-            "objective_match": _str(r.get("objective_match")),
-            "judge_score": _int(r.get("judge_score")),
-            "judge_verdict": _str(r.get("judge_verdict")),
-            "judge_comment": _str(r.get("judge_comment")),
-            "correct": _truthy(r.get("correct")),
-            "needs_review": needs_review,
-            "reference_answer": _str(r.get("reference_answer")),
-            "answer_preview": answer[:_ANSWER_PREVIEW_CHARS],
-            "latency_total_s": _num(r.get("latency_total_s")) or 0.0,
-            "latency_str": fmt_secs(r.get("latency_total_s")),
-            "estimated_cost": _num(r.get("estimated_cost")) or 0.0,
-            # Strictness note + crisp expected value (so the review panel shows the contract).
-            "notes": _str(r.get("notes")),
-            "expected_value": _str(r.get("expected_value")),
-            "expected_value_type": _str(r.get("expected_value_type")),
-            # Human-in-the-loop override (the effective verdict is what KPIs already use).
-            "human_verdict": _str(r.get("human_verdict")),
-            "human_comment": _str(r.get("human_comment")),
-            "reviewed_by": _str(r.get("reviewed_by")),
-            "reviewed_at": _str(r.get("reviewed_at")),
-            "effective_correct": eff["correct"],
-            "effective_verdict": eff["verdict"],
-            "overridden": eff["overridden"],
-        })
-    # Needs-review first, then incorrect, then the rest - the eye lands on the problems. Sort
-    # the FULL filtered list BEFORE capping, so a needs-review row beyond the cap is never
-    # dropped from view (the cap bounds the table, the sort surfaces the problems within it).
-    out.sort(key=lambda s: (not s["needs_review"], s["effective_correct"], s["question_id"]))
+        ev = evolution_for_question(bench_rows, bid, shaped["question_id"])
+        # Find this row's mode entry for the delta + attempt count (the per-(question, mode) history).
+        mode_ev = next((m for m in ev if m["mode"] == shaped["mode"]), None)
+        shaped["n_attempts"] = len(mode_ev["attempts"]) if mode_ev else 1
+        shaped["delta"] = mode_ev["delta"] if mode_ev else "first"
+        shaped["attempts"] = mode_ev["attempts"] if mode_ev else []
+        out.append(shaped)
+    out.sort(key=lambda s: (not s["needs_review"], s["effective_correct"], s["question_id"], s["mode"]))
     out = out[:cap]
-    return {"run_id": rid, "count": len(out), "rows": out}
+    return {"benchmark_id": bid, "count": len(out), "rows": out}
+
+
+def review_view(scored_rows, benchmark_id=None, only_needs_review=False, limit=2000):
+    """ALL attempts of one benchmark (NOT reduced to latest), for the launcher Review/override (v2).
+
+    The reviewer overrides a SPECIFIC attempt (the override key is run_id/question_id/agent_key/mode),
+    so this lists every attempt - newest first within a question - rather than the latest only. Pure.
+    """
+    rows = _rows(scored_rows)
+    bid = _str(benchmark_id) or latest_benchmark_id(rows)
+    bench_rows = [r for r in rows if _str(r.get("benchmark_id")) == bid] if bid else rows
+    try:
+        cap = max(1, min(int(limit), 5000))
+    except (TypeError, ValueError):
+        cap = 2000
+    out = []
+    for r in bench_rows:
+        shaped = _shape_detail_row(r)
+        if only_needs_review and not shaped["needs_review"]:
+            continue
+        out.append(shaped)
+    # Needs-review first (the priority pile), then group a question's attempts together with the
+    # newest attempt on top so the latest verdict + its evolution read at a glance.
+    out.sort(key=lambda s: (not s["needs_review"], s["question_id"], s["mode"], -s["attempt_no"]))
+    out = out[:cap]
+    return {"benchmark_id": bid, "count": len(out), "rows": out}
 
 
 # --- human-in-the-loop override (pure key match + field set) ----------------
@@ -562,6 +656,9 @@ def golden_view(rows):
             "language": _str(r.get("language")) or "fr",
             "active": True if act is None else _truthy(act),
             "notes": _str(r.get("notes")),
+            # v2: reference SQL / tool (soft judge signal + training data), editable in the launcher.
+            "expected_sql": _str(r.get("expected_sql")),
+            "expected_tool": _str(r.get("expected_tool")),
         })
     out.sort(key=lambda g: ((g["category"] or "~"), g["question_id"]))
     return out
@@ -687,6 +784,200 @@ def build_config_object(existing, form):
         out["question_filter"] = clean
 
     return out
+
+
+# --- v2: named per-agent benchmarks (registry view-models + launch) ---------
+
+def _member_items(entity):
+    """Ordered (question_id, meta) pairs of an entity's ACTIVE membership (by added_at, then id)."""
+    questions = entity.get("questions") if isinstance(entity, dict) else None
+    questions = questions if isinstance(questions, dict) else {}
+    items = [(qid, meta) for qid, meta in questions.items()
+             if isinstance(meta, dict) and meta.get("active", True)]
+    items.sort(key=lambda it: (_str(it[1].get("added_at")), _str(it[0])))
+    return items
+
+
+def _benchmark_kpis(summary_rows, benchmark_id):
+    """Accuracy (correct over scored across the benchmark's summary rows) + n_runs + last_run_ts."""
+    bid = _str(benchmark_id)
+    total_correct = 0.0
+    total_ok = 0
+    n_runs = 0
+    last_ts = ""
+    for r in _rows(summary_rows):
+        if _str(r.get("benchmark_id")) != bid:
+            continue
+        n_ok = _int(r.get("n_ok"))
+        total_correct += (_num(r.get("accuracy")) or 0.0) * n_ok
+        total_ok += n_ok
+        n_runs = max(n_runs, _int(r.get("n_runs")))
+        ts = _str(r.get("last_run_timestamp"))
+        if ts > last_ts:
+            last_ts = ts
+    accuracy = (total_correct / total_ok) if total_ok else 0.0
+    return accuracy, total_ok, n_runs, last_ts
+
+
+def benchmarks_view(reg, summary_rows, scored_rows, include_archived=False):
+    """Shape the registry into the launcher's benchmark LIST. Pure, never raises.
+
+    ``reg`` is the parsed registry ({benchmark_id: entity}); ``summary_rows`` the benchmark-level
+    summary; ``scored_rows`` a light scored projection (for done / pending / redo counts). Each item:
+    ``{benchmark_id, name, agent_key, agent_label, modes, status, created_at, n_questions, n_done,
+    n_pending, n_redo, n_runs, last_run_timestamp, accuracy, accuracy_pct, band}``.
+    """
+    out = []
+    for bid, entity in (reg or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        if entity.get("status") == "archived" and not include_archived:
+            continue
+        members = _member_items(entity)
+        member_ids = {qid for qid, _ in members}
+        done = registry.done_question_ids(scored_rows, bid, entity.get("agent_key"))
+        n_done = len(member_ids & done)
+        n_redo = sum(1 for _, m in members if _truthy(m.get("include_next")))
+        accuracy, n_scored, n_runs, last_ts = _benchmark_kpis(summary_rows, bid)
+        out.append({
+            "benchmark_id": _str(bid),
+            "name": _str(entity.get("name")),
+            "agent_key": _str(entity.get("agent_key")),
+            "agent_label": _str(entity.get("agent_label")) or _str(entity.get("agent_key")),
+            "modes": list(entity.get("modes") or []),
+            "status": _str(entity.get("status")) or "active",
+            "created_at": _str(entity.get("created_at")),
+            "n_questions": len(members),
+            "n_done": n_done,
+            "n_pending": len(members) - n_done,
+            "n_redo": n_redo,
+            "n_scored": n_scored,
+            "n_runs": n_runs,
+            "last_run_timestamp": last_ts,
+            "accuracy": accuracy,
+            "accuracy_pct": fmt_pct(accuracy) if n_scored else "-",
+            "band": confidence_band(accuracy) if n_scored else "none",
+        })
+    out.sort(key=lambda b: (b["last_run_timestamp"] or "", b["created_at"] or "", b["name"]),
+             reverse=True)
+    return out
+
+
+def _attempt_brief(r):
+    """A compact per-attempt record (effective verdict wins) for the evolution view."""
+    eff = schemas.effective_correct(r)
+    return {
+        "attempt_no": _int(r.get("attempt_no")),
+        "run_timestamp": _str(r.get("run_timestamp")),
+        "mode": _str(r.get("mode")),
+        "status": _str(r.get("status")),
+        "judge_score": _int(r.get("judge_score")),
+        "judge_verdict": _str(r.get("judge_verdict")),
+        "verdict": eff["verdict"],
+        "correct": eff["correct"],
+        "overridden": eff["overridden"],
+    }
+
+
+def evolution_for_question(scored_rows, benchmark_id, question_id):
+    """Per-mode attempt history of one question in one benchmark. Pure, never raises.
+
+    Returns a list (one entry per mode) of ``{mode, attempts: [brief...], latest, delta}`` where
+    ``attempts`` is ordered by attempt_no, ``latest`` is the most recent attempt's brief, and
+    ``delta`` is 'improved' / 'regressed' / 'same' / 'first' comparing the latest correct flag to the
+    previous attempt's (the "evolution / regression" signal).
+    """
+    bid = _str(benchmark_id)
+    qid = _str(question_id)
+    by_mode = {}
+    for r in _rows(scored_rows):
+        if _str(r.get("benchmark_id")) != bid or _str(r.get("question_id")) != qid:
+            continue
+        by_mode.setdefault(_str(r.get("mode")), []).append(_attempt_brief(r))
+    out = []
+    for mode in sorted(by_mode):
+        attempts = sorted(by_mode[mode], key=lambda a: (a["attempt_no"], a["run_timestamp"]))
+        latest = attempts[-1] if attempts else None
+        delta = "first"
+        if len(attempts) >= 2:
+            prev, cur = attempts[-2]["correct"], attempts[-1]["correct"]
+            delta = "same" if prev == cur else ("improved" if cur and not prev else "regressed")
+        out.append({"mode": mode, "attempts": attempts, "latest": latest, "delta": delta})
+    return out
+
+
+def benchmark_detail_view(entity, golden_rows, scored_rows):
+    """The membership table of ONE benchmark: each member question + its evolution. Pure, never raises.
+
+    ``entity`` is one registry entity; ``golden_rows`` the golden pool (for question text +
+    expected_sql/tool); ``scored_rows`` a light scored projection of this benchmark. Per question:
+    ``{question_id, question, category, expected_sql, expected_tool, include_next, status, n_attempts,
+    latest_verdict, latest_correct, modes: [evolution...]}``.
+    """
+    if not isinstance(entity, dict):
+        return {"benchmark_id": "", "questions": []}
+    bid = _str(entity.get("benchmark_id"))
+    golden_by_id = {}
+    for g in _rows(golden_rows):
+        gid = _str(g.get("question_id"))
+        if gid:
+            golden_by_id[gid] = g
+    done = registry.done_question_ids(scored_rows, bid, entity.get("agent_key"))
+
+    questions = []
+    for qid, meta in _member_items(entity):
+        g = golden_by_id.get(qid, {})
+        modes_ev = evolution_for_question(scored_rows, bid, qid)
+        # Question-level "latest": the most recent attempt across all modes (highest attempt_no,
+        # then run_timestamp), so the table shows a single current verdict at a glance.
+        latest = None
+        for mev in modes_ev:
+            cand = mev.get("latest")
+            if cand and (latest is None
+                         or (cand["attempt_no"], cand["run_timestamp"])
+                         > (latest["attempt_no"], latest["run_timestamp"])):
+                latest = cand
+        n_attempts = sum(len(mev["attempts"]) for mev in modes_ev)
+        questions.append({
+            "question_id": qid,
+            "question": _str(g.get("question")),
+            "category": _str(g.get("category")),
+            "reference_answer": _str(g.get("reference_answer")),
+            "expected_sql": _str(g.get("expected_sql")),
+            "expected_tool": _str(g.get("expected_tool")),
+            "in_golden": qid in golden_by_id,
+            "include_next": _truthy(meta.get("include_next")),
+            "status": "done" if qid in done else "pending",
+            "n_attempts": n_attempts,
+            "latest_verdict": latest["verdict"] if latest else "",
+            "latest_correct": latest["correct"] if latest else None,
+            "modes": modes_ev,
+        })
+    n_done = sum(1 for q in questions if q["status"] == "done")
+    return {
+        "benchmark_id": bid,
+        "name": _str(entity.get("name")),
+        "agent_key": _str(entity.get("agent_key")),
+        "agent_label": _str(entity.get("agent_label")) or _str(entity.get("agent_key")),
+        "modes": list(entity.get("modes") or []),
+        "status": _str(entity.get("status")) or "active",
+        "n_questions": len(questions),
+        "n_done": n_done,
+        "n_pending": len(questions) - n_done,
+        "n_redo": sum(1 for q in questions if q["include_next"]),
+        "questions": questions,
+    }
+
+
+def build_launch_request(benchmark_id, launch_mode):
+    """The ``run_request`` block to write into the variable before firing. None when invalid. Pure."""
+    bid = _str(benchmark_id).strip()
+    if not bid:
+        return None
+    mode = _str(launch_mode).strip().lower()
+    if mode not in (registry.LAUNCH_APPEND, registry.LAUNCH_FULL):
+        mode = registry.LAUNCH_APPEND
+    return {"benchmark_id": bid, "launch_mode": mode}
 
 
 def config_view(resolved):

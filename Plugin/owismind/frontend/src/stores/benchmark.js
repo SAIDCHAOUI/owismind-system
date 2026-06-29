@@ -24,11 +24,13 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
 
   // --- Consultation (benchmark results, ALL users) ----------------------------
   // The agent whose results are on screen (its logical key), the normalized RESULTS
-  // (or null), the selected run id, and the read state. configured:false = no benchmark
-  // wired for the agent; readError = a soft degraded read; resultsError = a hard failure.
+  // (or null), the selected benchmark id, and the read state. A benchmark is a named
+  // campaign that accumulates runs; the score is over the latest attempt of each
+  // question. configured:false = no benchmark wired for the agent; readError = a soft
+  // degraded read; resultsError = a hard failure.
   const consultAgentKey = ref('')
   const results = ref(null)
-  const selectedRunId = ref('')
+  const selectedBenchmarkId = ref('')
   const resultsConfigured = ref(true)
   const resultsReadError = ref('')
   const resultsLoading = ref(false)
@@ -71,9 +73,9 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     await loadMine()
   }
 
-  // Load the benchmark results for one agent (+ optional run). Never throws: a failure
-  // leaves a soft error state the view renders (the consultation must never crash).
-  async function loadResults(agentKey, runId) {
+  // Load the benchmark results for one agent (+ optional benchmark id). Never throws: a
+  // failure leaves a soft error state the view renders (the consultation must never crash).
+  async function loadResults(agentKey, benchmarkId) {
     if (!agentKey) {
       results.value = null
       resultsConfigured.value = true
@@ -84,11 +86,11 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     resultsLoading.value = true
     resultsError.value = ''
     try {
-      const r = await fetchBenchmarkResults(agentKey, runId)
+      const r = await fetchBenchmarkResults(agentKey, benchmarkId)
       resultsConfigured.value = r.configured !== false
       resultsReadError.value = r.read_error || ''
       results.value = r.results ? normalizeResults(r.results) : null
-      selectedRunId.value = (results.value && results.value.run_id) || runId || ''
+      selectedBenchmarkId.value = (results.value && results.value.benchmark_id) || benchmarkId || ''
     } catch (e) {
       results.value = null
       resultsConfigured.value = true
@@ -99,27 +101,29 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     }
   }
 
-  // Pick an agent for the consultation: reset the run and (re)load the newest results.
+  // Pick an agent for the consultation: reset the benchmark and (re)load its newest one.
   function selectConsultAgent(agentKey) {
     consultAgentKey.value = agentKey || ''
-    selectedRunId.value = ''
+    selectedBenchmarkId.value = ''
     return loadResults(consultAgentKey.value, '')
   }
 
-  // Pick a specific run of the current agent.
-  function selectRun(runId) {
-    selectedRunId.value = runId || ''
-    return loadResults(consultAgentKey.value, selectedRunId.value)
+  // Pick a specific benchmark of the current agent.
+  function selectBenchmark(benchmarkId) {
+    selectedBenchmarkId.value = benchmarkId || ''
+    return loadResults(consultAgentKey.value, selectedBenchmarkId.value)
   }
 
   // Admin: set / clear an override on one scored question, then re-fetch the same agent
-  // + run so the effective verdict updates. Throws the backend code on failure (the
-  // caller toasts it); the busy key disables the row's buttons while in flight.
+  // + benchmark so the effective verdict updates. The payload's run_id targets the
+  // SPECIFIC attempt being overridden (each detail row carries its own run_id). Throws
+  // the backend code on failure (the caller toasts it); the busy key disables the row's
+  // buttons while in flight.
   async function submitOverride(payload, busyKey) {
     overrideBusyKey.value = busyKey || ''
     try {
       await adminBenchmarkOverride(payload)
-      await loadResults(consultAgentKey.value, selectedRunId.value)
+      await loadResults(consultAgentKey.value, selectedBenchmarkId.value)
     } finally {
       overrideBusyKey.value = ''
     }
@@ -137,7 +141,7 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     // consultation
     consultAgentKey,
     results,
-    selectedRunId,
+    selectedBenchmarkId,
     resultsConfigured,
     resultsReadError,
     resultsLoading,
@@ -145,7 +149,7 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     overrideBusyKey,
     loadResults,
     selectConsultAgent,
-    selectRun,
+    selectBenchmark,
     submitOverride,
   }
 })

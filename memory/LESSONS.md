@@ -2575,5 +2575,48 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : `Plugin/owismind/frontend/src/components/pages/PageShell.vue` + `views/BenchmarkSuggestView.vue` ;
   `sessions/2026-06-29.md` Run 2. Date : 2026-06-29.
 
+## L113 - Benchmark « append mode » : faire vivre le registre + l'appartenance + le redo dans la VARIABLE projet (zéro dataset neuf) ; score = dernière tentative par question ; le redo se consomme APRÈS les gardes [repo, TDD, NON validé DSS, 2026-06-30]
+- **Contexte** : le benchmark v1 rejouait TOUTES les questions actives à chaque lancement (1 `run_id` =
+  un run complet) ; pas de benchmark persistant ni de notion « question déjà faite ». Demande user :
+  benchmark NOMMÉ unique par agent qui s'enrichit dans le temps (append), score sur la dernière
+  tentative, refaire-tout / nouveau / refaire-une-question, + 2 colonnes golden SQL/tool de référence.
+- **Ce qui aurait pu mal tourner** : (a) créer des datasets DSS pour le registre/membership = lourd à
+  déployer + I/O ; (b) garder summary keyé par `run_id` casse l'idée « un benchmark = N runs » ; (c) la
+  consultation plugin qui lit une table pas encore migrée -> 500 sur colonne manquante ; (d) le juge qui
+  EXIGE le SQL de référence -> pénalise une requête différente mais correcte.
+- **Solution qui marche** :
+  - **État dans la variable projet `benchmark`** : `benchmarks` (registre {id: entity{name, agent épinglé,
+    modes, questions:{qid:{added_at, include_next, active}}}}) + `run_request` {benchmark_id, launch_mode}.
+    Le launcher est l'unique writer (read-modify-write sous `_REGISTRY_LOCK`). Module PUR
+    `benchmark/registry.py` (parse/CRUD/résolution, ne lève jamais, sans horloge/uuid : la DSS les mint).
+    **Aucun dataset neuf à créer.**
+  - **Colonnes additives** sur les tables de résultats : `benchmark_id`/`benchmark_name`/`attempt_no`
+    (+ `expected_sql`/`expected_tool`/`actual_tools`). `scoring.latest_attempts` réduit à la **dernière
+    tentative** par (benchmark_id, question_id, agent, mode) AVANT d'agréger ; summary/breakdown
+    regroupés **par benchmark** (merge par `benchmark_id`, pas `run_id`). Évolution = historique des
+    tentatives par (question, mode) + delta improved/regressed/same.
+  - **Lancement** : `step_run_matrix` lit `run_request` -> entity -> agent épinglé + modes ; lit le raw
+    antérieur (fail-open) pour done + attempt_no ; `resolve_to_run` (append = pending ∪ redo ; full =
+    tous) ; stampe les colonnes benchmark.
+  - **Signal doux au juge** : `build_judge_prompt` ajoute `expected_sql`/`expected_tool` comme INDICE,
+    le system prompt dit « hints, jamais une exigence ; une autre requête/tool correct est valide ».
+  - **Rétro-compat plugin** : `lab_io.read_scored` lit l'**intersection** des colonnes désirées et des
+    colonnes réelles (`table_columns`) -> une table v1 non-migrée ne fait jamais échouer le SELECT.
+  - **PIÈGE corrigé en revue** : `launch_benchmark` consommait les drapeaux `include_next` + écrivait
+    `run_request` AVANT le verrou single-flight -> un lancement rejeté (`already_running`) perdait
+    l'intention « refaire » (jamais restaurée) + laissait un `run_request` périmé. **Fix** : ne persister
+    le reset + `run_request` qu'APRÈS RUN_LOCK + `is_running` faux + méthode de lancement disponible
+    (`_can_launch`), juste avant de tirer (le step lit `run_request` au démarrage, donc écrire avant le
+    `launch()`). Tout retour anticipé laisse le registre intact.
+- **Preuve-vérification** : LAB 329 + plugin 509 + node 134 tests verts (nouveau `test_registry.py` +
+  tests v2 partout) ; build Vite propre (BenchmarkSuggestView 25.89 kB) ; 0 tiret (scan Python byte-safe) ;
+  i18n EN+FR complet ; revue adversariale (workflow 3 dim + vérif sceptique) = 0 crit/high, 1 medium
+  corrigé + re-testé ; zip DEV `index-DZ7yGIZO.js` (78 entrées), PROD intacte.
+- **Source** : spec `docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md` ;
+  `OWIsMind_LAB/project-library/python/benchmark/{registry,scoring,judge,run_params,schemas,agent_runner}.py`,
+  `dss_steps/*`, `benchmark_webapp/{views,dss}.py`, webapps backends ;
+  `Plugin/owismind/python-lib/owismind/benchmark_view/*` + `api/routes.py` ; frontends launcher/results/Vue ;
+  `sessions/2026-06-30.md`. Date : 2026-06-30.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

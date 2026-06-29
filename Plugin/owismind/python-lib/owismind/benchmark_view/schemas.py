@@ -25,6 +25,17 @@ LIGHT_COLUMNS = (
     "objective_match", "judge_score", "judge_verdict", "judge_comment",
     "judge_estimated_cost", "correct", "needs_review",
     "human_verdict", "human_correct", "human_comment", "reviewed_by", "reviewed_at",
+    # v2 (append mode + reference signal): the benchmark dimension + the reference SQL/tool vs the
+    # agent's actual tools. OPTIONAL (NOT in schema_check.REQUIRED_COLUMNS) so an older table that
+    # predates a v2 re-run still validates; lab_io reads only the columns the table actually has.
+    "benchmark_id", "benchmark_name", "attempt_no",
+    "expected_sql", "expected_tool", "actual_tools",
+)
+
+# The v2 columns are read only when the table already has them (lab_io intersects with the live
+# schema), so a table created before v2 keeps working until the LAB re-runs and materializes them.
+OPTIONAL_V2_COLUMNS = (
+    "benchmark_id", "benchmark_name", "attempt_no", "expected_sql", "expected_tool", "actual_tools",
 )
 
 

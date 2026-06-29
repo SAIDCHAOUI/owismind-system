@@ -76,7 +76,9 @@ test('rowKey is stable per question x agent x mode', () => {
 
 test('normalizeResults - safe defaults for a missing / partial payload', () => {
   const empty = normalizeResults(null)
-  assert.deepEqual(empty.runs, [])
+  assert.equal(empty.benchmark_id, '')
+  assert.equal(empty.benchmark_name, '')
+  assert.deepEqual(empty.benchmarks, [])
   assert.deepEqual(empty.configs, [])
   assert.deepEqual(empty.detail, [])
   assert.deepEqual(empty.categories, [])
@@ -84,18 +86,56 @@ test('normalizeResults - safe defaults for a missing / partial payload', () => {
   assert.equal(empty.kpis.band, '')
 
   const r = normalizeResults({
-    run_id: 7,
-    runs: [{ run_id: 7, run_timestamp: 't' }],
+    benchmark_id: 7,
+    benchmark_name: 'said',
+    benchmarks: [{ benchmark_id: '7', benchmark_name: 'said', last_run_timestamp: 't', n_questions: 6 }],
     kpis: { accuracy: 0.5, accuracy_pct: 50, n_correct: 3, n_scored: 6, band: 'medium', total_cost_str: '$1.20' },
     configs: [{ mode: 'smart' }],
     categories: [{ bucket: 'revenue', accuracy: 0.5 }],
     detail: [{ question_id: 'q1' }],
   })
-  assert.equal(r.run_id, '7') // coerced to string
+  assert.equal(r.benchmark_id, '7') // coerced to string
+  assert.equal(r.benchmark_name, 'said')
+  assert.equal(r.benchmarks.length, 1)
   assert.equal(r.kpis.accuracy, 0.5)
   assert.equal(r.kpis.total_cost_str, '$1.20')
   assert.equal(r.configs.length, 1)
   assert.equal(r.detail.length, 1)
+})
+
+test('normalizeResults - detail passthrough keeps the v2 per-attempt fields', () => {
+  const r = normalizeResults({
+    benchmark_id: 'b1',
+    detail: [
+      {
+        question_id: 'q1',
+        agent_key: 'orchestrator',
+        mode: 'smart',
+        run_id: 'run-42',
+        attempt_no: 3,
+        n_attempts: 3,
+        delta: 'improved',
+        expected_sql: 'SELECT 1',
+        expected_tool: 'show_chart',
+        actual_tools: 'chart,table',
+        attempts: [
+          { attempt_no: 1, run_timestamp: 't1', judge_score: 2, verdict: 'incorrect', correct: false },
+          { attempt_no: 2, run_timestamp: 't2', judge_score: 4, verdict: 'correct', correct: true },
+          { attempt_no: 3, run_timestamp: 't3', judge_score: 5, verdict: 'correct', correct: true },
+        ],
+      },
+    ],
+  })
+  const row = r.detail[0]
+  assert.equal(row.run_id, 'run-42')
+  assert.equal(row.attempt_no, 3)
+  assert.equal(row.n_attempts, 3)
+  assert.equal(row.delta, 'improved')
+  assert.equal(row.expected_sql, 'SELECT 1')
+  assert.equal(row.expected_tool, 'show_chart')
+  assert.equal(row.actual_tools, 'chart,table')
+  assert.equal(row.attempts.length, 3)
+  assert.equal(row.attempts[2].judge_score, 5)
 })
 
 test('hasScoredResults - true only when something is scored', () => {

@@ -37,39 +37,41 @@ def _safe(fn):
     return wrapped
 
 
-@app.route("/api/results/runs", methods=["GET"])
+# v2: the selector lists BENCHMARKS (not runs); summary / breakdown / detail scope by benchmark_id.
+@app.route("/api/results/benchmarks", methods=["GET"])
 @_safe
-def api_runs():
+def api_benchmarks():
     cfg = dss.config()
-    return jsonify({"status": "ok", "runs": views.runs_view(dss.read_dataset(cfg["summary_dataset"]))})
+    return jsonify({"status": "ok",
+                    "benchmarks": views.benchmark_options(dss.read_dataset(cfg["summary_dataset"]))})
 
 
 @app.route("/api/results/summary", methods=["GET"])
 @_safe
 def api_summary():
     cfg = dss.config()
-    run_id = request.args.get("run_id") or None
+    benchmark_id = request.args.get("benchmark_id") or None
     return jsonify({"status": "ok",
-                    **views.summary_view(dss.read_dataset(cfg["summary_dataset"]), run_id)})
+                    **views.summary_view(dss.read_dataset(cfg["summary_dataset"]), benchmark_id)})
 
 
 @app.route("/api/results/breakdown", methods=["GET"])
 @_safe
 def api_breakdown():
     cfg = dss.config()
-    run_id = request.args.get("run_id") or None
+    benchmark_id = request.args.get("benchmark_id") or None
     return jsonify({"status": "ok",
-                    **views.breakdown_view(dss.read_dataset(cfg["breakdown_dataset"]), run_id)})
+                    **views.breakdown_view(dss.read_dataset(cfg["breakdown_dataset"]), benchmark_id)})
 
 
 @app.route("/api/results/detail", methods=["GET"])
 @_safe
 def api_detail():
     cfg = dss.config()
-    run_id = request.args.get("run_id") or None
+    benchmark_id = request.args.get("benchmark_id") or None
     only_nr = str(request.args.get("needs_review") or "").lower() in ("1", "true", "yes")
     # Project to the LIGHT columns at read time so the heavy full_answer / SQL / artifacts blobs are
     # never materialized into RAM (the cap then bounds the LOAD, not just the post-load frame).
     rows = dss.read_dataset(cfg["scored_dataset"], keep_cols=dss.SCORED_KEEP, drop_cols=dss.SCORED_DROP)
     return jsonify({"status": "ok",
-                    **views.detail_view(rows, run_id, only_needs_review=only_nr)})
+                    **views.detail_view(rows, benchmark_id, only_needs_review=only_nr)})

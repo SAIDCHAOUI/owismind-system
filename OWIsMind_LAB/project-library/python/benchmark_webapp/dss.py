@@ -24,14 +24,17 @@ DSS-only (imports dataiku / pandas at top level); not unit-tested in the NO-INST
 thin so the testable logic lives in ``views``.
 """
 
+import datetime
 import logging
 import threading
 import traceback
+import uuid
 
 import dataiku
 import pandas as pd
 
 from benchmark import run_params, schemas
+from benchmark import registry
 from benchmark_webapp import views
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,10 @@ RUN_LOCK = threading.Lock()
 # Serializes the scored read-modify-write so two concurrent reviewer overrides cannot lose each
 # other's change (lost update); same role as _PROMOTE_LOCK for the golden.
 _OVERRIDE_LOCK = threading.Lock()
+# Serializes every read-modify-write of the ``benchmark`` project variable's registry (create a
+# benchmark, add/remove a question, toggle the redo flag, write a launch request), so two concurrent
+# launcher edits cannot clobber each other's change. The launcher is one Flask process.
+_REGISTRY_LOCK = threading.Lock()
 
 SCENARIO_ID = "Run_Benchmark"
 # Heavy columns never shipped to the per-question table (kept in the dataset for the dashboard).
@@ -166,9 +173,21 @@ def is_running(scen):
     return False
 
 
+_LAUNCH_METHODS = ("run_scenario", "run")
+
+
+def _can_launch(scen):
+    """True when this dataikuapi version exposes a way to fire the scenario (without firing it).
+
+    Lets launch_benchmark detect a launch_unsupported deploy BEFORE it mutates the registry, so a
+    rejected launch never consumes the redo intent.
+    """
+    return any(callable(getattr(scen, m, None)) for m in _LAUNCH_METHODS)
+
+
 def launch(scen):
     """Fire the scenario async (best-effort across dataikuapi versions). Returns True/False."""
-    for method in ("run_scenario", "run"):
+    for method in _LAUNCH_METHODS:
         fn = getattr(scen, method, None)
         if callable(fn):
             fn()
@@ -435,3 +454,164 @@ def write_override(cfg, payload, reviewed_at):
         out = pd.DataFrame([{c: r.get(c) for c in all_cols} for r in rows], columns=all_cols)
         ds.write_with_schema(out)
         return {"matched": matched}, []
+
+
+# --- v2: named per-agent benchmarks (registry in the variable + launch) ----------
+# The registry + per-benchmark question membership + the redo intent live IN the ``benchmark`` project
+# variable (no new dataset). Every mutation is a read-modify-write of that variable serialized by
+# _REGISTRY_LOCK; the clock + uuid live here (the pure registry/views modules never read them).
+
+def _now_iso():
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _new_benchmark_id():
+    return uuid.uuid4().hex
+
+
+def read_registry():
+    """The parsed registry ({benchmark_id: entity}) from the variable. Never raises -> {}."""
+    return registry.parse_registry(read_raw_benchmark_var().get("benchmarks"))
+
+
+def _persist_registry(reg, run_request="__keep__"):
+    """Write the registry (and optionally the run_request) back into the variable, preserving all
+    other keys. ``run_request="__keep__"`` leaves the existing run_request untouched; pass None to
+    clear it or a dict to set it. Caller holds _REGISTRY_LOCK."""
+    raw = read_raw_benchmark_var()
+    raw = dict(raw) if isinstance(raw, dict) else {}
+    raw["benchmarks"] = registry.serialize_registry(reg)
+    if run_request != "__keep__":
+        raw["run_request"] = run_request
+    write_benchmark_var(raw)
+
+
+def benchmark_agents_catalog(cfg):
+    """The agent catalog (from benchmark.agents) the launcher offers when creating a benchmark."""
+    return views.config_view(cfg).get("agents", [])
+
+
+def create_benchmark(name, agent, modes, question_ids, created_by=""):
+    """Create a new benchmark in the registry. Returns ``(result, errors)``.
+
+    ``agent`` is ``{agent_key, agent_label, project_key, agent_id}`` (from the catalog). ``modes`` is
+    the mode list (e.g. ["Smart","Pro","Claude"] or ["default"]). ``question_ids`` seeds the
+    membership (all pending). The name must be unique (case-insensitive). Locked read-modify-write.
+    """
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        ok, err = registry.validate_benchmark_name(name, registry.existing_names(reg))
+        if not ok:
+            return None, [err]
+        bid = _new_benchmark_id()
+        reg = registry.create_benchmark(
+            reg, bid, name, agent, modes, _now_iso(), created_by, question_ids or [])
+        _persist_registry(reg)
+        return {"benchmark_id": bid, "name": name, "n_questions": len(question_ids or [])}, []
+
+
+def add_questions_to_benchmark(benchmark_id, question_ids):
+    """Add member questions to a benchmark (pending). Returns ``(result, errors)``. Locked."""
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return None, ["unknown benchmark"]
+        reg = registry.add_questions(reg, benchmark_id, question_ids or [], _now_iso())
+        _persist_registry(reg)
+        n = len(reg[benchmark_id].get("questions") or {})
+        return {"benchmark_id": benchmark_id, "n_questions": n}, []
+
+
+def remove_question_from_benchmark(benchmark_id, question_id):
+    """Remove one member question from a benchmark. Returns ``(result, errors)``. Locked."""
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return None, ["unknown benchmark"]
+        reg = registry.remove_question(reg, benchmark_id, question_id)
+        _persist_registry(reg)
+        return {"benchmark_id": benchmark_id}, []
+
+
+def set_question_redo(benchmark_id, question_id, value):
+    """Set/clear the 'redo at next run' flag on one member question. Returns ``(result, errors)``."""
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return None, ["unknown benchmark"]
+        reg = registry.set_include_next(reg, benchmark_id, question_id, bool(value))
+        _persist_registry(reg)
+        return {"benchmark_id": benchmark_id, "question_id": question_id,
+                "include_next": bool(value)}, []
+
+
+def rename_benchmark(benchmark_id, name):
+    """Rename a benchmark (name must stay unique). Returns ``(result, errors)``. Locked."""
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return None, ["unknown benchmark"]
+        current = str(reg[benchmark_id].get("name") or "").strip().lower()
+        others = registry.existing_names(reg) - {current}
+        ok, err = registry.validate_benchmark_name(name, others)
+        if not ok:
+            return None, [err]
+        reg = registry.rename_benchmark(reg, benchmark_id, name)
+        _persist_registry(reg)
+        return {"benchmark_id": benchmark_id, "name": name}, []
+
+
+def archive_benchmark(benchmark_id):
+    """Archive a benchmark (kept for consultation, hidden from the active list). Locked."""
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return None, ["unknown benchmark"]
+        reg = registry.archive_benchmark(reg, benchmark_id)
+        _persist_registry(reg)
+        return {"benchmark_id": benchmark_id, "status": "archived"}, []
+
+
+def launch_benchmark(benchmark_id, launch_mode):
+    """Write the launch request, consume the redo flags, and fire the scenario. Returns (result, err).
+
+    Sets ``run_request`` = {benchmark_id, launch_mode} in the variable so step_run_matrix runs exactly
+    this benchmark, and CONSUMES the redo intent (clears every include_next of this benchmark, since
+    'redo at next run' is a one-shot signal honored by this launch). Then fires the scenario under the
+    single-flight RUN_LOCK (the authoritative cross-process guard is the scenario's "Prevent
+    concurrent executions"). The error code mirrors api_run.
+    """
+    req = views.build_launch_request(benchmark_id, launch_mode)
+    if not req:
+        return None, "bad_request"
+    # Validate the benchmark exists WITHOUT mutating the registry: a rejected launch must leave the
+    # redo flags + run_request untouched, otherwise a user who flagged "redo at next run" and hits a
+    # 409 (a run already in flight) would silently lose that intent (never restored). So the registry
+    # is only committed AFTER the single-flight + is_running + launchable guards all pass, right
+    # before firing - the redo intent is consumed only by a launch that actually starts.
+    if benchmark_id not in read_registry():
+        return None, "unknown_benchmark"
+    if not RUN_LOCK.acquire(blocking=False):
+        return None, "already_running"
+    try:
+        scen = scenario()
+        if is_running(scen):
+            return None, "already_running"
+        if not _can_launch(scen):
+            return None, "launch_unsupported"
+        # Committed to launching: write run_request + consume the redo flags now (the scenario step
+        # reads run_request fresh at its start, so it must be in the variable before we fire).
+        with _REGISTRY_LOCK:
+            reg = read_registry()
+            if benchmark_id not in reg:
+                return None, "unknown_benchmark"
+            redo_ids = [qid for qid, m in (reg[benchmark_id].get("questions") or {}).items()
+                        if isinstance(m, dict) and m.get("include_next")]
+            reg = registry.reset_include_next_for(reg, benchmark_id, redo_ids)
+            _persist_registry(reg, run_request=req)
+        launch(scen)  # method confirmed available by _can_launch above
+        logger.info("benchmark launcher - launched benchmark %s (%s)", benchmark_id, req["launch_mode"])
+        return {"launched": True, "benchmark_id": benchmark_id,
+                "launch_mode": req["launch_mode"]}, None
+    finally:
+        RUN_LOCK.release()

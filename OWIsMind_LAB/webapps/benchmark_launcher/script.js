@@ -26,7 +26,10 @@
     info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>',
     bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1.5 1.5 1.5 3h5c0-1.5.5-2 1.5-3a6 6 0 0 0-4-10z"/></svg>',
     rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c3 1 5 4 5 8l-2 4H9l-2-4c0-4 2-7 5-8zM9 15l-2 3M15 15l2 3"/><circle cx="12" cy="9" r="1.4"/></svg>',
-    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6l-6 6 6 6M8 12h12"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 5l12 7-12 7z"/></svg>'
   };
 
   /* ============================ i18n ============================ */
@@ -43,6 +46,7 @@
     "status.running": { en: "Running", fr: "En cours" },
     "status.done": { en: "Completed", fr: "Termine" },
 
+    "tab.bench": { en: "Benchmarks", fr: "Benchmarks" },
     "tab.config": { en: "Configuration", fr: "Configuration" },
     "tab.golden": { en: "Golden set", fr: "Jeu de reference" },
     "tab.suggest": { en: "Suggestions", fr: "Suggestions" },
@@ -128,6 +132,10 @@
     "run.note": {
       en: "Launch the Run_Benchmark scenario asynchronously. Only one run can be in progress at a time.",
       fr: "Lance le scenario Run_Benchmark de facon asynchrone. Une seule execution a la fois."
+    },
+    "run.moved": {
+      en: "Launching now happens per benchmark. Open a benchmark in the Benchmarks tab to run its pending questions or re-run it.",
+      fr: "Le lancement se fait desormais par benchmark. Ouvrez un benchmark dans l'onglet Benchmarks pour lancer ses questions en attente ou le relancer."
     },
     "run.btn": { en: "Launch the benchmark", fr: "Lancer le benchmark" },
     "run.btn.running": { en: "Run in progress...", fr: "Execution en cours..." },
@@ -319,7 +327,119 @@
 
     "common.dash": { en: "-", fr: "-" },
     "common.loading": { en: "Loading...", fr: "Chargement..." },
-    "common.retry": { en: "Retry", fr: "Reessayer" }
+    "common.retry": { en: "Retry", fr: "Reessayer" },
+
+    /* --- benchmarks tab (v2: named per-agent benchmarks, append mode) --- */
+    "bm.eyebrow": { en: "Benchmarks", fr: "Benchmarks" },
+    "bm.title": { en: "Benchmarks", fr: "Benchmarks" },
+    "bm.note": {
+      en: "A benchmark is a named evaluation campaign pinned to one agent. Runs accumulate: launching tests only the not-yet-done questions, so the score grows question by question over time.",
+      fr: "Un benchmark est une campagne d'evaluation nommee, rattachee a un seul agent. Les executions s'accumulent : un lancement ne teste que les questions pas encore faites, le score grandit donc question par question."
+    },
+    "bm.new": { en: "New benchmark", fr: "Nouveau benchmark" },
+    "bm.count": { en: "{n} benchmark(s)", fr: "{n} benchmark(s)" },
+    "bm.empty.h": { en: "No benchmark yet", fr: "Aucun benchmark" },
+    "bm.empty.p": {
+      en: "Create the first benchmark: pick an agent and seed it with your golden questions.",
+      fr: "Creez le premier benchmark : choisissez un agent et amorcez-le avec vos questions de reference."
+    },
+    "bm.loadError": { en: "Could not load the benchmarks.", fr: "Impossible de charger les benchmarks." },
+    "bm.open": { en: "Open", fr: "Ouvrir" },
+    "bm.badge.done": { en: "{n} done", fr: "{n} faites" },
+    "bm.badge.pending": { en: "{n} pending", fr: "{n} en attente" },
+    "bm.badge.redo": { en: "{n} redo", fr: "{n} a refaire" },
+    "bm.lastRun": { en: "Last run", fr: "Derniere execution" },
+    "bm.never": { en: "never", fr: "jamais" },
+    "bm.accuracy": { en: "Accuracy", fr: "Justesse" },
+    "bm.archived": { en: "Archived", fr: "Archive" },
+
+    /* --- new-benchmark modal --- */
+    "bn.title": { en: "New benchmark", fr: "Nouveau benchmark" },
+    "bn.name": { en: "Benchmark name", fr: "Nom du benchmark" },
+    "bn.namePh": { en: "e.g. orchestrator baseline", fr: "ex. reference orchestrateur" },
+    "bn.agent": { en: "Agent under test", fr: "Agent teste" },
+    "bn.agentNone": {
+      en: "No agent in the catalog. Add one in the Configuration tab first.",
+      fr: "Aucun agent dans le catalogue. Ajoutez-en un dans l'onglet Configuration."
+    },
+    "bn.seed": { en: "Questions", fr: "Questions" },
+    "bn.seedAll": { en: "Seed with all active golden questions", fr: "Amorcer avec toutes les questions de reference actives" },
+    "bn.seedEmpty": { en: "Start empty, add questions later", fr: "Commencer vide, ajouter des questions plus tard" },
+    "bn.create": { en: "Create benchmark", fr: "Creer le benchmark" },
+    "bn.cancel": { en: "Cancel", fr: "Annuler" },
+    "bn.created": { en: "Benchmark created", fr: "Benchmark cree" },
+    "bn.error": { en: "Could not create the benchmark.", fr: "Impossible de creer le benchmark." },
+
+    /* --- benchmark detail --- */
+    "bd.back": { en: "Back to list", fr: "Retour a la liste" },
+    "bd.rename": { en: "Rename", fr: "Renommer" },
+    "bd.renameSave": { en: "Save name", fr: "Enregistrer le nom" },
+    "bd.renameCancel": { en: "Cancel", fr: "Annuler" },
+    "bd.renamed": { en: "Benchmark renamed", fr: "Benchmark renomme" },
+    "bd.renameError": { en: "Could not rename the benchmark.", fr: "Impossible de renommer le benchmark." },
+    "bd.agent": { en: "Agent", fr: "Agent" },
+    "bd.modes": { en: "Modes", fr: "Modes" },
+    "bd.runPending": { en: "Run pending", fr: "Lancer les questions en attente" },
+    "bd.runFull": { en: "Re-run entire benchmark", fr: "Relancer tout le benchmark" },
+    "bd.runPendingHint": {
+      en: "Nothing pending or flagged to redo. Add questions, flag some to redo, or re-run the entire benchmark.",
+      fr: "Rien en attente ni a refaire. Ajoutez des questions, marquez-en a refaire, ou relancez tout le benchmark."
+    },
+    "bd.loadError": { en: "Could not load the benchmark.", fr: "Impossible de charger le benchmark." },
+    "bd.qTitle": { en: "Questions", fr: "Questions" },
+    "bd.empty": {
+      en: "No question in this benchmark yet. Add some from the golden pool below.",
+      fr: "Aucune question dans ce benchmark. Ajoutez-en depuis le jeu de reference ci-dessous."
+    },
+    "bd.addTitle": { en: "Add questions", fr: "Ajouter des questions" },
+    "bd.addNote": {
+      en: "Pick golden questions that are not already in this benchmark.",
+      fr: "Choisissez des questions de reference pas encore presentes dans ce benchmark."
+    },
+    "bd.addToggle": { en: "Add questions", fr: "Ajouter des questions" },
+    "bd.addNone": { en: "Every golden question is already a member of this benchmark.", fr: "Toutes les questions de reference sont deja membres de ce benchmark." },
+    "bd.addSelected": { en: "Add selected", fr: "Ajouter la selection" },
+    "bd.addCancel": { en: "Cancel", fr: "Annuler" },
+    "bd.added": { en: "{n} question(s) added", fr: "{n} question(s) ajoutee(s)" },
+    "bd.addError": { en: "Could not add the questions.", fr: "Impossible d'ajouter les questions." },
+    "bd.remove": { en: "Remove", fr: "Retirer" },
+    "bd.removed": { en: "Question removed from the benchmark", fr: "Question retiree du benchmark" },
+    "bd.removeError": { en: "Could not remove the question.", fr: "Impossible de retirer la question." },
+    "bd.redo": { en: "Redo at next run", fr: "Refaire au prochain lancement" },
+    "bd.redoError": { en: "Could not update the redo flag.", fr: "Impossible de mettre a jour l'indicateur a refaire." },
+    "bd.status.done": { en: "Done", fr: "Faite" },
+    "bd.status.pending": { en: "Pending", fr: "En attente" },
+    "bd.verdict.correct": { en: "Correct", fr: "Correcte" },
+    "bd.verdict.incorrect": { en: "Incorrect", fr: "Incorrecte" },
+    "bd.verdict.none": { en: "Not run", fr: "Non executee" },
+    "bd.delta.improved": { en: "Improved", fr: "Amelioree" },
+    "bd.delta.regressed": { en: "Regressed", fr: "Regression" },
+    "bd.delta.same": { en: "Stable", fr: "Stable" },
+    "bd.attempts": { en: "{n} attempt(s)", fr: "{n} tentative(s)" },
+    "bd.refSql": { en: "Reference SQL", fr: "SQL de reference" },
+    "bd.refTool": { en: "Suggested tool", fr: "Outil suggere" },
+    "bd.refNone": { en: "No reference SQL or tool set.", fr: "Aucun SQL ni outil de reference." },
+    "bd.evoShow": { en: "Show attempt history", fr: "Voir l'historique des tentatives" },
+    "bd.evoHide": { en: "Hide attempt history", fr: "Masquer l'historique" },
+    "bd.attempt": { en: "Attempt {n}", fr: "Tentative {n}" },
+
+    /* --- golden: reference SQL / tool (soft judge signal) --- */
+    "md.sql": { en: "Reference SQL (optional)", fr: "SQL de reference (optionnel)" },
+    "md.sqlHelp": {
+      en: "A SQL that could answer the question. A soft hint to the judge - a different but correct query is fine.",
+      fr: "Un SQL qui pourrait repondre a la question. Un indice souple pour le juge - une requete differente mais correcte reste valable."
+    },
+    "md.tool": { en: "Suggested tool (optional)", fr: "Outil suggere (optionnel)" },
+    "md.toolPh": { en: "show_chart / show_table / none", fr: "show_chart / show_table / none" },
+    "th.ref": { en: "Reference SQL / tool", fr: "SQL / outil de reference" },
+
+    /* --- review: benchmark selector + per-attempt override --- */
+    "rv.bench": { en: "Benchmark", fr: "Benchmark" },
+    "rv.attempt": { en: "Attempt {n}", fr: "Tentative {n}" },
+    "rv.caption2": {
+      en: "You review every attempt of the selected benchmark. An override targets that one attempt (its run) and survives future runs.",
+      fr: "Vous revoyez chaque tentative du benchmark choisi. Une correction porte sur cette tentative (son execution) et survit aux executions suivantes."
+    }
   };
 
   function t(key, vars) {
@@ -342,7 +462,7 @@
   var ui = { theme: "light", lang: "en" };
 
   var S = {
-    tab: "config",
+    tab: "benchmarks",
     loaded: false,
     loadError: false,
     // config form
@@ -373,8 +493,21 @@
     editor: { open: false, isNew: false, qid: "", error: null },
     // suggestions
     suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 },
-    // review (human-in-the-loop verdict override)
-    review: { loaded: false, loadError: false, runId: "", onlyNeedsReview: false, runs: [], rows: [], count: 0, expanded: {}, saving: {} }
+    // review (human-in-the-loop verdict override) - v2: a benchmark selector, every attempt listed
+    review: { loaded: false, loadError: false, benchmarkId: "", onlyNeedsReview: false, benchmarks: [], rows: [], count: 0, expanded: {}, saving: {} },
+    // benchmarks (v2): named per-agent campaigns, list + open one (detail)
+    bench: {
+      loaded: false, loadError: false,
+      list: [], agents: [], modeOptions: [], golden: [],
+      view: "list", detailId: "",
+      detail: null, detailLoaded: false, detailError: false,
+      addOpen: false, addSel: {},
+      renaming: false,
+      expanded: {},
+      running: false, runMsg: null, busy: false
+    },
+    // new-benchmark modal
+    benchNew: { open: false, error: null }
   };
 
   var newAgentSeq = 0;
@@ -450,29 +583,82 @@
     mode_options: ["Smart", "Pro", "Claude"],
     runs: [{ run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" }],
     golden: [
-      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "" },
-      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)" },
-      { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse" }
+      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "", expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table" },
+      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)", expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none" },
+      { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse", expected_sql: "", expected_tool: "" }
+    ],
+    benchmarks: [
+      { benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart", "Claude"], status: "active", created_at: "2026-06-25T09:00:00Z", n_questions: 3, n_done: 2, n_pending: 1, n_redo: 1, n_scored: 2, n_runs: 2, last_run_timestamp: "2026-06-26 09:02:34", accuracy: 0.5, accuracy_pct: "50%", band: "low" },
+      { benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart"], status: "active", created_at: "2026-06-29T11:00:00Z", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" }
+    ],
+    bench_agents: [
+      { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
     ],
     suggestions: [
       { suggestion_id: "sug_a1b2c3", user_id: "marie.dupont", source: "chat", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_is_correct: true, missing_explanation: "", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-24 14:09:22" },
       { suggestion_id: "sug_g7h8i9", user_id: "sara.benali", source: "chat", question: "Quel est le budget 2026 du produit Roaming Hub pour le client Airbus ?", reference_answer: "Le budget 2026 du produit Roaming Hub pour Airbus est de 1 050 000 euros (scenario BUDGET, periode 2026).", answer_is_correct: null, missing_explanation: "L'agent a confondu Roaming Hub avec Roaming Sponsor.", expected_value: "1050000", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-23 17:30:05" }
     ],
-    review: {
-      runs: [
-        { run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" },
-        { run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11" }
-      ],
-      rows: {
-        "run_20260626_0902": [
-          { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", category: "tickets", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.4, judge_verdict: "incorrect", judge_comment: "The agent answered 41 tickets but the reference anchor is 37: it counted raw snapshot rows instead of distinct ticket ids.", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", answer_preview: "Algerie Telecom currently has 41 open trouble tickets.\n\nSQL: SELECT COUNT(*) FROM trouble_tickets WHERE status = 'OPEN' AND account = 'Algerie Telecom'", notes: "Strictness: accept the distinct count on the latest snapshot per id. Raw row counts are wrong.", expected_value: "37", expected_value_type: "numeric", correct: false, needs_review: true, latency_str: "12.4s", estimated_cost: 0.0182 },
-          { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", category: "offre", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Claude", status: "ok", objective_match: null, judge_score: 0.6, judge_verdict: "incorrect", judge_comment: "The agent called IPL a Product; the reference says SolutionLine.", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", answer_preview: "IPL est un Product dans la hierarchie d'offre.", notes: "Open answer: judge on the hierarchy level named (SolutionLine).", expected_value: "", expected_value_type: "", correct: false, needs_review: true, latency_str: "15.7s", estimated_cost: 0.0345 },
-          { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 }
-        ],
-        "run_20260625_1740": [
-          { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Pro", status: "ok", objective_match: true, judge_score: 0.9, judge_verdict: "correct", judge_comment: "Anchor value matches.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel est de 4 218 540 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", correct: true, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
+    // v2: benchmark detail (membership table + per-question evolution), keyed by benchmark_id.
+    bench_detail: {
+      bm_said01: {
+        benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)",
+        modes: ["Smart", "Claude"], status: "active", n_questions: 3, n_done: 2, n_pending: 1, n_redo: 1,
+        questions: [
+          {
+            question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
+            category: "revenue", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.",
+            expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'",
+            expected_tool: "show_table", in_golden: true, include_next: false, status: "done", n_attempts: 2,
+            latest_verdict: "correct", latest_correct: true,
+            modes: [{ mode: "Smart", delta: "improved", latest: { attempt_no: 2, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.95, judge_verdict: "correct", verdict: "correct", correct: true, overridden: false },
+              attempts: [
+                { attempt_no: 1, run_timestamp: "2026-06-25 17:40:11", mode: "Smart", status: "ok", judge_score: 0.55, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false },
+                { attempt_no: 2, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.95, judge_verdict: "correct", verdict: "correct", correct: true, overridden: false }
+              ] }]
+          },
+          {
+            question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
+            category: "tickets", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
+            expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'",
+            expected_tool: "none", in_golden: true, include_next: true, status: "done", n_attempts: 1,
+            latest_verdict: "incorrect", latest_correct: false,
+            modes: [{ mode: "Smart", delta: "first", latest: { attempt_no: 1, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.4, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false },
+              attempts: [
+                { attempt_no: 1, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.4, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false }
+              ] }]
+          },
+          {
+            question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?",
+            category: "offre", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).",
+            expected_sql: "", expected_tool: "", in_golden: true, include_next: false, status: "pending", n_attempts: 0,
+            latest_verdict: "", latest_correct: null, modes: []
+          }
+        ]
+      },
+      bm_quick02: {
+        benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)",
+        modes: ["Smart"], status: "active", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0,
+        questions: [
+          {
+            question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
+            category: "tickets", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
+            expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'",
+            expected_tool: "none", in_golden: true, include_next: false, status: "pending", n_attempts: 0,
+            latest_verdict: "", latest_correct: null, modes: []
+          }
         ]
       }
+    },
+    // v2 review: the benchmark selector + every attempt of one benchmark (NOT reduced to latest).
+    review_benchmarks: [
+      { benchmark_id: "bm_said01", benchmark_name: "said", last_run_timestamp: "2026-06-26 09:02:34" }
+    ],
+    review: {
+      bm_said01: [
+        { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", category: "tickets", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.4, judge_verdict: "incorrect", judge_comment: "The agent answered 41 tickets but the reference anchor is 37: it counted raw snapshot rows instead of distinct ticket ids.", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", answer_preview: "Algerie Telecom currently has 41 open trouble tickets.\n\nSQL: SELECT COUNT(*) FROM trouble_tickets WHERE status = 'OPEN' AND account = 'Algerie Telecom'", notes: "Strictness: accept the distinct count on the latest snapshot per id. Raw row counts are wrong.", expected_value: "37", expected_value_type: "numeric", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", actual_tools: "table", correct: false, needs_review: true, latency_str: "12.4s", estimated_cost: 0.0182 },
+        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 },
+        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.55, judge_verdict: "incorrect", judge_comment: "Right account but reported a budget figure, not the ACTUALS scope.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu du compte Maroc Telecom est d'environ 3 900 000 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: false, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
+      ]
     }
   };
   var mockRun = { remaining: 0 };
@@ -576,12 +762,65 @@
       data = { status: "ok", deleted: MOCK.golden.length < before, count: MOCK.golden.length };
     } else if (method === "GET" && path0 === "review") {
       var params = parseQuery(path);
-      var runId = params.run_id || (MOCK.review.runs[0] && MOCK.review.runs[0].run_id) || "";
-      var base = (MOCK.review.rows[runId] || []).map(deepCopy);
-      var rows = base.map(function (r) { return mockEffectiveRow(runId, r); });
+      var rvBid = params.benchmark_id || (MOCK.review_benchmarks[0] && MOCK.review_benchmarks[0].benchmark_id) || "";
+      var base = (MOCK.review[rvBid] || []).map(deepCopy);
+      var rows = base.map(function (r) { return mockEffectiveRow(r.run_id, r); });
       if (params.only_needs_review === "1") { rows = rows.filter(function (r) { return !!r.needs_review; }); }
-      rows.sort(function (a, b) { return (b.needs_review ? 1 : 0) - (a.needs_review ? 1 : 0); });
-      data = { status: "ok", run_id: runId, count: rows.length, runs: MOCK.review.runs.slice(), rows: rows };
+      // needs-review first, then a question's attempts grouped newest-first (matches review_view).
+      rows.sort(function (a, b) {
+        if ((b.needs_review ? 1 : 0) !== (a.needs_review ? 1 : 0)) { return (b.needs_review ? 1 : 0) - (a.needs_review ? 1 : 0); }
+        if (a.question_id !== b.question_id) { return a.question_id < b.question_id ? -1 : 1; }
+        return (b.attempt_no || 0) - (a.attempt_no || 0);
+      });
+      data = { status: "ok", benchmark_id: rvBid, count: rows.length, benchmarks: MOCK.review_benchmarks.slice(), rows: rows };
+    } else if (method === "GET" && path0 === "benchmarks") {
+      data = { status: "ok", benchmarks: MOCK.benchmarks.slice(), agents: MOCK.bench_agents.slice(),
+               modes: MOCK.mode_options.slice(), golden: MOCK.golden.slice() };
+    } else if (method === "GET" && path0 === "benchmark/detail") {
+      var dParams = parseQuery(path);
+      var det = MOCK.bench_detail[dParams.benchmark_id || ""];
+      if (det) { data = { status: "ok", ...deepCopy(det) }; }
+      else { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
+    } else if (method === "POST" && path0 === "benchmark/create") {
+      data = mockBenchCreate(body || {});
+    } else if (method === "POST" && path0 === "benchmark/add-questions") {
+      data = mockBenchMutate(body, function (d, b) {
+        var have = {}; d.questions.forEach(function (q) { have[q.question_id] = true; });
+        (b.question_ids || []).forEach(function (qid) {
+          if (have[qid]) { return; }
+          var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
+          d.questions.push({ question_id: qid, question: g.question || qid, category: g.category || "",
+            reference_answer: g.reference_answer || "", expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
+            in_golden: true, include_next: false, status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] });
+        });
+        return { benchmark_id: d.benchmark_id, n_questions: d.questions.length };
+      });
+    } else if (method === "POST" && path0 === "benchmark/remove-question") {
+      data = mockBenchMutate(body, function (d, b) {
+        d.questions = d.questions.filter(function (q) { return q.question_id !== b.question_id; });
+        return { benchmark_id: d.benchmark_id };
+      });
+    } else if (method === "POST" && path0 === "benchmark/redo") {
+      data = mockBenchMutate(body, function (d, b) {
+        d.questions.forEach(function (q) { if (q.question_id === b.question_id) { q.include_next = !!b.include_next; } });
+        return { benchmark_id: d.benchmark_id, question_id: b.question_id, include_next: !!b.include_next };
+      });
+    } else if (method === "POST" && path0 === "benchmark/rename") {
+      data = mockBenchMutate(body, function (d, b) {
+        var nm = (b.name || "").trim();
+        if (!nm) { return { _err: ["name is required"] }; }
+        if (MOCK.benchmarks.some(function (x) { return x.benchmark_id !== d.benchmark_id && x.name.toLowerCase() === nm.toLowerCase(); })) {
+          return { _err: ["a benchmark named '" + nm + "' already exists"] };
+        }
+        d.name = nm;
+        return { benchmark_id: d.benchmark_id, name: nm };
+      });
+    } else if (method === "POST" && path0 === "benchmark/archive") {
+      data = mockBenchMutate(body, function (d) { d.status = "archived"; return { benchmark_id: d.benchmark_id, status: "archived" }; });
+    } else if (method === "POST" && path0 === "benchmark/launch") {
+      var lbid = (body && body.benchmark_id) || "";
+      if (!MOCK.bench_detail[lbid]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
+      else { mockRun.remaining = 2; data = { status: "ok", launched: true, launch_mode: (body && body.launch_mode) || "append" }; }
     } else if (method === "POST" && path0 === "override") {
       var ob = body || {};
       var okey = [ob.run_id, ob.question_id, ob.agent_key || "", ob.mode || ""].join("|");
@@ -595,10 +834,67 @@
       status = 404;
       data = { status: "error", error: "not_found" };
     }
+    // A mock branch can carry an HTTP-ish status on the payload (_status); lift it onto the response.
+    if (data && data._status) { status = data._status; delete data._status; }
     return new Promise(function (resolve) { setTimeout(function () { resolve({ status: status, data: data }); }, 120); });
   }
 
   function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+  // Recompute a benchmark's counts (detail + list row) after a mock mutation, for a believable preview.
+  function mockSyncBench(bid) {
+    var d = MOCK.bench_detail[bid];
+    if (!d) { return; }
+    d.n_questions = d.questions.length;
+    d.n_done = d.questions.filter(function (q) { return q.status === "done"; }).length;
+    d.n_pending = d.n_questions - d.n_done;
+    d.n_redo = d.questions.filter(function (q) { return q.include_next; }).length;
+    MOCK.benchmarks.forEach(function (b) {
+      if (b.benchmark_id === bid) {
+        b.n_questions = d.n_questions; b.n_done = d.n_done; b.n_pending = d.n_pending;
+        b.n_redo = d.n_redo; b.status = d.status; b.name = d.name; b.modes = d.modes.slice();
+      }
+    });
+  }
+
+  function mockBenchCreate(body) {
+    var name = (body.name || "").trim();
+    if (!name) { return { _status: 400, status: "error", error: "invalid_benchmark", messages: ["name is required"] }; }
+    if (MOCK.benchmarks.some(function (b) { return b.name.toLowerCase() === name.toLowerCase(); })) {
+      return { _status: 400, status: "error", error: "invalid_benchmark", messages: ["a benchmark named '" + name + "' already exists"] };
+    }
+    var ag = MOCK.bench_agents.filter(function (a) { return a.agent_key === body.agent_key; })[0];
+    if (!ag) { return { _status: 400, status: "error", error: "unknown_agent" }; }
+    var bid = "bm_" + Math.random().toString(36).slice(2, 8);
+    var modes = ag.modes ? MOCK.mode_options.slice() : ["default"];
+    var qids = body.seed_all
+      ? MOCK.golden.filter(function (g) { return g.active; }).map(function (g) { return g.question_id; })
+      : (body.question_ids || []).slice();
+    var questions = qids.map(function (qid) {
+      var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
+      return { question_id: qid, question: g.question || qid, category: g.category || "",
+        reference_answer: g.reference_answer || "", expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
+        in_golden: true, include_next: false, status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] };
+    });
+    MOCK.bench_detail[bid] = { benchmark_id: bid, name: name, agent_key: ag.agent_key, agent_label: ag.agent_label,
+      modes: modes, status: "active", n_questions: questions.length, n_done: 0, n_pending: questions.length, n_redo: 0, questions: questions };
+    MOCK.benchmarks.unshift({ benchmark_id: bid, name: name, agent_key: ag.agent_key, agent_label: ag.agent_label,
+      modes: modes, status: "active", created_at: new Date().toISOString(), n_questions: questions.length, n_done: 0,
+      n_pending: questions.length, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" });
+    return { status: "ok", benchmark_id: bid, name: name, n_questions: questions.length };
+  }
+
+  // Run a mutation against one benchmark's mock detail, then resync counts. ``fn(detail, body)`` may
+  // return ``{_err:[...]}`` to surface a validation error like the backend.
+  function mockBenchMutate(body, fn) {
+    var bid = (body && body.benchmark_id) || "";
+    var d = MOCK.bench_detail[bid];
+    if (!d) { return { _status: 404, status: "error", error: "unknown_benchmark" }; }
+    var res = fn(d, body || {}) || {};
+    if (res._err) { return { _status: 400, status: "error", error: "invalid_request", messages: res._err }; }
+    mockSyncBench(bid);
+    return { status: "ok", ...res };
+  }
 
   /* ============================ theme + language ============================ */
 
@@ -640,6 +936,7 @@
           '</div>' +
         '</header>' +
         '<nav class="tabs">' +
+          '<button class="tab" data-tab="benchmarks"><span data-i18n="tab.bench"></span><span class="count" id="tabBenchCount"></span></button>' +
           '<button class="tab" data-tab="config"><span data-i18n="tab.config"></span></button>' +
           '<button class="tab" data-tab="golden"><span data-i18n="tab.golden"></span><span class="count" id="tabGoldenCount"></span></button>' +
           '<button class="tab" data-tab="suggest"><span data-i18n="tab.suggest"></span></button>' +
@@ -647,6 +944,7 @@
         '</nav>' +
         '<div class="body">' +
           '<main class="content">' +
+            '<section class="panel" data-panel="benchmarks"><div id="benchContent"></div></section>' +
             configPanelHtml() +
             '<section class="panel" data-panel="golden"><div id="goldenContent"></div></section>' +
             '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
@@ -656,6 +954,7 @@
         '</div>' +
       '</div>' +
       modalHtml() +
+      benchModalHtml() +
       '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>';
   }
 
@@ -716,13 +1015,8 @@
         '<div class="aside-block">' +
           '<p class="aside-eyebrow" data-i18n="run.eyebrow"></p>' +
           '<h3 class="aside-h"><span id="icRun" style="display:inline-flex;vertical-align:-3px;margin-right:8px;color:var(--orange)"></span><span data-i18n="run.title"></span></h3>' +
-          '<p class="aside-note" data-i18n="run.note"></p>' +
-          '<div style="margin-top:18px"><button class="btn btn-primary btn-block" id="launchBtn"><span id="launchBtnTxt" data-i18n="run.btn"></span></button></div>' +
-          '<div class="progress" id="progress"><i id="progressBar"></i></div>' +
-          '<div class="progress-meta" id="progressMeta"></div>' +
-          '<div id="runMsg"></div>' +
+          '<p class="aside-note" data-i18n="run.moved"></p>' +
           '<div class="lastrun"><span data-i18n="run.last"></span>: <b id="lastRunVal"></b></div>' +
-          '<p class="aside-note" data-i18n="run.save1"></p>' +
           '<p class="aside-note" data-i18n="run.save2"></p>' +
         '</div>' +
         '<div class="aside-block">' +
@@ -751,11 +1045,40 @@
           '<p class="field-help" data-i18n="md.valueHelp" style="grid-column:1 / -1;margin:0"></p>' +
           '<label class="field"><span class="field-label" data-i18n="md.cat"></span><input class="input" id="mcat" list="catList" autocomplete="off"><datalist id="catList"></datalist></label>' +
           '<label class="field"><span class="field-label" data-i18n="md.lang"></span><select class="input" id="mlang"><option value="en">en</option><option value="fr">fr</option></select></label>' +
+          '<label class="field full"><span class="field-label" data-i18n="md.sql"></span><textarea class="input mono" id="msql"></textarea></label>' +
+          '<p class="field-help" data-i18n="md.sqlHelp" style="grid-column:1 / -1;margin:0"></p>' +
+          '<label class="field"><span class="field-label" data-i18n="md.tool"></span>' +
+            '<input class="input mono" id="mtool" list="toolList" autocomplete="off"><datalist id="toolList">' +
+              '<option value="show_chart"></option><option value="show_table"></option><option value="none"></option></datalist></label>' +
           '<div class="field full"><button type="button" class="chk on" id="mActive" data-on="1">' +
             '<span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="md.active"></b></span></button></div>' +
         '</div>' +
         '<div class="modal-foot"><button class="btn btn-ghost" id="mdCancel" data-i18n="md.cancel"></button>' +
           '<button class="btn btn-primary" id="mdSave" data-i18n="md.save"></button></div>' +
+      '</div></div>';
+  }
+
+  // New-benchmark modal (name + agent picker + seed choice). A separate overlay from the golden editor.
+  function benchModalHtml() {
+    return '' +
+      '<div class="overlay" id="benchOverlay"><div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-head"><h3 class="modal-title" data-i18n="bn.title"></h3>' +
+          '<button class="modal-x" id="bnClose" aria-label="Close">' + I.x + '</button></div>' +
+        '<div class="modal-err" id="bnErr"></div>' +
+        '<div class="modal-body">' +
+          '<label class="field full"><span class="field-label" data-i18n="bn.name"></span>' +
+            '<input class="input" id="bnName" autocomplete="off"></label>' +
+          '<label class="field full"><span class="field-label" data-i18n="bn.agent"></span>' +
+            '<select class="input" id="bnAgent"></select></label>' +
+          '<div class="field full"><span class="field-label" data-i18n="bn.seed"></span>' +
+            '<div class="chk-stack" style="margin-top:8px">' +
+              '<button type="button" class="chk on" id="bnSeedAll" data-on="1"><span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="bn.seedAll"></b></span></button>' +
+              '<button type="button" class="chk" id="bnSeedEmpty" data-on="0"><span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="bn.seedEmpty"></b></span></button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-foot"><button class="btn btn-ghost" id="bnCancel" data-i18n="bn.cancel"></button>' +
+          '<button class="btn btn-primary" id="bnCreate" data-i18n="bn.create"></button></div>' +
       '</div></div>';
   }
 
@@ -805,12 +1128,14 @@
 
     renderAside();
     setText("tabGoldenCount", S.golden.loaded ? String(S.golden.list.length) : String(S.questionCount || 0));
+    setText("tabBenchCount", S.bench.loaded ? String(S.bench.list.length) : "");
 
+    renderBenchmarks();
     renderGolden();
     renderSuggestions();
     renderReview();
 
-    setStatus(S.running ? "running" : (S.runDone ? "done" : "idle"));
+    setStatus(S.bench.running ? "running" : (S.bench.runMsg ? "done" : "idle"));
     setHTML("icSave", I.save);
     setHTML("icRun", I.rocket);
   }
@@ -932,29 +1257,7 @@
   /* --- aside (run + preserved) --- */
 
   function renderAside() {
-    var btn = byId("launchBtnTxt");
-    if (btn) { btn.textContent = S.running ? t("run.btn.running") : t("run.btn"); }
-    var lbtn = byId("launchBtn");
-    if (lbtn) { lbtn.disabled = !!S.running; }
-
-    var pr = byId("progress");
-    var bar = byId("progressBar");
-    var meta = byId("progressMeta");
-    if (pr && bar && meta) {
-      pr.classList.toggle("on", !!S.running);
-      bar.style.width = (S.running ? S.progress : 0) + "%";
-      meta.textContent = S.running ? (Math.round(S.progress) + "%") : "";
-    }
-    var rm = byId("runMsg");
-    if (rm) {
-      if (S.runMsg) {
-        rm.innerHTML = '<div class="run-msg ' + (S.runMsg.kind === "ok" ? "ok" : "err") + '">' + esc(S.runMsg.text) + '</div>';
-      } else if (S.dirty) {
-        rm.innerHTML = '<div class="run-msg err">' + esc(t("run.dirty")) + '</div>';
-      } else {
-        rm.innerHTML = "";
-      }
-    }
+    // The global launch button is gone (launching is per benchmark): this block is run info only.
     var last = (S.runs && S.runs.length) ? (S.runs[0].run_timestamp || S.runs[0].run_id) : "";
     setText("lastRunVal", last || t("run.never"));
 
@@ -1006,11 +1309,22 @@
     var rows = list.map(qRowHtml).join("");
     return head +
       '<table class="gtable"><colgroup>' +
-        '<col class="c-status"><col class="c-q"><col class="c-a"><col class="c-anchor"><col class="c-cat"><col class="c-lang"><col class="c-act">' +
+        '<col class="c-status"><col class="c-q"><col class="c-a"><col class="c-anchor"><col class="c-ref"><col class="c-cat"><col class="c-lang"><col class="c-act">' +
       '</colgroup><thead><tr>' +
         '<th>' + esc(t("th.status")) + '</th><th>' + esc(t("th.q")) + '</th><th>' + esc(t("th.a")) + '</th>' +
-        '<th>' + esc(t("th.anchor")) + '</th><th>' + esc(t("th.cat")) + '</th><th>' + esc(t("th.lang")) + '</th><th>' + esc(t("th.act")) + '</th>' +
+        '<th>' + esc(t("th.anchor")) + '</th><th>' + esc(t("th.ref")) + '</th><th>' + esc(t("th.cat")) + '</th><th>' + esc(t("th.lang")) + '</th><th>' + esc(t("th.act")) + '</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  // The reference SQL / tool cell (soft judge signal): a truncated mono SQL + a tool tag, or a dash.
+  function qRefHtml(g) {
+    var sql = (g.expected_sql == null) ? "" : String(g.expected_sql).trim();
+    var tool = (g.expected_tool == null) ? "" : String(g.expected_tool).trim();
+    if (!sql && !tool) { return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>'; }
+    var html = "";
+    if (sql) { html += '<code class="ref-sql">' + esc(truncate(sql, 90)) + '</code>'; }
+    if (tool) { html += '<span class="ref-tool">' + esc(tool) + '</span>'; }
+    return html;
   }
 
   function qRowHtml(g) {
@@ -1033,6 +1347,7 @@
       '<td data-l="' + esc(t("th.q")) + '"><div class="cell-q clamp">' + esc(g.question) + '</div></td>' +
       '<td data-l="' + esc(t("th.a")) + '"><div class="cell-a clamp">' + esc(g.reference_answer) + '</div></td>' +
       '<td data-l="' + esc(t("th.anchor")) + '">' + qAnchorHtml(g) + '</td>' +
+      '<td data-l="' + esc(t("th.ref")) + '">' + qRefHtml(g) + '</td>' +
       '<td data-l="' + esc(t("th.cat")) + '">' + (g.category ? '<span class="cat-tag">' + esc(g.category) + '</span>' : '<span class="anchor-none">' + esc(t("common.dash")) + '</span>') + '</td>' +
       '<td data-l="' + esc(t("th.lang")) + '"><span class="lang-tag">' + esc(g.language) + '</span></td>' +
       '<td data-l="' + esc(t("th.act")) + '">' + act + '</td>' +
@@ -1220,6 +1535,8 @@
     byId("catList").innerHTML = S.categories.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
     byId("mcat").value = g ? (g.category || "") : "";
     byId("mlang").value = (g && g.language === "en") ? "en" : (g ? "fr" : (ui.lang === "en" ? "en" : "fr"));
+    byId("msql").value = g ? (g.expected_sql || "") : "";
+    byId("mtool").value = g ? (g.expected_tool || "") : "";
     var at = byId("mActive");
     var on = g ? (g.active !== false) : true;
     at.classList.toggle("on", on);
@@ -1244,7 +1561,10 @@
       category: byId("mcat").value.trim(),
       language: (byId("mlang").value === "en") ? "en" : "fr",
       active: byId("mActive").getAttribute("data-on") === "1",
-      notes: editorNotes()
+      notes: editorNotes(),
+      // v2: reference SQL / tool (soft judge signal + training data).
+      expected_sql: byId("msql").value.trim(),
+      expected_tool: byId("mtool").value.trim()
     };
     if (!S.editor.isNew && S.editor.qid) { payload.question_id = S.editor.qid; }
     setHTML("mdErr", "");
@@ -1284,7 +1604,8 @@
       question_id: g.question_id, question: g.question, reference_answer: g.reference_answer,
       expected_value: g.expected_value || "", expected_value_type: g.expected_value_type || "",
       category: g.category || "", language: (g.language === "en") ? "en" : "fr",
-      active: !g.active, notes: g.notes || ""
+      active: !g.active, notes: g.notes || "",
+      expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || ""
     };
     callApi("POST", "golden/save", payload).then(function (res) {
       var d = res.data || {};
@@ -1459,75 +1780,506 @@
     });
   }
 
-  /* ============================ actions: run ============================ */
+  /* ============================ benchmarks (v2): list + detail + launch ============================ */
 
-  function launch() {
-    if (S.running) { return; }
-    S.running = true;
-    S.runDone = false;
-    S.progress = 6;
-    S.runMsg = null;
-    setStatus("running");
-    renderAside();
-    callApi("POST", "run").then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok" && d.launched) {
-        S.runMsg = { kind: "ok", text: t("run.launched") };
-        renderAside();
-        toast(t("run.launched"));
-        pollStatus();
-      } else if (res.status === 409 || d.error === "already_running") {
-        S.runMsg = { kind: "err", text: t("run.already") };
-        renderAside();
-        pollStatus();
-      } else if (d.error === "launch_unsupported") {
-        endRun({ kind: "err", text: t("run.unsupported") });
+  function renderBenchmarks() {
+    var box = byId("benchContent");
+    if (!box) { return; }
+    if (S.bench.view === "detail") {
+      box.innerHTML = benchDetailWrapHtml();
+    } else {
+      var inner;
+      if (S.bench.loadError) {
+        inner = '<div class="note note-error" role="alert">' + esc(t("bm.loadError")) + '</div>' +
+          '<div class="actions-row"><button type="button" class="btn" data-bm="retry">' + esc(t("common.retry")) + '</button></div>';
+      } else if (!S.bench.loaded) {
+        inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
       } else {
-        endRun({ kind: "err", text: t("run.error") });
+        inner = benchListHtml();
       }
-    }, function () { endRun({ kind: "err", text: t("run.error") }); });
+      box.innerHTML = '' +
+        '<div class="sec-head">' +
+          '<p class="sec-eyebrow">' + esc(t("bm.eyebrow")) + '</p>' +
+          '<h2 class="sec-title">' + esc(t("bm.title")) + '</h2>' +
+          '<div class="title-bar"></div>' +
+          '<p class="sec-note">' + esc(t("bm.note")) + '</p>' +
+        '</div>' + inner;
+    }
+    wireBench(box);
   }
 
-  var pollErrors = 0;
-  function pollStatus() {
-    if (!S.running) { return; }
+  function benchListHtml() {
+    var list = S.bench.list;
+    var head = '<div class="table-head">' +
+      '<span class="count-line">' + t("bm.count", { n: "<b>" + fmtNum(list.length) + "</b>" }) + '</span>' +
+      '<button class="btn btn-primary btn-sm" data-bm="new"><span class="ic-plus"></span>' + esc(t("bm.new")) + '</button>' +
+      '</div>';
+    if (!list.length) {
+      return head + '<div class="empty"><div class="ei"><span class="ic-grid"></span></div>' +
+        '<h4>' + esc(t("bm.empty.h")) + '</h4><p>' + esc(t("bm.empty.p")) + '</p></div>';
+    }
+    return head + '<div class="bm-list">' + list.map(benchCardHtml).join("") + '</div>';
+  }
+
+  function benchCardHtml(b) {
+    var band = b.band || "none";
+    var last = b.last_run_timestamp ? esc(b.last_run_timestamp) : esc(t("bm.never"));
+    var redo = b.n_redo ? '<span class="bm-badge redo">' + esc(t("bm.badge.redo", { n: fmtNum(b.n_redo) })) + '</span>' : '';
+    var modes = (b.modes && b.modes.length) ? '<span class="bm-modes">' + b.modes.map(esc).join(", ") + '</span>' : '';
+    return '<div class="bm-card">' +
+      '<div class="bm-card-main">' +
+        '<div class="bm-card-head"><h3 class="bm-name">' + esc(b.name) + '</h3>' +
+          (b.status === "archived" ? '<span class="bm-arch">' + esc(t("bm.archived")) + '</span>' : '') + '</div>' +
+        '<p class="bm-agent">' + esc(b.agent_label) + ' ' + modes + '</p>' +
+        '<div class="bm-badges">' +
+          '<span class="bm-badge done">' + esc(t("bm.badge.done", { n: fmtNum(b.n_done) })) + '</span>' +
+          '<span class="bm-badge pending">' + esc(t("bm.badge.pending", { n: fmtNum(b.n_pending) })) + '</span>' +
+          redo +
+        '</div>' +
+      '</div>' +
+      '<div class="bm-card-side">' +
+        '<div class="bm-accwrap"><span class="bm-acclabel">' + esc(t("bm.accuracy")) + '</span>' +
+          '<span class="bm-acc band-' + band + '">' + esc(b.accuracy_pct || "-") + '</span></div>' +
+        '<div class="bm-last">' + esc(t("bm.lastRun")) + ': <b>' + last + '</b></div>' +
+        '<button class="btn btn-sm" data-bm="open" data-id="' + esc(b.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function benchDetailWrapHtml() {
+    var top = '<div class="bd-top"><button class="btn btn-sm btn-ghost" data-bm="back"><span class="ic-back"></span>' + esc(t("bd.back")) + '</button></div>';
+    if (S.bench.detailError) {
+      return top + '<div class="note note-error" role="alert">' + esc(t("bd.loadError")) + '</div>' +
+        '<div class="actions-row"><button type="button" class="btn" data-bm="detail-retry">' + esc(t("common.retry")) + '</button></div>';
+    }
+    if (!S.bench.detailLoaded || !S.bench.detail) {
+      return top + '<p class="loading">' + esc(t("common.loading")) + '</p>';
+    }
+    return benchDetailHtml(S.bench.detail);
+  }
+
+  function benchDetailHtml(d) {
+    var canPending = ((d.n_pending || 0) + (d.n_redo || 0)) > 0;
+    var nameBlock;
+    if (S.bench.renaming) {
+      nameBlock = '<div class="bd-rename"><input class="input" id="bdRenameInput" value="' + esc(d.name) + '" aria-label="' + esc(t("bn.name")) + '">' +
+        '<button class="btn btn-sm btn-primary" data-bm="rename-save">' + esc(t("bd.renameSave")) + '</button>' +
+        '<button class="btn btn-sm" data-bm="rename-cancel">' + esc(t("bd.renameCancel")) + '</button></div>';
+    } else {
+      nameBlock = '<div class="bd-titlewrap"><h2 class="sec-title">' + esc(d.name) + '</h2>' +
+        '<button class="btn btn-sm btn-ghost" data-bm="rename">' + esc(t("bd.rename")) + '</button></div>';
+    }
+    var modesLine = (d.modes && d.modes.length) ? ('  <b>' + esc(t("bd.modes")) + ':</b> ' + d.modes.map(esc).join(", ")) : "";
+    var header = '<div class="sec-head">' +
+      '<p class="sec-eyebrow">' + esc(t("bm.eyebrow")) + '</p>' + nameBlock +
+      '<div class="title-bar"></div>' +
+      '<p class="bd-agentline"><b>' + esc(t("bd.agent")) + ':</b> ' + esc(d.agent_label) + modesLine + '</p>' +
+      '<div class="bm-badges" style="margin-top:12px">' +
+        '<span class="bm-badge done">' + esc(t("bm.badge.done", { n: fmtNum(d.n_done) })) + '</span>' +
+        '<span class="bm-badge pending">' + esc(t("bm.badge.pending", { n: fmtNum(d.n_pending) })) + '</span>' +
+        (d.n_redo ? '<span class="bm-badge redo">' + esc(t("bm.badge.redo", { n: fmtNum(d.n_redo) })) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+    var launch = '<div class="bd-launch">' +
+      '<button class="btn btn-primary" data-bm="run-pending"' + (canPending && !S.bench.running ? "" : " disabled") + '>' +
+        '<span class="ic-play"></span>' + esc(t("bd.runPending")) + '</button>' +
+      '<button class="btn" data-bm="run-full"' + (S.bench.running ? " disabled" : "") + '>' + esc(t("bd.runFull")) + '</button>' +
+      (!canPending ? '<span class="bd-hint">' + esc(t("bd.runPendingHint")) + '</span>' : "") +
+    '</div>';
+    var qSection = (d.questions && d.questions.length)
+      ? '<div class="bd-list">' + d.questions.map(benchQCardHtml).join("") + '</div>'
+      : '<div class="note note-info" role="status">' + esc(t("bd.empty")) + '</div>';
+    return '<div class="bd-top"><button class="btn btn-sm btn-ghost" data-bm="back"><span class="ic-back"></span>' + esc(t("bd.back")) + '</button></div>' +
+      header + launch + benchRunStatusHtml() +
+      '<div class="bd-qhead"><p class="glabel">' + esc(t("bd.qTitle")) + '</p></div>' +
+      qSection + benchAddHtml(d);
+  }
+
+  function benchRunStatusHtml() {
+    if (S.bench.running) {
+      return '<div class="bd-run"><span class="dot"></span>' + esc(t("run.btn.running")) + '</div>';
+    }
+    if (S.bench.runMsg) {
+      return '<div class="run-msg ' + (S.bench.runMsg.kind === "ok" ? "ok" : "err") + '" style="margin-top:14px">' + esc(S.bench.runMsg.text) + '</div>';
+    }
+    return "";
+  }
+
+  // The question-level evolution delta = the strongest signal across its modes (regressed wins,
+  // then improved, then stable); 'first' when no mode has more than one attempt.
+  function questionDelta(q) {
+    var ds = (q.modes || []).filter(function (m) { return m.attempts && m.attempts.length > 1; })
+      .map(function (m) { return m.delta; });
+    if (ds.indexOf("regressed") !== -1) { return "regressed"; }
+    if (ds.indexOf("improved") !== -1) { return "improved"; }
+    if (ds.indexOf("same") !== -1) { return "same"; }
+    return "first";
+  }
+
+  function qVerdictChip(q) {
+    if (q.status !== "done" || !q.latest_verdict) {
+      return '<span class="bd-vd none">' + esc(t("bd.verdict.none")) + '</span>';
+    }
+    var ok = !!q.latest_correct;
+    return '<span class="bd-vd ' + (ok ? "correct" : "incorrect") + '">' +
+      esc(t(ok ? "bd.verdict.correct" : "bd.verdict.incorrect")) + '</span>';
+  }
+
+  function attemptHistoryHtml(q) {
+    var modes = q.modes || [];
+    if (!modes.length) { return ""; }
+    var blocks = modes.map(function (m) {
+      var atts = (m.attempts || []).map(function (a) {
+        var ok = !!a.correct;
+        var score = (a.judge_score != null && a.judge_score !== "") ? (" · " + fmtNum(a.judge_score)) : "";
+        var ovr = a.overridden ? (" · " + t("rv.effective")) : "";
+        return '<span class="bd-att-chip ' + (ok ? "correct" : "incorrect") + '">' +
+          esc(t("bd.attempt", { n: a.attempt_no })) + esc(score) + esc(ovr) + '</span>';
+      }).join("");
+      return '<div class="bd-evo-mode"><span class="bd-evo-modelabel">' + esc(m.mode || t("common.dash")) + '</span>' +
+        '<div class="bd-att-row">' + atts + '</div></div>';
+    }).join("");
+    return '<div class="bd-evo-body">' + blocks + '</div>';
+  }
+
+  function benchQCardHtml(q) {
+    var expanded = !!S.bench.expanded[q.question_id];
+    var statusCls = (q.status === "done") ? "done" : "pending";
+    var delta = questionDelta(q);
+    var deltaBadge = (q.n_attempts > 1 && delta !== "first")
+      ? '<span class="bd-delta ' + delta + '">' + esc(t("bd.delta." + delta)) + '</span>' : "";
+    var attemptsLine = q.n_attempts ? '<span class="bd-att">' + esc(t("bd.attempts", { n: fmtNum(q.n_attempts) })) + '</span>' : "";
+
+    var sql = (q.expected_sql == null) ? "" : String(q.expected_sql).trim();
+    var tool = (q.expected_tool == null) ? "" : String(q.expected_tool).trim();
+    var ref;
+    if (sql || tool) {
+      ref = '<div class="bd-ref">' +
+        (sql ? '<div class="bd-ref-row"><span class="bd-ref-l">' + esc(t("bd.refSql")) + '</span><code class="bd-ref-sql">' + esc(sql) + '</code></div>' : "") +
+        (tool ? '<div class="bd-ref-row"><span class="bd-ref-l">' + esc(t("bd.refTool")) + '</span><span class="ref-tool">' + esc(tool) + '</span></div>' : "") +
+        '</div>';
+    } else {
+      ref = '<div class="bd-ref"><span class="bd-ref-none">' + esc(t("bd.refNone")) + '</span></div>';
+    }
+
+    var evo = "";
+    if (q.n_attempts > 0) {
+      evo = '<div class="bd-evo">' +
+        '<button type="button" class="bd-evo-toggle" data-bm="evo" data-id="' + esc(q.question_id) + '">' +
+          esc(expanded ? t("bd.evoHide") : t("bd.evoShow")) + '</button>' +
+        (expanded ? attemptHistoryHtml(q) : "") + '</div>';
+    }
+
+    var redoOn = !!q.include_next;
+    var controls = '<div class="bd-controls">' +
+      '<button type="button" class="chk' + (redoOn ? " on" : "") + '" data-bm="redo" data-id="' + esc(q.question_id) + '" data-val="' + (redoOn ? "0" : "1") + '">' +
+        '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("bd.redo")) + '</b></span></button>' +
+      '<button type="button" class="btn btn-sm btn-danger" data-bm="remove" data-id="' + esc(q.question_id) + '">' + esc(t("bd.remove")) + '</button>' +
+    '</div>';
+
+    return '<div class="bd-card">' +
+      '<div class="bd-card-head"><p class="bd-q">' + esc(q.question || q.question_id) + '</p>' +
+        '<div class="bd-badges"><span class="bd-status ' + statusCls + '">' + esc(t("bd.status." + statusCls)) + '</span>' +
+          qVerdictChip(q) + deltaBadge + '</div></div>' +
+      '<div class="bd-meta">' + (q.category ? '<span class="cat-tag">' + esc(q.category) + '</span>' : "") + attemptsLine + '</div>' +
+      ref + evo + controls +
+    '</div>';
+  }
+
+  function benchAddHtml(d) {
+    var memberIds = {};
+    (d.questions || []).forEach(function (q) { memberIds[q.question_id] = true; });
+    var pool = (S.bench.golden || []).filter(function (g) { return g.question_id && !memberIds[g.question_id]; });
+    var head = '<div class="bd-add-head"><div>' +
+      '<p class="glabel">' + esc(t("bd.addTitle")) + '</p>' +
+      '<p class="ghelp" style="margin:0">' + esc(t("bd.addNote")) + '</p></div>' +
+      '<button type="button" class="btn btn-sm" data-bm="add-toggle">' + esc(t("bd.addToggle")) + '</button></div>';
+    if (!S.bench.addOpen) {
+      return '<div class="card bd-add"><div class="card-pad">' + head + '</div></div>';
+    }
+    var body;
+    if (!pool.length) {
+      body = '<div class="note note-info" role="status">' + esc(t("bd.addNone")) + '</div>';
+    } else {
+      var items = pool.map(function (g) {
+        var checked = S.bench.addSel[g.question_id] ? " checked" : "";
+        return '<label class="bd-add-item"><input type="checkbox" data-addq="' + esc(g.question_id) + '"' + checked + '>' +
+          '<span class="bd-add-q">' + esc(truncate(g.question, 140)) + '</span>' +
+          (g.category ? '<span class="cat-tag">' + esc(g.category) + '</span>' : "") + '</label>';
+      }).join("");
+      var hasSel = pool.some(function (g) { return !!S.bench.addSel[g.question_id]; });
+      body = '<div class="bd-add-list">' + items + '</div>' +
+        '<div class="actions-row"><button class="btn btn-primary btn-sm" id="benchAddGo" data-bm="add-go"' + (hasSel ? "" : " disabled") + '>' + esc(t("bd.addSelected")) + '</button>' +
+        '<button class="btn btn-sm" data-bm="add-cancel">' + esc(t("bd.addCancel")) + '</button></div>';
+    }
+    return '<div class="card bd-add"><div class="card-pad">' + head + body + '</div></div>';
+  }
+
+  function wireBench(box) {
+    if (!box) { return; }
+    qsa(".ic-plus", box).forEach(function (e) { e.innerHTML = I.plus; });
+    qsa(".ic-grid", box).forEach(function (e) { e.innerHTML = I.grid; });
+    qsa(".ic-play", box).forEach(function (e) { e.innerHTML = I.play; });
+    qsa(".ic-back", box).forEach(function (e) { e.innerHTML = I.back; });
+
+    qsa("[data-addq]", box).forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        S.bench.addSel[cb.getAttribute("data-addq")] = cb.checked;
+        var go = byId("benchAddGo");
+        if (go) {
+          var any = Object.keys(S.bench.addSel).some(function (k) { return S.bench.addSel[k]; });
+          go.disabled = !any;
+        }
+      });
+    });
+
+    qsa("[data-bm]", box).forEach(function (el) {
+      var kind = el.getAttribute("data-bm");
+      var id = el.getAttribute("data-id");
+      el.addEventListener("click", function () {
+        if (kind === "new") { openBenchModal(); }
+        else if (kind === "open") { openBenchmark(id); }
+        else if (kind === "retry") { loadBenchmarks(); }
+        else if (kind === "back") { backToList(); }
+        else if (kind === "detail-retry") { loadBenchDetail(); }
+        else if (kind === "rename") { S.bench.renaming = true; renderBenchmarks(); setTimeout(function () { var i = byId("bdRenameInput"); if (i) { i.focus(); } }, 30); }
+        else if (kind === "rename-cancel") { S.bench.renaming = false; renderBenchmarks(); }
+        else if (kind === "rename-save") { var inp = byId("bdRenameInput"); benchRename(inp ? inp.value : ""); }
+        else if (kind === "run-pending") { benchLaunch("append"); }
+        else if (kind === "run-full") { benchLaunch("full"); }
+        else if (kind === "evo") { S.bench.expanded[id] = !S.bench.expanded[id]; renderBenchmarks(); }
+        else if (kind === "redo") { benchRedo(id, el.getAttribute("data-val")); }
+        else if (kind === "remove") { benchRemove(id); }
+        else if (kind === "add-toggle") { S.bench.addOpen = !S.bench.addOpen; S.bench.addSel = {}; renderBenchmarks(); }
+        else if (kind === "add-cancel") { S.bench.addOpen = false; S.bench.addSel = {}; renderBenchmarks(); }
+        else if (kind === "add-go") { benchAddSelected(); }
+      });
+    });
+  }
+
+  function loadBenchmarks() {
+    S.bench.loadError = false;
+    if (!S.bench.loaded) { renderBenchmarks(); }
+    callApi("GET", "benchmarks").then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        S.bench.list = (d.benchmarks || []).slice();
+        S.bench.agents = (d.agents || []).slice();
+        S.bench.modeOptions = (d.modes || []).slice();
+        S.bench.golden = (d.golden || []).slice();
+        S.bench.loaded = true;
+        S.bench.loadError = false;
+      } else {
+        S.bench.loadError = true;
+      }
+      setText("tabBenchCount", S.bench.loaded ? String(S.bench.list.length) : "");
+      renderBenchmarks();
+    }, function () { S.bench.loadError = true; renderBenchmarks(); });
+  }
+
+  function openBenchmark(bid) {
+    S.bench.view = "detail";
+    S.bench.detailId = bid;
+    S.bench.detail = null;
+    S.bench.detailLoaded = false;
+    S.bench.detailError = false;
+    S.bench.renaming = false;
+    S.bench.addOpen = false;
+    S.bench.addSel = {};
+    S.bench.expanded = {};
+    S.bench.runMsg = null;
+    renderBenchmarks();
+    loadBenchDetail();
+  }
+
+  function loadBenchDetail() {
+    S.bench.detailError = false;
+    callApi("GET", "benchmark/detail?benchmark_id=" + encodeURIComponent(S.bench.detailId)).then(function (res) {
+      var d = res.data || {};
+      // The detail response merges the benchmark entity, whose own ``status`` (active/archived)
+      // shadows the envelope ``status``; so success = HTTP 200 + a benchmark_id + no error code.
+      if (res.status === 200 && d.benchmark_id && !d.error) {
+        S.bench.detail = d;
+        S.bench.detailLoaded = true;
+        S.bench.detailError = false;
+      } else {
+        S.bench.detailError = true;
+      }
+      renderBenchmarks();
+    }, function () { S.bench.detailError = true; renderBenchmarks(); });
+  }
+
+  function backToList() {
+    S.bench.view = "list";
+    S.bench.detailId = "";
+    S.bench.detail = null;
+    S.bench.runMsg = null;
+    renderBenchmarks();
+    loadBenchmarks();  // refresh counts / accuracy after any launch
+  }
+
+  function benchLaunch(mode) {
+    if (S.bench.running) { return; }
+    S.bench.running = true;
+    S.bench.runMsg = null;
+    setStatus("running");
+    renderBenchmarks();
+    callApi("POST", "benchmark/launch", { benchmark_id: S.bench.detailId, launch_mode: mode }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok" && d.launched) {
+        toast(t("run.launched"));
+        benchPoll();
+      } else if (res.status === 409 || d.error === "already_running") {
+        S.bench.runMsg = { kind: "err", text: t("run.already") };
+        renderBenchmarks();
+        benchPoll();
+      } else if (d.error === "launch_unsupported") {
+        benchEndRun({ kind: "err", text: t("run.unsupported") });
+      } else if (d.error === "unknown_benchmark") {
+        benchEndRun({ kind: "err", text: t("bd.loadError") });
+      } else {
+        benchEndRun({ kind: "err", text: t("run.error") });
+      }
+    }, function () { benchEndRun({ kind: "err", text: t("run.error") }); });
+  }
+
+  var benchPollErrors = 0;
+  function benchPoll() {
+    if (!S.bench.running) { return; }
     setTimeout(function () {
       callApi("GET", "run/status").then(function (res) {
-        pollErrors = 0;
+        benchPollErrors = 0;
         var d = res.data || {};
         if (d.running) {
-          S.progress = Math.min(92, S.progress + 11);
-          renderAside();
-          pollStatus();
+          benchPoll();
         } else {
-          endRun({ kind: "ok", text: t("run.finished") });
-          loadConfigQuiet();
+          benchEndRun({ kind: "ok", text: t("run.finished") });
+          loadBenchDetail();
         }
       }, function () {
-        pollErrors += 1;
-        if (pollErrors >= 4) { endRun({ kind: "err", text: t("run.lostContact") }); }
-        else { pollStatus(); }
+        benchPollErrors += 1;
+        if (benchPollErrors >= 4) { benchEndRun({ kind: "err", text: t("run.lostContact") }); }
+        else { benchPoll(); }
       });
     }, 2500);
   }
 
-  function endRun(msg) {
-    S.running = false;
-    S.runDone = true;
-    S.progress = 0;
-    S.runMsg = msg || null;
+  function benchEndRun(msg) {
+    S.bench.running = false;
+    S.bench.runMsg = msg || null;
     setStatus("done");
-    renderAside();
+    renderBenchmarks();
   }
 
-  // Refresh runs / last-run after a run finishes, without disrupting the form.
-  function loadConfigQuiet() {
-    callApi("GET", "config").then(function (res) {
+  function benchRedo(id, val) {
+    callApi("POST", "benchmark/redo", { benchmark_id: S.bench.detailId, question_id: id, include_next: (val === "1") }).then(function (res) {
       var d = res.data || {};
-      if (d.status !== "ok") { return; }
-      S.runs = (d.runs || []).slice();
-      renderAside();
-    }, function () { /* best-effort */ });
+      if (d.status === "ok") { loadBenchDetail(); }
+      else { toast(t("bd.redoError")); }
+    }, function () { toast(t("bd.redoError")); });
+  }
+
+  function benchRemove(id) {
+    callApi("POST", "benchmark/remove-question", { benchmark_id: S.bench.detailId, question_id: id }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") { toast(t("bd.removed")); loadBenchDetail(); }
+      else { toast(t("bd.removeError")); }
+    }, function () { toast(t("bd.removeError")); });
+  }
+
+  function benchAddSelected() {
+    var ids = (S.bench.golden || [])
+      .filter(function (g) { return S.bench.addSel[g.question_id]; })
+      .map(function (g) { return g.question_id; });
+    if (!ids.length) { return; }
+    callApi("POST", "benchmark/add-questions", { benchmark_id: S.bench.detailId, question_ids: ids }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        toast(t("bd.added", { n: fmtNum(ids.length) }));
+        S.bench.addOpen = false;
+        S.bench.addSel = {};
+        loadBenchDetail();
+      } else {
+        toast(t("bd.addError"));
+      }
+    }, function () { toast(t("bd.addError")); });
+  }
+
+  function benchRename(name) {
+    name = (name || "").trim();
+    if (!name) { S.bench.renaming = false; renderBenchmarks(); return; }
+    callApi("POST", "benchmark/rename", { benchmark_id: S.bench.detailId, name: name }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        S.bench.renaming = false;
+        toast(t("bd.renamed"));
+        loadBenchDetail();
+      } else {
+        var msg = (d.messages && d.messages.length) ? d.messages[0] : t("bd.renameError");
+        toast(msg);
+      }
+    }, function () { toast(t("bd.renameError")); });
+  }
+
+  /* --- new-benchmark modal --- */
+
+  function benchSeedAll() {
+    var a = byId("bnSeedAll");
+    return !a || a.getAttribute("data-on") === "1";
+  }
+  function setBenchSeed(all) {
+    var a = byId("bnSeedAll");
+    var e = byId("bnSeedEmpty");
+    if (a) { a.classList.toggle("on", all); a.setAttribute("data-on", all ? "1" : "0"); }
+    if (e) { e.classList.toggle("on", !all); e.setAttribute("data-on", !all ? "1" : "0"); }
+  }
+
+  function openBenchModal() {
+    S.benchNew.open = true;
+    S.benchNew.error = null;
+    var sel = byId("bnAgent");
+    sel.innerHTML = (S.bench.agents || []).map(function (a) {
+      return '<option value="' + esc(a.agent_key) + '">' + esc(a.agent_label || a.agent_key) + '</option>';
+    }).join("");
+    byId("bnName").value = "";
+    var noAgents = !(S.bench.agents && S.bench.agents.length);
+    setHTML("bnErr", noAgents ? '<div class="note note-error" role="alert">' + esc(t("bn.agentNone")) + '</div>' : "");
+    var create = byId("bnCreate");
+    if (create) { create.disabled = noAgents; }
+    setBenchSeed(true);
+    byId("benchOverlay").classList.add("on");
+    setTimeout(function () { byId("bnName").focus(); }, 50);
+  }
+
+  function closeBenchModal() {
+    S.benchNew.open = false;
+    byId("benchOverlay").classList.remove("on");
+  }
+
+  function submitBenchModal() {
+    var name = byId("bnName").value.trim();
+    var agentKey = byId("bnAgent").value;
+    var seedAll = benchSeedAll();
+    setHTML("bnErr", "");
+    var btn = byId("bnCreate");
+    if (btn) { btn.disabled = true; }
+    callApi("POST", "benchmark/create", { name: name, agent_key: agentKey, seed_all: seedAll }).then(function (res) {
+      if (btn) { btn.disabled = false; }
+      var d = res.data || {};
+      if (d.status === "ok") {
+        closeBenchModal();
+        toast(t("bn.created"));
+        loadBenchmarks();
+        if (d.benchmark_id) { openBenchmark(d.benchmark_id); }
+      } else {
+        var msgs = d.messages || [t("bn.error")];
+        setHTML("bnErr", '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
+          msgs.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>');
+      }
+    }, function () {
+      if (btn) { btn.disabled = false; }
+      setHTML("bnErr", '<div class="note note-error" role="alert">' + esc(t("bn.error")) + '</div>');
+    });
   }
 
   /* ============================ actions: golden / suggestions ============================ */
@@ -1599,10 +2351,11 @@
 
   /* ============================ review (human-in-the-loop) ============================ */
 
-  // Stable identity of a scored row: a run tests the same question across agents and modes, so the
-  // override target is (question_id, agent_key, mode). agent_key comes from the api/review row.
+  // Stable identity of a scored row (v2): the review lists EVERY attempt, so the key includes this
+  // attempt's run_id (+ attempt_no for safety) on top of (question_id, agent_key, mode). The override
+  // sent to the backend is exactly that row's (run_id, question_id, agent_key, mode).
   function reviewRowKey(r) {
-    return [r.question_id, r.agent_key || "", r.mode || ""].join("\u0001");
+    return [r.run_id || "", r.question_id, r.agent_key || "", r.mode || "", r.attempt_no || ""].join("\u0001");
   }
   function findReviewRow(rk) {
     var found = null;
@@ -1630,7 +2383,7 @@
         '<div class="actions-row"><button type="button" class="btn" data-rv="retry">' + esc(t("common.retry")) + '</button></div>';
     } else if (!S.review.loaded) {
       inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
-    } else if (!S.review.runs.length) {
+    } else if (!S.review.benchmarks.length) {
       inner = '<div class="empty"><div class="ei"><span class="ic-info"></span></div>' +
         '<h4>' + esc(t("rv.noRuns.h")) + '</h4><p>' + esc(t("rv.noRuns.p")) + '</p></div>';
     } else {
@@ -1647,19 +2400,20 @@
   }
 
   function reviewBodyHtml() {
-    var runOpts = S.review.runs.map(function (r) {
-      var label = r.run_timestamp || r.run_id;
-      var seld = (r.run_id === S.review.runId) ? " selected" : "";
-      return '<option value="' + esc(r.run_id) + '"' + seld + '>' + esc(label) + '</option>';
+    var benchOpts = S.review.benchmarks.map(function (b) {
+      var label = b.benchmark_name || b.benchmark_id;
+      if (b.last_run_timestamp) { label += " (" + b.last_run_timestamp + ")"; }
+      var seld = (b.benchmark_id === S.review.benchmarkId) ? " selected" : "";
+      return '<option value="' + esc(b.benchmark_id) + '"' + seld + '>' + esc(label) + '</option>';
     }).join("");
     var bar = '' +
       '<div class="rvw-bar">' +
-        '<label class="field rvw-runsel"><span class="field-label">' + esc(t("rv.run")) + '</span>' +
-          '<select class="input" id="rvwRun">' + runOpts + '</select></label>' +
+        '<label class="field rvw-runsel"><span class="field-label">' + esc(t("rv.bench")) + '</span>' +
+          '<select class="input" id="rvwBench">' + benchOpts + '</select></label>' +
         '<button type="button" class="chk' + (S.review.onlyNeedsReview ? " on" : "") + '" id="rvwOnly">' +
           '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("rv.onlyNeeds")) + '</b></span></button>' +
       '</div>';
-    var caption = '<div class="note note-info" role="note">' + esc(t("rv.caption")) + '</div>';
+    var caption = '<div class="note note-info" role="note">' + esc(t("rv.caption2")) + '</div>';
 
     // Defensive: if no row carries agent_key, the override POST cannot match server-side.
     var warn = "";
@@ -1701,6 +2455,7 @@
       (r.category ? '<span class="cat-tag">' + esc(r.category) + '</span>' : '') +
       (r.agent_label ? '<span class="rvw-agent">' + esc(r.agent_label) + '</span>' : '') +
       (r.mode ? '<span class="rvw-mode">' + esc(r.mode) + '</span>' : '') +
+      (r.attempt_no ? '<span class="rvw-mode">' + esc(t("rv.attempt", { n: r.attempt_no })) + '</span>' : '') +
       (r.latency_str ? '<span class="rvw-kpi">' + esc(r.latency_str) + '</span>' : '') +
       ((r.estimated_cost != null && r.estimated_cost !== "") ? '<span class="rvw-kpi">$' + esc(fmtCost(r.estimated_cost)) + '</span>' : '') +
     '</div>';
@@ -1762,10 +2517,10 @@
     if (!box) { return; }
     qsa(".ic-info", box).forEach(function (e) { e.innerHTML = I.info; });
 
-    var runSel = byId("rvwRun");
-    if (runSel) {
-      runSel.addEventListener("change", function () {
-        S.review.runId = runSel.value;
+    var benchSel = byId("rvwBench");
+    if (benchSel) {
+      benchSel.addEventListener("change", function () {
+        S.review.benchmarkId = benchSel.value;
         S.review.expanded = {};
         loadReview();
       });
@@ -1805,14 +2560,14 @@
     S.review.loadError = false;
     if (!opts.quiet && !S.review.loaded) { renderReview(); }
     var path = "review?only_needs_review=" + (S.review.onlyNeedsReview ? "1" : "0");
-    if (S.review.runId) { path += "&run_id=" + encodeURIComponent(S.review.runId); }
+    if (S.review.benchmarkId) { path += "&benchmark_id=" + encodeURIComponent(S.review.benchmarkId); }
     callApi("GET", path).then(function (res) {
       var d = res.data || {};
       if (d.status === "ok") {
-        S.review.runs = (d.runs || []).slice();
+        S.review.benchmarks = (d.benchmarks || []).slice();
         S.review.rows = (d.rows || []).slice();
         S.review.count = (typeof d.count === "number") ? d.count : S.review.rows.length;
-        if (d.run_id) { S.review.runId = d.run_id; }
+        if (d.benchmark_id) { S.review.benchmarkId = d.benchmark_id; }
         S.review.loaded = true;
         S.review.loadError = false;
         S.review.saving = {};
@@ -1828,8 +2583,9 @@
     if (S.review.saving[rk]) { return; }
     S.review.saving[rk] = true;
     renderReview();
+    // v2: override the SPECIFIC attempt -> send THIS row's run_id (not a single global run id).
     var payload = {
-      run_id: S.review.runId,
+      run_id: row.run_id || "",
       question_id: row.question_id,
       agent_key: row.agent_key || "",
       mode: row.mode || "",
@@ -1861,6 +2617,7 @@
   function setTab(tab) {
     S.tab = tab;
     setTabUI(tab);
+    if (tab === "benchmarks" && !S.bench.loaded && !S.bench.loadError) { loadBenchmarks(); }
     if (tab === "golden" && !S.golden.loaded && !S.golden.loadError) { loadGolden(); }
     if (tab === "suggest" && !S.suggestions.loaded && !S.suggestions.loadError) { loadSuggestions(); }
     if (tab === "review" && !S.review.loaded && !S.review.loadError) { loadReview(); }
@@ -1900,7 +2657,6 @@
       S.concurrency = v; e.target.value = v; markDirty();
     });
     byId("saveBtn").addEventListener("click", saveConfig);
-    byId("launchBtn").addEventListener("click", launch);
 
     byId("mdClose").addEventListener("click", closeModal);
     byId("mdCancel").addEventListener("click", closeModal);
@@ -1911,7 +2667,20 @@
       this.classList.toggle("on", on);
     });
     byId("overlay").addEventListener("click", function (e) { if (e.target === byId("overlay")) { closeModal(); } });
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && S.editor.open) { closeModal(); } });
+
+    // New-benchmark modal (separate overlay from the golden editor).
+    byId("bnClose").addEventListener("click", closeBenchModal);
+    byId("bnCancel").addEventListener("click", closeBenchModal);
+    byId("bnCreate").addEventListener("click", submitBenchModal);
+    byId("bnSeedAll").addEventListener("click", function () { setBenchSeed(true); });
+    byId("bnSeedEmpty").addEventListener("click", function () { setBenchSeed(false); });
+    byId("benchOverlay").addEventListener("click", function (e) { if (e.target === byId("benchOverlay")) { closeBenchModal(); } });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") { return; }
+      if (S.editor.open) { closeModal(); }
+      if (S.benchNew.open) { closeBenchModal(); }
+    });
   }
 
   /* ============================ init ============================ */
@@ -1921,6 +2690,7 @@
     applyTheme();
     applyLang();
     loadConfig();
+    loadBenchmarks();  // benchmarks is the primary (first) tab and default landing
   }
 
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }

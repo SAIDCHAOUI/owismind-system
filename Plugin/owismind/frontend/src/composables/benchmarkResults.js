@@ -78,9 +78,9 @@ export function pctText(value) {
   return '-'
 }
 
-// A stable key for one detail row (a benchmark scores each golden question once per
-// agent x mode config). Used as the v-for key, the expand-state key and the
-// override-comment key.
+// A stable key for one detail row. Detail is the LATEST attempt per
+// (question_id, agent_key, mode) inside the selected benchmark, so this triplet stays
+// unique. Used as the v-for key, the expand-state key and the override-comment key.
 export function rowKey(row) {
   const r = row || {}
   return [r.question_id, r.agent_key, r.mode].map((x) => (x == null ? '' : String(x))).join('::')
@@ -94,8 +94,11 @@ export function normalizeResults(raw) {
   const r = raw && typeof raw === 'object' ? raw : {}
   const k = r.kpis && typeof r.kpis === 'object' ? r.kpis : {}
   return {
-    run_id: r.run_id != null ? String(r.run_id) : '',
-    runs: Array.isArray(r.runs) ? r.runs : [],
+    // A benchmark is the unit of consultation now (it spans many runs). `benchmarks` is
+    // the selector list; the detail rows each carry their own run_id / attempt history.
+    benchmark_id: r.benchmark_id != null ? String(r.benchmark_id) : '',
+    benchmark_name: r.benchmark_name != null ? String(r.benchmark_name) : '',
+    benchmarks: Array.isArray(r.benchmarks) ? r.benchmarks : [],
     kpis: {
       accuracy: num(k.accuracy),
       accuracy_pct: k.accuracy_pct,

@@ -406,21 +406,30 @@ _JUDGE_SYSTEM = (
     "order-of-magnitude answer is then INCORRECT. When there is no such demand, an answer "
     "that conveys the right magnitude or the correctly rounded value (e.g. '36 456 876' for a "
     "reference of '36 millions', or vice versa) is CORRECT. Otherwise stay strict on facts.\n\n"
+    "REFERENCE SQL / TOOL (a soft hint, NOT a requirement): when a reference SQL or a suggested tool "
+    "is given, it is one way a human thought the answer could be produced. Use it ONLY to help you "
+    "judge whether the answer covers the right facts. The assistant may legitimately use a different, "
+    "equally valid query or a different tool: NEVER penalize a different-but-correct approach, and "
+    "never require the assistant to match the reference SQL or tool.\n\n"
     "Write a concise one-sentence 'comment' explaining the decision (this is shown as a "
     "column), and a slightly longer 'justification'. Output only the structured result."
 )
 
 
-def build_judge_prompt(question, reference_answer, expected_value, full_answer, notes=None):
+def build_judge_prompt(question, reference_answer, expected_value, full_answer, notes=None,
+                       expected_sql=None, expected_tool=None):
     """Assemble the user message for the judge (the inputs, clearly labelled).
 
-    The reference answer and the expected exact value are the ground truth; the
-    full answer is the complete agent output (text + serialized tables). The optional
-    human ``notes`` is the strictness contract (e.g. "I want the exact figure"). Pure,
-    never raises.
+    The reference answer and the expected exact value are the ground truth; the full answer is the
+    complete agent output (text + serialized tables). The optional human ``notes`` is the strictness
+    contract (e.g. "I want the exact figure"). The optional ``expected_sql`` / ``expected_tool`` are
+    SOFT hints (a reference query / tool that could answer): they help the judge gauge coverage but
+    are explicitly non-binding (a different but correct approach is fully correct). Pure, never raises.
     """
     expected = "" if expected_value is None else str(expected_value)
     note = "" if notes is None else str(notes)
+    ref_sql = "" if expected_sql is None else str(expected_sql)
+    ref_tool = "" if expected_tool is None else str(expected_tool)
     parts = [
         "QUESTION:",
         str(question or "").strip(),
@@ -432,6 +441,10 @@ def build_judge_prompt(question, reference_answer, expected_value, full_answer, 
         parts += ["", "EXPECTED EXACT VALUE:", expected.strip()]
     if note.strip():
         parts += ["", "HUMAN NOTE (strictness contract):", note.strip()]
+    if ref_sql.strip():
+        parts += ["", "REFERENCE SQL (soft hint, a different valid query is fine):", ref_sql.strip()]
+    if ref_tool.strip() and ref_tool.strip().lower() != "none":
+        parts += ["", "SUGGESTED TOOL (soft hint, not required):", ref_tool.strip()]
     parts += [
         "",
         "ASSISTANT ANSWER (complete: final text + serialized data tables):",
@@ -522,7 +535,7 @@ def _safe_failure(message):
 
 
 def run_llm_judge(project, question, reference_answer, expected_value, full_answer,
-                  notes=None, llm_id=config.JUDGE_LLM_ID):
+                  notes=None, llm_id=config.JUDGE_LLM_ID, expected_sql=None, expected_tool=None):
     """Call the LLM judge over Mesh and return its structured verdict (DSS-touching).
 
     Uses the native Mesh completion API: ``project.get_llm(llm_id).new_completion()``
@@ -547,7 +560,8 @@ def run_llm_judge(project, question, reference_answer, expected_value, full_answ
 
     system_prompt = _JUDGE_SYSTEM
     user_msg = build_judge_prompt(question, reference_answer, expected_value,
-                                  full_answer, notes=notes)
+                                  full_answer, notes=notes,
+                                  expected_sql=expected_sql, expected_tool=expected_tool)
 
     # Attempt native JSON mode first; fall back to a prompt-only parse if the model
     # or connection rejects with_json_output (mirrors the sub-agent's UNDERSTAND).

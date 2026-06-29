@@ -212,6 +212,26 @@ class TestScalars(unittest.TestCase):
         self.assertTrue(cfg["score_all_runs"])
         self.assertTrue(cfg["aggregate_all_runs"])
 
+    def test_benchmarks_and_run_request_resolved(self):
+        # v2: the registry + the pending launch request are parsed into the resolved config.
+        entity = {
+            "benchmark_id": "B1", "name": "said", "agent_key": "orchestrator",
+            "project_key": "OWISMIND_DEV", "agent_id": "agent:038G7mlF",
+            "modes": ["Smart"], "questions": {},
+        }
+        cfg = run_params.resolve(_vars({
+            "benchmarks": {"B1": entity},
+            "run_request": {"benchmark_id": "B1", "launch_mode": "full"},
+        }))
+        self.assertIn("B1", cfg["benchmarks"])
+        self.assertEqual(cfg["benchmarks"]["B1"]["name"], "said")
+        self.assertEqual(cfg["run_request"], {"benchmark_id": "B1", "launch_mode": "full"})
+
+    def test_benchmarks_default_empty(self):
+        cfg = run_params.resolve(_vars({}))
+        self.assertEqual(cfg["benchmarks"], {})
+        self.assertIsNone(cfg["run_request"])
+
 
 if __name__ == "__main__":
     unittest.main()

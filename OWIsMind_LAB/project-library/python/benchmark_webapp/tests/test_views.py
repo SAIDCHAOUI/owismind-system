@@ -35,41 +35,44 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(views.fmt_secs(None), "-")
 
 
-class RunSelectorTests(unittest.TestCase):
-    def test_latest_and_runs(self):
+class BenchmarkSelectorTests(unittest.TestCase):
+    def test_latest_and_options(self):
         rows = [
-            {"run_id": "a", "run_timestamp": "2026-06-25T10:00:00"},
-            {"run_id": "b", "run_timestamp": "2026-06-25T12:00:00"},
-            {"run_id": "a", "run_timestamp": "2026-06-25T10:00:00"},
+            {"benchmark_id": "a", "benchmark_name": "A", "last_run_timestamp": "2026-06-25T10:00:00"},
+            {"benchmark_id": "b", "benchmark_name": "B", "last_run_timestamp": "2026-06-25T12:00:00"},
+            {"benchmark_id": "a", "benchmark_name": "A", "last_run_timestamp": "2026-06-25T10:00:00"},
         ]
-        self.assertEqual(views.latest_run_id(rows), "b")
-        runs = views.runs_view(rows)
-        self.assertEqual([r["run_id"] for r in runs], ["b", "a"])
+        self.assertEqual(views.latest_benchmark_id(rows), "b")
+        opts = views.benchmark_options(rows)
+        self.assertEqual([o["benchmark_id"] for o in opts], ["b", "a"])
+        self.assertEqual(opts[0]["benchmark_name"], "B")
 
     def test_empty(self):
-        self.assertEqual(views.latest_run_id([]), "")
-        self.assertEqual(views.runs_view(None), [])
+        self.assertEqual(views.latest_benchmark_id([]), "")
+        self.assertEqual(views.benchmark_options(None), [])
 
 
 class SummaryViewTests(unittest.TestCase):
     def _rows(self):
         return [
-            {"run_id": "r1", "run_timestamp": "t", "agent_key": "orch", "agent_label": "Orch",
+            {"benchmark_id": "B1", "benchmark_name": "said", "last_run_timestamp": "t",
+             "agent_key": "orch", "agent_label": "Orch",
              "mode": "Smart", "n_questions": 10, "n_ok": 10, "n_error": 0, "error_rate": 0.0,
              "accuracy": 0.8, "mean_score": 4.2, "latency_p50_s": 1.0, "latency_p95_s": 2.0,
              "avg_cost_per_q": 0.01, "total_cost": 0.10, "needs_review_count": 1,
              "judge_total_cost": 0.02},
-            {"run_id": "r1", "run_timestamp": "t", "agent_key": "orch", "agent_label": "Orch",
+            {"benchmark_id": "B1", "benchmark_name": "said", "last_run_timestamp": "t",
+             "agent_key": "orch", "agent_label": "Orch",
              "mode": "Claude", "n_questions": 10, "n_ok": 10, "n_error": 0, "error_rate": 0.0,
              "accuracy": 0.5, "mean_score": 3.0, "latency_p50_s": 4.0, "latency_p95_s": 8.0,
              "avg_cost_per_q": 0.05, "total_cost": 0.50, "needs_review_count": 2,
              "judge_total_cost": 0.03},
-            # a row from another run, must be filtered out when run_id=r1
-            {"run_id": "r0", "agent_label": "Orch", "mode": "Smart", "n_ok": 10, "accuracy": 1.0},
+            # a row from another benchmark, must be filtered out when benchmark_id=B1
+            {"benchmark_id": "B0", "agent_label": "Orch", "mode": "Smart", "n_ok": 10, "accuracy": 1.0},
         ]
 
     def test_global_accuracy_weighted(self):
-        out = views.summary_view(self._rows(), run_id="r1")
+        out = views.summary_view(self._rows(), benchmark_id="B1")
         # 8 correct + 5 correct over 20 ok = 0.65
         self.assertAlmostEqual(out["kpis"]["accuracy"], 0.65, places=6)
         self.assertEqual(out["kpis"]["accuracy_pct"], "65.0 %")
@@ -77,92 +80,129 @@ class SummaryViewTests(unittest.TestCase):
         self.assertEqual(out["kpis"]["n_configs"], 2)
         self.assertEqual(out["kpis"]["needs_review"], 3)
         self.assertEqual(out["kpis"]["total_cost_str"], "$0.60")
+        self.assertEqual(out["benchmark_id"], "B1")
+        self.assertEqual(out["benchmark_name"], "said")
 
     def test_rows_sorted_by_accuracy_desc(self):
-        out = views.summary_view(self._rows(), run_id="r1")
+        out = views.summary_view(self._rows(), benchmark_id="B1")
         self.assertEqual([r["mode"] for r in out["rows"]], ["Smart", "Claude"])
         self.assertEqual(out["rows"][0]["accuracy_pct"], "80.0 %")
 
-    def test_latest_when_no_run_id(self):
-        # No run_id -> latest by timestamp; r1 has timestamp 't', r0 has none -> r1 wins.
+    def test_latest_when_no_benchmark_id(self):
+        # No benchmark_id -> latest by timestamp; B1 has 't', B0 has none -> B1 wins.
         out = views.summary_view(self._rows())
-        self.assertEqual(out["run_id"], "r1")
+        self.assertEqual(out["benchmark_id"], "B1")
 
 
 class BreakdownViewTests(unittest.TestCase):
     def test_shape(self):
         rows = [
-            {"run_id": "r1", "agent_label": "Orch", "mode": "Smart", "dimension": "category",
+            {"benchmark_id": "B1", "agent_label": "Orch", "mode": "Smart", "dimension": "category",
              "bucket": "revenus", "n": 5, "accuracy": 0.8, "mean_score": 4.0},
-            {"run_id": "r1", "agent_label": "Orch", "mode": "Smart", "dimension": "category",
+            {"benchmark_id": "B1", "agent_label": "Orch", "mode": "Smart", "dimension": "category",
              "bucket": "tickets", "n": 5, "accuracy": 0.4, "mean_score": 3.0},
         ]
-        out = views.breakdown_view(rows, run_id="r1")
+        out = views.breakdown_view(rows, benchmark_id="B1")
         self.assertEqual(len(out["rows"]), 2)
         self.assertEqual(out["rows"][0]["bucket"], "revenus")
         self.assertEqual(out["rows"][0]["accuracy_pct"], "80.0 %")
 
 
+def _drow(**over):
+    base = {
+        "benchmark_id": "B1", "benchmark_name": "said", "attempt_no": 1, "run_id": "r1",
+        "run_timestamp": "2026-06-29T10:00:00Z", "question_id": "Q1", "question": "q1",
+        "agent_key": "orch", "agent_label": "Orch", "mode": "Smart", "status": "ok",
+        "objective_match": "hit", "judge_score": 5, "judge_verdict": "correct", "correct": True,
+        "needs_review": False, "answer_text": "a", "latency_total_s": 1.0, "estimated_cost": 0.01,
+    }
+    base.update(over)
+    return base
+
+
 class DetailViewTests(unittest.TestCase):
     def _rows(self):
         return [
-            {"run_id": "r1", "question_id": "Q1", "question": "q1", "agent_label": "Orch",
-             "mode": "Smart", "status": "ok", "objective_match": "hit", "judge_score": 5,
-             "judge_verdict": "correct", "correct": True, "needs_review": False,
-             "answer_text": "a" * 500, "latency_total_s": 1.0, "estimated_cost": 0.01},
-            {"run_id": "r1", "question_id": "Q2", "question": "q2", "agent_label": "Orch",
-             "mode": "Smart", "status": "ok", "objective_match": "miss", "judge_score": 2,
-             "judge_verdict": "incorrect", "correct": False, "needs_review": True,
-             "answer_text": "b", "latency_total_s": 2.0, "estimated_cost": 0.02},
+            _drow(question_id="Q1", judge_score=5, correct=True, needs_review=False,
+                  answer_text="a" * 500),
+            _drow(question_id="Q2", objective_match="miss", judge_score=2,
+                  judge_verdict="incorrect", correct=False, needs_review=True,
+                  answer_text="b", latency_total_s=2.0, estimated_cost=0.02),
         ]
 
     def test_needs_review_first_and_preview_trimmed(self):
-        out = views.detail_view(self._rows(), run_id="r1")
+        out = views.detail_view(self._rows(), benchmark_id="B1")
         self.assertEqual(out["count"], 2)
-        # needs_review row sorts first
-        self.assertEqual(out["rows"][0]["question_id"], "Q2")
+        self.assertEqual(out["rows"][0]["question_id"], "Q2")  # needs_review sorts first
         self.assertTrue(out["rows"][0]["needs_review"])
-        # answer preview trimmed to the cap
         self.assertLessEqual(len(out["rows"][1]["answer_preview"]), 280)
+        # v2: each row carries its evolution (single attempt -> 'first').
+        self.assertEqual(out["rows"][0]["n_attempts"], 1)
+        self.assertEqual(out["rows"][0]["delta"], "first")
 
     def test_only_needs_review_filter(self):
-        out = views.detail_view(self._rows(), run_id="r1", only_needs_review=True)
+        out = views.detail_view(self._rows(), benchmark_id="B1", only_needs_review=True)
         self.assertEqual(out["count"], 1)
         self.assertEqual(out["rows"][0]["question_id"], "Q2")
 
     def test_limit_keeps_needs_review_first(self):
-        # Cap applies AFTER the needs-review-first sort, so the priority row survives the cap
-        # even though it is second in raw order (regression: cap-before-sort dropped it).
-        out = views.detail_view(self._rows(), run_id="r1", limit=1)
+        out = views.detail_view(self._rows(), benchmark_id="B1", limit=1)
         self.assertEqual(out["count"], 1)
         self.assertEqual(out["rows"][0]["question_id"], "Q2")
         self.assertTrue(out["rows"][0]["needs_review"])
 
-    def test_surfaces_judge_comment_and_review_fields(self):
-        out = views.detail_view(self._rows(), run_id="r1")
+    def test_latest_attempt_wins(self):
+        # Two attempts of Q1: attempt 2 (correct) supersedes attempt 1 (incorrect).
+        rows = [
+            _drow(question_id="Q1", attempt_no=1, correct=False, judge_verdict="incorrect",
+                  run_id="r1", run_timestamp="2026-06-29T10:00:00Z"),
+            _drow(question_id="Q1", attempt_no=2, correct=True, judge_verdict="correct",
+                  run_id="r2", run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        out = views.detail_view(rows, benchmark_id="B1")
+        self.assertEqual(out["count"], 1)
+        self.assertEqual(out["rows"][0]["attempt_no"], 2)
+        self.assertTrue(out["rows"][0]["effective_correct"])
+        self.assertEqual(out["rows"][0]["n_attempts"], 2)
+        self.assertEqual(out["rows"][0]["delta"], "improved")
+
+    def test_surfaces_judge_comment_and_reference_fields(self):
+        out = views.detail_view(self._rows(), benchmark_id="B1")
         row = next(r for r in out["rows"] if r["question_id"] == "Q1")
-        # The concise judge comment + the human override fields are present (for the table +
-        # the review panel), defaulting to empty strings when absent.
-        for key in ("agent_key", "judge_comment", "human_verdict", "human_comment",
-                    "reviewed_by", "notes", "expected_value", "expected_value_type",
-                    "effective_correct", "effective_verdict", "overridden"):
+        for key in ("agent_key", "run_id", "attempt_no", "judge_comment", "human_verdict",
+                    "human_comment", "reviewed_by", "notes", "expected_value", "expected_sql",
+                    "expected_tool", "actual_tools", "effective_correct", "effective_verdict",
+                    "overridden"):
             self.assertIn(key, row)
 
     def test_effective_verdict_reflects_human_override(self):
-        rows = [
-            {"run_id": "r1", "question_id": "Q9", "question": "q", "agent_label": "Orch",
-             "mode": "Smart", "status": "ok", "objective_match": "miss", "judge_score": 2,
-             "judge_verdict": "incorrect", "correct": False, "needs_review": True,
-             "human_verdict": "correct", "human_comment": "magnitude is fine",
-             "reviewed_by": "u_admin", "answer_text": "b", "judge_comment": "off by a lot"},
-        ]
-        out = views.detail_view(rows, run_id="r1")
+        rows = [_drow(question_id="Q9", objective_match="miss", judge_score=2,
+                      judge_verdict="incorrect", correct=False, needs_review=True,
+                      human_verdict="correct", human_comment="magnitude is fine",
+                      reviewed_by="u_admin", answer_text="b", judge_comment="off by a lot")]
+        out = views.detail_view(rows, benchmark_id="B1")
         row = out["rows"][0]
         self.assertTrue(row["effective_correct"])
         self.assertEqual(row["effective_verdict"], "correct")
         self.assertTrue(row["overridden"])
         self.assertEqual(row["judge_comment"], "off by a lot")
         self.assertEqual(row["human_comment"], "magnitude is fine")
+
+
+class ReviewViewTests(unittest.TestCase):
+    def test_lists_all_attempts(self):
+        # review_view does NOT reduce to latest: a reviewer overrides a specific attempt.
+        rows = [
+            _drow(question_id="Q1", attempt_no=1, correct=False, run_id="r1",
+                  run_timestamp="2026-06-29T10:00:00Z"),
+            _drow(question_id="Q1", attempt_no=2, correct=True, run_id="r2",
+                  run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        out = views.review_view(rows, benchmark_id="B1")
+        self.assertEqual(out["count"], 2)
+        # newest attempt first within the question
+        self.assertEqual([r["attempt_no"] for r in out["rows"]], [2, 1])
+        self.assertEqual(out["rows"][0]["run_id"], "r2")
 
 
 class OverrideTests(unittest.TestCase):
@@ -363,12 +403,12 @@ class PlainLanguageTests(unittest.TestCase):
 
     def test_summary_kpis_plain_counts(self):
         rows = [
-            {"run_id": "r1", "agent_label": "A", "mode": "Smart", "n_questions": 10,
+            {"benchmark_id": "B1", "agent_label": "A", "mode": "Smart", "n_questions": 10,
              "n_ok": 10, "accuracy": 0.8, "total_cost": 0.1},
-            {"run_id": "r1", "agent_label": "A", "mode": "Claude", "n_questions": 10,
+            {"benchmark_id": "B1", "agent_label": "A", "mode": "Claude", "n_questions": 10,
              "n_ok": 10, "accuracy": 0.5, "total_cost": 0.5},
         ]
-        k = views.summary_view(rows, run_id="r1")["kpis"]
+        k = views.summary_view(rows, benchmark_id="B1")["kpis"]
         # 8 + 5 correct over 20 scored = 13/20.
         self.assertEqual(k["n_correct"], 13)
         self.assertEqual(k["n_ok_total"], 20)
@@ -418,6 +458,166 @@ class BuildConfigTests(unittest.TestCase):
         out = views.build_config_object({}, form)
         self.assertEqual(len(out["agents"]), 1)
         self.assertEqual(out["concurrency"], 8)
+
+
+def _entity(**over):
+    base = {
+        "benchmark_id": "B1", "name": "said", "agent_key": "orchestrator",
+        "agent_label": "Orchestrator", "project_key": "OWISMIND_DEV",
+        "agent_id": "agent:038G7mlF", "modes": ["Smart", "Pro"], "status": "active",
+        "created_at": "2026-06-29T09:00:00Z", "created_by": "user",
+        "questions": {
+            "Q1": {"added_at": "2026-06-29T09:00:00Z", "include_next": False, "active": True},
+            "Q2": {"added_at": "2026-06-29T09:01:00Z", "include_next": True, "active": True},
+            "Q3": {"added_at": "2026-06-29T09:02:00Z", "include_next": False, "active": True},
+        },
+    }
+    base.update(over)
+    return base
+
+
+def _scored(benchmark_id="B1", question_id="Q1", mode="Smart", attempt_no=1, correct=True,
+            judge_score=5, status="ok", run_timestamp="2026-06-29T10:00:00Z",
+            human_verdict="", agent_key="orchestrator"):
+    return {
+        "benchmark_id": benchmark_id, "benchmark_name": "said", "question_id": question_id,
+        "mode": mode, "attempt_no": attempt_no, "agent_key": agent_key, "status": status,
+        "correct": correct, "judge_score": judge_score, "judge_verdict":
+        "correct" if correct else "incorrect", "human_verdict": human_verdict,
+        "run_timestamp": run_timestamp,
+    }
+
+
+class BenchmarksViewTests(unittest.TestCase):
+    def test_counts_done_pending_redo(self):
+        reg = {"B1": _entity()}
+        scored = [_scored(question_id="Q1")]  # Q1 done; Q2, Q3 pending; Q2 redo flagged
+        summary = [{"benchmark_id": "B1", "n_ok": 1, "accuracy": 1.0, "n_runs": 1,
+                    "last_run_timestamp": "2026-06-29T10:00:00Z"}]
+        view = views.benchmarks_view(reg, summary, scored)
+        self.assertEqual(len(view), 1)
+        b = view[0]
+        self.assertEqual(b["n_questions"], 3)
+        self.assertEqual(b["n_done"], 1)
+        self.assertEqual(b["n_pending"], 2)
+        self.assertEqual(b["n_redo"], 1)
+        self.assertEqual(b["accuracy_pct"], "100.0 %")
+        self.assertEqual(b["n_runs"], 1)
+
+    def test_archived_hidden_by_default(self):
+        reg = {"B1": _entity(status="archived")}
+        self.assertEqual(views.benchmarks_view(reg, [], []), [])
+        self.assertEqual(len(views.benchmarks_view(reg, [], [], include_archived=True)), 1)
+
+    def test_no_scored_shows_dash(self):
+        reg = {"B1": _entity()}
+        b = views.benchmarks_view(reg, [], [])[0]
+        self.assertEqual(b["accuracy_pct"], "-")
+        self.assertEqual(b["band"], "none")
+        self.assertEqual(b["n_done"], 0)
+
+
+class EvolutionViewTests(unittest.TestCase):
+    def test_improved_over_two_attempts(self):
+        scored = [
+            _scored(question_id="Q1", mode="Smart", attempt_no=1, correct=False, judge_score=2,
+                    run_timestamp="2026-06-29T10:00:00Z"),
+            _scored(question_id="Q1", mode="Smart", attempt_no=2, correct=True, judge_score=5,
+                    run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        ev = views.evolution_for_question(scored, "B1", "Q1")
+        self.assertEqual(len(ev), 1)
+        smart = ev[0]
+        self.assertEqual(smart["mode"], "Smart")
+        self.assertEqual([a["attempt_no"] for a in smart["attempts"]], [1, 2])
+        self.assertEqual(smart["latest"]["attempt_no"], 2)
+        self.assertTrue(smart["latest"]["correct"])
+        self.assertEqual(smart["delta"], "improved")
+
+    def test_regressed(self):
+        scored = [
+            _scored(question_id="Q1", attempt_no=1, correct=True),
+            _scored(question_id="Q1", attempt_no=2, correct=False,
+                    run_timestamp="2026-06-30T10:00:00Z"),
+        ]
+        ev = views.evolution_for_question(scored, "B1", "Q1")
+        self.assertEqual(ev[0]["delta"], "regressed")
+
+    def test_first_attempt(self):
+        ev = views.evolution_for_question([_scored(question_id="Q1")], "B1", "Q1")
+        self.assertEqual(ev[0]["delta"], "first")
+
+    def test_human_override_wins_in_evolution(self):
+        scored = [_scored(question_id="Q1", correct=False, human_verdict="correct")]
+        ev = views.evolution_for_question(scored, "B1", "Q1")
+        self.assertTrue(ev[0]["latest"]["correct"])
+        self.assertTrue(ev[0]["latest"]["overridden"])
+
+
+class BenchmarkDetailViewTests(unittest.TestCase):
+    def test_membership_and_status(self):
+        entity = _entity()
+        golden = [
+            {"question_id": "Q1", "question": "q1", "category": "revenus",
+             "expected_sql": "SELECT 1", "expected_tool": "show_table", "reference_answer": "a"},
+            {"question_id": "Q2", "question": "q2", "category": "tickets",
+             "expected_sql": "", "expected_tool": "", "reference_answer": "b"},
+            {"question_id": "Q3", "question": "q3", "category": "revenus", "reference_answer": "c"},
+        ]
+        scored = [_scored(question_id="Q1", correct=True)]
+        view = views.benchmark_detail_view(entity, golden, scored)
+        self.assertEqual(view["n_questions"], 3)
+        self.assertEqual(view["n_done"], 1)
+        self.assertEqual(view["n_pending"], 2)
+        self.assertEqual(view["n_redo"], 1)
+        by_q = {q["question_id"]: q for q in view["questions"]}
+        self.assertEqual(by_q["Q1"]["status"], "done")
+        self.assertEqual(by_q["Q1"]["expected_sql"], "SELECT 1")
+        self.assertEqual(by_q["Q1"]["expected_tool"], "show_table")
+        self.assertTrue(by_q["Q1"]["latest_correct"])
+        self.assertEqual(by_q["Q2"]["status"], "pending")
+        self.assertTrue(by_q["Q2"]["include_next"])
+
+    def test_order_by_added_at(self):
+        entity = _entity(questions={
+            "Qb": {"added_at": "2026-06-29T09:05:00Z", "include_next": False, "active": True},
+            "Qa": {"added_at": "2026-06-29T09:01:00Z", "include_next": False, "active": True},
+        })
+        view = views.benchmark_detail_view(entity, [], [])
+        self.assertEqual([q["question_id"] for q in view["questions"]], ["Qa", "Qb"])
+
+
+class LaunchRequestTests(unittest.TestCase):
+    def test_build_append(self):
+        self.assertEqual(views.build_launch_request("B1", "append"),
+                         {"benchmark_id": "B1", "launch_mode": "append"})
+
+    def test_build_full(self):
+        self.assertEqual(views.build_launch_request("B1", "full")["launch_mode"], "full")
+
+    def test_garbage_mode_defaults_append(self):
+        self.assertEqual(views.build_launch_request("B1", "zzz")["launch_mode"], "append")
+
+    def test_blank_id_none(self):
+        self.assertIsNone(views.build_launch_request("", "append"))
+
+
+class GoldenReferenceColumnsTests(unittest.TestCase):
+    def test_golden_view_carries_reference_sql_tool(self):
+        rows = [{"question_id": "q1", "question": "q", "reference_answer": "a",
+                 "expected_sql": "SELECT 1", "expected_tool": "show_chart"}]
+        g = views.golden_view(rows)[0]
+        self.assertEqual(g["expected_sql"], "SELECT 1")
+        self.assertEqual(g["expected_tool"], "show_chart")
+
+    def test_prepare_save_keeps_reference_columns(self):
+        row, errors, is_new = views.prepare_golden_save(
+            {"question": "q", "reference_answer": "a", "expected_sql": "SELECT 2",
+             "expected_tool": "show_table"}, [])
+        self.assertEqual(errors, [])
+        self.assertTrue(is_new)
+        self.assertEqual(row["expected_sql"], "SELECT 2")
+        self.assertEqual(row["expected_tool"], "show_table")
 
 
 if __name__ == "__main__":

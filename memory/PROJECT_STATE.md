@@ -420,6 +420,20 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
 > **Packages inchangés** (`from benchmark ...` / `from benchmark_webapp ...`), zéro recoll DSS. Carte : `OWIsMind_LAB/README.md`.
 > Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`. Voir **L109**.
 > (Les chemins `benchmark/...` / `benchmark_webapp/...` cités plus bas dans 8c/8d = anciens, lire sous `OWIsMind_LAB/...`.)
+>
+> 🆕 **v2 APPEND MODE (2026-06-30, L113, ⏳ NON validé DSS)** : un benchmark = campagne **NOMMÉE unique
+> par agent** (`benchmark_id`+nom), les runs **s'accumulent** (relancer ne joue que les questions pas
+> faites ; score global = **dernière tentative** par question via `scoring.latest_attempts`). Registre +
+> appartenance des questions + drapeaux « refaire » dans la **variable projet `benchmark`** (`benchmarks`
+> map + `run_request`) -> **0 dataset neuf** ; module PUR `benchmark/registry.py`. Colonnes additives :
+> `benchmark_id`/`benchmark_name`/`attempt_no` (raw+scored), `expected_sql`/`expected_tool` (golden+raw+
+> scored, **signal doux au juge** + affichées), `actual_tools` (scored). **SUMMARY/BREAKDOWN keyés par
+> `benchmark_id`** (plus `run_id`), 1 bloc par benchmark, merge par benchmark_id. Results LAB + consultation
+> plugin sélectionnent **par benchmark** + évolution + attendu vs réel ; `lab_io.read_scored` lit
+> l'intersection des colonnes (rétro-compat tables v1). Launcher : onglet **Benchmarks** (créer/ouvrir/
+> lancer ; 3 boutons append/full/new ; toggle redo) ; lancement global retiré. Override = par tentative
+> (run_id de la ligne). À déployer : recoller lib+webapps LAB + variable (`benchmarks:{}`,`run_request:null`)
+> + upload DEV + redémarrer backend ; un run frais matérialise les colonnes. Détail : `sessions/2026-06-30.md`.
 
 But : mesurer précision (taux de bonnes réponses), latence, coût, tokens **par agent ET par mode**, restitution
 lisible. **Archi (spec `docs/superpowers/specs/2026-06-24-agent-benchmark-evaluation-design.md`)** : projet DSS

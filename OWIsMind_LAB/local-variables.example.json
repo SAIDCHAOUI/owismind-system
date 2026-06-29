@@ -26,6 +26,10 @@
     "aggregate_all_runs": false,
     "history_keep_runs": 50,
 
+    "_comment_v2": "APPEND MODE (v2): 'agents' above is now the CATALOG the launcher offers when you CREATE a benchmark. The named per-agent benchmarks + their question membership + the 'redo at next run' flags live below in 'benchmarks' (the launcher writes them; you do NOT edit this by hand). 'run_request' is written by the launcher just before it fires the Run_Benchmark scenario - leave it null here. Both start empty.",
+    "benchmarks": {},
+    "run_request": null,
+
     "suggestions": {
       "connection": "SQL_owi",
       "table": "OWISMIND_DEV_webapp_devtest-owismind_webapp_golden_s_90f625c2f8",

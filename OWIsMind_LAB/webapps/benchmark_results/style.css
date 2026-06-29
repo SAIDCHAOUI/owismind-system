@@ -114,6 +114,7 @@ a{color:inherit;}
 .verdict.good{border-color:var(--good);color:var(--good);} .verdict.good .sq{background:var(--good);}
 .verdict.mid{border-color:var(--orange);color:var(--orange-deep);} .verdict.mid .sq{background:var(--orange);}
 .verdict.bad{border-color:var(--bad);color:var(--bad);} .verdict.bad .sq{background:var(--bad);}
+.hero-bench{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;font-family:var(--mono);}
 .hero-note{color:var(--ink);font-size:14px;margin:16px 0 6px;}
 .hero-meta{color:var(--ink-3);font-size:13px;font-family:var(--mono);margin:0;}
 .hero-meta b{color:var(--ink-2);}
@@ -195,6 +196,15 @@ a{color:inherit;}
 .show-details:hover{color:var(--orange);}
 .show-details svg{width:13px;height:13px;}
 
+/* evolution delta badge */
+.evo{display:inline-flex;align-items:center;gap:6px;border:1.5px solid;padding:4px 9px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}
+.evo svg{width:13px;height:13px;flex:0 0 13px;}
+.evo-up{border-color:var(--good);color:var(--good);}
+.evo-down{border-color:var(--bad);color:var(--bad);}
+.evo-flat{border-color:var(--line);color:var(--ink-3);}
+.evo-n{display:block;margin-top:5px;font-size:11px;color:var(--ink-3);font-family:var(--mono);}
+.evo-latest{margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--orange);}
+
 /* detail panel */
 .detail{background:var(--soft);padding:22px 24px;display:grid;grid-template-columns:140px 1fr 1fr;gap:8px 28px;align-items:start;}
 .detail dt{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);grid-column:1;}
@@ -205,6 +215,31 @@ a{color:inherit;}
 .ans-box.expected{border-left:3px solid var(--good);padding-left:16px;}
 .ans-box.agent{border-left:3px solid var(--bad);padding-left:16px;}
 .judge-note{font-size:13px;color:var(--ink);}
+.detail .d-full.human{border-top:1px solid var(--line-soft);border-bottom:none;padding-top:12px;margin-top:12px;margin-bottom:0;padding-bottom:0;}
+.detail .d-full.human b{color:var(--orange-deep);}
+
+/* reference vs produced (soft judge hint) */
+.refvs{grid-column:1 / -1;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft);}
+.rv-h{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px;}
+.rv-note{font-size:12px;color:var(--ink-3);margin:0 0 12px;max-width:640px;line-height:1.5;}
+.rv-l{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px;}
+.rv-sql{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line-soft);border-left:3px solid var(--orange);padding:12px 14px;margin:0 0 12px;white-space:pre-wrap;word-break:break-word;overflow-x:auto;}
+.rv-tools{display:flex;flex-wrap:wrap;gap:10px 28px;}
+.rv-pair{display:flex;flex-direction:column;gap:4px;}
+.rv-k{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);}
+.rv-v code{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--soft-2);padding:3px 8px;}
+.rv-v{font-size:12.5px;color:var(--ink-3);}
+
+/* attempt history */
+.attempts{grid-column:1 / -1;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft);}
+.att-h{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px;}
+.att-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);}
+.att-table th{text-align:left;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:9px 12px;background:var(--soft);border-bottom:1px solid var(--line);}
+.att-table td{padding:9px 12px;border-bottom:1px solid var(--line-soft);font-size:12.5px;vertical-align:middle;}
+.att-table tr:last-child td{border-bottom:none;}
+.att-table .mono{font-family:var(--mono);color:var(--ink-2);}
+.att-table .result-pill{padding:3px 8px;font-size:10px;}
+.att-table .cfg-cell{font-size:12px;}
 
 /* aside reference */
 .ref-block+.ref-block{margin-top:24px;padding-top:24px;border-top:1px solid var(--line);}

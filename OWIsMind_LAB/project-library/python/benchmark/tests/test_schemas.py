@@ -206,6 +206,32 @@ class TestNormalizeGoldenRow(unittest.TestCase):
         out = schemas.normalize_golden_row(_valid_golden_row())
         self.assertEqual(set(out.keys()), set(schemas.GOLDEN_COLUMNS))
 
+    def test_reference_sql_tool_columns(self):
+        # v2: the reference SQL / tool are nullable golden columns, trimmed, blank -> None.
+        self.assertIn("expected_sql", schemas.GOLDEN_COLUMNS)
+        self.assertIn("expected_tool", schemas.GOLDEN_COLUMNS)
+        out = schemas.normalize_golden_row({
+            "question_id": "q1", "question": "q", "reference_answer": "a",
+            "expected_sql": "  SELECT 1 ", "expected_tool": " show_chart ",
+        })
+        self.assertEqual(out["expected_sql"], "SELECT 1")
+        self.assertEqual(out["expected_tool"], "show_chart")
+        # blank -> None (still optional: validate_golden_row stays happy)
+        out2 = schemas.normalize_golden_row({
+            "question_id": "q1", "question": "q", "reference_answer": "a",
+            "expected_sql": "   ", "expected_tool": None,
+        })
+        self.assertIsNone(out2["expected_sql"])
+        self.assertIsNone(out2["expected_tool"])
+        ok, errors = schemas.validate_golden_row(out2)
+        self.assertTrue(ok, errors)
+
+    def test_reference_columns_in_raw_and_scored(self):
+        for col in ("benchmark_id", "benchmark_name", "attempt_no",
+                    "expected_sql", "expected_tool", "actual_tools"):
+            self.assertIn(col, schemas.RAW_COLUMNS)
+            self.assertIn(col, schemas.SCORED_COLUMNS)
+
     def test_non_dict_returns_empty(self):
         self.assertEqual(schemas.normalize_golden_row(None), {})
 

@@ -79,8 +79,8 @@ const bandLabel = computed(() => {
 function onAgentChange(e) {
   bench.selectConsultAgent(e.target.value)
 }
-function onRunChange(e) {
-  bench.selectRun(e.target.value)
+function onBenchmarkChange(e) {
+  bench.selectBenchmark(e.target.value)
 }
 
 // Auto-select the first benchmark agent once the list is known (so results load
@@ -124,18 +124,23 @@ function verdictLabel(row) {
 function fmtScore(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '-'
 }
-function fmtRun(run) {
-  if (!run) return ''
-  const stamp = run.run_timestamp
-  if (stamp) {
-    try {
-      const d = new Date(stamp)
-      if (!Number.isNaN(d.getTime())) return d.toLocaleString(locale.value)
-    } catch (e) {
-      /* fall through to the raw id */
-    }
+// Localized date-time for a backend timestamp; falls back to the raw value.
+function fmtTimestamp(stamp) {
+  if (!stamp) return ''
+  try {
+    const d = new Date(stamp)
+    if (!Number.isNaN(d.getTime())) return d.toLocaleString(locale.value)
+  } catch (e) {
+    /* fall through to the raw value */
   }
-  return String(run.run_id || '')
+  return String(stamp)
+}
+// Benchmark selector option label: the name, plus its last-run date when known.
+function fmtBenchmarkOption(b) {
+  if (!b) return ''
+  const name = b.benchmark_name || b.benchmark_id || ''
+  const when = fmtTimestamp(b.last_run_timestamp)
+  return when ? name + ' (' + when + ')' : String(name)
 }
 function catWidth(cat) {
   return pctFromAccuracy(cat && cat.accuracy) + '%'
@@ -183,6 +188,63 @@ function resultPillKind(row) {
   return 'plaus'
 }
 
+// --- Evolution (attempt history) ---------------------------------------------
+// The benchmark grows question-by-question over many runs; a re-run of a question
+// yields a new attempt. The backend stamps each detail row with `delta` (the trend of
+// the latest attempt vs the previous one): improved | regressed | same | first.
+const EVOLUTION_KINDS = ['improved', 'regressed', 'same', 'first']
+function evolutionKind(row) {
+  const d = String((row && row.delta) || '').toLowerCase()
+  return EVOLUTION_KINDS.indexOf(d) >= 0 ? d : ''
+}
+function evolutionLabel(row) {
+  const k = evolutionKind(row)
+  return k ? t('bench.evo.' + k) : ''
+}
+// Trend -> pill class (improved = good, regressed = bad, same/first = neutral).
+function evolutionClass(row) {
+  const k = evolutionKind(row)
+  if (k === 'improved') return 'evo-up'
+  if (k === 'regressed') return 'evo-down'
+  return 'evo-flat'
+}
+// How many attempts this question has accumulated in the benchmark.
+function attemptCount(row) {
+  const n = Number(row && row.n_attempts)
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+// The ordered attempt history (oldest -> newest), defensive against a missing array.
+function attemptHistory(row) {
+  return row && Array.isArray(row.attempts) ? row.attempts : []
+}
+// One attempt's verdict pill kind (ok / bad / plaus), folding any override.
+function attemptPillKind(att) {
+  if (!att || typeof att !== 'object') return 'plaus'
+  if (att.correct === true) return 'ok'
+  if (att.correct === false) return 'bad'
+  const v = String(att.verdict || '').toLowerCase()
+  if (v === 'correct') return 'ok'
+  if (v === 'incorrect') return 'bad'
+  return 'plaus'
+}
+function attemptVerdictLabel(att) {
+  const k = attemptPillKind(att)
+  if (k === 'ok') return t('bench.verdict.correct')
+  if (k === 'bad') return t('bench.verdict.incorrect')
+  return t('bench.verdict.unknown')
+}
+// The agent's actual tools for one row -> a readable list (or empty).
+function actualToolsText(row) {
+  const v = row && row.actual_tools
+  if (Array.isArray(v)) return v.filter((x) => x != null && String(x).trim()).join(', ')
+  return v != null ? String(v).trim() : ''
+}
+// Whether a row carries any reference-vs-produced material worth a block.
+function hasRefVsActual(row) {
+  if (!row) return false
+  return !!(row.expected_sql || row.expected_tool || actualToolsText(row))
+}
+
 async function applyOverride(row, verdict) {
   const k = rowKey(row)
   if (bench.overrideBusyKey) return
@@ -190,7 +252,9 @@ async function applyOverride(row, verdict) {
     await bench.submitOverride(
       {
         agent: bench.consultAgentKey,
-        run_id: (results.value && results.value.run_id) || bench.selectedRunId || '',
+        // A benchmark spans many runs; the override targets the SPECIFIC attempt, whose
+        // run_id is carried on the detail row itself (not a single results-level run_id).
+        run_id: row.run_id || '',
         question_id: row.question_id,
         agent_key: row.agent_key,
         mode: row.mode,
@@ -375,11 +439,18 @@ function fmtDate(value) {
             </div>
           </div>
 
-          <div v-if="results && results.runs.length > 1" class="cp-field">
-            <label class="bench-label" for="bench-run">{{ t('bench.consult.run_label') }}</label>
+          <div v-if="results && results.benchmarks.length > 1" class="cp-field">
+            <label class="bench-label" for="bench-benchmark">{{ t('bench.consult.benchmark_label') }}</label>
             <div class="select-wrap">
-              <select id="bench-run" class="bench-select-ctl" :value="bench.selectedRunId" @change="onRunChange">
-                <option v-for="r in results.runs" :key="r.run_id" :value="r.run_id">{{ fmtRun(r) }}</option>
+              <select
+                id="bench-benchmark"
+                class="bench-select-ctl"
+                :value="bench.selectedBenchmarkId"
+                @change="onBenchmarkChange"
+              >
+                <option v-for="b in results.benchmarks" :key="b.benchmark_id" :value="b.benchmark_id">
+                  {{ fmtBenchmarkOption(b) }}
+                </option>
               </select>
               <span class="select-arr"><Icon name="chevronDown" /></span>
             </div>
@@ -421,6 +492,9 @@ function fmtDate(value) {
                   </div>
                 </div>
                 <div class="hero-body">
+                  <p v-if="results.benchmark_name" class="hero-bench">
+                    {{ t('bench.consult.benchmark_caption', [results.benchmark_name]) }}
+                  </p>
                   <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
                   <span class="verdict" :class="bandPill()"><span class="sq" /><span>{{ bandLabel }}</span></span>
                   <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
@@ -536,6 +610,8 @@ function fmtDate(value) {
                     <td data-l="Result">
                       <span class="result-pill" :class="'result-' + resultPillKind(row)"><span class="sq" />{{ verdictLabel(row) }}</span>
                       <span v-if="row.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
+                      <span v-if="evolutionKind(row)" class="evo-badge" :class="evolutionClass(row)">{{ evolutionLabel(row) }}</span>
+                      <span v-if="attemptCount(row) > 1" class="attempt-count">{{ t('bench.evo.attempts_n', [attemptCount(row)]) }}</span>
                     </td>
                     <td class="num" data-l="Score">
                       <span class="score">{{ fmtScore(row.judge_score) }}<small>/ 5</small></span>
@@ -575,6 +651,45 @@ function fmtDate(value) {
                         <p v-if="row.judge_comment" class="judge-note">
                           <b>{{ t('bench.detail.judge_comment') }} : </b>{{ row.judge_comment }}
                         </p>
+
+                        <!-- Reference (golden) vs what the agent actually produced. The
+                             references are a soft signal to the judge, not a hard metric. -->
+                        <div v-if="hasRefVsActual(row)" class="refblock">
+                          <div class="refblock-h">{{ t('bench.refprod.title') }}</div>
+                          <div class="refprod">
+                            <div class="rp-col">
+                              <div class="rp-l">{{ t('bench.refprod.reference_sql') }}</div>
+                              <pre v-if="row.expected_sql" class="rp-code">{{ row.expected_sql }}</pre>
+                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
+                            </div>
+                            <div class="rp-col">
+                              <div class="rp-l">{{ t('bench.refprod.suggested_tool') }}</div>
+                              <div v-if="row.expected_tool" class="rp-tool mono">{{ row.expected_tool }}</div>
+                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
+                              <div class="rp-l rp-l--mt">{{ t('bench.refprod.tools_used') }}</div>
+                              <div v-if="actualToolsText(row)" class="rp-tool mono">{{ actualToolsText(row) }}</div>
+                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Per-question evolution: the attempt history over the runs that
+                             contributed to this benchmark (oldest first). -->
+                        <div v-if="attemptCount(row) > 1 && attemptHistory(row).length" class="refblock">
+                          <div class="refblock-h">
+                            {{ t('bench.evo.history_title') }}
+                            <span v-if="evolutionKind(row)" class="evo-badge" :class="evolutionClass(row)">{{ evolutionLabel(row) }}</span>
+                          </div>
+                          <ol class="attempts">
+                            <li v-for="(att, ai) in attemptHistory(row)" :key="ai" class="attempt">
+                              <span class="att-no">{{ t('bench.evo.attempt_n', [att.attempt_no != null ? att.attempt_no : ai + 1]) }}</span>
+                              <span class="att-pill" :class="'result-' + attemptPillKind(att)"><span class="sq" />{{ attemptVerdictLabel(att) }}</span>
+                              <span class="att-score">{{ fmtScore(att.judge_score) }}<small>/ 5</small></span>
+                              <span v-if="att.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
+                              <span class="att-when mono">{{ fmtTimestamp(att.run_timestamp) }}</span>
+                            </li>
+                          </ol>
+                        </div>
 
                         <!-- Admin override controls -->
                         <div v-if="isAdmin" class="override">
@@ -1535,6 +1650,174 @@ function fmtDate(value) {
 }
 .judge-note b {
   font-weight: var(--fw-bold);
+}
+
+/* --- Benchmark name caption in the hero --- */
+.hero-bench {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--orange-text);
+  margin: 0 0 8px;
+}
+
+/* --- Evolution (delta badge + attempt history) --- */
+.evo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  vertical-align: middle;
+}
+.evo-badge.evo-up {
+  border-color: var(--success);
+  color: var(--success);
+}
+.evo-badge.evo-down {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.evo-badge.evo-flat {
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+.attempt-count {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  vertical-align: middle;
+}
+
+/* shared block frame for ref-vs-produced + attempt history */
+.refblock {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: var(--s-4) var(--s-5);
+}
+.refblock-h {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: var(--s-3);
+}
+
+/* reference SQL / suggested tool vs tools used */
+.refprod {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-5);
+}
+.rp-l {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.rp-l--mt {
+  margin-top: var(--s-4);
+}
+.rp-code {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.rp-tool {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.rp-empty {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+/* attempt history list */
+.attempts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.attempt {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+.att-no {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  width: 96px;
+  flex: 0 0 96px;
+}
+.att-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1.5px solid;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.att-pill .sq {
+  width: 9px;
+  height: 9px;
+}
+.att-score {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.att-score small {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: 2px;
+}
+.att-when {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+@media (max-width: 760px) {
+  .refprod {
+    grid-template-columns: 1fr;
+  }
+  .att-when {
+    margin-left: 0;
+  }
 }
 
 /* --- Reference aside --- */

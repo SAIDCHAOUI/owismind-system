@@ -5,6 +5,29 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧪 SESSION 2026-06-30 (BENCHMARK v2 : APPEND MODE + colonnes SQL/tool de reference) - repo only,
+DEV repackage, NON valide DSS. Session autonome de nuit.** Spec :
+`docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md`. Deux features :
+**(1)** golden + colonnes **`expected_sql` / `expected_tool`** (signal DOUX au juge : indice non
+contraignant + affichees a cote du SQL/tool reellement generes = `actual_tools`, + donnees
+d'entrainement). **(2) APPEND MODE** : un benchmark = campagne NOMMEE unique attachee a 1 agent
+(`benchmark_id`+nom) ; les runs s'**accumulent** dans le meme benchmark (relancer ne joue que les
+questions PAS encore faites ; score global = **derniere tentative** par question ; ex 10 q +5 -> 15) ;
+3 boutons *Run pending* (append) / *Re-run entire benchmark* (full) / *New benchmark* ; drapeau
+**« refaire au prochain run »** -> 2e tentative + **evolution** (improved/regressed/same). **Decision
+archi (zero dataset neuf)** : le registre + appartenance des questions + drapeaux vivent dans la
+**variable projet `benchmark`** (`benchmarks` map + `run_request`) ; seules les tables de resultats
+gagnent `benchmark_id`/`benchmark_name`/`attempt_no` (+ expected_sql/tool/actual_tools) ; summary/
+breakdown deviennent **par benchmark**. Plugin consultation + results LAB selectionnent **par
+benchmark** + montrent l'evolution + attendu vs reel ; lecture plugin par **intersection de colonnes**
+(retro-compat des tables non-migrees). NOUVEAU module pur `benchmark/registry.py`. Frontends (workflow
+3 agents //) : onglet **Benchmarks** au launcher, selecteur benchmark au results, consultation Vue.
+**Tests LAB 329 + plugin 509 + node 134 verts, 0 tiret, build Vite OK, zip DEV `index-DZ7yGIZO.js`
+(78 entrees), PROD INTACTE.** Revue adversariale = 0 crit/high, 1 medium (redo consomme avant le
+verrou single-flight) **corrige**. A FAIRE DSS : recoller lib+webapps LAB + variable
+(`benchmarks:{}`,`run_request:null`) ; uploader DEV + redemarrer backend ; un run frais materialise
+les colonnes. Voir **L113** + `sessions/2026-06-30.md`.
+
 **🖥️ SESSION 2026-06-29 Run 2 (CONSULTATION BENCHMARK EN PLEINE LARGEUR + Q/R conseil) - repo only,
 DEV repackagé, NON validé DSS.** Retour user : l'onglet Benchmark du plugin rendait "confiné au milieu"
 vs la webapp LAB `results` pleine largeur. Cause : le wrapper partagé **`PageShell`** plafonne le contenu à
@@ -670,7 +693,19 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-29 Run 2 : consultation benchmark en PLEINE LARGEUR (parité LAB results) → détail `sessions/2026-06-29.md` Run 2 + **L112**
+## 🧭 Dernière session - 2026-06-30 : Benchmark v2 (append mode + colonnes SQL/tool de référence) → détail `sessions/2026-06-30.md` + **L113**
+- **Repo only, DEV repackagé, NON validé DSS.** (1) Golden +`expected_sql`/`expected_tool` (signal doux
+  au juge + affichés vs `actual_tools`). (2) **Append mode** : benchmark nommé unique par agent, runs qui
+  s'accumulent (score = dernière tentative), 3 boutons + drapeau « refaire » + évolution.
+- **Archi : registre + appartenance + redo dans la VARIABLE `benchmark`** (0 dataset neuf) ; tables +
+  `benchmark_id`/`benchmark_name`/`attempt_no` ; summary/breakdown **par benchmark** ; lecture plugin par
+  intersection de colonnes (rétro-compat). NOUVEAU `benchmark/registry.py`.
+- **Tests LAB 329 + plugin 509 + node 134 verts, 0 tiret, build Vite OK, zip DEV `index-DZ7yGIZO.js`
+  (78 entrées), PROD intacte.** Revue adversariale = 0 crit/high, 1 medium corrigé (redo consommé avant
+  le verrou). **À FAIRE DSS** : recoller lib+webapps LAB + variable (`benchmarks:{}`,`run_request:null`) ;
+  upload DEV + redémarrer backend ; un run frais matérialise les colonnes. Voir **L113**.
+
+## Avant - 2026-06-29 Run 2 : consultation benchmark en PLEINE LARGEUR (parité LAB results) → détail `sessions/2026-06-29.md` Run 2 + **L112**
 - **Cause** : `PageShell` (wrapper partagé) plafonne à **880px centré** -> rendu "confiné" vs LAB pleine largeur.
 - **Fix propre, scoped** : prop **opt-in `fluid`** sur `PageShell` (`.page-wrap--fluid` enlève le cap, padding LAB).
   Seule `BenchmarkSuggestView` le passe -> **aucune autre vue touchée** (garantie demandée par l'user). +

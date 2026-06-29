@@ -45,6 +45,13 @@ aucune connaissance : tu te bases UNIQUEMENT sur le texte fourni.
   inactive / a ignorer).
 - `notes` : commentaire court optionnel (ex. une reference source, une reserve).
   Sinon VIDE.
+- `expected_sql` (v2, optionnel) : un SQL de REFERENCE qui aurait pu repondre a la question, si la
+  source en fournit un ou s'il est evident. C'est un SIGNAL DOUX (le juge l'utilise comme indice, jamais
+  comme exigence : l'agent peut utiliser une autre requete valide) et une donnee d'entrainement. Sinon VIDE.
+- `expected_tool` (v2, optionnel) : un outil de reference qui illustrerait bien le resultat
+  (ex. `show_chart`, `show_table`, `none`). Signal doux, jamais une exigence. Sinon VIDE.
+- Si tu emets ces 2 colonnes, mets-les A LA FIN, apres `notes` :
+  `...,active,notes,expected_sql,expected_tool`. Le launcher sait aussi les editer plus tard.
 
 ### Regles d'extraction de `expected_value` (le coeur du travail)
 

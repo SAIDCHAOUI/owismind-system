@@ -20,6 +20,7 @@ import pandas as pd
 
 from benchmark import schemas, run_params
 from benchmark import scoring
+from benchmark import registry
 from benchmark.dss_steps.history_io import write_history_dataset
 
 
@@ -55,34 +56,42 @@ def _to_frame(rows, columns):
 
 
 def run():
-    """Aggregate benchmark_runs_scored into summary + breakdown datasets."""
+    """Aggregate benchmark_runs_scored into BENCHMARK-level summary + breakdown datasets (v2).
+
+    By default we aggregate the BENCHMARK of the latest run (the one just judged): scoring reduces it
+    to the latest attempt of each question and emits one summary row per (benchmark_id, agent, mode).
+    ``aggregate_all_runs`` recomputes every benchmark present. The write merges by ``benchmark_id`` so
+    re-aggregating a benchmark replaces just its block and other benchmarks are preserved.
+    """
     cfg = run_params.resolve(_get_variables())
     aggregate_all = cfg["aggregate_all_runs"]
 
     df = dataiku.Dataset(cfg["scored_dataset"]).get_dataframe()
     # astype(object) first so NaN -> None actually sticks on numeric columns.
     df = df.astype(object).where(pd.notnull(df), None)
+    scored_rows = df.to_dict(orient="records")
 
     if not aggregate_all:
-        run_id = _latest_run_id(df)
-        if run_id is not None:
-            df = df[df["run_id"] == run_id]
-
-    scored_rows = df.to_dict(orient="records")
+        # Scope to the benchmark of the most recent run (its rows + every prior attempt of the same
+        # benchmark, so the latest-attempt reduction sees the whole benchmark, not just this run).
+        latest_run = _latest_run_id(df)
+        target_benchmark = registry.benchmark_id_of_run(scored_rows, latest_run)
+        if target_benchmark:
+            scored_rows = [r for r in scored_rows
+                           if str(r.get("benchmark_id") or "") == target_benchmark]
 
     summary_rows = scoring.summarize(scored_rows)
     breakdown_rows = scoring.breakdown(scored_rows)
 
-    # APPEND this run's per-(run_id, agent, mode) summary + breakdown rows to the history
-    # (aggregate scopes to the latest run unless aggregate_all_runs), so the Results app
-    # keeps every past run's KPIs. A re-aggregate of the same run replaces just its rows.
-    # These two datasets are LIGHT (one tiny row per run x agent x mode), so they are NEVER
-    # capped (keep_runs=None) - the full run history stays available to the dashboard even
-    # when the heavy raw/scored tables are bounded by history_keep_runs.
+    # Merge by benchmark_id (NOT run_id): a summary row is the benchmark's CURRENT state over all its
+    # runs, so re-aggregating replaces the benchmark's block and keeps other benchmarks. These two
+    # datasets are LIGHT (a few rows per benchmark), so they are NEVER capped (keep_runs=None).
     write_history_dataset(
-        cfg["summary_dataset"], _to_frame(summary_rows, schemas.SUMMARY_COLUMNS), None)
+        cfg["summary_dataset"], _to_frame(summary_rows, schemas.SUMMARY_COLUMNS),
+        keep_runs=None, key="benchmark_id")
     write_history_dataset(
-        cfg["breakdown_dataset"], _to_frame(breakdown_rows, schemas.BREAKDOWN_COLUMNS), None)
+        cfg["breakdown_dataset"], _to_frame(breakdown_rows, schemas.BREAKDOWN_COLUMNS),
+        keep_runs=None, key="benchmark_id")
 
 
 run()

@@ -107,6 +107,8 @@ def _score_row(project, row, judge_llm_id):
         judge_out = judge.run_llm_judge(
             project, question, reference_answer, expected_value, full_answer,
             notes=row.get("notes"), llm_id=judge_llm_id,
+            # v2 soft signal: a reference SQL / tool the judge may use as a HINT (non-binding).
+            expected_sql=row.get("expected_sql"), expected_tool=row.get("expected_tool"),
         )
 
     final = judge.final_correctness(objective_match, judge_out)

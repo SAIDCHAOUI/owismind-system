@@ -47,3 +47,4 @@ graphify-out/
 
 # ── Temp research corpus for the agentique skill (provenance, kept on disk) ──
 docs/agentic-research/
+.playwright-mcp/
