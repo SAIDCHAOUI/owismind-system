@@ -12,8 +12,11 @@ chat / suggestion tables). This module is therefore strict:
     explicit column list, a guarded physical table name, status='pending' literal, LIMIT 500).
   - There is NO UPDATE / DELETE / DROP / TRUNCATE / INSERT / raw DML on the shared connection
     anywhere in the benchmark webapps.
-  - The only WRITES are APPEND-preserving rewrites of LAB Flow datasets (the golden + a
-    promoted-ids log) via the dataiku Dataset API - never raw SQL on the connection.
+  - The only WRITES are rewrites of LAB Flow datasets via the dataiku Dataset API (never raw
+    SQL on the connection): APPEND-preserving for the golden + promoted-ids log, and a
+    read-modify-write of the scored dataset for a human review override (``write_override``).
+    The override read-modify-write has the SAME RAM profile as the normal history merge the
+    judge/aggregate steps already perform, so it adds no new instance-safety risk.
 Keep it that way. The security audit verifies this invariant.
 =======================================================================================
 
@@ -40,6 +43,9 @@ logger = logging.getLogger(__name__)
 # Run_Benchmark scenario in DSS (see README), which these locks complement, not replace.
 _PROMOTE_LOCK = threading.Lock()
 RUN_LOCK = threading.Lock()
+# Serializes the scored read-modify-write so two concurrent reviewer overrides cannot lose each
+# other's change (lost update); same role as _PROMOTE_LOCK for the golden.
+_OVERRIDE_LOCK = threading.Lock()
 
 SCENARIO_ID = "Run_Benchmark"
 # Heavy columns never shipped to the per-question table (kept in the dataset for the dashboard).
@@ -390,3 +396,42 @@ def delete_golden_question(cfg, question_id):
             return {"deleted": False, "count": len(rows)}, []
         _write_golden(ds, rows)
         return {"deleted": True, "count": len(rows)}, []
+
+
+# --- human-in-the-loop override: read-modify-write of the scored dataset ----------
+
+def write_override(cfg, payload, reviewed_at):
+    """Apply one reviewer override into benchmark_runs_scored. Returns ``(result, errors)``.
+
+    Read-modify-write under _OVERRIDE_LOCK, schema-gated + abort-safe (the same RAISING read as
+    the golden, so a transient blip aborts rather than truncating the scored history). Sets the
+    human_* fields on the row(s) matching (run_id, question_id, agent_key, mode) and rewrites the
+    FULL scored schema (plus any extra columns) so the heavy answer/SQL columns are preserved.
+    Because scored accumulates by run_id, the override survives every future run untouched.
+    ``reviewed_at`` is stamped by the caller (the DSS layer owns the clock).
+    """
+    ok, errors = views.validate_override(payload)
+    if not ok:
+        return None, errors
+    stamped = dict(payload)
+    stamped["reviewed_at"] = reviewed_at
+    with _OVERRIDE_LOCK:
+        ds = dataiku.Dataset(cfg["scored_dataset"])
+        df = _golden_existing(ds)  # schema-gated RAISING read (abort on a blip, never truncate)
+        if df.empty:
+            return None, ["no scored results to override yet"]
+        rows, matched = views.apply_override(df.to_dict("records"), stamped)
+        if matched == 0:
+            return {"matched": 0}, []
+        cols = list(schemas.SCORED_COLUMNS)
+        seen = set(cols)
+        extra = []
+        for r in rows:
+            for key in r.keys():
+                if key not in seen:
+                    seen.add(key)
+                    extra.append(key)
+        all_cols = cols + extra
+        out = pd.DataFrame([{c: r.get(c) for c in all_cols} for r in rows], columns=all_cols)
+        ds.write_with_schema(out)
+        return {"matched": matched}, []

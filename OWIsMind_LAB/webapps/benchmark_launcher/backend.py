@@ -10,6 +10,7 @@
 # Dataset API. There is NO raw SQL write anywhere - the single cross-project SQL read is read-only
 # (see benchmark_webapp/dss.read_pending_suggestions). Every endpoint degrades to a clean JSON error.
 
+import datetime
 import functools
 import logging
 import traceback
@@ -20,6 +21,22 @@ from benchmark import config as bench_config
 from benchmark_webapp import views, dss
 
 logger = logging.getLogger(__name__)
+
+
+def _now_iso():
+    """UTC timestamp for the review audit (the Flask backend owns the clock, not the pure libs)."""
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _reviewer():
+    """Best-effort identity of the reviewer for the audit field. The launcher is a SEPARATE,
+    admin-only webapp (not exposed to consultation users), so this is an audit label, not an
+    access control. Reads a DSS-injected header when present, else a neutral fallback."""
+    for header in ("X-DKU-AuthIdentifier", "X-Dku-User", "X-Forwarded-User"):
+        val = request.headers.get(header)
+        if val and val.strip():
+            return val.strip()[:120]
+    return "launcher"
 
 
 def _err(code, status=400, extra=None):
@@ -154,6 +171,50 @@ def api_run():
 @_safe
 def api_run_status():
     return jsonify({"status": "ok", **dss.last_status(dss.scenario())})
+
+
+# --- review + override: human-in-the-loop correction of the judge verdict ----
+
+@app.route("/api/review", methods=["GET"])
+@_safe
+def api_review():
+    """The per-question detail of ONE run for human review (judge verdict + comment + override).
+
+    Reuses the shaped detail rows (views.detail_view) that already surface the judge comment, the
+    effective verdict and the human override fields. ``run_id`` selects the run (latest by default);
+    ``only_needs_review=1`` keeps the priority pile."""
+    cfg = dss.config()
+    run_id = request.args.get("run_id") or None
+    only_nr = request.args.get("only_needs_review") in ("1", "true", "yes")
+    scored = dss.read_dataset(cfg["scored_dataset"], keep_cols=dss.SCORED_KEEP)
+    detail = views.detail_view(scored, run_id=run_id, only_needs_review=only_nr, limit=2000)
+    return jsonify({
+        "status": "ok",
+        "runs": views.runs_view(dss.read_dataset(cfg["summary_dataset"])),
+        **detail,
+    })
+
+
+@app.route("/api/override", methods=["POST"])
+@_safe
+def api_override():
+    """Apply (or clear) a reviewer override of the judge verdict on one scored row.
+
+    The reviewer marks a row correct/incorrect (or sends a blank verdict to clear). The write is a
+    locked read-modify-write of the scored dataset (dss.write_override); the override survives every
+    future run (scored accumulates by run_id)."""
+    cfg = dss.config()
+    payload = request.get_json(silent=True) or {}
+    payload = dict(payload)
+    payload["reviewed_by"] = _reviewer()
+    try:
+        result, errors = dss.write_override(cfg, payload, _now_iso())
+    except Exception:
+        logger.error("api_override failed\n%s", traceback.format_exc())
+        return _err("override_failed", 500)
+    if errors:
+        return _err("invalid_override", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
 
 
 # --- suggestions: review (read-only cross-project) + promote (Flow append) ---

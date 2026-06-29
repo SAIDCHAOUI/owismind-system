@@ -91,6 +91,7 @@ def _score_row(project, row, judge_llm_id):
         judge_out = {
             "score": None,
             "verdict": None,
+            "comment": "",
             "justification": "agent run did not complete (status={0})".format(status),
             "missing_facts": [],
             "hallucination": False,
@@ -105,7 +106,7 @@ def _score_row(project, row, judge_llm_id):
     else:
         judge_out = judge.run_llm_judge(
             project, question, reference_answer, expected_value, full_answer,
-            llm_id=judge_llm_id,
+            notes=row.get("notes"), llm_id=judge_llm_id,
         )
 
     final = judge.final_correctness(objective_match, judge_out)
@@ -115,6 +116,7 @@ def _score_row(project, row, judge_llm_id):
     scored["objective_match"] = objective_match
     scored["judge_score"] = judge_out.get("score")
     scored["judge_verdict"] = judge_out.get("verdict")
+    scored["judge_comment"] = judge_out.get("comment") or ""
     scored["judge_justification"] = judge_out.get("justification")
     scored["judge_missing_facts_json"] = json.dumps(
         judge_out.get("missing_facts") or [], ensure_ascii=False
@@ -126,6 +128,14 @@ def _score_row(project, row, judge_llm_id):
     scored["judge_estimated_cost"] = usage.get("estimatedCost", 0.0)
     scored["correct"] = bool(final.get("correct"))
     scored["needs_review"] = bool(final.get("needs_review"))
+    # Human-in-the-loop override fields start empty on a freshly judged row. They are filled
+    # later by a reviewer (write-back into scored); because scored accumulates by run_id, a
+    # review on an old run survives every future run untouched.
+    scored["human_verdict"] = ""
+    scored["human_correct"] = None
+    scored["human_comment"] = ""
+    scored["reviewed_by"] = ""
+    scored["reviewed_at"] = ""
     return scored
 
 

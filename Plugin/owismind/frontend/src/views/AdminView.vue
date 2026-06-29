@@ -23,6 +23,8 @@ import {
   fetchAdminBudget,
   saveAdminBudget,
   saveAdminUserQuota,
+  adminListBenchmarkTables,
+  adminValidateBenchmarkTable,
 } from '../services/backend.js'
 import {
   formatMoney,
@@ -81,8 +83,21 @@ const BADGES = ['', 'default', 'new', 'beta']
 const TAGLINE_MAX = 120
 const DESC_MAX = 700
 
+// Default benchmark block stored with the profile (enabled + where its results live).
+function emptyBenchmark() {
+  return { enabled: false, connection: 'SQL_owi', table: '', agent_key: '' }
+}
 function emptyProfile() {
-  return { tagline: '', description: '', capabilities: [], tools: [], icon: 'robot', badge: '', modes: false }
+  return {
+    tagline: '',
+    description: '',
+    capabilities: [],
+    tools: [],
+    icon: 'robot',
+    badge: '',
+    modes: false,
+    benchmark: emptyBenchmark(),
+  }
 }
 
 // --- Profile editor (modal) ---------------------------------------------------
@@ -99,7 +114,19 @@ const editForm = reactive({
   toolsText: '',
   // Whether this agent supports the chat response-mode dial (Smart / Pro / Claude).
   modes: false,
+  // Benchmark block (where this agent's evaluation results live, for the Benchmark tab).
+  benchEnabled: false,
+  benchConnection: 'SQL_owi',
+  benchTable: '',
+  benchAgentKey: '',
 })
+
+// Benchmark table picker + schema check (loaded lazily inside the editor).
+const benchTables = ref([])
+const benchTablesLoading = ref(false)
+const benchTablesError = ref('')
+// { state: 'idle' | 'busy' | 'ok' | 'bad' | 'error', missing: [] }
+const benchValidate = reactive({ state: 'idle', missing: [] })
 
 function linesToList(text, max) {
   return String(text || '')
@@ -113,6 +140,7 @@ function openEditor(i) {
   const e = enabled.value[i]
   if (!e) return
   const p = e.profile || emptyProfile()
+  const b = (p.benchmark && typeof p.benchmark === 'object') ? p.benchmark : emptyBenchmark()
   editingIndex.value = i
   editForm.label = e.label
   editForm.project_key = e.project_key
@@ -123,6 +151,16 @@ function openEditor(i) {
   editForm.capsText = (p.capabilities || []).join('\n')
   editForm.toolsText = (p.tools || []).join('\n')
   editForm.modes = !!p.modes
+  editForm.benchEnabled = !!b.enabled
+  editForm.benchConnection = b.connection || 'SQL_owi'
+  editForm.benchTable = b.table || ''
+  editForm.benchAgentKey = b.agent_key || ''
+  // Reset the table picker + schema check; load tables when a benchmark is on.
+  benchTables.value = []
+  benchTablesError.value = ''
+  benchValidate.state = 'idle'
+  benchValidate.missing = []
+  if (editForm.benchEnabled) loadBenchTables()
   editorOpen.value = true
 }
 
@@ -137,10 +175,63 @@ function applyEditor() {
       capabilities: linesToList(editForm.capsText, 8),
       tools: linesToList(editForm.toolsText, 16),
       modes: !!editForm.modes,
+      benchmark: {
+        enabled: !!editForm.benchEnabled,
+        connection: editForm.benchConnection.trim() || 'SQL_owi',
+        table: editForm.benchTable.trim(),
+        agent_key: editForm.benchAgentKey.trim(),
+      },
     }
     profilesDirty.value = true
   }
   editorOpen.value = false
+}
+
+// List the tables of the chosen SQL connection (best-effort; the input stays usable as
+// free text when the listing is empty or fails - the table may be a physical name).
+async function loadBenchTables() {
+  benchTablesLoading.value = true
+  benchTablesError.value = ''
+  try {
+    const res = await adminListBenchmarkTables(editForm.benchConnection.trim() || 'SQL_owi')
+    benchTables.value = Array.isArray(res.tables) ? res.tables : []
+    if (res.error) benchTablesError.value = t('bench.profile.tables_error')
+  } catch (e) {
+    benchTables.value = []
+    benchTablesError.value = t('bench.profile.tables_error')
+  } finally {
+    benchTablesLoading.value = false
+  }
+}
+
+// When the benchmark toggle flips on, load the tables once (idempotent).
+function onBenchToggle() {
+  benchValidate.state = 'idle'
+  benchValidate.missing = []
+  if (editForm.benchEnabled && !benchTables.value.length && !benchTablesLoading.value) {
+    loadBenchTables()
+  }
+}
+
+// Validate the picked table carries the columns a benchmark needs.
+async function validateBenchSchema() {
+  const table = editForm.benchTable.trim()
+  if (!table) return
+  benchValidate.state = 'busy'
+  benchValidate.missing = []
+  try {
+    const res = await adminValidateBenchmarkTable(editForm.benchConnection.trim() || 'SQL_owi', table)
+    if (res.error) {
+      benchValidate.state = 'error'
+    } else if (res.ok) {
+      benchValidate.state = 'ok'
+    } else {
+      benchValidate.state = 'bad'
+      benchValidate.missing = Array.isArray(res.missing) ? res.missing : []
+    }
+  } catch (e) {
+    benchValidate.state = 'error'
+  }
 }
 
 // Live preview of how the agent card will read with the current form values.
@@ -853,6 +944,85 @@ if (import.meta.env.DEV) {
             />
             <p class="ed-hint">{{ t('admin.agents.f_tools_hint') }}</p>
           </div>
+
+          <!-- Benchmark: whether this agent has a benchmark + where its results live -->
+          <div class="ed-section">
+            <div class="ed-section-title">{{ t('bench.profile.section') }}</div>
+
+            <div class="ed-field">
+              <label class="ed-check">
+                <input type="checkbox" v-model="editForm.benchEnabled" @change="onBenchToggle" />
+                <span>{{ t('bench.profile.enabled') }}</span>
+              </label>
+              <p class="ed-hint">{{ t('bench.profile.enabled_hint') }}</p>
+            </div>
+
+            <template v-if="editForm.benchEnabled">
+              <div class="ed-field">
+                <label class="field-label" for="ed-bench-conn">{{ t('bench.profile.connection') }}</label>
+                <input
+                  id="ed-bench-conn"
+                  v-model="editForm.benchConnection"
+                  type="text"
+                  class="ed-input"
+                  @change="loadBenchTables"
+                />
+              </div>
+
+              <div class="ed-field">
+                <label class="field-label" for="ed-bench-table">{{ t('bench.profile.table') }}</label>
+                <input
+                  id="ed-bench-table"
+                  v-model="editForm.benchTable"
+                  type="text"
+                  class="ed-input"
+                  list="bench-table-list"
+                  :placeholder="t('bench.profile.table_ph')"
+                />
+                <datalist id="bench-table-list">
+                  <option v-for="tb in benchTables" :key="tb" :value="tb" />
+                </datalist>
+                <p v-if="benchTablesLoading" class="ed-hint">{{ t('bench.profile.tables_loading') }}</p>
+                <p v-else-if="benchTablesError" class="ed-hint ed-hint--bad">{{ benchTablesError }}</p>
+                <button v-else type="button" class="ed-link" @click="loadBenchTables">
+                  {{ t('bench.profile.refresh_tables') }}
+                </button>
+              </div>
+
+              <div class="ed-field">
+                <label class="field-label" for="ed-bench-key">{{ t('bench.profile.agent_key') }}</label>
+                <input
+                  id="ed-bench-key"
+                  v-model="editForm.benchAgentKey"
+                  type="text"
+                  class="ed-input"
+                  :placeholder="t('bench.profile.agent_key_ph')"
+                />
+                <p class="ed-hint">{{ t('bench.profile.agent_key_hint') }}</p>
+              </div>
+
+              <div class="ed-field">
+                <div class="bench-validate-row">
+                  <Button
+                    variant="ghost"
+                    :disabled="!editForm.benchTable.trim() || benchValidate.state === 'busy'"
+                    @click="validateBenchSchema"
+                  >
+                    {{ benchValidate.state === 'busy' ? t('bench.profile.validating') : t('bench.profile.validate') }}
+                  </Button>
+                  <span v-if="benchValidate.state === 'ok'" class="bench-vd bench-vd--ok">
+                    <Icon name="check" />{{ t('bench.profile.ok') }}
+                  </span>
+                  <span v-else-if="benchValidate.state === 'bad'" class="bench-vd bench-vd--bad">
+                    <Icon name="alert" />{{ t('bench.profile.missing', [benchValidate.missing.join(', ')]) }}
+                  </span>
+                  <span v-else-if="benchValidate.state === 'error'" class="bench-vd bench-vd--bad">
+                    <Icon name="alert" />{{ t('bench.profile.error') }}
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
 
         <!-- Live preview of the user-facing agent card (per mockup .pf-card) -->
@@ -1455,6 +1625,42 @@ if (import.meta.env.DEV) {
 .ed-input::placeholder { color: var(--text-3); }
 .ed-textarea { resize: vertical; line-height: 1.5; min-height: 78px; }
 .ed-hint { font-size: 13px; color: var(--text-2); margin: 0; }
+.ed-hint--bad { color: var(--danger); }
+
+/* Benchmark sub-section inside the profile editor: a labeled block divided by a
+   1px rule (square/flat, charter). */
+.ed-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.ed-section-title {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.ed-link {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--orange-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.ed-link:hover { opacity: 0.8; }
+.bench-validate-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bench-vd { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.bench-vd :deep(.ui-icon) { width: 14px; height: 14px; flex-shrink: 0; }
+.bench-vd--ok { color: var(--success); }
+.bench-vd--bad { color: var(--danger); }
 
 /* Square checkbox toggle (response-mode support) - same flat/square treatment as the
    quota checkboxes (18px box, 1.5px border, checked = orange fill + white check). */

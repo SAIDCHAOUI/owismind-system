@@ -22,6 +22,7 @@ section 7 (aggregation and restitution).
 
 import json
 
+from benchmark import schemas
 from benchmark.schemas import (
     SUMMARY_COLUMNS,
     BREAKDOWN_COLUMNS,
@@ -183,10 +184,14 @@ def _group_meta(rows):
 # --- per-bucket statistics --------------------------------------------------
 
 def _accuracy(ok_rows):
-    """Fraction of correct rows among scored ok rows, in [0, 1] (0.0 if empty)."""
+    """Fraction of correct rows among scored ok rows, in [0, 1] (0.0 if empty).
+
+    Uses the EFFECTIVE verdict (a human override of ``human_verdict`` wins over the machine
+    ``correct`` column), so a reviewer's correction is reflected in every KPI and breakdown.
+    """
     if not ok_rows:
         return 0.0
-    n_correct = sum(1 for r in ok_rows if _truthy(r.get("correct")))
+    n_correct = sum(1 for r in ok_rows if schemas.effective_correct(r)["correct"])
     return _ratio(n_correct, len(ok_rows))
 
 

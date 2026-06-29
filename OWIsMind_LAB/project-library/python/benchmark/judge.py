@@ -55,9 +55,28 @@ def _blank_value(value):
 # so they are handled by ``normalize_number`` rather than blindly stripped here.
 _CURRENCY_CHARS = "$€£¥₽₩₤"  # $ EUR GBP JPY RUB KRW lira
 
-# A run of digits with optional dot / comma group separators and an optional
-# decimal tail. Used to harvest number-looking substrings from a free-text answer.
-_NUMBER_RE = re.compile(r"[-+]?\d[\d.,\xa0\u202f]*\d|\d")
+# Magnitude words/abbreviations a human reference can carry: "36 millions" means 36e6,
+# not 36. The token must match the WHOLE trailing alpha run (so "36 meters" is not scaled
+# by the leading "m"). Both English and French forms are accepted (k, m/millions, Md/milliards).
+_MAGNITUDE = {
+    "k": 1e3, "thousand": 1e3, "thousands": 1e3, "mille": 1e3, "milliers": 1e3,
+    "m": 1e6, "mn": 1e6, "million": 1e6, "millions": 1e6,
+    "b": 1e9, "bn": 1e9, "billion": 1e9, "billions": 1e9,
+    "md": 1e9, "mds": 1e9, "milliard": 1e9, "milliards": 1e9,
+}
+# Alternation for the harvester, longest-first so "millions" wins over "m".
+_MAG_ALT = "|".join(sorted((re.escape(k) for k in _MAGNITUDE), key=len, reverse=True))
+
+# A run of digits with optional dot / comma group separators and an optional decimal tail,
+# plus an OPTIONAL magnitude suffix (a single separating space then a whole magnitude word),
+# so a free-text "36 millions" is harvested as one token and read as 36e6. The trailing ``\b``
+# keeps "36 minutes" / "36 meters" from being mistaken for a magnitude. Used to harvest
+# number-looking substrings from a free-text answer.
+_NUMBER_RE = re.compile(
+    r"[-+]?\d[\d.,\xa0\u202f]*\d(?:[ \xa0\u202f]?(?:" + _MAG_ALT + r")\b)?"
+    r"|\d(?:[ \xa0\u202f]?(?:" + _MAG_ALT + r")\b)?",
+    re.IGNORECASE,
+)
 
 # Common date formats accepted by the date anchor (parsed without dateutil).
 _DATE_FORMATS = (
@@ -110,7 +129,8 @@ def normalize_number(s):
         groups digits in threes (``1,234`` -> 1234) and as a decimal otherwise
         (``12,5`` -> 12.5);
       - if only '.' is present, the symmetric rule applies (``1.234`` thousands,
-        ``12.5`` decimal). A trailing magnitude word / unit is ignored.
+        ``12.5`` decimal). A trailing magnitude word scales the number (``36 millions``
+        -> 36e6, ``500k`` -> 5e5); any other trailing unit is ignored.
     Returns ``None`` when no number can be parsed. Never raises.
     """
     if s is None:
@@ -142,6 +162,19 @@ def normalize_number(s):
     if text[0] in "+-":
         sign, text = text[0], text[1:]
 
+    # Magnitude suffix: a trailing alpha run that is EXACTLY a known magnitude word scales the
+    # number (36millions -> 36e6). A trailing run that is not a known word (36meters) is left
+    # for the numeric-core match below to drop, so it is read as 36 (no scaling).
+    multiplier = 1.0
+    mag = re.search(r"[A-Za-z]+$", text)
+    if mag:
+        mult = _MAGNITUDE.get(mag.group(0).lower())
+        if mult is not None:
+            multiplier = mult
+            text = text[: mag.start()]
+    if not text:
+        return None
+
     has_dot = "." in text
     has_comma = "," in text
 
@@ -161,7 +194,7 @@ def normalize_number(s):
     if not m:
         return None
     try:
-        return float(sign + m.group(0))
+        return float(sign + m.group(0)) * multiplier
     except (TypeError, ValueError):
         return None
 
@@ -331,11 +364,12 @@ JUDGE_OUTPUT_SCHEMA = {
     "properties": {
         "score": {"type": "integer", "minimum": 1, "maximum": 5},
         "verdict": {"type": "string", "enum": ["correct", "incorrect"]},
+        "comment": {"type": "string"},
         "justification": {"type": "string"},
         "missing_facts": {"type": "array", "items": {"type": "string"}},
         "hallucination": {"type": "boolean"},
     },
-    "required": ["score", "verdict", "justification", "hallucination"],
+    "required": ["score", "verdict", "comment", "justification", "hallucination"],
 }
 
 # System prompt: a hardened rubric on the 1..5 scale (design section 6.2). The
@@ -365,19 +399,28 @@ _JUDGE_SYSTEM = (
     "fact(s) without a material error (typically score 4 or 5). Set hallucination "
     "to true when the answer states a figure or fact that is NOT supported by the "
     "reference or by the shown data. List the reference facts the answer omits in "
-    "missing_facts. Keep justification to one or two sentences. Output only the "
-    "structured result."
+    "missing_facts.\n\n"
+    "STRICTNESS CONTRACT (the human note governs numeric exactness): when a HUMAN NOTE is "
+    "given and it demands an exact figure (it says 'exact', 'precise', 'to the unit', 'au "
+    "centime', a precise count, etc.), require the exact value: a rounded or "
+    "order-of-magnitude answer is then INCORRECT. When there is no such demand, an answer "
+    "that conveys the right magnitude or the correctly rounded value (e.g. '36 456 876' for a "
+    "reference of '36 millions', or vice versa) is CORRECT. Otherwise stay strict on facts.\n\n"
+    "Write a concise one-sentence 'comment' explaining the decision (this is shown as a "
+    "column), and a slightly longer 'justification'. Output only the structured result."
 )
 
 
-def build_judge_prompt(question, reference_answer, expected_value, full_answer):
-    """Assemble the user message for the judge (the four inputs, clearly labelled).
+def build_judge_prompt(question, reference_answer, expected_value, full_answer, notes=None):
+    """Assemble the user message for the judge (the inputs, clearly labelled).
 
     The reference answer and the expected exact value are the ground truth; the
-    full answer is the complete agent output (text + serialized tables). Pure,
+    full answer is the complete agent output (text + serialized tables). The optional
+    human ``notes`` is the strictness contract (e.g. "I want the exact figure"). Pure,
     never raises.
     """
     expected = "" if expected_value is None else str(expected_value)
+    note = "" if notes is None else str(notes)
     parts = [
         "QUESTION:",
         str(question or "").strip(),
@@ -387,6 +430,8 @@ def build_judge_prompt(question, reference_answer, expected_value, full_answer):
     ]
     if expected.strip():
         parts += ["", "EXPECTED EXACT VALUE:", expected.strip()]
+    if note.strip():
+        parts += ["", "HUMAN NOTE (strictness contract):", note.strip()]
     parts += [
         "",
         "ASSISTANT ANSWER (complete: final text + serialized data tables):",
@@ -441,6 +486,9 @@ def _coerce_judge_payload(parsed):
     return {
         "score": score,
         "verdict": verdict,
+        # The concise one-line reason for the decision, surfaced as a column in the UI. Kept
+        # short (the longer "justification" remains available for a detail view).
+        "comment": str(parsed.get("comment") or "")[:200],
         "justification": str(parsed.get("justification") or "")[:4000],
         "missing_facts": missing,
         "hallucination": bool(parsed.get("hallucination")),
@@ -459,6 +507,7 @@ def _safe_failure(message):
     return {
         "score": None,
         "verdict": None,
+        "comment": "",
         "justification": "",
         "missing_facts": [],
         "hallucination": False,
@@ -473,7 +522,7 @@ def _safe_failure(message):
 
 
 def run_llm_judge(project, question, reference_answer, expected_value, full_answer,
-                  llm_id=config.JUDGE_LLM_ID):
+                  notes=None, llm_id=config.JUDGE_LLM_ID):
     """Call the LLM judge over Mesh and return its structured verdict (DSS-touching).
 
     Uses the native Mesh completion API: ``project.get_llm(llm_id).new_completion()``
@@ -498,7 +547,7 @@ def run_llm_judge(project, question, reference_answer, expected_value, full_answ
 
     system_prompt = _JUDGE_SYSTEM
     user_msg = build_judge_prompt(question, reference_answer, expected_value,
-                                  full_answer)
+                                  full_answer, notes=notes)
 
     # Attempt native JSON mode first; fall back to a prompt-only parse if the model
     # or connection rejects with_json_output (mirrors the sub-agent's UNDERSTAND).
@@ -578,15 +627,16 @@ def _parse_judge_json(raw, json_mod):
 def final_correctness(objective_match, judge):
     """Combine the objective anchor and the judge verdict into the final decision.
 
-    Rules (design section 6.3):
-      - WITH an anchor (objective_match in {hit, miss}): the anchor is ground truth,
-        so ``correct = (objective_match == "hit")``; the judge only adds nuance.
-      - WITHOUT an anchor (n/a / missing): ``correct = (verdict == "correct" and
-        score >= 4)``.
-      - ``needs_review`` is True when the anchor and the judge DISAGREE (anchor hit
-        but judge says incorrect, or anchor miss but judge says correct), or when
-        the agent errored (passed in as objective_match=='error' or judge carrying
-        an error). These rows are the most instructive and should be re-read first.
+    Rules (anchor is a SIGNAL, the contextual judge decides on a MISS):
+      - HIT: a crisp fact was found verbatim -> ``correct = True``. A judge that disagrees
+        or errored only flags review; it cannot override a HIT.
+      - MISS: no longer forces incorrect. The judge decides (``correct = verdict == "correct"
+        and score >= 4``) because it can see an order-of-magnitude / rounded / note-driven
+        equivalence the anchor cannot. A "correct" verdict on a MISS is a disagreement -> review.
+      - n/a / missing: lean on the judge (same rule as MISS without the disagreement flag).
+      - ``needs_review`` is True on any anchor/judge disagreement, a missing/ambiguous verdict,
+        a judge error, or an agent error (objective_match=='error'). These rows are the most
+        instructive and should be re-read first.
 
     Returns ``{"correct": bool, "needs_review": bool}``. Pure, never raises.
     """
@@ -602,20 +652,27 @@ def final_correctness(objective_match, judge):
     if anchor == "error":
         return {"correct": False, "needs_review": True}
 
-    if anchor in (HIT, MISS):
-        correct = (anchor == HIT)
-        # Disagreement between the deterministic anchor and the LLM judge.
-        disagree = (
-            (anchor == HIT and verdict == "incorrect")
-            or (anchor == MISS and verdict == "correct")
-        )
-        needs_review = disagree or judge_error
+    has_score = isinstance(score, int)
+
+    if anchor == HIT:
+        # A crisp fact was found verbatim: the answer is correct. A judge that disagrees (or
+        # errored) only flags the row for a human re-read; it cannot override a HIT.
+        needs_review = (verdict == "incorrect") or judge_error
+        return {"correct": True, "needs_review": needs_review}
+
+    if anchor == MISS:
+        # A MISS no longer FORCES incorrect: the contextual judge can recognise an
+        # order-of-magnitude / rounded equivalence (or a note-driven exactness demand) the
+        # deterministic anchor cannot. Trust a confident "correct" verdict; flag the
+        # anchor/judge disagreement for review so a human can confirm.
+        correct = (verdict == "correct" and has_score and score >= 4)
+        disagree = (verdict == "correct")
+        needs_review = disagree or judge_error or verdict is None or not has_score
         return {"correct": correct, "needs_review": needs_review}
 
     # No anchor: lean on the judge. A missing / failed judge cannot confirm. A verdict that
     # carries NO usable score (the prompt-only judge fallback does not enforce the schema's
     # required score) is ambiguous - flag it for a human rather than silently scoring it wrong.
-    has_score = isinstance(score, int)
     correct = (verdict == "correct" and has_score and score >= 4)
     needs_review = judge_error or verdict is None or not has_score
     return {"correct": correct, "needs_review": needs_review}

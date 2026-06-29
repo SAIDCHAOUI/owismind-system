@@ -11,13 +11,30 @@ import {
   suggestBenchmarkManual,
   suggestBenchmarkFromChat,
   fetchMySuggestions,
+  fetchBenchmarkResults,
+  adminBenchmarkOverride,
 } from '../services/backend.js'
+import { normalizeResults } from '../composables/benchmarkResults.js'
 
 export const useBenchmarkStore = defineStore('benchmark', () => {
   // Prefill from a chat answer. null = the Benchmark page shows the blank manual form.
   const prefill = ref(null)
   const mySuggestions = ref([])
   const loadingMine = ref(false)
+
+  // --- Consultation (benchmark results, ALL users) ----------------------------
+  // The agent whose results are on screen (its logical key), the normalized RESULTS
+  // (or null), the selected run id, and the read state. configured:false = no benchmark
+  // wired for the agent; readError = a soft degraded read; resultsError = a hard failure.
+  const consultAgentKey = ref('')
+  const results = ref(null)
+  const selectedRunId = ref('')
+  const resultsConfigured = ref(true)
+  const resultsReadError = ref('')
+  const resultsLoading = ref(false)
+  const resultsError = ref('')
+  // The override currently in flight (row key), so the per-row admin buttons can disable.
+  const overrideBusyKey = ref('')
 
   function setPrefill(data) {
     prefill.value = data
@@ -54,6 +71,60 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     await loadMine()
   }
 
+  // Load the benchmark results for one agent (+ optional run). Never throws: a failure
+  // leaves a soft error state the view renders (the consultation must never crash).
+  async function loadResults(agentKey, runId) {
+    if (!agentKey) {
+      results.value = null
+      resultsConfigured.value = true
+      resultsReadError.value = ''
+      resultsError.value = ''
+      return
+    }
+    resultsLoading.value = true
+    resultsError.value = ''
+    try {
+      const r = await fetchBenchmarkResults(agentKey, runId)
+      resultsConfigured.value = r.configured !== false
+      resultsReadError.value = r.read_error || ''
+      results.value = r.results ? normalizeResults(r.results) : null
+      selectedRunId.value = (results.value && results.value.run_id) || runId || ''
+    } catch (e) {
+      results.value = null
+      resultsConfigured.value = true
+      resultsReadError.value = ''
+      resultsError.value = (e && e.message) || 'load_failed'
+    } finally {
+      resultsLoading.value = false
+    }
+  }
+
+  // Pick an agent for the consultation: reset the run and (re)load the newest results.
+  function selectConsultAgent(agentKey) {
+    consultAgentKey.value = agentKey || ''
+    selectedRunId.value = ''
+    return loadResults(consultAgentKey.value, '')
+  }
+
+  // Pick a specific run of the current agent.
+  function selectRun(runId) {
+    selectedRunId.value = runId || ''
+    return loadResults(consultAgentKey.value, selectedRunId.value)
+  }
+
+  // Admin: set / clear an override on one scored question, then re-fetch the same agent
+  // + run so the effective verdict updates. Throws the backend code on failure (the
+  // caller toasts it); the busy key disables the row's buttons while in flight.
+  async function submitOverride(payload, busyKey) {
+    overrideBusyKey.value = busyKey || ''
+    try {
+      await adminBenchmarkOverride(payload)
+      await loadResults(consultAgentKey.value, selectedRunId.value)
+    } finally {
+      overrideBusyKey.value = ''
+    }
+  }
+
   return {
     prefill,
     mySuggestions,
@@ -63,5 +134,18 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     loadMine,
     submitManual,
     submitFromChat,
+    // consultation
+    consultAgentKey,
+    results,
+    selectedRunId,
+    resultsConfigured,
+    resultsReadError,
+    resultsLoading,
+    resultsError,
+    overrideBusyKey,
+    loadResults,
+    selectConsultAgent,
+    selectRun,
+    submitOverride,
   }
 })

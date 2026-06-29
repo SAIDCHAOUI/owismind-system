@@ -521,6 +521,120 @@ export const extraMessages = {
     'bench.source.manual': 'Manuelle',
     'bench.sent': 'Merci ! Votre suggestion a bien été envoyée.',
     'bench.send_failed': "Échec de l'envoi de la suggestion. Réessayez.",
+
+    // === Benchmark tab - broader page header ===
+    'bench.page_title': 'Benchmark des agents',
+    'bench.page_desc':
+      "Consultez la justesse des agents mesurée par le benchmark, puis aidez à l'améliorer en proposant des questions de test.",
+
+    // Consultation (results)
+    'bench.consult.title': 'Résultats du benchmark',
+    'bench.consult.desc':
+      "Choisissez un agent pour voir sa dernière évaluation : justesse globale, détail par mode et par sujet, question par question.",
+    'bench.consult.agent_label': 'Agent',
+    'bench.consult.no_agents_title': 'Aucun benchmark disponible',
+    'bench.consult.no_agents':
+      "Aucun agent ne dispose encore d'un benchmark. Un administrateur peut en activer un depuis la fiche d'un agent.",
+    'bench.consult.loading': 'Chargement des résultats…',
+    'bench.consult.not_configured': "Aucun benchmark n'est configuré pour cet agent.",
+    'bench.consult.read_error':
+      'Les résultats ont été lus en mode dégradé : certaines informations peuvent manquer.',
+    'bench.consult.load_error': 'Impossible de charger les résultats du benchmark.',
+    'bench.consult.no_results': "Aucun résultat de benchmark pour cet agent pour l'instant.",
+    'bench.consult.run_label': 'Exécution',
+    'bench.consult.hero': '{0} réponses correctes sur {1}',
+
+    // KPI tiles
+    'bench.kpi.accuracy': 'Justesse',
+    'bench.kpi.questions': 'Questions',
+    'bench.kpi.configs': 'Configurations',
+    'bench.kpi.cost': 'Coût total',
+    'bench.kpi.needs_review': 'À revoir',
+
+    // Confidence band (donut)
+    'bench.band.high': 'Confiance élevée',
+    'bench.band.medium': 'Confiance moyenne',
+    'bench.band.low': 'Confiance faible',
+    'bench.band.unknown': 'Confiance',
+
+    // Per agent x mode table
+    'bench.cfg.title': 'Résultats par agent et par mode',
+    'bench.cfg.col_config': 'Agent / mode',
+    'bench.cfg.col_questions': 'Questions',
+    'bench.cfg.col_ok': 'OK',
+    'bench.cfg.col_error': 'Erreurs',
+    'bench.cfg.col_accuracy': 'Justesse',
+    'bench.cfg.col_score': 'Score',
+    'bench.cfg.col_latency': 'Latence moy.',
+    'bench.cfg.col_cost': 'Coût moy.',
+    'bench.cfg.col_review': 'À revoir',
+
+    // Per category bars
+    'bench.cat.title': 'Justesse par sujet',
+    'bench.cat.count': '{0} question(s)',
+    'bench.cat.uncategorized': 'Sans catégorie',
+
+    // Per question table
+    'bench.detail.title': 'Question par question',
+    'bench.detail.col_question': 'Question',
+    'bench.detail.col_category': 'Catégorie',
+    'bench.detail.col_agent': 'Agent / mode',
+    'bench.detail.col_judge': 'Juge',
+    'bench.detail.col_verdict': 'Verdict',
+    'bench.detail.reference': 'Réponse attendue',
+    'bench.detail.expected': 'Valeur clé',
+    'bench.detail.answer': "Réponse de l'agent",
+    'bench.detail.judge_comment': 'Commentaire du juge',
+    'bench.detail.notes': 'Notes',
+    'bench.detail.objective': 'Ancre objective',
+    'bench.detail.objective_yes': 'Concordance exacte',
+    'bench.detail.objective_no': 'Pas de concordance exacte',
+    'bench.detail.reviewed': 'Revu par',
+
+    // Verdict badges
+    'bench.verdict.correct': 'Correct',
+    'bench.verdict.incorrect': 'Incorrect',
+    'bench.verdict.review': 'À revoir',
+    'bench.verdict.unknown': 'Indéterminé',
+    'bench.verdict.overridden': 'Ajusté',
+
+    // Admin review + override
+    'bench.review.title': 'Revue administrateur',
+    'bench.review.mark_correct': 'Marquer correct',
+    'bench.review.mark_incorrect': 'Marquer incorrect',
+    'bench.review.clear': "Retirer l'ajustement",
+    'bench.review.comment_ph': 'Commentaire (facultatif)',
+    'bench.review.saved': 'Verdict mis à jour.',
+    'bench.review.failed': "Échec de la mise à jour du verdict.",
+    'bench.review.reset_note':
+      'Relancer la MÊME exécution réinitialise les ajustements ; les ajustements des exécutions passées sont conservés.',
+    'bench.review.reviewed_by': '{0} le {1}',
+
+    // Suggest sub-section (accordion)
+    'bench.section.suggest_title': 'Suggérer une question de test',
+    'bench.section.suggest_desc':
+      'Proposez une question avec la bonne réponse que vous connaissez : elle alimente les prochains benchmarks.',
+
+    // Admin agent-profile benchmark section
+    'bench.profile.section': 'Benchmark',
+    'bench.profile.enabled': 'Cet agent dispose d\'un benchmark',
+    'bench.profile.enabled_hint':
+      "Quand c'est activé, les utilisateurs peuvent consulter les résultats de cet agent dans l'onglet Benchmark.",
+    'bench.profile.connection': 'Connexion SQL',
+    'bench.profile.table': 'Table des résultats',
+    'bench.profile.table_ph': 'Choisir ou saisir une table',
+    'bench.profile.tables_loading': 'Chargement des tables…',
+    'bench.profile.tables_error': 'Impossible de lister les tables de cette connexion.',
+    'bench.profile.refresh_tables': 'Rafraîchir les tables',
+    'bench.profile.agent_key': "Clé d'agent (filtre, facultatif)",
+    'bench.profile.agent_key_ph': 'Ex. : agent:038G7mlF',
+    'bench.profile.agent_key_hint':
+      "Si la table contient plusieurs agents, indiquez la clé d'agent à filtrer.",
+    'bench.profile.validate': 'Vérifier le schéma',
+    'bench.profile.validating': 'Vérification…',
+    'bench.profile.ok': 'Schéma compatible.',
+    'bench.profile.missing': 'Schéma incompatible : colonnes manquantes : {0}',
+    'bench.profile.error': 'Impossible de vérifier le schéma.',
   },
   en: {
     // Generic reusable
@@ -1031,5 +1145,119 @@ export const extraMessages = {
     'bench.source.manual': 'Manual',
     'bench.sent': 'Thank you! Your suggestion has been sent.',
     'bench.send_failed': 'Could not send the suggestion. Please try again.',
+
+    // === Benchmark tab - broader page header ===
+    'bench.page_title': 'Agent benchmark',
+    'bench.page_desc':
+      'Check how accurate the agents are as measured by the benchmark, then help improve it by proposing test questions.',
+
+    // Consultation (results)
+    'bench.consult.title': 'Benchmark results',
+    'bench.consult.desc':
+      'Pick an agent to see its latest evaluation: overall accuracy, a breakdown by mode and by topic, question by question.',
+    'bench.consult.agent_label': 'Agent',
+    'bench.consult.no_agents_title': 'No benchmark available',
+    'bench.consult.no_agents':
+      'No agent has a benchmark yet. An administrator can enable one from an agent profile.',
+    'bench.consult.loading': 'Loading results…',
+    'bench.consult.not_configured': 'No benchmark is configured for this agent.',
+    'bench.consult.read_error':
+      'Results were read in a degraded mode: some information may be missing.',
+    'bench.consult.load_error': 'Could not load the benchmark results.',
+    'bench.consult.no_results': 'No benchmark results for this agent yet.',
+    'bench.consult.run_label': 'Run',
+    'bench.consult.hero': '{0} of {1} answered correctly',
+
+    // KPI tiles
+    'bench.kpi.accuracy': 'Accuracy',
+    'bench.kpi.questions': 'Questions',
+    'bench.kpi.configs': 'Configurations',
+    'bench.kpi.cost': 'Total cost',
+    'bench.kpi.needs_review': 'Needs review',
+
+    // Confidence band (donut)
+    'bench.band.high': 'High confidence',
+    'bench.band.medium': 'Medium confidence',
+    'bench.band.low': 'Low confidence',
+    'bench.band.unknown': 'Confidence',
+
+    // Per agent x mode table
+    'bench.cfg.title': 'Results by agent and mode',
+    'bench.cfg.col_config': 'Agent / mode',
+    'bench.cfg.col_questions': 'Questions',
+    'bench.cfg.col_ok': 'OK',
+    'bench.cfg.col_error': 'Errors',
+    'bench.cfg.col_accuracy': 'Accuracy',
+    'bench.cfg.col_score': 'Score',
+    'bench.cfg.col_latency': 'Avg latency',
+    'bench.cfg.col_cost': 'Avg cost',
+    'bench.cfg.col_review': 'Needs review',
+
+    // Per category bars
+    'bench.cat.title': 'Accuracy by topic',
+    'bench.cat.count': '{0} question(s)',
+    'bench.cat.uncategorized': 'Uncategorized',
+
+    // Per question table
+    'bench.detail.title': 'Question by question',
+    'bench.detail.col_question': 'Question',
+    'bench.detail.col_category': 'Category',
+    'bench.detail.col_agent': 'Agent / mode',
+    'bench.detail.col_judge': 'Judge',
+    'bench.detail.col_verdict': 'Verdict',
+    'bench.detail.reference': 'Expected answer',
+    'bench.detail.expected': 'Key value',
+    'bench.detail.answer': "Agent's answer",
+    'bench.detail.judge_comment': 'Judge comment',
+    'bench.detail.notes': 'Notes',
+    'bench.detail.objective': 'Objective anchor',
+    'bench.detail.objective_yes': 'Exact match',
+    'bench.detail.objective_no': 'No exact match',
+    'bench.detail.reviewed': 'Reviewed by',
+
+    // Verdict badges
+    'bench.verdict.correct': 'Correct',
+    'bench.verdict.incorrect': 'Incorrect',
+    'bench.verdict.review': 'Needs review',
+    'bench.verdict.unknown': 'Undetermined',
+    'bench.verdict.overridden': 'Overridden',
+
+    // Admin review + override
+    'bench.review.title': 'Admin review',
+    'bench.review.mark_correct': 'Mark correct',
+    'bench.review.mark_incorrect': 'Mark incorrect',
+    'bench.review.clear': 'Clear override',
+    'bench.review.comment_ph': 'Comment (optional)',
+    'bench.review.saved': 'Verdict updated.',
+    'bench.review.failed': 'Could not update the verdict.',
+    'bench.review.reset_note':
+      'Re-running the SAME run resets overrides; overrides on past runs are kept.',
+    'bench.review.reviewed_by': '{0} on {1}',
+
+    // Suggest sub-section (accordion)
+    'bench.section.suggest_title': 'Suggest a test question',
+    'bench.section.suggest_desc':
+      'Propose a question with the correct answer you know: it feeds the next benchmarks.',
+
+    // Admin agent-profile benchmark section
+    'bench.profile.section': 'Benchmark',
+    'bench.profile.enabled': 'This agent has a benchmark',
+    'bench.profile.enabled_hint':
+      'When on, users can consult this agent\'s results in the Benchmark tab.',
+    'bench.profile.connection': 'SQL connection',
+    'bench.profile.table': 'Results table',
+    'bench.profile.table_ph': 'Pick or type a table',
+    'bench.profile.tables_loading': 'Loading tables…',
+    'bench.profile.tables_error': 'Could not list the tables of this connection.',
+    'bench.profile.refresh_tables': 'Refresh tables',
+    'bench.profile.agent_key': 'Agent key (filter, optional)',
+    'bench.profile.agent_key_ph': 'e.g. agent:038G7mlF',
+    'bench.profile.agent_key_hint':
+      'If the table holds several agents, give the agent key to filter on.',
+    'bench.profile.validate': 'Validate schema',
+    'bench.profile.validating': 'Validating…',
+    'bench.profile.ok': 'Schema compatible.',
+    'bench.profile.missing': 'Schema incompatible: missing columns: {0}',
+    'bench.profile.error': 'Could not validate the schema.',
   },
 }

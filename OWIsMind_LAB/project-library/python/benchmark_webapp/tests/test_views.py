@@ -138,6 +138,95 @@ class DetailViewTests(unittest.TestCase):
         self.assertEqual(out["rows"][0]["question_id"], "Q2")
         self.assertTrue(out["rows"][0]["needs_review"])
 
+    def test_surfaces_judge_comment_and_review_fields(self):
+        out = views.detail_view(self._rows(), run_id="r1")
+        row = next(r for r in out["rows"] if r["question_id"] == "Q1")
+        # The concise judge comment + the human override fields are present (for the table +
+        # the review panel), defaulting to empty strings when absent.
+        for key in ("agent_key", "judge_comment", "human_verdict", "human_comment",
+                    "reviewed_by", "notes", "expected_value", "expected_value_type",
+                    "effective_correct", "effective_verdict", "overridden"):
+            self.assertIn(key, row)
+
+    def test_effective_verdict_reflects_human_override(self):
+        rows = [
+            {"run_id": "r1", "question_id": "Q9", "question": "q", "agent_label": "Orch",
+             "mode": "Smart", "status": "ok", "objective_match": "miss", "judge_score": 2,
+             "judge_verdict": "incorrect", "correct": False, "needs_review": True,
+             "human_verdict": "correct", "human_comment": "magnitude is fine",
+             "reviewed_by": "u_admin", "answer_text": "b", "judge_comment": "off by a lot"},
+        ]
+        out = views.detail_view(rows, run_id="r1")
+        row = out["rows"][0]
+        self.assertTrue(row["effective_correct"])
+        self.assertEqual(row["effective_verdict"], "correct")
+        self.assertTrue(row["overridden"])
+        self.assertEqual(row["judge_comment"], "off by a lot")
+        self.assertEqual(row["human_comment"], "magnitude is fine")
+
+
+class OverrideTests(unittest.TestCase):
+    def _scored(self):
+        return [
+            {"run_id": "r1", "question_id": "Q1", "agent_key": "orch", "mode": "Smart",
+             "correct": False, "human_verdict": ""},
+            {"run_id": "r1", "question_id": "Q2", "agent_key": "orch", "mode": "Smart",
+             "correct": True, "human_verdict": ""},
+        ]
+
+    def test_validate_override_requires_key_and_verdict(self):
+        ok, errors = views.validate_override({"run_id": "", "question_id": "Q1",
+                                              "agent_key": "orch", "verdict": "correct"})
+        self.assertFalse(ok)
+        ok, errors = views.validate_override({"run_id": "r1", "question_id": "Q1",
+                                              "agent_key": "orch", "verdict": "maybe"})
+        self.assertFalse(ok)
+        ok, errors = views.validate_override({"run_id": "r1", "question_id": "Q1",
+                                              "agent_key": "orch", "mode": "Smart",
+                                              "verdict": "correct"})
+        self.assertTrue(ok, errors)
+
+    def test_apply_override_sets_human_fields_on_match(self):
+        payload = {"run_id": "r1", "question_id": "Q1", "agent_key": "orch", "mode": "Smart",
+                   "verdict": "correct", "comment": "magnitude ok",
+                   "reviewed_by": "u_admin", "reviewed_at": "2026-06-29T10:00:00Z"}
+        rows, matched = views.apply_override(self._scored(), payload)
+        self.assertEqual(matched, 1)
+        q1 = next(r for r in rows if r["question_id"] == "Q1")
+        self.assertEqual(q1["human_verdict"], "correct")
+        self.assertTrue(q1["human_correct"])
+        self.assertEqual(q1["human_comment"], "magnitude ok")
+        self.assertEqual(q1["reviewed_by"], "u_admin")
+        # The untouched row keeps its empty override.
+        q2 = next(r for r in rows if r["question_id"] == "Q2")
+        self.assertEqual(q2["human_verdict"], "")
+
+    def test_apply_override_incorrect_sets_false(self):
+        payload = {"run_id": "r1", "question_id": "Q2", "agent_key": "orch", "mode": "Smart",
+                   "verdict": "incorrect", "reviewed_by": "u", "reviewed_at": "t"}
+        rows, matched = views.apply_override(self._scored(), payload)
+        q2 = next(r for r in rows if r["question_id"] == "Q2")
+        self.assertEqual(q2["human_verdict"], "incorrect")
+        self.assertFalse(q2["human_correct"])
+
+    def test_apply_override_clear_resets_fields(self):
+        scored = self._scored()
+        scored[0].update({"human_verdict": "correct", "human_correct": True,
+                          "human_comment": "x", "reviewed_by": "u", "reviewed_at": "t"})
+        payload = {"run_id": "r1", "question_id": "Q1", "agent_key": "orch", "mode": "Smart",
+                   "verdict": "", "reviewed_by": "u2", "reviewed_at": "t2"}
+        rows, matched = views.apply_override(scored, payload)
+        q1 = next(r for r in rows if r["question_id"] == "Q1")
+        self.assertEqual(q1["human_verdict"], "")
+        self.assertIsNone(q1["human_correct"])
+        self.assertEqual(q1["human_comment"], "")
+
+    def test_apply_override_no_match_returns_zero(self):
+        payload = {"run_id": "r1", "question_id": "ZZ", "agent_key": "orch", "mode": "Smart",
+                   "verdict": "correct", "reviewed_by": "u", "reviewed_at": "t"}
+        rows, matched = views.apply_override(self._scored(), payload)
+        self.assertEqual(matched, 0)
+
 
 class ConfigValidationTests(unittest.TestCase):
     def test_valid_config_dict(self):

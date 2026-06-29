@@ -46,6 +46,7 @@
     "tab.config": { en: "Configuration", fr: "Configuration" },
     "tab.golden": { en: "Golden set", fr: "Jeu de reference" },
     "tab.suggest": { en: "Suggestions", fr: "Suggestions" },
+    "tab.review": { en: "Review", fr: "Revue" },
 
     "cfg.eyebrow": { en: "Setup", fr: "Parametrage" },
     "cfg.title": { en: "Configuration", fr: "Configuration" },
@@ -259,6 +260,63 @@
     "ag.removed": { en: "Agent removed", fr: "Agent retire" },
     "cfg.saved": { en: "Configuration saved", fr: "Configuration enregistree" },
 
+    "rv.eyebrow": { en: "Human review", fr: "Revue humaine" },
+    "rv.title": { en: "Verdict review", fr: "Revue des verdicts" },
+    "rv.note": {
+      en: "Review the judge's verdicts for one run and override them when the judge got it wrong. Overrides are saved per run.",
+      fr: "Revoyez les verdicts du juge pour une execution et corrigez-les quand le juge s'est trompe. Les corrections sont enregistrees par execution."
+    },
+    "rv.run": { en: "Run", fr: "Execution" },
+    "rv.onlyNeeds": { en: "Only needs-review", fr: "Seulement a revoir" },
+    "rv.caption": {
+      en: "Re-running the SAME run id resets its overrides. Overrides on past runs survive new runs.",
+      fr: "Relancer le MEME identifiant d'execution reinitialise ses corrections. Les corrections des executions passees survivent aux nouvelles."
+    },
+    "rv.count": { en: "{n} verdict(s), needs-review first", fr: "{n} verdict(s), a revoir d'abord" },
+    "rv.loadError": { en: "Could not load the review.", fr: "Impossible de charger la revue." },
+    "rv.noRuns.h": { en: "No benchmark run yet", fr: "Aucune execution de benchmark" },
+    "rv.noRuns.p": {
+      en: "Launch a run from the Configuration tab to review its verdicts here.",
+      fr: "Lancez une execution depuis l'onglet Configuration pour en revoir les verdicts ici."
+    },
+    "rv.noRows": { en: "No row to review for this run.", fr: "Aucune ligne a revoir pour cette execution." },
+    "rv.noNeeds": { en: "No row needs review in this run.", fr: "Aucune ligne a revoir dans cette execution." },
+    "rv.agentMissing": {
+      en: "Agent key missing on these rows: overrides cannot match until the backend includes agent_key.",
+      fr: "Cle d'agent absente sur ces lignes : les corrections ne peuvent pas correspondre tant que le backend n'inclut pas agent_key."
+    },
+
+    "rv.effective": { en: "Effective", fr: "Effectif" },
+    "rv.v.correct": { en: "Correct", fr: "Correcte" },
+    "rv.v.incorrect": { en: "Incorrect", fr: "Incorrecte" },
+    "rv.overriddenBy": { en: "Overridden by {who}", fr: "Corrige par {who}" },
+    "rv.needsReview": { en: "Needs review", fr: "A revoir" },
+
+    "rv.judge": { en: "Judge", fr: "Juge" },
+    "rv.score": { en: "Score", fr: "Score" },
+    "rv.obj.hit": { en: "Anchor hit", fr: "Ancre OK" },
+    "rv.obj.miss": { en: "Anchor miss", fr: "Ancre KO" },
+    "rv.obj.na": { en: "No anchor", fr: "Sans ancre" },
+    "rv.judgeComment": { en: "Judge comment", fr: "Commentaire du juge" },
+    "rv.reference": { en: "Reference answer", fr: "Reponse de reference" },
+    "rv.expected": { en: "Expected value", fr: "Valeur attendue" },
+    "rv.humanNote": { en: "Strictness note", fr: "Note de severite" },
+    "rv.answer.show": { en: "Show agent answer", fr: "Voir la reponse de l'agent" },
+    "rv.answer.hide": { en: "Hide agent answer", fr: "Masquer la reponse de l'agent" },
+    "rv.answer.empty": { en: "(no answer captured)", fr: "(aucune reponse capturee)" },
+
+    "rv.commentPh": { en: "Optional override reason", fr: "Raison de la correction (optionnel)" },
+    "rv.markCorrect": { en: "Mark correct", fr: "Marquer correcte" },
+    "rv.markIncorrect": { en: "Mark incorrect", fr: "Marquer incorrecte" },
+    "rv.clear": { en: "Clear override", fr: "Annuler la correction" },
+    "rv.reviewedBy": { en: "Reviewed by {who} on {when}", fr: "Revue par {who} le {when}" },
+    "rv.humanComment": { en: "Reviewer note", fr: "Note du relecteur" },
+
+    "rv.toast.set": { en: "Override saved", fr: "Correction enregistree" },
+    "rv.toast.cleared": { en: "Override cleared", fr: "Correction annulee" },
+    "rv.toast.nomatch": { en: "No matching row (agent key missing?)", fr: "Aucune ligne correspondante (cle d'agent absente ?)" },
+    "rv.toast.error": { en: "Could not save the override.", fr: "Impossible d'enregistrer la correction." },
+
     "common.dash": { en: "-", fr: "-" },
     "common.loading": { en: "Loading...", fr: "Chargement..." },
     "common.retry": { en: "Retry", fr: "Reessayer" }
@@ -314,7 +372,9 @@
     // modal editor
     editor: { open: false, isNew: false, qid: "", error: null },
     // suggestions
-    suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 }
+    suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 },
+    // review (human-in-the-loop verdict override)
+    review: { loaded: false, loadError: false, runId: "", onlyNeedsReview: false, runs: [], rows: [], count: 0, expanded: {}, saving: {} }
   };
 
   var newAgentSeq = 0;
@@ -347,6 +407,12 @@
     var v = Number(n);
     if (isNaN(v)) { return String(n); }
     try { return v.toLocaleString(ui.lang === "fr" ? "fr-FR" : "en-US"); }
+    catch (e) { return String(v); }
+  }
+  function fmtCost(n) {
+    var v = Number(n);
+    if (isNaN(v)) { return ""; }
+    try { return v.toLocaleString(ui.lang === "fr" ? "fr-FR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
     catch (e) { return String(v); }
   }
 
@@ -391,14 +457,67 @@
     suggestions: [
       { suggestion_id: "sug_a1b2c3", user_id: "marie.dupont", source: "chat", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_is_correct: true, missing_explanation: "", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-24 14:09:22" },
       { suggestion_id: "sug_g7h8i9", user_id: "sara.benali", source: "chat", question: "Quel est le budget 2026 du produit Roaming Hub pour le client Airbus ?", reference_answer: "Le budget 2026 du produit Roaming Hub pour Airbus est de 1 050 000 euros (scenario BUDGET, periode 2026).", answer_is_correct: null, missing_explanation: "L'agent a confondu Roaming Hub avec Roaming Sponsor.", expected_value: "1050000", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-23 17:30:05" }
-    ]
+    ],
+    review: {
+      runs: [
+        { run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" },
+        { run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11" }
+      ],
+      rows: {
+        "run_20260626_0902": [
+          { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", category: "tickets", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.4, judge_verdict: "incorrect", judge_comment: "The agent answered 41 tickets but the reference anchor is 37: it counted raw snapshot rows instead of distinct ticket ids.", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", answer_preview: "Algerie Telecom currently has 41 open trouble tickets.\n\nSQL: SELECT COUNT(*) FROM trouble_tickets WHERE status = 'OPEN' AND account = 'Algerie Telecom'", notes: "Strictness: accept the distinct count on the latest snapshot per id. Raw row counts are wrong.", expected_value: "37", expected_value_type: "numeric", correct: false, needs_review: true, latency_str: "12.4s", estimated_cost: 0.0182 },
+          { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", category: "offre", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Claude", status: "ok", objective_match: null, judge_score: 0.6, judge_verdict: "incorrect", judge_comment: "The agent called IPL a Product; the reference says SolutionLine.", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", answer_preview: "IPL est un Product dans la hierarchie d'offre.", notes: "Open answer: judge on the hierarchy level named (SolutionLine).", expected_value: "", expected_value_type: "", correct: false, needs_review: true, latency_str: "15.7s", estimated_cost: 0.0345 },
+          { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 }
+        ],
+        "run_20260625_1740": [
+          { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Pro", status: "ok", objective_match: true, judge_score: 0.9, judge_verdict: "correct", judge_comment: "Anchor value matches.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel est de 4 218 540 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", correct: true, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
+        ]
+      }
+    }
   };
   var mockRun = { remaining: 0 };
   var mockPromoted = {};
+  var mockOverrides = {};
+
+  function parseQuery(path) {
+    var out = {};
+    var qi = path.indexOf("?");
+    if (qi === -1) { return out; }
+    path.slice(qi + 1).split("&").forEach(function (pair) {
+      if (!pair) { return; }
+      var kv = pair.split("=");
+      out[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
+    });
+    return out;
+  }
+
+  function mockEffectiveRow(runId, r) {
+    var key = [runId, r.question_id, r.agent_key || "", r.mode || ""].join("|");
+    var ov = mockOverrides[key];
+    if (ov) {
+      r.overridden = true;
+      r.human_verdict = ov.verdict;
+      r.human_comment = ov.comment;
+      r.reviewed_by = ov.reviewed_by;
+      r.reviewed_at = ov.reviewed_at;
+      r.effective_verdict = ov.verdict;
+      r.effective_correct = (ov.verdict === "correct");
+    } else {
+      r.overridden = false;
+      r.human_verdict = "";
+      r.human_comment = "";
+      r.reviewed_by = "";
+      r.reviewed_at = "";
+      r.effective_correct = !!r.correct;
+      r.effective_verdict = r.correct ? "correct" : "incorrect";
+    }
+    return r;
+  }
 
   function mockApi(method, path, body) {
     var status = 200;
     var data = {};
+    var path0 = path.split("?")[0];
     if (method === "GET" && path === "config") {
       data = { status: "ok", config: deepCopy(MOCK.config), categories: MOCK.categories.slice(), question_count: MOCK.question_count, mode_options: MOCK.mode_options.slice(), runs: MOCK.runs.slice() };
     } else if (method === "POST" && path === "config") {
@@ -455,6 +574,23 @@
       var before = MOCK.golden.length;
       MOCK.golden = MOCK.golden.filter(function (g) { return g.question_id !== delId; });
       data = { status: "ok", deleted: MOCK.golden.length < before, count: MOCK.golden.length };
+    } else if (method === "GET" && path0 === "review") {
+      var params = parseQuery(path);
+      var runId = params.run_id || (MOCK.review.runs[0] && MOCK.review.runs[0].run_id) || "";
+      var base = (MOCK.review.rows[runId] || []).map(deepCopy);
+      var rows = base.map(function (r) { return mockEffectiveRow(runId, r); });
+      if (params.only_needs_review === "1") { rows = rows.filter(function (r) { return !!r.needs_review; }); }
+      rows.sort(function (a, b) { return (b.needs_review ? 1 : 0) - (a.needs_review ? 1 : 0); });
+      data = { status: "ok", run_id: runId, count: rows.length, runs: MOCK.review.runs.slice(), rows: rows };
+    } else if (method === "POST" && path0 === "override") {
+      var ob = body || {};
+      var okey = [ob.run_id, ob.question_id, ob.agent_key || "", ob.mode || ""].join("|");
+      if (ob.verdict === "correct" || ob.verdict === "incorrect") {
+        mockOverrides[okey] = { verdict: ob.verdict, comment: ob.comment || "", reviewed_by: "preview.admin", reviewed_at: "2026-06-26 10:15:00" };
+      } else {
+        delete mockOverrides[okey];
+      }
+      data = { status: "ok", matched: 1 };
     } else {
       status = 404;
       data = { status: "error", error: "not_found" };
@@ -507,12 +643,14 @@
           '<button class="tab" data-tab="config"><span data-i18n="tab.config"></span></button>' +
           '<button class="tab" data-tab="golden"><span data-i18n="tab.golden"></span><span class="count" id="tabGoldenCount"></span></button>' +
           '<button class="tab" data-tab="suggest"><span data-i18n="tab.suggest"></span></button>' +
+          '<button class="tab" data-tab="review"><span data-i18n="tab.review"></span></button>' +
         '</nav>' +
         '<div class="body">' +
           '<main class="content">' +
             configPanelHtml() +
             '<section class="panel" data-panel="golden"><div id="goldenContent"></div></section>' +
             '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
+            '<section class="panel" data-panel="review"><div id="reviewContent"></div></section>' +
           '</main>' +
           asideHtml() +
         '</div>' +
@@ -670,6 +808,7 @@
 
     renderGolden();
     renderSuggestions();
+    renderReview();
 
     setStatus(S.running ? "running" : (S.runDone ? "done" : "idle"));
     setHTML("icSave", I.save);
@@ -1458,6 +1597,265 @@
     }, function () { S.suggestions.confirm = false; toast(t("sg.promoteError")); renderSuggestions(); });
   }
 
+  /* ============================ review (human-in-the-loop) ============================ */
+
+  // Stable identity of a scored row: a run tests the same question across agents and modes, so the
+  // override target is (question_id, agent_key, mode). agent_key comes from the api/review row.
+  function reviewRowKey(r) {
+    return [r.question_id, r.agent_key || "", r.mode || ""].join("\u0001");
+  }
+  function findReviewRow(rk) {
+    var found = null;
+    S.review.rows.forEach(function (r) { if (reviewRowKey(r) === rk) { found = r; } });
+    return found;
+  }
+
+  // objective_match arrives stringified from the backend (str(True) -> "True"), or as a bool/null.
+  function objChip(r) {
+    var v = r.objective_match;
+    var s = (v === true) ? "true" : (v === false ? "false" : String(v == null ? "" : v).trim().toLowerCase());
+    var key, cls;
+    if (s === "true" || s === "hit" || s === "match" || s === "1" || s === "yes") { key = "rv.obj.hit"; cls = "obj-hit"; }
+    else if (s === "false" || s === "miss" || s === "0" || s === "no") { key = "rv.obj.miss"; cls = "obj-miss"; }
+    else { key = "rv.obj.na"; cls = "obj-na"; }
+    return '<span class="rvw-obj ' + cls + '">' + esc(t(key)) + '</span>';
+  }
+
+  function renderReview() {
+    var box = byId("reviewContent");
+    if (!box) { return; }
+    var inner;
+    if (S.review.loadError) {
+      inner = '<div class="note note-error" role="alert">' + esc(t("rv.loadError")) + '</div>' +
+        '<div class="actions-row"><button type="button" class="btn" data-rv="retry">' + esc(t("common.retry")) + '</button></div>';
+    } else if (!S.review.loaded) {
+      inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
+    } else if (!S.review.runs.length) {
+      inner = '<div class="empty"><div class="ei"><span class="ic-info"></span></div>' +
+        '<h4>' + esc(t("rv.noRuns.h")) + '</h4><p>' + esc(t("rv.noRuns.p")) + '</p></div>';
+    } else {
+      inner = reviewBodyHtml();
+    }
+    box.innerHTML = '' +
+      '<div class="sec-head">' +
+        '<p class="sec-eyebrow">' + esc(t("rv.eyebrow")) + '</p>' +
+        '<h2 class="sec-title">' + esc(t("rv.title")) + '</h2>' +
+        '<div class="title-bar"></div>' +
+        '<p class="sec-note">' + esc(t("rv.note")) + '</p>' +
+      '</div>' + inner;
+    wireReview();
+  }
+
+  function reviewBodyHtml() {
+    var runOpts = S.review.runs.map(function (r) {
+      var label = r.run_timestamp || r.run_id;
+      var seld = (r.run_id === S.review.runId) ? " selected" : "";
+      return '<option value="' + esc(r.run_id) + '"' + seld + '>' + esc(label) + '</option>';
+    }).join("");
+    var bar = '' +
+      '<div class="rvw-bar">' +
+        '<label class="field rvw-runsel"><span class="field-label">' + esc(t("rv.run")) + '</span>' +
+          '<select class="input" id="rvwRun">' + runOpts + '</select></label>' +
+        '<button type="button" class="chk' + (S.review.onlyNeedsReview ? " on" : "") + '" id="rvwOnly">' +
+          '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("rv.onlyNeeds")) + '</b></span></button>' +
+      '</div>';
+    var caption = '<div class="note note-info" role="note">' + esc(t("rv.caption")) + '</div>';
+
+    // Defensive: if no row carries agent_key, the override POST cannot match server-side.
+    var warn = "";
+    if (S.review.rows.length && !S.review.rows.some(function (r) { return !!r.agent_key; })) {
+      warn = '<div class="note note-error" role="alert">' + esc(t("rv.agentMissing")) + '</div>';
+    }
+
+    var list;
+    if (!S.review.rows.length) {
+      var emptyKey = S.review.onlyNeedsReview ? "rv.noNeeds" : "rv.noRows";
+      list = '<div class="note note-info" role="status">' + esc(t(emptyKey)) + '</div>';
+    } else {
+      var countLine = '<div class="rvw-count">' + esc(t("rv.count", { n: fmtNum(S.review.count) })) + '</div>';
+      list = countLine + '<div class="rvw-list">' + S.review.rows.map(reviewCardHtml).join("") + '</div>';
+    }
+    return bar + caption + warn + list;
+  }
+
+  function rvField(labelKey, value) {
+    if (value == null || String(value).trim() === "") { return ""; }
+    return '<div class="rvw-field"><span class="rvw-flabel">' + esc(t(labelKey)) + '</span>' +
+      '<div class="rvw-fval">' + esc(value) + '</div></div>';
+  }
+
+  function reviewCardHtml(r) {
+    var rk = reviewRowKey(r);
+    var eff = (r.effective_verdict === "correct") ? "correct" : "incorrect";
+    var effLabel = (eff === "correct") ? t("rv.v.correct") : t("rv.v.incorrect");
+
+    var badges = '<span class="rvw-verdict ' + eff + '">' + esc(t("rv.effective")) + ': ' + esc(effLabel) + '</span>';
+    if (r.overridden) {
+      badges += '<span class="rvw-ovr">' + esc(t("rv.overriddenBy", { who: r.reviewed_by || "?" })) + '</span>';
+    }
+    if (r.needs_review) {
+      badges += '<span class="rvw-flag">' + esc(t("rv.needsReview")) + '</span>';
+    }
+
+    var meta = '<div class="rvw-meta">' +
+      (r.category ? '<span class="cat-tag">' + esc(r.category) + '</span>' : '') +
+      (r.agent_label ? '<span class="rvw-agent">' + esc(r.agent_label) + '</span>' : '') +
+      (r.mode ? '<span class="rvw-mode">' + esc(r.mode) + '</span>' : '') +
+      (r.latency_str ? '<span class="rvw-kpi">' + esc(r.latency_str) + '</span>' : '') +
+      ((r.estimated_cost != null && r.estimated_cost !== "") ? '<span class="rvw-kpi">$' + esc(fmtCost(r.estimated_cost)) + '</span>' : '') +
+    '</div>';
+
+    var jverdictCls = (r.judge_verdict === "correct") ? "correct" : ((r.judge_verdict === "incorrect") ? "incorrect" : "");
+    var judge = '<div class="rvw-judge">' +
+      '<span class="rvw-jlabel">' + esc(t("rv.judge")) + '</span>' +
+      '<span class="rvw-jverdict ' + jverdictCls + '">' + esc(r.judge_verdict || t("common.dash")) + '</span>' +
+      ((r.judge_score != null && r.judge_score !== "") ? '<span class="rvw-score">' + esc(t("rv.score")) + ' ' + esc(fmtNum(r.judge_score)) + '</span>' : '') +
+      objChip(r) +
+    '</div>';
+
+    var fields = rvField("rv.judgeComment", r.judge_comment) +
+      rvField("rv.reference", r.reference_answer);
+
+    var expVal = (r.expected_value == null) ? "" : String(r.expected_value).trim();
+    if (expVal) {
+      fields += '<div class="rvw-field"><span class="rvw-flabel">' + esc(t("rv.expected")) + '</span>' +
+        '<div class="rvw-fval"><span class="anchor-val">' + esc(expVal) + '</span>' +
+        (r.expected_value_type ? '<span class="anchor-type">' + esc(r.expected_value_type) + '</span>' : '') + '</div></div>';
+    }
+    fields += rvField("rv.humanNote", r.notes);
+
+    var expanded = !!S.review.expanded[rk];
+    var ans = (r.answer_preview == null) ? "" : String(r.answer_preview);
+    var answer = '<div class="rvw-answer">' +
+      '<button type="button" class="rvw-toggle" data-rv="toggle" data-rk="' + esc(rk) + '">' +
+        esc(expanded ? t("rv.answer.hide") : t("rv.answer.show")) + '</button>' +
+      (expanded ? '<pre class="rvw-pre">' + esc(ans || t("rv.answer.empty")) + '</pre>' : '') +
+    '</div>';
+
+    var reviewed = "";
+    if (r.overridden && r.reviewed_at) {
+      reviewed = '<div class="rvw-reviewed">' + esc(t("rv.reviewedBy", { who: r.reviewed_by || "?", when: r.reviewed_at })) + '</div>';
+    }
+
+    var saving = !!S.review.saving[rk];
+    var dis = saving ? " disabled" : "";
+    var corActive = (r.human_verdict === "correct") ? " rvw-active" : "";
+    var incActive = (r.human_verdict === "incorrect") ? " rvw-active" : "";
+    var controls = '<div class="rvw-controls">' +
+      '<input class="input rvw-comment" type="text" placeholder="' + esc(t("rv.commentPh")) + '" value="' + esc(r.human_comment || "") + '" aria-label="' + esc(t("rv.commentPh")) + '"' + dis + '>' +
+      '<div class="rvw-btns">' +
+        '<button type="button" class="btn btn-sm rvw-mc' + corActive + '" data-rv="correct" data-rk="' + esc(rk) + '"' + dis + '>' + esc(t("rv.markCorrect")) + '</button>' +
+        '<button type="button" class="btn btn-sm btn-danger rvw-mi' + incActive + '" data-rv="incorrect" data-rk="' + esc(rk) + '"' + dis + '>' + esc(t("rv.markIncorrect")) + '</button>' +
+        '<button type="button" class="btn btn-sm btn-ghost" data-rv="clear" data-rk="' + esc(rk) + '"' + (r.overridden && !saving ? "" : " disabled") + '>' + esc(t("rv.clear")) + '</button>' +
+      '</div>' +
+    '</div>';
+
+    return '<div class="rvw-card" data-rk="' + esc(rk) + '">' +
+      '<div class="rvw-head"><p class="rvw-q">' + esc(r.question) + '</p>' +
+        '<div class="rvw-badges">' + badges + '</div></div>' +
+      meta + judge + fields + answer + reviewed + controls +
+    '</div>';
+  }
+
+  function wireReview() {
+    var box = byId("reviewContent");
+    if (!box) { return; }
+    qsa(".ic-info", box).forEach(function (e) { e.innerHTML = I.info; });
+
+    var runSel = byId("rvwRun");
+    if (runSel) {
+      runSel.addEventListener("change", function () {
+        S.review.runId = runSel.value;
+        S.review.expanded = {};
+        loadReview();
+      });
+    }
+    var only = byId("rvwOnly");
+    if (only) {
+      only.addEventListener("click", function () {
+        S.review.onlyNeedsReview = !S.review.onlyNeedsReview;
+        loadReview();
+      });
+    }
+    qsa("[data-rv]", box).forEach(function (el) {
+      var kind = el.getAttribute("data-rv");
+      el.addEventListener("click", function () {
+        if (kind === "retry") { loadReview(); return; }
+        var rk = el.getAttribute("data-rk");
+        if (kind === "toggle") {
+          S.review.expanded[rk] = !S.review.expanded[rk];
+          renderReview();
+          return;
+        }
+        var row = findReviewRow(rk);
+        if (!row) { return; }
+        var comment = "";
+        var card = el.closest ? el.closest(".rvw-card") : null;
+        if (card) { var ci = card.querySelector(".rvw-comment"); if (ci) { comment = ci.value; } }
+        if (kind === "correct") { doOverride(row, "correct", comment); }
+        else if (kind === "incorrect") { doOverride(row, "incorrect", comment); }
+        else if (kind === "clear") { doOverride(row, "", comment); }
+      });
+    });
+  }
+
+
+  function loadReview(opts) {
+    opts = opts || {};
+    S.review.loadError = false;
+    if (!opts.quiet && !S.review.loaded) { renderReview(); }
+    var path = "review?only_needs_review=" + (S.review.onlyNeedsReview ? "1" : "0");
+    if (S.review.runId) { path += "&run_id=" + encodeURIComponent(S.review.runId); }
+    callApi("GET", path).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        S.review.runs = (d.runs || []).slice();
+        S.review.rows = (d.rows || []).slice();
+        S.review.count = (typeof d.count === "number") ? d.count : S.review.rows.length;
+        if (d.run_id) { S.review.runId = d.run_id; }
+        S.review.loaded = true;
+        S.review.loadError = false;
+        S.review.saving = {};
+      } else {
+        S.review.loadError = true;
+      }
+      renderReview();
+    }, function () { S.review.loadError = true; renderReview(); });
+  }
+
+  function doOverride(row, verdict, comment) {
+    var rk = reviewRowKey(row);
+    if (S.review.saving[rk]) { return; }
+    S.review.saving[rk] = true;
+    renderReview();
+    var payload = {
+      run_id: S.review.runId,
+      question_id: row.question_id,
+      agent_key: row.agent_key || "",
+      mode: row.mode || "",
+      verdict: verdict,
+      comment: comment || ""
+    };
+    callApi("POST", "override", payload).then(function (res) {
+      S.review.saving[rk] = false;
+      var d = res.data || {};
+      if (d.status === "ok") {
+        var matched = (typeof d.matched === "number") ? d.matched : 0;
+        if (matched > 0) { toast(verdict ? t("rv.toast.set") : t("rv.toast.cleared")); }
+        else { toast(t("rv.toast.nomatch")); }
+        loadReview({ quiet: true });
+      } else {
+        var msg = (d.messages && d.messages.length) ? d.messages[0] : t("rv.toast.error");
+        toast(msg);
+        renderReview();
+      }
+    }, function () {
+      S.review.saving[rk] = false;
+      toast(t("rv.toast.error"));
+      renderReview();
+    });
+  }
+
   /* ============================ tabs ============================ */
 
   function setTab(tab) {
@@ -1465,6 +1863,7 @@
     setTabUI(tab);
     if (tab === "golden" && !S.golden.loaded && !S.golden.loadError) { loadGolden(); }
     if (tab === "suggest" && !S.suggestions.loaded && !S.suggestions.loadError) { loadSuggestions(); }
+    if (tab === "review" && !S.review.loaded && !S.review.loadError) { loadReview(); }
   }
 
   /* ============================ static wiring ============================ */

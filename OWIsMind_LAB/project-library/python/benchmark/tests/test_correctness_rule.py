@@ -43,8 +43,35 @@ class TestWithAnchor(unittest.TestCase):
         self.assertTrue(out["correct"])
         self.assertTrue(out["needs_review"])
 
-    def test_miss_stays_incorrect_even_if_judge_says_correct(self):
+    def test_miss_with_judge_correct_now_trusts_judge(self):
+        # New contract: a MISS no longer FORCES incorrect. The contextual judge decides
+        # (it can recognise an order-of-magnitude / rounded equivalence the anchor cannot).
+        # correct verdict + score >= 4 -> correct True; the anchor/judge disagreement still
+        # flags review so a human can confirm.
         out = judge.final_correctness(judge.MISS, _judge("correct", 5))
+        self.assertTrue(out["correct"])
+        self.assertTrue(out["needs_review"])
+
+    def test_miss_with_judge_correct_low_score_not_correct(self):
+        # A "correct" verdict but a low score (<4) is not confident enough -> not correct,
+        # but the lean-correct judge still disagrees with the MISS -> review.
+        out = judge.final_correctness(judge.MISS, _judge("correct", 3))
+        self.assertFalse(out["correct"])
+        self.assertTrue(out["needs_review"])
+
+    def test_miss_with_judge_incorrect_agrees_no_review(self):
+        # Anchor MISS and judge "incorrect" agree -> incorrect, no review needed.
+        out = judge.final_correctness(judge.MISS, _judge("incorrect", 2))
+        self.assertFalse(out["correct"])
+        self.assertFalse(out["needs_review"])
+
+    def test_miss_with_judge_error_flags_review(self):
+        out = judge.final_correctness(judge.MISS, _judge(error="boom"))
+        self.assertFalse(out["correct"])
+        self.assertTrue(out["needs_review"])
+
+    def test_miss_with_no_verdict_flags_review(self):
+        out = judge.final_correctness(judge.MISS, _judge(verdict=None, score=None))
         self.assertFalse(out["correct"])
         self.assertTrue(out["needs_review"])
 

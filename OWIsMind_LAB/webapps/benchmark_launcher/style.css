@@ -284,6 +284,56 @@ textarea.input{resize:vertical;min-height:84px;}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast svg{width:16px;height:16px;color:var(--orange);}
 
+/* ---------------- review tab (human-in-the-loop verdict override) ---------------- */
+.rvw-bar{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;margin-bottom:14px;}
+.rvw-runsel{min-width:280px;}
+.rvw-count{font-size:13px;color:var(--ink-2);font-family:var(--mono);margin:14px 0 12px;}
+.rvw-list{display:flex;flex-direction:column;gap:16px;}
+
+.rvw-card{border:1px solid var(--line);background:var(--panel);padding:20px 22px;}
+.rvw-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;}
+.rvw-q{font-size:15px;font-weight:700;color:var(--ink);margin:0;flex:1 1 320px;min-width:0;}
+.rvw-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.rvw-verdict{display:inline-block;border:1px solid var(--line);padding:4px 10px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+.rvw-verdict.correct{border-color:var(--green);color:var(--green);}
+.rvw-verdict.incorrect{border-color:var(--red);color:var(--red);}
+.rvw-ovr{display:inline-block;border:1px solid var(--orange);color:var(--orange);padding:4px 9px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.rvw-flag{display:inline-block;background:var(--orange);color:#fff;padding:4px 9px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+
+.rvw-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.rvw-agent{font-size:12px;font-weight:700;color:var(--ink-2);}
+.rvw-mode{font-family:var(--mono);font-size:11px;font-weight:700;border:1px solid var(--line);padding:2px 7px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em;}
+.rvw-kpi{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);}
+
+.rvw-judge{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft);}
+.rvw-jlabel{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);}
+.rvw-jverdict{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);}
+.rvw-jverdict.correct{color:var(--green);}
+.rvw-jverdict.incorrect{color:var(--red);}
+.rvw-score{font-family:var(--mono);font-size:12px;color:var(--ink-2);}
+.rvw-obj{display:inline-block;border:1px solid var(--line);padding:2px 8px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.rvw-obj.obj-hit{border-color:var(--green);color:var(--green);}
+.rvw-obj.obj-miss{border-color:var(--red);color:var(--red);}
+.rvw-obj.obj-na{color:var(--ink-3);}
+
+.rvw-field{margin-top:14px;}
+.rvw-flabel{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;}
+.rvw-fval{font-size:13.5px;color:var(--ink-2);white-space:pre-wrap;word-break:break-word;}
+.rvw-fval .anchor-val{font-size:13px;}
+
+.rvw-answer{margin-top:14px;}
+.rvw-toggle{font-size:12px;font-weight:700;color:var(--ink-2);border:1px solid var(--line);padding:6px 12px;}
+.rvw-toggle:hover{border-color:var(--ink);color:var(--ink);}
+.rvw-pre{margin:12px 0 0;background:var(--soft);border:1px solid var(--line-soft);border-left:3px solid var(--orange);padding:14px 16px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto;}
+
+.rvw-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft);}
+.rvw-comment{flex:1 1 240px;min-width:200px;}
+.rvw-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.rvw-mc.rvw-active{background:var(--green);border-color:var(--green);color:#fff;}
+.rvw-mc.rvw-active:hover{background:var(--green);border-color:var(--green);color:#fff;}
+.rvw-mi.rvw-active{background:var(--red);border-color:var(--red);color:#fff;}
+.rvw-reviewed{font-size:12px;color:var(--ink-3);margin-top:12px;}
+
 /* ---------------- responsive ---------------- */
 @media (max-width:1180px){
   .config-cols{grid-template-columns:1fr 1fr;}

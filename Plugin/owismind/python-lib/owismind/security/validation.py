@@ -9,6 +9,8 @@ machine-readable ``code`` (never an internal detail) when the payload is invalid
 
 import math
 
+from owismind.benchmark_view.agent_profile import validate_benchmark_block
+
 # Defensive upper bound on message length (avoid pathological payloads).
 MAX_MESSAGE_LENGTH = 8000
 
@@ -674,6 +676,10 @@ def validate_agent_meta(raw):
     # server-side, so a meaningless control string never leaks into its prompt. Coerced
     # to a strict bool so a malformed value defaults to off (dial hidden).
     modes = bool(raw.get("modes"))
+    # The benchmark block tells the plugin WHERE this agent's benchmark lives (a SQL table the admin
+    # selected). Validated/bounded by benchmark_view.agent_profile (an invalid table is blanked, which
+    # just disables consultation for that agent - never fails the whole profile save).
+    benchmark = validate_benchmark_block(raw.get("benchmark"))
     return {
         "tagline": _clean_str(raw.get("tagline"), MAX_AGENT_TAGLINE_CHARS),
         "description": _clean_str(raw.get("description"), MAX_AGENT_DESC_CHARS),
@@ -686,4 +692,5 @@ def validate_agent_meta(raw):
         "icon": icon,
         "badge": badge,
         "modes": modes,
+        "benchmark": benchmark,
     }

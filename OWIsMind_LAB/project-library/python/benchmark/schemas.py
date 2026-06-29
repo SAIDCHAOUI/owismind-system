@@ -66,6 +66,7 @@ RAW_COLUMNS = (
     "reference_answer",
     "expected_value",
     "expected_value_type",
+    "notes",                 # human strictness note (governs the judge's numeric exactness)
     "agent_key",
     "agent_label",
     "project_key",
@@ -93,6 +94,7 @@ SCORED_COLUMNS = RAW_COLUMNS + (
     "objective_match",       # hit / miss / n/a
     "judge_score",           # 1..5
     "judge_verdict",         # correct / incorrect
+    "judge_comment",         # concise one-line reason for the decision (shown as a column)
     "judge_justification",
     "judge_missing_facts_json",
     "judge_hallucination",   # boolean
@@ -100,8 +102,14 @@ SCORED_COLUMNS = RAW_COLUMNS + (
     "judge_completion_tokens",
     "judge_total_tokens",
     "judge_estimated_cost",
-    "correct",               # boolean (final correctness rule)
+    "correct",               # boolean (machine correctness rule, pre-override)
     "needs_review",          # boolean
+    # --- human-in-the-loop override (survives re-runs: scored accumulates by run_id) -----
+    "human_verdict",         # "" / correct / incorrect (a reviewer's decision)
+    "human_correct",         # boolean nullable (machine mirror of human_verdict)
+    "human_comment",         # the reviewer's free note
+    "reviewed_by",           # reviewer user_id
+    "reviewed_at",           # ISO timestamp of the review
 )
 
 # --- benchmark_summary (section 7) - one row per (run_id, agent_key, mode) ----
@@ -232,3 +240,24 @@ def normalize_golden_row(row):
         out["language"] = "fr"
     out["active"] = _as_bool(row.get("active"), default=True)
     return out
+
+
+def effective_correct(row):
+    """Final correctness of a scored row once a human override is applied. Pure, never raises.
+
+    A reviewer's ``human_verdict`` of "correct" / "incorrect" WINS over the machine ``correct``
+    column (the override is the human-in-the-loop decision). Any other / blank human_verdict
+    leaves the machine verdict in place. Returns
+    ``{"correct": bool, "overridden": bool, "verdict": "correct"|"incorrect"}``.
+    """
+    if not isinstance(row, dict):
+        return {"correct": False, "overridden": False, "verdict": "incorrect"}
+    hv = row.get("human_verdict")
+    hv = hv.strip().lower() if isinstance(hv, str) else ""
+    if hv in ("correct", "incorrect"):
+        correct = (hv == "correct")
+        return {"correct": correct, "overridden": True,
+                "verdict": "correct" if correct else "incorrect"}
+    machine = _as_bool(row.get("correct"), default=False)
+    return {"correct": machine, "overridden": False,
+            "verdict": "correct" if machine else "incorrect"}

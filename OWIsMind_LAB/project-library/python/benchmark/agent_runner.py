@@ -156,6 +156,7 @@ def _denormalized_golden(question_row):
         "reference_answer": row.get("reference_answer"),
         "expected_value": row.get("expected_value"),
         "expected_value_type": row.get("expected_value_type"),
+        "notes": row.get("notes"),
     }
 
 

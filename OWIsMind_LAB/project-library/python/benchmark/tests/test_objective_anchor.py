@@ -55,6 +55,64 @@ class TestNormalizeNumber(unittest.TestCase):
         self.assertIsNone(judge.normalize_number(""))
 
 
+class TestNormalizeNumberMagnitude(unittest.TestCase):
+    """Magnitude-aware parsing: a human reference like '36 millions' means 36e6, not 36."""
+
+    def test_millions_word(self):
+        self.assertEqual(judge.normalize_number("36 millions"), 36_000_000.0)
+        self.assertEqual(judge.normalize_number("36 million"), 36_000_000.0)
+
+    def test_million_abbrev_attached(self):
+        self.assertEqual(judge.normalize_number("36M"), 36_000_000.0)
+        self.assertEqual(judge.normalize_number("36m"), 36_000_000.0)
+        self.assertEqual(judge.normalize_number("1.5M"), 1_500_000.0)
+
+    def test_thousands_k(self):
+        self.assertEqual(judge.normalize_number("500k"), 500_000.0)
+        self.assertEqual(judge.normalize_number("1.5 k"), 1_500.0)
+
+    def test_billions(self):
+        self.assertEqual(judge.normalize_number("2 milliards"), 2_000_000_000.0)
+        self.assertEqual(judge.normalize_number("1,2 Md"), 1_200_000_000.0)
+        self.assertEqual(judge.normalize_number("1.5 bn"), 1_500_000_000.0)
+
+    def test_no_false_magnitude_on_unit_words(self):
+        # A word that merely starts with a magnitude letter must NOT scale the number.
+        self.assertEqual(judge.normalize_number("36 meters"), 36.0)
+        self.assertEqual(judge.normalize_number("36 minutes"), 36.0)
+
+    def test_plain_numbers_unchanged(self):
+        # Non-regression: numbers without a magnitude word behave exactly as before.
+        self.assertEqual(judge.normalize_number("1,234,567.89"), 1234567.89)
+        self.assertEqual(judge.normalize_number("42"), 42.0)
+
+
+class TestMagnitudeAnchor(unittest.TestCase):
+    """The '36 millions' case: a rounded human reference vs a precise agent figure."""
+
+    def test_expected_millions_matches_rounded_answer(self):
+        self.assertEqual(
+            judge.objective_anchor("36 millions", "numeric", "the total is 36000000", []),
+            judge.HIT)
+
+    def test_expected_millions_vs_precise_is_miss(self):
+        # 36 456 876 is 1.27% off 36e6, beyond the 0.5% anchor tolerance: the anchor MISSES
+        # (the contextual judge is what rescues this case, not the anchor).
+        self.assertEqual(
+            judge.objective_anchor("36 millions", "numeric", "exactly 36456876", []),
+            judge.MISS)
+
+    def test_answer_side_magnitude_word(self):
+        self.assertEqual(
+            judge.objective_anchor("36 millions", "numeric", "around 36 millions", []),
+            judge.HIT)
+
+    def test_answer_side_unit_word_not_scaled(self):
+        self.assertEqual(
+            judge.objective_anchor("36 millions", "numeric", "it took 36 minutes", []),
+            judge.MISS)
+
+
 class TestNormalizeText(unittest.TestCase):
     def test_accents_case_whitespace(self):
         self.assertEqual(judge.normalize_text("  Maroc   Telecom  "),

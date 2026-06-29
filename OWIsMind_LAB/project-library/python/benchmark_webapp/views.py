@@ -267,16 +267,20 @@ def detail_view(scored_rows, run_id=None, only_needs_review=False, limit=200):
         if only_needs_review and not needs_review:
             continue
         answer = _str(r.get("answer_text"))
+        eff = schemas.effective_correct(r)
         out.append({
             "question_id": _str(r.get("question_id")),
             "question": _str(r.get("question")),
             "category": _str(r.get("category")),
+            # agent_key is the override match key (with run_id, question_id, mode); agent_label is display.
+            "agent_key": _str(r.get("agent_key")),
             "agent_label": _str(r.get("agent_label")) or _str(r.get("agent_key")),
             "mode": _str(r.get("mode")),
             "status": _str(r.get("status")),
             "objective_match": _str(r.get("objective_match")),
             "judge_score": _int(r.get("judge_score")),
             "judge_verdict": _str(r.get("judge_verdict")),
+            "judge_comment": _str(r.get("judge_comment")),
             "correct": _truthy(r.get("correct")),
             "needs_review": needs_review,
             "reference_answer": _str(r.get("reference_answer")),
@@ -284,13 +288,88 @@ def detail_view(scored_rows, run_id=None, only_needs_review=False, limit=200):
             "latency_total_s": _num(r.get("latency_total_s")) or 0.0,
             "latency_str": fmt_secs(r.get("latency_total_s")),
             "estimated_cost": _num(r.get("estimated_cost")) or 0.0,
+            # Strictness note + crisp expected value (so the review panel shows the contract).
+            "notes": _str(r.get("notes")),
+            "expected_value": _str(r.get("expected_value")),
+            "expected_value_type": _str(r.get("expected_value_type")),
+            # Human-in-the-loop override (the effective verdict is what KPIs already use).
+            "human_verdict": _str(r.get("human_verdict")),
+            "human_comment": _str(r.get("human_comment")),
+            "reviewed_by": _str(r.get("reviewed_by")),
+            "reviewed_at": _str(r.get("reviewed_at")),
+            "effective_correct": eff["correct"],
+            "effective_verdict": eff["verdict"],
+            "overridden": eff["overridden"],
         })
     # Needs-review first, then incorrect, then the rest - the eye lands on the problems. Sort
     # the FULL filtered list BEFORE capping, so a needs-review row beyond the cap is never
     # dropped from view (the cap bounds the table, the sort surfaces the problems within it).
-    out.sort(key=lambda s: (not s["needs_review"], s["correct"], s["question_id"]))
+    out.sort(key=lambda s: (not s["needs_review"], s["effective_correct"], s["question_id"]))
     out = out[:cap]
     return {"run_id": rid, "count": len(out), "rows": out}
+
+
+# --- human-in-the-loop override (pure key match + field set) ----------------
+
+_OVERRIDE_KEYS = ("run_id", "question_id", "agent_key", "mode")
+
+
+def validate_override(payload):
+    """Validate a reviewer's override request. Returns ``(ok, errors)``. Pure, never raises.
+
+    Requires the row key (run_id, question_id, agent_key; mode may be blank for a no-mode agent)
+    and a verdict that is "correct", "incorrect", or "" (blank clears a prior override).
+    """
+    errors = []
+    if not isinstance(payload, dict):
+        return False, ["override payload must be an object"]
+    for field in ("run_id", "question_id", "agent_key"):
+        if not _str(payload.get(field)).strip():
+            errors.append("missing required field: {0}".format(field))
+    verdict = _str(payload.get("verdict")).strip().lower()
+    if verdict not in ("correct", "incorrect", ""):
+        errors.append("verdict must be 'correct', 'incorrect' or '' (to clear)")
+    return (len(errors) == 0), errors
+
+
+def _override_match(row, payload):
+    """True when a scored row matches the override key (run_id, question_id, agent_key, mode)."""
+    for key in _OVERRIDE_KEYS:
+        if _str(row.get(key)).strip() != _str(payload.get(key)).strip():
+            return False
+    return True
+
+
+def apply_override(scored_rows, payload):
+    """Set the human_* fields on every scored row matching the override key. Pure, never raises.
+
+    Returns ``(new_rows, matched_count)``. A blank verdict CLEARS the override (human_* reset).
+    Other rows are returned unchanged. The caller (dss) persists the rewritten list and stamps
+    ``reviewed_at`` (modules never read the clock).
+    """
+    verdict = _str(payload.get("verdict")).strip().lower()
+    if verdict not in ("correct", "incorrect"):
+        verdict = ""  # blank / garbage clears
+    human_correct = None if verdict == "" else (verdict == "correct")
+    comment = "" if verdict == "" else _str(payload.get("comment"))
+    reviewer = "" if verdict == "" else _str(payload.get("reviewed_by"))
+    reviewed_at = "" if verdict == "" else _str(payload.get("reviewed_at"))
+
+    out = []
+    matched = 0
+    for r in (scored_rows or []):
+        if isinstance(r, dict) and _override_match(r, payload):
+            matched += 1
+            merged = dict(r)
+            merged["human_verdict"] = verdict
+            merged["human_correct"] = human_correct
+            merged["human_comment"] = comment
+            merged["reviewed_by"] = reviewer
+            merged["reviewed_at"] = reviewed_at
+            out.append(merged)
+        else:
+            out.append(r)
+    return out, matched
 
 
 # --- config edit + validation -----------------------------------------------

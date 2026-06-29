@@ -173,6 +173,51 @@ export function fetchMySuggestions() {
   return request('/owismind-api/benchmark/suggestions', { method: 'GET' });
 }
 
+// --- Benchmark results (consultation, ALL users) ------------------------------
+
+// Benchmark scoring for ONE agent (its logical key) and an OPTIONAL run id (omit for
+// the newest run). Returns { status, configured:bool, read_error?:str, results } where
+// results = { run_id, runs, kpis, configs, categories, detail }. `configured:false`
+// means no benchmark is wired for that agent; `read_error` is a soft degraded read.
+export function fetchBenchmarkResults(agentKey, runId) {
+  const qs = new URLSearchParams();
+  qs.set('agent', agentKey);
+  if (runId) qs.set('run_id', runId);
+  return request('/owismind-api/benchmark/results?' + qs.toString(), { method: 'GET' });
+}
+
+// --- Admin: benchmark configuration + review (server-gated: 403 if not admin) ---
+
+// Tables visible on one SQL connection, for the agent-profile benchmark table picker.
+// Returns { tables: [name, ...], error? }.
+export function adminListBenchmarkTables(connection) {
+  return request('/owismind-api/admin/benchmark/tables?connection=' + encodeURIComponent(connection || ''), {
+    method: 'GET',
+  });
+}
+
+// Validate that a table carries the columns a benchmark needs. Returns
+// { ok:bool, missing:[name, ...], error? }.
+export function adminValidateBenchmarkTable(connection, table) {
+  return request('/owismind-api/admin/benchmark/validate-table', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connection, table }),
+  });
+}
+
+// Set / clear an admin override on one scored question. `payload` =
+// { agent, run_id, question_id, agent_key, mode, verdict:'correct'|'incorrect'|'', comment }.
+// An empty verdict clears the override. Returns { status:'ok' } (re-fetch results to
+// reflect the new effective verdict).
+export function adminBenchmarkOverride(payload) {
+  return request('/owismind-api/admin/benchmark/override', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 // --- Evidence Studio ----------------------------------------------------------
 
 // Interactive descriptor of one exchange's evidence: columns, filter chips

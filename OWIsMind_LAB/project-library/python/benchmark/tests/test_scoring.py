@@ -314,5 +314,36 @@ class TestBreakdown(unittest.TestCase):
         self.assertEqual(r["run_timestamp"], "2026-06-24T10:00:00Z")
 
 
+class TestEffectiveOverrideAccuracy(unittest.TestCase):
+    """Human override (human_verdict) flips the machine `correct` in the accuracy maths."""
+
+    def test_human_correct_flips_accuracy_up(self):
+        rows = [
+            _row(mode="smart", category="revenus", correct=False,
+                 human_verdict="correct"),
+        ]
+        summ = scoring.summarize(rows)
+        self.assertEqual(len(summ), 1)
+        self.assertEqual(summ[0]["accuracy"], 1.0)
+
+    def test_human_incorrect_flips_accuracy_down(self):
+        rows = [
+            _row(mode="smart", category="revenus", correct=True,
+                 human_verdict="incorrect"),
+        ]
+        summ = scoring.summarize(rows)
+        self.assertEqual(summ[0]["accuracy"], 0.0)
+
+    def test_breakdown_uses_effective_verdict(self):
+        rows = [
+            _row(mode="smart", category="revenus", correct=False,
+                 human_verdict="correct"),
+        ]
+        bd = scoring.breakdown(rows)
+        revenus = [r for r in bd if r["bucket"] == "revenus"]
+        self.assertEqual(len(revenus), 1)
+        self.assertEqual(revenus[0]["accuracy"], 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

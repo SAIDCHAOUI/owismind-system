@@ -162,6 +162,26 @@ class TestAgentMeta(unittest.TestCase):
         self.assertEqual(validate_agent_meta({"badge": "new"})["badge"], "new")
         self.assertEqual(validate_agent_meta({"badge": "bogus"})["badge"], "")
 
+    def test_benchmark_block_default_off(self):
+        meta = validate_agent_meta({})
+        self.assertIn("benchmark", meta)
+        self.assertFalse(meta["benchmark"]["enabled"])
+        self.assertEqual(meta["benchmark"]["table"], "")
+        self.assertEqual(meta["benchmark"]["connection"], "SQL_owi")
+
+    def test_benchmark_block_valid_and_bounded(self):
+        meta = validate_agent_meta({"benchmark": {
+            "enabled": True, "connection": "SQL_owi",
+            "table": "OWISMIND_LAB_benchmark_runs_scored", "agent_key": "owismind"}})
+        self.assertTrue(meta["benchmark"]["enabled"])
+        self.assertEqual(meta["benchmark"]["table"], "OWISMIND_LAB_benchmark_runs_scored")
+        self.assertEqual(meta["benchmark"]["agent_key"], "owismind")
+
+    def test_benchmark_invalid_table_blanked(self):
+        meta = validate_agent_meta({"benchmark": {"enabled": True,
+                                                  "table": "evil; DROP TABLE x"}})
+        self.assertEqual(meta["benchmark"]["table"], "")
+
     def test_unhashable_icon_or_badge_never_raises(self):
         # JSON arrays/objects arrive as list/dict: the membership test must not raise.
         for raw in ({"icon": [], "badge": {}}, {"icon": {"a": 1}, "badge": ["x"]}):

@@ -54,6 +54,16 @@ class TestColumnLists(unittest.TestCase):
                     "correct", "needs_review"):
             self.assertIn(col, schemas.SCORED_COLUMNS)
 
+    def test_notes_in_raw(self):
+        # The human strictness note travels with each run row so the judge can read it.
+        self.assertIn("notes", schemas.RAW_COLUMNS)
+
+    def test_judge_comment_and_human_override_columns(self):
+        # The concise judge comment + the human override fields (survive re-runs in scored).
+        for col in ("judge_comment", "human_verdict", "human_correct",
+                    "human_comment", "reviewed_by", "reviewed_at"):
+            self.assertIn(col, schemas.SCORED_COLUMNS)
+
     def test_full_answer_in_raw(self):
         # The complete answer (judge input) and the proof SQL must be persisted.
         self.assertIn("full_answer", schemas.RAW_COLUMNS)
@@ -128,6 +138,42 @@ class TestValidateGoldenRow(unittest.TestCase):
     def test_non_dict_row(self):
         ok, errors = schemas.validate_golden_row("not a row")
         self.assertFalse(ok)
+
+
+class TestEffectiveCorrect(unittest.TestCase):
+    """The human override (human_verdict) wins over the machine `correct` at read time."""
+
+    def test_no_override_mirrors_machine(self):
+        out = schemas.effective_correct({"correct": True, "human_verdict": ""})
+        self.assertTrue(out["correct"])
+        self.assertFalse(out["overridden"])
+        self.assertEqual(out["verdict"], "correct")
+
+    def test_no_override_machine_incorrect(self):
+        out = schemas.effective_correct({"correct": False, "human_verdict": None})
+        self.assertFalse(out["correct"])
+        self.assertFalse(out["overridden"])
+
+    def test_human_correct_wins_over_machine_incorrect(self):
+        out = schemas.effective_correct({"correct": False, "human_verdict": "correct"})
+        self.assertTrue(out["correct"])
+        self.assertTrue(out["overridden"])
+        self.assertEqual(out["verdict"], "correct")
+
+    def test_human_incorrect_wins_over_machine_correct(self):
+        out = schemas.effective_correct({"correct": True, "human_verdict": "incorrect"})
+        self.assertFalse(out["correct"])
+        self.assertTrue(out["overridden"])
+
+    def test_garbage_human_verdict_is_ignored(self):
+        out = schemas.effective_correct({"correct": True, "human_verdict": "maybe"})
+        self.assertTrue(out["correct"])
+        self.assertFalse(out["overridden"])
+
+    def test_never_raises_on_non_dict(self):
+        out = schemas.effective_correct(None)
+        self.assertFalse(out["correct"])
+        self.assertFalse(out["overridden"])
 
 
 class TestNormalizeGoldenRow(unittest.TestCase):

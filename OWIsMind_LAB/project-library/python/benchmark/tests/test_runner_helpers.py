@@ -111,6 +111,7 @@ def _golden(qid="q001", question="Quel est le revenu du compte X ?"):
         "category": "revenus",
         "language": "fr",
         "active": True,
+        "notes": "exact figure required",
     }
 
 
@@ -305,6 +306,8 @@ class TestRunOne(unittest.TestCase):
         # Denormalized golden fields.
         self.assertEqual(row["question_id"], "q001")
         self.assertEqual(row["category"], "revenus")
+        # The human strictness note is carried onto the raw row (so the judge can read it).
+        self.assertEqual(row["notes"], "exact figure required")
         self.assertEqual(row["mode"], "Claude")
         self.assertEqual(row["agent_id"], "agent:038G7mlF")
         # The agent id reached the (fake) project.

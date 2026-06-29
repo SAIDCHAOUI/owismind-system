@@ -66,6 +66,10 @@ from owismind.security.validation import (
 from owismind.storage import admin, budget, chat_v5, settings, sql_config
 from owismind.storage import suggestions as suggestions_storage
 from owismind.storage.migrations import ensure_chat_table
+from owismind.benchmark_view import aggregate as bench_aggregate
+from owismind.benchmark_view import agent_profile as bench_profile
+from owismind.benchmark_view import lab_io as bench_io
+from owismind.benchmark_view import schema_check as bench_schema
 # --- BEGIN impersonation (temporary, removable) ---
 # Admin "act as user" (read-only). The whole feature lives in security/impersonation.py
 # plus the FENCED blocks below; remove the feature = delete that module + these blocks.
@@ -704,6 +708,14 @@ def agents_available():
                 # ⟦owi:mode=…⟧ token (the orchestrator) set this; the picker is hidden
                 # otherwise. Default off so a plain visual agent never shows it.
                 "modes": bool(profile.get("modes", False)),
+                # Whether this agent has a benchmark the consultation can show. ONLY the boolean
+                # is exposed (never the table / connection / project): the table is resolved
+                # server-side from the admin profile when the results are read.
+                "has_benchmark": bool(
+                    isinstance(profile.get("benchmark"), dict)
+                    and profile["benchmark"].get("enabled")
+                    and profile["benchmark"].get("table")
+                ),
             }
         )
     logger.info(
@@ -1040,6 +1052,124 @@ def benchmark_my_suggestions():
         identity["user_id"], len(suggestions),
     )
     return jsonify({"status": "ok", "count": len(suggestions), "suggestions": suggestions})
+
+
+# --- benchmark consultation (any signed-in user) + admin review/override -----
+
+def _benchmark_block_for_key(agent_key):
+    """Resolve an opaque agent logical key to its admin-configured benchmark block, or None.
+
+    The end user only ever sends the opaque key; the table / connection are NEVER accepted from
+    the client - they are read here from the server-side enabled-agents whitelist. Returns the
+    validated block ({enabled, connection, table, agent_key}) only when it is usable.
+    """
+    if not agent_key or not isinstance(agent_key, str):
+        return None
+    agent = settings.resolve_enabled_agent(agent_key)
+    if not agent:
+        return None
+    profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
+    block = bench_profile.validate_benchmark_block(profile.get("benchmark"))
+    return block if bench_profile.is_configured(block) else None
+
+
+@api.route("/benchmark/results", methods=["GET"])
+def benchmark_results():
+    """Consult one agent's benchmark results (any signed-in user). Read-only, bounded.
+
+    ``agent`` is the opaque logical key (resolved server-side to the admin-set table); ``run_id``
+    selects the run (latest by default). Returns the consultation view-model (verdict, KPIs, per
+    agent x mode, per category, per-question detail) recomputed on the EFFECTIVE verdict.
+    """
+    try:
+        resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/benchmark/results - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+    if not sql_config.is_configured():
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    agent_key = request.args.get("agent")
+    block = _benchmark_block_for_key(agent_key)
+    if block is None:
+        return jsonify({"status": "ok", "configured": False,
+                        "results": bench_aggregate.results_view([], run_id=None)})
+
+    rows, err = bench_io.read_scored(block)
+    if err:
+        logger.warning("/benchmark/results - read failed (%s) agent=%s", err, agent_key)
+        return jsonify({"status": "ok", "configured": True, "read_error": err,
+                        "results": bench_aggregate.results_view([], run_id=None)})
+    run_id = request.args.get("run_id") or None
+    results = bench_aggregate.results_view(rows, run_id=run_id)
+    return jsonify({"status": "ok", "configured": True, "results": results})
+
+
+@api.route("/admin/benchmark/tables", methods=["GET"])
+def admin_benchmark_tables():
+    """List the public tables on a SQL connection, for the agent-profile table picker (admin)."""
+    _identity, err = _admin_guard()
+    if err:
+        return err
+    connection = request.args.get("connection") or bench_profile.DEFAULT_CONNECTION
+    tables, read_err = bench_io.list_tables(connection)
+    if read_err:
+        return jsonify({"status": "ok", "tables": [], "error": read_err})
+    return jsonify({"status": "ok", "tables": tables})
+
+
+@api.route("/admin/benchmark/validate-table", methods=["POST"])
+def admin_benchmark_validate_table():
+    """Check a candidate table has the columns the consultation needs (admin). Reports missing ones."""
+    _identity, err = _admin_guard()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    connection = body.get("connection") or bench_profile.DEFAULT_CONNECTION
+    table = bench_profile.validate_benchmark_block(
+        {"enabled": True, "connection": connection, "table": body.get("table")}
+    )["table"]
+    if not table:
+        return jsonify({"status": "ok", "ok": False, "error": "bad_table",
+                        "missing": list(bench_schema.REQUIRED_COLUMNS)})
+    cols, read_err = bench_io.table_columns(connection, table)
+    if read_err:
+        return jsonify({"status": "ok", "ok": False, "error": read_err})
+    return jsonify({"status": "ok", **bench_schema.check_columns(cols)})
+
+
+@api.route("/admin/benchmark/override", methods=["POST"])
+def admin_benchmark_override():
+    """Override (or clear) the judge verdict on one scored row (admin, human-in-the-loop).
+
+    Resolves the agent's benchmark table server-side from the opaque key, validates the override,
+    and writes the human_* columns via a bounded parametrized UPDATE (lab_io.write_override).
+    """
+    identity, err = _admin_guard()
+    if err:
+        return err
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: an admin acting as another user is read-only; block the override write.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
+    body = request.get_json(silent=True) or {}
+    block = _benchmark_block_for_key(body.get("agent"))
+    if block is None:
+        return jsonify({"status": "error", "error": "agent_has_no_benchmark"}), 400
+    ok, errors = bench_aggregate.validate_override(body)
+    if not ok:
+        return jsonify({"status": "error", "error": "invalid_override", "messages": errors}), 400
+    reviewed_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    result, write_err = bench_io.write_override(block, body, identity["user_id"], reviewed_at)
+    if write_err:
+        logger.warning("/admin/benchmark/override - write failed (%s)", write_err)
+        return jsonify({"status": "error", "error": write_err}), 500
+    logger.info("/admin/benchmark/override - by=%s agent=%s q=%s verdict=%s",
+                identity["user_id"], body.get("agent"), body.get("question_id"),
+                body.get("verdict"))
+    return jsonify({"status": "ok", **(result or {})})
 
 
 # --- admin space (server-gated; visible in the UI only to admins) ------------
