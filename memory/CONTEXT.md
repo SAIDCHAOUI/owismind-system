@@ -5,6 +5,20 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🖥️ SESSION 2026-06-29 Run 2 (CONSULTATION BENCHMARK EN PLEINE LARGEUR + Q/R conseil) - repo only,
+DEV repackagé, NON validé DSS.** Retour user : l'onglet Benchmark du plugin rendait "confiné au milieu"
+vs la webapp LAB `results` pleine largeur. Cause : le wrapper partagé **`PageShell`** plafonne le contenu à
+**880px centré**. Fix PROPRE = prop **opt-in `fluid`** sur `PageShell` (`.page-wrap--fluid { max-width:none;
+margin:0; padding 40px }`) ; seule `BenchmarkSuggestView` le passe -> **zéro impact sur les autres vues**
+(elles gardent 880/1080px). + aside 320->**360px**, KPIs 3-col dès 1280px (parité LAB), section "Suggérer"
+plafonnée 880px. **Zip DEV `index-CzZWTpbS.js` (78 entrées), PROD INTACTE, 0 tiret, build OK.** Frontend
+only -> **upload DEV suffit, PAS de redémarrage backend**. Q/R de fond (pas de code) : (a) override admin
+plugin = `POST /admin/benchmark/override` -> `lab_io.write_override` = **UPDATE paramétré de la table SCORED
+du LAB en cross-projet** (colonnes `human_*`+`reviewed_*`, admin-only, bloqué en impersonation, survit aux
+runs, même table que le launcher LAB) ; (b) taille benchmark credible = ~**100-150 questions stratifiées**
+(1 question ≈ 100/n pts, <30 = bruit ; stat PAR CONFIG donc n par mode ; calquer le mix sur
+`docs/questions_asked.md`). Voir **L112** + `sessions/2026-06-29.md` Run 2.
+
 **🔬 SESSION 2026-06-29 (BENCHMARK PHASE FINALE : juge contextuel + override humain + CONSULTATION
 dans le plugin) - repo only, DEV repackagé, NON validé DSS.** Spec :
 `docs/superpowers/specs/2026-06-29-benchmark-final-phase-design.md`. **(A) Juge contextuel** (`judge.py`,
@@ -656,7 +670,16 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-29 : benchmark phase finale (juge contextuel + override humain + consultation native dans le plugin) → détail `sessions/2026-06-29.md` + **L111**
+## 🧭 Dernière session - 2026-06-29 Run 2 : consultation benchmark en PLEINE LARGEUR (parité LAB results) → détail `sessions/2026-06-29.md` Run 2 + **L112**
+- **Cause** : `PageShell` (wrapper partagé) plafonne à **880px centré** -> rendu "confiné" vs LAB pleine largeur.
+- **Fix propre, scoped** : prop **opt-in `fluid`** sur `PageShell` (`.page-wrap--fluid` enlève le cap, padding LAB).
+  Seule `BenchmarkSuggestView` le passe -> **aucune autre vue touchée** (garantie demandée par l'user). +
+  aside 360px, KPIs 3-col dès 1280px (parité LAB), section "Suggérer" plafonnée 880px.
+- **Zip DEV `index-CzZWTpbS.js` (78 entrées), PROD INTACTE, 0 tiret, build OK.** Frontend only -> **upload DEV
+  suffit, PAS de redémarrage backend.** Q/R override admin (UPDATE cross-projet du scored LAB, table de la fiche
+  d'agent) + taille benchmark (~100-150 questions stratifiées) répondues sans code. Voir **L112**.
+
+## Avant - 2026-06-29 Run 1 : benchmark phase finale (juge contextuel + override humain + consultation native dans le plugin) → détail `sessions/2026-06-29.md` + **L111**
 - **Juge contextuel** (`judge.py`, TDD) : magnitudes (« 36 millions » -> 36e6), **ancre = signal** (MISS ne
   force plus faux, le juge tranche), **note humaine = contrat de sévérité**, colonne `judge_comment`.
 - **Override humain** : colonnes `human_*` dans `scored` (survivent aux runs, scored empile par run_id),

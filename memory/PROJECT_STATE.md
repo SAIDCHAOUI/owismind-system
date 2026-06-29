@@ -614,7 +614,7 @@ styles/{tokens.css,base.css} # tokens (theme.css verbatim + no-op) ; reset+keyfr
 components/ui/               # PRIMITIVES MUTUALISÉES : Icon(+icons.js 57 icônes) Button Tabs Menu Modal ToastHost (+index.js barrel)  [Badge supprimé au cleanup L033]
 components/shell/            # AppLayout (grille .app 2col + resize) · Sidebar · MainTop
 components/chat/             # AgentPicker(repeuplé /agents) PromptBar MessageUser MessageAgent(timeline+md+sql+actions+nav versions) ChatThread ChatEmpty
-components/pages/            # FONDATIONS pages (Phase 3) : PageShell · EmptyState(état vide honnête) · SettingCard (+index.js). [AdminPanel.vue SUPPRIMÉ → logique portée dans AdminView]
+components/pages/            # FONDATIONS pages (Phase 3) : PageShell (props `wide`=1080px, `fluid`=pleine largeur opt-in pour la consultation Benchmark, L112) · EmptyState(état vide honnête) · SettingCard (+index.js). [AdminPanel.vue SUPPRIMÉ → logique portée dans AdminView]
 composables/                 # useChatStream(polling→applyEvent) · timelineModel.js(REDUCER PUR: createAnswerState/applyEvent/answerText/timelineSignature) · useMarkdown · useTr · useClickOutside · useReducedMotion · useToasts
 registries/                  # timelineSteps.js(eventKind→label, mergé i18n) · agentMeta.js(6 fiches + resolveAgentMeta par label) · faqContent.js(groupes Q/A statiques)
 stores/                      # ui(SOURCE UNIQUE: thème+langue+contextMessages+sidebar, persistés) · prefs.js(PUR: clamps) · session(/me+/agents) · conversationList/conversationTree/agentPick(PURS) · chat(exchanges+turns=timeline; send/regenerate/branch)

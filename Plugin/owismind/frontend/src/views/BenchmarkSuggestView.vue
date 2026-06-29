@@ -337,7 +337,7 @@ function fmtDate(value) {
 </script>
 
 <template>
-  <PageShell :eyebrow="t('bench.eyebrow')" :title="t('bench.page_title')" :desc="t('bench.page_desc')">
+  <PageShell fluid :eyebrow="t('bench.eyebrow')" :title="t('bench.page_title')" :desc="t('bench.page_desc')">
     <!-- ========================= CONSULTATION ========================= -->
     <section class="bench-section">
       <div class="bench-section-head">
@@ -653,7 +653,7 @@ function fmtDate(value) {
     </section>
 
     <!-- ============================ SUGGEST ============================ -->
-    <section class="bench-section">
+    <section class="bench-section bench-section--narrow">
       <button type="button" class="accordion-head" :aria-expanded="suggestOpen" @click="suggestOpen = !suggestOpen">
         <span class="ico-square"><Icon name="bookOpen" :size="18" /></span>
         <span class="accordion-text">
@@ -821,6 +821,11 @@ function fmtDate(value) {
 .bench-section {
   margin-bottom: var(--s-7);
 }
+/* The page is full-width (fluid PageShell) so the consultation mirrors the LAB
+   results webapp. The suggest forms below stay a readable left-aligned column. */
+.bench-section--narrow {
+  max-width: 880px;
+}
 .bench-section-head {
   display: flex;
   align-items: flex-start;
@@ -943,8 +948,8 @@ function fmtDate(value) {
   min-width: 0;
 }
 .consult-aside {
-  width: 320px;
-  flex: 0 0 320px;
+  width: 360px;
+  flex: 0 0 360px;
   border-left: 1px solid var(--border);
   padding-left: var(--s-6);
   margin-left: var(--s-6);
@@ -1603,7 +1608,12 @@ function fmtDate(value) {
   color: var(--text);
 }
 
-/* --- consultation responsive --- */
+/* --- consultation responsive (mirrors the LAB results breakpoints) --- */
+@media (max-width: 1280px) {
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 @media (max-width: 1080px) {
   .consult-aside {
     width: auto;
@@ -1614,9 +1624,6 @@ function fmtDate(value) {
     margin-left: 0;
     margin-top: var(--s-6);
     padding-top: var(--s-6);
-  }
-  .kpis {
-    grid-template-columns: repeat(3, 1fr);
   }
 }
 @media (max-width: 760px) {

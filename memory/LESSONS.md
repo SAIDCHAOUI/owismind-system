@@ -2540,5 +2540,40 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   1er plan. Leçon : pour une tâche de design critique au résultat, prévoir le fallback « je le fais moi-même ».
 - **Source** : `docs/superpowers/specs/2026-06-29-benchmark-final-phase-design.md` ; `sessions/2026-06-29.md`. Date : 2026-06-29.
 
+## L112 - Une vue pleine largeur dans un shell de pages partagé = prop opt-in sur le wrapper, JAMAIS modifier le wrapper pour tout le monde [repo, build OK, NON validé DSS, 2026-06-29]
+- **Contexte** : l'onglet Benchmark du plugin rendait « confiné au milieu » alors que la webapp LAB `results`
+  (que la consultation reproduit nativement) rend pleine largeur. L'user veut le même rendu, **proprement,
+  sans casser les autres vues** (il avait lui-même identifié le risque : « si on modifie le conteneur ça va
+  bousiller le reste des vues »).
+- **Cause** : toutes les pages secondaires passent par le wrapper partagé `components/pages/PageShell.vue`,
+  dont `.page-wrap` est plafonné à **880px centré** (`max-width:880px; margin:0 auto`, ou 1080px en `wide`).
+  Le LAB `results` n'a aucun plafond (`.content flex:1`, aside 360px, padding 40px). Le markup/CSS interne de
+  la consultation était DÉJÀ la repro LAB ; le seul écart était ce conteneur partagé.
+- **Solution qui marche (scoped, zéro régression)** : ajouter un prop **opt-in `fluid`** à `PageShell` ->
+  `.page-wrap.page-wrap--fluid { max-width:none; margin:0; padding: var(--s-8) var(--s-8) var(--s-10) }`
+  (override des règles 880/1080 via spécificité `.page-wrap.page-wrap--fluid`). Les modes existants restent
+  intacts ; **seule** `BenchmarkSuggestView` passe `fluid`. Les vues qui ne passent pas le prop sont
+  byte-identiques. + parité LAB : aside 320->360px, KPIs 3-col dès **1280px** (pas 1080), et la sous-section
+  « Suggérer » (formulaires) plafonnée à 880px via un modifier de classe `.bench-section--narrow` (un input à
+  1400px serait moche), pendant que la consultation au-dessus est pleine largeur.
+- **Principe réutilisable** : pour faire diverger UNE page d'un composant de layout partagé, **étendre le
+  composant par une variante opt-in** (prop + classe modifier), pas modifier son comportement par défaut.
+  C'est l'inverse exact de « élargir le conteneur global » -> aucune autre surface n'est touchée.
+- **Le reste (Q/R, pas de code)** : (a) override admin depuis le plugin = `POST /admin/benchmark/override` ->
+  `lab_io.write_override` = **UPDATE paramétré de la table SCORED du LAB en cross-projet** (colonnes
+  `human_verdict/human_correct/human_comment/reviewed_by/reviewed_at` sur la ligne `(run_id,question_id,
+  agent_key,mode)`, table résolue serveur depuis le bloc `benchmark` de la fiche d'agent, admin-only + bloqué
+  en impersonation, survit aux runs, même table que le launcher LAB) ; (b) taille d'un benchmark crédible :
+  1 question ≈ `100/n` points, **<30 = bruit**, **cible ~100-150 stratifiées** (mix calqué sur
+  `docs/questions_asked.md`, ~10-15 par bucket), robuste 250-300+ ; la stat est **PAR CONFIG** (n par mode,
+  Claude cher -> sous-ensemble noyau) ; surveiller `needs_review` (bruit du juge) ; qualité golden > quantité.
+- **Preuve-vérification** : compile-check Vite OK + `tools/build_dev_plugin.py` (invariants `--check` + build)
+  -> zip DEV **`index-CzZWTpbS.js` (78 entrées)** ; **prod intacte** (`git status` = seuls les 2 fichiers source
+  modifiés, resource/body.html prod non touchés -> règle dev-first) ; 0 tiret (scan Python). **NON validé DSS**
+  (la vue a besoin du backend pour `/agents` + `/benchmark/results`). Frontend only -> upload DEV suffit, PAS
+  de redémarrage backend.
+- **Source** : `Plugin/owismind/frontend/src/components/pages/PageShell.vue` + `views/BenchmarkSuggestView.vue` ;
+  `sessions/2026-06-29.md` Run 2. Date : 2026-06-29.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

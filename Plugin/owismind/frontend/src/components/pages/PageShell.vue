@@ -13,12 +13,16 @@ defineProps({
   desc: { type: String, default: '' },
   // Wider column for dense, two-column pages (Settings, Agents grid).
   wide: { type: Boolean, default: false },
+  // Full-width (no centered cap), for pages that mirror a full-canvas webapp such
+  // as the Benchmark consultation. Opt-in: pages that omit it keep the centered
+  // 880 / 1080px column, so this never affects existing views.
+  fluid: { type: Boolean, default: false },
 })
 </script>
 
 <template>
   <div class="page-scroll">
-    <div :class="['page-wrap', { 'page-wrap--wide': wide }]">
+    <div :class="['page-wrap', { 'page-wrap--wide': wide, 'page-wrap--fluid': fluid }]">
       <slot name="header">
         <header v-if="eyebrow || title || desc" class="page-head">
           <p v-if="eyebrow" class="page-eyebrow">{{ eyebrow }}</p>
@@ -49,6 +53,13 @@ defineProps({
 }
 .page-wrap--wide {
   max-width: 1080px;
+}
+/* Full-canvas pages (Benchmark consultation): span the whole main column, no
+   centered cap, LAB-results-like edge padding. Overrides both rules above. */
+.page-wrap.page-wrap--fluid {
+  max-width: none;
+  margin: 0;
+  padding: var(--s-8) var(--s-8) var(--s-10);
 }
 .page-head {
   margin-bottom: var(--s-7);
