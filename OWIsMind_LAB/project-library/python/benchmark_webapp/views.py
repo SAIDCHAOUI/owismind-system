@@ -730,62 +730,6 @@ def apply_golden_delete(existing_rows, question_id):
     return [r for r in (existing_rows or []) if _str(r.get("question_id")).strip() != qid]
 
 
-def build_config_object(existing, form):
-    """Merge the launcher FORM fields into the existing ``benchmark`` variable object.
-
-    The launcher is a real form, not a JSON editor: it only manages ``agents``, ``modes``,
-    ``language``, ``concurrency`` and ``question_filter``. EVERY other key (dataset names,
-    ``judge_llm_id``, the ``suggestions`` block, score/aggregate flags) is PRESERVED from
-    ``existing`` so saving the form never clobbers them. Returns the merged object (dict).
-    Pure, never raises; the caller validates the result with ``validate_config``.
-    """
-    out = dict(existing) if isinstance(existing, dict) else {}
-    if not isinstance(form, dict):
-        return out
-
-    agents = []
-    for a in (form.get("agents") or []):
-        if not isinstance(a, dict):
-            continue
-        key = _str(a.get("agent_key")).strip()
-        project_key = _str(a.get("project_key")).strip()
-        agent_id = _str(a.get("agent_id")).strip()
-        if not (key and project_key and agent_id):
-            continue
-        agents.append({
-            "agent_key": key,
-            "agent_label": _str(a.get("agent_label")).strip() or key,
-            "project_key": project_key,
-            "agent_id": agent_id,
-            "modes": bool(a.get("modes")),
-        })
-    out["agents"] = agents
-
-    modes = [m for m in (form.get("modes") or []) if isinstance(m, str) and m.strip()]
-    if modes:
-        out["modes"] = modes
-
-    lang = _str(form.get("language")).strip().lower()
-    if lang in ("fr", "en"):
-        out["language"] = lang
-
-    try:
-        out["concurrency"] = max(1, min(int(form.get("concurrency")), 8))
-    except (TypeError, ValueError):
-        pass
-
-    qf = form.get("question_filter")
-    if isinstance(qf, dict):
-        clean = {}
-        for k in ("categories", "question_ids", "languages"):
-            v = qf.get(k)
-            if isinstance(v, list) and v:
-                clean[k] = [str(x) for x in v]
-        out["question_filter"] = clean
-
-    return out
-
-
 # --- agent-first view-models (v2: registry-based, per-agent) ----------------
 
 def _agent_tagged_active_ids(golden_rows, agent_key):

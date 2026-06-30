@@ -415,51 +415,6 @@ class PlainLanguageTests(unittest.TestCase):
         self.assertEqual(k["band"], "medium")  # 0.65
 
 
-class BuildConfigTests(unittest.TestCase):
-    def _existing(self):
-        return {
-            "golden_dataset": "golden_questions_v1_prepared",
-            "judge_llm_id": "anthropic:x",
-            "suggestions": {"connection": "SQL_owi", "table": "T", "promoted_dataset": "P"},
-            "score_all_runs": True,
-        }
-
-    def test_form_overwrites_managed_preserves_rest(self):
-        form = {
-            "agents": [{"agent_key": "orch", "agent_label": "Orch",
-                        "project_key": "OWISMIND_DEV", "agent_id": "agent:x", "modes": True}],
-            "modes": ["Smart", "Pro"],
-            "language": "en",
-            "concurrency": 5,
-            "question_filter": {"categories": ["revenus"], "question_ids": []},
-        }
-        out = views.build_config_object(self._existing(), form)
-        # Managed keys set from the form.
-        self.assertEqual(len(out["agents"]), 1)
-        self.assertEqual(out["modes"], ["Smart", "Pro"])
-        self.assertEqual(out["language"], "en")
-        self.assertEqual(out["concurrency"], 5)
-        self.assertEqual(out["question_filter"], {"categories": ["revenus"]})  # empty list dropped
-        # Unmanaged keys PRESERVED (the whole point - no clobber).
-        self.assertEqual(out["golden_dataset"], "golden_questions_v1_prepared")
-        self.assertEqual(out["judge_llm_id"], "anthropic:x")
-        self.assertEqual(out["suggestions"]["table"], "T")
-        self.assertTrue(out["score_all_runs"])
-        # And the merged object validates.
-        ok, cfg, errors = views.validate_config(out)
-        self.assertTrue(ok, errors)
-
-    def test_form_drops_incomplete_agents_and_clamps_concurrency(self):
-        form = {
-            "agents": [{"agent_key": "ok", "project_key": "P", "agent_id": "agent:x"},
-                       {"agent_key": "bad", "project_key": "", "agent_id": "agent:y"}],
-            "concurrency": 99,
-        }
-        out = views.build_config_object({}, form)
-        self.assertEqual(len(out["agents"]), 1)
-        self.assertEqual(out["concurrency"], 8)
-
-
 def _scored(benchmark_id="B1", question_id="Q1", mode="Smart", attempt_no=1, correct=True,
             judge_score=5, status="ok", run_timestamp="2026-06-29T10:00:00Z",
             human_verdict="", agent_key="orchestrator"):
