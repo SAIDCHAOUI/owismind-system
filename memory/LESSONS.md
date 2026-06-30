@@ -2618,5 +2618,36 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `Plugin/owismind/python-lib/owismind/benchmark_view/*` + `api/routes.py` ; frontends launcher/results/Vue ;
   `sessions/2026-06-30.md`. Date : 2026-06-30.
 
+## L114 - Mail HTML de marque (charte Orange appliquee a un email) : esprit charte + contraintes email
+- **Contexte** : produire un mail HTML de relance (retour OWIsMind en beta) "aux couleurs et style
+  d'OWIsMind/Orange", court et scannable, livre a la racine du repo (`owismind-relaunch-email.html`).
+- **Ce qui a echoue / a ete corrige** :
+  - 1er jet **trop long** (l'user : "meme moi j'ai pas eu envie de lire") -> un mail marketing se lit en
+    ~15s : remplacer les paragraphes par des **elements cles scannables** (grille 2x2 titre gras court +
+    1 ligne, modes en une ligne, UN encadre = le seul vrai message). Couper ~60%.
+  - 1er jet avec **gros aplat orange plein ecran** en hero -> l'user "ca me perturbe". Contraire a la
+    charte ("orange = accent RARE ; blanc/noir portent l'essentiel"). **Hero blanc editorial** (eyebrow
+    orange MAJ + grand H1 noir + barre-titre orange 52x4) = plus sobre ET plus fidele. Garder quand meme
+    un **petit paragraphe** d'intro (3 phrases) : tout-puces sans contexte = trop sec.
+- **Solution qui marche (contraintes email, differentes de l'UI web)** :
+  - **Layout en `<table>` + CSS inline** (flexbox/grid pas fiables Outlook), largeur fixe ~600px,
+    `role="presentation"`, media query pour empiler sur mobile, **preheader** cache (apercu inbox).
+  - **Geometrie carree** (charte, `border-radius:0`) = ideal, zero souci Outlook. Bloc MSO conditionnel
+    pour forcer la police de repli Arial.
+  - **Charte = esprit, pas l'UI** : reprendre les tokens couleur exacts de `tokens.css` en hex en dur
+    (un email n'a pas les variables CSS) -> #ff7900, **#b85700** (orange-text AA), #111, #d8d8d8
+    border-strong, #15803d success. Eyebrow + barre-titre orange, aplats, filets 1px.
+  - **Logo = image REELLE** (charte : jamais reconstruit en CSS) embarquee en **data URI base64**
+    (depuis `frontend/src/assets/orange-logo.png`) + **wordmark texte "OWIsMind" a cote** = la marque
+    reste visible meme si l'image est bloquee. **CAVEAT majeur** : les data URI base64 sont souvent
+    **bloques par Gmail web et Outlook desktop** -> pour ces audiences, heberger le PNG sur une URL
+    https et remplacer le `src`. Le wordmark texte est le filet de securite.
+  - Regle #9 (tirets) s'applique au mail : **scan Python byte-safe** (`h.count(chr(8212))`), pas grep BSD.
+- **Preuve-verification** : `owismind-relaunch-email.html` ~29 KB, 0 tiret, logo confirme visuellement
+  (Read image), 1 placeholder `[Insert OWIsMind link]`. Apercu envoye via SendUserFile a chaque iteration.
+  NON rendu live navigateur (Playwright "browser already in use", Chrome occupe cote user).
+- **Source** : `owismind-relaunch-email.html` (racine) ; `docs/cadrage/CHARTE_ORANGE_UI.md` ;
+  `sessions/2026-06-30.md` (Run 2). Date : 2026-06-30.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

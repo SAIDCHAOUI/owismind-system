@@ -5,6 +5,20 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**✉️ SESSION 2026-06-30 Run 2 (MAIL DE RELANCE HTML : retour OWIsMind en BETA) - asset only (hors
+code/DSS), livre.** Cree `owismind-relaunch-email.html` a la RACINE du repo : mail HTML autonome
+(tables email-safe, CSS inline, 600px, responsive, geometrie carree, logo Orange REEL en base64 +
+wordmark texte, preheader, **0 tiret**) aux couleurs/style Orange. Court et SCANNABLE apres 2 retours
+user : (1) "trop de texte" -> coupe ~60%, grille 2x2 "elements cles en un regard" (Benchmark-tested /
+Grounded answers / Full transparency / Tables & charts) + modes une ligne + encadre noir = seul vrai
+message ; (2) "le gros carre orange en haut me perturbe" + "faut un petit paragraphe" -> hero orange
+aplat REMPLACE par hero BLANC editorial (eyebrow orange + H1 noir + barre orange 52x4, fidele a
+"orange = accent rare") + paragraphe d'intro 3 phrases. Contenu : retour beta, ameliorations (benchmark,
+garde-fous SQL, transparence, tableaux/graphiques), 3 modes Smart/Pro/Claude, **insistance forte sur la
+clarte du prompt** (vague in -> vague out, citer les solution lines/produits) + exemple de bon prompt,
+CTA, appel au feedback. `[Insert OWIsMind link]` = placeholder a remplir. **Caveat** : data URI base64
+souvent bloque par Gmail web/Outlook desktop -> heberger le PNG + swap `src` si besoin. Voir **L114**.
+
 **🧪 SESSION 2026-06-30 (BENCHMARK v2 : APPEND MODE + colonnes SQL/tool de reference) - repo only,
 DEV repackage, NON valide DSS. Session autonome de nuit.** Spec :
 `docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md`. Deux features :
@@ -693,7 +707,17 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-30 : Benchmark v2 (append mode + colonnes SQL/tool de référence) → détail `sessions/2026-06-30.md` + **L113**
+## 🧭 Dernière session - 2026-06-30 Run 2 : Mail de relance HTML (retour beta) → détail `sessions/2026-06-30.md` (Run 2) + **L114**
+- **Asset only (hors code/DSS).** Cree `owismind-relaunch-email.html` (racine) : mail HTML autonome
+  charte Orange, court et scannable, annonce le retour d'OWIsMind en **beta** + ameliorations (benchmark,
+  garde-fous SQL, transparence, tableaux/graphiques, 3 modes) + **insistance forte sur la clarte du
+  prompt** + CTA + appel feedback.
+- 2 retours user appliques : coupe ~60% (grille 2x2 scannable) ; **hero orange aplat retire** au profit
+  d'un hero blanc editorial (orange = accent rare) + ajout d'un petit paragraphe d'intro.
+- Logo Orange reel en base64 + wordmark texte. **0 tiret, 1 placeholder lien** a remplir. **Caveat** :
+  base64 souvent bloque Gmail/Outlook -> heberger le PNG si besoin. NON rendu live (Chrome occupe). Voir **L114**.
+
+## Avant - 2026-06-30 Run 1 : Benchmark v2 (append mode + colonnes SQL/tool de référence) → détail `sessions/2026-06-30.md` + **L113**
 - **Repo only, DEV repackagé, NON validé DSS.** (1) Golden +`expected_sql`/`expected_tool` (signal doux
   au juge + affichés vs `actual_tools`). (2) **Append mode** : benchmark nommé unique par agent, runs qui
   s'accumulent (score = dernière tentative), 3 boutons + drapeau « refaire » + évolution.
