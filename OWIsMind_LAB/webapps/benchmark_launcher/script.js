@@ -350,6 +350,7 @@
     "bm.deleted": { en: "Benchmark deleted.", fr: "Benchmark supprime." },
     "bm.deleteError": { en: "Could not delete the benchmark.", fr: "Impossible de supprimer le benchmark." },
     "common.cancel": { en: "Cancel", fr: "Annuler" },
+    "common.edit": { en: "Edit", fr: "Modifier" },
     "bm.badge.done": { en: "{n} done", fr: "{n} faites" },
     "bm.badge.pending": { en: "{n} pending", fr: "{n} en attente" },
     "bm.badge.redo": { en: "{n} redo", fr: "{n} a refaire" },
@@ -511,7 +512,81 @@
     "bd.newPending":  {
       en: "{n} pending cell(s) since the last run. Run pending to test them.",
       fr: "{n} cellule(s) en attente depuis le dernier run. Lancez les questions en attente pour les tester."
-    }
+    },
+
+    /* --- Screen 5: run lifecycle --- */
+    "run.progress":     { en: "Running... {scored} / {total}", fr: "En cours... {scored} / {total}" },
+    "run.elapsed":      { en: "Running... {s}s",               fr: "En cours... {s}s" },
+    "run.singleFlight": { en: "Only one run at a time. You can leave; it keeps going.", fr: "Un seul run a la fois. Vous pouvez partir, il continue." },
+    "run.viewRun":      { en: "View run",     fr: "Voir le run" },
+    "run.complete.score":   { en: "Score: {pct}",    fr: "Score : {pct}" },
+    "run.complete.mode":    { en: "{mode}: {pct}",   fr: "{mode} : {pct}" },
+    "run.complete.results": { en: "Open full results in Results webapp", fr: "Voir les resultats complets dans la webapp Results" },
+    "run.evo.title":    { en: "Changes vs previous run",  fr: "Changements par rapport au run precedent" },
+    "run.evo.improved": { en: "Improved",   fr: "Ameliore" },
+    "run.evo.regressed":{ en: "Regressed",  fr: "Regresse" },
+    "run.evo.same":     { en: "Unchanged",  fr: "Inchange" },
+    "run.evo.new":      { en: "New",        fr: "Nouveau" },
+    "run.reset":        { en: "Reset run state", fr: "Reinitialiser l'etat du run" },
+    "run.resetHint":    { en: "The scenario is idle but a run request is still set. Reset to unblock.", fr: "Le scenario est inactif mais une demande de run est encore definie. Reinitialiser pour debloquer." },
+    "run.rerun.title":  { en: "Re-run entire benchmark",  fr: "Relancer tout le benchmark" },
+    "run.rerun.scope":  { en: "Scope: {n} questions x {m} modes = {t} runs", fr: "Perimetre : {n} questions x {m} modes = {t} executions" },
+    "run.rerun.go":     { en: "Re-run all", fr: "Tout relancer" },
+    "run.locked":       { en: "Another benchmark is running.", fr: "Un autre benchmark est en cours d'execution." },
+
+    /* --- Screen 6: golden agent-tagging --- */
+    "gt.title":        { en: "Golden questions",  fr: "Questions golden" },
+    "gt.eyebrow":      { en: "AGENT-FIRST",       fr: "PAR AGENT" },
+    "gt.scope.agent":  { en: "This agent",        fr: "Cet agent" },
+    "gt.scope.untagged":{ en: "Untagged",         fr: "Sans tag" },
+    "gt.scope.all":    { en: "All",               fr: "Toutes" },
+    "gt.searchPh":     { en: "Search...",          fr: "Rechercher..." },
+    "gt.col.q":        { en: "Question",          fr: "Intitule" },
+    "gt.col.active":   { en: "Active",            fr: "Actif" },
+    "gt.col.agent":    { en: "Agent tag",         fr: "Tag agent" },
+    "gt.noAgent":      { en: "(none)",            fr: "(aucun)" },
+    "gt.add":          { en: "Add question",      fr: "Ajouter une question" },
+    "gt.save":         { en: "Save",              fr: "Enregistrer" },
+    "gt.cancel":       { en: "Cancel",            fr: "Annuler" },
+    "gt.delete":       { en: "Delete",            fr: "Supprimer" },
+    "gt.deleteConfirm":{ en: "Delete this question permanently?", fr: "Supprimer cette question definitivement ?" },
+    "gt.deleted":      { en: "Question deleted.", fr: "Question supprimee." },
+    "gt.loading":      { en: "Loading questions...", fr: "Chargement des questions..." },
+    "gt.empty":        { en: "No questions match.", fr: "Aucune question correspondante." },
+    "gt.agentRequired":{ en: "An agent tag is required.", fr: "Un tag agent est requis." },
+    "gt.saved":        { en: "Question saved.",   fr: "Question enregistree." },
+    "gt.loadError":    { en: "Could not load questions.", fr: "Impossible de charger les questions." },
+    "gt.formQ":        { en: "Question",          fr: "Intitule" },
+    "gt.formA":        { en: "Reference answer",  fr: "Reponse de reference" },
+    "gt.formSql":      { en: "Expected SQL (optional)", fr: "SQL attendu (optionnel)" },
+    "gt.formTool":     { en: "Expected tool (optional)", fr: "Outil attendu (optionnel)" },
+    "gt.formAgent":    { en: "Agent tag",         fr: "Tag agent" },
+    "gt.formCat":      { en: "Category",          fr: "Categorie" },
+    "gt.formLang":     { en: "Language",          fr: "Langue" },
+    "gt.formActive":   { en: "Active",            fr: "Actif" },
+
+    /* --- Screen 7: settings panel --- */
+    "st.title":         { en: "Settings",        fr: "Parametres" },
+    "st.close":         { en: "Close",           fr: "Fermer" },
+    "st.golden":        { en: "Golden dataset name", fr: "Nom du dataset golden" },
+    "st.goldenHint":    { en: "Managed dataset containing the golden questions.", fr: "Dataset manage contenant les questions golden." },
+    "st.judge":         { en: "Judge LLM id",    fr: "Identifiant du LLM juge" },
+    "st.judgeHint":     { en: "Mesh connection id of the model used to judge answers.", fr: "Identifiant de connexion Mesh du modele utilise comme juge." },
+    "st.concurrency":   { en: "Concurrency",     fr: "Concurrence" },
+    "st.concurrencyHint":{ en: "Max parallel agent calls during a run (1-10).", fr: "Appels agents paralleles maximum pendant un run (1-10)." },
+    "st.runLang":       { en: "Run language",    fr: "Langue des runs" },
+    "st.runLangHint":   { en: "Language in which questions are sent to the agent (separate from the interface language).", fr: "Langue dans laquelle les questions sont envoyees a l'agent (independante de la langue d'interface)." },
+    "st.langEn":        { en: "English (en)",    fr: "Anglais (en)" },
+    "st.langFr":        { en: "French (fr)",     fr: "Francais (fr)" },
+    "st.rawDs":         { en: "Raw results dataset",     fr: "Dataset des resultats bruts" },
+    "st.scoredDs":      { en: "Scored results dataset",  fr: "Dataset des resultats scores" },
+    "st.summaryDs":     { en: "Summary dataset",          fr: "Dataset de synthese" },
+    "st.breakdownDs":   { en: "Breakdown dataset",        fr: "Dataset de repartition" },
+    "st.whereData":     { en: "These datasets live in the OWIsMind_LAB Dataiku project.", fr: "Ces datasets se trouvent dans le projet Dataiku OWIsMind_LAB." },
+    "st.save":          { en: "Save settings",   fr: "Enregistrer les parametres" },
+    "st.saved":         { en: "Settings saved.", fr: "Parametres enregistres." },
+    "st.loading":       { en: "Loading settings...", fr: "Chargement des parametres..." },
+    "st.loadError":     { en: "Could not load settings.", fr: "Impossible de charger les parametres." }
   };
 
   function t(key, vars) {
@@ -585,8 +660,11 @@
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
     agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" },
     // Screen 4: benchmark detail (dispatch 2)
-    benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null },
-    settingsOpen: false
+    benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false },
+    // Screen 6: golden agent-tagging panel
+    goldenTag: { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null },
+    // Screen 7: settings panel
+    settings: { open: false, loaded: false, loadError: false, data: {}, saving: false, saveError: null, fieldErrors: {} }
   };
 
   var newAgentSeq = 0;
@@ -766,9 +844,20 @@
       discovered_at: "2026-06-30T08:00:00Z"
     },
     // Number of active tagged golden questions per agent_key
-    agent_tagged: { orchestrator: 2 }
+    agent_tagged: { orchestrator: 2 },
+    // Settings (Screen 7)
+    settings: {
+      golden_dataset: "golden_questions_v1_prepared",
+      judge_llm_id: "anthropic:claude-sonnet-4-6",
+      concurrency: 3,
+      run_language: "fr",
+      raw_dataset: "benchmark_runs_raw",
+      scored_dataset: "benchmark_runs_scored",
+      summary_dataset: "benchmark_summary",
+      breakdown_dataset: "benchmark_breakdown"
+    }
   };
-  var mockRun = { remaining: 0 };
+  var mockRun = { remaining: 0, bid: null };
   var mockPromoted = {};
   var mockOverrides = {};
 
@@ -835,7 +924,29 @@
     } else if (method === "GET" && path === "run/status") {
       var running = mockRun.remaining > 0;
       if (running) { mockRun.remaining -= 1; }
-      data = { status: "ok", running: running, last: running ? null : "SUCCESS" };
+      var mockTotal = 3;
+      var mockScored = running ? Math.max(0, mockTotal - mockRun.remaining - 1) : mockTotal;
+      data = { status: "ok", running: running, scored: mockScored, total: mockTotal, last: running ? null : "SUCCESS", benchmark_id: mockRun.bid };
+      if (running) {
+        data.run_request = { benchmark_id: mockRun.bid };
+      } else {
+        // Completion payload: overall score, per-mode accuracy, and a sample re-run evolution
+        // (one improved, one regressed, one unchanged) so the run-complete card has data.
+        data.just_completed = true;
+        data.run_request = null;
+        data.result = {
+          score_pct: "67%",
+          by_mode: [{ mode: "Smart", pct: "100%" }, { mode: "Claude", pct: "33%" }],
+          evolution: [
+            { question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", prev_verdict: "MISS", cur_verdict: "OK" },
+            { question: "How many distinct open trouble tickets does Algerie Telecom currently have?", prev_verdict: "OK", cur_verdict: "MISS" },
+            { question: "Quelle est la hierarchie d'offre pour le produit IPL ?", prev_verdict: "OK", cur_verdict: "OK" }
+          ]
+        };
+      }
+    } else if (method === "POST" && path === "run/reset") {
+      mockRun.remaining = 0; mockRun.bid = null;
+      data = { status: "ok", reset: true };
     } else if (method === "GET" && path === "suggestions") {
       var pending = MOCK.suggestions.filter(function (s) { return !mockPromoted[s.suggestion_id]; });
       data = { status: "ok", configured: true, suggestions: pending };
@@ -844,8 +955,14 @@
       var promoted = 0;
       ids.forEach(function (id) { if (!mockPromoted[id]) { mockPromoted[id] = true; promoted += 1; } });
       data = { status: "ok", promoted: promoted, recorded: ids.length };
-    } else if (method === "GET" && path === "golden") {
-      data = { status: "ok", questions: MOCK.golden.slice() };
+    } else if (method === "GET" && path0 === "golden" && !path.startsWith("golden/")) {
+      var gtParams = parseQuery(path);
+      var gtScope = gtParams.scope || "all";
+      var gtAgKey = gtParams.agent_key || "";
+      var gtList = MOCK.golden.slice();
+      if (gtScope === "agent" && gtAgKey) { gtList = gtList.filter(function (g) { return g.agent_key === gtAgKey; }); }
+      else if (gtScope === "untagged") { gtList = gtList.filter(function (g) { return !g.agent_key; }); }
+      data = { status: "ok", questions: gtList, agents: MOCK.bench_agents.slice() };
     } else if (method === "POST" && path === "golden/save") {
       var q = (body && body.question || "").trim();
       var ref = (body && body.reference_answer || "").trim();
@@ -856,7 +973,7 @@
         var qid = (body && body.question_id || "").trim();
         var isNew = !qid;
         if (isNew) { qid = "a_mock_" + (MOCK.golden.length + 1); }
-        var nrow = { question_id: qid, question: q, reference_answer: ref, expected_value: (body.expected_value || ""), expected_value_type: (body.expected_value_type || ""), category: (body.category || ""), language: (body.language === "en") ? "en" : "fr", active: body.active !== false, notes: (body.notes || "") };
+        var nrow = { question_id: qid, question: q, reference_answer: ref, expected_value: (body.expected_value || ""), expected_value_type: (body.expected_value_type || ""), category: (body.category || ""), language: (body.language === "en") ? "en" : "fr", active: body.active !== false, notes: (body.notes || ""), expected_sql: (body.expected_sql || ""), expected_tool: (body.expected_tool || ""), agent_key: (body.agent_key || "") };
         var found = false;
         MOCK.golden = MOCK.golden.map(function (g) { if (g.question_id === qid) { found = true; return nrow; } return g; });
         if (!found) { MOCK.golden.push(nrow); }
@@ -952,7 +1069,8 @@
     } else if (method === "POST" && path0 === "benchmark/launch") {
       var lbid = (body && body.benchmark_id) || "";
       if (!MOCK.bench_detail[lbid]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
-      else { mockRun.remaining = 2; data = { status: "ok", launched: true, launch_mode: (body && body.launch_mode) || "append" }; }
+      else if (mockRun.remaining > 0 && mockRun.bid !== lbid) { status = 409; data = { status: "error", error: "already_running" }; }
+      else { mockRun.remaining = 3; mockRun.bid = lbid; data = { status: "ok", launched: true, launch_mode: (body && body.launch_mode) || "append" }; }
     } else if (method === "GET" && path0 === "agents") {
       data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), discovered_at: MOCK.agent_catalog.discovered_at };
     } else if (method === "POST" && path0 === "agents/discover") {
@@ -973,6 +1091,22 @@
         delete mockOverrides[okey];
       }
       data = { status: "ok", matched: 1 };
+    } else if (method === "GET" && path0 === "settings") {
+      data = { status: "ok", settings: deepCopy(MOCK.settings) };
+    } else if (method === "POST" && path0 === "settings") {
+      var sBody = body || {};
+      // Validation preview: an unknown golden dataset name fails with a field-level error,
+      // mirroring the backend POST /api/settings that probes the dataset before saving.
+      if ((sBody.golden_dataset || "").trim() === "badname") {
+        status = 400;
+        data = { status: "error", error: "invalid_settings", errors: { golden_dataset: "Dataset not found. Check the dataset name in OWIsMind_LAB." } };
+      } else {
+        if (sBody.golden_dataset) { MOCK.settings.golden_dataset = sBody.golden_dataset; }
+        if (sBody.judge_llm_id) { MOCK.settings.judge_llm_id = sBody.judge_llm_id; }
+        if (sBody.concurrency) { MOCK.settings.concurrency = parseInt(sBody.concurrency, 10) || MOCK.settings.concurrency; }
+        if (sBody.run_language) { MOCK.settings.run_language = sBody.run_language; }
+        data = { status: "ok", settings: deepCopy(MOCK.settings) };
+      }
     } else {
       status = 404;
       data = { status: "error", error: "not_found" };
@@ -1119,7 +1253,15 @@
         '<footer class="data-footer" id="dataFooter"></footer>' +
       '</div>' +
       modalHtml() +
-      '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>';
+      '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>' +
+      '<div class="settings-panel" id="settingsPanel" aria-hidden="true">' +
+        '<div class="settings-head">' +
+          '<span class="settings-title" data-i18n="st.title"></span>' +
+          '<button class="btn btn-ghost btn-sm" id="settingsClose" data-i18n="st.close"></button>' +
+        '</div>' +
+        '<div class="settings-body" id="settingsBody"></div>' +
+      '</div>' +
+      '<div class="settings-overlay" id="settingsOverlay"></div>';
   }
 
   function modalHtml() {
@@ -2722,7 +2864,7 @@
         creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" };
     }
     if (level === "benchmark" && benchmarkId) {
-      S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null };
+      S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false };
     }
     renderBreadcrumb();
     renderDetailContent();
@@ -2862,6 +3004,29 @@
       return;
     }
 
+    if (S.route.level === "golden-tag") {
+      // 3-part: Agents / AgentLabel / Golden questions
+      var det2 = S.benchDetailState && S.benchDetailState.detail;
+      var bmName2 = det2 ? det2.name : (S.route.benchmarkId || "");
+      var html2 = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
+        '<span class="bcr-sep">/</span>' +
+        '<button class="bcr-btn" id="bcrAgent">' + esc(agLabel || agKey) + '</button>' +
+        (bmName2 ? '<span class="bcr-sep">/</span><button class="bcr-btn" id="bcrBench">' + esc(bmName2) + '</button>' : '') +
+        '<span class="bcr-sep">/</span>' +
+        '<span class="bcr-cur">' + esc(t("gt.title")) + '</span>';
+      box.innerHTML = html2;
+      var bcrHome3 = byId("bcrHome");
+      if (bcrHome3) { bcrHome3.addEventListener("click", function () { navigateTo("home", null, null); renderAgentsRail(); }); }
+      var bcrAgent3 = byId("bcrAgent");
+      if (bcrAgent3) { bcrAgent3.addEventListener("click", function () { navigateTo("agent", agKey, null); renderAgentsRail(); }); }
+      var bcrBench3 = byId("bcrBench");
+      if (bcrBench3) {
+        var _bBid = S.route.benchmarkId;
+        bcrBench3.addEventListener("click", function () { navigateTo("benchmark", agKey, _bBid); });
+      }
+      return;
+    }
+
     var html = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
       '<span class="bcr-sep">/</span>' +
       '<span class="bcr-cur">' + esc(agLabel || agKey) + '</span>';
@@ -2877,7 +3042,8 @@
     if (!box) { return; }
     if (S.route.level === "home") { box.innerHTML = ""; return; }
     if (S.route.level === "agent") { box.innerHTML = buildAgentViewHtml(); wireAgentView(); return; }
-    if (S.route.level === "benchmark") { renderBenchmarkDetail(); }
+    if (S.route.level === "benchmark") { renderBenchmarkDetail(); return; }
+    if (S.route.level === "golden-tag") { box.innerHTML = buildGoldenTagHtml(); wireGoldenTag(); return; }
   }
 
   function buildAgentViewHtml() {
@@ -3017,7 +3183,14 @@
     var av = S.agentView;
     var agKey = S.route.agentKey;
 
-    function goTag() { S.agentView.creating = false; setTab("golden"); }
+    function goTag() {
+      S.agentView.creating = false;
+      // Navigate to Screen 6: golden agent-tagging in the detail pane
+      S.goldenTag = { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null };
+      navigateTo("golden-tag", agKey, null);
+      renderAgentsRail();
+      loadGoldenTag();
+    }
 
     // Screen 2 wiring
     var newBtn = byId("newBenchBtn");
@@ -3222,27 +3395,119 @@
     if (ledger.redo)    { html += '<span class="bm-chip bm-chip--redo">' + esc(t("bm.badge.redo", { n: ledger.redo })) + '</span>'; }
     html += '</div>';
 
-    // Run status
+    // Another benchmark owns the live run: this one's controls are locked until it ends.
+    var otherRunning = !st.running && !!S_bench4ActiveBid && S_bench4ActiveBid !== S.route.benchmarkId;
+
+    // Run status: full Screen 5 lifecycle
     if (st.running) {
-      html += '<div class="bd4-run-status bd4-run-status--running">' + esc(t("run.btn.running")) + '</div>';
+      // Progress bar
+      var elapsed = st.runStartedAt ? Math.round((Date.now() - st.runStartedAt) / 1000) : 0;
+      var pct = (st.runTotal > 0) ? Math.round((st.runScored / st.runTotal) * 100) : 0;
+      var progLabel = (st.runTotal > 0)
+        ? esc(t("run.progress", { scored: st.runScored, total: st.runTotal }))
+        : esc(t("run.elapsed", { s: elapsed }));
+      html += '<div class="bd4-run-status bd4-run-status--running">' +
+        '<div class="run-progress-bar"><div class="run-progress-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="run-progress-label">' + progLabel + '</span>' +
+        '</div>';
+      // Single-flight reassurance: leaving the page does not stop the run.
+      html += '<p class="bd4-sflight">' + esc(t("run.singleFlight")) + '</p>';
+      if (st.runMsg && st.runMsg.kind === "info") {
+        html += '<div class="bd4-run-status bd4-run-status--info">' + esc(st.runMsg.text) + '</div>';
+      }
     } else if (st.runMsg) {
-      var msgCls = st.runMsg.kind === "ok" ? "bd4-run-status--ok" : "bd4-run-status--err";
-      html += '<div class="bd4-run-status ' + msgCls + '">' + esc(st.runMsg.text) + '</div>';
+      var msgCls2 = (st.runMsg.kind === "ok") ? "bd4-run-status--ok" : (st.runMsg.kind === "info" ? "bd4-run-status--info" : "bd4-run-status--err");
+      html += '<div class="bd4-run-status ' + msgCls2 + '">' + esc(st.runMsg.text) + '</div>';
+    }
+
+    // Locked strip: jump to the benchmark that currently owns the run.
+    if (otherRunning) {
+      html += '<div class="bd4-locked-strip">' +
+        '<span>' + esc(t("run.locked")) + '</span>' +
+        '<button class="btn-link" id="bd4ViewRun">' + esc(t("run.viewRun")) + '</button>' +
+        '</div>';
+    }
+
+    // Run-complete card: score, per-mode accuracy, optional re-run evolution, results link.
+    if (!st.running && st.runComplete) {
+      var rc = st.runComplete;
+      html += '<div class="bd4-complete">';
+      if (rc.score_pct) {
+        html += '<p class="bd4-complete-score">' + esc(t("run.complete.score", { pct: rc.score_pct })) + '</p>';
+      }
+      if (rc.by_mode && rc.by_mode.length) {
+        html += '<ul class="bd4-complete-modes">';
+        rc.by_mode.forEach(function (bm2) {
+          html += '<li>' + esc(t("run.complete.mode", { mode: bm2.mode, pct: bm2.pct })) + '</li>';
+        });
+        html += '</ul>';
+      }
+      // Evolution vs the previous run (regressions pinned to the top, heaviest weight).
+      if (rc.evolution && rc.evolution.length) {
+        var evoOrder = { regressed: 0, improved: 1, same: 2, "new": 3 };
+        var evos = rc.evolution.map(function (e) {
+          var tok = (typeof Journey !== "undefined" && typeof Journey.evolutionToken === "function")
+            ? Journey.evolutionToken(e.prev_verdict, e.cur_verdict)
+            : "same";
+          return { q: e.question, tok: tok };
+        }).sort(function (a, b) {
+          var oa = evoOrder[a.tok] === undefined ? 9 : evoOrder[a.tok];
+          var ob = evoOrder[b.tok] === undefined ? 9 : evoOrder[b.tok];
+          return oa - ob;
+        });
+        html += '<div class="bd4-evo"><p class="bd4-evo-title">' + esc(t("run.evo.title")) + '</p><ul class="bd4-evo-list">';
+        evos.forEach(function (e) {
+          html += '<li class="bd4-evo-item bd4-evo-item--' + esc(e.tok) + '">' +
+            '<span class="bd4-evo-token">' + esc(t("run.evo." + e.tok)) + '</span>' +
+            '<span class="bd4-evo-q">' + esc(e.q) + '</span>' +
+            '</li>';
+        });
+        html += '</ul></div>';
+      }
+      html += '<a class="bd4-results-link" href="#results" target="_blank" rel="noopener">' + esc(t("run.complete.results")) + '</a>';
+      html += '</div>';
+    }
+
+    // Reset strip: scenario idle but run_request still set
+    if (!st.running && st.resetNeeded) {
+      html += '<div class="bd4-reset-strip">' +
+        '<span>' + esc(t("run.resetHint")) + '</span>' +
+        '<button class="btn btn-ghost btn-sm" id="bd4ResetBtn">' + esc(t("run.reset")) + '</button>' +
+        '</div>';
     }
 
     // Action bar
     html += '<div class="bd4-actions">';
 
-    // Primary run button (always visible, from Journey)
+    // Primary run button (always visible, from Journey). Locked while another benchmark runs.
     if (!st.running) {
-      html += '<button class="btn' + (rl.enabled ? " btn-primary" : "") + '" id="bd4RunPending"' + (!rl.enabled ? ' disabled' : '') + '>' + esc(rl.label) + '</button>';
+      var runDisabled = !rl.enabled || otherRunning;
+      html += '<button class="btn' + (rl.enabled && !otherRunning ? " btn-primary" : "") + '" id="bd4RunPending"' + (runDisabled ? ' disabled' : '') + '>' + esc(rl.label) + '</button>';
     } else {
       html += '<button class="btn" disabled>' + esc(rl.label) + '</button>';
     }
 
-    // Re-run entire (all-tested state only)
+    // Tag questions shortcut
+    if (!st.running) {
+      html += '<button class="btn btn-ghost btn-sm" id="bd4TagBtn">' + esc(t("bd4.tagQ")) + '</button>';
+    }
+
+    // Re-run entire (all-tested state only) - with inline confirm
     if (allTested && !st.running) {
-      html += '<button class="btn btn-primary" id="bd4Rerun">' + esc(t("bd.runFull")) + '</button>';
+      if (st.rerunConfirm) {
+        var nQ = qs.length;
+        var nM = modes.length;
+        html += '<div class="bd4-rerun-confirm">' +
+          '<span class="confirm-title">' + esc(t("run.rerun.title")) + '</span>' +
+          '<span class="confirm-scope">' + esc(t("run.rerun.scope", { n: nQ, m: nM, t: nQ * nM })) + '</span>' +
+          '<div class="confirm-btns">' +
+            '<button class="btn btn-danger btn-sm" id="bd4RerunGo">' + esc(t("run.rerun.go")) + '</button>' +
+            '<button class="btn btn-ghost btn-sm" id="bd4RerunCancel">' + esc(t("common.cancel")) + '</button>' +
+          '</div>' +
+        '</div>';
+      } else {
+        html += '<button class="btn btn-primary" id="bd4Rerun">' + esc(t("bd.runFull")) + '</button>';
+      }
     }
 
     // Run hint
@@ -3365,6 +3630,47 @@
     if (rerunBtn) {
       rerunBtn.addEventListener("click", function () { bench4Launch("full"); });
     }
+    // Rerun confirm box
+    var rerunGoBtn = byId("bd4RerunGo");
+    if (rerunGoBtn) {
+      rerunGoBtn.addEventListener("click", function () {
+        // st.rerunConfirm is already true; calling bench4Launch("full") again will proceed
+        bench4Launch("full");
+      });
+    }
+    var rerunCancelBtn = byId("bd4RerunCancel");
+    if (rerunCancelBtn) {
+      rerunCancelBtn.addEventListener("click", function () {
+        st.rerunConfirm = false;
+        renderDetailContent();
+      });
+    }
+    // Reset strip
+    var resetBtn = byId("bd4ResetBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", function () {
+        st.resetNeeded = false;
+        renderDetailContent();
+        callApi("POST", "run/reset", { benchmark_id: S.route.benchmarkId }).then(function (res) {
+          if (S.route.level !== "benchmark") { return; }
+          if (res.status === 200 && res.data && res.data.status === "ok") { toast(t("run.reset")); }
+        }, function () { /* best-effort */ });
+      });
+    }
+    // Jump to the benchmark that currently owns the live run.
+    var viewRunBtn = byId("bd4ViewRun");
+    if (viewRunBtn) {
+      viewRunBtn.addEventListener("click", function () {
+        if (S_bench4ActiveBid) { navigateTo("benchmark", S.route.agentKey, S_bench4ActiveBid); renderAgentsRail(); }
+      });
+    }
+    // Tag questions shortcut from detail view
+    var bdTagBtn = byId("bd4TagBtn");
+    if (bdTagBtn) {
+      bdTagBtn.addEventListener("click", function () {
+        navigateTo("golden-tag", S.route.agentKey, S.route.benchmarkId);
+      });
+    }
 
     var editModesBtn = byId("bd4EditModesBtn");
     if (editModesBtn) {
@@ -3472,13 +3778,28 @@
 
   var bench4PollErrors = 0;
   var bench4LaunchedBid = null;  // Fix I-3: tracks which benchmark launched the current poll cycle
+  var bench4LaunchMode = "append";  // "append" or "full"; flags the run-complete card as a re-run
+  var S_bench4ActiveBid = null;  // tracks the bid that OWNS the current run (from run/status response)
 
   function bench4Launch(launchMode) {
     var st = S.benchDetailState;
     if (st.running) { return; }
+    // Re-run entire: require confirmation first
+    if (launchMode === "full" && !st.rerunConfirm) {
+      st.rerunConfirm = true;
+      renderDetailContent();
+      return;
+    }
     bench4PollErrors = 0;  // Fix I-4: reset error counter at launch
+    bench4LaunchMode = launchMode;  // remembered so the run-complete card can flag a re-run
     st.running = true;
+    st.rerunConfirm = false;
     st.runMsg = null;
+    st.runScored = 0;
+    st.runTotal = 0;
+    st.runStartedAt = Date.now();
+    st.runComplete = null;
+    st.resetNeeded = false;
     renderDetailContent();
     var bid = S.route.benchmarkId;
     bench4LaunchedBid = bid;  // Fix I-3: capture bid for poll guard
@@ -3488,7 +3809,9 @@
         toast(t("run.launched"));
         bench4Poll();
       } else if (res.status === 409 || d.error === "already_running") {
-        st.runMsg = { kind: "err", text: t("run.already") };
+        // Another benchmark is running - show single-flight notice and poll anyway
+        st.runMsg = { kind: "info", text: t("run.singleFlight") };
+        S_bench4ActiveBid = null;  // will be set from poll response
         renderDetailContent();
         bench4Poll();
       } else {
@@ -3506,9 +3829,29 @@
         if (S.route.level !== "benchmark" || S.route.benchmarkId !== bench4LaunchedBid) { return; }
         bench4PollErrors = 0;
         var d = res.data || {};
+        // Track which benchmark is actually running (may differ from the one we launched against)
+        if (d.benchmark_id) { S_bench4ActiveBid = d.benchmark_id; }
+        // Update progress counters
+        if (d.total && d.total > 0) {
+          st.runTotal = d.total;
+          st.runScored = d.scored || 0;
+        }
         if (d.running) {
+          renderDetailContent();  // refresh progress bar
           bench4Poll();
         } else {
+          // Completion: keep the result (score, per-mode, evolution) for the run-complete card.
+          var result = d.result || {};
+          st.runComplete = {
+            scored: st.runScored, total: st.runTotal,
+            score_pct: result.score_pct || null,
+            by_mode: result.by_mode || [],
+            evolution: result.evolution || [],
+            rerun: (bench4LaunchMode === "full")
+          };
+          // The scenario went idle but a run request may still be set: offer a reset.
+          st.resetNeeded = !!(d.run_request);
+          S_bench4ActiveBid = null;  // run is over: no benchmark owns it anymore
           bench4EndRun({ kind: "ok", text: t("bd4.runDone") });
           loadBenchmarkDetail4(S.route.benchmarkId);
         }
@@ -3580,6 +3923,568 @@
     });
   }
 
+  /* ============================ Screen 6: golden agent-tagging ============================ */
+
+  function loadGoldenTag() {
+    var gt = S.goldenTag;
+    var agKey = S.route.agentKey;
+    var qs = "scope=" + encodeURIComponent(gt.scope);
+    if (agKey && gt.scope === "agent") { qs += "&agent_key=" + encodeURIComponent(agKey); }
+    callApi("GET", "golden?" + qs).then(function (res) {
+      if (S.route.level !== "golden-tag") { return; }
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        gt.list = d.questions || [];
+        gt.agents = d.agents || [];
+        gt.loaded = true;
+        gt.loadError = false;
+      } else {
+        gt.loadError = true;
+        gt.loaded = true;
+      }
+      renderDetailContent();
+    }, function () {
+      if (S.route.level !== "golden-tag") { return; }
+      gt.loadError = true;
+      gt.loaded = true;
+      renderDetailContent();
+    });
+  }
+
+  function buildGoldenTagHtml() {
+    var gt = S.goldenTag;
+    var agKey = S.route.agentKey;
+    var html = '<div class="gt-wrap">';
+    html += '<div class="gt-head">';
+    html += '<span class="eyebrow">' + esc(t("gt.eyebrow")) + '</span>';
+    html += '<h2 class="gt-title">' + esc(t("gt.title")) + '</h2>';
+    html += '</div>';
+
+    if (!gt.loaded) {
+      return html + '<div class="gt-loading">' + esc(t("gt.loading")) + '</div></div>';
+    }
+    if (gt.loadError) {
+      return html + '<div class="note note-error">' + esc(t("gt.loadError")) + '</div></div>';
+    }
+
+    // Scope tabs
+    html += '<div class="gt-scope-tabs">';
+    ["agent", "untagged", "all"].forEach(function (sc) {
+      var active = gt.scope === sc;
+      html += '<button class="gt-scope-tab' + (active ? " active" : "") + '" data-gt-scope="' + esc(sc) + '">' +
+        esc(t("gt.scope." + sc)) + '</button>';
+    });
+    html += '</div>';
+
+    // Search bar + add button
+    html += '<div class="gt-toolbar">' +
+      '<input class="input gt-search" id="gtSearch" placeholder="' + esc(t("gt.searchPh")) + '" value="' + esc(gt.searchText) + '">' +
+      '<button class="btn btn-primary btn-sm" id="gtAddBtn">' + esc(t("gt.add")) + '</button>' +
+      '</div>';
+
+    // Save error
+    if (gt.saveError) {
+      html += '<div class="note note-error">' + esc(gt.saveError) + '</div>';
+    }
+
+    // New-question form (inline at top)
+    if (gt.editRow && gt.editRow._new) {
+      html += buildGoldenTagForm(gt.editRow, gt.agents, agKey);
+    }
+
+    // Filter list
+    var search = (gt.searchText || "").toLowerCase();
+    var list = gt.list.filter(function (q) {
+      if (!search) { return true; }
+      return (q.question || "").toLowerCase().indexOf(search) !== -1 ||
+             (q.category || "").toLowerCase().indexOf(search) !== -1;
+    });
+
+    if (list.length === 0 && !gt.editRow) {
+      html += '<div class="gt-empty">' + esc(t("gt.empty")) + '</div>';
+    } else {
+      html += '<div class="gt-table-wrap"><table class="gt-table">';
+      html += '<thead><tr>' +
+        '<th>' + esc(t("gt.col.q")) + '</th>' +
+        '<th>' + esc(t("gt.col.agent")) + '</th>' +
+        '<th>' + esc(t("gt.col.active")) + '</th>' +
+        '<th></th>' +
+        '</tr></thead><tbody>';
+
+      list.forEach(function (q) {
+        var isEdit = gt.editRow && !gt.editRow._new && gt.editRow.question_id === q.question_id;
+        var isConfirm = gt.confirmDelete === q.question_id;
+
+        if (isEdit) {
+          html += '<tr class="gt-row-edit"><td colspan="4">' + buildGoldenTagForm(gt.editRow, gt.agents, agKey) + '</td></tr>';
+        } else if (isConfirm) {
+          html += '<tr class="gt-row-confirm"><td colspan="4">' +
+            '<span class="confirm-msg">' + esc(t("gt.deleteConfirm")) + '</span>' +
+            '<button class="btn btn-danger btn-sm" data-gt-delete-go="' + esc(q.question_id) + '">' + esc(t("gt.delete")) + '</button>' +
+            '<button class="btn btn-ghost btn-sm" data-gt-delete-cancel>' + esc(t("gt.cancel")) + '</button>' +
+            '</td></tr>';
+        } else {
+          // Inline agent-tag dropdown: re-tag a question without opening the edit form.
+          var agentOpts = '<option value="">' + esc(t("gt.noAgent")) + '</option>';
+          (gt.agents || []).forEach(function (a) {
+            agentOpts += '<option value="' + esc(a.agent_key) + '"' + (q.agent_key === a.agent_key ? ' selected' : '') + '>' + esc(a.agent_label) + '</option>';
+          });
+          html += '<tr class="gt-row">' +
+            '<td class="gt-q-cell"><span class="gt-q-text">' + esc(q.question) + '</span>' +
+              (q.category ? '<span class="cat-tag">' + esc(q.category) + '</span>' : '') +
+            '</td>' +
+            '<td class="gt-agent-cell"><select class="gt-agent-sel" data-gt-tag="' + esc(q.question_id) + '">' + agentOpts + '</select></td>' +
+            '<td class="gt-active-cell">' +
+              '<button type="button" class="chk gt-active-toggle' + (q.active ? " on" : "") + '" data-gt-toggle="' + esc(q.question_id) + '" data-on="' + (q.active ? "1" : "0") + '" aria-label="' + esc(t("gt.col.active")) + '">' +
+                '<span class="box">' + I.check + '</span></button>' +
+            '</td>' +
+            '<td class="gt-actions-cell">' +
+              '<button class="btn btn-ghost btn-sm" data-gt-edit="' + esc(q.question_id) + '">' + esc(t("common.edit")) + '</button>' +
+              '<button class="btn btn-ghost btn-sm btn-danger" data-gt-delete="' + esc(q.question_id) + '">' + esc(t("gt.delete")) + '</button>' +
+            '</td>' +
+            '</tr>';
+        }
+      });
+
+      html += '</tbody></table></div>';
+    }
+
+    html += '</div>';  // gt-wrap
+    return html;
+  }
+
+  function buildGoldenTagForm(row, agents, agKey) {
+    var agentsHtml = '<option value="">' + esc(t("gt.noAgent")) + '</option>';
+    agents.forEach(function (a) {
+      var sel = (row.agent_key === a.agent_key) || (!row.agent_key && a.agent_key === agKey);
+      agentsHtml += '<option value="' + esc(a.agent_key) + '"' + (sel ? ' selected' : '') + '>' + esc(a.agent_label) + '</option>';
+    });
+    var activeOn = row.active !== false;
+    return '<div class="gt-form">' +
+      (row._new ? '' : '<input type="hidden" id="gtFormQid" value="' + esc(row.question_id || "") + '">') +
+      '<label class="field full"><span class="field-label">' + esc(t("gt.formQ")) + '</span>' +
+        '<textarea class="input" id="gtFormQ" rows="3">' + esc(row.question || "") + '</textarea></label>' +
+      '<label class="field full"><span class="field-label">' + esc(t("gt.formA")) + '</span>' +
+        '<textarea class="input" id="gtFormA" rows="3">' + esc(row.reference_answer || "") + '</textarea></label>' +
+      '<label class="field full"><span class="field-label">' + esc(t("gt.formSql")) + '</span>' +
+        '<textarea class="input mono" id="gtFormSql" rows="2">' + esc(row.expected_sql || "") + '</textarea></label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formTool")) + '</span>' +
+        '<input class="input mono" id="gtFormTool" value="' + esc(row.expected_tool || "") + '" list="gtToolList">' +
+        '<datalist id="gtToolList"><option value="show_chart"></option><option value="show_table"></option><option value="none"></option></datalist>' +
+      '</label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formAgent")) + '</span>' +
+        '<select class="input" id="gtFormAgent">' + agentsHtml + '</select></label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formCat")) + '</span>' +
+        '<input class="input" id="gtFormCat" value="' + esc(row.category || "") + '"></label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formLang")) + '</span>' +
+        '<select class="input" id="gtFormLang"><option value="en"' + (row.language === "en" ? " selected" : "") + '>en</option>' +
+        '<option value="fr"' + (row.language !== "en" ? " selected" : "") + '>fr</option></select></label>' +
+      '<div class="field full"><button type="button" class="chk' + (activeOn ? " on" : "") + '" id="gtFormActive" data-on="' + (activeOn ? "1" : "0") + '">' +
+        '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("gt.formActive")) + '</b></span></button></div>' +
+      '<div class="gt-form-actions">' +
+        '<button class="btn btn-primary btn-sm" id="gtFormSave">' + esc(t("gt.save")) + '</button>' +
+        '<button class="btn btn-ghost btn-sm" id="gtFormCancel">' + esc(t("gt.cancel")) + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireGoldenTag() {
+    var gt = S.goldenTag;
+    var agKey = S.route.agentKey;
+
+    // Scope tabs
+    qsa("[data-gt-scope]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        gt.scope = btn.getAttribute("data-gt-scope");
+        gt.loaded = false;
+        gt.editRow = null;
+        gt.confirmDelete = null;
+        renderDetailContent();
+        loadGoldenTag();
+      });
+    });
+
+    // Search
+    var searchInput = byId("gtSearch");
+    if (searchInput) {
+      searchInput.addEventListener("input", function () {
+        gt.searchText = this.value;
+        renderDetailContent();
+      });
+    }
+
+    // Add new question
+    var addBtn = byId("gtAddBtn");
+    if (addBtn) {
+      addBtn.addEventListener("click", function () {
+        gt.editRow = { _new: true, question: "", reference_answer: "", expected_sql: "", expected_tool: "", agent_key: agKey || "", category: "", language: "fr", active: true };
+        gt.saveError = null;
+        renderDetailContent();
+      });
+    }
+
+    // Persist a single inline field change (agent tag or active flag) through golden/save.
+    // Read-modify-write keeps every other column intact; optimistic, with revert on failure.
+    function gtInlinePersist(qid, patch, revert) {
+      var row = gt.list.filter(function (q) { return q.question_id === qid; })[0];
+      if (!row) { return; }
+      var payload = {
+        question_id: row.question_id,
+        question: row.question || "",
+        reference_answer: row.reference_answer || "",
+        expected_sql: row.expected_sql || "",
+        expected_tool: row.expected_tool || "",
+        agent_key: ("agent_key" in patch) ? patch.agent_key : (row.agent_key || ""),
+        category: row.category || "",
+        language: row.language || "fr",
+        active: ("active" in patch) ? patch.active : (row.active !== false),
+        expected_value: row.expected_value || "",
+        expected_value_type: row.expected_value_type || ""
+      };
+      Object.keys(patch).forEach(function (k) { row[k] = patch[k]; });  // optimistic
+      callApi("POST", "golden/save", payload).then(function (res) {
+        if (S.route.level !== "golden-tag") { return; }
+        var d = res.data || {};
+        if (res.status === 200 && d.status === "ok") {
+          toast(t("gt.saved"));
+          // Re-tagging can move a row out of a scoped view: reload prunes it cleanly.
+          if (("agent_key" in patch) && gt.scope !== "all") { gt.loaded = false; renderDetailContent(); loadGoldenTag(); }
+        } else {
+          revert();
+          toast(t("gt.loadError"));
+          renderDetailContent();
+        }
+      }, function () {
+        if (S.route.level !== "golden-tag") { return; }
+        revert();
+        toast(t("gt.loadError"));
+        renderDetailContent();
+      });
+    }
+
+    // Inline agent-tag dropdown
+    qsa("[data-gt-tag]").forEach(function (sel) {
+      sel.addEventListener("change", function () {
+        var qid = sel.getAttribute("data-gt-tag");
+        var row = gt.list.filter(function (q) { return q.question_id === qid; })[0];
+        if (!row) { return; }
+        var prev = row.agent_key || "";
+        gtInlinePersist(qid, { agent_key: sel.value }, function () { row.agent_key = prev; });
+      });
+    });
+
+    // Inline active toggle
+    qsa("[data-gt-toggle]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var qid = btn.getAttribute("data-gt-toggle");
+        var row = gt.list.filter(function (q) { return q.question_id === qid; })[0];
+        if (!row) { return; }
+        var prev = row.active !== false;
+        var next = !prev;
+        btn.classList.toggle("on", next);
+        btn.setAttribute("data-on", next ? "1" : "0");
+        gtInlinePersist(qid, { active: next }, function () { row.active = prev; });
+      });
+    });
+
+    // Edit existing
+    qsa("[data-gt-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var qid = btn.getAttribute("data-gt-edit");
+        var row = gt.list.filter(function (q) { return q.question_id === qid; })[0];
+        if (row) {
+          gt.editRow = Object.assign({}, row);
+          gt.saveError = null;
+          gt.confirmDelete = null;
+          renderDetailContent();
+        }
+      });
+    });
+
+    // Delete (show confirm)
+    qsa("[data-gt-delete]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        gt.confirmDelete = btn.getAttribute("data-gt-delete");
+        gt.editRow = null;
+        renderDetailContent();
+      });
+    });
+    qsa("[data-gt-delete-cancel]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        gt.confirmDelete = null;
+        renderDetailContent();
+      });
+    });
+    qsa("[data-gt-delete-go]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var qid = btn.getAttribute("data-gt-delete-go");
+        callApi("POST", "golden/delete", { question_id: qid }).then(function (res) {
+          if (S.route.level !== "golden-tag") { return; }
+          var d = res.data || {};
+          if (res.status === 200 && d.status === "ok") {
+            gt.list = gt.list.filter(function (q) { return q.question_id !== qid; });
+            gt.confirmDelete = null;
+            toast(t("gt.deleted"));
+          } else {
+            gt.confirmDelete = null;
+            toast(t("gt.loadError"));
+          }
+          renderDetailContent();
+        }, function () {
+          if (S.route.level !== "golden-tag") { return; }
+          gt.confirmDelete = null;
+          toast(t("gt.loadError"));
+          renderDetailContent();
+        });
+      });
+    });
+
+    // Form: active toggle
+    var formActive = byId("gtFormActive");
+    if (formActive) {
+      formActive.addEventListener("click", function () {
+        var on = this.getAttribute("data-on") !== "1";
+        this.setAttribute("data-on", on ? "1" : "0");
+        this.classList.toggle("on", on);
+        if (gt.editRow) { gt.editRow.active = on; }
+      });
+    }
+
+    // Form: save
+    var formSave = byId("gtFormSave");
+    if (formSave) {
+      formSave.addEventListener("click", function () {
+        var q = (byId("gtFormQ") && byId("gtFormQ").value || "").trim();
+        var a = (byId("gtFormA") && byId("gtFormA").value || "").trim();
+        var agentKey = (byId("gtFormAgent") && byId("gtFormAgent").value || "").trim();
+        if (!agentKey) {
+          gt.saveError = t("gt.agentRequired");
+          renderDetailContent();
+          return;
+        }
+        var payload = {
+          question_id: gt.editRow && !gt.editRow._new ? gt.editRow.question_id : "",
+          question: q,
+          reference_answer: a,
+          expected_sql: (byId("gtFormSql") && byId("gtFormSql").value || "").trim(),
+          expected_tool: (byId("gtFormTool") && byId("gtFormTool").value || "").trim(),
+          agent_key: agentKey,
+          category: (byId("gtFormCat") && byId("gtFormCat").value || "").trim(),
+          language: (byId("gtFormLang") && byId("gtFormLang").value) || "fr",
+          active: (byId("gtFormActive") && byId("gtFormActive").getAttribute("data-on") === "1")
+        };
+        gt.saving = true;
+        gt.saveError = null;
+        callApi("POST", "golden/save", payload).then(function (res) {
+          if (S.route.level !== "golden-tag") { return; }
+          gt.saving = false;
+          var d = res.data || {};
+          if (res.status === 200 && d.status === "ok") {
+            toast(t("gt.saved"));
+            gt.editRow = null;
+            gt.saveError = null;
+            // Reload the list to reflect the new/updated row
+            gt.loaded = false;
+            renderDetailContent();
+            loadGoldenTag();
+          } else {
+            var msg = (d.messages && d.messages[0]) || t("gt.loadError");
+            gt.saveError = msg;
+            renderDetailContent();
+          }
+        }, function () {
+          if (S.route.level !== "golden-tag") { return; }
+          gt.saving = false;
+          gt.saveError = t("gt.loadError");
+          renderDetailContent();
+        });
+      });
+    }
+
+    // Form: cancel
+    var formCancel = byId("gtFormCancel");
+    if (formCancel) {
+      formCancel.addEventListener("click", function () {
+        gt.editRow = null;
+        gt.saveError = null;
+        renderDetailContent();
+      });
+    }
+  }
+
+  /* ============================ Screen 7: settings panel ============================ */
+
+  function openSettings() {
+    var st = S.settings;
+    st.open = true;
+    var panel = byId("settingsPanel");
+    var overlay = byId("settingsOverlay");
+    if (panel) { panel.classList.add("open"); panel.setAttribute("aria-hidden", "false"); }
+    if (overlay) { overlay.classList.add("open"); }
+    if (!st.loaded && !st.loading) { loadSettings(); }
+    else { renderSettingsBody(); }
+  }
+
+  function closeSettings() {
+    S.settings.open = false;
+    var panel = byId("settingsPanel");
+    var overlay = byId("settingsOverlay");
+    if (panel) { panel.classList.remove("open"); panel.setAttribute("aria-hidden", "true"); }
+    if (overlay) { overlay.classList.remove("open"); }
+  }
+
+  function loadSettings() {
+    var st = S.settings;
+    st.loading = true;
+    callApi("GET", "settings").then(function (res) {
+      st.loading = false;
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        st.data = d.settings || {};
+        st.loaded = true;
+        st.loadError = false;
+      } else {
+        st.loadError = true;
+        st.loaded = true;
+      }
+      renderSettingsBody();
+    }, function () {
+      st.loading = false;
+      st.loadError = true;
+      st.loaded = true;
+      renderSettingsBody();
+    });
+  }
+
+  function renderSettingsBody() {
+    var box = byId("settingsBody");
+    if (!box) { return; }
+    box.innerHTML = buildSettingsHtml();
+    // Wire save button
+    var saveBtn = byId("stSaveBtn");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () { saveSettings(); });
+    }
+    // Wire run_language select live update
+    var runLangSel = byId("stRunLang");
+    if (runLangSel) {
+      runLangSel.addEventListener("change", function () { S.settings.data.run_language = this.value; });
+    }
+    applyI18n(box);
+  }
+
+  function buildSettingsHtml() {
+    var st = S.settings;
+    if (!st.loaded) {
+      return '<div class="st-loading">' + esc(t("st.loading")) + '</div>';
+    }
+    if (st.loadError) {
+      return '<div class="note note-error">' + esc(t("st.loadError")) + '</div>';
+    }
+    var d = st.data;
+    var fe = st.fieldErrors || {};
+    function fieldErr(k) {
+      return fe[k] ? '<span class="st-field-err">' + esc(fe[k]) + '</span>' : '';
+    }
+    var html = '<div class="st-form">';
+
+    // Golden dataset
+    html += '<label class="field full"><span class="field-label">' + esc(t("st.golden")) + '</span>' +
+      '<input class="input mono" id="stGolden" value="' + esc(d.golden_dataset || "") + '">' +
+      '<span class="field-help">' + esc(t("st.goldenHint")) + '</span>' + fieldErr("golden_dataset") + '</label>';
+
+    // Judge LLM
+    html += '<label class="field full"><span class="field-label">' + esc(t("st.judge")) + '</span>' +
+      '<input class="input mono" id="stJudge" value="' + esc(d.judge_llm_id || "") + '">' +
+      '<span class="field-help">' + esc(t("st.judgeHint")) + '</span>' + fieldErr("judge_llm_id") + '</label>';
+
+    // Concurrency
+    html += '<label class="field"><span class="field-label">' + esc(t("st.concurrency")) + '</span>' +
+      '<input class="input" id="stConcurrency" type="number" min="1" max="10" value="' + esc(String(d.concurrency || 3)) + '">' +
+      '<span class="field-help">' + esc(t("st.concurrencyHint")) + '</span>' + fieldErr("concurrency") + '</label>';
+
+    // Run language
+    var langEn = d.run_language === "en";
+    html += '<label class="field"><span class="field-label">' + esc(t("st.runLang")) + '</span>' +
+      '<select class="input" id="stRunLang">' +
+        '<option value="en"' + (langEn ? " selected" : "") + '>' + esc(t("st.langEn")) + '</option>' +
+        '<option value="fr"' + (!langEn ? " selected" : "") + '>' + esc(t("st.langFr")) + '</option>' +
+      '</select>' +
+      '<span class="field-help">' + esc(t("st.runLangHint")) + '</span>' + fieldErr("run_language") + '</label>';
+
+    // Read-only dataset names
+    html += '<div class="st-section-title">' + esc(t("st.whereData")) + '</div>';
+    html += '<div class="st-ds-grid">';
+    [
+      { key: "st.rawDs", val: d.raw_dataset },
+      { key: "st.scoredDs", val: d.scored_dataset },
+      { key: "st.summaryDs", val: d.summary_dataset },
+      { key: "st.breakdownDs", val: d.breakdown_dataset }
+    ].forEach(function (row) {
+      html += '<span class="st-ds-label">' + esc(t(row.key)) + '</span>' +
+        '<span class="st-ds-val mono">' + esc(row.val || "-") + '</span>';
+    });
+    html += '</div>';
+
+    // Save error
+    if (st.saveError) {
+      html += '<div class="note note-error">' + esc(st.saveError) + '</div>';
+    }
+
+    // Save button
+    html += '<div class="st-actions">' +
+      '<button class="btn btn-primary" id="stSaveBtn"' + (st.saving ? ' disabled' : '') + '>' +
+        esc(t("st.save")) + '</button>' +
+    '</div>';
+
+    html += '</div>';  // st-form
+    return html;
+  }
+
+  function saveSettings() {
+    var st = S.settings;
+    if (st.saving) { return; }
+    var payload = {
+      golden_dataset: (byId("stGolden") && byId("stGolden").value || "").trim(),
+      judge_llm_id: (byId("stJudge") && byId("stJudge").value || "").trim(),
+      concurrency: parseInt((byId("stConcurrency") && byId("stConcurrency").value) || "3", 10),
+      run_language: (byId("stRunLang") && byId("stRunLang").value) || "fr"
+    };
+    st.saving = true;
+    st.saveError = null;
+    st.fieldErrors = {};
+    // Keep the form reflecting what the user typed so a rejected save never wipes their input.
+    st.data = Object.assign({}, st.data, {
+      golden_dataset: payload.golden_dataset,
+      judge_llm_id: payload.judge_llm_id,
+      concurrency: payload.concurrency,
+      run_language: payload.run_language
+    });
+    renderSettingsBody();
+    callApi("POST", "settings", payload).then(function (res) {
+      st.saving = false;
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        st.data = d.settings || st.data;
+        st.fieldErrors = {};
+        st.saveError = null;
+        toast(t("st.saved"));
+        renderSettingsBody();
+      } else {
+        // Field-level errors render under the relevant field; fall back to a banner otherwise.
+        var fe = (d && d.errors) || {};
+        st.fieldErrors = fe;
+        st.saveError = Object.keys(fe).length ? null : t("st.loadError");
+        renderSettingsBody();
+      }
+    }, function () {
+      st.saving = false;
+      st.fieldErrors = {};
+      st.saveError = t("st.loadError");
+      renderSettingsBody();
+    });
+  }
+
   /* ============================ static wiring ============================ */
 
   function wireStatic() {
@@ -3592,7 +4497,13 @@
       });
     });
     // Header links (Golden / Suggestions / Review)
-    byId("linkGolden").addEventListener("click", function () { setTab("golden"); });
+    byId("linkGolden").addEventListener("click", function () {
+      // Navigate to golden-tag in the detail pane (agent-first context if one is selected)
+      S.goldenTag = { loaded: false, loadError: false, list: [], agents: [], scope: S.route.agentKey ? "agent" : "all", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null };
+      navigateTo("golden-tag", S.route.agentKey || null, null);
+      renderAgentsRail();
+      loadGoldenTag();
+    });
     byId("linkSuggest").addEventListener("click", function () { setTab("suggest"); });
     byId("linkReview").addEventListener("click", function () { setTab("review"); });
     // Back from golden / suggest / review panels
@@ -3602,9 +4513,13 @@
     if (suggestBack) { suggestBack.addEventListener("click", function () { setTab("benchmarks"); }); }
     var reviewBack = byId("reviewBack");
     if (reviewBack) { reviewBack.addEventListener("click", function () { setTab("benchmarks"); }); }
-    // Gear: settings placeholder (dispatch 3)
+    // Gear: settings panel (Screen 7)
     var gearBtn = byId("gearBtn");
-    if (gearBtn) { gearBtn.addEventListener("click", function () { toast("Settings - coming in dispatch 3."); }); }
+    if (gearBtn) { gearBtn.addEventListener("click", function () { openSettings(); }); }
+    var settingsClose = byId("settingsClose");
+    if (settingsClose) { settingsClose.addEventListener("click", function () { closeSettings(); }); }
+    var settingsOverlay = byId("settingsOverlay");
+    if (settingsOverlay) { settingsOverlay.addEventListener("click", function () { closeSettings(); }); }
     // Golden editor modal
     byId("mdClose").addEventListener("click", closeModal);
     byId("mdCancel").addEventListener("click", closeModal);
