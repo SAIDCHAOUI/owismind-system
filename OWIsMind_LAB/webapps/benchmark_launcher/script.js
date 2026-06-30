@@ -345,6 +345,11 @@
     },
     "bm.loadError": { en: "Could not load the benchmarks.", fr: "Impossible de charger les benchmarks." },
     "bm.open": { en: "Open", fr: "Ouvrir" },
+    "bm.delete": { en: "Delete", fr: "Supprimer" },
+    "bm.deleteConfirm": { en: "Delete \"{n}\"? This removes the benchmark from the registry. Past result rows stay in the dataset. This cannot be undone.", fr: "Supprimer \"{n}\" ? Le benchmark est retire du registre. Les lignes de resultats passees restent dans le dataset. Cette action est irreversible." },
+    "bm.deleted": { en: "Benchmark deleted.", fr: "Benchmark supprime." },
+    "bm.deleteError": { en: "Could not delete the benchmark.", fr: "Impossible de supprimer le benchmark." },
+    "common.cancel": { en: "Cancel", fr: "Annuler" },
     "bm.badge.done": { en: "{n} done", fr: "{n} faites" },
     "bm.badge.pending": { en: "{n} pending", fr: "{n} en attente" },
     "bm.badge.redo": { en: "{n} redo", fr: "{n} a refaire" },
@@ -563,7 +568,7 @@
     // Agent-first routing (dispatch 1)
     route: { level: "home", agentKey: null, benchmarkId: null },
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
-    agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [] },
+    agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" },
     settingsOpen: false
   };
 
@@ -881,6 +886,14 @@
         d.name = nm;
         return { benchmark_id: d.benchmark_id, name: nm };
       });
+    } else if (method === "POST" && path0 === "benchmark/delete") {
+      var delBid2 = (body && body.benchmark_id) || "";
+      if (!MOCK.bench_detail[delBid2]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
+      else {
+        delete MOCK.bench_detail[delBid2];
+        MOCK.benchmarks = MOCK.benchmarks.filter(function (b) { return b.benchmark_id !== delBid2; });
+        data = { status: "ok", benchmark_id: delBid2 };
+      }
     } else if (method === "POST" && path0 === "benchmark/archive") {
       data = mockBenchMutate(body, function (d) { d.status = "archived"; return { benchmark_id: d.benchmark_id, status: "archived" }; });
     } else if (method === "POST" && path0 === "benchmark/launch") {
@@ -1029,8 +1042,14 @@
             '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="goldenBack" data-i18n="hdr.back"></button></div>' +
             '<div id="goldenContent"></div>' +
           '</section>' +
-          '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
-          '<section class="panel" data-panel="review"><div id="reviewContent"></div></section>' +
+          '<section class="panel" data-panel="suggest">' +
+            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="suggestBack" data-i18n="hdr.back"></button></div>' +
+            '<div id="suggestContent"></div>' +
+          '</section>' +
+          '<section class="panel" data-panel="review">' +
+            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="reviewBack" data-i18n="hdr.back"></button></div>' +
+            '<div id="reviewContent"></div>' +
+          '</section>' +
         '</div>' +
         '<footer class="data-footer" id="dataFooter"></footer>' +
       '</div>' +
@@ -2818,6 +2837,10 @@
       html += '<div class="rail-status rail-status--warn">' + esc(t("rail.failed")) + '</div>';
     }
 
+    if (S.agentCatalog.loaded && !S.agentCatalog.discovering && !S.agentCatalog.discoveryFailed && S.agentCatalog.agents.length > 0) {
+      html += '<div class="rail-status">' + esc(t("rail.discovered", { n: S.agentCatalog.agents.length })) + '</div>';
+    }
+
     if (S.agentCatalog.loaded && !S.agentCatalog.agents.length) {
       html += '<div class="rail-empty">' + esc(t("rail.empty")) + '</div>';
     }
@@ -2922,13 +2945,31 @@
         var chips = '<span class="bm-chip bm-chip--done">' + esc(t("bm.badge.done", { n: bm.n_done })) + '</span>';
         if (bm.n_pending > 0) { chips += '<span class="bm-chip bm-chip--pending">' + esc(t("bm.badge.pending", { n: bm.n_pending })) + '</span>'; }
         if (bm.n_redo > 0)    { chips += '<span class="bm-chip bm-chip--redo">' + esc(t("bm.badge.redo", { n: bm.n_redo })) + '</span>'; }
+        var isDelConfirm = (av.bmDeleteConfirmId === bm.benchmark_id);
+        var cardFoot;
+        if (isDelConfirm) {
+          cardFoot = '<div class="bm-card-foot bm-card-foot--confirm">' +
+            '<div class="bm-delete-confirm">' +
+              '<p class="bm-delete-confirm-msg">' + esc(t("bm.deleteConfirm", { n: bm.name })) + '</p>' +
+              '<div class="bm-delete-confirm-btns">' +
+                '<button class="btn btn-danger btn-sm" data-bm-delete-go="' + esc(bm.benchmark_id) + '">' + esc(t("bm.delete")) + '</button>' +
+                '<button class="btn btn-ghost btn-sm" data-bm-delete-cancel>' + esc(t("common.cancel")) + '</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        } else {
+          cardFoot = '<div class="bm-card-foot">' +
+            '<span class="bm-card-modes">' + esc((bm.modes || []).join(", ")) + '</span>' +
+            '<div style="display:flex;gap:8px">' +
+              '<button class="btn btn-ghost btn-sm" data-bm-delete="' + esc(bm.benchmark_id) + '">' + esc(t("bm.delete")) + '</button>' +
+              '<button class="btn btn-sm" data-bm-open="' + esc(bm.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
+            '</div>' +
+          '</div>';
+        }
         html += '<div class="bm-card">' +
           '<div class="bm-card-head"><span class="bm-card-name">' + esc(bm.name) + '</span>' + acc + '</div>' +
           '<div class="bm-card-chips">' + chips + '</div>' +
-          '<div class="bm-card-foot">' +
-            '<span class="bm-card-modes">' + esc((bm.modes || []).join(", ")) + '</span>' +
-            '<button class="btn btn-sm" data-bm-open="' + esc(bm.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
-          '</div>' +
+          cardFoot +
         '</div>';
       });
       html += '</div>';
@@ -3012,6 +3053,39 @@
       });
     });
 
+    // Delete benchmark: show inline confirm, then DELETE on confirm
+    qsa("[data-bm-delete]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        av.bmDeleteConfirmId = btn.getAttribute("data-bm-delete");
+        renderDetailContent();
+      });
+    });
+    qsa("[data-bm-delete-cancel]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        av.bmDeleteConfirmId = "";
+        renderDetailContent();
+      });
+    });
+    qsa("[data-bm-delete-go]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var bid = btn.getAttribute("data-bm-delete-go");
+        callApi("POST", "benchmark/delete", { benchmark_id: bid }).then(function (res) {
+          av.bmDeleteConfirmId = "";
+          if (res.status === 200 && res.data && res.data.status === "ok") {
+            av.benchmarks = av.benchmarks.filter(function (b) { return b.benchmark_id !== bid; });
+            toast(t("bm.deleted"));
+          } else {
+            toast(t("bm.deleteError"));
+          }
+          renderDetailContent();
+        }, function () {
+          av.bmDeleteConfirmId = "";
+          toast(t("bm.deleteError"));
+          renderDetailContent();
+        });
+      });
+    });
+
     // Screen 3 (create form) wiring
     if (av.creating) {
       var nameInput = byId("crName");
@@ -3085,9 +3159,13 @@
     byId("linkGolden").addEventListener("click", function () { setTab("golden"); });
     byId("linkSuggest").addEventListener("click", function () { setTab("suggest"); });
     byId("linkReview").addEventListener("click", function () { setTab("review"); });
-    // Back from golden panel
+    // Back from golden / suggest / review panels
     var goldenBack = byId("goldenBack");
     if (goldenBack) { goldenBack.addEventListener("click", function () { setTab("benchmarks"); }); }
+    var suggestBack = byId("suggestBack");
+    if (suggestBack) { suggestBack.addEventListener("click", function () { setTab("benchmarks"); }); }
+    var reviewBack = byId("reviewBack");
+    if (reviewBack) { reviewBack.addEventListener("click", function () { setTab("benchmarks"); }); }
     // Gear: settings placeholder (dispatch 3)
     var gearBtn = byId("gearBtn");
     if (gearBtn) { gearBtn.addEventListener("click", function () { toast("Settings - coming in dispatch 3."); }); }
