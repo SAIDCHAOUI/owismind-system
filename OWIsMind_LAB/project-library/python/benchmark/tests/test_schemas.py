@@ -251,5 +251,27 @@ class TestNormalizeGoldenRow(unittest.TestCase):
         self.assertTrue(ok, errors)
 
 
+class TestAgentKeyColumn(unittest.TestCase):
+    def test_golden_columns_has_agent_key(self):
+        self.assertIn("agent_key", schemas.GOLDEN_COLUMNS)
+
+    def test_raw_columns_has_agent_key_tag(self):
+        self.assertIn("agent_key_tag", schemas.RAW_COLUMNS)
+
+    def test_agent_key_not_required(self):
+        row = {"question_id": "q1", "question": "x", "reference_answer": "y"}
+        ok, errors = schemas.validate_golden_row(row)
+        self.assertTrue(ok, errors)  # blank agent_key still validates
+
+    def test_normalize_carries_agent_key(self):
+        out = schemas.normalize_golden_row(
+            {"question_id": "q1", "question": "x", "reference_answer": "y",
+             "agent_key": "  revenue_expert "})
+        self.assertEqual(out["agent_key"], "revenue_expert")
+        out2 = schemas.normalize_golden_row(
+            {"question_id": "q1", "question": "x", "reference_answer": "y", "agent_key": ""})
+        self.assertIsNone(out2["agent_key"])
+
+
 if __name__ == "__main__":
     unittest.main()

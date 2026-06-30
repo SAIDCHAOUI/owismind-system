@@ -44,6 +44,7 @@ GOLDEN_COLUMNS = (
     "language",              # enum (LANGUAGES), default 'fr'
     "active",                # boolean, default True
     "notes",                 # nullable: free human note
+    "agent_key",             # nullable: the LOGICAL agent this question tests (membership tag)
     # --- reference SQL / tool (v2): a soft signal for the judge + training data ----------
     # Nullable. NOT scored as a hard metric: stored, displayed beside the agent's ACTUAL
     # generated SQL / tool, and passed to the judge as a non-binding hint (the assistant may
@@ -85,6 +86,7 @@ RAW_COLUMNS = (
     "agent_label",
     "project_key",
     "agent_id",
+    "agent_key_tag",         # the golden agent tag carried for display/breakdown (logical key)
     "mode",
     "status",                # ok / error / timeout
     "error_type",
