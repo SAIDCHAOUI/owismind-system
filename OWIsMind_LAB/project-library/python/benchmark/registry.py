@@ -14,6 +14,7 @@ edits the registry. The DSS side (benchmark_webapp.dss) reads/writes the variabl
 """
 
 import json
+import re
 
 # Launch modes. ``append`` runs the pending questions plus any flagged "redo at next run"; ``full``
 # re-runs every member question (to show evolution / regression across the whole benchmark).
@@ -70,6 +71,24 @@ def _int(value, default=0):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def slug_agent_key(label):
+    """A stable logical agent key from a human label. Pure, never raises.
+
+    Lowercase, keep [a-z0-9_], collapse other runs to a single '_', strip leading/trailing '_'.
+    Falls back to 'agent' for an empty / symbol-only label.
+    """
+    s = _clean(label).lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return s or "agent"
+
+
+def names_for_agent(registry, agent_key):
+    """Lower-cased benchmark names already used BY THIS AGENT (name uniqueness is per agent)."""
+    akey = _clean(agent_key)
+    return {_clean(e.get("name")).lower() for e in (registry or {}).values()
+            if isinstance(e, dict) and _clean(e.get("agent_key")) == akey and _clean(e.get("name"))}
 
 
 # --- parse / normalize the registry -----------------------------------------
