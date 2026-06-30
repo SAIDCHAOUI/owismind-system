@@ -1,10 +1,11 @@
 """The benchmark registry + membership model and launch resolution (PURE, stdlib only).
 
 A *benchmark* is a named, unique evaluation campaign pinned to ONE agent. It accumulates the results
-of one or more runs and its question set grows over time (append mode). The registry + per-benchmark
-question membership + the per-question "redo at next run" intent live in the ``benchmark`` PROJECT
-VARIABLE (so there is no new managed dataset to create): this module parses / normalizes / mutates
-that registry and resolves, for a launch, exactly which questions to run and at which attempt number.
+of one or more runs; membership is AUTO-DERIVED from the golden question set (rows tagged to the
+agent), so the registry itself only carries a small ``redo`` list (questions to re-run at the next
+append launch). The registry + the per-question "redo at next run" intent live in the ``benchmark``
+PROJECT VARIABLE (so there is no new managed dataset to create): this module parses / normalizes /
+mutates that registry and resolves, for a launch, exactly which (question, mode) cells to run.
 
 Design contract: docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md.
 
@@ -16,14 +17,17 @@ edits the registry. The DSS side (benchmark_webapp.dss) reads/writes the variabl
 import json
 import re
 
-# Launch modes. ``append`` runs the pending questions plus any flagged "redo at next run"; ``full``
-# re-runs every member question (to show evolution / regression across the whole benchmark).
+# Launch modes. ``append`` runs the pending cells plus any flagged "redo at next run"; ``full``
+# re-runs every (member question, mode) cell (to show evolution / regression across the benchmark).
 LAUNCH_APPEND = "append"
 LAUNCH_FULL = "full"
 _LAUNCH_MODES = (LAUNCH_APPEND, LAUNCH_FULL)
 
 _STATUS_ACTIVE = "active"
 _STATUS_ARCHIVED = "archived"
+
+# Fallback mode key used when the entity carries no modes (agent does not support mode tokens).
+DEFAULT_MODE = "default"
 
 
 # --- scalar helpers ---------------------------------------------------------
@@ -101,22 +105,16 @@ def _normalize_modes(value):
     return []
 
 
-def _normalize_questions(value):
-    """Normalize the membership map: ``{question_id: {added_at, include_next, active}}``."""
+def _normalize_redo(value):
+    """Normalize the redo set into an ordered, de-duped list of question_ids. Never raises."""
     parsed = _coerce_obj(value)
-    out = {}
-    if not isinstance(parsed, dict):
-        return out
-    for qid, meta in parsed.items():
-        key = _clean(qid)
-        if not key:
-            continue
-        meta = meta if isinstance(meta, dict) else {}
-        out[key] = {
-            "added_at": _clean(meta.get("added_at")),
-            "include_next": _bool(meta.get("include_next"), default=False),
-            "active": _bool(meta.get("active"), default=True),
-        }
+    out, seen = [], set()
+    if isinstance(parsed, list):
+        for qid in parsed:
+            key = _clean(qid)
+            if key and key not in seen:
+                seen.add(key)
+                out.append(key)
     return out
 
 
@@ -124,7 +122,10 @@ def normalize_entity(raw):
     """Return a normalized benchmark entity, or None when it is unusable. Never raises.
 
     A usable entity needs a benchmark_id, a name, and a pinned agent (agent_key + project_key +
-    agent_id). ``modes`` is a list (possibly empty: the caller / step falls back to a default).
+    agent_id). ``modes`` is a list (possibly empty: the caller / step falls back to DEFAULT_MODE).
+    ``redo`` is an ordered, de-duped list of question_ids flagged for re-run at the next append.
+    A legacy ``questions`` membership map is silently ignored (membership is now auto-derived from
+    the golden dataset by agent_key tag).
     """
     if not isinstance(raw, dict):
         return None
@@ -149,7 +150,7 @@ def normalize_entity(raw):
         "status": status,
         "created_at": _clean(raw.get("created_at")),
         "created_by": _clean(raw.get("created_by")),
-        "questions": _normalize_questions(raw.get("questions")),
+        "redo": _normalize_redo(raw.get("redo")),
     }
 
 
@@ -193,39 +194,7 @@ def parse_run_request(raw):
     return {"benchmark_id": bid, "launch_mode": mode}
 
 
-# --- launch resolution ------------------------------------------------------
-
-def _member_order(entity):
-    """Member question_ids in a deterministic order (by added_at, then question_id)."""
-    questions = entity.get("questions") if isinstance(entity, dict) else None
-    questions = questions if isinstance(questions, dict) else {}
-    items = [(qid, meta) for qid, meta in questions.items()
-             if isinstance(meta, dict) and meta.get("active", True)]
-    items.sort(key=lambda it: (_clean(it[1].get("added_at")), it[0]))
-    return [qid for qid, _ in items]
-
-
-def done_question_ids(scored_rows, benchmark_id, agent_key=None):
-    """Set of question_ids with at least one scored attempt in this benchmark. Pure, never raises.
-
-    A question is "done" at the QUESTION level (any mode counts), matching the launch semantics: a
-    launch runs a question across all the benchmark's modes together.
-    """
-    bid = _clean(benchmark_id)
-    akey = _clean(agent_key)
-    out = set()
-    for r in (scored_rows or []):
-        if not isinstance(r, dict):
-            continue
-        if _clean(r.get("benchmark_id")) != bid:
-            continue
-        if akey and _clean(r.get("agent_key")) != akey:
-            continue
-        qid = _clean(r.get("question_id"))
-        if qid:
-            out.add(qid)
-    return out
-
+# --- attempt tracking -------------------------------------------------------
 
 def attempt_numbers(scored_rows, benchmark_id, agent_key=None):
     """Map ``(question_id, mode) -> max attempt_no`` seen in this benchmark. Pure, never raises."""
@@ -256,31 +225,6 @@ def next_attempt_no(attempt_map, question_id, mode):
     return _int(prior, default=0) + 1
 
 
-def resolve_to_run(entity, scored_rows, golden_active_ids, launch_mode=LAUNCH_APPEND):
-    """The ORDERED list of question_ids to run for one launch of ``entity``. Pure, never raises.
-
-    - members = the entity's active membership that is ALSO an active golden question.
-    - ``full``  : every member (re-run the whole benchmark -> evolution / regression).
-    - ``append``: members not yet done, plus members flagged ``include_next`` (the "redo" intent).
-    The ``golden_active_ids`` gate drops a member whose golden row was deactivated / deleted.
-    """
-    if not isinstance(entity, dict):
-        return []
-    active_golden = set(_clean(x) for x in (golden_active_ids or []))
-    members = [qid for qid in _member_order(entity) if qid in active_golden]
-    mode = _clean(launch_mode).lower()
-    if mode == LAUNCH_FULL:
-        return members
-    done = done_question_ids(scored_rows, entity.get("benchmark_id"), entity.get("agent_key"))
-    questions = entity.get("questions") or {}
-    out = []
-    for qid in members:
-        meta = questions.get(qid) if isinstance(questions.get(qid), dict) else {}
-        if qid not in done or _bool(meta.get("include_next"), default=False):
-            out.append(qid)
-    return out
-
-
 def benchmark_id_of_run(scored_rows, run_id):
     """The benchmark_id stamped on the rows of a given run_id ('' when unknown). Pure, never raises."""
     rid = _clean(run_id)
@@ -292,6 +236,81 @@ def benchmark_id_of_run(scored_rows, run_id):
     return ""
 
 
+# --- launch resolution ------------------------------------------------------
+
+def done_cells(scored_rows, benchmark_id, agent_key=None):
+    """Set of ``(question_id, mode)`` cells already scored in this benchmark. Pure, never raises.
+
+    Per-mode: (Q1, Smart) done does NOT imply (Q1, Pro) done. Each cell is resolved independently.
+    """
+    bid = _clean(benchmark_id)
+    akey = _clean(agent_key)
+    out = set()
+    for r in (scored_rows or []):
+        if not isinstance(r, dict):
+            continue
+        if _clean(r.get("benchmark_id")) != bid:
+            continue
+        if akey and _clean(r.get("agent_key")) != akey:
+            continue
+        qid = _clean(r.get("question_id"))
+        mode = _clean(r.get("mode"))
+        if qid and mode:
+            out.add((qid, mode))
+    return out
+
+
+def _entity_modes(entity):
+    """The modes to run for this entity; falls back to [DEFAULT_MODE] when the list is empty."""
+    modes = entity.get("modes") if isinstance(entity, dict) else None
+    if isinstance(modes, list):
+        cleaned = [_clean(m) for m in modes if _clean(m)]
+        if cleaned:
+            return cleaned
+    return [DEFAULT_MODE]
+
+
+def resolve_to_run(entity, golden_agent_active_ids, prior_scored, launch_mode=LAUNCH_APPEND):
+    """The per-mode launch plan ``{mode: [question_id]}`` for one benchmark launch. Pure, never raises.
+
+    Args:
+        entity: normalized benchmark entity (from the registry).
+        golden_agent_active_ids: active golden question_ids tagged to the entity's agent_key (the
+            gate: only these are eligible to run regardless of past attempts).
+        prior_scored: already-scored rows for this benchmark (used to detect done cells in append).
+        launch_mode: LAUNCH_APPEND or LAUNCH_FULL.
+
+    Returns:
+        A dict ``{mode: [question_id]}`` where each mode maps to its ordered list of question_ids.
+        Empty modes list -> ``{DEFAULT_MODE: [...]}``.
+        Returns ``{}`` for an unusable entity.
+
+    Modes:
+        full   : every golden_agent_active_id in every mode (re-run the whole benchmark).
+        append : per (qid, mode) cell - include if NOT yet done, OR if qid is in entity.redo.
+    """
+    if not isinstance(entity, dict):
+        return {}
+    active_golden = [_clean(x) for x in (golden_agent_active_ids or []) if _clean(x)]
+    modes = _entity_modes(entity)
+    redo = set(entity.get("redo") or [])
+    lmode = _clean(launch_mode).lower()
+
+    if lmode == LAUNCH_FULL:
+        return {mode: list(active_golden) for mode in modes}
+
+    # append mode: per-(qid, mode) cell
+    bid = _clean(entity.get("benchmark_id"))
+    akey = _clean(entity.get("agent_key"))
+    cells_done = done_cells(prior_scored, bid, akey)
+    plan = {}
+    for mode in modes:
+        qids = [qid for qid in active_golden
+                if (qid, mode) not in cells_done or qid in redo]
+        plan[mode] = qids
+    return plan
+
+
 # --- registry mutation (pure: returns a NEW registry dict) ------------------
 
 def _copy_registry(registry):
@@ -299,8 +318,8 @@ def _copy_registry(registry):
     for bid, entity in (registry or {}).items():
         if isinstance(entity, dict):
             clone = dict(entity)
-            clone["questions"] = {q: dict(m) for q, m in (entity.get("questions") or {}).items()
-                                  if isinstance(m, dict)}
+            clone["redo"] = list(entity.get("redo") or [])
+            clone.pop("questions", None)
             out[_clean(bid) or _clean(entity.get("benchmark_id"))] = clone
     return out
 
@@ -327,24 +346,17 @@ def validate_benchmark_name(name, taken_names):
     return True, None
 
 
-def create_benchmark(registry, benchmark_id, name, agent, modes, created_at,
-                     created_by="", question_ids=None):
-    """Return a new registry with a fresh benchmark added. Pure, never raises.
+def create_benchmark(registry, benchmark_id, name, agent, modes, created_at, created_by=""):
+    """Return a new registry with a fresh, EMPTY-redo benchmark added. Pure, never raises.
 
-    ``agent`` is ``{agent_key, agent_label, project_key, agent_id}``. ``question_ids`` seeds the
-    membership (all pending, include_next=False). The caller mints ``benchmark_id`` + ``created_at``
-    and has validated the name uniqueness (validate_benchmark_name).
+    Membership is auto-derived (active golden rows tagged to the agent), so nothing is seeded here.
+    ``agent`` is ``{agent_key, agent_label, project_key, agent_id}``. The caller mints benchmark_id +
+    created_at and has validated the name uniqueness (validate_benchmark_name with names_for_agent).
     """
     out = _copy_registry(registry)
-    bid = _clean(benchmark_id)
     agent = agent if isinstance(agent, dict) else {}
-    questions = {}
-    for qid in (question_ids or []):
-        key = _clean(qid)
-        if key:
-            questions[key] = {"added_at": _clean(created_at), "include_next": False, "active": True}
     entity = normalize_entity({
-        "benchmark_id": bid,
+        "benchmark_id": _clean(benchmark_id),
         "name": _clean(name),
         "agent_key": _clean(agent.get("agent_key")),
         "agent_label": _clean(agent.get("agent_label")),
@@ -354,67 +366,41 @@ def create_benchmark(registry, benchmark_id, name, agent, modes, created_at,
         "status": _STATUS_ACTIVE,
         "created_at": _clean(created_at),
         "created_by": _clean(created_by),
-        "questions": questions,
+        "redo": [],
     })
     if entity:
         out[entity["benchmark_id"]] = entity
     return out
 
 
-def add_questions(registry, benchmark_id, question_ids, added_at):
-    """Add member questions to a benchmark (pending, include_next=False). Idempotent. Pure."""
+def delete_benchmark(registry, benchmark_id):
+    """Hard-remove a benchmark from the registry. Pure, never raises. Scored rows are untouched."""
     out = _copy_registry(registry)
-    bid = _clean(benchmark_id)
-    entity = out.get(bid)
-    if not isinstance(entity, dict):
-        return out
-    questions = entity.setdefault("questions", {})
-    for qid in (question_ids or []):
-        key = _clean(qid)
-        if not key:
-            continue
-        if key in questions:
-            # Re-adding an existing member re-activates it but keeps its run/redo state.
-            questions[key]["active"] = True
-        else:
-            questions[key] = {"added_at": _clean(added_at), "include_next": False, "active": True}
+    out.pop(_clean(benchmark_id), None)
     return out
 
 
-def remove_question(registry, benchmark_id, question_id):
-    """Remove a member question from a benchmark (drops the membership row). Pure, never raises.
-
-    Past results for that question stay in the scored table; only the membership is removed, so the
-    question no longer runs nor counts toward the benchmark's pending/score going forward.
-    """
+def set_redo(registry, benchmark_id, question_id, value):
+    """Set/clear the 'redo at next run' flag for one member question. Pure, never raises."""
     out = _copy_registry(registry)
     entity = out.get(_clean(benchmark_id))
     if isinstance(entity, dict):
-        entity.get("questions", {}).pop(_clean(question_id), None)
+        qid = _clean(question_id)
+        redo = entity.setdefault("redo", [])
+        if value and qid and qid not in redo:
+            redo.append(qid)
+        elif not value and qid in redo:
+            redo.remove(qid)
     return out
 
 
-def set_include_next(registry, benchmark_id, question_id, value):
-    """Set the "redo at next run" flag on one member question. Pure, never raises."""
+def reset_redo_for(registry, benchmark_id, question_ids):
+    """Clear the redo flag for the given questions (after they ran). Pure, never raises."""
     out = _copy_registry(registry)
     entity = out.get(_clean(benchmark_id))
     if isinstance(entity, dict):
-        meta = entity.get("questions", {}).get(_clean(question_id))
-        if isinstance(meta, dict):
-            meta["include_next"] = bool(value)
-    return out
-
-
-def reset_include_next_for(registry, benchmark_id, question_ids):
-    """Clear the redo flag for the given member questions (after they ran). Pure, never raises."""
-    out = _copy_registry(registry)
-    entity = out.get(_clean(benchmark_id))
-    if isinstance(entity, dict):
-        questions = entity.get("questions", {})
-        for qid in (question_ids or []):
-            meta = questions.get(_clean(qid))
-            if isinstance(meta, dict):
-                meta["include_next"] = False
+        drop = {_clean(q) for q in (question_ids or [])}
+        entity["redo"] = [q for q in (entity.get("redo") or []) if q not in drop]
     return out
 
 
@@ -424,15 +410,6 @@ def rename_benchmark(registry, benchmark_id, name):
     entity = out.get(_clean(benchmark_id))
     if isinstance(entity, dict) and _clean(name):
         entity["name"] = _clean(name)
-    return out
-
-
-def archive_benchmark(registry, benchmark_id):
-    """Mark a benchmark archived (kept for consultation, hidden from the active list). Pure."""
-    out = _copy_registry(registry)
-    entity = out.get(_clean(benchmark_id))
-    if isinstance(entity, dict):
-        entity["status"] = _STATUS_ARCHIVED
     return out
 
 

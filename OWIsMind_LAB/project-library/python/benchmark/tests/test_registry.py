@@ -1,8 +1,8 @@
 """Tests for benchmark.registry (the named per-agent benchmark model + launch resolution).
 
-Stdlib only, no DSS. Covers parsing the registry / run_request out of the variable, the membership
-mutations (create / add / remove / redo flag), and the launch resolution (append vs full, attempt
-numbering, the golden-active gate, multi-attempt done detection).
+Stdlib only, no DSS. Covers parsing the registry / run_request out of the variable, the redo
+mutations (create / redo flag / delete), and the launch resolution (append vs full per mode,
+attempt numbering, the golden-agent-active gate, multi-attempt done detection).
 """
 
 import unittest
@@ -30,7 +30,7 @@ def _entity(**over):
         "status": "active",
         "created_at": "2026-06-29T09:00:00Z",
         "created_by": "user",
-        "questions": {},
+        "redo": [],
     }
     base.update(over)
     return base
@@ -84,63 +84,100 @@ class TestParse(unittest.TestCase):
         self.assertIsNone(registry.parse_run_request(None))
 
 
-class TestResolveToRun(unittest.TestCase):
+class TestEntityRedo(unittest.TestCase):
+    def test_normalize_parses_redo_list(self):
+        e = registry.normalize_entity(_entity(redo=["q1", "q2", "q1", ""]))
+        self.assertEqual(e["redo"], ["q1", "q2"])  # de-duped, blanks dropped, order kept
+
+    def test_normalize_ignores_legacy_questions_map(self):
+        raw = _entity()
+        raw.pop("redo", None)
+        raw["questions"] = {"q9": {"added_at": "x"}}  # legacy shape
+        e = registry.normalize_entity(raw)
+        self.assertEqual(e["redo"], [])
+        self.assertNotIn("questions", e)
+
+    def test_create_benchmark_no_seed(self):
+        reg = registry.create_benchmark({}, "B9", "Q4", _AGENT, ["Smart"], "2026-06-30T00:00:00Z")
+        self.assertEqual(reg["B9"]["name"], "Q4")
+        self.assertEqual(reg["B9"]["redo"], [])
+        self.assertEqual(reg["B9"]["modes"], ["Smart"])
+
+    def test_delete_benchmark(self):
+        reg = {"B1": _entity()}
+        out = registry.delete_benchmark(reg, "B1")
+        self.assertNotIn("B1", out)
+
+    def test_set_and_reset_redo(self):
+        reg = {"B1": _entity(redo=[])}
+        reg = registry.set_redo(reg, "B1", "q1", True)
+        self.assertEqual(reg["B1"]["redo"], ["q1"])
+        reg = registry.set_redo(reg, "B1", "q1", True)  # idempotent
+        self.assertEqual(reg["B1"]["redo"], ["q1"])
+        reg = registry.set_redo(reg, "B1", "q1", False)
+        self.assertEqual(reg["B1"]["redo"], [])
+        reg = registry.set_redo(reg, "B1", "q2", True)
+        reg = registry.reset_redo_for(reg, "B1", ["q2", "qX"])
+        self.assertEqual(reg["B1"]["redo"], [])
+
+
+class TestResolvePlan(unittest.TestCase):
     def setUp(self):
-        self.entity = _entity(questions={
-            "Q1": {"added_at": "2026-06-29T09:00:00Z", "include_next": False, "active": True},
-            "Q2": {"added_at": "2026-06-29T09:01:00Z", "include_next": False, "active": True},
-            "Q3": {"added_at": "2026-06-29T09:02:00Z", "include_next": False, "active": True},
-        })
-        self.golden = {"Q1", "Q2", "Q3"}
+        self.entity = _entity(modes=["Smart", "Pro"], redo=[])
+        self.golden_ids = ["Q1", "Q2", "Q3"]
 
     def test_append_all_pending_when_no_scored(self):
-        to_run = registry.resolve_to_run(self.entity, [], self.golden, "append")
-        self.assertEqual(to_run, ["Q1", "Q2", "Q3"])
+        plan = registry.resolve_to_run(self.entity, self.golden_ids, [], "append")
+        self.assertEqual(plan["Smart"], ["Q1", "Q2", "Q3"])
+        self.assertEqual(plan["Pro"], ["Q1", "Q2", "Q3"])
 
-    def test_append_skips_done(self):
-        scored = [_scored("B1", "Q1")]  # Q1 already attempted
-        to_run = registry.resolve_to_run(self.entity, scored, self.golden, "append")
-        self.assertEqual(to_run, ["Q2", "Q3"])
+    def test_append_skips_done_cell(self):
+        scored = [_scored("B1", "Q1", mode="Smart")]
+        plan = registry.resolve_to_run(self.entity, self.golden_ids, scored, "append")
+        self.assertNotIn("Q1", plan["Smart"])   # (Q1, Smart) done
+        self.assertIn("Q1", plan["Pro"])         # (Q1, Pro) still pending
 
-    def test_append_includes_redo_even_if_done(self):
-        ent = _entity(questions=dict(self.entity["questions"]))
-        ent["questions"]["Q1"]["include_next"] = True
-        scored = [_scored("B1", "Q1")]
-        to_run = registry.resolve_to_run(ent, scored, self.golden, "append")
-        self.assertIn("Q1", to_run)         # redo flag re-includes a done question
-        self.assertEqual(set(to_run), {"Q1", "Q2", "Q3"})
+    def test_redo_re_includes_done_cell(self):
+        scored = [_scored("B1", "Q1", mode="Smart")]
+        ent = _entity(modes=["Smart", "Pro"], redo=["Q1"])
+        plan = registry.resolve_to_run(ent, self.golden_ids, scored, "append")
+        self.assertIn("Q1", plan["Smart"])       # redo flag re-includes
 
-    def test_full_runs_every_member(self):
-        scored = [_scored("B1", "Q1"), _scored("B1", "Q2")]
-        to_run = registry.resolve_to_run(self.entity, scored, self.golden, "full")
-        self.assertEqual(to_run, ["Q1", "Q2", "Q3"])
+    def test_full_reruns_all_cells(self):
+        scored = [_scored("B1", "Q1", mode="Smart"), _scored("B1", "Q2", mode="Pro")]
+        plan = registry.resolve_to_run(self.entity, self.golden_ids, scored, "full")
+        self.assertEqual(plan["Smart"], ["Q1", "Q2", "Q3"])
+        self.assertEqual(plan["Pro"], ["Q1", "Q2", "Q3"])
 
-    def test_inactive_golden_question_dropped(self):
-        # Q2 no longer an active golden question -> not run even though pending.
-        to_run = registry.resolve_to_run(self.entity, [], {"Q1", "Q3"}, "append")
-        self.assertEqual(to_run, ["Q1", "Q3"])
+    def test_no_modes_uses_default(self):
+        ent = _entity(modes=[], redo=[])
+        plan = registry.resolve_to_run(ent, self.golden_ids, [], "append")
+        self.assertIn(registry.DEFAULT_MODE, plan)
+        self.assertEqual(plan[registry.DEFAULT_MODE], ["Q1", "Q2", "Q3"])
 
-    def test_inactive_member_dropped(self):
-        ent = _entity(questions=dict(self.entity["questions"]))
-        ent["questions"]["Q2"]["active"] = False
-        to_run = registry.resolve_to_run(ent, [], self.golden, "append")
-        self.assertEqual(to_run, ["Q1", "Q3"])
+    def test_done_cells_per_mode(self):
+        scored = [
+            _scored("B1", "Q1", mode="Smart"),
+            _scored("B1", "Q2", mode="Smart"),
+            _scored("B1", "Q1", mode="Pro"),
+        ]
+        cells = registry.done_cells(scored, "B1", "orchestrator")
+        self.assertIn(("Q1", "Smart"), cells)
+        self.assertIn(("Q2", "Smart"), cells)
+        self.assertIn(("Q1", "Pro"), cells)
+        self.assertNotIn(("Q2", "Pro"), cells)
 
-    def test_member_order_by_added_at(self):
-        ent = _entity(questions={
-            "Qb": {"added_at": "2026-06-29T09:05:00Z", "include_next": False, "active": True},
-            "Qa": {"added_at": "2026-06-29T09:01:00Z", "include_next": False, "active": True},
-        })
-        to_run = registry.resolve_to_run(ent, [], {"Qa", "Qb"}, "append")
-        self.assertEqual(to_run, ["Qa", "Qb"])
+    def test_golden_gate_excludes_absent_questions(self):
+        # Q3 not in golden_ids -> not planned in any mode
+        plan = registry.resolve_to_run(self.entity, ["Q1", "Q2"], [], "append")
+        for mode in ("Smart", "Pro"):
+            self.assertNotIn("Q3", plan[mode])
+
+    def test_resolve_none_entity_returns_empty(self):
+        self.assertEqual(registry.resolve_to_run(None, self.golden_ids, [], "append"), {})
 
 
 class TestAttempts(unittest.TestCase):
-    def test_done_question_ids(self):
-        scored = [_scored("B1", "Q1"), _scored("B1", "Q2", mode="Pro"), _scored("B2", "Q9")]
-        done = registry.done_question_ids(scored, "B1", "orchestrator")
-        self.assertEqual(done, {"Q1", "Q2"})
-
     def test_attempt_numbers_per_mode(self):
         scored = [
             _scored("B1", "Q1", mode="Smart", attempt_no=1),
@@ -164,41 +201,15 @@ class TestAttempts(unittest.TestCase):
 
 
 class TestMutations(unittest.TestCase):
-    def test_create_benchmark_seeds_questions(self):
-        reg = registry.create_benchmark({}, "B1", "said", _AGENT, ["Smart"],
-                                        "2026-06-29T09:00:00Z", "user", ["Q1", "Q2"])
-        self.assertIn("B1", reg)
-        self.assertEqual(set(reg["B1"]["questions"].keys()), {"Q1", "Q2"})
-        self.assertFalse(reg["B1"]["questions"]["Q1"]["include_next"])
-
     def test_create_does_not_mutate_input(self):
         reg0 = {}
         registry.create_benchmark(reg0, "B1", "said", _AGENT, ["Smart"], "t")
         self.assertEqual(reg0, {})
 
-    def test_add_questions_idempotent(self):
-        reg = registry.create_benchmark({}, "B1", "said", _AGENT, ["Smart"], "t", question_ids=["Q1"])
-        reg = registry.add_questions(reg, "B1", ["Q1", "Q2"], "t2")
-        self.assertEqual(set(reg["B1"]["questions"].keys()), {"Q1", "Q2"})
-
-    def test_remove_question(self):
-        reg = registry.create_benchmark({}, "B1", "said", _AGENT, ["Smart"], "t", question_ids=["Q1", "Q2"])
-        reg = registry.remove_question(reg, "B1", "Q1")
-        self.assertEqual(set(reg["B1"]["questions"].keys()), {"Q2"})
-
-    def test_set_and_reset_include_next(self):
-        reg = registry.create_benchmark({}, "B1", "said", _AGENT, ["Smart"], "t", question_ids=["Q1", "Q2"])
-        reg = registry.set_include_next(reg, "B1", "Q1", True)
-        self.assertTrue(reg["B1"]["questions"]["Q1"]["include_next"])
-        reg = registry.reset_include_next_for(reg, "B1", ["Q1"])
-        self.assertFalse(reg["B1"]["questions"]["Q1"]["include_next"])
-
-    def test_rename_and_archive(self):
+    def test_rename_benchmark(self):
         reg = registry.create_benchmark({}, "B1", "said", _AGENT, ["Smart"], "t")
         reg = registry.rename_benchmark(reg, "B1", "renamed")
         self.assertEqual(reg["B1"]["name"], "renamed")
-        reg = registry.archive_benchmark(reg, "B1")
-        self.assertEqual(reg["B1"]["status"], "archived")
 
     def test_validate_benchmark_name(self):
         ok, err = registry.validate_benchmark_name("fresh", {"said"})
