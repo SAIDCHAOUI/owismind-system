@@ -582,7 +582,7 @@
     "st.scoredDs":      { en: "Scored results dataset",  fr: "Dataset des resultats scores" },
     "st.summaryDs":     { en: "Summary dataset",          fr: "Dataset de synthese" },
     "st.breakdownDs":   { en: "Breakdown dataset",        fr: "Dataset de repartition" },
-    "st.whereData":     { en: "These datasets live in the OWIsMind_LAB Dataiku project.", fr: "Ces datasets se trouvent dans le projet Dataiku OWIsMind_LAB." },
+    "st.whereData":     { en: "Benchmarks and redo flags live in the project variable 'benchmark'. Questions and results live in Flow datasets (named above).", fr: "Les benchmarks et les drapeaux 'a refaire' vivent dans la variable projet 'benchmark'. Les questions et les resultats vivent dans des datasets du Flow (nommes ci-dessus)." },
     "st.save":          { en: "Save settings",   fr: "Enregistrer les parametres" },
     "st.saved":         { en: "Settings saved.", fr: "Parametres enregistres." },
     "st.loading":       { en: "Loading settings...", fr: "Chargement des parametres..." },
@@ -2864,6 +2864,7 @@
         creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" };
     }
     if (level === "benchmark" && benchmarkId) {
+      S_bench4ActiveBid = null;  // Fix 1: clear stale lock so other benchmarks are not false-locked
       S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false };
     }
     renderBreadcrumb();
@@ -3506,7 +3507,8 @@
           '</div>' +
         '</div>';
       } else {
-        html += '<button class="btn btn-primary" id="bd4Rerun">' + esc(t("bd.runFull")) + '</button>';
+        // Fix 3: disable Re-run when another benchmark is running (mirrors Run pending guard)
+        html += '<button class="btn' + (!otherRunning ? ' btn-primary' : '') + '" id="bd4Rerun"' + (otherRunning ? ' disabled' : '') + '>' + esc(t("bd.runFull")) + '</button>';
       }
     }
 
@@ -3664,11 +3666,14 @@
         if (S_bench4ActiveBid) { navigateTo("benchmark", S.route.agentKey, S_bench4ActiveBid); renderAgentsRail(); }
       });
     }
-    // Tag questions shortcut from detail view
+    // Tag questions shortcut from detail view - mirrors goTag() exactly (Fix 2)
     var bdTagBtn = byId("bd4TagBtn");
     if (bdTagBtn) {
       bdTagBtn.addEventListener("click", function () {
+        S.goldenTag = { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null };
         navigateTo("golden-tag", S.route.agentKey, S.route.benchmarkId);
+        renderAgentsRail();
+        loadGoldenTag();
       });
     }
 
