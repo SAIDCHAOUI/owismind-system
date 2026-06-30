@@ -232,6 +232,14 @@ class TestScalars(unittest.TestCase):
         self.assertEqual(cfg["benchmarks"], {})
         self.assertIsNone(cfg["run_request"])
 
+    def test_settings_keys_present(self):
+        cfg = run_params.resolve({"benchmark": {"golden_dataset": "g", "judge_llm_id": "j",
+                                                "concurrency": 5, "language": "en"}})
+        self.assertEqual(cfg["golden_dataset"], "g")
+        self.assertEqual(cfg["judge_llm_id"], "j")
+        self.assertEqual(cfg["concurrency"], 5)
+        self.assertEqual(cfg["language"], "en")
+
 
 if __name__ == "__main__":
     unittest.main()

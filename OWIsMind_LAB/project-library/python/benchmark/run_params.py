@@ -29,7 +29,8 @@ The ``benchmark`` object (every key optional except ``agents`` for the run step)
       "modes":        ["Smart", "Pro", "Claude"], // modes tried on mode-aware agents
       "language":     "fr",
       "concurrency":  3,                          // bounded thread pool (clamped 1..8)
-      "question_filter": {},                      // {"categories":[...],"question_ids":[...],"languages":[...]}
+      "question_filter": {},  // legacy: tolerated but no longer used for membership (auto-derived
+                              // from the golden agent_key tag); kept only for back-compat reads.
       "judge_llm_id": null,                       // null -> config.JUDGE_LLM_ID
       "score_all_runs":     false,                // step 3: re-judge every run_id
       "aggregate_all_runs": false                 // step 4: aggregate every run_id
