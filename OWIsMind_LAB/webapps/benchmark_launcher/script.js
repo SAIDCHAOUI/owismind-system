@@ -439,6 +439,58 @@
     "rv.caption2": {
       en: "You review every attempt of the selected benchmark. An override targets that one attempt (its run) and survives future runs.",
       fr: "Vous revoyez chaque tentative du benchmark choisi. Une correction porte sur cette tentative (son execution) et survit aux executions suivantes."
+    },
+
+    /* --- agent-first shell --- */
+    "hdr.link.golden":  { en: "Golden",      fr: "Jeu de ref." },
+    "hdr.link.suggest": { en: "Suggestions", fr: "Suggestions" },
+    "hdr.link.review":  { en: "Review",       fr: "Revue" },
+    "hdr.back":         { en: "Back",         fr: "Retour" },
+
+    "rail.title":       { en: "AGENTS",       fr: "AGENTS" },
+    "rail.refresh":     { en: "Refresh",      fr: "Actualiser" },
+    "rail.empty":       { en: "No agent yet. Refresh or add one manually.", fr: "Aucun agent. Actualisez ou ajoutez-en un manuellement." },
+    "rail.discovering": { en: "Discovering agents...", fr: "Decouverte des agents..." },
+    "rail.discovered":  { en: "{n} agent(s) found",   fr: "{n} agent(s) trouve(s)" },
+    "rail.failed":      { en: "Discovery failed - known agents shown", fr: "Decouverte echouee - agents connus affiches" },
+    "rail.nTagged":     { en: "{n} tagged",   fr: "{n} taguees" },
+
+    "gs.step1": { en: "Connect an agent",    fr: "Connectez un agent" },
+    "gs.step2": { en: "Tag questions to it", fr: "Taguez des questions" },
+    "gs.step3": { en: "Create a benchmark",  fr: "Creez un benchmark" },
+    "gs.step4": { en: "Run it",              fr: "Lancez-le" },
+
+    "bcr.home": { en: "Agents", fr: "Agents" },
+
+    "agv.new":      { en: "New benchmark",         fr: "Nouveau benchmark" },
+    "agv.nTagged":  { en: "{n} tagged question(s)", fr: "{n} question(s) taguee(s)" },
+    "agv.tagLink":  { en: "Tag questions to this agent", fr: "Taguer des questions pour cet agent" },
+    "agv.loadError":{ en: "Could not load the benchmarks.", fr: "Impossible de charger les benchmarks." },
+    "agv.2b.h":     { en: "No benchmark yet",      fr: "Aucun benchmark" },
+    "agv.2b.p":     { en: "Create the first benchmark for this agent.", fr: "Creez le premier benchmark pour cet agent." },
+    "agv.2c.h":     { en: "No benchmark yet",      fr: "Aucun benchmark" },
+    "agv.2c.p":     { en: "Tag questions to this agent first, then create a benchmark.", fr: "Taguez d'abord des questions a cet agent, puis creez un benchmark." },
+    "agv.2c.tag":   { en: "Tag questions",         fr: "Taguer des questions" },
+    "agv.2c.locked":{ en: "No tagged question yet - tag some to enable benchmark creation.", fr: "Aucune question taguee - taguez-en pour creer un benchmark." },
+
+    "cr.eyebrow":  { en: "New benchmark",     fr: "Nouveau benchmark" },
+    "cr.title":    { en: "Create benchmark",  fr: "Creer un benchmark" },
+    "cr.agent":    { en: "Agent",             fr: "Agent" },
+    "cr.name":     { en: "Benchmark name",    fr: "Nom du benchmark" },
+    "cr.namePh":   { en: "e.g. Q4 Baseline", fr: "ex. Reference Q4" },
+    "cr.nameHint": { en: "Unique for this agent.", fr: "Unique pour cet agent." },
+    "cr.modes":    { en: "Response modes",    fr: "Modes de reponse" },
+    "cr.pending":  { en: "{n} question(s) will be queued on creation.", fr: "{n} question(s) seront en attente a la creation." },
+    "cr.noTagged": { en: "0 tagged questions - tag some first to enable creation.", fr: "0 question taguee - taguez-en d'abord pour creer un benchmark." },
+    "cr.create":   { en: "Create",            fr: "Creer" },
+    "cr.tag":      { en: "Tag questions",     fr: "Taguer des questions" },
+    "cr.cancel":   { en: "Cancel",            fr: "Annuler" },
+    "cr.created":  { en: "Benchmark created.", fr: "Benchmark cree." },
+    "cr.error":    { en: "Could not create the benchmark.", fr: "Impossible de creer le benchmark." },
+
+    "footer.copy": {
+      en: "Benchmarks and redo flags live in the project variable \"benchmark\". Questions and results live in Flow datasets (set their names in Settings).",
+      fr: "Les benchmarks et les indicateurs a refaire vivent dans la variable de projet \"benchmark\". Les questions et resultats vivent dans les datasets Flow (noms a configurer dans Parametres)."
     }
   };
 
@@ -507,7 +559,12 @@
       running: false, runMsg: null, busy: false
     },
     // new-benchmark modal
-    benchNew: { open: false, error: null }
+    benchNew: { open: false, error: null },
+    // Agent-first routing (dispatch 1)
+    route: { level: "home", agentKey: null, benchmarkId: null },
+    agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
+    agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [] },
+    settingsOpen: false
   };
 
   var newAgentSeq = 0;
@@ -583,8 +640,8 @@
     mode_options: ["Smart", "Pro", "Claude"],
     runs: [{ run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" }],
     golden: [
-      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "", expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table" },
-      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)", expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none" },
+      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "", expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", agent_key: "orchestrator" },
+      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)", expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", agent_key: "orchestrator" },
       { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse", expected_sql: "", expected_tool: "" }
     ],
     benchmarks: [
@@ -659,7 +716,16 @@
         { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 },
         { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.55, judge_verdict: "incorrect", judge_comment: "Right account but reported a budget figure, not the ACTUALS scope.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu du compte Maroc Telecom est d'environ 3 900 000 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: false, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
       ]
-    }
+    },
+    // Agent catalog (populated by GET /api/agents + POST /api/agents/discover)
+    agent_catalog: {
+      agents: [
+        { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
+      ],
+      discovered_at: "2026-06-30T08:00:00Z"
+    },
+    // Number of active tagged golden questions per agent_key
+    agent_tagged: { orchestrator: 2 }
   };
   var mockRun = { remaining: 0 };
   var mockPromoted = {};
@@ -821,6 +887,17 @@
       var lbid = (body && body.benchmark_id) || "";
       if (!MOCK.bench_detail[lbid]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
       else { mockRun.remaining = 2; data = { status: "ok", launched: true, launch_mode: (body && body.launch_mode) || "append" }; }
+    } else if (method === "GET" && path0 === "agents") {
+      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), discovered_at: MOCK.agent_catalog.discovered_at };
+    } else if (method === "POST" && path0 === "agents/discover") {
+      MOCK.agent_catalog.discovered_at = new Date().toISOString();
+      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), discovered_at: MOCK.agent_catalog.discovered_at, discovery: "ok" };
+    } else if (method === "GET" && path0 === "agent/benchmarks") {
+      var agParams = parseQuery(path);
+      var agKey = agParams.agent_key || "";
+      var agBMs = MOCK.benchmarks.filter(function (b) { return b.agent_key === agKey; });
+      var nTagged = MOCK.agent_tagged[agKey] || 0;
+      data = { status: "ok", agent_key: agKey, n_tagged: nTagged, benchmarks: agBMs };
     } else if (method === "POST" && path0 === "override") {
       var ob = body || {};
       var okey = [ob.run_id, ob.question_id, ob.agent_key || "", ob.mode || ""].join("|");
@@ -859,22 +936,25 @@
 
   function mockBenchCreate(body) {
     var name = (body.name || "").trim();
+    var agKey = (body.agent_key || "").trim();
     if (!name) { return { _status: 400, status: "error", error: "invalid_benchmark", messages: ["name is required"] }; }
-    if (MOCK.benchmarks.some(function (b) { return b.name.toLowerCase() === name.toLowerCase(); })) {
-      return { _status: 400, status: "error", error: "invalid_benchmark", messages: ["a benchmark named '" + name + "' already exists"] };
+    var nTagged = MOCK.agent_tagged[agKey] || 0;
+    if (nTagged === 0) { return { _status: 400, status: "error", error: "no_tagged_questions" }; }
+    // Per-agent name uniqueness
+    if (MOCK.benchmarks.some(function (b) { return b.agent_key === agKey && b.name.toLowerCase() === name.toLowerCase(); })) {
+      return { _status: 400, status: "error", error: "invalid_benchmark", messages: ["a benchmark named '" + name + "' already exists for this agent"] };
     }
-    var ag = MOCK.bench_agents.filter(function (a) { return a.agent_key === body.agent_key; })[0];
+    var ag = MOCK.agent_catalog.agents.filter(function (a) { return a.agent_key === agKey; })[0];
     if (!ag) { return { _status: 400, status: "error", error: "unknown_agent" }; }
     var bid = "bm_" + Math.random().toString(36).slice(2, 8);
-    var modes = ag.modes ? MOCK.mode_options.slice() : ["default"];
-    var qids = body.seed_all
-      ? MOCK.golden.filter(function (g) { return g.active; }).map(function (g) { return g.question_id; })
-      : (body.question_ids || []).slice();
+    var modes = body.modes && body.modes.length ? body.modes : (ag.modes ? ["Smart"] : ["default"]);
+    // Auto-membership: no seed questions at create time; membership = active golden tagged to this agent
+    var qids = MOCK.golden.filter(function (g) { return g.active && g.agent_key === agKey; }).map(function (g) { return g.question_id; });
     var questions = qids.map(function (qid) {
       var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
-      return { question_id: qid, question: g.question || qid, category: g.category || "",
-        reference_answer: g.reference_answer || "", expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
-        in_golden: true, include_next: false, status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] };
+      return { question_id: qid, question: g.question || qid, category: g.category || "", reference_answer: g.reference_answer || "",
+        expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "", in_golden: true, include_next: false,
+        status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] };
     });
     MOCK.bench_detail[bid] = { benchmark_id: bid, name: name, agent_key: ag.agent_key, agent_label: ag.agent_label,
       modes: modes, status: "active", n_questions: questions.length, n_done: 0, n_pending: questions.length, n_redo: 0, questions: questions };
@@ -920,38 +1000,39 @@
   function shellHtml() {
     return '' +
       '<div class="main">' +
-        '<div class="util"><span class="util-sp"></span>' +
-          '<span class="run-pill idle" id="runPill"><span class="dot"></span><span id="runStatusTxt"></span></span>' +
-        '</div>' +
         '<header class="header">' +
-          '<div>' +
+          '<div class="header-brand">' +
             '<p class="eyebrow" data-i18n="hdr.eyebrow"></p>' +
             '<h1 data-i18n="hdr.h1"></h1>' +
             '<div class="title-bar"></div>' +
-            '<p class="header-sub" data-i18n="hdr.sub"></p>' +
           '</div>' +
+          '<nav class="hdr-links">' +
+            '<button class="hdr-link" id="linkGolden" data-i18n="hdr.link.golden"></button>' +
+            '<button class="hdr-link" id="linkSuggest" data-i18n="hdr.link.suggest"></button>' +
+            '<button class="hdr-link" id="linkReview" data-i18n="hdr.link.review"></button>' +
+          '</nav>' +
           '<div class="controls">' +
             '<div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>' +
-            '<div class="seg" id="themeSeg"><button data-theme="light">LIGHT</button><button data-theme="dark">DARK</button></div>' +
+            '<button class="btn-gear" id="gearBtn" title="Settings">&#9881;</button>' +
           '</div>' +
         '</header>' +
-        '<nav class="tabs">' +
-          '<button class="tab" data-tab="benchmarks"><span data-i18n="tab.bench"></span><span class="count" id="tabBenchCount"></span></button>' +
-          '<button class="tab" data-tab="config"><span data-i18n="tab.config"></span></button>' +
-          '<button class="tab" data-tab="golden"><span data-i18n="tab.golden"></span><span class="count" id="tabGoldenCount"></span></button>' +
-          '<button class="tab" data-tab="suggest"><span data-i18n="tab.suggest"></span></button>' +
-          '<button class="tab" data-tab="review"><span data-i18n="tab.review"></span></button>' +
-        '</nav>' +
+        '<div id="gsStrip" class="gs-strip" style="display:none"></div>' +
         '<div class="body">' +
-          '<main class="content">' +
-            '<section class="panel" data-panel="benchmarks"><div id="benchContent"></div></section>' +
-            configPanelHtml() +
-            '<section class="panel" data-panel="golden"><div id="goldenContent"></div></section>' +
-            '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
-            '<section class="panel" data-panel="review"><div id="reviewContent"></div></section>' +
-          '</main>' +
-          asideHtml() +
+          '<section class="panel on" data-panel="benchmarks">' +
+            '<nav class="rail" id="agentsRail"></nav>' +
+            '<div class="detail-pane" id="detailPane">' +
+              '<div class="breadcrumb" id="breadcrumb"></div>' +
+              '<div id="detailContent"></div>' +
+            '</div>' +
+          '</section>' +
+          '<section class="panel" data-panel="golden">' +
+            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="goldenBack" data-i18n="hdr.back"></button></div>' +
+            '<div id="goldenContent"></div>' +
+          '</section>' +
+          '<section class="panel" data-panel="suggest"><div id="suggestContent"></div></section>' +
+          '<section class="panel" data-panel="review"><div id="reviewContent"></div></section>' +
         '</div>' +
+        '<footer class="data-footer" id="dataFooter"></footer>' +
       '</div>' +
       modalHtml() +
       benchModalHtml() +
@@ -1094,50 +1175,25 @@
     applyTheme();
     applyLang();
 
-    if (S.loadError && !S.loaded) {
-      built = false;
-      var root = byId("bench-app");
-      if (root) {
-        root.classList.remove("dirty");
-        root.innerHTML = '' +
-          '<div class="main"><div class="content">' +
-          '<div class="note note-error" role="alert">' + esc(t("save.loadError")) + '</div>' +
-          '<div class="actions-row"><button type="button" class="btn" id="retryConfig">' + esc(t("common.retry")) + '</button></div>' +
-          '</div></div>';
-        var rc = byId("retryConfig");
-        if (rc) { rc.addEventListener("click", function () { loadConfig(); }); }
-      }
-      return;
-    }
-
     ensureShell();
     applyI18n();
     syncSeg("langSeg", "data-lang", ui.lang);
-    syncSeg("themeSeg", "data-theme", ui.theme);
     setTabUI(S.tab);
 
-    renderAgents();
-    renderModes();
-    renderCats();
-    byId("langFilter").value = S.filterLanguage;
-    byId("benchLang").value = S.benchLang;
-    byId("concurrency").value = S.concurrency;
-    setText("qtHelp", t("qt.help", { n: fmtNum(S.questionCount) }));
-    setDirtyUI();
-    renderSaveError();
+    // Agent-first master-detail (benchmarks panel)
+    renderAgentsRail();
+    renderBreadcrumb();
+    renderDetailContent();
+    renderGettingStarted();
+    renderDataFooter();
 
-    renderAside();
-    setText("tabGoldenCount", S.golden.loaded ? String(S.golden.list.length) : String(S.questionCount || 0));
-    setText("tabBenchCount", S.bench.loaded ? String(S.bench.list.length) : "");
-
-    renderBenchmarks();
+    // Auxiliary panels (shown via header links)
     renderGolden();
     renderSuggestions();
     renderReview();
 
+    // Status for any running bench operation (run pill gone; bench.running drives poll)
     setStatus(S.bench.running ? "running" : (S.bench.runMsg ? "done" : "idle"));
-    setHTML("icSave", I.save);
-    setHTML("icRun", I.rocket);
   }
 
   function syncSeg(segId, attr, value) {
@@ -2617,15 +2673,407 @@
   function setTab(tab) {
     S.tab = tab;
     setTabUI(tab);
-    if (tab === "benchmarks" && !S.bench.loaded && !S.bench.loadError) { loadBenchmarks(); }
+    if (tab === "benchmarks") { renderAgentsRail(); renderBreadcrumb(); renderDetailContent(); }
     if (tab === "golden" && !S.golden.loaded && !S.golden.loadError) { loadGolden(); }
     if (tab === "suggest" && !S.suggestions.loaded && !S.suggestions.loadError) { loadSuggestions(); }
     if (tab === "review" && !S.review.loaded && !S.review.loadError) { loadReview(); }
   }
 
+  /* ============================ agent-first (dispatch 1) ============================ */
+
+  var _agentDiscoverFired = false;  // ensure discover fires only once per page load
+
+  function loadAgents() {
+    S.agentCatalog.loaded = false;
+    S.agentCatalog.loadError = false;
+    render();  // build the shell (ensureShell) before the targeted rail renders below
+    callApi("GET", "agents").then(function (res) {
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        S.agentCatalog.agents = d.agents || [];
+        S.agentCatalog.discovered_at = d.discovered_at || null;
+        S.agentCatalog.loaded = true;
+        S.agentCatalog.loadError = false;
+      } else {
+        S.agentCatalog.loaded = true;
+        S.agentCatalog.loadError = true;
+      }
+      renderAgentsRail();
+      renderGettingStarted();
+      if (!_agentDiscoverFired) { _agentDiscoverFired = true; discoverAgents(); }
+    }, function () {
+      S.agentCatalog.loaded = true;
+      S.agentCatalog.loadError = true;
+      renderAgentsRail();
+      if (!_agentDiscoverFired) { _agentDiscoverFired = true; discoverAgents(); }
+    });
+  }
+
+  function discoverAgents() {
+    S.agentCatalog.discovering = true;
+    S.agentCatalog.discoveryFailed = false;
+    renderAgentsRail();
+    callApi("POST", "agents/discover").then(function (res) {
+      var d = res.data || {};
+      S.agentCatalog.discovering = false;
+      if (res.status === 200 && d.status === "ok") {
+        S.agentCatalog.agents = d.agents || S.agentCatalog.agents;
+        S.agentCatalog.discovered_at = d.discovered_at || null;
+        S.agentCatalog.discoveryFailed = false;
+      } else {
+        S.agentCatalog.discoveryFailed = true;
+      }
+      renderAgentsRail();
+      renderGettingStarted();
+    }, function () {
+      S.agentCatalog.discovering = false;
+      S.agentCatalog.discoveryFailed = true;
+      renderAgentsRail();
+    });
+  }
+
+  function navigateTo(level, agentKey, benchmarkId) {
+    S.route = { level: level, agentKey: agentKey || null, benchmarkId: benchmarkId || null };
+    if (level === "agent" && agentKey) {
+      S.agentView = { loaded: false, loadError: false, agentKey: agentKey, n_tagged: 0, benchmarks: [],
+        creating: false, submitting: false, createError: null, createName: "", createModes: [] };
+    }
+    renderBreadcrumb();
+    renderDetailContent();
+    if (level === "agent" && agentKey) { loadAgentBenchmarks(agentKey); }
+  }
+
+  function loadAgentBenchmarks(agentKey) {
+    callApi("GET", "agent/benchmarks?agent_key=" + encodeURIComponent(agentKey)).then(function (res) {
+      if (S.route.agentKey !== agentKey) { return; }  // stale response
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        S.agentView.n_tagged = d.n_tagged || 0;
+        S.agentView.benchmarks = d.benchmarks || [];
+        S.agentView.loaded = true;
+        S.agentView.loadError = false;
+      } else {
+        S.agentView.loaded = true;
+        S.agentView.loadError = true;
+      }
+      if (S.route.level === "agent" && S.route.agentKey === agentKey) { renderDetailContent(); renderGettingStarted(); }
+    }, function () {
+      if (S.route.agentKey !== agentKey) { return; }
+      S.agentView.loaded = true;
+      S.agentView.loadError = true;
+      if (S.route.level === "agent") { renderDetailContent(); }
+    });
+  }
+
+  function submitCreate() {
+    var name = (S.agentView.createName || "").trim();
+    if (!name) {
+      S.agentView.createError = { text: t("cr.error") };
+      renderDetailContent();
+      return;
+    }
+    var agKey = S.route.agentKey;
+    var modes = S.agentView.createModes.slice();
+    // ``submitting`` is the in-flight flag (disables the button); ``creating`` keeps the form open.
+    S.agentView.submitting = true;
+    S.agentView.createError = null;
+    renderDetailContent();
+    callApi("POST", "benchmark/create", { name: name, agent_key: agKey, modes: modes }).then(function (res) {
+      var d = res.data || {};
+      S.agentView.submitting = false;
+      if (res.status === 200 && d.status === "ok") {
+        toast(t("cr.created"));
+        S.agentView.creating = false;  // close the form, return to the list
+        S.agentView.loaded = false;
+        renderDetailContent();
+        loadAgentBenchmarks(agKey);
+      } else if (res.status === 400 && d.error === "no_tagged_questions") {
+        // gate triggered server-side: keep the form open, swap to the tag action
+        S.agentView.n_tagged = 0;
+        S.agentView.createError = { text: t("cr.noTagged") };
+        renderDetailContent();
+      } else {
+        var msg = (d.messages && d.messages.length) ? d.messages[0] : t("cr.error");
+        S.agentView.createError = { text: msg };
+        renderDetailContent();
+      }
+    }, function () {
+      S.agentView.submitting = false;
+      S.agentView.createError = { text: t("cr.error") };
+      renderDetailContent();
+    });
+  }
+
+  /* --- render helpers --- */
+
+  function renderAgentsRail() {
+    var box = byId("agentsRail");
+    if (!box) { return; }
+    var html = '<div class="rail-head"><span class="rail-title">' + esc(t("rail.title")) + '</span>' +
+      '<button class="rail-refresh" id="refreshAgents">' + esc(t("rail.refresh")) + '</button></div>';
+
+    if (S.agentCatalog.discovering) {
+      html += '<div class="rail-status">' + esc(t("rail.discovering")) + '</div>';
+    } else if (S.agentCatalog.discoveryFailed) {
+      html += '<div class="rail-status rail-status--warn">' + esc(t("rail.failed")) + '</div>';
+    }
+
+    if (S.agentCatalog.loaded && !S.agentCatalog.agents.length) {
+      html += '<div class="rail-empty">' + esc(t("rail.empty")) + '</div>';
+    }
+
+    S.agentCatalog.agents.forEach(function (ag) {
+      var active = (S.route.level === "agent" || S.route.level === "benchmark") && S.route.agentKey === ag.agent_key;
+      html += '<button class="rail-row' + (active ? " rail-row--active" : "") + '" data-rail-key="' + esc(ag.agent_key) + '">' +
+        '<span class="rail-row-lbl">' + esc(ag.agent_label) + '</span>' +
+      '</button>';
+    });
+
+    box.innerHTML = html;
+
+    var refreshBtn = byId("refreshAgents");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", function () {
+        _agentDiscoverFired = true;  // prevent the double-fire guard; this IS the re-fire
+        discoverAgents();
+      });
+    }
+    qsa("[data-rail-key]", box).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        navigateTo("agent", btn.getAttribute("data-rail-key"), null);
+        renderAgentsRail();  // refresh active state
+      });
+    });
+  }
+
+  function renderBreadcrumb() {
+    var box = byId("breadcrumb");
+    if (!box) { return; }
+    if (S.route.level === "home") { box.innerHTML = ""; return; }
+    var agKey = S.route.agentKey;
+    var agLabel = "";
+    S.agentCatalog.agents.forEach(function (a) { if (a.agent_key === agKey) { agLabel = a.agent_label; } });
+    var html = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
+      '<span class="bcr-sep">/</span>' +
+      '<span class="bcr-cur">' + esc(agLabel || agKey) + '</span>';
+    box.innerHTML = html;
+    var homeBtn = byId("bcrHome");
+    if (homeBtn) {
+      homeBtn.addEventListener("click", function () { navigateTo("home", null, null); renderAgentsRail(); });
+    }
+  }
+
+  function renderDetailContent() {
+    var box = byId("detailContent");
+    if (!box) { return; }
+    if (S.route.level === "home") { box.innerHTML = ""; return; }
+    if (S.route.level === "agent") { box.innerHTML = buildAgentViewHtml(); wireAgentView(); }
+  }
+
+  function buildAgentViewHtml() {
+    var av = S.agentView;
+    var agKey = S.route.agentKey;
+    var agLabel = "";
+    S.agentCatalog.agents.forEach(function (a) { if (a.agent_key === agKey) { agLabel = a.agent_label; } });
+
+    var html = '<div class="agv-head">' +
+      '<h2 class="agv-title">' + esc(agLabel || agKey) + '</h2>';
+    if (av.loaded) {
+      html += '<span class="agv-tagged">' + esc(t("agv.nTagged", { n: av.n_tagged })) + '</span>';
+    }
+    html += '</div>';
+
+    // Screen 3: create form (inline)
+    if (av.creating) { return html + buildCreateFormHtml(av, agLabel || agKey); }
+
+    // Determine gate using Journey helper (fall back to simple check)
+    var gate = (typeof Journey !== "undefined" && typeof Journey.createGate === "function")
+      ? Journey.createGate(av.loaded ? av.n_tagged : 1)
+      : { canCreate: av.n_tagged > 0, primaryAction: av.n_tagged > 0 ? "create" : "tag" };
+
+    // Screen 2: action bar
+    html += '<div class="agv-bar">';
+    if (gate.canCreate) {
+      html += '<button class="btn btn-primary" id="newBenchBtn">' + esc(t("agv.new")) + '</button>';
+    } else {
+      html += '<button class="btn btn-primary" id="tagQuestionsBtn">' + esc(t("agv.2c.tag")) + '</button>' +
+        '<button class="btn btn-ghost" disabled title="' + esc(t("agv.2c.locked")) + '">' + esc(t("agv.new")) + '</button>';
+    }
+    html += '</div>';
+
+    if (!av.loaded) {
+      html += '<div class="agv-loading">' + esc(t("common.loading")) + '</div>';
+      return html;
+    }
+    if (av.loadError) {
+      html += '<div class="note note-error">' + esc(t("agv.loadError")) + '</div>';
+      return html;
+    }
+
+    // Determine list state using Journey helper
+    var listState = (typeof Journey !== "undefined" && typeof Journey.benchmarkListState === "function")
+      ? Journey.benchmarkListState({ benchmarks: av.benchmarks, n_tagged: av.n_tagged })
+      : (av.benchmarks.length > 0 ? "list" : (av.n_tagged > 0 ? "empty_has_questions" : "empty_no_questions"));
+
+    if (listState === "list") {
+      html += '<div class="bm-list">';
+      av.benchmarks.forEach(function (bm) {
+        var acc = (bm.accuracy_pct && bm.accuracy_pct !== "-") ? '<span class="bm-acc">' + esc(bm.accuracy_pct) + '</span>' : "";
+        var chips = '<span class="bm-chip bm-chip--done">' + esc(t("bm.badge.done", { n: bm.n_done })) + '</span>';
+        if (bm.n_pending > 0) { chips += '<span class="bm-chip bm-chip--pending">' + esc(t("bm.badge.pending", { n: bm.n_pending })) + '</span>'; }
+        if (bm.n_redo > 0)    { chips += '<span class="bm-chip bm-chip--redo">' + esc(t("bm.badge.redo", { n: bm.n_redo })) + '</span>'; }
+        html += '<div class="bm-card">' +
+          '<div class="bm-card-head"><span class="bm-card-name">' + esc(bm.name) + '</span>' + acc + '</div>' +
+          '<div class="bm-card-chips">' + chips + '</div>' +
+          '<div class="bm-card-foot">' +
+            '<span class="bm-card-modes">' + esc((bm.modes || []).join(", ")) + '</span>' +
+            '<button class="btn btn-sm" data-bm-open="' + esc(bm.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    } else if (listState === "empty_has_questions") {
+      html += '<div class="agv-empty"><h3>' + esc(t("agv.2b.h")) + '</h3><p>' + esc(t("agv.2b.p")) + '</p></div>';
+    } else {
+      html += '<div class="agv-empty">' +
+        '<h3>' + esc(t("agv.2c.h")) + '</h3>' +
+        '<p>' + esc(t("agv.2c.p")) + '</p>' +
+        '<p class="agv-locked-note">' + esc(t("agv.2c.locked")) + '</p>' +
+      '</div>';
+    }
+
+    html += '<div class="agv-footer-link"><button class="btn-link" id="agvTagLink">' + esc(t("agv.tagLink")) + '</button></div>';
+    return html;
+  }
+
+  function buildCreateFormHtml(av, agLabel) {
+    var modeOpts = ["Smart", "Pro", "Claude"];
+    var modesHtml = modeOpts.map(function (m) {
+      var on = av.createModes.indexOf(m) !== -1;
+      return '<button type="button" class="chk' + (on ? " on" : "") + '" data-cr-mode="' + esc(m) + '">' +
+        '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(m) + '</b></span></button>';
+    }).join("");
+
+    var pendLine = av.n_tagged > 0
+      ? '<p class="cr-pending">' + esc(t("cr.pending", { n: av.n_tagged })) + '</p>'
+      : '<p class="cr-pending cr-pending--warn">' + esc(t("cr.noTagged")) + '</p>';
+
+    var errHtml = av.createError ? '<div class="note note-error">' + esc(av.createError.text) + '</div>' : "";
+    var canCreate = av.n_tagged > 0;
+    var submitHtml = canCreate
+      ? '<button class="btn btn-primary" id="crSubmit"' + (av.submitting ? ' disabled' : '') + '>' + esc(av.submitting ? t("common.loading") : t("cr.create")) + '</button>'
+      : '<button class="btn btn-primary" id="crTagBtn">' + esc(t("cr.tag")) + '</button>';
+
+    return '<div class="cr-form">' +
+      '<div class="sec-head">' +
+        '<p class="sec-eyebrow">' + esc(t("cr.eyebrow")) + '</p>' +
+        '<h2 class="sec-title">' + esc(t("cr.title")) + '</h2>' +
+      '</div>' +
+      errHtml +
+      '<div class="cr-agent-row"><span class="cr-agent-lbl">' + esc(t("cr.agent")) + '</span><span class="cr-agent-val">' + esc(agLabel) + '</span></div>' +
+      '<label class="field full">' +
+        '<span class="field-label">' + esc(t("cr.name")) + '</span>' +
+        '<input class="input" id="crName" value="' + esc(av.createName) + '" placeholder="' + esc(t("cr.namePh")) + '" autocomplete="off">' +
+        '<span class="field-help">' + esc(t("cr.nameHint")) + '</span>' +
+      '</label>' +
+      '<div class="field">' +
+        '<span class="field-label">' + esc(t("cr.modes")) + '</span>' +
+        '<div class="chk-stack" id="crModesGroup">' + modesHtml + '</div>' +
+      '</div>' +
+      pendLine +
+      '<div class="cr-actions">' + submitHtml + '<button class="btn btn-ghost" id="crCancel">' + esc(t("cr.cancel")) + '</button></div>' +
+    '</div>';
+  }
+
+  function wireAgentView() {
+    var av = S.agentView;
+    var agKey = S.route.agentKey;
+
+    function goTag() { S.agentView.creating = false; setTab("golden"); }
+
+    // Screen 2 wiring
+    var newBtn = byId("newBenchBtn");
+    if (newBtn) {
+      newBtn.addEventListener("click", function () {
+        av.creating = true; av.createName = ""; av.createModes = ["Smart"]; av.createError = null;
+        renderDetailContent();
+      });
+    }
+    var tagBtn = byId("tagQuestionsBtn");
+    if (tagBtn) { tagBtn.addEventListener("click", goTag); }
+    var tagLink = byId("agvTagLink");
+    if (tagLink) { tagLink.addEventListener("click", goTag); }
+    qsa("[data-bm-open]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var bid = btn.getAttribute("data-bm-open");
+        navigateTo("benchmark", agKey, bid);
+        openBenchmark(bid);  // re-use existing dispatch for detail (dispatch 2 will refine)
+        renderAgentsRail();
+      });
+    });
+
+    // Screen 3 (create form) wiring
+    if (av.creating) {
+      var nameInput = byId("crName");
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.addEventListener("input", function () { av.createName = nameInput.value; });
+      }
+      qsa("[data-cr-mode]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var m = btn.getAttribute("data-cr-mode");
+          var idx = av.createModes.indexOf(m);
+          if (idx === -1) { av.createModes.push(m); } else { av.createModes.splice(idx, 1); }
+          btn.classList.toggle("on", av.createModes.indexOf(m) !== -1);
+        });
+      });
+      var submitBtn = byId("crSubmit");
+      if (submitBtn) { submitBtn.addEventListener("click", submitCreate); }
+      var cancelBtn = byId("crCancel");
+      if (cancelBtn) { cancelBtn.addEventListener("click", function () { av.creating = false; av.createError = null; renderDetailContent(); }); }
+      var crTagBtn = byId("crTagBtn");
+      if (crTagBtn) { crTagBtn.addEventListener("click", function () { av.creating = false; setTab("golden"); }); }
+    }
+  }
+
+  function renderGettingStarted() {
+    var box = byId("gsStrip");
+    if (!box) { return; }
+    if (!S.agentCatalog.loaded) { box.style.display = "none"; return; }
+    var hasAgent = S.agentCatalog.agents.length > 0;
+    var av = S.agentView;
+    var hasTags = hasAgent && av.loaded && av.n_tagged > 0;
+    var hasBench = hasAgent && av.loaded && av.benchmarks.length > 0;
+    // Step 4 (has runs): approximated by having at least one done question across benchmarks
+    var hasRun = hasBench && av.benchmarks.some(function (b) { return b.n_done > 0; });
+
+    var steps = [
+      { key: "gs.step1", done: hasAgent },
+      { key: "gs.step2", done: hasTags },
+      { key: "gs.step3", done: hasBench },
+      { key: "gs.step4", done: hasRun }
+    ];
+    if (steps.every(function (s) { return s.done; })) { box.style.display = "none"; return; }
+
+    box.style.display = "";
+    box.innerHTML = '<div class="gs-inner">' +
+      steps.map(function (s, i) {
+        return '<span class="gs-step' + (s.done ? " gs-step--done" : "") + '">' +
+          (s.done ? I.check : '<span class="gs-num">' + (i + 1) + '</span>') +
+          ' ' + esc(t(s.key)) + '</span>';
+      }).join('<span class="gs-sep"> / </span>') +
+    '</div>';
+  }
+
+  function renderDataFooter() {
+    var box = byId("dataFooter");
+    if (box) { box.textContent = t("footer.copy"); }
+  }
+
   /* ============================ static wiring ============================ */
 
   function wireStatic() {
+    // Language toggle
     qsa("#langSeg button").forEach(function (b) {
       b.addEventListener("click", function () {
         ui.lang = b.getAttribute("data-lang");
@@ -2633,31 +3081,17 @@
         render();
       });
     });
-    qsa("#themeSeg button").forEach(function (b) {
-      b.addEventListener("click", function () {
-        ui.theme = b.getAttribute("data-theme");
-        applyTheme();
-        try { localStorage.setItem("bench-theme", ui.theme); } catch (e) { /* */ }
-        syncSeg("themeSeg", "data-theme", ui.theme);
-      });
-    });
-    qsa(".tab").forEach(function (b) {
-      b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
-    });
-    byId("addAgent").addEventListener("click", function () {
-      S.agents.push({ agent_key: genKey(), agent_label: "", project_key: "", agent_id: "", modes: false });
-      markDirty();
-      renderAgents();
-      toast(t("ag.added"));
-    });
-    byId("langFilter").addEventListener("change", function (e) { S.filterLanguage = e.target.value; markDirty(); });
-    byId("benchLang").addEventListener("change", function (e) { S.benchLang = (e.target.value === "en") ? "en" : "fr"; markDirty(); });
-    byId("concurrency").addEventListener("change", function (e) {
-      var v = clampInt(e.target.value, 1, 8, S.concurrency);
-      S.concurrency = v; e.target.value = v; markDirty();
-    });
-    byId("saveBtn").addEventListener("click", saveConfig);
-
+    // Header links (Golden / Suggestions / Review)
+    byId("linkGolden").addEventListener("click", function () { setTab("golden"); });
+    byId("linkSuggest").addEventListener("click", function () { setTab("suggest"); });
+    byId("linkReview").addEventListener("click", function () { setTab("review"); });
+    // Back from golden panel
+    var goldenBack = byId("goldenBack");
+    if (goldenBack) { goldenBack.addEventListener("click", function () { setTab("benchmarks"); }); }
+    // Gear: settings placeholder (dispatch 3)
+    var gearBtn = byId("gearBtn");
+    if (gearBtn) { gearBtn.addEventListener("click", function () { toast("Settings - coming in dispatch 3."); }); }
+    // Golden editor modal
     byId("mdClose").addEventListener("click", closeModal);
     byId("mdCancel").addEventListener("click", closeModal);
     byId("mdSave").addEventListener("click", submitModal);
@@ -2667,15 +3101,13 @@
       this.classList.toggle("on", on);
     });
     byId("overlay").addEventListener("click", function (e) { if (e.target === byId("overlay")) { closeModal(); } });
-
-    // New-benchmark modal (separate overlay from the golden editor).
+    // New-benchmark modal (legacy; kept for compatibility with openBenchModal used in dispatch 2)
     byId("bnClose").addEventListener("click", closeBenchModal);
     byId("bnCancel").addEventListener("click", closeBenchModal);
     byId("bnCreate").addEventListener("click", submitBenchModal);
     byId("bnSeedAll").addEventListener("click", function () { setBenchSeed(true); });
     byId("bnSeedEmpty").addEventListener("click", function () { setBenchSeed(false); });
     byId("benchOverlay").addEventListener("click", function (e) { if (e.target === byId("benchOverlay")) { closeBenchModal(); } });
-
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") { return; }
       if (S.editor.open) { closeModal(); }
@@ -2689,8 +3121,7 @@
     loadPrefs();
     applyTheme();
     applyLang();
-    loadConfig();
-    loadBenchmarks();  // benchmarks is the primary (first) tab and default landing
+    loadAgents();  // GET /api/agents + fire discover once
   }
 
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }
