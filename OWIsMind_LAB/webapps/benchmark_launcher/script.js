@@ -29,7 +29,9 @@
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6l-6 6 6 6M8 12h12"/></svg>',
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>',
-    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 5l12 7-12 7z"/></svg>'
+    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 5l12 7-12 7z"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>',
+    theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>'
   };
 
   /* ============================ i18n ============================ */
@@ -1225,7 +1227,8 @@
           '</nav>' +
           '<div class="controls">' +
             '<div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>' +
-            '<button class="btn-gear" id="gearBtn" title="Settings">&#9881;</button>' +
+            '<button class="btn-gear" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">' + I.theme + '</button>' +
+            '<button class="btn-gear" id="gearBtn" title="Settings" aria-label="Settings">' + I.gear + '</button>' +
           '</div>' +
         '</header>' +
         '<div id="gsStrip" class="gs-strip" style="display:none"></div>' +
@@ -4521,6 +4524,14 @@
     // Gear: settings panel (Screen 7)
     var gearBtn = byId("gearBtn");
     if (gearBtn) { gearBtn.addEventListener("click", function () { openSettings(); }); }
+    var themeBtn = byId("themeBtn");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", function () {
+        ui.theme = (ui.theme === "dark") ? "light" : "dark";
+        try { localStorage.setItem("bench-theme", ui.theme); } catch (e) { /* */ }
+        applyTheme();
+      });
+    }
     var settingsClose = byId("settingsClose");
     if (settingsClose) { settingsClose.addEventListener("click", function () { closeSettings(); }); }
     var settingsOverlay = byId("settingsOverlay");
