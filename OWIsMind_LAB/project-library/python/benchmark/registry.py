@@ -54,22 +54,6 @@ def _clean(value):
         return ""
 
 
-def _bool(value, default=False):
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        s = value.strip().lower()
-        if s in ("true", "1", "yes", "y", "oui", "t"):
-            return True
-        if s in ("false", "0", "no", "n", "non", "f", ""):
-            return False
-    return default
-
-
 def _int(value, default=0):
     try:
         return int(value)

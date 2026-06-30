@@ -65,14 +65,22 @@ def _safe(fn):
 @app.route("/api/agents", methods=["GET"])
 @_safe
 def api_agents():
-    """The current agent catalog (as stored in the variable)."""
-    return jsonify({"status": "ok", "agents": dss.agents_catalog()})
+    """The current agent catalog (as stored in the variable) + discovery timestamp."""
+    catalog = dss.agents_catalog()
+    discovered_at = ""
+    try:
+        raw = dss.read_raw_benchmark_var()
+        discovered_at = str((raw or {}).get("agents_discovered_at") or "") \
+            if isinstance(raw, dict) else ""
+    except Exception:
+        pass
+    return jsonify({"status": "ok", "agents": catalog, "discovered_at": discovered_at})
 
 
 @app.route("/api/agents/discover", methods=["POST"])
 @_safe
 def api_agents_discover():
-    """Discover LLM agents across accessible DSS projects and update the catalog."""
+    """Discover LLM agents across accessible DSS projects, merge into catalog, return result."""
     result = dss.discover_agents()
     return jsonify({"status": "ok", **result})
 
@@ -310,39 +318,27 @@ def api_benchmark_launch():
 def api_run_status():
     """Scenario run status. Calls reconcile_redo_after_run on completion (best-effort).
 
-    The reconcile clears redo flags for questions that landed a scored row in the last run.
-    It is idempotent and called on every non-running poll; the overhead is one light dataset
-    read (3 columns) per poll, acceptable for a typical benchmark size.
+    Returns {running, benchmark_id, scored, total, run_request, last} as provided by
+    dss.last_status. On completion, reconcile_redo_after_run is called once per
+    (benchmark_id, requested_at) pair (keyed sentinel so idle polls are cheap). The reconcile
+    reads the scored dataset to clear redo flags for questions that ran in the latest run.
     """
     scen = dss.scenario()
     st = dss.last_status(scen)
     if not st.get("running"):
         # Best-effort: reconcile redo flags for the benchmark that just finished.
         try:
-            raw = dss.read_raw_benchmark_var()
-            rr = raw.get("run_request") if isinstance(raw, dict) else None
-            bid = rr.get("benchmark_id") if isinstance(rr, dict) else None
-            if bid:
-                run_id = ""
-                try:
-                    runs = scen.get_last_runs(limit=1)
-                    if runs:
-                        info = (runs[0].get_info()
-                                if hasattr(runs[0], "get_info") else {})
-                        # run_id may be at the top level of info or nested under result.
-                        run_id = str(
-                            info.get("runId") or info.get("run_id") or
-                            (info.get("result") or {}).get("runId") or ""
-                        ).strip()
-                except Exception:
-                    pass
-                if run_id:
-                    key = (bid, run_id)
-                    if key not in _RECONCILED:
-                        dss.reconcile_redo_after_run(bid, run_id)
-                        _RECONCILED.append(key)
-                        if len(_RECONCILED) > _RECONCILED_MAX:
-                            del _RECONCILED[0]
+            bid = st.get("benchmark_id") or ""
+            rr = st.get("run_request")
+            requested_at = str((rr or {}).get("requested_at") or "").strip() \
+                if isinstance(rr, dict) else ""
+            # Key on (bid, requested_at); fall back to total_cells if requested_at absent.
+            sentinel = (bid, requested_at or str(st.get("total") or 0))
+            if bid and sentinel not in _RECONCILED:
+                dss.reconcile_redo_after_run(bid)
+                _RECONCILED.append(sentinel)
+                if len(_RECONCILED) > _RECONCILED_MAX:
+                    del _RECONCILED[0]
         except Exception:
             logger.warning("api_run_status - reconcile best-effort failed\n%s",
                            traceback.format_exc())

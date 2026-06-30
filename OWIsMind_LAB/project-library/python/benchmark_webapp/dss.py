@@ -196,7 +196,12 @@ def launch(scen):
 
 
 def last_status(scen):
-    """Best-effort last/current run state for the status poll."""
+    """Best-effort last/current run state for the status poll.
+
+    Returns {running, benchmark_id, scored, total, run_request, last}. benchmark_id and total
+    are derived from the stored run_request; scored counts rows written since requested_at.
+    Never raises.
+    """
     running = is_running(scen)
     last = None
     try:
@@ -206,7 +211,44 @@ def last_status(scen):
             last = info.get("result") or info.get("outcome") or info
     except Exception:
         last = None
-    return {"running": running, "last": last}
+    # Enrich with run_request fields for the frontend progress poll.
+    benchmark_id = ""
+    run_request = None
+    total_cells = 0
+    scored_count = 0
+    try:
+        raw = read_raw_benchmark_var()
+        rr = raw.get("run_request") if isinstance(raw, dict) else None
+        if isinstance(rr, dict):
+            run_request = rr
+            benchmark_id = str(rr.get("benchmark_id") or "").strip()
+            total_cells = int(rr.get("total_cells") or 0)
+            requested_at = str(rr.get("requested_at") or "").strip()
+            if benchmark_id and requested_at:
+                try:
+                    cfg = config()
+                    scored_name = cfg.get("scored_dataset")
+                    if scored_name:
+                        rows = read_dataset(scored_name,
+                                            keep_cols=["benchmark_id", "run_timestamp"])
+                        scored_count = sum(
+                            1 for r in rows
+                            if isinstance(r, dict)
+                            and str(r.get("benchmark_id") or "").strip() == benchmark_id
+                            and str(r.get("run_timestamp") or "") >= requested_at
+                        )
+                except Exception:
+                    scored_count = 0
+    except Exception:
+        pass
+    return {
+        "running": running,
+        "benchmark_id": benchmark_id,
+        "scored": scored_count,
+        "total": total_cells,
+        "run_request": run_request,
+        "last": last,
+    }
 
 
 # --- suggestions: the ONLY raw SQL on the shared connection (READ-ONLY) ------
@@ -514,11 +556,6 @@ def _persist_registry(reg, run_request="__keep__"):
     write_benchmark_var(raw)
 
 
-def benchmark_agents_catalog(cfg):
-    """The agent catalog (from benchmark.agents) the launcher offers when creating a benchmark."""
-    return views.config_view(cfg).get("agents", [])
-
-
 # --- registry mutations (all RMW under _REGISTRY_LOCK) -----------------------
 
 def create_benchmark(name, agent, modes, created_by=""):
@@ -638,10 +675,27 @@ def launch_benchmark(benchmark_id, launch_mode):
         if not _can_launch(scen):
             return None, "launch_unsupported"
         # Write run_request now (the scenario step reads it fresh at its start).
+        # Stamp total_cells + requested_at for the status poll progress indicator.
         with _REGISTRY_LOCK:
             reg = read_registry()
             if benchmark_id not in reg:
                 return None, "unknown_benchmark"
+            entity = reg[benchmark_id]
+            try:
+                cfg = config()
+                golden_rows = read_dataset(cfg.get("golden_dataset", ""),
+                                           keep_cols=["question_id", "agent_key", "active"])
+                scored_rows = read_dataset(cfg.get("scored_dataset", ""),
+                                           keep_cols=["benchmark_id", "question_id",
+                                                      "mode", "agent_key"])
+                golden_ids = views._agent_tagged_active_ids(golden_rows,
+                                                             entity.get("agent_key"))
+                plan = registry.resolve_to_run(entity, golden_ids, scored_rows,
+                                               req["launch_mode"])
+                req["total_cells"] = sum(len(v) for v in plan.values())
+            except Exception:
+                req["total_cells"] = 0
+            req["requested_at"] = _now_iso()
             _persist_registry(reg, run_request=req)
         launch(scen)
         logger.info("benchmark launcher - launched benchmark %s (%s)", benchmark_id,
@@ -652,35 +706,48 @@ def launch_benchmark(benchmark_id, launch_mode):
         RUN_LOCK.release()
 
 
-def reconcile_redo_after_run(benchmark_id, run_id):
-    """Clear redo flags for questions that landed a scored row in this run. Idempotent, locked.
+def reconcile_redo_after_run(benchmark_id, run_id=None):
+    """Clear redo flags for questions that ran in the LATEST scored run for this benchmark.
 
-    Called by the backend route/poll after a run finishes. Reads the scored dataset to find
-    question_ids present for this run_id + benchmark_id, then resets their redo flags so the next
-    append launch does not re-run them again. Safe to call multiple times (reset_redo_for is a
-    no-op for questions not in the redo list).
+    ``run_id`` is accepted for call-site compat but IGNORED: DSS scenario run ids never match
+    the step's uuid-based run_id, so filtering by run_id would always clear zero flags. Instead
+    this reads the scored dataset (light: benchmark_id, question_id, run_timestamp), finds the
+    LATEST run by max run_timestamp, collects its question_ids, and under _REGISTRY_LOCK clears
+    the intersection with the entity's current redo set via registry.reset_redo_for. Idempotent -
+    clearing an already-clear flag is a no-op. Never raises.
     """
     cfg = config()
     scored_name = cfg.get("scored_dataset")
     if not scored_name:
         return {"benchmark_id": benchmark_id, "cleared": 0}
-    scored = read_dataset(scored_name, keep_cols=["run_id", "benchmark_id", "question_id"])
-    rid = str(run_id).strip()
+    scored = read_dataset(scored_name,
+                          keep_cols=["benchmark_id", "question_id", "run_timestamp"])
     bid = str(benchmark_id).strip()
-    done_qids = list({
-        str(r.get("question_id", "")).strip()
-        for r in scored
-        if str(r.get("run_id", "")).strip() == rid
-        and str(r.get("benchmark_id", "")).strip() == bid
+    bench_rows = [
+        r for r in scored
+        if isinstance(r, dict)
+        and str(r.get("benchmark_id") or "").strip() == bid
         and r.get("question_id")
+    ]
+    if not bench_rows:
+        return {"benchmark_id": benchmark_id, "cleared": 0}
+    # Find max run_timestamp to identify the latest run (any tie: all are included).
+    latest_ts = max(str(r.get("run_timestamp") or "") for r in bench_rows)
+    latest_qids = list({
+        str(r.get("question_id") or "").strip()
+        for r in bench_rows
+        if str(r.get("run_timestamp") or "") == latest_ts
     })
     with _REGISTRY_LOCK:
         reg = read_registry()
         if benchmark_id not in reg:
             return {"benchmark_id": benchmark_id, "cleared": 0}
-        reg = registry.reset_redo_for(reg, benchmark_id, done_qids)
+        entity = reg[benchmark_id]
+        redo_set = set(entity.get("redo") or [])
+        to_clear = [q for q in latest_qids if q in redo_set]
+        reg = registry.reset_redo_for(reg, benchmark_id, to_clear)
         _persist_registry(reg)
-    return {"benchmark_id": benchmark_id, "cleared": len(done_qids)}
+    return {"benchmark_id": benchmark_id, "cleared": len(to_clear)}
 
 
 # --- settings (global benchmark keys in the variable) -----------------------
@@ -885,13 +952,27 @@ def discover_agents():
                     })
             except Exception:
                 continue
+        # Merge by agent_key: keep existing manual entries, add/update discovered ones.
+        discovered_at = _now_iso()
+        merged = found
         with _REGISTRY_LOCK:
             raw = read_raw_benchmark_var()
             raw = dict(raw) if isinstance(raw, dict) else {}
-            raw["agents"] = found
-            raw["agents_discovered_at"] = _now_iso()
+            existing = raw.get("agents")
+            catalog = [a for a in (existing or []) if isinstance(a, dict)]
+            by_key = {str(a.get("agent_key") or "").strip(): a
+                      for a in catalog
+                      if str(a.get("agent_key") or "").strip()}
+            for entry in found:
+                akey = str(entry.get("agent_key") or "").strip()
+                if akey:
+                    by_key[akey] = entry  # discovered is fresher; overwrites
+            merged = list(by_key.values())
+            raw["agents"] = merged
+            raw["agents_discovered_at"] = discovered_at
             write_benchmark_var(raw)
-        return {"status": "ok", "discovery": "ok", "agents": found}
+        return {"status": "ok", "discovery": "ok", "agents": merged,
+                "discovered_at": discovered_at}
     except Exception:
         logger.warning("benchmark webapp - agent discovery failed; using cached catalog\n%s",
                        traceback.format_exc())
