@@ -272,6 +272,11 @@ class TestAgentKeyColumn(unittest.TestCase):
             {"question_id": "q1", "question": "x", "reference_answer": "y", "agent_key": ""})
         self.assertIsNone(out2["agent_key"])
 
+    def test_normalize_absent_agent_key_is_none(self):
+        out = schemas.normalize_golden_row(
+            {"question_id": "q1", "question": "x", "reference_answer": "y"})
+        self.assertIsNone(out.get("agent_key"))
+
 
 if __name__ == "__main__":
     unittest.main()
