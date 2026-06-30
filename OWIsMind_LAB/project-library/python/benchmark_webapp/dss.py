@@ -604,7 +604,7 @@ def rename_benchmark(benchmark_id, name):
         # Exclude this benchmark's own current name from the uniqueness check.
         current_lower = str(entity.get("name") or "").strip().lower()
         taken = registry.names_for_agent(reg, agent_key) - {current_lower}
-        ok, err = registry.validate_benchmark_name(name, taken)
+        ok, err = views.validate_benchmark_name(name, taken)
         if not ok:
             return None, [err]
         reg = registry.rename_benchmark(reg, benchmark_id, name)
@@ -746,10 +746,11 @@ def save_settings(form):
         ds_ok, ds_errors = _validate_golden_dataset(golden_name)
         if not ds_ok:
             return None, ds_errors
-    raw = read_raw_benchmark_var()
-    raw = dict(raw) if isinstance(raw, dict) else {}
-    raw.update(normalized)
-    write_benchmark_var(raw)
+    with _REGISTRY_LOCK:
+        raw = read_raw_benchmark_var()
+        raw = dict(raw) if isinstance(raw, dict) else {}
+        raw.update(normalized)
+        write_benchmark_var(raw)
     return {"saved": True}, []
 
 
