@@ -1,16 +1,12 @@
 /* OWIsMind Benchmark - Launcher webapp (framework-free vanilla JS, no build).
  *
- * A REAL configuration FORM (never a raw JSON editor): edit the agents under test, the response
- * modes, the question filter, the concurrency and the benchmark language, then save (POST
- * api/config) and launch the Run_Benchmark scenario (POST api/run + poll api/run/status). It also
- * manages the golden set (add/edit/enable/delete) and reviews/promotes user-suggested questions.
- * Talks to the Python backend via getWebAppBackendUrl.
- *
- * UI ported from the OWIsMind benchmark mockup (tabs + aside + cards + golden table + modal +
- * toast), minus the left rail. The whole interface is rendered by this script into #bench-app, so
- * the language / theme toggles re-render in place. Bilingual: English default, French via the
- * top-right toggle (persisted). Orange charter styling lives in style.css. MOCK mode (no
- * getWebAppBackendUrl) serves sample data so preview.html renders a full page offline. */
+ * Agent-first master-detail model: a left rail lists discovered agents (GET api/agents +
+ * POST api/agents/discover, auto only when the catalog is empty); clicking an agent opens the
+ * agent view (its benchmarks); clicking a benchmark opens the benchmark detail (its questions,
+ * cells, run controls). Settings (gear button) expose the golden dataset name, judge LLM id,
+ * concurrency, and run language - stored in the project variable + Flow datasets, not in code.
+ * Bilingual EN/FR; Orange charter styling lives in style.css.
+ * MOCK mode (no getWebAppBackendUrl) serves sample data so preview.html renders offline. */
 
 (function () {
   "use strict";
@@ -666,7 +662,7 @@
     // Screen 6: golden agent-tagging panel
     goldenTag: { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null },
     // Screen 7: settings panel
-    settings: { open: false, loaded: false, loadError: false, data: {}, saving: false, saveError: null, fieldErrors: {} }
+    settings: { open: false, loaded: false, loadError: false, data: {}, saving: false, saveError: null, saveMessages: [], fieldErrors: {} }
   };
 
   var newAgentSeq = 0;
@@ -852,7 +848,7 @@
       golden_dataset: "golden_questions_v1_prepared",
       judge_llm_id: "anthropic:claude-sonnet-4-6",
       concurrency: 3,
-      run_language: "fr",
+      language: "fr",
       raw_dataset: "benchmark_runs_raw",
       scored_dataset: "benchmark_runs_scored",
       summary_dataset: "benchmark_summary",
@@ -928,24 +924,17 @@
       if (running) { mockRun.remaining -= 1; }
       var mockTotal = 3;
       var mockScored = running ? Math.max(0, mockTotal - mockRun.remaining - 1) : mockTotal;
-      data = { status: "ok", running: running, scored: mockScored, total: mockTotal, last: running ? null : "SUCCESS", benchmark_id: mockRun.bid };
-      if (running) {
-        data.run_request = { benchmark_id: mockRun.bid };
-      } else {
-        // Completion payload: overall score, per-mode accuracy, and a sample re-run evolution
-        // (one improved, one regressed, one unchanged) so the run-complete card has data.
-        data.just_completed = true;
-        data.run_request = null;
-        data.result = {
-          score_pct: "67%",
-          by_mode: [{ mode: "Smart", pct: "100%" }, { mode: "Claude", pct: "33%" }],
-          evolution: [
-            { question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", prev_verdict: "MISS", cur_verdict: "OK" },
-            { question: "How many distinct open trouble tickets does Algerie Telecom currently have?", prev_verdict: "OK", cur_verdict: "MISS" },
-            { question: "Quelle est la hierarchie d'offre pour le produit IPL ?", prev_verdict: "OK", cur_verdict: "OK" }
-          ]
-        };
-      }
+      // Real backend shape: {running, benchmark_id, scored, total, run_request, last}.
+      // No result/score_pct/by_mode/evolution on this endpoint (deferred; use the Results webapp).
+      data = {
+        status: "ok",
+        running: running,
+        benchmark_id: mockRun.bid || "",
+        scored: mockScored,
+        total: mockTotal,
+        run_request: running ? { benchmark_id: mockRun.bid } : null,
+        last: running ? null : "SUCCESS"
+      };
     } else if (method === "POST" && path === "run/reset") {
       mockRun.remaining = 0; mockRun.bid = null;
       data = { status: "ok", reset: true };
@@ -1097,16 +1086,16 @@
       data = { status: "ok", settings: deepCopy(MOCK.settings) };
     } else if (method === "POST" && path0 === "settings") {
       var sBody = body || {};
-      // Validation preview: an unknown golden dataset name fails with a field-level error,
-      // mirroring the backend POST /api/settings that probes the dataset before saving.
+      // Validation preview: an unknown golden dataset name fails with a messages array,
+      // mirroring the real backend POST /api/settings shape: {status:"error", messages:[...]}.
       if ((sBody.golden_dataset || "").trim() === "badname") {
         status = 400;
-        data = { status: "error", error: "invalid_settings", errors: { golden_dataset: "Dataset not found. Check the dataset name in OWIsMind_LAB." } };
+        data = { status: "error", error: "invalid_settings", messages: ["Dataset not found in this project. Check the name."] };
       } else {
         if (sBody.golden_dataset) { MOCK.settings.golden_dataset = sBody.golden_dataset; }
         if (sBody.judge_llm_id) { MOCK.settings.judge_llm_id = sBody.judge_llm_id; }
         if (sBody.concurrency) { MOCK.settings.concurrency = parseInt(sBody.concurrency, 10) || MOCK.settings.concurrency; }
-        if (sBody.run_language) { MOCK.settings.run_language = sBody.run_language; }
+        if (sBody.language) { MOCK.settings.language = sBody.language; }
         data = { status: "ok", settings: deepCopy(MOCK.settings) };
       }
     } else {
@@ -2809,7 +2798,10 @@
 
   /* ============================ agent-first (dispatch 1) ============================ */
 
-  var _agentDiscoverFired = false;  // ensure discover fires only once per page load
+  // Auto-discovery fires only when the catalog is empty (first-run UX).
+  // When agents are already known, render them and require the explicit Refresh button to
+  // re-discover - this avoids a metadata fan-out on every page load (instance-safety).
+  var _agentDiscoverFired = false;
 
   function loadAgents() {
     S.agentCatalog.loaded = false;
@@ -2828,12 +2820,20 @@
       }
       renderAgentsRail();
       renderGettingStarted();
-      if (!_agentDiscoverFired) { _agentDiscoverFired = true; discoverAgents(); }
+      // Auto-discover only when the catalog is empty (first-run UX); skip when agents are known.
+      if (!_agentDiscoverFired && S.agentCatalog.agents.length === 0) {
+        _agentDiscoverFired = true;
+        discoverAgents();
+      }
     }, function () {
       S.agentCatalog.loaded = true;
       S.agentCatalog.loadError = true;
       renderAgentsRail();
-      if (!_agentDiscoverFired) { _agentDiscoverFired = true; discoverAgents(); }
+      // On load error, treat catalog as empty and attempt discovery once.
+      if (!_agentDiscoverFired) {
+        _agentDiscoverFired = true;
+        discoverAgents();
+      }
     });
   }
 
@@ -2971,7 +2971,7 @@
     var refreshBtn = byId("refreshAgents");
     if (refreshBtn) {
       refreshBtn.addEventListener("click", function () {
-        _agentDiscoverFired = true;  // prevent the double-fire guard; this IS the re-fire
+        _agentDiscoverFired = true;  // mark fired so an upcoming loadAgents() does not auto-discover
         discoverAgents();
       });
     }
@@ -3848,8 +3848,11 @@
           renderDetailContent();  // refresh progress bar
           bench4Poll();
         } else {
-          // Completion: keep the result (score, per-mode, evolution) for the run-complete card.
-          var result = d.result || {};
+          // Completion: the real backend does not return a rich result card on run/status.
+          // Store counts for the simple "Run complete" state; the detail reload below refreshes
+          // the ledger, cells, and accuracy. score_pct/by_mode/evolution are deferred to the
+          // Results webapp and will be null/empty - buildBench4Html guards each with an if-check.
+          var result = (d && d.result) || {};
           st.runComplete = {
             scored: st.runScored, total: st.runTotal,
             score_pct: result.score_pct || null,
@@ -4373,10 +4376,10 @@
     if (saveBtn) {
       saveBtn.addEventListener("click", function () { saveSettings(); });
     }
-    // Wire run_language select live update
+    // Wire run language select live update (field key: "language")
     var runLangSel = byId("stRunLang");
     if (runLangSel) {
-      runLangSel.addEventListener("change", function () { S.settings.data.run_language = this.value; });
+      runLangSel.addEventListener("change", function () { S.settings.data.language = this.value; });
     }
     applyI18n(box);
   }
@@ -4412,13 +4415,13 @@
       '<span class="field-help">' + esc(t("st.concurrencyHint")) + '</span>' + fieldErr("concurrency") + '</label>';
 
     // Run language
-    var langEn = d.run_language === "en";
+    var langEn = d.language === "en";
     html += '<label class="field"><span class="field-label">' + esc(t("st.runLang")) + '</span>' +
       '<select class="input" id="stRunLang">' +
         '<option value="en"' + (langEn ? " selected" : "") + '>' + esc(t("st.langEn")) + '</option>' +
         '<option value="fr"' + (!langEn ? " selected" : "") + '>' + esc(t("st.langFr")) + '</option>' +
       '</select>' +
-      '<span class="field-help">' + esc(t("st.runLangHint")) + '</span>' + fieldErr("run_language") + '</label>';
+      '<span class="field-help">' + esc(t("st.runLangHint")) + '</span>' + fieldErr("language") + '</label>';
 
     // Read-only dataset names
     html += '<div class="st-section-title">' + esc(t("st.whereData")) + '</div>';
@@ -4434,8 +4437,12 @@
     });
     html += '</div>';
 
-    // Save error
-    if (st.saveError) {
+    // Save error: messages array from the real backend (shape: {messages:[...]}).
+    if (st.saveMessages && st.saveMessages.length) {
+      html += '<div class="note note-error"><ul class="st-msgs">';
+      st.saveMessages.forEach(function (m) { html += '<li>' + esc(m) + '</li>'; });
+      html += '</ul></div>';
+    } else if (st.saveError) {
       html += '<div class="note note-error">' + esc(st.saveError) + '</div>';
     }
 
@@ -4456,17 +4463,18 @@
       golden_dataset: (byId("stGolden") && byId("stGolden").value || "").trim(),
       judge_llm_id: (byId("stJudge") && byId("stJudge").value || "").trim(),
       concurrency: parseInt((byId("stConcurrency") && byId("stConcurrency").value) || "3", 10),
-      run_language: (byId("stRunLang") && byId("stRunLang").value) || "fr"
+      language: (byId("stRunLang") && byId("stRunLang").value) || "fr"
     };
     st.saving = true;
     st.saveError = null;
+    st.saveMessages = [];
     st.fieldErrors = {};
     // Keep the form reflecting what the user typed so a rejected save never wipes their input.
     st.data = Object.assign({}, st.data, {
       golden_dataset: payload.golden_dataset,
       judge_llm_id: payload.judge_llm_id,
       concurrency: payload.concurrency,
-      run_language: payload.run_language
+      language: payload.language
     });
     renderSettingsBody();
     callApi("POST", "settings", payload).then(function (res) {
@@ -4476,19 +4484,21 @@
         st.data = d.settings || st.data;
         st.fieldErrors = {};
         st.saveError = null;
+        st.saveMessages = [];
         toast(t("st.saved"));
         renderSettingsBody();
       } else {
-        // Field-level errors render under the relevant field; fall back to a banner otherwise.
-        var fe = (d && d.errors) || {};
-        st.fieldErrors = fe;
-        st.saveError = Object.keys(fe).length ? null : t("st.loadError");
+        // Real backend returns {status:"error", messages:[...]}. Render messages as a list.
+        st.saveMessages = (d && Array.isArray(d.messages) && d.messages.length) ? d.messages : [t("st.loadError")];
+        st.fieldErrors = {};
+        st.saveError = null;
         renderSettingsBody();
       }
     }, function () {
       st.saving = false;
       st.fieldErrors = {};
-      st.saveError = t("st.loadError");
+      st.saveMessages = [t("st.loadError")];
+      st.saveError = null;
       renderSettingsBody();
     });
   }
