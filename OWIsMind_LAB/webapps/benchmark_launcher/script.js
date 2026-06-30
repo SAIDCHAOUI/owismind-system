@@ -496,7 +496,17 @@
     "footer.copy": {
       en: "Benchmarks and redo flags live in the project variable \"benchmark\". Questions and results live in Flow datasets (set their names in Settings).",
       fr: "Les benchmarks et les indicateurs a refaire vivent dans la variable de projet \"benchmark\". Les questions et resultats vivent dans les datasets Flow (noms a configurer dans Parametres)."
-    }
+    },
+
+    "bd4.col.q":      { en: "Question",            fr: "Question" },
+    "bd4.col.cat":    { en: "Category",            fr: "Categorie" },
+    "bd4.col.redo":   { en: "Redo",                fr: "A refaire" },
+    "bd4.editModes":  { en: "Edit modes",          fr: "Modifier les modes" },
+    "bd4.editSave":   { en: "Save",                fr: "Enregistrer" },
+    "bd4.modesOk":    { en: "Modes updated.",      fr: "Modes mis a jour." },
+    "bd4.modesError": { en: "Could not update modes.", fr: "Impossible de mettre a jour les modes." },
+    "bd4.runDone":    { en: "Run complete.",        fr: "Execution terminee." },
+    "bd4.runError":   { en: "Launch failed.",       fr: "Echec du lancement." }
   };
 
   function t(key, vars) {
@@ -569,6 +579,8 @@
     route: { level: "home", agentKey: null, benchmarkId: null },
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
     agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" },
+    // Screen 4: benchmark detail (dispatch 2)
+    benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null },
     settingsOpen: false
   };
 
@@ -660,53 +672,72 @@
       { suggestion_id: "sug_a1b2c3", user_id: "marie.dupont", source: "chat", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_is_correct: true, missing_explanation: "", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-24 14:09:22" },
       { suggestion_id: "sug_g7h8i9", user_id: "sara.benali", source: "chat", question: "Quel est le budget 2026 du produit Roaming Hub pour le client Airbus ?", reference_answer: "Le budget 2026 du produit Roaming Hub pour Airbus est de 1 050 000 euros (scenario BUDGET, periode 2026).", answer_is_correct: null, missing_explanation: "L'agent a confondu Roaming Hub avec Roaming Sponsor.", expected_value: "1050000", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-23 17:30:05" }
     ],
-    // v2: benchmark detail (membership table + per-question evolution), keyed by benchmark_id.
+    // v2 benchmark detail: new shape with cells[], ledger, runnable, redo flag per question.
     bench_detail: {
       bm_said01: {
-        benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)",
-        modes: ["Smart", "Claude"], status: "active", n_questions: 3, n_done: 2, n_pending: 1, n_redo: 1,
+        benchmark_id: "bm_said01", name: "said",
+        agent: { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
+        modes: ["Smart", "Claude"],
+        ledger: { tested: 1, pending: 2, redo: 1 },
+        runnable: 4,
+        accuracy_pct: "33%",
         questions: [
           {
-            question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
-            category: "revenue", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.",
+            question_id: "a_revenue001",
+            question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?",
+            category: "revenue",
             expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'",
-            expected_tool: "show_table", in_golden: true, include_next: false, status: "done", n_attempts: 2,
-            latest_verdict: "correct", latest_correct: true,
-            modes: [{ mode: "Smart", delta: "improved", latest: { attempt_no: 2, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.95, judge_verdict: "correct", verdict: "correct", correct: true, overridden: false },
-              attempts: [
-                { attempt_no: 1, run_timestamp: "2026-06-25 17:40:11", mode: "Smart", status: "ok", judge_score: 0.55, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false },
-                { attempt_no: 2, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.95, judge_verdict: "correct", verdict: "correct", correct: true, overridden: false }
-              ] }]
+            expected_tool: "show_table",
+            redo: false,
+            cells: [
+              { mode: "Smart", status: "tested", verdict: "OK" },
+              { mode: "Claude", status: "tested", verdict: "MISS" }
+            ]
           },
           {
-            question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
-            category: "tickets", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
+            question_id: "u_sug_d4e5f6",
+            question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
+            category: "tickets",
             expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'",
-            expected_tool: "none", in_golden: true, include_next: true, status: "done", n_attempts: 1,
-            latest_verdict: "incorrect", latest_correct: false,
-            modes: [{ mode: "Smart", delta: "first", latest: { attempt_no: 1, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.4, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false },
-              attempts: [
-                { attempt_no: 1, run_timestamp: "2026-06-26 09:02:34", mode: "Smart", status: "ok", judge_score: 0.4, judge_verdict: "incorrect", verdict: "incorrect", correct: false, overridden: false }
-              ] }]
+            expected_tool: "none",
+            redo: true,
+            cells: [
+              { mode: "Smart", status: "tested", verdict: "MISS" },
+              { mode: "Claude", status: "pending", verdict: "" }
+            ]
           },
           {
-            question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?",
-            category: "offre", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).",
-            expected_sql: "", expected_tool: "", in_golden: true, include_next: false, status: "pending", n_attempts: 0,
-            latest_verdict: "", latest_correct: null, modes: []
+            question_id: "a_offer002",
+            question: "Quelle est la hierarchie d'offre pour le produit IPL ?",
+            category: "offre",
+            expected_sql: "",
+            expected_tool: "",
+            redo: false,
+            cells: [
+              { mode: "Smart", status: "pending", verdict: "" },
+              { mode: "Claude", status: "pending", verdict: "" }
+            ]
           }
         ]
       },
       bm_quick02: {
-        benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)",
-        modes: ["Smart"], status: "active", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0,
+        benchmark_id: "bm_quick02", name: "tickets smoke",
+        agent: { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
+        modes: ["Smart"],
+        ledger: { tested: 0, pending: 1, redo: 0 },
+        runnable: 1,
+        accuracy_pct: "-",
         questions: [
           {
-            question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
-            category: "tickets", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).",
+            question_id: "u_sug_d4e5f6",
+            question: "How many distinct open trouble tickets does Algerie Telecom currently have?",
+            category: "tickets",
             expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'",
-            expected_tool: "none", in_golden: true, include_next: false, status: "pending", n_attempts: 0,
-            latest_verdict: "", latest_correct: null, modes: []
+            expected_tool: "none",
+            redo: false,
+            cells: [
+              { mode: "Smart", status: "pending", verdict: "" }
+            ]
           }
         ]
       }
@@ -861,8 +892,8 @@
           if (have[qid]) { return; }
           var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
           d.questions.push({ question_id: qid, question: g.question || qid, category: g.category || "",
-            reference_answer: g.reference_answer || "", expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
-            in_golden: true, include_next: false, status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] });
+            expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
+            redo: false, cells: (d.modes || []).map(function (m) { return { mode: m, status: "pending", verdict: "" }; }) });
         });
         return { benchmark_id: d.benchmark_id, n_questions: d.questions.length };
       });
@@ -873,8 +904,25 @@
       });
     } else if (method === "POST" && path0 === "benchmark/redo") {
       data = mockBenchMutate(body, function (d, b) {
-        d.questions.forEach(function (q) { if (q.question_id === b.question_id) { q.include_next = !!b.include_next; } });
-        return { benchmark_id: d.benchmark_id, question_id: b.question_id, include_next: !!b.include_next };
+        d.questions.forEach(function (q) { if (q.question_id === b.question_id) { q.redo = !!b.value; } });
+        return { benchmark_id: d.benchmark_id, question_id: b.question_id, redo: !!b.value };
+      });
+    } else if (method === "POST" && path0 === "benchmark/modes") {
+      data = mockBenchMutate(body, function (d, b) {
+        var newModes = (b.modes || []).filter(function (m) { return ["Smart", "Pro", "Claude", "default"].indexOf(m) !== -1; });
+        if (!newModes.length) { return { _err: ["at least one mode is required"] }; }
+        if (MOCK.benchmarks.some(function (bk) {
+          return bk.benchmark_id !== d.benchmark_id && bk.agent_key === (d.agent && d.agent.agent_key) &&
+                 bk.name.toLowerCase() === d.name.toLowerCase();
+        })) { /* name uniqueness already satisfied */ }
+        // Update cells: keep existing results, add new pending, drop removed modes
+        d.questions.forEach(function (q) {
+          var existing = {};
+          (q.cells || []).forEach(function (c) { existing[c.mode] = c; });
+          q.cells = newModes.map(function (m) { return existing[m] || { mode: m, status: "pending", verdict: "" }; });
+        });
+        d.modes = newModes;
+        return { benchmark_id: d.benchmark_id, modes: newModes };
       });
     } else if (method === "POST" && path0 === "benchmark/rename") {
       data = mockBenchMutate(body, function (d, b) {
@@ -931,18 +979,28 @@
 
   function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-  // Recompute a benchmark's counts (detail + list row) after a mock mutation, for a believable preview.
+  // Recompute a benchmark's ledger/runnable (detail + list row) after a mock mutation.
   function mockSyncBench(bid) {
     var d = MOCK.bench_detail[bid];
     if (!d) { return; }
-    d.n_questions = d.questions.length;
-    d.n_done = d.questions.filter(function (q) { return q.status === "done"; }).length;
-    d.n_pending = d.n_questions - d.n_done;
-    d.n_redo = d.questions.filter(function (q) { return q.include_next; }).length;
+    var modes = d.modes || [];
+    var qs = d.questions || [];
+    var tested = 0, pending = 0, redo = 0, runnable = 0;
+    qs.forEach(function (q) {
+      var cells = q.cells || [];
+      var allTested = cells.length === modes.length && cells.every(function (c) { return c.status === "tested"; });
+      var hasPending = cells.some(function (c) { return c.status !== "tested"; });
+      if (allTested && !q.redo) { tested += 1; }
+      if (hasPending) { pending += 1; }
+      if (q.redo) { redo += 1; }
+      runnable += q.redo ? modes.length : cells.filter(function (c) { return c.status !== "tested"; }).length;
+    });
+    d.ledger = { tested: tested, pending: pending, redo: redo };
+    d.runnable = runnable;
     MOCK.benchmarks.forEach(function (b) {
       if (b.benchmark_id === bid) {
-        b.n_questions = d.n_questions; b.n_done = d.n_done; b.n_pending = d.n_pending;
-        b.n_redo = d.n_redo; b.status = d.status; b.name = d.name; b.modes = d.modes.slice();
+        b.n_questions = qs.length; b.n_done = tested; b.n_pending = pending;
+        b.n_redo = redo; b.name = d.name; b.modes = modes.slice();
       }
     });
   }
@@ -961,16 +1019,18 @@
     if (!ag) { return { _status: 400, status: "error", error: "unknown_agent" }; }
     var bid = "bm_" + Math.random().toString(36).slice(2, 8);
     var modes = body.modes && body.modes.length ? body.modes : (ag.modes ? ["Smart"] : ["default"]);
-    // Auto-membership: no seed questions at create time; membership = active golden tagged to this agent
+    // Auto-membership: active golden questions tagged to this agent
     var qids = MOCK.golden.filter(function (g) { return g.active && g.agent_key === agKey; }).map(function (g) { return g.question_id; });
     var questions = qids.map(function (qid) {
       var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
-      return { question_id: qid, question: g.question || qid, category: g.category || "", reference_answer: g.reference_answer || "",
-        expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "", in_golden: true, include_next: false,
-        status: "pending", n_attempts: 0, latest_verdict: "", latest_correct: null, modes: [] };
+      return { question_id: qid, question: g.question || qid, category: g.category || "",
+        expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
+        redo: false, cells: modes.map(function (m) { return { mode: m, status: "pending", verdict: "" }; }) };
     });
-    MOCK.bench_detail[bid] = { benchmark_id: bid, name: name, agent_key: ag.agent_key, agent_label: ag.agent_label,
-      modes: modes, status: "active", n_questions: questions.length, n_done: 0, n_pending: questions.length, n_redo: 0, questions: questions };
+    var agentInfo = { agent_key: ag.agent_key, agent_label: ag.agent_label, project_key: ag.project_key, agent_id: ag.agent_id };
+    MOCK.bench_detail[bid] = { benchmark_id: bid, name: name, agent: agentInfo,
+      modes: modes, ledger: { tested: 0, pending: questions.length, redo: 0 },
+      runnable: questions.length * modes.length, accuracy_pct: "-", questions: questions };
     MOCK.benchmarks.unshift({ benchmark_id: bid, name: name, agent_key: ag.agent_key, agent_label: ag.agent_label,
       modes: modes, status: "active", created_at: new Date().toISOString(), n_questions: questions.length, n_done: 0,
       n_pending: questions.length, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" });
@@ -1054,81 +1114,7 @@
         '<footer class="data-footer" id="dataFooter"></footer>' +
       '</div>' +
       modalHtml() +
-      benchModalHtml() +
       '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>';
-  }
-
-  function configPanelHtml() {
-    return '' +
-      '<section class="panel" data-panel="config">' +
-        '<div class="sec-head">' +
-          '<p class="sec-eyebrow" data-i18n="cfg.eyebrow"></p>' +
-          '<h2 class="sec-title" data-i18n="cfg.title"></h2>' +
-          '<p class="sec-note" data-i18n="cfg.note"></p>' +
-        '</div>' +
-        '<p class="glabel" data-i18n="ag.label"></p>' +
-        '<p class="ghelp" data-i18n="ag.help"></p>' +
-        '<div id="agentsList"></div>' +
-        '<div style="margin-top:14px"><button class="btn btn-ghost" id="addAgent"><span data-i18n="ag.add"></span></button></div>' +
-        '<div class="config-cols">' +
-          '<div class="card"><div class="card-pad">' +
-            '<p class="glabel" data-i18n="rm.title"></p>' +
-            '<p class="ghelp" data-i18n="rm.help"></p>' +
-            '<div class="chk-stack" id="modesGroup"></div>' +
-          '</div></div>' +
-          '<div class="card"><div class="card-pad">' +
-            '<p class="glabel" data-i18n="qt.title"></p>' +
-            '<p class="ghelp" id="qtHelp"></p>' +
-            '<div class="chk-wrap" id="catsGroup"></div>' +
-            '<div class="subgroup"><label class="field"><span class="field-label" data-i18n="qt.langfilter"></span>' +
-              '<select class="input" id="langFilter">' +
-                '<option value="all" data-i18n="opt.all"></option>' +
-                '<option value="en" data-i18n="opt.en"></option>' +
-                '<option value="fr" data-i18n="opt.fr"></option>' +
-              '</select></label></div>' +
-          '</div></div>' +
-          '<div class="card"><div class="card-pad">' +
-            '<p class="glabel" data-i18n="rp.title"></p>' +
-            '<label class="field"><span class="field-label" data-i18n="rp.conc"></span>' +
-              '<input class="input num" id="concurrency" type="number" min="1" max="8" value="1"></label>' +
-            '<p class="ghelp" style="margin-top:10px" data-i18n="rp.conc.help"></p>' +
-            '<div class="subgroup"><label class="field"><span class="field-label" data-i18n="rp.lang"></span>' +
-              '<select class="input" id="benchLang">' +
-                '<option value="en" data-i18n="opt.en"></option>' +
-                '<option value="fr" data-i18n="opt.fr"></option>' +
-              '</select></label>' +
-              '<p class="ghelp" style="margin-top:10px" data-i18n="rp.lang.help"></p></div>' +
-          '</div></div>' +
-        '</div>' +
-        '<div id="saveErr"></div>' +
-        '<div class="save-bar">' +
-          '<button class="btn btn-primary" id="saveBtn"><span id="icSave"></span><span id="saveBtnTxt" data-i18n="save.btn"></span></button>' +
-          '<span class="dirty-dot"></span>' +
-          '<span class="hint" data-i18n="save.hint"></span>' +
-        '</div>' +
-      '</section>';
-  }
-
-  function asideHtml() {
-    return '' +
-      '<aside class="aside">' +
-        '<div class="aside-block">' +
-          '<p class="aside-eyebrow" data-i18n="run.eyebrow"></p>' +
-          '<h3 class="aside-h"><span id="icRun" style="display:inline-flex;vertical-align:-3px;margin-right:8px;color:var(--orange)"></span><span data-i18n="run.title"></span></h3>' +
-          '<p class="aside-note" data-i18n="run.moved"></p>' +
-          '<div class="lastrun"><span data-i18n="run.last"></span>: <b id="lastRunVal"></b></div>' +
-          '<p class="aside-note" data-i18n="run.save2"></p>' +
-        '</div>' +
-        '<div class="aside-block">' +
-          '<p class="aside-eyebrow" data-i18n="pr.eyebrow"></p>' +
-          '<h3 class="aside-h" data-i18n="pr.title"></h3>' +
-          '<dl class="kv">' +
-            '<div class="kv-row"><dt data-i18n="pr.golden"></dt><dd id="prGolden"></dd></div>' +
-            '<div class="kv-row"><dt data-i18n="pr.judge"></dt><dd id="prJudge"></dd></div>' +
-            '<div class="kv-row"><dt data-i18n="pr.suggest"></dt><dd id="prSuggest"></dd></div>' +
-          '</dl>' +
-        '</div>' +
-      '</aside>';
   }
 
   function modalHtml() {
@@ -1155,30 +1141,6 @@
         '</div>' +
         '<div class="modal-foot"><button class="btn btn-ghost" id="mdCancel" data-i18n="md.cancel"></button>' +
           '<button class="btn btn-primary" id="mdSave" data-i18n="md.save"></button></div>' +
-      '</div></div>';
-  }
-
-  // New-benchmark modal (name + agent picker + seed choice). A separate overlay from the golden editor.
-  function benchModalHtml() {
-    return '' +
-      '<div class="overlay" id="benchOverlay"><div class="modal" role="dialog" aria-modal="true">' +
-        '<div class="modal-head"><h3 class="modal-title" data-i18n="bn.title"></h3>' +
-          '<button class="modal-x" id="bnClose" aria-label="Close">' + I.x + '</button></div>' +
-        '<div class="modal-err" id="bnErr"></div>' +
-        '<div class="modal-body">' +
-          '<label class="field full"><span class="field-label" data-i18n="bn.name"></span>' +
-            '<input class="input" id="bnName" autocomplete="off"></label>' +
-          '<label class="field full"><span class="field-label" data-i18n="bn.agent"></span>' +
-            '<select class="input" id="bnAgent"></select></label>' +
-          '<div class="field full"><span class="field-label" data-i18n="bn.seed"></span>' +
-            '<div class="chk-stack" style="margin-top:8px">' +
-              '<button type="button" class="chk on" id="bnSeedAll" data-on="1"><span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="bn.seedAll"></b></span></button>' +
-              '<button type="button" class="chk" id="bnSeedEmpty" data-on="0"><span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="bn.seedEmpty"></b></span></button>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="modal-foot"><button class="btn btn-ghost" id="bnCancel" data-i18n="bn.cancel"></button>' +
-          '<button class="btn btn-primary" id="bnCreate" data-i18n="bn.create"></button></div>' +
       '</div></div>';
   }
 
@@ -1210,9 +1172,6 @@
     renderGolden();
     renderSuggestions();
     renderReview();
-
-    // Status for any running bench operation (run pill gone; bench.running drives poll)
-    setStatus(S.bench.running ? "running" : (S.bench.runMsg ? "done" : "idle"));
   }
 
   function syncSeg(segId, attr, value) {
@@ -2755,11 +2714,15 @@
     S.route = { level: level, agentKey: agentKey || null, benchmarkId: benchmarkId || null };
     if (level === "agent" && agentKey) {
       S.agentView = { loaded: false, loadError: false, agentKey: agentKey, n_tagged: 0, benchmarks: [],
-        creating: false, submitting: false, createError: null, createName: "", createModes: [] };
+        creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" };
+    }
+    if (level === "benchmark" && benchmarkId) {
+      S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null };
     }
     renderBreadcrumb();
     renderDetailContent();
     if (level === "agent" && agentKey) { loadAgentBenchmarks(agentKey); }
+    if (level === "benchmark" && benchmarkId) { loadBenchmarkDetail4(benchmarkId); }
   }
 
   function loadAgentBenchmarks(agentKey) {
@@ -2876,6 +2839,24 @@
     var agKey = S.route.agentKey;
     var agLabel = "";
     S.agentCatalog.agents.forEach(function (a) { if (a.agent_key === agKey) { agLabel = a.agent_label; } });
+
+    if (S.route.level === "benchmark") {
+      // 3-part: Agents / AgentLabel / BenchmarkName
+      var det = S.benchDetailState && S.benchDetailState.detail;
+      var bmName = det ? det.name : (S.route.benchmarkId || "");
+      var html = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
+        '<span class="bcr-sep">/</span>' +
+        '<button class="bcr-btn" id="bcrAgent">' + esc(agLabel || agKey) + '</button>' +
+        '<span class="bcr-sep">/</span>' +
+        '<span class="bcr-cur">' + esc(bmName) + '</span>';
+      box.innerHTML = html;
+      var homeBtn2 = byId("bcrHome");
+      if (homeBtn2) { homeBtn2.addEventListener("click", function () { navigateTo("home", null, null); renderAgentsRail(); }); }
+      var agentBtn = byId("bcrAgent");
+      if (agentBtn) { agentBtn.addEventListener("click", function () { navigateTo("agent", agKey, null); renderAgentsRail(); }); }
+      return;
+    }
+
     var html = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
       '<span class="bcr-sep">/</span>' +
       '<span class="bcr-cur">' + esc(agLabel || agKey) + '</span>';
@@ -2890,7 +2871,8 @@
     var box = byId("detailContent");
     if (!box) { return; }
     if (S.route.level === "home") { box.innerHTML = ""; return; }
-    if (S.route.level === "agent") { box.innerHTML = buildAgentViewHtml(); wireAgentView(); }
+    if (S.route.level === "agent") { box.innerHTML = buildAgentViewHtml(); wireAgentView(); return; }
+    if (S.route.level === "benchmark") { renderBenchmarkDetail(); }
   }
 
   function buildAgentViewHtml() {
@@ -3048,7 +3030,6 @@
       btn.addEventListener("click", function () {
         var bid = btn.getAttribute("data-bm-open");
         navigateTo("benchmark", agKey, bid);
-        openBenchmark(bid);  // re-use existing dispatch for detail (dispatch 2 will refine)
         renderAgentsRail();
       });
     });
@@ -3144,6 +3125,410 @@
     if (box) { box.textContent = t("footer.copy"); }
   }
 
+  /* ============================ Screen 4: benchmark detail (dispatch 2) ============================ */
+
+  function loadBenchmarkDetail4(bid) {
+    var st = S.benchDetailState;
+    st.loaded = false;
+    st.loadError = false;
+    st.detail = null;
+    renderDetailContent();
+    callApi("GET", "benchmark/detail?benchmark_id=" + encodeURIComponent(bid)).then(function (res) {
+      if (S.route.benchmarkId !== bid) { return; }  // stale
+      var d = res.data || {};
+      if (res.status === 200 && d.benchmark_id && !d.error) {
+        st.detail = d;
+        st.loaded = true;
+        st.loadError = false;
+      } else {
+        st.loaded = true;
+        st.loadError = true;
+      }
+      if (S.route.level === "benchmark") { renderDetailContent(); renderBreadcrumb(); }
+    }, function () {
+      if (S.route.benchmarkId !== bid) { return; }
+      st.loaded = true;
+      st.loadError = true;
+      if (S.route.level === "benchmark") { renderDetailContent(); }
+    });
+  }
+
+  function renderBenchmarkDetail() {
+    var box = byId("detailContent");
+    if (!box) { return; }
+    box.innerHTML = buildBenchmarkDetailHtml();
+    wireBenchmarkDetail();
+  }
+
+  function buildBenchmarkDetailHtml() {
+    var st = S.benchDetailState;
+    if (!st.loaded) {
+      return '<div class="bd4-loading">' + esc(t("common.loading")) + '</div>';
+    }
+    if (st.loadError) {
+      return '<div class="note note-error">' + esc(t("bd.loadError")) + '</div>';
+    }
+
+    var det = st.detail;
+    var modes = det.modes || [];
+    var ledger = det.ledger || {};
+    var qs = det.questions || [];
+    var rl = (typeof Journey !== "undefined" && typeof Journey.runnableLabel === "function")
+      ? Journey.runnableLabel(det)
+      : { label: "Run pending (" + (det.runnable || 0) + ")", enabled: (det.runnable || 0) > 0, hint: "" };
+    var allTested = !ledger.pending && !ledger.redo;
+
+    var html = '<div class="bd4">';
+
+    // Meta row
+    var agLabel = (det.agent && det.agent.agent_label) || "";
+    html += '<div class="bd4-meta">' +
+      '<span class="bd4-meta-agent"><b>' + esc(t("bd.agent")) + '</b> ' + esc(agLabel) + '</span>' +
+      '<span class="bd4-meta-modes"><b>' + esc(t("bd.modes")) + '</b> ' + esc(modes.join(", ")) + '</span>' +
+      (det.accuracy_pct && det.accuracy_pct !== "-"
+        ? '<span class="bd4-meta-acc"><b>' + esc(t("bm.accuracy")) + '</b> ' + esc(det.accuracy_pct) + '</span>'
+        : '') +
+    '</div>';
+
+    // Ledger chips
+    html += '<div class="bd4-ledger">' +
+      '<span class="bm-chip bm-chip--done">' + esc(t("bm.badge.done", { n: ledger.tested || 0 })) + '</span>';
+    if (ledger.pending) { html += '<span class="bm-chip bm-chip--pending">' + esc(t("bm.badge.pending", { n: ledger.pending })) + '</span>'; }
+    if (ledger.redo)    { html += '<span class="bm-chip bm-chip--redo">' + esc(t("bm.badge.redo", { n: ledger.redo })) + '</span>'; }
+    html += '</div>';
+
+    // Run status
+    if (st.running) {
+      html += '<div class="bd4-run-status bd4-run-status--running">' + esc(t("run.btn.running")) + '</div>';
+    } else if (st.runMsg) {
+      var msgCls = st.runMsg.kind === "ok" ? "bd4-run-status--ok" : "bd4-run-status--err";
+      html += '<div class="bd4-run-status ' + msgCls + '">' + esc(st.runMsg.text) + '</div>';
+    }
+
+    // Action bar
+    html += '<div class="bd4-actions">';
+
+    // Primary run button (always visible, from Journey)
+    if (!st.running) {
+      html += '<button class="btn' + (rl.enabled ? " btn-primary" : "") + '" id="bd4RunPending"' + (!rl.enabled ? ' disabled' : '') + '>' + esc(rl.label) + '</button>';
+    } else {
+      html += '<button class="btn" disabled>' + esc(rl.label) + '</button>';
+    }
+
+    // Re-run entire (all-tested state only)
+    if (allTested && !st.running) {
+      html += '<button class="btn btn-primary" id="bd4Rerun">' + esc(t("bd.runFull")) + '</button>';
+    }
+
+    // Run hint
+    if (!st.running && rl.hint) {
+      html += '<span class="bd4-run-hint">' + esc(rl.hint) + '</span>';
+    }
+
+    html += '</div>';  // bd4-actions
+
+    // Secondary action bar (edit / delete)
+    if (!st.running) {
+      html += '<div class="bd4-sec-actions">';
+      if (!st.editModes && !st.deleteConfirm) {
+        html += '<button class="btn btn-ghost btn-sm" id="bd4EditModesBtn">' + esc(t("bd4.editModes")) + '</button>';
+        html += '<button class="btn btn-ghost btn-sm btn-danger" id="bd4DeleteBtn">' + esc(t("bm.delete")) + '</button>';
+      }
+      html += '</div>';
+    }
+
+    // Edit modes inline form (state 4f)
+    if (st.editModes) {
+      var modeOpts = ["Smart", "Pro", "Claude"];
+      var modesHtml = modeOpts.map(function (m) {
+        var on = st.editModesValue.indexOf(m) !== -1;
+        return '<button type="button" class="chk' + (on ? " on" : "") + '" data-bd4-mode="' + esc(m) + '">' +
+          '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(m) + '</b></span></button>';
+      }).join("");
+      html += '<div class="bd4-edit-modes">' +
+        '<span class="field-label">' + esc(t("bd4.editModes")) + '</span>' +
+        '<div class="chk-stack">' + modesHtml + '</div>' +
+        '<div class="bd4-edit-actions">' +
+          '<button class="btn btn-primary btn-sm" id="bd4EditModesSave">' + esc(t("bd4.editSave")) + '</button>' +
+          '<button class="btn btn-ghost btn-sm" id="bd4EditModesCancel">' + esc(t("common.cancel")) + '</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Delete confirm (state 4g) - named confirm, not window.confirm
+    if (st.deleteConfirm) {
+      html += '<div class="confirm-row">' +
+        '<span class="confirm-msg">' + esc(t("bm.deleteConfirm", { n: det.name })) + '</span>' +
+        '<div class="confirm-btns">' +
+          '<button class="btn btn-danger btn-sm" id="bd4DeleteGo">' + esc(t("bm.delete")) + '</button>' +
+          '<button class="btn btn-ghost btn-sm" id="bd4DeleteCancel">' + esc(t("common.cancel")) + '</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Questions table
+    html += '<div class="bd4-table-wrap"><table class="bd4-table">';
+    html += '<thead><tr>' +
+      '<th class="bd4-th-q">' + esc(t("bd4.col.q")) + '</th>' +
+      '<th class="bd4-th-cat">' + esc(t("bd4.col.cat")) + '</th>';
+    modes.forEach(function (m) { html += '<th class="bd4-th-mode">' + esc(m) + '</th>'; });
+    html += '<th class="bd4-th-redo">' + esc(t("bd4.col.redo")) + '</th>' +
+      '</tr></thead>';
+
+    html += '<tbody>';
+    qs.forEach(function (q) {
+      // Build cell map by mode for quick lookup
+      var cellsMap = {};
+      (q.cells || []).forEach(function (c) { cellsMap[c.mode] = c; });
+
+      html += '<tr>';
+      // Question text + expected refs
+      var qInner = '<span class="bd4-q-text">' + esc(q.question) + '</span>';
+      if (q.expected_sql) { qInner += '<code class="bd4-ref-sql clamp">' + esc(q.expected_sql) + '</code>'; }
+      if (q.expected_tool && q.expected_tool !== "none" && q.expected_tool !== "") {
+        qInner += '<span class="ref-tool bd4-ref-tool">' + esc(q.expected_tool) + '</span>';
+      }
+      html += '<td class="bd4-q-cell">' + qInner + '</td>';
+
+      // Category
+      html += '<td class="bd4-cat-cell">' + (q.category ? '<span class="cat-tag">' + esc(q.category) + '</span>' : '') + '</td>';
+
+      // Per-mode chip cells
+      modes.forEach(function (m) {
+        var chip = (typeof Journey !== "undefined" && typeof Journey.cellChip === "function")
+          ? Journey.cellChip(cellsMap[m])
+          : (cellsMap[m] && cellsMap[m].status === "tested"
+              ? (cellsMap[m].verdict === "OK" ? { text: "OK", kind: "ok" } : { text: "MISS", kind: "miss" })
+              : { text: "Pending", kind: "pending" });
+        html += '<td class="bd4-cell"><span class="bd4-chip bd4-chip--' + chip.kind + '">' + esc(chip.text) + '</span></td>';
+      });
+
+      // Redo toggle
+      var redoOn = !!q.redo;
+      html += '<td class="bd4-redo-cell"><button type="button" class="chk' + (redoOn ? " on" : "") +
+        '" data-bd4-redo="' + esc(q.question_id) + '" data-bd4-redo-val="' + (redoOn ? "0" : "1") + '">' +
+        '<span class="box">' + I.check + '</span></button></td>';
+
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+
+    html += '</div>';  // bd4
+    return html;
+  }
+
+  function wireBenchmarkDetail() {
+    var st = S.benchDetailState;
+
+    var runBtn = byId("bd4RunPending");
+    if (runBtn && !runBtn.disabled) {
+      runBtn.addEventListener("click", function () { bench4Launch("append"); });
+    }
+    var rerunBtn = byId("bd4Rerun");
+    if (rerunBtn) {
+      rerunBtn.addEventListener("click", function () { bench4Launch("full"); });
+    }
+
+    var editModesBtn = byId("bd4EditModesBtn");
+    if (editModesBtn) {
+      editModesBtn.addEventListener("click", function () {
+        st.editModes = true;
+        st.editModesValue = ((st.detail && st.detail.modes) || []).slice();
+        renderDetailContent();
+      });
+    }
+
+    qsa("[data-bd4-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var m = btn.getAttribute("data-bd4-mode");
+        var idx = st.editModesValue.indexOf(m);
+        if (idx === -1) { st.editModesValue.push(m); } else { st.editModesValue.splice(idx, 1); }
+        btn.classList.toggle("on", st.editModesValue.indexOf(m) !== -1);
+      });
+    });
+
+    var editSaveBtn = byId("bd4EditModesSave");
+    if (editSaveBtn) {
+      editSaveBtn.addEventListener("click", function () {
+        var modes = st.editModesValue.slice();
+        editSaveBtn.disabled = true;
+        var bid = S.route.benchmarkId;
+        callApi("POST", "benchmark/modes", { benchmark_id: bid, modes: modes }).then(function (res) {
+          st.editModes = false;
+          if (res.status === 200 && res.data && res.data.status === "ok") {
+            toast(t("bd4.modesOk"));
+            loadBenchmarkDetail4(bid);
+          } else {
+            toast(t("bd4.modesError"));
+            renderDetailContent();
+          }
+        }, function () {
+          st.editModes = false;
+          toast(t("bd4.modesError"));
+          renderDetailContent();
+        });
+      });
+    }
+
+    var editCancelBtn = byId("bd4EditModesCancel");
+    if (editCancelBtn) {
+      editCancelBtn.addEventListener("click", function () {
+        st.editModes = false;
+        renderDetailContent();
+      });
+    }
+
+    var delBtn = byId("bd4DeleteBtn");
+    if (delBtn) {
+      delBtn.addEventListener("click", function () {
+        st.deleteConfirm = true;
+        renderDetailContent();
+      });
+    }
+    var delCancelBtn = byId("bd4DeleteCancel");
+    if (delCancelBtn) {
+      delCancelBtn.addEventListener("click", function () {
+        st.deleteConfirm = false;
+        renderDetailContent();
+      });
+    }
+    var delGoBtn = byId("bd4DeleteGo");
+    if (delGoBtn) {
+      delGoBtn.addEventListener("click", function () { bench4Delete(); });
+    }
+
+    qsa("[data-bd4-redo]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var qid = btn.getAttribute("data-bd4-redo");
+        var val = btn.getAttribute("data-bd4-redo-val") === "1";  // true = set redo ON
+        bench4Redo(qid, val);
+      });
+    });
+  }
+
+  // Recompute ledger + runnable in-place on a detail object (for optimistic redo updates).
+  function bench4RecomputeLedger(det) {
+    var modes = det.modes || [];
+    var qs = det.questions || [];
+    var tested = 0, pending = 0, redo = 0, runnable = 0;
+    qs.forEach(function (q) {
+      var cells = q.cells || [];
+      var allTested = cells.length === modes.length && cells.every(function (c) { return c.status === "tested"; });
+      var hasPending = cells.some(function (c) { return c.status !== "tested"; });
+      if (allTested && !q.redo) { tested += 1; }
+      if (hasPending) { pending += 1; }
+      if (q.redo) { redo += 1; }
+      runnable += q.redo ? modes.length : cells.filter(function (c) { return c.status !== "tested"; }).length;
+    });
+    det.ledger = { tested: tested, pending: pending, redo: redo };
+    det.runnable = runnable;
+  }
+
+  function bench4Launch(launchMode) {
+    var st = S.benchDetailState;
+    if (st.running) { return; }
+    st.running = true;
+    st.runMsg = null;
+    renderDetailContent();
+    var bid = S.route.benchmarkId;
+    callApi("POST", "benchmark/launch", { benchmark_id: bid, launch_mode: launchMode }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok" && d.launched) {
+        toast(t("run.launched"));
+        bench4Poll();
+      } else if (res.status === 409 || d.error === "already_running") {
+        st.runMsg = { kind: "err", text: t("run.already") };
+        renderDetailContent();
+        bench4Poll();
+      } else {
+        bench4EndRun({ kind: "err", text: t("bd4.runError") });
+      }
+    }, function () { bench4EndRun({ kind: "err", text: t("bd4.runError") }); });
+  }
+
+  var bench4PollErrors = 0;
+  function bench4Poll() {
+    var st = S.benchDetailState;
+    if (!st.running) { return; }
+    setTimeout(function () {
+      callApi("GET", "run/status").then(function (res) {
+        bench4PollErrors = 0;
+        if (S.route.level !== "benchmark") { return; }
+        var d = res.data || {};
+        if (d.running) {
+          bench4Poll();
+        } else {
+          bench4EndRun({ kind: "ok", text: t("bd4.runDone") });
+          loadBenchmarkDetail4(S.route.benchmarkId);
+        }
+      }, function () {
+        bench4PollErrors += 1;
+        if (bench4PollErrors >= 4) { bench4EndRun({ kind: "err", text: t("run.lostContact") }); }
+        else { bench4Poll(); }
+      });
+    }, 2500);
+  }
+
+  function bench4EndRun(msg) {
+    S.benchDetailState.running = false;
+    S.benchDetailState.runMsg = msg || null;
+    renderDetailContent();
+  }
+
+  function bench4Redo(questionId, value) {
+    // Optimistic update: flip redo flag and recompute ledger/runnable immediately
+    var st = S.benchDetailState;
+    var det = st.detail;
+    if (det && det.questions) {
+      det.questions.forEach(function (q) { if (q.question_id === questionId) { q.redo = value; } });
+      bench4RecomputeLedger(det);
+    }
+    renderDetailContent();
+    callApi("POST", "benchmark/redo", { benchmark_id: S.route.benchmarkId, question_id: questionId, value: value }).then(function (res) {
+      if (S.route.level !== "benchmark") { return; }
+      if (!res.data || res.data.status !== "ok") {
+        // Revert
+        if (det && det.questions) {
+          det.questions.forEach(function (q) { if (q.question_id === questionId) { q.redo = !value; } });
+          bench4RecomputeLedger(det);
+        }
+        toast(t("bd.redoError"));
+        renderDetailContent();
+      }
+    }, function () {
+      if (S.route.level !== "benchmark") { return; }
+      if (det && det.questions) {
+        det.questions.forEach(function (q) { if (q.question_id === questionId) { q.redo = !value; } });
+        bench4RecomputeLedger(det);
+      }
+      toast(t("bd.redoError"));
+      renderDetailContent();
+    });
+  }
+
+  function bench4Delete() {
+    var bid = S.route.benchmarkId;
+    var agKey = S.route.agentKey;
+    var st = S.benchDetailState;
+    callApi("POST", "benchmark/delete", { benchmark_id: bid }).then(function (res) {
+      var d = res.data || {};
+      if (d.status === "ok") {
+        toast(t("bm.deleted"));
+        navigateTo("agent", agKey, null);
+        renderAgentsRail();
+        loadAgentBenchmarks(agKey);
+      } else {
+        st.deleteConfirm = false;
+        toast(t("bm.deleteError"));
+        renderDetailContent();
+      }
+    }, function () {
+      st.deleteConfirm = false;
+      toast(t("bm.deleteError"));
+      renderDetailContent();
+    });
+  }
+
   /* ============================ static wiring ============================ */
 
   function wireStatic() {
@@ -3179,17 +3564,9 @@
       this.classList.toggle("on", on);
     });
     byId("overlay").addEventListener("click", function (e) { if (e.target === byId("overlay")) { closeModal(); } });
-    // New-benchmark modal (legacy; kept for compatibility with openBenchModal used in dispatch 2)
-    byId("bnClose").addEventListener("click", closeBenchModal);
-    byId("bnCancel").addEventListener("click", closeBenchModal);
-    byId("bnCreate").addEventListener("click", submitBenchModal);
-    byId("bnSeedAll").addEventListener("click", function () { setBenchSeed(true); });
-    byId("bnSeedEmpty").addEventListener("click", function () { setBenchSeed(false); });
-    byId("benchOverlay").addEventListener("click", function (e) { if (e.target === byId("benchOverlay")) { closeBenchModal(); } });
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") { return; }
       if (S.editor.open) { closeModal(); }
-      if (S.benchNew.open) { closeBenchModal(); }
     });
   }
 
