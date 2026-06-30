@@ -132,38 +132,34 @@ def run():
     run_id = uuid.uuid4().hex
     run_timestamp = datetime.now().isoformat()
 
-    # Active + valid golden rows, indexed by id (the gate for membership + the question payloads).
+    # Load active+valid golden rows; build the full index (all agents) and the subset
+    # of ids whose agent_key matches this benchmark's pinned agent (membership gate).
     golden_rows = _load_golden_rows(cfg["golden_dataset"])
-    golden_by_id = {r.get("question_id"): r for r in golden_rows if r.get("question_id")}
-    golden_active_ids = set(golden_by_id.keys())
+    bench_agent_key = entity.get("agent_key")
+    golden_by_id = {}
+    golden_agent_active_ids = []
+    for r in golden_rows:
+        qid = r.get("question_id")
+        if not qid:
+            continue
+        golden_by_id[qid] = r
+        if (r.get("agent_key") or None) == bench_agent_key:
+            golden_agent_active_ids.append(qid)  # active is already filtered in _load_golden_rows
 
-    # Prior attempts of THIS benchmark from the raw history (fail-open []): used to skip already-done
-    # questions (append mode) and to compute the next attempt number per (question, mode).
+    # Prior attempts of THIS benchmark from the raw history (fail-open []): used to skip
+    # already-done (question, mode) cells (append) and compute the next attempt number.
     prior = read_history_rows(cfg["raw_dataset"], columns=_RESOLVER_COLUMNS)
-    to_run_ids = registry.resolve_to_run(entity, prior, golden_active_ids, launch_mode)
-    if not to_run_ids:
+    plan = registry.resolve_to_run(entity, golden_agent_active_ids, prior, launch_mode)
+    total_cells = sum(len(qids) for qids in plan.values())
+    if total_cells == 0:
         raise ValueError(
-            "nothing to run for benchmark {0!r} ({1}): every member question is already done. "
-            "Use the full re-run, add questions, or flag some 'redo at next run'."
+            "nothing to run for benchmark {0!r} ({1}): every (question, mode) cell is already done. "
+            "Use the full re-run, tag more questions to this agent, or flag some 'redo at next run'."
             .format(entity.get("name") or benchmark_id, launch_mode)
         )
-    attempt_map = registry.attempt_numbers(prior, benchmark_id, agent["agent_key"])
-    questions = [golden_by_id[qid] for qid in to_run_ids if qid in golden_by_id]
+    attempt_map = registry.attempt_numbers(prior, benchmark_id, bench_agent_key)
 
     project = dataiku.api_client().get_project(agent["project_key"])
-
-    run_config = {
-        "run_id": run_id,
-        "run_timestamp": run_timestamp,
-        "project": project,           # DSS handle the runner uses to reach the agent
-        "agents": [agent],            # a benchmark pins exactly ONE agent
-        "modes": run_modes,
-        "language": cfg["language"],
-        "concurrency": cfg["concurrency"],
-        "per_call_timeout_s": cfg["per_call_timeout_s"],
-        "questions": questions,
-    }
-
     bench_name = entity.get("name") or ""
     collected = []
 
@@ -175,11 +171,29 @@ def run():
         raw["benchmark_name"] = bench_name
         raw["attempt_no"] = registry.next_attempt_no(
             attempt_map, raw.get("question_id"), raw.get("mode"))
+        # Carry the golden agent tag for display/breakdown (distinct from the runner's agent_key col).
+        gq = golden_by_id.get(raw.get("question_id")) or {}
+        raw["agent_key_tag"] = gq.get("agent_key")
         collected.append(raw)
 
-    print("benchmark: run {0} on benchmark {1!r} ({2}) - {3} question(s) x {4} mode(s)".format(
-        run_id, bench_name, launch_mode, len(questions), len(run_modes)))
-    agent_runner.run_matrix(run_config, write_row)
+    for mode, qids in plan.items():
+        questions = [golden_by_id[qid] for qid in qids if qid in golden_by_id]
+        if not questions:
+            continue
+        run_config = {
+            "run_id": run_id,
+            "run_timestamp": run_timestamp,
+            "project": project,           # DSS handle the runner uses to reach the agent
+            "agents": [agent],            # a benchmark pins exactly ONE agent
+            "modes": [mode],
+            "language": cfg["language"],
+            "concurrency": cfg["concurrency"],
+            "per_call_timeout_s": cfg["per_call_timeout_s"],
+            "questions": questions,
+        }
+        print("benchmark: run {0} benchmark {1!r} mode {2} - {3} question(s)".format(
+            run_id, bench_name, mode, len(questions)))
+        agent_runner.run_matrix(run_config, write_row)
 
     # Build the raw frame with the canonical RAW_COLUMNS schema (missing keys -> None so error /
     # timeout rows still conform), then APPEND this run to the raw history (idempotent by run_id).
