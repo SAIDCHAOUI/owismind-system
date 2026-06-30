@@ -50,8 +50,8 @@ RUN_LOCK = threading.Lock()
 # other's change (lost update); same role as _PROMOTE_LOCK for the golden.
 _OVERRIDE_LOCK = threading.Lock()
 # Serializes every read-modify-write of the ``benchmark`` project variable's registry (create a
-# benchmark, add/remove a question, toggle the redo flag, write a launch request), so two concurrent
-# launcher edits cannot clobber each other's change. The launcher is one Flask process.
+# benchmark, toggle the redo flag, write a launch request), so two concurrent launcher edits
+# cannot clobber each other's change. The launcher is one Flask process.
 _REGISTRY_LOCK = threading.Lock()
 
 SCENARIO_ID = "Run_Benchmark"
@@ -361,7 +361,7 @@ def read_golden_rows(cfg):
 def _write_golden(ds, rows):
     """Write the full golden row list via the Dataset API, preserving any extra columns.
 
-    Columns = the canonical lean-9 GOLDEN_COLUMNS first, then any extra columns the prepared
+    Columns = the canonical GOLDEN_COLUMNS first, then any extra columns the prepared
     golden carries (kept after the canonical ones), so a rewrite never narrows the dataset.
     """
     cols = list(schemas.GOLDEN_COLUMNS)
@@ -375,6 +375,30 @@ def _write_golden(ds, rows):
     ds.write_with_schema(df)
 
 
+def _ensure_golden_agent_key_column(dataset_name):
+    """Idempotent: add the agent_key column to the golden dataset schema if missing. Best-effort.
+
+    Uses the dataiku.Dataset schema API: read_schema() returns a list of column dicts;
+    write_schema() persists the updated list. Wrapped in try/except so a schema-evolution
+    failure never blocks a golden write - the data will carry the column regardless.
+
+    NEEDS INSTANCE VERIFICATION: dataiku.Dataset.read_schema() and write_schema() shapes.
+    """
+    try:
+        ds = dataiku.Dataset(dataset_name)
+        schema = ds.read_schema()
+        if not isinstance(schema, list):
+            return
+        col_names = {c.get("name") for c in schema if isinstance(c, dict)}
+        if "agent_key" not in col_names:
+            new_schema = list(schema)
+            new_schema.append({"name": "agent_key", "type": "string"})
+            ds.write_schema(new_schema)
+    except Exception:
+        logger.warning("benchmark webapp - could not evolve golden schema for agent_key (%s)",
+                       dataset_name)
+
+
 def save_golden_question(cfg, payload):
     """Create or update one golden question. Returns ``(result_or_None, errors)``.
 
@@ -383,7 +407,9 @@ def save_golden_question(cfg, payload):
     with a truncated set. A payload without a question_id is a create (minted ``a_`` id);
     one with a question_id updates that row (extra columns preserved). The write goes through
     the Dataset API (a LAB Flow dataset), NEVER raw SQL on the shared connection.
+    Ensures the agent_key column exists in the schema (best-effort) before writing.
     """
+    _ensure_golden_agent_key_column(cfg["golden_dataset"])
     with _PROMOTE_LOCK:
         ds = dataiku.Dataset(cfg["golden_dataset"])
         df = _golden_existing(ds)  # schema-gated: empty on a never-built golden, RAISES on a blip
@@ -402,10 +428,12 @@ def delete_golden_question(cfg, question_id):
 
     Locked + RAISING read (same data-safety as save). Removing a question never touches the
     PAST run results (raw/scored keep their own rows by question_id), only the golden set.
+    Ensures the agent_key column exists in the schema (best-effort) before writing.
     """
     qid = question_id.strip() if isinstance(question_id, str) else ""
     if not qid:
         return None, ["question_id is required"]
+    _ensure_golden_agent_key_column(cfg["golden_dataset"])
     with _PROMOTE_LOCK:
         ds = dataiku.Dataset(cfg["golden_dataset"])
         df = _golden_existing(ds)  # schema-gated RAISING read (abort on a blip, not truncate)
@@ -457,7 +485,7 @@ def write_override(cfg, payload, reviewed_at):
 
 
 # --- v2: named per-agent benchmarks (registry in the variable + launch) ----------
-# The registry + per-benchmark question membership + the redo intent live IN the ``benchmark`` project
+# The registry + the per-question "redo at next run" intent live IN the ``benchmark`` project
 # variable (no new dataset). Every mutation is a read-modify-write of that variable serialized by
 # _REGISTRY_LOCK; the clock + uuid live here (the pure registry/views modules never read them).
 
@@ -491,69 +519,92 @@ def benchmark_agents_catalog(cfg):
     return views.config_view(cfg).get("agents", [])
 
 
-def create_benchmark(name, agent, modes, question_ids, created_by=""):
+# --- registry mutations (all RMW under _REGISTRY_LOCK) -----------------------
+
+def create_benchmark(name, agent, modes, created_by=""):
     """Create a new benchmark in the registry. Returns ``(result, errors)``.
 
-    ``agent`` is ``{agent_key, agent_label, project_key, agent_id}`` (from the catalog). ``modes`` is
-    the mode list (e.g. ["Smart","Pro","Claude"] or ["default"]). ``question_ids`` seeds the
-    membership (all pending). The name must be unique (case-insensitive). Locked read-modify-write.
+    ``agent`` is ``{agent_key, agent_label, project_key, agent_id}`` (from the catalog). ``modes``
+    is the mode list (e.g. ["Smart","Pro","Claude"] or ["default"]). Name uniqueness is checked
+    PER AGENT (case-insensitive): two different agents may each have a benchmark named "Q4".
+    Membership is AUTO-DERIVED at run time from the golden rows tagged to the agent_key, so no
+    question seeding happens here. Gating on the tagged-question count is done in the backend
+    route, not here.
     """
     with _REGISTRY_LOCK:
         reg = read_registry()
-        ok, err = registry.validate_benchmark_name(name, registry.existing_names(reg))
+        agent_key = (agent or {}).get("agent_key", "") if isinstance(agent, dict) else ""
+        ok, err = views.validate_benchmark_name(name, registry.names_for_agent(reg, agent_key))
         if not ok:
             return None, [err]
         bid = _new_benchmark_id()
-        reg = registry.create_benchmark(
-            reg, bid, name, agent, modes, _now_iso(), created_by, question_ids or [])
+        reg = registry.create_benchmark(reg, bid, name, agent, modes, _now_iso(), created_by)
         _persist_registry(reg)
-        return {"benchmark_id": bid, "name": name, "n_questions": len(question_ids or [])}, []
+        return {"benchmark_id": bid, "name": name}, []
 
 
-def add_questions_to_benchmark(benchmark_id, question_ids):
-    """Add member questions to a benchmark (pending). Returns ``(result, errors)``. Locked."""
+def delete_benchmark(benchmark_id):
+    """Hard-delete a benchmark from the registry. Returns ``(result, errors)``. Locked.
+
+    Scored rows for this benchmark_id are untouched (they accumulate in the dataset and remain
+    readable; the deletion only removes the registry entry so the benchmark no longer appears
+    in the active list). Irreversible - no soft-delete / archive in the v2 model.
+    """
     with _REGISTRY_LOCK:
         reg = read_registry()
         if benchmark_id not in reg:
             return None, ["unknown benchmark"]
-        reg = registry.add_questions(reg, benchmark_id, question_ids or [], _now_iso())
+        reg = registry.delete_benchmark(reg, benchmark_id)
         _persist_registry(reg)
-        n = len(reg[benchmark_id].get("questions") or {})
-        return {"benchmark_id": benchmark_id, "n_questions": n}, []
+        return {"benchmark_id": benchmark_id, "deleted": True}, []
 
 
-def remove_question_from_benchmark(benchmark_id, question_id):
-    """Remove one member question from a benchmark. Returns ``(result, errors)``. Locked."""
+def set_benchmark_modes(benchmark_id, modes):
+    """Update the modes list on a benchmark. Returns ``(result, errors)``. Locked.
+
+    ``modes`` is a list of mode strings; passing [] sets the benchmark to the single default
+    mode (the step falls back to registry.DEFAULT_MODE). No registry module function exists for
+    this mutation, so it is done inline on the normalized entity dict.
+    """
     with _REGISTRY_LOCK:
         reg = read_registry()
         if benchmark_id not in reg:
             return None, ["unknown benchmark"]
-        reg = registry.remove_question(reg, benchmark_id, question_id)
+        entity = dict(reg[benchmark_id])
+        entity["modes"] = [m for m in (modes or []) if isinstance(m, str) and m.strip()]
+        reg = dict(reg)
+        reg[benchmark_id] = entity
         _persist_registry(reg)
-        return {"benchmark_id": benchmark_id}, []
+        return {"benchmark_id": benchmark_id, "modes": entity["modes"]}, []
 
 
 def set_question_redo(benchmark_id, question_id, value):
-    """Set/clear the 'redo at next run' flag on one member question. Returns ``(result, errors)``."""
+    """Set/clear the 'redo at next run' flag on a question in this benchmark's redo list.
+
+    Returns ``(result, errors)``. Locked RMW.
+    """
     with _REGISTRY_LOCK:
         reg = read_registry()
         if benchmark_id not in reg:
             return None, ["unknown benchmark"]
-        reg = registry.set_include_next(reg, benchmark_id, question_id, bool(value))
+        reg = registry.set_redo(reg, benchmark_id, question_id, bool(value))
         _persist_registry(reg)
         return {"benchmark_id": benchmark_id, "question_id": question_id,
-                "include_next": bool(value)}, []
+                "redo": bool(value)}, []
 
 
 def rename_benchmark(benchmark_id, name):
-    """Rename a benchmark (name must stay unique). Returns ``(result, errors)``. Locked."""
+    """Rename a benchmark (name must stay unique per agent). Returns ``(result, errors)``. Locked."""
     with _REGISTRY_LOCK:
         reg = read_registry()
         if benchmark_id not in reg:
             return None, ["unknown benchmark"]
-        current = str(reg[benchmark_id].get("name") or "").strip().lower()
-        others = registry.existing_names(reg) - {current}
-        ok, err = registry.validate_benchmark_name(name, others)
+        entity = reg[benchmark_id]
+        agent_key = entity.get("agent_key", "")
+        # Exclude this benchmark's own current name from the uniqueness check.
+        current_lower = str(entity.get("name") or "").strip().lower()
+        taken = registry.names_for_agent(reg, agent_key) - {current_lower}
+        ok, err = registry.validate_benchmark_name(name, taken)
         if not ok:
             return None, [err]
         reg = registry.rename_benchmark(reg, benchmark_id, name)
@@ -561,34 +612,21 @@ def rename_benchmark(benchmark_id, name):
         return {"benchmark_id": benchmark_id, "name": name}, []
 
 
-def archive_benchmark(benchmark_id):
-    """Archive a benchmark (kept for consultation, hidden from the active list). Locked."""
-    with _REGISTRY_LOCK:
-        reg = read_registry()
-        if benchmark_id not in reg:
-            return None, ["unknown benchmark"]
-        reg = registry.archive_benchmark(reg, benchmark_id)
-        _persist_registry(reg)
-        return {"benchmark_id": benchmark_id, "status": "archived"}, []
-
-
 def launch_benchmark(benchmark_id, launch_mode):
-    """Write the launch request, consume the redo flags, and fire the scenario. Returns (result, err).
+    """Write the launch request and fire the scenario. Returns (result, err).
 
-    Sets ``run_request`` = {benchmark_id, launch_mode} in the variable so step_run_matrix runs exactly
-    this benchmark, and CONSUMES the redo intent (clears every include_next of this benchmark, since
-    'redo at next run' is a one-shot signal honored by this launch). Then fires the scenario under the
-    single-flight RUN_LOCK (the authoritative cross-process guard is the scenario's "Prevent
-    concurrent executions"). The error code mirrors api_run.
+    Sets ``run_request`` = {benchmark_id, launch_mode} in the variable so step_run_matrix runs
+    exactly this benchmark, then fires the scenario under the single-flight RUN_LOCK (the
+    authoritative cross-process guard is the scenario's "Prevent concurrent executions").
+    The redo flags are NOT consumed here: they are cleared by ``reconcile_redo_after_run`` AFTER
+    the run's scored rows land (so a rejected launch - 409 already running - never silently drops
+    the redo intent). The error code mirrors api_run.
     """
     req = views.build_launch_request(benchmark_id, launch_mode)
     if not req:
         return None, "bad_request"
-    # Validate the benchmark exists WITHOUT mutating the registry: a rejected launch must leave the
-    # redo flags + run_request untouched, otherwise a user who flagged "redo at next run" and hits a
-    # 409 (a run already in flight) would silently lose that intent (never restored). So the registry
-    # is only committed AFTER the single-flight + is_running + launchable guards all pass, right
-    # before firing - the redo intent is consumed only by a launch that actually starts.
+    # Validate the benchmark exists WITHOUT mutating the registry (rejected launch leaves redo
+    # flags intact).
     if benchmark_id not in read_registry():
         return None, "unknown_benchmark"
     if not RUN_LOCK.acquire(blocking=False):
@@ -599,19 +637,261 @@ def launch_benchmark(benchmark_id, launch_mode):
             return None, "already_running"
         if not _can_launch(scen):
             return None, "launch_unsupported"
-        # Committed to launching: write run_request + consume the redo flags now (the scenario step
-        # reads run_request fresh at its start, so it must be in the variable before we fire).
+        # Write run_request now (the scenario step reads it fresh at its start).
         with _REGISTRY_LOCK:
             reg = read_registry()
             if benchmark_id not in reg:
                 return None, "unknown_benchmark"
-            redo_ids = [qid for qid, m in (reg[benchmark_id].get("questions") or {}).items()
-                        if isinstance(m, dict) and m.get("include_next")]
-            reg = registry.reset_include_next_for(reg, benchmark_id, redo_ids)
             _persist_registry(reg, run_request=req)
-        launch(scen)  # method confirmed available by _can_launch above
-        logger.info("benchmark launcher - launched benchmark %s (%s)", benchmark_id, req["launch_mode"])
+        launch(scen)
+        logger.info("benchmark launcher - launched benchmark %s (%s)", benchmark_id,
+                    req["launch_mode"])
         return {"launched": True, "benchmark_id": benchmark_id,
                 "launch_mode": req["launch_mode"]}, None
     finally:
         RUN_LOCK.release()
+
+
+def reconcile_redo_after_run(benchmark_id, run_id):
+    """Clear redo flags for questions that landed a scored row in this run. Idempotent, locked.
+
+    Called by the backend route/poll after a run finishes. Reads the scored dataset to find
+    question_ids present for this run_id + benchmark_id, then resets their redo flags so the next
+    append launch does not re-run them again. Safe to call multiple times (reset_redo_for is a
+    no-op for questions not in the redo list).
+    """
+    cfg = config()
+    scored_name = cfg.get("scored_dataset")
+    if not scored_name:
+        return {"benchmark_id": benchmark_id, "cleared": 0}
+    scored = read_dataset(scored_name, keep_cols=["run_id", "benchmark_id", "question_id"])
+    rid = str(run_id).strip()
+    bid = str(benchmark_id).strip()
+    done_qids = list({
+        str(r.get("question_id", "")).strip()
+        for r in scored
+        if str(r.get("run_id", "")).strip() == rid
+        and str(r.get("benchmark_id", "")).strip() == bid
+        and r.get("question_id")
+    })
+    with _REGISTRY_LOCK:
+        reg = read_registry()
+        if benchmark_id not in reg:
+            return {"benchmark_id": benchmark_id, "cleared": 0}
+        reg = registry.reset_redo_for(reg, benchmark_id, done_qids)
+        _persist_registry(reg)
+    return {"benchmark_id": benchmark_id, "cleared": len(done_qids)}
+
+
+# --- settings (global benchmark keys in the variable) -----------------------
+
+def read_settings():
+    """Read the global benchmark settings (dataset names, judge llm, concurrency, language).
+
+    Returns the settings view-model shaped by views.settings_view. Never raises -> defaults.
+    """
+    try:
+        cfg = config()
+        return views.settings_view(cfg)
+    except Exception:
+        logger.warning("benchmark webapp - could not read settings")
+        return views.settings_view({})
+
+
+def _validate_golden_dataset(name):
+    """Check the golden dataset exists and has the minimum schema (question + reference_answer).
+
+    Also bootstraps the agent_key column if missing (best-effort). Returns (ok, errors).
+    NEEDS INSTANCE VERIFICATION: dataiku.Dataset.read_schema() shape.
+    """
+    if not name or not str(name).strip():
+        return False, ["golden_dataset is required"]
+    try:
+        ds = dataiku.Dataset(name)
+        schema = ds.read_schema()
+    except Exception:
+        return False, ["golden dataset '{0}' not found or not readable".format(name)]
+    if not isinstance(schema, list):
+        return False, ["could not read schema for golden dataset '{0}'".format(name)]
+    col_names = {c.get("name") for c in schema if isinstance(c, dict)}
+    missing = []
+    for required in ("question", "reference_answer"):
+        if required not in col_names:
+            missing.append(required)
+    if missing:
+        return False, ["golden dataset missing required columns: {0}".format(", ".join(missing))]
+    # Bootstrap agent_key best-effort (does not count as a validation failure).
+    if "agent_key" not in col_names:
+        try:
+            ds.write_schema(list(schema) + [{"name": "agent_key", "type": "string"}])
+        except Exception:
+            pass
+    return True, []
+
+
+def save_settings(form):
+    """Validate and persist the global benchmark settings. Returns ``(result, errors)``.
+
+    Validates with views.validate_settings, validates the golden dataset schema (must exist +
+    have question + reference_answer), then writes the normalized keys into the raw variable
+    (preserving all other keys like suggestions / benchmarks / agents / run_request).
+    Never auto-creates datasets.
+    """
+    ok, result = views.validate_settings(form)
+    if not ok:
+        return None, result  # result is a list of error strings
+    normalized = result
+    golden_name = normalized.get("golden_dataset", "")
+    if golden_name:
+        ds_ok, ds_errors = _validate_golden_dataset(golden_name)
+        if not ds_ok:
+            return None, ds_errors
+    raw = read_raw_benchmark_var()
+    raw = dict(raw) if isinstance(raw, dict) else {}
+    raw.update(normalized)
+    write_benchmark_var(raw)
+    return {"saved": True}, []
+
+
+def reset_run_request():
+    """Clear run_request ONLY when the scenario is verifiably idle. Returns (result, errors).
+
+    A running scenario means the run_request is still being consumed by the step; clearing it
+    mid-run would confuse the step. Returns ``{error: "run_active"}`` when a run is in progress.
+    """
+    try:
+        scen = scenario()
+        if is_running(scen):
+            return None, ["run_active"]
+    except Exception:
+        # If we cannot determine status, refuse to clear (safe direction: assume running).
+        return None, ["run_active"]
+    with _REGISTRY_LOCK:
+        raw = read_raw_benchmark_var()
+        raw = dict(raw) if isinstance(raw, dict) else {}
+        raw["run_request"] = None
+        write_benchmark_var(raw)
+    return {"cleared": True}, []
+
+
+# --- agent catalog: discovery + manual connect --------------------------------
+
+def agents_catalog():
+    """The cached agent catalog from the variable (no discovery call). Returns list. Never raises."""
+    try:
+        raw = read_raw_benchmark_var()
+        agents = raw.get("agents")
+        if isinstance(agents, list):
+            return [a for a in agents if isinstance(a, dict)]
+        return []
+    except Exception:
+        return []
+
+
+def connect_agent(agent_key, agent_label, project_key, agent_id, modes=True):
+    """Upsert one agent entry into the variable's agents catalog by agent_key. Returns (result, errors).
+
+    Creates a new entry when agent_key is unknown; updates the existing entry when it already
+    exists. RMW under _REGISTRY_LOCK so concurrent calls cannot clobber each other.
+    """
+    akey = str(agent_key).strip() if agent_key else ""
+    if not akey:
+        return None, ["agent_key is required"]
+    entry = {
+        "agent_key": akey,
+        "agent_label": str(agent_label or "").strip() or akey,
+        "project_key": str(project_key or "").strip(),
+        "agent_id": str(agent_id or "").strip(),
+        "modes": bool(modes),
+    }
+    with _REGISTRY_LOCK:
+        raw = read_raw_benchmark_var()
+        raw = dict(raw) if isinstance(raw, dict) else {}
+        existing = raw.get("agents")
+        catalog = [a for a in (existing or []) if isinstance(a, dict)]
+        replaced = False
+        updated = []
+        for a in catalog:
+            if str(a.get("agent_key", "")).strip() == akey:
+                updated.append(entry)
+                replaced = True
+            else:
+                updated.append(a)
+        if not replaced:
+            updated.append(entry)
+        raw["agents"] = updated
+        write_benchmark_var(raw)
+    return {"agent_key": akey, "created": not replaced}, []
+
+
+def _accessible_project_keys(client):
+    """Best-effort list of project keys accessible via the API client. Never raises."""
+    try:
+        return client.list_project_keys()
+    except Exception:
+        pass
+    try:
+        return [p.project_key for p in client.list_projects()]
+    except Exception:
+        return []
+
+
+def _llm_label(llm):
+    """Best-effort human label from an LLM object (dict or object with attributes). Never raises."""
+    if isinstance(llm, dict):
+        return (llm.get("label") or llm.get("name") or llm.get("id") or "")
+    for attr in ("label", "name", "id"):
+        val = getattr(llm, attr, None)
+        if val:
+            return str(val)
+    return ""
+
+
+def discover_agents():
+    """Enumerate LLM-based agents across accessible DSS projects (best-effort, cached).
+
+    Iterates every accessible project and lists its LLMs via the dataikuapi client, collecting
+    entries whose id starts with "agent:". Writes the discovered catalog into the variable under
+    "agents" with a discovery timestamp. On ANY exception (permission denied, API not available,
+    unknown dataikuapi version) degrades gracefully to the manual catalog (agents_catalog()).
+
+    NEEDS INSTANCE VERIFICATION:
+      - dataikuapi Project.list_llms() existence and return type (list of dicts or objects).
+      - The shape of each LLM entry (id field vs attribute, label/name field).
+      - client.list_project_keys() vs client.list_projects() for project enumeration.
+    """
+    try:
+        client = dataiku.api_client()
+        found = []
+        for pkey in _accessible_project_keys(client):
+            try:
+                proj = client.get_project(pkey)
+                for llm in (proj.list_llms() or []):
+                    lid = None
+                    if isinstance(llm, dict):
+                        lid = llm.get("id")
+                    else:
+                        lid = getattr(llm, "id", None)
+                    if not lid or not str(lid).startswith("agent:"):
+                        continue
+                    label = _llm_label(llm) or str(lid)
+                    found.append({
+                        "project_key": pkey,
+                        "agent_id": str(lid),
+                        "agent_label": label,
+                        "agent_key": registry.slug_agent_key(label),
+                        "modes": True,
+                    })
+            except Exception:
+                continue
+        with _REGISTRY_LOCK:
+            raw = read_raw_benchmark_var()
+            raw = dict(raw) if isinstance(raw, dict) else {}
+            raw["agents"] = found
+            raw["agents_discovered_at"] = _now_iso()
+            write_benchmark_var(raw)
+        return {"status": "ok", "discovery": "ok", "agents": found}
+    except Exception:
+        logger.warning("benchmark webapp - agent discovery failed; using cached catalog\n%s",
+                       traceback.format_exc())
+        return {"status": "ok", "discovery": "unavailable", "agents": agents_catalog()}
