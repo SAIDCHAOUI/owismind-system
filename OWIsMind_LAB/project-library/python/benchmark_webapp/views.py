@@ -40,9 +40,9 @@ def _num(value):
     return f
 
 
-def _int(value):
+def _int(value, default=0):
     f = _num(value)
-    return int(f) if f is not None else 0
+    return int(f) if f is not None else default
 
 
 def _str(value):
@@ -786,82 +786,125 @@ def build_config_object(existing, form):
     return out
 
 
-# --- v2: named per-agent benchmarks (registry view-models + launch) ---------
+# --- agent-first view-models (v2: registry-based, per-agent) ----------------
 
-def _member_items(entity):
-    """Ordered (question_id, meta) pairs of an entity's ACTIVE membership (by added_at, then id)."""
-    questions = entity.get("questions") if isinstance(entity, dict) else None
-    questions = questions if isinstance(questions, dict) else {}
-    items = [(qid, meta) for qid, meta in questions.items()
-             if isinstance(meta, dict) and meta.get("active", True)]
-    items.sort(key=lambda it: (_str(it[1].get("added_at")), _str(it[0])))
-    return items
-
-
-def _benchmark_kpis(summary_rows, benchmark_id):
-    """Accuracy (correct over scored across the benchmark's summary rows) + n_runs + last_run_ts."""
-    bid = _str(benchmark_id)
-    total_correct = 0.0
-    total_ok = 0
-    n_runs = 0
-    last_ts = ""
-    for r in _rows(summary_rows):
-        if _str(r.get("benchmark_id")) != bid:
-            continue
-        n_ok = _int(r.get("n_ok"))
-        total_correct += (_num(r.get("accuracy")) or 0.0) * n_ok
-        total_ok += n_ok
-        n_runs = max(n_runs, _int(r.get("n_runs")))
-        ts = _str(r.get("last_run_timestamp"))
-        if ts > last_ts:
-            last_ts = ts
-    accuracy = (total_correct / total_ok) if total_ok else 0.0
-    return accuracy, total_ok, n_runs, last_ts
-
-
-def benchmarks_view(reg, summary_rows, scored_rows, include_archived=False):
-    """Shape the registry into the launcher's benchmark LIST. Pure, never raises.
-
-    ``reg`` is the parsed registry ({benchmark_id: entity}); ``summary_rows`` the benchmark-level
-    summary; ``scored_rows`` a light scored projection (for done / pending / redo counts). Each item:
-    ``{benchmark_id, name, agent_key, agent_label, modes, status, created_at, n_questions, n_done,
-    n_pending, n_redo, n_runs, last_run_timestamp, accuracy, accuracy_pct, band}``.
-    """
+def _agent_tagged_active_ids(golden_rows, agent_key):
+    """Ordered active golden question_ids tagged to ``agent_key``. Pure, never raises."""
     out = []
-    for bid, entity in (reg or {}).items():
-        if not isinstance(entity, dict):
+    for g in (golden_rows or []):
+        if not isinstance(g, dict):
             continue
-        if entity.get("status") == "archived" and not include_archived:
+        act = g.get("active")
+        if act is not None and not _truthy(act):
             continue
-        members = _member_items(entity)
-        member_ids = {qid for qid, _ in members}
-        done = registry.done_question_ids(scored_rows, bid, entity.get("agent_key"))
-        n_done = len(member_ids & done)
-        n_redo = sum(1 for _, m in members if _truthy(m.get("include_next")))
-        accuracy, n_scored, n_runs, last_ts = _benchmark_kpis(summary_rows, bid)
-        out.append({
-            "benchmark_id": _str(bid),
-            "name": _str(entity.get("name")),
-            "agent_key": _str(entity.get("agent_key")),
-            "agent_label": _str(entity.get("agent_label")) or _str(entity.get("agent_key")),
-            "modes": list(entity.get("modes") or []),
-            "status": _str(entity.get("status")) or "active",
-            "created_at": _str(entity.get("created_at")),
-            "n_questions": len(members),
-            "n_done": n_done,
-            "n_pending": len(members) - n_done,
-            "n_redo": n_redo,
-            "n_scored": n_scored,
-            "n_runs": n_runs,
-            "last_run_timestamp": last_ts,
-            "accuracy": accuracy,
-            "accuracy_pct": fmt_pct(accuracy) if n_scored else "-",
-            "band": confidence_band(accuracy) if n_scored else "none",
-        })
-    out.sort(key=lambda b: (b["last_run_timestamp"] or "", b["created_at"] or "", b["name"]),
-             reverse=True)
+        if (g.get("agent_key") or None) == (agent_key or None):
+            qid = g.get("question_id")
+            if qid:
+                out.append(qid)
     return out
 
+
+def _last_run_ts(scored_rows, benchmark_id):
+    """Max run_timestamp among rows of this benchmark, or None. Pure, never raises."""
+    bid = _str(benchmark_id) if benchmark_id else None
+    best = None
+    for r in (scored_rows or []):
+        if not isinstance(r, dict):
+            continue
+        if bid and _str(r.get("benchmark_id")) != bid:
+            continue
+        ts = _str(r.get("run_timestamp"))
+        if ts and (best is None or ts > best):
+            best = ts
+    return best
+
+
+def _accuracy_pct(summary_rows, scored_rows, benchmark_id):
+    """Accuracy as a fraction [0,1] or None when nothing tested. Pure, never raises.
+
+    Prefers the summary rows for the benchmark; falls back to latest-attempt effective_correct
+    per (question, mode) in scored_rows. Returns None when there is nothing tested.
+    """
+    bid = _str(benchmark_id) if benchmark_id else None
+    # Prefer summary rows when available.
+    if summary_rows:
+        total_correct = 0.0
+        total_ok = 0
+        for r in (summary_rows or []):
+            if not isinstance(r, dict):
+                continue
+            if bid and _str(r.get("benchmark_id")) != bid:
+                continue
+            n_ok = _int(r.get("n_ok"))
+            total_correct += (_num(r.get("accuracy")) or 0.0) * n_ok
+            total_ok += n_ok
+        if total_ok:
+            return total_correct / total_ok
+    # Fall back to scored rows: latest attempt per (question_id, mode).
+    if not scored_rows:
+        return None
+    latest = {}
+    for r in (scored_rows or []):
+        if not isinstance(r, dict):
+            continue
+        if bid and _str(r.get("benchmark_id")) != bid:
+            continue
+        qid = _str(r.get("question_id"))
+        mode = _str(r.get("mode"))
+        if not qid:
+            continue
+        key = (qid, mode)
+        attempt = _int(r.get("attempt_no"), 0)
+        ts = _str(r.get("run_timestamp") or "")
+        if key not in latest or (attempt, ts) > (latest[key][0], latest[key][1]):
+            latest[key] = (attempt, ts, r)
+    if not latest:
+        return None
+    n_correct = sum(1 for _, _, r in latest.values()
+                    if schemas.effective_correct(r)["correct"])
+    return n_correct / len(latest)
+
+
+def agent_benchmarks_view(reg, agent_key, golden_rows, scored_rows, summary_rows=None):
+    """Per-agent benchmark list with derived status counts. Pure, never raises.
+
+    ``reg`` is the parsed registry ({benchmark_id: entity}).
+    Returns {agent_key, n_tagged, benchmarks: [{benchmark_id, name, modes, n_questions,
+    n_cells, n_tested, n_pending, n_redo, last_run_timestamp, accuracy_pct}]}.
+    Archived benchmarks are excluded.
+    """
+    member_ids = _agent_tagged_active_ids(golden_rows, agent_key)
+    benchmarks = []
+    for entity in (reg or {}).values():
+        if not isinstance(entity, dict):
+            continue
+        if (entity.get("agent_key") or None) != (agent_key or None):
+            continue
+        if (entity.get("status") or "active") == "archived":
+            continue
+        bid = entity.get("benchmark_id")
+        modes = [m for m in (entity.get("modes") or []) if m] or [registry.DEFAULT_MODE]
+        done = registry.done_cells(scored_rows, bid, agent_key)
+        n_cells = len(member_ids) * len(modes)
+        n_tested = sum(1 for q in member_ids for m in modes if (q, m) in done)
+        redo = set(entity.get("redo") or [])
+        benchmarks.append({
+            "benchmark_id": bid,
+            "name": entity.get("name"),
+            "modes": modes,
+            "n_questions": len(member_ids),
+            "n_cells": n_cells,
+            "n_tested": n_tested,
+            "n_pending": n_cells - n_tested,
+            "n_redo": sum(1 for q in member_ids if q in redo),
+            "last_run_timestamp": _last_run_ts(scored_rows, bid),
+            "accuracy_pct": _accuracy_pct(summary_rows, scored_rows, bid),
+        })
+    benchmarks.sort(key=lambda b: (b.get("name") or "").lower())
+    return {"agent_key": agent_key, "n_tagged": len(member_ids), "benchmarks": benchmarks}
+
+
+# --- attempt history (used by detail_view and review_view) ------------------
 
 def _attempt_brief(r):
     """A compact per-attempt record (effective verdict wins) for the evolution view."""
@@ -906,65 +949,91 @@ def evolution_for_question(scored_rows, benchmark_id, question_id):
     return out
 
 
+# --- per-mode benchmark detail (replaces the old membership-map detail) -----
+
+def _latest_cell_verdict(scored_rows, benchmark_id, question_id, mode):
+    """Latest-attempt effective verdict for a (benchmark, question, mode) cell, or None if untested."""
+    best = None
+    for r in (scored_rows or []):
+        if not isinstance(r, dict):
+            continue
+        if r.get("benchmark_id") != benchmark_id or r.get("question_id") != question_id:
+            continue
+        if (r.get("mode") or "") != (mode or ""):
+            continue
+        key = (_int(r.get("attempt_no"), 0), str(r.get("run_timestamp") or ""))
+        if best is None or key > best[0]:
+            best = (key, r)
+    if best is None:
+        return None
+    return "OK" if schemas.effective_correct(best[1])["correct"] else "MISS"
+
+
 def benchmark_detail_view(entity, golden_rows, scored_rows):
-    """The membership table of ONE benchmark: each member question + its evolution. Pure, never raises.
+    """The per-mode cell table for ONE benchmark. Pure, never raises.
 
     ``entity`` is one registry entity; ``golden_rows`` the golden pool (for question text +
-    expected_sql/tool); ``scored_rows`` a light scored projection of this benchmark. Per question:
-    ``{question_id, question, category, expected_sql, expected_tool, include_next, status, n_attempts,
-    latest_verdict, latest_correct, modes: [evolution...]}``.
-    """
-    if not isinstance(entity, dict):
-        return {"benchmark_id": "", "questions": []}
-    bid = _str(entity.get("benchmark_id"))
-    golden_by_id = {}
-    for g in _rows(golden_rows):
-        gid = _str(g.get("question_id"))
-        if gid:
-            golden_by_id[gid] = g
-    done = registry.done_question_ids(scored_rows, bid, entity.get("agent_key"))
+    active/agent_key membership + reference SQL/tool); ``scored_rows`` a light scored projection
+    of this benchmark.
 
+    Returns {benchmark_id, name, agent{...}, modes, ledger{tested, pending, redo},
+    runnable, accuracy_pct, questions:[{question_id, question, category, expected_sql,
+    expected_tool, redo, cells:[{mode, status, verdict}]}]}.
+    """
+    entity = entity if isinstance(entity, dict) else {}
+    bid = entity.get("benchmark_id")
+    agent_key = entity.get("agent_key")
+    modes = [m for m in (entity.get("modes") or []) if m] or [registry.DEFAULT_MODE]
+    redo = set(entity.get("redo") or [])
+    # Membership = active golden rows tagged to this agent.
+    members = [g for g in (golden_rows or [])
+               if isinstance(g, dict)
+               and (g.get("active") is None or _truthy(g.get("active")))
+               and (g.get("agent_key") or None) == (agent_key or None)
+               and g.get("question_id")]
     questions = []
-    for qid, meta in _member_items(entity):
-        g = golden_by_id.get(qid, {})
-        modes_ev = evolution_for_question(scored_rows, bid, qid)
-        # Question-level "latest": the most recent attempt across all modes (highest attempt_no,
-        # then run_timestamp), so the table shows a single current verdict at a glance.
-        latest = None
-        for mev in modes_ev:
-            cand = mev.get("latest")
-            if cand and (latest is None
-                         or (cand["attempt_no"], cand["run_timestamp"])
-                         > (latest["attempt_no"], latest["run_timestamp"])):
-                latest = cand
-        n_attempts = sum(len(mev["attempts"]) for mev in modes_ev)
+    tested = 0
+    runnable = 0
+    for g in members:
+        qid = g.get("question_id")
+        cells = []
+        for m in modes:
+            verdict = _latest_cell_verdict(scored_rows, bid, qid, m)
+            is_tested = verdict is not None
+            if is_tested:
+                tested += 1
+            if not is_tested or qid in redo:
+                runnable += 1
+            cells.append({"mode": m,
+                          "status": "tested" if is_tested else "pending",
+                          "verdict": verdict})
         questions.append({
             "question_id": qid,
-            "question": _str(g.get("question")),
-            "category": _str(g.get("category")),
-            "reference_answer": _str(g.get("reference_answer")),
-            "expected_sql": _str(g.get("expected_sql")),
-            "expected_tool": _str(g.get("expected_tool")),
-            "in_golden": qid in golden_by_id,
-            "include_next": _truthy(meta.get("include_next")),
-            "status": "done" if qid in done else "pending",
-            "n_attempts": n_attempts,
-            "latest_verdict": latest["verdict"] if latest else "",
-            "latest_correct": latest["correct"] if latest else None,
-            "modes": modes_ev,
+            "question": g.get("question"),
+            "category": g.get("category"),
+            "expected_sql": g.get("expected_sql"),
+            "expected_tool": g.get("expected_tool"),
+            "redo": qid in redo,
+            "cells": cells,
         })
-    n_done = sum(1 for q in questions if q["status"] == "done")
+    n_cells = len(members) * len(modes)
     return {
         "benchmark_id": bid,
-        "name": _str(entity.get("name")),
-        "agent_key": _str(entity.get("agent_key")),
-        "agent_label": _str(entity.get("agent_label")) or _str(entity.get("agent_key")),
-        "modes": list(entity.get("modes") or []),
-        "status": _str(entity.get("status")) or "active",
-        "n_questions": len(questions),
-        "n_done": n_done,
-        "n_pending": len(questions) - n_done,
-        "n_redo": sum(1 for q in questions if q["include_next"]),
+        "name": entity.get("name"),
+        "agent": {
+            "agent_key": agent_key,
+            "agent_label": entity.get("agent_label"),
+            "project_key": entity.get("project_key"),
+            "agent_id": entity.get("agent_id"),
+        },
+        "modes": modes,
+        "ledger": {
+            "tested": tested,
+            "pending": n_cells - tested,
+            "redo": sum(1 for q in members if q.get("question_id") in redo),
+        },
+        "runnable": runnable,
+        "accuracy_pct": _accuracy_pct(None, scored_rows, bid),
         "questions": questions,
     }
 
@@ -1003,3 +1072,118 @@ def config_view(resolved):
         "judge_llm_id": _str(cfg.get("judge_llm_id")),
         "suggestions": run_params.suggestions_config(cfg),
     }
+
+
+# --- task-9: golden tag view + benchmark settings validation ----------------
+
+def golden_tag_view(golden_rows, agent_key=None, scope="this"):
+    """Shape golden rows filtered by agent_key scope. Pure, never raises.
+
+    scope:
+        "this"     - rows whose agent_key matches (tagged to this agent).
+        "untagged" - rows with a blank / None agent_key.
+        "all"      - all rows regardless of tag.
+
+    Each row in the output carries all GOLDEN_COLUMNS including agent_key and reference fields.
+    """
+    akey = _str(agent_key).strip() if agent_key else ""
+    out = []
+    for r in (golden_rows or []):
+        if not isinstance(r, dict):
+            continue
+        row_key = _str(r.get("agent_key")).strip()
+        if scope == "this":
+            if row_key != akey:
+                continue
+        elif scope == "untagged":
+            if row_key:
+                continue
+        # scope == "all" passes everything
+        out.append({
+            "question_id": _str(r.get("question_id")),
+            "question": _str(r.get("question")),
+            "reference_answer": _str(r.get("reference_answer")),
+            "expected_value": _str(r.get("expected_value")),
+            "expected_value_type": _str(r.get("expected_value_type")),
+            "category": _str(r.get("category")),
+            "language": _str(r.get("language")) or "fr",
+            "active": True if r.get("active") is None else _truthy(r.get("active")),
+            "notes": _str(r.get("notes")),
+            "expected_sql": _str(r.get("expected_sql")),
+            "expected_tool": _str(r.get("expected_tool")),
+            "agent_key": _str(r.get("agent_key")),
+        })
+    return {"rows": out}
+
+
+def validate_benchmark_name(name, taken_names):
+    """Validate a new benchmark name. Wraps registry.validate_benchmark_name. Pure, never raises.
+
+    Returns ``(ok, error_or_None)``: non-blank, <=80 chars, unique case-insensitively.
+    """
+    return registry.validate_benchmark_name(name, taken_names)
+
+
+def settings_view(cfg):
+    """Shape the resolved config into the settings view-model for the Settings tab. Pure."""
+    c = cfg if isinstance(cfg, dict) else {}
+    return {
+        "golden_dataset": _str(c.get("golden_dataset")),
+        "judge_llm_id": _str(c.get("judge_llm_id")),
+        "concurrency": _int(c.get("concurrency")) or 3,
+        "language": _str(c.get("language")) or "fr",
+        "raw_dataset": _str(c.get("raw_dataset")),
+        "scored_dataset": _str(c.get("scored_dataset")),
+        "summary_dataset": _str(c.get("summary_dataset")),
+        "breakdown_dataset": _str(c.get("breakdown_dataset")),
+    }
+
+
+def validate_settings(form):
+    """Validate a benchmark settings form submission. Returns ``(ok, normalized)`` or
+    ``(False, [error strings])``. Pure, never raises.
+
+    Mandatory: golden_dataset non-blank. concurrency int 1..8. language 'en' or 'fr'.
+    Dataset names (raw/scored/summary/breakdown) must be non-blank when provided.
+    """
+    if not isinstance(form, dict):
+        return False, ["settings must be an object"]
+    errors = []
+    normalized = {}
+
+    golden_dataset = _str(form.get("golden_dataset")).strip()
+    if not golden_dataset:
+        errors.append("golden_dataset is required")
+    else:
+        normalized["golden_dataset"] = golden_dataset
+
+    normalized["judge_llm_id"] = _str(form.get("judge_llm_id"))
+
+    concurrency_raw = form.get("concurrency")
+    if concurrency_raw is not None:
+        try:
+            concurrency = int(float(_str(concurrency_raw)))
+            if not (1 <= concurrency <= 8):
+                errors.append("concurrency must be between 1 and 8")
+            else:
+                normalized["concurrency"] = concurrency
+        except (TypeError, ValueError):
+            errors.append("concurrency must be an integer")
+
+    lang = _str(form.get("language")).strip().lower()
+    if lang and lang not in ("en", "fr"):
+        errors.append("language must be 'en' or 'fr'")
+    else:
+        normalized["language"] = lang or "fr"
+
+    for field in ("raw_dataset", "scored_dataset", "summary_dataset", "breakdown_dataset"):
+        if field in form:
+            val = _str(form.get(field)).strip()
+            if not val:
+                errors.append("{0} must not be blank".format(field))
+            else:
+                normalized[field] = val
+
+    if errors:
+        return False, errors
+    return True, normalized

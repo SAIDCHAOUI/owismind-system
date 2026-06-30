@@ -460,22 +460,6 @@ class BuildConfigTests(unittest.TestCase):
         self.assertEqual(out["concurrency"], 8)
 
 
-def _entity(**over):
-    base = {
-        "benchmark_id": "B1", "name": "said", "agent_key": "orchestrator",
-        "agent_label": "Orchestrator", "project_key": "OWISMIND_DEV",
-        "agent_id": "agent:038G7mlF", "modes": ["Smart", "Pro"], "status": "active",
-        "created_at": "2026-06-29T09:00:00Z", "created_by": "user",
-        "questions": {
-            "Q1": {"added_at": "2026-06-29T09:00:00Z", "include_next": False, "active": True},
-            "Q2": {"added_at": "2026-06-29T09:01:00Z", "include_next": True, "active": True},
-            "Q3": {"added_at": "2026-06-29T09:02:00Z", "include_next": False, "active": True},
-        },
-    }
-    base.update(over)
-    return base
-
-
 def _scored(benchmark_id="B1", question_id="Q1", mode="Smart", attempt_no=1, correct=True,
             judge_score=5, status="ok", run_timestamp="2026-06-29T10:00:00Z",
             human_verdict="", agent_key="orchestrator"):
@@ -486,35 +470,6 @@ def _scored(benchmark_id="B1", question_id="Q1", mode="Smart", attempt_no=1, cor
         "correct" if correct else "incorrect", "human_verdict": human_verdict,
         "run_timestamp": run_timestamp,
     }
-
-
-class BenchmarksViewTests(unittest.TestCase):
-    def test_counts_done_pending_redo(self):
-        reg = {"B1": _entity()}
-        scored = [_scored(question_id="Q1")]  # Q1 done; Q2, Q3 pending; Q2 redo flagged
-        summary = [{"benchmark_id": "B1", "n_ok": 1, "accuracy": 1.0, "n_runs": 1,
-                    "last_run_timestamp": "2026-06-29T10:00:00Z"}]
-        view = views.benchmarks_view(reg, summary, scored)
-        self.assertEqual(len(view), 1)
-        b = view[0]
-        self.assertEqual(b["n_questions"], 3)
-        self.assertEqual(b["n_done"], 1)
-        self.assertEqual(b["n_pending"], 2)
-        self.assertEqual(b["n_redo"], 1)
-        self.assertEqual(b["accuracy_pct"], "100.0 %")
-        self.assertEqual(b["n_runs"], 1)
-
-    def test_archived_hidden_by_default(self):
-        reg = {"B1": _entity(status="archived")}
-        self.assertEqual(views.benchmarks_view(reg, [], []), [])
-        self.assertEqual(len(views.benchmarks_view(reg, [], [], include_archived=True)), 1)
-
-    def test_no_scored_shows_dash(self):
-        reg = {"B1": _entity()}
-        b = views.benchmarks_view(reg, [], [])[0]
-        self.assertEqual(b["accuracy_pct"], "-")
-        self.assertEqual(b["band"], "none")
-        self.assertEqual(b["n_done"], 0)
 
 
 class EvolutionViewTests(unittest.TestCase):
@@ -554,39 +509,6 @@ class EvolutionViewTests(unittest.TestCase):
         self.assertTrue(ev[0]["latest"]["overridden"])
 
 
-class BenchmarkDetailViewTests(unittest.TestCase):
-    def test_membership_and_status(self):
-        entity = _entity()
-        golden = [
-            {"question_id": "Q1", "question": "q1", "category": "revenus",
-             "expected_sql": "SELECT 1", "expected_tool": "show_table", "reference_answer": "a"},
-            {"question_id": "Q2", "question": "q2", "category": "tickets",
-             "expected_sql": "", "expected_tool": "", "reference_answer": "b"},
-            {"question_id": "Q3", "question": "q3", "category": "revenus", "reference_answer": "c"},
-        ]
-        scored = [_scored(question_id="Q1", correct=True)]
-        view = views.benchmark_detail_view(entity, golden, scored)
-        self.assertEqual(view["n_questions"], 3)
-        self.assertEqual(view["n_done"], 1)
-        self.assertEqual(view["n_pending"], 2)
-        self.assertEqual(view["n_redo"], 1)
-        by_q = {q["question_id"]: q for q in view["questions"]}
-        self.assertEqual(by_q["Q1"]["status"], "done")
-        self.assertEqual(by_q["Q1"]["expected_sql"], "SELECT 1")
-        self.assertEqual(by_q["Q1"]["expected_tool"], "show_table")
-        self.assertTrue(by_q["Q1"]["latest_correct"])
-        self.assertEqual(by_q["Q2"]["status"], "pending")
-        self.assertTrue(by_q["Q2"]["include_next"])
-
-    def test_order_by_added_at(self):
-        entity = _entity(questions={
-            "Qb": {"added_at": "2026-06-29T09:05:00Z", "include_next": False, "active": True},
-            "Qa": {"added_at": "2026-06-29T09:01:00Z", "include_next": False, "active": True},
-        })
-        view = views.benchmark_detail_view(entity, [], [])
-        self.assertEqual([q["question_id"] for q in view["questions"]], ["Qa", "Qb"])
-
-
 class LaunchRequestTests(unittest.TestCase):
     def test_build_append(self):
         self.assertEqual(views.build_launch_request("B1", "append"),
@@ -618,6 +540,85 @@ class GoldenReferenceColumnsTests(unittest.TestCase):
         self.assertTrue(is_new)
         self.assertEqual(row["expected_sql"], "SELECT 2")
         self.assertEqual(row["expected_tool"], "show_table")
+
+
+# --- new view-model tests (Tasks 7, 8, 9) ------------------------------------
+
+class AgentBenchmarksViewTests(unittest.TestCase):
+    def test_agent_benchmarks_view_counts(self):
+        golden = [
+            {"question_id": "q1", "agent_key": "rev", "active": True},
+            {"question_id": "q2", "agent_key": "rev", "active": True},
+            {"question_id": "q3", "agent_key": "tic", "active": True},
+            {"question_id": "q4", "agent_key": "rev", "active": False},
+        ]
+        reg = {"B1": {"benchmark_id": "B1", "name": "Base", "agent_key": "rev",
+                      "modes": ["Smart", "Pro"], "status": "active", "redo": ["q2"]}}
+        scored = [{"benchmark_id": "B1", "question_id": "q1", "mode": "Smart", "agent_key": "rev",
+                   "correct": True, "attempt_no": 1, "run_timestamp": "2026-06-30T01:00:00Z",
+                   "run_id": "r1"}]
+        out = views.agent_benchmarks_view(reg, "rev", golden, scored)
+        self.assertEqual(out["n_tagged"], 2)               # q1, q2 active+rev
+        b = out["benchmarks"][0]
+        self.assertEqual(b["n_questions"], 2)
+        self.assertEqual(b["n_cells"], 4)                  # 2 questions x 2 modes
+        self.assertEqual(b["n_tested"], 1)                 # (q1,Smart)
+        self.assertEqual(b["n_pending"], 3)                # 4 - 1
+        self.assertEqual(b["n_redo"], 1)                   # q2 flagged
+
+
+class BenchmarkDetailViewTests(unittest.TestCase):
+    def test_benchmark_detail_view_cells_and_runnable(self):
+        golden = [{"question_id": "q1", "question": "Q one", "agent_key": "rev", "active": True,
+                   "category": "rev", "expected_sql": "select 1", "expected_tool": "show_table"},
+                  {"question_id": "q2", "question": "Q two", "agent_key": "rev", "active": True}]
+        entity = {"benchmark_id": "B1", "name": "Base", "agent_key": "rev",
+                  "agent_label": "Revenue", "project_key": "P", "agent_id": "agent:x",
+                  "modes": ["Smart", "Pro"], "status": "active", "redo": ["q1"]}
+        scored = [{"benchmark_id": "B1", "question_id": "q1", "mode": "Smart", "agent_key": "rev",
+                   "correct": True, "attempt_no": 1, "run_timestamp": "2026-06-30T01:00:00Z",
+                   "run_id": "r1"}]
+        out = views.benchmark_detail_view(entity, golden, scored)
+        self.assertEqual(out["ledger"]["tested"], 1)
+        self.assertEqual(out["ledger"]["pending"], 3)
+        self.assertEqual(out["ledger"]["redo"], 1)
+        # runnable = 3 pending + q1 tested cell pulled back by redo (q1,Smart) -> 4
+        self.assertEqual(out["runnable"], 4)
+        q1 = next(q for q in out["questions"] if q["question_id"] == "q1")
+        smart = next(c for c in q1["cells"] if c["mode"] == "Smart")
+        self.assertEqual(smart["status"], "tested")
+        self.assertEqual(smart["verdict"], "OK")
+        self.assertTrue(q1["redo"])
+
+
+class GoldenTagViewTests(unittest.TestCase):
+    def test_golden_tag_view_scope(self):
+        golden = [{"question_id": "q1", "agent_key": "rev", "active": True},
+                  {"question_id": "q2", "agent_key": None, "active": True},
+                  {"question_id": "q3", "agent_key": "tic", "active": True}]
+        self.assertEqual(
+            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "this")["rows"]],
+            ["q1"]
+        )
+        self.assertEqual(
+            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "untagged")["rows"]],
+            ["q2"]
+        )
+        self.assertEqual(len(views.golden_tag_view(golden, "rev", "all")["rows"]), 3)
+
+
+class SettingsValidationTests(unittest.TestCase):
+    def test_validate_settings(self):
+        ok, norm = views.validate_settings({
+            "golden_dataset": "g", "judge_llm_id": "j",
+            "concurrency": "5", "language": "en",
+            "raw_dataset": "r", "scored_dataset": "s",
+            "summary_dataset": "su", "breakdown_dataset": "b",
+        })
+        self.assertTrue(ok, norm)
+        self.assertEqual(norm["concurrency"], 5)
+        ok2, errs = views.validate_settings({"golden_dataset": "  ", "language": "xx"})
+        self.assertFalse(ok2)
 
 
 if __name__ == "__main__":
