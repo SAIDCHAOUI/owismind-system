@@ -21,6 +21,10 @@ from benchmark_webapp import views, dss
 
 logger = logging.getLogger(__name__)
 
+# Bounded sentinel for reconcile_redo_after_run single-flight gate (max 50 benchmarks).
+_RECONCILED = []
+_RECONCILED_MAX = 50
+
 
 def _now_iso():
     """UTC timestamp for the review audit (the Flask backend owns the clock, not the pure libs)."""
@@ -185,14 +189,13 @@ def api_benchmark_create():
     if not agent:
         return _err("unknown_agent", 400)
     # Gate: the agent must have at least one active tagged golden question.
+    # Use the canonical active check from views._agent_tagged_active_ids logic.
     cfg = dss.config()
     golden_raw = dss.read_dataset(cfg["golden_dataset"])
-    n_tagged = sum(
-        1 for g in golden_raw
-        if isinstance(g, dict)
-        and str(g.get("agent_key") or "").strip() == agent_key
-        and (g.get("active") is None or g.get("active"))
-    )
+    reg = dss.read_registry()
+    scored = _scored_light(cfg)
+    bench_view = views.agent_benchmarks_view(reg, agent_key, golden_raw, scored)
+    n_tagged = bench_view.get("n_tagged", 0)
     if n_tagged == 0:
         return _err("no_tagged_questions", 400)
     name = body.get("name")
@@ -334,7 +337,12 @@ def api_run_status():
                 except Exception:
                     pass
                 if run_id:
-                    dss.reconcile_redo_after_run(bid, run_id)
+                    key = (bid, run_id)
+                    if key not in _RECONCILED:
+                        dss.reconcile_redo_after_run(bid, run_id)
+                        _RECONCILED.append(key)
+                        if len(_RECONCILED) > _RECONCILED_MAX:
+                            del _RECONCILED[0]
         except Exception:
             logger.warning("api_run_status - reconcile best-effort failed\n%s",
                            traceback.format_exc())
