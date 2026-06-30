@@ -506,7 +506,12 @@
     "bd4.modesOk":    { en: "Modes updated.",      fr: "Modes mis a jour." },
     "bd4.modesError": { en: "Could not update modes.", fr: "Impossible de mettre a jour les modes." },
     "bd4.runDone":    { en: "Run complete.",        fr: "Execution terminee." },
-    "bd4.runError":   { en: "Launch failed.",       fr: "Echec du lancement." }
+    "bd4.runError":   { en: "Launch failed.",       fr: "Echec du lancement." },
+    "bd4.tagQ":       { en: "Tag questions",        fr: "Taguer des questions" },
+    "bd.newPending":  {
+      en: "{n} pending cell(s) since the last run. Run pending to test them.",
+      fr: "{n} cellule(s) en attente depuis le dernier run. Lancez les questions en attente pour les tester."
+    }
   };
 
   function t(key, vars) {
@@ -3190,6 +3195,26 @@
         : '') +
     '</div>';
 
+    // Fix I-1: state 4d - no active tagged questions in this benchmark
+    if (qs.length === 0) {
+      html += '<div class="note note-info" role="status">' + esc(t("bd.empty")) + '</div>';
+      html += '<div class="bd4-actions">' +
+        '<button class="btn btn-primary" id="bd4TagQBtn">' + esc(t("bd4.tagQ")) + '</button>' +
+        '</div>';
+      html += '</div>';  // bd4
+      return html;
+    }
+
+    // Fix I-2: state 4e - pending cells exist AND benchmark has run before
+    var hasPrevRun = det.accuracy_pct != null && det.accuracy_pct !== "-";
+    var runnableCount = det.runnable || 0;
+    if (hasPrevRun && runnableCount > 0) {
+      html += '<div class="bd4-pending-strip">' +
+        '<p>' + esc(t("bd.newPending", { n: runnableCount })) + '</p>' +
+        '<button class="btn btn-primary btn-sm" id="bd4StripRunPending">' + esc(t("bd.runPending")) + '</button>' +
+        '</div>';
+    }
+
     // Ledger chips
     html += '<div class="bd4-ledger">' +
       '<span class="bm-chip bm-chip--done">' + esc(t("bm.badge.done", { n: ledger.tested || 0 })) + '</span>';
@@ -3320,6 +3345,18 @@
   function wireBenchmarkDetail() {
     var st = S.benchDetailState;
 
+    // Fix I-1: state 4d "Tag questions" button
+    var tagQBtn = byId("bd4TagQBtn");
+    if (tagQBtn) {
+      tagQBtn.addEventListener("click", function () { setTab("golden"); });
+    }
+
+    // Fix I-2: state 4e pending strip run button
+    var stripRunBtn = byId("bd4StripRunPending");
+    if (stripRunBtn) {
+      stripRunBtn.addEventListener("click", function () { bench4Launch("append"); });
+    }
+
     var runBtn = byId("bd4RunPending");
     if (runBtn && !runBtn.disabled) {
       runBtn.addEventListener("click", function () { bench4Launch("append"); });
@@ -3407,30 +3444,44 @@
   }
 
   // Recompute ledger + runnable in-place on a detail object (for optimistic redo updates).
+  // Fix M-1: count per (question, mode) CELL for tested/pending; redo stays per-question.
   function bench4RecomputeLedger(det) {
     var modes = det.modes || [];
     var qs = det.questions || [];
     var tested = 0, pending = 0, redo = 0, runnable = 0;
     qs.forEach(function (q) {
       var cells = q.cells || [];
-      var allTested = cells.length === modes.length && cells.every(function (c) { return c.status === "tested"; });
-      var hasPending = cells.some(function (c) { return c.status !== "tested"; });
-      if (allTested && !q.redo) { tested += 1; }
-      if (hasPending) { pending += 1; }
+      var cellMap = {};
+      cells.forEach(function (c) { cellMap[c.mode] = c; });
+      // Count each (question, mode) cell individually
+      modes.forEach(function (m) {
+        var c = cellMap[m];
+        if (c && c.status === "tested") { tested += 1; }
+        else { pending += 1; }
+      });
+      // redo is per-question
       if (q.redo) { redo += 1; }
-      runnable += q.redo ? modes.length : cells.filter(function (c) { return c.status !== "tested"; }).length;
+      runnable += q.redo ? modes.length : modes.filter(function (m) {
+        var c = cellMap[m];
+        return !c || c.status !== "tested";
+      }).length;
     });
     det.ledger = { tested: tested, pending: pending, redo: redo };
     det.runnable = runnable;
   }
 
+  var bench4PollErrors = 0;
+  var bench4LaunchedBid = null;  // Fix I-3: tracks which benchmark launched the current poll cycle
+
   function bench4Launch(launchMode) {
     var st = S.benchDetailState;
     if (st.running) { return; }
+    bench4PollErrors = 0;  // Fix I-4: reset error counter at launch
     st.running = true;
     st.runMsg = null;
     renderDetailContent();
     var bid = S.route.benchmarkId;
+    bench4LaunchedBid = bid;  // Fix I-3: capture bid for poll guard
     callApi("POST", "benchmark/launch", { benchmark_id: bid, launch_mode: launchMode }).then(function (res) {
       var d = res.data || {};
       if (d.status === "ok" && d.launched) {
@@ -3446,14 +3497,14 @@
     }, function () { bench4EndRun({ kind: "err", text: t("bd4.runError") }); });
   }
 
-  var bench4PollErrors = 0;
   function bench4Poll() {
     var st = S.benchDetailState;
     if (!st.running) { return; }
     setTimeout(function () {
       callApi("GET", "run/status").then(function (res) {
+        // Fix I-3 + M-2: stale-check BEFORE resetting error counter
+        if (S.route.level !== "benchmark" || S.route.benchmarkId !== bench4LaunchedBid) { return; }
         bench4PollErrors = 0;
-        if (S.route.level !== "benchmark") { return; }
         var d = res.data || {};
         if (d.running) {
           bench4Poll();

@@ -13,6 +13,9 @@
   --red:#cd3c14;
   --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,"Roboto Mono",monospace;
+  /* Fix I-5: chip status tokens (light defaults) */
+  --chip-ok-bg:#d4edda; --chip-ok-fg:#155724;
+  --chip-miss-bg:#f8d7da; --chip-miss-fg:#721c24;
 }
 [data-theme="light"]{
   --bg:#ffffff; --panel:#ffffff; --soft:#f7f7f7; --soft-2:#efefef;
@@ -23,6 +26,9 @@
   --bg:#0a0a0a; --panel:#141414; --soft:#1a1a1a; --soft-2:#222222;
   --line:#333333; --line-soft:#242424; --ink:#ffffff; --ink-2:#b0b0b0; --ink-3:#7d7d7d;
   --orange-soft:rgba(255,121,0,.18); --success-soft:rgba(50,200,50,.14);
+  /* Fix I-5: chip status tokens (dark overrides) */
+  --chip-ok-bg:#1a3a22; --chip-ok-fg:#6fcf97;
+  --chip-miss-bg:#3a1a1a; --chip-miss-fg:#eb5757;
 }
 
 *,*::before,*::after{box-sizing:border-box;}
@@ -708,9 +714,24 @@ textarea.input{resize:vertical;min-height:84px;}
   padding: 2px 8px;
   letter-spacing: .03em;
 }
-.bd4-chip--ok      { background: #d4edda; color: #155724; }
-.bd4-chip--miss    { background: #f8d7da; color: #721c24; }
+.bd4-chip--ok      { background: var(--chip-ok-bg); color: var(--chip-ok-fg); }
+.bd4-chip--miss    { background: var(--chip-miss-bg); color: var(--chip-miss-fg); }
 .bd4-chip--pending { background: var(--soft); color: var(--ink-2); border: 1px solid var(--line); }
 
-[data-theme="dark"] .bd4-chip--ok   { background: #1a3a22; color: #6fcf97; }
-[data-theme="dark"] .bd4-chip--miss { background: #3a1a1a; color: #eb5757; }
+/* Fix I-5: dark overrides now handled by tokens above */
+
+/* Fix I-2: state 4e pending-since-last-run banner */
+.bd4-pending-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+  margin-bottom: 12px;
+  font-size: .85rem;
+  color: var(--ink-2);
+}
+.bd4-pending-strip p { margin: 0; flex: 1; }
+.bd4-pending-strip .btn { white-space: nowrap; }
