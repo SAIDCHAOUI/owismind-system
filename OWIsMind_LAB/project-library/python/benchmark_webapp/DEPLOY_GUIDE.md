@@ -66,8 +66,9 @@ Tableau "quel fichier du repo va ou dans DSS" :
 | `OWIsMind_LAB/project-library/python/benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
 | `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
-| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
+| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,journey.js+script.js,backend.py}` | Webapp standard "Benchmark - Launcher" (l'onglet JS recoit journey.js PUIS script.js concatenes) |
 | `OWIsMind_LAB/webapps/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
+| `OWIsMind_LAB/webapps/benchmark_launcher/journey.js` | NE PAS creer de fichier a part : son contenu va EN TETE de l'onglet JS, avant script.js (voir C3) |
 
 ---
 
@@ -185,8 +186,13 @@ chiffres cles, par configuration / par sujet / par question. En haut a droite : 
 **langue EN/FR** (anglais par defaut). Sans run encore : "Aucun run disponible" (normal).
 
 ### C3. Creer la webapp "Benchmark - Launcher"
-Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les 4 panes depuis
-`OWIsMind_LAB/webapps/benchmark_launcher/`. Tu vois un formulaire de Configuration, un bouton Lancer, une carte
+Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les panes depuis
+`OWIsMind_LAB/webapps/benchmark_launcher/` : `body.html` -> **HTML**, `style.css` -> **CSS**,
+`backend.py` -> **Python**. Pour l'onglet **JS**, il y a DEUX fichiers a mettre dans le SEUL panneau
+JS : colle d'abord tout `journey.js`, PUIS tout `script.js`, dans cet ordre (script.js lit le global
+`Journey` ; sans lui la colonne "evolution" retombe en degrade). L'onglet HTML n'a PAS besoin de balises
+`<script src=...>` (elles ne servent que la preview locale ; DSS injecte le panneau JS tout seul).
+Tu vois un formulaire de Configuration, un bouton Lancer, une carte
 **Questions** (gerer le golden : ajouter / modifier / activer-desactiver / supprimer une question avec
 sa reponse attendue) et une section Suggestions.
 
