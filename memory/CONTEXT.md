@@ -5,6 +5,29 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧪 SESSION 2026-07-01 (LAB BENCHMARK LAUNCHER : nettoyage + 4 fixes + 1 feature) - repo only, code
+commite par session concurrente, PARTIELLEMENT valide DSS.** Tout dans `OWIsMind_LAB/`. **(1) Nettoyage
+webapp = vraie webapp DSS standard** : fusion `journey.js` -> `script.js` (1 seul pane JS ; bootstrap
+garde par `typeof document` + `module.exports = Journey` -> requerable en Node), `journey.js` supprime,
+body/preview nettoyes, test repointe, DEPLOY_GUIDE corrige. **(2) ✅ VALIDE DSS - fix contrat golden**
+`questions`/`rows` : `/api/golden` renvoyait `{rows}` scope `this`, front+MOCK attendent
+`{questions,agents}` scope `agent` -> questions golden INVISIBLES meme sur "Toutes". Fix `golden_tag_view`
+(cle `questions` + scope `agent`/alias `this`) + route ajoute `agents`. **(3) ✅ VALIDE DSS - agent_key =
+l'ID de l'agent PARTOUT** (directive user : jamais le slug `orchestrator`, toujours l'id, tout pilote
+webapp, 0 hardcode) : `registry.agent_catalog_key` = agent_id sans prefixe verbatim,
+`normalize_agent`/`run_params._resolve_agents` **derivent toujours** (ignorent toute cle hardcodee),
+purge des `orchestrator` en dur (variable/exemple/MOCK/docstrings). **(4) Formulaire golden : 3 colonnes
+manquantes** ajoutees (`expected_value` + `expected_value_type` select enum + `notes`) au form+payload+
+payload inline (bonus : `notes` etait absent du payload inline -> toggle inline ECRASAIT les notes).
+**(5) Fix redo "nothing to run"** : `/api/benchmark/redo` lisait `include_next`, front+MOCK envoient
+`value` -> chaque clic = decocher -> flag jamais stocke. Fix backend lit `value`. **Defaut secondaire
+NON corrige (propose)** : `reconcile_redo_after_run` efface le redo du dernier run scored existant sans
+verifier qu'il a consomme le flag -> nettoie le redo sur un run qui echoue. **335 tests LAB + node 5/5,
+0 tiret.** A FAIRE DSS : recoller Launcher onglet JS (`script.js`) + Python (`backend.py`), recharger.
+Voir **L115** + `sessions/2026-07-01.md`. **Cause commune (2 fixes) = dérive de contrat MOCK vs vrai
+backend** : le front launcher est QA contre son MOCK embarque -> tout decalage nom-de-champ/forme passe
+la preview mais casse en DSS. **Aligner le vrai backend sur le MOCK.**
+
 **✉️ SESSION 2026-06-30 Run 2 (MAIL DE RELANCE HTML : retour OWIsMind en BETA) - asset only (hors
 code/DSS), livre.** Cree `owismind-relaunch-email.html` a la RACINE du repo : mail HTML autonome
 (tables email-safe, CSS inline, 600px, responsive, geometrie carree, logo Orange REEL en base64 +
@@ -707,7 +730,20 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-06-30 Run 2 : Mail de relance HTML (retour beta) → détail `sessions/2026-06-30.md` (Run 2) + **L114**
+## 🧭 Dernière session - 2026-07-01 : LAB launcher, nettoyage + 4 fixes + 1 feature → détail `sessions/2026-07-01.md` + **L115**
+- **Repo only (code commite par session concurrente), partiellement validé DSS.** Tout dans `OWIsMind_LAB/`.
+- **✅ Validé DSS** : (a) questions golden s'affichent (fix contrat `/api/golden` : renvoie `questions`+`agents`
+  scope `agent`, pas `rows`/`this`) ; (b) `agent_key = agent_id` partout (jamais le slug `orchestrator` ;
+  derive dans `registry`+`run_params`, purge des hardcodes). User : "ça marche beaucoup mieux".
+- **⏳ Non validé DSS (à recoller Launcher)** : (c) formulaire golden gagne `expected_value`/`expected_value_type`/
+  `notes` (couvre les 12 col ; bonus : payload inline n'écrasait plus `notes`) ; (d) fix redo "nothing to run"
+  (`/api/benchmark/redo` lisait `include_next`, front envoie `value`). **Défaut ouvert** : `reconcile_redo_after_run`
+  nettoie le redo du dernier run existant sans vérifier qu'il l'a consommé (mord sur run échoué) - fix proposé.
+- **Cause commune (fixes b/d) = dérive de contrat MOCK vs vrai backend** : le front launcher est QA contre son
+  MOCK -> aligner le vrai backend sur le MOCK. **335 tests LAB + node 5/5, 0 tiret.** À FAIRE DSS : recoller
+  Launcher onglet JS (`script.js`) + Python (`backend.py`), recharger la webapp.
+
+## Avant - 2026-06-30 Run 2 : Mail de relance HTML (retour beta) → détail `sessions/2026-06-30.md` (Run 2) + **L114**
 - **Asset only (hors code/DSS).** Cree `owismind-relaunch-email.html` (racine) : mail HTML autonome
   charte Orange, court et scannable, annonce le retour d'OWIsMind en **beta** + ameliorations (benchmark,
   garde-fous SQL, transparence, tableaux/graphiques, 3 modes) + **insistance forte sur la clarte du
@@ -1065,6 +1101,16 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🧪NEW (2026-07-01). **RECOLLER + VALIDER les 2 fixes LAB non validés.** Launcher webapp : onglet **JS =
+   `OWIsMind_LAB/webapps/benchmark_launcher/script.js`** (les 3 champs du form golden : valeur attendue +
+   type + notes) + onglet **Python = `.../backend.py`** (fix redo `value`). Recharger la webapp. Smoke :
+   (a) éditer une question -> `expected_value`/`expected_value_type`/`notes` persistent (relire le row) ;
+   (b) cocher "à refaire" sur une question testée -> "Run pending" -> la question repasse (2e tentative +
+   evolution), plus de "nothing to run". Recoller aussi `views.py`/`registry.py`/`run_params.py` + MOCK
+   results `script.js` s'ils ne sont pas déjà en DSS (le contrat golden `questions`+`agents` et
+   `agent_key=id` en dépendent). **DÉCIDER** du durcissement de `reconcile_redo_after_run` (ne nettoyer le
+   redo que pour les questions dont une ligne scored est plus récente que le launch : snapshot du dernier
+   `run_timestamp` au launch). Voir **L115** + `sessions/2026-07-01.md`.
 0🗂️NEW. **RÉORG FAITE (2026-06-26)** : tout le benchmark est sous **`OWIsMind_LAB/`** (carte = `OWIsMind_LAB/README.md`).
    Les chemins ci-dessous sont les NOUVEAUX : `OWIsMind_LAB/project-library/python/{benchmark, benchmark_webapp}` (lib),
    `OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}` (panes), `OWIsMind_LAB/local-variables.example.json`

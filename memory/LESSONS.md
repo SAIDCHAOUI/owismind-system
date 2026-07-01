@@ -2649,5 +2649,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : `owismind-relaunch-email.html` (racine) ; `docs/cadrage/CHARTE_ORANGE_UI.md` ;
   `sessions/2026-06-30.md` (Run 2). Date : 2026-06-30.
 
+## L115 - Launcher LAB : dérive de contrat MOCK vs vrai backend (le front est QA contre son MOCK)
+- **Contexte** : la webapp Launcher du benchmark (`OWIsMind_LAB/webapps/benchmark_launcher/script.js`)
+  embarque un MOCK complet (mode preview offline, quand `getWebAppBackendUrl` est absent). Le frontend
+  a été développé ET validé visuellement contre ce MOCK. En vrai DSS, deux bugs distincts, même cause.
+- **Ce qui a échoué (2 fois en une session)** :
+  1. **Golden invisible** : `/api/golden` (`views.golden_tag_view`) renvoyait `{rows}` sans `agents`,
+     scope `this` ; le front + le MOCK attendent `{questions, agents}` scope `agent`. `gt.list =
+     d.questions || []` = `[]` -> "Aucune question correspondante" même sur "Toutes". Le contrat n'avait
+     JAMAIS matché (vérifié sur git : déjà divergent à `bc2ae15`/`c661dcf`), mais la preview marchait
+     via le MOCK.
+  2. **Redo "nothing to run"** : `/api/benchmark/redo` lisait `body.get("include_next")` ; le front +
+     le MOCK envoient `value`. `bool(None)=False` -> chaque clic "à refaire" décochait -> le flag n'était
+     jamais stocké -> `resolve_to_run` ne voyait aucun redo -> `ValueError: nothing to run`.
+- **Solution qui marche** : **aligner le VRAI backend sur le contrat du front/MOCK** (le MOCK fait foi,
+  c'est la référence de QA). Golden : `golden_tag_view` renvoie `questions` (+ scope `agent`, alias
+  `this` défensif), la route ajoute `agents = dss.agents_catalog()`. Redo : la route lit `value`
+  (`include_next` en alias). **Règle** : en ajoutant/revoyant un endpoint du launcher, cross-checker
+  systématiquement la forme de la réponse du MOCK (bloc `else if (method === "POST"/"GET" && path0 ===
+  ...)` dans script.js) contre le vrai backend (`body.get(...)` en entrée, clés de `jsonify(...)` en
+  sortie). La preview verte ne prouve RIEN sur le vrai backend.
+- **Corollaire (identité d'agent, décision user 2026-07-01)** : la clé technique d'un agent = son
+  **agent_id** (préfixe `agent:` retiré, verbatim), jamais un slug type `orchestrator`. Enforce dans le
+  code (`registry.agent_catalog_key`/`normalize_agent` dérivent toujours de l'id et ignorent toute
+  `agent_key` hardcodée ; `run_params._resolve_agents` idem). Le nom = affichage seulement. Le golden
+  se tague sur l'id, tout est piloté par la sélection webapp (0 hardcode). Les slugs `orchestrator` en
+  dur ont été purgés (variable/exemple/MOCK/docstrings) ; les fixtures de tests gardent la chaîne comme
+  clé opaque (sans impact).
+- **Preuve** : 335 tests LAB + node 5/5 verts, 0 tiret. Golden + agent_key validés DSS (user : "ça
+  marche beaucoup mieux") ; fix redo + champs de form codés, non re-validés DSS.
+- **Source** : session 2026-07-01, `memory/sessions/2026-07-01.md`.
+- **Date** : 2026-07-01.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
