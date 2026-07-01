@@ -191,6 +191,21 @@ export function fetchBenchmarkResults(agentKey, benchmarkId) {
   return request('/owismind-api/benchmark/results?' + qs.toString(), { method: 'GET' });
 }
 
+// Full detail of ONE benchmark attempt (any signed-in user), loaded on demand when a user expands a
+// question: the complete agent answer + the SQL the agent actually generated + each query's captured
+// result table. `keys` = { run_id, question_id, agent_key, mode }. Returns
+// { configured, read_error?, detail:{ found, answer_text, sql_items:[...] } }.
+export function fetchBenchmarkAttempt(agentKey, keys) {
+  const k = keys || {};
+  const qs = new URLSearchParams();
+  qs.set('agent', agentKey);
+  qs.set('run_id', k.run_id || '');
+  qs.set('question_id', k.question_id || '');
+  qs.set('agent_key', k.agent_key || '');
+  qs.set('mode', k.mode || '');
+  return request('/owismind-api/benchmark/attempt?' + qs.toString(), { method: 'GET' });
+}
+
 // --- Admin: benchmark configuration + review (server-gated: 403 if not admin) ---
 
 // Tables visible on one SQL connection, for the agent-profile benchmark table picker.

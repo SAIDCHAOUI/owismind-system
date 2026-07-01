@@ -99,8 +99,33 @@ watch(
 const expanded = ref({})
 const comments = ref({})
 
-function toggleRow(k) {
-  expanded.value[k] = !expanded.value[k]
+function toggleRow(row) {
+  const k = rowKey(row)
+  const open = !expanded.value[k]
+  expanded.value[k] = open
+  // Lazily load the full detail (complete answer + generated SQL + result table) on first expand.
+  if (open) bench.loadAttempt(row)
+}
+
+// --- On-demand attempt detail (full answer + generated SQL + result table) ---
+// Reads the store's per-rowKey detail state ({ loading } | { data } | { error }).
+function attemptState(row) {
+  return bench.attemptDetail[rowKey(row)] || {}
+}
+function attemptSqlItems(row) {
+  const st = attemptState(row)
+  return st.data && Array.isArray(st.data.sql_items) ? st.data.sql_items : []
+}
+function itemRowCount(it) {
+  if (it && it.row_count != null) return it.row_count
+  return it && it.result && Array.isArray(it.result.rows) ? it.result.rows.length : 0
+}
+function itemHasTable(it) {
+  const res = it && it.result
+  return !!(res && Array.isArray(res.columns) && res.columns.length && Array.isArray(res.rows) && res.rows.length)
+}
+function cellText(cell) {
+  return cell == null ? '' : String(cell)
 }
 
 // Re-seed the comment inputs from the rows whenever the results change (newest
@@ -596,7 +621,7 @@ function fmtDate(value) {
                     <td data-l="Question">
                       <div class="q-main">{{ row.question }}</div>
                       <div class="q-id">{{ row.question_id }}</div>
-                      <button type="button" class="show-details" @click="toggleRow(rowKey(row))">
+                      <button type="button" class="show-details" @click="toggleRow(row)">
                         <Icon :name="expanded[rowKey(row)] ? 'chevronUp' : 'chevronDown'" />
                         {{ expanded[rowKey(row)] ? t('bench.detail.hide') : t('bench.detail.show') }}
                       </button>
@@ -651,6 +676,51 @@ function fmtDate(value) {
                         <p v-if="row.judge_comment" class="judge-note">
                           <b>{{ t('bench.detail.judge_comment') }} : </b>{{ row.judge_comment }}
                         </p>
+
+                        <!-- On-demand full evidence: the COMPLETE agent answer + the SQL the agent
+                             actually generated + each query's captured result table (loaded on expand,
+                             one row at a time). Shows WHY a verdict is right or wrong, for good or bad. -->
+                        <div class="agent-ev">
+                          <div class="agent-ev-h">{{ t('bench.ev.title') }}</div>
+                          <p v-if="attemptState(row).error" class="ev-msg ev-err">{{ t('bench.ev.error') }}</p>
+                          <p v-else-if="!attemptState(row).data" class="ev-msg">{{ t('bench.ev.loading') }}</p>
+                          <p v-else-if="!attemptState(row).data.found" class="ev-msg">{{ t('bench.ev.empty') }}</p>
+                          <template v-else>
+                            <div class="ev-answer">
+                              <div class="ev-l">{{ t('bench.ev.answer') }}</div>
+                              <pre class="ev-pre">{{ attemptState(row).data.answer_text || '-' }}</pre>
+                            </div>
+                            <template v-if="attemptSqlItems(row).length">
+                              <div class="ev-l ev-sqlh">{{ t('bench.ev.sql') }}</div>
+                              <div v-for="(it, i) in attemptSqlItems(row)" :key="i" class="ev-item">
+                                <div class="ev-item-h">
+                                  <span class="ev-qn">{{ t('bench.ev.query', [i + 1]) }}</span>
+                                  <span class="ev-badge" :class="it.success ? 'ev-ok' : 'ev-bad'">{{ it.success ? t('bench.ev.ok') : t('bench.ev.failed') }}</span>
+                                  <span class="ev-rc">{{ t('bench.ev.rows', [itemRowCount(it)]) }}</span>
+                                </div>
+                                <pre v-if="it.sql" class="ev-sql">{{ it.sql }}</pre>
+                                <div class="ev-data">
+                                  <div class="ev-l">{{ t('bench.ev.data') }}</div>
+                                  <div v-if="itemHasTable(it)" class="ev-twrap">
+                                    <table class="ev-table">
+                                      <thead>
+                                        <tr><th v-for="(c, ci) in it.result.columns" :key="ci">{{ c }}</th></tr>
+                                      </thead>
+                                      <tbody>
+                                        <tr v-for="(r2, ri) in it.result.rows" :key="ri">
+                                          <td v-for="(cell, cj) in r2" :key="cj">{{ cellText(cell) }}</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                  <p v-else class="ev-msg">{{ t('bench.ev.no_data') }}</p>
+                                  <p v-if="it.result && it.result.truncated" class="ev-msg ev-trunc">{{ t('bench.ev.truncated') }}</p>
+                                </div>
+                              </div>
+                            </template>
+                            <p v-else class="ev-msg">{{ t('bench.ev.no_sql') }}</p>
+                          </template>
+                        </div>
 
                         <!-- Reference (golden) vs what the agent actually produced. The
                              references are a soft signal to the judge, not a hard metric. -->
@@ -1650,6 +1720,157 @@ function fmtDate(value) {
 }
 .judge-note b {
   font-weight: var(--fw-bold);
+}
+
+/* --- On-demand full evidence: complete answer + generated SQL + result table --- */
+.agent-ev {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: var(--s-4) var(--s-5);
+}
+.agent-ev-h {
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--orange-text);
+  margin-bottom: var(--s-4);
+}
+.ev-l {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.ev-answer {
+  margin-bottom: var(--s-4);
+}
+.ev-pre {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-3);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.ev-sqlh {
+  margin-top: 2px;
+}
+.ev-item {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: var(--s-3);
+}
+.ev-item-h {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.ev-qn {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.ev-badge {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+}
+.ev-badge.ev-ok {
+  border-color: var(--success);
+  color: var(--success);
+}
+.ev-badge.ev-bad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.ev-rc {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+.ev-sql {
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-left: 3px solid var(--orange);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+.ev-data {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.ev-twrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+}
+.ev-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg);
+  font-size: var(--fs-sm);
+}
+.ev-table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 7px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+.ev-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.ev-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.ev-msg {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  margin: 6px 0 0;
+}
+.ev-msg.ev-err {
+  color: var(--danger);
+}
+.ev-msg.ev-trunc {
+  margin-top: 8px;
+  font-style: italic;
 }
 
 /* --- Benchmark name caption in the hero --- */

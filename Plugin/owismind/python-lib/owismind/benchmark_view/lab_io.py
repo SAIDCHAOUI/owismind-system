@@ -131,6 +131,66 @@ def read_scored(block, max_rows=MAX_SCORED_ROWS):
     return rows, None
 
 
+# Columns the on-demand FULL detail needs. answer_text is already LIGHT; generated_sql_json (the SQL the
+# agent actually generated + its captured result table) is the ONE heavy blob, read only for the single
+# opened row. The 4 keys + status are guaranteed present (schema_check.REQUIRED_COLUMNS).
+_FULL_DETAIL_COLUMNS = (
+    "run_id", "question_id", "agent_key", "mode", "status", "answer_text",
+    "actual_tools", "n_sql", "total_rows", "generated_sql_json",
+)
+# The always-present subset (all in REQUIRED_COLUMNS): read when the column probe fails so the full
+# answer still shows, just without the generated SQL, instead of risking a missing-column error.
+_FULL_DETAIL_SAFE = ("run_id", "question_id", "agent_key", "mode", "status", "answer_text")
+
+
+def read_scored_row_full(block, run_id, question_id, agent_key, mode):
+    """Read ONE attempt's full row (incl. the heavy generated_sql_json) on demand. Returns (row, error).
+
+    The per-question consultation reads LIGHT columns only; when a user opens one attempt, this fetches
+    that SINGLE row WITH its heavy generated_sql_json so the panel can show the SQL the agent actually
+    generated + the captured result table (and the complete answer). Bounded + safe: an explicit column
+    list intersected with the LIVE schema (a table that predates the capture still reads the answer), a
+    guarded (pg_identifier) table name, a fully parametrized 4-key WHERE, LIMIT 1, read-only +
+    statement_timeout pre-queries. ``block`` is the admin-validated benchmark block (never client input).
+    """
+    connection = (block or {}).get("connection")
+    table = (block or {}).get("table")
+    if not connection or not table:
+        return None, "not_configured"
+    if not run_id or not question_id:
+        return None, "bad_key"
+    ex = _executor(connection)
+    if ex is None:
+        return None, "not_configured"
+    try:
+        ident = pg_identifier(table)
+    except ValueError:
+        return None, "bad_table"
+    present, cerr = table_columns(connection, table)
+    if cerr or not present:
+        read_cols = list(_FULL_DETAIL_SAFE)
+    else:
+        have = {c.strip().lower() for c in present if isinstance(c, str) and c.strip()}
+        read_cols = [c for c in _FULL_DETAIL_COLUMNS if c.lower() in have]
+        if not read_cols:
+            read_cols = list(_FULL_DETAIL_SAFE)
+    cols = ", ".join(pg_identifier(c) for c in read_cols)
+    where = "{r} = {rv} AND {q} = {qv} AND {a} = {av} AND {m} = {mv}".format(
+        r=pg_identifier("run_id"), rv=sql_value(str(run_id)),
+        q=pg_identifier("question_id"), qv=sql_value(str(question_id)),
+        a=pg_identifier("agent_key"), av=sql_value(str(agent_key or "")),
+        m=pg_identifier("mode"), mv=sql_value(str(mode or "")),
+    )
+    sql = "SELECT {cols} FROM public.{ident} WHERE {where} LIMIT 1".format(
+        cols=cols, ident=ident, where=where)
+    try:
+        rows = rows_to_json_safe(ex.query_to_df(sql, pre_queries=_READ_PRE))
+    except Exception:
+        logger.warning("benchmark read_scored_row_full failed table=%s", table, exc_info=True)
+        return None, "read_failed"
+    return (rows[0] if rows else None), None
+
+
 def write_override(block, payload, reviewer, reviewed_at):
     """Apply one reviewer override via a parametrized UPDATE of the human_* columns. COMMITted.
 

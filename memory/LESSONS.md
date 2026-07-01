@@ -2713,5 +2713,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-01 Run 2, `memory/sessions/2026-07-01.md`.
 - **Date** : 2026-07-01.
 
+## L117 - Un manque de "visibilité" sur des résultats déjà stockés = trou d'EXPOSITION+AFFICHAGE, pas de re-capture ; charger le lourd à la demande, 1 ligne [LAB commit `511e4bd` + plugin non commité, tests + harnais headless, NON validé DSS, 2026-07-01]
+- **Contexte** : user veut voir sur le benchmark la **réponse complète** de l'agent, le **tableau de données**
+  et le **SQL réellement généré** (pas seulement le SQL de référence), + **override** du juge. Réflexe naïf =
+  "il faut capturer plus / re-runner". FAUX.
+- **Ce qui piégeait** : (1) croire qu'il faut re-capturer -> alors que le pipeline stocke DÉJÀ tout dans le
+  scored : `generated_sql_json` = `[{sql, success, row_count, result:{columns, rows}}]` (SQL réel + tableau),
+  `answer_text` complet, `full_answer`, `total_rows` (cf `agent_capture.py`/`schemas.RAW_COLUMNS`). Le trou
+  était **à la LECTURE** : `dss.SCORED_DROP` / `SCORED_KEEP` (LAB) et `benchmark_view/schemas._HEAVY_COLUMNS`
+  (plugin) **droppent volontairement** les blobs lourds (~100k c/ligne, sûreté instance), et le detail ne
+  renvoyait qu'un `answer_preview` tronqué 280c. (2) croire que l'override était à créer -> il **existait
+  déjà** dans le launcher (`/api/review`+`/api/override`) ; il manquait juste de quoi décider.
+- **Solution qui marche** :
+  1. **Charger le lourd À LA DEMANDE, une seule ligne**, quand l'user déplie - jamais en masse (la liste
+     reste légère). Deux chemins selon la façon dont chaque surface lit :
+     - **LAB** (Dataset API) : `iter_rows()` **streaming**, match des 4 clés (run_id/question_id/agent_key/mode),
+       **arrêt à la 1re ligne** + backstop de scan. Pas de nouveau SQL brut -> invariant `dss.py` préservé.
+     - **Plugin** (SQL cross-projet) : `SELECT` **paramétré** des colonnes lourdes, WHERE 4 clés, **`LIMIT 1`**,
+       read-only + statement_timeout ; colonnes **intersectées avec le schéma LIVE** (une vieille table sans
+       `generated_sql_json` dégrade en "réponse seule" au lieu de planter). Table résolue **côté serveur** depuis
+       le bloc agent (jamais depuis le front).
+  2. **Vue pure `full_detail_view(row)` partagée en esprit** (LAB `views.py` + plugin `aggregate.py`, à garder
+     en sync) : parse JSON défensif, bornes d'affichage (20 items, 200 lignes, 50 cols, cells cappées), never raises.
+  3. **Affichage** : réponse complète + par requête {SQL généré, succès/échec, nb lignes, tableau
+     colonnes/lignes scrollable + note tronqué}. Tout **échappé** (esc / `{{ }}` Vue) - vérifié XSS.
+- **Vérif sans navigateur** (Chrome occupé / plugin non-offline) : **harnais headless** qui déballe l'IIFE des
+  script.js, stubbe le DOM pour que `init()` ne parte pas, et appelle les vraies fonctions de rendu sur le
+  payload MOCK (16 checks dont XSS). Complète les tests Python purs + le build Vite (qui compile le template).
+- **Preuve** : LAB 342 tests + node 5/5 + 16 checks headless ; plugin 513 + 134 node + Vite OK + zip DEV 78
+  entrées ; 0 tiret. Override launcher déjà en place. **NON validé DSS.**
+- **Source** : session 2026-07-01 Run 3, `memory/sessions/2026-07-01.md`.
+- **Date** : 2026-07-01.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

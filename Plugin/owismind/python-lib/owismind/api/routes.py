@@ -1106,6 +1106,41 @@ def benchmark_results():
     return jsonify({"status": "ok", "configured": True, "results": results})
 
 
+@api.route("/benchmark/attempt", methods=["GET"])
+def benchmark_attempt():
+    """FULL detail of ONE benchmark attempt (any signed-in user), loaded on demand.
+
+    Mirrors /benchmark/results security: ``agent`` is the opaque logical key resolved server-side to the
+    admin-set table; the 4 attempt keys (run_id, question_id, agent_key, mode) select the single row.
+    Returns the complete agent answer + the SQL the agent actually generated + each query's captured
+    result table, so a user can see WHY a verdict is what it is. Read-only, bounded (one row).
+    """
+    try:
+        resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/benchmark/attempt - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+    if not sql_config.is_configured():
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    block = _benchmark_block_for_key(request.args.get("agent"))
+    if block is None:
+        return jsonify({"status": "ok", "configured": False, "detail": {"found": False}})
+    row, err = bench_io.read_scored_row_full(
+        block,
+        request.args.get("run_id"),
+        request.args.get("question_id"),
+        request.args.get("agent_key"),
+        request.args.get("mode"),
+    )
+    if err:
+        logger.warning("/benchmark/attempt - read failed (%s)", err)
+        return jsonify({"status": "ok", "configured": True, "read_error": err,
+                        "detail": {"found": False}})
+    return jsonify({"status": "ok", "configured": True,
+                    "detail": bench_aggregate.full_detail_view(row)})
+
+
 @api.route("/admin/benchmark/tables", methods=["GET"])
 def admin_benchmark_tables():
     """List the public tables on a SQL connection, for the agent-profile table picker (admin)."""

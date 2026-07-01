@@ -5,6 +5,28 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🔬 SESSION 2026-07-01 Run 3 (VISIBILITE COMPLETE DES RESULTATS BENCHMARK : reponse complete + SQL
+GENERE PAR L'AGENT + tableau de donnees ; override juge deja present ; ETENDU AU PLUGIN) - LAB commite
+`511e4bd`, plugin non commite (ce log), NON valide DSS.** Retour user : manque de visibilite sur les
+resultats. **Constat cle = la donnee etait DEJA stockee** (`generated_sql_json` = `[{sql, success,
+row_count, result:{columns,rows}}]` = SQL reel + tableau ; `answer_text` complet ; `full_answer` ;
+`total_rows`), le trou etait a la **LECTURE** (colonnes lourdes droppees pour la surete instance, detail
+= `answer_preview` 280c). **Aucun re-run.** L'**override du juge existait deja** dans le launcher (onglet
+Review) : ajoute la visibilite pour decider, pas recree. **Partie A (LAB, commit `511e4bd`)** :
+`benchmark_webapp/views.full_detail_view` (pur, parse generated_sql_json) + `dss.read_scored_row_full`
+(**a la demande, 1 ligne**, `iter_rows` streaming + arret precoce, pas de SQL brut) + routes
+`/api/results/attempt` + `/api/review/attempt` + rendu dans `benchmark_results/script.js` ET onglet Review
+du `benchmark_launcher/script.js` (reponse complete + SQL genere + tableau, i18n EN/FR + MOCK + CSS).
+**Partie B (plugin, a commiter)** : meme visibilite sur `BenchmarkSuggestView.vue` (le plugin lit le scored
+en **cross-projet SQL**) : `aggregate.full_detail_view` (porte) + `lab_io.read_scored_row_full` (`SELECT`
+parametre borne, WHERE 4 cles, `LIMIT 1`, colonnes intersectees au schema LIVE) + route `GET
+/benchmark/attempt` (tous users) + `services.fetchBenchmarkAttempt` + store `attemptDetail`/`loadAttempt` +
+rendu Vue + CSS scope + i18n `bench.ev.*`. **Filet** : LAB 342 tests + node 5/5 + **harnais headless 16
+checks (dont XSS)** ; plugin 513 + 134 node + Vite OK + **zip DEV construit** (`owismind_dev-upload.zip`, 78
+entrees, `index-d58-B9PB.js`/`BenchmarkSuggestView-Dnkuoloc.js`, PROD intacte) ; 0 tiret. **A FAIRE DSS** :
+LAB = recoller lib (`views.py`,`dss.py`) + panes des 2 webapps ; plugin = upload zip DEV + **redemarrer
+backend**. Pas de re-run. Voir **L117** + `sessions/2026-07-01.md` (Run 3).
+
 **🧹 SESSION 2026-07-01 Run 2 (SESSION PARALLELE - LAB launcher : clarte benchmark detail + galerie
 d'agents + flux "ajouter un agent" + GRAND NETTOYAGE ultracode) - repo only, NON valide DSS.** Menee en
 // de la Run 1 ci-dessous (2 sessions Claude sur `OWIsMind_LAB/`, commits entrelaces ; tree fusionne
@@ -755,7 +777,20 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-01 Run 2 (session //) : clarté benchmark detail + galerie d'agents + flux "ajouter un agent" + grand nettoyage ultracode → détail `sessions/2026-07-01.md` (Run 2) + **L116**
+## 🧭 Dernière session - 2026-07-01 Run 3 : visibilité complète des résultats benchmark (réponse + SQL généré + tableau) + override + extension plugin → détail `sessions/2026-07-01.md` (Run 3) + **L117**
+- **LAB commité `511e4bd`, plugin non commité (ce log), NON validé DSS.** Retour user : manque de visibilité.
+- **Constat = la donnée était déjà stockée** (`generated_sql_json` = SQL réel + tableau, `answer_text` complet) ;
+  trou à la **LECTURE** (colonnes lourdes droppées, preview 280c). **Aucun re-run.** Override juge **déjà là**
+  (launcher) -> on a ajouté de quoi décider. Chargement **à la demande, 1 ligne** (LAB `iter_rows` streaming ;
+  plugin `SELECT ... LIMIT 1` paramétré, colonnes intersectées au schéma live). Vue pure `full_detail_view`.
+- **LAB** (`views.py`/`dss.py` + routes `/api/*/attempt` + rendu `benchmark_{results,launcher}/script.js`) ;
+  **plugin** (`aggregate.py`/`lab_io.py` + route `GET /benchmark/attempt` + store `attemptDetail`/`loadAttempt`
+  + `BenchmarkSuggestView.vue` + i18n `bench.ev.*`). Réponse complète + SQL généré + tableau, dépli lazy.
+- **Filet** : LAB 342 + node 5/5 + **harnais headless 16 checks (XSS inclus)** ; plugin 513 + 134 node + Vite OK
+  + **zip DEV** (78 entrées, `index-d58-B9PB.js`, PROD intacte) ; 0 tiret. **À FAIRE DSS** : LAB = recoller lib +
+  panes 2 webapps ; plugin = upload zip DEV + **redémarrer backend**. Pas de re-run. Voir **L117**.
+
+## 🧭 Avant - 2026-07-01 Run 2 (session //) : clarté benchmark detail + galerie d'agents + flux "ajouter un agent" + grand nettoyage ultracode → détail `sessions/2026-07-01.md` (Run 2) + **L116**
 - **Repo only, NON validé DSS.** Menée en parallèle de la Run 1 (tree fusionné re-vérifié vert avant log).
 - **Benchmark detail clarifié** (1 seule carte de statut + 1 bouton « Lancer en attente (N) », légende) ;
   **accueil = galerie de cartes d'agents** (rail latéral seulement à l'ouverture) ; **flux "ajouter un
@@ -1138,6 +1173,15 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🔬NEW (2026-07-01 Run 3). **DÉPLOYER + VALIDER la visibilité complète des résultats benchmark (L117).**
+   **LAB** (commit `511e4bd`) : recoller project-library `benchmark_webapp/{views.py,dss.py}` + les panes des
+   2 webapps (`backend.py`+`script.js`+`style.css` de `benchmark_results` ET `benchmark_launcher`), recharger.
+   **Plugin** : uploader `owismind_dev-upload.zip` (DEV, 78 entrées) + **redémarrer le backend** (python-lib
+   changé : `benchmark_view/{aggregate,lab_io}.py` + `api/routes.py` route `/benchmark/attempt`). **Pas de
+   re-run** (donnée déjà stockée ; vieux runs d'avant la capture `generated_sql_json` = "aucun SQL capturé",
+   normal). **Smoke** : déplier une question BONNE et une MAUVAISE -> réponse complète (non tronquée) + SQL
+   RÉELLEMENT généré par l'agent + tableau de données ; dans le launcher, override le juge avec ce contexte
+   visible au-dessus des boutons. Valider en DEV -> demander promotion prod (rebuild+package prod). Voir **L117**.
 0🧪NEW (2026-07-01). **RECOLLER + VALIDER les 2 fixes LAB non validés.** Launcher webapp : onglet **JS =
    `OWIsMind_LAB/webapps/benchmark_launcher/script.js`** (les 3 champs du form golden : valeur attendue +
    type + notes) + onglet **Python = `.../backend.py`** (fix redo `value`). Recharger la webapp. Smoke :

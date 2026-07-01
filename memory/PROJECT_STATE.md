@@ -339,6 +339,12 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
     (`schemas` effective_correct, `aggregate` view-model consultation, `schema_check`, `agent_profile`,
     `lab_io` lecture/UPDATE SQL cross-projet) = côté LECTURE du benchmark dans le plugin (modules purs
     portés du LAB, source de vérité = `OWIsMind_LAB/`). Plugin = **consultation seule**, pas de launcher.
+    **Détail complet à la demande (2026-07-01/L117)** : la liste lit LIGHT (colonnes lourdes droppées) ;
+    au dépli d'une question, route `GET /benchmark/attempt` (tous users) -> `lab_io.read_scored_row_full`
+    (`SELECT` paramétré 1 ligne, colonnes lourdes intersectées au schéma live) -> `aggregate.full_detail_view`
+    (parse `generated_sql_json`) = **réponse complète + SQL réellement généré par l'agent + tableau capturé**.
+    Côté LAB, mêmes vues (`views.full_detail_view` + `dss.read_scored_row_full` via `iter_rows`) exposées par
+    `/api/results/attempt` (results) et `/api/review/attempt` (launcher Review, pour décider l'override).
 - **Connexion configurable** (plus de hardcode) : params webapp `sql_connection`/`table_prefix`/`log_level`
   (`hideWebAppConfig=false`), lus via `get_webapp_config()`. ⚠️ dropdown Settings KO (L012) → champ texte.
   Nommage `{PROJECT_KEY}_{prefix-}owismind_{logical}` (préfixe optionnel après le project key).

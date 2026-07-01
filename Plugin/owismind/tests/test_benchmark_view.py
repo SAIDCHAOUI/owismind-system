@@ -8,6 +8,7 @@ consultation view-model, validates the agent-profile benchmark block, and checks
 table's schema against what the consultation needs.
 """
 
+import json
 import os
 import sys
 import unittest
@@ -135,6 +136,48 @@ class ResultsViewTests(unittest.TestCase):
         self.assertEqual(out["kpis"]["n_scored"], 0)
         self.assertEqual(out["detail"], [])
         self.assertEqual(out["benchmarks"], [])
+
+
+class FullDetailViewTests(unittest.TestCase):
+    def _row(self, **over):
+        items = [{"sql": "SELECT SUM(amount_eur) FROM drive_revenues WHERE phase='ACTUALS'",
+                  "success": True, "row_count": 2,
+                  "result": {"columns": ["client", "rev"],
+                             "rows": [["Orange", 1200], ["Maroc Telecom", 900]], "truncated": False}}]
+        row = {"run_id": "r1", "question_id": "Q1", "agent_key": "038G7mlF", "mode": "Smart",
+               "status": "ok", "answer_text": "Top client Orange with 1200 EUR.",
+               "actual_tools": "table", "n_sql": 1, "total_rows": 2,
+               "generated_sql_json": json.dumps(items)}
+        row.update(over)
+        return row
+
+    def test_parses_generated_sql_and_full_answer(self):
+        out = aggregate.full_detail_view(self._row())
+        self.assertTrue(out["found"])
+        self.assertEqual(out["answer_text"], "Top client Orange with 1200 EUR.")
+        self.assertEqual(len(out["sql_items"]), 1)
+        item = out["sql_items"][0]
+        self.assertIn("SELECT SUM(amount_eur)", item["sql"])
+        self.assertTrue(item["success"])
+        self.assertEqual(item["result"]["columns"], ["client", "rev"])
+        self.assertEqual(item["result"]["rows"][0], ["Orange", 1200])
+
+    def test_none_row_not_found(self):
+        self.assertEqual(aggregate.full_detail_view(None), {"found": False})
+
+    def test_malformed_json_degrades(self):
+        out = aggregate.full_detail_view(self._row(generated_sql_json="{bad"))
+        self.assertTrue(out["found"])
+        self.assertEqual(out["sql_items"], [])
+
+    def test_answer_capped_and_rows_capped(self):
+        out = aggregate.full_detail_view(self._row(answer_text="x" * 50000))
+        self.assertLessEqual(len(out["answer_text"]), 20000)
+        big = {"columns": ["n"], "rows": [[i] for i in range(500)], "truncated": False}
+        items = [{"sql": "SELECT n", "success": True, "row_count": 500, "result": big}]
+        out2 = aggregate.full_detail_view(self._row(generated_sql_json=json.dumps(items)))
+        self.assertLessEqual(len(out2["sql_items"][0]["result"]["rows"]), 200)
+        self.assertTrue(out2["sql_items"][0]["result"]["truncated"])
 
 
 class OverrideTests(unittest.TestCase):

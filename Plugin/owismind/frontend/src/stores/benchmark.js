@@ -12,9 +12,10 @@ import {
   suggestBenchmarkFromChat,
   fetchMySuggestions,
   fetchBenchmarkResults,
+  fetchBenchmarkAttempt,
   adminBenchmarkOverride,
 } from '../services/backend.js'
-import { normalizeResults } from '../composables/benchmarkResults.js'
+import { normalizeResults, rowKey } from '../composables/benchmarkResults.js'
 
 export const useBenchmarkStore = defineStore('benchmark', () => {
   // Prefill from a chat answer. null = the Benchmark page shows the blank manual form.
@@ -37,6 +38,10 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
   const resultsError = ref('')
   // The override currently in flight (row key), so the per-row admin buttons can disable.
   const overrideBusyKey = ref('')
+  // On-demand FULL detail per expanded question, keyed by rowKey: { loading } | { data } | { error }.
+  // The data is { found, answer_text, sql_items:[{sql, success, row_count, result}] } - the complete
+  // answer + the SQL the agent actually generated + the captured result table. Reset when results reload.
+  const attemptDetail = ref({})
 
   function setPrefill(data) {
     prefill.value = data
@@ -85,6 +90,7 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     }
     resultsLoading.value = true
     resultsError.value = ''
+    attemptDetail.value = {}  // drop any per-question detail cached for the previous agent/benchmark
     try {
       const r = await fetchBenchmarkResults(agentKey, benchmarkId)
       resultsConfigured.value = r.configured !== false
@@ -112,6 +118,27 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
   function selectBenchmark(benchmarkId) {
     selectedBenchmarkId.value = benchmarkId || ''
     return loadResults(consultAgentKey.value, selectedBenchmarkId.value)
+  }
+
+  // Load the FULL detail of ONE attempt on demand (when a user expands its question row): the complete
+  // answer + the SQL the agent actually generated + the captured result table. Fetched once per rowKey,
+  // never throws (a failure leaves an { error } state the view renders). The heavy blob loads one row at
+  // a time so the list read stays light.
+  async function loadAttempt(row) {
+    const k = rowKey(row)
+    if (!k || attemptDetail.value[k]) return
+    attemptDetail.value[k] = { loading: true }
+    try {
+      const r = await fetchBenchmarkAttempt(consultAgentKey.value, {
+        run_id: row.run_id,
+        question_id: row.question_id,
+        agent_key: row.agent_key,
+        mode: row.mode,
+      })
+      attemptDetail.value[k] = { data: (r && r.detail) ? r.detail : { found: false } }
+    } catch (e) {
+      attemptDetail.value[k] = { error: true }
+    }
   }
 
   // Admin: set / clear an override on one scored question, then re-fetch the same agent
@@ -147,9 +174,11 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
     resultsLoading,
     resultsError,
     overrideBusyKey,
+    attemptDetail,
     loadResults,
     selectConsultAgent,
     selectBenchmark,
     submitOverride,
+    loadAttempt,
   }
 })
