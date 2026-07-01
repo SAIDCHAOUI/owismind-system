@@ -86,19 +86,25 @@ def names_for_agent(registry, agent_key):
 # agent_key is DETERMINISTIC per (project_key, agent_id) so re-adding an agent keeps benchmarks linked.
 
 def agent_catalog_key(project_key, agent_id):
-    """Stable logical key for a catalog agent, derived from (project_key, agent_id). Pure, never raises."""
-    suffix = _clean(agent_id)
-    if suffix.startswith("agent:"):
-        suffix = suffix[len("agent:"):]
-    return slug_agent_key(_clean(project_key) + "_" + suffix)
+    """The technical agent key = the agent id (with any ``agent:`` prefix stripped). Pure, never raises.
+
+    Identity is the agent id, never a human slug: the launcher already knows the selected agent's id,
+    so everything (catalog, golden tag, benchmark membership, scored tag) keys on it. ``project_key`` is
+    accepted for a stable call signature but no longer part of the value (agent ids are unique already).
+    """
+    key = _clean(agent_id)
+    if key.startswith("agent:"):
+        key = key[len("agent:"):]
+    return key
 
 
 def normalize_agent(raw):
     """Return a normalized catalog agent, or None when unusable. Never raises.
 
-    Requires project_key + agent_id. agent_key defaults to the deterministic catalog key; agent_label
-    defaults to the agent_id (so a nameless agent still shows something). ``modes`` is a bool: whether
-    the agent understands the mode tokens (Smart/Pro/Claude) - defaults to True.
+    Requires project_key + agent_id. agent_key is ALWAYS derived from the agent id (any human-set
+    ``agent_key`` in the raw block is ignored - identity is the id, not a slug); agent_label defaults
+    to the agent_id (so a nameless agent still shows something). ``modes`` is a bool: whether the agent
+    understands the mode tokens (Smart/Pro/Claude) - defaults to True.
     """
     if not isinstance(raw, dict):
         return None
@@ -106,7 +112,7 @@ def normalize_agent(raw):
     agent_id = _clean(raw.get("agent_id"))
     if not project_key or not agent_id:
         return None
-    agent_key = _clean(raw.get("agent_key")) or agent_catalog_key(project_key, agent_id)
+    agent_key = agent_catalog_key(project_key, agent_id)
     modes = raw.get("modes")
     return {
         "agent_key": agent_key,

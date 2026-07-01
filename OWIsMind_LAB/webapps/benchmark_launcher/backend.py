@@ -127,13 +127,17 @@ def api_agent_benchmarks():
 @app.route("/api/golden", methods=["GET"])
 @_safe
 def api_golden_get():
-    """Golden questions filtered by agent_key and scope ('this' / 'untagged' / 'all')."""
+    """Golden questions filtered by agent_key and scope ('agent' / 'untagged' / 'all').
+
+    Returns ``questions`` (the shaped golden rows) plus ``agents`` (the catalog the tagging form
+    dropdown needs) - the same shape the launcher MOCK serves for offline preview.
+    """
     cfg = dss.config()
     agent_key = request.args.get("agent_key") or None
     scope = request.args.get("scope") or "all"
     raw = dss.read_dataset(cfg["golden_dataset"])
     result = views.golden_tag_view(raw, agent_key=agent_key, scope=scope)
-    return jsonify({"status": "ok", **result})
+    return jsonify({"status": "ok", "agents": dss.agents_catalog(), **result})
 
 
 @app.route("/api/golden/save", methods=["POST"])

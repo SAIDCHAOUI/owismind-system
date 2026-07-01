@@ -237,13 +237,14 @@ class TestAgentKeyAndNames(unittest.TestCase):
 
 
 class AgentCatalogTests(unittest.TestCase):
-    def test_catalog_key_is_deterministic_and_strips_prefix(self):
-        k1 = registry.agent_catalog_key("OWISMIND_DEV", "agent:038G7mlF")
-        k2 = registry.agent_catalog_key("OWISMIND_DEV", "agent:038G7mlF")
-        self.assertEqual(k1, k2)
-        self.assertEqual(k1, "owismind_dev_038g7mlf")
-        # same agent id in a different project -> different key
-        self.assertNotEqual(k1, registry.agent_catalog_key("OTHER", "agent:038G7mlF"))
+    def test_catalog_key_is_the_agent_id_verbatim(self):
+        # The technical key IS the agent id (case preserved), with the 'agent:' prefix stripped.
+        self.assertEqual(registry.agent_catalog_key("OWISMIND_DEV", "agent:038G7mlF"), "038G7mlF")
+        # id-based, so the project no longer changes the key (agent ids are already unique).
+        self.assertEqual(
+            registry.agent_catalog_key("OWISMIND_DEV", "agent:038G7mlF"),
+            registry.agent_catalog_key("OTHER", "agent:038G7mlF"),
+        )
 
     def test_normalize_agent_requires_project_and_id(self):
         self.assertIsNone(registry.normalize_agent({"project_key": "P"}))
@@ -252,13 +253,20 @@ class AgentCatalogTests(unittest.TestCase):
 
     def test_normalize_agent_defaults(self):
         a = registry.normalize_agent({"project_key": "OWISMIND_DEV", "agent_id": "agent:abc"})
-        self.assertEqual(a["agent_key"], "owismind_dev_abc")
+        self.assertEqual(a["agent_key"], "abc")  # the id (prefix stripped), not a slug
         self.assertEqual(a["agent_label"], "agent:abc")  # falls back to the id
         self.assertTrue(a["modes"])  # defaults True
         b = registry.normalize_agent({"project_key": "P", "agent_id": "agent:z",
                                       "agent_label": "Nice name", "modes": False})
         self.assertEqual(b["agent_label"], "Nice name")
         self.assertFalse(b["modes"])
+
+    def test_normalize_agent_ignores_hardcoded_key(self):
+        # A human-set agent_key (e.g. a legacy "orchestrator" slug in the variable) is ignored:
+        # the key is always the agent id, so the whole system stays driven by the real id.
+        a = registry.normalize_agent({"agent_key": "orchestrator", "project_key": "OWISMIND_DEV",
+                                      "agent_id": "agent:038G7mlF"})
+        self.assertEqual(a["agent_key"], "038G7mlF")
 
     def test_parse_agents_dedupes_and_tolerates_json_string(self):
         raw = [
@@ -267,10 +275,10 @@ class AgentCatalogTests(unittest.TestCase):
             {"agent_id": "agent:bad"},  # no project -> dropped
         ]
         out = registry.parse_agents(raw)
-        self.assertEqual([a["agent_key"] for a in out], ["p_a"])
+        self.assertEqual([a["agent_key"] for a in out], ["a"])  # key = the agent id
         self.assertEqual(out[0]["agent_label"], "A")  # first wins on dedupe
         # a JSON string is parsed too
-        self.assertEqual(registry.parse_agents('[{"project_key":"P","agent_id":"agent:a"}]')[0]["agent_key"], "p_a")
+        self.assertEqual(registry.parse_agents('[{"project_key":"P","agent_id":"agent:a"}]')[0]["agent_key"], "a")
         self.assertEqual(registry.parse_agents("garbage"), [])
 
     def test_upsert_updates_existing_and_appends_new(self):
@@ -279,7 +287,7 @@ class AgentCatalogTests(unittest.TestCase):
             {"project_key": "P", "agent_id": "agent:a", "agent_label": "new"},  # update
             {"project_key": "P", "agent_id": "agent:b", "agent_label": "B"},    # append
         ])
-        self.assertEqual([a["agent_key"] for a in out], ["p_a", "p_b"])  # order preserved
+        self.assertEqual([a["agent_key"] for a in out], ["a", "b"])  # order preserved, key = id
         self.assertEqual(out[0]["agent_label"], "new")
 
     def test_remove_and_serialize(self):
@@ -287,10 +295,10 @@ class AgentCatalogTests(unittest.TestCase):
             {"project_key": "P", "agent_id": "agent:a"},
             {"project_key": "P", "agent_id": "agent:b"},
         ])
-        out = registry.remove_agent(cur, "p_a")
-        self.assertEqual([a["agent_key"] for a in out], ["p_b"])
+        out = registry.remove_agent(cur, "a")
+        self.assertEqual([a["agent_key"] for a in out], ["b"])
         ser = registry.serialize_agents(out)
-        self.assertEqual(ser, [{"agent_key": "p_b", "agent_label": "agent:b",
+        self.assertEqual(ser, [{"agent_key": "b", "agent_label": "agent:b",
                                 "project_key": "P", "agent_id": "agent:b", "modes": True}])
 
 

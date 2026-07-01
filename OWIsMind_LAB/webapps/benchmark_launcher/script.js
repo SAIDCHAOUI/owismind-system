@@ -75,54 +75,12 @@
   var DICT = {
     "hdr.eyebrow": { en: "OWIsMind Benchmark", fr: "OWIsMind Benchmark" },
     "hdr.h1": { en: "Launcher", fr: "Lanceur" },
-    "hdr.sub": {
-      en: "Configure the benchmark, launch a run, and promote the questions your users suggested. Results are read in the separate Results app.",
-      fr: "Configurez le benchmark, lancez une execution et promouvez les questions suggerees par vos utilisateurs. Les resultats se consultent dans l'application Resultats."
-    },
 
-    "status.idle": { en: "Idle", fr: "En attente" },
-    "status.running": { en: "Running", fr: "En cours" },
-    "status.done": { en: "Completed", fr: "Termine" },
 
-    "tab.bench": { en: "Benchmarks", fr: "Benchmarks" },
-    "tab.config": { en: "Configuration", fr: "Configuration" },
-    "tab.golden": { en: "Golden set", fr: "Jeu de reference" },
-    "tab.suggest": { en: "Suggestions", fr: "Suggestions" },
-    "tab.review": { en: "Review", fr: "Revue" },
 
-    "cfg.eyebrow": { en: "Setup", fr: "Parametrage" },
-    "cfg.title": { en: "Configuration", fr: "Configuration" },
-    "cfg.note": {
-      en: "This is the live configuration. Saving only changes the agents, modes, question filter, concurrency and language. The preserved settings are kept untouched.",
-      fr: "Ceci est la configuration active. L'enregistrement ne modifie que les agents, les modes, le filtre de questions, la concurrence et la langue. Les reglages preserves ne sont pas touches."
-    },
 
-    "ag.label": { en: "Agents under test", fr: "Agents testes" },
-    "ag.help": {
-      en: "The agent id (like agent:038G7mlF) lives inside its own DSS project: do not prefix it. The project key tells the benchmark which project to call it in.",
-      fr: "L'identifiant de l'agent (ex. agent:038G7mlF) vit dans son propre projet DSS : ne le prefixez pas. La cle de projet indique au benchmark dans quel projet l'appeler."
-    },
-    "ag.f.label": { en: "Label", fr: "Libelle" },
-    "ag.f.key": { en: "Project key", fr: "Cle de projet" },
-    "ag.f.id": { en: "Agent id", fr: "Identifiant d'agent" },
-    "ag.modes": {
-      en: "Supports response modes (Smart / Pro / Claude)",
-      fr: "Gere les modes de reponse (Smart / Pro / Claude)"
-    },
-    "ag.remove": { en: "Remove", fr: "Retirer" },
-    "ag.add": { en: "Add agent", fr: "Ajouter un agent" },
-    "ag.empty": {
-      en: "No agent yet. Add at least one to run the benchmark.",
-      fr: "Aucun agent. Ajoutez-en au moins un pour lancer le benchmark."
-    },
 
-    "rm.title": { en: "Response modes", fr: "Modes de reponse" },
-    "rm.help": {
-      en: "Only mode-aware agents are tested across the checked modes. Other agents get a single default call.",
-      fr: "Seuls les agents compatibles sont testes sur les modes coches. Les autres recoivent un appel par defaut."
-    },
 
-    "qt.title": { en: "Questions to test", fr: "Questions a tester" },
     "qt.help": {
       en: "Pick the categories to test. Empty selection = all {n} active questions.",
       fr: "Choisissez les categories a tester. Aucune selection = les {n} questions actives."
@@ -131,81 +89,15 @@
       en: "No category in the golden set yet.",
       fr: "Aucune categorie dans le jeu de reference pour l'instant."
     },
-    "qt.langfilter": { en: "Language filter", fr: "Filtre de langue" },
 
-    "rp.title": { en: "Run parameters", fr: "Parametres d'execution" },
-    "rp.conc": { en: "Concurrency", fr: "Concurrence" },
-    "rp.conc.help": {
-      en: "Questions run in parallel (1-8, kept low for instance safety). Out-of-range values are clamped.",
-      fr: "Questions en parallele (1-8, faible pour la securite de l'instance). Les valeurs hors plage sont bornees."
-    },
-    "rp.lang": { en: "Benchmark language", fr: "Langue du benchmark" },
-    "rp.lang.help": {
-      en: "Language used for the run report and the agent prompts. To choose which golden questions are tested, use the language filter.",
-      fr: "Langue du rapport d'execution et des prompts d'agent. Pour choisir les questions testees, utilisez le filtre de langue."
-    },
 
-    "opt.all": { en: "All", fr: "Toutes" },
-    "opt.en": { en: "English (en)", fr: "Anglais (en)" },
-    "opt.fr": { en: "French (fr)", fr: "Francais (fr)" },
 
-    "save.btn": { en: "Save configuration", fr: "Enregistrer la configuration" },
-    "save.saving": { en: "Saving...", fr: "Enregistrement..." },
-    "save.hint": {
-      en: "Live config - applies to the next run.",
-      fr: "Config active - s'applique a la prochaine execution."
-    },
     "save.invalidTitle": { en: "The configuration could not be saved:", fr: "La configuration n'a pas pu etre enregistree :" },
-    "save.error": {
-      en: "Could not save the configuration. Check your write access to the LAB project.",
-      fr: "Impossible d'enregistrer la configuration. Verifiez votre acces en ecriture au projet LAB."
-    },
-    "save.loadError": {
-      en: "Could not load the configuration. Check your access to the LAB project.",
-      fr: "Impossible de charger la configuration. Verifiez votre acces au projet LAB."
-    },
 
-    "run.eyebrow": { en: "Run", fr: "Execution" },
-    "run.title": { en: "Launch", fr: "Lancer" },
-    "run.note": {
-      en: "Launch the Run_Benchmark scenario asynchronously. Only one run can be in progress at a time.",
-      fr: "Lance le scenario Run_Benchmark de facon asynchrone. Une seule execution a la fois."
-    },
-    "run.moved": {
-      en: "Launching now happens per benchmark. Open a benchmark in the Benchmarks tab to run its pending questions or re-run it.",
-      fr: "Le lancement se fait desormais par benchmark. Ouvrez un benchmark dans l'onglet Benchmarks pour lancer ses questions en attente ou le relancer."
-    },
-    "run.btn": { en: "Launch the benchmark", fr: "Lancer le benchmark" },
-    "run.btn.running": { en: "Run in progress...", fr: "Execution en cours..." },
-    "run.last": { en: "Last run", fr: "Derniere execution" },
     "run.never": { en: "never", fr: "jamais" },
-    "run.save1": {
-      en: "Launching runs the last saved configuration - save your edits first.",
-      fr: "Le lancement utilise la derniere configuration enregistree - enregistrez d'abord vos modifications."
-    },
-    "run.save2": {
-      en: "Launching may require scenario permissions. If unsupported, run Run_Benchmark from the DSS scenario UI.",
-      fr: "Le lancement peut necessiter des permissions de scenario. Si indisponible, lancez Run_Benchmark depuis l'UI scenario DSS."
-    },
-    "run.dirty": {
-      en: "Unsaved changes - save the configuration before launching.",
-      fr: "Modifications non enregistrees - enregistrez la configuration avant de lancer."
-    },
     "run.launched": { en: "Benchmark launched.", fr: "Benchmark lance." },
-    "run.already": { en: "A run is already in progress.", fr: "Une execution est deja en cours." },
-    "run.unsupported": {
-      en: "Launch is not supported here. Run the Run_Benchmark scenario from the DSS scenario UI.",
-      fr: "Le lancement n'est pas supporte ici. Lancez le scenario Run_Benchmark depuis l'UI scenario DSS."
-    },
-    "run.error": { en: "Could not launch the run.", fr: "Impossible de lancer l'execution." },
-    "run.finished": { en: "Run completed - open the Results app to read it.", fr: "Execution terminee - ouvrez l'application Resultats pour la consulter." },
     "run.lostContact": { en: "Lost contact with the run. Check the DSS scenario log.", fr: "Contact perdu avec l'execution. Consultez le log du scenario DSS." },
 
-    "pr.eyebrow": { en: "Preserved settings", fr: "Reglages preserves" },
-    "pr.title": { en: "Not editable here", fr: "Non modifiable ici" },
-    "pr.golden": { en: "Golden dataset", fr: "Jeu de reference" },
-    "pr.judge": { en: "Judge model", fr: "Modele juge" },
-    "pr.suggest": { en: "Suggestions source", fr: "Source des suggestions" },
     "pr.na": { en: "Not configured", fr: "Non configuree" },
 
     "gs.eyebrow": { en: "Golden set", fr: "Jeu de reference" },
@@ -230,8 +122,6 @@
     "th.lang": { en: "Lang", fr: "Langue" },
     "th.act": { en: "Actions", fr: "Actions" },
 
-    "q.status.active": { en: "Active", fr: "Active" },
-    "q.status.inactive": { en: "Inactive", fr: "Inactive" },
     "q.edit": { en: "Edit", fr: "Modifier" },
     "q.delete": { en: "Delete", fr: "Supprimer" },
     "q.deleteConfirm": { en: "Delete this question?", fr: "Supprimer cette question ?" },
@@ -284,7 +174,6 @@
     "sg.col.a": { en: "Expected answer", fr: "Reponse attendue" },
     "sg.col.anchor": { en: "Anchor", fr: "Ancre" },
     "sg.col.review": { en: "Review", fr: "Revue" },
-    "sg.col.source": { en: "Source", fr: "Source" },
     "sg.col.cat": { en: "Category", fr: "Categorie" },
     "sg.col.date": { en: "Date", fr: "Date" },
     "sg.review.correct": { en: "Correct", fr: "Correcte" },
@@ -302,9 +191,6 @@
     "sg.promotedNone": { en: "No new question added (already in the golden set).", fr: "Aucune nouvelle question ajoutee (deja dans le jeu de reference)." },
     "sg.promoteError": { en: "Could not promote the selection.", fr: "Impossible de promouvoir la selection." },
 
-    "ag.added": { en: "Agent added", fr: "Agent ajoute" },
-    "ag.removed": { en: "Agent removed", fr: "Agent retire" },
-    "cfg.saved": { en: "Configuration saved", fr: "Configuration enregistree" },
 
     "rv.eyebrow": { en: "Human review", fr: "Revue humaine" },
     "rv.title": { en: "Verdict review", fr: "Revue des verdicts" },
@@ -312,12 +198,7 @@
       en: "Review the judge's verdicts for one run and override them when the judge got it wrong. Overrides are saved per run.",
       fr: "Revoyez les verdicts du juge pour une execution et corrigez-les quand le juge s'est trompe. Les corrections sont enregistrees par execution."
     },
-    "rv.run": { en: "Run", fr: "Execution" },
     "rv.onlyNeeds": { en: "Only needs-review", fr: "Seulement a revoir" },
-    "rv.caption": {
-      en: "Re-running the SAME run id resets its overrides. Overrides on past runs survive new runs.",
-      fr: "Relancer le MEME identifiant d'execution reinitialise ses corrections. Les corrections des executions passees survivent aux nouvelles."
-    },
     "rv.count": { en: "{n} verdict(s), needs-review first", fr: "{n} verdict(s), a revoir d'abord" },
     "rv.loadError": { en: "Could not load the review.", fr: "Impossible de charger la revue." },
     "rv.noRuns.h": { en: "No benchmark run yet", fr: "Aucune execution de benchmark" },
@@ -356,7 +237,6 @@
     "rv.markIncorrect": { en: "Mark incorrect", fr: "Marquer incorrecte" },
     "rv.clear": { en: "Clear override", fr: "Annuler la correction" },
     "rv.reviewedBy": { en: "Reviewed by {who} on {when}", fr: "Revue par {who} le {when}" },
-    "rv.humanComment": { en: "Reviewer note", fr: "Note du relecteur" },
 
     "rv.toast.set": { en: "Override saved", fr: "Correction enregistree" },
     "rv.toast.cleared": { en: "Override cleared", fr: "Correction annulee" },
@@ -368,20 +248,6 @@
     "common.retry": { en: "Retry", fr: "Reessayer" },
 
     /* --- benchmarks tab (v2: named per-agent benchmarks, append mode) --- */
-    "bm.eyebrow": { en: "Benchmarks", fr: "Benchmarks" },
-    "bm.title": { en: "Benchmarks", fr: "Benchmarks" },
-    "bm.note": {
-      en: "A benchmark is a named evaluation campaign pinned to one agent. Runs accumulate: launching tests only the not-yet-done questions, so the score grows question by question over time.",
-      fr: "Un benchmark est une campagne d'evaluation nommee, rattachee a un seul agent. Les executions s'accumulent : un lancement ne teste que les questions pas encore faites, le score grandit donc question par question."
-    },
-    "bm.new": { en: "New benchmark", fr: "Nouveau benchmark" },
-    "bm.count": { en: "{n} benchmark(s)", fr: "{n} benchmark(s)" },
-    "bm.empty.h": { en: "No benchmark yet", fr: "Aucun benchmark" },
-    "bm.empty.p": {
-      en: "Create the first benchmark: pick an agent and seed it with your golden questions.",
-      fr: "Creez le premier benchmark : choisissez un agent et amorcez-le avec vos questions de reference."
-    },
-    "bm.loadError": { en: "Could not load the benchmarks.", fr: "Impossible de charger les benchmarks." },
     "bm.open": { en: "Open", fr: "Ouvrir" },
     "bm.delete": { en: "Delete", fr: "Supprimer" },
     "bm.deleteConfirm": { en: "Delete \"{n}\"? This removes the benchmark from the registry. Past result rows stay in the dataset. This cannot be undone.", fr: "Supprimer \"{n}\" ? Le benchmark est retire du registre. Les lignes de resultats passees restent dans le dataset. Cette action est irreversible." },
@@ -392,80 +258,21 @@
     "bm.badge.done": { en: "{n} done", fr: "{n} faites" },
     "bm.badge.pending": { en: "{n} pending", fr: "{n} en attente" },
     "bm.badge.redo": { en: "{n} redo", fr: "{n} a refaire" },
-    "bm.lastRun": { en: "Last run", fr: "Derniere execution" },
-    "bm.never": { en: "never", fr: "jamais" },
     "bm.accuracy": { en: "Accuracy", fr: "Justesse" },
-    "bm.archived": { en: "Archived", fr: "Archive" },
 
     /* --- new-benchmark modal --- */
-    "bn.title": { en: "New benchmark", fr: "Nouveau benchmark" },
-    "bn.name": { en: "Benchmark name", fr: "Nom du benchmark" },
-    "bn.namePh": { en: "e.g. orchestrator baseline", fr: "ex. reference orchestrateur" },
-    "bn.agent": { en: "Agent under test", fr: "Agent teste" },
-    "bn.agentNone": {
-      en: "No agent in the catalog. Add one in the Configuration tab first.",
-      fr: "Aucun agent dans le catalogue. Ajoutez-en un dans l'onglet Configuration."
-    },
-    "bn.seed": { en: "Questions", fr: "Questions" },
-    "bn.seedAll": { en: "Seed with all active golden questions", fr: "Amorcer avec toutes les questions de reference actives" },
-    "bn.seedEmpty": { en: "Start empty, add questions later", fr: "Commencer vide, ajouter des questions plus tard" },
-    "bn.create": { en: "Create benchmark", fr: "Creer le benchmark" },
-    "bn.cancel": { en: "Cancel", fr: "Annuler" },
-    "bn.created": { en: "Benchmark created", fr: "Benchmark cree" },
-    "bn.error": { en: "Could not create the benchmark.", fr: "Impossible de creer le benchmark." },
 
     /* --- benchmark detail --- */
-    "bd.back": { en: "Back to list", fr: "Retour a la liste" },
-    "bd.rename": { en: "Rename", fr: "Renommer" },
-    "bd.renameSave": { en: "Save name", fr: "Enregistrer le nom" },
-    "bd.renameCancel": { en: "Cancel", fr: "Annuler" },
-    "bd.renamed": { en: "Benchmark renamed", fr: "Benchmark renomme" },
-    "bd.renameError": { en: "Could not rename the benchmark.", fr: "Impossible de renommer le benchmark." },
     "bd.agent": { en: "Agent", fr: "Agent" },
     "bd.modes": { en: "Modes", fr: "Modes" },
-    "bd.runPending": { en: "Run pending", fr: "Lancer les questions en attente" },
     "bd.runFull": { en: "Re-run entire benchmark", fr: "Relancer tout le benchmark" },
-    "bd.runPendingHint": {
-      en: "Nothing pending or flagged to redo. Add questions, flag some to redo, or re-run the entire benchmark.",
-      fr: "Rien en attente ni a refaire. Ajoutez des questions, marquez-en a refaire, ou relancez tout le benchmark."
-    },
     "bd.loadError": { en: "Could not load the benchmark.", fr: "Impossible de charger le benchmark." },
-    "bd.qTitle": { en: "Questions", fr: "Questions" },
     "bd.empty": {
       en: "No question in this benchmark yet. Add some from the golden pool below.",
       fr: "Aucune question dans ce benchmark. Ajoutez-en depuis le jeu de reference ci-dessous."
     },
-    "bd.addTitle": { en: "Add questions", fr: "Ajouter des questions" },
-    "bd.addNote": {
-      en: "Pick golden questions that are not already in this benchmark.",
-      fr: "Choisissez des questions de reference pas encore presentes dans ce benchmark."
-    },
-    "bd.addToggle": { en: "Add questions", fr: "Ajouter des questions" },
-    "bd.addNone": { en: "Every golden question is already a member of this benchmark.", fr: "Toutes les questions de reference sont deja membres de ce benchmark." },
-    "bd.addSelected": { en: "Add selected", fr: "Ajouter la selection" },
-    "bd.addCancel": { en: "Cancel", fr: "Annuler" },
-    "bd.added": { en: "{n} question(s) added", fr: "{n} question(s) ajoutee(s)" },
-    "bd.addError": { en: "Could not add the questions.", fr: "Impossible d'ajouter les questions." },
-    "bd.remove": { en: "Remove", fr: "Retirer" },
-    "bd.removed": { en: "Question removed from the benchmark", fr: "Question retiree du benchmark" },
-    "bd.removeError": { en: "Could not remove the question.", fr: "Impossible de retirer la question." },
-    "bd.redo": { en: "Redo at next run", fr: "Refaire au prochain lancement" },
     "bd.redoError": { en: "Could not update the redo flag.", fr: "Impossible de mettre a jour l'indicateur a refaire." },
-    "bd.status.done": { en: "Done", fr: "Faite" },
     "bd.status.pending": { en: "Pending", fr: "En attente" },
-    "bd.verdict.correct": { en: "Correct", fr: "Correcte" },
-    "bd.verdict.incorrect": { en: "Incorrect", fr: "Incorrecte" },
-    "bd.verdict.none": { en: "Not run", fr: "Non executee" },
-    "bd.delta.improved": { en: "Improved", fr: "Amelioree" },
-    "bd.delta.regressed": { en: "Regressed", fr: "Regression" },
-    "bd.delta.same": { en: "Stable", fr: "Stable" },
-    "bd.attempts": { en: "{n} attempt(s)", fr: "{n} tentative(s)" },
-    "bd.refSql": { en: "Reference SQL", fr: "SQL de reference" },
-    "bd.refTool": { en: "Suggested tool", fr: "Outil suggere" },
-    "bd.refNone": { en: "No reference SQL or tool set.", fr: "Aucun SQL ni outil de reference." },
-    "bd.evoShow": { en: "Show attempt history", fr: "Voir l'historique des tentatives" },
-    "bd.evoHide": { en: "Hide attempt history", fr: "Masquer l'historique" },
-    "bd.attempt": { en: "Attempt {n}", fr: "Tentative {n}" },
 
     /* --- golden: reference SQL / tool (soft judge signal) --- */
     "md.sql": { en: "Reference SQL (optional)", fr: "SQL de reference (optionnel)" },
@@ -474,7 +281,6 @@
       fr: "Un SQL qui pourrait repondre a la question. Un indice souple pour le juge - une requete differente mais correcte reste valable."
     },
     "md.tool": { en: "Suggested tool (optional)", fr: "Outil suggere (optionnel)" },
-    "md.toolPh": { en: "show_chart / show_table / none", fr: "show_chart / show_table / none" },
     "th.ref": { en: "Reference SQL / tool", fr: "SQL / outil de reference" },
 
     /* --- review: benchmark selector + per-attempt override --- */
@@ -698,24 +504,13 @@
 
   var S = {
     tab: "benchmarks",
-    loaded: false,
-    loadError: false,
-    // config form
-    agents: [],
-    modes: [],
-    modeOptions: ["Smart", "Pro", "Claude"],
+    // config meta (vestigial: written by refreshConfigMeta, read by the golden modal + count)
     categories: [],
     filterCategories: [],
-    filterCategoriesLoaded: [],
-    filterQuestionIds: [],
-    filterLanguage: "all",
-    concurrency: 1,
-    benchLang: "en",
     questionCount: 0,
     runs: [],
     preserved: { golden: "", judge: "", suggestions: {} },
     dirty: false,
-    saving: false,
     saveError: null,
     // golden
     golden: { loaded: false, loadError: false, list: [], confirmDelete: null },
@@ -725,19 +520,6 @@
     suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 },
     // review (human-in-the-loop verdict override) - v2: a benchmark selector, every attempt listed
     review: { loaded: false, loadError: false, benchmarkId: "", onlyNeedsReview: false, benchmarks: [], rows: [], count: 0, expanded: {}, saving: {} },
-    // benchmarks (v2): named per-agent campaigns, list + open one (detail)
-    bench: {
-      loaded: false, loadError: false,
-      list: [], agents: [], modeOptions: [], golden: [],
-      view: "list", detailId: "",
-      detail: null, detailLoaded: false, detailError: false,
-      addOpen: false, addSel: {},
-      renaming: false,
-      expanded: {},
-      running: false, runMsg: null, busy: false
-    },
-    // new-benchmark modal
-    benchNew: { open: false, error: null },
     // Agent-first routing (dispatch 1)
     route: { level: "home", agentKey: null, benchmarkId: null },
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
@@ -753,12 +535,6 @@
     settings: { open: false, loaded: false, loadError: false, data: {}, saving: false, saveError: null, saveMessages: [], fieldErrors: {} }
   };
 
-  var newAgentSeq = 0;
-  function genKey() {
-    newAgentSeq += 1;
-    return "agent_" + newAgentSeq;
-  }
-
   /* ============================ dom helpers ============================ */
 
   function byId(id) { return document.getElementById(id); }
@@ -773,11 +549,6 @@
   function truncate(s, n) {
     s = String(s == null ? "" : s);
     return (s.length > n) ? (s.slice(0, n).replace(/\s+\S*$/, "") + "...") : s;
-  }
-  function clampInt(v, lo, hi, dflt) {
-    var n = parseInt(v, 10);
-    if (isNaN(n)) { return dflt; }
-    return Math.max(lo, Math.min(hi, n));
   }
   function fmtNum(n) {
     var v = Number(n);
@@ -812,7 +583,7 @@
 
   var MOCK = {
     config: {
-      agents: [{ agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }],
+      agents: [{ agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }],
       modes: ["Smart", "Claude"],
       language: "fr",
       concurrency: 3,
@@ -826,16 +597,16 @@
     mode_options: ["Smart", "Pro", "Claude"],
     runs: [{ run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34" }],
     golden: [
-      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "", expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", agent_key: "orchestrator" },
-      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)", expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", agent_key: "orchestrator" },
+      { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", active: true, notes: "", expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", agent_key: "038G7mlF" },
+      { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", expected_value: "37", expected_value_type: "numeric", category: "tickets", language: "en", active: true, notes: "promoted from user suggestion sug_d4e5f6 (source=manual)", expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", agent_key: "038G7mlF" },
       { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse", expected_sql: "", expected_tool: "" }
     ],
     benchmarks: [
-      { benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart", "Claude"], status: "active", created_at: "2026-06-25T09:00:00Z", n_questions: 3, n_done: 3, n_pending: 3, n_redo: 1, n_scored: 2, n_runs: 2, last_run_timestamp: "2026-06-26 09:02:34", accuracy: 0.5, accuracy_pct: "50%", band: "low" },
-      { benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart"], status: "active", created_at: "2026-06-29T11:00:00Z", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" }
+      { benchmark_id: "bm_said01", name: "said", agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart", "Claude"], status: "active", created_at: "2026-06-25T09:00:00Z", n_questions: 3, n_done: 3, n_pending: 3, n_redo: 1, n_scored: 2, n_runs: 2, last_run_timestamp: "2026-06-26 09:02:34", accuracy: 0.5, accuracy_pct: "50%", band: "low" },
+      { benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart"], status: "active", created_at: "2026-06-29T11:00:00Z", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" }
     ],
     bench_agents: [
-      { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
+      { agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
     ],
     suggestions: [
       { suggestion_id: "sug_a1b2c3", user_id: "marie.dupont", source: "chat", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_is_correct: true, missing_explanation: "", expected_value: "4218540", expected_value_type: "currency", category: "revenue", language: "fr", created_at: "2026-06-24 14:09:22" },
@@ -845,7 +616,7 @@
     bench_detail: {
       bm_said01: {
         benchmark_id: "bm_said01", name: "said",
-        agent: { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
+        agent: { agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
         modes: ["Smart", "Claude"],
         ledger: { tested: 3, pending: 3, redo: 1 },
         runnable: 4,
@@ -891,7 +662,7 @@
       },
       bm_quick02: {
         benchmark_id: "bm_quick02", name: "tickets smoke",
-        agent: { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
+        agent: { agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
         modes: ["Smart"],
         ledger: { tested: 0, pending: 1, redo: 0 },
         runnable: 1,
@@ -917,15 +688,15 @@
     ],
     review: {
       bm_said01: [
-        { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", category: "tickets", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.4, judge_verdict: "incorrect", judge_comment: "The agent answered 41 tickets but the reference anchor is 37: it counted raw snapshot rows instead of distinct ticket ids.", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", answer_preview: "Algerie Telecom currently has 41 open trouble tickets.\n\nSQL: SELECT COUNT(*) FROM trouble_tickets WHERE status = 'OPEN' AND account = 'Algerie Telecom'", notes: "Strictness: accept the distinct count on the latest snapshot per id. Raw row counts are wrong.", expected_value: "37", expected_value_type: "numeric", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", actual_tools: "table", correct: false, needs_review: true, latency_str: "12.4s", estimated_cost: 0.0182 },
-        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 },
-        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.55, judge_verdict: "incorrect", judge_comment: "Right account but reported a budget figure, not the ACTUALS scope.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu du compte Maroc Telecom est d'environ 3 900 000 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: false, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
+        { question_id: "u_sug_d4e5f6", question: "How many distinct open trouble tickets does Algerie Telecom currently have?", category: "tickets", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.4, judge_verdict: "incorrect", judge_comment: "The agent answered 41 tickets but the reference anchor is 37: it counted raw snapshot rows instead of distinct ticket ids.", reference_answer: "Algerie Telecom currently has 37 distinct open trouble tickets (counted on the latest snapshot per ticket id).", answer_preview: "Algerie Telecom currently has 41 open trouble tickets.\n\nSQL: SELECT COUNT(*) FROM trouble_tickets WHERE status = 'OPEN' AND account = 'Algerie Telecom'", notes: "Strictness: accept the distinct count on the latest snapshot per id. Raw row counts are wrong.", expected_value: "37", expected_value_type: "numeric", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT COUNT(DISTINCT id) FROM trouble_tickets WHERE account = 'Algerie Telecom' AND CurrentStatus = 'OPEN'", expected_tool: "none", actual_tools: "table", correct: false, needs_review: true, latency_str: "12.4s", estimated_cost: 0.0182 },
+        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260626_0902", run_timestamp: "2026-06-26 09:02:34", agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: true, judge_score: 0.95, judge_verdict: "correct", judge_comment: "Matches the anchor value 4 218 540 and the expected scope (ACTUALS, all periods).", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu reel (ACTUALS) du compte Maroc Telecom est de 4 218 540 EUR sur l'annee en cours, toutes periodes confondues.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 2, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: true, needs_review: false, latency_str: "9.1s", estimated_cost: 0.0121 },
+        { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11", agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.55, judge_verdict: "incorrect", judge_comment: "Right account but reported a budget figure, not the ACTUALS scope.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu du compte Maroc Telecom est d'environ 3 900 000 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: false, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
       ]
     },
     // Curated agent catalog (GET /api/agents; grown via the add-agent flow).
     agent_catalog: {
       agents: [
-        { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
+        { agent_key: "038G7mlF", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
       ]
     },
     // Projects + their agents for the add-agent picker (GET /api/agents/projects + project-agents).
@@ -949,7 +720,7 @@
       ]
     },
     // Number of active tagged golden questions per agent_key
-    agent_tagged: { orchestrator: 2 },
+    agent_tagged: { "038G7mlF": 2 },
     // Settings (Screen 7)
     settings: {
       golden_dataset: "golden_questions_v1_prepared",
@@ -1016,25 +787,6 @@
     var path0 = path.split("?")[0];
     if (method === "GET" && path === "config") {
       data = { status: "ok", config: deepCopy(MOCK.config), categories: MOCK.categories.slice(), question_count: MOCK.question_count, mode_options: MOCK.mode_options.slice(), runs: MOCK.runs.slice() };
-    } else if (method === "POST" && path === "config") {
-      var merged = deepCopy(MOCK.config);
-      if (body) {
-        if (body.agents) { merged.agents = body.agents; }
-        if (body.modes) { merged.modes = body.modes; }
-        if (body.language) { merged.language = body.language; }
-        if (body.concurrency) { merged.concurrency = body.concurrency; }
-        if (body.question_filter) { merged.question_filter = body.question_filter; }
-      }
-      if (!merged.agents || !merged.agents.length) {
-        status = 400;
-        data = { status: "error", error: "invalid_config", messages: ["no valid agent: 'agents' must list at least one {agent_key, project_key, agent_id}"] };
-      } else {
-        MOCK.config = merged;
-        data = { status: "ok", config: deepCopy(merged) };
-      }
-    } else if (method === "POST" && path === "run") {
-      mockRun.remaining = 2;
-      data = { status: "ok", launched: true };
     } else if (method === "GET" && path === "run/status") {
       var running = mockRun.remaining > 0;
       if (running) { mockRun.remaining -= 1; }
@@ -1104,9 +856,6 @@
         return (b.attempt_no || 0) - (a.attempt_no || 0);
       });
       data = { status: "ok", benchmark_id: rvBid, count: rows.length, benchmarks: MOCK.review_benchmarks.slice(), rows: rows };
-    } else if (method === "GET" && path0 === "benchmarks") {
-      data = { status: "ok", benchmarks: MOCK.benchmarks.slice(), agents: MOCK.bench_agents.slice(),
-               modes: MOCK.mode_options.slice(), golden: MOCK.golden.slice() };
     } else if (method === "GET" && path0 === "benchmark/detail") {
       var dParams = parseQuery(path);
       var det = MOCK.bench_detail[dParams.benchmark_id || ""];
@@ -1114,23 +863,6 @@
       else { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
     } else if (method === "POST" && path0 === "benchmark/create") {
       data = mockBenchCreate(body || {});
-    } else if (method === "POST" && path0 === "benchmark/add-questions") {
-      data = mockBenchMutate(body, function (d, b) {
-        var have = {}; d.questions.forEach(function (q) { have[q.question_id] = true; });
-        (b.question_ids || []).forEach(function (qid) {
-          if (have[qid]) { return; }
-          var g = MOCK.golden.filter(function (x) { return x.question_id === qid; })[0] || {};
-          d.questions.push({ question_id: qid, question: g.question || qid, category: g.category || "",
-            expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || "",
-            redo: false, cells: (d.modes || []).map(function (m) { return { mode: m, status: "pending", verdict: "" }; }) });
-        });
-        return { benchmark_id: d.benchmark_id, n_questions: d.questions.length };
-      });
-    } else if (method === "POST" && path0 === "benchmark/remove-question") {
-      data = mockBenchMutate(body, function (d, b) {
-        d.questions = d.questions.filter(function (q) { return q.question_id !== b.question_id; });
-        return { benchmark_id: d.benchmark_id };
-      });
     } else if (method === "POST" && path0 === "benchmark/redo") {
       data = mockBenchMutate(body, function (d, b) {
         d.questions.forEach(function (q) { if (q.question_id === b.question_id) { q.redo = !!b.value; } });
@@ -1153,16 +885,6 @@
         d.modes = newModes;
         return { benchmark_id: d.benchmark_id, modes: newModes };
       });
-    } else if (method === "POST" && path0 === "benchmark/rename") {
-      data = mockBenchMutate(body, function (d, b) {
-        var nm = (b.name || "").trim();
-        if (!nm) { return { _err: ["name is required"] }; }
-        if (MOCK.benchmarks.some(function (x) { return x.benchmark_id !== d.benchmark_id && x.name.toLowerCase() === nm.toLowerCase(); })) {
-          return { _err: ["a benchmark named '" + nm + "' already exists"] };
-        }
-        d.name = nm;
-        return { benchmark_id: d.benchmark_id, name: nm };
-      });
     } else if (method === "POST" && path0 === "benchmark/delete") {
       var delBid2 = (body && body.benchmark_id) || "";
       if (!MOCK.bench_detail[delBid2]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
@@ -1171,8 +893,6 @@
         MOCK.benchmarks = MOCK.benchmarks.filter(function (b) { return b.benchmark_id !== delBid2; });
         data = { status: "ok", benchmark_id: delBid2 };
       }
-    } else if (method === "POST" && path0 === "benchmark/archive") {
-      data = mockBenchMutate(body, function (d) { d.status = "archived"; return { benchmark_id: d.benchmark_id, status: "archived" }; });
     } else if (method === "POST" && path0 === "benchmark/launch") {
       var lbid = (body && body.benchmark_id) || "";
       if (!MOCK.bench_detail[lbid]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
@@ -1475,69 +1195,12 @@
     }
   }
 
-  /* --- agents --- */
-
-  function renderAgents() {
-    var box = byId("agentsList");
-    if (!box) { return; }
-    box.innerHTML = "";
-    if (!S.agents.length) {
-      box.innerHTML = '<div class="agent-empty">' + esc(t("ag.empty")) + '</div>';
-      return;
-    }
-    S.agents.forEach(function (a, i) {
-      var card = document.createElement("div");
-      card.className = "agent";
-      card.innerHTML = '' +
-        '<div class="agent-grid">' +
-          '<label class="field"><span class="field-label">' + esc(t("ag.f.label")) + '</span>' +
-            '<input class="input" data-f="agent_label" value="' + esc(a.agent_label) + '"></label>' +
-          '<label class="field"><span class="field-label">' + esc(t("ag.f.key")) + '</span>' +
-            '<input class="input mono" data-f="project_key" value="' + esc(a.project_key) + '"></label>' +
-          '<label class="field"><span class="field-label">' + esc(t("ag.f.id")) + '</span>' +
-            '<input class="input mono" data-f="agent_id" value="' + esc(a.agent_id) + '"></label>' +
-        '</div>' +
-        '<div class="agent-foot">' +
-          '<button type="button" class="chk ' + (a.modes ? "on" : "") + '" data-modes>' +
-            '<span class="box">' + I.check + '</span><span class="chk-txt">' + esc(t("ag.modes")) + '</span></button>' +
-          '<button type="button" class="btn btn-danger btn-sm" data-remove>' + esc(t("ag.remove")) + '</button>' +
-        '</div>';
-      qsa("input", card).forEach(function (inp) {
-        inp.addEventListener("input", function () { a[inp.getAttribute("data-f")] = inp.value; markDirty(); });
-      });
-      card.querySelector("[data-modes]").addEventListener("click", function () {
-        a.modes = !a.modes; this.classList.toggle("on", a.modes); markDirty();
-      });
-      card.querySelector("[data-remove]").addEventListener("click", function () {
-        S.agents.splice(i, 1); markDirty(); renderAgents(); toast(t("ag.removed"));
-      });
-      box.appendChild(card);
-    });
-  }
-
   function chkBtn(label, on) {
     var b = document.createElement("button");
     b.type = "button";
     b.className = "chk" + (on ? " on" : "");
     b.innerHTML = '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(label) + '</b></span>';
     return b;
-  }
-
-  function renderModes() {
-    var box = byId("modesGroup");
-    if (!box) { return; }
-    box.innerHTML = "";
-    S.modeOptions.forEach(function (m) {
-      var on = S.modes.indexOf(m) !== -1;
-      var b = chkBtn(m, on);
-      b.addEventListener("click", function () {
-        var idx = S.modes.indexOf(m);
-        if (idx === -1) { S.modes.push(m); } else { S.modes.splice(idx, 1); }
-        b.classList.toggle("on", S.modes.indexOf(m) !== -1);
-        markDirty();
-      });
-      box.appendChild(b);
-    });
   }
 
   function renderCats() {
@@ -1955,12 +1618,6 @@
     toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
   }
 
-  function setStatus(kind) {
-    var p = byId("runPill");
-    if (p) { p.className = "run-pill " + kind; }
-    setText("runStatusTxt", t("status." + kind));
-  }
-
   function markDirty() {
     S.dirty = true;
     S.saveError = null;
@@ -1968,50 +1625,7 @@
     renderSaveError();
     renderAside();
   }
-  function clearDirty() {
-    S.dirty = false;
-    setDirtyUI();
-    renderAside();
-  }
-
   /* ============================ actions: config ============================ */
-
-  function loadConfig() {
-    S.loadError = false;
-    render();
-    callApi("GET", "config").then(function (res) {
-      var d = res.data || {};
-      if (d.status !== "ok") { S.loadError = true; render(); return; }
-      var cfg = d.config || {};
-      S.agents = (cfg.agents || []).map(function (a) {
-        return {
-          agent_key: a.agent_key || genKey(),
-          agent_label: a.agent_label || "",
-          project_key: a.project_key || "",
-          agent_id: a.agent_id || "",
-          modes: !!a.modes
-        };
-      });
-      S.modes = (cfg.modes || []).slice();
-      S.benchLang = (cfg.language === "en") ? "en" : "fr";
-      S.concurrency = clampInt(cfg.concurrency, 1, 8, 1);
-      var qf = cfg.question_filter || {};
-      S.filterCategories = (qf.categories || []).slice();
-      S.filterCategoriesLoaded = (qf.categories || []).slice();
-      S.filterQuestionIds = (qf.question_ids || []).slice();
-      var langs = qf.languages || [];
-      S.filterLanguage = (langs.length === 1 && (langs[0] === "en" || langs[0] === "fr")) ? langs[0] : "all";
-      S.categories = (d.categories || []).slice();
-      S.modeOptions = (d.mode_options && d.mode_options.length) ? d.mode_options.slice() : ["Smart", "Pro", "Claude"];
-      S.questionCount = d.question_count || 0;
-      S.runs = (d.runs || []).slice();
-      S.preserved = { golden: cfg.golden_dataset || "", judge: cfg.judge_llm_id || "", suggestions: cfg.suggestions || {} };
-      S.loaded = true;
-      S.loadError = false;
-      S.dirty = false;
-      render();
-    }, function () { S.loadError = true; render(); });
-  }
 
   // Refresh ONLY the config META (categories / question_count / runs / preserved) after a golden
   // change, WITHOUT touching the form state or the dirty flag (so an unsaved edit is not lost and
@@ -2029,564 +1643,6 @@
       setText("qtHelp", t("qt.help", { n: fmtNum(S.questionCount) }));
       renderAside();
     }, function () { /* meta refresh is best-effort */ });
-  }
-
-  function saveConfig() {
-    if (S.saving) { return; }
-    var cats = S.filterCategories.slice();
-    // Keep a configured category that has no checkbox (drift vs the live category list).
-    S.filterCategoriesLoaded.forEach(function (c) {
-      if (S.categories.indexOf(c) === -1 && cats.indexOf(c) === -1) { cats.push(c); }
-    });
-    var qf = {};
-    if (cats.length) { qf.categories = cats; }
-    if (S.filterQuestionIds.length) { qf.question_ids = S.filterQuestionIds.slice(); }
-    if (S.filterLanguage === "en" || S.filterLanguage === "fr") { qf.languages = [S.filterLanguage]; }
-    var payload = {
-      agents: S.agents.map(function (a) {
-        return { agent_key: a.agent_key || genKey(), agent_label: a.agent_label, project_key: a.project_key, agent_id: a.agent_id, modes: !!a.modes };
-      }),
-      modes: S.modes.slice(),
-      language: S.benchLang,
-      concurrency: S.concurrency,
-      question_filter: qf
-    };
-    S.saving = true;
-    S.saveError = null;
-    setText("saveBtnTxt", t("save.saving"));
-    var btn = byId("saveBtn");
-    if (btn) { btn.disabled = true; }
-    callApi("POST", "config", payload).then(function (res) {
-      S.saving = false;
-      if (btn) { btn.disabled = false; }
-      setText("saveBtnTxt", t("save.btn"));
-      var d = res.data || {};
-      if (d.status === "ok") {
-        clearDirty();
-        S.saveError = null;
-        renderSaveError();
-        var cfg = d.config || {};
-        if (cfg.suggestions || cfg.golden_dataset || cfg.judge_llm_id) {
-          S.preserved = { golden: cfg.golden_dataset || S.preserved.golden, judge: cfg.judge_llm_id || S.preserved.judge, suggestions: cfg.suggestions || S.preserved.suggestions };
-          renderAside();
-        }
-        toast(t("cfg.saved"));
-      } else if (res.status === 400 && d.messages) {
-        S.saveError = { messages: d.messages };
-        renderSaveError();
-      } else {
-        S.saveError = { text: t("save.error") };
-        renderSaveError();
-      }
-    }, function () {
-      S.saving = false;
-      if (btn) { btn.disabled = false; }
-      setText("saveBtnTxt", t("save.btn"));
-      S.saveError = { text: t("save.error") };
-      renderSaveError();
-    });
-  }
-
-  /* ============================ benchmarks (v2): list + detail + launch ============================ */
-
-  function renderBenchmarks() {
-    var box = byId("benchContent");
-    if (!box) { return; }
-    if (S.bench.view === "detail") {
-      box.innerHTML = benchDetailWrapHtml();
-    } else {
-      var inner;
-      if (S.bench.loadError) {
-        inner = '<div class="note note-error" role="alert">' + esc(t("bm.loadError")) + '</div>' +
-          '<div class="actions-row"><button type="button" class="btn" data-bm="retry">' + esc(t("common.retry")) + '</button></div>';
-      } else if (!S.bench.loaded) {
-        inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
-      } else {
-        inner = benchListHtml();
-      }
-      box.innerHTML = '' +
-        '<div class="sec-head">' +
-          '<p class="sec-eyebrow">' + esc(t("bm.eyebrow")) + '</p>' +
-          '<h2 class="sec-title">' + esc(t("bm.title")) + '</h2>' +
-          '<div class="title-bar"></div>' +
-          '<p class="sec-note">' + esc(t("bm.note")) + '</p>' +
-        '</div>' + inner;
-    }
-    wireBench(box);
-  }
-
-  function benchListHtml() {
-    var list = S.bench.list;
-    var head = '<div class="table-head">' +
-      '<span class="count-line">' + t("bm.count", { n: "<b>" + fmtNum(list.length) + "</b>" }) + '</span>' +
-      '<button class="btn btn-primary btn-sm" data-bm="new"><span class="ic-plus"></span>' + esc(t("bm.new")) + '</button>' +
-      '</div>';
-    if (!list.length) {
-      return head + '<div class="empty"><div class="ei"><span class="ic-grid"></span></div>' +
-        '<h4>' + esc(t("bm.empty.h")) + '</h4><p>' + esc(t("bm.empty.p")) + '</p></div>';
-    }
-    return head + '<div class="bm-list">' + list.map(benchCardHtml).join("") + '</div>';
-  }
-
-  function benchCardHtml(b) {
-    var band = b.band || "none";
-    var last = b.last_run_timestamp ? esc(b.last_run_timestamp) : esc(t("bm.never"));
-    var redo = b.n_redo ? '<span class="bm-badge redo">' + esc(t("bm.badge.redo", { n: fmtNum(b.n_redo) })) + '</span>' : '';
-    var modes = (b.modes && b.modes.length) ? '<span class="bm-modes">' + b.modes.map(esc).join(", ") + '</span>' : '';
-    return '<div class="bm-card">' +
-      '<div class="bm-card-main">' +
-        '<div class="bm-card-head"><h3 class="bm-name">' + esc(b.name) + '</h3>' +
-          (b.status === "archived" ? '<span class="bm-arch">' + esc(t("bm.archived")) + '</span>' : '') + '</div>' +
-        '<p class="bm-agent">' + esc(b.agent_label) + ' ' + modes + '</p>' +
-        '<div class="bm-badges">' +
-          '<span class="bm-badge done">' + esc(t("bm.badge.done", { n: fmtNum(b.n_done) })) + '</span>' +
-          '<span class="bm-badge pending">' + esc(t("bm.badge.pending", { n: fmtNum(b.n_pending) })) + '</span>' +
-          redo +
-        '</div>' +
-      '</div>' +
-      '<div class="bm-card-side">' +
-        '<div class="bm-accwrap"><span class="bm-acclabel">' + esc(t("bm.accuracy")) + '</span>' +
-          '<span class="bm-acc band-' + band + '">' + esc(b.accuracy_pct || "-") + '</span></div>' +
-        '<div class="bm-last">' + esc(t("bm.lastRun")) + ': <b>' + last + '</b></div>' +
-        '<button class="btn btn-sm" data-bm="open" data-id="' + esc(b.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
-      '</div>' +
-    '</div>';
-  }
-
-  function benchDetailWrapHtml() {
-    var top = '<div class="bd-top"><button class="btn btn-sm btn-ghost" data-bm="back"><span class="ic-back"></span>' + esc(t("bd.back")) + '</button></div>';
-    if (S.bench.detailError) {
-      return top + '<div class="note note-error" role="alert">' + esc(t("bd.loadError")) + '</div>' +
-        '<div class="actions-row"><button type="button" class="btn" data-bm="detail-retry">' + esc(t("common.retry")) + '</button></div>';
-    }
-    if (!S.bench.detailLoaded || !S.bench.detail) {
-      return top + '<p class="loading">' + esc(t("common.loading")) + '</p>';
-    }
-    return benchDetailHtml(S.bench.detail);
-  }
-
-  function benchDetailHtml(d) {
-    var canPending = ((d.n_pending || 0) + (d.n_redo || 0)) > 0;
-    var nameBlock;
-    if (S.bench.renaming) {
-      nameBlock = '<div class="bd-rename"><input class="input" id="bdRenameInput" value="' + esc(d.name) + '" aria-label="' + esc(t("bn.name")) + '">' +
-        '<button class="btn btn-sm btn-primary" data-bm="rename-save">' + esc(t("bd.renameSave")) + '</button>' +
-        '<button class="btn btn-sm" data-bm="rename-cancel">' + esc(t("bd.renameCancel")) + '</button></div>';
-    } else {
-      nameBlock = '<div class="bd-titlewrap"><h2 class="sec-title">' + esc(d.name) + '</h2>' +
-        '<button class="btn btn-sm btn-ghost" data-bm="rename">' + esc(t("bd.rename")) + '</button></div>';
-    }
-    var modesLine = (d.modes && d.modes.length) ? ('  <b>' + esc(t("bd.modes")) + ':</b> ' + d.modes.map(esc).join(", ")) : "";
-    var header = '<div class="sec-head">' +
-      '<p class="sec-eyebrow">' + esc(t("bm.eyebrow")) + '</p>' + nameBlock +
-      '<div class="title-bar"></div>' +
-      '<p class="bd-agentline"><b>' + esc(t("bd.agent")) + ':</b> ' + esc(d.agent_label) + modesLine + '</p>' +
-      '<div class="bm-badges" style="margin-top:12px">' +
-        '<span class="bm-badge done">' + esc(t("bm.badge.done", { n: fmtNum(d.n_done) })) + '</span>' +
-        '<span class="bm-badge pending">' + esc(t("bm.badge.pending", { n: fmtNum(d.n_pending) })) + '</span>' +
-        (d.n_redo ? '<span class="bm-badge redo">' + esc(t("bm.badge.redo", { n: fmtNum(d.n_redo) })) + '</span>' : '') +
-      '</div>' +
-    '</div>';
-    var launch = '<div class="bd-launch">' +
-      '<button class="btn btn-primary" data-bm="run-pending"' + (canPending && !S.bench.running ? "" : " disabled") + '>' +
-        '<span class="ic-play"></span>' + esc(t("bd.runPending")) + '</button>' +
-      '<button class="btn" data-bm="run-full"' + (S.bench.running ? " disabled" : "") + '>' + esc(t("bd.runFull")) + '</button>' +
-      (!canPending ? '<span class="bd-hint">' + esc(t("bd.runPendingHint")) + '</span>' : "") +
-    '</div>';
-    var qSection = (d.questions && d.questions.length)
-      ? '<div class="bd-list">' + d.questions.map(benchQCardHtml).join("") + '</div>'
-      : '<div class="note note-info" role="status">' + esc(t("bd.empty")) + '</div>';
-    return '<div class="bd-top"><button class="btn btn-sm btn-ghost" data-bm="back"><span class="ic-back"></span>' + esc(t("bd.back")) + '</button></div>' +
-      header + launch + benchRunStatusHtml() +
-      '<div class="bd-qhead"><p class="glabel">' + esc(t("bd.qTitle")) + '</p></div>' +
-      qSection + benchAddHtml(d);
-  }
-
-  function benchRunStatusHtml() {
-    if (S.bench.running) {
-      return '<div class="bd-run"><span class="dot"></span>' + esc(t("run.btn.running")) + '</div>';
-    }
-    if (S.bench.runMsg) {
-      return '<div class="run-msg ' + (S.bench.runMsg.kind === "ok" ? "ok" : "err") + '" style="margin-top:14px">' + esc(S.bench.runMsg.text) + '</div>';
-    }
-    return "";
-  }
-
-  // The question-level evolution delta = the strongest signal across its modes (regressed wins,
-  // then improved, then stable); 'first' when no mode has more than one attempt.
-  function questionDelta(q) {
-    var ds = (q.modes || []).filter(function (m) { return m.attempts && m.attempts.length > 1; })
-      .map(function (m) { return m.delta; });
-    if (ds.indexOf("regressed") !== -1) { return "regressed"; }
-    if (ds.indexOf("improved") !== -1) { return "improved"; }
-    if (ds.indexOf("same") !== -1) { return "same"; }
-    return "first";
-  }
-
-  function qVerdictChip(q) {
-    if (q.status !== "done" || !q.latest_verdict) {
-      return '<span class="bd-vd none">' + esc(t("bd.verdict.none")) + '</span>';
-    }
-    var ok = !!q.latest_correct;
-    return '<span class="bd-vd ' + (ok ? "correct" : "incorrect") + '">' +
-      esc(t(ok ? "bd.verdict.correct" : "bd.verdict.incorrect")) + '</span>';
-  }
-
-  function attemptHistoryHtml(q) {
-    var modes = q.modes || [];
-    if (!modes.length) { return ""; }
-    var blocks = modes.map(function (m) {
-      var atts = (m.attempts || []).map(function (a) {
-        var ok = !!a.correct;
-        var score = (a.judge_score != null && a.judge_score !== "") ? (" · " + fmtNum(a.judge_score)) : "";
-        var ovr = a.overridden ? (" · " + t("rv.effective")) : "";
-        return '<span class="bd-att-chip ' + (ok ? "correct" : "incorrect") + '">' +
-          esc(t("bd.attempt", { n: a.attempt_no })) + esc(score) + esc(ovr) + '</span>';
-      }).join("");
-      return '<div class="bd-evo-mode"><span class="bd-evo-modelabel">' + esc(m.mode || t("common.dash")) + '</span>' +
-        '<div class="bd-att-row">' + atts + '</div></div>';
-    }).join("");
-    return '<div class="bd-evo-body">' + blocks + '</div>';
-  }
-
-  function benchQCardHtml(q) {
-    var expanded = !!S.bench.expanded[q.question_id];
-    var statusCls = (q.status === "done") ? "done" : "pending";
-    var delta = questionDelta(q);
-    var deltaBadge = (q.n_attempts > 1 && delta !== "first")
-      ? '<span class="bd-delta ' + delta + '">' + esc(t("bd.delta." + delta)) + '</span>' : "";
-    var attemptsLine = q.n_attempts ? '<span class="bd-att">' + esc(t("bd.attempts", { n: fmtNum(q.n_attempts) })) + '</span>' : "";
-
-    var sql = (q.expected_sql == null) ? "" : String(q.expected_sql).trim();
-    var tool = (q.expected_tool == null) ? "" : String(q.expected_tool).trim();
-    var ref;
-    if (sql || tool) {
-      ref = '<div class="bd-ref">' +
-        (sql ? '<div class="bd-ref-row"><span class="bd-ref-l">' + esc(t("bd.refSql")) + '</span><code class="bd-ref-sql">' + esc(sql) + '</code></div>' : "") +
-        (tool ? '<div class="bd-ref-row"><span class="bd-ref-l">' + esc(t("bd.refTool")) + '</span><span class="ref-tool">' + esc(tool) + '</span></div>' : "") +
-        '</div>';
-    } else {
-      ref = '<div class="bd-ref"><span class="bd-ref-none">' + esc(t("bd.refNone")) + '</span></div>';
-    }
-
-    var evo = "";
-    if (q.n_attempts > 0) {
-      evo = '<div class="bd-evo">' +
-        '<button type="button" class="bd-evo-toggle" data-bm="evo" data-id="' + esc(q.question_id) + '">' +
-          esc(expanded ? t("bd.evoHide") : t("bd.evoShow")) + '</button>' +
-        (expanded ? attemptHistoryHtml(q) : "") + '</div>';
-    }
-
-    var redoOn = !!q.include_next;
-    var controls = '<div class="bd-controls">' +
-      '<button type="button" class="chk' + (redoOn ? " on" : "") + '" data-bm="redo" data-id="' + esc(q.question_id) + '" data-val="' + (redoOn ? "0" : "1") + '">' +
-        '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("bd.redo")) + '</b></span></button>' +
-      '<button type="button" class="btn btn-sm btn-danger" data-bm="remove" data-id="' + esc(q.question_id) + '">' + esc(t("bd.remove")) + '</button>' +
-    '</div>';
-
-    return '<div class="bd-card">' +
-      '<div class="bd-card-head"><p class="bd-q">' + esc(q.question || q.question_id) + '</p>' +
-        '<div class="bd-badges"><span class="bd-status ' + statusCls + '">' + esc(t("bd.status." + statusCls)) + '</span>' +
-          qVerdictChip(q) + deltaBadge + '</div></div>' +
-      '<div class="bd-meta">' + (q.category ? '<span class="cat-tag">' + esc(q.category) + '</span>' : "") + attemptsLine + '</div>' +
-      ref + evo + controls +
-    '</div>';
-  }
-
-  function benchAddHtml(d) {
-    var memberIds = {};
-    (d.questions || []).forEach(function (q) { memberIds[q.question_id] = true; });
-    var pool = (S.bench.golden || []).filter(function (g) { return g.question_id && !memberIds[g.question_id]; });
-    var head = '<div class="bd-add-head"><div>' +
-      '<p class="glabel">' + esc(t("bd.addTitle")) + '</p>' +
-      '<p class="ghelp" style="margin:0">' + esc(t("bd.addNote")) + '</p></div>' +
-      '<button type="button" class="btn btn-sm" data-bm="add-toggle">' + esc(t("bd.addToggle")) + '</button></div>';
-    if (!S.bench.addOpen) {
-      return '<div class="card bd-add"><div class="card-pad">' + head + '</div></div>';
-    }
-    var body;
-    if (!pool.length) {
-      body = '<div class="note note-info" role="status">' + esc(t("bd.addNone")) + '</div>';
-    } else {
-      var items = pool.map(function (g) {
-        var checked = S.bench.addSel[g.question_id] ? " checked" : "";
-        return '<label class="bd-add-item"><input type="checkbox" data-addq="' + esc(g.question_id) + '"' + checked + '>' +
-          '<span class="bd-add-q">' + esc(truncate(g.question, 140)) + '</span>' +
-          (g.category ? '<span class="cat-tag">' + esc(g.category) + '</span>' : "") + '</label>';
-      }).join("");
-      var hasSel = pool.some(function (g) { return !!S.bench.addSel[g.question_id]; });
-      body = '<div class="bd-add-list">' + items + '</div>' +
-        '<div class="actions-row"><button class="btn btn-primary btn-sm" id="benchAddGo" data-bm="add-go"' + (hasSel ? "" : " disabled") + '>' + esc(t("bd.addSelected")) + '</button>' +
-        '<button class="btn btn-sm" data-bm="add-cancel">' + esc(t("bd.addCancel")) + '</button></div>';
-    }
-    return '<div class="card bd-add"><div class="card-pad">' + head + body + '</div></div>';
-  }
-
-  function wireBench(box) {
-    if (!box) { return; }
-    qsa(".ic-plus", box).forEach(function (e) { e.innerHTML = I.plus; });
-    qsa(".ic-grid", box).forEach(function (e) { e.innerHTML = I.grid; });
-    qsa(".ic-play", box).forEach(function (e) { e.innerHTML = I.play; });
-    qsa(".ic-back", box).forEach(function (e) { e.innerHTML = I.back; });
-
-    qsa("[data-addq]", box).forEach(function (cb) {
-      cb.addEventListener("change", function () {
-        S.bench.addSel[cb.getAttribute("data-addq")] = cb.checked;
-        var go = byId("benchAddGo");
-        if (go) {
-          var any = Object.keys(S.bench.addSel).some(function (k) { return S.bench.addSel[k]; });
-          go.disabled = !any;
-        }
-      });
-    });
-
-    qsa("[data-bm]", box).forEach(function (el) {
-      var kind = el.getAttribute("data-bm");
-      var id = el.getAttribute("data-id");
-      el.addEventListener("click", function () {
-        if (kind === "new") { openBenchModal(); }
-        else if (kind === "open") { openBenchmark(id); }
-        else if (kind === "retry") { loadBenchmarks(); }
-        else if (kind === "back") { backToList(); }
-        else if (kind === "detail-retry") { loadBenchDetail(); }
-        else if (kind === "rename") { S.bench.renaming = true; renderBenchmarks(); setTimeout(function () { var i = byId("bdRenameInput"); if (i) { i.focus(); } }, 30); }
-        else if (kind === "rename-cancel") { S.bench.renaming = false; renderBenchmarks(); }
-        else if (kind === "rename-save") { var inp = byId("bdRenameInput"); benchRename(inp ? inp.value : ""); }
-        else if (kind === "run-pending") { benchLaunch("append"); }
-        else if (kind === "run-full") { benchLaunch("full"); }
-        else if (kind === "evo") { S.bench.expanded[id] = !S.bench.expanded[id]; renderBenchmarks(); }
-        else if (kind === "redo") { benchRedo(id, el.getAttribute("data-val")); }
-        else if (kind === "remove") { benchRemove(id); }
-        else if (kind === "add-toggle") { S.bench.addOpen = !S.bench.addOpen; S.bench.addSel = {}; renderBenchmarks(); }
-        else if (kind === "add-cancel") { S.bench.addOpen = false; S.bench.addSel = {}; renderBenchmarks(); }
-        else if (kind === "add-go") { benchAddSelected(); }
-      });
-    });
-  }
-
-  function loadBenchmarks() {
-    S.bench.loadError = false;
-    if (!S.bench.loaded) { renderBenchmarks(); }
-    callApi("GET", "benchmarks").then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        S.bench.list = (d.benchmarks || []).slice();
-        S.bench.agents = (d.agents || []).slice();
-        S.bench.modeOptions = (d.modes || []).slice();
-        S.bench.golden = (d.golden || []).slice();
-        S.bench.loaded = true;
-        S.bench.loadError = false;
-      } else {
-        S.bench.loadError = true;
-      }
-      setText("tabBenchCount", S.bench.loaded ? String(S.bench.list.length) : "");
-      renderBenchmarks();
-    }, function () { S.bench.loadError = true; renderBenchmarks(); });
-  }
-
-  function openBenchmark(bid) {
-    S.bench.view = "detail";
-    S.bench.detailId = bid;
-    S.bench.detail = null;
-    S.bench.detailLoaded = false;
-    S.bench.detailError = false;
-    S.bench.renaming = false;
-    S.bench.addOpen = false;
-    S.bench.addSel = {};
-    S.bench.expanded = {};
-    S.bench.runMsg = null;
-    renderBenchmarks();
-    loadBenchDetail();
-  }
-
-  function loadBenchDetail() {
-    S.bench.detailError = false;
-    callApi("GET", "benchmark/detail?benchmark_id=" + encodeURIComponent(S.bench.detailId)).then(function (res) {
-      var d = res.data || {};
-      // The detail response merges the benchmark entity, whose own ``status`` (active/archived)
-      // shadows the envelope ``status``; so success = HTTP 200 + a benchmark_id + no error code.
-      if (res.status === 200 && d.benchmark_id && !d.error) {
-        S.bench.detail = d;
-        S.bench.detailLoaded = true;
-        S.bench.detailError = false;
-      } else {
-        S.bench.detailError = true;
-      }
-      renderBenchmarks();
-    }, function () { S.bench.detailError = true; renderBenchmarks(); });
-  }
-
-  function backToList() {
-    S.bench.view = "list";
-    S.bench.detailId = "";
-    S.bench.detail = null;
-    S.bench.runMsg = null;
-    renderBenchmarks();
-    loadBenchmarks();  // refresh counts / accuracy after any launch
-  }
-
-  function benchLaunch(mode) {
-    if (S.bench.running) { return; }
-    S.bench.running = true;
-    S.bench.runMsg = null;
-    setStatus("running");
-    renderBenchmarks();
-    callApi("POST", "benchmark/launch", { benchmark_id: S.bench.detailId, launch_mode: mode }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok" && d.launched) {
-        toast(t("run.launched"));
-        benchPoll();
-      } else if (res.status === 409 || d.error === "already_running") {
-        S.bench.runMsg = { kind: "err", text: t("run.already") };
-        renderBenchmarks();
-        benchPoll();
-      } else if (d.error === "launch_unsupported") {
-        benchEndRun({ kind: "err", text: t("run.unsupported") });
-      } else if (d.error === "unknown_benchmark") {
-        benchEndRun({ kind: "err", text: t("bd.loadError") });
-      } else {
-        benchEndRun({ kind: "err", text: t("run.error") });
-      }
-    }, function () { benchEndRun({ kind: "err", text: t("run.error") }); });
-  }
-
-  var benchPollErrors = 0;
-  function benchPoll() {
-    if (!S.bench.running) { return; }
-    setTimeout(function () {
-      callApi("GET", "run/status").then(function (res) {
-        benchPollErrors = 0;
-        var d = res.data || {};
-        if (d.running) {
-          benchPoll();
-        } else {
-          benchEndRun({ kind: "ok", text: t("run.finished") });
-          loadBenchDetail();
-        }
-      }, function () {
-        benchPollErrors += 1;
-        if (benchPollErrors >= 4) { benchEndRun({ kind: "err", text: t("run.lostContact") }); }
-        else { benchPoll(); }
-      });
-    }, 2500);
-  }
-
-  function benchEndRun(msg) {
-    S.bench.running = false;
-    S.bench.runMsg = msg || null;
-    setStatus("done");
-    renderBenchmarks();
-  }
-
-  function benchRedo(id, val) {
-    callApi("POST", "benchmark/redo", { benchmark_id: S.bench.detailId, question_id: id, include_next: (val === "1") }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") { loadBenchDetail(); }
-      else { toast(t("bd.redoError")); }
-    }, function () { toast(t("bd.redoError")); });
-  }
-
-  function benchRemove(id) {
-    callApi("POST", "benchmark/remove-question", { benchmark_id: S.bench.detailId, question_id: id }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") { toast(t("bd.removed")); loadBenchDetail(); }
-      else { toast(t("bd.removeError")); }
-    }, function () { toast(t("bd.removeError")); });
-  }
-
-  function benchAddSelected() {
-    var ids = (S.bench.golden || [])
-      .filter(function (g) { return S.bench.addSel[g.question_id]; })
-      .map(function (g) { return g.question_id; });
-    if (!ids.length) { return; }
-    callApi("POST", "benchmark/add-questions", { benchmark_id: S.bench.detailId, question_ids: ids }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        toast(t("bd.added", { n: fmtNum(ids.length) }));
-        S.bench.addOpen = false;
-        S.bench.addSel = {};
-        loadBenchDetail();
-      } else {
-        toast(t("bd.addError"));
-      }
-    }, function () { toast(t("bd.addError")); });
-  }
-
-  function benchRename(name) {
-    name = (name || "").trim();
-    if (!name) { S.bench.renaming = false; renderBenchmarks(); return; }
-    callApi("POST", "benchmark/rename", { benchmark_id: S.bench.detailId, name: name }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        S.bench.renaming = false;
-        toast(t("bd.renamed"));
-        loadBenchDetail();
-      } else {
-        var msg = (d.messages && d.messages.length) ? d.messages[0] : t("bd.renameError");
-        toast(msg);
-      }
-    }, function () { toast(t("bd.renameError")); });
-  }
-
-  /* --- new-benchmark modal --- */
-
-  function benchSeedAll() {
-    var a = byId("bnSeedAll");
-    return !a || a.getAttribute("data-on") === "1";
-  }
-  function setBenchSeed(all) {
-    var a = byId("bnSeedAll");
-    var e = byId("bnSeedEmpty");
-    if (a) { a.classList.toggle("on", all); a.setAttribute("data-on", all ? "1" : "0"); }
-    if (e) { e.classList.toggle("on", !all); e.setAttribute("data-on", !all ? "1" : "0"); }
-  }
-
-  function openBenchModal() {
-    S.benchNew.open = true;
-    S.benchNew.error = null;
-    var sel = byId("bnAgent");
-    sel.innerHTML = (S.bench.agents || []).map(function (a) {
-      return '<option value="' + esc(a.agent_key) + '">' + esc(a.agent_label || a.agent_key) + '</option>';
-    }).join("");
-    byId("bnName").value = "";
-    var noAgents = !(S.bench.agents && S.bench.agents.length);
-    setHTML("bnErr", noAgents ? '<div class="note note-error" role="alert">' + esc(t("bn.agentNone")) + '</div>' : "");
-    var create = byId("bnCreate");
-    if (create) { create.disabled = noAgents; }
-    setBenchSeed(true);
-    byId("benchOverlay").classList.add("on");
-    setTimeout(function () { byId("bnName").focus(); }, 50);
-  }
-
-  function closeBenchModal() {
-    S.benchNew.open = false;
-    byId("benchOverlay").classList.remove("on");
-  }
-
-  function submitBenchModal() {
-    var name = byId("bnName").value.trim();
-    var agentKey = byId("bnAgent").value;
-    var seedAll = benchSeedAll();
-    setHTML("bnErr", "");
-    var btn = byId("bnCreate");
-    if (btn) { btn.disabled = true; }
-    callApi("POST", "benchmark/create", { name: name, agent_key: agentKey, seed_all: seedAll }).then(function (res) {
-      if (btn) { btn.disabled = false; }
-      var d = res.data || {};
-      if (d.status === "ok") {
-        closeBenchModal();
-        toast(t("bn.created"));
-        loadBenchmarks();
-        if (d.benchmark_id) { openBenchmark(d.benchmark_id); }
-      } else {
-        var msgs = d.messages || [t("bn.error")];
-        setHTML("bnErr", '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
-          msgs.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>');
-      }
-    }, function () {
-      if (btn) { btn.disabled = false; }
-      setHTML("bnErr", '<div class="note note-error" role="alert">' + esc(t("bn.error")) + '</div>');
-    });
   }
 
   /* ============================ actions: golden / suggestions ============================ */

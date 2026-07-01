@@ -19,8 +19,8 @@ The ``benchmark`` object (every key optional except ``agents`` for the run step)
       "breakdown_dataset": "benchmark_breakdown",           // step 4 output
 
       "agents": [                                           // who to benchmark
-        {"agent_key": "orchestrator",
-         "agent_label": "OWIsMind Orchestrator (DEV)",
+        {"agent_key": "038G7mlF",   // ALWAYS the agent id (prefix stripped); derived, never hand-set
+         "agent_label": "OWIsMind Orchestrator (DEV)",   // display name only
          "project_key": "OWISMIND_DEV",
          "agent_id": "agent:038G7mlF",
          "modes": true}        // true: test across modes ; false/absent: ONE plain call
@@ -180,9 +180,10 @@ def _resolve_agents(value):
     """Normalize the agents list: keep well-formed entries, add the modes flag.
 
     Each kept entry is ``{agent_key, agent_label, project_key, agent_id, modes}``.
-    A required field (agent_key / project_key / agent_id) being blank drops that
-    entry silently (the run step raises a clear error when none survive). ``modes``
-    is coerced to bool, default False. Never raises.
+    ``agent_key`` is ALWAYS the agent id (any human-set key is ignored - identity is the id, not a
+    slug), so the run tag matches the catalog and the golden membership. A blank project_key or
+    agent_id drops that entry silently (the run step raises a clear error when none survive).
+    ``modes`` is coerced to bool, default False. Never raises.
     """
     value = _coerce_obj(value)
     if not isinstance(value, list):
@@ -191,11 +192,11 @@ def _resolve_agents(value):
     for entry in value:
         if not isinstance(entry, dict):
             continue
-        key = _clean(entry.get("agent_key"))
         project_key = _clean(entry.get("project_key"))
         agent_id = _clean(entry.get("agent_id"))
-        if not key or not project_key or not agent_id:
+        if not project_key or not agent_id:
             continue
+        key = agent_id[len("agent:"):] if agent_id.startswith("agent:") else agent_id
         agents.append({
             "agent_key": key,
             "agent_label": _clean(entry.get("agent_label")) or key,

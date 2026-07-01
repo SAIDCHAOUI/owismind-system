@@ -27,7 +27,7 @@ remplace l'objet `benchmark` par :
 "benchmark": {
   "golden_dataset": "golden_questions_v1_prepared",
   "agents": [
-    {"agent_key": "orchestrator",
+    {"agent_key": "038G7mlF",
      "agent_label": "OWIsMind Orchestrator (DEV)",
      "project_key": "OWISMIND_DEV",
      "agent_id": "agent:038G7mlF",

@@ -128,13 +128,13 @@ class TestAgents(unittest.TestCase):
 
     def test_invalid_entries_dropped(self):
         cfg = run_params.resolve(_vars({"agents": [
-            {"agent_key": "ok", "project_key": "P", "agent_id": "agent:ok"},
-            {"agent_key": "", "project_key": "P", "agent_id": "agent:x"},  # blank key
-            {"agent_key": "y", "agent_id": "agent:y"},                     # no project
+            {"project_key": "P", "agent_id": "agent:ok"},
+            {"project_key": "P"},                          # no agent_id -> dropped
+            {"agent_id": "agent:y"},                       # no project -> dropped
             "not a dict",
         ]}))
         self.assertEqual(len(cfg["agents"]), 1)
-        self.assertEqual(cfg["agents"][0]["agent_key"], "ok")
+        self.assertEqual(cfg["agents"][0]["agent_key"], "ok")  # derived from agent:ok
 
     def test_agents_as_json_string(self):
         cfg = run_params.resolve(_vars({"agents": json.dumps([

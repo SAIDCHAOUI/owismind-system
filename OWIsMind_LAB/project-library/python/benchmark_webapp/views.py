@@ -929,15 +929,16 @@ def build_launch_request(benchmark_id, launch_mode):
 
 # --- task-9: golden tag view + benchmark settings validation ----------------
 
-def golden_tag_view(golden_rows, agent_key=None, scope="this"):
+def golden_tag_view(golden_rows, agent_key=None, scope="agent"):
     """Shape golden rows filtered by agent_key scope. Pure, never raises.
 
-    scope:
-        "this"     - rows whose agent_key matches (tagged to this agent).
+    scope (the value the frontend / launcher MOCK send):
+        "agent"    - rows whose agent_key matches (tagged to this agent). "this" is an alias.
         "untagged" - rows with a blank / None agent_key.
         "all"      - all rows regardless of tag.
 
-    Each row in the output carries all GOLDEN_COLUMNS including agent_key and reference fields.
+    Returns ``{"questions": [...]}`` (the key the frontend reads). Each row carries the golden
+    columns the launcher needs, including agent_key and the reference SQL / tool fields.
     """
     akey = _str(agent_key).strip() if agent_key else ""
     out = []
@@ -945,7 +946,7 @@ def golden_tag_view(golden_rows, agent_key=None, scope="this"):
         if not isinstance(r, dict):
             continue
         row_key = _str(r.get("agent_key")).strip()
-        if scope == "this":
+        if scope in ("agent", "this"):
             if row_key != akey:
                 continue
         elif scope == "untagged":
@@ -966,7 +967,7 @@ def golden_tag_view(golden_rows, agent_key=None, scope="this"):
             "expected_tool": _str(r.get("expected_tool")),
             "agent_key": _str(r.get("agent_key")),
         })
-    return {"rows": out}
+    return {"questions": out}
 
 
 def validate_benchmark_name(name, taken_names):

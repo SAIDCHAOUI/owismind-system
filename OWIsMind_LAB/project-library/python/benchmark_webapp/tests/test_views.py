@@ -501,18 +501,25 @@ class BenchmarkDetailViewTests(unittest.TestCase):
 
 class GoldenTagViewTests(unittest.TestCase):
     def test_golden_tag_view_scope(self):
+        # The endpoint contract the frontend (and the launcher MOCK) rely on: the payload key is
+        # ``questions`` and the per-agent scope value is ``agent`` (``this`` accepted as an alias).
         golden = [{"question_id": "q1", "agent_key": "rev", "active": True},
                   {"question_id": "q2", "agent_key": None, "active": True},
                   {"question_id": "q3", "agent_key": "tic", "active": True}]
         self.assertEqual(
-            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "this")["rows"]],
+            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "agent")["questions"]],
+            ["q1"]
+        )
+        # ``this`` is kept as a defensive alias for the per-agent filter.
+        self.assertEqual(
+            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "this")["questions"]],
             ["q1"]
         )
         self.assertEqual(
-            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "untagged")["rows"]],
+            [r["question_id"] for r in views.golden_tag_view(golden, "rev", "untagged")["questions"]],
             ["q2"]
         )
-        self.assertEqual(len(views.golden_tag_view(golden, "rev", "all")["rows"]), 3)
+        self.assertEqual(len(views.golden_tag_view(golden, "rev", "all")["questions"]), 3)
 
 
 class SettingsValidationTests(unittest.TestCase):
