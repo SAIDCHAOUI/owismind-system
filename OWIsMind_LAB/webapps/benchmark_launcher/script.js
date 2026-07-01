@@ -1,9 +1,11 @@
 /* OWIsMind Benchmark - Launcher webapp (framework-free vanilla JS, no build).
  *
- * Agent-first master-detail model: a left rail lists discovered agents (GET api/agents +
- * POST api/agents/discover, auto only when the catalog is empty); clicking an agent opens the
- * agent view (its benchmarks); clicking a benchmark opens the benchmark detail (its questions,
- * cells, run controls). Settings (gear button) expose the golden dataset name, judge LLM id,
+ * Agent-first master-detail model: the home shows the CURATED agent catalog as cards (GET
+ * api/agents); "Add agent" picks a DSS project and its agents (GET api/agents/projects +
+ * project-agents, POST api/agents/connect); once an agent is opened, a left rail lists the
+ * curated agents. Clicking an agent opens the agent view (its benchmarks); clicking a benchmark
+ * opens the benchmark detail (its questions, cells, run controls). Settings expose the golden
+ * dataset name, judge LLM id,
  * concurrency, and run language - stored in the project variable + Flow datasets, not in code.
  * Bilingual EN/FR; Orange charter styling lives in style.css.
  * MOCK mode (no getWebAppBackendUrl) serves sample data so preview.html renders offline. */
@@ -468,20 +470,39 @@
 
     "bcr.home": { en: "Agents", fr: "Agents" },
 
-    /* --- home gallery (agent picker as cards) --- */
+    /* --- home gallery (curated agent list as cards) --- */
     "home.eyebrow":     { en: "Agents",            fr: "Agents" },
     "home.title":       { en: "Choose an agent",   fr: "Choisissez un agent" },
     "home.sub":         { en: "Pick an agent to see its benchmarks, create new ones and run them.",
                           fr: "Choisissez un agent pour voir ses benchmarks, en creer et les lancer." },
-    "home.refresh":     { en: "Refresh",           fr: "Actualiser" },
+    "home.add":         { en: "Add agent",         fr: "Ajouter un agent" },
     "home.open":        { en: "Open",              fr: "Ouvrir" },
+    "home.remove":      { en: "Remove",            fr: "Retirer" },
+    "home.removeConfirm": { en: "Remove this agent from the list?", fr: "Retirer cet agent de la liste ?" },
+    "home.removed":     { en: "Agent removed.",    fr: "Agent retire." },
+    "home.removeError": { en: "Could not remove the agent.", fr: "Impossible de retirer l'agent." },
     "home.loading":     { en: "Loading agents...", fr: "Chargement des agents..." },
-    "home.discovering": { en: "Discovering agents...", fr: "Decouverte des agents..." },
-    "home.failed":      { en: "Discovery failed - known agents are shown.", fr: "Decouverte echouee - les agents connus sont affiches." },
+    "home.loadError":   { en: "Could not load your agents.", fr: "Impossible de charger vos agents." },
     "home.found":       { en: "{n} agent(s)",      fr: "{n} agent(s)" },
     "home.emptyTitle":  { en: "No agent yet",      fr: "Aucun agent" },
-    "home.emptyBody":   { en: "Refresh to discover agents, or add one manually in Settings.",
-                          fr: "Actualisez pour decouvrir des agents, ou ajoutez-en un manuellement dans Parametres." },
+    "home.emptyBody":   { en: "Add an agent to start: pick a project, then choose its agents.",
+                          fr: "Ajoutez un agent pour commencer : choisissez un projet, puis ses agents." },
+
+    /* --- add-agent flow (project -> agents -> select) --- */
+    "aa.title":           { en: "Add an agent",    fr: "Ajouter un agent" },
+    "aa.project":         { en: "Project",         fr: "Projet" },
+    "aa.projectPh":       { en: "Select a project...", fr: "Choisir un projet..." },
+    "aa.loadingProjects": { en: "Loading projects...", fr: "Chargement des projets..." },
+    "aa.projectsError":   { en: "Could not list projects.", fr: "Impossible de lister les projets." },
+    "aa.loadingAgents":   { en: "Loading agents...", fr: "Chargement des agents..." },
+    "aa.agentsError":     { en: "Could not list this project's agents.", fr: "Impossible de lister les agents de ce projet." },
+    "aa.noAgents":        { en: "No agent found in this project.", fr: "Aucun agent trouve dans ce projet." },
+    "aa.pickHint":        { en: "Check the agents to add, and give each a clear name.",
+                            fr: "Cochez les agents a ajouter, et donnez a chacun un nom clair." },
+    "aa.namePh":          { en: "Agent name",      fr: "Nom de l'agent" },
+    "aa.add":             { en: "Add selected ({n})", fr: "Ajouter la selection ({n})" },
+    "aa.added":           { en: "{n} agent(s) added.", fr: "{n} agent(s) ajoute(s)." },
+    "aa.addError":        { en: "Could not add the agents.", fr: "Impossible d'ajouter les agents." },
 
     "agv.new":      { en: "New benchmark",         fr: "Nouveau benchmark" },
     "agv.nTagged":  { en: "{n} tagged question(s)", fr: "{n} question(s) taguee(s)" },
@@ -697,6 +718,9 @@
     // Agent-first routing (dispatch 1)
     route: { level: "home", agentKey: null, benchmarkId: null },
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
+    // Add-agent flow (pick a project -> list its agents -> select + name the ones to add).
+    addAgent: { open: false, loadingProjects: false, projects: [], projectKey: "", loadingAgents: false, agents: [], selected: {}, error: "", saving: false },
+    agentRemoveConfirm: "",
     agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" },
     // Screen 4: benchmark detail (dispatch 2)
     benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false },
@@ -875,12 +899,31 @@
         { question_id: "a_revenue001", question: "Quel est le revenu reel du compte Maroc Telecom sur l'annee en cours ?", category: "revenue", run_id: "run_20260625_1740", run_timestamp: "2026-06-25 17:40:11", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", mode: "Smart", status: "ok", objective_match: false, judge_score: 0.55, judge_verdict: "incorrect", judge_comment: "Right account but reported a budget figure, not the ACTUALS scope.", reference_answer: "Le revenu reel (ACTUALS) du compte Maroc Telecom sur l'annee en cours est de 4 218 540 euros, toutes periodes confondues.", answer_preview: "Le revenu du compte Maroc Telecom est d'environ 3 900 000 EUR.", notes: "", expected_value: "4218540", expected_value_type: "currency", benchmark_id: "bm_said01", benchmark_name: "said", attempt_no: 1, expected_sql: "SELECT SUM(amount_eur) FROM drive_revenues WHERE account_name = 'Maroc Telecom' AND phase = 'ACTUALS'", expected_tool: "show_table", actual_tools: "table", correct: false, needs_review: false, latency_str: "8.3s", estimated_cost: 0.0150 }
       ]
     },
-    // Agent catalog (populated by GET /api/agents + POST /api/agents/discover)
+    // Curated agent catalog (GET /api/agents; grown via the add-agent flow).
     agent_catalog: {
       agents: [
         { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF", modes: true }
+      ]
+    },
+    // Projects + their agents for the add-agent picker (GET /api/agents/projects + project-agents).
+    projects: [
+      { project_key: "OWISMIND_DEV", name: "OWIsMind (DEV)" },
+      { project_key: "OWISMIND_PROD_V1", name: "OWIsMind (PROD)" },
+      { project_key: "DKU_EXAM_GEN_AI", name: "Exam Gen AI" }
+    ],
+    project_agents: {
+      OWISMIND_DEV: [
+        { agent_id: "agent:038G7mlF", name: "OWIsMind Orchestrator (DEV)" },
+        { agent_id: "agent:bHrWLyOL", name: "SalesDrive Revenue Expert" },
+        { agent_id: "agent:NcE9LD2i", name: "CSSO Trouble Tickets Expert" }
       ],
-      discovered_at: "2026-06-30T08:00:00Z"
+      OWISMIND_PROD_V1: [
+        { agent_id: "agent:Xrv7GvfG", name: "OWIsMind Orchestrator (PROD)" },
+        { agent_id: "agent:uO5hEzAs", name: "SalesDrive Revenue Expert (PROD)" }
+      ],
+      DKU_EXAM_GEN_AI: [
+        { agent_id: "agent:OTYmUI9v", name: "Exam Assistant" }
+      ]
     },
     // Number of active tagged golden questions per agent_key
     agent_tagged: { orchestrator: 2 },
@@ -910,6 +953,15 @@
       out[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
     });
     return out;
+  }
+
+  // Mirror of registry.agent_catalog_key (Python) for the offline mock: a stable, deterministic
+  // logical key per (project_key, agent_id).
+  function mockAgentKey(projectKey, agentId) {
+    var suffix = String(agentId || "");
+    if (suffix.indexOf("agent:") === 0) { suffix = suffix.slice("agent:".length); }
+    var s = (String(projectKey || "") + "_" + suffix).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    return s || "agent";
   }
 
   function mockEffectiveRow(runId, r) {
@@ -1104,10 +1156,28 @@
       else if (mockRun.remaining > 0 && mockRun.bid !== lbid) { status = 409; data = { status: "error", error: "already_running" }; }
       else { mockRun.remaining = 3; mockRun.bid = lbid; data = { status: "ok", launched: true, launch_mode: (body && body.launch_mode) || "append" }; }
     } else if (method === "GET" && path0 === "agents") {
-      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), discovered_at: MOCK.agent_catalog.discovered_at };
-    } else if (method === "POST" && path0 === "agents/discover") {
-      MOCK.agent_catalog.discovered_at = new Date().toISOString();
-      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), discovered_at: MOCK.agent_catalog.discovered_at, discovery: "ok" };
+      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice() };
+    } else if (method === "GET" && path0 === "agents/projects") {
+      data = { status: "ok", projects: MOCK.projects.slice() };
+    } else if (method === "GET" && path0 === "agents/project-agents") {
+      var paPk = parseQuery(path).project_key || "";
+      data = { status: "ok", agents: (MOCK.project_agents[paPk] || []).slice() };
+    } else if (method === "POST" && path0 === "agents/connect") {
+      var caPk = (body && body.project_key) || "";
+      var caSel = (body && body.agents) || [];
+      caSel.forEach(function (s) {
+        if (!s || !s.agent_id) { return; }
+        var key = mockAgentKey(caPk, s.agent_id);
+        var existing = MOCK.agent_catalog.agents.filter(function (a) { return a.agent_key === key; })[0];
+        var entry = { agent_key: key, agent_label: (s.agent_label || s.agent_id), project_key: caPk, agent_id: s.agent_id, modes: s.modes !== false };
+        if (existing) { existing.agent_label = entry.agent_label; existing.modes = entry.modes; }
+        else { MOCK.agent_catalog.agents.push(entry); }
+      });
+      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice() };
+    } else if (method === "POST" && path0 === "agents/remove") {
+      var raKey = (body && body.agent_key) || "";
+      MOCK.agent_catalog.agents = MOCK.agent_catalog.agents.filter(function (a) { return a.agent_key !== raKey; });
+      data = { status: "ok", agents: MOCK.agent_catalog.agents.slice(), removed: raKey };
     } else if (method === "GET" && path0 === "agent/benchmarks") {
       var agParams = parseQuery(path);
       var agKey = agParams.agent_key || "";
@@ -2839,11 +2909,6 @@
 
   /* ============================ agent-first (dispatch 1) ============================ */
 
-  // Auto-discovery fires only when the catalog is empty (first-run UX).
-  // When agents are already known, render them and require the explicit Refresh button to
-  // re-discover - this avoids a metadata fan-out on every page load (instance-safety).
-  var _agentDiscoverFired = false;
-
   function loadAgents() {
     S.agentCatalog.loaded = false;
     S.agentCatalog.loadError = false;
@@ -2862,45 +2927,9 @@
       renderAgentsRail();
       renderGettingStarted();
       if (S.route.level === "home") { renderDetailContent(); }
-      // Auto-discover only when the catalog is empty (first-run UX); skip when agents are known.
-      if (!_agentDiscoverFired && S.agentCatalog.agents.length === 0) {
-        _agentDiscoverFired = true;
-        discoverAgents();
-      }
     }, function () {
       S.agentCatalog.loaded = true;
       S.agentCatalog.loadError = true;
-      renderAgentsRail();
-      if (S.route.level === "home") { renderDetailContent(); }
-      // On load error, treat catalog as empty and attempt discovery once.
-      if (!_agentDiscoverFired) {
-        _agentDiscoverFired = true;
-        discoverAgents();
-      }
-    });
-  }
-
-  function discoverAgents() {
-    S.agentCatalog.discovering = true;
-    S.agentCatalog.discoveryFailed = false;
-    renderAgentsRail();
-    if (S.route.level === "home") { renderDetailContent(); }
-    callApi("POST", "agents/discover").then(function (res) {
-      var d = res.data || {};
-      S.agentCatalog.discovering = false;
-      if (res.status === 200 && d.status === "ok") {
-        S.agentCatalog.agents = d.agents || S.agentCatalog.agents;
-        S.agentCatalog.discovered_at = d.discovered_at || null;
-        S.agentCatalog.discoveryFailed = false;
-      } else {
-        S.agentCatalog.discoveryFailed = true;
-      }
-      renderAgentsRail();
-      renderGettingStarted();
-      if (S.route.level === "home") { renderDetailContent(); }
-    }, function () {
-      S.agentCatalog.discovering = false;
-      S.agentCatalog.discoveryFailed = true;
       renderAgentsRail();
       if (S.route.level === "home") { renderDetailContent(); }
     });
@@ -2991,13 +3020,7 @@
     var html = '<div class="rail-head"><span class="rail-title">' + esc(t("rail.title")) + '</span>' +
       '<button class="rail-refresh" id="refreshAgents">' + esc(t("rail.refresh")) + '</button></div>';
 
-    if (S.agentCatalog.discovering) {
-      html += '<div class="rail-status">' + esc(t("rail.discovering")) + '</div>';
-    } else if (S.agentCatalog.discoveryFailed) {
-      html += '<div class="rail-status rail-status--warn">' + esc(t("rail.failed")) + '</div>';
-    }
-
-    if (S.agentCatalog.loaded && !S.agentCatalog.discovering && !S.agentCatalog.discoveryFailed && S.agentCatalog.agents.length > 0) {
+    if (S.agentCatalog.loaded && S.agentCatalog.agents.length > 0) {
       html += '<div class="rail-status">' + esc(t("rail.discovered", { n: S.agentCatalog.agents.length })) + '</div>';
     }
 
@@ -3016,10 +3039,7 @@
 
     var refreshBtn = byId("refreshAgents");
     if (refreshBtn) {
-      refreshBtn.addEventListener("click", function () {
-        _agentDiscoverFired = true;  // mark fired so an upcoming loadAgents() does not auto-discover
-        discoverAgents();
-      });
+      refreshBtn.addEventListener("click", function () { loadAgents(); });
     }
     qsa("[data-rail-key]", box).forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -3100,13 +3120,13 @@
     if (S.route.level === "golden-tag") { box.innerHTML = buildGoldenTagHtml(); wireGoldenTag(); return; }
   }
 
-  /* ---- home: agent gallery (cards) ---- */
+  /* ---- home: curated agent gallery + add-agent flow ---- */
 
   function buildHomeGalleryHtml() {
     var cat = S.agentCatalog;
     var html = '<div class="home">';
 
-    // Header: eyebrow + title + title-bar + sub, with a refresh action on the right.
+    // Header: eyebrow + title + title-bar + sub, with the primary "Add agent" action on the right.
     html += '<div class="home-head">' +
       '<div class="home-head-text">' +
         '<p class="sec-eyebrow">' + esc(t("home.eyebrow")) + '</p>' +
@@ -3114,40 +3134,56 @@
         '<div class="title-bar"></div>' +
         '<p class="home-sub">' + esc(t("home.sub")) + '</p>' +
       '</div>' +
-      '<button class="btn btn-ghost btn-sm" id="homeRefresh">' + esc(t("home.refresh")) + '</button>' +
+      '<button class="btn btn-primary" id="homeAddAgent">' + esc(t("home.add")) + '</button>' +
     '</div>';
 
-    // Status line
-    if (cat.discovering) {
-      html += '<p class="home-status">' + esc(t("home.discovering")) + '</p>';
-    } else if (cat.discoveryFailed) {
-      html += '<p class="home-status home-status--warn">' + esc(t("home.failed")) + '</p>';
-    } else if (cat.loaded && cat.agents.length > 0) {
-      html += '<p class="home-status">' + esc(t("home.found", { n: cat.agents.length })) + '</p>';
-    }
+    // Inline add-agent panel (project -> agents -> select), shown on demand.
+    if (S.addAgent.open) { html += buildAddAgentHtml(); }
 
     if (!cat.loaded) {
       html += '<p class="home-status">' + esc(t("home.loading")) + '</p></div>';
       return html;
     }
-
-    if (!cat.agents.length) {
-      html += '<div class="home-empty">' +
-        '<span class="home-empty-tile">' + I.bot + '</span>' +
-        '<h3>' + esc(t("home.emptyTitle")) + '</h3>' +
-        '<p>' + esc(t("home.emptyBody")) + '</p>' +
-      '</div></div>';
+    if (cat.loadError) {
+      html += '<div class="note note-error">' + esc(t("home.loadError")) + '</div></div>';
       return html;
     }
 
+    if (!cat.agents.length) {
+      // Skip the empty state while the add panel is open (it would be redundant).
+      if (!S.addAgent.open) {
+        html += '<div class="home-empty">' +
+          '<span class="home-empty-tile">' + I.bot + '</span>' +
+          '<h3>' + esc(t("home.emptyTitle")) + '</h3>' +
+          '<p>' + esc(t("home.emptyBody")) + '</p>' +
+          '<button class="btn btn-primary" id="homeEmptyAdd">' + esc(t("home.add")) + '</button>' +
+        '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    html += '<p class="home-status">' + esc(t("home.found", { n: cat.agents.length })) + '</p>';
     html += '<div class="agent-grid">';
     cat.agents.forEach(function (ag) {
-      html += '<button class="agent-card" data-home-key="' + esc(ag.agent_key) + '">' +
+      var confirming = S.agentRemoveConfirm === ag.agent_key;
+      var foot = confirming
+        ? '<div class="agent-card-confirm">' +
+            '<span class="agent-card-confirm-msg">' + esc(t("home.removeConfirm")) + '</span>' +
+            '<div class="agent-card-confirm-btns">' +
+              '<button class="btn btn-danger btn-sm" data-remove-go="' + esc(ag.agent_key) + '">' + esc(t("home.remove")) + '</button>' +
+              '<button class="btn btn-ghost btn-sm" data-remove-cancel>' + esc(t("common.cancel")) + '</button>' +
+            '</div>' +
+          '</div>'
+        : '<span class="agent-card-foot"><span>' + esc(t("home.open")) + '</span>' + I.chevron + '</span>';
+      html += '<div class="agent-card' + (confirming ? ' agent-card--confirm' : '') + '" data-home-key="' + esc(ag.agent_key) + '">' +
+        '<button class="agent-card-remove" data-remove-key="' + esc(ag.agent_key) + '" title="' + esc(t("home.remove")) + '" aria-label="' + esc(t("home.remove")) + '">' + I.x + '</button>' +
         '<span class="agent-card-tile">' + I.bot + '</span>' +
         '<span class="agent-card-name">' + esc(ag.agent_label || ag.agent_key) + '</span>' +
         (ag.project_key ? '<span class="agent-card-key mono">' + esc(ag.project_key) + '</span>' : '') +
-        '<span class="agent-card-foot"><span>' + esc(t("home.open")) + '</span>' + I.chevron + '</span>' +
-      '</button>';
+        (ag.agent_id ? '<span class="agent-card-id mono">' + esc(ag.agent_id) + '</span>' : '') +
+        foot +
+      '</div>';
     });
     html += '</div>';
 
@@ -3155,20 +3191,216 @@
     return html;
   }
 
-  function wireHomeGallery() {
-    var refresh = byId("homeRefresh");
-    if (refresh) {
-      refresh.addEventListener("click", function () {
-        _agentDiscoverFired = true;  // mark fired so a later loadAgents() does not auto-discover
-        discoverAgents();
+  function buildAddAgentHtml() {
+    var aa = S.addAgent;
+    var html = '<div class="add-agent">' +
+      '<div class="add-agent-head">' +
+        '<span class="add-agent-title">' + esc(t("aa.title")) + '</span>' +
+        '<button class="btn btn-ghost btn-sm" id="aaCancel">' + esc(t("common.cancel")) + '</button>' +
+      '</div>';
+    if (aa.error) { html += '<div class="note note-error">' + esc(aa.error) + '</div>'; }
+
+    // Project picker
+    html += '<label class="add-agent-field"><span class="field-label">' + esc(t("aa.project")) + '</span>';
+    if (aa.loadingProjects) {
+      html += '<span class="add-agent-note">' + esc(t("aa.loadingProjects")) + '</span>';
+    } else {
+      html += '<select class="input" id="aaProject"><option value="">' + esc(t("aa.projectPh")) + '</option>';
+      aa.projects.forEach(function (p) {
+        html += '<option value="' + esc(p.project_key) + '"' + (p.project_key === aa.projectKey ? ' selected' : '') + '>' +
+          esc(p.name) + ' (' + esc(p.project_key) + ')</option>';
       });
+      html += '</select>';
     }
-    qsa("[data-home-key]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        navigateTo("agent", btn.getAttribute("data-home-key"), null);
+    html += '</label>';
+
+    // Agents of the chosen project
+    if (aa.projectKey) {
+      if (aa.loadingAgents) {
+        html += '<p class="add-agent-note">' + esc(t("aa.loadingAgents")) + '</p>';
+      } else if (!aa.agents.length) {
+        html += '<p class="add-agent-note">' + esc(t("aa.noAgents")) + '</p>';
+      } else {
+        html += '<p class="add-agent-hint">' + esc(t("aa.pickHint")) + '</p>';
+        html += '<div class="add-agent-list">';
+        aa.agents.forEach(function (a) {
+          var sel = aa.selected[a.agent_id];
+          var checked = !!(sel && sel.checked);
+          var lbl = (sel && sel.label != null) ? sel.label : a.name;
+          html += '<div class="aa-row' + (checked ? " aa-row--on" : "") + '">' +
+            '<button type="button" class="chk' + (checked ? " on" : "") + '" data-aa-toggle="' + esc(a.agent_id) + '">' +
+              '<span class="box">' + I.check + '</span></button>' +
+            '<div class="aa-row-main">' +
+              '<input class="input aa-label" data-aa-label="' + esc(a.agent_id) + '" value="' + esc(lbl) + '" placeholder="' + esc(t("aa.namePh")) + '"' + (checked ? "" : " disabled") + '>' +
+              '<code class="aa-id">' + esc(a.agent_id) + '</code>' +
+            '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+        var nSel = _addAgentSelectedCount();
+        html += '<div class="add-agent-actions">' +
+          '<button class="btn btn-primary" id="aaAdd"' + ((nSel === 0 || aa.saving) ? " disabled" : "") + '>' +
+            esc(aa.saving ? t("common.loading") : t("aa.add", { n: nSel })) + '</button>' +
+        '</div>';
+      }
+    }
+
+    html += '</div>';  // add-agent
+    return html;
+  }
+
+  function _addAgentSelectedCount() {
+    var sel = S.addAgent.selected;
+    return Object.keys(sel).filter(function (k) { return sel[k] && sel[k].checked; }).length;
+  }
+
+  function wireHomeGallery() {
+    var addBtn = byId("homeAddAgent");
+    if (addBtn) { addBtn.addEventListener("click", openAddAgent); }
+    var emptyAdd = byId("homeEmptyAdd");
+    if (emptyAdd) { emptyAdd.addEventListener("click", openAddAgent); }
+
+    // Add-agent panel
+    var cancel = byId("aaCancel");
+    if (cancel) { cancel.addEventListener("click", cancelAddAgent); }
+    var proj = byId("aaProject");
+    if (proj) { proj.addEventListener("change", function () { onSelectProject(this.value); }); }
+    qsa("[data-aa-toggle]").forEach(function (b) {
+      b.addEventListener("click", function () { toggleAgentSelect(b.getAttribute("data-aa-toggle")); });
+    });
+    qsa("[data-aa-label]").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        var id = inp.getAttribute("data-aa-label");
+        if (S.addAgent.selected[id]) { S.addAgent.selected[id].label = inp.value; }
+      });
+    });
+    var addSel = byId("aaAdd");
+    if (addSel) { addSel.addEventListener("click", submitAddAgents); }
+
+    // Agent cards: open on click, remove via the corner button (with inline confirm).
+    qsa(".agent-card[data-home-key]").forEach(function (card) {
+      card.addEventListener("click", function (ev) {
+        if (ev.target.closest(".agent-card-remove") || ev.target.closest(".agent-card-confirm")) { return; }
+        navigateTo("agent", card.getAttribute("data-home-key"), null);
         renderAgentsRail();
       });
     });
+    qsa("[data-remove-key]").forEach(function (b) {
+      b.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        S.agentRemoveConfirm = b.getAttribute("data-remove-key");
+        renderDetailContent();
+      });
+    });
+    qsa("[data-remove-go]").forEach(function (b) {
+      b.addEventListener("click", function (ev) { ev.stopPropagation(); doRemoveAgent(b.getAttribute("data-remove-go")); });
+    });
+    qsa("[data-remove-cancel]").forEach(function (b) {
+      b.addEventListener("click", function (ev) { ev.stopPropagation(); S.agentRemoveConfirm = ""; renderDetailContent(); });
+    });
+  }
+
+  function openAddAgent() {
+    S.addAgent = { open: true, loadingProjects: true, projects: [], projectKey: "",
+      loadingAgents: false, agents: [], selected: {}, error: "", saving: false };
+    S.agentRemoveConfirm = "";
+    renderDetailContent();
+    callApi("GET", "agents/projects").then(function (res) {
+      var d = res.data || {};
+      S.addAgent.loadingProjects = false;
+      if (res.status === 200 && d.status === "ok") { S.addAgent.projects = d.projects || []; }
+      else { S.addAgent.error = t("aa.projectsError"); }
+      if (S.route.level === "home" && S.addAgent.open) { renderDetailContent(); }
+    }, function () {
+      S.addAgent.loadingProjects = false;
+      S.addAgent.error = t("aa.projectsError");
+      if (S.route.level === "home" && S.addAgent.open) { renderDetailContent(); }
+    });
+  }
+
+  function cancelAddAgent() { S.addAgent.open = false; renderDetailContent(); }
+
+  function onSelectProject(pk) {
+    S.addAgent.projectKey = pk;
+    S.addAgent.agents = [];
+    S.addAgent.selected = {};
+    S.addAgent.error = "";
+    if (!pk) { renderDetailContent(); return; }
+    S.addAgent.loadingAgents = true;
+    renderDetailContent();
+    callApi("GET", "agents/project-agents?project_key=" + encodeURIComponent(pk)).then(function (res) {
+      if (S.addAgent.projectKey !== pk) { return; }  // stale
+      var d = res.data || {};
+      S.addAgent.loadingAgents = false;
+      if (res.status === 200 && d.status === "ok") { S.addAgent.agents = d.agents || []; }
+      else { S.addAgent.error = t("aa.agentsError"); }
+      renderDetailContent();
+    }, function () {
+      if (S.addAgent.projectKey !== pk) { return; }
+      S.addAgent.loadingAgents = false;
+      S.addAgent.error = t("aa.agentsError");
+      renderDetailContent();
+    });
+  }
+
+  function toggleAgentSelect(agentId) {
+    var aa = S.addAgent;
+    var cur = aa.selected[agentId];
+    if (cur && cur.checked) {
+      cur.checked = false;
+    } else {
+      var name = "";
+      aa.agents.forEach(function (a) { if (a.agent_id === agentId) { name = a.name; } });
+      aa.selected[agentId] = { checked: true, label: (cur && cur.label != null) ? cur.label : (name || agentId) };
+    }
+    renderDetailContent();
+  }
+
+  function submitAddAgents() {
+    var aa = S.addAgent;
+    var picks = Object.keys(aa.selected)
+      .filter(function (k) { return aa.selected[k] && aa.selected[k].checked; })
+      .map(function (k) { return { agent_id: k, agent_label: aa.selected[k].label, modes: true }; });
+    if (!picks.length) { return; }
+    aa.saving = true;
+    aa.error = "";
+    renderDetailContent();
+    callApi("POST", "agents/connect", { project_key: aa.projectKey, agents: picks }).then(function (res) {
+      var d = res.data || {};
+      aa.saving = false;
+      if (res.status === 200 && d.status === "ok") {
+        S.agentCatalog.agents = d.agents || S.agentCatalog.agents;
+        S.agentCatalog.loaded = true;
+        S.addAgent.open = false;
+        toast(t("aa.added", { n: picks.length }));
+        renderDetailContent();
+        renderAgentsRail();
+        renderGettingStarted();
+      } else {
+        aa.error = (d.messages && d.messages.length) ? d.messages[0] : t("aa.addError");
+        renderDetailContent();
+      }
+    }, function () {
+      aa.saving = false;
+      aa.error = t("aa.addError");
+      renderDetailContent();
+    });
+  }
+
+  function doRemoveAgent(agentKey) {
+    callApi("POST", "agents/remove", { agent_key: agentKey }).then(function (res) {
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        S.agentCatalog.agents = d.agents || [];
+        S.agentRemoveConfirm = "";
+        toast(t("home.removed"));
+        renderDetailContent();
+        renderAgentsRail();
+        renderGettingStarted();
+      } else {
+        toast(t("home.removeError"));
+      }
+    }, function () { toast(t("home.removeError")); });
   }
 
   function buildAgentViewHtml() {

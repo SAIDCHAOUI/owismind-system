@@ -105,6 +105,149 @@ def write_benchmark_var(obj):
     proj.set_variables(allvars)
 
 
+# --- agent catalog + read-only discovery ------------------------------------
+# The launcher curates its agent list ON DEMAND: pick a DSS project, list the agents inside it
+# (LLM Mesh ids that start with "agent:"), then add the selected ones. Discovery is STRICTLY
+# READ-ONLY (list calls only) and BOUNDED, so a handler can never trigger heavy/unbounded work on
+# the instance. The chosen agents are stored in the ``agents`` key of the ``benchmark`` variable
+# (no new dataset, no code change to add an agent). Writes go through _persist_agents under the
+# shared registry lock (same variable), mirroring how the benchmark registry is persisted.
+
+AGENT_ID_PREFIX = "agent:"
+_MAX_PROJECTS = 500
+_MAX_AGENTS = 200
+
+
+def agents_catalog():
+    """The curated catalog (the agents the admin has added) from the variable. Never raises -> []."""
+    return registry.parse_agents(read_raw_benchmark_var().get("agents"))
+
+
+def list_projects():
+    """``[{project_key, name}]`` for projects this identity can see (sorted, bounded). Read-only.
+
+    Reflects the running identity's permissions. One cheap catalog call for names when the DSS
+    version supports it, else keys only. Never raises -> [].
+    """
+    try:
+        client = dataiku.api_client()
+    except Exception:
+        return []
+    try:
+        out = []
+        for s in (client.list_projects() or []):
+            if not isinstance(s, dict):
+                continue
+            pk = str(s.get("projectKey") or "").strip()
+            if pk:
+                out.append({"project_key": pk, "name": (str(s.get("name") or pk).strip() or pk)})
+        if out:
+            out.sort(key=lambda p: p["name"].lower())
+            return out[:_MAX_PROJECTS]
+    except Exception:
+        pass
+    try:
+        keys = sorted(str(k) for k in (client.list_project_keys() or []))
+        return [{"project_key": k, "name": k} for k in keys[:_MAX_PROJECTS]]
+    except Exception:
+        logger.warning("benchmark webapp - could not list projects")
+        return []
+
+
+def _llm_name(llm, llm_id):
+    """Best-effort human-friendly name for an LLM/agent list item; falls back to the id."""
+    try:
+        raw = llm.get_raw() if hasattr(llm, "get_raw") else None
+    except Exception:
+        raw = None
+    if isinstance(raw, dict):
+        for key in ("friendlyName", "name", "label", "description"):
+            val = raw.get(key)
+            if val and str(val).strip():
+                return str(val).strip()
+    val = getattr(llm, "description", None)
+    if val and str(val).strip() and str(val).strip() != llm_id:
+        return str(val).strip()
+    return llm_id
+
+
+def list_project_agents(project_key):
+    """``[{agent_id, name}]`` for the agents in one project (LLMs with id 'agent:'). Read-only, bounded.
+
+    Only projects visible to this identity are honored. Never raises -> [].
+    """
+    pk = str(project_key or "").strip()
+    if not pk:
+        return []
+    try:
+        client = dataiku.api_client()
+        if pk not in {str(k) for k in (client.list_project_keys() or [])}:
+            return []  # not visible to this identity
+        proj = client.get_project(pk)
+    except Exception:
+        logger.warning("benchmark webapp - could not open project %s", pk)
+        return []
+    agents = []
+    try:
+        for llm in (proj.list_llms() or []):
+            llm_id = getattr(llm, "id", None)
+            if not llm_id or not str(llm_id).startswith(AGENT_ID_PREFIX):
+                continue
+            agents.append({"agent_id": str(llm_id), "name": _llm_name(llm, str(llm_id))})
+            if len(agents) >= _MAX_AGENTS:
+                logger.warning("benchmark webapp - project=%s hit MAX_AGENTS; list truncated", pk)
+                break
+    except Exception:
+        logger.warning("benchmark webapp - could not list agents for %s", pk)
+        return []
+    agents.sort(key=lambda a: a["name"].lower())
+    return agents
+
+
+def _persist_agents(agents_list):
+    """Write the ``agents`` catalog back into the variable, preserving all other keys. Caller holds lock."""
+    raw = read_raw_benchmark_var()
+    raw = dict(raw) if isinstance(raw, dict) else {}
+    raw["agents"] = registry.serialize_agents(agents_list)
+    write_benchmark_var(raw)
+
+
+def connect_agents(project_key, selections):
+    """Add the selected agents of ``project_key`` to the catalog. Returns ``(result, errors)``.
+
+    ``selections`` is a list of ``{agent_id, agent_label, modes}``; agent_key is derived
+    deterministically. Existing entries (same key) are updated (label / modes). RMW under the lock.
+    """
+    pk = str(project_key or "").strip()
+    if not pk:
+        return None, ["a project is required"]
+    items = [s for s in (selections or [])
+             if isinstance(s, dict) and str(s.get("agent_id") or "").strip()]
+    if not items:
+        return None, ["select at least one agent"]
+    new_agents = [{
+        "project_key": pk,
+        "agent_id": s.get("agent_id"),
+        "agent_label": s.get("agent_label"),
+        "modes": bool(s.get("modes", True)),
+    } for s in items]
+    with _REGISTRY_LOCK:
+        catalog = registry.upsert_agents(agents_catalog(), new_agents)
+        _persist_agents(catalog)
+    return {"agents": catalog}, []
+
+
+def remove_agent_from_catalog(agent_key):
+    """Remove one agent from the catalog by agent_key. Returns ``(result, errors)``. RMW under the lock."""
+    akey = str(agent_key or "").strip()
+    if not akey:
+        return None, ["agent_key is required"]
+    with _REGISTRY_LOCK:
+        catalog = registry.remove_agent(agents_catalog(), akey)
+        _persist_agents(catalog)
+    return {"agents": catalog, "removed": akey}, []
+
+
 # --- dataset reads (bounded, NaN-safe) --------------------------------------
 
 def read_dataset(name, drop_cols=(), keep_cols=None, max_rows=MAX_ROWS):
@@ -842,138 +985,6 @@ def reset_run_request():
     return {"cleared": True}, []
 
 
-# --- agent catalog: discovery + manual connect --------------------------------
-
-def agents_catalog():
-    """The cached agent catalog from the variable (no discovery call). Returns list. Never raises."""
-    try:
-        raw = read_raw_benchmark_var()
-        agents = raw.get("agents")
-        if isinstance(agents, list):
-            return [a for a in agents if isinstance(a, dict)]
-        return []
-    except Exception:
-        return []
-
-
-def connect_agent(agent_key, agent_label, project_key, agent_id, modes=True):
-    """Upsert one agent entry into the variable's agents catalog by agent_key. Returns (result, errors).
-
-    Creates a new entry when agent_key is unknown; updates the existing entry when it already
-    exists. RMW under _REGISTRY_LOCK so concurrent calls cannot clobber each other.
-    """
-    akey = str(agent_key).strip() if agent_key else ""
-    if not akey:
-        return None, ["agent_key is required"]
-    entry = {
-        "agent_key": akey,
-        "agent_label": str(agent_label or "").strip() or akey,
-        "project_key": str(project_key or "").strip(),
-        "agent_id": str(agent_id or "").strip(),
-        "modes": bool(modes),
-    }
-    with _REGISTRY_LOCK:
-        raw = read_raw_benchmark_var()
-        raw = dict(raw) if isinstance(raw, dict) else {}
-        existing = raw.get("agents")
-        catalog = [a for a in (existing or []) if isinstance(a, dict)]
-        replaced = False
-        updated = []
-        for a in catalog:
-            if str(a.get("agent_key", "")).strip() == akey:
-                updated.append(entry)
-                replaced = True
-            else:
-                updated.append(a)
-        if not replaced:
-            updated.append(entry)
-        raw["agents"] = updated
-        write_benchmark_var(raw)
-    return {"agent_key": akey, "created": not replaced}, []
-
-
-def _accessible_project_keys(client):
-    """Best-effort list of project keys accessible via the API client. Never raises."""
-    try:
-        return client.list_project_keys()
-    except Exception:
-        pass
-    try:
-        return [p.project_key for p in client.list_projects()]
-    except Exception:
-        return []
-
-
-def _llm_label(llm):
-    """Best-effort human label from an LLM object (dict or object with attributes). Never raises."""
-    if isinstance(llm, dict):
-        return (llm.get("label") or llm.get("name") or llm.get("id") or "")
-    for attr in ("label", "name", "id"):
-        val = getattr(llm, attr, None)
-        if val:
-            return str(val)
-    return ""
-
-
-def discover_agents():
-    """Enumerate LLM-based agents across accessible DSS projects (best-effort, cached).
-
-    Iterates every accessible project and lists its LLMs via the dataikuapi client, collecting
-    entries whose id starts with "agent:". Writes the discovered catalog into the variable under
-    "agents" with a discovery timestamp. On ANY exception (permission denied, API not available,
-    unknown dataikuapi version) degrades gracefully to the manual catalog (agents_catalog()).
-
-    NEEDS INSTANCE VERIFICATION:
-      - dataikuapi Project.list_llms() existence and return type (list of dicts or objects).
-      - The shape of each LLM entry (id field vs attribute, label/name field).
-      - client.list_project_keys() vs client.list_projects() for project enumeration.
-    """
-    try:
-        client = dataiku.api_client()
-        found = []
-        for pkey in _accessible_project_keys(client):
-            try:
-                proj = client.get_project(pkey)
-                for llm in (proj.list_llms() or []):
-                    lid = None
-                    if isinstance(llm, dict):
-                        lid = llm.get("id")
-                    else:
-                        lid = getattr(llm, "id", None)
-                    if not lid or not str(lid).startswith("agent:"):
-                        continue
-                    label = _llm_label(llm) or str(lid)
-                    found.append({
-                        "project_key": pkey,
-                        "agent_id": str(lid),
-                        "agent_label": label,
-                        "agent_key": registry.slug_agent_key(label),
-                        "modes": True,
-                    })
-            except Exception:
-                continue
-        # Merge by agent_key: keep existing manual entries, add/update discovered ones.
-        discovered_at = _now_iso()
-        merged = found
-        with _REGISTRY_LOCK:
-            raw = read_raw_benchmark_var()
-            raw = dict(raw) if isinstance(raw, dict) else {}
-            existing = raw.get("agents")
-            catalog = [a for a in (existing or []) if isinstance(a, dict)]
-            by_key = {str(a.get("agent_key") or "").strip(): a
-                      for a in catalog
-                      if str(a.get("agent_key") or "").strip()}
-            for entry in found:
-                akey = str(entry.get("agent_key") or "").strip()
-                if akey:
-                    by_key[akey] = entry  # discovered is fresher; overwrites
-            merged = list(by_key.values())
-            raw["agents"] = merged
-            raw["agents_discovered_at"] = discovered_at
-            write_benchmark_var(raw)
-        return {"status": "ok", "discovery": "ok", "agents": merged,
-                "discovered_at": discovered_at}
-    except Exception:
-        logger.warning("benchmark webapp - agent discovery failed; using cached catalog\n%s",
-                       traceback.format_exc())
-        return {"status": "ok", "discovery": "unavailable", "agents": agents_catalog()}
+# NOTE: the old dump-all discovery (discover_agents / connect_agent / _llm_label) was replaced by
+# the curated add-agent flow at the top of this module (agents_catalog / list_projects /
+# list_project_agents / connect_agents / remove_agent_from_catalog). Nothing lives here anymore.

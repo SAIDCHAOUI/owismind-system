@@ -60,43 +60,47 @@ def _safe(fn):
     return wrapped
 
 
-# --- agents: catalog, discover, connect ------------------------------------
+# --- agents: curated catalog + on-demand discovery (pick a project, list its agents) --------
 
 @app.route("/api/agents", methods=["GET"])
 @_safe
 def api_agents():
-    """The current agent catalog (as stored in the variable) + discovery timestamp."""
-    catalog = dss.agents_catalog()
-    discovered_at = ""
-    try:
-        raw = dss.read_raw_benchmark_var()
-        discovered_at = str((raw or {}).get("agents_discovered_at") or "") \
-            if isinstance(raw, dict) else ""
-    except Exception:
-        pass
-    return jsonify({"status": "ok", "agents": catalog, "discovered_at": discovered_at})
+    """The curated agent catalog (the agents the admin has added), stored in the variable."""
+    return jsonify({"status": "ok", "agents": dss.agents_catalog()})
 
 
-@app.route("/api/agents/discover", methods=["POST"])
+@app.route("/api/agents/projects", methods=["GET"])
 @_safe
-def api_agents_discover():
-    """Discover LLM agents across accessible DSS projects, merge into catalog, return result."""
-    result = dss.discover_agents()
-    return jsonify({"status": "ok", **result})
+def api_agents_projects():
+    """DSS projects visible to this webapp's identity (for the add-agent picker). Read-only."""
+    return jsonify({"status": "ok", "projects": dss.list_projects()})
+
+
+@app.route("/api/agents/project-agents", methods=["GET"])
+@_safe
+def api_agents_project_agents():
+    """The agents (id + friendly name) inside one project. Read-only, bounded."""
+    project_key = request.args.get("project_key") or ""
+    return jsonify({"status": "ok", "agents": dss.list_project_agents(project_key)})
 
 
 @app.route("/api/agents/connect", methods=["POST"])
 @_safe
 def api_agents_connect():
-    """Manually upsert one agent into the catalog by agent_key."""
+    """Add the selected agents of a project to the catalog (id + editable label + modes flag)."""
     body = request.get_json(silent=True) or {}
-    result, errors = dss.connect_agent(
-        body.get("agent_key"),
-        body.get("agent_label"),
-        body.get("project_key"),
-        body.get("agent_id"),
-        bool(body.get("modes", True)),
-    )
+    result, errors = dss.connect_agents(body.get("project_key"), body.get("agents"))
+    if errors:
+        return _err("invalid_agent", 400, {"messages": errors})
+    return jsonify({"status": "ok", **result})
+
+
+@app.route("/api/agents/remove", methods=["POST"])
+@_safe
+def api_agents_remove():
+    """Remove one agent from the catalog by agent_key (benchmarks/results are untouched)."""
+    body = request.get_json(silent=True) or {}
+    result, errors = dss.remove_agent_from_catalog(body.get("agent_key"))
     if errors:
         return _err("invalid_agent", 400, {"messages": errors})
     return jsonify({"status": "ok", **result})

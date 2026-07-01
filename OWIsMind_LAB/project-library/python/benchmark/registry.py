@@ -79,6 +79,83 @@ def names_for_agent(registry, agent_key):
             if isinstance(e, dict) and _clean(e.get("agent_key")) == akey and _clean(e.get("name"))}
 
 
+# --- agent catalog (the curated set of agents the launcher can benchmark) ----
+# The launcher builds this on demand (pick a DSS project -> list its agents -> select the ones you
+# want). It lives in the ``agents`` key of the same ``benchmark`` variable, so adding an agent never
+# requires a code change. Each entry is {agent_key, agent_label, project_key, agent_id, modes}. The
+# agent_key is DETERMINISTIC per (project_key, agent_id) so re-adding an agent keeps benchmarks linked.
+
+def agent_catalog_key(project_key, agent_id):
+    """Stable logical key for a catalog agent, derived from (project_key, agent_id). Pure, never raises."""
+    suffix = _clean(agent_id)
+    if suffix.startswith("agent:"):
+        suffix = suffix[len("agent:"):]
+    return slug_agent_key(_clean(project_key) + "_" + suffix)
+
+
+def normalize_agent(raw):
+    """Return a normalized catalog agent, or None when unusable. Never raises.
+
+    Requires project_key + agent_id. agent_key defaults to the deterministic catalog key; agent_label
+    defaults to the agent_id (so a nameless agent still shows something). ``modes`` is a bool: whether
+    the agent understands the mode tokens (Smart/Pro/Claude) - defaults to True.
+    """
+    if not isinstance(raw, dict):
+        return None
+    project_key = _clean(raw.get("project_key"))
+    agent_id = _clean(raw.get("agent_id"))
+    if not project_key or not agent_id:
+        return None
+    agent_key = _clean(raw.get("agent_key")) or agent_catalog_key(project_key, agent_id)
+    modes = raw.get("modes")
+    return {
+        "agent_key": agent_key,
+        "agent_label": _clean(raw.get("agent_label")) or agent_id,
+        "project_key": project_key,
+        "agent_id": agent_id,
+        "modes": True if modes is None else bool(modes),
+    }
+
+
+def parse_agents(raw):
+    """Parse the ``agents`` block into an ordered, de-duped list of catalog agents. Pure, never raises."""
+    parsed = _coerce_obj(raw)
+    out, seen = [], set()
+    items = parsed if isinstance(parsed, list) else []
+    for value in items:
+        agent = normalize_agent(value)
+        if agent and agent["agent_key"] not in seen:
+            seen.add(agent["agent_key"])
+            out.append(agent)
+    return out
+
+
+def upsert_agents(agents_list, new_agents):
+    """Return a new catalog with ``new_agents`` added or updated (matched by agent_key). Never raises."""
+    current = parse_agents(agents_list)
+    by_key = {a["agent_key"]: a for a in current}
+    order = [a["agent_key"] for a in current]
+    for raw in (new_agents or []):
+        agent = normalize_agent(raw)
+        if not agent:
+            continue
+        if agent["agent_key"] not in by_key:
+            order.append(agent["agent_key"])
+        by_key[agent["agent_key"]] = agent
+    return [by_key[k] for k in order]
+
+
+def remove_agent(agents_list, agent_key):
+    """Return a new catalog without the given agent_key. Never raises."""
+    akey = _clean(agent_key)
+    return [a for a in parse_agents(agents_list) if a["agent_key"] != akey]
+
+
+def serialize_agents(agents_list):
+    """Return the catalog as a plain JSON-friendly list for writing back to the variable."""
+    return [dict(a) for a in parse_agents(agents_list)]
+
+
 # --- parse / normalize the registry -----------------------------------------
 
 def _normalize_modes(value):
