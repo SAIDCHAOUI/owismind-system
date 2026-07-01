@@ -486,6 +486,55 @@ textarea.input{resize:vertical;min-height:84px;}
 /* Master-detail body */
 .body { display: flex; flex-direction: column; }
 .panel[data-panel="benchmarks"].on { display: flex; flex-direction: row; min-height: 0; flex: 1; }
+/* Home: the rail is hidden, the agent gallery fills the whole pane. */
+.panel[data-panel="benchmarks"].home-mode .rail { display: none; }
+
+/* ---- home: agent gallery (cards) ---- */
+.home { padding: 8px 12px 24px; }
+.home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 6px; }
+.home-head-text { min-width: 0; }
+.home-title { font-size: 28px; font-weight: 800; letter-spacing: -.01em; margin: 0; line-height: 1.04; }
+.home-head .title-bar { margin: 14px 0 0; }
+.home-sub { color: var(--ink-2); font-size: 14px; margin: 14px 0 0; max-width: 520px; }
+.home-status { color: var(--ink-2); font-size: .82rem; margin: 18px 0 0; }
+.home-status--warn { color: var(--red); }
+
+.agent-grid {
+  display: grid; gap: 16px; margin-top: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.agent-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  border: 1px solid var(--line); background: var(--panel);
+  padding: 20px; text-align: left; cursor: pointer; width: 100%;
+  transition: border-color .12s, background .12s;
+}
+.agent-card:hover { border-color: var(--ink); }
+.agent-card-tile {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border: 1px solid var(--line); color: var(--orange); background: var(--orange-soft);
+}
+.agent-card-tile svg { width: 22px; height: 22px; }
+.agent-card-name { font-size: 1.02rem; font-weight: 700; color: var(--ink); line-height: 1.25; }
+.agent-card-key { font-size: .76rem; color: var(--ink-2); }
+.agent-card-foot {
+  display: flex; align-items: center; gap: 4px; margin-top: 4px;
+  font-size: .8rem; font-weight: 700; color: var(--orange);
+}
+.agent-card-foot svg { width: 15px; height: 15px; }
+.agent-card:hover .agent-card-foot svg { transform: translateX(2px); transition: transform .12s; }
+
+.home-empty {
+  margin-top: 24px; border: 1px solid var(--line); background: var(--panel);
+  padding: 40px 24px; text-align: center; max-width: 520px;
+}
+.home-empty-tile {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border: 1px solid var(--line); color: var(--orange); background: var(--orange-soft); margin-bottom: 14px;
+}
+.home-empty-tile svg { width: 24px; height: 24px; }
+.home-empty h3 { font-size: 1.05rem; font-weight: 700; margin: 0 0 8px; }
+.home-empty p { color: var(--ink-2); margin: 0; font-size: .9rem; line-height: 1.5; }
 
 /* Agents rail */
 .rail {
@@ -598,6 +647,30 @@ textarea.input{resize:vertical;min-height:84px;}
 .bd4-meta b { color: var(--ink); font-weight: 700; margin-right: 4px; }
 
 .bd4-ledger { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+
+/* Status summary: explainer line + three stat tiles (replaces the mixed-unit chips). */
+.bd4-summary {
+  border: 1px solid var(--line); background: var(--soft);
+  padding: 16px 18px; margin-bottom: 18px;
+}
+.bd4-how { margin: 0 0 14px; font-size: .9rem; color: var(--ink); line-height: 1.5; }
+.bd4-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+.bd4-stat {
+  flex: 1 1 120px; min-width: 110px;
+  border: 1px solid var(--line); background: var(--panel);
+  border-top: 3px solid var(--line);
+  padding: 12px 14px;
+}
+.bd4-stat--run { border-top-color: var(--orange); }
+.bd4-stat-val { display: block; font-size: 1.45rem; font-weight: 800; color: var(--ink); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.bd4-stat-lbl { display: block; margin-top: 6px; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+
+/* Results section header + chip legend */
+.bd4-results-head { margin: 22px 0 10px; }
+.bd4-results-title { font-size: 1.05rem; font-weight: 800; margin: 0; }
+.bd4-results-sub { margin: 6px 0 0; font-size: .85rem; color: var(--ink-2); }
+.bd4-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+.bd4-legend-item { display: inline-flex; align-items: center; gap: 7px; font-size: .8rem; color: var(--ink-2); }
 
 .bd4-run-status {
   padding: 8px 12px;

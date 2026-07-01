@@ -27,7 +27,9 @@
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 5l12 7-12 7z"/></svg>',
     gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>',
-    theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>'
+    theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>',
+    bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="11"/><path d="M12 4v4M9 13h0M15 13h0"/><path d="M2 12v3M22 12v3"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>'
   };
 
   /* ============================ i18n ============================ */
@@ -466,6 +468,21 @@
 
     "bcr.home": { en: "Agents", fr: "Agents" },
 
+    /* --- home gallery (agent picker as cards) --- */
+    "home.eyebrow":     { en: "Agents",            fr: "Agents" },
+    "home.title":       { en: "Choose an agent",   fr: "Choisissez un agent" },
+    "home.sub":         { en: "Pick an agent to see its benchmarks, create new ones and run them.",
+                          fr: "Choisissez un agent pour voir ses benchmarks, en creer et les lancer." },
+    "home.refresh":     { en: "Refresh",           fr: "Actualiser" },
+    "home.open":        { en: "Open",              fr: "Ouvrir" },
+    "home.loading":     { en: "Loading agents...", fr: "Chargement des agents..." },
+    "home.discovering": { en: "Discovering agents...", fr: "Decouverte des agents..." },
+    "home.failed":      { en: "Discovery failed - known agents are shown.", fr: "Decouverte echouee - les agents connus sont affiches." },
+    "home.found":       { en: "{n} agent(s)",      fr: "{n} agent(s)" },
+    "home.emptyTitle":  { en: "No agent yet",      fr: "Aucun agent" },
+    "home.emptyBody":   { en: "Refresh to discover agents, or add one manually in Settings.",
+                          fr: "Actualisez pour decouvrir des agents, ou ajoutez-en un manuellement dans Parametres." },
+
     "agv.new":      { en: "New benchmark",         fr: "Nouveau benchmark" },
     "agv.nTagged":  { en: "{n} tagged question(s)", fr: "{n} question(s) taguee(s)" },
     "agv.tagLink":  { en: "Tag questions to this agent", fr: "Taguer des questions pour cet agent" },
@@ -511,6 +528,30 @@
       en: "{n} pending cell(s) since the last run. Run pending to test them.",
       fr: "{n} cellule(s) en attente depuis le dernier run. Lancez les questions en attente pour les tester."
     },
+
+    /* --- benchmark detail: clearer status summary + legend --- */
+    "bd4.how": {
+      en: "Each active question is tested once per mode: {q} question(s) x {m} mode(s) = {t} test(s).",
+      fr: "Chaque question active est testee une fois par mode : {q} question(s) x {m} mode(s) = {t} test(s)."
+    },
+    "bd4.stat.tested": { en: "Tested",         fr: "Testees" },
+    "bd4.stat.toRun":  { en: "To run",         fr: "A lancer" },
+    "bd4.stat.redo":   { en: "Flagged to redo", fr: "A refaire" },
+    "bd4.statOf":      { en: "{n} of {t}",     fr: "{n} sur {t}" },
+    "bd4.runPending":  { en: "Run pending ({n})", fr: "Lancer en attente ({n})" },
+    "bd4.runPendingHint": {
+      en: "Runs only the tests not done yet, plus any question flagged to redo.",
+      fr: "Lance seulement les tests pas encore faits, plus les questions marquees a refaire."
+    },
+    "bd4.allTested":   { en: "All tests are done. Flag a question to redo, or re-run everything.",
+                         fr: "Tous les tests sont faits. Marquez une question a refaire, ou relancez tout." },
+    "bd4.nothingToRun":{ en: "Nothing to run", fr: "Rien a lancer" },
+    "bd4.resultsTitle":{ en: "Results by question", fr: "Resultats par question" },
+    "bd4.resultsSub":  { en: "One cell per mode. Tick Redo to re-test a question at the next run.",
+                         fr: "Une cellule par mode. Cochez A refaire pour retester une question au prochain lancement." },
+    "bd4.legendOk":    { en: "Correct",        fr: "Correcte" },
+    "bd4.legendMiss":  { en: "Incorrect",      fr: "Incorrecte" },
+    "bd4.legendPending": { en: "Not run yet",  fr: "Pas encore lancee" },
 
     /* --- Screen 5: run lifecycle --- */
     "run.progress":     { en: "Running... {scored} / {total}", fr: "En cours... {scored} / {total}" },
@@ -743,7 +784,7 @@
       { question_id: "a_offer002", question: "Quelle est la hierarchie d'offre pour le produit IPL ?", reference_answer: "IPL est un SolutionLine (niveau intermediaire de la hierarchie d'offre).", expected_value: "", expected_value_type: "", category: "offre", language: "fr", active: false, notes: "desactivee le temps de valider la reponse", expected_sql: "", expected_tool: "" }
     ],
     benchmarks: [
-      { benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart", "Claude"], status: "active", created_at: "2026-06-25T09:00:00Z", n_questions: 3, n_done: 2, n_pending: 1, n_redo: 1, n_scored: 2, n_runs: 2, last_run_timestamp: "2026-06-26 09:02:34", accuracy: 0.5, accuracy_pct: "50%", band: "low" },
+      { benchmark_id: "bm_said01", name: "said", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart", "Claude"], status: "active", created_at: "2026-06-25T09:00:00Z", n_questions: 3, n_done: 3, n_pending: 3, n_redo: 1, n_scored: 2, n_runs: 2, last_run_timestamp: "2026-06-26 09:02:34", accuracy: 0.5, accuracy_pct: "50%", band: "low" },
       { benchmark_id: "bm_quick02", name: "tickets smoke", agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", modes: ["Smart"], status: "active", created_at: "2026-06-29T11:00:00Z", n_questions: 1, n_done: 0, n_pending: 1, n_redo: 0, n_scored: 0, n_runs: 0, last_run_timestamp: "", accuracy: 0, accuracy_pct: "-", band: "none" }
     ],
     bench_agents: [
@@ -759,7 +800,7 @@
         benchmark_id: "bm_said01", name: "said",
         agent: { agent_key: "orchestrator", agent_label: "OWIsMind Orchestrator (DEV)", project_key: "OWISMIND_DEV", agent_id: "agent:038G7mlF" },
         modes: ["Smart", "Claude"],
-        ledger: { tested: 1, pending: 2, redo: 1 },
+        ledger: { tested: 3, pending: 3, redo: 1 },
         runnable: 4,
         accuracy_pct: "33%",
         questions: [
@@ -2820,6 +2861,7 @@
       }
       renderAgentsRail();
       renderGettingStarted();
+      if (S.route.level === "home") { renderDetailContent(); }
       // Auto-discover only when the catalog is empty (first-run UX); skip when agents are known.
       if (!_agentDiscoverFired && S.agentCatalog.agents.length === 0) {
         _agentDiscoverFired = true;
@@ -2829,6 +2871,7 @@
       S.agentCatalog.loaded = true;
       S.agentCatalog.loadError = true;
       renderAgentsRail();
+      if (S.route.level === "home") { renderDetailContent(); }
       // On load error, treat catalog as empty and attempt discovery once.
       if (!_agentDiscoverFired) {
         _agentDiscoverFired = true;
@@ -2841,6 +2884,7 @@
     S.agentCatalog.discovering = true;
     S.agentCatalog.discoveryFailed = false;
     renderAgentsRail();
+    if (S.route.level === "home") { renderDetailContent(); }
     callApi("POST", "agents/discover").then(function (res) {
       var d = res.data || {};
       S.agentCatalog.discovering = false;
@@ -2853,10 +2897,12 @@
       }
       renderAgentsRail();
       renderGettingStarted();
+      if (S.route.level === "home") { renderDetailContent(); }
     }, function () {
       S.agentCatalog.discovering = false;
       S.agentCatalog.discoveryFailed = true;
       renderAgentsRail();
+      if (S.route.level === "home") { renderDetailContent(); }
     });
   }
 
@@ -3044,10 +3090,85 @@
   function renderDetailContent() {
     var box = byId("detailContent");
     if (!box) { return; }
-    if (S.route.level === "home") { box.innerHTML = ""; return; }
+    // Home shows the agents as a full-width card gallery; the left rail only
+    // appears once an agent is opened (toggled via the "home-mode" class).
+    var panel = document.querySelector('.panel[data-panel="benchmarks"]');
+    if (panel) { panel.classList.toggle("home-mode", S.route.level === "home"); }
+    if (S.route.level === "home") { box.innerHTML = buildHomeGalleryHtml(); wireHomeGallery(); return; }
     if (S.route.level === "agent") { box.innerHTML = buildAgentViewHtml(); wireAgentView(); return; }
     if (S.route.level === "benchmark") { renderBenchmarkDetail(); return; }
     if (S.route.level === "golden-tag") { box.innerHTML = buildGoldenTagHtml(); wireGoldenTag(); return; }
+  }
+
+  /* ---- home: agent gallery (cards) ---- */
+
+  function buildHomeGalleryHtml() {
+    var cat = S.agentCatalog;
+    var html = '<div class="home">';
+
+    // Header: eyebrow + title + title-bar + sub, with a refresh action on the right.
+    html += '<div class="home-head">' +
+      '<div class="home-head-text">' +
+        '<p class="sec-eyebrow">' + esc(t("home.eyebrow")) + '</p>' +
+        '<h2 class="home-title">' + esc(t("home.title")) + '</h2>' +
+        '<div class="title-bar"></div>' +
+        '<p class="home-sub">' + esc(t("home.sub")) + '</p>' +
+      '</div>' +
+      '<button class="btn btn-ghost btn-sm" id="homeRefresh">' + esc(t("home.refresh")) + '</button>' +
+    '</div>';
+
+    // Status line
+    if (cat.discovering) {
+      html += '<p class="home-status">' + esc(t("home.discovering")) + '</p>';
+    } else if (cat.discoveryFailed) {
+      html += '<p class="home-status home-status--warn">' + esc(t("home.failed")) + '</p>';
+    } else if (cat.loaded && cat.agents.length > 0) {
+      html += '<p class="home-status">' + esc(t("home.found", { n: cat.agents.length })) + '</p>';
+    }
+
+    if (!cat.loaded) {
+      html += '<p class="home-status">' + esc(t("home.loading")) + '</p></div>';
+      return html;
+    }
+
+    if (!cat.agents.length) {
+      html += '<div class="home-empty">' +
+        '<span class="home-empty-tile">' + I.bot + '</span>' +
+        '<h3>' + esc(t("home.emptyTitle")) + '</h3>' +
+        '<p>' + esc(t("home.emptyBody")) + '</p>' +
+      '</div></div>';
+      return html;
+    }
+
+    html += '<div class="agent-grid">';
+    cat.agents.forEach(function (ag) {
+      html += '<button class="agent-card" data-home-key="' + esc(ag.agent_key) + '">' +
+        '<span class="agent-card-tile">' + I.bot + '</span>' +
+        '<span class="agent-card-name">' + esc(ag.agent_label || ag.agent_key) + '</span>' +
+        (ag.project_key ? '<span class="agent-card-key mono">' + esc(ag.project_key) + '</span>' : '') +
+        '<span class="agent-card-foot"><span>' + esc(t("home.open")) + '</span>' + I.chevron + '</span>' +
+      '</button>';
+    });
+    html += '</div>';
+
+    html += '</div>';  // home
+    return html;
+  }
+
+  function wireHomeGallery() {
+    var refresh = byId("homeRefresh");
+    if (refresh) {
+      refresh.addEventListener("click", function () {
+        _agentDiscoverFired = true;  // mark fired so a later loadAgents() does not auto-discover
+        discoverAgents();
+      });
+    }
+    qsa("[data-home-key]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        navigateTo("agent", btn.getAttribute("data-home-key"), null);
+        renderAgentsRail();
+      });
+    });
   }
 
   function buildAgentViewHtml() {
@@ -3382,22 +3503,28 @@
       return html;
     }
 
-    // Fix I-2: state 4e - pending cells exist AND benchmark has run before
-    var hasPrevRun = det.accuracy_pct != null && det.accuracy_pct !== "-";
+    // Clear status summary: one block that explains the unit (a "test" = question x
+    // mode), shows the counts, and tells whether anything is left to run. Replaces the
+    // old duplicate "pending strip + ledger chips" that mixed cells and questions.
+    var nQ = qs.length;
+    var nM = modes.length;
+    var totalTests = (ledger.tested || 0) + (ledger.pending || 0);  // = question x mode cells
     var runnableCount = det.runnable || 0;
-    if (hasPrevRun && runnableCount > 0) {
-      html += '<div class="bd4-pending-strip">' +
-        '<p>' + esc(t("bd.newPending", { n: runnableCount })) + '</p>' +
-        '<button class="btn btn-primary btn-sm" id="bd4StripRunPending">' + esc(t("bd.runPending")) + '</button>' +
-        '</div>';
-    }
 
-    // Ledger chips
-    html += '<div class="bd4-ledger">' +
-      '<span class="bm-chip bm-chip--done">' + esc(t("bm.badge.done", { n: ledger.tested || 0 })) + '</span>';
-    if (ledger.pending) { html += '<span class="bm-chip bm-chip--pending">' + esc(t("bm.badge.pending", { n: ledger.pending })) + '</span>'; }
-    if (ledger.redo)    { html += '<span class="bm-chip bm-chip--redo">' + esc(t("bm.badge.redo", { n: ledger.redo })) + '</span>'; }
-    html += '</div>';
+    html += '<div class="bd4-summary">' +
+      '<p class="bd4-how">' + esc(t("bd4.how", { q: nQ, m: nM, t: totalTests })) + '</p>' +
+      '<div class="bd4-stats">' +
+        '<div class="bd4-stat">' +
+          '<span class="bd4-stat-val">' + esc(t("bd4.statOf", { n: ledger.tested || 0, t: totalTests })) + '</span>' +
+          '<span class="bd4-stat-lbl">' + esc(t("bd4.stat.tested")) + '</span></div>' +
+        '<div class="bd4-stat' + (runnableCount > 0 ? ' bd4-stat--run' : '') + '">' +
+          '<span class="bd4-stat-val">' + esc(String(runnableCount)) + '</span>' +
+          '<span class="bd4-stat-lbl">' + esc(t("bd4.stat.toRun")) + '</span></div>' +
+        '<div class="bd4-stat">' +
+          '<span class="bd4-stat-val">' + esc(String(ledger.redo || 0)) + '</span>' +
+          '<span class="bd4-stat-lbl">' + esc(t("bd4.stat.redo")) + '</span></div>' +
+      '</div>' +
+    '</div>';
 
     // Another benchmark owns the live run: this one's controls are locked until it ends.
     var otherRunning = !st.running && !!S_bench4ActiveBid && S_bench4ActiveBid !== S.route.benchmarkId;
@@ -3483,12 +3610,14 @@
     // Action bar
     html += '<div class="bd4-actions">';
 
-    // Primary run button (always visible, from Journey). Locked while another benchmark runs.
+    // Primary run button. Label says exactly how many tests will run (cells, not
+    // questions), which is what confused users before. Locked while another benchmark runs.
+    var runLabel = runnableCount > 0 ? t("bd4.runPending", { n: runnableCount }) : t("bd4.nothingToRun");
     if (!st.running) {
       var runDisabled = !rl.enabled || otherRunning;
-      html += '<button class="btn' + (rl.enabled && !otherRunning ? " btn-primary" : "") + '" id="bd4RunPending"' + (runDisabled ? ' disabled' : '') + '>' + esc(rl.label) + '</button>';
+      html += '<button class="btn' + (rl.enabled && !otherRunning ? " btn-primary" : "") + '" id="bd4RunPending"' + (runDisabled ? ' disabled' : '') + '>' + esc(runLabel) + '</button>';
     } else {
-      html += '<button class="btn" disabled>' + esc(rl.label) + '</button>';
+      html += '<button class="btn" disabled>' + esc(runLabel) + '</button>';
     }
 
     // Tag questions shortcut
@@ -3499,8 +3628,6 @@
     // Re-run entire (all-tested state only) - with inline confirm
     if (allTested && !st.running) {
       if (st.rerunConfirm) {
-        var nQ = qs.length;
-        var nM = modes.length;
         html += '<div class="bd4-rerun-confirm">' +
           '<span class="confirm-title">' + esc(t("run.rerun.title")) + '</span>' +
           '<span class="confirm-scope">' + esc(t("run.rerun.scope", { n: nQ, m: nM, t: nQ * nM })) + '</span>' +
@@ -3515,9 +3642,13 @@
       }
     }
 
-    // Run hint
-    if (!st.running && rl.hint) {
-      html += '<span class="bd4-run-hint">' + esc(rl.hint) + '</span>';
+    // Run hint: explain what "Run pending" does, or that everything is already tested.
+    if (!st.running) {
+      if (runnableCount > 0) {
+        html += '<span class="bd4-run-hint">' + esc(t("bd4.runPendingHint")) + '</span>';
+      } else if (allTested) {
+        html += '<span class="bd4-run-hint">' + esc(t("bd4.allTested")) + '</span>';
+      }
     }
 
     html += '</div>';  // bd4-actions
@@ -3561,6 +3692,18 @@
       '</div>';
     }
 
+    // Results section: title + one-line explainer + a chip legend, so the OK / MISS /
+    // Pending cells and the Redo column read on their own.
+    html += '<div class="bd4-results-head">' +
+      '<h3 class="bd4-results-title">' + esc(t("bd4.resultsTitle")) + '</h3>' +
+      '<p class="bd4-results-sub">' + esc(t("bd4.resultsSub")) + '</p>' +
+      '<div class="bd4-legend">' +
+        '<span class="bd4-legend-item"><span class="bd4-chip bd4-chip--ok">OK</span>' + esc(t("bd4.legendOk")) + '</span>' +
+        '<span class="bd4-legend-item"><span class="bd4-chip bd4-chip--miss">MISS</span>' + esc(t("bd4.legendMiss")) + '</span>' +
+        '<span class="bd4-legend-item"><span class="bd4-chip bd4-chip--pending">' + esc(t("bd.status.pending")) + '</span>' + esc(t("bd4.legendPending")) + '</span>' +
+      '</div>' +
+    '</div>';
+
     // Questions table
     html += '<div class="bd4-table-wrap"><table class="bd4-table">';
     html += '<thead><tr>' +
@@ -3595,7 +3738,9 @@
           : (cellsMap[m] && cellsMap[m].status === "tested"
               ? (cellsMap[m].verdict === "OK" ? { text: "OK", kind: "ok" } : { text: "MISS", kind: "miss" })
               : { text: "Pending", kind: "pending" });
-        html += '<td class="bd4-cell"><span class="bd4-chip bd4-chip--' + chip.kind + '">' + esc(chip.text) + '</span></td>';
+        // Localize the "Pending" label so it matches the legend; OK / MISS stay universal.
+        var chipText = (chip.kind === "pending") ? t("bd.status.pending") : chip.text;
+        html += '<td class="bd4-cell"><span class="bd4-chip bd4-chip--' + chip.kind + '">' + esc(chipText) + '</span></td>';
       });
 
       // Redo toggle
@@ -3619,12 +3764,6 @@
     var tagQBtn = byId("bd4TagQBtn");
     if (tagQBtn) {
       tagQBtn.addEventListener("click", function () { setTab("golden"); });
-    }
-
-    // Fix I-2: state 4e pending strip run button
-    var stripRunBtn = byId("bd4StripRunPending");
-    if (stripRunBtn) {
-      stripRunBtn.addEventListener("click", function () { bench4Launch("append"); });
     }
 
     var runBtn = byId("bd4RunPending");
