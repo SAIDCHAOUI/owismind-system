@@ -89,6 +89,11 @@ all booking_types in ACTUALS).
 - "pipeline", "open opportunities"              → Phase = 'FORECAST' AND booking_type = 'New customer Open in Pipe'
 - "expected billing", "to bill", "à facturer"   → Phase = 'FORECAST' AND booking_type LIKE 'To Bill%'
 
+These qualifiers select a booking_type WITHIN a scenario. "billed" / "accrual" do not name a
+scenario by themselves: combine them with the scenario rule above (default Phase = 'ACTUALS'
+unless the user names another scenario). "pipeline" and "to bill" already carry their
+scenario (Phase = 'FORECAST').
+
 ## Commercial offer hierarchy - ALWAYS prefer the most granular level (CRITICAL)
 
 The offer is a hierarchy, broadest to most granular:
@@ -113,9 +118,11 @@ sirano_product ONLY if the user explicitly gives a sirano code. In particular, B
 may not carry a sirano_product, so resolving an offer term to sirano_product can wrongly drop
 the budget (returning budget = 0) - always prefer Product.
 
-When a request flags a term as an "AMBIGUOUS OFFER TERM" (a value present in several offer
-columns), YOU resolve it - pick the level from this hierarchy and the user's intent; do not
-assume the helper's column.
+When a request flags a term as "AMBIGUOUS TERM" (a value present in several columns), YOU
+resolve it. If the columns are offer levels, pick the level from this hierarchy and the
+user's intent. If they are identity columns (an account name vs a partner vs a parent
+group), decide from the user's phrasing which role they mean. Never assume the helper's
+column, and always disclose the interpretation you picked.
 
 TRANSPARENCY (mandatory): when the value you picked ALSO exists at another level (e.g. a value
 present both as a Product AND a SolutionLine), filter on the most granular level (Product)
@@ -169,6 +176,23 @@ Parent_Group, state it explicitly in the answer.
   Account_partner; otherwise keep it out of the output. Be transparent about which side (end
   customer vs partner) you grouped on.
 
+## Exact values, NEVER ILIKE on names / offers / codes (CRITICAL)
+
+Entity values reach you already grounded to the EXACT catalog spelling by a grounding helper
+(see HELPER FINDINGS) - resolving real values is the whole point of this stack (three datasets
+plus a lookup tool exist precisely so you never have to guess a spelling). Filter on those
+exact values with "=" (or IN for several), e.g. "Account_name" = 'HALYS', "Product" =
+'IP Transit', "diamond_id" = '5373'. Do NOT write ILIKE '%...%' on an account name, product,
+offer or any named entity: it is imprecise and silently matches the wrong rows (a typed partial
+name must become the FULL exact catalog value via "=", never an ILIKE pattern on a fragment).
+Prefer the stable id for aggregation: GROUP BY "diamond_id" and display MAX("Account_name").
+Only fall back to a pattern when NO exact value is available and you truly must approximate -
+and then say so and state the exact pattern you used. NEVER fabricate a name: if you were
+given no grounded value for a named entity (no HELPER FINDING for it), do NOT invent or
+complete one from your own knowledge - filter only on what is grounded, or return no data and
+name the entity you could not resolve. A guessed name that returns zero rows is the worst
+outcome.
+
 ## Hints from the grounding helper - assistance, NOT orders
 
 Some requests arrive with "HELPER FINDINGS" / "Suggested" values and columns produced by a
@@ -192,6 +216,12 @@ Do NOT relax filters or extrapolate.
   EXTRACT(YEAR FROM year_month) = <year> rather than comparing to today's calendar date (which
   would create a partial / empty current month).
 - FY = all reporting months of the target year.
+- Comparing ACTUALS with BUDGET, FORECAST, Q3F or HLF on a YTD basis needs PERIOD ALIGNMENT:
+  those phases carry rows for the FULL year up front, while ACTUALS stop at the latest
+  reported month. Restrict EVERY compared phase to the months where ACTUALS exist in that
+  year (year_month <= the MAX ACTUALS year_month of the year), so both sides cover the same
+  window, and state the month window you used. A full-year BUDGET total against a
+  partial-year ACTUALS total is NOT a YTD comparison.
 """
 
 
@@ -252,6 +282,14 @@ GOLDEN_QUERIES = [
         '  AND EXTRACT(YEAR FROM r."year_month") = 2026;' % {"t": PHYSICAL_TABLE}),
 
     # 5. Budget vs Actuals monthly (kept from source).
+    _gq("Billed revenue (booking_type within the default scenario)",
+        "Billed revenue in 2025",
+        'SELECT SUM(r."amount_eur") AS total_revenue\n'
+        'FROM %(t)s r\n'
+        'WHERE r."Phase" = \'ACTUALS\'\n'
+        '  AND r."booking_type" LIKE \'Bill%%\'\n'
+        '  AND EXTRACT(YEAR FROM r."year_month") = 2025;' % {"t": PHYSICAL_TABLE}),
+
     _gq("Budget vs Actuals Comparison (Monthly, Product)",
         "Compare budget vs actuals 2026 for Roaming Sponsor by month",
         'SELECT r."year_month",\n'

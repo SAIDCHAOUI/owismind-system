@@ -309,7 +309,8 @@ BUSINESS_DOMAINS = {
     "satisfaction": {"fr": "satisfaction client", "en": "customer satisfaction"},
     "opportunities": {"fr": "opportunités commerciales", "en": "sales opportunities"},
     "delivery": {"fr": "livraison et déploiement", "en": "delivery and deployment"},
-    "billing": {"fr": "facturation détaillée", "en": "detailed billing"},
+    "billing": {"fr": "documents de facturation (factures, lignes de facture)",
+                "en": "invoice documents (itemized invoice lines)"},
 }
 
 
@@ -367,8 +368,7 @@ def build_tool_specs(caps):
                     "does NOT see the conversation, so name the exact entity, "
                     "the scenario/phase and the exact period inside the task. "
                     "EXAMPLE task: 'YTD 2026 revenue for EVPL, actuals vs "
-                    "budget'. The specialist returns the figures AND a rendering "
-                    "hint telling you which chart/table to show next."),
+                    "budget'."),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -977,7 +977,9 @@ def _lookup_evidence_item(payload, step_index, n, source_url="",
     item = {
         "sql": sql,
         "success": True,
-        "row_count": payload.get("rows_matched"),
+        # Count the (column, value) pairs actually captured and shown, not the raw
+        # ILIKE scan count (rows_matched), so the Evidence count matches the display.
+        "row_count": len(rows),
         "sql_id": "s%dlk%d" % (step_index, n),
         "step_index": step_index,
         "agent_key": agent_key or LOOKUP_SOURCE_CAP,
@@ -1811,11 +1813,11 @@ class MyLLM(BaseLLM):
             writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
             text = (state.get("final_text") or "").strip()
             # When the data is in the panel, drop any table the model still typed
-            # (keeps the prose clean) - but never blank out a pure-text answer.
+            # (keeps the prose clean). Always strip: an answer that is NOTHING but a
+            # forbidden table collapses to '' here and then falls into the honest
+            # "data is in the panel" fallback below, instead of shipping the table.
             if rendered:
-                stripped = _strip_markdown_tables(text)
-                if stripped:
-                    text = stripped
+                text = _strip_markdown_tables(text)
             if not text:
                 if state.get("used_caps") and rows:
                     # Data WAS gathered and is in the panel (e.g. the rare loop-cap
@@ -1886,28 +1888,46 @@ class MyLLM(BaseLLM):
         # parallel fan-out: workers stream to a queue, we relay on this thread.
         out_q = queue.Queue()
         results = [None] * n
-        # workers must not touch trace/usage/writer; they capture and push.
+        # workers must not touch trace/usage/writer; they capture and push. The
+        # final "done" put is GUARANTEED (finally): the drain loop below waits for
+        # every worker, so a worker that died without reporting would hang the turn.
         def worker(i, tc, name, args):
-            cap_key = self._tool_to_cap[name]
-            res = self._consume_subagent(
-                project, trace, cap_key, str(args.get("task") or ""),
-                context_msg, base_step + i, lang,
-                lambda p: out_q.put(("event", p)))
-            out_q.put(("done", i, cap_key, res))
+            cap_key = self._tool_to_cap.get(name, name)
+            res = None
+            try:
+                res = self._consume_subagent(
+                    project, trace, cap_key, str(args.get("task") or ""),
+                    context_msg, base_step + i, lang,
+                    lambda p: out_q.put(("event", p)))
+            finally:
+                if res is None:
+                    res = {"ok": False, "answer": "", "sql_items": [],
+                           "usage": {}, "status": "error", "result": None,
+                           "duration_ms": 0}
+                out_q.put(("done", i, cap_key, res))
 
         deadline = time.monotonic() + PARALLEL_TOTAL_TIMEOUT_S
+        warned = False
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_AGENTS, n)) as ex:
             for i, (tc, name, args) in enumerate(sub_calls):
                 ex.submit(worker, i, tc, name, args)
             pending = n
+            # Drain until EVERY worker reports done. The pool exit blocks on
+            # shutdown(wait=True) anyway, so breaking out early would not shorten
+            # the wall-clock - it would only fabricate 'error' results for
+            # specialists that actually completed. Past the deadline we log ONE
+            # warning and keep draining (the get() timeout is just a wake-up to
+            # check the deadline), so a completed worker is never reported failed.
             while pending > 0:
-                timeout = max(0.1, deadline - time.monotonic())
                 try:
-                    msg = out_q.get(timeout=timeout)
+                    msg = out_q.get(timeout=1.0)
                 except queue.Empty:
-                    logger.warning("orchestrator - parallel fan-out timed out, "
-                                   "%d sub-agent(s) still pending", pending)
-                    break
+                    if not warned and time.monotonic() > deadline:
+                        logger.warning("orchestrator - parallel fan-out exceeded "
+                                       "%ss, %d sub-agent(s) still pending",
+                                       PARALLEL_TOTAL_TIMEOUT_S, pending)
+                        warned = True
+                    continue
                 if msg[0] == "event":
                     writer(msg[1])
                 elif msg[0] == "done":

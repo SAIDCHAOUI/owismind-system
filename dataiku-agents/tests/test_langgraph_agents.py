@@ -256,6 +256,9 @@ class TestAttributeLookupWiring(unittest.TestCase):
         self.assertEqual(item["result"]["columns"], ["column", "value"])
         self.assertEqual(item["result"]["rows"][0],
                          ["account_manager", "jean.blanchard@x.com"])
+        # row_count reflects the captured/displayed rows (1), not the raw ILIKE
+        # scan count (rows_matched=2), so the Evidence count matches the display.
+        self.assertEqual(item["row_count"], 1)
 
     def test_lookup_evidence_item_none_when_not_found(self):
         self.assertIsNone(
@@ -617,15 +620,15 @@ class TestSemanticAlignment(unittest.TestCase):
         self.assertIn("never group by Account_name or carrier_code", q)
 
     def test_semantic_question_ambiguous_term_not_pinned(self):
-        # An ambiguous offer term must NOT be pinned to a column (defer to the
-        # smart model) - even if the helper's best guess was sirano_product.
+        # A value found in several columns must NOT be pinned to one (defer to the
+        # smart model) - even if the helper's best guess was one specific column.
         u = _align_u(intent="total", instruction="revenus EVPL")
         q = dx.build_semantic_question(u, self.P, [
             {"column": "sirano_product", "value": "EVPL",
              "alt_columns": ["Product", "Solution"]}])
-        self.assertIn("AMBIGUOUS OFFER TERM", q)
+        self.assertIn("AMBIGUOUS TERM", q)
         self.assertIn("EVPL", q)
-        self.assertIn("Product", q)
+        self.assertIn("Product", q)                      # the colliding columns listed
         self.assertNotIn("sirano_product = 'EVPL'", q)   # never a hard pin
 
     def test_semantic_question_confident_value_suggested(self):
@@ -635,7 +638,7 @@ class TestSemanticAlignment(unittest.TestCase):
             {"column": "Account_name", "value": "HALYS"}])
         self.assertIn("HELPER FINDINGS", q)
         self.assertIn("Account_name = 'HALYS'", q)
-        self.assertNotIn("AMBIGUOUS OFFER TERM", q)
+        self.assertNotIn("AMBIGUOUS TERM", q)
 
 
 class TestDeferOfferTerms(unittest.TestCase):
@@ -677,9 +680,11 @@ class TestDeferOfferTerms(unittest.TestCase):
                          "samples": [{"column": "Product",
                                       "value": "Open Roaming Hub"}]}])
         q = dx.build_semantic_question(u, self.P, [])
-        self.assertIn("AMBIGUOUS OFFER TERM", q)
+        self.assertIn("AMBIGUOUS TERM", q)
         self.assertIn("Roaming Hub", q)
-        self.assertIn("NEVER default to sirano_product", q)
+        # Generic contract: resolve with the model's own rules, no hardcoded column.
+        self.assertIn("YOUR semantic-model rules", q)
+        self.assertNotIn("NEVER default to sirano_product", q)
         self.assertIn("Open Roaming Hub", q)                     # partial hit = context
         self.assertNotIn("= 'Roaming Hub'", q)                   # never a hard pin
 

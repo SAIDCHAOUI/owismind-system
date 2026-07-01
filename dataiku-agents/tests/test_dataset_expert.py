@@ -304,11 +304,35 @@ class TestValidateUnderstanding(unittest.TestCase):
                                        "terms": ["IPL (Product)"]}, P, "q")
         self.assertEqual(u["terms"], ["IPL (Product)"])
 
+    def test_terms_capped_and_drop_is_signaled(self):
+        # More than MAX_TERMS distinct valid terms: keep the first MAX_TERMS and
+        # record how many were dropped (so the tool grounds the rest itself).
+        terms = ["v%02d" % i for i in range(dx.MAX_TERMS + 3)]
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "total", "terms": terms}, P, "q")
+        self.assertEqual(len(u["terms"]), dx.MAX_TERMS)
+        self.assertEqual(u["terms"], terms[:dx.MAX_TERMS])
+        self.assertEqual(u["terms_dropped"], 3)
+
+    def test_terms_not_dropped_leaves_no_flag(self):
+        u = dx.validate_understanding({"scope": "data", "language": "fr",
+                                       "intent": "total",
+                                       "terms": ["HALYS"]}, P, "q")
+        self.assertNotIn("terms_dropped", u)
+
     def test_invalid_period_degrades(self):
+        # An explicit period with unusable bounds degrades to all months but is
+        # FLAGGED (invalid_explicit), distinct from "no period requested".
         u = dx.validate_understanding({"scope": "data", "language": "fr",
                                        "period": {"mode": "explicit",
                                                   "start": "garbage",
                                                   "end": "2026-12-31"}}, P, "q")
+        self.assertEqual(u["period"],
+                         {"mode": "all_available", "invalid_explicit": True})
+
+    def test_absent_period_is_not_flagged_invalid(self):
+        # A genuinely absent period stays a plain all_available (byte-identical).
+        u = dx.validate_understanding({"scope": "data", "language": "fr"}, P, "q")
         self.assertEqual(u["period"], {"mode": "all_available"})
 
 
@@ -586,6 +610,21 @@ class TestGuardCustomSql(unittest.TestCase):
             "SELECT 1 FROM %s LIMIT 7" % TABLE, TABLE)
         self.assertIsNone(reason)
         self.assertTrue(sql.endswith("LIMIT 7"))
+
+    def test_limit_offset_small_kept(self):
+        # A trailing OFFSET must not defeat the LIMIT detection (no double LIMIT).
+        sql, reason = dx.guard_custom_sql(
+            "SELECT 1 FROM %s LIMIT 7 OFFSET 20" % TABLE, TABLE)
+        self.assertIsNone(reason)
+        self.assertTrue(sql.endswith("LIMIT 7 OFFSET 20"))
+        self.assertEqual(sql.lower().count("limit"), 1)
+
+    def test_limit_offset_capped_preserves_offset(self):
+        sql, reason = dx.guard_custom_sql(
+            "SELECT 1 FROM %s LIMIT 99999 OFFSET 20" % TABLE, TABLE)
+        self.assertIsNone(reason)
+        self.assertTrue(sql.endswith("LIMIT 500 OFFSET 20"))
+        self.assertEqual(sql.lower().count("limit"), 1)
 
     def test_rejects_dml_and_ddl(self):
         for bad in ("DELETE FROM %s" % TABLE,
@@ -869,6 +908,42 @@ class TestSemanticEngine(unittest.TestCase):
         r = dx.extract_tabular_node(node)
         self.assertEqual(r["columns"], ["n", "s"])
         self.assertEqual(r["rows"], [[1, "a"], [2, "b"]])
+
+    def test_row_count_comes_from_the_captured_node(self):
+        # A stray row_count on an UNRELATED later node must not be attached to the
+        # captured table: the count belongs to the same node as the result.
+        raw = {"output": {"steps": [
+            {"records": [{"diamond_id": "5373", "total_revenue": 99.0}]},
+            {"meta_row_count_of_something_else": True, "row_count": 987654},
+        ]}}
+        p = dx.extract_semantic_payload(raw)
+        self.assertEqual(p["result"]["columns"], ["diamond_id", "total_revenue"])
+        self.assertEqual(p["row_count"], 1)          # len of captured rows, not 987654
+
+    def test_oversize_tabular_node_keeps_count(self):
+        # A result too large to serialize (> _RESULT_JSON_MAX_CHARS) drops its rows
+        # but keeps the count, so callers tell it apart from a genuine empty result.
+        wide = {"c%02d" % j: "x" * 250 for j in range(40)}
+        big = [dict(wide) for _ in range(dx.MAX_RESULT_ROWS)]
+        r = dx.extract_tabular_node({"records": big})
+        self.assertEqual(r["rows"], [])
+        self.assertTrue(r["truncated"])
+        self.assertEqual(r["row_count"], dx.MAX_RESULT_ROWS)
+
+    def test_shape_result_oversize_keeps_count(self):
+        cols = ["c%02d" % j for j in range(40)]
+        rows = [tuple("x" * 250 for _ in cols) for _ in range(dx.MAX_RESULT_ROWS)]
+        r = dx.shape_result(cols, rows)
+        self.assertEqual(r["rows"], [])
+        self.assertTrue(r["truncated"])
+        self.assertEqual(r["row_count"], dx.MAX_RESULT_ROWS)
+
+    def test_terms_dropped_note_in_semantic_question(self):
+        q = dx.build_semantic_question(make_u(terms_dropped=3), P, [])
+        self.assertIn("first %d named values" % dx.MAX_TERMS, q)
+        # No note when nothing was dropped.
+        self.assertNotIn("first %d named values" % dx.MAX_TERMS,
+                         dx.build_semantic_question(make_u(), P, []))
 
     def test_pick_semantic_input_key(self):
         self.assertEqual(dx.pick_semantic_input_key(

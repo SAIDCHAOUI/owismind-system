@@ -58,9 +58,10 @@ tool enforces them) and as supportive hints from the sub-agent.
    - **The semantic model owns this decision** (hierarchy rules in
      `sqlGenerationConfig.instructions` + `commercial_offer` description, incl. *never default to
      sirano_product*).
-   - **The sub-agent does NOT pin a column for an ambiguous offer term**: it flags
-     `AMBIGUOUS OFFER TERM - "EVPL" is present in (Product, sirano_product); YOU
-     resolve it` and leaves the choice to the model. (Regression that motivated this: pinning
+   - **The sub-agent does NOT pin a column for an ambiguous term**: it flags
+     `AMBIGUOUS TERM - "EVPL" is a real data value present in SEVERAL columns (...)` and
+     leaves the choice to the model (offer hierarchy for offer levels, identity roles for
+     account / partner / group columns). (Regression that motivated this: pinning
      `sirano_product = 'EVPL'` while BUDGET rows have no sirano_product, so budget = 0.)
      Confident single-column values (e.g. a customer name) are still suggested as typo-free hints.
 

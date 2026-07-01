@@ -428,6 +428,14 @@ class TestInvoke(unittest.TestCase):
         self.assertEqual(out["status"], "found")
         self.assertEqual(len(tool.sql_log), n_after_first)   # served from cache
 
+    def test_catalog_changes_cache_key(self):
+        # Same dataset searched with two catalogs must not collide in the cache
+        # (the catalog feeds the not_found/suggestions path).
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        k1 = tool._cache_key("D", "CAT_A", "blanchard", [])
+        k2 = tool._cache_key("D", "CAT_B", "blanchard", [])
+        self.assertNotEqual(k1, k2)
+
     def test_softer_not_found_message_no_absolute_claim(self):
         tool = FakeTool(fact_rows=[], no_catalog=True)
         out = invoke(tool, "zzz nothing")
