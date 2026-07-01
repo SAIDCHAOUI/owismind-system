@@ -274,11 +274,18 @@ def api_benchmark_modes():
 @app.route("/api/benchmark/redo", methods=["POST"])
 @_safe
 def api_benchmark_redo():
-    """Set / clear the 'redo at next run' flag on one member question."""
+    """Set / clear the 'redo at next run' flag on one member question.
+
+    The flag value is the ``value`` field (the frontend + MOCK contract); ``include_next`` is
+    accepted as a legacy alias. Reading the wrong field silently forced every toggle to False,
+    so the redo intent was never stored and append runs found "nothing to run".
+    """
     body = request.get_json(silent=True) or {}
+    flag = body.get("value")
+    if flag is None:
+        flag = body.get("include_next")
     result, errors = dss.set_question_redo(
-        body.get("benchmark_id") or "", body.get("question_id") or "",
-        bool(body.get("include_next")))
+        body.get("benchmark_id") or "", body.get("question_id") or "", bool(flag))
     if errors:
         return _err("invalid_request", 400, {"messages": errors})
     return jsonify({"status": "ok", **result})
