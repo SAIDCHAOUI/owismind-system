@@ -2681,5 +2681,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-01, `memory/sessions/2026-07-01.md`.
 - **Date** : 2026-07-01.
 
+## L116 - Nettoyer le code mort d'un gros webapp vanilla-JS : atteignabilité depuis les entrées RÉELLES + vérif adversariale défaut-garder ; et ajouter des agents = data, pas code [repo, workflow + smoke navigateur, NON validé DSS, 2026-07-01]
+- **Contexte** : demande user "ultracode, tout clean" sur `OWIsMind_LAB/`. En parallèle, une 2e session
+  Claude travaillait le même launcher (commits entrelacés). Deux pièges : (1) supprimer du code réellement
+  vivant ; (2) écraser le log-session de l'autre session.
+- **Ce qui a échoué / piégeait** : un simple grep "fonction jamais appelée ?" **ment** sur un webapp - un
+  **cluster mort s'auto-référence** (loadConfig -> renderCats -> markDirty -> renderAside...) et paraît
+  vivant. Inversement, une fonction listée "morte" (`renderCats`/`markDirty`) était encore atteignable
+  depuis une fonction **vivante** (`refreshConfigMeta`, appelée par submitModal/toggleActive/deleteQuestion/
+  doPromote) - la supprimer aurait cassé le live (elle y est un no-op, pas du mort).
+- **Solution qui marche** :
+  1. **Atteignabilité depuis les entrées réelles** (`render`/`init`/`wireStatic` + tout callback
+     `addEventListener`), pas grep textuel. Ce qui n'est PAS dans l'ensemble atteignable = mort.
+  2. **Découverte par workflow (scouts par zone) + vérif ADVERSARIALE par candidat, défaut = GARDER**,
+     avec règles dures encodées : docs jamais supprimées, artefacts prod intouchés, **sources recollées-DSS
+     ≠ mortes juste parce que rien ne les importe** (elles sont copiées-collées dans Dataiku). -> 12/58 faux
+     positifs écartés automatiquement ; retrait chirurgical multi-spans (fonctions interlacées avec du vivant)
+     délégué à un sous-agent qui prouve chaque suppression + garde le reste.
+  3. **Filet obligatoire** quand la couverture unitaire est mince (webapp) : node --check + tests + **smoke
+     navigateur** de TOUS les flux (le static ne voit pas une réf runtime à un helper supprimé).
+  4. **Retrait cohérent par unité** : une fonction morte tire ses i18n/CSS/état orphelins - les supprimer
+     ENSEMBLE (sinon état incohérent). Résultat : -945 l. script.js (37 fns, 125 i18n, 13 état, ~15 CSS, 7 mock).
+- **Corollaire feature (ajouter un agent sans code)** : la liste d'agents à benchmarker vit dans la
+  **variable projet `benchmark` (clé `agents`)**, alimentée par un flux webapp read-only "choisir un projet ->
+  `list_llms` filtré `agent:` (id + nom) -> cocher -> upsert". Jamais de hardcode d'agent ; la clé technique =
+  `agent_catalog_key` (= agent_id, cf L115). Découverte **bornée** (MAX_PROJECTS/MAX_AGENTS) = sûreté instance.
+- **Corollaire process (sessions //)** : avant `/log-session`, **re-vérifier le tree FUSIONNÉ** (tests +
+  cohérence, ex. `journey.js` bien supprimé/inliné) et **APPENDER** (nouvelle section de session, prochain Lxxx,
+  bloc focus en plus) - **jamais écraser** le log de l'autre session.
+- **Preuve** : LAB 335 tests + plugin 509 + node 134/5 verts, build Vite OK, smoke navigateur 0 erreur, 0 tiret.
+- **Source** : session 2026-07-01 Run 2, `memory/sessions/2026-07-01.md`.
+- **Date** : 2026-07-01.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

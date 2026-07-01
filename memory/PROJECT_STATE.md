@@ -459,6 +459,11 @@ webapp HTTP (isolé, prod-safe, vraie latence agent).
   agent_id,modes}`), `modes`, `language`, `concurrency`, `question_filter`, datasets de sortie, `judge_llm_id`,
   `score_all_runs`/`aggregate_all_runs`. **Zéro hardcode** (noms de datasets inclus). **Flag `modes` PAR agent** :
   `true` = testé sur chaque mode + token ; `false`/absent = **1 appel simple, mode `default`, sans token** (visual agents).
+  - **`agents` = catalogue curé, alimenté par le launcher SANS code** (flux « Ajouter un agent » : choisir un
+    projet -> `dss.list_project_agents` liste les `list_llms` `agent:` (id+nom) -> cocher -> `connect_agents` upsert
+    dans la variable ; retrait via `remove_agent_from_catalog`). Découverte **read-only bornée** (MAX_PROJECTS/AGENTS).
+    **`agent_key` = l'agent_id** (préfixe `agent:` retiré), jamais un slug (L115) : `registry.agent_catalog_key`/
+    `normalize_agent`/`parse_agents`/`upsert_agents`/`remove_agent`/`serialize_agents` (purs). (2026-07-01.)
 - **Datasets managés** (dans `OWIsMind_LAB`) : `golden_questions_v1` -> (recette prepare) -> **`golden_questions_v1_prepared`**
   (lu) -> `benchmark_runs_raw` -> `benchmark_runs_scored` (= détail) -> `benchmark_summary` + `benchmark_breakdown`.
   Schémas pensés **compatibles SQL `benchmark_*_v1`** pour une future section webapp.

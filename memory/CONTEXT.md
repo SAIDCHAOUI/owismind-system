@@ -5,6 +5,31 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧹 SESSION 2026-07-01 Run 2 (SESSION PARALLELE - LAB launcher : clarte benchmark detail + galerie
+d'agents + flux "ajouter un agent" + GRAND NETTOYAGE ultracode) - repo only, NON valide DSS.** Menee en
+// de la Run 1 ci-dessous (2 sessions Claude sur `OWIsMind_LAB/`, commits entrelaces ; tree fusionne
+re-verifie vert avant log). **(1) Benchmark detail RE-CLARIFIE** : fini le double "Run pending" ->
+carte de statut unique (« test = question x mode : {q}x{m}={t} », tuiles Testees/A lancer/A refaire),
+UN bouton « Lancer en attente (N) » (N=cellules, + fix i18n label toujours-anglais), titre + legende
+OK/MISS/En attente. **(2) Accueil = galerie de cartes d'agents** (fin de l'ecran blanc) ; le rail
+lateral revient SEULEMENT a l'ouverture d'un agent (`home-mode`). **(3) Flux "Ajouter un agent" SANS
+CODE** : catalogue dans la variable `benchmark.agents` ; NOUVEAU `registry.parse_agents`/`normalize_agent`/
+`upsert_agents`/`remove_agent`/`serialize_agents` ; `dss.agents_catalog`/`list_projects`/`list_project_agents`
+(read-only borne, `list_llms` filtre `agent:`, id+nom)/`connect_agents`/`remove_agent_from_catalog` (ancien
+dump-all `discover_agents` supprime) ; routes `/api/agents(+projects,project-agents,connect,remove)` ; front
+= panneau projet -> agents (id+nom editable) -> cocher -> ajouter, + retrait confirm inline (remplace le
+discover aveugle). **(4) GRAND NETTOYAGE (ultracode)** : Workflow 7 scouts + verif adversariale (defaut
+= garder ; docs/artefacts/sources-recollees protegees) -> 58 candidats (25 surs/21 a valider/**12 faux
+positifs ecartes**) ; retire junk + code mort symbol-level (LAB lib + plugin) + fonctions v1 LAB (+tests)
++ via sous-agent le vieux sous-systeme "config/run" + cluster v2-benchmark mort du launcher (**-945 l.
+script.js**, 37 fns/13 etat/125 i18n/~15 CSS/7 mock). **GARDE (choix user)** : ~130 clefs i18n inutilisees
+du `messages.json` plugin + `golden_view`/`read_golden_rows` (v1 mortes mais testees). **Filet** : LAB 335
++ plugin 509+134, Vite OK, node OK, **smoke navigateur EN+FR 0 erreur**, 0 tiret. **Divergence a savoir** :
+la Run 1 a rendu `agent_catalog_key` id-based ; mon `mockAgentKey` (preview) reste slug -> inoffensif
+(preview only). **A FAIRE DSS** : recoller lib+webapps launcher + composables plugin (rebuild) ; vider la
+variable `benchmark.agents` (~40 agents auto-decouverts a purger) puis ajouter via le flux ; redemarrer backend.
+Voir **L116** + `sessions/2026-07-01.md` (Run 2).
+
 **🧪 SESSION 2026-07-01 (LAB BENCHMARK LAUNCHER : nettoyage + 4 fixes + 1 feature) - repo only, code
 commite par session concurrente, PARTIELLEMENT valide DSS.** Tout dans `OWIsMind_LAB/`. **(1) Nettoyage
 webapp = vraie webapp DSS standard** : fusion `journey.js` -> `script.js` (1 seul pane JS ; bootstrap
@@ -730,7 +755,19 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-01 : LAB launcher, nettoyage + 4 fixes + 1 feature → détail `sessions/2026-07-01.md` + **L115**
+## 🧭 Dernière session - 2026-07-01 Run 2 (session //) : clarté benchmark detail + galerie d'agents + flux "ajouter un agent" + grand nettoyage ultracode → détail `sessions/2026-07-01.md` (Run 2) + **L116**
+- **Repo only, NON validé DSS.** Menée en parallèle de la Run 1 (tree fusionné re-vérifié vert avant log).
+- **Benchmark detail clarifié** (1 seule carte de statut + 1 bouton « Lancer en attente (N) », légende) ;
+  **accueil = galerie de cartes d'agents** (rail latéral seulement à l'ouverture) ; **flux "ajouter un
+  agent" sans code** (catalogue dans `benchmark.agents` ; `dss.list_projects`/`list_project_agents`/
+  `connect_agents` read-only ; front projet -> agents id+nom -> cocher). **Grand nettoyage ultracode** :
+  workflow 7 scouts + vérif adversariale (12 faux positifs écartés) -> junk + code mort symbol-level +
+  fonctions v1 LAB + **vieux sous-système launcher (-945 l. script.js)** ; **gardé** (choix user) i18n
+  `messages.json` plugin + `golden_view`. **LAB 335 + plugin 509+134, Vite OK, smoke navigateur 0 erreur.**
+- **À FAIRE DSS** : recoller lib+webapps launcher + composables plugin (rebuild), redémarrer backend ;
+  purger `benchmark.agents` (~40 agents auto-découverts) puis ré-ajouter via le flux. Voir **L116**.
+
+## 🧭 Avant - 2026-07-01 Run 1 : LAB launcher, nettoyage + 4 fixes + 1 feature → détail `sessions/2026-07-01.md` (Run 1) + **L115**
 - **Repo only (code commite par session concurrente), partiellement validé DSS.** Tout dans `OWIsMind_LAB/`.
 - **✅ Validé DSS** : (a) questions golden s'affichent (fix contrat `/api/golden` : renvoie `questions`+`agents`
   scope `agent`, pas `rows`/`this`) ; (b) `agent_key = agent_id` partout (jamais le slug `orchestrator` ;
