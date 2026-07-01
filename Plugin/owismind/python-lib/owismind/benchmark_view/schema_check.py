@@ -3,10 +3,8 @@
 When an admin points an agent at a SQL table that is supposed to hold its benchmark, the table
 must carry the columns the results page reads. ``check_columns`` compares a table's column names
 (case-insensitive) against ``REQUIRED_COLUMNS`` and returns the missing ones in plain language, so
-the admin sees exactly what is wrong instead of a runtime failure later.
+the admin sees exactly what is wrong instead of a runtime failure later. PURE stdlib, no imports.
 """
-
-from owismind.benchmark_view import schemas
 
 # The columns the consultation + review genuinely DEPEND on. A subset of LIGHT_COLUMNS: the keys
 # read by the aggregator (verdict / accuracy / per-config / per-category / detail) and the override.

@@ -94,34 +94,6 @@ def confidence_band(accuracy):
     return "low"
 
 
-# --- run selection ----------------------------------------------------------
-
-def latest_run_id(rows):
-    best_key = None
-    best_id = ""
-    for r in _rows(rows):
-        rid = _str(r.get("run_id"))
-        if not rid:
-            continue
-        key = (_str(r.get("run_timestamp")), rid)
-        if best_key is None or key > best_key:
-            best_key = key
-            best_id = rid
-    return best_id
-
-
-def runs_view(rows):
-    seen = {}
-    for r in _rows(rows):
-        rid = _str(r.get("run_id"))
-        if not rid or rid in seen:
-            continue
-        seen[rid] = _str(r.get("run_timestamp"))
-    items = [{"run_id": rid, "run_timestamp": ts} for rid, ts in seen.items()]
-    items.sort(key=lambda it: (it["run_timestamp"], it["run_id"]), reverse=True)
-    return items
-
-
 # --- v2: benchmark selection + latest-attempt reduction + evolution ----------
 
 def _attempt(r):

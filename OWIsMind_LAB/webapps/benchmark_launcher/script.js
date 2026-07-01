@@ -13,6 +13,42 @@
 (function () {
   "use strict";
 
+  /* ============================ journey (pure UI logic) ============================ */
+  /* Pending/evolution/gate helpers. Kept as a self-contained object so the render code
+   * below can call Journey.* and the Node unit test can import it (module.exports at the
+   * bottom). It is always defined here, so the `typeof Journey` guards at the call sites
+   * are just defensive no-ops. */
+  var Journey = (function () {
+    function runnableLabel(detail) {
+      var n = (detail && detail.runnable) || 0;
+      if (n > 0) { return { label: "Run pending (" + n + ")", enabled: true, hint: "" }; }
+      return { label: "Run pending (0)", enabled: false,
+               hint: "Nothing pending. Tag new questions to this agent, or flag a tested question to redo." };
+    }
+    function benchmarkListState(v) {
+      var has = v && v.benchmarks && v.benchmarks.length > 0;
+      if (has) { return "list"; }
+      return (v && v.n_tagged > 0) ? "empty_has_questions" : "empty_no_questions";
+    }
+    function createGate(nTagged) {
+      return nTagged > 0 ? { canCreate: true, primaryAction: "create" }
+                         : { canCreate: false, primaryAction: "tag" };
+    }
+    function cellChip(cell) {
+      if (!cell || cell.status !== "tested") { return { text: "Pending", kind: "pending" }; }
+      return cell.verdict === "OK" ? { text: "OK", kind: "ok" } : { text: "MISS", kind: "miss" };
+    }
+    function evolutionToken(prev, cur) {
+      if (prev == null) { return "new"; }
+      if (prev === cur) { return "same"; }
+      if (prev === "MISS" && cur === "OK") { return "improved"; }
+      if (prev === "OK" && cur === "MISS") { return "regressed"; }
+      return "same";
+    }
+    return { runnableLabel: runnableLabel, benchmarkListState: benchmarkListState,
+             createGate: createGate, cellChip: cellChip, evolutionToken: evolutionToken };
+  })();
+
   /* ============================ icons ============================ */
 
   var I = {
@@ -4942,6 +4978,12 @@
     loadAgents();  // GET /api/agents + fire discover once
   }
 
-  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }
-  else { init(); }
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }
+    else { init(); }
+  }
+
+  /* Node unit tests import the pure Journey helpers; the browser bootstrap above is skipped
+   * (no document), so requiring this file in Node is side-effect free. */
+  if (typeof module !== "undefined" && module.exports) { module.exports = Journey; }
 })();

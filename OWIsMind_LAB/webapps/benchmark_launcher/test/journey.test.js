@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const J = require("../journey.js");
+// The pure Journey helpers now live inlined at the top of script.js, which exports them via
+// module.exports when required in Node (its browser bootstrap is guarded by `typeof document`).
+const J = require("../script.js");
 
 test("runnableLabel armed when runnable > 0", () => {
   const r = J.runnableLabel({ runnable: 18, ledger: { tested: 0, pending: 18, redo: 0 } });

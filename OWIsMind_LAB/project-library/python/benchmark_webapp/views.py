@@ -101,34 +101,6 @@ def _rows(rows):
     return [r for r in (rows or []) if isinstance(r, dict)]
 
 
-def latest_run_id(rows):
-    """The newest run_id across rows (by run_timestamp then run_id, lexical). '' when none."""
-    best_key = None
-    best_id = ""
-    for r in _rows(rows):
-        rid = _str(r.get("run_id"))
-        if not rid:
-            continue
-        key = (_str(r.get("run_timestamp")), rid)
-        if best_key is None or key > best_key:
-            best_key = key
-            best_id = rid
-    return best_id
-
-
-def runs_view(rows):
-    """Distinct (run_id, run_timestamp) for a run selector, newest first (legacy / debug)."""
-    seen = {}
-    for r in _rows(rows):
-        rid = _str(r.get("run_id"))
-        if not rid or rid in seen:
-            continue
-        seen[rid] = _str(r.get("run_timestamp"))
-    items = [{"run_id": rid, "run_timestamp": ts} for rid, ts in seen.items()]
-    items.sort(key=lambda it: (it["run_timestamp"], it["run_id"]), reverse=True)
-    return items
-
-
 # --- v2: benchmark selector (the Results / Review picker is BY BENCHMARK now) ----
 
 def _row_ts(r):

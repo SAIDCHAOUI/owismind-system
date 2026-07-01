@@ -21,14 +21,13 @@ timeout; agent calls are read-only (SELECT through the semantic model). No
 unbounded loops, no aggressive retries.
 """
 
-import json
 import uuid
 from datetime import datetime
 
 import dataiku
 import pandas as pd
 
-from benchmark import config, schemas, run_params
+from benchmark import schemas, run_params
 from benchmark import agent_runner
 from benchmark import registry
 from benchmark.dss_steps.history_io import write_history_dataset, read_history_rows

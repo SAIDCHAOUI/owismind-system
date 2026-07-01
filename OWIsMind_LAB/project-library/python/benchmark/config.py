@@ -19,7 +19,6 @@ so appending the token forces the mode without leaking text into the question.
 # token sent to the orchestrator uses the LOWERCASE form of the same names
 # (smart/pro/claude), so build_mode_token just lower-cases at the wire boundary.
 MODES = ("Smart", "Pro", "Claude")
-DEFAULT_MODE = "Smart"
 
 # friendly mode -> the lowercase internal token the orchestrator's parse_mode expects.
 _MODE_TOKEN_KEY = {"Smart": "smart", "Pro": "pro", "Claude": "claude"}
@@ -28,14 +27,6 @@ _MODE_TOKEN_KEY = {"Smart": "smart", "Pro": "pro", "Claude": "claude"}
 # so both "Smart" and "smart" resolve.
 MODE_ALIASES = {
     "smart": "Smart", "pro": "Pro", "claude": "Claude",
-}
-
-# Human-facing model name per mode (display only; verify on instance). Mirrors the
-# orchestrator LOOP_LLM_BY_MODE tiers (Gemini Flash-Lite / Gemini Flash / Sonnet).
-MODE_LABELS = {
-    "Smart": "Gemini 3.1 Flash-Lite",
-    "Pro": "Gemini 3.5 Flash",
-    "Claude": "Claude Sonnet 4.6",
 }
 
 
