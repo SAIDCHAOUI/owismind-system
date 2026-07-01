@@ -452,11 +452,15 @@
     "gt.loadError":    { en: "Could not load questions.", fr: "Impossible de charger les questions." },
     "gt.formQ":        { en: "Question",          fr: "Intitule" },
     "gt.formA":        { en: "Reference answer",  fr: "Reponse de reference" },
+    "gt.formValue":    { en: "Expected value (optional)", fr: "Valeur attendue (optionnelle)" },
+    "gt.formValueType":{ en: "Value type",        fr: "Type de valeur" },
+    "gt.formValueTypeNone": { en: "(none)",       fr: "(aucun)" },
     "gt.formSql":      { en: "Expected SQL (optional)", fr: "SQL attendu (optionnel)" },
     "gt.formTool":     { en: "Expected tool (optional)", fr: "Outil attendu (optionnel)" },
     "gt.formAgent":    { en: "Agent tag",         fr: "Tag agent" },
     "gt.formCat":      { en: "Category",          fr: "Categorie" },
     "gt.formLang":     { en: "Language",          fr: "Langue" },
+    "gt.formNotes":    { en: "Notes (optional)",  fr: "Notes (optionnelles)" },
     "gt.formActive":   { en: "Active",            fr: "Actif" },
 
     /* --- Screen 7: settings panel --- */
@@ -3521,12 +3525,21 @@
       agentsHtml += '<option value="' + esc(a.agent_key) + '"' + (sel ? ' selected' : '') + '>' + esc(a.agent_label) + '</option>';
     });
     var activeOn = row.active !== false;
+    // Objective-anchor value type: the schema enum (must match schemas.EXPECTED_VALUE_TYPES).
+    var vtOptions = '<option value="">' + esc(t("gt.formValueTypeNone")) + '</option>';
+    ["numeric", "currency", "date", "string", "list"].forEach(function (vt) {
+      vtOptions += '<option value="' + vt + '"' + (row.expected_value_type === vt ? ' selected' : '') + '>' + vt + '</option>';
+    });
     return '<div class="gt-form">' +
       (row._new ? '' : '<input type="hidden" id="gtFormQid" value="' + esc(row.question_id || "") + '">') +
       '<label class="field full"><span class="field-label">' + esc(t("gt.formQ")) + '</span>' +
         '<textarea class="input" id="gtFormQ" rows="3">' + esc(row.question || "") + '</textarea></label>' +
       '<label class="field full"><span class="field-label">' + esc(t("gt.formA")) + '</span>' +
         '<textarea class="input" id="gtFormA" rows="3">' + esc(row.reference_answer || "") + '</textarea></label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formValue")) + '</span>' +
+        '<input class="input" id="gtFormValue" value="' + esc(row.expected_value || "") + '"></label>' +
+      '<label class="field"><span class="field-label">' + esc(t("gt.formValueType")) + '</span>' +
+        '<select class="input" id="gtFormValueType">' + vtOptions + '</select></label>' +
       '<label class="field full"><span class="field-label">' + esc(t("gt.formSql")) + '</span>' +
         '<textarea class="input mono" id="gtFormSql" rows="2">' + esc(row.expected_sql || "") + '</textarea></label>' +
       '<label class="field"><span class="field-label">' + esc(t("gt.formTool")) + '</span>' +
@@ -3540,6 +3553,8 @@
       '<label class="field"><span class="field-label">' + esc(t("gt.formLang")) + '</span>' +
         '<select class="input" id="gtFormLang"><option value="en"' + (row.language === "en" ? " selected" : "") + '>en</option>' +
         '<option value="fr"' + (row.language !== "en" ? " selected" : "") + '>fr</option></select></label>' +
+      '<label class="field full"><span class="field-label">' + esc(t("gt.formNotes")) + '</span>' +
+        '<textarea class="input" id="gtFormNotes" rows="2">' + esc(row.notes || "") + '</textarea></label>' +
       '<div class="field full"><button type="button" class="chk' + (activeOn ? " on" : "") + '" id="gtFormActive" data-on="' + (activeOn ? "1" : "0") + '">' +
         '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(t("gt.formActive")) + '</b></span></button></div>' +
       '<div class="gt-form-actions">' +
@@ -3578,7 +3593,7 @@
     var addBtn = byId("gtAddBtn");
     if (addBtn) {
       addBtn.addEventListener("click", function () {
-        gt.editRow = { _new: true, question: "", reference_answer: "", expected_sql: "", expected_tool: "", agent_key: agKey || "", category: "", language: "fr", active: true };
+        gt.editRow = { _new: true, question: "", reference_answer: "", expected_value: "", expected_value_type: "", expected_sql: "", expected_tool: "", agent_key: agKey || "", category: "", language: "fr", notes: "", active: true };
         gt.saveError = null;
         renderDetailContent();
       });
@@ -3600,7 +3615,8 @@
         language: row.language || "fr",
         active: ("active" in patch) ? patch.active : (row.active !== false),
         expected_value: row.expected_value || "",
-        expected_value_type: row.expected_value_type || ""
+        expected_value_type: row.expected_value_type || "",
+        notes: row.notes || ""
       };
       Object.keys(patch).forEach(function (k) { row[k] = patch[k]; });  // optimistic
       callApi("POST", "golden/save", payload).then(function (res) {
@@ -3727,11 +3743,14 @@
           question_id: gt.editRow && !gt.editRow._new ? gt.editRow.question_id : "",
           question: q,
           reference_answer: a,
+          expected_value: (byId("gtFormValue") && byId("gtFormValue").value || "").trim(),
+          expected_value_type: (byId("gtFormValueType") && byId("gtFormValueType").value) || "",
           expected_sql: (byId("gtFormSql") && byId("gtFormSql").value || "").trim(),
           expected_tool: (byId("gtFormTool") && byId("gtFormTool").value || "").trim(),
           agent_key: agentKey,
           category: (byId("gtFormCat") && byId("gtFormCat").value || "").trim(),
           language: (byId("gtFormLang") && byId("gtFormLang").value) || "fr",
+          notes: (byId("gtFormNotes") && byId("gtFormNotes").value || "").trim(),
           active: (byId("gtFormActive") && byId("gtFormActive").getAttribute("data-on") === "1")
         };
         gt.saving = true;
