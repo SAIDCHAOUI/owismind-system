@@ -494,10 +494,7 @@
     "rail.title":       { en: "AGENTS",       fr: "AGENTS" },
     "rail.refresh":     { en: "Refresh",      fr: "Actualiser" },
     "rail.empty":       { en: "No agent yet. Refresh or add one manually.", fr: "Aucun agent. Actualisez ou ajoutez-en un manuellement." },
-    "rail.discovering": { en: "Discovering agents...", fr: "Decouverte des agents..." },
     "rail.discovered":  { en: "{n} agent(s) found",   fr: "{n} agent(s) trouve(s)" },
-    "rail.failed":      { en: "Discovery failed - known agents shown", fr: "Decouverte echouee - agents connus affiches" },
-    "rail.nTagged":     { en: "{n} tagged",   fr: "{n} taguees" },
 
     "gs.step1": { en: "Connect an agent",    fr: "Connectez un agent" },
     "gs.step2": { en: "Tag questions to it", fr: "Taguez des questions" },
@@ -581,11 +578,6 @@
     "bd4.runDone":    { en: "Run complete.",        fr: "Execution terminee." },
     "bd4.runError":   { en: "Launch failed.",       fr: "Echec du lancement." },
     "bd4.tagQ":       { en: "Tag questions",        fr: "Taguer des questions" },
-    "bd.newPending":  {
-      en: "{n} pending cell(s) since the last run. Run pending to test them.",
-      fr: "{n} cellule(s) en attente depuis le dernier run. Lancez les questions en attente pour les tester."
-    },
-
     /* --- benchmark detail: clearer status summary + legend --- */
     "bd4.how": {
       en: "Each active question is tested once per mode: {q} question(s) x {m} mode(s) = {t} test(s).",
@@ -725,11 +717,6 @@
     dirty: false,
     saving: false,
     saveError: null,
-    // run
-    running: false,
-    runDone: false,
-    progress: 0,
-    runMsg: null,
     // golden
     golden: { loaded: false, loadError: false, list: [], confirmDelete: null },
     // modal editor

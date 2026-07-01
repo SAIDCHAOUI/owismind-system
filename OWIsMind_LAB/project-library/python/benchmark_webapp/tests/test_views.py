@@ -268,53 +268,6 @@ class OverrideTests(unittest.TestCase):
         self.assertEqual(matched, 0)
 
 
-class ConfigValidationTests(unittest.TestCase):
-    def test_valid_config_dict(self):
-        ok, cfg, errors = views.validate_config({
-            "agents": [{"agent_key": "orch", "project_key": "OWISMIND_DEV",
-                        "agent_id": "agent:038G7mlF", "modes": True}],
-            "modes": ["Smart", "Pro"],
-        })
-        self.assertTrue(ok)
-        self.assertEqual(errors, [])
-        self.assertEqual(len(cfg["agents"]), 1)
-        self.assertEqual(cfg["modes"], ["Smart", "Pro"])
-
-    def test_valid_config_json_string(self):
-        ok, cfg, errors = views.validate_config(
-            '{"agents":[{"agent_key":"a","project_key":"P","agent_id":"agent:x"}]}'
-        )
-        self.assertTrue(ok, errors)
-
-    def test_no_agents(self):
-        ok, cfg, errors = views.validate_config({"agents": []})
-        self.assertFalse(ok)
-        self.assertTrue(any("agent" in e for e in errors))
-
-    def test_bad_json(self):
-        ok, cfg, errors = views.validate_config("{not json}")
-        self.assertFalse(ok)
-        self.assertIsNone(cfg)
-        self.assertTrue(any("JSON" in e for e in errors))
-
-    def test_non_object(self):
-        ok, cfg, errors = views.validate_config(42)
-        self.assertFalse(ok)
-
-    def test_suggestions_block_resolved(self):
-        ok, cfg, errors = views.validate_config({
-            "agents": [{"agent_key": "a", "project_key": "P", "agent_id": "agent:x"}],
-            "suggestions": {"connection": "SQL_owi",
-                            "table": "OWISMIND_DEV_owismind_webapp_golden_suggestions_v1",
-                            "promoted_dataset": "benchmark_suggestions_promoted"},
-        })
-        self.assertTrue(ok)
-        cv = views.config_view(cfg)
-        self.assertEqual(cv["suggestions"]["connection"], "SQL_owi")
-        self.assertEqual(cv["suggestions"]["table"],
-                         "OWISMIND_DEV_owismind_webapp_golden_suggestions_v1")
-
-
 class PromotionTests(unittest.TestCase):
     def test_safe_table_name(self):
         self.assertEqual(

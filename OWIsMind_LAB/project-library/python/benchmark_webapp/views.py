@@ -438,44 +438,6 @@ def apply_override(scored_rows, payload):
     return out, matched
 
 
-# --- config edit + validation -----------------------------------------------
-
-def validate_config(raw):
-    """Validate an edited ``benchmark`` variable value before it is written back.
-
-    ``raw`` is the WHOLE ``benchmark`` object (a dict, or a JSON string of it). Returns
-    ``(ok, resolved, errors)`` where ``resolved`` is the normalized run_params config (the
-    same the steps will read) and ``errors`` is a list of human messages. Never raises.
-    """
-    if isinstance(raw, str):
-        text = raw.strip()
-        if not text:
-            return False, None, ["the configuration is empty"]
-        try:
-            obj = json.loads(text)
-        except Exception:
-            return False, None, ["invalid JSON: check the syntax (commas, quotes, braces)"]
-    elif isinstance(raw, dict):
-        obj = raw
-    else:
-        return False, None, ["the configuration must be a JSON object"]
-
-    if not isinstance(obj, dict):
-        return False, None, ["the configuration must be a JSON object"]
-
-    # resolve expects the merged custom-variables dict; the variable lives under "benchmark".
-    cfg = run_params.resolve({"benchmark": obj})
-    errors = []
-    if not cfg.get("agents"):
-        errors.append(
-            "no valid agent: 'agents' must list at least one "
-            "{agent_key, project_key, agent_id}"
-        )
-    if not cfg.get("modes"):
-        errors.append("no valid mode in 'modes'")
-    return (len(errors) == 0), cfg, errors
-
-
 # --- suggestions promotion (Lot 3) ------------------------------------------
 
 import re as _re
@@ -963,31 +925,6 @@ def build_launch_request(benchmark_id, launch_mode):
     if mode not in (registry.LAUNCH_APPEND, registry.LAUNCH_FULL):
         mode = registry.LAUNCH_APPEND
     return {"benchmark_id": bid, "launch_mode": mode}
-
-
-def config_view(resolved):
-    """A compact, display-ready view of the resolved config (for the config page summary)."""
-    cfg = resolved or {}
-    agents = cfg.get("agents") or []
-    return {
-        "agents": [
-            {
-                "agent_key": _str(a.get("agent_key")),
-                "agent_label": _str(a.get("agent_label")) or _str(a.get("agent_key")),
-                "project_key": _str(a.get("project_key")),
-                "agent_id": _str(a.get("agent_id")),
-                "modes": bool(a.get("modes")),
-            }
-            for a in agents if isinstance(a, dict)
-        ],
-        "modes": list(cfg.get("modes") or []),
-        "language": _str(cfg.get("language")),
-        "concurrency": _int(cfg.get("concurrency")),
-        "golden_dataset": _str(cfg.get("golden_dataset")),
-        "question_filter": cfg.get("question_filter") or {},
-        "judge_llm_id": _str(cfg.get("judge_llm_id")),
-        "suggestions": run_params.suggestions_config(cfg),
-    }
 
 
 # --- task-9: golden tag view + benchmark settings validation ----------------

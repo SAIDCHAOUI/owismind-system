@@ -187,8 +187,6 @@
 
   function byId(id) { return document.getElementById(id); }
   function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function setHTML(id, html) { var e = byId(id); if (e) { e.innerHTML = html; } }
-  function setText(id, txt) { var e = byId(id); if (e) { e.textContent = txt; } }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];

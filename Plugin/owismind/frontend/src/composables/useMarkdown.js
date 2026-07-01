@@ -26,7 +26,3 @@ export function renderMarkdown(text) {
   const raw = md.render(String(text))
   return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } })
 }
-
-export function useMarkdown() {
-  return { renderMarkdown }
-}

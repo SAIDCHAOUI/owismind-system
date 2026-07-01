@@ -19,12 +19,6 @@ const MAX_BACKOFF_MS = 5000
 const TERMINAL_CODES = new Set(['run_not_found', 'invalid_run_id', 'unauthenticated'])
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// Apply one normalized event to the live answer version. Thin wrapper over the pure
-// reducer (kept as a named export for clarity/testing parity with the reducer).
-export function handleEvent(target, evt) {
-  applyEvent(target, evt)
-}
-
 // Start a run and poll its event timeline into `target` until done. The frontend
 // sends ONLY { sessionId, message, agentKey } - agentKey is the OPAQUE logical key
 // (identity + real agent id resolved server-side). Throws the backend's stable

@@ -385,12 +385,6 @@ def _copy_registry(registry):
     return out
 
 
-def existing_names(registry):
-    """Lower-cased set of benchmark names already in the registry (for uniqueness checks)."""
-    return {_clean(e.get("name")).lower() for e in (registry or {}).values()
-            if isinstance(e, dict) and _clean(e.get("name"))}
-
-
 def validate_benchmark_name(name, taken_names):
     """Validate a NEW benchmark name. Returns ``(ok, error_or_None)``. Pure, never raises.
 

@@ -220,11 +220,6 @@ class TestMutations(unittest.TestCase):
         ok, err = registry.validate_benchmark_name("", set())
         self.assertFalse(ok)
 
-    def test_existing_names(self):
-        reg = registry.create_benchmark({}, "B1", "Said", _AGENT, ["Smart"], "t")
-        self.assertEqual(registry.existing_names(reg), {"said"})
-
-
 class TestAgentKeyAndNames(unittest.TestCase):
     def test_slug_agent_key(self):
         self.assertEqual(registry.slug_agent_key("Revenue Expert"), "revenue_expert")

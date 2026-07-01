@@ -432,20 +432,6 @@ def read_pending_suggestions(cfg):
     return df.to_dict("records"), None
 
 
-def read_promoted_ids(cfg):
-    """Already-promoted suggestion ids (LAB log dataset). [] when absent. Never raises.
-
-    This is the best-effort AUDIT log only; the authoritative "already promoted" signal is the
-    golden's question_ids (read_golden_question_ids), so a stale/empty log can never hide a
-    genuinely new suggestion nor corrupt the golden.
-    """
-    name = run_params.suggestions_config(cfg).get("promoted_dataset")
-    if not name:
-        return []
-    rows = read_dataset(name)
-    return [str(r.get("suggestion_id")) for r in rows if r.get("suggestion_id")]
-
-
 def read_golden_question_ids(cfg):
     """The set of question_ids already in the golden dataset. Fail-open ({} on any read error).
 
