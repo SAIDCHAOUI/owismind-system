@@ -4,6 +4,7 @@ Run from the repo root: ``python3 -m unittest discover \
 -s OWIsMind_LAB/project-library/python/benchmark_webapp/tests \
 -t OWIsMind_LAB/project-library/python``.
 """
+import json
 import os
 import sys
 import unittest
@@ -203,6 +204,71 @@ class ReviewViewTests(unittest.TestCase):
         # newest attempt first within the question
         self.assertEqual([r["attempt_no"] for r in out["rows"]], [2, 1])
         self.assertEqual(out["rows"][0]["run_id"], "r2")
+
+
+class FullDetailViewTests(unittest.TestCase):
+    def _full_row(self, **over):
+        items = [
+            {"sql": "SELECT SUM(amount_eur) FROM drive_revenues WHERE phase='ACTUALS'",
+             "success": True, "row_count": 2,
+             "result": {"columns": ["client", "rev"],
+                        "rows": [["Orange", 1200], ["Maroc Telecom", 900]], "truncated": False}},
+        ]
+        row = {
+            "run_id": "r1", "question_id": "Q1", "agent_key": "038G7mlF", "mode": "Smart",
+            "status": "ok", "answer_text": "The top client is Orange with 1200 EUR.",
+            "actual_tools": "table", "n_sql": 1, "total_rows": 2,
+            "generated_sql_json": json.dumps(items),
+        }
+        row.update(over)
+        return row
+
+    def test_parses_generated_sql_and_full_answer(self):
+        out = views.full_detail_view(self._full_row())
+        self.assertTrue(out["found"])
+        self.assertEqual(out["answer_text"], "The top client is Orange with 1200 EUR.")
+        self.assertEqual(out["run_id"], "r1")
+        self.assertEqual(len(out["sql_items"]), 1)
+        item = out["sql_items"][0]
+        self.assertIn("SELECT SUM(amount_eur)", item["sql"])
+        self.assertTrue(item["success"])
+        self.assertEqual(item["row_count"], 2)
+        self.assertEqual(item["result"]["columns"], ["client", "rev"])
+        self.assertEqual(item["result"]["rows"][0], ["Orange", 1200])
+
+    def test_none_row_not_found(self):
+        self.assertEqual(views.full_detail_view(None), {"found": False})
+        self.assertEqual(views.full_detail_view("nope"), {"found": False})
+
+    def test_malformed_json_degrades_to_empty_items(self):
+        out = views.full_detail_view(self._full_row(generated_sql_json="{not json"))
+        self.assertTrue(out["found"])
+        self.assertEqual(out["sql_items"], [])
+
+    def test_item_without_result_keeps_sql(self):
+        items = [{"sql": "SELECT 1", "success": False, "row_count": 0, "result": None}]
+        out = views.full_detail_view(self._full_row(generated_sql_json=json.dumps(items)))
+        self.assertEqual(out["sql_items"][0]["result"], None)
+        self.assertEqual(out["sql_items"][0]["sql"], "SELECT 1")
+        self.assertFalse(out["sql_items"][0]["success"])
+
+    def test_answer_text_capped(self):
+        out = views.full_detail_view(self._full_row(answer_text="x" * 50000))
+        self.assertLessEqual(len(out["answer_text"]), 20000)
+
+    def test_result_rows_capped_and_flagged(self):
+        big = {"columns": ["n"], "rows": [[i] for i in range(500)], "truncated": False}
+        items = [{"sql": "SELECT n", "success": True, "row_count": 500, "result": big}]
+        out = views.full_detail_view(self._full_row(generated_sql_json=json.dumps(items)))
+        res = out["sql_items"][0]["result"]
+        self.assertLessEqual(len(res["rows"]), 200)
+        self.assertTrue(res["truncated"])
+
+    def test_rows_without_columns_get_synthetic_headers(self):
+        items = [{"sql": "SELECT a, b", "success": True, "row_count": 1,
+                  "result": {"rows": [["x", "y"]]}}]
+        out = views.full_detail_view(self._full_row(generated_sql_json=json.dumps(items)))
+        self.assertEqual(out["sql_items"][0]["result"]["columns"], ["col_1", "col_2"])
 
 
 class OverrideTests(unittest.TestCase):

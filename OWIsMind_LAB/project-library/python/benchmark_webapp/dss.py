@@ -291,6 +291,54 @@ def read_dataset(name, drop_cols=(), keep_cols=None, max_rows=MAX_ROWS):
     return df.to_dict("records")
 
 
+# The 4 columns that identify ONE attempt (the override key + the full-detail lookup key).
+_ATTEMPT_KEYS = ("run_id", "question_id", "agent_key", "mode")
+# Backstop on rows streamed when looking up ONE attempt's full detail. A benchmark holds at most a
+# few thousand scored rows; this only prevents a pathological unbounded scan, it is not a paginator.
+_FULL_ROW_SCAN_CAP = 50000
+
+
+def _key_str(value):
+    """Trimmed string form of a match key (None -> '')."""
+    if value is None:
+        return ""
+    return (value if isinstance(value, str) else str(value)).strip()
+
+
+def read_scored_row_full(dataset_name, run_id, question_id, agent_key, mode):
+    """Stream the scored dataset and return ONE attempt's FULL row (heavy columns kept), or None.
+
+    The per-question table reads LIGHT columns only (``SCORED_KEEP`` drops the ~100k-char JSON blobs).
+    When a reviewer opens one attempt we need its heavy ``generated_sql_json`` / ``answer_text`` to show
+    the SQL the agent actually generated + the captured result table + the full answer. Rather than pull
+    every row's blobs into RAM just to keep one, this STREAMS the dataset row by row (``iter_rows``) and
+    returns the FIRST row whose (run_id, question_id, agent_key, mode) match, then stops.
+
+    Instance-safe (SQL invariant preserved): NO raw SQL on the shared connection - this reads through the
+    dataiku Dataset API only, one row in RAM at a time, early-exit on match, a hard scan backstop. This is
+    strictly LIGHTER on RAM than the existing history merge / override read-modify-write, so it adds no new
+    instance risk. Best-effort: a missing dataset / read error / no match -> None (caller shows "not found").
+    """
+    want = {k: _key_str(v) for k, v in
+            (("run_id", run_id), ("question_id", question_id), ("agent_key", agent_key), ("mode", mode))}
+    if not want["run_id"] or not want["question_id"]:
+        return None
+    try:
+        ds = dataiku.Dataset(dataset_name)
+        scanned = 0
+        for row in ds.iter_rows():
+            scanned += 1
+            if scanned > _FULL_ROW_SCAN_CAP:
+                break
+            record = row if isinstance(row, dict) else dict(row)
+            if all(_key_str(record.get(k)) == want[k] for k in _ATTEMPT_KEYS):
+                return record
+    except Exception:
+        logger.warning("benchmark webapp - scored full-row read failed for %s", dataset_name)
+        return None
+    return None
+
+
 # --- scenario (launch + status), best-effort + single-flight ----------------
 
 def scenario():

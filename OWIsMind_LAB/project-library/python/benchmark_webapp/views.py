@@ -375,6 +375,116 @@ def review_view(scored_rows, benchmark_id=None, only_needs_review=False, limit=2
     return {"benchmark_id": bid, "count": len(out), "rows": out}
 
 
+# --- on-demand FULL detail of ONE attempt (the heavy columns, one row at a time) ----------
+# The per-question table (detail_view / review_view) reads LIGHT columns only, so the browser never
+# gets the ~100k-char blobs. When a reviewer opens one attempt, dss.read_scored_row_full fetches that
+# SINGLE row WITH the heavy columns and this shapes it: the COMPLETE agent answer + the SQL the agent
+# actually generated + the captured result table per query. That is what makes a verdict explainable.
+
+# Display caps. agent_capture already bounds these at WRITE time (MAX_RESULT_* / MAX_SQL_ITEMS); we
+# re-apply a defensive cap here so a legacy / hand-edited row can never ship an unbounded blob.
+_FULL_ANSWER_CHARS = 20000
+_MAX_TABLE_ROWS = 200
+_MAX_TABLE_COLS = 50
+_CELL_CHARS = 300
+
+
+def _parse_json_list(value):
+    """Parse a JSON string (or pass through a list) into a list of dicts. Never raises -> []."""
+    if isinstance(value, list):
+        data = value
+    elif isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return []
+        try:
+            data = json.loads(s)
+        except (ValueError, TypeError):
+            return []
+    else:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [d for d in data if isinstance(d, dict)]
+
+
+def _cap_cell(value):
+    """Keep JSON-safe primitives; stringify + cap everything else (mirror of the capture normalizer)."""
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if (value == value and value not in (float("inf"), float("-inf"))) else _str(value)[:_CELL_CHARS]
+    return _str(value)[:_CELL_CHARS]
+
+
+def _shape_result(result):
+    """Shape one captured ``{columns, rows}`` into a bounded, JSON-safe table. Non-dict -> None."""
+    if not isinstance(result, dict):
+        return None
+    raw_cols = result.get("columns")
+    raw_cols = raw_cols if isinstance(raw_cols, list) else []
+    truncated = _truthy(result.get("truncated")) or len(raw_cols) > _MAX_TABLE_COLS
+    columns = [_str(c)[:_CELL_CHARS] for c in raw_cols[:_MAX_TABLE_COLS]]
+    raw_rows = result.get("rows")
+    out_rows = []
+    if isinstance(raw_rows, list):
+        if len(raw_rows) > _MAX_TABLE_ROWS:
+            raw_rows = raw_rows[:_MAX_TABLE_ROWS]
+            truncated = True
+        for raw in raw_rows:
+            cells = raw if isinstance(raw, (list, tuple)) else [raw]
+            width = len(columns) or _MAX_TABLE_COLS
+            row = [_cap_cell(c) for c in list(cells)[:width]]
+            if columns and len(row) < len(columns):
+                row = row + [None] * (len(columns) - len(row))
+            out_rows.append(row)
+    # Rows but no declared columns: synthesize positional headers so the table still renders.
+    if out_rows and not columns:
+        widest = max(len(r) for r in out_rows)
+        columns = ["col_{0}".format(i + 1) for i in range(min(widest, _MAX_TABLE_COLS))]
+    return {"columns": columns, "rows": out_rows, "truncated": truncated}
+
+
+def _shape_sql_item(item):
+    """One generated-SQL item -> ``{sql, success, row_count, result}``. The agent's ACTUAL query."""
+    return {
+        "sql": _str(item.get("sql"))[:schemas.MAX_ITEM_SQL_CHARS],
+        "success": _truthy(item.get("success")),
+        "row_count": _int(item.get("row_count")),
+        "result": _shape_result(item.get("result")),
+    }
+
+
+def full_detail_view(row):
+    """Shape ONE full scored row (heavy columns kept) into the on-demand attempt detail. Pure, never raises.
+
+    Unlike ``detail_view`` (a light, all-rows read), this shapes a SINGLE row that
+    ``dss.read_scored_row_full`` fetched on demand WITH the heavy ``generated_sql_json`` / ``answer_text``
+    columns. It returns the COMPLETE agent answer plus, per generated SQL query, the SQL the agent ACTUALLY
+    produced together with its captured result table (``{columns, rows}``) - so a reviewer sees WHY a verdict
+    is right or wrong, not just a 280-char preview. ``row=None`` (no matching attempt) -> ``{"found": False}``.
+    """
+    if not isinstance(row, dict):
+        return {"found": False}
+    items = _parse_json_list(row.get("generated_sql_json"))[:schemas.MAX_SQL_ITEMS]
+    sql_items = [_shape_sql_item(it) for it in items]
+    return {
+        "found": True,
+        "run_id": _str(row.get("run_id")),
+        "question_id": _str(row.get("question_id")),
+        "agent_key": _str(row.get("agent_key")),
+        "mode": _str(row.get("mode")),
+        "status": _str(row.get("status")),
+        "answer_text": _str(row.get("answer_text"))[:_FULL_ANSWER_CHARS],
+        "actual_tools": _str(row.get("actual_tools")),
+        "n_sql": _int(row.get("n_sql")) or len(sql_items),
+        "total_rows": _int(row.get("total_rows")),
+        "sql_items": sql_items,
+    }
+
+
 # --- human-in-the-loop override (pure key match + field set) ----------------
 
 _OVERRIDE_KEYS = ("run_id", "question_id", "agent_key", "mode")

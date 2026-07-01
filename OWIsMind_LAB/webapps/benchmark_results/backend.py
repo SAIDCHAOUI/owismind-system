@@ -75,3 +75,21 @@ def api_detail():
     rows = dss.read_dataset(cfg["scored_dataset"], keep_cols=dss.SCORED_KEEP, drop_cols=dss.SCORED_DROP)
     return jsonify({"status": "ok",
                     **views.detail_view(rows, benchmark_id, only_needs_review=only_nr)})
+
+
+@app.route("/api/results/attempt", methods=["GET"])
+@_safe
+def api_attempt():
+    """FULL detail of ONE attempt, loaded on demand: the complete agent answer + the SQL the agent
+    actually generated + each query's captured result table. The per-question read above stays LIGHT;
+    this fetches just the one opened row WITH its heavy columns (dss.read_scored_row_full streams one
+    row, no blob is loaded en masse). Read-only, best-effort (no matching row -> ``found: false``)."""
+    cfg = dss.config()
+    row = dss.read_scored_row_full(
+        cfg["scored_dataset"],
+        request.args.get("run_id"),
+        request.args.get("question_id"),
+        request.args.get("agent_key"),
+        request.args.get("mode"),
+    )
+    return jsonify({"status": "ok", **views.full_detail_view(row)})
