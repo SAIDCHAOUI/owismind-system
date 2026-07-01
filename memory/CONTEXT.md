@@ -5,6 +5,31 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧠 SESSION 2026-07-02 (AUDIT + DURCISSEMENT DES 2 AGENTS : orchestrateur + expert revenus +
+cerveau semantique + lookup) - repo only (DEV), NON valide DSS.** Audit ultracode (6 auditeurs +
+verif adversariale par finding : 26 -> 20 confirmes/6 refutes ; patches 2 sous-agents Opus ; revue
+finale du diff 3 lentilles -> 4 defauts traites). **Orchestrateur** : reponse pure-table -> fallback
+honnete ; fan-out parallele ne fabrique plus de faux "specialist unavailable" (drain complet +
+try/finally vivacite worker) ; domaine gap `billing` reformule (contredisait le revenue expert) ;
+row_count lookup Evidence = lignes affichees ; promesse "rendering hint" retiree. **Expert revenus** :
+[Scope] aussi sur no_data ; resultat trop gros != "no data" (`OVERSIZE_RESULT_TEXT` + row_count
+pre-drop stampe par les 3 moteurs) ; periode explicite ininterpretable -> `invalid_explicit` + note
+bilingue (toutes branches, gated compare_periods) ; cap 8 termes signale au semantic tool ;
+row_count du MEME node que le resultat ; `LIMIT n OFFSET m` gere par le guard ; erreurs dans la
+langue epinglee ; spans multi-SQL honnetes (row_count sur la derniere seule) ; marqueur generalise
+**`AMBIGUOUS TERM`** (wording neutre offre/identite - plus de consignes sirano pour une collision
+Account_name vs Parent_Group). **Cerveau semantique (update+build resync)** : billed/accrual =
+booking_type DANS le scenario par defaut + golden "Billed revenue" (11 golden) ; **alignement YTD
+cross-phase** (ACTUALS vs BUDGET même fenetre de mois + divulgation) ; contrat AMBIGUOUS TERM ;
+rattrapage section anti-ILIKE jamais portee dans build. **Lookup** : catalog dans la cle de cache.
+**DECISION (L118)** : param `source` multi-specialistes implemente puis **REVERTE** - le plugin ne
+lie qu'UN result_block a tous les artefacts (`routes.py:804`) -> 2e graphique VIDE ; vrai fix =
+chantier plugin (artefact tagge agent_key + binding par artefact) A VALIDER par l'user. Tickets
+expert (copie moteur) PAS patche -> porter apres validation DSS. **296 tests verts (+10), 0 tiret,
+PROD intacte.** **A FAIRE DSS** : recoller les 2 Code Agents DEV + tool lookup + executer
+`update_aligned_semantic_model.py` (AHUh9hb) + re-dump ; PAS de zip/restart. Voir **L118** +
+`sessions/2026-07-02.md`.
+
 **🔬 SESSION 2026-07-01 Run 3 (VISIBILITE COMPLETE DES RESULTATS BENCHMARK : reponse complete + SQL
 GENERE PAR L'AGENT + tableau de donnees ; override juge deja present ; ETENDU AU PLUGIN) - LAB commite
 `511e4bd`, plugin non commite (ce log), NON valide DSS.** Retour user : manque de visibilite sur les
@@ -777,7 +802,15 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-01 Run 3 : visibilité complète des résultats benchmark (réponse + SQL généré + tableau) + override + extension plugin → détail `sessions/2026-07-01.md` (Run 3) + **L117**
+## 🧭 Dernière session - 2026-07-02 : audit + durcissement orchestrateur & expert revenus & cerveau sémantique → détail `sessions/2026-07-02.md` + **L118**
+- **Repo only (DEV), NON validé DSS.** 20 findings confirmés implémentés (5 orchestrateur, 9 expert
+  revenus, 3 cerveau sémantique, 1 lookup, +2 filets de ma revue), 1 reverté après revue finale
+  (param `source` multi-spécialistes : le plugin rend tous les artefacts depuis UN result_block ->
+  chantier plugin à valider). 296 tests verts, PROD + moteur tickets intacts (à porter après DSS).
+- **À FAIRE DSS** : recoller orchestrateur + revenue expert (env 3.11) + tool lookup, exécuter
+  `update_aligned_semantic_model.py` + re-dump. Agent + modèle ENSEMBLE (contrat AMBIGUOUS TERM).
+
+## 🧭 Avant - 2026-07-01 Run 3 : visibilité complète des résultats benchmark (réponse + SQL généré + tableau) + override + extension plugin → détail `sessions/2026-07-01.md` (Run 3) + **L117**
 - **LAB commité `511e4bd`, plugin non commité (ce log), NON validé DSS.** Retour user : manque de visibilité.
 - **Constat = la donnée était déjà stockée** (`generated_sql_json` = SQL réel + tableau, `answer_text` complet) ;
   trou à la **LECTURE** (colonnes lourdes droppées, preview 280c). **Aucun re-run.** Override juge **déjà là**
@@ -1173,6 +1206,17 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🧠NEW (2026-07-02). **DÉPLOYER + VALIDER l'audit des agents (L118).** Recoller en DEV DSS :
+   les 2 Code Agents (`OWISMIND_DEV_OWIsMind_orchestrator.py` + `OWISMIND_DEV_SalesDrive_revenue_expert.py`,
+   env 3.11) + le Custom Python tool `attribute_lookup` ; exécuter `update_aligned_semantic_model.py`
+   en notebook (modèle `AHUh9hb`) puis `dump_semantic_model.py` (MODEL.md + .v1.json). **Agent +
+   modèle ENSEMBLE** (marqueur `AMBIGUOUS TERM` = contrat sous-agent <-> instructions). PAS de
+   zip/restart (python-lib intouché). Smoke : no-data avec [Périmètre] ; "billed revenue 2025"
+   (ACTUALS + Bill%) ; "budget vs actuals YTD" (fenêtre alignée + divulguée) ; période farfelue
+   (note) ; EVPL inchangé + ambiguïté d'identité divulguée ; 2 spécialistes 1 tour (plus de faux
+   "indisponible"). PUIS : porter les fixes moteur au tickets expert DEV + promotion PROD.
+   **Chantier plugin proposé (feu vert requis)** : binding par artefact (`agent_key` sur l'artefact,
+   `/evidence/meta` par artefact) puis ré-introduire `source` (code dans l'historique git).
 0🔬NEW (2026-07-01 Run 3). **DÉPLOYER + VALIDER la visibilité complète des résultats benchmark (L117).**
    **LAB** (commit `511e4bd`) : recoller project-library `benchmark_webapp/{views.py,dss.py}` + les panes des
    2 webapps (`backend.py`+`script.js`+`style.css` de `benchmark_results` ET `benchmark_launcher`), recharger.

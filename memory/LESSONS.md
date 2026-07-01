@@ -2745,5 +2745,40 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-01 Run 3, `memory/sessions/2026-07-01.md`.
 - **Date** : 2026-07-01.
 
+## L118 - Une capacité d'orchestration côté agent ne vaut que si le CONSOMMATEUR FINAL de la chaîne peut la suivre : vérifier le rendu de bout en bout AVANT d'instruire le modèle [repo, 296 tests, revert partiel assumé, NON validé DSS, 2026-07-02]
+
+- **Contexte** : audit/durcissement des 2 agents (workflow 6 auditeurs + vérif adversariale par
+  finding : 26 -> 20 confirmés/6 réfutés ; patches par 2 sous-agents Opus zones disjointes ; revue
+  adversariale finale du diff en 3 lentilles). Un finding confirmé demandait un param `source` sur
+  show_chart/show_table/show_kpi + un état `latest_by_cap` pour rendre les données du BON
+  spécialiste dans un tour à 2 spécialistes (aujourd'hui : un seul `state['latest']`, dernier écrit).
+- **Ce qui a échoué** : l'implémentation orchestrateur était correcte et testée (validation du spec
+  contre le bon résultat), MAIS la revue finale (lentille contrats) a prouvé que le PLUGIN ne lie
+  qu'UN `result_block` (le dernier item SQL réussi de l'échange) à TOUS les artefacts
+  (`api/routes.py:804-809` -> `build_chart_payload(result_block, a["chart"])` pour chaque artefact).
+  Résultat : le 2e graphique aurait été enregistré puis rendu VIDE côté panneau, et le prompt
+  aurait activement poussé le modèle dans ce piège - pire que l'existant (artefact refusé + message
+  d'erreur au modèle, qui se rabat sur du texte).
+- **Solution qui marche** : revert COMPLET de la feature côté agent (spec param + état + prompt +
+  3 tests) plutôt qu'un demi-état : un param exposé dans le tool spec serait utilisé par le modèle
+  même sans la clause de prompt. Le vrai fix est un chantier PLUGIN (artefact taggé `agent_key` +
+  binding par artefact dans `/evidence/meta`) = zip + restart -> changement de scope à faire valider
+  par l'user, pas en douce pendant un audit d'agents. Règle générale : avant de donner au modèle un
+  levier de présentation, tracer la chaîne complète events -> storage -> route -> frontend et
+  vérifier que CHAQUE maillon sait le porter.
+- **Bonus de la même session** : (1) les scripts « keep in sync » divergent en silence - la section
+  anti-ILIKE du cerveau sémantique (2026-06-22) n'avait jamais été portée dans
+  `build_aligned_semantic_model.py` ; vérifier l'identité byte-à-byte des blocs dupliqués quand on
+  les touche. (2) Un drain de ThreadPool avec `break` au timeout + back-fill « error » fabrique des
+  faux échecs pour des workers qui ont fini (le `with` bloque en shutdown(wait=True) de toute
+  façon) ; drainer jusqu'au bout ET garantir le put final par try/finally (sinon boucle infinie si
+  un worker meurt avant son put).
+- **Preuve-vérification** : 296 unittest verts (286 base +10), ast.parse OK, 0 tiret, PROD intacte,
+  `NEW_INSTRUCTIONS` build==update vérifié par script. Revue finale : 4 défauts détectés, 3 corrigés
+  (note période sur compare_periods, row_count oversize des moteurs direct, note sur no_data),
+  1 reverté (source).
+- **Source** : session 2026-07-02, `memory/sessions/2026-07-02.md`.
+- **Date** : 2026-07-02.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
