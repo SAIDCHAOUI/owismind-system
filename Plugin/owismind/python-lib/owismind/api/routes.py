@@ -49,6 +49,7 @@ from owismind.security.identity import IdentityError, derive_full_name, resolve_
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
     ValidationError,
+    _clean_source_query,
     validate_agent_meta,
     validate_budget_amount,
     validate_chat_start_request,
@@ -900,6 +901,9 @@ def evidence_distinct():
     ``exclude_id`` (optional, int) is the server id of the chip being edited:
     its own predicate must not scope its own picker. Malformed values degrade
     to None (the picker is then simply scoped by every locked predicate).
+    ``q`` (optional) is a free-text term narrowing the picker to values of that
+    column matching it; cleaned by ``_clean_source_query`` (never fails - an
+    unusable term degrades to no search), matched server-side.
     """
     identity, err = _evidence_guard()
     if err:
@@ -917,9 +921,10 @@ def evidence_distinct():
             exclude_id = None
     except (TypeError, ValueError, OverflowError):
         exclude_id = None
+    q = _clean_source_query(request.args.get("q"))
     try:
         result = evidence_service.evidence_distinct(
-            identity["user_id"], exchange_id, column, exclude_id,
+            identity["user_id"], exchange_id, column, exclude_id, q,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
@@ -1022,20 +1027,21 @@ def source_rows():
 def source_distinct():
     """Bounded distinct values of ONE source column (the filter-chip picker).
 
-    Query params: ``agent`` (opaque logical key), ``source`` (int index), ``column``.
+    Query params: ``agent`` (opaque logical key), ``source`` (int index), ``column``,
+    and an optional free-text ``q`` narrowing the picker to matching values.
     """
     _identity, err = _source_guard()
     if err:
         return err
     try:
-        agent_key, source_id, column = validate_source_distinct_params(
+        agent_key, source_id, column, q = validate_source_distinct_params(
             request.args.get("agent"), request.args.get("source"),
-            request.args.get("column"))
+            request.args.get("column"), request.args.get("q"))
     except ValidationError as exc:
         logger.warning("/source/distinct - invalid params: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
-        result = source_service.source_distinct(agent_key, source_id, column)
+        result = source_service.source_distinct(agent_key, source_id, column, q)
     except source_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:

@@ -7,15 +7,36 @@ import { ref, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
 import { useSessionStore } from '../../stores/session.js'
+import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
+import { contextKey } from '../../composables/promptContextModel.js'
 import { Icon } from '../ui'
 import AgentPicker from './AgentPicker.vue'
 import ModelModePicker from './ModelModePicker.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const chat = useChatStore()
 const session = useSessionStore()
+const promptContext = usePromptContextStore()
 const { push } = useToasts()
+
+// Chip identity + hover title for the picked data-context values.
+function ctxKey(it) {
+  return contextKey(it)
+}
+function ctxTitle(it) {
+  return it.column + ' = ' + it.value + (it.source ? ' (' + it.source + ')' : '')
+}
+
+// Values picked for one conversation must not bleed into another: navigating to a
+// different conversation (or starting a new one) drops the queue. On the PRE-
+// conversation screen an agent-picker switch drops it too (the values were picked
+// from the previous agent's datasets); mid-conversation the picker is left alone -
+// the chips stay visible and removable either way.
+watch(() => chat.activeSessionId, () => promptContext.clear())
+watch(() => session.selectedAgentKey, () => {
+  if (!chat.exchanges.length) promptContext.clear()
+})
 
 const ta = ref(null)
 
@@ -30,9 +51,16 @@ watch(() => chat.draft, () => nextTick(autosize))
 function submit() {
   const text = chat.draft
   if (!text.trim() || !chat.canSend) return
+  // Append the picked data-context values as a readable block, then clear the queue.
+  const block = promptContext.block(locale.value)
   chat.draft = ''
   nextTick(autosize)
-  chat.send(text)
+  if (block) {
+    chat.send(text + '\n\n' + block)
+    promptContext.clear()
+  } else {
+    chat.send(text)
+  }
 }
 function onKey(e) {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -55,6 +83,32 @@ const placeholder = () =>
 
 <template>
   <div class="prompt">
+    <!-- Picked data-context values (from Source Data cells): shown above the input,
+         appended to the message as a readable block at send time. -->
+    <div v-if="promptContext.hasItems" class="prompt-ctx">
+      <span class="prompt-ctx-title">{{ t('prompt.ctx.title') }}</span>
+      <span class="prompt-ctx-list">
+        <span
+          v-for="it in promptContext.items"
+          :key="ctxKey(it)"
+          class="prompt-ctx-chip"
+          :title="ctxTitle(it)"
+        >
+          <span class="prompt-ctx-chip-text">{{ it.column }} = {{ it.value }}</span>
+          <button
+            type="button"
+            class="prompt-ctx-x"
+            :title="t('prompt.ctx.remove')"
+            @click="promptContext.remove(ctxKey(it))"
+          >
+            <Icon name="x" />
+          </button>
+        </span>
+      </span>
+      <button type="button" class="prompt-ctx-clear" @click="promptContext.clear()">
+        {{ t('prompt.ctx.clear') }}
+      </button>
+    </div>
     <textarea
       ref="ta"
       v-model="chat.draft"
@@ -118,6 +172,61 @@ const placeholder = () =>
   transition: border-color var(--dur) var(--ease);
 }
 .prompt:focus-within { border-color: var(--border-strong); }
+/* Data-context chip row: compact, square, sober. Sits above the textarea inside the
+   prompt card. Orange stays rare - chips are ink-on-surface with a 1px border. */
+.prompt-ctx {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding-bottom: var(--s-2);
+  margin-bottom: var(--s-1);
+  border-bottom: 1px solid var(--border);
+}
+.prompt-ctx-title {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--fw-bold);
+  color: var(--text-2);
+}
+.prompt-ctx-list { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+.prompt-ctx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--surface);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.prompt-ctx-chip-text {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prompt-ctx-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+  border-radius: 0;
+  transition: color var(--dur) var(--ease);
+}
+.prompt-ctx-x:hover { color: var(--text); }
+.prompt-ctx-x :deep(.ui-icon) { width: 11px; height: 11px; }
+.prompt-ctx-clear {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  transition: color var(--dur) var(--ease);
+}
+.prompt-ctx-clear:hover { color: var(--text); }
 .prompt-input {
   width: 100%;
   background: transparent;

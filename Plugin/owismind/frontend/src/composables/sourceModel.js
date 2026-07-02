@@ -20,6 +20,23 @@ export const SOURCE_Q_MAX = 200
 // backend's default limit.
 export const SOURCE_DEFAULT_LIMIT = 50
 
+// Lowercase + accent-fold for CLIENT-side matching in the pickers. The map is the
+// server's translate() map VERBATIM (evidence/source_search.py _ACCENTS_FROM/_TO):
+// both sides must fold identically, otherwise a term matches a value while it is in
+// the loaded window but stops matching once the search escalates server-side.
+const ACCENTS_FROM = 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ'
+const ACCENTS_TO = 'aaaaaaceeeeiiiinooooouuuuyy'
+const ACCENT_MAP = new Map(
+  Array.from(ACCENTS_FROM, (ch, i) => [ch, ACCENTS_TO[i]]),
+)
+export function foldSearchTerm(s) {
+  let out = ''
+  for (const ch of String(s == null ? '' : s).toLowerCase()) {
+    out += ACCENT_MAP.get(ch) || ch
+  }
+  return out
+}
+
 // Cosmetic op for a user filter: one value reads as '=', several as 'IN' (the
 // backend treats both identically and re-normalizes). CONTRACT: `values` must be
 // non-empty - the store removes a chip instead of letting its last value drop.

@@ -7,7 +7,9 @@ from owismind.security.validation import (  # noqa: E402
     DEFAULT_ROWS_LIMIT,
     MAX_ROWS_LIMIT,
     MAX_ROWS_OFFSET,
+    MAX_SOURCE_QUERY_CHARS,
     ValidationError,
+    _clean_source_query,
     _parse_rows_limit,
     _parse_rows_offset,
     validate_evidence_column,
@@ -204,6 +206,30 @@ class HelpersTests(unittest.TestCase):
         for bad in (None, "", "x" * 200, 5):
             with self.assertRaises(ValidationError):
                 validate_evidence_column(bad)
+
+
+class SearchQueryCleanerTests(unittest.TestCase):
+    """The shared ``q`` cleaner: the /evidence/distinct route calls it inline (no
+    dedicated validator), so the picker search term is cleaned here exactly like
+    /source/rows and /evidence/rows. It never raises: an unusable value -> "".
+    """
+
+    def test_absent_or_non_str_yields_empty(self):
+        # Absent (None) and any non-str degrade to "" = no search (byte-identical scope).
+        self.assertEqual(_clean_source_query(None), "")
+        self.assertEqual(_clean_source_query(123), "")
+        self.assertEqual(_clean_source_query({"x": 1}), "")
+
+    def test_valid_term_trimmed(self):
+        self.assertEqual(_clean_source_query("  algerie "), "algerie")
+
+    def test_control_chars_collapse_to_single_spaces(self):
+        # Tabs/newlines (non-printable) become spaces, then whitespace runs collapse.
+        self.assertEqual(_clean_source_query("a\t\nb   c"), "a b c")
+
+    def test_over_long_capped(self):
+        long_q = _clean_source_query("x" * (MAX_SOURCE_QUERY_CHARS + 50))
+        self.assertEqual(len(long_q), MAX_SOURCE_QUERY_CHARS)
 
 
 class RowsWindowHelperTests(unittest.TestCase):

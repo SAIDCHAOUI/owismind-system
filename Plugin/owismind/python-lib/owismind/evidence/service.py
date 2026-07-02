@@ -1146,7 +1146,7 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
-def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
+def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None):
     """Bounded distinct values of one column (the filter-chip picker).
 
     The picker shows values WITHIN the agent's remaining scope: the =/IN
@@ -1154,6 +1154,9 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
     user is currently EDITING (``exclude_id``, the chip's server id) never
     self-scopes its own picker - every chip is editable in the UI, so a
     comparison chip (>=, BETWEEN…) must be able to widen past its own bound.
+    An optional free-text ``q`` further narrows the picker to values of THAT
+    column matching the term (one accent-folded ILIKE over the single resolved
+    column; empty / too-short -> no search, the picker is unchanged).
     """
     ctx = _context(user_id, exchange_id)
     resolved_col = ctx["colmap"].get(column.lower())
@@ -1168,6 +1171,12 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
         conditions.append(_locked_condition(ctx, pred))
     if ctx["advanced"]:
         conditions.append(_advanced_condition(ctx))
+    # Optional free-text search on the picked column - ADDS to the locked scope.
+    search = build_search_condition(
+        [resolved_col], q, pg_identifier, _quote_literal,
+    )
+    if search:
+        conditions.append(search)
     query = build_distinct_query(
         table_ref=ctx["table_ref"],
         column_ident=pg_identifier(resolved_col),
@@ -1178,7 +1187,8 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None):
     truncated = len(values) > DISTINCT_LIMIT
     values = values[:DISTINCT_LIMIT]
     logger.info(
-        "evidence_distinct - user_id=%s exchange_id=%s dataset=%s column=%s returned=%d truncated=%s",
-        user_id, exchange_id, ctx["dataset"], resolved_col, len(values), truncated,
+        "evidence_distinct - user_id=%s exchange_id=%s dataset=%s column=%s search=%s returned=%d truncated=%s",
+        user_id, exchange_id, ctx["dataset"], resolved_col, search is not None,
+        len(values), truncated,
     )
     return {"values": values, "truncated": truncated}

@@ -640,14 +640,17 @@ def validate_source_meta_params(agent, source):
     return _validate_source_agent(agent), _validate_source_id(source)
 
 
-def validate_source_distinct_params(agent, source, column):
-    """The ``(agent, source, column)`` query params on /source/distinct.
+def validate_source_distinct_params(agent, source, column, q=None):
+    """The ``(agent, source, column, q)`` query params on /source/distinct.
 
-    Returns ``(agent_key, source_id, column)``; ``column`` is shape-only (existence is
-    checked against the live schema by the service), reusing ``validate_evidence_column``.
+    Returns ``(agent_key, source_id, column, q)``; ``column`` is shape-only (existence
+    is checked against the live schema by the service), reusing ``validate_evidence_column``.
+    ``q`` is the OPTIONAL free-text search term over that one column: cleaned + capped by
+    ``_clean_source_query`` (never raises - a malformed value degrades to "", i.e. no
+    search; the service treats a folded needle < 2 chars as no search too).
     """
     return (_validate_source_agent(agent), _validate_source_id(source),
-            validate_evidence_column(column))
+            validate_evidence_column(column), _clean_source_query(q))
 
 
 # --- Monthly budget / quota (admin) -------------------------------------------

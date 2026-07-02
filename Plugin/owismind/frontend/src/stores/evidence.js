@@ -390,10 +390,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // its own transient open/loading state), never stored here. NOT staleness-
   // guarded: the popover must drop a result that resolves after the panel
   // moved on (it closes on outside-click anyway). `excludeId` = server id of
-  // the chip being edited (its predicate must not scope its own picker).
-  function loadDistinct(column, excludeId) {
+  // the chip being edited (its predicate must not scope its own picker). `q`
+  // (optional) narrows the window server-side over ALL values; empty/absent
+  // keeps the default top-N.
+  function loadDistinct(column, excludeId, q) {
     if (!exchangeId.value) return Promise.reject(new Error('evidence_unavailable'))
-    return fetchEvidenceDistinct(exchangeId.value, column, excludeId)
+    return fetchEvidenceDistinct(exchangeId.value, column, excludeId, q)
   }
 
   // Switch the active tab. Switching MUST NOT touch `open` (the ChatThread scroll

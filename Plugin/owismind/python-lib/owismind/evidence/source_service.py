@@ -204,28 +204,38 @@ def source_rows(agent_key, source_id, q, filters, limit, offset, sort):
     return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
-def source_distinct(agent_key, source_id, column):
+def source_distinct(agent_key, source_id, column, q=None):
     """Bounded distinct values of ONE column (the filter-chip picker).
 
     Unlike Evidence there are no locked agent predicates to scope by: this is raw
     dataset exploration, so the picker shows the column's distinct values directly.
-    Raises 'invalid_filter_column' (400) when the column is not on the live schema.
+    An optional free-text ``q`` narrows the picker to values of THAT column matching
+    the term (one accent-folded ILIKE over the single resolved column; empty / too-short
+    -> no search, i.e. the full distinct list). Raises 'invalid_filter_column' (400) when
+    the column is not on the live schema.
     """
     ctx = _resolve_source(agent_key, source_id)
     resolved_col = ctx["colmap"].get(column.lower())
     if resolved_col is None:
         raise EvidenceError("invalid_filter_column", 400)
+    conditions = []
+    search = build_search_condition(
+        [resolved_col], q, pg_identifier, _quote_literal,
+    )
+    if search:
+        conditions.append(search)
     query = build_distinct_query(
         table_ref=ctx["table_ref"],
         column_ident=pg_identifier(resolved_col),
         limit=DISTINCT_LIMIT + 1,     # one extra value -> truncated without a false positive
+        conditions=conditions,
     )
     values = [r["value"] for r in _run_source_query(ctx, query, "source_distinct")]
     truncated = len(values) > DISTINCT_LIMIT
     logger.info(
-        "source_distinct - agent=%s source=%d dataset=%s column=%s returned=%d truncated=%s",
-        agent_key, source_id, ctx["dataset"], resolved_col, min(len(values), DISTINCT_LIMIT),
-        truncated,
+        "source_distinct - agent=%s source=%d dataset=%s column=%s search=%s returned=%d truncated=%s",
+        agent_key, source_id, ctx["dataset"], resolved_col, search is not None,
+        min(len(values), DISTINCT_LIMIT), truncated,
     )
     return {"values": values[:DISTINCT_LIMIT], "truncated": truncated}
 

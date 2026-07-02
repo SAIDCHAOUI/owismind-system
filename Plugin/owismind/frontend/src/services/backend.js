@@ -261,10 +261,13 @@ export function fetchEvidenceRows(payload) {
 
 // Bounded distinct values of one column (the filter-chip picker).
 // `excludeId` (optional) is the server id of the chip being edited, so its own
-// predicate never scopes its own picker. Returns { status, values, truncated }.
-export function fetchEvidenceDistinct(exchangeId, column, excludeId) {
+// predicate never scopes its own picker. `search` (optional) narrows the window
+// server-side over ALL values (accent/case-insensitive) instead of the top-N.
+// Returns { status, values, truncated }.
+export function fetchEvidenceDistinct(exchangeId, column, excludeId, search) {
   let q = '?exchange_id=' + encodeURIComponent(exchangeId) + '&column=' + encodeURIComponent(column);
   if (excludeId != null) q += '&exclude_id=' + encodeURIComponent(excludeId);
+  if (search) q += '&q=' + encodeURIComponent(search);
   return request('/owismind-api/evidence/distinct' + q);
 }
 
@@ -293,12 +296,14 @@ export function fetchSourceRows(payload) {
 }
 
 // Bounded distinct values of one column of a source dataset (the filter picker).
-// Returns { status, values, truncated }.
-export function fetchSourceDistinct(agentKey, sourceId, column) {
-  const q =
+// `search` (optional) narrows the window server-side over ALL values (accent/
+// case-insensitive) instead of the top-N. Returns { status, values, truncated }.
+export function fetchSourceDistinct(agentKey, sourceId, column, search) {
+  let q =
     '?agent=' + encodeURIComponent(agentKey) +
     '&source=' + encodeURIComponent(sourceId) +
     '&column=' + encodeURIComponent(column);
+  if (search) q += '&q=' + encodeURIComponent(search);
   return request('/owismind-api/source/distinct' + q);
 }
 

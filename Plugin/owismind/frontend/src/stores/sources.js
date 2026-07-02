@@ -8,7 +8,7 @@
 // SAFETY: NO query fires on store creation or on a hidden mount. The first fetch only
 // happens when a surface becomes visible and calls ensureAgent()/openPanel().
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useSessionStore } from './session.js'
 import {
   fetchSourceMeta,
@@ -284,17 +284,26 @@ export const useSourcesStore = defineStore('sources', () => {
   }
 
   // Distinct values for the add/edit picker - returned to the caller (the popover owns
-  // its own transient open/loading state), never stored here.
-  function loadDistinct(column) {
+  // its own transient open/loading state), never stored here. `q` (optional) narrows
+  // the window server-side over ALL values; empty/absent keeps the default top-N.
+  function loadDistinct(column, q) {
     if (activeSourceId.value == null || !agentKey.value) {
       return Promise.reject(new Error('source_unavailable'))
     }
-    return fetchSourceDistinct(agentKey.value, activeSourceId.value, column)
+    return fetchSourceDistinct(agentKey.value, activeSourceId.value, column, q)
   }
+
+  // Label of the source currently browsed - what a cell selection reports as its
+  // provenance to the prompt context ('' when nothing is active).
+  const activeSourceLabel = computed(() => {
+    const entry = sourceList.value.find((s) => s.id === activeSourceId.value)
+    return entry ? entry.label : ''
+  })
 
   return {
     open, agentKey, sourceList, activeSourceId, columns, chips, q,
     rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
+    activeSourceLabel,
     ensureAgent, openPanel, closePanel, setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,

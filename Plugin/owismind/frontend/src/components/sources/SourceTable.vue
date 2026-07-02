@@ -7,6 +7,10 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
+import { usePromptContextStore } from '../../stores/promptContext.js'
+import { useToasts } from '../../composables/useToasts.js'
+import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
+import CellActionPopover from './CellActionPopover.vue'
 import { Icon } from '../ui'
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
@@ -17,6 +21,8 @@ const COLS_MORE = 20
 
 const { t } = useI18n()
 const sources = useSourcesStore()
+const promptContext = usePromptContextStore()
+const { push } = useToasts()
 const allColumns = computed(() => sources.columns || [])
 const colCount = ref(COLS_INITIAL)
 const columns = computed(() => allColumns.value.slice(0, colCount.value))
@@ -33,6 +39,45 @@ function cell(row, name) {
   const v = row[name]
   return v == null ? '-' : String(v)
 }
+
+// Cell selection: click a non-null cell to open a popover offering to queue its value
+// as context for the next question. Only one popover at a time; it closes on scroll of
+// the table container and whenever the active source changes.
+const popover = ref(null) // { x, y, column, value, source, canUse } | null
+
+function closePopover() {
+  popover.value = null
+}
+// A cell is pickable when it holds a REAL value: null and whitespace-only cells
+// would normalize to nothing (a silent no-op), so they are not clickable at all.
+function pickable(row, name) {
+  const raw = row[name]
+  return raw != null && String(raw).trim() !== ''
+}
+function onCellClick(event, row, name) {
+  if (!pickable(row, name)) return
+  const value = String(row[name])
+  popover.value = {
+    x: event.clientX,
+    y: event.clientY,
+    column: name,
+    value,
+    source: sources.activeSourceLabel,
+    canUse: value.length <= MAX_CONTEXT_VALUE_CHARS,
+  }
+}
+function usePopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const status = promptContext.add({ source: p.source, column: p.column, value: p.value })
+  if (status === 'added') push(t('src.cell.added'), { tone: 'ok', icon: 'check' })
+  else if (status === 'exists') push(t('src.cell.exists'), { icon: 'info' })
+  else if (status === 'full') push(t('src.cell.full', [MAX_CONTEXT_VALUES]), { tone: 'warn', icon: 'info' })
+  closePopover()
+}
+
+// Close the popover when the active source changes (immediate, before meta reloads).
+watch(() => sources.activeSourceId, closePopover)
 
 // Infinite scroll: an IntersectionObserver watches a sentinel just below the last row
 // inside the table's OWN scroll container. Root is the scroll container so it never
@@ -102,7 +147,20 @@ watch(colSentinelEl, (el) => {
   else teardownColObserver()
 })
 
-onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
+// Close the popover when the table scrolls (its anchor coordinates would go stale).
+function onScroll() {
+  if (popover.value) closePopover()
+}
+watch(scrollEl, (el, old) => {
+  if (old) old.removeEventListener('scroll', onScroll)
+  if (el) el.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  teardownObserver()
+  teardownColObserver()
+  if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
+})
 </script>
 
 <template>
@@ -137,7 +195,12 @@ onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
           <!-- Stable key on the accumulated index: rows only ever APPEND, so an
                index key never re-keys an already-rendered row. -->
           <tr v-for="(row, i) in sources.rows" :key="i">
-            <td v-for="c in columns" :key="c.name">{{ cell(row, c.name) }}</td>
+            <td
+              v-for="c in columns"
+              :key="c.name"
+              :class="{ 'cell-click': pickable(row, c.name) }"
+              @click="onCellClick($event, row, c.name)"
+            >{{ cell(row, c.name) }}</td>
           </tr>
         </tbody>
       </table>
@@ -169,6 +232,17 @@ onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
       <span v-if="sources.hasMore" class="more-hint">{{ t('src.more') }}</span>
     </div>
   </div>
+  <CellActionPopover
+    v-if="popover"
+    :x="popover.x"
+    :y="popover.y"
+    :column="popover.column"
+    :value="popover.value"
+    :source="popover.source"
+    :can-use="popover.canUse"
+    @use="usePopoverValue"
+    @close="closePopover"
+  />
 </template>
 
 <style scoped>
@@ -208,6 +282,9 @@ tbody td {
   text-overflow: ellipsis; max-width: 260px;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Non-null cells are pickable: subtle hover cue, no layout shift. */
+tbody td.cell-click { cursor: pointer; }
+tbody td.cell-click:hover { background: var(--surface-hover); }
 /* First-load skeleton rows - flat surface with an opacity pulse (no gradient). */
 .sk-cell {
   display: block; height: 12px; width: 70%; border-radius: 0;

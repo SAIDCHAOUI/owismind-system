@@ -92,6 +92,15 @@ class BuildSearchConditionTests(unittest.TestCase):
         cond = build_search_condition(["weird name"], "abc", qi, ql)
         self.assertIn('"weird name"', cond)
 
+    def test_single_column_condition(self):
+        # The distinct-picker search passes ONE resolved column: a valid single-column
+        # concat_ws, still exactly one accent-folded ILIKE (used by /source/distinct
+        # and /evidence/distinct to narrow the picker to a term on that column).
+        cond = build_search_condition(["Customer Id"], "Algerie", qi, ql)
+        self.assertIn("concat_ws(' ', \"Customer Id\")", cond)
+        self.assertEqual(cond.count("ILIKE"), 1)
+        self.assertIn("'%algerie%'", cond)
+
 
 if __name__ == "__main__":
     unittest.main()

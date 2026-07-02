@@ -8,6 +8,10 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
+import { usePromptContextStore } from '../../stores/promptContext.js'
+import { useToasts } from '../../composables/useToasts.js'
+import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
+import CellActionPopover from '../sources/CellActionPopover.vue'
 import { Icon } from '../ui'
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
@@ -18,13 +22,24 @@ const COLS_MORE = 20
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
+const promptContext = usePromptContextStore()
+const { push } = useToasts()
 const allColumns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+
+// Provenance of a picked cell: the source table currently shown by the "Source data"
+// selector (the chosen table, else the first matched source, else empty).
+const activeTableName = computed(() => {
+  if (evidence.selectedTable) return evidence.selectedTable
+  const first = evidence.sources && evidence.sources[0]
+  return (first && first.dataset) || ''
+})
 const colCount = ref(COLS_INITIAL)
 const columns = computed(() => allColumns.value.slice(0, colCount.value))
 const colsWindowed = computed(() => allColumns.value.length > columns.value.length)
 
-// Reset the visible window whenever the table's columns change (new exchange).
-watch(allColumns, () => { colCount.value = COLS_INITIAL })
+// Reset the visible window whenever the table's columns change (new exchange). A
+// column change also means a new source/exchange, so drop any open popover then.
+watch(allColumns, () => { colCount.value = COLS_INITIAL; closePopover() })
 
 function sortDir(name) {
   const s = evidence.sort
@@ -33,6 +48,43 @@ function sortDir(name) {
 function cell(row, name) {
   const v = row[name]
   return v == null ? '-' : String(v)
+}
+
+// Cell selection: click a non-null DATA cell to queue its value as context for the
+// next question. Only the data cells are wired (no thead/sort buttons), so the popover
+// never interferes with existing table controls. One popover at a time; it closes on
+// scroll and whenever the table columns change (new exchange or source table).
+const popover = ref(null) // { x, y, column, value, source, canUse } | null
+
+function closePopover() {
+  popover.value = null
+}
+// A cell is pickable when it holds a REAL value: null and whitespace-only cells
+// would normalize to nothing (a silent no-op), so they are not clickable at all.
+function pickable(row, name) {
+  const raw = row[name]
+  return raw != null && String(raw).trim() !== ''
+}
+function onCellClick(event, row, name) {
+  if (!pickable(row, name)) return
+  const value = String(row[name])
+  popover.value = {
+    x: event.clientX,
+    y: event.clientY,
+    column: name,
+    value,
+    source: activeTableName.value,
+    canUse: value.length <= MAX_CONTEXT_VALUE_CHARS,
+  }
+}
+function usePopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const status = promptContext.add({ source: p.source, column: p.column, value: p.value })
+  if (status === 'added') push(t('src.cell.added'), { tone: 'ok', icon: 'check' })
+  else if (status === 'exists') push(t('src.cell.exists'), { icon: 'info' })
+  else if (status === 'full') push(t('src.cell.full', [MAX_CONTEXT_VALUES]), { tone: 'warn', icon: 'info' })
+  closePopover()
 }
 
 // ── Infinite scroll ───────────────────────────────────────────────────────────
@@ -110,7 +162,20 @@ watch(colSentinelEl, (el) => {
   else teardownColObserver()
 })
 
-onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
+// Close the popover when the table scrolls (its anchor coordinates would go stale).
+function onScroll() {
+  if (popover.value) closePopover()
+}
+watch(scrollEl, (el, old) => {
+  if (old) old.removeEventListener('scroll', onScroll)
+  if (el) el.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  teardownObserver()
+  teardownColObserver()
+  if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
+})
 </script>
 
 <template>
@@ -145,7 +210,12 @@ onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
           <!-- Stable key on the accumulated index: rows only ever APPEND, so an
                index key never re-keys an already-rendered row. -->
           <tr v-for="(row, i) in evidence.rows" :key="i">
-            <td v-for="c in columns" :key="c.name">{{ cell(row, c.name) }}</td>
+            <td
+              v-for="c in columns"
+              :key="c.name"
+              :class="{ 'cell-click': pickable(row, c.name) }"
+              @click="onCellClick($event, row, c.name)"
+            >{{ cell(row, c.name) }}</td>
           </tr>
         </tbody>
       </table>
@@ -178,6 +248,17 @@ onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
       <span v-if="evidence.hasMore" class="more-hint">{{ t('ev.table.more') }}</span>
     </div>
   </div>
+  <CellActionPopover
+    v-if="popover"
+    :x="popover.x"
+    :y="popover.y"
+    :column="popover.column"
+    :value="popover.value"
+    :source="popover.source"
+    :can-use="popover.canUse"
+    @use="usePopoverValue"
+    @close="closePopover"
+  />
 </template>
 
 <style scoped>
@@ -224,6 +305,9 @@ tbody td {
   text-overflow: ellipsis; max-width: 260px;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Non-null cells are pickable: subtle hover cue, no layout shift. */
+tbody td.cell-click { cursor: pointer; }
+tbody td.cell-click:hover { background: var(--surface-hover); }
 /* First-load skeleton rows - gradient sweep, alternating widths for a natural look. */
 .sk-cell {
   display: block; height: 12px; border-radius: 4px; width: 70%;
