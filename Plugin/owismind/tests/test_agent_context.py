@@ -1,6 +1,7 @@
 # Plugin/owismind/tests/test_agent_context.py
 """Pure multi-turn assembly: END-placed context suffix, language detection,
 flatten exchanges -> messages, final list."""
+import json
 import os, sys, unittest
 from datetime import datetime
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -9,6 +10,8 @@ sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
 from owismind.agents.context import (  # noqa: E402
     build_user_suffix, detect_prompt_language, flatten_exchanges_to_messages,
     build_completion_messages, build_screen_state,
+    extract_prior_results, build_prior_data_block,
+    MAX_PRIOR_RESULTS, PRIOR_MAX_ROWS, PRIOR_TOKEN_MAX_CHARS,
 )
 
 
@@ -190,6 +193,111 @@ class SqlContextTests(unittest.TestCase):
         rows = [{"user_text": "u", "assistant_text": "a"}]
         msgs = flatten_exchanges_to_messages(rows, 10)
         self.assertEqual(msgs[1], {"role": "assistant", "content": "a"})
+
+
+class PriorResultsTests(unittest.TestCase):
+    """Prior-results recall: pure extraction from chain rows + bounded block."""
+
+    def _row(self, question, items):
+        return {"user_text": question, "assistant_text": "a", "generated_sql": items}
+
+    def _captured(self, sql, cols, rows, row_count=None):
+        return {"sql": sql, "success": True, "sql_id": "s1q1",
+                "row_count": row_count if row_count is not None else len(rows),
+                "result": {"columns": cols, "rows": rows}}
+
+    def test_extract_newest_first_active_item_rule(self):
+        rows = [
+            self._row("q1", [self._captured("SQL1", ["a"], [["1"]])]),
+            self._row("q2 no capture", [{"sql": "X", "success": True}]),
+            self._row("q3", [
+                {"sql": "failed", "success": False},
+                self._captured("SQL3-first", ["b"], [["2"]]),
+                self._captured("SQL3-last", ["c"], [["3"]]),
+            ]),
+        ]
+        out = extract_prior_results(rows)
+        # Newest exchange first; within an exchange, the LAST captured item wins.
+        self.assertEqual([r["question"] for r in out], ["q3", "q1"])
+        self.assertEqual(out[0]["sql"], "SQL3-last")
+
+    def test_extract_caps_and_glyph_cleaning(self):
+        big_rows = [["v⟦x⟧" + "y" * 200] for _ in range(100)]
+        # Distinct SQL per exchange: identical results would be deduplicated.
+        rows = [self._row("q%d" % i, [self._captured("S%d" % i, ["c"], big_rows, 100)])
+                for i in range(6)]
+        out = extract_prior_results(rows)
+        self.assertEqual(len(out), MAX_PRIOR_RESULTS)
+        self.assertLessEqual(len(out[0]["rows"]), PRIOR_MAX_ROWS)
+        self.assertTrue(out[0]["truncated"])
+        cell = out[0]["rows"][0][0]
+        self.assertNotIn("⟦", cell)
+        self.assertNotIn("⟧", cell)
+        self.assertLessEqual(len(cell), 128)
+
+    def test_block_contains_index_and_parseable_token(self):
+        out = extract_prior_results(
+            [self._row("compare actuals vs budget",
+                       [self._captured("SELECT m", ["month", "rev"],
+                                       [["Jan", "10"]], 24)])])
+        block = build_prior_data_block(out)
+        self.assertIn("[PRIOR DATA", block)
+        self.assertIn("recall_prior_result", block)
+        self.assertIn("compare actuals vs budget", block)
+        self.assertIn("24 rows", block)
+        start = block.index("⟦owi:prior=") + len("⟦owi:prior=")
+        payload = json.loads(block[start:block.index("⟧", start)])
+        self.assertEqual(payload[0]["columns"], ["month", "rev"])
+
+    def test_block_bounded_drops_oldest_first(self):
+        wide = [self._captured("S", ["c%d" % j for j in range(30)],
+                               [["x" * 120] * 30 for _ in range(30)])]
+        out = extract_prior_results([self._row("q%d" % i, wide) for i in range(4)])
+        block = build_prior_data_block(out)
+        token = block[block.index("⟦owi:prior="):]
+        self.assertLessEqual(len(token), PRIOR_TOKEN_MAX_CHARS + 2)
+        payload = json.loads(token[len("⟦owi:prior="):-1])
+        # Oldest dropped first: the most recent question must survive.
+        self.assertEqual(payload[0]["question"], "q3")
+
+    def test_block_empty_when_nothing_recallable(self):
+        self.assertEqual(build_prior_data_block([]), "")
+        self.assertEqual(build_prior_data_block(None), "")
+
+    def test_extract_dedups_recall_re_emits(self):
+        # A recall turn re-persists the SAME sql+columns as the original fetch:
+        # only the newest copy must survive, so copies never fill the window.
+        item = self._captured("SELECT m", ["month"], [["Jan"]])
+        rows = [self._row("original", [dict(item)]),
+                self._row("distinct", [self._captured("SELECT o", ["other"], [["x"]])]),
+                self._row("recall follow-up", [dict(item)])]
+        out = extract_prior_results(rows)
+        self.assertEqual([r["question"] for r in out],
+                         ["recall follow-up", "distinct"])
+
+    def test_extract_flags_column_and_sql_truncation(self):
+        cols = ["c%d" % i for i in range(50)]
+        long_sql = "SELECT " + "x" * 2000
+        items = [self._captured(long_sql, cols, [["v"] * 50])]
+        out = extract_prior_results([self._row("q", items)])
+        self.assertTrue(out[0]["truncated"])       # 50 -> 40 columns
+        self.assertTrue(out[0]["sql_truncated"])   # > 800 chars
+        self.assertLessEqual(len(out[0]["sql"]), 800)
+
+    def test_block_hard_bound_single_wide_result(self):
+        # Pathological single result at every per-field cap: the shrink loop
+        # must end with a token under the cap (halving rows then columns) or an
+        # empty block - never an oversized token.
+        wide = self._captured("S", ["c%d" % j for j in range(40)],
+                              [["x" * 128] * 40 for _ in range(30)])
+        out = extract_prior_results([self._row("q", [wide])])
+        block = build_prior_data_block(out)
+        if block:
+            token = block[block.index("⟦owi:prior="):]
+            self.assertLessEqual(len(token), PRIOR_TOKEN_MAX_CHARS)
+            payload = json.loads(token[len("⟦owi:prior="):-1])
+            self.assertTrue(payload[0]["truncated"])
+
 
 if __name__ == "__main__":
     unittest.main()

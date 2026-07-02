@@ -398,6 +398,10 @@ def chat_start():
     agent_profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
     if not agent_profile.get("modes"):
         mode = None
+    # Same opt-in gates the prior-results recall block: the `modes` flag marks an
+    # agent that speaks the owi control-token protocol (the orchestrator). For any
+    # other agent the ⟦owi:prior⟧ payload would leak into its prompt as raw text.
+    prior_recall_enabled = bool(agent_profile.get("modes"))
 
     # Web-app configured language (fr / en) the user is currently running the UI in.
     # Validated like the mode; absent/unknown -> None. The reply language of THIS turn
@@ -428,6 +432,7 @@ def chat_start():
             project_key, agent_id, message, exchange_id,
             identity["user_id"], parent_exchange_id, history_limit, user_suffix,
             screen_context=screen_context,
+            prior_recall_enabled=prior_recall_enabled,
         )
     except stream_manager.CapacityError:
         logger.warning("/chat/start - concurrency cap reached, rejected")

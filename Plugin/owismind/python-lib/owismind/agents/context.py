@@ -12,6 +12,7 @@ name/date/language directive at the start lets the model forget it. So the block
 user, date, web-app language, and the load-bearing rule "answer in the language of
 THIS message" - is appended last (see ``build_user_suffix``).
 """
+import json
 import math
 import re
 
@@ -158,6 +159,137 @@ def flatten_exchanges_to_messages(rows, max_messages):
 def exchanges_to_fetch(max_messages):
     """How many EXCHANGES to read to cover ``max_messages`` messages (2 per exchange)."""
     return max(1, int(math.ceil(int(max_messages) / 2.0)))
+
+
+# --- prior-results recall (grounded follow-ups without re-querying) -----------
+# The last exchanges' captured SQL results ride along the current turn as a
+# MACHINE token (⟦owi:prior=…⟧) the orchestrator parses and strips before any
+# LLM call - the model only reads a short [PRIOR DATA] index and loads the rows
+# on demand through its recall_prior_result tool. Everything is bounded so the
+# token stays small; the source rows were already read for the history replay
+# (same ancestor-chain query), so this adds ZERO database work.
+MAX_PRIOR_RESULTS = 3
+PRIOR_QUESTION_MAX_CHARS = 160
+PRIOR_SQL_MAX_CHARS = 800
+PRIOR_MAX_ROWS = 30
+PRIOR_MAX_COLS = 40
+PRIOR_CELL_MAX_CHARS = 128
+PRIOR_TOKEN_MAX_CHARS = 24_000
+PRIOR_MIN_ROWS_KEPT = 5
+PRIOR_MIN_COLS_KEPT = 6
+
+
+def _prior_clean(value, cap):
+    """String projection for the prior-data token: the ⟦⟧ glyphs would break the
+    token framing, so they are dropped from data; bounded."""
+    s = str(value) if value is not None else ""
+    return s.replace("⟦", "").replace("⟧", "")[:cap]
+
+
+def extract_prior_results(chain_rows):
+    """Up to MAX_PRIOR_RESULTS recallable results from ancestor-chain rows
+    (chronological input). Output is NEWEST FIRST (turn 1 = most recent). Pure.
+
+    An exchange contributes its ACTIVE captured result: the LAST successful
+    ``generated_sql`` item carrying {columns, rows} (same rule as Evidence).
+    Exchanges without a captured result are simply skipped. Duplicate results
+    are collapsed onto the NEWEST copy (same sql + columns): a recall turn
+    re-emits the recalled data as its own captured item, and without this
+    dedup a chain of follow-ups would fill the whole window with copies of
+    one dataset.
+    """
+    out = []
+    seen = set()
+    for row in reversed(chain_rows or []):
+        if len(out) >= MAX_PRIOR_RESULTS:
+            break
+        if not isinstance(row, dict):
+            continue
+        items = row.get("generated_sql") or []
+        active = None
+        for it in reversed(items):
+            if not isinstance(it, dict) or not it.get("success"):
+                continue
+            result = it.get("result")
+            if (isinstance(result, dict) and isinstance(result.get("columns"), list)
+                    and isinstance(result.get("rows"), list)):
+                active = it
+                break
+        if active is None:
+            continue
+        result = active["result"]
+        columns = [_prior_clean(c, PRIOR_CELL_MAX_CHARS)
+                   for c in result["columns"][:PRIOR_MAX_COLS]]
+        rows = [[_prior_clean(c, PRIOR_CELL_MAX_CHARS) for c in r[:PRIOR_MAX_COLS]]
+                for r in result["rows"][:PRIOR_MAX_ROWS] if isinstance(r, list)]
+        if not columns or not rows:
+            continue
+        sql_full = _prior_clean(active.get("sql"), 10 * PRIOR_SQL_MAX_CHARS)
+        signature = (sql_full[:PRIOR_SQL_MAX_CHARS], tuple(columns))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        row_count = active.get("row_count")
+        if isinstance(row_count, bool) or not isinstance(row_count, int):
+            row_count = None
+        out.append({
+            "question": _prior_clean(row.get("user_text"), PRIOR_QUESTION_MAX_CHARS),
+            "sql": sql_full[:PRIOR_SQL_MAX_CHARS],
+            "sql_truncated": len(sql_full) > PRIOR_SQL_MAX_CHARS,
+            "columns": columns,
+            "rows": rows,
+            "row_count": row_count,
+            "truncated": bool(result.get("truncated"))
+            or len(rows) < len(result["rows"])
+            or len(result["columns"]) > PRIOR_MAX_COLS,
+        })
+    return out
+
+
+def build_prior_data_block(prior_results):
+    """The visible [PRIOR DATA] index + the machine token, or '' when nothing is
+    recallable. HARD size bound: oldest results are dropped first, then the last
+    remaining result's rows are halved down to PRIOR_MIN_ROWS_KEPT, then its
+    columns down to PRIOR_MIN_COLS_KEPT; a result that still exceeds the cap
+    after all that is pathological and the block is dropped entirely."""
+    results = [dict(r) for r in (prior_results or []) if isinstance(r, dict)]
+    if not results:
+        return ""
+    while True:
+        token = ("⟦owi:prior=" +
+                 json.dumps(results, ensure_ascii=False, separators=(",", ":")) +
+                 "⟧")
+        if len(token) <= PRIOR_TOKEN_MAX_CHARS:
+            break
+        if len(results) > 1:
+            results = results[:-1]          # newest-first: drop the oldest
+            continue
+        rows = results[0].get("rows") or []
+        if len(rows) > PRIOR_MIN_ROWS_KEPT:
+            results[0]["rows"] = rows[: max(PRIOR_MIN_ROWS_KEPT, len(rows) // 2)]
+            results[0]["truncated"] = True
+            continue
+        cols = results[0].get("columns") or []
+        if len(cols) > PRIOR_MIN_COLS_KEPT:
+            keep = max(PRIOR_MIN_COLS_KEPT, len(cols) // 2)
+            results[0]["columns"] = cols[:keep]
+            results[0]["rows"] = [r[:keep] for r in results[0]["rows"]]
+            results[0]["truncated"] = True
+            continue
+        return ""                            # nothing sane to ship
+    lines = ["\n\n[PRIOR DATA - results already fetched earlier in this "
+             "conversation, recallable INSTANTLY with recall_prior_result "
+             "(no new query):"]
+    for i, r in enumerate(results, start=1):
+        cols = ", ".join(r.get("columns") or [])
+        n = r.get("row_count")
+        n_txt = ("%d rows" % n) if isinstance(n, int) else ("%d rows" % len(r.get("rows") or []))
+        lines.append(' %d%s: "%s" -> %s (%s)' % (
+            i, " (most recent)" if i == 1 else "",
+            r.get("question") or "?", n_txt, cols))
+    lines.append(" Prefer recall_prior_result over a specialist when these "
+                 "already answer the follow-up.]")
+    return "\n".join(lines) + token
 
 
 # Screen-awareness caps (bounded so the block can never bloat the prompt).

@@ -27,7 +27,11 @@ import json
 import logging
 from uuid import uuid4
 
-from owismind.agents.context import exchanges_to_fetch, flatten_exchanges_to_messages
+from owismind.agents.context import (
+    exchanges_to_fetch,
+    extract_prior_results,
+    flatten_exchanges_to_messages,
+)
 from owismind.evidence import capture  # pure module (no dataiku), no import cycle
 from owismind.security.validation import (
     validate_conversations_limit,
@@ -304,8 +308,18 @@ def history_messages_for_chain(user_id, parent_exchange_id, max_messages):
     depth AND a row LIMIT; ``parent_exchange_id`` (the chain start) and the user value
     are escaped via ``sql_value``. Never alters storage.
     """
+    return chain_context_for_agent(user_id, parent_exchange_id, max_messages)[0]
+
+
+def chain_context_for_agent(user_id, parent_exchange_id, max_messages):
+    """``(history_messages, prior_results)`` from ONE ancestor-chain read.
+
+    Same bounded walk as ``history_messages_for_chain`` (which delegates here);
+    the chain rows already carry each exchange's ``generated_sql`` items, so the
+    recallable prior results are extracted from the SAME read - no extra SQL.
+    """
     if not parent_exchange_id:
-        return []
+        return [], []
     limit = validate_history_limit(max_messages)
     n_exchanges = exchanges_to_fetch(limit)
     table = full_table(CHAT_V5_LOGICAL)
@@ -322,7 +336,8 @@ def history_messages_for_chain(user_id, parent_exchange_id, max_messages):
     rows.reverse()                        # -> chronological (oldest-first)
     for r in rows:
         r["generated_sql"] = parse_json_list(r.get("generated_sql"))
-    return flatten_exchanges_to_messages(rows, limit)
+    return (flatten_exchanges_to_messages(rows, limit),
+            extract_prior_results(rows))
 
 
 # Server-side truncation length for a conversation title (first user message).

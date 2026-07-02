@@ -176,7 +176,7 @@ def _append_event_locked_free(run_id, event):
             state["events"].append(event)
 
 
-def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None):
+def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False):
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
@@ -214,7 +214,8 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
         # Pass started_at explicitly so the wall-clock deadline is anchored at
         # registration and never reset by re-reading possibly-evicted run state.
         args=(run_id, project_key, agent_id, message, exchange_id, now,
-              user_id, parent_exchange_id, history_limit, user_suffix, screen_context),
+              user_id, parent_exchange_id, history_limit, user_suffix, screen_context,
+              prior_recall_enabled),
         name="owi-agent-run-{}".format(run_id[:8]),
         daemon=True,
     )
@@ -257,7 +258,8 @@ def _build_screen_block(user_id, history, screen_context):
 
 
 def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
-            user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None):
+            user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None,
+            prior_recall_enabled=False):
     """Run one agent completion, stream its events into the run, then persist.
 
     Mirrors the old SSE generator's body but writes into the shared run state
@@ -296,20 +298,31 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     # Best-effort: if the history read fails, degrade to the current turn alone (never
     # break the chat).
     try:
-        history = chat_v5.history_messages_for_chain(
+        history, prior_results = chat_v5.chain_context_for_agent(
             user_id, parent_exchange_id, history_limit
         )
     except Exception:
         logger.exception("history assembly failed; sending current turn only")
-        history = []
+        history, prior_results = [], []
     # Screen awareness: a bounded "ON SCREEN NOW" block (the artifacts the user is
     # viewing + the gist of the last answer) so follow-ups like "explain the chart" /
     # "add the forecast" are grounded. Only when the Evidence panel is actually open
     # (one owner-scoped O(1) read, skipped otherwise). Placed BEFORE the language
     # suffix so the reply-language imperative stays the last line of the turn (recency).
     screen_block = _build_screen_block(user_id, history, screen_context)
+    # Prior-results recall: a short [PRIOR DATA] index for the model + the
+    # machine token the orchestrator parses (and strips before any LLM call).
+    # Gated per agent (same opt-in as the mode token): for a non-token-aware
+    # agent the payload would leak into its prompt as raw text.
+    # Best-effort: on failure the turn simply behaves as before the feature.
+    prior_block = ""
+    if prior_recall_enabled:
+        try:
+            prior_block = context.build_prior_data_block(prior_results)
+        except Exception:
+            logger.exception("prior-data block assembly failed (non-fatal)")
     agent_messages = context.build_completion_messages(
-        history, message, screen_block + (user_suffix or ""))
+        history, message, screen_block + prior_block + (user_suffix or ""))
     try:
         for event in streaming.run_agent_streamed(project_key, agent_id, agent_messages):
             # Cooperative stop between chunks: hard deadline reached, or the browser

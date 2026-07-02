@@ -160,6 +160,37 @@ PROGRESS_TOOL_SPEC = {
         },
     },
 }
+
+# Prior-result recall tool: exposed only when the backend shipped recallable
+# results ([PRIOR DATA] note + ⟦owi:prior⟧ token). Loading is INSTANT (the data
+# is already in state) - the whole point is answering follow-ups without paying
+# a 30-60s specialist round-trip for figures the conversation already holds.
+RECALL_TOOL_NAME = "recall_prior_result"
+RECALL_TOOL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": RECALL_TOOL_NAME,
+        "description": (
+            "INSTANTLY reload a data result already fetched earlier in this "
+            "conversation (listed in the [PRIOR DATA] note) - no new query, no "
+            "waiting. Use it when the follow-up can be answered from that data: "
+            "reading a value, comparing figures already present, interpreting, "
+            "or re-displaying it (another chart type, a table). After recalling "
+            "you can call show_chart / show_table / show_kpi on it. For data "
+            "NOT in the note (new entity, period, scenario, metric or a "
+            "different aggregation), call the specialist instead."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "turn": {"type": "integer",
+                         "description": "Which prior result to reload: 1 = most "
+                                        "recent (default), 2 = the one before, "
+                                        "3 = the one before that."},
+            },
+            "required": [],
+        },
+    },
+}
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -171,7 +202,15 @@ _CTRL_TOKEN_RE = re.compile(r"⟦owi:[a-z_]+=[^⟧]*⟧")
 # block). The MODEL must see them (recency-anchored language rule + screen awareness),
 # but our own derived uses - sub-agent continuity, fallback detection - want the raw
 # question, so we strip from the FIRST appended block to the end.
-_CTX_BLOCK_RE = re.compile(r"\n\n\[(?:ON SCREEN NOW|Context -).*\Z", re.DOTALL)
+_CTX_BLOCK_RE = re.compile(
+    r"\n\n\[(?:ON SCREEN NOW|PRIOR DATA|Context -).*\Z", re.DOTALL)
+# Machine token carrying the previous turns' captured SQL results (built by the
+# backend). Parsed into state at run start, stripped before ANY model call (the
+# generic _CTRL_TOKEN_RE strip also covers it on every replayed message).
+_PRIOR_TOKEN_RE = re.compile(r"⟦owi:prior=([^⟧]*)⟧")
+MAX_PRIOR_RESULTS = 3
+PRIOR_MAX_ROWS = 30
+PRIOR_MAX_COLS = 40
 
 MAX_TOOL_LOOPS = 8                 # hard bound on agent<->tools cycles per turn
 MAX_PARALLEL_AGENTS = 3            # bounded fan-out (instance safety)
@@ -643,6 +682,8 @@ _L = {
     "tool_kpi": {"fr": "Préparation de l'indicateur", "en": "Preparing the KPI"},
     "tool_date": {"fr": "Date du jour", "en": "Current date"},
     "tool_lookup": {"fr": "Recherche rapide d'une valeur", "en": "Fast value lookup"},
+    "tool_recall": {"fr": "Relecture d'un résultat précédent",
+                    "en": "Recalling a previous result"},
     "tool_done": {"fr": "Outil terminé", "en": "Tool done"},
     "artifact_chart": {"fr": "Graphique prêt", "en": "Chart ready"},
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
@@ -1082,6 +1123,56 @@ def parse_lang(text):
     return None
 
 
+def parse_prior(text):
+    """``(prior_results, cleaned_text)`` from the backend's ⟦owi:prior=…⟧ token.
+
+    The payload is server-built, but it is still re-validated structurally here:
+    on ANY anomaly the results are dropped and the turn behaves exactly as
+    before the feature. Each result: {question, sql, columns, rows, row_count,
+    truncated}, newest first (turn 1 = most recent), bounded."""
+    if not text:
+        return [], text
+    matches = list(_PRIOR_TOKEN_RE.finditer(text))
+    if not matches:
+        return [], text
+    # LAST token wins (same security contract as the mode/lang tokens): the
+    # backend appends its authoritative token at the END of the message, so a
+    # fake token typed EARLIER by the user can never override it.
+    m = matches[-1]
+    cleaned = _PRIOR_TOKEN_RE.sub("", text).strip()
+    try:
+        data = json.loads(m.group(1))
+    except Exception:
+        return [], cleaned
+    out = []
+    if isinstance(data, list):
+        for entry in data[:MAX_PRIOR_RESULTS]:
+            if not isinstance(entry, dict):
+                continue
+            columns = entry.get("columns")
+            rows = entry.get("rows")
+            if not (isinstance(columns, list) and isinstance(rows, list)):
+                continue
+            columns = [str(c)[:128] for c in columns[:PRIOR_MAX_COLS]]
+            safe_rows = [[str(c)[:128] for c in r[:PRIOR_MAX_COLS]]
+                         for r in rows[:PRIOR_MAX_ROWS] if isinstance(r, list)]
+            if not columns or not safe_rows:
+                continue
+            row_count = entry.get("row_count")
+            if isinstance(row_count, bool) or not isinstance(row_count, int):
+                row_count = None
+            out.append({
+                "question": str(entry.get("question") or "")[:160],
+                "sql": str(entry.get("sql") or "")[:800],
+                "sql_truncated": bool(entry.get("sql_truncated")),
+                "columns": columns,
+                "rows": safe_rows,
+                "row_count": row_count,
+                "truncated": bool(entry.get("truncated")),
+            })
+    return out, cleaned
+
+
 def _strip_context_block(text):
     """Remove the backend's end-of-prompt human [Context -…] block. Used for our
     OWN derived text (sub-agent continuity, fallback detection); the MODEL still
@@ -1252,7 +1343,20 @@ PERSONA = (
     "ask to explain or change what's shown, they mean THAT. You may explain what's "
     "on screen directly. To CHANGE it or add ANY new figure (e.g. 'add the "
     "forecast'), CALL the specialist to fetch the data, then re-render - never just "
-    "say you did it, and never invent a number.\n"
+    "say you did it, and never invent a number.\n\n"
+    "# PRIOR TURN DATA (recall instead of re-querying)\n"
+    "When the user's message carries a [PRIOR DATA] note, those results were "
+    "already fetched by a specialist earlier in THIS conversation and reload "
+    "INSTANTLY with `recall_prior_result` (pick the turn number from the note; "
+    "a specialist call takes 30-60s, a recall takes none). For a follow-up "
+    "answered by that data - reading a value, comparing figures already "
+    "present, interpreting a result, or re-displaying it (another chart type, "
+    "a table) - recall it FIRST instead of re-calling the specialist, then "
+    "answer with figures taken VERBATIM from the recalled rows (they are "
+    "SQL-grounded; simple reading and comparison of visible values is fine, "
+    "but never invent a figure that is not in them). Call a specialist ONLY "
+    "for data NOT in the note: a new entity, period, scenario, metric, or an "
+    "aggregation the rows cannot answer.\n"
 )
 
 
@@ -1366,6 +1470,8 @@ class OrchState(TypedDict, total=False):
     used_caps: Annotated[list, _add_unique]        # capability keys consulted
     latest: dict                                   # {columns, rows} last result w/ rows
     latest_sql_id: str                             # sql_id backing 'latest' (artifact binding)
+    prior_results: list                            # recallable results of previous turns
+    recalled: bool                                 # a prior result was recalled this run
     preamble: str                                  # model's own lead-in for this turn's tools
     step: int                                      # tool-loop counter
     final_text: str
@@ -1842,6 +1948,67 @@ class MyLLM(BaseLLM):
                 # ticker fillers would double it.
                 model_narrated = True
 
+            # --- prior-result recall (before specialists AND artifacts) ---
+            # Instant: the data was parsed from the backend token at run start.
+            # Runs BEFORE the specialists so a specialist result in the same
+            # batch wins `latest` (freshest data charts by default), and before
+            # the artifact tools so a show_* in the same batch validates against
+            # the recalled columns.
+            recall_calls = [c for c in local_calls if c[1] == RECALL_TOOL_NAME]
+            local_calls = [c for c in local_calls if c[1] != RECALL_TOOL_NAME]
+            for (tc, name, args) in recall_calls:
+                writer(_ev("RUNNING_TOOL", {"toolKey": name, "stepIndex": base_step,
+                                            "label": _L["tool_recall"][lang]}))
+                prior = state.get("prior_results") or []
+                turn = args.get("turn")
+                idx = (turn - 1) if isinstance(turn, int) and not isinstance(turn, bool) \
+                    and 1 <= turn <= len(prior) else 0
+                entry = prior[idx] if prior else None
+                if entry is None:
+                    writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
+                                             "status": "skipped",
+                                             "label": _L["tool_done"][lang]}))
+                    _pair("No prior result is available in this conversation. "
+                          "Call the appropriate specialist instead.", tc.get("id"))
+                    continue
+                result = {"columns": entry["columns"], "rows": entry["rows"],
+                          "truncated": bool(entry.get("truncated"))}
+                updates["latest"] = result
+                # Data-presence signal for node_finish's safety nets (auto-table
+                # + honest fallback): a recall counts like a specialist result.
+                updates["recalled"] = True
+                # Unstamped on purpose: the recalled data is re-emitted below as
+                # THIS exchange's evidence span, and unstamped artifacts bind to
+                # the exchange's active captured result - which is that span.
+                # Known narrow edge: a successful lookup LATER in the same turn
+                # becomes the active span instead; a chart rendered on the recall
+                # then degrades to an honest empty state (never wrong data).
+                updates["latest_sql_id"] = None
+                # Same frozen span the lookup uses: the Evidence panel of THIS
+                # exchange shows the original SQL + the recalled rows.
+                sql_text = entry.get("sql") or "(recalled prior result)"
+                if entry.get("sql_truncated"):
+                    # Honest provenance: the recalled copy only carries a prefix
+                    # of the original query (full SQL in the original turn).
+                    sql_text += "\n-- truncated copy: see the original turn for the full SQL"
+                try:
+                    with trace.subspan("semantic-model-query") as rsp:
+                        rsp.outputs["sql"] = sql_text
+                        rsp.outputs["success"] = True
+                        rsp.outputs["row_count"] = entry.get("row_count")
+                        rsp.outputs["columns"] = entry["columns"]
+                        rsp.outputs["rows"] = entry["rows"]
+                except Exception:
+                    logger.exception("recall evidence span failed (non-fatal)")
+                writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
+                                         "status": "ok",
+                                         "label": _L["tool_done"][lang]}))
+                headline = ('Recalled the result of the earlier question "%s" '
+                            "(no new query was run). Answer from these rows; "
+                            "every figure verbatim."
+                            % (entry.get("question") or "?"))
+                _pair(_subagent_tool_output(headline, result), tc.get("id"))
+
             # --- specialists (parallel when more than one) ---
             if sub_calls:
                 # A fan-out consumes step indices base_step..base_step+N-1 (each
@@ -1967,12 +2134,15 @@ class MyLLM(BaseLLM):
             latest = state.get("latest") or {}
             rows = latest.get("rows") or []
             rendered = list(state.get("rendered") or [])
-            if state.get("used_caps") and not rendered and len(rows) >= 2:
+            # A recalled prior result is data-in-hand exactly like a specialist
+            # result: both must trigger the same safety nets below.
+            has_data = bool(state.get("used_caps") or state.get("recalled"))
+            if has_data and not rendered and len(rows) >= 2:
                 writer(_ev("ARTIFACT", {"kind": "table", "title": "", "chart": None,
                                         "sql_id": state.get("latest_sql_id"),
                                         "label": _L["artifact_table"][lang]}))
                 rendered.append("table")
-            if state.get("used_caps"):
+            if has_data:
                 writer(_narr(_NARR["writing"][lang]))   # live: "writing the answer…"
             writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
             text = (state.get("final_text") or "").strip()
@@ -1983,7 +2153,7 @@ class MyLLM(BaseLLM):
             if rendered:
                 text = _strip_markdown_tables(text)
             if not text:
-                if state.get("used_caps") and rows:
+                if has_data and rows:
                     # Data WAS gathered and is in the panel (e.g. the rare loop-cap
                     # case) - point the user to it instead of an opaque failure.
                     text = ("Voici les données demandées - le détail est dans le "
@@ -2133,6 +2303,11 @@ class MyLLM(BaseLLM):
             # local detection); the model also sees the human [Context -…] block in
             # the replayed history, which re-states the rule in the recency slot.
             token_lang = parse_lang(last_user)
+            # Recallable prior-turn results (backend-shipped machine token):
+            # parsed into state, stripped from every text the model ever sees.
+            # MUST run BEFORE parse_mode: parse_mode's cleanup strips EVERY
+            # ⟦owi:*⟧ token (including ours) from the text it returns.
+            prior_results, last_user = parse_prior(last_user)
             mode, last_user = parse_mode(last_user)
             last_user = _strip_context_block(last_user)   # raw question for OUR uses
             if not last_user:
@@ -2151,6 +2326,9 @@ class MyLLM(BaseLLM):
             # model); pro/claude narrate in plain text and do not get the tool.
             tool_specs = (list(self._tool_specs) if narration_enabled(mode)
                           else list(self._tool_specs) + [PROGRESS_TOOL_SPEC])
+            # The recall tool only exists when there is something to recall.
+            if prior_results:
+                tool_specs.append(RECALL_TOOL_SPEC)
             chat = self._new_chat(project, system_prompt, history, loop_llm,
                                   tool_specs)
             # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
@@ -2175,7 +2353,7 @@ class MyLLM(BaseLLM):
             initial = {"pending_tool_calls": [], "captured": [], "usage": {},
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",
-                       "started": False}
+                       "started": False, "prior_results": prior_results}
             # NON-DURABLE by design: no checkpointer, ephemeral per-request run. The
             # nodes are NOT idempotent (they stream real text, append trace, run
             # sub-agents and mutate `chat`), so a checkpointer must NOT be added
