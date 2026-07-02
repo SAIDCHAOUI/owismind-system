@@ -308,6 +308,10 @@ export const useEvidenceStore = defineStore('evidence', () => {
           savedPage: page.value,
         }
     page.value = 0
+    // The rows table lives in the Sources tab; the drill chevron sits on the
+    // Evidence tab. Land the user on the tab that renders the drilled rows so the
+    // click has a visible surface (setActiveTab never touches `open`, F13).
+    activeTab.value = 'sources'
     refreshRows()
   }
 

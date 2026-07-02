@@ -16,7 +16,8 @@ Routes:
   - ``/conversations`` : names-only, keyset-paginated conversation list (sidebar).
   - ``/conversation``  : all messages of ONE session, fetched lazily on click.
   - ``/evidence/*``    : Evidence Studio - meta / rows / distinct (owner-scoped, read-only, project datasets).
-  - ``/admin/*``       : storage view + user/admin + agent-whitelist + monthly-budget management (admin-gated).
+  - ``/source/*``      : Source Data Explorer - meta / rows / distinct (browse the raw project datasets an agent is configured with, read-only).
+  - ``/admin/*``       : storage view + user/admin + agent-whitelist + monthly-budget + source-dataset picker (admin-gated).
 
 Transport is polling, not SSE: DSS's internal nginx can buffer a long-lived
 event-stream so events would arrive all at once. Instead the agent runs in a
@@ -41,6 +42,7 @@ from flask import Blueprint, g, jsonify, request
 from owismind.agents import context, discovery, stream_manager
 from owismind.evidence import chart_payload
 from owismind.evidence import service as evidence_service
+from owismind.evidence import source_service
 from owismind.evidence import throttle as evidence_throttle
 from owismind.storage import artifacts as artifacts_storage
 from owismind.security.identity import IdentityError, derive_full_name, resolve_identity
@@ -59,6 +61,10 @@ from owismind.security.validation import (
     validate_optional_exchange_id,
     validate_quota_note,
     validate_required_exchange_id,
+    validate_source_distinct_params,
+    validate_source_meta_params,
+    validate_source_rows_request,
+    validate_sources_block,
     validate_suggestion_from_chat,
     validate_suggestion_manual,
     validate_user_id_list,
@@ -721,6 +727,14 @@ def agents_available():
                     and profile["benchmark"].get("enabled")
                     and profile["benchmark"].get("table")
                 ),
+                # The RAW project datasets an admin configured for this agent (Source
+                # Data Explorer). Only {id (stable index), label} is exposed - never the
+                # dataset name / connection / project. The id is the index into the SAME
+                # validated block the service re-derives, so they always line up.
+                "sources": [
+                    {"id": i, "label": s["label"]}
+                    for i, s in enumerate(validate_sources_block(profile.get("sources")))
+                ],
             }
         )
     logger.info(
@@ -910,6 +924,139 @@ def evidence_distinct():
         logger.exception("/evidence/distinct - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     return jsonify({"status": "ok", **result})
+
+
+# --- Source Data Explorer (browse the raw project datasets an agent is configured with) ----
+# Any authenticated user may explore the RAW datasets an admin attached to an agent
+# (before/after prompting). The frontend sends only the opaque agent key + an integer
+# source index + evidence-shaped filters + a free-text q; the server resolves the index
+# to a discovered project dataset and runs a bounded read-only page. Mirrors /evidence/*.
+
+
+def _source_guard():
+    """Resolve identity + require configured storage (shared by /source/*).
+
+    Like ``_evidence_guard`` (identity, impersonation-effective identity, configured
+    storage, per-user throttle) but WITHOUT the chat-table bootstrap: the explorer
+    reads project datasets, never the chat storage. Returns ``(identity, None)`` or
+    ``(None, (response, status))``.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/source - identity resolution failed: %s", exc)
+        return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
+    # --- BEGIN impersonation (temporary, removable) ---
+    # Source reads scope to the EFFECTIVE user (the impersonated target for an admin),
+    # so an admin sees exactly what the inspected user's agents can explore.
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+    if not sql_config.is_configured():
+        logger.warning("/source - storage not configured")
+        return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
+    # Per-user token-bucket gate: reuse the Evidence throttle - a scripted flood must
+    # not pin worker threads of the mono-process polling backend.
+    if not evidence_throttle.can_accept(identity["user_id"]):
+        logger.warning("/source - rate limited user_id=%s", identity["user_id"])
+        return None, (jsonify({"status": "error", "error": "rate_limited"}), 429)
+    return identity, None
+
+
+@api.route("/source/meta", methods=["GET"])
+def source_meta():
+    """Descriptor of one configured source: its label + live column list.
+
+    Query params: ``agent`` (opaque logical key), ``source`` (int index). Table /
+    connection are resolved server-side.
+    """
+    _identity, err = _source_guard()
+    if err:
+        return err
+    try:
+        agent_key, source_id = validate_source_meta_params(
+            request.args.get("agent"), request.args.get("source"))
+    except ValidationError as exc:
+        logger.warning("/source/meta - invalid params: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        meta = source_service.source_meta(agent_key, source_id)
+    except source_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/source/meta - failed")
+        return jsonify({"status": "error", "error": "source_unavailable"}), 500
+    return jsonify({"status": "ok", **meta})
+
+
+@api.route("/source/rows", methods=["POST"])
+def source_rows():
+    """One bounded page of a configured source dataset, filtered + optionally searched.
+
+    Body: ``{agent, source, q?, filters?, page?, sort?}``. The body never carries SQL:
+    filters travel as ``{column, op, values}`` and ``q`` is a free-text term matched
+    over all columns server-side.
+    """
+    _identity, err = _source_guard()
+    if err:
+        return err
+    try:
+        agent_key, source_id, q, filters, page, sort = validate_source_rows_request(
+            request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/source/rows - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        result = source_service.source_rows(agent_key, source_id, q, filters, page, sort)
+    except source_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/source/rows - failed")
+        return jsonify({"status": "error", "error": "source_unavailable"}), 500
+    return jsonify({"status": "ok", **result})
+
+
+@api.route("/source/distinct", methods=["GET"])
+def source_distinct():
+    """Bounded distinct values of ONE source column (the filter-chip picker).
+
+    Query params: ``agent`` (opaque logical key), ``source`` (int index), ``column``.
+    """
+    _identity, err = _source_guard()
+    if err:
+        return err
+    try:
+        agent_key, source_id, column = validate_source_distinct_params(
+            request.args.get("agent"), request.args.get("source"),
+            request.args.get("column"))
+    except ValidationError as exc:
+        logger.warning("/source/distinct - invalid params: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        result = source_service.source_distinct(agent_key, source_id, column)
+    except source_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/source/distinct - failed")
+        return jsonify({"status": "error", "error": "source_unavailable"}), 500
+    return jsonify({"status": "ok", **result})
+
+
+@api.route("/admin/sources/datasets", methods=["GET"])
+def admin_sources_datasets():
+    """The project's discovered SQL dataset NAMES, for the admin source picker.
+
+    Admin-gated. A listing failure degrades to an empty list + an ``error`` field
+    (never a 500 storm) so the admin form stays usable.
+    """
+    _identity, err = _admin_guard()
+    if err:
+        return err
+    try:
+        datasets = source_service.list_source_dataset_names()
+    except Exception:
+        logger.exception("/admin/sources/datasets - listing failed")
+        return jsonify({"status": "ok", "datasets": [], "error": "source_unavailable"})
+    return jsonify({"status": "ok", "datasets": datasets})
 
 
 # --- benchmark suggestions (the collaborative golden-set intake) -------------

@@ -17,6 +17,7 @@ import MessageAgent from './MessageAgent.vue'
 import { timelineSignature } from '../../composables/timelineModel.js'
 import { useChatStore } from '../../stores/chat.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
+import { useSourcesStore } from '../../stores/sources.js'
 
 const props = defineProps({
   turns: { type: Array, required: true },
@@ -24,6 +25,7 @@ const props = defineProps({
 
 const chat = useChatStore()
 const evidence = useEvidenceStore()
+const sources = useSourcesStore()
 
 const scroller = ref(null)
 // How close to the bottom (px) still counts as "following" the stream.
@@ -71,7 +73,8 @@ watch(() => chat.activeSessionId, repin)
 // is sending-gated, nothing else fires).
 // Re-run the STICK-GATED toBottom() once the new layout is applied - F13-safe: it
 // does not watch `turns`, and a user who scrolled up is never yanked (stick=false).
-watch(() => evidence.open, () => toBottom(), { flush: 'post' })
+// The standalone Source Data Explorer panel adds/removes the same right column.
+watch(() => evidence.open || sources.open, () => toBottom(), { flush: 'post' })
 onMounted(() => {
   stick = true
   toBottom()

@@ -25,6 +25,7 @@ import {
   saveAdminUserQuota,
   adminListBenchmarkTables,
   adminValidateBenchmarkTable,
+  adminListSourceDatasets,
 } from '../services/backend.js'
 import {
   formatMoney,
@@ -82,6 +83,9 @@ const AGENT_ICONS = [
 const BADGES = ['', 'default', 'new', 'beta']
 const TAGLINE_MAX = 120
 const DESC_MAX = 700
+// Max source datasets an agent can expose (mirrors server MAX_AGENT_SOURCES).
+const MAX_SOURCES = 8
+const SOURCE_LABEL_MAX = 60
 
 // Default benchmark block stored with the profile (enabled + where its results live).
 function emptyBenchmark() {
@@ -97,6 +101,8 @@ function emptyProfile() {
     badge: '',
     modes: false,
     benchmark: emptyBenchmark(),
+    // Raw project datasets this agent exposes to the Source Data Explorer.
+    sources: [],
   }
 }
 
@@ -119,6 +125,8 @@ const editForm = reactive({
   benchConnection: 'SQL_owi',
   benchTable: '',
   benchAgentKey: '',
+  // Source datasets the agent exposes: [{ dataset, label }] (edited in place below).
+  sources: [],
 })
 
 // Benchmark table picker + schema check (loaded lazily inside the editor).
@@ -127,6 +135,14 @@ const benchTablesLoading = ref(false)
 const benchTablesError = ref('')
 // { state: 'idle' | 'busy' | 'ok' | 'bad' | 'error', missing: [] }
 const benchValidate = reactive({ state: 'idle', missing: [] })
+
+// Source-dataset picker: the project's SQL dataset names, loaded lazily on first
+// interaction (a datalist for the free-text dataset inputs). A listing failure
+// leaves the inputs usable as free text (the name may still be valid).
+const sourceDatasets = ref([])
+const sourceDatasetsLoading = ref(false)
+const sourceDatasetsError = ref('')
+const sourceDatasetsLoaded = ref(false)
 
 function linesToList(text, max) {
   return String(text || '')
@@ -155,12 +171,23 @@ function openEditor(i) {
   editForm.benchConnection = b.connection || 'SQL_owi'
   editForm.benchTable = b.table || ''
   editForm.benchAgentKey = b.agent_key || ''
+  // Seed the source rows (deep copy, so edits never mutate the stored profile).
+  editForm.sources = Array.isArray(p.sources)
+    ? p.sources.map((s) => ({
+        dataset: String((s && s.dataset) || ''),
+        label: String((s && s.label) || ''),
+      }))
+    : []
   // Reset the table picker + schema check; load tables when a benchmark is on.
   benchTables.value = []
   benchTablesError.value = ''
   benchValidate.state = 'idle'
   benchValidate.missing = []
   if (editForm.benchEnabled) loadBenchTables()
+  // Reset the source-dataset picker (loaded lazily on first interaction below).
+  sourceDatasets.value = []
+  sourceDatasetsError.value = ''
+  sourceDatasetsLoaded.value = false
   editorOpen.value = true
 }
 
@@ -181,10 +208,29 @@ function applyEditor() {
         table: editForm.benchTable.trim(),
         agent_key: editForm.benchAgentKey.trim(),
       },
+      sources: cleanSources(editForm.sources),
     }
     profilesDirty.value = true
   }
   editorOpen.value = false
+}
+
+// Client mirror of the server's validate_sources_block: trim, drop empty-dataset rows,
+// de-dup by dataset (case-insensitive, first wins), fall the label back to the dataset
+// name, cap at MAX_SOURCES. The server revalidates on save regardless.
+function cleanSources(rows) {
+  const out = []
+  const seen = new Set()
+  for (const r of rows || []) {
+    const dataset = String((r && r.dataset) || '').trim()
+    if (!dataset) continue
+    const low = dataset.toLowerCase()
+    if (seen.has(low)) continue
+    seen.add(low)
+    out.push({ dataset, label: String((r && r.label) || '').trim().slice(0, SOURCE_LABEL_MAX) || dataset })
+    if (out.length >= MAX_SOURCES) break
+  }
+  return out
 }
 
 // List the tables of the chosen SQL connection (best-effort; the input stays usable as
@@ -232,6 +278,38 @@ async function validateBenchSchema() {
   } catch (e) {
     benchValidate.state = 'error'
   }
+}
+
+// List the project's SQL dataset names for the source picker datalist (best-effort;
+// the inputs stay usable as free text when the listing is empty or fails). Loaded once
+// per editor open, unless `force` (the refresh link) re-fetches.
+async function loadSourceDatasets(force) {
+  if (sourceDatasetsLoading.value) return
+  if (sourceDatasetsLoaded.value && !force) return
+  sourceDatasetsLoading.value = true
+  sourceDatasetsError.value = ''
+  try {
+    const res = await adminListSourceDatasets()
+    sourceDatasets.value = Array.isArray(res.datasets) ? res.datasets : []
+    if (res.error) sourceDatasetsError.value = t('src.admin.load_error')
+  } catch (e) {
+    sourceDatasets.value = []
+    sourceDatasetsError.value = t('src.admin.load_error')
+  } finally {
+    // Mark loaded so focusing another input does not re-fire; Refresh forces a retry.
+    sourceDatasetsLoaded.value = true
+    sourceDatasetsLoading.value = false
+  }
+}
+
+function addSource() {
+  if (editForm.sources.length >= MAX_SOURCES) return
+  editForm.sources.push({ dataset: '', label: '' })
+  loadSourceDatasets(false)
+}
+
+function removeSource(i) {
+  editForm.sources.splice(i, 1)
 }
 
 // Live preview of how the agent card will read with the current form values.
@@ -1023,6 +1101,57 @@ if (import.meta.env.DEV) {
               </div>
             </template>
           </div>
+
+          <!-- Source datasets: the RAW project datasets this agent exposes to the
+               Source Data Explorer (users browse them without writing a query). -->
+          <div class="ed-section">
+            <div class="ed-section-title">{{ t('src.admin.section') }}</div>
+            <p class="ed-hint">{{ t('src.admin.hint') }}</p>
+
+            <div v-for="(s, i) in editForm.sources" :key="i" class="src-row">
+              <input
+                v-model="s.dataset"
+                type="text"
+                class="ed-input src-dataset"
+                list="src-dataset-list"
+                :placeholder="t('src.admin.dataset_ph')"
+                @focus="loadSourceDatasets(false)"
+              />
+              <input
+                v-model="s.label"
+                type="text"
+                class="ed-input src-label"
+                :maxlength="SOURCE_LABEL_MAX"
+                :placeholder="s.dataset.trim() || t('src.admin.label_ph')"
+              />
+              <button
+                type="button"
+                class="src-remove"
+                :aria-label="t('src.admin.remove')"
+                :title="t('src.admin.remove')"
+                @click="removeSource(i)"
+              >
+                <Icon name="x" :size="14" />
+              </button>
+            </div>
+
+            <datalist id="src-dataset-list">
+              <option v-for="d in sourceDatasets" :key="d" :value="d" />
+            </datalist>
+
+            <div class="src-actions">
+              <Button variant="ghost" :disabled="editForm.sources.length >= MAX_SOURCES" @click="addSource">
+                {{ t('src.admin.add') }}
+              </Button>
+              <span v-if="sourceDatasetsLoading" class="ed-hint">{{ t('src.loading') }}</span>
+              <template v-else-if="sourceDatasetsError">
+                <span class="ed-hint ed-hint--bad">{{ sourceDatasetsError }}</span>
+                <button type="button" class="ed-link" @click="loadSourceDatasets(true)">
+                  {{ t('src.admin.refresh') }}
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
 
         <!-- Live preview of the user-facing agent card (per mockup .pf-card) -->
@@ -1661,6 +1790,27 @@ if (import.meta.env.DEV) {
 .bench-vd :deep(.ui-icon) { width: 14px; height: 14px; flex-shrink: 0; }
 .bench-vd--ok { color: var(--success); }
 .bench-vd--bad { color: var(--danger); }
+
+/* Source datasets: one editable row = dataset input + label input + remove (square). */
+.src-row { display: flex; align-items: center; gap: var(--s-3); }
+.src-dataset { flex: 1 1 55%; min-width: 0; }
+.src-label { flex: 1 1 45%; min-width: 0; }
+.src-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.src-remove:hover { border-color: var(--danger); color: var(--danger); }
+.src-remove:focus-visible { outline: none; border-color: var(--orange); }
+.src-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* Square checkbox toggle (response-mode support) - same flat/square treatment as the
    quota checkboxes (18px box, 1.5px border, checked = orange fill + white check). */

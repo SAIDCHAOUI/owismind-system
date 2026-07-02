@@ -266,6 +266,47 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId) {
   return request('/owismind-api/evidence/distinct' + q);
 }
 
+// --- Source Data Explorer -----------------------------------------------------
+
+// Descriptor of one of an agent's configured source datasets: its label + columns.
+// `agentKey` is the OPAQUE logical key from /agents, `sourceId` the integer index in
+// that agent's `sources` list; the server resolves both to a dataset (never named by
+// the client). Returns { status, label, columns: [{ name, type }] }.
+export function fetchSourceMeta(agentKey, sourceId) {
+  const q =
+    '?agent=' + encodeURIComponent(agentKey) + '&source=' + encodeURIComponent(sourceId);
+  return request('/owismind-api/source/meta' + q);
+}
+
+// One bounded page of a source dataset. The payload NEVER names a table/connection -
+// see composables/sourceModel.js buildSourceRowsPayload for the exact shape (agent
+// key + integer source id + plain-text search + structured filters + page + sort).
+// Returns { status, rows, has_more, page }.
+export function fetchSourceRows(payload) {
+  return request('/owismind-api/source/rows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// Bounded distinct values of one column of a source dataset (the filter picker).
+// Returns { status, values, truncated }.
+export function fetchSourceDistinct(agentKey, sourceId, column) {
+  const q =
+    '?agent=' + encodeURIComponent(agentKey) +
+    '&source=' + encodeURIComponent(sourceId) +
+    '&column=' + encodeURIComponent(column);
+  return request('/owismind-api/source/distinct' + q);
+}
+
+// The project's SQL dataset NAMES, for the agent-profile source picker (admin only,
+// server-gated: 403 if the caller is not an admin). A listing failure degrades to an
+// empty list + an `error` field, never a 500. Returns { datasets: [name, ...], error? }.
+export function adminListSourceDatasets() {
+  return request('/owismind-api/admin/sources/datasets', { method: 'GET' });
+}
+
 // Agents the admin has enabled, for any authenticated caller (chat-side picker +
 // agent library). Returns { status, count, agents: [{ key, label, tagline,
 // description, capabilities, tools, icon, badge }] } - opaque logical keys plus the

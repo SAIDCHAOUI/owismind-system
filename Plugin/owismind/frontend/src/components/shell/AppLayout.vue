@@ -7,10 +7,12 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUiStore } from '../../stores/ui.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
+import { useSourcesStore } from '../../stores/sources.js'
 import { useSessionStore } from '../../stores/session.js'
 import Sidebar from './Sidebar.vue'
 import MainTop from './MainTop.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
+import SourcePanel from '../sources/SourcePanel.vue'
 // BEGIN impersonation (temporary) - top banner shown while an admin views as a user.
 // Removable: delete this import + the <ImpersonateBanner> in the template + the
 // .shell wrapper, and the features/admin-impersonate folder.
@@ -19,10 +21,16 @@ import ImpersonateBanner from '../../features/admin-impersonate/ImpersonateBanne
 
 const ui = useUiStore()
 const evidence = useEvidenceStore()
+const sources = useSourcesStore()
 const session = useSessionStore()
 const route = useRoute()
 const dragging = ref(false)
 const draggingEv = ref(false)
+
+// Either the Evidence proof panel OR the standalone Source Data Explorer occupies the
+// right column - they are mutually exclusive (see the watches below), so this single
+// flag drives the grid track, the resize handle and the width re-clamp for both.
+const rightOpen = computed(() => evidence.open || sources.open)
 
 // The proof panel only makes sense NEXT TO a conversation: leaving the chat route
 // (Settings, FAQ, Agents…) closes it so the page renders in the main column -
@@ -36,17 +44,29 @@ const draggingEv = ref(false)
 // loop lives in the store and survives ChatView's unmount). close() is idempotent
 // and bumps the store's seq, which also aborts any still-in-flight auto commit.
 // Default pre-flush timing closes the panel before paint - no visual flash.
-watch([() => route.name, () => evidence.open], ([name]) => {
-  if (name !== 'chat') evidence.close()
+watch([() => route.name, () => evidence.open, () => sources.open], ([name]) => {
+  if (name !== 'chat') {
+    evidence.close()
+    sources.closePanel()
+  }
 })
 
-// Opening Evidence auto-collapses the conversation sidebar to give the panel
-// room; the expand toggle stays visible in MainTop (it shows whenever the
-// sidebar is collapsed). The user can re-expand at any time - we never force
-// the sidebar back open on close, and the automatic collapse is NOT persisted
-// (persistChoice=false): only an explicit user toggle may decide what state
-// the next session cold-starts with.
+// Mutual exclusion: only one right-column panel at a time. Opening one closes the
+// other. The close actions bump their store's seq (aborting any in-flight commit) and
+// set open=false, so the reciprocal watch fires with `false` and no loop can form.
 watch(() => evidence.open, (open) => {
+  if (open) sources.closePanel()
+})
+watch(() => sources.open, (open) => {
+  if (open) evidence.close()
+})
+
+// Opening a right-column panel auto-collapses the conversation sidebar to give it
+// room; the expand toggle stays visible in MainTop (it shows whenever the sidebar is
+// collapsed). The user can re-expand at any time - we never force the sidebar back
+// open on close, and the automatic collapse is NOT persisted (persistChoice=false):
+// only an explicit user toggle may decide what state the next session cold-starts with.
+watch(rightOpen, (open) => {
   if (open) ui.setSidebarCollapsed(true, false)
 })
 
@@ -54,7 +74,7 @@ watch(() => evidence.open, (open) => {
 // window shrunk WHILE the panel is open can never leave a stale wide panel
 // swallowing the chat column (and pushing the drag handle off-screen).
 function onWindowResize() {
-  if (evidence.open) ui.setEvidenceWidth(ui.evidenceW)
+  if (rightOpen.value) ui.setEvidenceWidth(ui.evidenceW)
 }
 window.addEventListener('resize', onWindowResize)
 
@@ -121,7 +141,7 @@ onBeforeUnmount(() => {
       class="app"
       :class="{
         'sidebar-collapsed': ui.sidebarCollapsed,
-        'with-evidence': evidence.open,
+        'with-evidence': rightOpen,
         resizing: dragging || draggingEv,
       }"
       :style="appStyle"
@@ -137,12 +157,13 @@ onBeforeUnmount(() => {
         <RouterView />
       </main>
       <div
-        v-if="evidence.open"
+        v-if="rightOpen"
         class="resize-handle ev"
         :class="{ active: draggingEv }"
         @pointerdown.prevent="startEvResize"
       />
       <EvidencePanel v-if="evidence.open" />
+      <SourcePanel v-else-if="sources.open" />
     </div>
   </div>
 </template>

@@ -5,9 +5,11 @@
 // raw SQL). All data lives in the evidence store; this component only renders
 // its states (loading / error / degraded / interactive).
 //
-// TABS: when meta.artifacts contains chart/table artifacts, a tab bar is shown
-// at the top of the body. Switching tabs ONLY updates evidence.activeTab - it
-// MUST NOT change evidence.open (the ChatThread scroll gate checks open, F13).
+// TABS: a tab bar is shown at the top of the body when the interactive view is
+// available (an exchange-scoped "Sources" data explorer) and/or meta.artifacts
+// carries chart / table / kpi artifacts. Switching tabs ONLY updates
+// evidence.activeTab - it MUST NOT change evidence.open (the ChatThread scroll
+// gate checks open, F13).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
@@ -27,6 +29,10 @@ import ArtifactKpi from './ArtifactKpi.vue'
 const { t } = useI18n()
 const evidence = useEvidenceStore()
 const meta = computed(() => evidence.meta)
+
+// The interactive view (rows table + chips + drill) is available: this gates both
+// the "Sources" tab entry and its body, exactly like the pre-tab explore block.
+const available = computed(() => !!(meta.value && meta.value.available))
 
 // Marker of the ENRICHED trust-layer contract: a v1 meta (no verification
 // block) must render pixel-identical to today - no badge, no extra labels.
@@ -73,6 +79,10 @@ const artifacts = computed(() => {
 
 const tabItems = computed(() => {
   const items = [{ key: 'evidence', label: t('art.tab.evidence') }]
+  // 'Sources' hosts the exchange-scoped rows explorer (chips + drill + table). It
+  // appears only when the interactive view is available - the same gate as the
+  // explore block itself, so a degraded exchange shows no tab bar (behavior unchanged).
+  if (available.value) items.push({ key: 'sources', label: t('ev.tab.sources') })
   const seen = new Set()
   for (const art of artifacts.value) {
     if ((art.kind === 'kpi' || art.kind === 'chart' || art.kind === 'table') && !seen.has(art.kind)) {
@@ -143,7 +153,8 @@ const activeTab = computed({
       </div>
       <div v-else-if="evidence.error" class="ev-state error">{{ t('ev.error') }}</div>
       <!-- Degraded: the honest "declared" badge ABOVE the reason - the claim
-           level is exactly what a degraded panel is about. -->
+           level is exactly what a degraded panel is about. No tabs here (the
+           Sources tab is gated on meta.available), so this branch is the whole body. -->
       <template v-else-if="meta && !meta.available">
         <EvidenceTrust />
         <div class="ev-state">{{ degradedMessage }}</div>
@@ -187,17 +198,14 @@ const activeTab = computed({
           />
         </template>
 
-        <!-- ── EVIDENCE TAB (default) ────────────────────────────────────── -->
-        <!-- Proof sections, most business-readable first (spec §6). Each new
-             section gates itself on its own OPTIONAL meta field, so a v1 meta
-             renders exactly the v1 panel (chips + table only). -->
-        <template v-else>
-          <EvidenceTrust v-if="enriched" />
-          <EvidenceSources />
+        <!-- ── SOURCES TAB ───────────────────────────────────────────────── -->
+        <!-- The exchange-scoped data explorer, moved here as ONE block: the filter
+             chips + the drill banner that scopes the table to one result row + the
+             "explore" label + the live rows table (which carries its own multi-table
+             selector). Exchange-scoped for EVERY agent - drilling a result row on the
+             Evidence tab lands here (evidence.drillIntoResultRow switches the tab). -->
+        <template v-else-if="activeTab === 'sources'">
           <EvidenceChips />
-          <EvidenceCalc />
-          <EvidenceResult />
-          <!-- Drill banner: the rows table below is scoped to ONE result row. -->
           <div v-if="drill" class="ev-drill-band">
             <Icon name="filter" />
             <span class="ev-drill-text">{{ t('ev.proof.drill.banner', [drillLabels]) }}</span>
@@ -207,6 +215,18 @@ const activeTab = computed({
           </div>
           <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
           <EvidenceTable />
+        </template>
+
+        <!-- ── EVIDENCE TAB (default) ────────────────────────────────────── -->
+        <!-- Proof sections, most business-readable first (spec §6). Each section
+             gates itself on its own OPTIONAL meta field, so a v1 meta renders the
+             same proof stack. The filter chips + live rows table live in the
+             Sources tab; EvidenceResult's drill chevrons switch to it on click. -->
+        <template v-else>
+          <EvidenceTrust v-if="enriched" />
+          <EvidenceSources />
+          <EvidenceCalc />
+          <EvidenceResult />
         </template>
       </template>
     </div>

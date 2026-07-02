@@ -8,6 +8,7 @@ machine-readable ``code`` (never an internal detail) when the payload is invalid
 """
 
 import math
+import re
 
 from owismind.benchmark_view.agent_profile import validate_benchmark_block
 
@@ -388,6 +389,55 @@ def _validate_evidence_value(v):
     raise ValidationError("invalid_filter_value")
 
 
+def _parse_evidence_filters(raw_filters):
+    """Shape + bounds a list of ``{column, op, values}`` chips into normalized dicts.
+
+    Shared by /evidence/rows and /source/rows: same caps and stable codes. Column
+    EXISTENCE is checked against the live schema downstream; here only shape/bounds.
+    """
+    if not isinstance(raw_filters, list) or len(raw_filters) > MAX_EVIDENCE_FILTERS:
+        raise ValidationError("invalid_filters")
+    filters = []
+    for item in raw_filters:
+        if not isinstance(item, dict):
+            raise ValidationError("invalid_filters")
+        column = validate_evidence_column(item.get("column"))
+        op = item.get("op")
+        if op not in EVIDENCE_FILTER_OPS:
+            raise ValidationError("invalid_filter_op")
+        values = item.get("values")
+        if not isinstance(values, list) or not values or len(values) > MAX_EVIDENCE_IN_VALUES:
+            raise ValidationError("invalid_filter_values")
+        if op == "=" and len(values) != 1:
+            raise ValidationError("invalid_filter_values")
+        filters.append({"column": column, "op": op,
+                        "values": [_validate_evidence_value(v) for v in values]})
+    return filters
+
+
+def _parse_evidence_page(raw):
+    """Clamp a client page index to ``[0, MAX_EVIDENCE_PAGE]``. Never raises."""
+    try:
+        page = int(raw or 0)
+    except (TypeError, ValueError, OverflowError):
+        page = 0
+    return max(0, min(MAX_EVIDENCE_PAGE, page))
+
+
+def _parse_evidence_sort(raw_sort):
+    """An optional ``{column, dir}`` sort, or None. Malformed input degrades to None.
+
+    The column EXISTENCE is validated against the live schema by the service (which
+    errors there); here only shape/bounds are checked, direction is normalized.
+    """
+    if isinstance(raw_sort, dict):
+        column = raw_sort.get("column")
+        if column and isinstance(column, str) and len(column) <= MAX_EVIDENCE_COLUMN_CHARS:
+            direction = "desc" if str(raw_sort.get("dir") or "").lower() == "desc" else "asc"
+            return {"column": column, "dir": direction}
+    return None
+
+
 def validate_evidence_rows_request(payload):
     """Validate a /evidence/rows payload.
 
@@ -406,24 +456,7 @@ def validate_evidence_rows_request(payload):
         raise ValidationError("invalid_payload")
     exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
 
-    raw_filters = payload.get("filters") or []
-    if not isinstance(raw_filters, list) or len(raw_filters) > MAX_EVIDENCE_FILTERS:
-        raise ValidationError("invalid_filters")
-    filters = []
-    for item in raw_filters:
-        if not isinstance(item, dict):
-            raise ValidationError("invalid_filters")
-        column = validate_evidence_column(item.get("column"))
-        op = item.get("op")
-        if op not in EVIDENCE_FILTER_OPS:
-            raise ValidationError("invalid_filter_op")
-        values = item.get("values")
-        if not isinstance(values, list) or not values or len(values) > MAX_EVIDENCE_IN_VALUES:
-            raise ValidationError("invalid_filter_values")
-        if op == "=" and len(values) != 1:
-            raise ValidationError("invalid_filter_values")
-        filters.append({"column": column, "op": op,
-                        "values": [_validate_evidence_value(v) for v in values]})
+    filters = _parse_evidence_filters(payload.get("filters") or [])
 
     raw_kept = payload.get("kept_ids") or []
     if not isinstance(raw_kept, list) or len(raw_kept) > MAX_EVIDENCE_KEPT_IDS:
@@ -436,21 +469,11 @@ def validate_evidence_rows_request(payload):
 
     include_advanced = bool(payload.get("include_advanced"))
 
-    try:
-        page = int(payload.get("page") or 0)
-    except (TypeError, ValueError, OverflowError):
-        page = 0
-    page = max(0, min(MAX_EVIDENCE_PAGE, page))
+    page = _parse_evidence_page(payload.get("page"))
 
     # Optional sort: malformed input degrades to None (the service still
     # validates the column against the live schema and errors there).
-    sort = None
-    raw_sort = payload.get("sort")
-    if isinstance(raw_sort, dict):
-        column = raw_sort.get("column")
-        if column and isinstance(column, str) and len(column) <= MAX_EVIDENCE_COLUMN_CHARS:
-            direction = "desc" if str(raw_sort.get("dir") or "").lower() == "desc" else "asc"
-            sort = {"column": column, "dir": direction}
+    sort = _parse_evidence_sort(payload.get("sort"))
 
     # Optional drill-down labels. Unlike sort, a malformed drill RAISES: a drill
     # silently dropped would return the UNdrilled (wider) page while the UI
@@ -485,6 +508,101 @@ def validate_evidence_rows_request(payload):
         table = raw_table
 
     return exchange_id, filters, kept_ids, include_advanced, page, sort, drill, table
+
+
+# --- Source Data Explorer ------------------------------------------------------
+# Users browse the RAW project datasets an agent is configured with (admin-authored),
+# before/after prompting. The frontend never names a table/connection/query: it sends
+# the opaque agent logical key + an integer source index (into the agent's validated
+# sources block) + evidence-shaped {column, op, values} filters + a free-text q. The
+# server resolves the index to a discovered dataset. Bounds mirror Evidence.
+MAX_AGENT_SOURCES = 8
+MAX_SOURCE_LABEL_CHARS = 60
+MAX_SOURCE_DATASET_CHARS = 128
+MAX_SOURCE_QUERY_CHARS = 200
+# A DSS dataset NAME (never a query): letters, digits, underscore, dot, hyphen. The
+# length is bounded by the pattern itself (mirrors MAX_SOURCE_DATASET_CHARS).
+_SOURCE_DATASET_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+
+
+def _validate_source_agent(value):
+    """The opaque agent logical key on a /source/* request.
+
+    Same cleaning as the chat-start agent key (validate_chat_start_request): a
+    non-empty, length-bounded string. Whether it maps to a real, enabled agent -
+    and to a source - is enforced server-side. Raises ``invalid_agent`` otherwise.
+    """
+    if not isinstance(value, str):
+        raise ValidationError("invalid_agent")
+    value = value.strip()
+    if not value or len(value) > MAX_AGENT_KEY_LENGTH:
+        raise ValidationError("invalid_agent")
+    return value
+
+
+def _validate_source_id(value):
+    """A source index into the agent's configured sources: int in [0, MAX_AGENT_SOURCES).
+
+    Accepts a JSON int (rows body) or a numeric string (meta/distinct query param).
+    bool is refused (int subclass trap). Raises ``invalid_source`` otherwise.
+    """
+    if isinstance(value, bool):
+        raise ValidationError("invalid_source")
+    try:
+        source_id = int(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValidationError("invalid_source")
+    if source_id < 0 or source_id >= MAX_AGENT_SOURCES:
+        raise ValidationError("invalid_source")
+    return source_id
+
+
+def _clean_source_query(value):
+    """The free-text search string: non-str -> "", control chars -> space, then
+    whitespace-collapsed, stripped and length-capped.
+
+    Whitespace is collapsed (not just trimmed) so the LIKE needle lines up with the
+    server's single-space ``concat_ws`` join; the search-condition builder still
+    treats a folded needle shorter than 2 chars as no search (returns None).
+    """
+    if not isinstance(value, str):
+        return ""
+    spaced = "".join(ch if ch.isprintable() else " " for ch in value)
+    return " ".join(spaced.split())[:MAX_SOURCE_QUERY_CHARS]
+
+
+def validate_source_rows_request(payload):
+    """Validate a /source/rows payload. Returns ``(agent_key, source_id, q, filters, page, sort)``.
+
+    Mirrors ``validate_evidence_rows_request`` (same filter/page/sort helpers and
+    bounds) but keyed by an agent + source index instead of an exchange id, and with
+    a free-text ``q`` instead of locked chips / drill. Raises ValidationError (stable
+    code) on structurally invalid input; the page is CLAMPED (never raises).
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    agent_key = _validate_source_agent(payload.get("agent"))
+    source_id = _validate_source_id(payload.get("source"))
+    q = _clean_source_query(payload.get("q"))
+    filters = _parse_evidence_filters(payload.get("filters") or [])
+    page = _parse_evidence_page(payload.get("page"))
+    sort = _parse_evidence_sort(payload.get("sort"))
+    return agent_key, source_id, q, filters, page, sort
+
+
+def validate_source_meta_params(agent, source):
+    """The ``(agent, source)`` query params on /source/meta. Returns ``(agent_key, source_id)``."""
+    return _validate_source_agent(agent), _validate_source_id(source)
+
+
+def validate_source_distinct_params(agent, source, column):
+    """The ``(agent, source, column)`` query params on /source/distinct.
+
+    Returns ``(agent_key, source_id, column)``; ``column`` is shape-only (existence is
+    checked against the live schema by the service), reusing ``validate_evidence_column``.
+    """
+    return (_validate_source_agent(agent), _validate_source_id(source),
+            validate_evidence_column(column))
 
 
 # --- Monthly budget / quota (admin) -------------------------------------------
@@ -649,6 +767,43 @@ def validate_target_user_id(value):
     return value
 
 
+def validate_sources_block(raw):
+    """Sanitize an admin-authored SOURCES list into bounded ``{dataset, label}`` entries.
+
+    A source is a RAW project dataset (admin-selected by NAME) the agent is configured
+    with, so users can explore it in the Source Data Explorer. Never raises: a malformed
+    entry is dropped, not fatal (same contract as ``validate_agent_meta``). ``dataset``
+    must be a DSS dataset name matching ``_SOURCE_DATASET_RE`` (never a query); ``label``
+    is a bounded display line, falling back to the dataset name when blank. Entries are
+    de-duplicated by dataset (case-insensitive, first wins) and capped at MAX_AGENT_SOURCES.
+    The list ORDER is preserved: its index is the stable ``source`` id the client sends.
+    """
+    if not isinstance(raw, list):
+        return []
+    out = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        dataset = item.get("dataset")
+        if not isinstance(dataset, str):
+            continue
+        dataset = dataset.strip()
+        if not _SOURCE_DATASET_RE.match(dataset):
+            continue
+        low = dataset.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        out.append({
+            "dataset": dataset,
+            "label": _clean_str(item.get("label"), MAX_SOURCE_LABEL_CHARS) or dataset,
+        })
+        if len(out) >= MAX_AGENT_SOURCES:
+            break
+    return out
+
+
 def validate_agent_meta(raw):
     """Sanitize an admin-authored agent profile into a bounded, safe display dict.
 
@@ -693,4 +848,6 @@ def validate_agent_meta(raw):
         "badge": badge,
         "modes": modes,
         "benchmark": benchmark,
+        # The RAW project datasets this agent is configured with (Source Data Explorer).
+        "sources": validate_sources_block(raw.get("sources")),
     }

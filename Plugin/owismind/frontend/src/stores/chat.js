@@ -27,6 +27,7 @@ import { createAnswerState, usageFromRow } from '../composables/timelineModel.js
 import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
+import { useSourcesStore } from './sources.js'
 import { lastEvidenceExchangeId } from '../composables/evidenceModel.js'
 
 // One session id per conversation (the backend stores it; history is scoped by user).
@@ -46,6 +47,7 @@ export const useChatStore = defineStore('chat', () => {
   const session = useSessionStore()
   const ui = useUiStore()
   const evidence = useEvidenceStore()
+  const sources = useSourcesStore()
 
   const activeSessionId = ref(newSessionId())
   const exchanges = ref([]) // [reactive({ id, parentId, userText, version, createdAt })]
@@ -143,6 +145,7 @@ export const useChatStore = defineStore('chat', () => {
   function newConversation() {
     cancelActive()
     evidence.close()
+    sources.closePanel()
     activeSessionId.value = newSessionId()
     exchanges.value = []
     overrides.value = {}
@@ -201,6 +204,7 @@ export const useChatStore = defineStore('chat', () => {
   async function openSession(sessionId) {
     cancelActive()
     evidence.close()
+    sources.closePanel()
     activeSessionId.value = sessionId
     overrides.value = {}
     errorMsg.value = ''
