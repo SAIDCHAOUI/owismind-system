@@ -5,6 +5,32 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧲 SESSION 2026-07-02 Run 4 (SOURCE DATA : filtres cherchables + « Use this value for agent »
++ fix popover Evidence + DataLoader) - ✅ VALIDÉ DSS (user : « parfait all good » ; arc 1 commité
+par l'user `a2754ca`, arc 2 dans le commit de session).** **(1) Filtres** (SourceChips +
+EvidenceChips jumeaux) : « Add filter » en 2 étapes (recherche de colonne -> picker de valeurs),
+recherche de valeurs client instantanée (fold = map d'accents VERBATIM du serveur, exportée
+`sourceModel.foldSearchTerm`), **recherche serveur sur Entrée** quand la liste est tronquée via
+param optionnel **`q` sur `/source/distinct` + `/evidence/distinct`** (seule adaptation backend ;
+q absent = byte-identique ; prédicats verrouillés + exclude_id conservés) ; flag **`serverFiltered`
+commité seulement quand la requête atterrit** (sinon liste coincée après recherche rétrécissante) ;
+garde min 2 chars miroir MIN_NEEDLE ; `pickerError` visible ; footer Annuler/Appliquer ; popover
+aéré 280-380px ; chips Evidence passées carrées. **(2) Cellule -> agent (option 3 hybride, choisie
+sur comparatif livré à l'user)** : clic cellule (SourceTable + EvidenceTable ; nulles/blanches non
+cliquables) -> `CellActionPopover` -> chips au-dessus du textarea (store `promptContext`, modèle
+pur `promptContextModel` caps 12/200 dédup) -> à l'ENVOI `PromptBar.submit()` appende un bloc
+lisible « Contexte de données : / Data context: » au message (stocké brut -> rejoué dans
+l'historique) ; purge sur changement de conversation + d'agent pré-conversation ; **zéro
+changement de `/chat/start` ni du store chat**. **(3) Retours DSS** : popover décalé dans Evidence
+= animations `ev-slide-in`/`ev-rise` (keyframes transform, fill-mode both) -> containing block
+pour `position:fixed` -> fix **`<Teleport to="body">`** (pattern Modal/ToastHost, L123) ;
+**`DataLoader.vue`** (design Fable) = mini bar-chart 5 barres carrées encre + UNE orange sur
+baseline nette, carte carrée 1px, micro-label MAJ « ON FOUILLE LES DONNÉES… », fade-in retardé
+150ms, reduced-motion statique ; dim busy déplacé sur les ENFANTS pour garder le loader net.
+**Process** : 4 scouts Sonnet + 3 patchs Opus // + revue adversariale Workflow 15 agents (8 LOW
+confirmés tous corrigés, 3 réfutés). **163 node + 582 back, build OK, 0 tiret, zip DEV final
+`index-CY8CEJu8.js` (80 entrées), PROD intacte.** Voir **L123-L124** + `sessions/2026-07-02.md` (Run 4).
+
 **🔎 SESSION 2026-07-02 Run 3 (SOURCE DATA EXPLORER : exploration des données brutes des agents,
 v1+v2) - ✅ VALIDÉ DSS (user : « tout fonctionne super bien » ; v1 commitée par l'user `030689b`,
 v2 dans le commit de session).** Dernière feature du MVP avant prod : les users explorent les
@@ -857,7 +883,14 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-02 Run 3 : Source Data Explorer (v1+v2) → détail `sessions/2026-07-02.md` (Run 3) + **L121-L122**
+## 🧭 Dernière session - 2026-07-02 Run 4 : Source Data filtres cherchables + cell-to-agent + popover/DataLoader → détail `sessions/2026-07-02.md` (Run 4) + **L123-L124**
+- **✅ VALIDÉ DSS (« parfait all good » ; arc 1 commité user `a2754ca`).** Filtres 2 étapes cherchables
+  (+ `q` serveur sur les 2 routes distinct), « Use this value for agent » (chips + bloc texte appendé
+  au message à l'envoi, frontend-only), popover cellule Teleport body (fix ancêtres transform),
+  DataLoader charté (bar-chart carré, 1 barre orange). Zip DEV `index-CY8CEJu8.js`.
+- Revue adversariale 15 agents : 8 LOW confirmés corrigés. Reste : promotion PROD à la demande.
+
+## 🧭 Avant - 2026-07-02 Run 3 : Source Data Explorer (v1+v2) → détail `sessions/2026-07-02.md` (Run 3) + **L121-L122**
 - **✅ VALIDÉ DSS** (« tout fonctionne super bien »). Exploration des datasets bruts des agents :
   bloc admin `sources` par agent, CTA + panneau sur New Conversation, onglet Source data
   d'Evidence (sélecteur fusionné, agent de l'échange), recherche Entrée-only accent-insensible,
@@ -1273,6 +1306,12 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🧲DONE (2026-07-02 Run 4). **Source Data ergonomie + cell-to-agent ✅ VALIDÉ DSS** (zip DEV
+   `index-CY8CEJu8.js` déployé). Reste, à la demande : (a) **promotion PROD de tout l'arc
+   Source Data** (Runs 3+4 : rebuild + package prod + upload + restart backend, le python-lib
+   porte le `q` des routes distinct) ; (b) idées différées : messages du DataLoader qui
+   tournent, chips de contexte cliquables pour éditer la valeur, envoi du contexte seul sans
+   question (aujourd'hui le draft non vide reste requis).
 0🔎DONE (2026-07-02 Run 3). **Source Data Explorer v1+v2 ✅ VALIDÉ DSS** (zip DEV
    `index-Sd9XWyIM.js` déployé, backend redémarré). Reste, à la demande : (a) **promotion
    PROD** (rebuild + package prod + upload) ; (b) leviers de charge optionnels discutés NON

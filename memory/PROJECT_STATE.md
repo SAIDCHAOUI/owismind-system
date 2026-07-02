@@ -544,6 +544,18 @@ endroits DIFFÉRENTS, ce qui tranche le choix de techno.
   `chat.agentKeyForExchange`) ; recherche Entrée/bouton only ; 100 lignes puis +20 (cap 500) ;
   30 colonnes puis +20 ; pleine hauteur ; sélection persistée `evidence.sourceTabKey`.
 - **État** : ✅ validé DSS par l'user (v1 `030689b` + v2). 576 tests back + 147 node. Leçons **L121-L122**.
+- **Run 4 (2026-07-02, ✅ VALIDÉ DSS, arc 1 commité user `a2754ca`)** : filtres cherchables (add
+  2 étapes, filtre client via `sourceModel.foldSearchTerm` = map d'accents VERBATIM du serveur,
+  **recherche serveur sur Entrée** = param optionnel **`q` sur `/source/distinct` + `/evidence/distinct`**,
+  flag `serverFiltered` commité à l'atterrissage, `pickerError`, footer Annuler/Appliquer, chips
+  Evidence carrées) ; **cell-to-agent** : clic cellule (SourceTable + EvidenceTable) ->
+  `CellActionPopover` (**Teleport body**, L123) -> store `promptContext` (modèle pur
+  `promptContextModel`, caps 12 valeurs/200 chars, dédup) -> chips dans PromptBar -> bloc
+  « Contexte de données : / Data context: » appendé au message à l'envoi (frontend-only, message
+  stocké brut = rejoué) ; purge sur changement de session/agent pré-conversation ;
+  **`ui/DataLoader.vue`** = overlay de chargement charté (bar-chart carré, 1 barre orange,
+  fade-in 150ms, reduced-motion) sur les 2 tables, dim busy déplacé sur les enfants.
+  163 node + 582 back. Leçons **L123-L124**.
 
 ---
 
@@ -579,6 +591,7 @@ au nettoyage du 2026-06-11, en même temps que `docs/superpowers/plans/` (journa
 | Sujet | État | Note |
 |---|---|---|
 | Source Data Explorer (bloc admin + panneau + onglet Evidence, §8e) | ✅ Validé DSS 2026-07-02 | routes `/source/*` + `q`/limit/offset sur `/evidence/rows` ; L121-L122 |
+| Source Data Run 4 : filtres cherchables + `q` distinct + cell-to-agent + DataLoader (§8e) | ✅ Validé DSS 2026-07-02 | « parfait all good » ; Teleport popover (L123), picker serveur (L124) |
 | Scaffold Vue 3 + Vite, build → `resource/owismind-app/` | ✅ Validé | un build existe ; assets câblés dans body.html |
 | `vite.config.js` (base + outDir réels) | ✅ Validé | noms réels corrects |
 | Zip runtime propre (sans frontend/node_modules) | ✅ Validé | `owismind-upload.zip` conforme |

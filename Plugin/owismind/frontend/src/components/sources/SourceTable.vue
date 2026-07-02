@@ -11,7 +11,7 @@ import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
 import CellActionPopover from './CellActionPopover.vue'
-import { Icon } from '../ui'
+import { DataLoader, Icon } from '../ui'
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
 // reveal COLS_MORE more each time the horizontal sentinel scrolls into view. The
@@ -165,8 +165,11 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- `busy` (55% dim) only applies to refreshes with REAL rows on screen: the
-       first-load skeleton must keep full opacity or its shimmer washes out. -->
+       first-load skeleton must keep full opacity or its shimmer washes out. The
+       DataLoader overlay rides the same condition (delayed fade-in inside it keeps
+       fast refreshes flicker-free). -->
   <div class="src-table" :class="{ busy: sources.rowsLoading && sources.rows.length > 0 }">
+    <DataLoader v-if="sources.rowsLoading && sources.rows.length > 0" :label="t('src.crunch')" />
     <div ref="scrollEl" class="src-table-scroll">
       <table>
         <thead>
@@ -247,13 +250,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* The table OWNS a bounded height with its own scroll so it can never collapse when
-   content stacks above it (flex:none keeps it out of the squeeze). Square geometry. */
+   content stacks above it (flex:none keeps it out of the squeeze). Square geometry.
+   position: relative anchors the DataLoader overlay; the busy dim lives on the
+   CHILDREN so the overlay itself stays at full opacity. */
 .src-table {
+  position: relative;
   display: flex; flex-direction: column; flex: none;
   border: 1px solid var(--border); border-radius: 0; overflow: hidden;
-  transition: opacity var(--dur) var(--ease);
 }
-.src-table.busy { opacity: 0.55; }
+.src-table-scroll, .src-table-foot { transition: opacity var(--dur) var(--ease); }
+.src-table.busy .src-table-scroll, .src-table.busy .src-table-foot { opacity: 0.55; }
 .src-table.busy tbody { pointer-events: none; }
 /* BOTH axes scroll: vertical for rows (~20 rows), horizontal for ALL columns. */
 .src-table-scroll {

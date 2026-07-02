@@ -2863,5 +2863,50 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-02 Run 3, `EvidenceSourcesTab.vue`, `stores/chat.js`.
 - **Date** : 2026-07-02.
 
+## L123 - Un popover position:fixed dans un panneau anime se decale : les keyframes transform + fill-mode both font de l'ancetre un containing block ; remede = Teleport to body [valide DSS, 2026-07-02 Run 4]
+- **Contexte** : `CellActionPopover` (position:fixed aux coordonnees clientX/clientY du clic)
+  fonctionnait dans le panneau New Conversation mais apparaissait decale de plusieurs colonnes
+  a droite dans Evidence Studio > onglet Source data.
+- **Ce qui a echoue** : positionner un `fixed` en supposant le viewport comme referentiel. Dans
+  l'arbre Evidence, `.evidence` (`ev-slide-in`) et `.ev-body > *` (`ev-rise`) portent des
+  animations dont les keyframes touchent `transform` avec `fill-mode: both` : tant que
+  l'animation est ASSOCIEE a l'element (fill both/forwards, meme finie sur `transform:none`),
+  le navigateur en fait le containing block des descendants `position:fixed` -> left/top
+  calcules viewport se peignent relativement au panneau (decale de son X dans la grille).
+- **Solution qui marche** : `<Teleport to="body">` autour du popover (pattern DEJA present :
+  `Modal.vue`, `ToastHost.vue`). Les tokens vivent sur `:root` + `body[data-theme]` donc un
+  noeud teleporte garde theme clair/sombre ; les styles scoped Vue s'appliquent a travers le
+  Teleport ; useClickOutside/Escape inchanges. Ne PAS retirer les animations du panneau (entree
+  validee) : teleporter la surface flottante.
+- **Preuve-verification** : bug reproduit par l'user en DSS (Evidence KO, New Conversation OK) ;
+  scout a identifie les 2 selecteurs exacts + confirme la chaine SourcePanel propre ; apres
+  Teleport, user : « parfait all good ».
+- **Source** : session 2026-07-02 Run 4, `CellActionPopover.vue`, `EvidencePanel.vue:221/244`.
+- **Date** : 2026-07-02.
+
+## L124 - Recherche serveur dans un picker a fenetre tronquee : le flag truncated ne suffit pas comme garde, le fold client doit etre la MEME map que le serveur, et l'etat ne se commite que quand la requete atterrit [valide DSS, 2026-07-02 Run 4]
+- **Contexte** : picker de valeurs distinctes (cap serveur 100 + flag `truncated`) enrichi d'un
+  filtrage client instantane + d'une recherche serveur sur Entree (`q` sur /source/distinct et
+  /evidence/distinct) pour les colonnes a 1000+ valeurs.
+- **Ce qui a echoue** (patch initial + findings de la revue adversariale, tous confirmes) :
+  (1) garde `if (!truncated) return` : une recherche serveur retrecissante renvoie < 100 valeurs
+  -> truncated=false -> plus AUCUNE Entree possible, liste coincee sur le resultat filtre ;
+  (2) fold client NFD strip-all vs map translate 27 chars du serveur : « gdansk » matchait
+  « Gdańsk » dans la fenetre chargee mais pas via SQL -> comportements incoherents ;
+  (3) escalade sans miroir de MIN_NEEDLE_CHARS : un terme 1 char declenchait une requete que le
+  serveur ignore + flaguait l'etat « filtre serveur » a tort ; (4) echec du fetch rendu comme
+  « aucune valeur » (indistinguable d'une colonne vide).
+- **Solution qui marche** : flag dedie `serverFiltered` decrivant la PROVENANCE de la fenetre,
+  commite UNIQUEMENT quand la requete atterrit (`_loadPicker` retourne true/false/null via le
+  stale-guard pickerSeq) ; Entree a terme vide restaure le top-N ; fold client = map d'accents
+  copiee VERBATIM du serveur (`sourceModel.foldSearchTerm` <- `_ACCENTS_FROM/TO`) ; garde
+  `fold(q).length >= 2` miroir du serveur ; `pickerError` affiche. Regle generale : tout cap ou
+  fold « miroir du backend » se copie depuis le backend, jamais re-invente.
+- **Preuve-verification** : revue adversariale Workflow (4 lentilles + verif par finding) = 8
+  confirmes tous corriges ; 163 node + 582 back verts ; valide DSS par l'user.
+- **Source** : session 2026-07-02 Run 4, `SourceChips.vue`/`EvidenceChips.vue`,
+  `composables/sourceModel.js`, `evidence/source_search.py`.
+- **Date** : 2026-07-02.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

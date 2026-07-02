@@ -66,24 +66,32 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
 </script>
 
 <template>
-  <div
-    ref="rootEl"
-    class="cell-pop"
-    role="dialog"
-    :style="{ left: pos.left + 'px', top: pos.top + 'px' }"
-  >
-    <div class="cell-pop-col">{{ column }}</div>
-    <div class="cell-pop-val mono">{{ value }}</div>
-    <button
-      v-if="canUse"
-      type="button"
-      class="cell-pop-use"
-      @click="emit('use')"
+  <!-- Teleported to body (Modal/ToastHost pattern): inside the Evidence panel,
+       ancestors animate `transform` (ev-slide-in / ev-rise, fill-mode both), which
+       makes them the containing block of a position:fixed descendant - the card
+       would render offset by the panel's own left edge. Under <body> the click
+       coordinates are viewport-true again; tokens still cascade from :root and
+       body[data-theme]. -->
+  <Teleport to="body">
+    <div
+      ref="rootEl"
+      class="cell-pop"
+      role="dialog"
+      :style="{ left: pos.left + 'px', top: pos.top + 'px' }"
     >
-      {{ t('src.cell.use') }}
-    </button>
-    <p v-else class="cell-pop-note">{{ t('src.cell.tooLong') }}</p>
-  </div>
+      <div class="cell-pop-col">{{ column }}</div>
+      <div class="cell-pop-val mono">{{ value }}</div>
+      <button
+        v-if="canUse"
+        type="button"
+        class="cell-pop-use"
+        @click="emit('use')"
+      >
+        {{ t('src.cell.use') }}
+      </button>
+      <p v-else class="cell-pop-note">{{ t('src.cell.tooLong') }}</p>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
