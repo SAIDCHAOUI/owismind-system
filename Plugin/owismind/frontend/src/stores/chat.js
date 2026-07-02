@@ -137,6 +137,10 @@ export const useChatStore = defineStore('chat', () => {
       id: r.exchange_id,
       parentId: r.parent_exchange_id || null,
       userText: r.user_text || '',
+      // The agent that produced this exchange (top-level column, distinct from the
+      // per-SQL-item agent_key used for fan-out attribution). Retained so the Evidence
+      // "Source data" tab can resolve the exchange's configured source datasets.
+      agentKey: r.agent_key || null,
       version,
       createdAt: r.created_at || '',
     })
@@ -247,7 +251,7 @@ export const useChatStore = defineStore('chat', () => {
     // `uid` is the stable render key, assigned once and NEVER changed. `id` starts null and
     // is reconciled to the backend exchange id (onExchangeId) - keying the v-for on `uid`
     // (not `id`) avoids a mid-stream remount/flicker when that reconciliation happens.
-    const exch = reactive({ uid: nextStamp(), id: null, parentId: parentId || null, userText, version, createdAt: nextStamp() })
+    const exch = reactive({ uid: nextStamp(), id: null, parentId: parentId || null, userText, agentKey: session.selectedAgentKey, version, createdAt: nextStamp() })
     exchanges.value.push(exch)
     // Keep the freshly created branch active: drop any override pinned at this parent.
     const parentKey = parentId || '__root__'
@@ -340,6 +344,15 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // The agent key of one exchange (pure scan of the flat exchange list). Used by the
+  // Evidence "Source data" tab to resolve that exchange's configured source datasets.
+  // Returns null when the exchange is unknown or carries no agent key.
+  function agentKeyForExchange(exchangeId) {
+    if (exchangeId == null) return null
+    const ex = exchanges.value.find((e) => e.id === exchangeId)
+    return (ex && ex.agentKey) || null
+  }
+
   // Send a follow-up: a child of the last turn (the bottom of the active path).
   function send(text) {
     const t = (text || '').trim()
@@ -405,6 +418,7 @@ export const useChatStore = defineStore('chat', () => {
     newConversation,
     ensureSession,
     openSession,
+    agentKeyForExchange,
     send,
     editTurn,
     regenerateTurn,

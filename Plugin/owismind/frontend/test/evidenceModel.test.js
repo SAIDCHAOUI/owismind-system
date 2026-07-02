@@ -10,6 +10,10 @@ import {
   isModified,
   normalizeEditableOp,
   lastEvidenceExchangeId,
+  effectiveEvidenceQuery,
+  EVIDENCE_Q_MIN,
+  EVIDENCE_Q_MAX,
+  EVIDENCE_DEFAULT_LIMIT,
 } from '../src/composables/evidenceModel.js'
 import { extraMessages } from '../src/i18n/extra.js'
 
@@ -31,20 +35,23 @@ test('chipsFromMeta clones values and tags agent chips', () => {
   assert.equal(META.chips[0].values.length, 2) // no aliasing
 })
 
-test('buildRowsPayload partitions editable filters vs kept locked ids', () => {
+test('buildRowsPayload partitions editable filters vs kept locked ids (limit/offset)', () => {
   const chips = chipsFromMeta(META)
-  const p = buildRowsPayload('ex1', chips, true, 2, { column: 'period', dir: 'desc' })
+  const p = buildRowsPayload('ex1', chips, true, 20, 40, { column: 'period', dir: 'desc' })
   assert.deepEqual(p.filters, [{ column: 'solution', op: 'IN', values: ['OBS', 'OCD'] }])
   assert.deepEqual(p.kept_ids, [1])
   assert.equal(p.include_advanced, true)
-  assert.equal(p.page, 2)
+  assert.equal(p.limit, 20)
+  assert.equal(p.offset, 40)
+  assert.ok(!('page' in p)) // the page index is gone from the contract
   assert.equal(p.exchange_id, 'ex1')
   assert.deepEqual(p.sort, { column: 'period', dir: 'desc' })
 })
 
-test('buildRowsPayload defaults: omitted page and sort', () => {
+test('buildRowsPayload defaults: omitted limit / offset / sort', () => {
   const p = buildRowsPayload('ex1', [], false)
-  assert.equal(p.page, 0)
+  assert.equal(p.limit, EVIDENCE_DEFAULT_LIMIT) // fallback window when no limit is passed
+  assert.equal(p.offset, 0)
   assert.equal(p.sort, null)
   assert.deepEqual(p.filters, [])
   assert.deepEqual(p.kept_ids, [])
@@ -53,7 +60,7 @@ test('buildRowsPayload defaults: omitted page and sort', () => {
 test('removed locked chip leaves kept_ids; user chip becomes a filter', () => {
   const chips = chipsFromMeta(META).filter((c) => c.key !== 'a1')
   chips.push({ key: 'u1', id: null, column: 'country', op: '=', values: ['DZ'], editable: true, source: 'user' })
-  const p = buildRowsPayload('ex1', chips, false, 0, null)
+  const p = buildRowsPayload('ex1', chips, false, 100, 0, null)
   assert.deepEqual(p.kept_ids, [])
   assert.equal(p.filters.length, 2)
   assert.equal(p.include_advanced, false)
@@ -114,12 +121,14 @@ test('lastEvidenceExchangeId: null on empty/malformed input', () => {
 
 // --- buildRowsPayload drill extension (trust layer v2, spec §3) ----------------------
 
-test('buildRowsPayload without the drill argument has NO drill key (back-compat 5 args)', () => {
-  const p = buildRowsPayload('ex1', chipsFromMeta(META), true, 1, null)
+test('buildRowsPayload without the drill/table/q args has none of those keys', () => {
+  const p = buildRowsPayload('ex1', chipsFromMeta(META), true, 20, 0, null)
   assert.ok(!('drill' in p))
-  // The 5-positional contract is untouched.
+  assert.ok(!('table' in p))
+  assert.ok(!('q' in p))
   assert.deepEqual(p.kept_ids, [1])
-  assert.equal(p.page, 1)
+  assert.equal(p.limit, 20)
+  assert.equal(p.offset, 0)
 })
 
 test('buildRowsPayload maps drill labels to clean {column, value} pairs', () => {
@@ -127,7 +136,7 @@ test('buildRowsPayload maps drill labels to clean {column, value} pairs', () => 
     { column: 'customer', value: 'Algerie Telecom', extra: 'never sent' },
     { column: 'phase', value: null },
   ]
-  const p = buildRowsPayload('ex1', [], false, 0, null, drill)
+  const p = buildRowsPayload('ex1', [], false, 100, 0, null, drill)
   assert.deepEqual(p.drill, [
     { column: 'customer', value: 'Algerie Telecom' },
     { column: 'phase', value: null },
@@ -135,26 +144,56 @@ test('buildRowsPayload maps drill labels to clean {column, value} pairs', () => 
 })
 
 test('buildRowsPayload: empty or null drill list adds no drill key', () => {
-  assert.ok(!('drill' in buildRowsPayload('ex1', [], false, 0, null, [])))
-  assert.ok(!('drill' in buildRowsPayload('ex1', [], false, 0, null, null)))
+  assert.ok(!('drill' in buildRowsPayload('ex1', [], false, 100, 0, null, [])))
+  assert.ok(!('drill' in buildRowsPayload('ex1', [], false, 100, 0, null, null)))
 })
 
 // --- buildRowsPayload table selector (multi-table SQL) -------------------------------
 
 test('buildRowsPayload adds the table key only for a non-empty string', () => {
-  const withTable = buildRowsPayload('ex1', [], false, 0, null, null, 'Tickets')
+  const withTable = buildRowsPayload('ex1', [], false, 100, 0, null, null, 'Tickets')
   assert.equal(withTable.table, 'Tickets')
   // Absent / empty / non-string -> no table key (server defaults to first matched).
-  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null)))
-  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null, '')))
-  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 0, null, null, 123)))
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 100, 0, null, null)))
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 100, 0, null, null, '')))
+  assert.ok(!('table' in buildRowsPayload('ex1', [], false, 100, 0, null, null, 123)))
 })
 
 test('buildRowsPayload table is independent of the drill key', () => {
   const drill = [{ column: 'phase', value: null }]
-  const p = buildRowsPayload('ex1', [], false, 0, null, drill, 'DRIVE_Revenues')
+  const p = buildRowsPayload('ex1', [], false, 100, 0, null, drill, 'DRIVE_Revenues')
   assert.deepEqual(p.drill, [{ column: 'phase', value: null }])
   assert.equal(p.table, 'DRIVE_Revenues')
+})
+
+// --- buildRowsPayload search (v2 q, appended after table) ----------------------------
+
+test('effectiveEvidenceQuery: trims, drops below the min, clamps to the max', () => {
+  assert.equal(effectiveEvidenceQuery('  ab '), 'ab')
+  assert.equal(effectiveEvidenceQuery('a'), '') // 1 char < EVIDENCE_Q_MIN
+  assert.equal(effectiveEvidenceQuery('  '), '')
+  assert.equal(effectiveEvidenceQuery(null), '')
+  assert.equal(effectiveEvidenceQuery(undefined), '')
+  assert.equal(EVIDENCE_Q_MIN, 2)
+  const long = 'x'.repeat(EVIDENCE_Q_MAX + 50)
+  assert.equal(effectiveEvidenceQuery(long).length, EVIDENCE_Q_MAX)
+})
+
+test('buildRowsPayload adds the q key only for an effective (>= 2 chars) search', () => {
+  const p = buildRowsPayload('ex1', [], false, 100, 0, null, null, null, '  Algerie ')
+  assert.equal(p.q, 'Algerie') // trimmed + kept (>= 2 chars)
+  // Below the threshold / absent -> no q key (server returns the unsearched window).
+  assert.ok(!('q' in buildRowsPayload('ex1', [], false, 100, 0, null, null, null, 'a')))
+  assert.ok(!('q' in buildRowsPayload('ex1', [], false, 100, 0, null, null, null, '')))
+  assert.ok(!('q' in buildRowsPayload('ex1', [], false, 100, 0, null)))
+})
+
+test('buildRowsPayload q is independent of the drill and table keys', () => {
+  const drill = [{ column: 'phase', value: null }]
+  const p = buildRowsPayload('ex1', [], false, 20, 0, null, drill, 'DRIVE_Revenues', 'total')
+  assert.deepEqual(p.drill, [{ column: 'phase', value: null }])
+  assert.equal(p.table, 'DRIVE_Revenues')
+  assert.equal(p.q, 'total')
 })
 
 // --- buildDrillLabels (captured-result row → drill labels) ---------------------------
@@ -184,7 +223,7 @@ test('buildDrillLabels aborts on missing cell, object cell or non-finite number'
 
 test('buildDrillLabels aborts (null) above the 8-column cap instead of truncating', () => {
   // CONTRACT-01: a truncated drill would show a SUPERSET of the group under a
-  // "source rows" banner — more keys than the backend accepts means NO drill.
+  // "source rows" banner - more keys than the backend accepts means NO drill.
   const cols = Array.from({ length: 10 }, (_, i) => 'c' + i)
   const row = cols.map((_, i) => i)
   assert.equal(buildDrillLabels(cols, cols, row), null)
@@ -205,7 +244,7 @@ test('buildDrillLabels: null on empty/malformed inputs', () => {
 
 // --- i18n contract: trust-layer keys (frozen enum coverage, fr + en) -----------------
 
-// Frozen explanation-step kinds (spec §2) — the frontend renders t('ev.exp.' + kind).
+// Frozen explanation-step kinds (spec §2) - the frontend renders t('ev.exp.' + kind).
 const FROZEN_KINDS = [
   'source', 'join',
   'filter_eq', 'filter_neq', 'filter_gt', 'filter_gte', 'filter_lt', 'filter_lte',

@@ -15,6 +15,10 @@
 export const SOURCE_Q_MIN = 2
 // Hard cap on the search string (mirrors the backend q length limit).
 export const SOURCE_Q_MAX = 200
+// Fallback window size when a call omits `limit` (the store always passes an
+// explicit 100 / 20; this keeps a pagination-less call safe). Mirrors the
+// backend's default limit.
+export const SOURCE_DEFAULT_LIMIT = 50
 
 // Cosmetic op for a user filter: one value reads as '=', several as 'IN' (the
 // backend treats both identically and re-normalizes). CONTRACT: `values` must be
@@ -46,7 +50,12 @@ export function effectiveSourceQuery(q) {
 // Assemble the /source/rows request body. `sourceId` is the integer id from the
 // agent's `sources` list; `chips` are the user filters; `sort` is {column, dir} or
 // null. Chips with no column or no values are skipped defensively.
-export function buildSourceRowsPayload(agentKey, sourceId, q, chips, page, sort) {
+//
+// Pagination is limit/offset (v2): `limit` is the window size (fresh load 100,
+// subsequent "load more" 20), `offset` the running count of already-loaded rows.
+// The server clamps both (1..100 / 0..500); a missing/zero limit falls back to a
+// sane default so a call without pagination still returns a first window.
+export function buildSourceRowsPayload(agentKey, sourceId, q, chips, limit, offset, sort) {
   const filters = []
   for (const c of chips || []) {
     if (!c || !c.column || !Array.isArray(c.values) || !c.values.length) continue
@@ -61,7 +70,8 @@ export function buildSourceRowsPayload(agentKey, sourceId, q, chips, page, sort)
     source: sourceId,
     q: effectiveSourceQuery(q),
     filters,
-    page: page || 0,
+    limit: limit || SOURCE_DEFAULT_LIMIT,
+    offset: offset || 0,
     sort: sort || null,
   }
 }

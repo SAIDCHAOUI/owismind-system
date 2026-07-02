@@ -1,24 +1,30 @@
 <script setup>
 // Evidence rows table - live rows of the matched source table under the agent's
 // (or user-modified) filters. Sticky header, click-to-sort, BOTH vertical and
-// horizontal scroll, and LAZY / INFINITE loading: the store loads page 0, then
-// appends the next page when the bottom sentinel scrolls into view (never the
-// whole table at once). When the agent's SQL reads several distinct source
-// datasets, a small table selector is shown above the table.
+// horizontal scroll, and LAZY / INFINITE loading: the store loads the first window,
+// then appends the next when the bottom sentinel scrolls into view (never the whole
+// table at once). The matched-source selector now lives in the unified Evidence
+// "Source data" tab selector (this table no longer draws its own).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon } from '../ui'
 
+// Column windowing (client-side only): render the first COLS_INITIAL columns, then
+// reveal COLS_MORE more each time the horizontal sentinel scrolls into view. The
+// server keeps returning ALL columns; search still spans every column server-side.
+const COLS_INITIAL = 30
+const COLS_MORE = 20
+
 const { t } = useI18n()
 const evidence = useEvidenceStore()
-const columns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+const allColumns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+const colCount = ref(COLS_INITIAL)
+const columns = computed(() => allColumns.value.slice(0, colCount.value))
+const colsWindowed = computed(() => allColumns.value.length > columns.value.length)
 
-// The dataset name the live rows currently re-query: the explicit selection, or
-// (default) the first matched source. Drives the selector's active chip.
-const activeTable = computed(
-  () => evidence.selectedTable || (evidence.sources[0] && evidence.sources[0].dataset) || null,
-)
+// Reset the visible window whenever the table's columns change (new exchange).
+watch(allColumns, () => { colCount.value = COLS_INITIAL })
 
 function sortDir(name) {
   const s = evidence.sort
@@ -70,29 +76,47 @@ watch(sentinelEl, (el) => {
   if (el) setupObserver()
   else teardownObserver()
 })
-onBeforeUnmount(teardownObserver)
+
+// Horizontal column sentinel: a thin cell at the right edge of the header inside the
+// SAME scroll container. When it enters the viewport (scrolled right) reveal the next
+// batch of columns - the horizontal mirror of the vertical rows sentinel.
+const colSentinelEl = ref(null)
+let colObserver = null
+
+function teardownColObserver() {
+  if (colObserver) {
+    colObserver.disconnect()
+    colObserver = null
+  }
+}
+function setupColObserver() {
+  teardownColObserver()
+  if (typeof IntersectionObserver !== 'function') return
+  if (!scrollEl.value || !colSentinelEl.value) return
+  colObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          colCount.value = Math.min(allColumns.value.length, colCount.value + COLS_MORE)
+        }
+      }
+    },
+    { root: scrollEl.value, rootMargin: '0px 200px', threshold: 0 },
+  )
+  colObserver.observe(colSentinelEl.value)
+}
+watch(colSentinelEl, (el) => {
+  if (el) setupColObserver()
+  else teardownColObserver()
+})
+
+onBeforeUnmount(() => { teardownObserver(); teardownColObserver() })
 </script>
 
 <template>
   <!-- `busy` (55% dim) only applies to refreshes with REAL rows on screen: the
        first-load skeleton must keep full opacity or its shimmer washes out. -->
   <div class="ev-table" :class="{ busy: evidence.rowsLoading && evidence.rows.length > 0 }">
-    <!-- Source-table selector - shown ONLY when the SQL reads several distinct
-         datasets. Single-source keeps the v1 layout (no selector). -->
-    <div v-if="evidence.hasMultipleSources" class="ev-table-sources">
-      <span class="src-label">{{ t('ev.table.source') }}</span>
-      <button
-        v-for="s in evidence.sources"
-        :key="s.dataset"
-        type="button"
-        class="src-chip"
-        :class="{ active: s.dataset === activeTable }"
-        :disabled="evidence.rowsLoading"
-        @click="evidence.setTable(s.dataset)"
-      >
-        {{ s.label || s.dataset }}
-      </button>
-    </div>
     <div ref="scrollEl" class="ev-table-scroll">
       <table>
         <thead>
@@ -105,6 +129,9 @@ onBeforeUnmount(teardownObserver)
                 </span>
               </button>
             </th>
+            <!-- Horizontal column sentinel: reveals the next batch of columns when
+                 scrolled into view (client-side column windowing). -->
+            <th v-if="colsWindowed" ref="colSentinelEl" class="col-sentinel" aria-hidden="true"></th>
           </tr>
         </thead>
         <!-- First load (no rows yet): shimmer skeleton rows instead of a blank area.
@@ -142,9 +169,12 @@ onBeforeUnmount(teardownObserver)
       <span>{{ t('ev.error') }}</span>
       <button @click="evidence.refreshRows()">{{ t('ev.retry') }}</button>
     </div>
-    <!-- Footer: how many rows are loaded, and whether more remain (lazy). -->
+    <!-- Footer: how many rows are loaded, how many columns are shown, and whether
+         more rows remain (lazy). -->
     <div class="ev-table-foot">
       <span class="mono page">{{ t('ev.table.loaded', [evidence.rows.length]) }}</span>
+      <span class="foot-spacer" />
+      <span v-if="colsWindowed" class="cols-hint">{{ t('ev.table.cols', [columns.length, allColumns.length]) }}</span>
       <span v-if="evidence.hasMore" class="more-hint">{{ t('ev.table.more') }}</span>
     </div>
   </div>
@@ -172,27 +202,6 @@ onBeforeUnmount(teardownObserver)
   max-height: min(60vh, 480px);
   min-height: 220px; /* ≈ header + ~7 rows even before the first page lands */
 }
-/* Source-table selector (multi-table SQL) - small chips above the table. */
-.ev-table-sources {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
-  padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
-}
-.src-label {
-  font-size: 11px; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
-}
-.src-chip {
-  padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--r-pill);
-  font-size: var(--fs-xs); color: var(--text-2); background: var(--surface);
-  transition: all var(--dur) var(--ease);
-}
-.src-chip:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
-.src-chip:disabled { opacity: 0.5; cursor: not-allowed; }
-.src-chip.active {
-  border-color: var(--orange); color: var(--orange-text); background: var(--orange-soft);
-}
-/* Dark: translucent orange patch for the active chip (full :global selector, F2/L022). */
-:global(body[data-theme="dark"] .src-chip.active) { background: var(--orange-soft-dark); }
 /* separate + spacing 0: with `collapse`, the th border scrolls away from a
    sticky header - paint the line as an inset shadow so it sticks with it. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
@@ -244,10 +253,15 @@ tbody tr:last-child td { border-bottom: none; }
   transition: all var(--dur) var(--ease);
 }
 .ev-table-error button:hover { background: var(--surface-hover); color: var(--text); }
+/* 1px column sentinel: no border, minimal footprint - just an observable target
+   at the right edge of the header content. */
+.col-sentinel { width: 1px; min-width: 1px; padding: 0; box-shadow: none; background: var(--surface); }
 .ev-table-foot {
   display: flex; align-items: center; gap: var(--s-2);
   padding: 6px 12px; border-top: 1px solid var(--border); background: var(--surface);
 }
 .ev-table-foot .page { font-size: 11px; color: var(--text-3); }
-.ev-table-foot .more-hint { font-size: 11px; color: var(--text-3); margin-left: auto; }
+.ev-table-foot .foot-spacer { flex: 1; }
+.ev-table-foot .cols-hint { font-size: 11px; color: var(--text-3); }
+.ev-table-foot .more-hint { font-size: 11px; color: var(--text-3); }
 </style>

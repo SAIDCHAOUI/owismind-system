@@ -10,6 +10,7 @@ import {
   buildSourceRowsPayload,
   SOURCE_Q_MIN,
   SOURCE_Q_MAX,
+  SOURCE_DEFAULT_LIMIT,
 } from '../src/composables/sourceModel.js'
 import { extraMessages } from '../src/i18n/extra.js'
 
@@ -41,12 +42,12 @@ test('effectiveSourceQuery: trims, drops below the min, clamps to the max', () =
   assert.equal(effectiveSourceQuery(long).length, SOURCE_Q_MAX)
 })
 
-test('buildSourceRowsPayload: full shape per the frozen contract', () => {
+test('buildSourceRowsPayload: full shape per the frozen contract (limit/offset)', () => {
   const chips = [
     makeSourceChip('country', ['DZ'], 1),
     makeSourceChip('phase', ['ACTUALS', 'BUDGET'], 2),
   ]
-  const p = buildSourceRowsPayload('agentA', 3, 'algerie', chips, 2, { column: 'total', dir: 'desc' })
+  const p = buildSourceRowsPayload('agentA', 3, 'algerie', chips, 20, 40, { column: 'total', dir: 'desc' })
   assert.equal(p.agent, 'agentA')
   assert.equal(p.source, 3)
   assert.equal(p.q, 'algerie')
@@ -54,22 +55,25 @@ test('buildSourceRowsPayload: full shape per the frozen contract', () => {
     { column: 'country', op: '=', values: ['DZ'] },
     { column: 'phase', op: 'IN', values: ['ACTUALS', 'BUDGET'] },
   ])
-  assert.equal(p.page, 2)
+  assert.equal(p.limit, 20)
+  assert.equal(p.offset, 40)
+  assert.ok(!('page' in p)) // the page index is gone from the contract
   assert.deepEqual(p.sort, { column: 'total', dir: 'desc' })
 })
 
 test('buildSourceRowsPayload: q below the threshold becomes an empty string', () => {
-  const p = buildSourceRowsPayload('agentA', 0, 'a', [], 0, null)
+  const p = buildSourceRowsPayload('agentA', 0, 'a', [], 100, 0, null)
   assert.equal(p.q, '')
   assert.deepEqual(p.filters, [])
-  assert.equal(p.page, 0)
+  assert.equal(p.limit, 100)
+  assert.equal(p.offset, 0)
   assert.equal(p.sort, null)
 })
 
 test('buildSourceRowsPayload: op is derived from the value count, not a stale chip op', () => {
   // A chip whose op says '=' but that carries two values must still travel as 'IN'.
   const chip = { key: 'u1', column: 'phase', op: '=', values: ['A', 'B'] }
-  const p = buildSourceRowsPayload('agentA', 1, '', [chip], 0, null)
+  const p = buildSourceRowsPayload('agentA', 1, '', [chip], 100, 0, null)
   assert.deepEqual(p.filters, [{ column: 'phase', op: 'IN', values: ['A', 'B'] }])
 })
 
@@ -80,20 +84,21 @@ test('buildSourceRowsPayload: skips empty / malformed chips', () => {
     { key: 'u3', column: 'noval', op: '=', values: [] }, // no values
     null,
   ]
-  const p = buildSourceRowsPayload('agentA', 1, '', chips, 0, null)
+  const p = buildSourceRowsPayload('agentA', 1, '', chips, 100, 0, null)
   assert.deepEqual(p.filters, [{ column: 'ok', op: '=', values: ['v'] }])
 })
 
-test('buildSourceRowsPayload: defaults for omitted page / sort', () => {
-  const p = buildSourceRowsPayload('agentA', 2, '', undefined, undefined, undefined)
-  assert.equal(p.page, 0)
+test('buildSourceRowsPayload: defaults for omitted limit / offset / sort', () => {
+  const p = buildSourceRowsPayload('agentA', 2, '', undefined, undefined, undefined, undefined)
+  assert.equal(p.limit, SOURCE_DEFAULT_LIMIT) // fallback window when no limit is passed
+  assert.equal(p.offset, 0)
   assert.equal(p.sort, null)
   assert.deepEqual(p.filters, [])
 })
 
 test('buildSourceRowsPayload: does not alias the chip values array', () => {
   const chip = makeSourceChip('c', ['A'], 1)
-  const p = buildSourceRowsPayload('agentA', 1, '', [chip], 0, null)
+  const p = buildSourceRowsPayload('agentA', 1, '', [chip], 100, 0, null)
   p.filters[0].values.push('B')
   assert.equal(chip.values.length, 1)
 })
@@ -101,14 +106,14 @@ test('buildSourceRowsPayload: does not alias the chip values array', () => {
 // --- i18n contract: every Source Explorer key exists in fr + en ----------------------
 
 const SRC_KEYS = [
-  'ev.tab.sources',
+  'ev.tab.sources', 'ev.table.cols',
   'src.cta.title', 'src.cta.hint', 'src.panel.title', 'src.dataset_label',
-  'src.search.placeholder', 'src.search.min',
+  'src.search.placeholder', 'src.search.min', 'src.search.go',
   'src.filters.title', 'src.filters.add', 'src.filters.clear', 'src.filters.remove',
   'src.column',
   'src.picker.empty', 'src.picker.truncated', 'src.picker.max', 'src.picker.apply',
   'src.loading', 'src.error', 'src.retry', 'src.empty',
-  'src.loaded', 'src.more', 'src.loadingMore',
+  'src.loaded', 'src.more', 'src.loadingMore', 'src.cols',
 ]
 
 test('extra.js covers every Source Explorer key (fr + en)', () => {

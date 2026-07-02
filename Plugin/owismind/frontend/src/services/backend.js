@@ -247,8 +247,10 @@ export function fetchEvidenceMeta(exchangeId) {
   return request('/owismind-api/evidence/meta?exchange_id=' + encodeURIComponent(exchangeId));
 }
 
-// One bounded page of the evidence table. The payload NEVER carries SQL - see
-// composables/evidenceModel.js buildRowsPayload for the exact shape.
+// One bounded window of the evidence table. The payload NEVER carries SQL - see
+// composables/evidenceModel.js buildRowsPayload for the exact shape (limit/offset
+// pagination + an optional full-text q over all columns). Returns
+// { status, rows, has_more, offset }.
 export function fetchEvidenceRows(payload) {
   return request('/owismind-api/evidence/rows', {
     method: 'POST',
@@ -278,10 +280,10 @@ export function fetchSourceMeta(agentKey, sourceId) {
   return request('/owismind-api/source/meta' + q);
 }
 
-// One bounded page of a source dataset. The payload NEVER names a table/connection -
+// One bounded window of a source dataset. The payload NEVER names a table/connection -
 // see composables/sourceModel.js buildSourceRowsPayload for the exact shape (agent
-// key + integer source id + plain-text search + structured filters + page + sort).
-// Returns { status, rows, has_more, page }.
+// key + integer source id + plain-text search + structured filters + limit + offset +
+// sort). Returns { status, rows, has_more, offset }.
 export function fetchSourceRows(payload) {
   return request('/owismind-api/source/rows', {
     method: 'POST',

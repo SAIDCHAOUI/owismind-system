@@ -11,6 +11,24 @@
 // structured {column, op, values} filters; locked agent chips travel as kept
 // ids only (the backend re-derives them from the stored SQL by id).
 
+// Minimum / maximum effective length of the exchange-table search term. Below the
+// min the term is dropped (mirrors the backend, which ignores a q shorter than 2
+// chars after trimming); above the max it is clamped. Identical grammar to the
+// Source Explorer q so both search boxes behave the same.
+export const EVIDENCE_Q_MIN = 2
+export const EVIDENCE_Q_MAX = 200
+// Fallback window size when a call omits `limit` (the store always passes an
+// explicit 100 / 20). Mirrors the backend's default limit.
+export const EVIDENCE_DEFAULT_LIMIT = 50
+
+// The effective search term: trimmed, dropped to '' below EVIDENCE_Q_MIN chars,
+// and clamped to EVIDENCE_Q_MAX (the backend clamps identically). Always a string.
+export function effectiveEvidenceQuery(q) {
+  const trimmed = (q == null ? '' : String(q)).trim()
+  if (trimmed.length < EVIDENCE_Q_MIN) return ''
+  return trimmed.slice(0, EVIDENCE_Q_MAX)
+}
+
 export function chipsFromMeta(meta) {
   const chips = meta && Array.isArray(meta.chips) ? meta.chips : []
   return chips.map((c) => ({
@@ -33,7 +51,12 @@ export function normalizeEditableOp(values) {
   return values.length > 1 ? 'IN' : '='
 }
 
-export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort, drill, table) {
+// Assemble the /evidence/rows request body. Pagination is limit/offset (v2):
+// `limit` is the window size (fresh load 100, "load more" 20), `offset` the
+// running count of already-loaded rows; the server clamps both. `drill`, `table`
+// and `q` are OPTIONAL trailing arguments (in that order) so every legacy
+// positional call keeps working and each key is added only when meaningful.
+export function buildRowsPayload(exchangeId, chips, includeAdvanced, limit, offset, sort, drill, table, q) {
   const filters = []
   const keptIds = []
   for (const c of chips) {
@@ -48,22 +71,28 @@ export function buildRowsPayload(exchangeId, chips, includeAdvanced, page, sort,
     filters,
     kept_ids: keptIds,
     include_advanced: !!includeAdvanced,
-    page: page || 0,
+    limit: limit || EVIDENCE_DEFAULT_LIMIT,
+    offset: offset || 0,
     sort: sort || null,
   }
-  // Drill-down (trust layer v2): OPTIONAL trailing argument so every existing
-  // positional call stays valid. Only {column, value} pairs travel - the server
+  // Drill-down (trust layer v2): only {column, value} pairs travel - the server
   // re-derives the drillable group keys from the STORED SQL and 400s anything
   // else, so this list is a request, never an authority.
   if (Array.isArray(drill) && drill.length) {
     payload.drill = drill.map((d) => ({ column: d.column, value: d.value }))
   }
-  // Source-table selector (multi-table SQL): OPTIONAL trailing argument. Only a
-  // dataset NAME travels - the server matches it against the SQL's own set of
-  // matched tables and falls back to the first when unknown, so it is a request,
-  // never an authority. Absent / empty -> default (first matched) table.
+  // Source-table selector (multi-table SQL): only a dataset NAME travels - the
+  // server matches it against the SQL's own set of matched tables and falls back
+  // to the first when unknown. Absent / empty -> default (first matched) table.
   if (typeof table === 'string' && table) {
     payload.table = table
+  }
+  // Full-text search over ALL columns of the active exchange table: only the
+  // effective (>= 2 chars, folded, clamped) form travels; below the threshold no
+  // `q` key is added so the server returns the unsearched window.
+  const cleanQ = effectiveEvidenceQuery(q)
+  if (cleanQ) {
+    payload.q = cleanQ
   }
   return payload
 }

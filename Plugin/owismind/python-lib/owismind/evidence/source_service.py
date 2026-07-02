@@ -38,7 +38,8 @@ from owismind.storage.sql_config import pg_identifier
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 50        # rows per page (mirror of evidence.service.PAGE_SIZE)
+# Row-window pagination is client-driven: the validated `limit`/`offset` come in per
+# request (bounded in security.validation), so there is no fixed page size here.
 DISTINCT_LIMIT = 100  # picker values cap (mirror of evidence.service.DISTINCT_LIMIT)
 
 
@@ -146,14 +147,16 @@ def source_meta(agent_key, source_id):
     }
 
 
-def source_rows(agent_key, source_id, q, filters, page, sort):
-    """One bounded page of the source dataset, filtered + optionally searched. Read-only.
+def source_rows(agent_key, source_id, q, filters, limit, offset, sort):
+    """One bounded window of the source dataset, filtered + optionally searched. Read-only.
 
-    ``filters`` (validated upstream) are resolved against the LIVE schema (unknown
-    column -> 'invalid_filter_column'); ``q`` adds one accent-folded ILIKE over ALL
-    columns (empty / too-short -> no search). Default order is the first schema column
-    ASC; an explicit ``sort`` column is validated against the schema
-    ('invalid_sort_column'). Returns ``{"rows", "has_more", "page"}``.
+    ``limit``/``offset`` (validated + clamped upstream) define the row window: a LIMIT
+    of ``limit + 1`` yields ``has_more`` without a COUNT(*). ``filters`` (validated
+    upstream) are resolved against the LIVE schema (unknown column ->
+    'invalid_filter_column'); ``q`` adds one accent-folded ILIKE over ALL columns
+    (empty / too-short -> no search). Default order is the first schema column ASC; an
+    explicit ``sort`` column is validated against the schema ('invalid_sort_column').
+    Returns ``{"rows", "has_more", "offset"}``.
     """
     ctx = _resolve_source(agent_key, source_id)
     conditions = []
@@ -188,17 +191,17 @@ def source_rows(agent_key, source_id, q, filters, page, sort):
         conditions=conditions,
         order_ident=pg_identifier(order_col),
         order_dir=order_dir,
-        limit=PAGE_SIZE + 1,          # one extra row -> has_more without COUNT(*)
-        offset=page * PAGE_SIZE,
+        limit=limit + 1,              # one extra row -> has_more without COUNT(*)
+        offset=offset,
     )
     rows = _run_source_query(ctx, query, "source_rows")
-    has_more = len(rows) > PAGE_SIZE
+    has_more = len(rows) > limit
     logger.info(
-        "source_rows - agent=%s source=%d dataset=%s page=%d conditions=%d returned=%d",
-        agent_key, source_id, ctx["dataset"], page, len(conditions),
-        min(len(rows), PAGE_SIZE),
+        "source_rows - agent=%s source=%d dataset=%s limit=%d offset=%d conditions=%d returned=%d",
+        agent_key, source_id, ctx["dataset"], limit, offset, len(conditions),
+        min(len(rows), limit),
     )
-    return {"rows": rows[:PAGE_SIZE], "has_more": has_more, "page": page}
+    return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
 def source_distinct(agent_key, source_id, column):

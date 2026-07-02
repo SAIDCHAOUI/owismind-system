@@ -524,6 +524,29 @@ endroits DIFFÉRENTS, ce qui tranche le choix de techno.
 
 ---
 
+## 8e. Source Data Explorer - exploration des datasets bruts des agents (2026-07-02, ✅ VALIDÉ DSS)
+
+- **But** : les users voient/exploren les données que les agents manipulent (anti « outil magique »),
+  pour des prompts précis. Spec : `docs/superpowers/specs/2026-07-02-source-data-explorer-design.md`.
+- **Config** : bloc `sources` [{dataset,label}] (max 8) dans le profil d'agent (`validate_sources_block`,
+  `security/validation.py`) ; admin le remplit sur la fiche (AdminView, datalist `/admin/sources/datasets`).
+- **Backend** : routes read-only `/source/meta|rows|distinct` (`evidence/source_service.py`, garde =
+  miroir `_evidence_guard` sans ensure_chat_table + throttle + timeout 30s + read-only) ; recherche
+  accent/casse-insensible = 1 ILIKE sur `concat_ws` de toutes les colonnes via `translate()` (module
+  PUR `evidence/source_search.py`) ; `q` aussi sur `/evidence/rows` ; **contrat limit/offset** (limit
+  1..100 déf 50, offset 0..500, clamp jamais d'erreur, réponse `{rows,has_more,offset}`) ; `/agents`
+  sources = `[{id,label,dataset}]` (dataset display-only, jamais accepté en paramètre).
+- **Frontend** : `stores/sources.js` + `composables/sourceModel.js` + `components/sources/*`
+  (SourcePanel/SourceExplorer/SourceChips/SourceTable) ; CTA sur ChatEmpty (agent du picker) ;
+  panneau droite partagé avec Evidence (mutual exclusion, grille `rightOpen`) ; onglet Evidence
+  **Source data** = `EvidenceSourcesTab.vue` (sélecteur fusionné tables détectées legacy
+  chips+drill+recherche / datasets configurés de l'agent de l'ÉCHANGE via `exch.agentKey` +
+  `chat.agentKeyForExchange`) ; recherche Entrée/bouton only ; 100 lignes puis +20 (cap 500) ;
+  30 colonnes puis +20 ; pleine hauteur ; sélection persistée `evidence.sourceTabKey`.
+- **État** : ✅ validé DSS par l'user (v1 `030689b` + v2). 576 tests back + 147 node. Leçons **L121-L122**.
+
+---
+
 ## 9. Maquette cible - SUPPRIMÉE du repo (2026-06-11, conversion terminée)
 
 La maquette (SPA HTML/JS/CSS sans framework, `maquette/` + son paquet de docs de transmission) a servi de
@@ -555,6 +578,7 @@ au nettoyage du 2026-06-11, en même temps que `docs/superpowers/plans/` (journa
 
 | Sujet | État | Note |
 |---|---|---|
+| Source Data Explorer (bloc admin + panneau + onglet Evidence, §8e) | ✅ Validé DSS 2026-07-02 | routes `/source/*` + `q`/limit/offset sur `/evidence/rows` ; L121-L122 |
 | Scaffold Vue 3 + Vite, build → `resource/owismind-app/` | ✅ Validé | un build existe ; assets câblés dans body.html |
 | `vite.config.js` (base + outDir réels) | ✅ Validé | noms réels corrects |
 | Zip runtime propre (sans frontend/node_modules) | ✅ Validé | `owismind-upload.zip` conforme |

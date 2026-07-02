@@ -1,15 +1,20 @@
 <script setup>
 // Source Data Explorer body - store-driven. Renders (top to bottom): a dataset
-// selector (one chip per configured source, hidden when there is a single one), a
-// debounced global search, the user filter chips, and the rows table. Used inside the
-// standalone SourcePanel (the pre-conversation empty-screen surface); it feeds the
+// selector (one chip per configured source, hidden when there is a single one or the
+// explorer is embedded), an Enter/button global search, the user filter chips, and
+// the rows table. Used in the standalone SourcePanel (the pre-conversation empty
+// screen) and, with `embedded`, inside the Evidence "Source data" tab; it feeds the
 // sources store, so the host only has to ensureAgent() first.
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
 import { Icon } from '../ui'
 import SourceChips from './SourceChips.vue'
 import SourceTable from './SourceTable.vue'
+
+// `embedded` hides the internal dataset selector: hosted inside the Evidence
+// "Source data" tab, the unified selector there drives the dataset choice.
+defineProps({ embedded: { type: Boolean, default: false } })
 
 const { t } = useI18n()
 const sources = useSourcesStore()
@@ -17,40 +22,30 @@ const sources = useSourcesStore()
 const activeSourceId = computed(() => sources.activeSourceId)
 const hasTabs = computed(() => sources.sourceList.length > 1)
 
-// Debounced search: the input binds to a LOCAL term so typing is instant; the store
-// (and its refetch) is only touched after a short idle or on Enter.
+// Search fires ONLY on Enter or the explicit search button (no debounce): the input
+// binds to a LOCAL term so typing stays instant; the store (and its refetch) is
+// touched only on submit. The clear (X) resets and refetches immediately.
 const term = ref(sources.q || '')
 const oneChar = computed(() => term.value.trim().length === 1)
-let timer = null
 
-function scheduleQuery() {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => {
-    timer = null
-    sources.setQuery(term.value)
-  }, 350)
-}
-function flushQuery() {
-  if (timer) { clearTimeout(timer); timer = null }
+function submitQuery() {
   sources.setQuery(term.value)
 }
 function clearQuery() {
-  if (timer) { clearTimeout(timer); timer = null }
   term.value = ''
   sources.setQuery('')
 }
 // Switching dataset resets the store's search: mirror it into the local term.
 watch(() => sources.activeSourceId, () => {
-  if (timer) { clearTimeout(timer); timer = null }
   term.value = sources.q || ''
 })
-onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 </script>
 
 <template>
   <div class="src-explorer">
-    <!-- Dataset selector - only when the agent exposes more than one source. -->
-    <div v-if="hasTabs" class="src-datasets">
+    <!-- Dataset selector - only when the agent exposes more than one source AND the
+         explorer is not embedded (the unified Evidence selector drives it there). -->
+    <div v-if="hasTabs && !embedded" class="src-datasets">
       <span class="src-datasets-label">{{ t('src.dataset_label') }}</span>
       <button
         v-for="s in sources.sourceList"
@@ -65,7 +60,7 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
       </button>
     </div>
 
-    <!-- Global search over the whole dataset. -->
+    <!-- Global search over the whole dataset - fires on Enter or the search button. -->
     <div class="src-search">
       <Icon name="search" class="src-search-ico" />
       <input
@@ -75,11 +70,20 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
         maxlength="200"
         :placeholder="t('src.search.placeholder')"
         :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
-        @input="scheduleQuery"
-        @keydown.enter.prevent="flushQuery"
+        @keydown.enter.prevent="submitQuery"
       />
       <button v-if="term" type="button" class="src-search-clear" :title="t('x.close')" @click="clearQuery">
         <Icon name="x" />
+      </button>
+      <button
+        type="button"
+        class="src-search-go"
+        :aria-label="t('src.search.go')"
+        :title="t('src.search.go')"
+        :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
+        @click="submitQuery"
+      >
+        <Icon name="search" />
       </button>
     </div>
     <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
@@ -137,6 +141,15 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 }
 .src-search-clear:hover { color: var(--text); }
 .src-search-clear :deep(.ui-icon) { width: 13px; height: 13px; }
+/* Explicit search trigger (search fires only on Enter or this button). */
+.src-search-go {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  padding: 5px 8px; margin-left: 2px; border-left: 1px solid var(--border);
+  color: var(--text-2); transition: all var(--dur) var(--ease);
+}
+.src-search-go:hover:not(:disabled) { color: var(--orange); background: var(--surface-hover); }
+.src-search-go:disabled { opacity: 0.5; cursor: not-allowed; }
+.src-search-go :deep(.ui-icon) { width: 15px; height: 15px; }
 .src-search-hint { font-size: var(--fs-xs); color: var(--text-3); margin-top: calc(-1 * var(--s-2)); }
 
 /* Meta-loading skeleton - flat surface blocks with an opacity pulse (no gradient). */

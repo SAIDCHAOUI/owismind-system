@@ -42,6 +42,7 @@ from owismind.evidence.query_builders import (
     build_rows_query,
     render_predicate,
 )
+from owismind.evidence.source_search import build_search_condition
 from owismind.evidence.whitelist import match_whitelist
 from owismind.storage.migrations import CHAT_V5_LOGICAL
 from owismind.storage.serialization import parse_json_list, rows_to_json_safe
@@ -65,7 +66,8 @@ except ImportError:  # honest degradation, never a hard dependency
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 50       # rows per page (LIMIT PAGE_SIZE+1 -> has_more, no COUNT(*))
+# Row-window pagination is client-driven now: the validated `limit`/`offset` come in
+# per request (bounded in security.validation), so there is no fixed page size here.
 DISTINCT_LIMIT = 100 # picker values cap
 
 # --- Trust-layer bounds (mirrors of the frozen contract §§2-3) -----------------
@@ -133,6 +135,18 @@ def _quote_value(value):
     if isinstance(value, bool):
         return bool_literal(value)
     return sql_value(value)
+
+
+def _quote_literal(value):
+    """A standard single-quoted SQL string literal (doubles embedded quotes).
+
+    Used only for the free-text search condition (the accent-fold map constants and
+    the already LIKE-escaped, server-derived needle). A plain standard-string quote -
+    not an E-string - so the ILIKE's ``ESCAPE '\\'`` clause behaves under
+    ``standard_conforming_strings`` (mirror of source_service._quote_literal; kept
+    local to avoid an import cycle with the source explorer service).
+    """
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 class EvidenceError(Exception):
@@ -1054,10 +1068,14 @@ def evidence_meta(user_id, exchange_id):
 
 
 def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
-                  page, sort, drill=None, table=None):
-    """One bounded page of the (re-)filtered evidence table. Read-only.
+                  limit, offset, sort, drill=None, table=None, q=""):
+    """One bounded window of the (re-)filtered evidence table. Read-only.
 
-    ``drill`` (optional, validated upstream) narrows the page to ONE result
+    ``limit``/``offset`` (validated + clamped upstream) define the row window: a
+    LIMIT of ``limit + 1`` yields ``has_more`` without a COUNT(*). ``q`` (optional)
+    is a free-text term matched over EVERY live column via one accent-folded ILIKE
+    (empty / too-short -> no search), mirroring the Source Data Explorer.
+    ``drill`` (optional, validated upstream) narrows the window to ONE result
     group: every drill column is re-derived from the STORED SQL server-side
     (never trusted from the client) and rendered as an equality / IS NULL
     condition ADDED to the standard ones. Everything else is unchanged.
@@ -1085,6 +1103,13 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
         ))
     if include_advanced and ctx["advanced"]:
         conditions.append(_advanced_condition(ctx))
+    # Free-text search over every live column: one accent-folded ILIKE (or None when
+    # the folded needle is < 2 chars), ANDed with the rest. Mirrors source_service.
+    search = build_search_condition(
+        [c["name"] for c in ctx["columns"]], q, pg_identifier, _quote_literal,
+    )
+    if search:
+        conditions.append(search)
     if drill:
         conditions.extend(_drill_conditions(ctx, drill))
 
@@ -1107,18 +1132,18 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
         conditions=conditions,
         order_ident=pg_identifier(order_col),
         order_dir=order_dir,
-        limit=PAGE_SIZE + 1,           # one extra row -> has_more without COUNT(*)
-        offset=page * PAGE_SIZE,
+        limit=limit + 1,               # one extra row -> has_more without COUNT(*)
+        offset=offset,
     )
     rows = _run_evidence_query(ctx, query, "evidence_rows")
-    has_more = len(rows) > PAGE_SIZE
+    has_more = len(rows) > limit
     logger.info(
         "evidence_rows - user_id=%s exchange_id=%s dataset=%s requested_table=%s "
-        "page=%d conditions=%d returned=%d",
-        user_id, exchange_id, ctx["dataset"], table, page, len(conditions),
-        min(len(rows), PAGE_SIZE),
+        "limit=%d offset=%d conditions=%d returned=%d",
+        user_id, exchange_id, ctx["dataset"], table, limit, offset, len(conditions),
+        min(len(rows), limit),
     )
-    return {"rows": rows[:PAGE_SIZE], "has_more": has_more, "page": page}
+    return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
 def evidence_distinct(user_id, exchange_id, column, exclude_id=None):

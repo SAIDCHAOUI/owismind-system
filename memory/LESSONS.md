@@ -2828,5 +2828,40 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   prompting-claude-fable-5 (« Create a send-to-user tool »).
 - **Date** : 2026-07-02.
 
+## L121 - Workflow tool : les prompts de la phase verify doivent etre construits par VRAIE interpolation ; l'echappement `${'${x}'}` produit le litteral et les verificateurs refutent des claims vides [process, 2026-07-02 Run 3]
+- **Contexte** : revue adversariale en Workflow (pattern find -> verify par finding) pour le
+  Source Data Explorer. Les prompts de verification embarquaient titre/detail du finding.
+- **Ce qui a echoue** : ecrits `${'${f.title}'}` (echappement voulu pour un template exterieur),
+  ils ont produit le LITTERAL `${f.title}` : les 6 verificateurs ont recu des claims vides et
+  ont correctement rendu real=false (« harness substitution failure ») -> 0 confirme a tort,
+  alors que les findings etaient reels.
+- **Solution qui marche** : dans le script Workflow, construire les prompts de verify par
+  concatenation (`'TITLE: ' + f.title`) ou vraie interpolation ; et TOUJOURS relire
+  `journal.jsonl` du run quand un resultat de workflow semble incoherent : les findings
+  complets de la phase Review y etaient intacts (recuperes, re-verifies via une 2e passe
+  correctement interpolee).
+- **Preuve-verification** : run `wf_1eab506e-7ca` (6 refutes avec raison « unsubstituted
+  template ») vs run `wf_16b4f13d-814` (interpolation concatenee : 2 confirmes, 0 faux refus).
+- **Source** : session 2026-07-02 Run 3.
+- **Date** : 2026-07-02.
+
+## L122 - Deplacer de l'UI validee entre onglets : un cluster d'interaction (controles + cible) se deplace EN BLOC, et une surface dans un panneau scope-echange se lie a l'agent de l'ECHANGE, pas au picker vivant [valide DSS, 2026-07-02 Run 3]
+- **Contexte** : v1 du Source Data Explorer : « deplacer l'explore source data dans un nouvel
+  onglet » d'Evidence Studio, implemente en ne deplacant QUE la table.
+- **Ce qui a echoue** : chips de filtre et chevrons de drill restes sur l'onglet Evidence
+  pendant que la table (leur cible) partait dans l'onglet sources -> editer un chip / driller
+  ne montrait rien (voire cible jamais montee) ; et l'onglet lisait `session.selectedAgent`
+  (picker LIVE) -> les datasets d'un agent B affiches dans le panneau d'une reponse de A.
+- **Solution qui marche** : (1) le cluster chips + bandeau drill + table se deplace EN BLOC ;
+  (2) l'action qui declenche depuis un autre onglet (drill) fait un auto-switch d'onglet vers
+  la cible ; (3) toute surface d'un panneau scope-echange resout son agent depuis l'ECHANGE
+  (retenir `agent_key` sur l'objet exchange : rowToExchange + envoi live), le picker ne sert
+  qu'aux surfaces pre-conversation ; (4) l'etat de selection d'un onglet v-if (demonte au
+  switch) vit dans le store, pas en ref locale.
+- **Preuve-verification** : findings confirmes des 2 revues adversariales (v1 : 6 ; v2 : 2)
+  tous fermes ; contre-verification Opus « clean sur 6 checks » ; VALIDE DSS par l'user.
+- **Source** : session 2026-07-02 Run 3, `EvidenceSourcesTab.vue`, `stores/chat.js`.
+- **Date** : 2026-07-02.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

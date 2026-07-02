@@ -4,7 +4,10 @@ import os, sys, unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
 from owismind.security.validation import (  # noqa: E402
+    DEFAULT_ROWS_LIMIT,
     MAX_AGENT_SOURCES,
+    MAX_ROWS_LIMIT,
+    MAX_ROWS_OFFSET,
     MAX_SOURCE_QUERY_CHARS,
     ValidationError,
     validate_agent_meta,
@@ -95,22 +98,24 @@ def _rows(**over):
 
 class RowsRequestTests(unittest.TestCase):
     def test_valid_roundtrip(self):
-        agent, source_id, q, filters, page, sort = validate_source_rows_request(_rows(
+        agent, source_id, q, filters, limit, offset, sort = validate_source_rows_request(_rows(
             q="  algerie ",
             filters=[{"column": "customer", "op": "IN", "values": ["A", "B"]}],
-            page=2,
+            limit=25,
+            offset=40,
             sort={"column": "period", "dir": "desc"},
         ))
         self.assertEqual(agent, "ag_abc123")
         self.assertEqual(source_id, 0)
         self.assertEqual(q, "algerie")
         self.assertEqual(filters, [{"column": "customer", "op": "IN", "values": ["A", "B"]}])
-        self.assertEqual(page, 2)
+        self.assertEqual(limit, 25)
+        self.assertEqual(offset, 40)
         self.assertEqual(sort, {"column": "period", "dir": "desc"})
 
     def test_defaults(self):
-        agent, source_id, q, filters, page, sort = validate_source_rows_request(_rows())
-        self.assertEqual((q, filters, page, sort), ("", [], 0, None))
+        agent, source_id, q, filters, limit, offset, sort = validate_source_rows_request(_rows())
+        self.assertEqual((q, filters, limit, offset, sort), ("", [], DEFAULT_ROWS_LIMIT, 0, None))
 
     def test_agent_cleaned_and_required(self):
         self.assertEqual(validate_source_rows_request(_rows(agent="  ag_x "))[0], "ag_x")
@@ -136,11 +141,16 @@ class RowsRequestTests(unittest.TestCase):
         long_q = validate_source_rows_request(_rows(q="x" * (MAX_SOURCE_QUERY_CHARS + 50)))[2]
         self.assertEqual(len(long_q), MAX_SOURCE_QUERY_CHARS)
 
-    def test_page_clamped_never_raises(self):
-        self.assertEqual(validate_source_rows_request(_rows(page=-3))[4], 0)
-        self.assertEqual(validate_source_rows_request(_rows(page=9999))[4], 20)
-        self.assertEqual(validate_source_rows_request(_rows(page="junk"))[4], 0)
-        self.assertEqual(validate_source_rows_request(_rows(page=float("inf")))[4], 0)
+    def test_limit_offset_clamped_never_raises(self):
+        # limit is index 4, offset index 5 - both clamp to their bands, never raise.
+        self.assertEqual(validate_source_rows_request(_rows(limit=9999))[4], MAX_ROWS_LIMIT)
+        self.assertEqual(validate_source_rows_request(_rows(limit=0))[4], 1)
+        self.assertEqual(validate_source_rows_request(_rows(limit="junk"))[4], DEFAULT_ROWS_LIMIT)
+        self.assertEqual(validate_source_rows_request(_rows(limit=float("inf")))[4], DEFAULT_ROWS_LIMIT)
+        self.assertEqual(validate_source_rows_request(_rows(offset=-3))[5], 0)
+        self.assertEqual(validate_source_rows_request(_rows(offset=9999))[5], MAX_ROWS_OFFSET)
+        self.assertEqual(validate_source_rows_request(_rows(offset="junk"))[5], 0)
+        self.assertEqual(validate_source_rows_request(_rows(offset=float("inf")))[5], 0)
 
     def test_filter_bounds_reused(self):
         bad = [
@@ -160,9 +170,9 @@ class RowsRequestTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, code)
 
     def test_sort_normalized(self):
-        self.assertEqual(validate_source_rows_request(_rows(sort={"column": "p", "dir": "JUNK"}))[5],
+        self.assertEqual(validate_source_rows_request(_rows(sort={"column": "p", "dir": "JUNK"}))[6],
                          {"column": "p", "dir": "asc"})
-        self.assertIsNone(validate_source_rows_request(_rows(sort="x"))[5])
+        self.assertIsNone(validate_source_rows_request(_rows(sort="x"))[6])
 
 
 class MetaDistinctParamTests(unittest.TestCase):

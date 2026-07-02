@@ -37,6 +37,17 @@ and the agent guesses less.
 ## Non-goals
 - No write path, no generic SQL route, no per-user source config, no export.
 
+## v2 amendments (2026-07-02, user feedback)
+- Search fires ONLY on Enter or an explicit button (no debounce/auto-fire).
+- Both rows endpoints use limit/offset (limit 1..100 default 50, offset 0..500, clamp
+  never raise); front loads 100 rows first then +20 per scroll (client cap 500).
+- `/evidence/rows` gained the same optional `q` global search (all live columns).
+- Evidence "Source data" tab = ONE selector merging the exchange's detected tables
+  (legacy mode: chips + drill + search + table, full height) with the exchange AGENT's
+  other configured datasets (embedded SourceExplorer); agent resolved from the
+  exchange's stored agent_key, never the live picker. /agents sources expose `dataset`.
+- Tables render 30 columns first, +20 via horizontal sentinel; full-height explorer.
+
 ## Safety net
 - Backend unittest (sources block validation, agent+id -> table resolution, `q` SQL,
   guards) + frontend node:test (pure models) + Vite build + DEV zip only (prod intact).

@@ -16,15 +16,18 @@ import {
   buildDrillLabels,
   isModified,
   normalizeEditableOp,
+  effectiveEvidenceQuery,
 } from '../composables/evidenceModel.js'
 
-// Deepest browsable page index - mirrors the backend's MAX_EVIDENCE_PAGE
-// (security/validation.py): the server silently clamps anything deeper.
-const MAX_PAGE = 20
+// Limit/offset pagination (v2): the first load pulls a big window, then each
+// "load more" appends a small one. INITIAL_LIMIT + n x MORE_LIMIT never exceeds
+// MAX_ROWS (100 + 20 x 20 = 500), so the offset never passes the backend's cap.
+const INITIAL_LIMIT = 100
+const MORE_LIMIT = 20
 // Defensive client-side cap on the ACCUMULATED (lazily appended) rows: infinite
-// scroll appends page after page, so a huge source table must never grow the
-// in-memory array without bound. 10 pages x 50 rows = 500 rows max on screen;
-// past that the "load more" sentinel stops fetching (the user filters to narrow).
+// scroll appends window after window, so a huge source table must never grow the
+// in-memory array without bound. Past MAX_ROWS the "load more" sentinel stops
+// fetching (the user filters to narrow).
 const MAX_ROWS = 500
 
 export const useEvidenceStore = defineStore('evidence', () => {
@@ -41,14 +44,23 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // the next page (infinite scroll). Bounded by MAX_ROWS so a huge table can
   // never blow memory. `page` is the index of the LAST loaded page.
   const rows = ref([])
-  const page = ref(0)
+  const offset = ref(0) // running count of already-loaded rows (= next window start)
   const hasMore = ref(false)
   const sort = ref(null) // { column, dir: 'asc' | 'desc' } | null
+  // Full-text search over ALL columns of the active exchange table. Raw text; the
+  // payload carries the effective (>= 2 chars, folded) form. Reset on exchange/close.
+  const q = ref('')
   // Source-table selector (multi-table SQL): the dataset name the live rows
   // table is currently re-querying. null = the backend's default (first matched
   // table). Reset on every exchange/close; a selector is shown only when the
   // meta carries more than one matched source.
   const selectedTable = ref(null)
+  // Which entry the unified "Source data" selector has active (its `key`, e.g.
+  // 'legacy:<dataset>' or 'agent:<id>'). Exchange-scoped so an agent-mode dataset
+  // choice survives a tab round-trip (the tab component is v-if'd and remounts).
+  // null = the selector's default (the first detected/legacy entry). Reset on
+  // every exchange/close.
+  const sourceTabKey = ref(null)
   // Drill-down into ONE captured-result row (trust layer v2): non-null while
   // the table shows the source rows behind a result row. Carries the labels
   // sent with /evidence/rows plus a snapshot of the pre-drill view (restored
@@ -93,10 +105,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
     chips.value = []
     includeAdvanced.value = false
     rows.value = []
-    page.value = 0
+    offset.value = 0
+    q.value = '' // close / new exchange = no active search
     hasMore.value = false
     sort.value = null
     selectedTable.value = null // close / new exchange = default (first matched) table
+    sourceTabKey.value = null // close / new exchange = default (first detected) selector entry
     drill.value = null // close / new exchange = no drill (and nothing to restore)
     error.value = ''
     rowsError.value = ''
@@ -158,38 +172,41 @@ export const useEvidenceStore = defineStore('evidence', () => {
     }
   }
 
-  // Lazily load ONE page of rows. `append` selects the mode:
-  //   - false (default): a FRESH load of page 0 - replaces the accumulated rows
-  //     (used on open / filter / sort / drill / table change).
-  //   - true: load the NEXT page (page + 1) and APPEND to the accumulated rows
-  //     (the infinite-scroll sentinel). The accumulated array is capped at
-  //     MAX_ROWS so a huge source table can never grow it without bound.
+  // Lazily load ONE window of rows. `append` selects the mode:
+  //   - false (default): a FRESH first window (offset 0) - replaces the
+  //     accumulated rows (used on open / search / filter / sort / drill / table).
+  //   - true: load the NEXT window (offset = rows.length) and APPEND to the
+  //     accumulated rows (the infinite-scroll sentinel). The accumulated array is
+  //     capped at MAX_ROWS so a huge source table can never grow it without bound.
   // Tri-state result: true = latest request succeeded, false = latest request
   // FAILED (no append/reset committed), null = superseded by a newer
   // request/close (no rollback - something else owns the state now).
   async function _loadRows(mySeq, opts) {
     const append = !!(opts && opts.append)
-    const targetPage = append ? page.value + 1 : 0
+    const targetOffset = append ? rows.value.length : 0
+    const targetLimit = append ? MORE_LIMIT : INITIAL_LIMIT
     const myRows = ++rowsSeq
     rowsLoading.value = true
     try {
       const payload = buildRowsPayload(
-        exchangeId.value, chips.value, includeAdvanced.value, targetPage, sort.value,
-        drill.value ? drill.value.labels : null, selectedTable.value,
+        exchangeId.value, chips.value, includeAdvanced.value, targetLimit, targetOffset, sort.value,
+        drill.value ? drill.value.labels : null, selectedTable.value, q.value,
       )
       const data = await fetchEvidenceRows(payload)
       if (mySeq !== seq || myRows !== rowsSeq) return null
       const newRows = data.rows || []
-      // Adopt the server-echoed page: the backend silently CLAMPS deep pages
-      // (MAX_EVIDENCE_PAGE); a counter racing past the clamp would page forever
-      // over the same rows. Append guards against that double-counting too.
-      const echoed = typeof data.page === 'number' && data.page >= 0 ? data.page : targetPage
-      if (append && echoed > page.value) {
-        rows.value = rows.value.concat(newRows).slice(0, MAX_ROWS)
-      } else if (!append) {
+      // Adopt the server-echoed offset: the backend silently CLAMPS an out-of-range
+      // offset; appending a clamped window would duplicate rows, so we only append
+      // when the server honoured the exact offset we asked for (= current tail).
+      const echoed = typeof data.offset === 'number' && data.offset >= 0 ? data.offset : targetOffset
+      if (append) {
+        if (echoed === rows.value.length) {
+          rows.value = rows.value.concat(newRows).slice(0, MAX_ROWS)
+        }
+      } else {
         rows.value = newRows.slice(0, MAX_ROWS)
       }
-      page.value = echoed
+      offset.value = echoed
       // Stop paging once the server has no more rows OR the client cap is hit.
       hasMore.value = !!data.has_more && rows.value.length < MAX_ROWS
       return true
@@ -209,13 +226,26 @@ export const useEvidenceStore = defineStore('evidence', () => {
     return _loadRows(seq)
   }
 
-  // Infinite-scroll: append the next page when the sentinel scrolls into view.
+  // Infinite-scroll: append the next window when the sentinel scrolls into view.
   // Bounded by hasMore (server) and MAX_ROWS (client); never fetches everything.
   function loadMoreRows() {
     if (!hasMore.value || rowsLoading.value) return Promise.resolve(null)
-    if (page.value >= MAX_PAGE) return Promise.resolve(null) // mirrors backend clamp
     if (rows.value.length >= MAX_ROWS) return Promise.resolve(null)
     return _loadRows(seq, { append: true })
+  }
+
+  // Search the WHOLE active exchange table (all columns). The caller fires this on
+  // Enter / an explicit search button only (no debounce). Stores the raw text but
+  // skips a pointless refetch when the EFFECTIVE term is unchanged (e.g. a 1st char
+  // still below the 2-char threshold). A fresh reload starts at offset 0.
+  function setQuery(value) {
+    const next = value == null ? '' : String(value)
+    if (next === q.value) return
+    const before = effectiveEvidenceQuery(q.value)
+    q.value = next
+    if (effectiveEvidenceQuery(next) === before) return
+    offset.value = 0
+    refreshRows()
   }
 
   function close() {
@@ -228,7 +258,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // --- filter editing (picker = / IN + removal + add + reset) -----------------
   function removeChip(key) {
     chips.value = chips.value.filter((c) => c.key !== key)
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function setChipValues(key, values) {
@@ -240,7 +270,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     // picked values: it now travels as a structured client filter instead of a
     // server-side kept id (see evidenceModel.buildRowsPayload).
     chip.editable = true
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function addFilter(column, values) {
@@ -255,18 +285,18 @@ export const useEvidenceStore = defineStore('evidence', () => {
       editable: true,
       source: 'user',
     })
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function removeAdvanced() {
     includeAdvanced.value = false
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function resetToAgent() {
     chips.value = chipsFromMeta(meta.value)
     includeAdvanced.value = !!(meta.value && meta.value.advanced && meta.value.advanced.present)
-    page.value = 0
+    offset.value = 0
     sort.value = null
     // Back to the agent view = out of any drill. The drill snapshot is NOT
     // restored - the reset target IS the agent scope, not the pre-drill view.
@@ -279,7 +309,8 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // reachable when the server vouched for it (drilldown.available) AND the
   // exact agent result was captured: the labels are built from the CAPTURED
   // row, never from the live table, so the drill proves what the agent used.
-  // The pre-drill view (chips/advanced/sort/page) is snapshotted for exitDrill.
+  // The pre-drill view (chips/advanced/sort) is snapshotted for exitDrill; exit
+  // does a fresh reload at offset 0, so no scroll offset needs saving.
   function drillIntoResultRow(rowIndex) {
     const m = meta.value
     if (!m || !m.result || !m.result.captured) return
@@ -305,9 +336,8 @@ export const useEvidenceStore = defineStore('evidence', () => {
           savedChips: chips.value.map((c) => ({ ...c, values: c.values.slice() })),
           savedIncludeAdvanced: includeAdvanced.value,
           savedSort: sort.value ? { ...sort.value } : null,
-          savedPage: page.value,
         }
-    page.value = 0
+    offset.value = 0
     // The rows table lives in the Sources tab; the drill chevron sits on the
     // Evidence tab. Land the user on the tab that renders the drilled rows so the
     // click has a visible surface (setActiveTab never touches `open`, F13).
@@ -323,7 +353,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     chips.value = d.savedChips
     includeAdvanced.value = d.savedIncludeAdvanced
     sort.value = d.savedSort
-    page.value = d.savedPage
+    offset.value = 0 // restore = fresh reload from the top with the saved filters
     drill.value = null
     refreshRows()
   }
@@ -334,7 +364,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       sort.value && sort.value.column === column
         ? { column, dir: sort.value.dir === 'asc' ? 'desc' : 'asc' }
         : { column, dir: 'asc' }
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   // Switch the live rows table to another matched source dataset (multi-table
@@ -352,7 +382,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     includeAdvanced.value = false
     sort.value = null
     drill.value = null
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
 
@@ -373,10 +403,10 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
 
   return {
-    open, exchangeId, meta, chips, includeAdvanced, rows, page, hasMore, sort, drill,
+    open, exchangeId, meta, chips, includeAdvanced, rows, offset, hasMore, sort, drill, q,
     loading, rowsLoading, error, rowsError, available, modified,
-    sources, hasMultipleSources, selectedTable,
-    activeTab, setActiveTab,
+    sources, hasMultipleSources, selectedTable, sourceTabKey,
+    activeTab, setActiveTab, setQuery,
     openForExchange, close, refreshRows, loadMoreRows,
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,
     drillIntoResultRow, exitDrill,

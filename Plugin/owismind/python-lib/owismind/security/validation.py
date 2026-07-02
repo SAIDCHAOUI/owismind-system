@@ -333,11 +333,20 @@ def validate_suggestion_from_chat(payload):
 MAX_EVIDENCE_FILTERS = 20
 MAX_EVIDENCE_IN_VALUES = 50
 MAX_EVIDENCE_VALUE_CHARS = 500
-# Max browsable page index. OFFSET pagination makes the server re-sort and skip
-# (page * PAGE_SIZE) rows, so a deep page is an O(offset) cost on the dataset's
-# connection. 50 rows x 20 pages = 1000 rows browsable before the user must filter,
-# which bounds the worst-case OFFSET sort 10x vs. the previous 200.
-MAX_EVIDENCE_PAGE = 20
+# Row-window pagination (shared by /evidence/rows and /source/rows). The client asks
+# for an explicit limit + offset instead of a page index: a first load of up to
+# MAX_ROWS_LIMIT rows, then small follow-up windows. OFFSET pagination makes the
+# server re-sort and skip `offset` rows, so a deep offset is an O(offset) cost on the
+# dataset's connection; capping the offset bounds that worst case. Both values are
+# CLAMPED (never raise): a missing / malformed value degrades to the default, an
+# out-of-range one to the nearest bound (same philosophy as the old page clamp). The
+# browsable window is bounded by MAX_ROWS_OFFSET + MAX_ROWS_LIMIT (600 rows) before
+# the user must filter.
+MAX_ROWS_LIMIT = 100
+MAX_ROWS_OFFSET = 500
+DEFAULT_ROWS_LIMIT = 50
+# The free-text search cap. Shared: /source/rows AND /evidence/rows both take a `q`.
+MAX_SOURCE_QUERY_CHARS = 200
 MAX_EVIDENCE_KEPT_IDS = 100
 MAX_EVIDENCE_COLUMN_CHARS = 128
 # Optional source-table selector (multi-table SQL): the client may ask Evidence
@@ -415,13 +424,37 @@ def _parse_evidence_filters(raw_filters):
     return filters
 
 
-def _parse_evidence_page(raw):
-    """Clamp a client page index to ``[0, MAX_EVIDENCE_PAGE]``. Never raises."""
+def _parse_rows_limit(value):
+    """Clamp a client row-window limit to ``[1, MAX_ROWS_LIMIT]``. Never raises.
+
+    A missing / malformed value (including a bool - an int subclass that must not
+    read as 0/1) degrades to ``DEFAULT_ROWS_LIMIT``; a valid number is clamped into
+    the ``[1, MAX_ROWS_LIMIT]`` band. Mirrors the old page-clamp philosophy: a bad
+    limit never fails the request, it just shrinks to a safe window.
+    """
+    if isinstance(value, bool):
+        return DEFAULT_ROWS_LIMIT
     try:
-        page = int(raw or 0)
+        limit = int(value)
     except (TypeError, ValueError, OverflowError):
-        page = 0
-    return max(0, min(MAX_EVIDENCE_PAGE, page))
+        return DEFAULT_ROWS_LIMIT
+    return max(1, min(MAX_ROWS_LIMIT, limit))
+
+
+def _parse_rows_offset(value):
+    """Clamp a client row-window offset to ``[0, MAX_ROWS_OFFSET]``. Never raises.
+
+    A missing / malformed value (including a bool) degrades to 0; a valid number is
+    clamped into ``[0, MAX_ROWS_OFFSET]`` so a deep OFFSET can never make the dataset
+    connection skip an unbounded number of rows.
+    """
+    if isinstance(value, bool):
+        return 0
+    try:
+        offset = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, min(MAX_ROWS_OFFSET, offset))
 
 
 def _parse_evidence_sort(raw_sort):
@@ -438,19 +471,36 @@ def _parse_evidence_sort(raw_sort):
     return None
 
 
+def _clean_source_query(value):
+    """The free-text search string: non-str -> "", control chars -> space, then
+    whitespace-collapsed, stripped and length-capped.
+
+    Shared by /source/rows and /evidence/rows (both take a ``q``). Whitespace is
+    collapsed (not just trimmed) so the LIKE needle lines up with the server's
+    single-space ``concat_ws`` join; the search-condition builder still treats a
+    folded needle shorter than 2 chars as no search (returns None). Never raises.
+    """
+    if not isinstance(value, str):
+        return ""
+    spaced = "".join(ch if ch.isprintable() else " " for ch in value)
+    return " ".join(spaced.split())[:MAX_SOURCE_QUERY_CHARS]
+
+
 def validate_evidence_rows_request(payload):
     """Validate a /evidence/rows payload.
 
-    Returns ``(exchange_id, filters, kept_ids, include_advanced, page, sort,
-    drill, table)``. Raises ValidationError (stable code) on structurally
-    invalid input; the page is CLAMPED (never raises), mirroring the other limit
-    helpers. ``drill`` is the optional drill-down label list (<= 8 entries of
+    Returns ``(exchange_id, filters, kept_ids, include_advanced, limit, offset,
+    sort, drill, table, q)``. Raises ValidationError (stable code) on structurally
+    invalid input; ``limit`` and ``offset`` are CLAMPED (never raise), mirroring the
+    old page helper. ``drill`` is the optional drill-down label list (<= 8 entries of
     ``{column, value}``; value may be None - it renders an IS NULL test); the
     drillable column SET is re-derived server-side from the stored SQL, so only
     shape and bounds are validated here (single stable code: 'invalid_drill').
     ``table`` is the OPTIONAL source-table selector (multi-table SQL): a bounded
     identifier string or None; the service matches it against the SQL's own set
-    of matched tables (the client never picks an arbitrary table).
+    of matched tables (the client never picks an arbitrary table). ``q`` is the
+    OPTIONAL free-text search term (cleaned like /source/rows, effective only when
+    its folded form is >= 2 chars), matched server-side over every live column.
     """
     if not isinstance(payload, dict):
         raise ValidationError("invalid_payload")
@@ -469,7 +519,9 @@ def validate_evidence_rows_request(payload):
 
     include_advanced = bool(payload.get("include_advanced"))
 
-    page = _parse_evidence_page(payload.get("page"))
+    # Explicit row window (replaces the old page index). Both clamp, never raise.
+    limit = _parse_rows_limit(payload.get("limit"))
+    offset = _parse_rows_offset(payload.get("offset"))
 
     # Optional sort: malformed input degrades to None (the service still
     # validates the column against the live schema and errors there).
@@ -507,7 +559,12 @@ def validate_evidence_rows_request(payload):
             and len(raw_table) <= MAX_EVIDENCE_TABLE_CHARS):
         table = raw_table
 
-    return exchange_id, filters, kept_ids, include_advanced, page, sort, drill, table
+    # Optional free-text search over every live column (cleaned + capped, never
+    # raises; the service treats a folded needle < 2 chars as no search).
+    q = _clean_source_query(payload.get("q"))
+
+    return (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
+            drill, table, q)
 
 
 # --- Source Data Explorer ------------------------------------------------------
@@ -519,7 +576,8 @@ def validate_evidence_rows_request(payload):
 MAX_AGENT_SOURCES = 8
 MAX_SOURCE_LABEL_CHARS = 60
 MAX_SOURCE_DATASET_CHARS = 128
-MAX_SOURCE_QUERY_CHARS = 200
+# MAX_SOURCE_QUERY_CHARS lives with the Evidence section now: the free-text `q` is
+# shared by /source/rows and /evidence/rows.
 # A DSS dataset NAME (never a query): letters, digits, underscore, dot, hyphen. The
 # length is bounded by the pattern itself (mirrors MAX_SOURCE_DATASET_CHARS).
 _SOURCE_DATASET_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
@@ -557,27 +615,13 @@ def _validate_source_id(value):
     return source_id
 
 
-def _clean_source_query(value):
-    """The free-text search string: non-str -> "", control chars -> space, then
-    whitespace-collapsed, stripped and length-capped.
-
-    Whitespace is collapsed (not just trimmed) so the LIKE needle lines up with the
-    server's single-space ``concat_ws`` join; the search-condition builder still
-    treats a folded needle shorter than 2 chars as no search (returns None).
-    """
-    if not isinstance(value, str):
-        return ""
-    spaced = "".join(ch if ch.isprintable() else " " for ch in value)
-    return " ".join(spaced.split())[:MAX_SOURCE_QUERY_CHARS]
-
-
 def validate_source_rows_request(payload):
-    """Validate a /source/rows payload. Returns ``(agent_key, source_id, q, filters, page, sort)``.
+    """Validate a /source/rows payload. Returns ``(agent_key, source_id, q, filters, limit, offset, sort)``.
 
-    Mirrors ``validate_evidence_rows_request`` (same filter/page/sort helpers and
-    bounds) but keyed by an agent + source index instead of an exchange id, and with
+    Mirrors ``validate_evidence_rows_request`` (same filter/limit/offset/sort helpers
+    and bounds) but keyed by an agent + source index instead of an exchange id, and with
     a free-text ``q`` instead of locked chips / drill. Raises ValidationError (stable
-    code) on structurally invalid input; the page is CLAMPED (never raises).
+    code) on structurally invalid input; ``limit`` and ``offset`` are CLAMPED (never raise).
     """
     if not isinstance(payload, dict):
         raise ValidationError("invalid_payload")
@@ -585,9 +629,10 @@ def validate_source_rows_request(payload):
     source_id = _validate_source_id(payload.get("source"))
     q = _clean_source_query(payload.get("q"))
     filters = _parse_evidence_filters(payload.get("filters") or [])
-    page = _parse_evidence_page(payload.get("page"))
+    limit = _parse_rows_limit(payload.get("limit"))
+    offset = _parse_rows_offset(payload.get("offset"))
     sort = _parse_evidence_sort(payload.get("sort"))
-    return agent_key, source_id, q, filters, page, sort
+    return agent_key, source_id, q, filters, limit, offset, sort
 
 
 def validate_source_meta_params(agent, source):

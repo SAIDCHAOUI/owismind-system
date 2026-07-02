@@ -22,11 +22,14 @@ import {
   effectiveSourceQuery,
 } from '../composables/sourceModel.js'
 
-// Deepest browsable page index - mirrors the backend's MAX page clamp.
-const MAX_PAGE = 20
-// Client-side cap on the ACCUMULATED (lazily appended) rows: infinite scroll appends
-// page after page, so a huge dataset must never grow the in-memory array without
-// bound. 10 pages x 50 rows = 500 rows on screen; past that the sentinel stops.
+// Limit/offset pagination (v2): the first load pulls a big window, then each
+// "load more" appends a small one. INITIAL_LIMIT + n x MORE_LIMIT never exceeds
+// MAX_ROWS (100 + 20 x 20 = 500), so the offset never passes the backend's cap.
+const INITIAL_LIMIT = 100
+const MORE_LIMIT = 20
+// Client-side cap on the ACCUMULATED (lazily appended) rows: infinite scroll
+// appends window after window, so a huge dataset must never grow the in-memory
+// array without bound. Past MAX_ROWS the sentinel stops (the user filters to narrow).
 const MAX_ROWS = 500
 
 export const useSourcesStore = defineStore('sources', () => {
@@ -34,13 +37,13 @@ export const useSourcesStore = defineStore('sources', () => {
 
   const open = ref(false) // standalone panel visibility (pre-conversation)
   const agentKey = ref('') // logical key of the agent whose sources we browse
-  const sourceList = ref([]) // [{ id, label }] taken from the session agent (no fetch)
+  const sourceList = ref([]) // [{ id, label, dataset }] from the session agent (no fetch)
   const activeSourceId = ref(null) // integer id of the dataset currently browsed
   const columns = ref([]) // [{ name, type }] of the active source
   const chips = ref([]) // user filters only (sourceModel chip shape)
   const q = ref('') // raw search text (payload uses the effective, trimmed form)
   const rows = ref([]) // lazily accumulated rows (bounded by MAX_ROWS)
-  const page = ref(0) // index of the LAST loaded page
+  const offset = ref(0) // running count of already-loaded rows (= next window start)
   const hasMore = ref(false)
   const sort = ref(null) // { column, dir: 'asc' | 'desc' } | null
   const loading = ref(false) // meta fetch (blanks the whole body)
@@ -59,7 +62,7 @@ export const useSourcesStore = defineStore('sources', () => {
   function _agentSources(key) {
     const a = session.agents.find((x) => x.key === key)
     const list = a && Array.isArray(a.sources) ? a.sources : []
-    return list.map((s) => ({ id: s.id, label: s.label || '#' + s.id }))
+    return list.map((s) => ({ id: s.id, label: s.label || '#' + s.id, dataset: s.dataset || '' }))
   }
 
   function _resetAll() {
@@ -70,7 +73,7 @@ export const useSourcesStore = defineStore('sources', () => {
     chips.value = []
     q.value = ''
     rows.value = []
-    page.value = 0
+    offset.value = 0
     hasMore.value = false
     sort.value = null
     error.value = ''
@@ -87,7 +90,7 @@ export const useSourcesStore = defineStore('sources', () => {
     chips.value = []
     q.value = ''
     rows.value = []
-    page.value = 0
+    offset.value = 0
     hasMore.value = false
     sort.value = null
     rowsError.value = ''
@@ -154,30 +157,35 @@ export const useSourcesStore = defineStore('sources', () => {
     }
   }
 
-  // Load ONE page of rows. `append` selects the mode: false = fresh page 0 (replaces
-  // the accumulated rows), true = next page appended (infinite scroll). Tri-state:
-  // true = latest request succeeded, false = it failed, null = superseded.
+  // Load ONE window of rows. `append` selects the mode: false = fresh first window
+  // at offset 0 (replaces the accumulated rows), true = next window appended at
+  // offset = rows.length (infinite scroll). Tri-state result: true = latest request
+  // succeeded, false = it failed, null = superseded.
   async function _loadRows(mySeq, opts) {
     const append = !!(opts && opts.append)
-    const targetPage = append ? page.value + 1 : 0
+    const targetOffset = append ? rows.value.length : 0
+    const targetLimit = append ? MORE_LIMIT : INITIAL_LIMIT
     const myRows = ++rowsSeq
     rowsLoading.value = true
     try {
       const payload = buildSourceRowsPayload(
-        agentKey.value, activeSourceId.value, q.value, chips.value, targetPage, sort.value,
+        agentKey.value, activeSourceId.value, q.value, chips.value, targetLimit, targetOffset, sort.value,
       )
       const data = await fetchSourceRows(payload)
       if (mySeq !== seq || myRows !== rowsSeq) return null
       const newRows = data.rows || []
-      // Adopt the server-echoed page: the backend silently CLAMPS deep pages; a
-      // client counter racing past the clamp would page forever over the same rows.
-      const echoed = typeof data.page === 'number' && data.page >= 0 ? data.page : targetPage
-      if (append && echoed > page.value) {
-        rows.value = rows.value.concat(newRows).slice(0, MAX_ROWS)
-      } else if (!append) {
+      // Adopt the server-echoed offset: the backend silently CLAMPS an out-of-range
+      // offset; appending a clamped window would duplicate rows, so we only append
+      // when the server honoured the exact offset we asked for (= current tail).
+      const echoed = typeof data.offset === 'number' && data.offset >= 0 ? data.offset : targetOffset
+      if (append) {
+        if (echoed === rows.value.length) {
+          rows.value = rows.value.concat(newRows).slice(0, MAX_ROWS)
+        }
+      } else {
         rows.value = newRows.slice(0, MAX_ROWS)
       }
-      page.value = echoed
+      offset.value = echoed
       hasMore.value = !!data.has_more && rows.value.length < MAX_ROWS
       return true
     } catch (e) {
@@ -198,12 +206,11 @@ export const useSourcesStore = defineStore('sources', () => {
     return _loadRows(seq)
   }
 
-  // Infinite-scroll: append the next page when the sentinel scrolls into view.
-  // Bounded by hasMore (server) and MAX_ROWS / MAX_PAGE (client).
+  // Infinite-scroll: append the next window when the sentinel scrolls into view.
+  // Bounded by hasMore (server) and MAX_ROWS (client).
   function loadMoreRows() {
     if (activeSourceId.value == null) return Promise.resolve(null)
     if (!hasMore.value || rowsLoading.value) return Promise.resolve(null)
-    if (page.value >= MAX_PAGE) return Promise.resolve(null)
     if (rows.value.length >= MAX_ROWS) return Promise.resolve(null)
     return _loadRows(seq, { append: true })
   }
@@ -234,7 +241,7 @@ export const useSourcesStore = defineStore('sources', () => {
     const before = effectiveSourceQuery(q.value)
     q.value = next
     if (effectiveSourceQuery(next) === before) return
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
 
@@ -243,7 +250,7 @@ export const useSourcesStore = defineStore('sources', () => {
     if (!column || !values || !values.length) return
     userChipSeq += 1
     chips.value.push(makeSourceChip(column, values, userChipSeq))
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function setChipValues(key, values) {
@@ -251,18 +258,18 @@ export const useSourcesStore = defineStore('sources', () => {
     if (!chip || !values.length) return
     chip.values = values.slice()
     chip.op = normalizeSourceOp(values)
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function removeChip(key) {
     chips.value = chips.value.filter((c) => c.key !== key)
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
   function clearFilters() {
     if (!chips.value.length) return
     chips.value = []
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
 
@@ -272,7 +279,7 @@ export const useSourcesStore = defineStore('sources', () => {
       sort.value && sort.value.column === column
         ? { column, dir: sort.value.dir === 'asc' ? 'desc' : 'asc' }
         : { column, dir: 'asc' }
-    page.value = 0
+    offset.value = 0
     refreshRows()
   }
 
@@ -287,7 +294,7 @@ export const useSourcesStore = defineStore('sources', () => {
 
   return {
     open, agentKey, sourceList, activeSourceId, columns, chips, q,
-    rows, page, hasMore, sort, loading, rowsLoading, error, rowsError,
+    rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
     ensureAgent, openPanel, closePanel, setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,

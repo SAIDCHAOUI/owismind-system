@@ -17,10 +17,9 @@ import { Icon } from '../ui'
 import Tabs from '../ui/Tabs.vue'
 import EvidenceTrust from './EvidenceTrust.vue'
 import EvidenceSources from './EvidenceSources.vue'
-import EvidenceChips from './EvidenceChips.vue'
 import EvidenceCalc from './EvidenceCalc.vue'
 import EvidenceResult from './EvidenceResult.vue'
-import EvidenceTable from './EvidenceTable.vue'
+import EvidenceSourcesTab from './EvidenceSourcesTab.vue'
 import EvidenceSql from './EvidenceSql.vue'
 import ArtifactChart from './ArtifactChart.vue'
 import ArtifactTable from './ArtifactTable.vue'
@@ -38,20 +37,6 @@ const available = computed(() => !!(meta.value && meta.value.available))
 // block) must render pixel-identical to today - no badge, no extra labels.
 // The proof sections gate themselves on their own optional meta fields.
 const enriched = computed(() => !!(meta.value && meta.value.verification))
-
-// Drill-down state lands with the store workstream (IMPL-5): guard every
-// access so this panel keeps working against a store build without it.
-const drill = computed(() => evidence.drill || null)
-const drillLabels = computed(() => {
-  const labels = drill.value && Array.isArray(drill.value.labels) ? drill.value.labels : []
-  return labels
-    .map((l) => l.column + ' = ' + (l.value == null ? '-' : String(l.value)))
-    .join(', ')
-})
-function onExitDrill() {
-  const fn = evidence.exitDrill
-  if (typeof fn === 'function') fn()
-}
 
 // Degraded mode shows WHY the interactive view is unavailable. With best-effort
 // SQL mapping the remaining reasons are "the agent's table maps to no SQL
@@ -141,7 +126,7 @@ const activeTab = computed({
       class="ev-tabs"
     />
 
-    <div class="ev-body">
+    <div class="ev-body" :class="{ 'ev-body--fill': activeTab === 'sources' }">
       <!-- Meta loading: shimmer skeleton shaped like the upcoming content
            (trust banner + chips row + table block) instead of a bare text line. -->
       <div v-if="evidence.loading" class="ev-skeleton" :aria-label="t('ev.loading')">
@@ -199,22 +184,13 @@ const activeTab = computed({
         </template>
 
         <!-- ── SOURCES TAB ───────────────────────────────────────────────── -->
-        <!-- The exchange-scoped data explorer, moved here as ONE block: the filter
-             chips + the drill banner that scopes the table to one result row + the
-             "explore" label + the live rows table (which carries its own multi-table
-             selector). Exchange-scoped for EVERY agent - drilling a result row on the
-             Evidence tab lands here (evidence.drillIntoResultRow switches the tab). -->
+        <!-- The unified "Source data" explorer: a single selector merging the
+             exchange's detected tables (legacy: agent chips + drill + search + the
+             live rows table) with the agent's extra configured datasets (the
+             standalone explorer). Drilling a result row on the Evidence tab lands
+             here (evidence.drillIntoResultRow switches the tab). -->
         <template v-else-if="activeTab === 'sources'">
-          <EvidenceChips />
-          <div v-if="drill" class="ev-drill-band">
-            <Icon name="filter" />
-            <span class="ev-drill-text">{{ t('ev.proof.drill.banner', [drillLabels]) }}</span>
-            <button class="ev-drill-exit" :title="t('ev.proof.drill.exit')" @click="onExitDrill">
-              <Icon name="x" />
-            </button>
-          </div>
-          <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
-          <EvidenceTable />
+          <EvidenceSourcesTab />
         </template>
 
         <!-- ── EVIDENCE TAB (default) ────────────────────────────────────── -->
@@ -301,38 +277,10 @@ const activeTab = computed({
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-5);
 }
+/* Sources tab: the tab content fills the panel and the rows table owns the only
+   scroll (no double scrollbar). The body itself stops scrolling; its single flex
+   child (EvidenceSourcesTab) grows to fill and manages its own overflow. */
+.ev-body--fill { overflow: hidden; }
 .ev-state { color: var(--text-3); font-size: var(--fs-sm); }
 .ev-state.error { color: var(--danger); }
-
-/* Drill banner - discreet dashed-orange band (same grammar as the "modified"
-   badge: the table scope was narrowed by the user). NO z-index: the chips
-   popover (z-index 5, L043) must stay above every proof section. */
-.ev-drill-band {
-  display: flex; align-items: center; gap: var(--s-2);
-  padding: 4px 10px; border: 1px dashed var(--orange); border-radius: var(--r-sm);
-  background: var(--orange-soft);
-}
-.ev-drill-band :deep(.ui-icon) { flex: none; width: 12px; height: 12px; color: var(--orange-text); }
-.ev-drill-text {
-  flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--orange-text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ev-drill-exit {
-  flex: none; padding: 2px; border-radius: var(--r-sm); color: var(--orange-text);
-  transition: all var(--dur) var(--ease);
-}
-.ev-drill-exit:hover { background: var(--surface-hover); color: var(--text); }
-.ev-drill-exit :deep(.ui-icon) { width: 12px; height: 12px; }
-/* Dark: swap the light tint for the translucent orange patch - entire
-   selector inside :global (scoped+theme rule F2/L022). */
-:global(body[data-theme="dark"] .ev-drill-band) { background: var(--orange-soft-dark); }
-
-/* "Explore source data" label over the live table (same pattern as
-   .ev-chips-title) - only rendered for the enriched contract. */
-.ev-explore {
-  font-size: var(--fs-xs); color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
-  /* Pull the table visually under its label without changing the table flex. */
-  margin-bottom: calc(-1 * var(--s-2));
-}
 </style>

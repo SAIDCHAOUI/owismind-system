@@ -728,11 +728,14 @@ def agents_available():
                     and profile["benchmark"].get("table")
                 ),
                 # The RAW project datasets an admin configured for this agent (Source
-                # Data Explorer). Only {id (stable index), label} is exposed - never the
-                # dataset name / connection / project. The id is the index into the SAME
-                # validated block the service re-derives, so they always line up.
+                # Data Explorer). Exposes {id (stable index), label, dataset}: the
+                # dataset NAME lets the Evidence "source data" tab map a matched SQL
+                # table back to its source id (Evidence meta already surfaces dataset
+                # names, so this is not a new leak); the connection / project stay
+                # server-side. The id is the index into the SAME validated block the
+                # service re-derives, so they always line up.
                 "sources": [
-                    {"id": i, "label": s["label"]}
+                    {"id": i, "label": s["label"], "dataset": s["dataset"]}
                     for i, s in enumerate(validate_sources_block(profile.get("sources")))
                 ],
             }
@@ -872,15 +875,15 @@ def evidence_rows():
     if err:
         return err
     try:
-        (exchange_id, filters, kept_ids, include_advanced, page, sort, drill,
-         table) = validate_evidence_rows_request(request.get_json(silent=True))
+        (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
+         drill, table, q) = validate_evidence_rows_request(request.get_json(silent=True))
     except ValidationError as exc:
         logger.warning("/evidence/rows - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
         result = evidence_service.evidence_rows(
             identity["user_id"], exchange_id, filters, kept_ids,
-            include_advanced, page, sort, drill, table,
+            include_advanced, limit, offset, sort, drill, table, q,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
@@ -990,23 +993,23 @@ def source_meta():
 
 @api.route("/source/rows", methods=["POST"])
 def source_rows():
-    """One bounded page of a configured source dataset, filtered + optionally searched.
+    """One bounded window of a configured source dataset, filtered + optionally searched.
 
-    Body: ``{agent, source, q?, filters?, page?, sort?}``. The body never carries SQL:
-    filters travel as ``{column, op, values}`` and ``q`` is a free-text term matched
-    over all columns server-side.
+    Body: ``{agent, source, q?, filters?, limit?, offset?, sort?}``. The body never
+    carries SQL: filters travel as ``{column, op, values}`` and ``q`` is a free-text
+    term matched over all columns server-side; ``limit``/``offset`` are clamped.
     """
     _identity, err = _source_guard()
     if err:
         return err
     try:
-        agent_key, source_id, q, filters, page, sort = validate_source_rows_request(
+        agent_key, source_id, q, filters, limit, offset, sort = validate_source_rows_request(
             request.get_json(silent=True))
     except ValidationError as exc:
         logger.warning("/source/rows - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
-        result = source_service.source_rows(agent_key, source_id, q, filters, page, sort)
+        result = source_service.source_rows(agent_key, source_id, q, filters, limit, offset, sort)
     except source_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:

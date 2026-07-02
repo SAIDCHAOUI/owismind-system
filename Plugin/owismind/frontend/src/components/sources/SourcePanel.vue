@@ -72,7 +72,13 @@ watch(() => session.selectedAgentKey, (key) => {
 .src-close { padding: 4px; border-radius: 0; color: var(--text-3); transition: all var(--dur) var(--ease); }
 .src-close:hover { background: var(--surface-hover); color: var(--text); }
 .src-close :deep(.ui-icon) { width: 16px; height: 16px; }
+/* Full-height body: a flex column that does NOT scroll itself - the rows table
+   fills the remaining height and owns the only scroll (no double scrollbar). */
 .src-panel-body {
-  flex: 1; min-height: 0; overflow-y: auto; padding: var(--s-5);
+  flex: 1; min-height: 0; overflow: hidden; padding: var(--s-5);
+  display: flex; flex-direction: column;
 }
+.src-panel-body :deep(.src-explorer) { flex: 1; min-height: 0; }
+.src-panel-body :deep(.src-table) { flex: 1; min-height: 0; }
+.src-panel-body :deep(.src-table-scroll) { flex: 1 1 auto; max-height: none; }
 </style>

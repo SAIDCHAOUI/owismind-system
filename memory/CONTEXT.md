@@ -5,6 +5,34 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🔎 SESSION 2026-07-02 Run 3 (SOURCE DATA EXPLORER : exploration des données brutes des agents,
+v1+v2) - ✅ VALIDÉ DSS (user : « tout fonctionne super bien » ; v1 commitée par l'user `030689b`,
+v2 dans le commit de session).** Dernière feature du MVP avant prod : les users explorent les
+datasets bruts des agents pour écrire des prompts précis. **3 surfaces** : (1) **admin** : bloc
+`sources` [{dataset,label}] max 8 sur la fiche d'agent (`validate_sources_block`, pattern
+benchmark ; datalist depuis `/admin/sources/datasets`) ; (2) **New Conversation** : CTA (si
+l'agent du picker a des sources) -> panneau droite `SourcePanel/SourceExplorer` (onglets par
+dataset, recherche globale, chips filtres, tri, scroll infini) ; (3) **Evidence Studio** :
+onglet **Source data** = `EvidenceSourcesTab` = UN sélecteur fusionnant tables détectées de la
+réponse (mode legacy chips+drill+**recherche**+table, déplacé EN BLOC, drill auto-switch
+d'onglet) + datasets configurés de l'**agent de l'ÉCHANGE** (agentKey retenu sur l'exchange,
+JAMAIS le picker live ; SourceExplorer `embedded`). **Backend** : routes read-only
+`/source/meta|rows|distinct` (garde miroir `_evidence_guard` sans ensure_chat_table, throttle,
+timeout 30s) ; recherche accent/casse-insensible = 1 ILIKE sur concat_ws de TOUTES les colonnes
+via `translate()` (module pur `evidence/source_search.py`) ; `q` AUSSI sur `/evidence/rows` ;
+contrat **limit/offset** partout (limit 1..100 déf 50, offset 0..500, clamp jamais d'erreur) ;
+`/agents` sources exposent `dataset` (display-only, dédup front). **UX v2** : recherche
+UNIQUEMENT sur Entrée/bouton (débounce supprimé) ; 100 lignes puis +20/scroll (cap client 500) ;
+30 colonnes puis +20 (sentinelle horizontale) ; pleine hauteur (`ev-body--fill`, scroll flex:1) ;
+sélection d'onglet persistée (`evidence.sourceTabKey`). **Process** : scouts Sonnet ->
+implémenteurs Opus // -> 2 revues adversariales (v1 : 6 confirmés = cluster chips/drill/table
+séparé + binding picker, tous corrigés ; v2 : 2 UX corrigés) + contre-vérif Opus clean ; ⚠️
+incident L121 (prompts verify mal interpolés -> findings récupérés au journal). **576 back +
+147 node, build OK, 0 tiret, zip DEV `index-Sd9XWyIM.js` (80 entrées), PROD intacte.** Charge :
+1 recherche = 1 requête SQL bornée (LIMIT+timeout+read-only+throttle 15/10s par user) ; leviers
+additionnels (timeout court, sémaphore global, throttle dédié, cache TTL) discutés NON
+implémentés. Voir **L121-L122** + `sessions/2026-07-02.md` (Run 3).
+
 **🎨 SESSION 2026-07-02 Run 2 (ARTEFACTS NATIFS + NARRATION + RECALL) - ✅ VALIDÉ DSS (user :
 « ça marche vraiment pas mal » puis « tout fonctionne super bien » ; code commité par l'user
 `0368dd7` + `0275ae9`).** Trois arcs livrés + validés : **(1) Artefacts natifs (fix L118 complet)** :
@@ -829,7 +857,14 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-02 Run 2 : artefacts natifs + narration + recall → détail `sessions/2026-07-02.md` (Run 2) + **L119-L120**
+## 🧭 Dernière session - 2026-07-02 Run 3 : Source Data Explorer (v1+v2) → détail `sessions/2026-07-02.md` (Run 3) + **L121-L122**
+- **✅ VALIDÉ DSS** (« tout fonctionne super bien »). Exploration des datasets bruts des agents :
+  bloc admin `sources` par agent, CTA + panneau sur New Conversation, onglet Source data
+  d'Evidence (sélecteur fusionné, agent de l'échange), recherche Entrée-only accent-insensible,
+  limit/offset 100+20, colonnes 30+20, pleine hauteur. Zip DEV `index-Sd9XWyIM.js` déployé.
+- Reste à la demande : promotion PROD ; leviers de charge (timeout court, sémaphore, throttle dédié).
+
+## 🧭 Avant - 2026-07-02 Run 2 : artefacts natifs + narration + recall → détail `sessions/2026-07-02.md` (Run 2) + **L119-L120**
 - **✅ VALIDÉ DSS, code commité par l'user (`0368dd7`, `0275ae9`).** Multi-charts + métadonnées +
   binding par artefact ; narration pro/claude + `tell_user` smart ; `recall_prior_result` (3 tours).
 - 2 revues adversariales + vérif Opus finale ; consigne gravée : sous-agents/workflows en OPUS.
@@ -1238,6 +1273,12 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🔎DONE (2026-07-02 Run 3). **Source Data Explorer v1+v2 ✅ VALIDÉ DSS** (zip DEV
+   `index-Sd9XWyIM.js` déployé, backend redémarré). Reste, à la demande : (a) **promotion
+   PROD** (rebuild + package prod + upload) ; (b) leviers de charge optionnels discutés NON
+   implémentés (timeout 10s sur les routes source, sémaphore global de requêtes en vol,
+   throttle dédié plus strict, mini-cache TTL) ; (c) config : remplir le bloc « Source
+   datasets » des fiches d'agent au fil des besoins (revenus + tickets faits par l'user).
 0🎨DONE (2026-07-02 Run 2). **Artefacts + narration + recall ✅ VALIDÉS DSS et commités par l'user.**
    Reste, à la demande : (a) **promotion PROD** de tout l'arc (copier l'orchestrateur vers
    `OWISMIND_PROD_V1_*` + rebuild/package prod + upload) ; (b) différés discutés : artefacts
