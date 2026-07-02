@@ -30,6 +30,23 @@ _LANG_LABEL = {"fr": "French", "en": "English"}
 MODEL_MODES = ("smart", "pro", "claude")
 
 
+def resolve_effective_mode(requested, supports_modes):
+    """The EFFECTIVE response mode of a run (persisted on the exchange + relayed).
+
+    Contract (pure, side-effect free):
+      - agent WITHOUT the mode dial (``supports_modes`` False) -> ``None`` (the run
+        carries no mode token, exactly as before the mode feature existed);
+      - agent WITH the dial + a valid requested mode -> that mode ('smart'/'pro'/'claude');
+      - agent WITH the dial + a missing/unknown requested mode -> 'smart' (the default).
+
+    Mode is EPHEMERAL in the UI (the picker resets to smart after each send), but the
+    mode a given answer actually used is stamped on its exchange row from this value.
+    """
+    if not supports_modes:
+        return None
+    return requested if requested in MODEL_MODES else "smart"
+
+
 # Lightweight, deterministic language guess of a RAW user message. Ported into the
 # 3.9 backend (stdlib-only) so language is computed ONCE, on the clean message
 # (before the English date stamp can contaminate the heuristic), and handed to the

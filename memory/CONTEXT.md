@@ -5,6 +5,24 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🎚️ SESSION 2026-07-02 Run 6 (MODE ÉPHÉMÈRE : Smart par défaut + reset à l'envoi + mode
+persisté/affiché par réponse) - ✅ VALIDÉ DSS (user : « super ça marche très bien »).**
+**(1) Éphémère** : `ui.js` boot 'smart' inconditionnel, **persistance localStorage du mode
+SUPPRIMÉE** (clé legacy purgée), `resetModelMode()` ; `chat.js` capture `rawMode`/`runMode`
+AVANT le reset, **stamp `newVersion({mode})`**, reset SYNCHRONE avant l'await (picker revient
+à Smart à l'instant de l'envoi ; edit/regenerate pareil) ; analytics `question_sent`/
+`answer_received` lisent le STAMP (jamais le store resété). **(2) Persistance** : colonne
+**`mode VARCHAR(16)` nullable sur `webapp_chat_v5` SANS bump _v6** (ALTER `ADD COLUMN IF NOT
+EXISTS` idempotent, 2e usage du précédent users_v1 = **L126**) ; helper pur
+`agents/context.resolve_effective_mode` ; `/chat/start` stampe le mode effectif AVANT le write
+phase-1 ('smart'|'pro'|'claude', NULL si agent sans modes) ; `_COLUMNS` + `/conversation`
+l'exposent NULL-safe ; `MessageAgent` affiche le mode dans la ligne tokens/coût (libellés
+existants, tooltip `msg.usage_mode` fr+en) ; vieilles réponses NULL = rendu identique.
+`timelineModel.js` : seulement `mode:null` au shape + `modeFromRow` pur (reducer/signature
+INTOUCHÉS, vérifié par la revue). **Revue adversariale 3 lentilles + réfutateurs = 0 confirmé.**
+**629 back (+15) + 186 node (+2), build OK, 0 tiret, zip DEV `index-CbbPsbRU.js` déployé,
+PROD intacte.** Voir **L126** + `sessions/2026-07-02.md` (Run 6).
+
 **📊 SESSION 2026-07-02 Run 5 (ANALYTICS D'USAGE : `webapp_events_v1` + `POST /track` + `track.js`)
 - ✅ VALIDÉ DSS (user : « ça marche super bien » puis « parfait tout fonctionne all good »).**
 Tracking GA4-like de l'usage webapp (fréquentation, features, parcours), distinct des logs
@@ -906,7 +924,13 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-02 Run 5 : analytics d'usage webapp (events + /track + dashboard à venir) → détail `sessions/2026-07-02.md` (Run 5) + **L125**
+## 🧭 Dernière session - 2026-07-02 Run 6 : mode éphémère + mode par réponse (chat_v5.mode) → détail `sessions/2026-07-02.md` (Run 6) + **L126**
+- **✅ VALIDÉ DSS.** Smart par défaut permanent, Pro/Claude éphémères (reset synchrone à l'envoi,
+  persistance localStorage supprimée) ; `mode` stampé serveur sur chaque échange (ADD COLUMN
+  IF NOT EXISTS sur chat_v5, L126) et affiché dans la ligne tokens/coût. Revue 3 lentilles :
+  0 confirmé. Zip DEV `index-CbbPsbRU.js`.
+
+## 🧭 Avant - 2026-07-02 Run 5 : analytics d'usage webapp (events + /track + dashboard à venir) → détail `sessions/2026-07-02.md` (Run 5) + **L125**
 - **✅ VALIDÉ DSS.** Table unique `webapp_events_v1` (38 events auto-descriptifs, onglets Evidence
   en events de 1er rang), route `/track` batch best-effort (impersonation drop, throttle, jamais 500),
   `track.js` (flush 5s/20 + sendBeacon), hooks minces dans 13 fichiers. Revue adversariale 12 Opus :
@@ -1336,6 +1360,9 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🎚️DONE (2026-07-02 Run 6). **Mode éphémère + mode par réponse ✅ VALIDÉ DSS** (zip DEV
+   `index-CbbPsbRU.js` déployé, backend redémarré, ALTER auto-appliqué). Le mode par réponse
+   est maintenant croisable chat_v5 x webapp_events_v1 pour le dashboard d'adoption.
 0📊DONE (2026-07-02 Run 5). **Analytics d'usage ✅ VALIDÉ DSS** (zip DEV `index-D-NkcYpc.js`
    déployé, backend redémarré par l'user). Reste, à la demande : (a) **dashboard d'adoption
    Dataiku** : dataset SQL sur `webapp_events_v1` + rollups (DAU/WAU, top features par

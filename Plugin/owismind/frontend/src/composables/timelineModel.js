@@ -42,6 +42,11 @@ export function createAnswerState(over) {
     error: '',
     showSql: false,
     exchangeId: null,
+    // Response mode used for THIS answer ('smart' | 'pro' | 'claude') or null when the
+    // agent does not support modes / a legacy row predates the feature. Display-only
+    // (shown in the usage line); never affects the timeline. Stamped by the chat store at
+    // send time (live path) or rebuilt from the persisted row on reload (modeFromRow).
+    mode: null,
     feedbackRating: null, // 1 (up) | 0 (down) | null (none)
     feedbackReasons: [], // reason codes (down)
     feedbackComment: '', // free-text (down)
@@ -261,6 +266,21 @@ export function usageFromRow(row) {
     totalTokens: has(row.total_tokens) ? row.total_tokens : null,
     estimatedCost: has(row.estimated_cost) ? row.estimated_cost : null,
   }
+}
+
+// Allowed response modes (a mirror of ui.js MODEL_MODES, duplicated here so this pure
+// reducer keeps zero Vue/store dependency). Any other value is treated as "no mode".
+export const ANSWER_MODES = ['smart', 'pro', 'claude']
+
+/**
+ * Normalize the response mode of a RELOADED exchange from its persisted /conversation
+ * row: returns the stored mode when it is one of ANSWER_MODES, else null (a legacy row
+ * with no mode column, or a non-supporting agent stored as NULL). Mirrors usageFromRow -
+ * a null result means the usage line shows no mode segment.
+ */
+export function modeFromRow(row) {
+  if (!row) return null
+  return ANSWER_MODES.includes(row.mode) ? row.mode : null
 }
 
 /** The full answer text = concatenation of the timeline's text blocks (for copy). */

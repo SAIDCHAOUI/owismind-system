@@ -431,35 +431,34 @@ def chat_start():
             {"status": "error", "error": "monthly_quota_exceeded", "budget": budget_status}
         ), 402
 
-    # Phase one: persist the user message. Done in the request thread so a write
-    # error surfaces as a clean HTTP error rather than inside the worker.
+    # Optional model mode (smart / pro / claude) chosen in the web app. Resolved to
+    # the EFFECTIVE mode BEFORE the phase-one write, so the exchange row records the
+    # mode its own answer uses. The per-agent gate is the real enforcement behind the
+    # hidden picker: only an agent whose admin profile opted into the response-mode
+    # dial gets a mode (and the relayed ⟦owi:mode⟧ token); for any other agent the
+    # orchestrator-only token would just leak into the prompt as visible text, so the
+    # effective mode is None - the agent runs with no mode token, exactly as before
+    # this feature existed. It never picks a raw model id from the front.
+    agent_profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
+    supports_modes = bool(agent_profile.get("modes"))
+    mode = context.resolve_effective_mode(body.get("mode"), supports_modes)
+    # Same opt-in gates the prior-results recall block: the `modes` flag marks an
+    # agent that speaks the owi control-token protocol (the orchestrator). For any
+    # other agent the ⟦owi:prior⟧ payload would leak into its prompt as raw text.
+    prior_recall_enabled = supports_modes
+
+    # Phase one: persist the user message (stamped with the effective mode). Done in
+    # the request thread so a write error surfaces as a clean HTTP error rather than
+    # inside the worker. Edit / regenerate turns branch through this same path (they
+    # pass parent_exchange_id), so each sibling exchange records its own run mode.
     try:
         ensure_chat_table()
         exchange_id = chat_v5.save_user_message(
-            session_id, identity, message, agent_key, parent_exchange_id
+            session_id, identity, message, agent_key, parent_exchange_id, mode=mode
         )
     except Exception:
         logger.exception("/chat/start - failed to persist user message")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
-
-    # Optional model mode (smart / pro / claude) chosen in the web app. Unknown or
-    # absent -> smart (the recommended default). Relayed to the orchestrator via
-    # the per-turn suffix token; it never picks a raw model id from the front.
-    mode = body.get("mode")
-    if mode not in context.MODEL_MODES:
-        mode = "smart"
-    # Per-agent gate (the real enforcement behind the hidden picker): only relay the
-    # mode control token to an agent that actually supports the response-mode dial
-    # (its admin profile opted in). For any other agent the orchestrator-only token
-    # would just leak into the prompt as visible text, so drop it entirely - the agent
-    # then runs with no mode token, exactly as before this feature existed.
-    agent_profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
-    if not agent_profile.get("modes"):
-        mode = None
-    # Same opt-in gates the prior-results recall block: the `modes` flag marks an
-    # agent that speaks the owi control-token protocol (the orchestrator). For any
-    # other agent the ⟦owi:prior⟧ payload would leak into its prompt as raw text.
-    prior_recall_enabled = bool(agent_profile.get("modes"))
 
     # Web-app configured language (fr / en) the user is currently running the UI in.
     # Validated like the mode; absent/unknown -> None. The reply language of THIS turn

@@ -15,6 +15,7 @@ import {
   activitySummary,
   stepStampDiff,
   usageFromRow,
+  modeFromRow,
 } from '../src/composables/timelineModel.js'
 import { resolveTimelineStep, timelineMessages } from '../src/registries/timelineSteps.js'
 
@@ -213,6 +214,29 @@ test('createAnswerState carries feedback defaults and accepts overrides', () => 
   assert.equal(o.feedbackRating, 0)
   assert.deepEqual(o.feedbackReasons, ['incorrect'])
   assert.equal(o.feedbackComment, 'x')
+})
+
+test('createAnswerState defaults mode to null and accepts an override', () => {
+  // Ephemeral mode feature: a live version is stamped with the sent mode via this override
+  // (newVersion({ mode })); a version with no mode carries null (usage line shows no mode).
+  assert.equal(createAnswerState().mode, null)
+  assert.equal(createAnswerState({ mode: 'pro' }).mode, 'pro')
+})
+
+test('modeFromRow returns a valid mode or null (reload path)', () => {
+  // Valid modes pass through unchanged.
+  assert.equal(modeFromRow({ mode: 'smart' }), 'smart')
+  assert.equal(modeFromRow({ mode: 'pro' }), 'pro')
+  assert.equal(modeFromRow({ mode: 'claude' }), 'claude')
+  // Legacy row (no column), a stored NULL (non-supporting agent), or no row at all -> null.
+  assert.equal(modeFromRow({ mode: null }), null)
+  assert.equal(modeFromRow({}), null)
+  assert.equal(modeFromRow(null), null)
+  assert.equal(modeFromRow(undefined), null)
+  // Unknown / malformed values are rejected so the UI never does t('mode.'+garbage).
+  assert.equal(modeFromRow({ mode: 'ultra' }), null)
+  assert.equal(modeFromRow({ mode: 'SMART' }), null)
+  assert.equal(modeFromRow({ mode: 42 }), null)
 })
 
 test('timelineSignature changes as text grows (drives auto-scroll re-check)', () => {

@@ -2927,5 +2927,23 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   adversariale rapporte le plus.
 - **Source** : revue Workflow `review-analytics-tracking`, lentille security-privacy.
 
+## L126 - Colonne additive sur une table _vN : la relaxation ADD COLUMN IF NOT EXISTS (precedent users_v1) est le bon choix quand un bump _vN+1 detruirait la continuite des donnees ; webapp_chat_v5 porte desormais `mode` [valide DSS, 2026-07-02 Run 6]
+- **Contexte** : afficher le mode (smart/pro/claude) sous chaque reponse -> persister par echange.
+  `webapp_chat_v5` n'avait pas de colonne `mode` ; la regle projet dit `_vN` jamais d'ALTER
+  (bump de version a la place).
+- **Le probleme du bump** : passer a `webapp_chat_v6` aurait rendu TOUTES les conversations
+  existantes invisibles (deja subi une fois au passage v4->v5, assume a l'epoque, inacceptable
+  en beta avec de vrais users).
+- **Solution qui marche** : 2e usage du precedent sanctionne `users_v1` : colonne nullable dans
+  le DDL CREATE + **`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` idempotent** dans le meme ensure
+  guarde (s'applique tout seul au premier acces apres redeploiement, zero SQL manuel), relaxation
+  commentee dans `migrations.py` au meme format que le precedent.
+- **Regle de decision** : bump `_vN+1` = schema restructure ou donnee jetable ; ADD COLUMN
+  nullable = ajout additif sur une table dont la continuite des donnees compte. Les vieilles
+  lignes restent NULL et le rendu doit etre NULL-safe de bout en bout (lecture, front, affichage).
+- **Preuve** : valide DSS (reset ephemere + mode affiche + reload OK) ; 629 tests back verts dont
+  idempotence de l'ALTER ; revue adversariale 3 lentilles = 0 confirme.
+- **Source** : `sessions/2026-07-02.md` Run 6 ; `storage/migrations.py` (`_ALTERS_BY_LOGICAL`).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

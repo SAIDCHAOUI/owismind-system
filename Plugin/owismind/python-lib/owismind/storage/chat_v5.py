@@ -81,18 +81,21 @@ def _bounded(text):
 
 
 # Columns selected for a conversation readback, in a stable order (includes generated_sql,
-# the per-message feedback columns, parent_exchange_id, and the per-exchange usage columns
-# - which feed /conversation -> frontend coloring, conversation-tree reconstruction, and
-# the per-message tokens/cost line on reload).
+# the per-message feedback columns, parent_exchange_id, the per-exchange usage columns, and
+# the effective response ``mode`` - which feed /conversation -> frontend coloring,
+# conversation-tree reconstruction, and the per-message tokens/cost/mode line on reload).
+# ``mode`` reads back NULL-safe (None for pre-mode rows / modes-disabled agents).
 _COLUMNS = (
     "exchange_id, session_id, user_id, user_display_name, user_groups, "
     "user_text, assistant_text, generated_sql, agent_key, created_at, answered_at, "
     "feedback_rating, feedback_reasons, feedback_comment, parent_exchange_id, "
-    "input_tokens, output_tokens, total_tokens, estimated_cost"
+    "input_tokens, output_tokens, total_tokens, estimated_cost, mode"
 )
 
 
-def save_user_message(session_id, identity, user_text, agent_key, parent_exchange_id=None):
+def save_user_message(
+    session_id, identity, user_text, agent_key, parent_exchange_id=None, mode=None
+):
     """Persist the user side of an exchange and return its ``exchange_id``.
 
     Phase one of the two-phase write: assistant_text, generated_sql and answered_at
@@ -104,6 +107,11 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
     the derived default at write time; it is intentionally NOT back-updated if the
     display name later changes. ``parent_exchange_id`` links this exchange to the one
     it branched from (NULL for a root / first turn) - the conversation-tree edge.
+    ``mode`` is the EFFECTIVE response mode the run uses ('smart'/'pro'/'claude', or
+    None for an agent that does not support the mode dial) - resolved server-side and
+    stamped here so the exchange records the mode of its own answer (NULL-safe). Edit /
+    regenerate turns are sibling exchange rows written through this same path, so each
+    carries its own mode.
     """
     exchange_id = uuid4().hex
     groups = identity.get("groups") or []
@@ -114,14 +122,14 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
     user_text = _bounded(user_text)
 
     table = full_table(CHAT_V5_LOGICAL)
-    #   columns:  ... agent_key, parent_exchange_id, answered_at
-    #   values:   ... {agent_key}, {parent}, NULL
+    #   columns:  ... agent_key, parent_exchange_id, mode, answered_at
+    #   values:   ... {agent_key}, {parent}, {mode}, NULL
     insert_sql = """
     INSERT INTO {table}
       (exchange_id, session_id, user_id, user_display_name, user_groups,
-       user_text, assistant_text, generated_sql, agent_key, parent_exchange_id, answered_at)
+       user_text, assistant_text, generated_sql, agent_key, parent_exchange_id, mode, answered_at)
     VALUES ({exchange_id}, {session_id}, {user_id}, {display_name}, {groups},
-       {user_text}, NULL, NULL, {agent_key}, {parent}, NULL)
+       {user_text}, NULL, NULL, {agent_key}, {parent}, {mode}, NULL)
     """.format(
         table=table,
         exchange_id=sql_value(exchange_id),
@@ -132,6 +140,7 @@ def save_user_message(session_id, identity, user_text, agent_key, parent_exchang
         user_text=sql_value(user_text),
         agent_key=sql_value(agent_key),
         parent=nullable_value(parent_exchange_id),
+        mode=nullable_value(mode),
     )
     logger.info(
         "save_user_message - INSERT into %s exchange_id=%s session_id=%s user_id=%s "

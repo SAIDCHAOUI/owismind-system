@@ -292,7 +292,11 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
     **`feedback_reasons` TEXT(JSON)** + **`feedback_comment` TEXT** + **`feedback_at` TIMESTAMP** (L031/v3),
     **`parent_exchange_id` TEXT** (arbre de conversation - L032/v4), **`input_tokens`/`output_tokens`/`total_tokens` INT +
     `estimated_cost` DOUBLE** (usage de l'échange, nullables - L049/v5, écrites dans le MÊME UPDATE que la réponse =
-    **source de vérité** des agrégats). Index `(user_id, created_at DESC)` + `(user_id, session_id, created_at DESC)`.
+    **source de vérité** des agrégats), **`mode` VARCHAR(16) nullable** ('smart'|'pro'|'claude'|NULL, stampé serveur à
+    `/chat/start` via `resolve_effective_mode`, ajouté par **ALTER ADD COLUMN IF NOT EXISTS** = relaxation sanctionnée
+    L126, exposé par `/conversation`, affiché dans la ligne usage - ✅ VALIDÉ DSS 2026-07-02 Run 6 ; le mode est
+    ÉPHÉMÈRE côté front : Smart par défaut, reset à l'envoi, plus de persistance localStorage).
+    Index `(user_id, created_at DESC)` + `(user_id, session_id, created_at DESC)`.
   - Écriture **2 temps** (INSERT user → UPDATE assistant+SQL), COMMIT. **Feedback** : `save_feedback` =
     `UPDATE … WHERE exchange_id AND user_id` (owner-scopé). **Branches** : `parent_exchange_id` (NULL = racine) ;
     éditer/régénérer = nouvel échange **frère** ; contexte agent = **chaîne d'ancêtres** (`build_ancestor_chain_query`

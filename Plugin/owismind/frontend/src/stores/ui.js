@@ -73,16 +73,17 @@ export const useUiStore = defineStore('ui', () => {
   const contextMessages = ref(
     clampContextMessages(readNum(CTXMSG_KEY, CONTEXT_MESSAGES_DEFAULT)),
   )
-  // Model mode (smart / pro / claude) sent with each chat turn.
-  const modelMode = ref((() => {
-    try {
-      const v = localStorage.getItem(MODELMODE_KEY)
-      if (MODEL_MODES.includes(v)) return v
-    } catch (e) {
-      /* ignore */
-    }
-    return MODELMODE_DEFAULT
-  })())
+  // Model mode (smart / pro / claude) for the NEXT chat turn. EPHEMERAL by design: it
+  // always boots to smart and is NEVER persisted. Picking pro/claude applies to the next
+  // sent question only; the chat store calls resetModelMode() right after each dispatch,
+  // so every new question starts from the recommended default again. Purge any value the
+  // old persisted behavior may have left behind (one-time cleanup, harmless if absent).
+  try {
+    localStorage.removeItem(MODELMODE_KEY)
+  } catch (e) {
+    /* ignore */
+  }
+  const modelMode = ref(MODELMODE_DEFAULT)
 
   function clampSidebar(px) {
     return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px))
@@ -135,7 +136,12 @@ export const useUiStore = defineStore('ui', () => {
     if (!MODEL_MODES.includes(m)) return
     track('mode_changed', { from: modelMode.value, to: m })
     modelMode.value = m
-    persist(MODELMODE_KEY, m)
+  }
+  // Ephemeral reset back to the default (smart) after a turn is dispatched. NOT a user
+  // action: no mode_changed event, nothing persisted - it simply returns the picker to the
+  // recommended default so the mode never carries over to the following question.
+  function resetModelMode() {
+    modelMode.value = MODELMODE_DEFAULT
   }
   // `persistChoice: false` = an AUTOMATIC collapse (e.g. Evidence opening):
   // it must never overwrite the USER's stored preference - only an explicit
@@ -174,6 +180,7 @@ export const useUiStore = defineStore('ui', () => {
     setLang,
     setContextMessages,
     setModelMode,
+    resetModelMode,
     setSidebarCollapsed,
     toggleSidebar,
     setSidebarWidth,

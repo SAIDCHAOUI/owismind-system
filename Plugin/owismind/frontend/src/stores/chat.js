@@ -23,7 +23,7 @@ import { ref, reactive, computed } from 'vue'
 import { useSessionStore } from './session.js'
 import { useUiStore } from './ui.js'
 import { runChatStream } from '../composables/useChatStream.js'
-import { createAnswerState, usageFromRow } from '../composables/timelineModel.js'
+import { createAnswerState, usageFromRow, modeFromRow } from '../composables/timelineModel.js'
 import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
@@ -125,6 +125,9 @@ export const useChatStore = defineStore('chat', () => {
       // Persisted token/cost usage (null when none was stored) - so a reloaded
       // conversation shows the same per-message usage line as the live run.
       usage: usageFromRow(r),
+      // Persisted response mode ('smart'|'pro'|'claude', null for a non-supporting agent
+      // or a legacy row) - shown in the usage line, same path as usage.
+      mode: modeFromRow(r),
       status: 'done',
       exchangeId: r.exchange_id || null,
       feedbackRating: r.feedback_rating === 0 || r.feedback_rating === 1 ? r.feedback_rating : null,
@@ -244,13 +247,27 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // The response mode ACTUALLY sent this turn: the picker's value for an agent that
+  // supports modes, else null (the backend stores NULL for a non-supporting agent, so the
+  // stamp + analytics stay consistent with a later /conversation reload). ui.modelMode is
+  // always a valid mode. Read BEFORE the ephemeral reset in _runExchange.
+  function sentMode() {
+    return session.selectedAgentSupportsModes ? ui.modelMode : null
+  }
+
   // Create a new exchange under `parentId`, run the agent into its version, and reconcile
   // its real backend id (assigned by /chat/start). The new exchange is the latest child of
   // its parent -> active by default (we also clear any override at that parent so the fresh
   // branch stays selected). This is the single place an exchange is created + run.
   async function _runExchange(userText, parentId) {
     cancelActive()
-    const version = newVersion()
+    // Capture the mode BEFORE the ephemeral reset below. `rawMode` is what we relay to the
+    // backend (which gates on the agent profile); `runMode` is what gets STAMPED on the
+    // version and reported to analytics (null for a non-supporting agent, matching the
+    // backend's stored NULL). Nothing past the reset may read ui.modelMode for this run.
+    const rawMode = ui.modelMode
+    const runMode = sentMode()
+    const version = newVersion({ mode: runMode })
     // `uid` is the stable render key, assigned once and NEVER changed. `id` starts null and
     // is reconciled to the backend exchange id (onExchangeId) - keying the v-for on `uid`
     // (not `id`) avoids a mid-stream remount/flicker when that reconciliation happens.
@@ -263,6 +280,11 @@ export const useChatStore = defineStore('chat', () => {
       delete next[parentKey]
       overrides.value = next
     }
+    // Ephemeral mode: the picker snaps back to smart the instant a turn is dispatched.
+    // Done AFTER the version.mode stamp above (the usage line reads the stamp once the
+    // run completes) and BEFORE the await (so the reset is not tied to the run finishing).
+    // Everything below reads the captured rawMode/runMode, never ui.modelMode.
+    ui.resetModelMode()
     // Sidebar bump data captured at RUN ENTRY: the finally below can run up to a
     // poll cycle AFTER a cancellation, when the store may already hold ANOTHER
     // conversation - reading store state there created phantom/retitled sidebar
@@ -290,7 +312,7 @@ export const useChatStore = defineStore('chat', () => {
         message: userText,
         agentKey: session.selectedAgentKey,
         historyLimit: ui.contextMessages,
-        mode: ui.modelMode,
+        mode: rawMode,
         webappLang: ui.lang,
         screenContext,
         parentExchangeId: parentId || null,
@@ -319,7 +341,9 @@ export const useChatStore = defineStore('chat', () => {
         track('answer_received', { duration_ms: Date.now() - runStartedAt }, {
           conversation_id: runSessionId,
           agent_key: exch.agentKey,
-          mode: ui.modelMode,
+          // The mode actually sent (from the stamp), NOT ui.modelMode - which was reset
+          // to smart the moment this turn was dispatched.
+          mode: runMode,
         })
       }
     } catch (e) {
@@ -375,7 +399,7 @@ export const useChatStore = defineStore('chat', () => {
     track('question_sent', { length: t.length }, {
       conversation_id: activeSessionId.value,
       agent_key: session.selectedAgentKey,
-      mode: ui.modelMode,
+      mode: sentMode(),
     })
     return _runExchange(t, last ? last.exchange.id : null)
   }
@@ -388,7 +412,7 @@ export const useChatStore = defineStore('chat', () => {
     track('question_edited', { length: t.length }, {
       conversation_id: activeSessionId.value,
       agent_key: session.selectedAgentKey,
-      mode: ui.modelMode,
+      mode: sentMode(),
     })
     return _runExchange(t, turn.exchange.parentId)
   }
@@ -399,7 +423,7 @@ export const useChatStore = defineStore('chat', () => {
     track('answer_regenerated', {}, {
       conversation_id: activeSessionId.value,
       agent_key: session.selectedAgentKey,
-      mode: ui.modelMode,
+      mode: sentMode(),
     })
     return _runExchange(turn.exchange.userText, turn.exchange.parentId)
   }

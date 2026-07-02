@@ -82,6 +82,13 @@ EVENTS_V1_LOGICAL = "webapp_events_v1"
 # they are filled from the run's footer ``usage_summary`` totals at phase-two write, and
 # stay NULL when no footer arrived (e.g. an early-stopped run). They are the AUTHORITATIVE
 # per-exchange usage record - the users + monthly aggregates are reconstructible from them.
+# ``mode`` (nullable VARCHAR(16), values 'smart'/'pro'/'claude'/NULL) records the EFFECTIVE
+# response mode of the run, stamped at phase-one write next to the usage line. It is listed
+# both here (fresh instances) AND in _ALTERS_BY_LOGICAL (existing instances get it via an
+# additive ADD COLUMN IF NOT EXISTS) - the SAME documented, explicit relaxation of the
+# no-ALTER rule already used for the users usage counters (see _ALTERS_BY_LOGICAL). Bumping
+# to _v6 for one nullable column would hide every existing conversation, which is why the
+# additive ALTER is preferred here; old rows read back with mode NULL (shown as nothing).
 _CHAT_V5_DDL = """
 CREATE TABLE IF NOT EXISTS {full_table} (
     exchange_id        TEXT       PRIMARY KEY,
@@ -103,7 +110,8 @@ CREATE TABLE IF NOT EXISTS {full_table} (
     input_tokens       INTEGER,
     output_tokens      INTEGER,
     total_tokens       INTEGER,
-    estimated_cost     DOUBLE PRECISION
+    estimated_cost     DOUBLE PRECISION,
+    mode               VARCHAR(16)
 )
 """
 
@@ -266,18 +274,26 @@ _DDL_BY_LOGICAL = {
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
-# CREATE) to tables that gained columns AFTER first release - the ONLY relaxation of
-# the no-ALTER rule, used for additive counters on the existing users registry whose
-# rows (admin flags, first_seen) must be preserved. ``ADD COLUMN IF NOT EXISTS`` makes
+# CREATE) to tables that gained a NULLABLE/defaulted column AFTER first release - the
+# ONLY relaxation of the no-ALTER rule, kept intentionally narrow (additive columns whose
+# absence would otherwise force a data-hiding _vN bump). ``ADD COLUMN IF NOT EXISTS`` makes
 # each clause a no-op once applied, so it is safe on every process start AND on a fresh
 # table that already has the column from its CREATE DDL. Each entry is a bare clause
 # (the "ALTER TABLE <t> " prefix is added by _ensure_table).
+#   - users_v1: additive lifetime counters whose rows (admin flags, first_seen) must be
+#     preserved (explicit user authorization, 2026-06-11).
+#   - chat_v5: the nullable ``mode`` column (effective response mode per exchange) - a
+#     _v6 bump for one nullable column would hide every existing conversation, so the same
+#     additive-ALTER relaxation applies; pre-existing rows get mode NULL.
 _ALTERS_BY_LOGICAL = {
     USERS_V1_LOGICAL: [
         "ADD COLUMN IF NOT EXISTS total_input_tokens  BIGINT NOT NULL DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT NOT NULL DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS total_cost          DOUBLE PRECISION NOT NULL DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS last_usage_at       TIMESTAMP",
+    ],
+    CHAT_V5_LOGICAL: [
+        "ADD COLUMN IF NOT EXISTS mode VARCHAR(16)",
     ],
 }
 

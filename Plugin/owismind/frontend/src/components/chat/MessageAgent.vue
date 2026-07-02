@@ -453,6 +453,12 @@ function nextVersion() {
         <span class="u-sep">·</span>
         <span class="u-seg" :title="t('msg.usage_cost')">~{{ fmtCost(usage.estimatedCost) }}</span>
       </template>
+      <!-- Response mode used for THIS answer (smart|pro|claude). Absent for a
+           non-supporting agent or a legacy row (v.mode null), so those render as before. -->
+      <template v-if="v.mode">
+        <span class="u-sep">·</span>
+        <span class="u-seg" :title="t('msg.usage_mode')">{{ t('mode.' + v.mode) }}</span>
+      </template>
     </div>
 
     <!-- Actions + version nav -->

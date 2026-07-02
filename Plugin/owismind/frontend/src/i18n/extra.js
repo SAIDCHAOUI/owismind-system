@@ -90,6 +90,7 @@ export const extraMessages = {
     'msg.usage_in': "Tokens d'entrée (question + contexte)",
     'msg.usage_out': 'Tokens de sortie (réponse générée)',
     'msg.usage_cost': 'Coût estimé de cet échange',
+    'msg.usage_mode': 'Mode de réponse utilisé pour cet échange',
 
     // Feedback - no submit endpoint yet
     'fb.soon_note': "L'envoi de feedback sera bientôt disponible. L'équipe OWI prépare ce service.",
@@ -826,6 +827,7 @@ export const extraMessages = {
     'msg.usage_in': 'Input tokens (question + context)',
     'msg.usage_out': 'Output tokens (generated answer)',
     'msg.usage_cost': 'Estimated cost of this exchange',
+    'msg.usage_mode': 'Response mode used for this exchange',
 
     // Feedback - no submit endpoint yet
     'fb.soon_note': 'Feedback submission will be available soon. The OWI team is preparing this service.',
