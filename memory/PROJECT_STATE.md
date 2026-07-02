@@ -352,6 +352,22 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
 
 ## 8. Agents & streaming
 
+- **✅ VALIDÉ DSS 2026-07-02 Run 2 - artefacts natifs + narration + recall** (commits user
+  `0368dd7`/`0275ae9`) : (a) **artefacts** : le panneau empile TOUS les charts/KPIs ; spec chart
+  étendue (`x_label`/`y_label`/`unit` dans le bloc chart ; `description` + `sql_id` top-level,
+  additif) ; **binding par artefact** via `sql_id` (stampé par l'orchestrateur `latest_sql_id`,
+  résolu par `evidence/service.results_by_sql_map` - ids ambigus exclus - dans `/evidence/meta` ;
+  stampé-mais-manquant = payload vide honnête, non-stampé = repli actif legacy ; table bindée
+  aussi) ; step bumpé après fan-out = `sql_id` uniques par échange ; dédup specs identiques dans
+  `storage/artifacts._sanitize`. (b) **Tools orchestrateur nouveaux** : `tell_user` (smart
+  seulement, narration-as-tool anti narrate-and-stop, 2 notes/batch) et `recall_prior_result`
+  (exposé seulement si le backend a fourni des résultats rappelables). (c) **Protocole jeton
+  `⟦owi:prior=json⟧`** (L119) : backend `chat_v5.chain_context_for_agent` (même lecture que
+  l'historique) + `context.extract_prior_results` (3 derniers tours, dédup signature sql+colonnes)
+  + `context.build_prior_data_block` (index [PRIOR DATA] + jeton borné dur 24k) ; gate = flag
+  profil `modes` (routes -> `start_run(prior_recall_enabled=...)`) ; côté agent : parse AVANT
+  `parse_mode`, last-token-wins, flag d'état `recalled` pour les filets de `node_finish`.
+  (d) Filet narrate-and-stop : regex prospective, garde `?`, cap 480c, `_MAX_NUDGES=2`.
 - **Whitelist DYNAMIQUE implémentée (✅ validée EN DSS - L017)** : plus de `ALLOWED_AGENTS` hardcodé.
   L'admin découvre les projets/agents (`agents/discovery.py`, **lecture seule** : `list_project_keys` →
   `list_project_agents` filtré sur `agent:`), choisit la sélection, persistée en `webapp_settings_v1`

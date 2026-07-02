@@ -2780,5 +2780,53 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-02, `memory/sessions/2026-07-02.md`.
 - **Date** : 2026-07-02.
 
+## L119 - Un nouveau jeton de contrôle ⟦owi:*⟧ doit répliquer les 3 propriétés du protocole ET être testé dans la SÉQUENCE réelle de parsing [validé DSS, 2026-07-02 Run 2]
+
+- **Contexte** : feature recall (les résultats des tours précédents voyagent dans un jeton machine
+  `⟦owi:prior=json⟧` que l'orchestrateur parse puis strippe ; le modèle ne voit qu'un index
+  [PRIOR DATA] d'une ligne par résultat).
+- **Ce qui a échoué** : la feature était MORTE en live alors que 100% des tests unitaires du
+  parseur passaient : `parse_mode` (appelé avant) nettoie le texte avec le strip GÉNÉRIQUE
+  `_CTRL_TOKEN_RE` (`⟦owi:[a-z_]+=...⟧`) qui matchait aussi le nouveau jeton -> `parse_prior`
+  recevait un texte déjà vidé. Attrapé uniquement par la revue adversariale (lentille contrats),
+  pas par les tests (ils appelaient `parse_prior` directement, jamais la séquence).
+- **Solution qui marche** : (1) parser tout NOUVEAU jeton AVANT `parse_mode` ; (2) répliquer les
+  3 propriétés du protocole jeton : **parse-avant-strip-générique**, **last-token-wins** (le
+  backend appende le jeton autoritaire à la FIN -> un faux jeton tapé par l'user ne gagne jamais),
+  **gating par profil d'agent** (flag `modes` = « parle le protocole owi » ; sinon le payload fuit
+  en texte brut dans le prompt d'un autre agent) ; (3) un test qui rejoue la SÉQUENCE réelle
+  (`parse_prior` puis `parse_mode` sur un message portant les deux jetons).
+- **Bonus taille** : une borne « douce » ne borne rien - la boucle de rétrécissement doit avoir
+  une issue TERMINALE (drop oldest -> moitié lignes -> moitié colonnes -> abandon), sinon un seul
+  résultat large dépasse le cap annoncé (26,5k mesurés pour un cap « 24k »).
+- **Preuve-vérification** : revue adversariale #2 (critique confirmé 2/2 réfuteurs) ; après fix,
+  vérif Opus 12 agents batterie verte ; validé DSS par l'user (« tout fonctionne super bien »).
+- **Source** : session 2026-07-02 Run 2, `sessions/2026-07-02.md`.
+- **Date** : 2026-07-02.
+
+## L120 - Mini modèle : la narration fiable passe par un TOOL (turn-safe), et un détecteur de promesses ne doit matcher que des formes PROSPECTIVES [validé DSS, 2026-07-02 Run 2]
+
+- **Contexte** : obtenir le comportement « boucle Claude Code » (annonce -> action -> observe ->
+  rend -> répond) y compris en mode smart (Gemini Flash-Lite), où la narration texte est bannie
+  (narrate-and-stop prouvé, L063) et où le filet regex laissait passer des promesses.
+- **Ce qui a échoué** : (1) demander du texte au mini = il promet puis s'arrête, la promesse
+  DEVIENT la réponse finale ; (2) élargir la regex de détection avec des verbes d'analyse
+  (calcule/analyse/compare + gérondifs asking/checking...) = faux positifs sur de VRAIES réponses
+  finales et sur les questions de clarification (« Which period are you asking about? ») -> nudges
+  à tort et, au cap de boucle, une vraie réponse JETÉE (finding high de la revue).
+- **Solution qui marche** : (1) **narration-as-tool** `tell_user` (exposé en smart seulement) :
+  une promesse exprimée en tool call ne termine JAMAIS le run - la boucle continue et l'ack pousse
+  l'action (« now make the call ») ; notes streamées AVANT les appels lents, bornées 2/batch,
+  ticker déterministe coupé quand le modèle a narré (pas de doublon) ; c'est le pattern
+  `send_to_user` documenté par Anthropic pour les agents asynchrones. (2) Le détecteur de
+  premature-stop ne garde que des indices PROSPECTIFS (je vais/commence/lance/récupère..., let me/
+  i'll + verbe d'action) ; JAMAIS les verbes d'analyse (naturels en prose finie : « Si je compare
+  2025 et 2026, ... ») ; un texte contenant `?` n'est jamais nudgé ; cap 480c, 2 nudges max/run.
+- **Preuve-vérification** : revue adversariale (regex trop large = high confirmé, corrigé + tests
+  positifs/négatifs) ; validé DSS par l'user, plus de « je vais faire ceci » en réponse finale.
+- **Source** : session 2026-07-02 Run 2, `sessions/2026-07-02.md` ; doc Anthropic
+  prompting-claude-fable-5 (« Create a send-to-user tool »).
+- **Date** : 2026-07-02.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

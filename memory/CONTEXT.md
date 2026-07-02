@@ -5,6 +5,33 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🎨 SESSION 2026-07-02 Run 2 (ARTEFACTS NATIFS + NARRATION + RECALL) - ✅ VALIDÉ DSS (user :
+« ça marche vraiment pas mal » puis « tout fonctionne super bien » ; code commité par l'user
+`0368dd7` + `0275ae9`).** Trois arcs livrés + validés : **(1) Artefacts natifs (fix L118 complet)** :
+le frontend empile TOUS les charts/KPIs (fini le 1er-par-kind), métadonnées de chart bout en bout
+(`x_label`/`y_label`/`unit` + `description` + `sql_id`, agent -> event -> storage -> /evidence/meta
+-> ArtifactChart/Kpi/Table : axes nommés, ticks localisés, légendes), **binding par artefact**
+(`latest_sql_id` stampé, `results_by_sql_map` ids ambigus exclus, stampé-mais-manquant = vide
+HONNÊTE jamais un autre résultat, repli legacy pour les non-stampés, table bindée, step bumpé
+après fan-out = sql_id uniques, dédup specs identiques). **(2) Narration façon Claude Code** :
+bloc NARRATE enrichi pro/claude (annonce à chaque phase) ; filet narrate-and-stop durci (cap 480c,
+2 nudges, regex PROSPECTIVE seulement : les verbes d'analyse matchaient de vraies réponses, garde
+`?` = question jamais nudgée) ; **tool `tell_user` smart-only** (narration-as-tool : une promesse
+en tool call ne termine JAMAIS le run ; notes streamées AVANT les appels lents ; pattern
+send_to_user de la doc Anthropic). **(3) Recall des résultats précédents** (`recall_prior_result`) :
+suivis type « on a mieux fait cette année ? » répondus SANS re-questionner le sous-agent - backend
+`chain_context_for_agent` (même lecture SQL que l'historique, zéro coût) -> 3 derniers tours
+(dédup anti recall-de-recall) -> index `[PRIOR DATA]` visible + jeton machine `⟦owi:prior=json⟧`
+borné dur, gated par profil `modes` ; orchestrateur : **parse_prior AVANT parse_mode** (le strip
+générique tuait le jeton = CRITIQUE attrapé en revue), last-token-wins, tool exposé si données,
+recall instantané + re-émission span Evidence + flag `recalled` pour les filets node_finish.
+**Process** : 2 revues adversariales (7 + 8 confirmés, tous traités) + vérif finale Opus (batterie
+100% verte). **316 agents + 535 plugin + 134 node, 0 tiret, zip DEV `index-D3ATZvv5.js`, PROD
+intacte. ⚠️ CONSIGNE USER GRAVÉE : workflows/sous-agents = OPUS (Fable = boucle principale
+seulement)** (`subagents-use-opus-not-fable.md`). Différés : artefacts inline dans le message
+(reducer gelé), fenêtre recall > 3 tours, insight/warning cards. Voir **L119-L120** +
+`sessions/2026-07-02.md` (Run 2).
+
 **🧠 SESSION 2026-07-02 (AUDIT + DURCISSEMENT DES 2 AGENTS : orchestrateur + expert revenus +
 cerveau semantique + lookup) - repo only (DEV), NON valide DSS.** Audit ultracode (6 auditeurs +
 verif adversariale par finding : 26 -> 20 confirmes/6 refutes ; patches 2 sous-agents Opus ; revue
@@ -802,7 +829,12 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-02 : audit + durcissement orchestrateur & expert revenus & cerveau sémantique → détail `sessions/2026-07-02.md` + **L118**
+## 🧭 Dernière session - 2026-07-02 Run 2 : artefacts natifs + narration + recall → détail `sessions/2026-07-02.md` (Run 2) + **L119-L120**
+- **✅ VALIDÉ DSS, code commité par l'user (`0368dd7`, `0275ae9`).** Multi-charts + métadonnées +
+  binding par artefact ; narration pro/claude + `tell_user` smart ; `recall_prior_result` (3 tours).
+- 2 revues adversariales + vérif Opus finale ; consigne gravée : sous-agents/workflows en OPUS.
+
+## 🧭 Avant - 2026-07-02 Run 1 : audit + durcissement orchestrateur & expert revenus & cerveau sémantique → détail `sessions/2026-07-02.md` + **L118**
 - **Repo only (DEV), NON validé DSS.** 20 findings confirmés implémentés (5 orchestrateur, 9 expert
   revenus, 3 cerveau sémantique, 1 lookup, +2 filets de ma revue), 1 reverté après revue finale
   (param `source` multi-spécialistes : le plugin rend tous les artefacts depuis UN result_block ->
@@ -1206,7 +1238,16 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🧠NEW (2026-07-02). **DÉPLOYER + VALIDER l'audit des agents (L118).** Recoller en DEV DSS :
+0🎨DONE (2026-07-02 Run 2). **Artefacts + narration + recall ✅ VALIDÉS DSS et commités par l'user.**
+   Reste, à la demande : (a) **promotion PROD** de tout l'arc (copier l'orchestrateur vers
+   `OWISMIND_PROD_V1_*` + rebuild/package prod + upload) ; (b) différés discutés : artefacts
+   INLINE dans le message (chantier reducer gelé F8/F12), fenêtre recall > 3 tours,
+   insight/warning cards, upgrade du modèle smart (Flash-Lite -> Flash, 1 ligne, coût ↑) ;
+   (c) micro-polish : `_defaultTab` ignore kpi ; description des artefacts dans le bloc ON SCREEN.
+   ⚠️ Règle process gravée : **workflows/sous-agents en OPUS** (Fable = boucle principale).
+0🧠NEW (2026-07-02). **DÉPLOYER + VALIDER l'audit des agents (L118).** (Note Run 2 : l'orchestrateur
+   DEV a été recollé et validé depuis ; reste à confirmer côté DSS le sous-agent revenus + le tool
+   lookup + l'exécution `update_aligned_semantic_model.py` + re-dump.) Recoller en DEV DSS :
    les 2 Code Agents (`OWISMIND_DEV_OWIsMind_orchestrator.py` + `OWISMIND_DEV_SalesDrive_revenue_expert.py`,
    env 3.11) + le Custom Python tool `attribute_lookup` ; exécuter `update_aligned_semantic_model.py`
    en notebook (modèle `AHUh9hb`) puis `dump_semantic_model.py` (MODEL.md + .v1.json). **Agent +
