@@ -795,18 +795,37 @@ def evidence_meta():
     # Attach this exchange's rendered-artifact specs (chart / table the orchestrator
     # asked for). Owner-scoped, best-effort: a read failure degrades to no artifacts,
     # never a 500 - the rest of the evidence panel stays usable.
+    # Server-internal per-SQL result blocks (never sent to the client): popped
+    # unconditionally so the response payload stays unchanged even on failure.
+    results_by_sql = meta.pop("results_by_sql", None) or {}
     try:
         arts = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
         # Server-side chart shaping: build the Chart.js-ready {labels, datasets}
         # for each chart artifact from the captured result, so the agent only
         # had to pick x / y / type. Pure + bounded; an unbuildable chart yields
         # an honest {ok: false} the frontend renders as an empty state.
+        # An artifact stamped with a sql_id binds to THAT captured query's rows
+        # (multi-specialist turns). A stamped artifact whose block is missing
+        # (result shed at write time, or ambiguous id) degrades to an HONEST
+        # empty payload - never to another query's rows, which would render
+        # confidently wrong data. Only unstamped (legacy) artifacts keep the
+        # exchange-level active result.
         result_block = meta.get("result")
         for a in arts:
+            sql_id = a.get("sql_id")
+            block = results_by_sql.get(sql_id) if sql_id else result_block
             if a.get("kind") == "chart":
-                a["data"] = chart_payload.build_chart_payload(result_block, a.get("chart"))
+                a["data"] = chart_payload.build_chart_payload(block, a.get("chart"))
             elif a.get("kind") == "kpi":
-                a["data"] = chart_payload.build_kpi_payload(result_block, a.get("kpi"))
+                a["data"] = chart_payload.build_kpi_payload(block, a.get("kpi"))
+            elif a.get("kind") == "table" and sql_id:
+                # Bind the table tab too (same rule as chart/kpi). Skip the copy
+                # when the bound block IS the active result: the frontend falls
+                # back to meta.result, keeping the response payload single-copy.
+                if block is None:
+                    a["data"] = {"captured": False}
+                elif block is not result_block:
+                    a["data"] = block
         meta["artifacts"] = arts
     except Exception:
         logger.exception("/evidence/meta - artifacts read failed (non-fatal)")

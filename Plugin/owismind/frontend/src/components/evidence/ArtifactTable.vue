@@ -11,6 +11,8 @@ const { t } = useI18n()
 const props = defineProps({
   // meta.result: { captured, columns, rows, row_count, truncated }
   result: { type: Object, default: null },
+  // Agent-provided one-sentence caption (what the table shows), above it.
+  description: { type: String, default: '' },
 })
 
 const captured = computed(() => !!(props.result && props.result.captured))
@@ -37,6 +39,7 @@ function cell(row, j) {
     </div>
 
     <template v-else>
+      <p v-if="description" class="art-desc">{{ description }}</p>
       <div class="art-table-box">
         <div class="art-table-scroll">
           <table>
@@ -74,6 +77,12 @@ function cell(row, j) {
   flex-direction: column;
   gap: var(--s-2);
   min-height: 0;
+}
+/* Agent-provided caption: what the table shows (scope, period, scenario). */
+.art-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
 }
 
 /* Scrollable viewport - taller than EvidenceResult's mini-table since this IS

@@ -11,12 +11,14 @@ import Chart from 'chart.js/auto'
 const { t } = useI18n()
 
 const props = defineProps({
-  // Artifact chart spec: { type: 'line'|'bar'|'pie', x, y[], style? }
+  // Artifact chart spec: { type: 'line'|'bar'|'pie', x, y[], style?, x_label?, y_label?, unit? }
   chart: { type: Object, required: true },
   // Server-built Chart.js payload: { ok, labels, datasets, truncated, reason }
   data: { type: Object, default: null },
   // Title for the chart + aria-label
   title: { type: String, default: '' },
+  // Agent-provided one-sentence caption (what the chart shows), shown below it.
+  description: { type: String, default: '' },
 })
 
 const canvasEl = ref(null)
@@ -52,6 +54,35 @@ function withAlpha(color, a) {
 
 function isOk() {
   return !!(props.data && props.data.ok && Array.isArray(props.data.datasets))
+}
+
+// Group-aware tick formatting on the VALUE axis (thousands separators).
+function fmtTick(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n.toLocaleString() : value
+}
+
+// Cartesian axes with optional agent-provided titles: x_label names the
+// category axis, y_label (+ unit) the value axis - swapped for horizontal bars.
+function buildScales(spec, horizontal, stacked, text3, grid) {
+  const xLabel = String(spec.x_label || '')
+  const unit = String(spec.unit || '')
+  let yLabel = String(spec.y_label || '')
+  if (unit) yLabel = yLabel ? yLabel + ' (' + unit + ')' : unit
+  const catAxis = {
+    stacked,
+    ticks: { color: text3 },
+    grid: { color: grid },
+    title: { display: !!xLabel, text: xLabel, color: text3 },
+  }
+  const valAxis = {
+    stacked,
+    ticks: { color: text3, callback: fmtTick },
+    grid: { color: grid },
+    beginAtZero: true,
+    title: { display: !!yLabel, text: yLabel, color: text3 },
+  }
+  return horizontal ? { x: valAxis, y: catAxis } : { x: catAxis, y: valAxis }
 }
 
 function buildConfig() {
@@ -129,12 +160,7 @@ function buildConfig() {
           }
         : {},
     },
-    scales: isPie
-      ? {}
-      : {
-          x: { stacked, ticks: { color: text3 }, grid: { color: grid } },
-          y: { stacked, ticks: { color: text3 }, grid: { color: grid }, beginAtZero: true },
-        },
+    scales: isPie ? {} : buildScales(spec, horizontal, stacked, text3, grid),
   }
 
   return { type: chartType, data: { labels: props.data.labels, datasets }, options }
@@ -186,6 +212,7 @@ onBeforeUnmount(() => {
       <div class="art-canvas-wrap">
         <canvas ref="canvasEl" role="img" :aria-label="title || t('art.chart.title_fallback')" />
       </div>
+      <p v-if="description" class="art-desc">{{ description }}</p>
       <div v-if="data.truncated" class="art-trunc">{{ t('art.chart.truncated') }}</div>
     </template>
   </div>
@@ -207,6 +234,12 @@ onBeforeUnmount(() => {
 .art-trunc {
   font-size: var(--fs-xs);
   color: var(--orange-text);
+}
+/* Agent-provided caption: what the chart shows (scope, period, scenario). */
+.art-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
 }
 .art-empty {
   display: flex;

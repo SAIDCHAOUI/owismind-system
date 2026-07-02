@@ -147,6 +147,11 @@ class TestRegistryAndTools(unittest.TestCase):
         self.assertIn("chart_type", req)
         self.assertIn("x", req)
         self.assertIn("y", req)
+        # Presentation metadata is exposed but OPTIONAL (additive contract).
+        props = chart["function"]["parameters"]["properties"]
+        for key in ("x_label", "y_label", "unit", "description"):
+            self.assertIn(key, props)
+            self.assertNotIn(key, req)
 
 
 class TestAttributeLookupWiring(unittest.TestCase):
@@ -478,6 +483,51 @@ class TestArtifactValidation(unittest.TestCase):
     def test_no_result_yet(self):
         art, msg = self.agent._record_artifact("show_table", {}, {})
         self.assertIsNone(art)
+
+    def test_chart_metadata_and_sql_binding(self):
+        state = dict(self.state, latest_sql_id="s1q2")
+        art, _msg = self.agent._record_artifact(
+            "show_chart",
+            {"chart_type": "line", "x": "year", "y": ["revenue"],
+             "x_label": "Year", "y_label": "Revenue", "unit": "EUR",
+             "description": " Monthly ACTUALS revenue. "},
+            state)
+        self.assertEqual(art["chart"]["x_label"], "Year")
+        self.assertEqual(art["chart"]["y_label"], "Revenue")
+        self.assertEqual(art["chart"]["unit"], "EUR")
+        self.assertEqual(art["description"], "Monthly ACTUALS revenue.")
+        self.assertEqual(art["sql_id"], "s1q2")
+
+    def test_metadata_absent_keeps_legacy_shape(self):
+        art, _msg = self.agent._record_artifact(
+            "show_chart",
+            {"chart_type": "line", "x": "year", "y": ["revenue"]},
+            self.state)
+        self.assertNotIn("description", art)
+        self.assertNotIn("sql_id", art)
+        self.assertNotIn("x_label", art["chart"])
+
+    def test_metadata_bounded(self):
+        state = dict(self.state, latest_sql_id="s1q1")
+        art, _msg = self.agent._record_artifact(
+            "show_chart",
+            {"chart_type": "bar", "x": "year", "y": ["revenue"],
+             "unit": "u" * 99, "description": "d" * 999},
+            state)
+        self.assertLessEqual(len(art["chart"]["unit"]), 16)
+        self.assertLessEqual(len(art["description"]), 280)
+
+    def test_kpi_unit_and_table_description(self):
+        art, _msg = self.agent._record_artifact(
+            "show_kpi",
+            {"label": "Revenue YTD", "value": "revenue", "unit": "EUR",
+             "description": "Total over 2026."},
+            self.state)
+        self.assertEqual(art["kpi"]["unit"], "EUR")
+        self.assertEqual(art["description"], "Total over 2026.")
+        art, _msg = self.agent._record_artifact(
+            "show_table", {"description": "Top accounts."}, self.state)
+        self.assertEqual(art["description"], "Top accounts.")
 
 
 class TestLanguageAndPrompt(unittest.TestCase):
@@ -924,6 +974,70 @@ class TestNarrateAndStopGuard(unittest.TestCase):
     def test_long_text_is_not_premature(self):
         long_answer = "Let me explain. " + ("revenue analysis " * 40)
         self.assertFalse(orch._looks_like_premature_stop(long_answer))
+
+    def test_widened_promise_cues_are_premature(self):
+        # Phrasings observed live on the mini model that used to slip through.
+        self.assertTrue(orch._looks_like_premature_stop(
+            "Je commence par récupérer le schéma de la table."))
+        self.assertTrue(orch._looks_like_premature_stop(
+            "Je lance la recherche des revenus du client A."))
+        self.assertTrue(orch._looks_like_premature_stop(
+            "J'interroge le spécialiste revenus pour 2025 et 2026…"))
+        self.assertTrue(orch._looks_like_premature_stop(
+            "I'll ask the revenue specialist for the monthly figures first."))
+        self.assertTrue(orch._looks_like_premature_stop(
+            "Starting with the ACTUALS data."))
+
+    def test_finished_analysis_and_questions_are_not_premature(self):
+        # Analysis verbs and questions are legitimate TERMINAL turns: a real
+        # answer or a clarification relay must never be nudged (review finding).
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Si je compare 2025 et 2026, le revenu progresse de 12 %."))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Je calcule un écart de +12% entre 2025 et 2026 ; le détail est "
+            "dans le panneau Evidence."))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "J'analyse ces résultats : la tendance est clairement haussière."))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "Which period are you asking about: 2025 or 2026?"))
+        self.assertFalse(orch._looks_like_premature_stop(
+            "The March spike is worth calling out in your review."))
+
+    def test_medium_length_plan_is_premature(self):
+        # A verbose multi-sentence plan (> the old 240-char cap) must be caught.
+        plan = ("Je vais d'abord interroger le spécialiste revenus pour obtenir "
+                "les chiffres mensuels 2025 et 2026 du client, en séparant les "
+                "scénarios ACTUALS et BUDGET. Ensuite je préparerai un graphique "
+                "par scénario pour bien visualiser l'évolution, puis un tableau "
+                "récapitulatif des totaux annuels avec les écarts.")
+        self.assertTrue(len(plan) > 240)
+        self.assertTrue(orch._looks_like_premature_stop(plan))
+
+    def test_nudge_budget_is_two(self):
+        self.assertEqual(orch._MAX_NUDGES, 2)
+
+
+class TestProgressNoteTool(unittest.TestCase):
+    """tell_user: narration-as-a-tool, exposed to the SMART mode only (turn-safe
+    on the mini model - a note spoken through a tool never ends the run)."""
+
+    def test_not_in_base_specs(self):
+        specs, _ = orch.build_tool_specs(orch.get_capabilities())
+        names = {s["function"]["name"] for s in specs}
+        self.assertNotIn(orch.PROGRESS_TOOL_NAME, names)
+
+    def test_spec_shape(self):
+        fn = orch.PROGRESS_TOOL_SPEC["function"]
+        self.assertEqual(fn["name"], orch.PROGRESS_TOOL_NAME)
+        self.assertIn("message", fn["parameters"]["required"])
+
+    def test_prompt_gating(self):
+        smart = orch.build_system_prompt(orch.get_capabilities(), "fr", narrate=False)
+        self.assertIn("tell_user", smart)
+        self.assertNotIn("NARRATE AS YOU GO", smart)
+        pro = orch.build_system_prompt(orch.get_capabilities(), "fr", narrate=True)
+        self.assertNotIn("tell_user", pro)
+        self.assertIn("NARRATE AS YOU GO", pro)
 
 
 # --- Fakes for the model-switchable chat (no DSS needed) -------------------

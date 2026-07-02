@@ -131,6 +131,35 @@ LOOP_LLM_BY_MODE = {
 # the wait is covered by the deterministic ticker instead.
 def narration_enabled(mode):
     return mode != "smart"
+
+
+# Progress-note tool (smart mode only). The mini model cannot reliably write chat
+# text alongside a tool call (narrate-and-stop), so narration becomes a TOOL CALL
+# instead: a promise spoken through a tool never ends the turn - the loop keeps
+# running and the tool ack pushes the model to follow through. Exposed at run
+# time only when narration_enabled() is False; pro/claude narrate in plain text.
+PROGRESS_TOOL_NAME = "tell_user"
+MAX_PROGRESS_NOTES_PER_BATCH = 2
+PROGRESS_TOOL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": PROGRESS_TOOL_NAME,
+        "description": (
+            "Show ONE short progress sentence to the user immediately, WITHOUT "
+            "ending your turn ('Je récupère les revenus 2025-2026 du client A…'). "
+            "Call it in the SAME turn as the slow tool call it announces (a "
+            "specialist call, a chart). NEVER end the run on a note alone - the "
+            "announced tool call must follow. Never use it for the final answer."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string",
+                            "description": "One short sentence, in the user's language."},
+            },
+            "required": ["message"],
+        },
+    },
+}
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -397,9 +426,15 @@ def build_tool_specs(caps):
                 "evolution over time; 'bar' = compare/breakdown across categories "
                 "(use style 'grouped' for several series, 'horizontal' for long "
                 "labels); 'pie' = share of a total (style 'donut'). x and y MUST "
-                "be EXACT column names of the latest result.\n"
+                "be EXACT column names of the latest result. You MAY call this "
+                "tool SEVERAL times in one turn (e.g. one chart per scenario) - "
+                "every chart reads the SAME latest result, so pick different y "
+                "columns per chart. Always give a clear title, both axis labels, "
+                "the unit and a one-sentence description.\n"
                 "EXAMPLE: {\"chart_type\":\"line\",\"x\":\"month\","
-                "\"y\":[\"Revenue_EUR\"],\"title\":\"Monthly revenue 2026\"} -> a "
+                "\"y\":[\"Revenue_EUR\"],\"title\":\"Monthly revenue 2026\","
+                "\"x_label\":\"Month\",\"y_label\":\"Revenue\",\"unit\":\"EUR\","
+                "\"description\":\"Monthly ACTUALS revenue over 2026.\"} -> a "
                 "line chart appears; you then write 'Revenue peaked in March.'"),
             "parameters": {
                 "type": "object",
@@ -415,6 +450,15 @@ def build_tool_specs(caps):
                               "description": "Optional style: line -> 'area'/'smooth'/"
                                              "'stepped'; bar -> 'horizontal'/'grouped'/"
                                              "'stacked'; pie -> 'donut'."},
+                    "x_label": {"type": "string",
+                                "description": "Human x-axis label (e.g. 'Month')."},
+                    "y_label": {"type": "string",
+                                "description": "Human y-axis label (e.g. 'Revenue')."},
+                    "unit": {"type": "string",
+                             "description": "Unit of the values (e.g. 'EUR', '%')."},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the chart "
+                                                   "shows (scope, period, scenario)."},
                 },
                 "required": ["chart_type", "x", "y"],
             },
@@ -432,7 +476,12 @@ def build_tool_specs(caps):
                 "show a table."),
             "parameters": {
                 "type": "object",
-                "properties": {"title": {"type": "string"}},
+                "properties": {
+                    "title": {"type": "string"},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the table "
+                                                   "shows (scope, period, scenario)."},
+                },
                 "required": [],
             },
         },
@@ -460,6 +509,11 @@ def build_tool_specs(caps):
                               "description": "Optional column with the absolute variation."},
                     "delta_pct": {"type": "string",
                                   "description": "Optional column with the % variation."},
+                    "unit": {"type": "string",
+                             "description": "Unit of the figure (e.g. 'EUR', '%')."},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the figure "
+                                                   "represents (scope, period, scenario)."},
                 },
                 "required": ["label", "value"],
             },
@@ -1041,15 +1095,32 @@ def _strip_context_block(text):
 # screen-explanation answers are never forced to call a tool.
 _LEADIN_RE = re.compile(
     r"(?i)("
-    r"\bje (vais|récupère|recupere|rajoute|regarde|consulte|cherche|prépare|prepare|extrais|sors|charge)\b|"
-    r"\bj'(ajoute|extrais)\b|"
-    r"\blet me (pull|get|fetch|check|look|add|compute|grab|see|run)\b|"
-    r"\bi'?ll (pull|get|fetch|check|look|add|compute|grab|run)\b|"
-    r"\bi'?m going to (pull|get|fetch|check|look|add|run)\b|"
-    r"\blet'?s (look|check|pull|see|run)\b|"
+    # French first-person cues: only FORWARD-LOOKING fetch/start verbs. Analysis
+    # verbs (calcule/analyse/compare/verifie...) are excluded on purpose - they
+    # are natural in FINISHED analytical prose ("Si je compare 2025 et 2026, le
+    # revenu progresse de 12 %") and would misclassify real answers.
+    r"\bje (vais|récupère|recupere|rajoute|regarde|consulte|cherche|prépare|prepare|"
+    r"extrais|sors|charge|commence|démarre|demarre|lance|appelle|interroge|contacte|"
+    r"demande|collecte|explore)\b|"
+    r"\bj'(ajoute|extrais|interroge|appelle|explore)\b|"
+    r"\blet me (pull|get|fetch|check|look|add|compute|grab|see|run|start|ask|query|"
+    r"call|build|create|chart|show)\b|"
+    r"\bi'?ll (pull|get|fetch|check|look|add|compute|grab|run|ask|call|query|start|"
+    r"build|create|chart|show|now)\b|"
+    r"\bi (will|shall) (pull|get|fetch|check|look|add|compute|run|ask|call|query|"
+    r"start|build|create|chart|show|now)\b|"
+    r"\bi'?m going to (pull|get|fetch|check|look|add|run|ask|call|query|build|"
+    r"create|show)\b|"
+    r"\blet'?s (look|check|pull|see|run|start|ask|query)\b|"
+    r"\bstarting (by|with)\b|"
+    # Bare gerunds: only the unambiguous progress ones (the analysis gerunds -
+    # analyzing/asking/building... - appear in finished answers and questions).
     r"\b(fetching|pulling|loading|retrieving|gathering|querying|checking)\b|"
     r"\bone moment\b|\bun instant\b"
     r")")
+# How many times per run the model gets nudged after a premature stop before we
+# give up and ship its text (each nudge costs one extra LLM call, so keep it low).
+_MAX_NUDGES = 2
 # Nudge injected once when a premature stop is detected (instruction to the model;
 # kept bilingual so it never bleeds a stray language into the model's context).
 _NUDGE_MSG = {
@@ -1070,7 +1141,11 @@ def _looks_like_premature_stop(text):
     is NOT enough on its own (a stylistic '…' must not trigger a nudge), and long
     declarative answers (a real on-screen explanation) are never premature."""
     t = (text or "").strip()
-    if not t or len(t) > 240:
+    if not t or len(t) > 480:
+        return False
+    # A question is a legitimate terminal turn (clarification relay, rule 5) -
+    # never nudge it, whatever verbs it happens to contain.
+    if "?" in t:
         return False
     if not staffed_domains():
         return False
@@ -1144,6 +1219,14 @@ PERSONA = (
     "fits - `show_chart` (you pick line/bar/pie + the x and y columns), "
     "`show_table` (a list/ranking), or `show_kpi` (one headline figure, with a "
     "delta if present) - then write the analysis. Pick freely what reads best.\n"
+    "- You MAY render SEVERAL artifacts in one turn when it genuinely helps: "
+    "one chart per scenario (e.g. an ACTUALS chart and a BUDGET chart), or a "
+    "chart plus a table/KPI. Every artifact reads the LATEST specialist result, "
+    "so ask for ALL the series in ONE task, then split them across charts via "
+    "the y columns.\n"
+    "- Make every chart self-explanatory: clear title, x_label and y_label, the "
+    "unit (e.g. EUR), and a one-sentence description of what it shows (scope, "
+    "period, scenario). Mention missing data or limits in your text.\n"
     "- Your prose REFERENCES the artifact ('the chart shows…') and gives the "
     "INSIGHT - the trend, the outlier, the key figure, the 'so what'. Spend your "
     "effort on the ANALYSIS, not on repeating numbers. A single figure / one-line "
@@ -1223,7 +1306,10 @@ def build_system_prompt(caps, lang_hint, narrate=True):
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
         "figure EXACT, in the user's language - comment on the artifact and give "
-        "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
+        "the INSIGHT (trend, key figure, the so-what). Never reprint a table. "
+        "Several artifacts are fine when they genuinely help (e.g. one chart per "
+        "scenario); fill title / x_label / y_label / unit / description so each "
+        "chart stands on its own.\n"
         "5. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user - do not invent an answer.\n")
     # Live narration is a SEPARATE instruction, enabled only for capable models
@@ -1234,13 +1320,27 @@ def build_system_prompt(caps, lang_hint, narrate=True):
     if narrate:
         parts.append(
             "\n# NARRATE AS YOU GO (live progress, SAVED as part of your reply)\n"
-            "Right before you call a tool, write ONE short, natural sentence in the "
-            "user's language saying what you're about to do ('Let me pull EVPL revenue, "
-            "actuals vs budget…'). It MUST come TOGETHER WITH the tool call on the SAME "
-            "turn - NEVER the sentence alone (a sentence with no tool call is the FAILURE "
-            "from rule 1). Keep these progress lines brief and human; don't narrate "
-            "trivial steps. When the data comes back, continue the SAME message into "
-            "your analysis - do not repeat the lead-in.\n")
+            "Work like a transparent analyst: right before EACH tool call, write ONE "
+            "short, natural sentence in the user's language saying what you're about "
+            "to do and why ('Let me pull EVPL revenue, actuals vs budget…'). It MUST "
+            "come TOGETHER WITH the tool call on the SAME turn - NEVER the sentence "
+            "alone (a sentence with no tool call is the FAILURE from rule 1). Do it at "
+            "EVERY phase: announce the specialist call; then, once its data is back, "
+            "announce what you'll render and why it fits ('The monthly figures are in "
+            "- I'll chart ACTUALS and BUDGET separately…') together with the "
+            "show_chart/show_table/show_kpi call(s). Keep these progress lines brief "
+            "and human; don't narrate trivial steps. When the data comes back, "
+            "continue the SAME message into your analysis - do not repeat the "
+            "lead-in.\n")
+    else:
+        parts.append(
+            "\n# PROGRESS NOTES (tell_user)\n"
+            "Before a SLOW tool call (a specialist), ALSO call `tell_user` with ONE "
+            "short sentence in the user's language saying what you are doing ('Je "
+            "récupère les revenus du client A…') - in the SAME turn as the real "
+            "call. The note shows instantly and does NOT end your turn. Never call "
+            "tell_user alone (the announced tool call must be in the same turn), "
+            "and never use it for the final answer.\n")
     # Re-state the reply language LAST (recency slot of the system message). The
     # backend also appends it at the end of the user's message; both anchor it.
     lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
@@ -1265,11 +1365,12 @@ class OrchState(TypedDict, total=False):
     statuses: Annotated[list, operator.add]        # sub-agent AGENT_RESULT statuses
     used_caps: Annotated[list, _add_unique]        # capability keys consulted
     latest: dict                                   # {columns, rows} last result w/ rows
+    latest_sql_id: str                             # sql_id backing 'latest' (artifact binding)
     preamble: str                                  # model's own lead-in for this turn's tools
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
-    nudged: bool                                   # narrate-and-stop nudge spent (once/run)
+    nudged: int                                    # narrate-and-stop nudges spent (max _MAX_NUDGES/run)
 
 
 # =============================================================================
@@ -1550,9 +1651,21 @@ class MyLLM(BaseLLM):
         def resolve(col):
             return lower.get(str(col).lower())
 
+        def annotate(artifact):
+            # Optional presentation metadata + the sql_id of the result the
+            # artifact renders (per-artifact Evidence binding). Purely additive:
+            # absent fields keep the historical spec byte-identical.
+            desc = args.get("description")
+            if isinstance(desc, str) and desc.strip():
+                artifact["description"] = desc.strip()[:280]
+            sql_id = state.get("latest_sql_id")
+            if isinstance(sql_id, str) and sql_id:
+                artifact["sql_id"] = sql_id
+            return artifact
+
         if name == "show_table":
             title = str(args.get("title") or "")[:200]
-            return ({"kind": "table", "title": title, "chart": None},
+            return (annotate({"kind": "table", "title": title, "chart": None}),
                     "A table of the latest result is now shown in the side "
                     "panel. Comment on it; do not repeat all the rows.")
         if name == "show_kpi":
@@ -1567,7 +1680,11 @@ class MyLLM(BaseLLM):
             delta_pct = resolve(args.get("delta_pct"))
             if delta_pct:
                 kpi["delta_pct"] = delta_pct
-            return ({"kind": "kpi", "title": kpi["label"], "chart": None, "kpi": kpi},
+            unit = args.get("unit")
+            if isinstance(unit, str) and unit.strip():
+                kpi["unit"] = unit.strip()[:16]
+            return (annotate({"kind": "kpi", "title": kpi["label"], "chart": None,
+                              "kpi": kpi}),
                     "A KPI card for '%s' is now shown in the side panel. State "
                     "the figure in one short sentence." % value)
         # show_chart
@@ -1587,7 +1704,11 @@ class MyLLM(BaseLLM):
         style = args.get("style")
         if isinstance(style, str) and style.strip():
             chart["style"] = style.strip()[:24]
-        return ({"kind": "chart", "title": title, "chart": chart},
+        for key, cap in (("x_label", 80), ("y_label", 80), ("unit", 16)):
+            v = args.get(key)
+            if isinstance(v, str) and v.strip():
+                chart[key] = v.strip()[:cap]
+        return (annotate({"kind": "chart", "title": title, "chart": chart}),
                 "A %s chart of the latest result is now shown in the side "
                 "panel. Comment on what it reveals; do not repeat the rows."
                 % ctype)
@@ -1619,19 +1740,20 @@ class MyLLM(BaseLLM):
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
-            # Narrate-and-stop guard (ONCE per RUN, model-agnostic): the model wrote a
+            # Narrate-and-stop guard (model-agnostic): the model wrote a
             # forward-looking lead-in that PROMISES a data action ("je rajoute le
             # forecast…") but emitted NO tool call. That is a premature stop, not an
-            # answer - nudge once and re-ask so the promise actually triggers the fetch.
-            # Gated by a per-run `nudged` flag (not "before any specialist"), so it also
+            # answer - nudge and re-ask so the promise actually triggers the fetch.
+            # Gated by a per-run counter (not "before any specialist"), so it also
             # catches a narrate-and-stop on a FOLLOW-UP turn after a sub-agent already
-            # ran. Bounded to one extra call total (no loop risk).
-            nudged = bool(state.get("nudged"))
-            if not tcs and not nudged and _looks_like_premature_stop(text):
+            # ran. Bounded to _MAX_NUDGES extra calls per run (no loop risk: small
+            # models sometimes re-promise once before finally acting).
+            nudged = int(state.get("nudged") or 0)
+            while not tcs and nudged < _MAX_NUDGES and _looks_like_premature_stop(text):
                 if text:
                     chat.add_message(text, role="assistant")
                 chat.add_message(_NUDGE_MSG.get(lang, _NUDGE_MSG["en"]), role="user")
-                nudged = True
+                nudged += 1
                 writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
                 resp = _run_llm()
                 usage = _sum_usage(usage, _usage_from_resp(resp))
@@ -1697,8 +1819,37 @@ class MyLLM(BaseLLM):
                        "statuses": [], "used_caps": [], "pending_tool_calls": []}
             base_step = state.get("step", 1)
 
+            # --- progress notes FIRST (smart mode) ---
+            # tell_user notes stream BEFORE the slow specialist calls so the user
+            # reads "what I'm doing" while the work actually runs. The note is
+            # persisted REAL answer text (same channel as the pro/claude lead-in);
+            # the ack pushes the model to follow through with the announced call.
+            notes_shown = 0
+            note_calls = [c for c in local_calls if c[1] == PROGRESS_TOOL_NAME]
+            local_calls = [c for c in local_calls if c[1] != PROGRESS_TOOL_NAME]
+            for (tc, name, args) in note_calls:
+                msg = str(args.get("message") or "").strip()[:300]
+                if msg and notes_shown < MAX_PROGRESS_NOTES_PER_BATCH:
+                    writer(_txt(msg + "\n\n"))
+                    notes_shown += 1
+                    _pair("Shown to the user. Now IMMEDIATELY make the tool call "
+                          "you announced - never end the run on a note.", tc.get("id"))
+                else:
+                    _pair("Note skipped (limit reached or empty). Proceed with the "
+                          "real tool call now.", tc.get("id"))
+            if notes_shown:
+                # The model just narrated through the tool - the deterministic
+                # ticker fillers would double it.
+                model_narrated = True
+
             # --- specialists (parallel when more than one) ---
             if sub_calls:
+                # A fan-out consumes step indices base_step..base_step+N-1 (each
+                # specialist's sql_id is derived from its index). Advance the
+                # step PAST the consumed range so the next turn can never reuse
+                # an index - sql_id must stay unique within the exchange (the
+                # per-artifact Evidence binding is keyed on it).
+                updates["step"] = base_step + len(sub_calls)
                 results = self._run_subagents(project, trace, sub_calls,
                                               context_msg, lang, base_step, writer,
                                               model_narrated)
@@ -1720,6 +1871,16 @@ class MyLLM(BaseLLM):
                     updates["used_caps"].append(cap_key)
                     if result and result.get("rows"):
                         updates["latest"] = result
+                        # Remember WHICH captured SQL backs this result so the
+                        # artifacts rendered from it can carry the reference
+                        # (per-artifact Evidence data binding). The specialist
+                        # attaches the captured rows to its LAST SQL item.
+                        sid = None
+                        for it in reversed(res.get("sql_items") or []):
+                            if it.get("result") and it.get("sql_id"):
+                                sid = it.get("sql_id")
+                                break
+                        updates["latest_sql_id"] = sid
 
             # --- local presentation / utility tools ---
             for (tc, name, args) in local_calls:
@@ -1743,6 +1904,8 @@ class MyLLM(BaseLLM):
                             "kind": akind, "title": artifact.get("title", ""),
                             "chart": artifact.get("chart"),
                             "kpi": artifact.get("kpi"),
+                            "description": artifact.get("description", ""),
+                            "sql_id": artifact.get("sql_id"),
                             "label": _L["artifact_%s" % akind][lang]}))
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok" if artifact else "skipped",
@@ -1806,6 +1969,7 @@ class MyLLM(BaseLLM):
             rendered = list(state.get("rendered") or [])
             if state.get("used_caps") and not rendered and len(rows) >= 2:
                 writer(_ev("ARTIFACT", {"kind": "table", "title": "", "chart": None,
+                                        "sql_id": state.get("latest_sql_id"),
                                         "label": _L["artifact_table"][lang]}))
                 rendered.append("table")
             if state.get("used_caps"):
@@ -1983,8 +2147,12 @@ class MyLLM(BaseLLM):
             loop_llm = pick_loop_llm(mode)
             system_prompt = build_system_prompt(self._caps, lang,
                                                 narrate=narration_enabled(mode))
+            # smart narrates through the tell_user TOOL (turn-safe on the mini
+            # model); pro/claude narrate in plain text and do not get the tool.
+            tool_specs = (list(self._tool_specs) if narration_enabled(mode)
+                          else list(self._tool_specs) + [PROGRESS_TOOL_SPEC])
             chat = self._new_chat(project, system_prompt, history, loop_llm,
-                                  self._tool_specs)
+                                  tool_specs)
             # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
             # authoritative reply language so the specialist writes any clarification /
             # no-data / out-of-scope message in the user's language (it no longer

@@ -63,6 +63,7 @@ from owismind.evidence.service import (  # noqa: E402
     effective_where_complete,
     has_captured_result,
     item_matches_candidates,
+    results_by_sql_map,
     matched_source_tables,
     source_url_for_run,
     with_source_urls,
@@ -521,6 +522,37 @@ class DrillConditionsTests(unittest.TestCase):
 
     def test_empty_drill_renders_nothing(self):
         self.assertEqual(self._render([]), [])
+
+
+class TestResultsBySqlMap(unittest.TestCase):
+    """Per-artifact binding map: captured + UNAMBIGUOUS sql_ids only."""
+
+    def _item(self, sql_id, cols=("a",), rows=(("1",),)):
+        return {"sql": "SELECT 1", "success": True, "sql_id": sql_id,
+                "result": {"columns": list(cols), "rows": [list(r) for r in rows]}}
+
+    def test_maps_captured_items_by_sql_id(self):
+        out = results_by_sql_map([self._item("s1q1"), self._item("s2q1")])
+        self.assertEqual(set(out.keys()), {"s1q1", "s2q1"})
+        self.assertTrue(out["s1q1"]["captured"])
+
+    def test_excludes_items_without_capture_or_id(self):
+        no_result = {"sql": "SELECT 1", "success": True, "sql_id": "s3q1"}
+        no_id = self._item(None)
+        out = results_by_sql_map([no_result, no_id, self._item("s1q1")])
+        self.assertEqual(set(out.keys()), {"s1q1"})
+
+    def test_excludes_ambiguous_duplicate_ids_entirely(self):
+        # Two items share the same sql_id (historical fan-out collision): the
+        # binding must degrade honestly, never pick one of the duplicates.
+        out = results_by_sql_map(
+            [self._item("s2q1", cols=("m",)), self._item("s2q1", cols=("n",)),
+             self._item("s5q1")])
+        self.assertEqual(set(out.keys()), {"s5q1"})
+
+    def test_empty_and_malformed_inputs(self):
+        self.assertEqual(results_by_sql_map(None), {})
+        self.assertEqual(results_by_sql_map(["junk", 42]), {})
 
 
 if __name__ == "__main__":

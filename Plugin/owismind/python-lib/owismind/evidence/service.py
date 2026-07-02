@@ -325,6 +325,30 @@ def has_captured_result(item):
             and isinstance(result.get("rows"), list))
 
 
+def results_by_sql_map(items):
+    """``{sql_id: result_block}`` for per-artifact data binding. Pure.
+
+    Only items with a captured result AND an UNAMBIGUOUS sql_id qualify: a
+    sql_id that appears more than once in the exchange (possible on historical
+    exchanges written before step indices were made fan-out-unique) is excluded
+    entirely, so a stamped artifact degrades to an honest empty payload instead
+    of silently binding to whichever duplicate won.
+    """
+    counts = {}
+    for it in items or []:
+        sid = it.get("sql_id") if isinstance(it, dict) else None
+        if isinstance(sid, str) and sid:
+            counts[sid] = counts.get(sid, 0) + 1
+    return {
+        it["sql_id"]: build_result_block(it)
+        for it in items or []
+        if isinstance(it, dict)
+        and isinstance(it.get("sql_id"), str) and it.get("sql_id")
+        and counts.get(it["sql_id"]) == 1
+        and has_captured_result(it)
+    }
+
+
 def build_result_block(item):
     """The ``result`` block of /evidence/meta for the ACTIVE item (§2). Pure.
 
@@ -1018,6 +1042,13 @@ def evidence_meta(user_id, exchange_id):
         "verification": verification,
         "explanation": build_explanation(explain),
         "result": result_block,
+        # Result block per captured SQL id, for PER-ARTIFACT data binding: an
+        # artifact stamped with a sql_id renders THAT query's rows instead of
+        # the exchange-level active result. Server-internal: the route consumes
+        # it to build the chart/kpi payloads and pops it before responding.
+        # Bounded: only items that actually captured rows appear (a turn keeps
+        # at most one captured result per specialist call).
+        "results_by_sql": results_by_sql_map(ctx["items"]),
         "drilldown": drilldown,
     }
 

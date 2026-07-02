@@ -86,14 +86,17 @@ const tabItems = computed(() => {
 // Show the tab bar only when there are extra tabs beyond 'evidence'.
 const showTabs = computed(() => tabItems.value.length > 1)
 
-// The active chart artifact spec (for the 'chart' tab): first chart artifact.
-const chartArtifact = computed(() =>
-  artifacts.value.find((a) => a.kind === 'chart') || null,
-)
+// ALL chart artifacts (the 'chart' tab stacks them: a turn may render one
+// chart per scenario, each with its own server-built data payload).
+const chartArtifacts = computed(() => artifacts.value.filter((a) => a.kind === 'chart'))
 
-// The active KPI artifact spec (for the 'kpi' tab): first kpi artifact.
-const kpiArtifact = computed(() =>
-  artifacts.value.find((a) => a.kind === 'kpi') || null,
+// ALL KPI artifacts (the 'kpi' tab stacks the cards).
+const kpiArtifacts = computed(() => artifacts.value.filter((a) => a.kind === 'kpi'))
+
+// The table artifact spec (first one): the table tab renders meta.result, the
+// spec only contributes its optional title / description caption.
+const tableArtifact = computed(() =>
+  artifacts.value.find((a) => a.kind === 'table') || null,
 )
 
 // Active tab model - bound to the store so it resets correctly on exchange change.
@@ -147,25 +150,41 @@ const activeTab = computed({
       </template>
       <template v-else-if="meta">
         <!-- ── KPI TAB ────────────────────────────────────────────────────── -->
-        <template v-if="activeTab === 'kpi' && kpiArtifact">
-          <ArtifactKpi
-            :data="kpiArtifact.data || null"
-            :title="kpiArtifact.title || ''"
-          />
+        <template v-if="activeTab === 'kpi' && kpiArtifacts.length">
+          <div class="art-stack">
+            <ArtifactKpi
+              v-for="(art, i) in kpiArtifacts"
+              :key="'kpi-' + i"
+              :data="art.data || null"
+              :title="art.title || ''"
+              :unit="(art.kpi && art.kpi.unit) || ''"
+              :description="art.description || ''"
+            />
+          </div>
         </template>
 
         <!-- ── CHART TAB ──────────────────────────────────────────────────── -->
-        <template v-else-if="activeTab === 'chart' && chartArtifact">
-          <ArtifactChart
-            :chart="chartArtifact.chart"
-            :data="chartArtifact.data || null"
-            :title="chartArtifact.title || ''"
-          />
+        <template v-else-if="activeTab === 'chart' && chartArtifacts.length">
+          <div class="art-stack">
+            <ArtifactChart
+              v-for="(art, i) in chartArtifacts"
+              :key="'chart-' + i"
+              :chart="art.chart"
+              :data="art.data || null"
+              :title="art.title || ''"
+              :description="art.description || ''"
+            />
+          </div>
         </template>
 
         <!-- ── TABLE TAB ──────────────────────────────────────────────────── -->
+        <!-- A bound table artifact carries its own result block (data); the
+             legacy/unbound case falls back to the exchange-level meta.result. -->
         <template v-else-if="activeTab === 'table'">
-          <ArtifactTable :result="meta.result || null" />
+          <ArtifactTable
+            :result="(tableArtifact && tableArtifact.data) || meta.result || null"
+            :description="(tableArtifact && tableArtifact.description) || ''"
+          />
         </template>
 
         <!-- ── EVIDENCE TAB (default) ────────────────────────────────────── -->
@@ -218,6 +237,12 @@ const activeTab = computed({
 .ev-tabs {
   padding: 0 var(--s-5);
   flex: none;
+}
+/* Vertical stack of artifacts of one kind (several charts / KPI cards). */
+.art-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
 }
 .ev-head { animation: ev-rise var(--dur-slow) var(--ease) both; }
 .ev-body > * { animation: ev-rise var(--dur-slow) var(--ease) both; }

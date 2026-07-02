@@ -72,7 +72,8 @@ class TestSanitize(unittest.TestCase):
         self.assertEqual(artifacts._sanitize([{"kind": "map"}]), [])
 
     def test_cap(self):
-        many = [{"kind": "table"} for _ in range(50)]
+        # Distinct titles: identical specs would be deduplicated before the cap.
+        many = [{"kind": "table", "title": "T%d" % i} for i in range(50)]
         self.assertEqual(len(artifacts._sanitize(many)), artifacts.MAX_ARTIFACTS)
 
     def test_title_bounded(self):
@@ -127,6 +128,76 @@ class TestKpiArtifact(unittest.TestCase):
     def test_normalized_kpi_rejected_without_value(self):
         self.assertIsNone(streaming._normalized_artifact_event(
             {"kind": "kpi", "kpi": {"label": "L"}}))
+
+
+class TestArtifactMetadata(unittest.TestCase):
+    """description / sql_id / axis labels / unit: additive, bounded, optional."""
+
+    def test_sanitize_keeps_metadata(self):
+        out = artifacts._sanitize([
+            {"kind": "chart", "title": "T", "description": " What it shows. ",
+             "sql_id": "s1q2",
+             "chart": {"type": "line", "x": "month", "y": ["rev"],
+                       "x_label": "Month", "y_label": "Revenue", "unit": "EUR"}}])
+        self.assertEqual(out[0]["description"], "What it shows.")
+        self.assertEqual(out[0]["sql_id"], "s1q2")
+        self.assertEqual(out[0]["chart"]["x_label"], "Month")
+        self.assertEqual(out[0]["chart"]["y_label"], "Revenue")
+        self.assertEqual(out[0]["chart"]["unit"], "EUR")
+
+    def test_sanitize_bounds_metadata(self):
+        out = artifacts._sanitize([
+            {"kind": "table", "description": "d" * 999, "sql_id": "i" * 999}])
+        self.assertLessEqual(len(out[0]["description"]), 280)
+        self.assertLessEqual(len(out[0]["sql_id"]), 64)
+
+    def test_sanitize_drops_non_string_metadata(self):
+        out = artifacts._sanitize([
+            {"kind": "table", "description": 42, "sql_id": ["x"]}])
+        self.assertNotIn("description", out[0])
+        self.assertNotIn("sql_id", out[0])
+
+    def test_sanitize_absent_metadata_keeps_legacy_shape(self):
+        out = artifacts._sanitize([{"kind": "table", "title": "All"}])
+        self.assertEqual(set(out[0].keys()), {"kind", "title", "chart"})
+
+    def test_sanitize_kpi_unit(self):
+        out = artifacts._sanitize([
+            {"kind": "kpi", "kpi": {"label": "L", "value": "V", "unit": "EUR"}}])
+        self.assertEqual(out[0]["kpi"]["unit"], "EUR")
+
+    def test_sanitize_drops_exact_duplicates(self):
+        chart = {"kind": "chart", "title": "T",
+                 "chart": {"type": "line", "x": "m", "y": ["v"]}}
+        out = artifacts._sanitize([chart, dict(chart), {"kind": "table"}])
+        self.assertEqual([a["kind"] for a in out], ["chart", "table"])
+
+    def test_sanitize_keeps_distinct_charts(self):
+        a = {"kind": "chart", "title": "ACTUALS",
+             "chart": {"type": "line", "x": "m", "y": ["a"]}}
+        b = {"kind": "chart", "title": "BUDGET",
+             "chart": {"type": "line", "x": "m", "y": ["b"]}}
+        self.assertEqual(len(artifacts._sanitize([a, b])), 2)
+
+    def test_normalized_event_keeps_metadata(self):
+        ev = streaming._normalized_artifact_event(
+            {"kind": "chart", "title": "T", "description": "Scope line.",
+             "sql_id": "s2q1",
+             "chart": {"type": "bar", "x": "p", "y": ["v"],
+                       "x_label": "Product", "y_label": "Revenue", "unit": "EUR"}})
+        self.assertEqual(ev["description"], "Scope line.")
+        self.assertEqual(ev["sql_id"], "s2q1")
+        self.assertEqual(ev["chart"]["x_label"], "Product")
+        self.assertEqual(ev["chart"]["unit"], "EUR")
+
+    def test_normalized_event_kpi_unit(self):
+        ev = streaming._normalized_artifact_event(
+            {"kind": "kpi", "kpi": {"label": "L", "value": "V", "unit": "%"}})
+        self.assertEqual(ev["kpi"]["unit"], "%")
+
+    def test_normalized_event_absent_metadata_keeps_legacy_shape(self):
+        ev = streaming._normalized_artifact_event({"kind": "table", "title": "T"})
+        self.assertEqual(set(ev.keys()), {"type", "kind", "title", "chart"})
 
 
 if __name__ == "__main__":

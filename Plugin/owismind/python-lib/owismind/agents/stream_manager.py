@@ -395,6 +395,10 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                     }
                     if event.get("kpi") is not None:
                         spec["kpi"] = event.get("kpi")
+                    # Optional metadata + per-artifact SQL binding (additive).
+                    for key in ("description", "sql_id"):
+                        if event.get(key) is not None:
+                            spec[key] = event.get(key)
                     artifacts.append(spec)
                 continue
             elif etype == "trace":

@@ -153,6 +153,15 @@ def _normalized_artifact_event(event_data):
         return None
     out = {"type": "artifact", "kind": kind,
            "title": str(event_data.get("title") or "")[:200]}
+    # Optional presentation metadata + the id of the captured SQL whose result
+    # the artifact renders (per-artifact Evidence binding). Additive: absent on
+    # pre-metadata runs, so historical events keep their exact shape.
+    description = event_data.get("description")
+    if isinstance(description, str) and description.strip():
+        out["description"] = description.strip()[:280]
+    sql_id = event_data.get("sql_id")
+    if isinstance(sql_id, str) and sql_id:
+        out["sql_id"] = sql_id[:64]
     if kind == "chart":
         chart = event_data.get("chart")
         if not isinstance(chart, dict):
@@ -173,6 +182,10 @@ def _normalized_artifact_event(event_data):
         style = chart.get("style")
         if isinstance(style, str) and style.strip():
             chart_out["style"] = style.strip()[:24]
+        for key, cap in (("x_label", 80), ("y_label", 80), ("unit", 16)):
+            v = chart.get(key)
+            if isinstance(v, str) and v.strip():
+                chart_out[key] = v.strip()[:cap]
         out["chart"] = chart_out
     elif kind == "kpi":
         kpi = event_data.get("kpi")
@@ -184,6 +197,9 @@ def _normalized_artifact_event(event_data):
             v = kpi.get(key)
             if isinstance(v, str) and v:
                 kpi_out[key] = v[:128]
+        unit = kpi.get("unit")
+        if isinstance(unit, str) and unit.strip():
+            kpi_out["unit"] = unit.strip()[:16]
         out["chart"] = None
         out["kpi"] = kpi_out
     else:

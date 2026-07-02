@@ -13,6 +13,10 @@ const props = defineProps({
   // Server-built payload: { ok, label, value, value_raw, delta?, delta_pct?, reason }
   data: { type: Object, default: null },
   title: { type: String, default: '' },
+  // Agent-provided unit of the figure (e.g. 'EUR', '%'), shown after the value.
+  unit: { type: String, default: '' },
+  // Agent-provided one-sentence caption (what the figure represents).
+  description: { type: String, default: '' },
 })
 
 const ok = computed(() => !!(props.data && props.data.ok))
@@ -59,13 +63,16 @@ const deltaText = computed(() => {
     </div>
     <div v-else class="kpi-card">
       <span class="kpi-label">{{ label }}</span>
-      <span class="kpi-value">{{ valueText }}</span>
+      <span class="kpi-value">
+        {{ valueText }}<span v-if="unit" class="kpi-unit">{{ ' ' + unit }}</span>
+      </span>
       <span v-if="hasDelta" class="kpi-delta" :class="deltaSign">
         <span class="kpi-arrow" aria-hidden="true">
           {{ deltaSign === 'up' ? '▲' : deltaSign === 'down' ? '▼' : '▬' }}
         </span>
         {{ deltaText }}
       </span>
+      <span v-if="description" class="kpi-desc">{{ description }}</span>
     </div>
   </div>
 </template>
@@ -106,6 +113,8 @@ const deltaText = computed(() => {
   border-radius: var(--r-pill);
 }
 .kpi-arrow { font-size: 10px; }
+.kpi-unit { font-size: 20px; font-weight: 600; color: var(--text-2); }
+.kpi-desc { font-size: var(--fs-sm); color: var(--text-2); }
 .kpi-delta.up { color: var(--success, #10b981); background: rgba(16, 185, 129, 0.12); }
 .kpi-delta.down { color: var(--danger, #ef4444); background: rgba(239, 68, 68, 0.12); }
 .kpi-delta.flat { color: var(--text-3); background: var(--surface-2); }

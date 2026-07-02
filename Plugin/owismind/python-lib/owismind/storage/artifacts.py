@@ -50,6 +50,7 @@ def _sanitize(artifacts):
     keeps {type, x, y[]}; a table keeps no chart block; a KPI keeps {value[,delta,
     delta_pct]}. Pure, never raises."""
     out = []
+    seen = set()
     for a in artifacts or []:
         if not isinstance(a, dict):
             continue
@@ -57,6 +58,14 @@ def _sanitize(artifacts):
         if kind not in _ARTIFACT_KINDS:
             continue
         spec = {"kind": kind, "title": str(a.get("title") or "")[:200]}
+        # Optional metadata + the captured-SQL id the artifact renders (additive:
+        # absent fields are simply not stored, keeping historical rows unchanged).
+        description = a.get("description")
+        if isinstance(description, str) and description.strip():
+            spec["description"] = description.strip()[:280]
+        sql_id = a.get("sql_id")
+        if isinstance(sql_id, str) and sql_id:
+            spec["sql_id"] = sql_id[:64]
         if kind == "chart":
             chart = a.get("chart")
             if not isinstance(chart, dict):
@@ -77,6 +86,10 @@ def _sanitize(artifacts):
             style = chart.get("style")
             if isinstance(style, str) and style.strip():
                 chart_spec["style"] = style.strip()[:24]
+            for key, cap in (("x_label", 80), ("y_label", 80), ("unit", 16)):
+                v = chart.get(key)
+                if isinstance(v, str) and v.strip():
+                    chart_spec[key] = v.strip()[:cap]
             spec["chart"] = chart_spec
         elif kind == "kpi":
             kpi = a.get("kpi")
@@ -88,10 +101,19 @@ def _sanitize(artifacts):
                 v = kpi.get(key)
                 if isinstance(v, str) and v:
                     kpi_spec[key] = v[:128]
+            unit = kpi.get("unit")
+            if isinstance(unit, str) and unit.strip():
+                kpi_spec["unit"] = unit.strip()[:16]
             spec["chart"] = None
             spec["kpi"] = kpi_spec
         else:
             spec["chart"] = None
+        # Drop exact duplicates: a nudged model can re-emit the same show_chart,
+        # and the panel stacks ALL artifacts - a duplicate would render twice.
+        key = json.dumps(spec, sort_keys=True, ensure_ascii=False)
+        if key in seen:
+            continue
+        seen.add(key)
         out.append(spec)
         if len(out) >= MAX_ARTIFACTS:
             break
