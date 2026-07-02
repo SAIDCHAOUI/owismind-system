@@ -37,7 +37,6 @@ export const extraMessages = {
     'set.budget.src_user_temp': 'Limite mensuelle : {0} (boost temporaire jusqu\'au {1}).',
 
     // Settings - usage detail (this month + lifetime)
-    'set.usage.tokens': 'tokens',
     'set.usage.tokens_month': 'Tokens ce mois',
     'set.usage.spend_month': 'Dépense ce mois',
     'set.usage.lifetime_cost': 'Dépense totale',
@@ -100,11 +99,7 @@ export const extraMessages = {
     'faq.no_results': 'Aucun résultat pour « {0} ».',
 
     // Agents - fallbacks for agents not described in the local registry
-    'ag.generic_tagline': 'Agent IA OWI',
-    'ag.generic_desc':
-      "Cet agent est activé pour votre compte. Sa fiche détaillée n'est pas encore renseignée.",
     'ag.no_agents': "Aucun agent n'est activé pour votre compte. Contactez un administrateur.",
-    'ag.tools_section_empty': 'Aucun outil renseigné.',
 
     // Project - no project API yet
     'pj.coming':
@@ -212,13 +207,11 @@ export const extraMessages = {
     'set.eyebrow': 'Mon compte',
     'set.title': 'Mon compte',
     'sb.settings': 'Mon compte',
-    'sb.account': 'Compte',
 
     // Sidebar - collapsed icon rail (tooltips).
     'sb.expand': 'Déplier le menu',
     'sb.collapse': 'Replier le menu',
     'rail.new': 'Nouvelle conversation',
-    'rail.chat': 'Conversations',
     'rail.agents': 'Agents',
     'rail.help': 'Aide et support',
     'rail.account': 'Mon compte',
@@ -235,7 +228,6 @@ export const extraMessages = {
     'ag.capabilities': 'Ce que fait cet agent',
     'ag.tools': 'Outils exposés',
     'ag.tools_count': '{0} outil(s)',
-    'ag.new_conv_with': 'Démarrer une conversation',
     'ag.start': 'Démarrer une conversation',
     'ag.open': 'Voir la fiche',
     'ag.badge.default': 'Par défaut',
@@ -296,9 +288,6 @@ export const extraMessages = {
     'ev.filters.remove': 'Retirer ce filtre',
     'ev.modified': 'Filtres modifiés',
     'ev.table.empty': 'Aucune ligne ne correspond aux filtres.',
-    'ev.table.page': 'Page {0}',
-    'ev.table.prev': 'Page précédente',
-    'ev.table.next': 'Page suivante',
     'ev.table.source': 'Table source',
     'ev.table.loaded': '{0} ligne(s) chargée(s)',
     'ev.table.more': 'Faites défiler pour charger plus',
@@ -317,7 +306,6 @@ export const extraMessages = {
     'ev.picker.truncated': 'Premières {0} valeurs distinctes',
     'ev.picker.max': 'Maximum {0} valeurs par filtre',
     'ev.picker.apply': 'Appliquer',
-    'ev.column': 'Colonne…',
 
     // - Evidence trust layer (v2) - proof levels, sources, calc steps, result, drill.
     // Badge wording is deliberately CAUTIOUS (honesty rules, spec §9): "certifié"
@@ -468,8 +456,6 @@ export const extraMessages = {
     'msg.suggest_benchmark': 'Suggérer pour le benchmark',
     'bench.eyebrow': 'Benchmark',
     'bench.title': 'Suggérer une question de test',
-    'bench.desc':
-      "Aidez-nous à évaluer les agents : proposez une question avec la bonne réponse que vous connaissez. Vos suggestions alimentent les prochains benchmarks qui mesurent la justesse des agents.",
     // From-chat suggestion (pre-filled from an answer)
     'bench.modal.title': 'Suggérer cette question pour le benchmark',
     'bench.modal.intro':
@@ -543,7 +529,6 @@ export const extraMessages = {
       'Les résultats ont été lus en mode dégradé : certaines informations peuvent manquer.',
     'bench.consult.load_error': 'Impossible de charger les résultats du benchmark.',
     'bench.consult.no_results': "Aucun résultat de benchmark pour cet agent pour l'instant.",
-    'bench.consult.run_label': 'Exécution',
     'bench.consult.hero': '{0} réponses correctes sur {1}',
 
     // KPI tiles
@@ -705,7 +690,6 @@ export const extraMessages = {
     'src.filters.add': 'Ajouter un filtre',
     'src.filters.clear': 'Tout effacer',
     'src.filters.remove': 'Retirer ce filtre',
-    'src.column': 'Colonne…',
     'src.picker.empty': 'Aucune valeur disponible.',
     'src.picker.truncated': 'Premières {0} valeurs distinctes',
     'src.picker.max': 'Maximum {0} valeurs par filtre',
@@ -774,7 +758,6 @@ export const extraMessages = {
     'set.budget.src_user_temp': 'Monthly limit: {0} (temporary boost until {1}).',
 
     // Settings - usage detail (this month + lifetime)
-    'set.usage.tokens': 'tokens',
     'set.usage.tokens_month': 'Tokens this month',
     'set.usage.spend_month': 'Spend this month',
     'set.usage.lifetime_cost': 'Lifetime spend',
@@ -837,11 +820,7 @@ export const extraMessages = {
     'faq.no_results': 'No result for "{0}".',
 
     // Agents - fallbacks for agents not described in the local registry
-    'ag.generic_tagline': 'OWI AI agent',
-    'ag.generic_desc':
-      'This agent is enabled for your account. Its detailed profile is not documented yet.',
     'ag.no_agents': 'No agent is enabled for your account. Please contact an administrator.',
-    'ag.tools_section_empty': 'No tools documented.',
 
     // Project - no project API yet
     'pj.coming':
@@ -949,13 +928,11 @@ export const extraMessages = {
     'set.eyebrow': 'My account',
     'set.title': 'My account',
     'sb.settings': 'My account',
-    'sb.account': 'Account',
 
     // Sidebar - collapsed icon rail (tooltips).
     'sb.expand': 'Expand menu',
     'sb.collapse': 'Collapse menu',
     'rail.new': 'New conversation',
-    'rail.chat': 'Conversations',
     'rail.agents': 'Agents',
     'rail.help': 'Help and support',
     'rail.account': 'My account',
@@ -972,7 +949,6 @@ export const extraMessages = {
     'ag.capabilities': 'What this agent does',
     'ag.tools': 'Exposed tools',
     'ag.tools_count': '{0} tool(s)',
-    'ag.new_conv_with': 'Start a conversation',
     'ag.start': 'Start a conversation',
     'ag.open': 'View profile',
     'ag.badge.default': 'Default',
@@ -1032,9 +1008,6 @@ export const extraMessages = {
     'ev.filters.remove': 'Remove this filter',
     'ev.modified': 'Filters modified',
     'ev.table.empty': 'No row matches the filters.',
-    'ev.table.page': 'Page {0}',
-    'ev.table.prev': 'Previous page',
-    'ev.table.next': 'Next page',
     'ev.table.source': 'Source table',
     'ev.table.loaded': '{0} row(s) loaded',
     'ev.table.more': 'Scroll to load more',
@@ -1053,7 +1026,6 @@ export const extraMessages = {
     'ev.picker.truncated': 'First {0} distinct values',
     'ev.picker.max': 'Up to {0} values per filter',
     'ev.picker.apply': 'Apply',
-    'ev.column': 'Column…',
 
     // - Evidence trust layer (v2) - proof levels, sources, calc steps, result, drill.
     // Badge wording is deliberately CAUTIOUS (honesty rules, spec §9): "certified"
@@ -1203,8 +1175,6 @@ export const extraMessages = {
     'msg.suggest_benchmark': 'Suggest for the benchmark',
     'bench.eyebrow': 'Benchmark',
     'bench.title': 'Suggest a test question',
-    'bench.desc':
-      'Help us evaluate the agents: propose a question with the correct answer you know. Your suggestions feed the next benchmarks that measure how accurate the agents are.',
     // From-chat suggestion (pre-filled from an answer)
     'bench.modal.title': 'Suggest this question for the benchmark',
     'bench.modal.intro':
@@ -1278,7 +1248,6 @@ export const extraMessages = {
       'Results were read in a degraded mode: some information may be missing.',
     'bench.consult.load_error': 'Could not load the benchmark results.',
     'bench.consult.no_results': 'No benchmark results for this agent yet.',
-    'bench.consult.run_label': 'Run',
     'bench.consult.hero': '{0} of {1} answered correctly',
 
     // KPI tiles
@@ -1440,7 +1409,6 @@ export const extraMessages = {
     'src.filters.add': 'Add a filter',
     'src.filters.clear': 'Clear all',
     'src.filters.remove': 'Remove this filter',
-    'src.column': 'Column…',
     'src.picker.empty': 'No value available.',
     'src.picker.truncated': 'First {0} distinct values',
     'src.picker.max': 'At most {0} values per filter',

@@ -94,7 +94,7 @@ traverse jamais vers le front (CLAUDE règle #4, mémoire L017/L018).
 Le `agent_id` résolu reste serveur de bout en bout : passé au worker (`stream_manager.start_run`,
 `routes.py:253-256`), jamais renvoyé au client (le front ne reçoit que le `run_id` opaque,
 `routes.py:264`). La colonne `agent_key` stockée est la **clé logique opaque**, jamais le `agent_id` brut
-(`chat_v4.py:18-20`).
+(`chat_v5.py:18-20`).
 
 ---
 
@@ -134,16 +134,16 @@ règle #3, mémoire L008/L014/L015).
 **Pas de DDL destructive :** seul `CREATE TABLE IF NOT EXISTS` (+ `CREATE INDEX IF NOT EXISTS`), `INSERT`,
 `UPDATE … WHERE`, `SELECT` bornés. Audits L015/L016/L026/L027 : grep `DROP|ALTER|TRUNCATE|DELETE|GRANT|REVOKE|
 VACUUM` → vide (re-vérifié pour ce document). Idiome `_vN` (jamais d'`ALTER`). Tout `COMMIT` est explicite
-(`pre_queries=[...]`, `post_queries=["COMMIT"]` - ex. `chat_v4.py:137-141, 181-185, 227-229` ; `admin.py:81-85,
+(`pre_queries=[...]`, `post_queries=["COMMIT"]` - ex. `chat_v5.py:137-141, 181-185, 227-229` ; `admin.py:81-85,
 132-136` ; `settings.py:77-81`).
 
 **Bornes de lignes (caps) :**
 
 | Lecture | Cap | Code |
 |---|---|---|
-| Messages d'une session (`/conversation`) | `SESSION_MESSAGES_CAP = 500` | `chat_v4.py:306, 309` |
+| Messages d'une session (`/conversation`) | `SESSION_MESSAGES_CAP = 500` | `chat_v5.py:306, 309` |
 | Liste de conversations (sidebar) | `[1, 60]`, défaut 30 (`validate_conversations_limit`) | `validation.py:139-151` |
-| Chaîne d'ancêtres (contexte agent) | `MAX_CHAIN_DEPTH = 200` + LIMIT `n_exchanges` (dérivé de `history_limit`) | `chat_v4.py:235, 253-260` |
+| Chaîne d'ancêtres (contexte agent) | `MAX_CHAIN_DEPTH = 200` + LIMIT `n_exchanges` (dérivé de `history_limit`) | `chat_v5.py:235, 253-260` |
 | Liste des utilisateurs (admin) | `MAX_USERS_LISTED = 1000` | `admin.py:26, 117` |
 
 ---
@@ -157,8 +157,8 @@ résolu depuis les en-têtes (§2). Un appelant ne peut **jamais** lire ou modif
 |---|---|---|
 | Liste de conversations | `WHERE user_id = {user}` | `sql_builders.py:35` (`build_conversation_list_query`) |
 | Messages d'une session | `WHERE user_id = {user} AND session_id = {session}` | `sql_builders.py:53` (`build_session_messages_query`) - un `session_id` appartenant à autrui ne renvoie aucune ligne (`routes.py:392-398`) |
-| Chaîne d'ancêtres (contexte) | user-scopé dans **les deux** membres du CTE récursif (ancre **et** membre récursif) | `sql_builders.py:73, 77` (`build_ancestor_chain_query`) ; `chat_v4.py:238-266` |
-| Feedback | `UPDATE … WHERE exchange_id = {exchange} AND user_id = {user}` - no-op (0 ligne) si l'échange n'est pas à l'appelant | `chat_v4.py:202-217` (`save_feedback`) ; route `routes.py:302-345` |
+| Chaîne d'ancêtres (contexte) | user-scopé dans **les deux** membres du CTE récursif (ancre **et** membre récursif) | `sql_builders.py:73, 77` (`build_ancestor_chain_query`) ; `chat_v5.py:238-266` |
+| Feedback | `UPDATE … WHERE exchange_id = {exchange} AND user_id = {user}` - no-op (0 ligne) si l'échange n'est pas à l'appelant | `chat_v5.py:202-217` (`save_feedback`) ; route `routes.py:302-345` |
 | Poll d'un run | un `run_id` inconnu **ou** appartenant à un autre user → `None` → `404` (sans révéler lequel) | `stream_manager.py:371-395` (test `state.get("user_id") != user_id`, `stream_manager.py:383`) ; `routes.py:295-297` |
 
 Le `parent_exchange_id` fourni par le client est traité défensivement : `validate_optional_exchange_id`
@@ -266,7 +266,7 @@ sont per-process. En multi-process : poll cross-process en 404, cap ×N, rate-ga
 payloads pathologiques avant tout traitement.
 
 **Cap du texte persisté (sûreté des logs CRU) :** `MAX_PERSISTED_TEXT_CHARS = 262_144` borne `user_text` /
-`assistant_text` **persistés** (`chat_v4.py:60, 63-72, 103, 157`). Raison (mémoire L027) : DSS **logue chaque
+`assistant_text` **persistés** (`chat_v5.py:60, 63-72, 103, 157`). Raison (mémoire L027) : DSS **logue chaque
 requête `SQLExecutor2`** (texte complet) et `SQLExecutor2` n'a **aucun bind serveur** → `sql_value` inline
 toujours la valeur dans l'INSERT/UPDATE loggé ; un scénario DSS matérialisant ces logs en dataset peut tripper
 la limite de longueur de ligne. Les traces (Mo) - vrai coupable historique - évitent entièrement ce chemin via
@@ -274,7 +274,7 @@ le **writer de dataset** (write-only, `chat_traces`, L027/L028).
 
 **Logging content-free (hygiène) :** `/chat/start` logue `user_id`, `session_id`, `agent_key` et `msg_len`
 **jamais le contenu** du message (`routes.py:213-221`, commentaire explicite). Les INSERT/UPDATE complets (qui
-inlineraient le corps) ne sont **pas** logués (`chat_v4.py:136, 180`). En cas d'échec agent, aucun interne
+inlineraient le corps) ne sont **pas** logués (`chat_v5.py:136, 180`). En cas d'échec agent, aucun interne
 agent/SQL/connexion n'est divulgué au client (`stream_manager.py:349-356` → `error: agent_unavailable`).
 
 **API DSS en lecture seule (+ run agent) :** seules des méthodes de lecture sont appelées

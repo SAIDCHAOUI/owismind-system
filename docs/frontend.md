@@ -315,7 +315,7 @@ Helpers **purs** (aucun import Vue - F11), testés dans `test/evidenceModel.test
 - **i18n** : les strings du panneau vivent sous les clés `ev.*` ajoutées dans `i18n/extra.js` (FR/EN,
   clé-plate par locale - F6) : titre/fermeture (`ev.title`, `ev.open`, `ev.close`), compteur
   (`ev.agent_rows`), chips (`ev.filters.*`, `ev.modified`), table (`ev.table.*`), SQL (`ev.sql.*`),
-  picker (`ev.picker.*`, `ev.column`), états (`ev.degraded`, `ev.error`, `ev.retry`, `ev.loading`).
+  picker (`ev.picker.*`), états (`ev.degraded`, `ev.error`, `ev.retry`, `ev.loading`).
   (Les `ev.chip.*` du footer SQL par message préexistent dans `messages.json` - pristine, inchangé.)
 
 ---

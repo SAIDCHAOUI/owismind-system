@@ -1,5 +1,7 @@
 # Prompting, context engineering & déterminisme (templates vs LLM)
 
+> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`dataset_expert_agent.py`, `orchestrator_agent.py`, `salesdrive_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16 puis réorg par projet 2026-06-22). Les agents vivent désormais sous `dataiku-agents/OWISMIND/<PROJET>/agents/<PROJET>_*.py`. Les extraits et numéros de ligne restent valables comme matériel pédagogique.
+
 > À jour : juin 2026 (LangChain 1.x, LangGraph 1.x, Dataiku DSS 14.x). Référence du skill `agentique-python-dataiku` — voir `SKILL.md` (parent). Réfs croisées : `references/langchain-v1.md`, `references/langgraph-v1.md`, `references/dataiku-code-agents.md`, `references/orchestration-multi-agents.md`, `references/eval-tracing-securite-production.md`.
 
 La thèse de ce fichier : en 2026, **le prompting n'est plus la rédaction d'un gros prompt système, c'est de l'architecture de contexte**, et la fiabilité vient de la **séparation explicite entre ce que le LLM a le droit de générer (langage, sélection contrainte) et ce que le code possède (valeurs exactes, SQL, formatage)**. Le corpus framework-agnostique (Anthropic / LangChain) et le retour de terrain OWIsMind (DSS-validé) convergent sur ce point ; là où ils divergent, le code-owned OWIsMind l'emporte sur les APIs/versions, la doc officielle l'emporte sur les signatures.

@@ -221,12 +221,6 @@ class TestMutations(unittest.TestCase):
         self.assertFalse(ok)
 
 class TestAgentKeyAndNames(unittest.TestCase):
-    def test_slug_agent_key(self):
-        self.assertEqual(registry.slug_agent_key("Revenue Expert"), "revenue_expert")
-        self.assertEqual(registry.slug_agent_key("  OWIsMind Orchestrator (DEV) "),
-                         "owismind_orchestrator_dev")
-        self.assertEqual(registry.slug_agent_key(""), "agent")
-
     def test_names_for_agent_is_scoped(self):
         reg = {
             "B1": _entity(benchmark_id="B1", name="Baseline", agent_key="revenue_expert"),

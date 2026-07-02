@@ -110,7 +110,6 @@ const SRC_KEYS = [
   'src.cta.title', 'src.cta.hint', 'src.panel.title', 'src.dataset_label',
   'src.search.placeholder', 'src.search.min', 'src.search.go',
   'src.filters.title', 'src.filters.add', 'src.filters.clear', 'src.filters.remove',
-  'src.column',
   'src.picker.empty', 'src.picker.truncated', 'src.picker.max', 'src.picker.apply',
   'src.loading', 'src.error', 'src.retry', 'src.empty',
   'src.loaded', 'src.more', 'src.loadingMore', 'src.cols',

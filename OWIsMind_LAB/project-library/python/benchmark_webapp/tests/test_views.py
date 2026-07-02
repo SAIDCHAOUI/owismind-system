@@ -602,5 +602,63 @@ class SettingsValidationTests(unittest.TestCase):
         self.assertFalse(ok2)
 
 
+class ConfigMetaTests(unittest.TestCase):
+    def test_config_meta_view_full(self):
+        from benchmark import schemas
+        cfg = {
+            "golden_dataset": "golden_prepared",
+            "judge_llm_id": "anthropic:claude-sonnet-4-6",
+            "concurrency": 3,
+            "language": "fr",
+            "modes": ["Smart", "Claude"],
+            "suggestions": {"connection": "SQL_owi", "table": "the_table"},
+        }
+        golden = [
+            {"question_id": "q1", "category": "revenue"},
+            {"question_id": "q2", "category": "tickets"},
+            {"question_id": "q3", "category": "revenue"},  # duplicate category
+            {"question_id": "q4", "category": ""},          # blank -> ignored
+        ]
+        runs = [
+            {"run_id": "r1", "run_timestamp": "2026-06-25 09:00:00"},
+            {"run_id": "r2", "run_timestamp": "2026-06-26 09:00:00"},
+            {"run_id": "r1", "run_timestamp": "2026-06-25 09:00:00"},  # same run, another cell
+        ]
+        out = views.config_meta_view(cfg, golden, runs)
+        # config block carries the fields refreshConfigMeta reads (golden / judge / suggestions).
+        self.assertEqual(out["config"]["golden_dataset"], "golden_prepared")
+        self.assertEqual(out["config"]["judge_llm_id"], "anthropic:claude-sonnet-4-6")
+        self.assertEqual(out["config"]["suggestions"], {"connection": "SQL_owi", "table": "the_table"})
+        self.assertEqual(out["config"]["modes"], ["Smart", "Claude"])
+        # distinct, sorted, blank dropped.
+        self.assertEqual(out["categories"], ["revenue", "tickets"])
+        # question_count = golden size (all rows, active or not).
+        self.assertEqual(out["question_count"], 4)
+        # mode options mirror the canonical set.
+        self.assertEqual(out["mode_options"], list(schemas.MODES))
+        # runs deduped on run_id, newest first (runs[0] = last run).
+        self.assertEqual([r["run_id"] for r in out["runs"]], ["r2", "r1"])
+        self.assertEqual(out["runs"][0]["run_timestamp"], "2026-06-26 09:00:00")
+
+    def test_config_meta_view_empty_and_malformed(self):
+        out = views.config_meta_view(None, None, None)
+        self.assertEqual(out["categories"], [])
+        self.assertEqual(out["question_count"], 0)
+        self.assertEqual(out["runs"], [])
+        self.assertEqual(out["config"]["suggestions"], {})
+        self.assertEqual(out["config"]["modes"], [])
+        # malformed rows are skipped, never raise.
+        out2 = views.config_meta_view(
+            {"suggestions": "not-a-dict", "modes": ["Smart", 7, None]},
+            [{"category": "a"}, "bad", None],
+            [{"run_id": "", "run_timestamp": "x"}, "bad", {"run_timestamp": "no-id"}],
+        )
+        self.assertEqual(out2["categories"], ["a"])
+        self.assertEqual(out2["question_count"], 1)
+        self.assertEqual(out2["runs"], [])  # blank / missing run_id ignored
+        self.assertEqual(out2["config"]["suggestions"], {})
+        self.assertEqual(out2["config"]["modes"], ["Smart"])
+
+
 if __name__ == "__main__":
     unittest.main()

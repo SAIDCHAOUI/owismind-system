@@ -36,7 +36,7 @@ Nothing in the proof path calls an LLM. Every claim maps to a mechanical check.
    ≤ 200 rows × 50 columns, cells ≤ 256 chars, result ≤ 100 kB, list ≤ 20 items,
    global JSON ≤ 262 144 chars (results shed oldest-first, the last successful item's
    result preserved longest).
-3. **Persist** - `storage/chat_v4.save_assistant_message` stores the capped JSON in the
+3. **Persist** - `storage/chat_v5.save_assistant_message` stores the capped JSON in the
    existing `generated_sql` TEXT column (**no migration**). `/conversation` readback
    strips `result` (thread payload stays light); only `/evidence/meta` returns it.
 4. **Prove** - `GET /evidence/meta?exchange_id=` (owner-scoped, throttled, no source SQL

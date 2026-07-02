@@ -1151,3 +1151,71 @@ def validate_settings(form):
     if errors:
         return False, errors
     return True, normalized
+
+
+# --- config meta (the launcher's post-golden-edit refresh) ------------------
+
+def _distinct_categories(golden_rows):
+    """Distinct non-blank golden category labels, sorted case-insensitively. Pure, never raises."""
+    seen = []
+    for r in (golden_rows or []):
+        if not isinstance(r, dict):
+            continue
+        cat = _str(r.get("category")).strip()
+        if cat and cat not in seen:
+            seen.append(cat)
+    seen.sort(key=lambda c: c.lower())
+    return seen
+
+
+def _distinct_runs(run_rows):
+    """Distinct benchmark runs as ``[{run_id, run_timestamp}]``, newest first. Pure, never raises.
+
+    Deduplicates on run_id (a run writes one scored row per cell, so run_id repeats), keeping the
+    max run_timestamp seen for it, then sorts by timestamp descending so ``runs[0]`` is the latest
+    run (what the aside's "last run" line reads). Rows without a run_id are ignored.
+    """
+    acc = {}
+    order = []
+    for r in (run_rows or []):
+        if not isinstance(r, dict):
+            continue
+        rid = _str(r.get("run_id")).strip()
+        if not rid:
+            continue
+        ts = _str(r.get("run_timestamp")).strip()
+        if rid not in acc:
+            acc[rid] = ts
+            order.append(rid)
+        elif ts > acc[rid]:
+            acc[rid] = ts
+    runs = [{"run_id": rid, "run_timestamp": acc[rid]} for rid in order]
+    runs.sort(key=lambda it: (it["run_timestamp"], it["run_id"]), reverse=True)
+    return runs
+
+
+def config_meta_view(cfg, golden_rows, run_rows):
+    """Shape the launcher's config-meta payload refreshed after a golden edit. Pure, never raises.
+
+    Mirrors the launcher MOCK's ``config`` response contract exactly, so the real backend and the
+    offline preview stay in lock-step (lesson L115: the front is QA'd against its MOCK):
+      - ``config``: the settings block plus ``suggestions`` + ``modes``. refreshConfigMeta reads
+        ``golden_dataset`` / ``judge_llm_id`` / ``suggestions`` from it (aside "preserved" line).
+      - ``categories``: distinct golden categories (the question-filter chips).
+      - ``question_count``: the golden set size (the "N questions" help + golden-tab fallback).
+      - ``mode_options``: the available Smart/Pro/Claude choices.
+      - ``runs``: ``[{run_id, run_timestamp}]`` newest first (``runs[0]`` = last-run time).
+    """
+    c = cfg if isinstance(cfg, dict) else {}
+    golden = [r for r in (golden_rows or []) if isinstance(r, dict)]
+    config_block = settings_view(c)
+    sug = c.get("suggestions")
+    config_block["suggestions"] = sug if isinstance(sug, dict) else {}
+    config_block["modes"] = [m for m in (c.get("modes") or []) if isinstance(m, str)]
+    return {
+        "config": config_block,
+        "categories": _distinct_categories(golden),
+        "question_count": len(golden),
+        "mode_options": list(schemas.MODES),
+        "runs": _distinct_runs(run_rows),
+    }

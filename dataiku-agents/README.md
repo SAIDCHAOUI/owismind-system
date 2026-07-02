@@ -31,7 +31,7 @@
 2. This `README.md` - the full architecture, the Flow, deploy, extend, roadmap.
 3. The skill `agentique-python-dataiku` - how to build/audit DSS agents safely.
 4. `memory/PROJECT_STATE.md` + `memory/LESSONS.md` (repo root) - canonical ids and what really works (these PRIME over the cadrage guides).
-5. Sub-folder READMEs for detail: [`agents/`](agents/README.md), [`recipes/`](recipes/README.md), [`tools/`](tools/README.md), [`tools/semantic_model/`](tools/semantic_model/MODEL.md).
+5. Sub-folder docs for detail (per project, DEV shown): [`recipes/README.md`](OWISMIND/OWISMIND_DEV/recipes/README.md), [`semantic_model/README.md`](OWISMIND/OWISMIND_DEV/semantic_model/README.md) + [`MODEL.md`](OWISMIND/OWISMIND_DEV/semantic_model/MODEL.md); `agents/` and `tools/` are documented by [`OWISMIND/README.md`](OWISMIND/README.md) + each project's `registry.json`.
 6. [`registry.json`](registry.json) (the per-domain spec: ids, dataset names, model + tool binding, lookup config, guardrails) + [`DATASETS.md`](DATASETS.md) (the column inventory) - the single source of truth for "which datasets / columns / tools / agents / ids exist". To add an agent, follow [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md).
 
 To navigate the code ("where is X handled?"), query the knowledge graph first

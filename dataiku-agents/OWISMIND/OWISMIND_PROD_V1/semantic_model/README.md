@@ -15,6 +15,7 @@ human-readable snapshot of its config. The live model itself lives in DSS.
 | `dump_semantic_model.py` | Export the live model `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json` (refresh the snapshot, no transcription drift). |
 | `update_tickets_semantic_model.py` | In-place MODIFY of the TICKETS model: inject the tickets instructions + golden queries on the active version (no create, no re-index). The iteration path for tickets. |
 | `dump_tickets_semantic_model.py` | Export the live tickets model to `TroubleTickets_Semantic_Model.v1.json`. |
+| `drop_column_and_reindex.py` | Reconcile a model with a CHANGED source dataset: (A) re-index distinct values after row changes; (B) structurally strip every reference to a REMOVED column before re-indexing. Parameterised per run (this copy: 'Solution' removal). |
 | `migrate_semantic_model_to_project.py` | COPY a model to another project (e.g. DEV -> PROD), remapping dataset refs + table names automatically from the project keys. Creates a new model in the target. |
 | `remap_semantic_model.py` | Rewrite an EXISTING model's dataset refs / table literals IN PLACE (no copy), then re-index. Fixes a botched migration or repoints a model at a different table. |
 

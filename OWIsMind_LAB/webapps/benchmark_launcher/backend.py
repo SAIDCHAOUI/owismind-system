@@ -122,6 +122,24 @@ def api_agent_benchmarks():
     return jsonify({"status": "ok", **result})
 
 
+# --- config meta: refreshed by the frontend after a golden edit -------------
+
+@app.route("/api/config", methods=["GET"])
+@_safe
+def api_config():
+    """Config META the launcher re-reads after a golden save/delete (refreshConfigMeta).
+
+    Returns the preserved config (golden_dataset / judge_llm_id / suggestions + settings), the
+    distinct golden categories, the golden question count, the mode options, and the benchmark
+    runs (newest first). Read-only + bounded (two projected dataset reads through the shared
+    reader); shape mirrors the launcher MOCK's ``config`` response exactly.
+    """
+    cfg = dss.config()
+    golden = dss.read_dataset(cfg["golden_dataset"], keep_cols=["question_id", "category"])
+    runs = dss.read_dataset(cfg["scored_dataset"], keep_cols=["run_id", "run_timestamp"])
+    return jsonify({"status": "ok", **views.config_meta_view(cfg, golden, runs)})
+
+
 # --- golden questions: manage the golden set (read + create/update/delete) ---
 
 @app.route("/api/golden", methods=["GET"])

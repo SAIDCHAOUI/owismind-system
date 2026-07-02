@@ -1,5 +1,7 @@
 # Orchestration & multi-agents (superviseur, sous-agents, handoffs, hiérarchie, swarm)
 
+> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`orchestrator_agent.py`, `dataset_expert_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16 puis réorg par projet 2026-06-22). Les agents vivent désormais sous `dataiku-agents/OWISMIND/<PROJET>/agents/<PROJET>_*.py`. Les extraits et numéros de ligne restent valables comme matériel pédagogique.
+
 > À jour : juin 2026 — LangChain 1.x / LangGraph 1.x, Dataiku DSS 14.x. Fichier de référence du skill `agentique-python-dataiku` (parent : `SKILL.md`). Pour les fondations LangGraph (state/nodes/edges, persistence, streaming) : voir `references/langgraph-v1.md` ; pour `create_agent`, middleware, structured output : `references/langchain-v1.md` ; pour LLM Mesh, tools managés, gouvernance : `references/dataiku-code-agents.md`.
 
 ---

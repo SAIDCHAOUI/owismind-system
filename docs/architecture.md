@@ -117,7 +117,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
    │                                │ resolve_enabled_agent(key)   │                            │
    │                                │   → (project_key, agent_id)  │                            │
    │                                │ can_accept(user_id)          │                            │
-   │                                │ save_user_message (BRUT) ────┼───────────────────────────►│ INSERT chat_v4 (phase 1)
+   │                                │ save_user_message (BRUT) ────┼───────────────────────────►│ INSERT chat_v5 (phase 1)
    │                                │ start_run(...) ──────────────►│ (spawn daemon)             │
    │  ◄─────────────────────────────┤ {run_id, exchange_id}        │                            │
    │                                │                              │ history_messages_for_chain ┼──► SELECT (CTE ancêtres)
@@ -126,7 +126,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
    ├───────────────────────────────►│ stream_manager.poll(...)     │   ← events normalisés      │
    │  ◄─────────────────────────────┤ {events, cursor, done, error}│   (timeline live)          │
    │   … répété toutes les 500 ms … │                              │                            │
-   │                                │                              │ save_assistant_message ────┼──► UPDATE chat_v4 (phase 2)
+   │                                │                              │ save_assistant_message ────┼──► UPDATE chat_v5 (phase 2)
    │                                │                              │ save_trace (best-effort) ──┼──► append dataset Flow
    │  GET /chat/poll (done=true) ───►│                              │ done=true                  │
    │  ◄─────────────────────────────┤ {events incl. final_answer}  │                            │
@@ -137,13 +137,13 @@ Navigateur                     Backend Flask                  Worker (thread)   
 1. **`POST /chat/start`** (`routes.py:160`) - résout l'identité, valide le payload, résout l'`agent_key`
    opaque → `(project_key, agent_id)` via la **whitelist serveur** (`settings.resolve_enabled_agent`).
    Pré-check d'admission (`can_accept`, 429/503) **avant tout write**. **Phase 1 du write 2 temps** :
-   `chat_v4.save_user_message` persiste le message utilisateur **BRUT** (pour ne pas perdre la question
+   `chat_v5.save_user_message` persiste le message utilisateur **BRUT** (pour ne pas perdre la question
    si le run échoue). Lance le worker via `stream_manager.start_run`, renvoie `{run_id, exchange_id}`.
    Le **préfixe nom+date** du tour courant (`context.build_user_prefix`) est calculé au build-time et
    passé au worker, mais **le message stocké reste BRUT**.
 
 2. **Worker daemon** (`stream_manager._worker`) - assemble le **contexte multi-tours = chaîne d'ancêtres**
-   de la branche (`chat_v4.history_messages_for_chain` remonte `parent_exchange_id`, excluant l'après-branche)
+   de la branche (`chat_v5.history_messages_for_chain` remonte `parent_exchange_id`, excluant l'après-branche)
    + le tour courant préfixé, puis itère `streaming.run_agent_streamed`. Chaque event normalisé est empilé
    dans `_RUNS[run_id]["events"]` sous `_LOCK`. Bornes de sûreté : `MAX_CONCURRENT_RUNS=8`, TTL d'éviction
    (60s/600s), `MAX_RUN_SECONDS=300`, `ABANDON_AFTER_SECONDS=30`, caps mémoire par run.
@@ -153,7 +153,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
    `answer_delta`, `generated_sql`, `usage_summary`, `final_answer`, `run_done`, `error`. Le front poll
    toutes les ~500 ms jusqu'à `done`.
 
-4. **Persistance - Phase 2** : à la fin du stream, le worker appelle `chat_v4.save_assistant_message`
+4. **Persistance - Phase 2** : à la fin du stream, le worker appelle `chat_v5.save_assistant_message`
    (UPDATE réponse + `generated_sql`) puis `chat_traces.save_trace` (append dataset Flow, best-effort).
    Un échec de persistance n'avorte jamais le run.
 
@@ -194,7 +194,7 @@ Le stockage repose sur **3 tables SQL** (connexion `SQL_owi`, schéma `public`) 
 toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` centralisée dans
 `storage/sql_config.py` (`APP_NAMESPACE = "owismind"`, `physical_table()` / `full_table()`).
 
-- **`webapp_chat_v4`** - table courante du chat, structurée en **arbre de conversation** via
+- **`webapp_chat_v5`** - table courante du chat, structurée en **arbre de conversation** via
   `parent_exchange_id` (NULL = racine). Contient user/assistant text, `generated_sql` (JSON), `agent_key`
   (clé logique opaque), colonnes de feedback, et les colonnes d'arbre. Écriture en **2 temps** (INSERT user
   → UPDATE assistant). Idiome `_vN` : v1/v2/v3 inertes, jamais d'ALTER.
@@ -261,7 +261,7 @@ owismind/
         ├── python-lib/owismind/    # BACKEND Flask modulaire (mis sur le path d'import par DSS)
         │   ├── api/routes.py       #   Blueprint /owismind-api + register_routes(app)
         │   ├── agents/             #   streaming.py · stream_manager.py · context.py · discovery.py
-        │   ├── storage/            #   chat_v4 · chat_traces · admin · settings · migrations ·
+        │   ├── storage/            #   chat_v5 · chat_traces · admin · settings · migrations ·
         │   │                       #   sql_config · serialization · sql_builders · pagination
         │   ├── evidence/           #   sql_parse · query_builders · whitelist (purs) · service (DSS)
         │   └── security/           #   identity.py · validation.py

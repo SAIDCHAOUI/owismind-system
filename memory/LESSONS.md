@@ -1397,6 +1397,8 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-06-16, revue adversariale. **Date** : 2026-06-16.
 
 ## L062 - Streaming sans parier sur l'API : streamer le préambule + la SYNTHÈSE finale (nœud dédié sans tools), pas la décision d'outils (⏳ codé, NON validé DSS)
+
+> ⚠️ OBSOLÈTE (marqueur 2026-07-03) : architecture narrate-first + nœud de synthèse SUPPRIMÉE au Run 2 2026-06-16 (cause du narrate-and-stop). Voir **L063**. Ne pas réappliquer.
 - **Contexte** : l'user voyait « j'attends, j'attends, et boom tout d'un coup ». L'infra de transport
   supporte DÉJÀ les `answer_delta` incrémentaux (poll 500ms → reducer `timelineModel` interleave) ; le
   goulot = l'agent poussait toute la réponse en **un seul** `writer(_txt)`.
@@ -1505,6 +1507,8 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   session 2026-06-16 Run 4. **Date** : 2026-06-16.
 
 ## L067 - Réponses live = VRAIS messages (answer_delta, pas NARRATION) + narrate-and-stop : ACT-FIRST (régression L063 réintroduite par erreur) + nudge + AUTO-escalade (⏳ codé+testé, à valider DSS)
+
+> ⚠️ PARTIELLEMENT OBSOLÈTE (marqueur 2026-07-03) : la partie AUTO-escalade a été RETIRÉE au Run 5 2026-06-16 (escalade supprimée, voir **L071**). La partie answer_delta (réponses live = vrais messages) reste valide et validée DSS.
 - **Contexte** : l'user veut voir le modèle parler DANS la foulée des appels d'outils (ChatGPT-style),
   en **vrais messages**, pas en lignes « event kind » grises. Et le mini « ne marche pas du tout » : il
   dit « I'm checking… now » puis s'arrête sans appeler l'outil (narrate-and-stop), alors que Sonnet/Gemini
@@ -1529,6 +1533,8 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   session 2026-06-16 Run 4. **Date** : 2026-06-16.
 
 ## L068 - Escalade pilotée par le modèle (hand-over Sonnet) : LoopChat transcript-replay + appariement tool_call↔output + RÔLES ALTERNÉS obligatoires (sinon 400 Vertex) + verrou one-way (⏳ codé+testé, à valider DSS)
+
+> ⚠️ OBSOLÈTE (marqueur 2026-07-03) : l'escalade a été SUPPRIMÉE en entier au Run 5 2026-06-16 (1 modèle par mode, voir **L071**). Le détail technique LoopChat/rôles alternés reste instructif mais le mécanisme n'existe plus.
 - **Contexte** : approche éco-first - le mini tourne par défaut, et quand il doute il passe le **relai** à
   Sonnet AVEC le contexte déjà rassemblé (choix user : « synthèse depuis les données », pas re-run), en
   transparence. Éco a le droit d'escalader (choix user).
@@ -1632,6 +1638,8 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   lignes, AND/OR ; appel `tool.run(payload)`, schéma auto via descriptor) + session 2026-06-16 Run 5. **Date** : 2026-06-16.
 
 ## L073 - Bouton STOP qui « ne répond pas » : arrêt OPTIMISTE côté frontend (le stop coopératif backend ne peut couper qu'entre 2 chunks) (⏳ codé, à valider DSS)
+
+> ⚠️ REVERTÉ (marqueur 2026-07-03) : l'arrêt optimiste a été annulé au Run 5 2026-06-16 au profit de l'attente + « Stopping... » clignotant. Voir **L075**. Ne pas réappliquer l'optimiste.
 - **Contexte** : user : « le bouton stop ne fonctionne pas tout de suite, 5-6 s de latence, on dirait qu'il
   ne marche pas ». Cause : le worker backend ne teste le flag stop qu'**entre deux chunks streamés**
   (`_stop_reason` dans `stream_manager._worker`) ; pendant un appel LLM bloquant (~5-6 s) ou un SQL
@@ -1957,6 +1965,8 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : demande user (2026-06-17, session nettoyage) ; re-lecture du code des 2 agents. **Date** : 2026-06-17.
 
 ## L086 - Resolver de valeurs RAPIDE : recherche SQL full-text (ILIKE) sur le fact, pas le catalog ; tool separe ; `dataset_lookup` supprime (⏳ tool valide RUN TEST, NON branche)
+
+> ⚠️ SUPPLANTÉ (marqueur 2026-07-03) : le branchement a été tranché ensuite : `attribute_lookup` vit en built-in dans l'ORCHESTRATEUR (multi-table par registre, 1 seul ILIKE sur concat_ws). Voir **L087** qui fait foi sur le câblage.
 
 - **Contexte** : en DSS, les questions simples ("account manager de X ?") passaient par le semantic
   model (~80s) et echouaient ("pas dans les donnees" alors que la colonne existe) ; l'orthographe des
@@ -2944,6 +2954,36 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : valide DSS (reset ephemere + mode affiche + reload OK) ; 629 tests back verts dont
   idempotence de l'ALTER ; revue adversariale 3 lentilles = 0 confirme.
 - **Source** : `sessions/2026-07-02.md` Run 6 ; `storage/migrations.py` (`_ALTERS_BY_LOGICAL`).
+
+## L127 - La mémoire et la doc DÉRIVENT comme du code : condensation CONTEXT.md (-72 %), marqueurs de péremption sur les leçons revertées, matrice PROJECT_STATE par sous-système ; 3e instance de la dérive MOCK vs backend (route /api/config absente) [validé local, 2026-07-03]
+
+- **Contexte** : session de nettoyage pré-bêta. L'audit multi-agents (7 scouts Sonnet + vérification
+  adversariale Opus par candidat) a montré un CODE déjà sain (0 mort backend/frontend/agents après les
+  nettoyages 2026-06-26 et 2026-07-01) mais une MÉMOIRE et une DOC qui avaient dérivé en silence.
+- **Ce qui a échoué (dérives constatées)** : (1) CONTEXT.md avait gonflé à 1546 lignes en portant TROIS
+  copies de la même histoire (blocs Focus courant pleins + chaîne condensée + sessions/*.md) : coût de
+  contexte à chaque session sans information nouvelle. (2) Des leçons revertées/supplantées
+  (L062/L067/L068/L073/L086) n'avaient AUCUN marqueur en fichier : une session lisant LESSONS.md seul
+  pouvait réappliquer un design annulé (auto-escalade, stop optimiste, nœud de synthèse). (3) Les
+  sections datées de PROJECT_STATE (§2b/§4/§11/§12) et docs/ (chat_v4, CONV_TITLE_MAXLEN 140, routes
+  et tables absentes) se périmaient sans signal. (4) Le launcher LAB appelait `GET /api/config` que le
+  MOCK fournissait mais PAS le vrai backend : 404 avalé par le best-effort, compteurs golden périmés
+  en DSS = exactement la dérive de contrat prédite par L115 (3e instance).
+- **Solution qui marche** : (1) CONTEXT.md = 1-2 derniers runs pleins + chaîne ~2 semaines + gotchas +
+  bloc « historique archivé » pointant sessions/LESSONS (1546 -> 431 lignes, zéro fait unique perdu :
+  tout existe dans sessions/*.md). (2) Leçon périmée = marqueur `> ⚠️ OBSOLÈTE/REVERTÉ/SUPPLANTÉ ...
+  voir LXXX` SOUS le titre, entrée jamais réécrite (append-only respecté). (3) PROJECT_STATE : matrice
+  de validation PAR SOUS-SYSTÈME (stable) au lieu de par-session (périssable) ; sections historiques
+  explicitement « gelées au JJ-MM ». (4) Doc vivante alignée par diff exhaustif contre le code
+  (34/34 routes de routes.py, 8/8 tables de migrations.py) ; specs `docs/superpowers/specs/` gelées,
+  jamais retouchées. (5) MOCK vs backend : toujours aligner le BACKEND sur le MOCK (règle L115) ;
+  route `/api/config` implémentée read-only (`views.config_meta_view` pure + `dss.read_dataset`
+  projeté, contrat = miroir exact de `MOCK.config`).
+- **Preuve-vérification** : 629 back + 316 agents + 343 LAB (+2) + 186 node verts ; build Vite OK ;
+  0 référence résiduelle aux 15 symboles supprimés (grep adversarial) ; 0 tiret ajouté (scan Python
+  du diff complet) ; gotchas CONTEXT.md byte-identiques (git diff vide sur la section).
+- **Source** : `sessions/2026-07-03.md` ; décisions user en session (implémenter /api/config, garder
+  /api/benchmark/rename, compléter docs/ maintenant).
 
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
