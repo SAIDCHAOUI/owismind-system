@@ -9,6 +9,7 @@ import {
   buildContextBlock,
   contextKey,
 } from '../composables/promptContextModel.js'
+import { track } from '../services/track.js'
 
 export const usePromptContextStore = defineStore('promptContext', () => {
   const items = ref([])
@@ -18,10 +19,13 @@ export const usePromptContextStore = defineStore('promptContext', () => {
   function add(item) {
     const result = addContextValue(items.value, item)
     items.value = result.items
+    // Record only a genuine addition (not a dedup 'exists' / 'full' / 'invalid' no-op).
+    if (result.status === 'added') track('cell_value_added_to_prompt', { column: (item && item.column) || null })
     return result.status
   }
   function remove(key) {
     items.value = items.value.filter((it) => contextKey(it) !== key)
+    track('cell_value_removed_from_prompt', {})
   }
   function clear() {
     items.value = []

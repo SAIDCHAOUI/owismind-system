@@ -11,6 +11,8 @@
 // features/admin-impersonate folder.
 import { impersonationHeaders } from '../features/admin-impersonate/impersonation.js'
 // END impersonation (temporary)
+// Usage analytics: record backend failures (best-effort; track never throws).
+import { track } from './track.js'
 
 function backendUrl(path) {
   const resolver = window.getWebAppBackendUrl;
@@ -20,18 +22,37 @@ function backendUrl(path) {
   return resolver(path);
 }
 
+// Emit an error_backend usage event for a failed request. Skipped for /track itself
+// (a tracking failure must not track itself) and for /chat/poll (fires every 500ms
+// during a run - it would flood). The model-level limiter caps this to 10 per session.
+// Only the route path is recorded: the query string is stripped because some GET
+// endpoints carry user-typed search text in it (e.g. distinct ?q=), which must never
+// reach the analytics table.
+function trackBackendError(path, status) {
+  const p = (path || '').split('?')[0];
+  if (p.indexOf('/track') !== -1 || p.indexOf('/chat/poll') !== -1) return;
+  track('error_backend', { path: p, status });
+}
+
 // Single fetch helper: same-origin credentials (so DSS auth cookies travel),
 // JSON in/out, and a stable error code surfaced from the backend when present.
 async function request(path, options) {
   const opts = options || {};
-  const res = await fetch(backendUrl(path), {
-    credentials: 'same-origin',
-    ...opts,
-    // BEGIN impersonation (temporary) - carry the X-OWI-Impersonate header (empty
-    // object when not impersonating). Server honours it only for real admins.
-    headers: { Accept: 'application/json', ...impersonationHeaders(), ...(opts.headers || {}) },
-    // END impersonation (temporary)
-  });
+  let res;
+  try {
+    res = await fetch(backendUrl(path), {
+      credentials: 'same-origin',
+      ...opts,
+      // BEGIN impersonation (temporary) - carry the X-OWI-Impersonate header (empty
+      // object when not impersonating). Server honours it only for real admins.
+      headers: { Accept: 'application/json', ...impersonationHeaders(), ...(opts.headers || {}) },
+      // END impersonation (temporary)
+    });
+  } catch (e) {
+    // Network / resolver failure (no HTTP response): status 0. Rethrow unchanged.
+    trackBackendError(path, 0);
+    throw e;
+  }
   if (!res.ok) {
     let code = 'http_' + res.status;
     try {
@@ -40,6 +61,7 @@ async function request(path, options) {
     } catch (e) {
       /* ignore non-JSON error bodies */
     }
+    trackBackendError(path, res.status);
     throw new Error(code);
   }
   return res.json();

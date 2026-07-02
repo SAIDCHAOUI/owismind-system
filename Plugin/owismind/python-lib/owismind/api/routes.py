@@ -6,6 +6,7 @@ Routes:
                          also records the caller in the users registry + first-admin bootstrap;
                          GET stays read-only.
   - ``/usage``         : the caller's own monthly budget status (spend / limit / remaining).
+  - ``/track``         : best-effort usage-analytics ingest (batched client events); always 200.
   - ``/agents``        : the agents the admin enabled (opaque logical keys + labels).
   - ``/chat/start``    : run a real agent for one message in a background worker and
                          return a run_id; persists the user message first (phase one).
@@ -45,6 +46,7 @@ from owismind.evidence import service as evidence_service
 from owismind.evidence import source_service
 from owismind.evidence import throttle as evidence_throttle
 from owismind.storage import artifacts as artifacts_storage
+from owismind.storage import events as events_storage
 from owismind.security.identity import IdentityError, derive_full_name, resolve_identity
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
@@ -254,6 +256,55 @@ def usage_me():
         status.get("limit_source"), status.get("blocked"),
     )
     return jsonify({"status": "ok", "usage": status})
+
+
+@api.route("/track", methods=["POST"])
+def track_events():
+    """Best-effort usage-analytics ingest. ALWAYS returns HTTP 200; never a 500.
+
+    The frontend batches small product-analytics events and posts them here, often via
+    ``navigator.sendBeacon`` (Content-Type ``text/plain``), so the body is parsed with
+    ``force=True``. Identity is resolved server-side (never from the body); the batch is
+    written under the auth-resolved user_id only. Guarantees for tracking never to affect
+    the product:
+      - unauthenticated / storage-not-configured -> accepted=0 (still 200);
+      - events sent while an admin IMPERSONATES a user are DROPPED (analytics must reflect
+        real users, not admin consultation);
+      - a per-user token bucket silently drops a scripted flood (accepted=0, still 200);
+      - any unexpected failure degrades to accepted=0 (the whole route is wrapped).
+    """
+    try:
+        # sendBeacon posts text/plain, so force JSON parsing (silent -> None on garbage).
+        body = request.get_json(force=True, silent=True)
+        if not isinstance(body, dict):
+            body = {}
+
+        try:
+            identity = resolve_identity(request.headers)
+        except IdentityError:
+            # Unauthenticated tracking is simply dropped (best-effort, still 200).
+            return jsonify({"ok": True, "accepted": 0})
+
+        # Do NOT record analytics while an admin impersonates a user: the effective
+        # identity flags whether the impersonation header is active for a real admin.
+        if impersonation.effective_identity(identity).get("impersonating"):
+            return jsonify({"ok": True, "accepted": 0})
+
+        if not sql_config.is_configured():
+            return jsonify({"ok": True, "accepted": 0})
+
+        user_id = identity["user_id"]
+        # Per-user token bucket: silently drop a scripted flood (still 200, accepted=0).
+        if not evidence_throttle.track_can_accept(user_id):
+            return jsonify({"ok": True, "accepted": 0})
+
+        clean = events_storage.validate_events(body.get("events"))
+        accepted = events_storage.record_events(user_id, clean)
+        return jsonify({"ok": True, "accepted": accepted})
+    except Exception:
+        # Tracking is best-effort: never surface a 500 to the client.
+        logger.exception("/track - unexpected failure; dropping batch")
+        return jsonify({"ok": True, "accepted": 0})
 
 
 _SCREEN_TABS = ("evidence", "chart", "table")

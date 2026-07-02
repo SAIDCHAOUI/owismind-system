@@ -22,9 +22,18 @@ _BUCKET_TTL_SECONDS = 300
 USAGE_BUCKET_CAPACITY = 12
 USAGE_REFILL_PER_SEC = 5.0
 
+# Separate bucket for the POST /track analytics ingest (best-effort event batches). Its
+# own dict so tracking traffic never starves Evidence / usage refills and vice-versa. The
+# client already coalesces events into batches, so a slow refill (0.5/s) tolerates a small
+# burst (capacity 12) while flatly capping a scripted flood - when denied the route still
+# returns 200 with accepted=0 (a silent drop, analytics being non-critical).
+TRACK_BUCKET_CAPACITY = 12
+TRACK_REFILL_PER_SEC = 0.5
+
 _lock = threading.Lock()
 _buckets = {}  # user_id -> [tokens_float, last_ts]
 _usage_buckets = {}  # user_id -> [tokens_float, last_ts] (the /usage read gate)
+_track_buckets = {}  # user_id -> [tokens_float, last_ts] (the /track ingest gate)
 
 
 def take_token(buckets, key, now, capacity, refill_per_sec):
@@ -67,3 +76,16 @@ def usage_can_accept(user_id):
     with _lock:
         _evict_stale_locked(_usage_buckets, now)
         return take_token(_usage_buckets, user_id, now, USAGE_BUCKET_CAPACITY, USAGE_REFILL_PER_SEC)
+
+
+def track_can_accept(user_id):
+    """True if this user may ingest one more POST /track batch now (thread-safe).
+
+    Gates the best-effort analytics ingest with its own per-user token bucket, so a
+    scripted flood of /track cannot pin the mono-process backend's worker threads or the
+    shared SQL connection. Independent of the evidence and usage buckets.
+    """
+    now = time.time()
+    with _lock:
+        _evict_stale_locked(_track_buckets, now)
+        return take_token(_track_buckets, user_id, now, TRACK_BUCKET_CAPACITY, TRACK_REFILL_PER_SEC)

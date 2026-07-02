@@ -559,6 +559,42 @@ endroits DIFFÉRENTS, ce qui tranche le choix de techno.
 
 ---
 
+## 8f. Analytics d'usage - `webapp_events_v1` + `POST /track` (2026-07-02, ✅ VALIDÉ DSS)
+- **But** : tracking GA4-like de l'usage de la webapp (fréquentation, features, parcours), distinct des
+  logs agentiques. **1 table brute unique** `webapp_events_v1` (SQL_owi ; décision : PAS folder/S3 comme
+  l'ancienne webapp Dash, dont le 1-fichier-JSON-par-event s'est avéré la faiblesse principale).
+- **Schéma** : `event_id` PK (uuid client, dédup ON CONFLICT), `ts` (serveur), `client_ts`, `seq`
+  (ordre intra-session), `user_id` (résolu serveur), `app_session_id` (uuid par chargement),
+  `event_name`, `event_category`, `view_name` (VIEW = mot réservé PG), `conversation_id`, `agent_key`,
+  `mode`, `props` TEXT (JSON cappé 2000c). Index `(ts)`, `(user_id,ts)`, `(event_name,ts)`,
+  `(app_session_id,seq)`.
+- **Backend** : `storage/events.py` (**EVENT_CATEGORIES = whitelist source de vérité, 38 noms**,
+  `validate_events` pur never-raises, `record_events` 1 INSERT multi-lignes + COMMIT best-effort) ;
+  route `POST /track` (batch <=40, get_json force+silent pour sendBeacon, **impersonation = drop avant
+  write**, throttle dédié 12/0.5 par s, jamais de 500) ; DDL dans `migrations.py`.
+- **Frontend** : `services/trackModel.js` (pur : whitelist miroir, queue 200, drain 40, limiteur 10
+  events d'erreur/session) + `services/track.js` (flush 5s/20, sendBeacon pagehide, no-op en
+  impersonation) ; hooks minces dans router afterEach + stores (chat/ui/session/evidence/sources/
+  promptContext/benchmark) + MessageAgent (feedback) + tables (cell popover) + main.js (erreurs) +
+  backend.js (`error_backend`, path SANS query string = L125, hors /track et /chat/poll).
+- **Taxonomie (38 events auto-descriptifs, validée user)** : nav `webapp_opened`/`page_viewed` ; chat
+  `question_sent`/`answer_received {duration_ms}`/`answer_stopped`/`question_edited`/
+  `answer_regenerated`/`answer_version_switched`/`conversation_created`/`conversation_opened`/
+  `cell_value_added_to_prompt`(+removed) ; ui `mode_changed`/`agent_changed`/`theme_changed`/
+  `sidebar_toggled` ; evidence `evidence_panel_opened`(+closed)/**`chart_viewed`/`table_viewed`/
+  `kpi_viewed`/`source_data_viewed`/`evidence_proof_viewed`** (onglets = events de 1er rang, fallback
+  `evidence_tab_viewed {tab}`)/filtres/`evidence_row_drilled`/`evidence_searched {len}` ; source
+  `source_explorer_opened`/`source_dataset_switched`/filtres/`source_searched {len}`/
+  `source_cell_clicked` ; `feedback_submitted`/`benchmark_suggestion_sent`/`error_frontend`/
+  `error_backend`. Privacy : longueurs seules pour les recherches, paths sans query string.
+- **Exploitation** : dataset SQL Dataiku direct sur la table ; sessions = gap 30 min sur
+  `(user_id, ts)` ; parcours = `app_session_id` + `seq` ; rollups par recette planifiée (hors runtime).
+- **État** : ✅ VALIDÉ DSS (2026-07-02, v1 + taxonomie renommée). 614 back + 184 node, parité
+  whitelist 38/38 vérifiée par script, revue adversariale 12 Opus (1 HIGH corrigé = L125), zip DEV
+  `index-D-NkcYpc.js`. Dashboard d'adoption = à construire. Détail -> `sessions/2026-07-02.md` Run 5.
+
+---
+
 ## 9. Maquette cible - SUPPRIMÉE du repo (2026-06-11, conversion terminée)
 
 La maquette (SPA HTML/JS/CSS sans framework, `maquette/` + son paquet de docs de transmission) a servi de

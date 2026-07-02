@@ -29,6 +29,7 @@ import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
 import { useSourcesStore } from './sources.js'
 import { lastEvidenceExchangeId } from '../composables/evidenceModel.js'
+import { track } from '../services/track.js'
 
 // One session id per conversation (the backend stores it; history is scoped by user).
 function newSessionId() {
@@ -151,6 +152,7 @@ export const useChatStore = defineStore('chat', () => {
     evidence.close()
     sources.closePanel()
     activeSessionId.value = newSessionId()
+    track('conversation_created', {}, { conversation_id: activeSessionId.value })
     exchanges.value = []
     overrides.value = {}
     errorMsg.value = ''
@@ -210,6 +212,7 @@ export const useChatStore = defineStore('chat', () => {
     evidence.close()
     sources.closePanel()
     activeSessionId.value = sessionId
+    track('conversation_opened', {}, { conversation_id: sessionId })
     overrides.value = {}
     errorMsg.value = ''
     threadError.value = ''
@@ -268,6 +271,8 @@ export const useChatStore = defineStore('chat', () => {
     const runSessionId = activeSessionId.value
     const firstTurn = turns.value[0]
     const runTitle = (firstTurn && firstTurn.exchange.userText) || userText
+    // Usage analytics: stamp the run start so the terminal event can report duration_ms.
+    const runStartedAt = Date.now()
     const token = { cancelled: false }
     activeToken = token
     activeVersion = version
@@ -307,6 +312,15 @@ export const useChatStore = defineStore('chat', () => {
         // Fire-and-forget: the reveal must never affect the send flow. The
         // store catches its own fetch errors; this guards the commit path too.
         Promise.resolve(evidence.openForExchange(exch.id, { auto: true })).catch(() => {})
+      }
+      // Usage analytics: a cleanly finished run (the terminal `done` state) - report the
+      // wall-clock duration. Covers send / edit / regenerate (all funnel through here).
+      if (!token.cancelled && version.status === 'done') {
+        track('answer_received', { duration_ms: Date.now() - runStartedAt }, {
+          conversation_id: runSessionId,
+          agent_key: exch.agentKey,
+          mode: ui.modelMode,
+        })
       }
     } catch (e) {
       if (!token.cancelled) {
@@ -358,6 +372,11 @@ export const useChatStore = defineStore('chat', () => {
     const t = (text || '').trim()
     if (!t || !canSend.value) return
     const last = turns.value[turns.value.length - 1]
+    track('question_sent', { length: t.length }, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: ui.modelMode,
+    })
     return _runExchange(t, last ? last.exchange.id : null)
   }
 
@@ -366,12 +385,22 @@ export const useChatStore = defineStore('chat', () => {
   function editTurn(turn, newText) {
     const t = (newText || '').trim()
     if (!t || !canSend.value || !turn) return
+    track('question_edited', { length: t.length }, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: ui.modelMode,
+    })
     return _runExchange(t, turn.exchange.parentId)
   }
 
   // Regenerate a turn: a NEW SIBLING with the SAME prompt (a fresh branch / new version).
   function regenerateTurn(turn) {
     if (!canSend.value || !turn) return
+    track('answer_regenerated', {}, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: ui.modelMode,
+    })
     return _runExchange(turn.exchange.userText, turn.exchange.parentId)
   }
 
@@ -383,6 +412,7 @@ export const useChatStore = defineStore('chat', () => {
     const sib = turn.siblings[idx]
     if (!sib || !sib.id) return
     overrides.value = { ...overrides.value, [turn.exchange.parentId || '__root__']: sib.id }
+    track('answer_version_switched', { idx }, { conversation_id: activeSessionId.value })
   }
 
   // Explicit user stop of the in-flight run (the ■ button). The backend stop is
@@ -394,6 +424,7 @@ export const useChatStore = defineStore('chat', () => {
   // defer the backend stop via `stopPending` (onRunId fires it once the id arrives).
   function stopGeneration() {
     if (!sending.value) return
+    track('answer_stopped', {}, { conversation_id: activeSessionId.value })
     // Ask the backend to cut the run (it persists the partial + frees the worker).
     if (activeRunId) stopChat(activeRunId).catch(() => {})
     else stopPending = true

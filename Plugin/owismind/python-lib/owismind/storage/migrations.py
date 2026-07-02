@@ -54,6 +54,13 @@ USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"
 # OWIsMind_LAB benchmark webapp, reads this table cross-project read-only and promotes). Brand
 # new _v1 table per the no-ALTER rule; owner-scoped on the "my suggestions" read.
 GOLDEN_SUGGESTIONS_V1_LOGICAL = "webapp_golden_suggestions_v1"
+# One row per product-analytics event the frontend batches to /track (navigation, chat
+# lifecycle, UI toggles, evidence/source interactions, feedback). Append-only, best-effort:
+# a tracking failure never touches the user experience. ``ts`` (authoritative, server receive
+# time) is stamped by the DB; the client-supplied ``client_ts`` + ``seq`` are kept only for
+# intra-session ordering. ``user_id`` is resolved server-side, never read from the event body.
+# Brand new _v1 table per the no-ALTER rule.
+EVENTS_V1_LOGICAL = "webapp_events_v1"
 # Note: raw agent traces are NO LONGER stored in a backend-managed SQL table. They are
 # appended to an admin-selected Flow dataset via the Dataset API (see storage/chat_traces.py),
 # which keeps the large JSON out of any SQL statement text (and out of DSS CRU logs).
@@ -218,6 +225,33 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# One product-analytics event per row. Fixed-width columns bound each field at the storage
+# layer (validate_events in storage/events.py truncates to the same widths before write).
+# ``event_id`` is the client-generated idempotency key (ON CONFLICT DO NOTHING on retry /
+# sendBeacon double-send). ``ts`` is NOT NULL with no DEFAULT: the write inlines ``now()``
+# so every row carries the authoritative server receive time. ``client_ts`` (nullable) is the
+# best-effort client clock; ``seq`` (nullable) is the monotonic per-app-session counter - the
+# two only order events within one session, they are never trusted as wall-clock truth. The
+# column is named ``view_name`` (not ``view``) because VIEW is a reserved PostgreSQL keyword;
+# the client event field is still "view". Brand new _v1 table per the no-ALTER rule.
+_EVENTS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    event_id         VARCHAR(64)   PRIMARY KEY,
+    ts               TIMESTAMPTZ   NOT NULL,
+    client_ts        TIMESTAMPTZ,
+    seq              INTEGER,
+    user_id          VARCHAR(128)  NOT NULL,
+    app_session_id   VARCHAR(64)   NOT NULL,
+    event_name       VARCHAR(64)   NOT NULL,
+    event_category   VARCHAR(32)   NOT NULL,
+    view_name        VARCHAR(64),
+    conversation_id  VARCHAR(64),
+    agent_key        VARCHAR(64),
+    mode             VARCHAR(16),
+    props            TEXT
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -228,6 +262,7 @@ _DDL_BY_LOGICAL = {
     ARTIFACTS_V1_LOGICAL: _ARTIFACTS_V1_DDL,
     USER_QUOTA_V1_LOGICAL: _USER_QUOTA_V1_DDL,
     GOLDEN_SUGGESTIONS_V1_LOGICAL: _GOLDEN_SUGGESTIONS_V1_DDL,
+    EVENTS_V1_LOGICAL: _EVENTS_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -264,6 +299,16 @@ _INDEXES_BY_LOGICAL = {
         ("uc_idx", "(user_id, created_at DESC)"),
         # Admin / LAB cross-project read = WHERE status ORDER BY created_at DESC.
         ("sc_idx", "(status, created_at DESC)"),
+    ],
+    EVENTS_V1_LOGICAL: [
+        # Time-window scans across all users (analytics rollups).
+        ("ts_idx", "(ts)"),
+        # Per-user activity over time (per-user funnels / recency).
+        ("uts_idx", "(user_id, ts)"),
+        # Per-event-name trends (counts of a given event over time).
+        ("nts_idx", "(event_name, ts)"),
+        # Intra-session ordering (reconstruct one app session in sequence order).
+        ("as_idx", "(app_session_id, seq)"),
     ],
 }
 
@@ -350,3 +395,8 @@ def ensure_user_quota_table():
 def ensure_golden_suggestions_table():
     """Ensure the user benchmark-suggestions table exists (create-if-missing), once per process."""
     _ensure_table(GOLDEN_SUGGESTIONS_V1_LOGICAL)
+
+
+def ensure_events_table():
+    """Ensure the product-analytics events table exists (create-if-missing), once per process."""
+    _ensure_table(EVENTS_V1_LOGICAL)

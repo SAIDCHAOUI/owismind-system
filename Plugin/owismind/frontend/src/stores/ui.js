@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { setLocale, currentLocale } from '../i18n'
 import { clampContextMessages, CONTEXT_MESSAGES_DEFAULT } from './prefs.js'
+import { track } from '../services/track.js'
 
 const THEME_KEY = 'owismind.theme'
 const COLLAPSE_KEY = 'owismind.sidebarCollapsed'
@@ -114,7 +115,9 @@ export const useUiStore = defineStore('ui', () => {
     applyTheme(t)
   }
   function toggleTheme() {
-    setTheme(theme.value === 'light' ? 'dark' : 'light')
+    const next = theme.value === 'light' ? 'dark' : 'light'
+    track('theme_changed', { to: next })
+    setTheme(next)
   }
   // Language: setLocale validates the id, applies it to vue-i18n (so the whole UI
   // re-renders), persists it ('owismind.lang') and sets <html lang>. We then mirror the
@@ -130,6 +133,7 @@ export const useUiStore = defineStore('ui', () => {
   }
   function setModelMode(m) {
     if (!MODEL_MODES.includes(m)) return
+    track('mode_changed', { from: modelMode.value, to: m })
     modelMode.value = m
     persist(MODELMODE_KEY, m)
   }
@@ -138,7 +142,12 @@ export const useUiStore = defineStore('ui', () => {
   // toggle decides what the next session starts with.
   function setSidebarCollapsed(v, persistChoice = true) {
     sidebarCollapsed.value = !!v
-    if (persistChoice) persist(COLLAPSE_KEY, v ? '1' : '0')
+    if (persistChoice) {
+      persist(COLLAPSE_KEY, v ? '1' : '0')
+      // Track only EXPLICIT toggles (persistChoice): an automatic collapse (e.g. Evidence
+      // opening, persistChoice:false) is not a user intent and would just add noise.
+      track('sidebar_toggled', { collapsed: !!v })
+    }
   }
   function toggleSidebar() {
     setSidebarCollapsed(!sidebarCollapsed.value)

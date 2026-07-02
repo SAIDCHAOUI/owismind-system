@@ -10,6 +10,7 @@
 // until their real content is built. Admin is a GUARDED route.
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useSessionStore } from '../stores/session.js'
+import { setCurrentView, track } from '../services/track.js'
 
 const ChatView = () => import('../views/ChatView.vue')
 const PagePlaceholder = () => import('../views/PagePlaceholder.vue')
@@ -65,4 +66,11 @@ router.beforeEach(async (to) => {
   const session = useSessionStore()
   await session.ensureLoaded()
   return session.isAdmin ? true : { name: 'chat' }
+})
+
+// Usage analytics: stamp the ambient view for subsequent events and record the
+// navigation. Thin + best-effort (track never throws), so this cannot affect routing.
+router.afterEach((to, from) => {
+  setCurrentView(to.name || null)
+  track('page_viewed', { from: (from && from.name) || null })
 })

@@ -21,6 +21,7 @@ import {
   normalizeSourceOp,
   effectiveSourceQuery,
 } from '../composables/sourceModel.js'
+import { track } from '../services/track.js'
 
 // Limit/offset pagination (v2): the first load pulls a big window, then each
 // "load more" appends a small one. INITIAL_LIMIT + n x MORE_LIMIT never exceeds
@@ -123,6 +124,7 @@ export const useSourcesStore = defineStore('sources', () => {
   // Standalone panel open/close (the pre-conversation surface).
   function openPanel(key) {
     open.value = true
+    track('source_explorer_opened', {}, { agent_key: key || null })
     ensureAgent(key)
   }
   function closePanel() {
@@ -220,6 +222,7 @@ export const useSourcesStore = defineStore('sources', () => {
   function setSource(id) {
     if (id == null || id === activeSourceId.value) return
     if (!sourceList.value.some((s) => s.id === id)) return
+    track('source_dataset_switched', { source: id }, { agent_key: agentKey.value || null })
     activeSourceId.value = id
     _loadMeta(id)
   }
@@ -241,6 +244,8 @@ export const useSourcesStore = defineStore('sources', () => {
     const before = effectiveSourceQuery(q.value)
     q.value = next
     if (effectiveSourceQuery(next) === before) return
+    // Record only the length (never the search text itself - it can carry PII).
+    track('source_searched', { len: next.length }, { agent_key: agentKey.value || null })
     offset.value = 0
     refreshRows()
   }
@@ -248,6 +253,7 @@ export const useSourcesStore = defineStore('sources', () => {
   // --- user filters (add / edit / remove / clear) ------------------------------
   function addFilter(column, values) {
     if (!column || !values || !values.length) return
+    track('source_filter_added', { column }, { agent_key: agentKey.value || null })
     userChipSeq += 1
     chips.value.push(makeSourceChip(column, values, userChipSeq))
     offset.value = 0
@@ -262,6 +268,8 @@ export const useSourcesStore = defineStore('sources', () => {
     refreshRows()
   }
   function removeChip(key) {
+    const chip = chips.value.find((c) => c.key === key)
+    track('source_filter_removed', { column: chip ? chip.column : null }, { agent_key: agentKey.value || null })
     chips.value = chips.value.filter((c) => c.key !== key)
     offset.value = 0
     refreshRows()

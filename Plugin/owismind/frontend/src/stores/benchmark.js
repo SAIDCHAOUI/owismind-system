@@ -16,6 +16,7 @@ import {
   adminBenchmarkOverride,
 } from '../services/backend.js'
 import { normalizeResults, rowKey } from '../composables/benchmarkResults.js'
+import { track } from '../services/track.js'
 
 export const useBenchmarkStore = defineStore('benchmark', () => {
   // Prefill from a chat answer. null = the Benchmark page shows the blank manual form.
@@ -67,6 +68,7 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
   // caller can toast it; on success the "my suggestions" list is refreshed.
   async function submitManual(fields) {
     await suggestBenchmarkManual(fields)
+    track('benchmark_suggestion_sent', { source: 'manual' })
     await loadMine()
   }
 
@@ -74,6 +76,7 @@ export const useBenchmarkStore = defineStore('benchmark', () => {
   // refreshes the list.
   async function submitFromChat(payload) {
     await suggestBenchmarkFromChat(payload)
+    track('benchmark_suggestion_sent', { source: 'chat' })
     clearPrefill()
     await loadMine()
   }

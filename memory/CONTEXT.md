@@ -5,6 +5,29 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**📊 SESSION 2026-07-02 Run 5 (ANALYTICS D'USAGE : `webapp_events_v1` + `POST /track` + `track.js`)
+- ✅ VALIDÉ DSS (user : « ça marche super bien » puis « parfait tout fonctionne all good »).**
+Tracking GA4-like de l'usage webapp (fréquentation, features, parcours), distinct des logs
+agentiques. **Décision (cadrage 3 scouts Sonnet)** : 1 table SQL brute unique (PAS le folder/S3
+1-fichier-par-event de l'ancienne webapp Dash, faiblesse prouvée). **Backend** : DDL 13 colonnes
+(`view_name` car VIEW réservé PG ; index `(app_session_id,seq)` pour les parcours) ;
+`storage/events.py` = whitelist **38 events** source de vérité + `validate_events` pur (caps
+batch 40 / props 2000c, dédup, client_ts py3.9) + `record_events` (1 INSERT multi-lignes ON
+CONFLICT DO NOTHING, best-effort) ; route `POST /track` (sendBeacon text/plain via get_json
+force+silent, **impersonation = drop avant write**, throttle 12/0.5 par s, jamais de 500).
+**Frontend** : `trackModel.js` pur (queue 200, drain 40, limiteur 10 erreurs/session) +
+`track.js` (app_session_id, seq, flush 5s/20, sendBeacon pagehide, no-op impersonation) + hooks
+minces (router afterEach, 7 stores, feedback, cell popover, erreurs window/Vue/réseau).
+**Taxonomie renommée sur retour user (38 noms auto-descriptifs)** : `question_sent`,
+`answer_received {duration_ms}`, `webapp_opened`, `page_viewed`, et **onglets Evidence = events
+de 1er rang** (`chart_viewed`/`table_viewed`/`kpi_viewed`/`source_data_viewed`/
+`evidence_proof_viewed`) ; top features = GROUP BY event_name. **Privacy** : recherches = `{len}`
+seul ; paths d'erreur SANS query string (fix HIGH de la revue adversariale 12 Opus, 1 confirmé/
+7 réfutés = **L125**). Sessions = gap 30 min (pas de session_end). **614 back (+32) + 184 node
+(+21), parité whitelist 38/38 par script, 0 tiret, zip DEV `index-D-NkcYpc.js`, PROD intacte
+(build prod stoppé par réflexe dev-first).** Reste : dashboard d'adoption Dataiku (dataset SQL
++ rollups). Voir **L125** + `sessions/2026-07-02.md` (Run 5).
+
 **🧲 SESSION 2026-07-02 Run 4 (SOURCE DATA : filtres cherchables + « Use this value for agent »
 + fix popover Evidence + DataLoader) - ✅ VALIDÉ DSS (user : « parfait all good » ; arc 1 commité
 par l'user `a2754ca`, arc 2 dans le commit de session).** **(1) Filtres** (SourceChips +
@@ -883,7 +906,14 @@ entrées les INCLUT (tester ensemble). **Avant** : Evidence v1 ✅ DSS (L035-L03
 stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agent_key/result + Run 4 :
 4 colonnes usage input/output/total tokens + estimated_cost).
 
-## 🧭 Dernière session - 2026-07-02 Run 4 : Source Data filtres cherchables + cell-to-agent + popover/DataLoader → détail `sessions/2026-07-02.md` (Run 4) + **L123-L124**
+## 🧭 Dernière session - 2026-07-02 Run 5 : analytics d'usage webapp (events + /track + dashboard à venir) → détail `sessions/2026-07-02.md` (Run 5) + **L125**
+- **✅ VALIDÉ DSS.** Table unique `webapp_events_v1` (38 events auto-descriptifs, onglets Evidence
+  en events de 1er rang), route `/track` batch best-effort (impersonation drop, throttle, jamais 500),
+  `track.js` (flush 5s/20 + sendBeacon), hooks minces dans 13 fichiers. Revue adversariale 12 Opus :
+  1 HIGH corrigé (query string PII dans error_backend, L125). Zip DEV `index-D-NkcYpc.js`.
+- Reste : dashboard d'adoption Dataiku (dataset SQL sur la table + rollups DAU/features/parcours).
+
+## 🧭 Avant - 2026-07-02 Run 4 : Source Data filtres cherchables + cell-to-agent + popover/DataLoader → détail `sessions/2026-07-02.md` (Run 4) + **L123-L124**
 - **✅ VALIDÉ DSS (« parfait all good » ; arc 1 commité user `a2754ca`).** Filtres 2 étapes cherchables
   (+ `q` serveur sur les 2 routes distinct), « Use this value for agent » (chips + bloc texte appendé
   au message à l'envoi, frontend-only), popover cellule Teleport body (fix ancêtres transform),
@@ -1306,6 +1336,13 @@ stockage = `webapp_chat_v5` (items generated_sql enrichis sql_id/step_index/agen
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0📊DONE (2026-07-02 Run 5). **Analytics d'usage ✅ VALIDÉ DSS** (zip DEV `index-D-NkcYpc.js`
+   déployé, backend redémarré par l'user). Reste, à la demande : (a) **dashboard d'adoption
+   Dataiku** : dataset SQL sur `webapp_events_v1` + rollups (DAU/WAU, top features par
+   event_name, sessions par gap 30 min, parcours `app_session_id`+`seq`, croisement chat_v5
+   pour tokens/coûts) ; (b) promotion PROD de l'arc analytics (avec les autres arcs en
+   attente) ; (c) events v2 selon ce que le dashboard révèle. Note : la table DEV contenait
+   quelques events à l'ancienne taxonomie (DROP TABLE conseillé, recréation lazy).
 0🧲DONE (2026-07-02 Run 4). **Source Data ergonomie + cell-to-agent ✅ VALIDÉ DSS** (zip DEV
    `index-CY8CEJu8.js` déployé). Reste, à la demande : (a) **promotion PROD de tout l'arc
    Source Data** (Runs 3+4 : rebuild + package prod + upload + restart backend, le python-lib

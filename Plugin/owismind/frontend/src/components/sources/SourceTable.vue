@@ -10,6 +10,7 @@ import { useSourcesStore } from '../../stores/sources.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
+import { track } from '../../services/track.js'
 import CellActionPopover from './CellActionPopover.vue'
 import { DataLoader, Icon } from '../ui'
 
@@ -65,6 +66,7 @@ function onCellClick(event, row, name) {
     source: sources.activeSourceLabel,
     canUse: value.length <= MAX_CONTEXT_VALUE_CHARS,
   }
+  track('source_cell_clicked', { column: name })
 }
 function usePopoverValue() {
   const p = popover.value

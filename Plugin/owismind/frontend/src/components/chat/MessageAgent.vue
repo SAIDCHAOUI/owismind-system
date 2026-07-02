@@ -26,6 +26,7 @@ import {
 } from '../../composables/timelineModel.js'
 import { resolveTimelineStep } from '../../registries/timelineSteps.js'
 import { submitFeedback } from '../../services/backend.js'
+import { track } from '../../services/track.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon, Menu } from '../ui'
 import FeedbackModal from './FeedbackModal.vue'
@@ -248,6 +249,7 @@ async function persistFeedback(rating, reasons, comment) {
   if (!ex) return false // no exchange id yet (still running / not persisted)
   try {
     await submitFeedback(ex, rating, reasons, comment)
+    track('feedback_submitted', { rating })
     v.value.feedbackRating = rating
     // Reasons only apply to a negative rating; the comment is kept for either rating (a 👍
     // can carry a "what you liked" note from the ⋯ modal). Clearing (null) wipes both.

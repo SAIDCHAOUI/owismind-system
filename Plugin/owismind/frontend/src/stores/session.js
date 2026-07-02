@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import { fetchMe, fetchConversations, fetchAgents, fetchUsage } from '../services/backend.js'
 import { mergeConversations, upsertAndBump } from './conversationList.js'
 import { pickDefaultAgent } from './agentPick.js'
+import { track } from '../services/track.js'
 
 // localStorage key for the last agent the user explicitly selected. Persisting it lets a
 // FRESH conversation default to that agent (instead of always the first in the list).
@@ -217,8 +218,10 @@ export const useSessionStore = defineStore('session', () => {
 
   // User-driven selection (the picker): persist it so a fresh conversation defaults to it.
   function selectAgent(key) {
+    const from = selectedAgentKey.value
     selectedAgentKey.value = key
     if (key) persistLastAgent(key)
+    track('agent_changed', { from: from || null, to: key || null })
   }
 
   // Pick the default agent for a fresh conversation: the last-used one if still enabled,

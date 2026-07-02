@@ -18,6 +18,7 @@ import {
   normalizeEditableOp,
   effectiveEvidenceQuery,
 } from '../composables/evidenceModel.js'
+import { track } from '../services/track.js'
 
 // Limit/offset pagination (v2): the first load pulls a big window, then each
 // "load more" appends a small one. INITIAL_LIMIT + n x MORE_LIMIT never exceeds
@@ -147,6 +148,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
       activeTab.value = _defaultTab(m)
       open.value = true
+      track('evidence_panel_opened', { auto: true })
       await _loadRows(mySeq)
       return
     }
@@ -155,6 +157,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     exchangeId.value = id
     _resetData()
     open.value = true
+    track('evidence_panel_opened', { auto: false })
     loading.value = true
     try {
       const m = await fetchEvidenceMeta(id)
@@ -244,11 +247,16 @@ export const useEvidenceStore = defineStore('evidence', () => {
     const before = effectiveEvidenceQuery(q.value)
     q.value = next
     if (effectiveEvidenceQuery(next) === before) return
+    // Record only the length (never the search text itself - it can carry PII).
+    track('evidence_searched', { len: next.length })
     offset.value = 0
     refreshRows()
   }
 
   function close() {
+    // Only a real open->closed transition is a user action worth recording (close() is
+    // also called idempotently on new-exchange / open-session, when nothing was open).
+    if (open.value) track('evidence_panel_closed', {})
     seq += 1 // invalidate any in-flight request
     open.value = false
     exchangeId.value = null
@@ -257,6 +265,8 @@ export const useEvidenceStore = defineStore('evidence', () => {
 
   // --- filter editing (picker = / IN + removal + add + reset) -----------------
   function removeChip(key) {
+    const chip = chips.value.find((c) => c.key === key)
+    track('evidence_filter_removed', { column: chip ? chip.column : null })
     chips.value = chips.value.filter((c) => c.key !== key)
     offset.value = 0
     refreshRows()
@@ -275,6 +285,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
   function addFilter(column, values) {
     if (!column || !values.length) return
+    track('evidence_filter_added', { column })
     userChipSeq += 1
     chips.value.push({
       key: 'u' + userChipSeq,
@@ -323,6 +334,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     // abort silently rather than drill on a partial (lying) scope.
     const labels = buildDrillLabels(cols, m.result.columns, row)
     if (!labels) return
+    track('evidence_row_drilled', {})
     // Consecutive drill (chevron clicked while already drilling): keep the
     // ORIGINAL pre-drill snapshot - only the labels change. Re-snapshotting
     // here would capture the in-drill view, and exitDrill would then restore
@@ -398,10 +410,25 @@ export const useEvidenceStore = defineStore('evidence', () => {
     return fetchEvidenceDistinct(exchangeId.value, column, excludeId, q)
   }
 
+  // Map each real tab key to a FIRST-CLASS analytics event, so dashboards read
+  // feature usage directly (which tab users open) instead of one generic event
+  // with a `tab` prop. Any future/unknown key falls back to evidence_tab_viewed
+  // carrying the raw key. The keys mirror EvidencePanel.tabItems.
+  const _TAB_EVENT_BY_KEY = {
+    evidence: 'evidence_proof_viewed',
+    sources: 'source_data_viewed',
+    chart: 'chart_viewed',
+    table: 'table_viewed',
+    kpi: 'kpi_viewed',
+  }
+
   // Switch the active tab. Switching MUST NOT touch `open` (the ChatThread scroll
   // gate is gated on `evidence.open`, not on `activeTab` - F13 rule).
   function setActiveTab(key) {
     activeTab.value = key
+    const name = _TAB_EVENT_BY_KEY[key]
+    if (name) track(name, {})
+    else track('evidence_tab_viewed', { tab: key })
   }
 
   return {

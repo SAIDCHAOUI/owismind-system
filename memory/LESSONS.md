@@ -2908,5 +2908,24 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `composables/sourceModel.js`, `evidence/source_search.py`.
 - **Date** : 2026-07-02.
 
+## L125 - Event tracking d'usage : ne JAMAIS enregistrer un path de requete avec sa query string ; le texte user ne doit entrer dans l'analytics que sous forme de longueur [valide DSS, 2026-07-02 Run 5]
+- **Contexte** : systeme d'analytics `webapp_events_v1` (route `POST /track` + `services/track.js`).
+  Regle de conception posee d'emblee : les events `evidence_searched`/`source_searched` ne stockent
+  que `{len}` (jamais le texte tape, il porte des noms de clients = PII metier).
+- **Ce qui a echoue** : le hook `error_backend` de `request()` (backend.js) enregistrait le path
+  COMPLET de la requete echouee dans `props.path`. Or `/evidence/distinct?...&q=<needle>` et
+  `/source/distinct?...&q=<needle>` embarquent la recherche en query string, et ces routes renvoient
+  des non-2xx ordinaires (429 throttle, 500 timeout) pendant que l'user tape -> la regle privacy
+  etait contournee par un chemin lateral que personne n'avait vise.
+- **Solution qui marche** : `path.split('?')[0]` avant tout track (seule la route est utile a
+  l'analytics) ; a generaliser a tout logging de path (les query strings peuvent AUSSI porter
+  session_id, exclude_id...).
+- **Preuve** : finding HIGH de la revue adversariale (4 lentilles + refutateur par finding, 12 Opus,
+  1 confirme / 7 refutes), chaine complete tracee par le verificateur ; fix re-teste (184 node verts).
+- **Lecon generale** : quand une regle "on ne stocke pas X" existe, chercher les CANAUX INDIRECTS
+  par lesquels X transite (URLs, messages d'erreur, payloads de debug) - c'est la qu'une revue
+  adversariale rapporte le plus.
+- **Source** : revue Workflow `review-analytics-tracking`, lentille security-privacy.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
