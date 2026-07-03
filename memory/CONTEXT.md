@@ -5,6 +5,22 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**📐 SESSION 2026-07-03 Run 3 (PAGE BENCHMARK PLUGIN : optimisation des espaces, retour user) -
+✅ local (QA runtime harnais L129), NON recollé DSS.** Retour user : vide en haut à droite, vide
+sous les tuiles KPI, Accuracy redondante avec le donut, aside "How this is measured" = une colonne
+gâchée. Fix (2 fichiers, `BenchmarkSuggestView.vue` + `extra.js`) : **header custom** slot
+`#header` PageShell (recette charte locale) avec **pickers Agent+Benchmark en haut à droite** ;
+**hero fusionné** (les tuiles KPI deviennent une colonne de stats compacte à filets 1px DANS la
+carte hero, calée sur sa hauteur = zéro vide) ; **tuile Accuracy SUPPRIMÉE** (affichait
+`centerText`, la valeur du centre du donut ; clé `bench.kpi.accuracy` purgée fr+en, parité OK) ;
+**aside sticky 320px SUPPRIMÉE** -> bande de référence horizontale discrète (`ref-strip` auto-fit,
+légende modes horizontale) sous la liste des questions (pleine largeur récupérée). Skeleton aligné,
+media queries 1080/760 refaites. **QA Playwright réelle** (mini-serveur mappant le préfixe assets
+-> `qa-app/` + `qa-stub.js` injecté ; captures LUES clair/sombre 1680 + 1024 ; 0 erreur console) ;
+**207 node verts, Vite OK, accolades 688/688, 0 tiret. Zip DEV `index-CZZt5we5.js` (81 entrées)
+REMPLACE `index-B61pkfo9.js`** (contient Runs 2+3), PROD intacte. Gotcha guardrail scratchpad ->
+**L131**. Voir `sessions/2026-07-03.md` (Run 3).
+
 **🏗️ SESSION 2026-07-03 Run 2 (REFONTE BENCHMARK : launcher LAB reequilibre + fusion golden +
 UI rename + page plugin refondue avec modes conditionnels) - ✅ local (QA runtime reelle), NON
 recolle DSS.**
@@ -103,11 +119,17 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-03 Runs 2 + 2b : refonte benchmark + hotfix CSS → détail `sessions/2026-07-03.md` + **L128-L130**
+## 🧭 Dernière session - 2026-07-03 Run 3 : optimisation des espaces page benchmark plugin → détail `sessions/2026-07-03.md` (Run 3) + **L131**
+- **✅ Local (QA runtime réelle), NON recollé DSS.** Pickers dans l'en-tête (vide haut-droit comblé),
+  hero + stats fusionnés (Accuracy supprimée, redondante donut), aside -> bande de référence en pied.
+- **Zip DEV `index-CZZt5we5.js` remplace `index-B61pkfo9.js`** (Runs 2+3) ; smoke DSS = layout
+  (header/hero/bande, dark, ~1280px) + les smokes Run 2 ; revue adversariale des diffs à relancer.
+
+## 🧭 Avant - 2026-07-03 Runs 2 + 2b : refonte benchmark + hotfix CSS → détail `sessions/2026-07-03.md` + **L128-L130**
 - **✅ Local (QA runtime). Recoll DSS en cours par l'user** : HTML + JS launcher déjà collés
   (constaté sur son screenshot) ; **le pane CSS à coller = style.css POST-hotfix `a571474`**
   (la version du commit `98c06fc` est syntaxiquement cassée, L130). Route /api/config (Run 1)
-  encore à coller ; plugin : zip DEV `index-B61pkfo9.js` + restart backend.
+  encore à coller ; plugin : zip DEV (désormais `index-CZZt5we5.js`, Run 3) + restart backend.
 - Smoke DSS : rename, Review pré-filtré, badge suggestions, datalist catégories ; page plugin
   mono vs multi-mode, onglets détail, dark. Revue adversariale multi-agents à relancer (quota).
 
@@ -390,7 +412,9 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
 0🏗️NEW (2026-07-03 Run 2). **RECOLLER + VALIDER la refonte benchmark.** LAB : coller les 3 panes
    launcher (`body.html` + `script.js` + `style.css` ; backend.py inchangé ce run mais la route
    `/api/config` du Run 1 reste à coller) et recharger. Plugin : uploader le zip DEV
-   (`index-B61pkfo9.js`) + redémarrer le backend. Smoke : rename (vide/doublon/valide), carte fin
+   (`index-CZZt5we5.js`, inclut l'optimisation des espaces du Run 3) + redémarrer le backend.
+   Smoke : layout benchmark (pickers dans l'en-tête, hero + colonne de stats sans vide, bande de
+   référence en pied, dark) ; rename (vide/doublon/valide), carte fin
    de run -> Review pré-filtré -> Back, badge suggestions, golden-tag + datalist catégories ;
    page benchmark mono vs multi-mode (zéro appareil de modes en mono), onglets détail (SQL
    formaté, History si n>1), dark. Puis relancer la revue adversariale multi-agents sur les

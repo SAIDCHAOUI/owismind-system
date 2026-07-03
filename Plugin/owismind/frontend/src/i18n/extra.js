@@ -531,8 +531,7 @@ export const extraMessages = {
     'bench.consult.no_results': "Aucun résultat de benchmark pour cet agent pour l'instant.",
     'bench.consult.hero': '{0} réponses correctes sur {1}',
 
-    // KPI tiles
-    'bench.kpi.accuracy': 'Justesse',
+    // Hero stat rows (no "accuracy": the donut already shows it)
     'bench.kpi.questions': 'Questions',
     'bench.kpi.configs': 'Configurations',
     'bench.kpi.cost': 'Coût total',
@@ -1267,8 +1266,7 @@ export const extraMessages = {
     'bench.consult.no_results': 'No benchmark results for this agent yet.',
     'bench.consult.hero': '{0} of {1} answered correctly',
 
-    // KPI tiles
-    'bench.kpi.accuracy': 'Accuracy',
+    // Hero stat rows (no "accuracy": the donut already shows it)
     'bench.kpi.questions': 'Questions',
     'bench.kpi.configs': 'Configurations',
     'bench.kpi.cost': 'Total cost',

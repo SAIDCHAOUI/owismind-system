@@ -122,13 +122,13 @@ const multiMode = computed(() => hasMultipleModes(results.value))
 const singleAgent = computed(() => benchmarkAgents.value.length === 1)
 // Hero verdict pill kind (good / mid / bad / plaus) from the confidence band.
 const heroPillKind = computed(() => heroVerdictKind(kpis.value && kpis.value.band))
-// The KPI tiles, built so the "configurations" tile drops out in single-mode runs
-// and the grid (auto-fit) simply reflows. Each tile is { key, label, value, flag? }.
+// The hero stat rows. No "accuracy" entry on purpose: it duplicated the donut
+// center value. The "configurations" row drops out in single-mode runs.
+// Each row is { key, label, value, small?, flag? }.
 const kpiTiles = computed(() => {
   const k = kpis.value
   if (!k) return []
   const tiles = [
-    { key: 'accuracy', label: t('bench.kpi.accuracy'), value: centerText.value },
     { key: 'questions', label: t('bench.kpi.questions'), value: String(k.n_questions) },
   ]
   if (multiMode.value) {
@@ -416,29 +416,19 @@ function fmtDate(value) {
 </script>
 
 <template>
-  <PageShell fluid :eyebrow="t('bench.eyebrow')" :title="t('bench.page_title')" :desc="t('bench.page_desc')">
-    <!-- ========================= CONSULTATION ========================= -->
-    <section class="bench-section">
-      <div class="bench-section-head">
-        <span class="ico-square"><Icon name="chart" :size="18" /></span>
-        <div>
-          <h2 class="bench-section-title">{{ t('bench.consult.title') }}</h2>
-          <p class="bench-section-desc">{{ t('bench.consult.desc') }}</p>
+  <PageShell fluid>
+    <!-- Custom header (charter recipe reproduced locally): title block on the left,
+         the agent + benchmark pickers on the right, so the header row's empty right
+         half carries the page controls instead of sitting blank. -->
+    <template #header>
+      <header class="bench-head">
+        <div class="bench-head-main">
+          <p class="bh-eyebrow">{{ t('bench.eyebrow') }}</p>
+          <h1 class="bh-title">{{ t('bench.page_title') }}</h1>
+          <div class="bh-bar" aria-hidden="true"></div>
+          <p class="bh-desc">{{ t('bench.page_desc') }}</p>
         </div>
-      </div>
-
-      <!-- No benchmark-capable agent at all -->
-      <EmptyState
-        v-if="!benchmarkAgents.length"
-        bordered
-        icon="chart"
-        :title="t('bench.consult.no_agents_title')"
-        :desc="t('bench.consult.no_agents')"
-      />
-
-      <template v-else>
-        <!-- Agent + run pickers -->
-        <div class="consult-pickers">
+        <div v-if="benchmarkAgents.length" class="bench-head-pickers">
           <div class="cp-field">
             <label class="bench-label" for="bench-agent">{{ t('bench.consult.agent_label') }}</label>
             <!-- A single benchmark-capable agent needs no picker: show a static label. -->
@@ -473,7 +463,29 @@ function fmtDate(value) {
             </div>
           </div>
         </div>
+      </header>
+    </template>
 
+    <!-- ========================= CONSULTATION ========================= -->
+    <section class="bench-section">
+      <div class="bench-section-head">
+        <span class="ico-square"><Icon name="chart" :size="18" /></span>
+        <div>
+          <h2 class="bench-section-title">{{ t('bench.consult.title') }}</h2>
+          <p class="bench-section-desc">{{ t('bench.consult.desc') }}</p>
+        </div>
+      </div>
+
+      <!-- No benchmark-capable agent at all -->
+      <EmptyState
+        v-if="!benchmarkAgents.length"
+        bordered
+        icon="chart"
+        :title="t('bench.consult.no_agents_title')"
+        :desc="t('bench.consult.no_agents')"
+      />
+
+      <template v-else>
         <!-- States: flat charter skeleton while loading, framed cards otherwise -->
         <div
           v-if="bench.resultsLoading && !results"
@@ -481,12 +493,7 @@ function fmtDate(value) {
           role="status"
           :aria-label="t('bench.consult.loading')"
         >
-          <div class="sk-band">
-            <div class="sk-box sk-donut" />
-            <div class="sk-kpis">
-              <div v-for="n in 4" :key="n" class="sk-box sk-kpi" />
-            </div>
-          </div>
+          <div class="sk-box sk-hero" />
           <div class="sk-list">
             <div v-for="n in 6" :key="n" class="sk-box sk-row" />
           </div>
@@ -511,41 +518,35 @@ function fmtDate(value) {
             <span>{{ t('bench.consult.read_error') }}</span>
           </div>
 
-          <!-- content (1fr) + reference aside (360px), like the LAB results webapp -->
-          <div class="consult-body">
-            <div class="consult-content">
-              <!-- TOP BAND: hero (donut + verdict) left, KPI tiles right, one row on
-                   wide screens so the questions surface sooner. -->
-              <div class="top-band">
-                <div class="hero">
-                  <div class="donut-wrap">
-                    <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
-                      <circle class="donut-track" cx="60" cy="60" r="52" />
-                      <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
-                    </svg>
-                    <div class="donut-center">
-                      <span class="donut-pct">{{ centerText }}</span>
-                      <span class="donut-band">{{ t('bench.consult.correct_label') }}</span>
-                    </div>
-                  </div>
-                  <div class="hero-body">
-                    <p v-if="results.benchmark_name" class="hero-bench">
-                      {{ t('bench.consult.benchmark_caption', [results.benchmark_name]) }}
-                    </p>
-                    <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
-                    <span class="verdict" :class="heroPillKind"><span class="sq" /><span>{{ bandLabel }}</span></span>
-                    <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
-                  </div>
-                </div>
-
-                <!-- KPI tiles (auto-fit; the "configurations" tile drops in single-mode). -->
-                <div class="kpis">
-                  <div v-for="tile in kpiTiles" :key="tile.key" class="kpi">
-                    <span class="k-lab">{{ tile.label }}</span>
-                    <span class="k-val" :class="{ sm: tile.small, flag: tile.flag }">{{ tile.value }}</span>
-                  </div>
-                </div>
+          <!-- HERO BAND: donut + verdict + a compact stat column, ONE card. The old
+               KPI tiles lived in a separate stretched column and left a hole under
+               them; folded here as filet-separated rows they match the hero height. -->
+          <div class="hero">
+            <div class="donut-wrap">
+              <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
+                <circle class="donut-track" cx="60" cy="60" r="52" />
+                <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
+              </svg>
+              <div class="donut-center">
+                <span class="donut-pct">{{ centerText }}</span>
+                <span class="donut-band">{{ t('bench.consult.correct_label') }}</span>
               </div>
+            </div>
+            <div class="hero-body">
+              <p v-if="results.benchmark_name" class="hero-bench">
+                {{ t('bench.consult.benchmark_caption', [results.benchmark_name]) }}
+              </p>
+              <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
+              <span class="verdict" :class="heroPillKind"><span class="sq" /><span>{{ bandLabel }}</span></span>
+              <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
+            </div>
+            <div class="hero-stats">
+              <div v-for="tile in kpiTiles" :key="tile.key" class="stat">
+                <span class="s-lab">{{ tile.label }}</span>
+                <span class="s-val" :class="{ sm: tile.small, flag: tile.flag }">{{ tile.value }}</span>
+              </div>
+            </div>
+          </div>
 
           <!-- Per agent x mode: one performance card each -->
           <div v-if="results.configs.length" class="section">
@@ -807,34 +808,33 @@ function fmtDate(value) {
               </li>
             </ul>
           </div>
-            </div>
 
-            <!-- Reference aside (how it is measured + legends) -->
-            <aside class="consult-aside">
-              <div class="ref-block">
-                <p class="ref-h">{{ t('bench.ref.measure_h') }}</p>
-                <p class="ref-p">{{ t('bench.ref.measure_p') }}</p>
+          <!-- Reference footnote (replaces the old 320px sticky aside): a slim
+               horizontal strip under the results, plain-language help only. -->
+          <div class="ref-strip">
+            <div class="ref-block">
+              <p class="ref-h">{{ t('bench.ref.measure_h') }}</p>
+              <p class="ref-p">{{ t('bench.ref.measure_p') }}</p>
+            </div>
+            <div class="ref-block">
+              <p class="ref-h">{{ t('bench.ref.score_h') }}</p>
+              <dl class="ref-dl">
+                <div class="r"><dt>{{ t('bench.ref.judge_t') }}</dt><dd>{{ t('bench.ref.judge_d') }}</dd></div>
+                <div class="r"><dt>{{ t('bench.ref.dc_t') }}</dt><dd>{{ t('bench.ref.dc_d') }}</dd></div>
+              </dl>
+            </div>
+            <!-- The modes legend is contextual: only shown when several modes ran. -->
+            <div v-if="multiMode" class="ref-block">
+              <p class="ref-h">{{ t('bench.ref.modes_h') }}</p>
+              <p class="ref-p">{{ t('bench.ref.modes_p') }}</p>
+              <div class="legend">
+                <div class="l"><span class="dot" style="background:var(--success)" />Smart</div>
+                <div class="l"><span class="dot" style="background:var(--orange)" />Pro</div>
+                <div class="l"><span class="dot" style="background:var(--danger)" />Claude</div>
+                <div class="l"><span class="dot" style="background:var(--text-3)" />Standard</div>
               </div>
-              <div class="ref-block">
-                <p class="ref-h">{{ t('bench.ref.score_h') }}</p>
-                <dl class="ref-dl">
-                  <div class="r"><dt>{{ t('bench.ref.judge_t') }}</dt><dd>{{ t('bench.ref.judge_d') }}</dd></div>
-                  <div class="r"><dt>{{ t('bench.ref.dc_t') }}</dt><dd>{{ t('bench.ref.dc_d') }}</dd></div>
-                </dl>
-              </div>
-              <!-- The modes legend is contextual: only shown when several modes ran. -->
-              <div v-if="multiMode" class="ref-block">
-                <p class="ref-h">{{ t('bench.ref.modes_h') }}</p>
-                <p class="ref-p">{{ t('bench.ref.modes_p') }}</p>
-                <div class="legend">
-                  <div class="l"><span class="dot" style="background:var(--success)" />Smart</div>
-                  <div class="l"><span class="dot" style="background:var(--orange)" />Pro</div>
-                  <div class="l"><span class="dot" style="background:var(--danger)" />Claude</div>
-                  <div class="l"><span class="dot" style="background:var(--text-3)" />Standard</div>
-                </div>
-                <p class="ref-p" style="margin-top:12px">{{ t('bench.ref.modes_std') }}</p>
-              </div>
-            </aside>
+              <p class="ref-p ref-p--tail">{{ t('bench.ref.modes_std') }}</p>
+            </div>
           </div>
         </template>
       </template>
@@ -1046,12 +1046,55 @@ function fmtDate(value) {
   color: var(--orange);
 }
 
-/* --- Pickers --- */
-.consult-pickers {
+/* --- Custom page header: title block left, pickers right (charter recipe) --- */
+.bench-head {
   display: flex;
-  gap: var(--s-5);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-5) var(--s-7);
   flex-wrap: wrap;
-  margin-bottom: var(--s-5);
+  margin-bottom: var(--s-7);
+}
+.bench-head-main {
+  min-width: 260px;
+}
+.bh-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--orange);
+  margin: 0 0 10px;
+}
+.bh-title {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--text);
+  margin: 0;
+}
+.bh-bar {
+  width: 52px;
+  height: 4px;
+  background: var(--orange);
+  margin: 16px 0 0;
+}
+.bh-desc {
+  margin: 14px 0 0;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  color: var(--text-2);
+  max-width: 640px;
+}
+
+/* --- Pickers (live in the header, bottom-right aligned) --- */
+.bench-head-pickers {
+  display: flex;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-left: auto;
 }
 .cp-field {
   display: flex;
@@ -1131,18 +1174,10 @@ function fmtDate(value) {
 .skeleton {
   margin-bottom: var(--s-5);
 }
-.sk-band {
-  display: flex;
-  gap: var(--s-5);
-  flex-wrap: wrap;
+.sk-hero {
+  height: 176px;
+  border-top: 3px solid var(--border-strong);
   margin-bottom: var(--s-5);
-}
-.sk-kpis {
-  flex: 1;
-  min-width: 240px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--s-4);
 }
 .sk-list {
   display: flex;
@@ -1153,15 +1188,6 @@ function fmtDate(value) {
   background: var(--surface-2);
   border: 1px solid var(--border);
   animation: sk-pulse 1.2s ease-in-out infinite;
-}
-.sk-donut {
-  width: 200px;
-  height: 132px;
-  flex: 0 0 200px;
-}
-.sk-kpi {
-  height: 92px;
-  border-top: 3px solid var(--border-strong);
 }
 .sk-row {
   height: 56px;
@@ -1202,28 +1228,6 @@ function fmtDate(value) {
   border-color: var(--border);
 }
 
-/* --- Content + reference aside (LAB results two-column) --- */
-.consult-body {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-.consult-content {
-  flex: 1;
-  min-width: 0;
-}
-.consult-aside {
-  width: 320px;
-  flex: 0 0 320px;
-  border-left: 1px solid var(--border);
-  padding-left: var(--s-6);
-  margin-left: var(--s-6);
-  /* Stay useful while the question list scrolls. */
-  position: sticky;
-  top: var(--s-5);
-  align-self: flex-start;
-}
-
 /* sections inside the consultation content */
 .section {
   margin-top: var(--s-7);
@@ -1241,25 +1245,17 @@ function fmtDate(value) {
   margin: 0;
 }
 
-/* --- Top band: hero (left) + KPI tiles (right) on one horizontal row --- */
-.top-band {
-  display: grid;
-  grid-template-columns: minmax(340px, 1.1fr) 2fr;
-  gap: var(--s-5);
-  align-items: stretch;
-  margin-bottom: var(--s-6);
-}
-
-/* --- Hero: donut + verdict + note --- */
+/* --- Hero band: donut + verdict + compact stat column in ONE card --- */
 .hero {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) minmax(230px, 300px);
   gap: var(--s-6);
   align-items: center;
-  padding: var(--s-6);
+  padding: var(--s-5) var(--s-6);
   border: 1px solid var(--border-strong);
   border-top: 3px solid var(--orange);
   background: var(--bg);
+  margin-bottom: var(--s-6);
 }
 .donut-wrap {
   position: relative;
@@ -1369,40 +1365,43 @@ function fmtDate(value) {
   margin: var(--s-4) 0 0;
 }
 
-/* --- KPI tiles (auto-fit; the "configurations" tile drops in single-mode) --- */
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+/* --- Hero stat column (filet-separated rows; no dead space under tiles) --- */
+.hero-stats {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+  padding-left: var(--s-6);
+}
+.stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--s-4);
-  align-content: start;
+  padding: 9px 0;
 }
-.kpi {
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--orange);
-  background: var(--bg);
-  padding: 16px;
+.stat + .stat {
+  border-top: 1px solid var(--border);
 }
-.kpi .k-lab {
-  display: block;
+.s-lab {
   font-size: 11px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-2);
-  margin-bottom: 12px;
 }
-.kpi .k-val {
-  display: block;
-  font-size: 26px;
+.s-val {
+  font-size: var(--fs-lg);
   font-weight: var(--fw-heavy);
   font-family: var(--font-mono);
   color: var(--text);
-  line-height: 1;
+  white-space: nowrap;
 }
-.kpi .k-val.sm {
-  font-size: 20px;
+.s-val.sm {
+  font-size: var(--fs-md);
 }
-.kpi .k-val.flag {
+.s-val.flag {
   color: var(--danger);
 }
 
@@ -2166,11 +2165,14 @@ function fmtDate(value) {
   }
 }
 
-/* --- Reference aside --- */
-.ref-block + .ref-block {
-  margin-top: var(--s-5);
+/* --- Reference footnote strip (replaces the sticky aside) --- */
+.ref-strip {
+  margin-top: var(--s-7);
   padding-top: var(--s-5);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-strong);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s-5) var(--s-8);
 }
 .ref-h {
   font-size: 11px;
@@ -2210,10 +2212,13 @@ function fmtDate(value) {
   color: var(--text-2);
   line-height: 1.5;
 }
+.ref-p--tail {
+  margin: 12px 0 0;
+}
 .legend {
   display: flex;
-  flex-direction: column;
-  gap: 9px;
+  flex-wrap: wrap;
+  gap: 9px 18px;
 }
 .legend .l {
   display: flex;
@@ -2239,20 +2244,16 @@ function fmtDate(value) {
 
 /* --- consultation responsive --- */
 @media (max-width: 1080px) {
-  /* Hero + KPIs stack, and the aside drops below the content (no longer sticky). */
-  .top-band {
-    grid-template-columns: 1fr;
+  /* The stat column drops under the donut + verdict row (full width). */
+  .hero {
+    grid-template-columns: auto minmax(0, 1fr);
   }
-  .consult-aside {
-    width: auto;
-    flex: none;
+  .hero-stats {
+    grid-column: 1 / -1;
     border-left: none;
     border-top: 1px solid var(--border);
     padding-left: 0;
-    margin-left: 0;
-    margin-top: var(--s-6);
-    padding-top: var(--s-6);
-    position: static;
+    padding-top: var(--s-2);
   }
 }
 @media (max-width: 760px) {
@@ -2260,6 +2261,10 @@ function fmtDate(value) {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
+  }
+  .hero-stats {
+    width: 100%;
+    text-align: left;
   }
   .submetrics {
     grid-template-columns: 1fr 1fr;

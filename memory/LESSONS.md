@@ -3050,5 +3050,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-03.md Run 2b ; retour user (screenshot DSS).
 - **Date** : 2026-07-03.
 
+## L131 - Harnais QA plugin (L129) : le guardrail bloque l'écriture de TOUT chemin `resource/owismind-app`, même en scratchpad ; servir le base path par réécriture d'URL, pas en le matérialisant sur disque
+- **Contexte** : rejouer le harnais L129 (QA runtime de la page benchmark sans DSS) en construisant
+  le dist scratch SOUS le base path Vite `/plugins/owismind/resource/owismind-app/` pour que les
+  assets se résolvent avec un simple serveur statique.
+- **Ce qui a échoué** : le hook PreToolUse `guardrail.sh` bloque les Write/Edit sur tout chemin
+  contenant `resource/owismind-app` SANS distinguer le repo du scratchpad -> impossible d'écrire
+  `qa-stub.js` (ou quoi que ce soit) dans un dossier scratch qui reproduit ce chemin.
+- **Solution qui marche** : (1) `vite build --outDir <scratch>/qa-app` (nom neutre, jamais le
+  chemin canonique) ; (2) mini-serveur stdlib (`qa-serve.py`) dont `translate_path` RÉÉCRIT le
+  préfixe `/plugins/owismind/resource/owismind-app/` -> `qa-app/`, et qui injecte
+  `<script src=".../qa-stub.js">` dans `index.html` À LA VOLÉE (avant le module script ; les
+  scripts classiques s'exécutent avant les modules différés) -> zéro édition du build ; (3) stub =
+  `window.getWebAppBackendUrl = p => p` + `window.fetch` intercepté sur `/owismind-api/*` avec
+  mocks en mémoire (gère aussi le POST /me, qu'un http.server statique refuserait en 501).
+  Gotcha bonus : les screenshots du MCP Playwright atterrissent à la RACINE du repo (pas dans le
+  scratchpad) -> les LIRE (L130) puis les supprimer avant commit.
+- **Preuve** : page `#/benchmark` rendue avec les mocks (me admin + 2 agents + résultats
+  multi-mode), captures clair/sombre 1680px + 1024px lues, 0 erreur console ; guardrail resté
+  intact (aucune exception ajoutée).
+- **Source** : sessions/2026-07-03.md Run 3 ; `.claude/hooks/guardrail.sh`.
+- **Date** : 2026-07-03.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
