@@ -650,6 +650,23 @@ export const extraMessages = {
     'bench.refprod.suggested_tool': 'Outil suggéré',
     'bench.refprod.tools_used': 'Outils utilisés',
     'bench.refprod.none': '- aucun -',
+    'bench.refprod.note': "La référence est un indice donné au juge, pas une mesure contraignante.",
+
+    // Consultation redesign: detail tabs, question chips, attempt history, meta banner
+    'bench.tab.answer': 'Réponse complète',
+    'bench.tab.sql': 'SQL et données',
+    'bench.tab.reference': 'Référence',
+    'bench.tab.history': 'Historique',
+    'bench.detail.flag_review': 'À revérifier',
+    'bench.detail.judge_label': 'Verdict du juge',
+    'bench.detail.answers_title': 'Réponse attendue et réponse produite',
+    'bench.detail.meta_title': 'En bref',
+    'bench.detail.uncategorized': 'Sans catégorie',
+    'bench.hist.col_attempt': 'Tentative',
+    'bench.hist.col_date': 'Date',
+    'bench.hist.col_result': 'Résultat',
+    'bench.hist.col_score': 'Score',
+    'bench.hist.latest': 'Dernière',
 
     // Suggest sub-section (accordion)
     'bench.section.suggest_title': 'Suggérer une question de test',
@@ -1369,6 +1386,23 @@ export const extraMessages = {
     'bench.refprod.suggested_tool': 'Suggested tool',
     'bench.refprod.tools_used': 'Tools used',
     'bench.refprod.none': '- none -',
+    'bench.refprod.note': 'The reference is a hint given to the judge, not a binding metric.',
+
+    // Consultation redesign: detail tabs, question chips, attempt history, meta banner
+    'bench.tab.answer': 'Full answer',
+    'bench.tab.sql': 'SQL & data',
+    'bench.tab.reference': 'Reference',
+    'bench.tab.history': 'History',
+    'bench.detail.flag_review': 'To double-check',
+    'bench.detail.judge_label': 'Judge verdict',
+    'bench.detail.answers_title': 'Expected vs produced answer',
+    'bench.detail.meta_title': 'At a glance',
+    'bench.detail.uncategorized': 'Uncategorized',
+    'bench.hist.col_attempt': 'Attempt',
+    'bench.hist.col_date': 'Date',
+    'bench.hist.col_result': 'Result',
+    'bench.hist.col_score': 'Score',
+    'bench.hist.latest': 'Latest',
 
     // Suggest sub-section (accordion)
     'bench.section.suggest_title': 'Suggest a test question',

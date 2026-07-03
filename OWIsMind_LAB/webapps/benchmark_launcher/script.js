@@ -81,74 +81,17 @@
 
 
 
-    "qt.help": {
-      en: "Pick the categories to test. Empty selection = all {n} active questions.",
-      fr: "Choisissez les categories a tester. Aucune selection = les {n} questions actives."
-    },
-    "qt.nocats": {
-      en: "No category in the golden set yet.",
-      fr: "Aucune categorie dans le jeu de reference pour l'instant."
-    },
 
 
 
-    "save.invalidTitle": { en: "The configuration could not be saved:", fr: "La configuration n'a pas pu etre enregistree :" },
 
-    "run.never": { en: "never", fr: "jamais" },
     "run.launched": { en: "Benchmark launched.", fr: "Benchmark lance." },
     "run.lostContact": { en: "Lost contact with the run. Check the DSS scenario log.", fr: "Contact perdu avec l'execution. Consultez le log du scenario DSS." },
 
-    "pr.na": { en: "Not configured", fr: "Non configuree" },
 
-    "gs.eyebrow": { en: "Golden set", fr: "Jeu de reference" },
-    "gs.title": { en: "Questions", fr: "Questions" },
-    "gs.note": {
-      en: "The reference questions the benchmark scores the agents against, with the answer you expect. Add, edit, enable/disable or remove them. Changes apply to the next run.",
-      fr: "Les questions de reference sur lesquelles le benchmark evalue les agents, avec la reponse attendue. Ajoutez, modifiez, activez/desactivez ou retirez-les. Les changements s'appliquent a la prochaine execution."
-    },
-    "gs.count": { en: "{n} question(s), {a} active", fr: "{n} question(s), {a} active(s)" },
-    "gs.add": { en: "Add a question", fr: "Ajouter une question" },
-    "gs.empty": {
-      en: "No question yet. Add the first one, or promote a user suggestion.",
-      fr: "Aucune question pour l'instant. Ajoutez la premiere, ou promouvez une suggestion."
-    },
-    "gs.loadError": { en: "Could not load the golden questions.", fr: "Impossible de charger les questions de reference." },
 
-    "th.status": { en: "On", fr: "Actif" },
-    "th.q": { en: "Question", fr: "Question" },
-    "th.a": { en: "Expected answer", fr: "Reponse attendue" },
-    "th.anchor": { en: "Anchor", fr: "Ancre" },
-    "th.cat": { en: "Category", fr: "Categorie" },
-    "th.lang": { en: "Lang", fr: "Langue" },
-    "th.act": { en: "Actions", fr: "Actions" },
 
-    "q.edit": { en: "Edit", fr: "Modifier" },
-    "q.delete": { en: "Delete", fr: "Supprimer" },
-    "q.deleteConfirm": { en: "Delete this question?", fr: "Supprimer cette question ?" },
-    "q.deleteGo": { en: "Delete", fr: "Supprimer" },
-    "q.deleteCancel": { en: "Cancel", fr: "Annuler" },
-    "q.saved": { en: "Question updated", fr: "Question mise a jour" },
-    "q.added": { en: "Question added", fr: "Question ajoutee" },
-    "q.removed": { en: "Question removed", fr: "Question retiree" },
-    "q.toggled": { en: "Question updated", fr: "Question mise a jour" },
-    "q.saveError": { en: "Could not save the question.", fr: "Impossible d'enregistrer la question." },
-    "q.deleteError": { en: "Could not delete the question.", fr: "Impossible de supprimer la question." },
 
-    "md.add": { en: "Add a question", fr: "Ajouter une question" },
-    "md.edit": { en: "Edit question", fr: "Modifier la question" },
-    "md.q": { en: "Question", fr: "Question" },
-    "md.a": { en: "Expected answer", fr: "Reponse attendue" },
-    "md.anchor": { en: "Anchor value (optional)", fr: "Valeur d'ancre (optionnel)" },
-    "md.anchorType": { en: "Anchor type", fr: "Type d'ancre" },
-    "md.valueHelp": {
-      en: "The anchor is the exact value the judge checks against (a number, currency, date, or list). Leave it empty for an open answer.",
-      fr: "L'ancre est la valeur exacte que le juge controle (un nombre, une devise, une date ou une liste). Laissez vide pour une reponse ouverte."
-    },
-    "md.cat": { en: "Category", fr: "Categorie" },
-    "md.lang": { en: "Language", fr: "Langue" },
-    "md.active": { en: "Active in the next run", fr: "Active a la prochaine execution" },
-    "md.cancel": { en: "Cancel", fr: "Annuler" },
-    "md.save": { en: "Save question", fr: "Enregistrer" },
 
     "vt.none": { en: "(none)", fr: "(aucun)" },
     "vt.numeric": { en: "Number", fr: "Nombre" },
@@ -288,13 +231,6 @@
     "bd.status.pending": { en: "Pending", fr: "En attente" },
 
     /* --- golden: reference SQL / tool (soft judge signal) --- */
-    "md.sql": { en: "Reference SQL (optional)", fr: "SQL de reference (optionnel)" },
-    "md.sqlHelp": {
-      en: "A SQL that could answer the question. A soft hint to the judge - a different but correct query is fine.",
-      fr: "Un SQL qui pourrait repondre a la question. Un indice souple pour le juge - une requete differente mais correcte reste valable."
-    },
-    "md.tool": { en: "Suggested tool (optional)", fr: "Outil suggere (optionnel)" },
-    "th.ref": { en: "Reference SQL / tool", fr: "SQL / outil de reference" },
 
     /* --- review: benchmark selector + per-attempt override --- */
     "rv.bench": { en: "Benchmark", fr: "Benchmark" },
@@ -397,6 +333,15 @@
     "bd4.runDone":    { en: "Run complete.",        fr: "Execution terminee." },
     "bd4.runError":   { en: "Launch failed.",       fr: "Echec du lancement." },
     "bd4.tagQ":       { en: "Tag questions",        fr: "Taguer des questions" },
+    /* --- benchmark detail: 3-zone layout + manage cluster (rename / edit modes / delete) --- */
+    "bd4.eyebrow":    { en: "Benchmark",            fr: "Benchmark" },
+    "bd4.runSection": { en: "Run",                  fr: "Execution" },
+    "bd4.rename":     { en: "Rename",               fr: "Renommer" },
+    "bd4.rename.save":{ en: "Save",                 fr: "Enregistrer" },
+    "bd4.renamed":    { en: "Benchmark renamed.",   fr: "Benchmark renomme." },
+    "bd4.renameEmpty":{ en: "A name is required.",  fr: "Un nom est requis." },
+    "bd4.renameError":{ en: "Could not rename the benchmark.", fr: "Impossible de renommer le benchmark." },
+    "bd4.reviewResults": { en: "Review the results", fr: "Revoir les resultats" },
     /* --- benchmark detail: clearer status summary + legend --- */
     "bd4.how": {
       en: "Each active question is tested once per mode: {q} question(s) x {m} mode(s) = {t} test(s).",
@@ -428,7 +373,6 @@
     "run.viewRun":      { en: "View run",     fr: "Voir le run" },
     "run.complete.score":   { en: "Score: {pct}",    fr: "Score : {pct}" },
     "run.complete.mode":    { en: "{mode}: {pct}",   fr: "{mode} : {pct}" },
-    "run.complete.results": { en: "Open full results in Results webapp", fr: "Voir les resultats complets dans la webapp Results" },
     "run.evo.title":    { en: "Changes vs previous run",  fr: "Changements par rapport au run precedent" },
     "run.evo.improved": { en: "Improved",   fr: "Ameliore" },
     "run.evo.regressed":{ en: "Regressed",  fr: "Regresse" },
@@ -521,22 +465,18 @@
 
   var S = {
     tab: "benchmarks",
-    // config meta (vestigial: written by refreshConfigMeta, read by the golden modal + count)
+    // Categories seen in the golden set; refreshed by refreshConfigMeta (GET config) and read by
+    // golden-tag form category datalist (buildGoldenTagForm).
     categories: [],
-    filterCategories: [],
-    questionCount: 0,
-    runs: [],
-    preserved: { golden: "", judge: "", suggestions: {} },
-    dirty: false,
-    saveError: null,
-    // golden
-    golden: { loaded: false, loadError: false, list: [], confirmDelete: null },
-    // modal editor
-    editor: { open: false, isNew: false, qid: "", error: null },
     // suggestions
     suggestions: { loaded: false, loadError: false, configured: false, list: [], selected: {}, confirm: false, confirmCount: 0 },
+    // UX-7: count of pending suggestions shown as a badge on the header link (best-effort).
+    suggestPending: 0,
     // review (human-in-the-loop verdict override) - v2: a benchmark selector, every attempt listed
     review: { loaded: false, loadError: false, benchmarkId: "", onlyNeedsReview: false, benchmarks: [], rows: [], count: 0, expanded: {}, saving: {}, detail: {} },
+    // UX-2: route to restore when leaving the Review panel via Back, set only when Review was
+    // entered from a benchmark context (e.g. the run-complete card). Null = default (go to benchmarks).
+    reviewReturn: null,
     // Agent-first routing (dispatch 1)
     route: { level: "home", agentKey: null, benchmarkId: null },
     agentCatalog: { loaded: false, loadError: false, discovering: false, agents: [], discovered_at: null, discoveryFailed: false },
@@ -545,7 +485,7 @@
     agentRemoveConfirm: "",
     agentView: { loaded: false, loadError: false, agentKey: null, n_tagged: 0, benchmarks: [], creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" },
     // Screen 4: benchmark detail (dispatch 2)
-    benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false },
+    benchDetailState: { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false, renaming: false, renameValue: "", renameError: null },
     // Screen 6: golden agent-tagging panel
     goldenTag: { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null },
     // Screen 7: settings panel
@@ -933,6 +873,8 @@
         d.modes = newModes;
         return { benchmark_id: d.benchmark_id, modes: newModes };
       });
+    } else if (method === "POST" && path0 === "benchmark/rename") {
+      data = mockBenchRename(body || {});
     } else if (method === "POST" && path0 === "benchmark/delete") {
       var delBid2 = (body && body.benchmark_id) || "";
       if (!MOCK.bench_detail[delBid2]) { status = 404; data = { status: "error", error: "unknown_benchmark" }; }
@@ -1069,6 +1011,28 @@
     return { status: "ok", benchmark_id: bid, name: name, n_questions: questions.length };
   }
 
+  // UX-3: mock mirror of POST /api/benchmark/rename (backend.py l.312-321 -> dss.rename_benchmark
+  // -> registry.validate_benchmark_name). Non-blank, <= 80 chars, unique per agent (case-insensitive,
+  // excluding this benchmark's own current name). Same response shapes as the real backend:
+  // {status:"ok", benchmark_id, name} or {status:"error", error:"invalid_request", messages:[...]}.
+  function mockBenchRename(body) {
+    var bid = (body.benchmark_id || "").trim();
+    var name = (body.name || "").trim();
+    var d = MOCK.bench_detail[bid];
+    if (!d) { return { _status: 400, status: "error", error: "invalid_request", messages: ["unknown benchmark"] }; }
+    if (!name) { return { _status: 400, status: "error", error: "invalid_request", messages: ["name is required"] }; }
+    if (name.length > 80) { return { _status: 400, status: "error", error: "invalid_request", messages: ["name is too long (max 80 characters)"] }; }
+    var agKey = (d.agent && d.agent.agent_key) || "";
+    var clash = MOCK.benchmarks.some(function (b) {
+      return b.agent_key === agKey && b.benchmark_id !== bid &&
+             String(b.name || "").trim().toLowerCase() === name.toLowerCase();
+    });
+    if (clash) { return { _status: 400, status: "error", error: "invalid_request", messages: ["a benchmark with this name already exists"] }; }
+    d.name = name;
+    mockSyncBench(bid);  // propagates d.name onto the MOCK.benchmarks list row
+    return { status: "ok", benchmark_id: bid, name: name };
+  }
+
   // Run a mutation against one benchmark's mock detail, then resync counts. ``fn(detail, body)`` may
   // return ``{_err:[...]}`` to surface a validation error like the backend.
   function mockBenchMutate(body, fn) {
@@ -1092,103 +1056,38 @@
 
   /* ============================ shell (built once) ============================ */
 
+  // The shell markup lives as a <template> in body.html (the DSS HTML pane). We clone it
+  // once into #bench-app, then every screen renders data-driven fragments into the ids below. If
+  // the template is missing (HTML pane not refreshed from body.html), show a clear message
+  // instead of a blank screen.
   var built = false;
   function ensureShell() {
     if (built) { return; }
     var root = byId("bench-app");
     if (!root) { return; }
-    root.innerHTML = shellHtml();
+    var shellT = byId("tpl-shell");
+    if (!shellT) {
+      root.innerHTML = '<div class="note note-error" role="alert" style="margin:24px">' +
+        'HTML pane out of date: reload the DSS HTML pane from body.html (the tpl-shell ' +
+        'template is missing). / Volet HTML perime : rechargez le volet HTML DSS depuis body.html ' +
+        '(le template tpl-shell est absent).</div>';
+      return;
+    }
+    root.innerHTML = "";
+    root.appendChild(shellT.content.cloneNode(true));
     built = true;
     wireStatic();
   }
 
-  function shellHtml() {
-    return '' +
-      '<div class="main">' +
-        '<header class="header">' +
-          '<div class="header-brand">' +
-            '<p class="eyebrow" data-i18n="hdr.eyebrow"></p>' +
-            '<h1 data-i18n="hdr.h1"></h1>' +
-            '<div class="title-bar"></div>' +
-          '</div>' +
-          '<nav class="hdr-links">' +
-            '<button class="hdr-link" id="linkGolden" data-i18n="hdr.link.golden"></button>' +
-            '<button class="hdr-link" id="linkSuggest" data-i18n="hdr.link.suggest"></button>' +
-            '<button class="hdr-link" id="linkReview" data-i18n="hdr.link.review"></button>' +
-          '</nav>' +
-          '<div class="controls">' +
-            '<div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>' +
-            '<button class="btn-gear" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">' + I.theme + '</button>' +
-            '<button class="btn-gear" id="gearBtn" title="Settings" aria-label="Settings">' + I.gear + '</button>' +
-          '</div>' +
-        '</header>' +
-        '<div id="gsStrip" class="gs-strip" style="display:none"></div>' +
-        '<div class="body">' +
-          '<section class="panel on" data-panel="benchmarks">' +
-            '<nav class="rail" id="agentsRail"></nav>' +
-            '<div class="detail-pane" id="detailPane">' +
-              '<div class="breadcrumb" id="breadcrumb"></div>' +
-              '<div id="detailContent"></div>' +
-            '</div>' +
-          '</section>' +
-          '<section class="panel" data-panel="golden">' +
-            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="goldenBack" data-i18n="hdr.back"></button></div>' +
-            '<div id="goldenContent"></div>' +
-          '</section>' +
-          '<section class="panel" data-panel="suggest">' +
-            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="suggestBack" data-i18n="hdr.back"></button></div>' +
-            '<div id="suggestContent"></div>' +
-          '</section>' +
-          '<section class="panel" data-panel="review">' +
-            '<div class="aux-back"><button class="btn btn-ghost btn-sm" id="reviewBack" data-i18n="hdr.back"></button></div>' +
-            '<div id="reviewContent"></div>' +
-          '</section>' +
-        '</div>' +
-        '<footer class="data-footer" id="dataFooter"></footer>' +
-      '</div>' +
-      modalHtml() +
-      '<div class="toast" id="toast">' + I.check + '<span id="toastMsg"></span></div>' +
-      '<div class="settings-panel" id="settingsPanel" aria-hidden="true">' +
-        '<div class="settings-head">' +
-          '<span class="settings-title" data-i18n="st.title"></span>' +
-          '<button class="btn btn-ghost btn-sm" id="settingsClose" data-i18n="st.close"></button>' +
-        '</div>' +
-        '<div class="settings-body" id="settingsBody"></div>' +
-      '</div>' +
-      '<div class="settings-overlay" id="settingsOverlay"></div>';
-  }
-
-  function modalHtml() {
-    return '' +
-      '<div class="overlay" id="overlay"><div class="modal" role="dialog" aria-modal="true">' +
-        '<div class="modal-head"><h3 class="modal-title" id="mdTitle"></h3>' +
-          '<button class="modal-x" id="mdClose" aria-label="Close">' + I.x + '</button></div>' +
-        '<div class="modal-err" id="mdErr"></div>' +
-        '<div class="modal-body">' +
-          '<label class="field full"><span class="field-label" data-i18n="md.q"></span><textarea class="input" id="mq"></textarea></label>' +
-          '<label class="field full"><span class="field-label" data-i18n="md.a"></span><textarea class="input" id="ma"></textarea></label>' +
-          '<label class="field"><span class="field-label" data-i18n="md.anchor"></span><input class="input mono" id="manchor"></label>' +
-          '<label class="field"><span class="field-label" data-i18n="md.anchorType"></span><select class="input" id="mtype"></select></label>' +
-          '<p class="field-help" data-i18n="md.valueHelp" style="grid-column:1 / -1;margin:0"></p>' +
-          '<label class="field"><span class="field-label" data-i18n="md.cat"></span><input class="input" id="mcat" list="catList" autocomplete="off"><datalist id="catList"></datalist></label>' +
-          '<label class="field"><span class="field-label" data-i18n="md.lang"></span><select class="input" id="mlang"><option value="en">en</option><option value="fr">fr</option></select></label>' +
-          '<label class="field full"><span class="field-label" data-i18n="md.sql"></span><textarea class="input mono" id="msql"></textarea></label>' +
-          '<p class="field-help" data-i18n="md.sqlHelp" style="grid-column:1 / -1;margin:0"></p>' +
-          '<label class="field"><span class="field-label" data-i18n="md.tool"></span>' +
-            '<input class="input mono" id="mtool" list="toolList" autocomplete="off"><datalist id="toolList">' +
-              '<option value="show_chart"></option><option value="show_table"></option><option value="none"></option></datalist></label>' +
-          '<div class="field full"><button type="button" class="chk on" id="mActive" data-on="1">' +
-            '<span class="box">' + I.check + '</span><span class="chk-txt"><b data-i18n="md.active"></b></span></button></div>' +
-        '</div>' +
-        '<div class="modal-foot"><button class="btn btn-ghost" id="mdCancel" data-i18n="md.cancel"></button>' +
-          '<button class="btn btn-primary" id="mdSave" data-i18n="md.save"></button></div>' +
-      '</div></div>';
-  }
-
   /* ============================ i18n apply ============================ */
 
+  // Fill static template text from the DICT. Three attribute forms are supported so markup in
+  // body.html can carry its own copy: data-i18n (textContent), data-i18n-ph (placeholder),
+  // data-i18n-title (title). Dynamic fragments keep calling t() inline as they are built.
   function applyI18n() {
     qsa("[data-i18n]").forEach(function (e) { e.textContent = t(e.getAttribute("data-i18n")); });
+    qsa("[data-i18n-ph]").forEach(function (e) { e.setAttribute("placeholder", t(e.getAttribute("data-i18n-ph"))); });
+    qsa("[data-i18n-title]").forEach(function (e) { e.setAttribute("title", t(e.getAttribute("data-i18n-title"))); });
   }
 
   /* ============================ render ============================ */
@@ -1208,9 +1107,9 @@
     renderDetailContent();
     renderGettingStarted();
     renderDataFooter();
+    renderSuggestBadge();
 
     // Auxiliary panels (shown via header links)
-    renderGolden();
     renderSuggestions();
     renderReview();
   }
@@ -1226,152 +1125,6 @@
     qsa(".panel").forEach(function (p) { p.classList.toggle("on", p.getAttribute("data-panel") === tab); });
   }
 
-  function setDirtyUI() {
-    var root = byId("bench-app");
-    if (root) { root.classList.toggle("dirty", !!S.dirty); }
-  }
-
-  function renderSaveError() {
-    var box = byId("saveErr");
-    if (!box) { return; }
-    if (!S.saveError) { box.innerHTML = ""; return; }
-    if (S.saveError.messages) {
-      box.innerHTML = '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
-        S.saveError.messages.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>';
-    } else {
-      box.innerHTML = '<div class="note note-error" role="alert">' + esc(S.saveError.text) + '</div>';
-    }
-  }
-
-  function chkBtn(label, on) {
-    var b = document.createElement("button");
-    b.type = "button";
-    b.className = "chk" + (on ? " on" : "");
-    b.innerHTML = '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(label) + '</b></span>';
-    return b;
-  }
-
-  function renderCats() {
-    var box = byId("catsGroup");
-    if (!box) { return; }
-    box.innerHTML = "";
-    if (!S.categories.length) {
-      box.innerHTML = '<p class="field-help" style="margin:0">' + esc(t("qt.nocats")) + '</p>';
-      return;
-    }
-    S.categories.forEach(function (c) {
-      var on = S.filterCategories.indexOf(c) !== -1;
-      var b = chkBtn(c, on);
-      b.addEventListener("click", function () {
-        var idx = S.filterCategories.indexOf(c);
-        if (idx === -1) { S.filterCategories.push(c); } else { S.filterCategories.splice(idx, 1); }
-        b.classList.toggle("on", S.filterCategories.indexOf(c) !== -1);
-        markDirty();
-      });
-      box.appendChild(b);
-    });
-  }
-
-  /* --- aside (run + preserved) --- */
-
-  function renderAside() {
-    // The global launch button is gone (launching is per benchmark): this block is run info only.
-    var last = (S.runs && S.runs.length) ? (S.runs[0].run_timestamp || S.runs[0].run_id) : "";
-    setText("lastRunVal", last || t("run.never"));
-
-    setText("prGolden", S.preserved.golden || t("pr.na"));
-    setText("prJudge", S.preserved.judge || t("pr.na"));
-    var sg = byId("prSuggest");
-    if (sg) {
-      var src = S.preserved.suggestions || {};
-      var label = src.table || src.connection || "";
-      if (label) { sg.textContent = label; sg.className = ""; }
-      else { sg.innerHTML = '<span class="tag-na">' + esc(t("pr.na")) + '</span>'; }
-    }
-  }
-
-  /* --- golden table --- */
-
-  function renderGolden() {
-    var box = byId("goldenContent");
-    if (!box) { return; }
-    var inner;
-    if (S.golden.loadError) {
-      inner = '<div class="note note-error" role="alert">' + esc(t("gs.loadError")) + '</div>' +
-        '<div class="actions-row"><button type="button" class="btn" data-g="retry">' + esc(t("common.retry")) + '</button></div>';
-    } else if (!S.golden.loaded) {
-      inner = '<p class="loading">' + esc(t("common.loading")) + '</p>';
-    } else {
-      inner = goldenTableHtml();
-    }
-    box.innerHTML = '' +
-      '<div class="sec-head">' +
-        '<p class="sec-eyebrow">' + esc(t("gs.eyebrow")) + '</p>' +
-        '<h2 class="sec-title">' + esc(t("gs.title")) + '</h2>' +
-        '<div class="title-bar"></div>' +
-        '<p class="sec-note">' + esc(t("gs.note")) + '</p>' +
-      '</div>' + inner;
-    wireGolden();
-  }
-
-  function goldenTableHtml() {
-    var list = S.golden.list;
-    var active = list.filter(function (g) { return g.active; }).length;
-    var head = '<div class="table-head">' +
-      '<span class="count-line">' + t("gs.count", { n: "<b>" + fmtNum(list.length) + "</b>", a: "<b>" + fmtNum(active) + "</b>" }) + '</span>' +
-      '<button class="btn btn-primary btn-sm" data-g="add"><span class="ic-plus"></span>' + esc(t("gs.add")) + '</button>' +
-      '</div>';
-    if (!list.length) {
-      return head + '<div class="note note-info" role="status">' + esc(t("gs.empty")) + '</div>';
-    }
-    var rows = list.map(qRowHtml).join("");
-    return head +
-      '<table class="gtable"><colgroup>' +
-        '<col class="c-status"><col class="c-q"><col class="c-a"><col class="c-anchor"><col class="c-ref"><col class="c-cat"><col class="c-lang"><col class="c-act">' +
-      '</colgroup><thead><tr>' +
-        '<th>' + esc(t("th.status")) + '</th><th>' + esc(t("th.q")) + '</th><th>' + esc(t("th.a")) + '</th>' +
-        '<th>' + esc(t("th.anchor")) + '</th><th>' + esc(t("th.ref")) + '</th><th>' + esc(t("th.cat")) + '</th><th>' + esc(t("th.lang")) + '</th><th>' + esc(t("th.act")) + '</th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table>';
-  }
-
-  // The reference SQL / tool cell (soft judge signal): a truncated mono SQL + a tool tag, or a dash.
-  function qRefHtml(g) {
-    var sql = (g.expected_sql == null) ? "" : String(g.expected_sql).trim();
-    var tool = (g.expected_tool == null) ? "" : String(g.expected_tool).trim();
-    if (!sql && !tool) { return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>'; }
-    var html = "";
-    if (sql) { html += '<code class="ref-sql">' + esc(truncate(sql, 90)) + '</code>'; }
-    if (tool) { html += '<span class="ref-tool">' + esc(tool) + '</span>'; }
-    return html;
-  }
-
-  function qRowHtml(g) {
-    var confirming = S.golden.confirmDelete === g.question_id;
-    var act;
-    if (confirming) {
-      act = '<div class="q-confirm"><span class="q-confirm-msg">' + esc(t("q.deleteConfirm")) + '</span>' +
-        '<span class="q-confirm-btns">' +
-          '<button class="btn btn-sm btn-danger" data-g="delete-go" data-id="' + esc(g.question_id) + '">' + esc(t("q.deleteGo")) + '</button>' +
-          '<button class="btn btn-sm" data-g="delete-cancel">' + esc(t("q.deleteCancel")) + '</button>' +
-        '</span></div>';
-    } else {
-      act = '<div class="row-act">' +
-        '<button class="icon-btn" data-g="edit" data-id="' + esc(g.question_id) + '" title="' + esc(t("q.edit")) + '" aria-label="' + esc(t("q.edit")) + '">' + I.edit + '</button>' +
-        '<button class="icon-btn danger" data-g="delete" data-id="' + esc(g.question_id) + '" title="' + esc(t("q.delete")) + '" aria-label="' + esc(t("q.delete")) + '">' + I.trash + '</button>' +
-        '</div>';
-    }
-    return '<tr class="' + (g.active ? "" : "off") + '">' +
-      '<td data-l="' + esc(t("th.status")) + '"><div class="tog ' + (g.active ? "on" : "") + '" role="switch" aria-checked="' + (g.active ? "true" : "false") + '" data-g="toggle" data-id="' + esc(g.question_id) + '"></div></td>' +
-      '<td data-l="' + esc(t("th.q")) + '"><div class="cell-q clamp">' + esc(g.question) + '</div></td>' +
-      '<td data-l="' + esc(t("th.a")) + '"><div class="cell-a clamp">' + esc(g.reference_answer) + '</div></td>' +
-      '<td data-l="' + esc(t("th.anchor")) + '">' + qAnchorHtml(g) + '</td>' +
-      '<td data-l="' + esc(t("th.ref")) + '">' + qRefHtml(g) + '</td>' +
-      '<td data-l="' + esc(t("th.cat")) + '">' + (g.category ? '<span class="cat-tag">' + esc(g.category) + '</span>' : '<span class="anchor-none">' + esc(t("common.dash")) + '</span>') + '</td>' +
-      '<td data-l="' + esc(t("th.lang")) + '"><span class="lang-tag">' + esc(g.language) + '</span></td>' +
-      '<td data-l="' + esc(t("th.act")) + '">' + act + '</td>' +
-    '</tr>';
-  }
-
   function qAnchorHtml(g) {
     var v = (g.expected_value == null) ? "" : String(g.expected_value).trim();
     if (!v) { return '<span class="anchor-none">' + esc(t("common.dash")) + '</span>'; }
@@ -1379,31 +1132,6 @@
     var ty = (g.expected_value_type == null) ? "" : String(g.expected_value_type).trim();
     if (ty) { html += '<span class="anchor-type">' + esc(ty) + '</span>'; }
     return html;
-  }
-
-  function wireGolden() {
-    var box = byId("goldenContent");
-    if (!box) { return; }
-    qsa(".ic-plus", box).forEach(function (e) { e.innerHTML = I.plus; });
-    qsa("[data-g]", box).forEach(function (el) {
-      var kind = el.getAttribute("data-g");
-      var id = el.getAttribute("data-id");
-      el.addEventListener("click", function () {
-        if (kind === "add") { openModal(null); }
-        else if (kind === "edit") { openModal(findGolden(id)); }
-        else if (kind === "toggle") { toggleActive(id); }
-        else if (kind === "delete") { S.golden.confirmDelete = id; renderGolden(); }
-        else if (kind === "delete-cancel") { S.golden.confirmDelete = null; renderGolden(); }
-        else if (kind === "delete-go") { deleteQuestion(id); }
-        else if (kind === "retry") { loadGolden(); }
-      });
-    });
-  }
-
-  function findGolden(id) {
-    var found = null;
-    S.golden.list.forEach(function (g) { if (g.question_id === id) { found = g; } });
-    return found;
   }
 
   /* --- suggestions --- */
@@ -1462,7 +1190,7 @@
     if (S.suggestions.confirm) {
       actions = '<div class="confirm-row">' +
         '<p class="confirm-msg">' + esc(t("sg.confirm", { n: fmtNum(S.suggestions.confirmCount) })) + '</p>' +
-        '<div class="actions-row" style="margin-top:0">' +
+        '<div class="actions-row actions-row--tight">' +
           '<button class="btn btn-primary" data-s="promote-go">' + esc(t("sg.go")) + '</button>' +
           '<button class="btn" data-s="promote-cancel">' + esc(t("sg.cancel")) + '</button>' +
         '</div></div>';
@@ -1529,132 +1257,7 @@
     all.indeterminate = checked > 0 && checked < total;
   }
 
-  /* ============================ modal ============================ */
-
-  function openModal(g) {
-    S.editor.open = true;
-    S.editor.isNew = !g;
-    S.editor.qid = g ? g.question_id : "";
-    S.editor.error = null;
-    setText("mdTitle", g ? t("md.edit") : t("md.add"));
-    setHTML("mdErr", "");
-    byId("mq").value = g ? (g.question || "") : "";
-    byId("ma").value = g ? (g.reference_answer || "") : "";
-    byId("manchor").value = g ? (g.expected_value || "") : "";
-    // anchor type select (rebuilt to apply the live language + selected value)
-    var sel = byId("mtype");
-    var cur = g ? (g.expected_value_type || "") : "";
-    sel.innerHTML = '<option value="">' + esc(t("vt.none")) + '</option>' +
-      VALUE_TYPES.map(function (vt) {
-        return '<option value="' + vt + '"' + (cur === vt ? " selected" : "") + '>' + esc(t("vt." + vt)) + '</option>';
-      }).join("");
-    sel.value = cur;
-    // category datalist (live categories)
-    byId("catList").innerHTML = S.categories.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("");
-    byId("mcat").value = g ? (g.category || "") : "";
-    byId("mlang").value = (g && g.language === "en") ? "en" : (g ? "fr" : (ui.lang === "en" ? "en" : "fr"));
-    byId("msql").value = g ? (g.expected_sql || "") : "";
-    byId("mtool").value = g ? (g.expected_tool || "") : "";
-    var at = byId("mActive");
-    var on = g ? (g.active !== false) : true;
-    at.classList.toggle("on", on);
-    at.setAttribute("data-on", on ? "1" : "0");
-    byId("overlay").classList.add("on");
-    setTimeout(function () { byId("mq").focus(); }, 50);
-  }
-
-  function closeModal() {
-    S.editor.open = false;
-    byId("overlay").classList.remove("on");
-  }
-
-  function submitModal() {
-    var question = byId("mq").value.trim();
-    var reference = byId("ma").value.trim();
-    var payload = {
-      question: question,
-      reference_answer: reference,
-      expected_value: byId("manchor").value.trim(),
-      expected_value_type: byId("mtype").value,
-      category: byId("mcat").value.trim(),
-      language: (byId("mlang").value === "en") ? "en" : "fr",
-      active: byId("mActive").getAttribute("data-on") === "1",
-      notes: editorNotes(),
-      // v2: reference SQL / tool (soft judge signal + training data).
-      expected_sql: byId("msql").value.trim(),
-      expected_tool: byId("mtool").value.trim()
-    };
-    if (!S.editor.isNew && S.editor.qid) { payload.question_id = S.editor.qid; }
-    setHTML("mdErr", "");
-    var btn = byId("mdSave");
-    if (btn) { btn.disabled = true; }
-    callApi("POST", "golden/save", payload).then(function (res) {
-      if (btn) { btn.disabled = false; }
-      var d = res.data || {};
-      if (d.status === "ok") {
-        var wasNew = S.editor.isNew;
-        closeModal();
-        toast(wasNew ? t("q.added") : t("q.saved"));
-        loadGolden();
-        refreshConfigMeta();
-      } else {
-        var msgs = d.messages || [t("q.saveError")];
-        setHTML("mdErr", '<div class="note note-error" role="alert"><strong>' + esc(t("save.invalidTitle")) + '</strong><ul>' +
-          msgs.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join("") + '</ul></div>');
-      }
-    }, function () {
-      if (btn) { btn.disabled = false; }
-      setHTML("mdErr", '<div class="note note-error" role="alert">' + esc(t("q.saveError")) + '</div>');
-    });
-  }
-
-  // Preserve the edited row's notes (the modal has no notes field, but the golden carries one).
-  function editorNotes() {
-    if (S.editor.isNew || !S.editor.qid) { return ""; }
-    var g = findGolden(S.editor.qid);
-    return (g && g.notes) ? g.notes : "";
-  }
-
-  function toggleActive(id) {
-    var g = findGolden(id);
-    if (!g) { return; }
-    var payload = {
-      question_id: g.question_id, question: g.question, reference_answer: g.reference_answer,
-      expected_value: g.expected_value || "", expected_value_type: g.expected_value_type || "",
-      category: g.category || "", language: (g.language === "en") ? "en" : "fr",
-      active: !g.active, notes: g.notes || "",
-      expected_sql: g.expected_sql || "", expected_tool: g.expected_tool || ""
-    };
-    callApi("POST", "golden/save", payload).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        g.active = !g.active;
-        renderGolden();
-        refreshConfigMeta();
-        toast(t("q.toggled"));
-      } else {
-        toast(t("q.saveError"));
-      }
-    }, function () { toast(t("q.saveError")); });
-  }
-
-  function deleteQuestion(id) {
-    callApi("POST", "golden/delete", { question_id: id }).then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        S.golden.confirmDelete = null;
-        S.golden.list = S.golden.list.filter(function (g) { return g.question_id !== id; });
-        renderGolden();
-        setText("tabGoldenCount", String(S.golden.list.length));
-        refreshConfigMeta();
-        toast(t("q.removed"));
-      } else {
-        toast(t("q.deleteError"));
-      }
-    }, function () { toast(t("q.deleteError")); });
-  }
-
-  /* ============================ toast / status / dirty ============================ */
+  /* ============================ toast / status ============================ */
 
   var toastT;
   function toast(msg) {
@@ -1666,51 +1269,23 @@
     toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
   }
 
-  function markDirty() {
-    S.dirty = true;
-    S.saveError = null;
-    setDirtyUI();
-    renderSaveError();
-    renderAside();
-  }
   /* ============================ actions: config ============================ */
 
-  // Refresh ONLY the config META (categories / question_count / runs / preserved) after a golden
-  // change, WITHOUT touching the form state or the dirty flag (so an unsaved edit is not lost and
-  // Launch is not silently re-enabled against a stale saved config).
+  // Refresh the golden categories (for the modal category datalist) after a golden change. Read-only
+  // and best-effort: the GET config route stays wired so the datalist stays in sync (decision user
+  // 2026-07-03). No form/state side effects.
   function refreshConfigMeta() {
     callApi("GET", "config").then(function (res) {
       var d = res.data || {};
       if (d.status !== "ok") { return; }
-      var cfg = d.config || {};
       S.categories = (d.categories || []).slice();
-      S.questionCount = d.question_count || 0;
-      S.runs = (d.runs || []).slice();
-      S.preserved = { golden: cfg.golden_dataset || "", judge: cfg.judge_llm_id || "", suggestions: cfg.suggestions || {} };
-      renderCats();
-      setText("qtHelp", t("qt.help", { n: fmtNum(S.questionCount) }));
-      renderAside();
+      // Live-refresh the golden-tag category datalist if the form is currently open.
+      var dl = byId("gtCatList");
+      if (dl) { dl.innerHTML = S.categories.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join(""); }
     }, function () { /* meta refresh is best-effort */ });
   }
 
   /* ============================ actions: golden / suggestions ============================ */
-
-  function loadGolden() {
-    S.golden.loadError = false;
-    if (!S.golden.loaded) { renderGolden(); }
-    callApi("GET", "golden").then(function (res) {
-      var d = res.data || {};
-      if (d.status === "ok") {
-        S.golden.list = (d.questions || []).slice();
-        S.golden.loaded = true;
-        S.golden.loadError = false;
-      } else {
-        S.golden.loadError = true;
-      }
-      setText("tabGoldenCount", String(S.golden.loaded ? S.golden.list.length : (S.questionCount || 0)));
-      renderGolden();
-    }, function () { S.golden.loadError = true; renderGolden(); });
-  }
 
   function loadSuggestions() {
     S.suggestions.loadError = false;
@@ -1729,6 +1304,26 @@
       }
       renderSuggestions();
     }, function () { S.suggestions.loadError = true; renderSuggestions(); });
+  }
+
+  // UX-7: reflect S.suggestPending on the header badge. Called by render() and after a refresh.
+  function renderSuggestBadge() {
+    var el = byId("suggestBadge");
+    if (!el) { return; }
+    var n = S.suggestPending || 0;
+    if (n > 0) { el.textContent = fmtNum(n); el.classList.remove("hdr-badge--hidden"); }
+    else { el.textContent = ""; el.classList.add("hdr-badge--hidden"); }
+  }
+
+  // UX-7: best-effort pending-suggestions count. Total silence on error or when the suggestions
+  // source is not configured (the badge just stays hidden). Never blocks the UI.
+  function refreshSuggestBadge() {
+    callApi("GET", "suggestions").then(function (res) {
+      var d = res.data || {};
+      if (d.status !== "ok" || !d.configured) { S.suggestPending = 0; renderSuggestBadge(); return; }
+      S.suggestPending = (d.suggestions || []).length;
+      renderSuggestBadge();
+    }, function () { /* silent: badge stays as-is */ });
   }
 
   function startPromote() {
@@ -1751,8 +1346,8 @@
         var n = d.promoted || 0;
         toast(n > 0 ? t("sg.promoted", { n: fmtNum(n) }) : t("sg.promotedNone"));
         loadSuggestions();
-        if (S.golden.loaded) { loadGolden(); }
         refreshConfigMeta();
+        refreshSuggestBadge();  // UX-7: the pending count dropped after a promotion
       } else {
         toast(t("sg.promoteError"));
         renderSuggestions();
@@ -2048,6 +1643,30 @@
   }
 
 
+  // UX-2: open the Review panel pre-filtered on one benchmark, remembering the current benchmark
+  // route so the panel's Back button can restore it (instead of the old dead #results anchor).
+  function openReviewForBenchmark(benchmarkId) {
+    S.reviewReturn = { level: S.route.level, agentKey: S.route.agentKey, benchmarkId: S.route.benchmarkId };
+    S.review.benchmarkId = benchmarkId || "";
+    S.review.onlyNeedsReview = false;
+    S.review.expanded = {};
+    S.review.loaded = false;      // force a reload for the newly selected benchmark
+    S.review.loadError = false;
+    setTab("review");             // setTabUI + loadReview (S.review.loaded is false)
+  }
+
+  // UX-2: leave a global panel via Back. If it was entered from a benchmark context, restore that
+  // exact route; otherwise fall back to the benchmarks tab (previous behaviour).
+  function returnFromReview() {
+    var rr = S.reviewReturn;
+    S.reviewReturn = null;
+    setTab("benchmarks");
+    if (rr && rr.level && rr.level !== "home") {
+      navigateTo(rr.level, rr.agentKey, rr.benchmarkId);
+      renderAgentsRail();
+    }
+  }
+
   function loadReview(opts) {
     opts = opts || {};
     S.review.loadError = false;
@@ -2111,7 +1730,6 @@
     S.tab = tab;
     setTabUI(tab);
     if (tab === "benchmarks") { renderAgentsRail(); renderBreadcrumb(); renderDetailContent(); }
-    if (tab === "golden" && !S.golden.loaded && !S.golden.loadError) { loadGolden(); }
     if (tab === "suggest" && !S.suggestions.loaded && !S.suggestions.loadError) { loadSuggestions(); }
     if (tab === "review" && !S.review.loaded && !S.review.loadError) { loadReview(); }
   }
@@ -2151,8 +1769,8 @@
         creating: false, submitting: false, createError: null, createName: "", createModes: [], bmDeleteConfirmId: "" };
     }
     if (level === "benchmark" && benchmarkId) {
-      S_bench4ActiveBid = null;  // Fix 1: clear stale lock so other benchmarks are not false-locked
-      S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false };
+      bench4ActiveBid = null;  // Fix 1: clear stale lock so other benchmarks are not false-locked
+      S.benchDetailState = { loaded: false, loadError: false, detail: null, editModes: false, editModesValue: [], deleteConfirm: false, running: false, runMsg: null, runScored: 0, runTotal: 0, runStartedAt: null, runComplete: null, rerunConfirm: false, resetNeeded: false, renaming: false, renameValue: "", renameError: null };
     }
     renderBreadcrumb();
     renderDetailContent();
@@ -2285,11 +1903,19 @@
 
     if (S.route.level === "golden-tag") {
       // 3-part: Agents / AgentLabel / Golden questions
+      // Only show the benchmark segment when this screen was entered FROM a benchmark
+      // (route.benchmarkId set). benchDetailState.detail may hold a stale detail otherwise.
       var det2 = S.benchDetailState && S.benchDetailState.detail;
-      var bmName2 = det2 ? det2.name : (S.route.benchmarkId || "");
+      var bmName2 = S.route.benchmarkId
+        ? ((det2 && det2.benchmark_id === S.route.benchmarkId) ? det2.name : S.route.benchmarkId)
+        : "";
+      // The agent segment only renders when an agent context exists (the header link can
+      // open this screen agent-less, scope "all": Agents / Golden questions).
+      var agSeg = (agLabel || agKey)
+        ? '<span class="bcr-sep">/</span><button class="bcr-btn" id="bcrAgent">' + esc(agLabel || agKey) + '</button>'
+        : '';
       var html2 = '<button class="bcr-btn" id="bcrHome">' + esc(t("bcr.home")) + '</button>' +
-        '<span class="bcr-sep">/</span>' +
-        '<button class="bcr-btn" id="bcrAgent">' + esc(agLabel || agKey) + '</button>' +
+        agSeg +
         (bmName2 ? '<span class="bcr-sep">/</span><button class="bcr-btn" id="bcrBench">' + esc(bmName2) + '</button>' : '') +
         '<span class="bcr-sep">/</span>' +
         '<span class="bcr-cur">' + esc(t("gt.title")) + '</span>';
@@ -2679,7 +2305,7 @@
         } else {
           cardFoot = '<div class="bm-card-foot">' +
             '<span class="bm-card-modes">' + esc((bm.modes || []).join(", ")) + '</span>' +
-            '<div style="display:flex;gap:8px">' +
+            '<div class="bm-card-actions-row">' +
               '<button class="btn btn-ghost btn-sm" data-bm-delete="' + esc(bm.benchmark_id) + '">' + esc(t("bm.delete")) + '</button>' +
               '<button class="btn btn-sm" data-bm-open="' + esc(bm.benchmark_id) + '">' + esc(t("bm.open")) + '</button>' +
             '</div>' +
@@ -2830,15 +2456,20 @@
       if (submitBtn) { submitBtn.addEventListener("click", submitCreate); }
       var cancelBtn = byId("crCancel");
       if (cancelBtn) { cancelBtn.addEventListener("click", function () { av.creating = false; av.createError = null; renderDetailContent(); }); }
+      // UX-1: the create-form "Tag questions" CTA points to the SAME agent-scoped golden-tag
+      // screen as every other "Tag questions" button (goTag), not the global golden panel.
       var crTagBtn = byId("crTagBtn");
-      if (crTagBtn) { crTagBtn.addEventListener("click", function () { av.creating = false; setTab("golden"); }); }
+      if (crTagBtn) { crTagBtn.addEventListener("click", goTag); }
     }
   }
 
   function renderGettingStarted() {
     var box = byId("gsStrip");
     if (!box) { return; }
-    if (!S.agentCatalog.loaded) { box.style.display = "none"; return; }
+    // UX-5: the getting-started strip is only meaningful inside an open agent context (its steps
+    // are computed from S.agentView, the last agent visited). Never show it on the home gallery.
+    if (S.route.level === "home") { box.classList.add("gs-strip--hidden"); return; }
+    if (!S.agentCatalog.loaded) { box.classList.add("gs-strip--hidden"); return; }
     var hasAgent = S.agentCatalog.agents.length > 0;
     var av = S.agentView;
     var hasTags = hasAgent && av.loaded && av.n_tagged > 0;
@@ -2852,9 +2483,9 @@
       { key: "gs.step3", done: hasBench },
       { key: "gs.step4", done: hasRun }
     ];
-    if (steps.every(function (s) { return s.done; })) { box.style.display = "none"; return; }
+    if (steps.every(function (s) { return s.done; })) { box.classList.add("gs-strip--hidden"); return; }
 
-    box.style.display = "";
+    box.classList.remove("gs-strip--hidden");
     box.innerHTML = '<div class="gs-inner">' +
       steps.map(function (s, i) {
         return '<span class="gs-step' + (s.done ? " gs-step--done" : "") + '">' +
@@ -2924,15 +2555,9 @@
 
     var html = '<div class="bd4">';
 
-    // Meta row
-    var agLabel = (det.agent && det.agent.agent_label) || "";
-    html += '<div class="bd4-meta">' +
-      '<span class="bd4-meta-agent"><b>' + esc(t("bd.agent")) + '</b> ' + esc(agLabel) + '</span>' +
-      '<span class="bd4-meta-modes"><b>' + esc(t("bd.modes")) + '</b> ' + esc(modes.join(", ")) + '</span>' +
-      (det.accuracy_pct && det.accuracy_pct !== "-"
-        ? '<span class="bd4-meta-acc"><b>' + esc(t("bm.accuracy")) + '</b> ' + esc(det.accuracy_pct) + '</span>'
-        : '') +
-    '</div>';
+    // UX-4 zone (a): title + meta + Manage cluster (Rename / Edit modes / Delete), plus the
+    // inline rename / edit-modes / delete-confirm forms when one is open.
+    html += buildBd4Head(det, st);
 
     // Fix I-1: state 4d - no active tagged questions in this benchmark
     if (qs.length === 0) {
@@ -2952,6 +2577,10 @@
     var totalTests = (ledger.tested || 0) + (ledger.pending || 0);  // = question x mode cells
     var runnableCount = det.runnable || 0;
 
+    // UX-4 zone (b): the Run zone - resume line, stat tiles, live status, primary actions.
+    html += '<div class="bd4-run">';
+    html += '<p class="bd4-section-label">' + esc(t("bd4.runSection")) + '</p>';
+
     html += '<div class="bd4-summary">' +
       '<p class="bd4-how">' + esc(t("bd4.how", { q: nQ, m: nM, t: totalTests })) + '</p>' +
       '<div class="bd4-stats">' +
@@ -2968,7 +2597,7 @@
     '</div>';
 
     // Another benchmark owns the live run: this one's controls are locked until it ends.
-    var otherRunning = !st.running && !!S_bench4ActiveBid && S_bench4ActiveBid !== S.route.benchmarkId;
+    var otherRunning = !st.running && !!bench4ActiveBid && bench4ActiveBid !== S.route.benchmarkId;
 
     // Run status: full Screen 5 lifecycle
     if (st.running) {
@@ -3036,7 +2665,9 @@
         });
         html += '</ul></div>';
       }
-      html += '<a class="bd4-results-link" href="#results" target="_blank" rel="noopener">' + esc(t("run.complete.results")) + '</a>';
+      // UX-2: was a dead href="#results" anchor. Now opens the in-app Review panel PRE-FILTERED
+      // on this benchmark (its Back button returns here).
+      html += '<button class="btn btn-primary btn-sm bd4-review-btn" id="bd4ReviewResults">' + esc(t("bd4.reviewResults")) + '</button>';
       html += '</div>';
     }
 
@@ -3093,45 +2724,11 @@
     }
 
     html += '</div>';  // bd4-actions
+    html += '</div>';  // bd4-run
 
-    // Secondary action bar (edit / delete)
-    if (!st.running) {
-      html += '<div class="bd4-sec-actions">';
-      if (!st.editModes && !st.deleteConfirm) {
-        html += '<button class="btn btn-ghost btn-sm" id="bd4EditModesBtn">' + esc(t("bd4.editModes")) + '</button>';
-        html += '<button class="btn btn-ghost btn-sm btn-danger" id="bd4DeleteBtn">' + esc(t("bm.delete")) + '</button>';
-      }
-      html += '</div>';
-    }
-
-    // Edit modes inline form (state 4f)
-    if (st.editModes) {
-      var modeOpts = ["Smart", "Pro", "Claude"];
-      var modesHtml = modeOpts.map(function (m) {
-        var on = st.editModesValue.indexOf(m) !== -1;
-        return '<button type="button" class="chk' + (on ? " on" : "") + '" data-bd4-mode="' + esc(m) + '">' +
-          '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(m) + '</b></span></button>';
-      }).join("");
-      html += '<div class="bd4-edit-modes">' +
-        '<span class="field-label">' + esc(t("bd4.editModes")) + '</span>' +
-        '<div class="chk-stack">' + modesHtml + '</div>' +
-        '<div class="bd4-edit-actions">' +
-          '<button class="btn btn-primary btn-sm" id="bd4EditModesSave">' + esc(t("bd4.editSave")) + '</button>' +
-          '<button class="btn btn-ghost btn-sm" id="bd4EditModesCancel">' + esc(t("common.cancel")) + '</button>' +
-        '</div>' +
-      '</div>';
-    }
-
-    // Delete confirm (state 4g) - named confirm, not window.confirm
-    if (st.deleteConfirm) {
-      html += '<div class="confirm-row">' +
-        '<span class="confirm-msg">' + esc(t("bm.deleteConfirm", { n: det.name })) + '</span>' +
-        '<div class="confirm-btns">' +
-          '<button class="btn btn-danger btn-sm" id="bd4DeleteGo">' + esc(t("bm.delete")) + '</button>' +
-          '<button class="btn btn-ghost btn-sm" id="bd4DeleteCancel">' + esc(t("common.cancel")) + '</button>' +
-        '</div>' +
-      '</div>';
-    }
+    // UX-4 zone (c): Questions & results. The Manage cluster (Rename / Edit modes / Delete) and
+    // its inline forms now live in the head (zone a), so this zone stays focused on the table.
+    html += '<div class="bd4-results">';
 
     // Results section: title + one-line explainer + a chip legend, so the OK / MISS /
     // Pending cells and the Redo column read on their own.
@@ -3194,17 +2791,97 @@
     });
     html += '</tbody></table></div>';
 
+    html += '</div>';  // bd4-results
     html += '</div>';  // bd4
+    return html;
+  }
+
+  // UX-4 zone (a) + UX-3: the benchmark detail head. Eyebrow + title (or inline rename form) +
+  // meta line, with a discrete Manage cluster (Rename / Edit modes / Delete) top-right, and the
+  // inline edit-modes / delete-confirm forms rendered under the head when one is open.
+  function buildBd4Head(det, st) {
+    var modes = det.modes || [];
+    var agLabel = (det.agent && det.agent.agent_label) || "";
+    var html = '<div class="bd4-head">';
+
+    html += '<div class="bd4-head-main">';
+    html += '<p class="bd4-eyebrow">' + esc(t("bd4.eyebrow")) + '</p>';
+    if (st.renaming) {
+      html += '<div class="bd4-rename">' +
+        '<input class="input bd4-rename-input" id="bd4RenameInput" value="' + esc(st.renameValue) + '" maxlength="80" autocomplete="off">' +
+        '<button class="btn btn-primary btn-sm" id="bd4RenameSave">' + esc(t("bd4.rename.save")) + '</button>' +
+        '<button class="btn btn-ghost btn-sm" id="bd4RenameCancel">' + esc(t("common.cancel")) + '</button>' +
+      '</div>';
+      if (st.renameError) { html += '<p class="bd4-rename-err">' + esc(st.renameError) + '</p>'; }
+    } else {
+      html += '<h2 class="bd4-title">' + esc(det.name || "") + '</h2>';
+    }
+    html += '<div class="bd4-meta">' +
+      '<span class="bd4-meta-agent"><b>' + esc(t("bd.agent")) + '</b> ' + esc(agLabel) + '</span>' +
+      '<span class="bd4-meta-modes"><b>' + esc(t("bd.modes")) + '</b> ' + esc(modes.join(", ")) + '</span>' +
+      (det.accuracy_pct && det.accuracy_pct !== "-"
+        ? '<span class="bd4-meta-acc"><b>' + esc(t("bm.accuracy")) + '</b> ' + esc(det.accuracy_pct) + '</span>'
+        : '') +
+    '</div>';
+    html += '</div>';  // bd4-head-main
+
+    // Manage cluster: only when the detail is idle and no inline form is already open.
+    var canManage = !st.running && !st.renaming && !st.editModes && !st.deleteConfirm;
+    if (canManage) {
+      html += '<div class="bd4-manage">' +
+        '<button class="btn btn-ghost btn-sm" id="bd4RenameBtn">' + esc(t("bd4.rename")) + '</button>' +
+        '<button class="btn btn-ghost btn-sm" id="bd4EditModesBtn">' + esc(t("bd4.editModes")) + '</button>' +
+        '<button class="btn btn-ghost btn-sm btn-danger" id="bd4DeleteBtn">' + esc(t("bm.delete")) + '</button>' +
+      '</div>';
+    }
+    html += '</div>';  // bd4-head
+
+    // Edit modes inline form (state 4f)
+    if (st.editModes) {
+      var modeOpts = ["Smart", "Pro", "Claude"];
+      var modesHtml = modeOpts.map(function (m) {
+        var on = st.editModesValue.indexOf(m) !== -1;
+        return '<button type="button" class="chk' + (on ? " on" : "") + '" data-bd4-mode="' + esc(m) + '">' +
+          '<span class="box">' + I.check + '</span><span class="chk-txt"><b>' + esc(m) + '</b></span></button>';
+      }).join("");
+      html += '<div class="bd4-edit-modes">' +
+        '<span class="field-label">' + esc(t("bd4.editModes")) + '</span>' +
+        '<div class="chk-stack">' + modesHtml + '</div>' +
+        '<div class="bd4-edit-actions">' +
+          '<button class="btn btn-primary btn-sm" id="bd4EditModesSave">' + esc(t("bd4.editSave")) + '</button>' +
+          '<button class="btn btn-ghost btn-sm" id="bd4EditModesCancel">' + esc(t("common.cancel")) + '</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Delete confirm (state 4g) - named confirm, not window.confirm
+    if (st.deleteConfirm) {
+      html += '<div class="confirm-row">' +
+        '<span class="confirm-msg">' + esc(t("bm.deleteConfirm", { n: det.name })) + '</span>' +
+        '<div class="confirm-btns">' +
+          '<button class="btn btn-danger btn-sm" id="bd4DeleteGo">' + esc(t("bm.delete")) + '</button>' +
+          '<button class="btn btn-ghost btn-sm" id="bd4DeleteCancel">' + esc(t("common.cancel")) + '</button>' +
+        '</div>' +
+      '</div>';
+    }
+
     return html;
   }
 
   function wireBenchmarkDetail() {
     var st = S.benchDetailState;
 
-    // Fix I-1: state 4d "Tag questions" button
+    // Fix I-1: state 4d "Tag questions" button. UX-1 consistency: this empty-benchmark CTA lives in
+    // an agent context, so it points to the SAME agent-scoped golden-tag screen as bd4TagBtn (not
+    // the global golden panel), giving one destination for "manage this agent's questions".
     var tagQBtn = byId("bd4TagQBtn");
     if (tagQBtn) {
-      tagQBtn.addEventListener("click", function () { setTab("golden"); });
+      tagQBtn.addEventListener("click", function () {
+        S.goldenTag = { loaded: false, loadError: false, list: [], agents: [], scope: "agent", searchText: "", editRow: null, confirmDelete: null, saving: false, saveError: null };
+        navigateTo("golden-tag", S.route.agentKey, S.route.benchmarkId);
+        renderAgentsRail();
+        loadGoldenTag();
+      });
     }
 
     var runBtn = byId("bd4RunPending");
@@ -3246,7 +2923,7 @@
     var viewRunBtn = byId("bd4ViewRun");
     if (viewRunBtn) {
       viewRunBtn.addEventListener("click", function () {
-        if (S_bench4ActiveBid) { navigateTo("benchmark", S.route.agentKey, S_bench4ActiveBid); renderAgentsRail(); }
+        if (bench4ActiveBid) { navigateTo("benchmark", S.route.agentKey, bench4ActiveBid); renderAgentsRail(); }
       });
     }
     // Tag questions shortcut from detail view - mirrors goTag() exactly (Fix 2)
@@ -3257,6 +2934,43 @@
         navigateTo("golden-tag", S.route.agentKey, S.route.benchmarkId);
         renderAgentsRail();
         loadGoldenTag();
+      });
+    }
+
+    // UX-2: open the Review panel pre-filtered on this benchmark, remembering the way back.
+    var reviewResultsBtn = byId("bd4ReviewResults");
+    if (reviewResultsBtn) {
+      reviewResultsBtn.addEventListener("click", function () { openReviewForBenchmark(S.route.benchmarkId); });
+    }
+
+    // UX-3: rename cluster - inline edit of the benchmark name (input + save/cancel).
+    var renameBtn = byId("bd4RenameBtn");
+    if (renameBtn) {
+      renameBtn.addEventListener("click", function () {
+        st.renaming = true;
+        st.renameValue = (st.detail && st.detail.name) || "";
+        st.renameError = null;
+        renderDetailContent();
+        var inp = byId("bd4RenameInput");
+        if (inp) { inp.focus(); inp.select(); }
+      });
+    }
+    var renameInput = byId("bd4RenameInput");
+    if (renameInput) {
+      renameInput.addEventListener("input", function () { st.renameValue = renameInput.value; });
+      renameInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); bench4Rename(st.renameValue); }
+        else if (e.key === "Escape") { e.preventDefault(); st.renaming = false; st.renameError = null; renderDetailContent(); }
+      });
+    }
+    var renameSaveBtn = byId("bd4RenameSave");
+    if (renameSaveBtn) {
+      renameSaveBtn.addEventListener("click", function () { bench4Rename(st.renameValue); });
+    }
+    var renameCancelBtn = byId("bd4RenameCancel");
+    if (renameCancelBtn) {
+      renameCancelBtn.addEventListener("click", function () {
+        st.renaming = false; st.renameError = null; renderDetailContent();
       });
     }
 
@@ -3367,7 +3081,7 @@
   var bench4PollErrors = 0;
   var bench4LaunchedBid = null;  // Fix I-3: tracks which benchmark launched the current poll cycle
   var bench4LaunchMode = "append";  // "append" or "full"; flags the run-complete card as a re-run
-  var S_bench4ActiveBid = null;  // tracks the bid that OWNS the current run (from run/status response)
+  var bench4ActiveBid = null;  // tracks the bid that OWNS the current run (from run/status response)
 
   function bench4Launch(launchMode) {
     var st = S.benchDetailState;
@@ -3399,7 +3113,7 @@
       } else if (res.status === 409 || d.error === "already_running") {
         // Another benchmark is running - show single-flight notice and poll anyway
         st.runMsg = { kind: "info", text: t("run.singleFlight") };
-        S_bench4ActiveBid = null;  // will be set from poll response
+        bench4ActiveBid = null;  // will be set from poll response
         renderDetailContent();
         bench4Poll();
       } else {
@@ -3418,7 +3132,7 @@
         bench4PollErrors = 0;
         var d = res.data || {};
         // Track which benchmark is actually running (may differ from the one we launched against)
-        if (d.benchmark_id) { S_bench4ActiveBid = d.benchmark_id; }
+        if (d.benchmark_id) { bench4ActiveBid = d.benchmark_id; }
         // Update progress counters
         if (d.total && d.total > 0) {
           st.runTotal = d.total;
@@ -3442,7 +3156,7 @@
           };
           // The scenario went idle but a run request may still be set: offer a reset.
           st.resetNeeded = !!(d.run_request);
-          S_bench4ActiveBid = null;  // run is over: no benchmark owns it anymore
+          bench4ActiveBid = null;  // run is over: no benchmark owns it anymore
           bench4EndRun({ kind: "ok", text: t("bd4.runDone") });
           loadBenchmarkDetail4(S.route.benchmarkId);
         }
@@ -3491,6 +3205,41 @@
     });
   }
 
+  // UX-3: persist a benchmark rename. Mirrors the backend's per-agent uniqueness / non-blank /
+  // length validation; validation messages are surfaced inline on the rename form.
+  function bench4Rename(name) {
+    var st = S.benchDetailState;
+    var bid = S.route.benchmarkId;
+    var trimmed = (name || "").trim();
+    if (!trimmed) { st.renameError = t("bd4.renameEmpty"); renderDetailContent(); return; }
+    callApi("POST", "benchmark/rename", { benchmark_id: bid, name: trimmed }).then(function (res) {
+      if (S.route.level !== "benchmark" || S.route.benchmarkId !== bid) { return; }
+      var d = res.data || {};
+      if (res.status === 200 && d.status === "ok") {
+        st.renaming = false;
+        st.renameError = null;
+        if (st.detail) { st.detail.name = d.name; }
+        // Keep the agent's benchmark list and breadcrumb in sync with the new name.
+        if (S.agentView && S.agentView.benchmarks) {
+          S.agentView.benchmarks.forEach(function (b) { if (b.benchmark_id === bid) { b.name = d.name; } });
+        }
+        toast(t("bd4.renamed"));
+        renderDetailContent();
+        renderBreadcrumb();
+      } else {
+        var msgs = (d && d.messages) || [];
+        st.renameError = msgs.length ? msgs.join(" ") : t("bd4.renameError");
+        renderDetailContent();
+        var inp = byId("bd4RenameInput");
+        if (inp) { inp.focus(); }
+      }
+    }, function () {
+      if (S.route.level !== "benchmark" || S.route.benchmarkId !== bid) { return; }
+      st.renameError = t("bd4.renameError");
+      renderDetailContent();
+    });
+  }
+
   function bench4Delete() {
     var bid = S.route.benchmarkId;
     var agKey = S.route.agentKey;
@@ -3534,6 +3283,7 @@
         gt.loaded = true;
       }
       renderDetailContent();
+      refreshConfigMeta();  // keep the category datalist in sync (best-effort)
     }, function () {
       if (S.route.level !== "golden-tag") { return; }
       gt.loadError = true;
@@ -3675,7 +3425,8 @@
       '<label class="field"><span class="field-label">' + esc(t("gt.formAgent")) + '</span>' +
         '<select class="input" id="gtFormAgent">' + agentsHtml + '</select></label>' +
       '<label class="field"><span class="field-label">' + esc(t("gt.formCat")) + '</span>' +
-        '<input class="input" id="gtFormCat" value="' + esc(row.category || "") + '"></label>' +
+        '<input class="input" id="gtFormCat" value="' + esc(row.category || "") + '" list="gtCatList" autocomplete="off">' +
+        '<datalist id="gtCatList">' + S.categories.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join("") + '</datalist></label>' +
       '<label class="field"><span class="field-label">' + esc(t("gt.formLang")) + '</span>' +
         '<select class="input" id="gtFormLang"><option value="en"' + (row.language === "en" ? " selected" : "") + '>en</option>' +
         '<option value="fr"' + (row.language !== "en" ? " selected" : "") + '>fr</option></select></label>' +
@@ -3893,6 +3644,7 @@
             gt.loaded = false;
             renderDetailContent();
             loadGoldenTag();
+            refreshConfigMeta();
           } else {
             var msg = (d.messages && d.messages[0]) || t("gt.loadError");
             gt.saveError = msg;
@@ -4118,14 +3870,15 @@
       loadGoldenTag();
     });
     byId("linkSuggest").addEventListener("click", function () { setTab("suggest"); });
-    byId("linkReview").addEventListener("click", function () { setTab("review"); });
+    byId("linkReview").addEventListener("click", function () {
+      S.reviewReturn = null;  // UX-2: opened from the header, Back goes to benchmarks (no stored route)
+      setTab("review");
+    });
     // Back from golden / suggest / review panels
-    var goldenBack = byId("goldenBack");
-    if (goldenBack) { goldenBack.addEventListener("click", function () { setTab("benchmarks"); }); }
     var suggestBack = byId("suggestBack");
     if (suggestBack) { suggestBack.addEventListener("click", function () { setTab("benchmarks"); }); }
     var reviewBack = byId("reviewBack");
-    if (reviewBack) { reviewBack.addEventListener("click", function () { setTab("benchmarks"); }); }
+    if (reviewBack) { reviewBack.addEventListener("click", function () { returnFromReview(); }); }
     // Gear: settings panel (Screen 7)
     var gearBtn = byId("gearBtn");
     if (gearBtn) { gearBtn.addEventListener("click", function () { openSettings(); }); }
@@ -4141,20 +3894,6 @@
     if (settingsClose) { settingsClose.addEventListener("click", function () { closeSettings(); }); }
     var settingsOverlay = byId("settingsOverlay");
     if (settingsOverlay) { settingsOverlay.addEventListener("click", function () { closeSettings(); }); }
-    // Golden editor modal
-    byId("mdClose").addEventListener("click", closeModal);
-    byId("mdCancel").addEventListener("click", closeModal);
-    byId("mdSave").addEventListener("click", submitModal);
-    byId("mActive").addEventListener("click", function () {
-      var on = this.getAttribute("data-on") !== "1";
-      this.setAttribute("data-on", on ? "1" : "0");
-      this.classList.toggle("on", on);
-    });
-    byId("overlay").addEventListener("click", function (e) { if (e.target === byId("overlay")) { closeModal(); } });
-    document.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") { return; }
-      if (S.editor.open) { closeModal(); }
-    });
   }
 
   /* ============================ init ============================ */
@@ -4164,6 +3903,7 @@
     applyTheme();
     applyLang();
     loadAgents();  // GET /api/agents + fire discover once
+    refreshSuggestBadge();  // UX-7: best-effort pending-suggestions count for the header badge
   }
 
   if (typeof document !== "undefined") {

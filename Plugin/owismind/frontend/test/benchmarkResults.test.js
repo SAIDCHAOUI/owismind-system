@@ -13,6 +13,27 @@ import {
   rowKey,
   normalizeResults,
   hasScoredResults,
+  distinctModes,
+  hasMultipleModes,
+  heroVerdictKind,
+  modeClass,
+  modeColor,
+  modeLabel,
+  resultPillKind,
+  rowAccentKind,
+  meterWidth,
+  catWidth,
+  evolutionKind,
+  evolutionClass,
+  attemptCount,
+  attemptHistory,
+  attemptPillKind,
+  actualToolsText,
+  hasRefVsActual,
+  expectedText,
+  fmtScore,
+  cellIsNumeric,
+  formatCell,
 } from '../src/composables/benchmarkResults.js'
 
 test('clampPct keeps values in [0,100]', () => {
@@ -144,4 +165,160 @@ test('hasScoredResults - true only when something is scored', () => {
   assert.equal(hasScoredResults(normalizeResults({ kpis: { n_scored: 4 } })), true)
   assert.equal(hasScoredResults(normalizeResults({ detail: [{ question_id: 'q' }] })), true)
   assert.equal(hasScoredResults(normalizeResults({ configs: [{ mode: 'smart' }] })), true)
+})
+
+// --- Conditional modes -------------------------------------------------------
+test('distinctModes - unique lower-cased non-blank modes across configs', () => {
+  assert.equal(distinctModes(null).size, 0)
+  assert.equal(distinctModes({ configs: [] }).size, 0)
+  assert.equal(distinctModes({ configs: [{ mode: 'Smart' }, { mode: 'smart' }] }).size, 1)
+  assert.equal(distinctModes({ configs: [{ mode: 'Smart' }, { mode: 'Pro' }] }).size, 2)
+  assert.equal(distinctModes({ configs: [{ mode: '' }, { mode: null }, {}] }).size, 0)
+})
+
+test('hasMultipleModes - true only above one distinct mode', () => {
+  assert.equal(hasMultipleModes(null), false)
+  assert.equal(hasMultipleModes({ configs: [{ mode: 'Smart' }] }), false)
+  assert.equal(hasMultipleModes({ configs: [{ mode: 'Smart' }, { mode: 'smart' }] }), false)
+  assert.equal(hasMultipleModes({ configs: [{ mode: 'Smart' }, { mode: 'Pro' }] }), true)
+  assert.equal(hasMultipleModes({ configs: [] }), false)
+})
+
+// --- Band / mode / verdict meta ----------------------------------------------
+test('heroVerdictKind - band to hero pill kind', () => {
+  assert.equal(heroVerdictKind('high'), 'good')
+  assert.equal(heroVerdictKind('medium'), 'mid')
+  assert.equal(heroVerdictKind('low'), 'bad')
+  assert.equal(heroVerdictKind('HIGH'), 'good')
+  assert.equal(heroVerdictKind('nope'), 'plaus')
+  assert.equal(heroVerdictKind(undefined), 'plaus')
+})
+
+test('modeClass - mode to badge class', () => {
+  assert.equal(modeClass('Smart'), 'mode-smart')
+  assert.equal(modeClass('pro'), 'mode-pro')
+  assert.equal(modeClass('CLAUDE'), 'mode-claude')
+  assert.equal(modeClass('other'), 'mode-default')
+  assert.equal(modeClass(null), 'mode-default')
+})
+
+test('modeColor - mode to token expression', () => {
+  assert.equal(modeColor('smart'), 'var(--success)')
+  assert.equal(modeColor('pro'), 'var(--orange)')
+  assert.equal(modeColor('claude'), 'var(--danger)')
+  assert.equal(modeColor(''), 'var(--text-3)')
+})
+
+test('modeLabel - display label, blank falls back to Standard', () => {
+  assert.equal(modeLabel('Smart'), 'Smart')
+  assert.equal(modeLabel('  Pro '), 'Pro')
+  assert.equal(modeLabel(''), 'Standard')
+  assert.equal(modeLabel(null), 'Standard')
+})
+
+test('resultPillKind - effective verdict to pill kind', () => {
+  assert.equal(resultPillKind({ effective_correct: true }), 'ok')
+  assert.equal(resultPillKind({ effective_correct: false }), 'bad')
+  assert.equal(resultPillKind({ needs_review: true }), 'plaus')
+  assert.equal(resultPillKind({}), 'plaus')
+})
+
+test('rowAccentKind - danger for incorrect, warn for review, else none', () => {
+  assert.equal(rowAccentKind({ effective_correct: false }), 'danger')
+  assert.equal(rowAccentKind({ correct: false }), 'danger')
+  assert.equal(rowAccentKind({ needs_review: true }), 'warn')
+  assert.equal(rowAccentKind({ effective_correct: true }), '')
+  assert.equal(rowAccentKind({}), '')
+  assert.equal(rowAccentKind(null), '')
+})
+
+// --- Meters ------------------------------------------------------------------
+test('meterWidth / catWidth - accuracy fraction to CSS width', () => {
+  assert.equal(meterWidth(0.5), '50%')
+  assert.equal(meterWidth(2), '100%')
+  assert.equal(meterWidth(null), '0%')
+  assert.equal(catWidth({ accuracy: 0.25 }), '25%')
+  assert.equal(catWidth(null), '0%')
+})
+
+// --- Evolution ---------------------------------------------------------------
+test('evolutionKind / evolutionClass - delta to kind + pill class', () => {
+  assert.equal(evolutionKind({ delta: 'improved' }), 'improved')
+  assert.equal(evolutionKind({ delta: 'REGRESSED' }), 'regressed')
+  assert.equal(evolutionKind({ delta: 'weird' }), '')
+  assert.equal(evolutionKind({}), '')
+  assert.equal(evolutionClass({ delta: 'improved' }), 'evo-up')
+  assert.equal(evolutionClass({ delta: 'regressed' }), 'evo-down')
+  assert.equal(evolutionClass({ delta: 'same' }), 'evo-flat')
+  assert.equal(evolutionClass({}), 'evo-flat')
+})
+
+test('attemptCount / attemptHistory - defensive', () => {
+  assert.equal(attemptCount({ n_attempts: 3 }), 3)
+  assert.equal(attemptCount({ n_attempts: 0 }), 1)
+  assert.equal(attemptCount({}), 1)
+  assert.equal(attemptCount(null), 1)
+  assert.deepEqual(attemptHistory({ attempts: [{ attempt_no: 1 }] }), [{ attempt_no: 1 }])
+  assert.deepEqual(attemptHistory({}), [])
+  assert.deepEqual(attemptHistory(null), [])
+})
+
+test('attemptPillKind - correct flag then verdict', () => {
+  assert.equal(attemptPillKind({ correct: true }), 'ok')
+  assert.equal(attemptPillKind({ correct: false }), 'bad')
+  assert.equal(attemptPillKind({ verdict: 'correct' }), 'ok')
+  assert.equal(attemptPillKind({ verdict: 'incorrect' }), 'bad')
+  assert.equal(attemptPillKind({}), 'plaus')
+  assert.equal(attemptPillKind(null), 'plaus')
+})
+
+// --- Reference vs produced ---------------------------------------------------
+test('actualToolsText - array or scalar to readable list', () => {
+  assert.equal(actualToolsText({ actual_tools: ['a', 'b'] }), 'a, b')
+  assert.equal(actualToolsText({ actual_tools: ['a', null, ' '] }), 'a')
+  assert.equal(actualToolsText({ actual_tools: 'chart,table' }), 'chart,table')
+  assert.equal(actualToolsText({}), '')
+  assert.equal(actualToolsText(null), '')
+})
+
+test('hasRefVsActual - any reference material triggers the tab', () => {
+  assert.equal(hasRefVsActual({ expected_sql: 'SELECT 1' }), true)
+  assert.equal(hasRefVsActual({ expected_tool: 't' }), true)
+  assert.equal(hasRefVsActual({ actual_tools: ['x'] }), true)
+  assert.equal(hasRefVsActual({}), false)
+  assert.equal(hasRefVsActual(null), false)
+})
+
+test('expectedText - value with optional type', () => {
+  assert.equal(expectedText({ expected_value: '1284300', expected_value_type: 'currency' }), '1284300 (currency)')
+  assert.equal(expectedText({ expected_value: 42 }), '42')
+  assert.equal(expectedText({ expected_value: '' }), '')
+  assert.equal(expectedText({}), '')
+  assert.equal(expectedText(null), '')
+})
+
+// --- Formatting --------------------------------------------------------------
+test('fmtScore - two decimals or dash', () => {
+  assert.equal(fmtScore(4), '4.00')
+  assert.equal(fmtScore(3.5), '3.50')
+  assert.equal(fmtScore(null), '-')
+  assert.equal(fmtScore('4'), '-')
+})
+
+test('cellIsNumeric - only finite number types', () => {
+  assert.equal(cellIsNumeric(12), true)
+  assert.equal(cellIsNumeric(0), true)
+  assert.equal(cellIsNumeric('12'), false)
+  assert.equal(cellIsNumeric(null), false)
+  assert.equal(cellIsNumeric(NaN), false)
+})
+
+test('formatCell - group large magnitudes, keep years / ids / text literal', () => {
+  assert.equal(formatCell(null), '')
+  assert.equal(formatCell(2025), '2025') // year stays literal
+  assert.equal(formatCell(42), '42') // small int stays literal
+  assert.equal(formatCell(1284300, 'en'), '1,284,300')
+  assert.equal(formatCell(12.5, 'en'), '12.5')
+  assert.equal(formatCell('Acme Corp'), 'Acme Corp')
+  assert.equal(formatCell('2025-03-31'), '2025-03-31') // date string untouched
 })

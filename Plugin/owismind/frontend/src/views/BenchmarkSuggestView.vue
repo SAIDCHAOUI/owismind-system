@@ -28,9 +28,29 @@ import {
   verdictKind,
   rowKey,
   hasScoredResults,
+  hasMultipleModes,
+  heroVerdictKind,
+  modeClass,
+  modeColor,
+  modeLabel,
+  resultPillKind,
+  rowAccentKind,
+  meterWidth,
+  catWidth,
+  evolutionKind,
+  evolutionClass,
+  attemptCount,
+  attemptHistory,
+  attemptPillKind,
+  actualToolsText,
+  hasRefVsActual,
+  expectedText,
+  fmtScore,
+  cellIsNumeric,
+  formatCell,
 } from '../composables/benchmarkResults.js'
 import { PageShell, EmptyState } from '../components/pages'
-import { Icon, Button } from '../components/ui'
+import { Icon, Button, Tabs } from '../components/ui'
 
 const { t, locale } = useI18n()
 const bench = useBenchmarkStore()
@@ -95,16 +115,78 @@ watch(
   { immediate: true },
 )
 
-// --- Per-question review (expand state + admin override comments) ------------
+// Whether more than one mode is actually benchmarked. When false the whole mode
+// apparatus (badges, aside legend, the "configurations" KPI) is noise and is hidden.
+const multiMode = computed(() => hasMultipleModes(results.value))
+// A single benchmark-capable agent needs no picker: show a static label instead.
+const singleAgent = computed(() => benchmarkAgents.value.length === 1)
+// Hero verdict pill kind (good / mid / bad / plaus) from the confidence band.
+const heroPillKind = computed(() => heroVerdictKind(kpis.value && kpis.value.band))
+// The KPI tiles, built so the "configurations" tile drops out in single-mode runs
+// and the grid (auto-fit) simply reflows. Each tile is { key, label, value, flag? }.
+const kpiTiles = computed(() => {
+  const k = kpis.value
+  if (!k) return []
+  const tiles = [
+    { key: 'accuracy', label: t('bench.kpi.accuracy'), value: centerText.value },
+    { key: 'questions', label: t('bench.kpi.questions'), value: String(k.n_questions) },
+  ]
+  if (multiMode.value) {
+    tiles.push({ key: 'configs', label: t('bench.kpi.configs'), value: String(k.n_configs) })
+  }
+  tiles.push({
+    key: 'cost',
+    label: t('bench.kpi.cost'),
+    value: k.total_cost_str || formatMoney(k.total_cost, locale.value),
+    small: true,
+  })
+  tiles.push({
+    key: 'needs_review',
+    label: t('bench.kpi.needs_review'),
+    value: String(k.needs_review),
+    flag: k.needs_review > 0,
+  })
+  return tiles
+})
+
+// --- Per-question review (expand state + active detail tab + override comments) ---
 const expanded = ref({})
 const comments = ref({})
+// Active detail tab per row (keyed by rowKey, like `expanded`). Presentation state
+// stays local to the view; the store only fetches / normalizes.
+const activeTab = ref({})
+
+// The available detail tabs for one row: full answer always, SQL & data always,
+// reference only when there is reference material, history only for multi-attempt
+// questions. Returns [{ key, label }] for Tabs.vue.
+function tabItems(row) {
+  const items = [
+    { key: 'answer', label: t('bench.tab.answer') },
+    { key: 'sql', label: t('bench.tab.sql') },
+  ]
+  if (hasRefVsActual(row)) items.push({ key: 'reference', label: t('bench.tab.reference') })
+  if (attemptCount(row) > 1 && attemptHistory(row).length) {
+    items.push({ key: 'history', label: t('bench.tab.history') })
+  }
+  return items
+}
+function currentTab(row) {
+  return activeTab.value[rowKey(row)] || 'answer'
+}
+function setTab(row, key) {
+  activeTab.value[rowKey(row)] = key
+}
 
 function toggleRow(row) {
   const k = rowKey(row)
   const open = !expanded.value[k]
   expanded.value[k] = open
-  // Lazily load the full detail (complete answer + generated SQL + result table) on first expand.
-  if (open) bench.loadAttempt(row)
+  // Default the detail to the full-answer tab on first open.
+  if (open) {
+    if (!activeTab.value[k]) activeTab.value[k] = 'answer'
+    // Lazily load the full detail (complete answer + generated SQL + result table).
+    bench.loadAttempt(row)
+  }
 }
 
 // --- On-demand attempt detail (full answer + generated SQL + result table) ---
@@ -124,8 +206,9 @@ function itemHasTable(it) {
   const res = it && it.result
   return !!(res && Array.isArray(res.columns) && res.columns.length && Array.isArray(res.rows) && res.rows.length)
 }
-function cellText(cell) {
-  return cell == null ? '' : String(cell)
+// Format one captured result cell (numbers grouped by locale, text left literal).
+function fmtCell(cell) {
+  return formatCell(cell, locale.value)
 }
 
 // Re-seed the comment inputs from the rows whenever the results change (newest
@@ -146,9 +229,6 @@ watch(
 function verdictLabel(row) {
   return t('bench.verdict.' + verdictKind(row))
 }
-function fmtScore(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '-'
-}
 // Localized date-time for a backend timestamp; falls back to the raw value.
 function fmtTimestamp(stamp) {
   if (!stamp) return ''
@@ -167,107 +247,17 @@ function fmtBenchmarkOption(b) {
   const when = fmtTimestamp(b.last_run_timestamp)
   return when ? name + ' (' + when + ')' : String(name)
 }
-function catWidth(cat) {
-  return pctFromAccuracy(cat && cat.accuracy) + '%'
-}
-function expectedText(row) {
-  if (!row || !row.expected_value) return ''
-  const ty = row.expected_value_type ? ' (' + row.expected_value_type + ')' : ''
-  return String(row.expected_value) + ty
-}
 
-// --- LAB results parity helpers (verdict pill / mode badge / meter widths) ---
-// Confidence band -> hero verdict pill class (good/mid/bad), like the LAB results hero.
-function bandPill() {
-  const b = String((kpis.value && kpis.value.band) || '').toLowerCase()
-  if (b === 'high') return 'good'
-  if (b === 'medium') return 'mid'
-  if (b === 'low') return 'bad'
-  return 'plaus'
-}
-// Mode name -> badge class (Smart green, Pro orange, Claude red, anything else standard grey).
-function modeClass(mode) {
-  const m = String(mode || '').toLowerCase()
-  if (m === 'smart') return 'mode-smart'
-  if (m === 'pro') return 'mode-pro'
-  if (m === 'claude') return 'mode-claude'
-  return 'mode-default'
-}
-// Mode name -> dot color token expression (used via :style, never an SVG/HTML color attribute).
-function modeColor(mode) {
-  const m = String(mode || '').toLowerCase()
-  if (m === 'smart') return 'var(--success)'
-  if (m === 'pro') return 'var(--orange)'
-  if (m === 'claude') return 'var(--danger)'
-  return 'var(--text-3)'
-}
-// Accuracy fraction -> meter bar width.
-function meterWidth(acc) {
-  return pctFromAccuracy(acc) + '%'
-}
-// Per-question result pill kind, from the EFFECTIVE verdict: ok / bad / plaus.
-function resultPillKind(row) {
-  const k = verdictKind(row)
-  if (k === 'correct') return 'ok'
-  if (k === 'incorrect') return 'bad'
-  return 'plaus'
-}
-
-// --- Evolution (attempt history) ---------------------------------------------
-// The benchmark grows question-by-question over many runs; a re-run of a question
-// yields a new attempt. The backend stamps each detail row with `delta` (the trend of
-// the latest attempt vs the previous one): improved | regressed | same | first.
-const EVOLUTION_KINDS = ['improved', 'regressed', 'same', 'first']
-function evolutionKind(row) {
-  const d = String((row && row.delta) || '').toLowerCase()
-  return EVOLUTION_KINDS.indexOf(d) >= 0 ? d : ''
-}
+// Evolution + attempt labels (need i18n; the pure kinds come from the module).
 function evolutionLabel(row) {
   const k = evolutionKind(row)
   return k ? t('bench.evo.' + k) : ''
-}
-// Trend -> pill class (improved = good, regressed = bad, same/first = neutral).
-function evolutionClass(row) {
-  const k = evolutionKind(row)
-  if (k === 'improved') return 'evo-up'
-  if (k === 'regressed') return 'evo-down'
-  return 'evo-flat'
-}
-// How many attempts this question has accumulated in the benchmark.
-function attemptCount(row) {
-  const n = Number(row && row.n_attempts)
-  return Number.isFinite(n) && n > 0 ? n : 1
-}
-// The ordered attempt history (oldest -> newest), defensive against a missing array.
-function attemptHistory(row) {
-  return row && Array.isArray(row.attempts) ? row.attempts : []
-}
-// One attempt's verdict pill kind (ok / bad / plaus), folding any override.
-function attemptPillKind(att) {
-  if (!att || typeof att !== 'object') return 'plaus'
-  if (att.correct === true) return 'ok'
-  if (att.correct === false) return 'bad'
-  const v = String(att.verdict || '').toLowerCase()
-  if (v === 'correct') return 'ok'
-  if (v === 'incorrect') return 'bad'
-  return 'plaus'
 }
 function attemptVerdictLabel(att) {
   const k = attemptPillKind(att)
   if (k === 'ok') return t('bench.verdict.correct')
   if (k === 'bad') return t('bench.verdict.incorrect')
   return t('bench.verdict.unknown')
-}
-// The agent's actual tools for one row -> a readable list (or empty).
-function actualToolsText(row) {
-  const v = row && row.actual_tools
-  if (Array.isArray(v)) return v.filter((x) => x != null && String(x).trim()).join(', ')
-  return v != null ? String(v).trim() : ''
-}
-// Whether a row carries any reference-vs-produced material worth a block.
-function hasRefVsActual(row) {
-  if (!row) return false
-  return !!(row.expected_sql || row.expected_tool || actualToolsText(row))
 }
 
 async function applyOverride(row, verdict) {
@@ -451,7 +441,9 @@ function fmtDate(value) {
         <div class="consult-pickers">
           <div class="cp-field">
             <label class="bench-label" for="bench-agent">{{ t('bench.consult.agent_label') }}</label>
-            <div class="select-wrap">
+            <!-- A single benchmark-capable agent needs no picker: show a static label. -->
+            <div v-if="singleAgent" class="cp-static">{{ benchmarkAgents[0].label }}</div>
+            <div v-else class="select-wrap">
               <select
                 id="bench-agent"
                 class="bench-select-ctl"
@@ -482,17 +474,35 @@ function fmtDate(value) {
           </div>
         </div>
 
-        <!-- States -->
-        <p v-if="bench.resultsLoading && !results" class="consult-state">{{ t('bench.consult.loading') }}</p>
-        <div v-else-if="!bench.resultsConfigured" class="consult-note">
+        <!-- States: flat charter skeleton while loading, framed cards otherwise -->
+        <div
+          v-if="bench.resultsLoading && !results"
+          class="skeleton"
+          role="status"
+          :aria-label="t('bench.consult.loading')"
+        >
+          <div class="sk-band">
+            <div class="sk-box sk-donut" />
+            <div class="sk-kpis">
+              <div v-for="n in 4" :key="n" class="sk-box sk-kpi" />
+            </div>
+          </div>
+          <div class="sk-list">
+            <div v-for="n in 6" :key="n" class="sk-box sk-row" />
+          </div>
+        </div>
+        <div v-else-if="!bench.resultsConfigured" class="consult-card-state">
           <Icon name="info" />
           <span>{{ t('bench.consult.not_configured') }}</span>
         </div>
-        <div v-else-if="bench.resultsError" class="consult-note">
+        <div v-else-if="bench.resultsError" class="consult-card-state">
           <Icon name="alert" />
           <span>{{ t('bench.consult.load_error') }}</span>
         </div>
-        <p v-else-if="!hasResults" class="consult-state">{{ t('bench.consult.no_results') }}</p>
+        <div v-else-if="!hasResults" class="consult-card-state">
+          <Icon name="chart" />
+          <span>{{ t('bench.consult.no_results') }}</span>
+        </div>
 
         <!-- Results -->
         <template v-else-if="results && kpis">
@@ -504,50 +514,36 @@ function fmtDate(value) {
           <!-- content (1fr) + reference aside (360px), like the LAB results webapp -->
           <div class="consult-body">
             <div class="consult-content">
-              <!-- HERO: donut + verdict pill + note + meta -->
-              <div class="hero">
-                <div class="donut-wrap">
-                  <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
-                    <circle class="donut-track" cx="60" cy="60" r="52" />
-                    <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
-                  </svg>
-                  <div class="donut-center">
-                    <span class="donut-pct">{{ centerText }}</span>
-                    <span class="donut-band">{{ t('bench.consult.correct_label') }}</span>
+              <!-- TOP BAND: hero (donut + verdict) left, KPI tiles right, one row on
+                   wide screens so the questions surface sooner. -->
+              <div class="top-band">
+                <div class="hero">
+                  <div class="donut-wrap">
+                    <svg class="donut" viewBox="0 0 120 120" role="img" :aria-label="centerText">
+                      <circle class="donut-track" cx="60" cy="60" r="52" />
+                      <circle class="donut-fill" cx="60" cy="60" r="52" :style="donutFillStyle" />
+                    </svg>
+                    <div class="donut-center">
+                      <span class="donut-pct">{{ centerText }}</span>
+                      <span class="donut-band">{{ t('bench.consult.correct_label') }}</span>
+                    </div>
+                  </div>
+                  <div class="hero-body">
+                    <p v-if="results.benchmark_name" class="hero-bench">
+                      {{ t('bench.consult.benchmark_caption', [results.benchmark_name]) }}
+                    </p>
+                    <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
+                    <span class="verdict" :class="heroPillKind"><span class="sq" /><span>{{ bandLabel }}</span></span>
+                    <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
                   </div>
                 </div>
-                <div class="hero-body">
-                  <p v-if="results.benchmark_name" class="hero-bench">
-                    {{ t('bench.consult.benchmark_caption', [results.benchmark_name]) }}
-                  </p>
-                  <p class="hero-head">{{ t('bench.consult.hero', [kpis.n_correct, kpis.n_scored]) }}</p>
-                  <span class="verdict" :class="bandPill()"><span class="sq" /><span>{{ bandLabel }}</span></span>
-                  <p class="hero-note">{{ t('bench.consult.hero_note') }}</p>
-                  <p class="hero-meta">{{ t('bench.consult.hero_meta', [kpis.n_questions, kpis.n_configs]) }}</p>
-                </div>
-              </div>
 
-              <!-- KPI row (5 tiles, orange top border) -->
-              <div class="kpis">
-                <div class="kpi">
-                  <span class="k-lab">{{ t('bench.kpi.accuracy') }}</span>
-                  <span class="k-val">{{ centerText }}</span>
-                </div>
-                <div class="kpi">
-                  <span class="k-lab">{{ t('bench.kpi.questions') }}</span>
-                  <span class="k-val">{{ kpis.n_questions }}</span>
-                </div>
-                <div class="kpi">
-                  <span class="k-lab">{{ t('bench.kpi.configs') }}</span>
-                  <span class="k-val">{{ kpis.n_configs }}</span>
-                </div>
-                <div class="kpi">
-                  <span class="k-lab">{{ t('bench.kpi.cost') }}</span>
-                  <span class="k-val sm">{{ kpis.total_cost_str || formatMoney(kpis.total_cost, locale) }}</span>
-                </div>
-                <div class="kpi">
-                  <span class="k-lab">{{ t('bench.kpi.needs_review') }}</span>
-                  <span class="k-val" :class="{ flag: kpis.needs_review > 0 }">{{ kpis.needs_review }}</span>
+                <!-- KPI tiles (auto-fit; the "configurations" tile drops in single-mode). -->
+                <div class="kpis">
+                  <div v-for="tile in kpiTiles" :key="tile.key" class="kpi">
+                    <span class="k-lab">{{ tile.label }}</span>
+                    <span class="k-val" :class="{ sm: tile.small, flag: tile.flag }">{{ tile.value }}</span>
+                  </div>
                 </div>
               </div>
 
@@ -557,7 +553,7 @@ function fmtDate(value) {
             <div v-for="(c, i) in results.configs" :key="i" class="cfg-card">
               <div class="cfg-top">
                 <span class="cfg-name">{{ c.agent_label || c.agent_key }}</span>
-                <span class="mode-badge" :class="modeClass(c.mode)"><span class="dot" />{{ c.mode }}</span>
+                <span v-if="multiMode" class="mode-badge" :class="modeClass(c.mode)"><span class="dot" />{{ modeLabel(c.mode) }}</span>
                 <span class="cfg-q">{{ t('bench.cfg.questions_n', [c.n_questions]) }}</span>
               </div>
               <div class="meter-row">
@@ -606,204 +602,210 @@ function fmtDate(value) {
             <p v-if="isAdmin" class="detail-admin-note">
               <Icon name="info" />{{ t('bench.review.reset_note') }}
             </p>
-            <table class="rtable">
-              <thead>
-                <tr>
-                  <th>{{ t('bench.detail.col_question') }}</th>
-                  <th>{{ t('bench.detail.col_agent') }}</th>
-                  <th>{{ t('bench.detail.col_result') }}</th>
-                  <th class="num">{{ t('bench.detail.col_score') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-for="row in results.detail" :key="rowKey(row)">
-                  <tr>
-                    <td data-l="Question">
-                      <div class="q-main">{{ row.question }}</div>
-                      <div class="q-id">{{ row.question_id }}</div>
-                      <button type="button" class="show-details" @click="toggleRow(row)">
-                        <Icon :name="expanded[rowKey(row)] ? 'chevronUp' : 'chevronDown'" />
-                        {{ expanded[rowKey(row)] ? t('bench.detail.hide') : t('bench.detail.show') }}
-                      </button>
-                    </td>
-                    <td data-l="Agent">
-                      <span class="cfg-cell">
-                        <span class="dot" :style="{ background: modeColor(row.mode) }" />
-                        {{ row.agent_label || row.agent_key }} . {{ row.mode }}
+            <!-- Scannable question list: one framed card-line per question, a left rail
+                 accent when incorrect (danger) or awaiting review (warn), the detail
+                 panel expands inline with lazy-loaded tabs. Backend sort is preserved
+                 (needs_review, then incorrect, then id). -->
+            <ul class="qlist">
+              <li
+                v-for="row in results.detail"
+                :key="rowKey(row)"
+                class="qitem"
+                :class="'accent-' + (rowAccentKind(row) || 'none')"
+              >
+                <button
+                  type="button"
+                  class="qhead"
+                  :aria-expanded="!!expanded[rowKey(row)]"
+                  @click="toggleRow(row)"
+                >
+                  <span class="qmain">
+                    <span class="qtext">{{ row.question }}</span>
+                    <span class="qchips">
+                      <span v-if="row.category" class="chip">{{ row.category }}</span>
+                      <span v-if="multiMode" class="chip chip-mode" :class="modeClass(row.mode)">
+                        <span class="dot" :style="{ background: modeColor(row.mode) }" />{{ modeLabel(row.mode) }}
                       </span>
-                    </td>
-                    <td data-l="Result">
-                      <span class="result-pill" :class="'result-' + resultPillKind(row)"><span class="sq" />{{ verdictLabel(row) }}</span>
-                      <span v-if="row.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
-                      <span v-if="evolutionKind(row)" class="evo-badge" :class="evolutionClass(row)">{{ evolutionLabel(row) }}</span>
-                      <span v-if="attemptCount(row) > 1" class="attempt-count">{{ t('bench.evo.attempts_n', [attemptCount(row)]) }}</span>
-                    </td>
-                    <td class="num" data-l="Score">
-                      <span class="score">{{ fmtScore(row.judge_score) }}<small>/ 5</small></span>
-                    </td>
-                  </tr>
-                  <tr v-if="expanded[rowKey(row)]" class="detail-row">
-                    <td colspan="4">
-                      <div class="detail">
-                        <div class="d-full">
-                          <template v-if="row.category">
-                            <dt>{{ t('bench.detail.col_category') }}</dt>
-                            <dd>{{ row.category }}</dd>
-                          </template>
-                          <template v-if="row.expected_value">
-                            <dt>{{ t('bench.detail.expected') }}</dt>
-                            <dd class="mono">{{ expectedText(row) }}</dd>
-                          </template>
-                          <template v-if="row.notes">
-                            <dt>{{ t('bench.detail.notes') }}</dt>
-                            <dd>{{ row.notes }}</dd>
-                          </template>
-                          <template v-if="row.reviewed_by">
-                            <dt>{{ t('bench.detail.reviewed') }}</dt>
-                            <dd>{{ t('bench.review.reviewed_by', [row.reviewed_by, fmtDate(row.reviewed_at)]) }}</dd>
-                          </template>
-                        </div>
-                        <div class="answers">
-                          <div class="ans-box expected">
-                            <div class="ans-l">{{ t('bench.detail.reference') }}</div>
-                            <div class="ans-t">{{ row.reference_answer || '-' }}</div>
-                          </div>
-                          <div class="ans-box agent">
-                            <div class="ans-l">{{ t('bench.detail.answer') }}</div>
-                            <div class="ans-t">{{ row.answer_preview || '-' }}</div>
-                          </div>
-                        </div>
-                        <p v-if="row.judge_comment" class="judge-note">
-                          <b>{{ t('bench.detail.judge_comment') }} : </b>{{ row.judge_comment }}
-                        </p>
+                      <span v-if="attemptCount(row) > 1" class="chip">{{ t('bench.evo.attempts_n', [attemptCount(row)]) }}</span>
+                      <span v-if="evolutionKind(row)" class="chip evo-badge" :class="evolutionClass(row)">{{ evolutionLabel(row) }}</span>
+                    </span>
+                  </span>
+                  <span class="qside">
+                    <span v-if="row.needs_review" class="flag-review"><span class="sq" />{{ t('bench.detail.flag_review') }}</span>
+                    <span class="result-pill" :class="'result-' + resultPillKind(row)"><span class="sq" />{{ verdictLabel(row) }}</span>
+                    <span v-if="row.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
+                    <span class="score">{{ fmtScore(row.judge_score) }}<small>/ 5</small></span>
+                    <Icon class="qchev" :name="expanded[rowKey(row)] ? 'chevronUp' : 'chevronDown'" />
+                  </span>
+                </button>
 
-                        <!-- On-demand full evidence: the COMPLETE agent answer + the SQL the agent
-                             actually generated + each query's captured result table (loaded on expand,
-                             one row at a time). Shows WHY a verdict is right or wrong, for good or bad. -->
-                        <div class="agent-ev">
-                          <div class="agent-ev-h">{{ t('bench.ev.title') }}</div>
-                          <p v-if="attemptState(row).error" class="ev-msg ev-err">{{ t('bench.ev.error') }}</p>
-                          <p v-else-if="!attemptState(row).data" class="ev-msg">{{ t('bench.ev.loading') }}</p>
-                          <p v-else-if="!attemptState(row).data.found" class="ev-msg">{{ t('bench.ev.empty') }}</p>
-                          <template v-else>
-                            <div class="ev-answer">
-                              <div class="ev-l">{{ t('bench.ev.answer') }}</div>
-                              <pre class="ev-pre">{{ attemptState(row).data.answer_text || '-' }}</pre>
+                <div v-if="expanded[rowKey(row)]" class="qdetail">
+                  <!-- Compact meta banner (always visible: category, key value, notes,
+                       judge verdict + comment, human override). -->
+                  <dl class="meta-banner">
+                    <div class="mb"><dt>{{ t('bench.detail.col_question') }}</dt><dd class="mono">{{ row.question_id }}</dd></div>
+                    <div v-if="row.category" class="mb"><dt>{{ t('bench.detail.col_category') }}</dt><dd>{{ row.category }}</dd></div>
+                    <div v-if="expectedText(row)" class="mb"><dt>{{ t('bench.detail.expected') }}</dt><dd class="mono">{{ expectedText(row) }}</dd></div>
+                    <div v-if="row.notes" class="mb mb-wide"><dt>{{ t('bench.detail.notes') }}</dt><dd>{{ row.notes }}</dd></div>
+                    <div v-if="row.judge_comment" class="mb mb-wide"><dt>{{ t('bench.detail.judge_label') }}</dt><dd>{{ row.judge_comment }}</dd></div>
+                    <div v-if="row.reviewed_by" class="mb mb-wide"><dt>{{ t('bench.detail.reviewed') }}</dt><dd>{{ t('bench.review.reviewed_by', [row.reviewed_by, fmtDate(row.reviewed_at)]) }}</dd></div>
+                  </dl>
+
+                  <!-- Expected vs produced answer (light previews, side by side). -->
+                  <div class="answers">
+                    <div class="ans-box expected">
+                      <div class="ans-l">{{ t('bench.detail.reference') }}</div>
+                      <div class="ans-t">{{ row.reference_answer || '-' }}</div>
+                    </div>
+                    <div class="ans-box agent">
+                      <div class="ans-l">{{ t('bench.detail.answer') }}</div>
+                      <div class="ans-t">{{ row.answer_preview || '-' }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Tabs (shared Tabs.vue, styled locally): full answer / SQL & data /
+                       reference / history. The heavy answer + SQL load lazily on expand;
+                       loading / error / empty states live inside the tab body. -->
+                  <div class="detail-tabs">
+                    <Tabs
+                      :items="tabItems(row)"
+                      :model-value="currentTab(row)"
+                      @update:model-value="(k) => setTab(row, k)"
+                    />
+                    <div class="tab-panel">
+                      <!-- Full answer -->
+                      <template v-if="currentTab(row) === 'answer'">
+                        <p v-if="attemptState(row).error" class="ev-msg ev-err">{{ t('bench.ev.error') }}</p>
+                        <p v-else-if="!attemptState(row).data" class="ev-msg">{{ t('bench.ev.loading') }}</p>
+                        <p v-else-if="!attemptState(row).data.found" class="ev-msg">{{ t('bench.ev.empty') }}</p>
+                        <pre v-else class="ev-pre">{{ attemptState(row).data.answer_text || '-' }}</pre>
+                      </template>
+
+                      <!-- SQL & data -->
+                      <template v-else-if="currentTab(row) === 'sql'">
+                        <p v-if="attemptState(row).error" class="ev-msg ev-err">{{ t('bench.ev.error') }}</p>
+                        <p v-else-if="!attemptState(row).data" class="ev-msg">{{ t('bench.ev.loading') }}</p>
+                        <p v-else-if="!attemptState(row).data.found" class="ev-msg">{{ t('bench.ev.empty') }}</p>
+                        <template v-else-if="attemptSqlItems(row).length">
+                          <div v-for="(it, i) in attemptSqlItems(row)" :key="i" class="ev-item">
+                            <div class="ev-item-h">
+                              <span class="ev-qn">{{ t('bench.ev.query', [i + 1]) }}</span>
+                              <span class="ev-badge" :class="it.success ? 'ev-ok' : 'ev-bad'">{{ it.success ? t('bench.ev.ok') : t('bench.ev.failed') }}</span>
+                              <span class="ev-rc">{{ t('bench.ev.rows', [itemRowCount(it)]) }}</span>
                             </div>
-                            <template v-if="attemptSqlItems(row).length">
-                              <div class="ev-l ev-sqlh">{{ t('bench.ev.sql') }}</div>
-                              <div v-for="(it, i) in attemptSqlItems(row)" :key="i" class="ev-item">
-                                <div class="ev-item-h">
-                                  <span class="ev-qn">{{ t('bench.ev.query', [i + 1]) }}</span>
-                                  <span class="ev-badge" :class="it.success ? 'ev-ok' : 'ev-bad'">{{ it.success ? t('bench.ev.ok') : t('bench.ev.failed') }}</span>
-                                  <span class="ev-rc">{{ t('bench.ev.rows', [itemRowCount(it)]) }}</span>
-                                </div>
-                                <pre v-if="it.sql" class="ev-sql">{{ it.sql }}</pre>
-                                <div class="ev-data">
-                                  <div class="ev-l">{{ t('bench.ev.data') }}</div>
-                                  <div v-if="itemHasTable(it)" class="ev-twrap">
-                                    <table class="ev-table">
-                                      <thead>
-                                        <tr><th v-for="(c, ci) in it.result.columns" :key="ci">{{ c }}</th></tr>
-                                      </thead>
-                                      <tbody>
-                                        <tr v-for="(r2, ri) in it.result.rows" :key="ri">
-                                          <td v-for="(cell, cj) in r2" :key="cj">{{ cellText(cell) }}</td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                  <p v-else class="ev-msg">{{ t('bench.ev.no_data') }}</p>
-                                  <p v-if="it.result && it.result.truncated" class="ev-msg ev-trunc">{{ t('bench.ev.truncated') }}</p>
-                                </div>
+                            <pre v-if="it.sql" class="ev-sql">{{ it.sql }}</pre>
+                            <div class="ev-data">
+                              <div class="ev-l">{{ t('bench.ev.data') }}</div>
+                              <div v-if="itemHasTable(it)" class="ev-twrap">
+                                <table class="ev-table">
+                                  <thead>
+                                    <tr><th v-for="(c, ci) in it.result.columns" :key="ci">{{ c }}</th></tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr v-for="(r2, ri) in it.result.rows" :key="ri">
+                                      <td v-for="(cell, cj) in r2" :key="cj" :class="{ num: cellIsNumeric(cell) }">{{ fmtCell(cell) }}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
                               </div>
-                            </template>
-                            <p v-else class="ev-msg">{{ t('bench.ev.no_sql') }}</p>
-                          </template>
-                        </div>
-
-                        <!-- Reference (golden) vs what the agent actually produced. The
-                             references are a soft signal to the judge, not a hard metric. -->
-                        <div v-if="hasRefVsActual(row)" class="refblock">
-                          <div class="refblock-h">{{ t('bench.refprod.title') }}</div>
-                          <div class="refprod">
-                            <div class="rp-col">
-                              <div class="rp-l">{{ t('bench.refprod.reference_sql') }}</div>
-                              <pre v-if="row.expected_sql" class="rp-code">{{ row.expected_sql }}</pre>
-                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
-                            </div>
-                            <div class="rp-col">
-                              <div class="rp-l">{{ t('bench.refprod.suggested_tool') }}</div>
-                              <div v-if="row.expected_tool" class="rp-tool mono">{{ row.expected_tool }}</div>
-                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
-                              <div class="rp-l rp-l--mt">{{ t('bench.refprod.tools_used') }}</div>
-                              <div v-if="actualToolsText(row)" class="rp-tool mono">{{ actualToolsText(row) }}</div>
-                              <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
+                              <p v-else class="ev-msg">{{ t('bench.ev.no_data') }}</p>
+                              <p v-if="it.result && it.result.truncated" class="ev-msg ev-trunc">{{ t('bench.ev.truncated') }}</p>
                             </div>
                           </div>
-                        </div>
+                        </template>
+                        <p v-else class="ev-msg">{{ t('bench.ev.no_sql') }}</p>
+                      </template>
 
-                        <!-- Per-question evolution: the attempt history over the runs that
-                             contributed to this benchmark (oldest first). -->
-                        <div v-if="attemptCount(row) > 1 && attemptHistory(row).length" class="refblock">
-                          <div class="refblock-h">
-                            {{ t('bench.evo.history_title') }}
-                            <span v-if="evolutionKind(row)" class="evo-badge" :class="evolutionClass(row)">{{ evolutionLabel(row) }}</span>
+                      <!-- Reference (golden SQL / suggested tool vs tools actually used) -->
+                      <template v-else-if="currentTab(row) === 'reference'">
+                        <div class="refprod">
+                          <div class="rp-col">
+                            <div class="rp-l">{{ t('bench.refprod.reference_sql') }}</div>
+                            <pre v-if="row.expected_sql" class="rp-code">{{ row.expected_sql }}</pre>
+                            <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
                           </div>
-                          <ol class="attempts">
-                            <li v-for="(att, ai) in attemptHistory(row)" :key="ai" class="attempt">
-                              <span class="att-no">{{ t('bench.evo.attempt_n', [att.attempt_no != null ? att.attempt_no : ai + 1]) }}</span>
-                              <span class="att-pill" :class="'result-' + attemptPillKind(att)"><span class="sq" />{{ attemptVerdictLabel(att) }}</span>
-                              <span class="att-score">{{ fmtScore(att.judge_score) }}<small>/ 5</small></span>
-                              <span v-if="att.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
-                              <span class="att-when mono">{{ fmtTimestamp(att.run_timestamp) }}</span>
-                            </li>
-                          </ol>
-                        </div>
-
-                        <!-- Admin override controls -->
-                        <div v-if="isAdmin" class="override">
-                          <div class="override-head">{{ t('bench.review.title') }}</div>
-                          <input
-                            v-model="comments[rowKey(row)]"
-                            class="override-comment"
-                            type="text"
-                            maxlength="280"
-                            :placeholder="t('bench.review.comment_ph')"
-                          />
-                          <div class="override-actions">
-                            <button
-                              type="button"
-                              class="ov-btn ov-ok"
-                              :disabled="bench.overrideBusyKey === rowKey(row)"
-                              @click="applyOverride(row, 'correct')"
-                            >
-                              <Icon name="check" />{{ t('bench.review.mark_correct') }}
-                            </button>
-                            <button
-                              type="button"
-                              class="ov-btn ov-no"
-                              :disabled="bench.overrideBusyKey === rowKey(row)"
-                              @click="applyOverride(row, 'incorrect')"
-                            >
-                              <Icon name="alert" />{{ t('bench.review.mark_incorrect') }}
-                            </button>
-                            <button
-                              type="button"
-                              class="ov-btn"
-                              :disabled="bench.overrideBusyKey === rowKey(row) || !row.overridden"
-                              @click="applyOverride(row, '')"
-                            >
-                              <Icon name="refresh" />{{ t('bench.review.clear') }}
-                            </button>
+                          <div class="rp-col">
+                            <div class="rp-l">{{ t('bench.refprod.suggested_tool') }}</div>
+                            <div v-if="row.expected_tool" class="rp-tool mono">{{ row.expected_tool }}</div>
+                            <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
+                            <div class="rp-l rp-l--mt">{{ t('bench.refprod.tools_used') }}</div>
+                            <div v-if="actualToolsText(row)" class="rp-tool mono">{{ actualToolsText(row) }}</div>
+                            <div v-else class="rp-empty">{{ t('bench.refprod.none') }}</div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
+                        <p class="rp-note">{{ t('bench.refprod.note') }}</p>
+                      </template>
+
+                      <!-- History (attempt trail over the runs, oldest first). -->
+                      <template v-else-if="currentTab(row) === 'history'">
+                        <div class="hist-wrap">
+                          <table class="hist-table">
+                            <thead>
+                              <tr>
+                                <th>{{ t('bench.hist.col_attempt') }}</th>
+                                <th>{{ t('bench.hist.col_date') }}</th>
+                                <th>{{ t('bench.hist.col_result') }}</th>
+                                <th class="num">{{ t('bench.hist.col_score') }}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="(att, ai) in attemptHistory(row)" :key="ai">
+                                <td class="mono">{{ att.attempt_no != null ? att.attempt_no : ai + 1 }}</td>
+                                <td class="mono">{{ fmtTimestamp(att.run_timestamp) }}</td>
+                                <td class="hist-result">
+                                  <span class="att-pill" :class="'result-' + attemptPillKind(att)"><span class="sq" />{{ attemptVerdictLabel(att) }}</span>
+                                  <span v-if="att.overridden" class="v-over">{{ t('bench.verdict.overridden') }}</span>
+                                  <span v-if="ai === attemptHistory(row).length - 1" class="latest-tag">{{ t('bench.hist.latest') }}</span>
+                                </td>
+                                <td class="num"><span class="score">{{ fmtScore(att.judge_score) }}<small>/ 5</small></span></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Admin override controls -->
+                  <div v-if="isAdmin" class="override">
+                    <div class="override-head">{{ t('bench.review.title') }}</div>
+                    <input
+                      v-model="comments[rowKey(row)]"
+                      class="override-comment"
+                      type="text"
+                      maxlength="280"
+                      :placeholder="t('bench.review.comment_ph')"
+                    />
+                    <div class="override-actions">
+                      <button
+                        type="button"
+                        class="ov-btn ov-ok"
+                        :disabled="bench.overrideBusyKey === rowKey(row)"
+                        @click="applyOverride(row, 'correct')"
+                      >
+                        <Icon name="check" />{{ t('bench.review.mark_correct') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="ov-btn ov-no"
+                        :disabled="bench.overrideBusyKey === rowKey(row)"
+                        @click="applyOverride(row, 'incorrect')"
+                      >
+                        <Icon name="alert" />{{ t('bench.review.mark_incorrect') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="ov-btn"
+                        :disabled="bench.overrideBusyKey === rowKey(row) || !row.overridden"
+                        @click="applyOverride(row, '')"
+                      >
+                        <Icon name="refresh" />{{ t('bench.review.clear') }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
           </div>
             </div>
 
@@ -820,7 +822,8 @@ function fmtDate(value) {
                   <div class="r"><dt>{{ t('bench.ref.dc_t') }}</dt><dd>{{ t('bench.ref.dc_d') }}</dd></div>
                 </dl>
               </div>
-              <div class="ref-block">
+              <!-- The modes legend is contextual: only shown when several modes ran. -->
+              <div v-if="multiMode" class="ref-block">
                 <p class="ref-h">{{ t('bench.ref.modes_h') }}</p>
                 <p class="ref-p">{{ t('bench.ref.modes_p') }}</p>
                 <div class="legend">
@@ -1095,10 +1098,87 @@ function fmtDate(value) {
 }
 
 /* --- States / notes --- */
-.consult-state {
+/* Single-agent static label (replaces the agent picker when only one exists). */
+.cp-static {
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+/* Empty / not-configured / error, presented as a framed charter card. */
+.consult-card-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
   font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin-bottom: var(--s-5);
+}
+.consult-card-state :deep(.ui-icon) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
   color: var(--text-3);
-  margin: var(--s-4) 0;
+}
+
+/* Loading skeleton: flat charter rectangles, a discreet opacity pulse (disabled
+   under prefers-reduced-motion). */
+.skeleton {
+  margin-bottom: var(--s-5);
+}
+.sk-band {
+  display: flex;
+  gap: var(--s-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-5);
+}
+.sk-kpis {
+  flex: 1;
+  min-width: 240px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-4);
+}
+.sk-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.sk-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  animation: sk-pulse 1.2s ease-in-out infinite;
+}
+.sk-donut {
+  width: 200px;
+  height: 132px;
+  flex: 0 0 200px;
+}
+.sk-kpi {
+  height: 92px;
+  border-top: 3px solid var(--border-strong);
+}
+.sk-row {
+  height: 56px;
+}
+@keyframes sk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-box {
+    animation: none;
+  }
 }
 .consult-note {
   display: flex;
@@ -1133,11 +1213,15 @@ function fmtDate(value) {
   min-width: 0;
 }
 .consult-aside {
-  width: 360px;
-  flex: 0 0 360px;
+  width: 320px;
+  flex: 0 0 320px;
   border-left: 1px solid var(--border);
   padding-left: var(--s-6);
   margin-left: var(--s-6);
+  /* Stay useful while the question list scrolls. */
+  position: sticky;
+  top: var(--s-5);
+  align-self: flex-start;
 }
 
 /* sections inside the consultation content */
@@ -1157,17 +1241,25 @@ function fmtDate(value) {
   margin: 0;
 }
 
-/* --- Hero: donut + verdict + note + meta --- */
+/* --- Top band: hero (left) + KPI tiles (right) on one horizontal row --- */
+.top-band {
+  display: grid;
+  grid-template-columns: minmax(340px, 1.1fr) 2fr;
+  gap: var(--s-5);
+  align-items: stretch;
+  margin-bottom: var(--s-6);
+}
+
+/* --- Hero: donut + verdict + note --- */
 .hero {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: var(--s-7);
+  gap: var(--s-6);
   align-items: center;
   padding: var(--s-6);
   border: 1px solid var(--border-strong);
   border-top: 3px solid var(--orange);
   background: var(--bg);
-  margin-bottom: var(--s-5);
 }
 .donut-wrap {
   position: relative;
@@ -1271,22 +1363,18 @@ function fmtDate(value) {
   background: var(--text-3);
 }
 .hero-note {
-  color: var(--text);
-  font-size: var(--fs-base);
-  margin: var(--s-4) 0 6px;
-}
-.hero-meta {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: var(--fs-sm);
-  font-family: var(--font-mono);
-  margin: 0;
+  line-height: 1.5;
+  margin: var(--s-4) 0 0;
 }
 
-/* --- KPI row (5 tiles, orange top border) --- */
+/* --- KPI tiles (auto-fit; the "configurations" tile drops in single-mode) --- */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--s-4);
+  align-content: start;
 }
 .kpi {
   border: 1px solid var(--border);
@@ -1516,62 +1604,131 @@ function fmtDate(value) {
   flex-shrink: 0;
   color: var(--text-3);
 }
-.rtable {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--bg);
+/* Question list: framed card-lines, left rail accent by effective verdict. */
+.qlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--border-strong);
+  background: var(--bg);
 }
-.rtable thead th {
-  text-align: left;
-  font-size: 11px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  padding: 12px 14px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-strong);
-}
-.rtable thead th.num {
-  text-align: right;
-}
-.rtable td {
-  padding: 14px;
+.qitem {
   border-bottom: 1px solid var(--border);
-  font-size: var(--fs-sm);
-  vertical-align: top;
-  color: var(--text-2);
+  border-left: 3px solid transparent;
 }
-.rtable tbody tr:last-child td {
+.qitem:last-child {
   border-bottom: none;
 }
-.rtable td.num {
-  text-align: right;
-  font-family: var(--font-mono);
-  white-space: nowrap;
+.qitem.accent-danger {
+  border-left-color: var(--danger);
 }
-.q-main {
+.qitem.accent-warn {
+  border-left-color: var(--warn);
+}
+.qhead {
+  width: 100%;
+  display: flex;
+  /* The side cluster (pills, score) never shrinks: let it wrap under the question
+     instead of crushing the title when the content column is narrow. */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-5);
+  padding: 13px var(--s-5);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.qhead:hover {
+  background: var(--surface-hover);
+}
+.qmain {
+  flex: 1;
+  min-width: min(240px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qtext {
+  font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
   color: var(--text);
+  line-height: 1.4;
+  /* Two lines max, ellipsed. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.q-id {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 4px;
+.qchips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-.cfg-cell {
+.chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: var(--fs-sm);
-  color: var(--text);
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
 }
-.cfg-cell .dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
+.chip .dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+}
+.chip-mode.mode-smart {
+  border-color: var(--success);
+  color: var(--success);
+}
+.chip-mode.mode-pro {
+  border-color: var(--orange);
+  color: var(--orange-text);
+}
+.chip-mode.mode-claude {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.qside {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-shrink: 0;
+}
+.flag-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--warn);
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warn);
+  white-space: nowrap;
+}
+.flag-review .sq {
+  width: 9px;
+  height: 9px;
+  background: var(--warn);
+}
+.qchev {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.qchev :deep(svg),
+.qside :deep(.qchev) {
+  width: 16px;
+  height: 16px;
 }
 .result-pill {
   display: inline-flex;
@@ -1621,26 +1778,6 @@ function fmtDate(value) {
   color: var(--text-3);
   margin-left: 2px;
 }
-.show-details {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 0;
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-bold);
-  color: var(--text-2);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.show-details:hover {
-  color: var(--orange-text);
-}
-.show-details :deep(.ui-icon) {
-  width: 13px;
-  height: 13px;
-}
 .v-over {
   display: inline-block;
   margin-left: 6px;
@@ -1651,30 +1788,40 @@ function fmtDate(value) {
   color: var(--orange-text);
 }
 
-/* --- Expanded detail panel (reference / agent answer / judge note) --- */
-.detail-row td {
+/* --- Expanded detail panel (meta banner + answers + tabs + override) --- */
+.qdetail {
   background: var(--surface);
   padding: var(--s-5);
-}
-.detail {
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: var(--s-4);
+  gap: var(--s-5);
 }
-.d-full {
+/* Compact meta banner: dt/dd pairs, always visible above the tabs. */
+.meta-banner {
   display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 8px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-3) var(--s-5);
   margin: 0;
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--border);
+  background: var(--bg);
 }
-.d-full dt {
+.meta-banner .mb {
+  min-width: 0;
+}
+.meta-banner .mb-wide {
+  grid-column: 1 / -1;
+}
+.meta-banner dt {
   font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-3);
+  margin-bottom: 4px;
 }
-.d-full dd {
+.meta-banner dd {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text);
@@ -1713,28 +1860,38 @@ function fmtDate(value) {
   max-height: 220px;
   overflow-y: auto;
 }
-.judge-note {
-  font-size: var(--fs-sm);
-  color: var(--text);
-  margin: 0;
-}
-.judge-note b {
-  font-weight: var(--fw-bold);
-}
-
-/* --- On-demand full evidence: complete answer + generated SQL + result table --- */
-.agent-ev {
+/* --- Detail tabs (shared Tabs.vue styled locally; active = 3px orange rule) --- */
+.detail-tabs {
   border: 1px solid var(--border);
   background: var(--bg);
-  padding: var(--s-4) var(--s-5);
 }
-.agent-ev-h {
-  font-size: 11px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--orange-text);
-  margin-bottom: var(--s-4);
+/* Charter: the active tab carries a 3px orange underline (Tabs.vue defaults to
+   1.5px); restyle locally via :deep without touching the shared component. */
+.detail-tabs :deep(.ui-tabs) {
+  padding: 0 var(--s-5);
+  border-bottom: 1px solid var(--border-strong);
+}
+.detail-tabs :deep(.ui-tab) {
+  padding-top: var(--s-4);
+  padding-bottom: var(--s-4);
+  font-weight: var(--fw-bold);
+}
+.detail-tabs :deep(.ui-tab.is-active) {
+  color: var(--text);
+}
+.detail-tabs :deep(.ui-tab.is-active)::after {
+  height: 3px;
+  background: var(--orange);
+}
+.tab-panel {
+  padding: var(--s-5);
+}
+/* Reference tab: the non-binding-hint caption. */
+.rp-note {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: var(--s-4) 0 0;
 }
 .ev-l {
   font-size: 10px;
@@ -1743,9 +1900,6 @@ function fmtDate(value) {
   text-transform: uppercase;
   color: var(--text-3);
   margin-bottom: 6px;
-}
-.ev-answer {
-  margin-bottom: var(--s-4);
 }
 .ev-pre {
   margin: 0;
@@ -1760,9 +1914,6 @@ function fmtDate(value) {
   overflow-wrap: anywhere;
   max-height: 260px;
   overflow-y: auto;
-}
-.ev-sqlh {
-  margin-top: 2px;
 }
 .ev-item {
   border: 1px solid var(--border);
@@ -1857,6 +2008,9 @@ function fmtDate(value) {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
+.ev-table td.num {
+  text-align: right;
+}
 .ev-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -1883,19 +2037,7 @@ function fmtDate(value) {
   margin: 0 0 8px;
 }
 
-/* --- Evolution (delta badge + attempt history) --- */
-.evo-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 7px;
-  border: 1px solid var(--border-strong);
-  font-size: 10px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  vertical-align: middle;
-}
+/* --- Evolution badge (rendered as a question chip) --- */
 .evo-badge.evo-up {
   border-color: var(--success);
   color: var(--success);
@@ -1907,31 +2049,6 @@ function fmtDate(value) {
 .evo-badge.evo-flat {
   border-color: var(--border-strong);
   color: var(--text-3);
-}
-.attempt-count {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-3);
-  vertical-align: middle;
-}
-
-/* shared block frame for ref-vs-produced + attempt history */
-.refblock {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  padding: var(--s-4) var(--s-5);
-}
-.refblock-h {
-  display: flex;
-  align-items: center;
-  font-size: 10px;
-  font-weight: var(--fw-heavy);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  margin-bottom: var(--s-3);
 }
 
 /* reference SQL / suggested tool vs tools used */
@@ -1975,29 +2092,56 @@ function fmtDate(value) {
   color: var(--text-3);
 }
 
-/* attempt history list */
-.attempts {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
+/* attempt history mini-table (History tab) */
+.hist-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-strong);
 }
-.attempt {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  flex-wrap: wrap;
+.hist-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg);
+  font-size: var(--fs-sm);
 }
-.att-no {
-  font-size: 11px;
+.hist-table th {
+  text-align: left;
+  font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-2);
-  width: 96px;
-  flex: 0 0 96px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+.hist-table th.num {
+  text-align: right;
+}
+.hist-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.hist-table td.num {
+  text-align: right;
+}
+.hist-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.hist-result {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.latest-tag {
+  font-size: 10px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--orange-text);
 }
 .att-pill {
   display: inline-flex;
@@ -2015,29 +2159,10 @@ function fmtDate(value) {
   width: 9px;
   height: 9px;
 }
-.att-score {
-  font-family: var(--font-mono);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-sm);
-  color: var(--text);
-}
-.att-score small {
-  font-size: 10px;
-  color: var(--text-3);
-  margin-left: 2px;
-}
-.att-when {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-}
 
 @media (max-width: 760px) {
   .refprod {
     grid-template-columns: 1fr;
-  }
-  .att-when {
-    margin-left: 0;
   }
 }
 
@@ -2112,13 +2237,12 @@ function fmtDate(value) {
   color: var(--text);
 }
 
-/* --- consultation responsive (mirrors the LAB results breakpoints) --- */
-@media (max-width: 1280px) {
-  .kpis {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
+/* --- consultation responsive --- */
 @media (max-width: 1080px) {
+  /* Hero + KPIs stack, and the aside drops below the content (no longer sticky). */
+  .top-band {
+    grid-template-columns: 1fr;
+  }
   .consult-aside {
     width: auto;
     flex: none;
@@ -2128,6 +2252,7 @@ function fmtDate(value) {
     margin-left: 0;
     margin-top: var(--s-6);
     padding-top: var(--s-6);
+    position: static;
   }
 }
 @media (max-width: 760px) {
@@ -2135,9 +2260,6 @@ function fmtDate(value) {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
-  }
-  .kpis {
-    grid-template-columns: repeat(2, 1fr);
   }
   .submetrics {
     grid-template-columns: 1fr 1fr;
@@ -2148,6 +2270,15 @@ function fmtDate(value) {
   .topic-agent {
     width: auto;
     flex: 1;
+  }
+  /* Question head stacks so chips + verdict never crush on narrow screens. */
+  .qhead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-3);
+  }
+  .qside {
+    flex-wrap: wrap;
   }
 }
 

@@ -5,6 +5,27 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🏗️ SESSION 2026-07-03 Run 2 (REFONTE BENCHMARK : launcher LAB reequilibre + fusion golden +
+UI rename + page plugin refondue avec modes conditionnels) - ✅ local (QA runtime reelle), NON
+recolle DSS.**
+**Launcher LAB** : panes reequilibres (tpl-shell dans body.html 9->67 l., preview.html =
+fetch(body.html), applyI18n 3 attributs, script.js 4177->**3917**) ; detail benchmark en 3 zones
++ cluster Manage avec **UI Rename** (route existante + mock miroir) ; "Review the results"
+pre-filtre + Back restaure ; badge suggestions ; **panneau Golden legacy SUPPRIME** (devenu
+inatteignable apres unification des destinations ; parite champs verifiee, datalist categories
+migre sur golden-tag = /api/config garde un consommateur reel, L128) ; 46 cles DICT + 68 regles
+CSS mortes purgees. Contrat API + MOCK intacts, backend.py intouche. **Page plugin**
+(BenchmarkSuggestView 2618 l. + benchmarkResults.js 290 l. purs) : mono-mode = zero appareil de
+modes (badges/KPI/legende/pickers), liste de questions en cartes scannables (rail 3px
+danger/warn), detail par onglets Tabs.vue (Full answer / SQL & data / Reference / History
+conditionnels), bande hero+KPI auto-fit, aside sticky contextuelle, skeletons ; formatCell
+locale-aware ; +21 tests node dont parite i18n. **Quota subagents mort en pleine verif** ->
+verification inline orchestrateur : checks statiques scriptes + QA Playwright reelle (launcher
+MOCK + harnais stub plugin `getWebAppBackendUrl` injecte, L129) ; 1 bug CSS trouve/corrige
+(qhead flex-wrap). **629+316+343+207+5 verts, 0 tiret, zip DEV `index-B61pkfo9.js` (81 entrees),
+PROD intacte.** Email relance modifie par l'user HORS session (beta 8 juillet) = NON commite.
+Voir **L128-L129** + `sessions/2026-07-03.md` (Run 2).
+
 **🧹 SESSION 2026-07-03 (GRAND NETTOYAGE pré-bêta : mémoire condensée + docs alignées + code mort +
 fix `/api/config` LAB) - ✅ local (4 suites vertes), route LAB à recoller DSS.**
 Audit Workflow 7 scouts Sonnet + vérif adversariale Opus par candidat : **code déjà sain** (0 mort
@@ -79,7 +100,14 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-03 : grand nettoyage pré-bêta (mémoire -72 %, docs 34/34 routes + 8/8 tables, code mort, /api/config LAB) → détail `sessions/2026-07-03.md` + **L127**
+## 🧭 Dernière session - 2026-07-03 Run 2 : refonte benchmark (launcher + page plugin) → détail `sessions/2026-07-03.md` (Run 2) + **L128-L129**
+- **✅ Local (QA runtime), NON recollé DSS.** À recoller en batch : 3 panes launcher LAB (+ la
+  route /api/config du Run 1) ; zip DEV `index-B61pkfo9.js` + restart backend (avec les recolls
+  L115/L117 en attente). Revue adversariale multi-agents à relancer (quota, reset 4:10am).
+- Smoke DSS : rename benchmark, Review pré-filtré, badge suggestions, datalist catégories ;
+  page plugin mono-mode vs multi-mode, onglets détail, dark.
+
+## 🧭 Avant - 2026-07-03 Run 1 : grand nettoyage pré-bêta (mémoire -72 %, docs 34/34 routes + 8/8 tables, code mort, /api/config LAB) → détail `sessions/2026-07-03.md` + **L127**
 - **Repo only, 4 suites vertes (629+316+343+186), rien à redéployer côté plugin.** Reste DSS :
   recoller `benchmark_webapp/views.py` + pane Python `benchmark_launcher/backend.py` (route
   `/api/config`, batchable avec les recolls L115/L117 en attente).
@@ -355,6 +383,15 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🏗️NEW (2026-07-03 Run 2). **RECOLLER + VALIDER la refonte benchmark.** LAB : coller les 3 panes
+   launcher (`body.html` + `script.js` + `style.css` ; backend.py inchangé ce run mais la route
+   `/api/config` du Run 1 reste à coller) et recharger. Plugin : uploader le zip DEV
+   (`index-B61pkfo9.js`) + redémarrer le backend. Smoke : rename (vide/doublon/valide), carte fin
+   de run -> Review pré-filtré -> Back, badge suggestions, golden-tag + datalist catégories ;
+   page benchmark mono vs multi-mode (zéro appareil de modes en mono), onglets détail (SQL
+   formaté, History si n>1), dark. Puis relancer la revue adversariale multi-agents sur les
+   diffs (échouée au quota). Différés proposés : refonte nav launcher (onglets scopés agent),
+   port du nouveau visuel plugin vers la webapp LAB results. Voir **L128-L129**.
 0🧹NEW (2026-07-03). **Recoller la route LAB `/api/config`** : project-library `benchmark_webapp/views.py`
    + pane Python `benchmark_launcher/backend.py`, recharger le launcher (batchable avec les recolls
    L115/L117 déjà en attente ci-dessous). Smoke : éditer/supprimer une golden -> compteurs, catégories

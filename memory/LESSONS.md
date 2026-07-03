@@ -2985,5 +2985,50 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : `sessions/2026-07-03.md` ; décisions user en session (implémenter /api/config, garder
   /api/benchmark/rename, compléter docs/ maintenant).
 
+## L128 - Rerouter un point d'entree peut orpheliner tout un sous-systeme : tracer les appelants AVANT/APRES, puis fusionner proprement
+- **Contexte** : refonte UX launcher (2026-07-03 Run 2). UX-1 = "une seule destination pour gerer
+  les questions golden" : les 2 derniers boutons pointant sur le panneau Golden global legacy
+  (`setTab("golden")`) ont ete reroutes vers l'ecran golden-tag.
+- **Ce qui a echoue** : rien en tests (5 journey verts, 0 erreur console) - mais la QA runtime a
+  montre le panneau legacy fige sur "Chargement..." : il n'avait PLUS AUCUN appelant (le lien
+  header pointait DEJA golden-tag avant la session). ~330 lignes de JS + modal + 46 cles i18n +
+  68 regles CSS devenues de l'UI morte cachee, invisible aux suites de tests.
+- **Solution qui marche** : (1) `grep setTab("golden")` avant/apres le reroutage -> 0 appelant =
+  decision de suppression complete ; (2) verifier la PARITE de capacites avant de supprimer
+  (submitModal mappait deja anchor -> expected_value : les 2 formulaires ecrivaient les memes
+  colonnes) ; (3) migrer le seul avantage du legacy (datalist categories via /api/config) vers le
+  survivant (gtCatList dans buildGoldenTagForm + live-refresh dans refreshConfigMeta) pour que la
+  route /api/config (decision user du matin) garde un consommateur reel ; (4) purger DICT/CSS par
+  audit zero-usage script (attention substrings : `overlay` matche `settings-overlay`, prefixes
+  dynamiques `vt.`/`run.evo.`/`gt.scope.` = familles a garder).
+- **Preuve** : script.js 4239 -> 3917, 5 journey + 343 LAB verts, parcours Playwright complet
+  0 erreur, datalist rempli depuis le mock config.
+- **Source** : sessions/2026-07-03.md Run 2.
+- **Date** : 2026-07-03.
+
+## L129 - QA runtime du frontend plugin SANS DSS : stub server + injection getWebAppBackendUrl (et fallback quand le quota subagents meurt)
+- **Contexte** : verifier la refonte BenchmarkSuggestView de bout en bout (skill verify) alors que
+  la page ne vit que dans DSS ; en plus le quota de session a tue TOUS les subagents en pleine
+  phase de verification ("You've hit your session limit", reset 4:10am) : workflows morts,
+  orchestrateur seul.
+- **Ce qui a echoue** : le workflow revue adversariale (5 lentilles Opus + refuteurs) + 2 agents QA
+  = 7/7 en erreur quota. Les tests unitaires seuls n'auraient jamais montre le bug d'ecrasement de
+  titre (CSS flex, dependant de la largeur reelle).
+- **Solution qui marche** : harnais reutilisable `stub_server.py` (stdlib http.server) : (1) vite
+  build vers un dist scratch ; (2) servir le dist SOUS le base path Vite
+  `/plugins/owismind/resource/owismind-app/` ; (3) fixtures JSON sur `/owismind-api/*` (me admin,
+  agents avec has_benchmark, benchmark/results multi|mono|empty|notconf via env FIXTURE,
+  benchmark/attempt, track 200) ; (4) injecter AVANT le module script dans index.html :
+  `window.getWebAppBackendUrl = function(p){ return p; }` (les paths du front portent deja le
+  prefixe) ; (5) piloter au Playwright sur `#/benchmark`. Gotchas : cache navigateur du index.html
+  (cache-buster `?v=N` obligatoire apres rebuild, verifier le scope data-v-*), 404 /conversations
+  benin (best-effort). A trouve un VRAI bug : `.qside` flex 0 0 auto ecrasait `.qmain` a 54px en
+  colonne etroite -> `.qhead` flex-wrap:wrap + min-width sur `.qmain`.
+- **Preuve** : mono-mode verifie en runtime (0 badge, KPI configs absent, legende retiree, label
+  statique), formatage cellules (12,100,000 vs 2025 intact), onglets conditionnels, etats
+  non-configure/vide en cartes ; harnais conserve dans le scratchpad de session.
+- **Source** : sessions/2026-07-03.md Run 2 ; scratchpad qa/stub_server.py.
+- **Date** : 2026-07-03.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

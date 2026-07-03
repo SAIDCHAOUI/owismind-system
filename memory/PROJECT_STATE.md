@@ -637,8 +637,8 @@ Historique par session : memory/sessions/*.md.
 | Budget / quotas 50 $/mois (`webapp_user_quota_v1`) | ⏳ Codé, non validé DSS | - | `storage/budget.py` (2026-06-18) |
 | Analytics d'usage `webapp_events_v1` (+ `POST /track`) | ✅ Validé DSS | 2026-07-02 (Run 5) | L125 |
 | Source Data Explorer (admin + panneau + onglet Evidence + cell-to-agent) | ✅ Validé DSS | 2026-07-02 (Runs 3-4) | L121-L124 |
-| Benchmark - LAB (moteur + 2 webapps Standard) | ⏳ Codé, non déployé DSS | - | L102-L113 (`OWIsMind_LAB/`) |
-| Benchmark - consultation plugin (+ détail attempt) | ⏳ Codé ; fix nom de table validé DSS | 2026-06-26 (fix L110) | L109-L111/L117 |
+| Benchmark - LAB (moteur + 2 webapps Standard) | ⏳ Codé, non déployé DSS ; launcher refondu 2026-07-03 (panes rééquilibrés, golden legacy fusionné, UI rename) | - | L102-L113/L128 (`OWIsMind_LAB/`) |
+| Benchmark - consultation plugin (+ détail attempt) | ⏳ Codé ; fix nom de table validé DSS ; page refondue 2026-07-03 (modes conditionnels, détail par onglets) | 2026-06-26 (fix L110) | L109-L111/L117/L129 |
 | Impersonation admin (read-only, « act as user ») | ✅ Validé DSS | 2026-06-19 (Run 3) | L095/L096 |
 | Auth gate (écran « non identifié » sur `/me` 401) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094-L096 |
 | Plugin DEV coexistant (`owismind_dev`) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094 |

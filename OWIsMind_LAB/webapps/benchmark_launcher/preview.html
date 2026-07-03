@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- DEV ONLY: offline visual QA of the launcher webapp (mock data). Do NOT paste into DSS.
      getWebAppBackendUrl is undefined here, so script.js serves the embedded sample data for
-     every endpoint and the page renders fully (used for screenshots). -->
+     every endpoint and the page renders fully (used for screenshots).
+
+     This file no longer duplicates the shell markup: it fetches body.html (the real DSS pane),
+     injects it into <body>, THEN appends script.js. That requires a local HTTP server because
+     fetch() cannot read file:// URLs:
+         cd webapps/benchmark_launcher && python3 -m http.server
+     then open http://localhost:8000/preview.html -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -10,9 +16,21 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="bench-app">
-    <p class="loading">Loading the benchmark launcher...</p>
-  </div>
-  <script src="script.js"></script>
+  <script>
+    // Inject the shared body.html (same content as the DSS HTML pane), then load script.js.
+    fetch("body.html")
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        document.body.insertAdjacentHTML("afterbegin", html);
+        var s = document.createElement("script");
+        s.src = "script.js";
+        document.body.appendChild(s);
+      })
+      .catch(function (e) {
+        document.body.innerHTML = '<p style="padding:24px;font:14px sans-serif">' +
+          'Could not load body.html. Serve this folder over HTTP (python3 -m http.server), ' +
+          'file:// will not work.</p>';
+      });
+  </script>
 </body>
 </html>

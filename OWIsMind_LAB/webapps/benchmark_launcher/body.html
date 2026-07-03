@@ -1,9 +1,67 @@
 <!-- OWIsMind Benchmark - Launcher webapp: BODY content only (no html/head).
-     Paste into the DSS Standard webapp HTML pane. The whole UI is rendered by
-     script.js into #bench-app (so a language toggle can re-render in place). -->
+     Paste into the DSS Standard webapp HTML pane. script.js clones the
+     <template> shell below into #bench-app once, then renders every data-driven
+     screen (agent cards, benchmark rows, golden-tag table, review cards, ...) in
+     place so a language toggle can re-render without a reload.
+
+     Static markup lives here as <template> content; only data-driven rows/cards are
+     built in JS. Static text uses data-i18n (textContent), data-i18n-ph (placeholder)
+     and data-i18n-title (title); applyI18n() fills them from the DICT after cloning. -->
 <div id="bench-app">
   <p class="loading">Loading the benchmark launcher...</p>
 </div>
 <noscript>
   <p>This benchmark launcher needs JavaScript enabled. / Ce lanceur de benchmark requiert l'activation de JavaScript.</p>
 </noscript>
+
+<!-- ===== Shell: header, nav, panels, footer, toast, settings drawer (built once) ===== -->
+<template id="tpl-shell">
+  <div class="main">
+    <header class="header">
+      <div class="header-brand">
+        <p class="eyebrow" data-i18n="hdr.eyebrow"></p>
+        <h1 data-i18n="hdr.h1"></h1>
+        <div class="title-bar"></div>
+      </div>
+      <nav class="hdr-links">
+        <button class="hdr-link" id="linkGolden" data-i18n="hdr.link.golden"></button>
+        <button class="hdr-link" id="linkSuggest"><span data-i18n="hdr.link.suggest"></span><span class="hdr-badge hdr-badge--hidden" id="suggestBadge"></span></button>
+        <button class="hdr-link" id="linkReview" data-i18n="hdr.link.review"></button>
+      </nav>
+      <div class="controls">
+        <div class="seg" id="langSeg"><button data-lang="en">EN</button><button data-lang="fr">FR</button></div>
+        <button class="btn-gear" id="themeBtn" title="Toggle theme" aria-label="Toggle theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg></button>
+        <button class="btn-gear" id="gearBtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg></button>
+      </div>
+    </header>
+    <div id="gsStrip" class="gs-strip gs-strip--hidden"></div>
+    <div class="body">
+      <section class="panel on" data-panel="benchmarks">
+        <nav class="rail" id="agentsRail"></nav>
+        <div class="detail-pane" id="detailPane">
+          <div class="breadcrumb" id="breadcrumb"></div>
+          <div id="detailContent"></div>
+        </div>
+      </section>
+      <section class="panel" data-panel="suggest">
+        <div class="aux-back"><button class="btn btn-ghost btn-sm" id="suggestBack" data-i18n="hdr.back"></button></div>
+        <div id="suggestContent"></div>
+      </section>
+      <section class="panel" data-panel="review">
+        <div class="aux-back"><button class="btn btn-ghost btn-sm" id="reviewBack" data-i18n="hdr.back"></button></div>
+        <div id="reviewContent"></div>
+      </section>
+    </div>
+    <footer class="data-footer" id="dataFooter"></footer>
+  </div>
+  <div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg><span id="toastMsg"></span></div>
+  <div class="settings-panel" id="settingsPanel" aria-hidden="true">
+    <div class="settings-head">
+      <span class="settings-title" data-i18n="st.title"></span>
+      <button class="btn btn-ghost btn-sm" id="settingsClose" data-i18n="st.close"></button>
+    </div>
+    <div class="settings-body" id="settingsBody"></div>
+  </div>
+  <div class="settings-overlay" id="settingsOverlay"></div>
+</template>
+
