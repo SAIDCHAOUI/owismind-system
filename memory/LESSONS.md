@@ -3030,5 +3030,25 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-03.md Run 2 ; scratchpad qa/stub_server.py.
 - **Date** : 2026-07-03.
 
+## L130 - Chirurgie CSS scriptee : les at-rules a blocs imbriques cassent un parseur naif, et un screenshot pris sans etre REGARDE ne verifie rien
+- **Contexte** : purge des regles CSS mortes du launcher (Run 2) via un decoupage python
+  "selecteur { corps }" naif. Le fichier contenait `@keyframes fade{from{...}to{...}}`.
+- **Ce qui a echoue** : le parseur prenait le premier `}` comme fin de regle -> l'accolade fermante
+  du keyframes a saute -> accolades desequilibrees (479/478) -> le NAVIGATEUR avale silencieusement
+  tout le CSS apres ce point (~670 lignes : header, rail, toast, drawer). Aucun test ne le voit
+  (le CSS ne "parse" pas en CI), la console est vide, et les checks post-purge (computed style
+  ponctuels sur des regles situees AVANT le point de casse ou survivantes) etaient verts. Le
+  screenshot final qui montrait la casse a ete pris SANS etre lu ; les captures propres dataient
+  d'avant la purge. Decouvert par l'user en DSS au reveil.
+- **Solution qui marche** : (1) apres TOUTE edition scriptee de CSS : verifier l'equilibre des
+  accolades en marchant le fichier (depth jamais negative, depth finale 0) - 3 lignes de python ;
+  (2) traiter les at-rules a blocs (`@keyframes`, `@media`, `@supports`) par comptage d'accolades,
+  jamais par "premier `}`" ; (3) tout screenshot pris DOIT etre relu (Read) avant de conclure,
+  et la passe visuelle finale se fait sur TOUS les ecrans APRES la derniere edition, pas avant.
+- **Preuve** : fix = retrait du keyframes orphelin + 2 reliquats modal ; 474/474, re-verif
+  visuelle complete (home/detail/golden-tag/drawer/toast/dark) identique aux bonnes captures.
+- **Source** : sessions/2026-07-03.md Run 2b ; retour user (screenshot DSS).
+- **Date** : 2026-07-03.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
