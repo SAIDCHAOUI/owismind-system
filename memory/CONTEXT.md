@@ -23,8 +23,11 @@ locale-aware ; +21 tests node dont parite i18n. **Quota subagents mort en pleine
 verification inline orchestrateur : checks statiques scriptes + QA Playwright reelle (launcher
 MOCK + harnais stub plugin `getWebAppBackendUrl` injecte, L129) ; 1 bug CSS trouve/corrige
 (qhead flex-wrap). **629+316+343+207+5 verts, 0 tiret, zip DEV `index-B61pkfo9.js` (81 entrees),
-PROD intacte.** Email relance modifie par l'user HORS session (beta 8 juillet) = NON commite.
-Voir **L128-L129** + `sessions/2026-07-03.md` (Run 2).
+PROD intacte.** **Run 2b (matin) : hotfix CSS launcher** : la purge avait mange le `}` de
+`@keyframes fade` -> tout le CSS apres l.202 avale par le navigateur (casse vue par l'user en
+DSS) ; fix commite `a571474`, re-verif visuelle complete (L130 : equilibre d'accolades apres
+toute chirurgie CSS + LIRE chaque screenshot pris). Email relance (beta 8 juillet) commite par
+l'user (`a95efbd`/`7c5c3be`). Voir **L128-L130** + `sessions/2026-07-03.md` (Runs 2 + 2b).
 
 **🧹 SESSION 2026-07-03 (GRAND NETTOYAGE pré-bêta : mémoire condensée + docs alignées + code mort +
 fix `/api/config` LAB) - ✅ local (4 suites vertes), route LAB à recoller DSS.**
@@ -100,12 +103,13 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-03 Run 2 : refonte benchmark (launcher + page plugin) → détail `sessions/2026-07-03.md` (Run 2) + **L128-L129**
-- **✅ Local (QA runtime), NON recollé DSS.** À recoller en batch : 3 panes launcher LAB (+ la
-  route /api/config du Run 1) ; zip DEV `index-B61pkfo9.js` + restart backend (avec les recolls
-  L115/L117 en attente). Revue adversariale multi-agents à relancer (quota, reset 4:10am).
-- Smoke DSS : rename benchmark, Review pré-filtré, badge suggestions, datalist catégories ;
-  page plugin mono-mode vs multi-mode, onglets détail, dark.
+## 🧭 Dernière session - 2026-07-03 Runs 2 + 2b : refonte benchmark + hotfix CSS → détail `sessions/2026-07-03.md` + **L128-L130**
+- **✅ Local (QA runtime). Recoll DSS en cours par l'user** : HTML + JS launcher déjà collés
+  (constaté sur son screenshot) ; **le pane CSS à coller = style.css POST-hotfix `a571474`**
+  (la version du commit `98c06fc` est syntaxiquement cassée, L130). Route /api/config (Run 1)
+  encore à coller ; plugin : zip DEV `index-B61pkfo9.js` + restart backend.
+- Smoke DSS : rename, Review pré-filtré, badge suggestions, datalist catégories ; page plugin
+  mono vs multi-mode, onglets détail, dark. Revue adversariale multi-agents à relancer (quota).
 
 ## 🧭 Avant - 2026-07-03 Run 1 : grand nettoyage pré-bêta (mémoire -72 %, docs 34/34 routes + 8/8 tables, code mort, /api/config LAB) → détail `sessions/2026-07-03.md` + **L127**
 - **Repo only, 4 suites vertes (629+316+343+186), rien à redéployer côté plugin.** Reste DSS :
