@@ -1,14 +1,18 @@
 # Agent system - overview
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the OWIsMind
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: how the OWIsMind
 > agent layer is structured (a LangGraph orchestrator that routes to a revenue expert
-> sub-agent, both of them Dataiku Code Agents on a Python 3.11 env, called natively on the LLM
-> Mesh), the sub-agents-as-tools pattern, the honesty invariant, and the 3.9/3.11 dual path.
+> sub-agent, plus a tickets sub-agent being built in DEV, all Dataiku Code Agents on a
+> Python 3.11 env, called natively on the LLM Mesh), the sub-agents-as-tools pattern, the
+> honesty invariant, the 3.9/3.11 dual path, and the DEV / PROD_V1 per-project split.
 
-> IN FLUX: the `dataiku-agents/` folder is being edited live by another engineer. This page
-> reflects the state of the repository as read on 2026-06-18. Some points (notably around
-> `attribute_lookup` / the `lookup` intent) are actively moving; they are flagged with
-> `> IN FLUX` or `> ROADMAP` blockquotes.
+> The agent code is split by DSS project under `dataiku-agents/OWISMIND/{OWISMIND_DEV,
+> OWISMIND_PROD_V1}/`, one complete ready-to-paste copy per project, every deployable file
+> prefixed with the project key. You develop and validate in DEV, then promote to PROD_V1 with
+> `python3 tools/promote_agents_to_prod.py` (regenerates the PROD files from DEV, PROD ids baked
+> in). The full id map lives in `dataiku-agents/OWISMIND/README.md` and each `registry.json`.
+> Paths in older sections below that read `dataiku-agents/agents/...` now resolve to
+> `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_...`.
 
 ## 1. What the agent layer is
 
@@ -17,18 +21,23 @@ and writes the analysis. It is deliberately separated from the webapp. The Flask
 does not reason: it resolves an identity, applies the whitelist, launches a worker thread, and
 transports the events; all the intelligence lives in two Dataiku Code Agents.
 
-Two agents, and only two, are staffed in v3:
+The staffed agents, per DSS project (ids from `dataiku-agents/OWISMIND/README.md`; PROD_V1 ships
+revenue only, tickets is DEV-only until validated):
 
-| Agent | Repo file | DSS name / id | Role in one sentence |
-|---|---|---|---|
-| Orchestrator | `agents/OWIsMind_orchestrator.py` | `OWIsMind_orchestrator` | Default entry point: dialogue, routes to a sub-agent, renders chart/table/KPI in Evidence, writes the analysis. NEVER holds a business figure. |
-| Revenue expert sub-agent | `agents/SalesDrive_revenue_expert.py` | `SalesDrive_revenue_expert`, `agent:bHrWLyOL` | Specialist of `DRIVE_Revenues`: UNDERSTAND -> RESOLVE -> QUERY -> RENDER pipeline; owns all revenue figures (all Phases). |
+| Agent | Repo file (DEV copy) | DEV id | PROD_V1 id | Role in one sentence |
+|---|---|---|---|---|
+| Orchestrator | `OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` | `038G7mlF` | `Xrv7GvfG` | Default entry point: dialogue, routes to a sub-agent, renders chart/table/KPI in Evidence, writes the analysis. NEVER holds a business figure. |
+| Revenue expert sub-agent | `OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py` | `bHrWLyOL` | `uO5hEzAs` | Specialist of `DRIVE_Revenues`: UNDERSTAND -> RESOLVE -> QUERY -> RENDER pipeline; owns all revenue figures (all Phases). |
+| Tickets expert sub-agent | `OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` | `NcE9LD2i` (being built) | not in PROD yet | Specialist of the incident-tickets base; being finished in DEV, deliberately absent from PROD_V1. |
 
-The repository is the **source of truth**. You edit the code here, then **re-paste** it by hand into the
-corresponding Code Agent in DSS. A direct edit in DSS is overwritten at the next paste
-(`dataiku-agents/CLAUDE.md`, "Repo = source of truth"; `agents/README.md`). When either of the two
-files changes, you re-paste BOTH (some fixes live on both sides), then you verify
-the config ids after pasting. The detail of the procedure lives in
+The repository is the **source of truth**. You edit the DEV copy here, then **re-paste** it by hand into the
+corresponding Code Agent in DSS (env 3.11). A direct edit in DSS is overwritten at the next paste
+(`dataiku-agents/CLAUDE.md`, "Repo = source of truth"). When either the orchestrator or a sub-agent
+changes, you re-paste BOTH (some fixes live on both sides), then you verify the config ids after
+pasting. **Promotion DEV -> PROD_V1** is scripted: `python3 tools/promote_agents_to_prod.py`
+regenerates each `OWISMIND_PROD_V1_*` file from its DEV twin (PROD ids substituted, the orchestrator's
+tickets capability block surgically removed so PROD still gives an honest "no agent for this domain"
+answer), then you paste the PROD files. Never hand-edit a PROD file. The detail of the procedure lives in
 [Deploying and editing the agents](07-deploying-and-editing-agents.md).
 
 ## 2. The central invariant: the structural honesty firewall
@@ -77,13 +86,11 @@ live in `BUSINESS_DOMAINS` (`revenue, tickets, satisfaction, opportunities, deli
 billing`); a domain becomes "staffed" when an active agent declares it, which automatically closes
 the capability gap message.
 
-> IN FLUX: the built-in `attribute_lookup` tool is wired on the orchestrator side (declared
-> in `build_tool_specs`, dispatched inline in `node_tools` like `show_table`/`current_date`). The
-> Custom Python tool object **already exists in DSS** (verified in `dataiku-agents/tools/README.md`
-> and `dataiku-agents/CLAUDE.md`). Two steps remain: re-paste the orchestrator so the built-in is
-> live, and optionally set `LOOKUP_TOOL_ID` (the name-based fallback `LOOKUP_TOOL_NAME =
-> "attribute_lookup"` resolves the tool even when `LOOKUP_TOOL_ID` is empty). The sub-agent is
-> UNCHANGED. See [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
+The built-in `attribute_lookup` tool is wired on the orchestrator side (declared in
+`build_tool_specs`, dispatched inline in `node_tools` like `show_table`/`current_date`) and live in
+DSS: `LOOKUP_TOOL_ID` is baked per project (`UUoynaL` in DEV, `szOZCoU` in PROD_V1). It is an
+orchestrator built-in, not a sub-agent capability; the sub-agents are UNCHANGED by it. See
+[Agent tools and Semantic Model](04-tools-and-semantic-model.md).
 
 ## 4. Agent layer diagram
 
@@ -198,9 +205,9 @@ OWIsMind lives on TWO Python environments, and this is intentional:
 | Component | Python env | Key dependencies | Why |
 |---|---|---|---|
 | Webapp Flask backend (`python-lib/owismind/`) | 3.9 (observed: 3.9.23) | stdlib + `dataiku` + Flask; NO langchain | It is the DSS webapp env; it does not need LangGraph. |
-| The two Code Agents (`dataiku-agents/agents/`) | 3.11 | stdlib + `dataiku` + `langchain`/`langgraph` | LangGraph requires Python >= 3.10; the agents import langchain/langgraph. |
+| The Code Agents (`dataiku-agents/OWISMIND/OWISMIND_DEV/agents/`, + a PROD_V1 mirror) | 3.11 | stdlib + `dataiku` + `langchain`/`langgraph` | LangGraph requires Python >= 3.10; the agents import langchain/langgraph. |
 
-The two agent files are **standalone**: they import only stdlib + `dataiku` +
+The agent files are **standalone**: they import only stdlib + `dataiku` +
 `langchain`/`langgraph`, and NO plugin module. This allows pasting them as-is into a
 DSS Code Agent without pulling in the backend. The DSS entry point is, in both files, the class
 `MyLLM(BaseLLM)` (with `from dataiku.llm.python import BaseLLM`), exposing
@@ -235,23 +242,24 @@ in the timeline are EVENT NAMES, not real tool calls. The only real DSS tool cal
 at runtime in v3 is `revenue_semantic_query` (`v4oqA6R`). The grounding (search for exact
 values) is NOT a tool either: it is read-only inline SQL on `DRIVE_Revenues_value_index`.
 
-## 8. In-flux points to know
+## 8. Moving parts to know
 
-> IN FLUX: the managed tool `dataset_lookup` (`9FEzVZk`) and the entire `lookup` intent of the sub-agent
-> were REMOVED on 2026-06-18. Its replacement, the Custom Python tool `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`), is built, unit-tested, RUN-TEST validated, and its DSS
-> tool object EXISTS on the instance (`dataiku-agents/tools/README.md`). The wiring (the
-> orchestrator built-in) becomes live after the next orchestrator re-paste. The sub-agent is
-> UNCHANGED and owns no `lookup` path. Follow [Agent tools and Semantic Model](04-tools-and-semantic-model.md)
-> for the current state and remaining steps.
+- The managed tool `dataset_lookup` (`9FEzVZk`) and the sub-agent's old `lookup` intent were removed;
+  the Custom Python tool `attribute_lookup` (`OWISMIND_<PROJ>_attribute_lookup_tool.py`) replaced them
+  as an orchestrator built-in and is live in both projects (`UUoynaL` DEV / `szOZCoU` PROD_V1). The
+  sub-agent owns no `lookup` path. See [Agent tools and Semantic Model](04-tools-and-semantic-model.md).
+- The dataset `DRIVE_Revenues_Value_Catalog` is read only by `attribute_lookup` (alias fallback), not by
+  the sub-agent's grounding (inline SQL on `value_index`). The old resolver
+  `Drive_Revenues_resolve_filter_value` is superseded and pending deletion in DSS. See
+  [Flow recipes and grounding](05-flow-recipes-and-grounding.md).
+- The **tickets sub-agent** (`CSSO_Trouble_Tickets_Expert`, `agent:NcE9LD2i`) is being built in DEV and is
+  intentionally absent from PROD_V1: there, `BUSINESS_DOMAINS` still lists `tickets` so the orchestrator
+  returns an honest capability gap ("no agent for this domain yet"). Once it staffs a second domain it will
+  unlock the multi-agent 360 fan-out (bounded by `MAX_PARALLEL_AGENTS = 3`); today that fan-out exists in
+  the code but is exercised with a single sub-agent in PROD.
 
-> ROADMAP: the dataset `DRIVE_Revenues_Value_Catalog` and the Python resolver
-> `Drive_Revenues_resolve_filter_value` are NOT wired in v3 (superseded by
-> `attribute_lookup`). See [Flow recipes and grounding](05-flow-recipes-and-grounding.md).
-
-> IN FLUX: a second business domain (for example `tickets`) would unlock the multi-agent
-> 360 analysis (parallel fan-out bounded by `MAX_PARALLEL_AGENTS = 3`). As long as a single domain is
-> staffed, the parallel fan-out exists in the code but is only exercised with one sub-agent.
+The pure-logic agent test suite runs against the DEV copies:
+`python3 -m unittest discover -s dataiku-agents/tests` (currently 316 tests, 2 skipped).
 
 ## See also
 - [The orchestrator (`OWIsMind_orchestrator`)](02-orchestrator.md) - the LangGraph loop, the registry, the tools, the honesty firewall, the modes in detail.

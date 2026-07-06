@@ -24,9 +24,17 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 | [architecture.md](architecture.md) | Architecture système, composants, modèle d'exécution DSS, flux end-to-end d'un tour de chat (polling, pas SSE), carte du dépôt. |
 | [backend-api.md](backend-api.md) | Référence exhaustive de l'API HTTP `/owismind-api`, carte des modules `python-lib/owismind/`, cycle de vie d'un run agent, validateurs + codes d'erreur. |
 | [frontend.md](frontend.md) | Architecture frontend Vue 3 : stores Pinia, composables (réducteurs purs testés), timeline live, routing HASH, i18n, thème, gotchas F1-F21. |
-| [data-model.md](data-model.md) | Modèle de données SQL : tables (`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`), arbre de conversation (`parent_exchange_id`), écriture en deux phases, dataset de trace write-only, invariants de sûreté. |
+| [data-model.md](data-model.md) | Modèle de données SQL : les 8 tables (`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`, `webapp_usage_monthly_v1`, `webapp_artifacts_v1`, `webapp_user_quota_v1`, `webapp_golden_suggestions_v1`, `webapp_events_v1`), arbre de conversation (`parent_exchange_id`), écriture en deux phases, dataset de trace write-only, invariants de sûreté. |
 | [security.md](security.md) | Modèle de menace, identité serveur, whitelist d'agents dynamique, sécurité SQL (paramétrage, owner-scoping), admin bootstrap, sûreté de l'instance Dataiku (rate/cap/TTL, logging content-free). |
 | [build-test-deploy.md](build-test-deploy.md) | Politique NO-INSTALL, noms canoniques, dev local, tests (`unittest` + `node:test`), pipeline build → wire → package → upload DSS manuel, matrice « quoi rebuilder quand ». |
+
+### Références complémentaires (`docs/`)
+
+| Document | Contenu |
+|---|---|
+| [evidence-trust-layer.md](evidence-trust-layer.md) | Référence technique du **trust layer** d'Evidence Studio v2 (niveaux de vérification, explication, drill-down, mode dégradé). Rédigée en **anglais** ; contrats gelés dans `superpowers/specs/2026-06-10-evidence-trust-layer-design.md`. |
+| [DEPLOY_PROD_V1_1.md](DEPLOY_PROD_V1_1.md) | **Runbook** de mise en production v1.1.0 (2026-07-06) : plugin, projet DSS prod, agents (scénarios A/B), smoke tests. À suivre pour le déploiement PROD. |
+| [questions_asked.md](questions_asked.md) | Liste brute de questions utilisateurs collectées (scratch), utile comme jeu d'exemples pour smoke-tests / golden-set. Non maintenue. |
 
 ## Le reste du dépôt
 

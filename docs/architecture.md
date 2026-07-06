@@ -88,8 +88,8 @@ OWIsMind est une webapp DSS de **type `STANDARD`** avec `hasBackend: "true"` et
    ```
 
    `register_routes` enregistre le Blueprint `owismind_api` (préfixe `/owismind-api`,
-   `routes.py:60`), applique le niveau de log configuré, et logge la table des routes + le statut
-   storage au démarrage (`routes.py:674-692`) - le log webapp DSS confirme ainsi quel build tourne.
+   `routes.py:99`), applique le niveau de log configuré, et logge la table des routes + le statut
+   storage au démarrage (`routes.py:1878`) - le log webapp DSS confirme ainsi quel build tourne.
 
 **Identité.** Toute requête `/owismind-api/*` résout l'utilisateur **côté serveur** depuis les
 **en-têtes d'authentification du navigateur** (`resolve_identity(request.headers)`,
@@ -132,9 +132,9 @@ Navigateur                     Backend Flask                  Worker (thread)   
    │  ◄─────────────────────────────┤ {events incl. final_answer}  │                            │
 ```
 
-Étapes clés (références : `routes.py:160-299`, `stream_manager.py`, `streaming.py`) :
+Étapes clés (références : `routes.py:351`, `stream_manager.py`, `streaming.py`) :
 
-1. **`POST /chat/start`** (`routes.py:160`) - résout l'identité, valide le payload, résout l'`agent_key`
+1. **`POST /chat/start`** (`routes.py:351`) - résout l'identité, valide le payload, résout l'`agent_key`
    opaque → `(project_key, agent_id)` via la **whitelist serveur** (`settings.resolve_enabled_agent`).
    Pré-check d'admission (`can_accept`, 429/503) **avant tout write**. **Phase 1 du write 2 temps** :
    `chat_v5.save_user_message` persiste le message utilisateur **BRUT** (pour ne pas perdre la question
@@ -148,7 +148,7 @@ Navigateur                     Backend Flask                  Worker (thread)   
    dans `_RUNS[run_id]["events"]` sous `_LOCK`. Bornes de sûreté : `MAX_CONCURRENT_RUNS=8`, TTL d'éviction
    (60s/600s), `MAX_RUN_SECONDS=300`, `ABANDON_AFTER_SECONDS=30`, caps mémoire par run.
 
-3. **`GET /chat/poll`** (`routes.py:267`) - renvoie les events depuis le `cursor`, **owner-scopé** (un
+3. **`GET /chat/poll`** (`routes.py:541`) - renvoie les events depuis le `cursor`, **owner-scopé** (un
    `run_id` inconnu ou appartenant à un autre user → 404). Events normalisés : `run_started`, `agent_event`,
    `answer_delta`, `generated_sql`, `usage_summary`, `final_answer`, `run_done`, `error`. Le front poll
    toutes les ~500 ms jusqu'à `done`.
@@ -169,7 +169,9 @@ Navigateur                     Backend Flask                  Worker (thread)   
    coût métadonnées ~0 amorti par requête),
    puis **re-exécute un SELECT borné, lecture seule** (50 lignes/page, pas de COMMIT) sur la
    **connexion du dataset whitelisté lui-même** (`SQLExecutor2(dataset=…)`, pas la connexion de stockage
-   chat), avec `SET LOCAL statement_timeout TO '30000'` (30 s, scoped transaction) en pre-query.
+   chat), avec les **pre-queries de lecture seule partagées** `storage/sql_config.readonly_pre_queries()`
+   (`SET LOCAL statement_timeout TO '30000'` = 30 s + `SET LOCAL transaction_read_only TO on`, transaction-scopées,
+   jamais héritées par la connexion poolée) - **source unique** réutilisée par Evidence et le Source Data Explorer.
    Pipeline **stateless** (tout est re-dérivé par appel, rien de nouveau n'est stocké) ; tout échec de
    fidélité dégrade honnêtement vers l'affichage du SQL brut. Détail → [`backend-api.md`](./backend-api.md)
    §3.5 et [`security.md`](./security.md).
@@ -190,16 +192,25 @@ ne bufferise jamais. Voir le docstring de `stream_manager.py:1-29`.
 
 ## 5. Persistance & état
 
-Le stockage repose sur **3 tables SQL** (connexion `SQL_owi`, schéma `public`) + 1 dataset Flow optionnel,
+Le stockage repose sur **8 tables SQL** (connexion `SQL_owi`, schéma `public`) + 1 dataset Flow optionnel,
 toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` centralisée dans
 `storage/sql_config.py` (`APP_NAMESPACE = "owismind"`, `physical_table()` / `full_table()`).
 
 - **`webapp_chat_v5`** - table courante du chat, structurée en **arbre de conversation** via
   `parent_exchange_id` (NULL = racine). Contient user/assistant text, `generated_sql` (JSON), `agent_key`
-  (clé logique opaque), colonnes de feedback, et les colonnes d'arbre. Écriture en **2 temps** (INSERT user
-  → UPDATE assistant). Idiome `_vN` : v1/v2/v3 inertes, jamais d'ALTER.
-- **`webapp_users_v1`** - registre des utilisateurs (1er user = admin, `display_name` auto-rempli).
+  (clé logique opaque), le `mode` de réponse stampé serveur, le `screen_ctx` consenti, colonnes de feedback,
+  et les colonnes d'arbre. Écriture en **2 temps** (INSERT user → UPDATE assistant). Idiome `_vN` : v1/v2/v3
+  inertes, jamais d'ALTER.
+- **`webapp_users_v1`** - registre des utilisateurs (1er user = admin, `display_name` auto-rempli, cumul
+  tokens/coût lifetime).
 - **`webapp_settings_v1`** - config globale, dont la whitelist `enabled_agents`.
+- **`webapp_usage_monthly_v1`** - buckets mensuels tokens/coût par user (enforcement du budget $50/mois).
+- **`webapp_artifacts_v1`** - specs d'artefacts (chart / table / KPI) par échange (la donnée n'est jamais
+  dupliquée, relue du `generated_sql`).
+- **`webapp_user_quota_v1`** - overrides de budget par user (limite + expiration + note admin).
+- **`webapp_events_v1`** - analytics d'usage produit (events whitelistés, `POST /track`, best-effort).
+- **`webapp_golden_suggestions_v1`** - intake collaboratif du golden-set benchmark (owner-stamped ; le pôle
+  admin LAB relit cross-projet et promeut).
 - **Dataset Flow de trace** (optionnel) - trace brute de fin de run, **write-only** (1 ligne/exchange),
   écriture **positionnelle** (`_column_order`), best-effort.
 - **Datasets Evidence** (optionnels, param webapp `evidence_datasets`, SELECT peuplé par
@@ -214,13 +225,13 @@ toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` 
 ## 6. Frontières de sécurité (résumé)
 
 - **Whitelist agents côté serveur** : le front ne reçoit que `{key, label}` (clés logiques opaques
-  `ag_<sha1>`, `routes.py:63-73`) ; la résolution `(project_key, agent_id)` est faite serveur
+  `ag_<sha1>`, `_logical_key`, `routes.py:102`) ; la résolution `(project_key, agent_id)` est faite serveur
   (`settings.resolve_enabled_agent`). Le front n'envoie **jamais** d'`agent_id` brut.
 - **Identité résolue serveur** depuis les en-têtes d'auth navigateur, jamais depuis le corps de requête.
   Toutes les lectures/écritures chat sont **owner-scopées** (`WHERE … AND user_id`).
 - **SQL paramétré** (`dataiku.sql.Constant/toSQL`), identifiants validés (`pg_identifier`), `COMMIT` après
   écriture. **Aucune route SQL générique** exposée ; le front ne choisit jamais table/connexion/requête.
-- **Espace admin** gardé serveur (`_admin_guard` : 401/409/403, `routes.py:472-490`).
+- **Espace admin** gardé serveur (`_admin_guard` : 401/409/403, `routes.py:1551`).
 - **API DSS en lecture seule** (+ run agent) ; découverte projets/agents bornée et à la demande.
 
 > Modèle de sécurité complet + sûreté de l'instance Dataiku → [`security.md`](./security.md).
@@ -233,13 +244,18 @@ toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` 
 owismind/
 ├── CLAUDE.md                       # instructions projet (règles NON NÉGOCIABLES)
 ├── dataiku-agents/                 # SYSTÈME D'AGENTS (source de vérité, recollé dans les Code Agents DSS)
-│   ├── README.md                   #   guide maître : architecture runtime + Flow + déploiement + roadmap
+│   ├── README.md                   #   guide maître : carte des IDs DEV/PROD + workflow de promotion
 │   ├── CLAUDE.md                   #   orientation Claude (contrats gelés, règles, pointeurs)
-│   ├── agents/                     #   OWIsMind_orchestrator.py + SalesDrive_revenue_expert.py (LangGraph)
-│   ├── recipes/                    #   recettes Flow : profil + value index + value catalog
-│   ├── tools/                      #   doc des tools DSS (semantic query, lookup, resolver) + modèle sémantique
-│   │   └── semantic_model/         #     scripts API du Semantic Model que le tool sémantique interroge
+│   ├── OWISMIND/                   #   agents DUPLIQUÉS PAR PROJET DSS (on développe en DEV puis on promeut)
+│   │   ├── OWISMIND_DEV/           #     {agents, recipes, semantic_model, tools} (fichiers préfixés DEV)
+│   │   └── OWISMIND_PROD_V1/       #     miroir promu (tools/promote_agents_to_prod.py ; tickets expert HORS PROD)
 │   └── tests/                      #   tests unitaires DSS-free
+├── tools/                          # OUTILLAGE repo : build_dev_plugin.py (plugin dev coexistant),
+│                                   #   promote_agents_to_prod.py (régénération DEV → PROD_V1 idempotente)
+├── OWIsMind_LAB/                   # PROJET DSS SÉPARÉ (benchmark / éval des agents), miroir repo
+│   ├── README.md                   #   carte repo↔DSS
+│   ├── project-library/python/     #   packages benchmark + benchmark_webapp
+│   └── webapps/                    #   benchmark_launcher + benchmark_results (2 webapps Standard)
 ├── memory/                         # SOURCE DE VÉRITÉ (mémoire vivante du projet)
 │   ├── CONTEXT.md                  # mémoire courte (chargée à chaque session)
 │   ├── PROJECT_STATE.md            # mémoire longue (état canonique)
@@ -251,7 +267,7 @@ owismind/
 │   └── superpowers/specs/          #   specs de conception gelées
 └── Plugin/
     └── owismind/                   # RACINE DU PLUGIN DSS
-        ├── plugin.json             # id="owismind" v0.0.1 (racine du zip)
+        ├── plugin.json             # id="owismind" v1.1.0 (racine du zip)
         ├── frontend/               # SOURCE Vue 3 + Vite (JAMAIS dans le zip)
         │   ├── src/                #   main.js, App.vue, router/, stores/, components/, views/,
         │   │                       #   composables/, registries/, services/backend.js, i18n/, styles/
@@ -261,10 +277,15 @@ owismind/
         ├── python-lib/owismind/    # BACKEND Flask modulaire (mis sur le path d'import par DSS)
         │   ├── api/routes.py       #   Blueprint /owismind-api + register_routes(app)
         │   ├── agents/             #   streaming.py · stream_manager.py · context.py · discovery.py
-        │   ├── storage/            #   chat_v5 · chat_traces · admin · settings · migrations ·
-        │   │                       #   sql_config · serialization · sql_builders · pagination
-        │   ├── evidence/           #   sql_parse · query_builders · whitelist (purs) · service (DSS)
-        │   └── security/           #   identity.py · validation.py
+        │   ├── storage/            #   chat_v5 · chat_traces · admin · settings · migrations · sql_config ·
+        │   │                       #   serialization · sql_builders · pagination · usage · budget ·
+        │   │                       #   artifacts · events · suggestions
+        │   ├── evidence/           #   sql_parse · query_builders · whitelist · aggregate_core · capture ·
+        │   │                       #   chart_payload · sql_explain · throttle (purs) · service ·
+        │   │                       #   source_service · source_search (DSS)
+        │   ├── benchmark_view/     #   consultation benchmark : aggregate · agent_profile · schemas ·
+        │   │                       #   schema_check (purs) · lab_io (SQL cross-projet LAB, seul module I/O)
+        │   └── security/           #   identity.py · validation.py · impersonation.py (admin, temporaire)
         ├── resource/               # ressources plugin
         │   ├── owismind-app/       #   ASSETS BUILDÉS par Vite (GÉNÉRÉ - ne pas éditer à la main)
         │   └── compute_available_connections.py   # setup des dropdowns (connexion SQL + datasets trace/evidence)

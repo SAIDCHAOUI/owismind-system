@@ -1,11 +1,11 @@
 # Scope and limitations
 
-> Audience: Product, business, support. Last updated: 2026-06-19. Summary: this document states
+> Audience: Product, business, support. Last updated: 2026-07-06. Summary: this document states
 > precisely what OWIsMind DOES and DOES NOT do today (a single staffed domain, the declared but
 > unequipped domains, the known technical limitations) and gives a snapshot of the roadmap.
 
 OWIsMind is a business-oriented agentic chat portal, packaged as a Dataiku DSS plugin (id `owismind`,
-version `0.0.1`). Its promise is not to "answer" but to answer with **evidence**: every figure comes
+version `1.1.0`, promoted to production in July 2026). Its promise is not to "answer" but to answer with **evidence**: every figure comes
 from a real SQL result, the user watches the agent work live (timeline), and they can inspect the
 exact data and SQL that produced the answer (Evidence Studio). This document frames that scope: it
 distinguishes what is delivered and validated in DSS, what is deliberately out of scope, and what is
@@ -23,12 +23,15 @@ revenues**, grounded on the `DRIVE_Revenues` source dataset.
 |---|---|
 | Multi-turn agentic chat | Ask a question in French or English; the orchestrator dialogues, routes to the right specialist, and writes the analysis in the language of the last message. History and context (ancestor chain, name and date) assembled on the backend side. |
 | Grounded NL-to-SQL | The terms typed by the user (client names, offer terms) are grounded on exact cell values via grounding (read-only inline SQL on the value index), then the analytical SQL is written and executed by the Semantic Model Query tool `revenue_semantic_query` (`v4oqA6R`). |
-| All revenue Phases | The sub-agent `SalesDrive_revenue_expert` (`agent:bHrWLyOL`) owns the figures for all Phases: `ACTUALS` (default), `BUDGET`, `FORECAST`, `Q3F`, `HLF`. Totals, breakdowns, rankings, share of total, scenario or period comparisons, trends, distinct values, "what does this data contain". |
+| All revenue Phases | The sub-agent `SalesDrive_revenue_expert` (DEV `agent:bHrWLyOL`, PROD `agent:uO5hEzAs`) owns the figures for all Phases: `ACTUALS` (default), `BUDGET`, `FORECAST`, `Q3F`, `HLF`. Totals, breakdowns, rankings, share of total, scenario or period comparisons, trends, distinct values, "what does this data contain". |
 | Live Execution Timeline | A live timeline of the agent's steps, with human-readable labels by default (debug mode shows the technical names). |
 | Evidence Studio v1 | An "evidence" panel to the right of the chat that replays the agent's SELECT in read-only mode, shows the source table with the WHERE filters as editable chips, the captured result, the calculation in business language, a deterministic verification badge and the collapsed SQL. Opens automatically at the end of generation. |
 | Artifacts (chart / table / KPI) | The orchestrator calls `show_chart` / `show_table` / `show_kpi`: the data is rendered in the panel (interactive Chart.js charts) instead of being copied into the answer bubble. |
-| Token and cost tracking | A `tokens in / out + estimated cost` line under each answer. |
+| Token and cost tracking | A `tokens in / out + estimated cost` line under each answer, with the mode used (Smart/Pro/Claude). |
 | Feedback, branches, stop | Per-message feedback, conversation editing and branches (tree via `parent_exchange_id`), persistent agent per conversation, generation stop. |
+| Source Data Explorer | A no-AI panel to browse an agent's raw source dataset: searchable two-step filters, cell-to-agent value pickup, a Calculer zone computing DB aggregates over the full filtered set, date-range filters, cascading distinct values, a per-column menu with 3-state sort, per-(agent, dataset) view persistence, and an opt-in "attach the on-screen view to my question" consent banner. |
+| Agent-evaluation benchmark | Golden-question evaluation, shipped and DSS-validated: a separate DSS project `OWIsMind_LAB` (two admin webapps for launching/reviewing runs, judge + human override) plus an in-plugin consultation page and a "suggest a golden question" flow from any answer. |
+| Usage analytics | GA4-like webapp usage tracking (single `webapp_events_v1` table, best-effort `/track` route, 38 whitelisted events), distinct from the agentic run logs. |
 | Admin-authored agent profiles | An admin writes each agent's tagline, description, capabilities, tools, icon and badge in the Administration panel (no hardcoded copy); validated and sanitized server-side by `validate_agent_meta` (pure, never raises); stored inside `enabled_agents` in `webapp_settings_v1`; served via `GET /agents` without leaking `agent_id` or project. An agent without a profile shows a "profile to complete" card. |
 | Monthly per-user budget | A configurable rolling monthly credit in USD (default $50); spend is `estimatedCost` from LLM Mesh, accumulated in `webapp_usage_monthly_v1` per calendar month. Enforcement: `/chat/start` returns HTTP 402 `monthly_quota_exceeded` when spent >= limit and enforcement is enabled; fails open (a read error lets the answer through). Admins set a global default, time-boxed global boost, or per-user overrides. Coded; not yet validated on DSS. |
 | Multilingual and theme | FR and EN; English is the default locale (FR kept). Every UI label translatable. Light and dark theme via `body[data-theme]` + semantic tokens. |
@@ -202,10 +205,11 @@ Some visible behaviors depend on the webapp configuration in the DSS Settings.
 | `traces_dataset` | Optional Flow dataset where the final trace of each run is appended. A missing or incompatible dataset never breaks the chat: the trace is simply skipped. |
 | `log_level` | Verbosity of the backend logs (DEBUG / INFO / WARNING, default INFO). |
 
-> IN FLUX: the per-mode LLM Mesh model ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`,
-> `SONNET_ID`) must match the instance's LLM Mesh connection. A wrong id breaks the corresponding
-> mode (for example, if the Flash-Lite id is wrong, eco mode, which is the default, no longer answers).
-> To be verified in DSS. See [Per-mode models](../08-decisions/0009-modeles-par-mode.md).
+> The per-mode LLM Mesh model ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must match
+> the instance's LLM Mesh connection. A wrong id breaks the corresponding mode (for example, if the
+> Flash-Lite id is wrong, Smart mode, which is the default, no longer answers). The modes were renamed
+> Smart / Pro / Claude on 2026-06-24 (internal keys `smart` / `pro` / `claude`). See
+> [Per-mode models](../08-decisions/0009-modeles-par-mode.md).
 
 For the detail of the parameters and the first commissioning, see
 [Installation and configuration](../06-operations/01-installation-and-configuration.md).
@@ -221,16 +225,18 @@ This snapshot lists what is framed but not yet delivered. The order is not a dat
   resolution is used by default, no id update required).
 - **Validate the budget cap on DSS**: the enforcement is coded (HTTP 402, `storage/budget.py`,
   `webapp_user_quota_v1`); a smoke-test on the live instance is still needed.
-- **Tickets agent**: add two recipes, a Code Agent and a registry entry; this unblocks
-  the parallel multi-agent 360 analysis.
+- **Tickets agent**: a second sub-agent (CSSO trouble-tickets expert, `agent:NcE9LD2i`) exists in DEV
+  and is deliberately NOT yet promoted to PROD; finishing and promoting it unblocks the parallel
+  multi-agent 360 analysis.
 - **Full Evidence Studio (six tabs)**: Evidence, Dataset explorer (lazy loading,
   sample warning), Chart (line / bar / grouped / stacked / KPI / donut), collapsed SQL,
   Trace (user view and debug view), Cost (tokens, estimated cost, per agent).
 - **Multi-agent 360 analysis**: single conversation, global timeline, one Evidence space per agent,
   the active agent loaded lazily.
 - **Export and report**: Markdown, PDF, PowerPoint, 360 client sheet, email; new artifacts
-  (image, map, slide, Excel); Admin registry page; agent evaluation (golden questions,
-  benchmark).
+  (image, map, slide, Excel); Admin registry page.
+- **Benchmark, deeper**: the golden-question benchmark is already shipped and validated (see section 1);
+  what remains roadmap is scheduled/planned runs and a richer in-app judge UI.
 - **Continuous alignment of the Semantic Model**: keep the model aligned (Phase `ACTUALS`, offer
   hierarchy, golden queries) via `tools/semantic_model/`.
 

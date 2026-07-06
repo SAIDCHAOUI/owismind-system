@@ -1,9 +1,10 @@
 # The orchestrator (`OWIsMind_orchestrator`)
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: internal structure of the orchestrator
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: internal structure of the orchestrator
 > Code Agent (LangGraph loop, capability registry, delegation and rendering tools, honesty firewall,
 > per-mode models and propagation to the sub-agent) anchored in
-> `dataiku-agents/agents/OWIsMind_orchestrator.py`.
+> `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` (DEV copy; a
+> PROD_V1 twin with PROD ids ships via `tools/promote_agents_to_prod.py`).
 
 The `OWIsMind_orchestrator` orchestrator is one of the two OWIsMind Code Agents. It is a LangGraph
 agent (the "sub-agents as tools" pattern) that runs on a Python 3.11 code env in DSS. It converses

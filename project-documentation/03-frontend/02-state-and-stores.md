@@ -1,7 +1,7 @@
 # Frontend - state and Pinia stores
 
-> Audience: frontend developer. Last updated: 2026-06-19. Summary: how OWIsMind chat state
-> is organized (4 Pinia stores, pure Vue-free modules, composables) and how the
+> Audience: frontend developer. Last updated: 2026-07-06. Summary: how OWIsMind chat state
+> is organized (12 Pinia stores, pure Vue-free modules, composables) and how the
 > "version mutated in place via applyEvent" reactivity model enables live streaming.
 
 The OWIsMind frontend (Vue 3, Composition API, Pinia 3) is built on a strict separation: a
@@ -25,16 +25,24 @@ The `src/stores/` directory mixes two kinds of files that must be clearly distin
 | `session.js` | Pinia store (`defineStore('session')`) | Identity, list of activatable agents, paginated conversation list, monthly usage/budget. |
 | `evidence.js` | Pinia store (`defineStore('evidence')`) | Evidence Studio panel: server meta, editable chips, row pagination. |
 | `ui.js` | Pinia store (`defineStore('ui')`) | SINGLE source of truth for preferences (theme, language, widths, mode, context window). |
+| `sources.js` | Pinia store (`defineStore('sources')`) | Source Data Explorer: selected agent/dataset, chips, search, sort, Calculer measures, cascading distincts; view persisted per (agent, dataset) via `sourceViewMemory`. |
+| `benchmark.js` | Pinia store (`defineStore('benchmark')`) | Benchmark consultation + suggestion state (results view-model, selected benchmark, attempt detail, my suggestions). |
+| `promptContext.js` | Pinia store (`defineStore('promptContext')`) | Cell-to-prompt chips: values the user picked from a table to append to the next message. |
+| `screenContext.js` | Pinia store (`defineStore('screenContext')`) | Consent-gated "what is on my screen now" sharing (the source-data view / open Evidence exchange offered to the agent). |
 | `conversationTree.js` | PURE module (no `defineStore`) | Tree walks (`childrenOf`, `activeChildOf`, `buildActivePath`). |
 | `conversationList.js` | PURE module | Dedup and bump of the side list (`mergeConversations`, `upsertAndBump`). |
 | `agentPick.js` | PURE module | Default agent selection (`pickDefaultAgent`). |
 | `prefs.js` | PURE module | Bounds and coercion of the context window (`clampContextMessages`). |
 
-So there are EXACTLY 4 Pinia stores. The other four files in the folder are not stores:
-they are pure helpers, with no state and no Vue imports, imported by the stores. This boundary
-is intentional: the deterministic logic lives in pure modules covered by `node:test`
+So there are 12 files here: **8 Pinia stores** (`chat`, `session`, `evidence`, `ui`, `sources`,
+`benchmark`, `promptContext`, `screenContext`) plus **4 pure helpers** (`conversationTree`,
+`conversationList`, `agentPick`, `prefs`) with no state and no Vue imports, imported by the stores. This
+boundary is intentional: the deterministic logic lives in pure modules covered by `node:test`
 (`test/*.test.js`), which gives a non-regression guarantee without installing an
-additional runner (NO INSTALL rule).
+additional runner (NO INSTALL rule). The Source Data / benchmark / prompt-context / screen-context
+stores follow the SAME pure-model + thin-store discipline: their deterministic logic lives in pure
+composables (`sourceModel`, `sourceViewMemory`, `aggregateSurface`, `benchmarkResults`,
+`promptContextModel`, `screenContextModel`), the store is a thin reactive wrapper.
 
 ```mermaid
 flowchart LR
@@ -43,6 +51,10 @@ flowchart LR
     session["session"]
     evidence["evidence"]
     ui["ui"]
+    sources["sources"]
+    benchmark["benchmark"]
+    promptCtx["promptContext"]
+    screenCtx["screenContext"]
   end
   subgraph pure["Pure modules (Vue-free, node:test)"]
     tree["conversationTree"]
@@ -58,6 +70,12 @@ flowchart LR
     sql["sqlPretty"]
     md["useMarkdown"]
     budget["budgetModel (PURE)"]
+    srcm["sourceModel (PURE)"]
+    aggs["aggregateSurface (PURE)"]
+    svm["sourceViewMemory (PURE)"]
+    benm["benchmarkResults (PURE)"]
+    pcm["promptContextModel (PURE)"]
+    scm["screenContextModel (PURE)"]
   end
   chat --> tree
   chat --> stream
@@ -66,11 +84,20 @@ flowchart LR
   chat --> session
   chat --> evidence
   chat --> ui
+  chat --> promptCtx
+  chat --> screenCtx
   session --> list
   session --> apick
   evidence --> emodel
+  evidence --> aggs
   ui --> prefs
   stream --> tmodel
+  sources --> srcm
+  sources --> aggs
+  sources --> svm
+  benchmark --> benm
+  promptCtx --> pcm
+  screenCtx --> scm
 ```
 
 ## 2. The central reactivity model: the version mutated in place
@@ -159,8 +186,9 @@ delegated to the pure module `conversationTree.js` (section 6).
   a new exchange, removes the override set on the parent (the fresh branch stays active), captures
   the sidebar bump data (`runSessionId`/`runTitle`) AT THE START of the run (not in the
   `finally`, which may run after cancellation when the store already holds another conversation),
-  builds `screenContext` (Evidence screen awareness) when the panel is open, then calls
-  `runChatStream`. At the end of a clean run that produced at least one successful SQL, it
+  builds `screenContext` from the `screenContext` store when the user has CONSENTED to share what is
+  on screen (an open Evidence exchange and/or the current Source Data view; see section 7bis), then
+  calls `runChatStream`. At the end of a clean run that produced at least one successful SQL, it
   auto-opens Evidence via `evidence.openForExchange(exch.id, { auto: true })`.
 - Budget race handling. If `/chat/start` returns a 402 `monthly_quota_exceeded` error (the user's
   budget gate flipped on between the send click and the actual start), the store drops the optimistic
@@ -313,17 +341,18 @@ in localStorage under ONE dedicated key.
 | `evidenceW` | `owi.evidenceW` | clamp min 360, max `innerWidth - 520`, default 480. |
 | `lang` | (none here) | MIRROR of the i18n locale; never persisted by this store. |
 | `contextMessages` | `owismind.contextMessages` | clamp 10 to 50 via `prefs.js`. |
-| `modelMode` | `owismind.modelMode` | one of the `MODEL_MODES` keys, default `eco`. |
+| `modelMode` | (not persisted) | one of the `MODEL_MODES` keys, default `smart`; EPHEMERAL (see below). |
 
 Important points:
-- `MODEL_MODES = ['eco', 'medium', 'high']`, default `eco`. The file comment indicates the
-  mapping: `eco` = Gemini 3.1 Flash-Lite (the economical default), `medium` = Gemini 3.5
-  Flash, `high` = Claude Sonnet. The frontend defaults to `eco`; the server defaults to `medium`
-  when `mode` is absent or unrecognized (verified in `api/routes.py`). The frontend sends ONLY the
-  logical key `mode`, never a model id: the real id is resolved server-side.
-  > IN FLUX: the mode -> model mapping lives on the agent side (currently being edited LIVE). The frontend
-  > is sensitive only to the `mode` key, so it is insensitive to a Mesh id adjustment (for example
-  > `flash-lite` vs `flash-light`). Document the exact ids in the agents documentation, not here.
+- `MODEL_MODES = ['smart', 'pro', 'claude']`, `MODELMODE_DEFAULT = 'smart'` (renamed from the internal
+  eco/medium/high). The mode is EPHEMERAL: the picker ALWAYS boots to Smart and is NEVER persisted (the
+  legacy `owismind.modelMode` key is removed at boot). Picking Pro/Claude applies to the NEXT sent
+  question only; the chat store calls `resetModelMode()` right after each dispatch. The effective mode
+  is stamped server-side per answer (`chat_v5.mode`). The frontend sends ONLY the logical key `mode`,
+  never a model id: the real id is resolved server-side.
+  > IN FLUX: the mode -> model mapping lives on the agent side. The frontend is sensitive only to the
+  > `mode` key, so it is insensitive to a Mesh id adjustment. Document the exact ids in the agents
+  > documentation, not here.
 - `applyTheme(t)` writes `document.body.dataset.theme`, applies immediately and is idempotent with the
   pre-mount set in `main.js`.
 - `setSidebarCollapsed(v, persistChoice = true)`: with `persistChoice = false`, the collapse is
@@ -332,6 +361,30 @@ Important points:
 - `setLang(id)` delegates to `setLocale` (which validates the id, applies it to vue-i18n, persists it under
   `owismind.lang` and sets `<html lang>`), then mirrors the resolved locale into `lang`. This store never
   persists the language itself, to avoid a second persistence system.
+
+## 7bis. The Source Data / benchmark / prompt-context / screen-context stores
+
+Four stores added by the 2026-07 waves follow the SAME discipline as the core four: a THIN reactive
+store over a PURE, `node:test`-covered composable.
+
+- **`sources.js`** (Source Data Explorer). Holds the selected agent + dataset (source index), the
+  editable filter chips, the free-text search, sort, and the Calculer measures; it drives `/source/*`.
+  Its deterministic logic lives in `sourceModel.js` (chip / range / ISO-date shaping) and
+  `aggregateSurface.js` (the shared aggregate factory, also used by `evidence`). The per-(agent, dataset)
+  VIEW (chips, q, sort, calc) is persisted across open/close via `sourceViewMemory.js`, so re-opening the
+  explorer restores the exact view. Every figure it shows is a DB aggregate over the full filtered set,
+  never the visible window.
+- **`benchmark.js`** (benchmark consultation + suggestion). Holds the results view-model, the selected
+  benchmark id, the on-demand attempt detail, and the caller's own suggestions; it drives `/benchmark/*`.
+  The pure shaping is `benchmarkResults.js`.
+- **`promptContext.js`** (cell-to-prompt). Holds the chips of values the user picked from a table cell to
+  append to the next message; pure logic in `promptContextModel.js`. The chips are appended to the message
+  text at send time (frontend-only, no server contract change).
+- **`screenContext.js`** (consent-gated screen sharing). Tracks whether the user has CONSENTED to attach
+  "what is on screen now" (the open Evidence exchange and/or the current Source Data view) to the next
+  message. The chat store reads it to build `screenContext` (section 3.2), which becomes the backend's
+  `[ON SCREEN NOW]` prompt block. Consent is explicit and dismissible (a sticky banner keyed by the SCOPE
+  signature); raw rows are never shared. Pure logic in `screenContextModel.js`.
 
 ## 8. Composables: from transport to render
 
@@ -347,6 +400,12 @@ that consume them, see the components and views.
 | `evidenceProof.js` | PURE | Trust layer: `trustLevel`, `calcStepArgs`, `resultPreview`, `droppedNote`. |
 | `sqlPretty.js` | PURE | `formatSql`, `tokenizeSql`, `highlightSqlLines` for SAFE SQL coloring. |
 | `budgetModel.js` | PURE | Budget/usage display helpers: `formatMoney`, `formatTokens`, `formatShortDate`, `usagePct`, `gaugePct`, `usageLevel`. |
+| `aggregateSurface.js` | PURE | Shared aggregate factory for the Source Data and Evidence surfaces (measure specs, totals, calendar buckets); one code path, two hosts. |
+| `sourceModel.js` | PURE | Source Data Explorer shaping: filter chips, date-range detection (ISO-valued string columns), sort/search normalization. |
+| `sourceViewMemory.js` | PURE | Per-(agent, dataset) view persistence (chips, q, sort, calc) so a closed/re-opened explorer restores its exact state. |
+| `benchmarkResults.js` | PURE | Benchmark consultation view-model shaping (KPIs, per-question detail, attempt evolution, format helpers). |
+| `promptContextModel.js` | PURE | Cell-to-prompt chip model (dedup, bounds, message-append text). |
+| `screenContextModel.js` | PURE | Screen-context scope signature + the shareable, localizable detail (what is offered to the agent), never raw rows. |
 | `useMarkdown.js` | Vue lifecycle | `renderMarkdown`: the ONLY LLM text -> HTML path, sanitized. |
 | `useTr.js` | Vue lifecycle | Resolves a `{ fr, en }` object to the current locale (DATA, not UI). |
 | `useToasts.js` | Vue lifecycle | Module-level reactive queue + auto-dismiss. |

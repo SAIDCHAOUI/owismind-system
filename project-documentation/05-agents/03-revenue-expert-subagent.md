@@ -1,6 +1,6 @@
 # The revenue expert sub-agent (SalesDrive_revenue_expert)
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the revenue sub-agent
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: how the revenue sub-agent
 > turns a business question into a sourced figure, via the UNDERSTAND -> RESOLVE -> QUERY ->
 > RENDER pipeline, read-only inline grounding on `DRIVE_Revenues_value_index`, assistive disambiguation,
 > and the frozen contracts (the `semantic-model-query` span) on which the webapp and Evidence depend.
@@ -8,9 +8,10 @@
 ## 1. What the sub-agent is and its identifiers
 
 The revenue expert sub-agent is a **LangGraph Code Agent** (Python 3.11 env), re-pasted by hand from
-the repository, which is the source of truth. Its file is
-`dataiku-agents/agents/SalesDrive_revenue_expert.py`; its DSS name is `SalesDrive_revenue_expert`; its
-id is `agent:bHrWLyOL`. The entry class required by the DSS contract is `class MyLLM(BaseLLM)`
+the repository, which is the source of truth. Its DEV file is
+`dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py`; its DSS name is
+`SalesDrive_revenue_expert`; its id is `agent:bHrWLyOL` in DEV / `agent:uO5hEzAs` in PROD_V1 (promote via
+`tools/promote_agents_to_prod.py`). The entry class required by the DSS contract is `class MyLLM(BaseLLM)`
 (import `from dataiku.llm.python import BaseLLM`) and the runtime entry point is the method
 `process_stream(self, query, settings, trace)`. The class must NOT be renamed: `MyLLM` is the
 Code Agent contract.

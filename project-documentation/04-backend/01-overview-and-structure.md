@@ -1,11 +1,14 @@
 # Backend - overview and structure
 
-> Audience: backend developer. Last updated: 2026-06-19. Summary: how the OWIsMind Flask backend
+> Audience: backend developer. Last updated: 2026-07-06. Summary: how the OWIsMind Flask backend
 > is assembled (thin bootstrap, `/owismind-api` blueprint, `before_request` hooks), how the
 > `python-lib/owismind/` package is split into sub-packages (api, agents, evidence, security,
-> storage), and which cross-cutting conventions (Python 3.9, stable error codes, owner-scoping)
-> govern the whole layer. Reflects the 2026-06-18 additions: monthly budget system
-> (`storage/budget.py`), agent profile metadata, and the 21-route API surface.
+> storage, benchmark_view), and which cross-cutting conventions (Python 3.9, stable error codes,
+> owner-scoping) govern the whole layer. Reflects the shipped waves through 2026-07-06: monthly
+> budget system (`storage/budget.py`), the Source Data Explorer (`evidence/source_service.py`,
+> `/source/*`), usage analytics (`storage/events.py`, `/track`), benchmark consultation
+> (`benchmark_view/`, `/benchmark/*`), admin impersonation (`security/impersonation.py`), and the
+> 36-route API surface.
 
 The OWIsMind backend is a **STANDARD DSS WebApp with a Python backend** (`hasBackend: "true"`
 in `webapp.json`). It is a **Flask** server that acts as an intermediary between the Vue 3 frontend (served
@@ -74,7 +77,7 @@ text of the message). It is a safety principle of the layer, not an implementati
 
 ## 3. The map of the sub-packages of `python-lib/owismind/`
 
-The library is split into five thematic sub-packages, plus the root package. Each sub-package
+The library is split into six thematic sub-packages, plus the root package. Each sub-package
 has a clear responsibility. The canonical diagram of the component map (modules by layer) lives
 in [Component map](../02-architecture/02-component-map.md); the mini-diagram below shows
 only the direction of the backend's internal dependencies (who calls whom), for the benefit of the backend reader.
@@ -84,15 +87,18 @@ flowchart TD
     BOOT["webapps/.../backend.py<br/>(thin bootstrap)"] --> API
     subgraph PKG["python-lib/owismind/"]
       API["api/routes.py<br/>(blueprint /owismind-api)"]
-      SEC["security/<br/>identity + validation"]
+      SEC["security/<br/>identity + validation<br/>+ impersonation"]
       AG["agents/<br/>stream_manager, streaming,<br/>context, discovery"]
-      EV["evidence/<br/>service, capture, sql_parse,<br/>chart_payload, throttle..."]
-      ST["storage/<br/>sql_config, migrations, chat_v5,<br/>admin, settings, usage, budget..."]
+      EV["evidence/<br/>service, capture, sql_parse,<br/>aggregate_core, source_service,<br/>chart_payload, throttle..."]
+      ST["storage/<br/>sql_config, migrations, chat_v5,<br/>admin, settings, usage, budget,<br/>events, suggestions..."]
+      BV["benchmark_view/<br/>aggregate, lab_io,<br/>schema_check, schemas"]
     end
     API --> SEC
     API --> AG
     API --> EV
     API --> ST
+    API --> BV
+    BV --> ST
     AG --> ST
     AG --> EV
     EV --> ST
@@ -116,7 +122,7 @@ SQL route, and the frontend never chooses a table, a connection, or a query.
 
 ### 3.2 `security/` - identity and validation (the frontend is never trusted)
 
-Two modules, and the guiding principle of the sub-package: **the frontend is never trusted**.
+Three modules, and the guiding principle of the sub-package: **the frontend is never trusted**.
 
 - `identity.py`: `resolve_identity(headers)` resolves the caller from the authenticated
   browser headers (`api_client().get_auth_info_from_browser_headers`), never from the request body.
@@ -133,6 +139,13 @@ Two modules, and the guiding principle of the sub-package: **the frontend is nev
   raising (`validate_history_limit` clamps `[10, 50]`, `validate_conversations_limit` clamps `[1, 60]`).
   The validation detail is documented in
   [Backend - security and validation](06-security-and-validation.md).
+- `impersonation.py`: the whole backend surface of the TEMPORARY admin "act as user" feature (kept
+  for the beta). `effective_identity(real_identity)` reads the `X-OWI-Impersonate` header off the
+  request and grants impersonation ONLY when storage is configured, the target validates, AND the real
+  caller is an admin; otherwise it degrades to the real identity (never raises, no DB round-trip when
+  no header is present). READ routes scope to the effective (impersonated) user; WRITE routes are
+  BLOCKED while impersonating. Removing this module plus the fenced blocks in `api/routes.py` reverts
+  the feature entirely.
 
 ### 3.3 `agents/` - the bridge to LLM Mesh and the run lifecycle
 
@@ -162,10 +175,16 @@ Four modules carry all the interaction with the agents, without ever reasoning t
 
 The Evidence Studio sub-package re-executes, in a DETERMINISTIC way (zero LLM), the stored SELECT scope of
 a response, read-only and owner-scoped. The pure analysis (`sql_parse.py`, `query_builders.py`,
-`whitelist.py`) is dataiku-free and testable; only `service.py` touches the DSS runtime. The modules:
-`service.py` (the stateless pipeline), `capture.py` (opportunistic capture of the `result` + mirror caps),
-`sql_parse.py` / `sql_explain.py` (parsing and structured explanation of the SQL), `chart_payload.py`
-(Chart.js / KPI shaping), `throttle.py` (per-user token-bucket) and `whitelist.py`. The detail lives in
+`whitelist.py`, `aggregate_core.py`, `source_search.py`) is dataiku-free and testable; only `service.py`
+and `source_service.py` touch the DSS runtime. The modules: `service.py` (the stateless Evidence
+pipeline), `capture.py` (opportunistic capture of the `result` + mirror caps), `sql_parse.py` /
+`sql_explain.py` (parsing and structured explanation of the SQL), `aggregate_core.py` (the SHARED
+aggregation planner: whitelisted measures, type gate from the live schema, mandatory group cap, used by
+both the Evidence and Source aggregate routes), `source_service.py` / `source_search.py` (the Source
+Data Explorer: `source_meta` / `source_rows` / `source_distinct` / `source_aggregate` over an admin-
+declared dataset, accent-insensitive search, cascading distincts, same read-only + `statement_timeout`
+pre-queries as Evidence), `chart_payload.py` (Chart.js / KPI shaping), `throttle.py` (per-user token-
+bucket) and `whitelist.py`. The detail lives in
 [Backend - Evidence Studio and artifacts](05-evidence-and-artifacts.md).
 
 ### 3.5 `storage/` - all application state in direct SQL
@@ -193,9 +212,28 @@ the write-only trace dataset, `chat_traces.py`). Key modules:
 - `usage.py`: token and cost accounting (accumulates into `webapp_usage_monthly_v1` and lifetime in
   `webapp_users_v1`).
 - `artifacts.py`: owner-stamped UPSERT and read of artifact specs (`webapp_artifacts_v1`) for the chart/table/kpi pipeline. Best-effort; a failure never aborts a run.
+- `events.py`: usage analytics. The whitelist of event names (`EVENT_CATEGORIES`, 41 names by
+  category, the single source of truth) plus the PURE `validate_events` (caps the batch at
+  `MAX_EVENTS_PER_BATCH = 40`, props JSON at `MAX_PROPS_JSON_CHARS = 2000`, never raises) and
+  `record_events` (one multi-row INSERT ON CONFLICT DO NOTHING into `webapp_events_v1`, best-effort,
+  bounded by a write `statement_timeout`). Feeds `POST /track`.
+- `suggestions.py`: append-only capture of user golden-question suggestions (`webapp_golden_suggestions_v1`),
+  the plugin side of the benchmark loop; the LAB project promotes them into golden datasets.
+- `chat_traces.py`: the ONE Flow exception - a write-only append into the optional `traces_dataset`
+  (never breaks a chat when absent/incompatible).
 - Pure helpers: `sql_builders.py`, `pagination.py`, `serialization.py`.
 
-The complete data model is documented in [Backend - storage and data model](04-storage-and-data-model.md).
+The complete data model (8 tables) is documented in
+[Backend - storage and data model](04-storage-and-data-model.md).
+
+### 3.6 `benchmark_view/` - read-only consultation of the LAB benchmark
+
+The plugin CONSULTS (never launches) the agent benchmark run in the separate `OWIsMind_LAB` DSS
+project. `lab_io.py` reads the LAB scored/summary tables (cross-project SQL, read-only, intersected
+against the live schema); `aggregate.py` shapes accuracy / latency / cost rollups for the plugin's
+Benchmark page and a single-attempt full detail on demand; `agent_profile.py` binds a benchmark table
+to an agent card; `schema_check.py` + `schemas.py` validate the selected table against the expected
+shape. Feeds the `/benchmark/*` and `/admin/benchmark/*` routes.
 
 ## 4. Cross-cutting conventions (apply to the whole layer)
 

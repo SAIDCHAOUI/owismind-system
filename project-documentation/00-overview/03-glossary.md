@@ -1,6 +1,6 @@
 # Glossary
 
-> Audience: everyone (both business and technical readers). Last updated: 2026-06-19.
+> Audience: everyone (both business and technical readers). Last updated: 2026-07-06.
 > Summary: this document lays out, in alphabetical order, the business AND technical terms of OWIsMind,
 > with a short definition, what NOT to confuse it with, and a pointer to the document that
 > goes deeper on the term.
@@ -63,12 +63,10 @@ A standalone Custom Python tool (`tools/attribute_lookup_tool.py`) that looks up
 the revenue dataset (does it exist, in which column, what is the exact spelling, which attribute
 of a record). It short-circuits the slow semantic path for simple questions such as
 "who is the account manager for X". The tool object already EXISTS in DSS.
-> IN FLUX: `attribute_lookup` is BUILT, unit-tested, and wired as a built-in tool dispatched
-> inline in the orchestrator's `node_tools` node. `LOOKUP_TOOL_ID = ""` means the tool is
-> resolved by name (no hard-coded id needed). The built-in becomes operational only after the
-> orchestrator is re-pasted into DSS. Its predecessor, the managed tool `dataset_lookup`
-> (`9FEzVZk`) and the `lookup` intent, were REMOVED on 2026-06-18: they no longer appear in
-> `KNOWN_INTENTS`. Attribute lookups are therefore in transition.
+`attribute_lookup` is BUILT, unit-tested, and wired as a built-in tool dispatched inline in the
+orchestrator's `node_tools` node, with `LOOKUP_TOOL_ID` now filled in DEV (`UUoynaL`; an empty value
+would mean resolve-by-name). Its predecessor, the managed tool `dataset_lookup` (`9FEzVZk`) and the
+`lookup` intent, were REMOVED on 2026-06-18: they no longer appear in `KNOWN_INTENTS`.
 Detail: [agent tools and Semantic Model](../05-agents/04-tools-and-semantic-model.md).
 
 ## B
@@ -182,18 +180,21 @@ the Mesh transport). Detail:
 
 ## M
 
-### mode (eco / medium / high)
+### mode (Smart / Pro / Claude)
 The LOGICAL key chosen by the user, which drives the loop model. A single model drives the whole
-turn (no escalation, no switch mid-turn), and the mode propagates to the sub-agent.
+turn (no escalation, no switch mid-turn), and the mode propagates to the sub-agent. Renamed on
+2026-06-24 from Eco/Medium/High; the internal keys were renamed to match (`smart` / `pro` / `claude`).
+The mode is ephemeral (the picker resets to Smart on send) and the mode actually used is stamped on
+each answer (`webapp_chat_v5.mode`).
 
 | Mode | Loop model | Live narration |
 |---|---|---|
-| `eco` (default) | Gemini 3.1 Flash-Lite (`GEMINI_FLASH_LITE_ID`) | OFF (strict act-first) |
-| `medium` | Gemini 3.5 Flash (`GEMINI_FLASH_ID`) | ON |
-| `high` | Claude Sonnet 4.6 (`SONNET_ID`) | ON |
+| `smart` (default) | Gemini 3.1 Flash-Lite (`GEMINI_FLASH_LITE_ID`) | OFF (strict act-first) |
+| `pro` | Gemini 3.5 Flash (`GEMINI_FLASH_ID`) | ON |
+| `claude` | Claude Sonnet 4.6 (`SONNET_ID`) | ON |
 
-> IN FLUX: the LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must match
-> the instance's LLM Mesh connection; a wrong id breaks the corresponding mode (to be verified in DSS).
+> The LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must match
+> the instance's LLM Mesh connection; a wrong id breaks the corresponding mode.
 Do not confuse with: a raw model id (the front never sends one); the model of the Semantic
 Model Query tool (which stays Sonnet in ALL modes). Detail:
 [per-mode models](../08-decisions/0009-modeles-par-mode.md).
@@ -227,7 +228,7 @@ any hex colour value used directly in code (the charter prohibits raw hex, only 
 
 ### OWIsMind
 The product: a Dataiku DSS plugin, an agentic business chat portal (id `owismind`, version
-`0.0.1`). It combines a Vue 3 frontend, a Flask backend and two LLM Mesh Code Agents.
+`1.1.0`). It combines a Vue 3 frontend, a Flask backend and LLM Mesh Code Agents.
 Do not confuse with: "the webapp" (which only refers to the frontend + Flask backend layer, not the
 agents). Detail: [product overview](01-product-overview.md).
 
@@ -352,7 +353,7 @@ A handful of identifiers recur throughout the documentation and are cited VERBAT
 
 | Identifier | What it is |
 |---|---|
-| `owismind` | the plugin id (version `0.0.1`) |
+| `owismind` | the plugin id (version `1.1.0`) |
 | `webapp-owismind-ai-agents` | the DSS webapp |
 | `owismind-app` | the resource folder serving the built frontend |
 | `/owismind-api` | the API prefix (health: `/owismind-api/ping`) |

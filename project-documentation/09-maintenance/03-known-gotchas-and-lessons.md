@@ -1,11 +1,15 @@
 # Known gotchas and lessons
 
-> Audience: developer, maintainer. Last updated: 2026-06-19. Summary: the distilled list of
+> Audience: developer, maintainer. Last updated: 2026-07-06. Summary: the distilled list of
 > the gotchas that genuinely cost time on OWIsMind (frontend, backend, agents, styling), each one
 > with its symptom and the fix that works, plus pointers to the ADRs and the detailed docs.
 
+> Note: the active, path-scoped gotchas now also live in `.claude/rules/*.md` (one file per zone:
+> `frontend.md`, `backend.md`, `agents.md`, `lab.md`, `memory.md`), loaded when a matching path is edited.
+> This document remains the narrative synthesis; the memory of record is `memory/LESSONS.md` (up to L140).
+
 This document is the project's operational memory: what you MUST know before touching the code,
-condensed from `memory/LESSONS.md` (L001 to L092). Every entry follows the same format: the gotcha, the
+condensed from `memory/LESSONS.md`. Every entry follows the same format: the gotcha, the
 observable symptom, the solution verified in the code. References name the real file; line
 numbers are deliberately omitted (the repository is edited live, especially `dataiku-agents/`).
 
@@ -104,9 +108,11 @@ issues.
 
 ## 6. Agent gotchas (LangGraph Code Agents, env 3.11)
 
-The two Code Agents (`OWIsMind_orchestrator` and `SalesDrive_revenue_expert`, `agent:bHrWLyOL`) run
-in Python 3.11, distinct from the Flask 3.9 backend. The repository is the SOURCE OF TRUTH: on every change you must
-re-paste the two files by hand into their DSS Code Agents.
+The Code Agents (`OWIsMind_orchestrator` + `SalesDrive_revenue_expert`, DEV `agent:bHrWLyOL`) run
+in Python 3.11, distinct from the Flask 3.9 backend. They are DUPLICATED per DSS project under
+`dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/` (we develop in DEV, promote to PROD by
+regenerating with `tools/promote_agents_to_prod.py`; ADR-0019). The repository is the SOURCE OF TRUTH: on
+every change you must re-paste the changed files by hand into their DSS Code Agents.
 
 | # | Gotcha | Symptom | Verified solution |
 |---|---|---|---|

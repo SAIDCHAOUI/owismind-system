@@ -1,10 +1,17 @@
 # Agent tools and Semantic Model
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: this document details the real DSS tools
-> called at runtime by the agents: `revenue_semantic_query` (`v4oqA6R`, called by the sub-agent) and
-> `attribute_lookup` (Custom Python tool, called as an orchestrator built-in; DSS object exists,
-> wiring goes live on the next orchestrator re-paste), plus the aligned Semantic Model that owns the
-> analytical SQL.
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: this document details the real DSS tools
+> called at runtime by the agents: `revenue_semantic_query` (called by the sub-agent) and
+> `attribute_lookup` (Custom Python tool, called as an orchestrator built-in, live in both projects),
+> plus the aligned Semantic Model that owns the analytical SQL.
+
+> Ids in this page are the **OWISMIND_DEV** values (development source of truth). Each has a PROD_V1
+> twin (map in `dataiku-agents/OWISMIND/README.md`): `revenue_semantic_query` `v4oqA6R` (DEV) /
+> `sgk5pfln` (PROD); `attribute_lookup` `UUoynaL` / `szOZCoU`; Drive_Revenues model `AHUh9hb`
+> (`Drive_Revenues_Semantic_Model`) / `a7K9jYk` (`Drive_Revenues_Model`). The tickets model
+> `TroubleTickets_Semantic_Model` (`dM4jA4G`) and its `tickets_semantic_query` tool (`nEirlso`) exist in
+> DEV only. Promote agent code with `python3 tools/promote_agents_to_prod.py`; the semantic-model
+> scripts (`update_aligned_semantic_model.py`, etc.) already carry each project's own model id and table.
 
 The revenue expert sub-agent (`SalesDrive_revenue_expert`, `agent:bHrWLyOL`) does not compute revenue
 figures itself in the nominal case. It prepares the context (UNDERSTAND, RESOLVE, COMPOSE) then delegates

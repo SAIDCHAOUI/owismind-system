@@ -1,9 +1,9 @@
 # FAQ and troubleshooting (user)
 
 > Audience: OWI/Orange business user, first-level support team. Last updated:
-> 2026-06-19. Summary: practical answers to frequently asked questions and the right course of action when
+> 2026-07-06. Summary: practical answers to frequently asked questions and the right course of action when
 > facing common situations (an uncovered domain, a long answer, a stopped generation, an empty result, slowness
-> in High mode, a budget reached), including the moment when an administrator should be involved.
+> in Claude mode, a budget reached), including the moment when an administrator should be involved.
 
 OWIsMind is a business-oriented agentic chat portal. You ask a question in natural language about
 revenue (the `DRIVE_Revenues` dataset), the agent works in front of you (the timeline), and every figure is
@@ -53,18 +53,19 @@ budget by solution line".
 `Enter` sends your message, `Shift+Enter` inserts a line break. The microphone (voice input) **never** triggers
 the send automatically: you re-read, then send it yourself.
 
-### What is the mode selector (Eco / Medium / High) for?
+### What is the mode selector (Smart / Pro / Claude) for?
 
 The mode chooses the model that drives the entire answer. A single model leads the run, there is no escalation
-along the way.
+along the way. The modes were renamed Smart / Pro / Claude on 2026-06-24 (previously Eco / Medium / High),
+and the picker is ephemeral: it resets to Smart after each send.
 
 | Mode | Cost | Speed | When to use it |
 |---|---|---|---|
-| Eco (default, recommended) | Low | Very fast | The vast majority of everyday questions |
-| Medium | Moderate | Fast | More demanding or nuanced requests |
-| High | High | More deliberate | Maximum quality on a complex question |
+| Smart (default, recommended) | Low | Very fast | The vast majority of everyday questions |
+| Pro | Moderate | Fast | More demanding or nuanced requests |
+| Claude | High | More deliberate | Maximum quality on a complex question |
 
-Eco is the recommended default mode (label `mode.recommended`, message `mode.reco_line`). Whatever
+Smart is the recommended default mode (label `mode.recommended`, message `mode.reco_line`). Whatever
 the mode, the analytical SQL is always written by the same engine (the Semantic Model Query tool, on a
 Sonnet model): switching mode does not degrade the accuracy of the figure, it mainly changes the comfort of the
 wording and the cost.
@@ -164,11 +165,11 @@ Several cases, to be distinguished:
 > cannot be read on the instance, Evidence shows `result_captured: false` (the SQL and the scope
 > remain visible, but not the mini-table of the result). This is not a computation error.
 
-### 2.5 Slowness in High mode
+### 2.5 Slowness in Claude mode
 
-High mode uses the most powerful model (Claude Sonnet 4.6): it is deliberately "more deliberate"
-(label `mode.high_speed`), so slower and more costly than Eco or Medium. If speed matters more than
-wording finesse on your question, switch back to **Eco** (fast, economical, recommended): the
+Claude mode uses the most powerful model (Claude Sonnet 4.6): it is deliberately "more deliberate"
+(label `mode.high_speed`), so slower and more costly than Smart or Pro. If speed matters more than
+wording finesse on your question, switch back to **Smart** (fast, economical, recommended): the
 accuracy of the figure does not change, because the SQL is always written by the same engine whatever the mode.
 
 If the slowness persists **in all modes**, it is probably not a model problem but
@@ -246,7 +247,7 @@ configuration:
   configured) are in the [Runbooks](../06-operations/04-runbooks.md).
 - The installation and the choice of SQL connection are described in
   [Installation and configuration](../06-operations/01-installation-and-configuration.md).
-- An unresponsive mode (Eco, Medium or High) often points to an LLM Mesh model id to verify
+- An unresponsive mode (Smart, Pro or Claude) often points to an LLM Mesh model id to verify
   on the agent side: see [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md).
 
 ## See also

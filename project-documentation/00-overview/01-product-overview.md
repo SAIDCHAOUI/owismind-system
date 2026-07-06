@@ -1,12 +1,12 @@
 # Product Overview
 
 > Audience: everyone (decision-makers, business users, technical newcomers). Last updated:
-> 2026-06-19. Summary: what OWIsMind solves, its business domain (Orange/OWI revenue analysis),
+> 2026-07-06. Summary: what OWIsMind solves, its business domain (Orange/OWI revenue analysis),
 > its users and its core value proposition, the trio of Conversation, live Timeline and Evidence
 > Studio.
 
 OWIsMind is a business agentic chat portal, delivered as a Dataiku DSS plugin
-(id `owismind`, version `0.0.1`). The official plugin description is unambiguous: "Business
+(id `owismind`, version `1.1.0`, promoted to production in July 2026). The official plugin description is unambiguous: "Business
 AI-agent chat portal: a Vue 3 webapp backed by a Flask backend that talks to Dataiku LLM Mesh agents
 and stores conversations in a PostgreSQL connection via direct SQL" (`Plugin/owismind/plugin.json`).
 Put differently: a user asks a business question in natural language, AI agents answer it with
@@ -191,6 +191,18 @@ green (solid = certified, dotted = partial, gray = declared), to avoid any false
   in the panel (interactive Chart.js charts).
 - Per-message feedback, conversation editing and branches, persistent agent per conversation,
   stop-generation, token and cost tracking under each answer.
+- Source Data Explorer: a no-AI panel to explore an agent's raw source dataset directly (searchable
+  two-step filters, cell-to-agent "use this value", a Calculer zone that computes DB aggregates
+  (count/sum/avg/median/min/max) over the full filtered set, date-range filters, cascading distinct
+  values, a per-column menu with 3-state sort, and per-(agent, dataset) view persistence). Every
+  figure it shows is a real database aggregate over the complete filtered set, never over the
+  displayed page. A consent banner lets the user attach the on-screen view to their next question
+  so the agent can reason over the figures already on screen.
+- Agent-evaluation benchmark: a shipped, DSS-validated evaluation system (a separate DSS project
+  `OWIsMind_LAB` with two admin webapps for running/reviewing golden-question runs, plus an in-plugin
+  consultation page and a "suggest a golden question" flow from any answer).
+- Usage analytics: a GA4-like tracking of webapp usage (a single `webapp_events_v1` table fed by a
+  best-effort `/track` route) for adoption and journey analysis, distinct from the agentic run logs.
 - FR and EN internationalization, English as the default locale (FR kept), light and dark theme,
   desktop-first responsive layout following the sober Orange charter (square geometry, white/black
   palette, `#FF7900` as a rare accent; see `docs/cadrage/CHARTE_ORANGE_UI.md`).
@@ -207,17 +219,22 @@ green (solid = certified, dotted = partial, gray = declared), to avoid any false
   `POST /admin/budget/users`. Budget enforcement is coded; DSS validation is still pending.
 
 The cost modes are a logical key chosen by the user that drives the loop model, with no escalation (a
-single model runs the whole loop):
+single model runs the whole loop). They were renamed Smart / Pro / Claude on 2026-06-24 (the internal
+keys were renamed to `smart` / `pro` / `claude` to match), validated in DSS:
 
 | Mode | Loop model | Status |
 |---|---|---|
-| eco | Gemini 3.1 Flash-Lite | Default. |
-| medium | Gemini 3.5 Flash | |
-| high | Claude Sonnet 4.6 | |
+| Smart (`smart`) | Gemini 3.1 Flash-Lite | Default, recommended. |
+| Pro (`pro`) | Gemini 3.5 Flash | |
+| Claude (`claude`) | Claude Sonnet 4.6 | Most powerful, most expensive. |
 
-> IN FLUX: the per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must
-> match the LLM Mesh connection of the Dataiku instance; a wrong id breaks the corresponding mode. To
-> be verified in DSS.
+The mode is ephemeral: the picker always resets to Smart on send, and the mode actually used is stamped
+on each answer (`mode` column on `webapp_chat_v5`) and shown in the tokens/cost line. Only an agent
+that declares `modes: true` exposes the picker; otherwise the whole turn runs on the default model.
+
+> The per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID` in the orchestrator)
+> must still match the LLM Mesh connection of the Dataiku instance; a wrong id breaks the corresponding
+> mode.
 
 ### 5.2 What the product does not do (limitations)
 
@@ -253,10 +270,16 @@ single model runs the whole loop):
 
 OWIsMind is made up of four layers: a Vue 3 frontend built into static assets served by DSS, a modular
 Flask backend (`python-lib/owismind/`) that talks to the agents via LLM Mesh and persists in direct SQL
-(`SQLExecutor2`, PostgreSQL, connection `SQL_owi`), two LangGraph Code Agents (Python env 3.11, the
-orchestrator and the revenue sub-agent), and PostgreSQL storage. The Dataiku Flow does not run at runtime
+(`SQLExecutor2`, PostgreSQL, connection `SQL_owi`), LangGraph Code Agents (Python env 3.11, the
+orchestrator and its sub-agents), and PostgreSQL storage. The Dataiku Flow does not run at runtime
 (except for an optional write-only trace): it serves design-time to build the profile and the value
 index.
+
+The Code Agents are duplicated per DSS project under
+`dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`: development happens in DEV, then agents are
+promoted to PROD by a scripted regeneration (`tools/promote_agents_to_prod.py`). PROD ids: orchestrator
+`Xrv7GvfG`, revenue expert `agent:uO5hEzAs`. A second sub-agent (CSSO trouble-tickets expert,
+`agent:NcE9LD2i`) exists in DEV only and is deliberately kept out of PROD for now.
 
 The detailed system context diagram (the four layers and their exchanges) is drawn only once, in the
 architecture overview. For the full diagram, see

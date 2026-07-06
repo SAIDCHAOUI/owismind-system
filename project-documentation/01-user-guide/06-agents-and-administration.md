@@ -1,7 +1,7 @@
 # Agents and Administration
 
 > Audience: business users (agents library) and administrators (Administration console). Last updated:
-> 2026-06-19. Summary: how any user can browse the agent library and read an agent's profile, and
+> 2026-07-06. Summary: how any user can browse the agent library and read an agent's profile, and
 > how an administrator enables agents, authors their profile, manages users, and manages monthly
 > budgets and quotas.
 

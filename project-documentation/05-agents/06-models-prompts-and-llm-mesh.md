@@ -1,6 +1,6 @@
 # Models, prompts and LLM Mesh
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: how the two Code Agents
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: how the two Code Agents
 > select an LLM Mesh model per mode, call it NATIVELY (never `as_langchain_chat_model`),
 > reserve reasoning for routing and contract-bound extraction (`with_json_output`), and how
 > control tokens drive mode and language end to end.
@@ -16,8 +16,9 @@ ADR-0006, ADR-0007 and ADR-0009.
 The mode is a LOGICAL key chosen by the user in the webapp. The backend appends it to the current turn
 as a control token (see section 4), and each Code Agent resolves it to an LLM Mesh id. The same three
 ids are declared VERBATIM at the top of
-`dataiku-agents/agents/OWIsMind_orchestrator.py` AND of
-`dataiku-agents/agents/SalesDrive_revenue_expert.py`, on the same Mesh connection.
+`dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` AND of
+`dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py` (+ their
+PROD_V1 twins), on the same Mesh connection.
 
 | Mode | Constant (id) | Model | Default | Live narration |
 |---|---|---|---|---|

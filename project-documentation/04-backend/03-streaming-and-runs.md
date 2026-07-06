@@ -1,9 +1,10 @@
 # Backend - streaming and run lifecycle
 
-> Audience: backend developer. Last updated: 2026-06-19. Summary: how the Flask backend streams an
+> Audience: backend developer. Last updated: 2026-07-06. Summary: how the Flask backend streams an
 > agent's progress to the browser without SSE (one bounded worker thread plus a module-level dict polled
 > by the client), including event normalization, cooperative stop handling and the instance-safety
-> guardrails. Reflects the 2026-06-18 monthly budget gate added to `/chat/start` (before any write).
+> guardrails. Reflects the monthly budget gate on `/chat/start` (before any write) and the per-answer
+> `mode` / consented `screen_ctx` stamped at phase-one persistence.
 
 ## Why polling and not SSE
 

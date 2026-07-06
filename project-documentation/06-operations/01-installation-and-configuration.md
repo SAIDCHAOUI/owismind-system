@@ -1,6 +1,6 @@
 # Installation and configuration
 
-> Audience: DSS admin, operator. Last updated: 2026-06-19. Summary: how to install the OWIsMind
+> Audience: DSS admin, operator. Last updated: 2026-07-06. Summary: how to install the OWIsMind
 > plugin, build the two code envs (3.9 backend, 3.11 agents), instantiate the webapp, configure it in
 > the Settings (SQL connection, table prefix, traces dataset, log level), paste the two Code Agents,
 > have an admin activate the agent whitelist, configure the monthly budget (default $50 USD/user), and
@@ -14,10 +14,11 @@ produce the zip) are described in [Build, packaging and deployment](02-build-pac
 assume the zip is already produced (or received) and we focus on installation and configuration on the
 instance side.
 
-Canonical identifiers to know: plugin id `owismind` (version `0.0.1`), webapp
+Canonical identifiers to know: plugin id `owismind` (version `1.1.0`), webapp
 `webapp-owismind-ai-agents`, python-lib package `owismind`, resource folder `owismind-app`, API prefix
 `/owismind-api` (health `/owismind-api/ping`), default SQL connection `SQL_owi` (PostgreSQL, schema
-`public`), fallback project key `OWISMIND_DEV`, DSS platform 14.4.x.
+`public`), fallback project key `OWISMIND_DEV`, DSS platform 14.4.x. The production plugin is deployed to
+its own DSS project; the promotion runbook is [docs/DEPLOY_PROD_V1_1.md](../../docs/DEPLOY_PROD_V1_1.md).
 
 ---
 
@@ -150,12 +151,23 @@ This is the only truly indispensable setting. Select the dedicated PostgreSQL co
   unavailable in the form-rendering context, the dropdown shows a CLEARLY LABELED fallback (for example
   `SQL_owi (fallback - listing failed: ...)`) rather than a silent fake; choosing that fallback remains
   possible if the connection does indeed exist on the DSS side.
-- On the first write, the backend lazily creates its tables (`CREATE TABLE IF NOT EXISTS`). The complete
-  data model (tables `webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`,
-  `webapp_usage_monthly_v1`, `webapp_user_quota_v1`, and the artifacts table) is described in
+- On the first write, the backend lazily creates its tables (`CREATE TABLE IF NOT EXISTS`). There are 8
+  tables today: `webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`, `webapp_usage_monthly_v1`,
+  `webapp_user_quota_v1`, `webapp_artifacts_v1`, `webapp_golden_suggestions_v1` (benchmark capture) and
+  `webapp_events_v1` (usage analytics, see section 4.3). The complete data model is described in
   [Backend - storage and data model](../04-backend/04-storage-and-data-model.md). The admin space
-  (`/admin/storage`) exposes the physical names of the five core tables tracked by `storage_status()`
-  (`chat`, `users`, `settings`, `usage_monthly`, `user_quota`).
+  (`/admin/storage`) exposes the physical names of the core tables tracked by `storage_status()`.
+
+### 4.5 Usage analytics for adoption tracking (`webapp_events_v1`)
+
+The webapp records its own GA4-like usage stream in `webapp_events_v1` (a single append table, distinct
+from the agentic run logs): frequentation, features used, and navigation paths. The frontend `track.js`
+batches whitelisted events (38 auto-descriptive names, e.g. `question_sent`, `answer_received`,
+`page_viewed`, the Evidence tab views) and posts them to `POST /track` (sendBeacon, best-effort, throttled,
+never returns 500; impersonated sessions are dropped before write). Privacy is built in: searches log only a
+length, error paths carry no query string. To build an **adoption dashboard**, create a DSS dataset on this
+table and roll up DAU / top features (GROUP BY `event_name`) / session paths (session = 30 min gap). The
+per-answer `mode` column of `webapp_chat_v5` is croissable with this stream (Smart/Pro/Claude usage).
 
 ### 4.2 Optional table prefix (`table_prefix`)
 
@@ -274,6 +286,20 @@ sub-agent.
 > (`_admin_guard()` + `resolve_enabled_agent`). The whitelist logic is detailed in
 > [Backend - security and validation](../04-backend/06-security-and-validation.md) and
 > [ADR-0004](../08-decisions/0004-whitelist-agents-serveur.md).
+
+The whitelist is **dynamic and cross-project**: each entry carries its own `project_key`, so a single
+webapp can activate agents from any DSS project it can see (e.g. `OWISMIND_DEV` and `OWISMIND_PROD_V1`).
+No agent id is hardcoded on the plugin side; the only per-project ids are the internal wiring between the
+Code Agents themselves (see [05-agents](../05-agents/07-deploying-and-editing-agents.md)).
+
+### 6.1 Admin impersonation (temporary, beta)
+
+An admin can view the app **as another user** to reproduce and debug their state. This is a **temporary
+beta aid**, deliberately fenced so it can be removed later: `security/impersonation.py` on the backend and
+`features/admin-impersonate/` on the frontend, plus fenced blocks in the routes/session/chat wiring.
+Scope: admin-gated, and impersonated sessions are **read-only** for side effects that would attribute to
+the impersonated user - in particular usage-analytics events are **dropped before write** so they never
+pollute `webapp_events_v1`. Plan to retire it once the beta closes.
 
 ---
 

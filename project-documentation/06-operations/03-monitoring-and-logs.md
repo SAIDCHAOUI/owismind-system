@@ -1,6 +1,6 @@
 # Monitoring and logs
 
-> Audience: operator, support. Last updated: 2026-06-19. Summary: where to look to
+> Audience: operator, support. Last updated: 2026-07-06. Summary: where to look to
 > diagnose OWIsMind (the webapp backend log, content-free), which identifiers to correlate
 > (`run_id`, `exchange_id`, `user_id`), how to monitor run concurrency and the caps,
 > and the safety best practices on a shared Dataiku instance.

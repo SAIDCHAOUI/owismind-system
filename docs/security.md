@@ -201,6 +201,29 @@ déjà exécuté, re-validé à chaque requête, et seulement appliqué à un SE
 whitelistée par l'admin (`sql_parse.py:106-112`). Les parties pures (`sql_parse`, `query_builders`,
 `whitelist`, validateurs) sont couvertes par la suite `unittest` DSS-free (`Plugin/owismind/tests/`).
 
+### Source Data Explorer (même modèle lecture seule, datasets bruts configurés par agent)
+
+Le Source Data Explorer (`evidence/source_service.py`, routes `/source/*`) laisse tout utilisateur authentifié
+explorer les datasets **bruts** qu'un admin a rattachés à un agent (bloc `sources` de la fiche d'agent). Il
+**réutilise le même modèle de sûreté** qu'Evidence : le front n'envoie qu'une **clé d'agent opaque** + un
+**index de source entier** + des filtres structurés `{column, op, values}` + un `q` plein-texte (jamais de SQL) ;
+le serveur résout l'index vers un dataset **auto-découvert** et exécute un SELECT **borné**. La ré-exécution
+hérite des **mêmes pre-queries transaction-scopées** `readonly_pre_queries()` (`statement_timeout 30 s` +
+`transaction_read_only`, `source_service.py:16, 290`), du **même token-bucket** par utilisateur (`_source_guard`)
+et des mêmes bornes de lignes. Les agrégats (`/source/aggregate`, `/evidence/aggregate`) restent des **specs
+structurées** (mesures whitelistées, cœur pur `evidence/aggregate_core.py`) : le front ne fournit jamais
+d'expression SQL. Le picker de sources admin (`/admin/sources/datasets`) est admin-gated et dégrade honnêtement.
+
+### Benchmark - lectures SQL cross-projet bornées
+
+La consultation benchmark (`benchmark_view/lab_io.py`, **seul module I/O** du package) lit la table `scored`
+qui vit dans le **projet DSS séparé `OWIsMind_LAB`**. La table et la connexion sont **résolues serveur** depuis
+la fiche d'agent validée (bloc `benchmark`), **jamais acceptées du client** (qui n'envoie qu'une clé d'agent
+opaque). Les lectures sont **bornées** (lecture du scored, détail 1 ligne) ; l'override admin est un **UPDATE
+paramétré borné** des seules colonnes `human_*`, réservé aux admins (`/admin/benchmark/override`, bloqué en
+impersonation). L'intake collaboratif (`storage/suggestions.py`, `webapp_golden_suggestions_v1`) est
+owner-stamped ; c'est le pôle admin LAB qui relit cross-projet et promeut.
+
 ---
 
 ## 7. Admin
@@ -229,6 +252,22 @@ la garde côté router front n'est que cosmétique (L027 Info).
 
 **Note opérationnelle (TOFU, L026 note a / PROJECT_STATE §12 item 5) :** le premier utilisateur à ouvrir l'app
 **après** configuration devient admin → s'assurer en déploiement que c'est bien l'admin déployeur.
+
+**Impersonation admin (frontière de confiance, TEMPORAIRE - gardée pour la bêta, code fencé et supprimable,
+`security/impersonation.py`) :** un admin peut consulter la webapp « à la place » d'un autre utilisateur pour
+diagnostiquer. Garanties :
+
+- **Admin-gated à la source.** `effective_identity(real_identity)` (`impersonation.py:35`) lit l'en-tête
+  `X-OWI-Impersonate` (`IMPERSONATION_HEADER`, `impersonation.py:32`) **directement depuis `flask.request`**,
+  et ne bascule vers l'identité cible **que si le caller réel est admin** ; sinon l'en-tête est ignoré (un
+  non-admin ne peut jamais se faire passer pour autrui).
+- **Lecture seule stricte.** Seules les routes de **LECTURE** utilisent l'identité **effective** (la cible :
+  `/me`, `/usage`, `/conversations`, `/conversation`, `_evidence_guard`, `_source_guard`,
+  `/benchmark/suggestions`). Toutes les routes d'**ÉCRITURE** (`/chat/start`, `/chat/stop`, `/chat/feedback`,
+  `/benchmark/suggest`, `/benchmark/suggest-from-chat`, `/admin/benchmark/override`) refusent
+  `403 impersonation_read_only` **avant tout travail** : un admin ne peut jamais écrire sous une autre identité.
+- **Analytics neutralisée.** `POST /track` **droppe** silencieusement les events émis pendant une impersonation
+  (aucune activité fantôme attribuée à la cible).
 
 ---
 
@@ -292,6 +331,15 @@ métadonnées, §8) ; les valeurs d'en-tête porteuses de credentials (`identity
 sont passés en DEBUG (compte seul en INFO, L026 correctif #4). `/ping` est volontairement minimal : il
 **n'expose pas** la config de stockage (connexion, project key, noms de tables) car il est atteignable sans
 authentification (`routes.py:101-107`) ; `storage_status()` n'est accessible qu'aux admins via `/admin/storage`.
+
+**Analytics d'usage - vie privée (best-effort, `POST /track`, `storage/events.py`, mémoire L125) :** le
+tracking produit ne capture **jamais** de contenu. Les hooks front n'émettent que des **métadonnées** : une
+recherche est réduite à sa **longueur** (`{len}`, jamais le terme saisi) et les events d'erreur portent le
+**chemin sans query string** (le fix HIGH de la revue adversariale L125 : une query string pouvait porter des
+PII). Côté serveur, `validate_events` n'accepte que des **noms d'events whitelistés** (`EVENT_CATEGORIES`,
+source de vérité ; un nom inconnu/forgé est droppé en silence) et **cape** les props (`MAX_PROPS_JSON_CHARS`) et
+la taille de batch ; `record_events` fait un unique INSERT `ON CONFLICT DO NOTHING`. La route **ne renvoie
+jamais 500** (best-effort) et **droppe** les events émis pendant une impersonation admin.
 
 **Codes d'erreur stables, sans détail interne :** `ValidationError(code)` renvoie un code machine stable et sûr
 (jamais d'interne) au front (`validation.py:20-26`). Notamment, le rating de feedback **rejette explicitement les

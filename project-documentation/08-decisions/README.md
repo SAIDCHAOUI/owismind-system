@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADR) - index
 
-> Audience: developer, architect. Last updated: 2026-06-19. Summary: this document explains what an ADR
-> is, the format adopted in OWIsMind, and indexes the 15 structuring decisions of the project with their
+> Audience: developer, architect. Last updated: 2026-07-06. Summary: this document explains what an ADR
+> is, the format adopted in OWIsMind, and indexes the 21 structuring decisions of the project with their
 > status and a link to the detailed record.
 
 ## What this section is for
@@ -60,8 +60,14 @@ Status convention used in the index table:
 | 0013 | Agent profiles are admin-authored (no hardcoded copy) | Accepted | [0013](0013-agent-profiles-admin-authored.md) |
 | 0014 | Monthly rolling budget and per-user quota overrides | Accepted (in flux) | [0014](0014-monthly-budget-and-per-user-quotas.md) |
 | 0015 | The Orange charter: sober design system for the UI | Accepted (in flux) | [0015](0015-orange-charter-ui.md) |
+| 0016 | Ephemeral response modes (Smart default, reset on send, mode stamped per answer) | Accepted (DSS) | [0016](0016-ephemeral-response-modes.md) |
+| 0017 | Usage analytics in a single SQL events table (not file-per-event) | Accepted (DSS) | [0017](0017-usage-analytics-events-table.md) |
+| 0018 | Benchmark in a separate DSS project (OWIsMind_LAB); plugin consults only | Accepted (DSS, phased) | [0018](0018-benchmark-separate-lab-project.md) |
+| 0019 | DEV / PROD_V1 agent split with scripted regeneration for promotion | Accepted | [0019](0019-dev-prod-agent-promotion.md) |
+| 0020 | Admin impersonation kept as a fenced, temporary feature for the beta | Accepted (DSS, temporary) | [0020](0020-impersonation-temporary-for-beta.md) |
+| 0021 | Source Data aggregates always computed DB-side on the full filtered set | Accepted | [0021](0021-source-data-aggregates-db-side.md) |
 
-> Numbering: the index table follows the file numbering `0001` to `0015`. The research material
+> Numbering: the index table follows the file numbering `0001` to `0021`. The research material
 > (`.workdir/research/decisions-history.md`) numbers from `ADR-01` to `ADR-14` because it groups some
 > neighboring decisions under two records (for example the hybrid data engine and the grounding, or the
 > orchestrator "route, do not deny"). The content is the same; only the split into delivered files

@@ -1,7 +1,7 @@
 # My account and budget
 
 > Audience: business user (analyst, sales representative, OWI/Orange manager). Last updated:
-> 2026-06-19. Summary: how to view and change your theme and language, understand your profile,
+> 2026-07-06. Summary: how to view and change your theme and language, understand your profile,
 > read the monthly budget gauge (spent / limit / remaining / reset date), and what happens when
 > the budget is exhausted.
 

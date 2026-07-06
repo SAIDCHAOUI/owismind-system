@@ -1,16 +1,25 @@
 # Build, packaging and deployment
 
-> Audience: Developer, operator. Last updated: 2026-06-19. Summary: how to go from source code to a running
+> Audience: Developer, operator. Last updated: 2026-07-06. Summary: how to go from source code to a running
 > DSS plugin, through the two steps `/build-plugin` then `/package-plugin`, the manual upload of the zip, and
 > the clear decision of when to restart the backend or re-paste the agents.
 
 OWIsMind is deployed through three independent flows: the Vue/Vite frontend compiles into static assets, the
-Flask backend and the webapp ship in a plugin zip, and the two LangGraph Code Agents are pasted by hand into
-DSS (Python 3.11 environment). This page describes the full release cycle and provides the decision matrix
-of "what to rebuild, what to restart, what to re-paste" depending on what you changed.
+Flask backend and the webapp ship in a plugin zip (currently version **1.1.0**), and the LangGraph Code
+Agents are pasted by hand into DSS (Python 3.11 environment). This page describes the full release cycle and
+provides the decision matrix of "what to rebuild, what to restart, what to re-paste" depending on what you
+changed.
 
 Cardinal rule: building does not package, packaging does not upload, and the agent never uploads. Uploading
 the zip and pasting the Code Agents are manual operations performed by the operator.
+
+> The end-to-end **production runbook** for promoting the plugin + agents to the `OWISMIND_PROD_V1`
+> project is [docs/DEPLOY_PROD_V1_1.md](../../docs/DEPLOY_PROD_V1_1.md) (plugin upload, prod project +
+> datasets, agent scenarios A/B, smoke tests). During development a coexisting **DEV copy of the plugin**
+> (id `owismind_dev`, separate from prod) is built from the single source by
+> `python3 tools/build_dev_plugin.py` / the `/package-plugin-dev` skill, so you can install it alongside
+> prod and validate before promoting. Never build or package the prod zip until the user validates DEV
+> and asks to promote (prod lives in git and is regenerable).
 
 ## 1. The two-step pipeline
 
@@ -69,8 +78,8 @@ bundle, and that hash changes on every build. Without the copy of `index.html` t
 `body.html` that points to an old hash, hence assets returning 404. After the copy, `body.html` must be
 identical to the built `index.html`. The asset hashes change on every build; the exact entries in the
 current `body.html` are therefore representative, not permanent. The reference is the hash embedded in
-`body.html` and `resource/owismind-app/` after the last `/build-plugin` run (currently `index-BHeG2NRY.js`
-as of 2026-06-19).
+`body.html` and `resource/owismind-app/` after the last `/build-plugin` run (see the
+`resource/owismind-app` build output for the current bundle name).
 
 The skill uses an allowed Bash `cp`. Depending on context, that `cp` may be refused: the documented fallback
 is to write `body.html` via the `Write` tool. This is gotcha F10 of the project memory.
@@ -114,13 +123,13 @@ the import of the API blueprint at runtime (`from owismind.api.routes import reg
 ## 4. What is in the zip, and what is not
 
 The archive is staged from the staging folder, so its canonical content is: `plugin.json` (at the root) +
-`python-lib/` + `resource/` + `webapps/`. Actual verified state of the current archive: 79 entries,
-top-level `plugin.json` / `python-lib/` / `resource/` / `webapps/`, verdict "ZIP clean" (zero pollution), 6
-`__init__.py` preserved (the by-name glob correctly protects the `__init__.py`).
+`python-lib/` + `resource/` + `webapps/`. Actual verified state of the current archive: **95 entries**
+(prod v1.1.0), top-level `plugin.json` / `python-lib/` / `resource/` / `webapps/`, verdict "ZIP clean"
+(zero pollution), the `__init__.py` preserved (the by-name glob correctly protects them).
 
 | Element | In the zip? | Note |
 |---|:--:|---|
-| `plugin.json` | yes | at the ROOT of the archive (id `owismind`, version `0.0.1`) |
+| `plugin.json` | yes | at the ROOT of the archive (id `owismind`, version `1.1.0`) |
 | `python-lib/owismind/**` (the Flask backend) | yes | the 6 sub-packages: `agents`, `api`, `evidence`, `security`, `storage` + root |
 | `resource/owismind-app/**` (built frontend) | yes | this is the payload served by DSS |
 | `resource/compute_available_connections.py` | yes | the webapp `paramsPythonSetup` (populates the Settings dropdowns) |
@@ -137,15 +146,18 @@ presence for a STANDARD webapp. `app.js` contains only a comment ("Vue/Vite appl
 body.html") and `style.css` an empty-slot comment; all the styling ships in the Vite bundle scoped on
 `App.vue`.
 
-> IN FLUX: the entry count and the list of hashed assets change on every build. The current archive holds
-> **79 entries** (as of 2026-06-19, build `index-BHeG2NRY.js`). The reference docs `docs/` sometimes
-> mention older counts (for example "77" or "64 entries"): the code and the memory take precedence; always
+> The entry count and the list of hashed assets change on every build. The current prod v1.1.0 archive
+> holds **95 entries** (see the `resource/owismind-app` build output for the current bundle hash). Older
+> docs sometimes mention smaller counts ("64", "79"): the code and the memory take precedence; always
 > count the actual zip after packaging.
 
 ## 5. The Code Agents: a separate deployment (outside the zip)
 
-The two LangGraph agents live in `dataiku-agents/agents/` (the repository is the source of truth) and are
-pasted by hand into DSS Code Agents, on the Python 3.11 code env. They NEVER go through the zip.
+The LangGraph agents live under `dataiku-agents/OWISMIND/`, split per DSS project into `OWISMIND_DEV/`
+and `OWISMIND_PROD_V1/` (the repository is the source of truth). You develop in DEV, then promote to
+PROD_V1 with `python3 tools/promote_agents_to_prod.py` (regenerates the PROD files from DEV, PROD ids
+baked in, tickets block removed). They are pasted by hand into DSS Code Agents on the Python 3.11 code
+env and NEVER go through the zip. Full runbook: [docs/DEPLOY_PROD_V1_1.md](../../docs/DEPLOY_PROD_V1_1.md).
 
 ### 5.1 Why a second Python environment
 
@@ -157,41 +169,42 @@ and `langgraph`, never the plugin. This is the Python 3.9 / 3.11 "dual path".
 
 ### 5.2 Pasting procedure
 
-1. Edit the file(s) in `dataiku-agents/agents/`, run the tests
-   (`python3 -m unittest discover -s dataiku-agents/tests`).
-2. Re-paste BOTH Code Agents when one changes: `agents/OWIsMind_orchestrator.py` to the
-   **OWIsMind_orchestrator** Code Agent, and `agents/SalesDrive_revenue_expert.py` to the
-   **SalesDrive_revenue_expert** Code Agent (`agent:bHrWLyOL`), on the Python 3.11 env. The two are
+1. Edit the DEV file(s) in `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/`, run the tests
+   (`python3 -m unittest discover -s dataiku-agents/tests`, 316 tests).
+2. Re-paste BOTH Code Agents when one changes: `OWISMIND_DEV_OWIsMind_orchestrator.py` to the
+   **OWIsMind_orchestrator** Code Agent (`038G7mlF`), and `OWISMIND_DEV_SalesDrive_revenue_expert.py` to
+   the **SalesDrive_revenue_expert** Code Agent (`bHrWLyOL`), on the Python 3.11 env. The two are
    re-pasted together because the orchestrator resolves the sub-agent by id and some fixes live on both
-   sides.
+   sides. To promote: run `promote_agents_to_prod.py`, then paste the `OWISMIND_PROD_V1_*` files into the
+   PROD Code Agents (`Xrv7GvfG` orchestrator, `uO5hEzAs` revenue expert).
 3. Verify the config ids against the instance (section 5.3).
 4. Optional: set `source_url` on the `revenue_expert` capability of the orchestrator registry to make the
    Evidence source clickable.
 5. If `python-lib` also changed, rebuild, package, upload the zip and restart the backend. An agent-only
    change requires NO zip upload (the webapp resolves the orchestrator by id via the server whitelist).
 
-The Flow recipes (`dataiku-agents/recipes/`) are deployed as Python recipes in the Flow and refreshed by a
-scenario; they are not re-pasted like the agents.
+The Flow recipes (`dataiku-agents/OWISMIND/OWISMIND_<PROJ>/recipes/`, identical across projects) are
+deployed as Python recipes in the Flow and refreshed by a scenario; they are not re-pasted like the agents.
 
 ### 5.3 The LLM Mesh ids to verify after pasting
 
 A wrong model id simply makes the corresponding mode not respond. To re-verify against the LLM Mesh
 connection of the instance after each pasting:
 
-| Constant (orchestrator and sub-agent) | Mode / role |
-|---|---|
-| `GEMINI_FLASH_LITE_ID` | eco mode (default) |
-| `GEMINI_FLASH_ID` | medium mode |
-| `SONNET_ID` | high mode, and the model of the Semantic Model Query tool in ALL modes |
-| `SEMANTIC_TOOL_ID` (`v4oqA6R`) | the Semantic Model Query tool called at runtime |
-| `agent:bHrWLyOL` | id of the sub-agent resolved by the orchestrator |
+| Constant (orchestrator and sub-agent) | Mode / role | DEV id | PROD_V1 id |
+|---|---|---|---|
+| `GEMINI_FLASH_LITE_ID` | eco / Smart mode (default) | - | - |
+| `GEMINI_FLASH_ID` | medium / Pro mode | - | - |
+| `SONNET_ID` | high / Claude mode, and the Semantic Model Query tool in ALL modes | - | - |
+| `SEMANTIC_TOOL_ID` | the Semantic Model Query tool called at runtime | `v4oqA6R` | `sgk5pfln` |
+| revenue sub-agent `agent_id` | resolved by the orchestrator | `agent:bHrWLyOL` | `agent:uO5hEzAs` |
+| `LOOKUP_TOOL_ID` | `attribute_lookup` built-in | `UUoynaL` | `szOZCoU` |
 
-> IN FLUX: `dataiku-agents/` is being edited live. The managed tool `dataset_lookup` (`9FEzVZk`) and the
-> `lookup` intent were REMOVED on 2026-06-18. Their replacement `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`) is wired as a BUILT-IN in the orchestrator (dispatched inline in
-> `node_tools`, DSS test-run validated). `DRIVE_Revenues_Value_Catalog` is USED by `attribute_lookup` as
-> an alias-fallback catalog. The Custom Python tool `Drive_Revenues_resolve_filter_value` is SUPERSEDED
-> and pending deletion from DSS.
+> The managed tool `dataset_lookup` (`9FEzVZk`) and the old `lookup` intent were removed; their
+> replacement `attribute_lookup` (`OWISMIND_<PROJ>_attribute_lookup_tool.py`) is wired as a BUILT-IN in the
+> orchestrator (dispatched inline in `node_tools`) and live in both projects.
+> `DRIVE_Revenues_Value_Catalog` is used by `attribute_lookup` as an alias-fallback catalog. The old
+> `Drive_Revenues_resolve_filter_value` tool is superseded and pending deletion from DSS.
 
 The detail of the agent layer and its editing lives in
 [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md).
@@ -251,9 +264,10 @@ DSS action to perform after upload.
 | `python-lib/owismind/**` or `backend.py` | no | yes | yes | **yes** | no |
 | `webapps/.../webapp.json` or slots `app.js`/`style.css` | no | yes | yes | yes if `webapp.json` touches the backend | no |
 | `plugin.json` (version / meta) | no | yes | yes | no | no |
-| `dataiku-agents/agents/**` (one agent) | no | no | no | no | **yes (both)** |
+| `dataiku-agents/OWISMIND/**/agents/**` (one agent) | no | no | no | no | **yes (both)** |
 | agent + `python-lib` together | depending on the frontend | yes | yes | yes | yes (both) |
-| `dataiku-agents/recipes/**` (Flow) | no | no | no | no | no (refresh by scenario) |
+| `dataiku-agents/OWISMIND/**/recipes/**` (Flow) | no | no | no | no | no (refresh by scenario) |
+| promote agents DEV -> PROD_V1 | no | no | no | no | run `promote_agents_to_prod.py`, paste PROD files |
 
 In one sentence for each case:
 

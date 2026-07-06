@@ -1,24 +1,23 @@
 # Runtime flows
 
-> Audience: developer. Last updated: 2026-06-19. Summary: this document is the canonical home
+> Audience: developer. Last updated: 2026-07-06. Summary: this document is the canonical home
 > for OWIsMind's runtime sequence diagrams (full chat turn, streaming-by-polling transport,
 > artifact pipeline, Evidence panel opening), each one explained step by step beneath the diagram.
 
 This document is the central reference for understanding what happens, in order and between which
 actors, when a user sends a message. The other documents (API, backend streaming, frontend
 communication, agents) point here rather than redrawing these sequences. Every actor named is real:
-the Vue frontend, the Flask backend (`python-lib/owismind`), the two LangGraph Code Agents
-(`OWIsMind_orchestrator` and `SalesDrive_revenue_expert`, `agent:bHrWLyOL`) called through LLM
-Mesh, the Semantic Model Query tool (`revenue_semantic_query`, `v4oqA6R`), and PostgreSQL (connection
-`SQL_owi`).
+the Vue frontend, the Flask backend (`python-lib/owismind`), the LangGraph Code Agents
+(`OWIsMind_orchestrator` DEV `038G7mlF` / PROD `Xrv7GvfG` and `SalesDrive_revenue_expert` DEV
+`agent:bHrWLyOL` / PROD `agent:uO5hEzAs`) called through LLM Mesh, the Semantic Model Query tool
+(`revenue_semantic_query`), and PostgreSQL (connection `SQL_owi`).
 
-> IN FLUX: the `dataiku-agents/` layer is being edited live. The Code Agents that PRODUCE the raw
-> events (NARRATION / AGENT_DONE / ARTIFACT, SQL tags) may evolve. The contract of the NORMALIZED
-> events described here (the format the python-lib backend emits to the front) is, by contrast,
-> stable. The managed tool `dataset_lookup` (`9FEzVZk`) and the `lookup` intent were REMOVED on
-> 2026-06-18; their replacement `attribute_lookup` is built and now wired as a built-in tool of the
-> orchestrator, with `LOOKUP_TOOL_ID` still empty (so not operational until the tool is created in
-> DSS). None of these elements appear in the flows below.
+> The `dataiku-agents/OWISMIND/` layer is split DEV / PROD_V1 (develop in DEV, promote via
+> `tools/promote_agents_to_prod.py`). The contract of the NORMALIZED events described here (the format
+> the python-lib backend emits to the front) is stable. The managed tool `dataset_lookup` (`9FEzVZk`)
+> and the `lookup` intent were REMOVED on 2026-06-18; their replacement `attribute_lookup` is built and
+> wired as a built-in tool of the orchestrator, with `LOOKUP_TOOL_ID` filled in DEV (`UUoynaL`). None of
+> these elements appear in the flows below.
 
 ---
 
@@ -344,6 +343,18 @@ sequenceDiagram
 > execution time are "what the agent actually used". Historical exchanges predating the trust layer have
 > neither tags nor `result`: the evidence degrades gracefully. The per-dataset source URL mapping for
 > multi-source is deferred (only the single-source case attaches `source.url`).
+
+### The aggregates pipeline (Source Data Explorer, no AI)
+
+The Source Data Explorer computes figures the same read-only, structured way, with NO agent involved.
+`POST /source/aggregate` (raw dataset) and `POST /evidence/aggregate` (exactly the SQL-filtered
+evidence scope) take a STRUCTURED spec: whitelisted functions (`count`, `count_distinct`, `sum`, `avg`,
+`median`, `min`, `max`), optional group-by, and the same structured filters as the rows routes. The
+shared engine (`evidence/aggregate_core.py`) type-gates each function against the LIVE schema, caps the
+number of groups with a mandatory `LIMIT 50`, and runs a separate totals query so percentages are exact.
+Every figure is a DB aggregate over the COMPLETE filtered set, never over the displayed page. The
+matching page rows come from `POST /source/rows`, distinct value pickers (cascading) from
+`POST /source/distinct`. All inherit the read-only + `statement_timeout` + per-user throttle chain.
 
 ---
 

@@ -51,8 +51,10 @@ main.js                       # createApp + pinia + i18n + router ; pose body[da
                               #   expose window.__pinia en DEV (tree-shaké en prod)
 App.vue                       # shell racine : <AppLayout/> + <ToastHost/> ; session.ensureLoaded() au mount
 
-services/
+services/                     # client backend + analytics
   backend.js                  # client backend (fetch via getWebAppBackendUrl) - 1 fn par route, jamais d'URL en dur
+  track.js                    # analytics d'usage : app_session_id/seq, flush 5s/20, sendBeacon pagehide, no-op impersonation
+  trackModel.js               # PUR : queue/drain/limiteur d'events (testé node:test)
 
 router/
   index.js                    # vue-router HASH ; routes + guard admin (beforeEach)
@@ -60,7 +62,7 @@ router/
 i18n/
   index.js                    # createI18n(legacy:false) ; merge des catalogues domaine ; setLocale/currentLocale
   messages.json               # port 1:1 de la maquette d'origine (window.OWI_I18N) - PRISTINE, jamais édité
-  extra.js                    # ajouts Phase 3/4 (clé-plate par locale), mergés dans vue-i18n
+  extra.js                    # ajouts domaine (clé-plate par locale), mergés dans vue-i18n
   langs.json                  # liste des locales [{id,label,short,flag,htmlLang}]
 
 styles/
@@ -70,38 +72,58 @@ styles/
 stores/                       # Pinia (setup stores) - voir §3
   ui.js  session.js  chat.js  conversationList.js  conversationTree.js  agentPick.js  prefs.js
   evidence.js                 # panneau Evidence Studio - voir §6
+  sources.js                  # Source Data Explorer (datasets bruts par agent : chips/rows/distinct/agrégats/vues)
+  screenContext.js            # contexte écran consenti -> agent ([ON SCREEN NOW])
+  promptContext.js            # chips de contexte « Utiliser cette valeur » appendées au message
+  benchmark.js                # consultation benchmark (résultats + détail de tentative)
 
 composables/                  # logique réutilisable - voir §4
   timelineModel.js  useChatStream.js  useMarkdown.js  useToasts.js
   useClickOutside.js  useReducedMotion.js  useTr.js
   evidenceModel.js            # modèle PUR Evidence (chips/payload/modified) - voir §6
+  aggregateSurface.js         # factory PURE des surfaces d'agrégat (2 hôtes : Source + Evidence)
+  sourceModel.js  sourceViewMemory.js   # PURS : payloads Source + persistance des vues par (agent,dataset)
+  evidenceProof.js  budgetModel.js  benchmarkResults.js   # PURS : preuve / budget / view-model benchmark
+  screenContextModel.js  promptContextModel.js  sqlPretty.js   # PURS : contexte écran, chips prompt, format SQL
 
 registries/                   # données statiques enregistrées (extensible = ajouter une entrée)
-  agentMeta.js  timelineSteps.js  faqContent.js
+  timelineSteps.js  faqContent.js
 
 components/
   ui/                         # primitives mutualisées + barrel index.js
-    Icon.vue (+icons.js)  Button.vue  Tabs.vue  Menu.vue  Modal.vue  ToastHost.vue
+    Icon.vue (+icons.js)  Button.vue  Tabs.vue  Menu.vue  Modal.vue  ToastHost.vue  DataLoader.vue
   shell/                      # ossature de l'app
-    AppLayout.vue  Sidebar.vue  MainTop.vue
+    AppLayout.vue  Sidebar.vue  MainTop.vue  AuthGate.vue
   chat/                       # surface de chat
-    AgentPicker.vue  PromptBar.vue  MessageUser.vue  MessageAgent.vue
-    ChatThread.vue  ChatEmpty.vue  FeedbackModal.vue
-  evidence/                   # Evidence Studio (panneau de preuve) - voir §6
-    EvidencePanel.vue  EvidenceChips.vue  EvidenceTable.vue  EvidenceSql.vue
+    AgentPicker.vue  PromptBar.vue  MessageUser.vue  MessageAgent.vue  ChatThread.vue
+    ChatEmpty.vue  FeedbackModal.vue  ModelModePicker.vue  ScreenContextDetail.vue
+  evidence/                   # Evidence Studio + artefacts natifs - voir §6
+    EvidencePanel.vue  EvidenceChips.vue  EvidenceTable.vue  EvidenceSql.vue  EvidenceTrust.vue
+    EvidenceResult.vue  EvidenceCalc.vue  EvidenceSources.vue  EvidenceSourcesTab.vue
+    ArtifactChart.vue  ArtifactTable.vue  ArtifactKpi.vue
+  sources/                    # Source Data Explorer (datasets bruts par agent) - voir §6/backend §3.7
+    SourceExplorer.vue  SourcePanel.vue  SourceTable.vue  SourceChips.vue  SourceCalc.vue
+    SourceAnalyze.vue  ColumnMenu.vue  CellActionPopover.vue  RangePopoverFields.vue
   pages/                      # fondations des pages secondaires + barrel index.js
     PageShell.vue  EmptyState.vue  SettingCard.vue
 
+features/                     # features fencées (activables/retirables en bloc)
+  admin-impersonate/          # impersonation admin TEMPORAIRE (bêta) - lecture seule, gardée serveur
+    impersonation.js  UserPicker.vue  ImpersonateBanner.vue
+
 views/                        # une vue par route (lazy-loadées par le router)
-  ChatView.vue  SettingsView.vue  FeedbackView.vue  FaqView.vue
-  AgentsView.vue  ProjectView.vue  AdminView.vue  PagePlaceholder.vue
+  ChatView.vue  SettingsView.vue  FeedbackView.vue  FaqView.vue  AgentsView.vue
+  ProjectView.vue  AdminView.vue  BenchmarkSuggestView.vue  PagePlaceholder.vue
 
 assets/
   orange-logo.png
 
 test/                         # HORS src/ (jamais buildé/zippé) - node:test pur (`npm test`)
-  timeline.test.js  prefs.test.js  conversationTree.test.js
-  conversationList.test.js  agentPick.test.js  evidenceModel.test.js
+  timeline.test.js  prefs.test.js  conversationTree.test.js  conversationList.test.js
+  agentPick.test.js  evidenceModel.test.js  evidenceProof.test.js  aggregateSurface.test.js
+  sourceModel.test.js  sourceViewMemory.test.js  sourceAnalyze.test.js  budgetModel.test.js
+  benchmarkResults.test.js  screenContextModel.test.js  promptContextModel.test.js
+  sqlPretty.test.js  track.test.js  i18nExtraParity.test.js
 ```
 
 ---

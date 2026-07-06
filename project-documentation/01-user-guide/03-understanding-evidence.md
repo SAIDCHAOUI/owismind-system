@@ -1,8 +1,10 @@
 # Understanding Results (Evidence Studio)
 
-> Audience: business user. Last updated: 2026-06-19. Summary: this guide explains the Evidence Studio
+> Audience: business user. Last updated: 2026-07-06. Summary: this guide explains the Evidence Studio
 > panel (trust badge, sources, calculation, captured result, drill, exploration, collapsed SQL,
-> Chart/Table/KPI tabs) and why every figure shown comes from a real SQL result, never from a fabrication.
+> Chart/Table/KPI tabs), the Source Data Explorer (filters, compute, date ranges), the "attach the
+> on-screen view to my question" consent banner, and why every figure shown comes from a real SQL
+> result, never from a fabrication.
 
 ## What Evidence Studio is for
 
@@ -143,6 +145,44 @@ filter, add a filter column, and observe the matching rows.
 Important: this exploration re-reads **today's** data. If the data has changed since the response, the rows
 here may differ from those the agent saw. To know exactly what the agent used, rely on the "Result used by
 the agent" section above.
+
+## The Source Data Explorer (browse the raw dataset, no AI)
+
+Beyond the evidence of one answer, OWIsMind lets you explore an agent's **raw source dataset** directly,
+with no AI involved. You reach it from the "Source data" tab of the Evidence panel, or from a dedicated
+panel on the New Conversation screen. Everything here is a plain database read: no model, no cost.
+
+- **Searchable, two-step filters.** Filter any column: pick from its distinct values (searched
+  accent-insensitively) or type a value. Filters **cascade** (once you filter one column, the value
+  pickers of the other columns only offer values that still exist under that filter). Date-valued columns
+  offer a **date-range** filter (two month pickers, or "Full year") instead of a value list.
+- **Calculer (compute figures).** A "Calculer" zone computes real database aggregates over the **full
+  filtered set** (count, count distinct, sum, average, median, min, max), never over the page shown on
+  screen. You choose which measures to compute. An "Analyser" action breaks a measure down by a chosen
+  column into chronological or logical buckets.
+- **Per-column menu and 3-state sort.** A discreet chevron on each column header opens a menu: sort
+  ascending, descending, or not at all (3-state), and "Filter this column..." (which opens the same value
+  picker pre-set on that column). Filtered columns are highlighted in orange.
+- **Cell to agent, and view persistence.** From a cell you can "Filter on this value" or "Use this value
+  for the agent" (it is appended to your next message). Your explored view (filters, search, sort,
+  computed measures) is **remembered per agent and per dataset**, so closing and reopening the panel
+  restores exactly what you had.
+
+> Golden rule: every figure the explorer shows is a database aggregate over the **complete filtered set**,
+> not over the visible rows. This is why the totals stay correct even while you scroll a paged table.
+
+## Attaching your on-screen view to a question (consent banner)
+
+When you have shaped a Source Data view (filters, a computed total, a date range) and start typing a
+question, a **consent banner** appears above the input bar offering to attach that on-screen view to your
+message. Nothing is sent without your explicit click:
+
+- If you **Include** it, a removable "On-screen data" chip is added; the agent then receives a compact,
+  bounded description of what is on your screen (the dataset name, your filters, and the figures you
+  computed, framed as already-grounded data) so it can reason over the numbers you are looking at. You can
+  click the chip to preview the exact snapshot, and remove it before sending.
+- If you decline, the banner does not reappear until the on-screen view actually changes. Raw data rows
+  are never sent, only a short description of the filters and the computed figures.
 
 ## Technical details (SQL)
 

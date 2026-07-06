@@ -1,16 +1,27 @@
 # Backend - Evidence Studio and artifacts
 
-> Audience: backend developer. Last updated: 2026-06-19. Summary: how the backend
+> Audience: backend developer. Last updated: 2026-07-06. Summary: how the backend
 > re-derives, in a purely deterministic way (zero LLM), the "evidence" behind an agent answer (badge,
 > sources, chips, explanation, captured result, drill, SQL) and reconstructs the artifacts (chart /
-> table / kpi) while strictly separating signal from data.
+> table / kpi) while strictly separating signal from data. Also covers the shared aggregation planner
+> (`aggregate_core.py`, behind `/evidence/aggregate` and `/source/aggregate`) and the Source Data
+> Explorer (`source_service.py`, `/source/*`) that reuse the same read-only, deterministic building
+> blocks.
 
 Evidence Studio is the Evidence panel to the right of the chat. On the backend side, it never asks an LLM
 to "justify" an answer: it re-derives everything, in a PURE and DETERMINISTIC way, from the single SQL
 statement that the sub-agent stored. The stored SQL is the source of truth; at evidence time, nothing
 new is written (with the exception of the artifact specs, persisted once at the end of the run). The
 sources live under `python-lib/owismind/evidence/` (service, sql_parse, sql_explain, capture,
-chart_payload, query_builders, whitelist, throttle) and `python-lib/owismind/storage/artifacts.py`.
+chart_payload, query_builders, whitelist, throttle, `aggregate_core`, `source_service`, `source_search`)
+and `python-lib/owismind/storage/artifacts.py`.
+
+> Two later additions reuse the same building blocks (documented in section 12):
+> `aggregate_core.py` is the SHARED aggregation planner behind both `POST /evidence/aggregate` and
+> `POST /source/aggregate` (whitelisted measures, a type gate from the live schema, a mandatory group
+> cap); `source_service.py` + `source_search.py` are the Source Data Explorer, which browses the raw
+> project datasets an admin attached to an agent (`/source/*`) under the same read-only +
+> `statement_timeout` pre-queries as Evidence.
 
 ## 1. The core principle: separate signal from data
 
@@ -427,6 +438,31 @@ trusted code.
 - Historical exchanges (pre-v2): no tags or `result`; the evidence degrades gracefully.
 - Legacy doc: `docs/evidence-trust-layer.md` still references v2 paths (`webapp_chat_v4`,
   the old orchestrator file); rely on the CODE for the exact names (`webapp_chat_v5`).
+
+## 12. Aggregation planner and the Source Data Explorer
+
+Two 2026-07 additions extend the `evidence/` sub-package with the same "deterministic, read-only,
+never-trust-the-frontend" discipline.
+
+**`aggregate_core.py` (pure, shared planner).** `build_aggregate_plan(columns, colmap, group, measures)`
+turns a STRUCTURED aggregation spec into SQL SELECT expressions. It is the single planner behind BOTH
+`POST /evidence/aggregate` (over the answer's pre-filtered scope) and `POST /source/aggregate` (over a
+raw source dataset). The body never carries SQL: measures are whitelisted (count / count_distinct / sum
+/ avg / median / min / max), each gated against the column's type from the LIVE schema, and the grouping
+is capped (a mandatory LIMIT on the number of groups) so a high-cardinality group-by can never explode.
+Every figure it produces is a database-EXACT total over EVERY row of the filtered set, never over the
+paginated window the table shows (the product rule: "any figure shown is a DB computation on the full
+filtered set").
+
+**`source_service.py` + `source_search.py` (the Source Data Explorer).** Any authenticated user can
+browse the RAW datasets an admin attached to an agent, before or after prompting. `source_service`
+resolves the opaque agent key + integer source index to a discovered project dataset (never an arbitrary
+table) and runs bounded reads under the same `readonly_pre_queries()` (transaction read-only +
+`statement_timeout`) as Evidence: `source_meta` (label + live columns), `source_rows` (one filtered /
+searched window), `source_distinct` (the CASCADING filter-chip picker: `filters` + `scope_q` restrict
+the offered values to those compatible with the other active filters), and `source_aggregate` (via
+`aggregate_core`). `source_search.build_search_condition` implements the accent-insensitive free-text
+match over all columns. `list_source_dataset_names` feeds the admin picker (`/admin/sources/datasets`).
 
 ## See also
 

@@ -1,6 +1,6 @@
 # Flow recipes and building the expertise
 
-> Audience: agents engineer, data engineer. Last updated: 2026-06-19. Summary: how the Dataiku Flow
+> Audience: agents engineer, data engineer. Last updated: 2026-07-06. Summary: how the Dataiku Flow
 > builds, at DESIGN-TIME, via three Python recipes, the artifacts (profile + value index, plus a value
 > catalog on the roadmap) that turn the sub-agent into an expert on a dataset, and how those artifacts are
 > then consumed at runtime for grounding.

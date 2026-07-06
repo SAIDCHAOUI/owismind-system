@@ -1,7 +1,7 @@
 # Getting Started
 
 > Audience: business user (analysts, sales representatives, OWI/Orange managers). Last updated:
-> 2026-06-19. Summary: how to open OWIsMind in Dataiku DSS, understand the home screen, ask
+> 2026-07-06. Summary: how to open OWIsMind in Dataiku DSS, understand the home screen, ask
 > your first question and find your conversations again, with no technical prerequisites.
 
 OWIsMind is a chat portal that lets you query your business data (first and foremost Orange telecom
@@ -121,7 +121,7 @@ on the timeline.
 
 By default, it is the **orchestrator** that answers: it converses with you, routes your question to the
 appropriate specialist, and writes the analysis. You can also choose a specific agent and a response
-**mode** (eco, medium, high); these settings are explained in
+**mode** (Smart, Pro, Claude); these settings are explained in
 [Using the chat](02-using-the-chat.md).
 
 > IN FLUX: only one domain is genuinely covered by an agent today, that of **revenues**. If you ask a

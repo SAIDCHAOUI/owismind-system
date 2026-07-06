@@ -1,8 +1,9 @@
 # Frontend - components and views
 
-> Audience: frontend developer. Last updated: 2026-06-19. Summary: the Vue 3 component hierarchy
-> (shell, chat, evidence, ui), the routed views (including the new AgentsView + AdminView),
-> the registries, and the rendering guards that govern the sensitive components.
+> Audience: frontend developer. Last updated: 2026-07-06. Summary: the Vue 3 component hierarchy
+> (shell, chat, evidence, sources, ui), the `features/admin-impersonate/` bundle, the routed views
+> (including AgentsView, AdminView and BenchmarkSuggestView), the registries, and the rendering guards
+> that govern the sensitive components.
 
 This document maps the presentation layer: who renders what, how the tree is composed, and which
 non-obvious rendering rules govern the sensitive components (scroll, version navigation, Evidence
@@ -255,6 +256,7 @@ The full pipeline that produces these tabs (agent-side `ARTIFACT` event -> norma
 | `ArtifactChart.vue` | `components/evidence/ArtifactChart.vue` | Chart.js chart (payload built on the Python side). |
 | `ArtifactTable.vue` | `components/evidence/ArtifactTable.vue` | Artifact table (captured result). |
 | `ArtifactKpi.vue` | `components/evidence/ArtifactKpi.vue` | KPI tile. |
+| `EvidenceSourcesTab.vue` | `components/evidence/EvidenceSourcesTab.vue` | The "Source data" tab INSIDE Evidence: hosts the shared Source Data surface (`SourcePanel` + `SourceCalc`/`SourceAnalyze`) bound to the exchange's agent, so a user can explore the raw datasets behind an answer. |
 
 `EvidenceSources.vue` is gated on `meta.source` (a v1 meta without that block renders nothing). The
 clickable link only appears when `source.url` is filled in (Dataiku link configured on the agent, styled
@@ -263,6 +265,40 @@ with `--orange-text` for AA contrast).
 > IN FLUX: the concrete presence of the `'kpi'` tab (and of the `source.url` link) depends on the
 > backend and the agent configuration. On the frontend side everything is wired, but the emission of a
 > `kind: 'kpi'` artifact and the filling of `source.url` are not guaranteed by this layer.
+
+## Sources family (Source Data Explorer)
+
+`components/sources/` implements the Source Data Explorer: browsing the RAW project datasets an admin
+attached to an agent (before or after prompting), driven by the `sources` store and `/source/*`. The
+same surface is hosted in two places: standalone on the New Conversation / home screen, and inside
+Evidence via `EvidenceSourcesTab.vue`. Every figure it shows is a database aggregate over the full
+filtered set, never the visible page.
+
+| Component | File | Role |
+|---|---|---|
+| `SourceExplorer.vue` | `components/sources/SourceExplorer.vue` | Top-level explorer: agent + dataset selector, hosts the panel. |
+| `SourcePanel.vue` | `components/sources/SourcePanel.vue` | The panel: search, filter chips, table, and the Calculer / Analyser surfaces. Reused by `EvidenceSourcesTab`. |
+| `SourceTable.vue` | `components/sources/SourceTable.vue` | The bounded row window, with per-column header menu + 3-state sort; filtered columns rendered in orange. |
+| `SourceChips.vue` | `components/sources/SourceChips.vue` | Editable filter chips (`=` / `IN` / `BETWEEN` date ranges); cascading value picker. |
+| `SourceCalc.vue` | `components/sources/SourceCalc.vue` | The Calculer zone: KPI cards per chosen measure (via `aggregateSurface`), bi-host. |
+| `SourceAnalyze.vue` | `components/sources/SourceAnalyze.vue` | The Analyser zone: grouped aggregates / calendar buckets, bi-host. |
+| `ColumnMenu.vue` | `components/sources/ColumnMenu.vue` | Teleported per-column menu (sort ascending/descending/none, "filter values..."), click-outside + Escape. |
+| `CellActionPopover.vue` | `components/sources/CellActionPopover.vue` | Teleported cell popover: "filter on this value" + "use this value for the agent" (cell-to-prompt). |
+| `RangePopoverFields.vue` | `components/sources/RangePopoverFields.vue` | Shared month-range fields for the date-range filter (also reused by Evidence chips). |
+
+The popovers/menus are Teleported to `body` (to escape any transformed ancestor) and close structurally
+on outside click (including the DSS chrome) and Escape.
+
+## features/admin-impersonate (temporary, removable)
+
+`features/admin-impersonate/` is the FRONTEND surface of the temporary admin "act as user" feature
+(kept for the beta). It is self-contained so it can be removed wholesale.
+
+| Component | File | Role |
+|---|---|---|
+| `impersonation.js` | `features/admin-impersonate/impersonation.js` | The client state + the `X-OWI-Impersonate` header injection on every backend call while active. |
+| `UserPicker.vue` | `features/admin-impersonate/UserPicker.vue` | Admin picker to choose the target user to view as. |
+| `ImpersonateBanner.vue` | `features/admin-impersonate/ImpersonateBanner.vue` | Persistent banner while impersonating (read-only: sending/feedback/budget are blocked server-side). |
 
 ## ui family (shared primitives)
 
@@ -304,6 +340,7 @@ is served at a fixed URL with no server-side SPA rewrite. See the dedicated ADR:
 | `/feedback` | `feedback` | `FeedbackView.vue` | Lazy. |
 | `/faq` | `faq` | `FaqView.vue` | Lazy; fed by `faqContent.js`. |
 | `/agents/:agentId?` | `agents` | `AgentsView.vue` | Lazy. Profiles from backend, NOT from a static registry. |
+| `/benchmark` | `benchmark` | `BenchmarkSuggestView.vue` | Lazy. ALL users (no admin guard): propose golden questions + consult one agent's benchmark results (`/benchmark/*`). |
 | `/project/:projectId` | `project` | `ProjectView.vue` | Lazy. |
 | `/support`, `/releases`, `/accessibility`, `/cgu`, `/privacy`, `/about` | (per target) | `PagePlaceholder.vue` | Help-menu targets, driven by `meta` i18n keys. |
 | `/admin` | `admin` | `AdminView.vue` | `meta.requiresAdmin: true`. |

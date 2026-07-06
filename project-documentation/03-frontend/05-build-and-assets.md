@@ -1,9 +1,10 @@
 # Frontend - build and assets
 
-> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the Vue 3
+> Audience: frontend developer. Last updated: 2026-07-06. Summary: how the Vue 3
 > + Vite frontend is compiled into static assets served by DSS (canonical `base` and `outDir`), how
-> the built `index.html` becomes the webapp's `body.html`, and which rules govern this chain
-> (NO INSTALL, never edit `resource/` by hand, throwaway compile-check).
+> the built `index.html` becomes the webapp's `body.html` (a byte-identical copy carrying the same
+> content hashes), and which rules govern this chain (NO INSTALL, never edit `resource/` by hand,
+> throwaway compile-check).
 
 The OWIsMind frontend is not served by a Node server: it is compiled once into hashed static bundles,
 and those files then travel inside the plugin and are served by Dataiku DSS at a fixed URL. This
@@ -94,9 +95,10 @@ app) lives in `main.js` and is described in
   replaced by the hashed bundles);
 - an `assets/` folder containing the content-hashed bundles: the entry chunk
   `assets/index-<hash>.js`, its CSS `assets/index-<hash>.css`, the lazy chunks per view
-  (`ChatView-<hash>.js`, `AdminView-*`, `AgentsView-*`, `SettingsView-*`, etc., with their twin
-  `.css` files), the shared chunks (`Icon-<hash>.js`, `session-<hash>.js`, `useTr-<hash>.js`,
-  `pages-<hash>.js`, `budgetModel-<hash>.js`) and the image asset `orange-logo-<hash>.png` (Vite
+  (`ChatView-<hash>.js`, `AdminView-*`, `AgentsView-*`, `SettingsView-*`, `BenchmarkSuggestView-*`,
+  etc., with their twin `.css` files), the shared chunks (`Icon-<hash>.js`, `session-<hash>.js`,
+  `useTr-<hash>.js`, `pages-<hash>.js`, `budgetModel-<hash>.js`) and the image asset
+  `orange-logo-<hash>.png` (Vite
   bundles the PNG because `Sidebar.vue` imports it via `import logoUrl from '../../assets/orange-logo.png'`);
 - the `favicon.svg` copied from `public/`.
 

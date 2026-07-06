@@ -1,6 +1,6 @@
 # Runbooks (incident procedures)
 
-> Audience: OWIsMind operator and support. Last updated: 2026-06-19. Summary: nine concrete
+> Audience: OWIsMind operator and support. Last updated: 2026-07-06. Summary: nine concrete
 > symptom -> checks -> resolution procedures for the most frequent failures (silent agent,
 > storage not configured, agent not enabled, mode with no answer, slowness in High, empty chart,
 > non-clickable Evidence source, budget exceeded, agent profile not filled), each with its own checklist.

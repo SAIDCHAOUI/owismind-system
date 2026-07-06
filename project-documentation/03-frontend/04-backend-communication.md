@@ -1,10 +1,11 @@
 # Frontend - backend communication
 
-> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the OWIsMind
+> Audience: frontend developer. Last updated: 2026-07-06. Summary: how the OWIsMind
 > frontend talks to the Flask backend (the `backend.js` client, the complete call catalogue
-> including budget and agent profile routes, the streaming-by-polling loop, applying normalized
-> events to the reactive model, the stop flow, Evidence / artifacts retrieval) and which stable
-> error codes it consumes.
+> including budget, agent profile, Source Data Explorer and benchmark routes, the streaming-by-polling
+> loop, applying normalized events to the reactive model, the stop flow, Evidence / artifacts
+> retrieval), the separate best-effort analytics channel (`services/track.js` -> `/track`), and which
+> stable error codes it consumes.
 
 This page describes the transport layer on the frontend side: the thin HTTP client, the catalogue of backend
 calls, the polling loop that animates a live answer, and the separate channels for Evidence and artifacts.
@@ -76,7 +77,39 @@ All of these functions are exported from `backend.js`. The routes are relative t
 |---|---|---|
 | `fetchEvidenceMeta(exchangeId)` | GET `/evidence/meta?exchange_id=` | interactive meta (see section 5) |
 | `fetchEvidenceRows(payload)` | POST `/evidence/rows` | `{status, rows, page, has_more, ...}` |
-| `fetchEvidenceDistinct(exchangeId, column, excludeId)` | GET `/evidence/distinct?...` | `{status, values, truncated}` |
+| `fetchEvidenceDistinct(exchangeId, column, excludeId, search, extra)` | POST `/evidence/distinct` | `{status, values, truncated}`; `filters`/`scope_q` make the picker cascading |
+| `fetchEvidenceAggregate(payload)` | POST `/evidence/aggregate` | `{status, rows, totals, truncated}` (DB-exact totals over the pre-filtered scope) |
+
+### Source Data Explorer
+
+| Function (export) | Method + route | Response (shape) |
+|---|---|---|
+| `fetchSourceMeta(agentKey, sourceId)` | GET `/source/meta?agent=&source=` | `{status, label, columns}` |
+| `fetchSourceRows(payload)` | POST `/source/rows` | one filtered/searched window |
+| `fetchSourceDistinct(agentKey, sourceId, column, search, filters, scopeQ)` | POST `/source/distinct` | cascading distinct values of one column |
+| `fetchSourceAggregate(payload)` | POST `/source/aggregate` | `{status, rows, totals, truncated}` |
+| `adminListSourceDatasets()` | GET `/admin/sources/datasets` | `{status, datasets}` (admin picker) |
+
+### Benchmark (suggestion + consultation)
+
+| Function (export) | Method + route | Response (shape) |
+|---|---|---|
+| `suggestBenchmarkManual(fields)` | POST `/benchmark/suggest` | `{status, suggestion_id}` (blocked while impersonating) |
+| `suggestBenchmarkFromChat(payload)` | POST `/benchmark/suggest-from-chat` | `{status, suggestion_id}` |
+| `fetchMySuggestions()` | GET `/benchmark/suggestions` | `{status, count, suggestions}` |
+| `fetchBenchmarkResults(agentKey, benchmarkId)` | GET `/benchmark/results?agent=&benchmark_id=` | consultation view-model on the EFFECTIVE verdict |
+| `fetchBenchmarkAttempt(agentKey, keys)` | GET `/benchmark/attempt?agent=&run_id=&question_id=&agent_key=&mode=` | full single-attempt detail (answer + generated SQL + result) |
+| `adminListBenchmarkTables(connection)` | GET `/admin/benchmark/tables` | `{status, tables}` |
+| `adminValidateBenchmarkTable(connection, table)` | POST `/admin/benchmark/validate-table` | `{status, ok, missing?}` |
+| `adminBenchmarkOverride(payload)` | POST `/admin/benchmark/override` | refreshed row (human-in-the-loop verdict override) |
+
+### Usage analytics (separate best-effort channel)
+
+Analytics does NOT go through `backend.js`. `services/track.js` (wrapping the pure `trackModel.js`)
+batches whitelisted events and flushes them to `POST /track` on a 5s timer and, on page hide, via
+`navigator.sendBeacon`. It is best-effort by contract: `track()` NEVER throws, the server always answers
+200, and it is a no-op while an admin impersonates. See [State and stores](02-state-and-stores.md) and
+[Backend - API reference](../04-backend/02-api-reference.md#9-usage-analytics).
 
 ### Agents and agent profiles
 
@@ -147,21 +180,24 @@ body: JSON.stringify({
   agent_key: agentKey,                  // OPAQUE logical key (resolved server-side)
   history_limit: historyLimit,          // re-clamped [10,50] server-side (default 20)
   parent_exchange_id: parentExchangeId || null,   // conversation-tree edge
-  mode: mode || undefined,              // eco / medium / high (server default: eco)
+  mode: mode || undefined,              // smart / pro / claude (ephemeral, resolved server-side)
   webapp_lang: webappLang || undefined, // fr / en (helps choose the answer language)
-  screen_context: screenContext || undefined,     // pointer to "what is on screen"
+  screen_context: screenContext || undefined,     // consented "what is on screen" (Evidence + Source view)
 })
 ```
 
 - `parent_exchange_id` attaches the new exchange into the conversation TREE and bounds the agent's context to
   that branch's ancestor chain. `null` creates a new branch at the root.
-- An unknown or absent `mode` (eco / medium / high) falls back to `medium` server-side (the backend
-  conservative default, verified in `api/routes.py`). The frontend itself defaults to `eco` via
-  `ui.modelMode` (MODELMODE_DEFAULT), so an absent mode reaches the server only in edge cases.
+- `mode` is one of `smart` / `pro` / `claude` (the internal eco/medium/high, renamed). It is EPHEMERAL:
+  the picker always boots to Smart and the chat store resets it after each dispatch; the effective mode
+  is stamped server-side per answer (`chat_v5.mode`). The frontend sends ONLY the logical key, never a
+  model id.
 - `webapp_lang` (the UI language, `ui.lang`) serves only as a tie-break: the language of the message itself
   wins server-side.
-- `screen_context` is built only when the Evidence panel is open (see section 6). It is owner-scoped
-  server-side, so a forged id reveals nothing.
+- `screen_context` is built from the consent-gated `screenContext` store: it carries the open Evidence
+  exchange and/or the current Source Data view the user chose to share (never raw rows). It is
+  owner-scoped server-side, so a forged id reveals nothing; the backend turns it into an
+  `[ON SCREEN NOW]` prompt block.
 
 ## 3. The transport: streaming-by-polling
 

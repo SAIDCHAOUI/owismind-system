@@ -1,9 +1,11 @@
 # Backend - security and validation
 
-> Audience: backend developer, security. Last updated: 2026-06-19. Summary: code-level detail of identity
+> Audience: backend developer, security. Last updated: 2026-07-06. Summary: code-level detail of identity
 > resolution, payload validation (including agent profile sanitization and budget validators), admin gating
-> (403), log hygiene, and defense in depth (sanitize on read AND on write) that implement the security
-> model summarized by the architecture.
+> (403), the TEMPORARY admin impersonation trust boundary (`security/impersonation.py`, read-only), the
+> consolidated `readonly_pre_queries()` guard shared by Evidence and the Source Data Explorer, log
+> hygiene, and defense in depth (sanitize on read AND on write) that implement the security model
+> summarized by the architecture.
 
 This document drops one level below [the security model (architecture)](../02-architecture/04-security-model.md):
 where the latter lays out the trust boundaries and invariants, this page shows the CODE that enforces them,
@@ -179,12 +181,14 @@ The shape helpers `validate_required_exchange_id` (`invalid_exchange_id`) and `v
 
 ### 3.6 `_sanitize_screen_context` (defined in `routes.py`)
 
-`_sanitize_screen_context(raw)` bounds the "what the user is looking at" pointer. A `raw` that is not a dict or
-lacks `open` returns `None`. The `exchange_id` must be `str`/`int` (bool excluded via
-`not isinstance(exch, (str, int)) or isinstance(exch, bool)`), otherwise `None`. The output is
-`{open: True, exchange_id: str(exch)[:128], active_tab: tab if in _SCREEN_TABS else None}`, with
-`_SCREEN_TABS = ("evidence", "chart", "table")`. The worker then reads that exchange's artifacts in
-OWNER-SCOPE: a forged id can only reveal the caller's own data.
+`_sanitize_screen_context(raw)` bounds the "what the user is looking at" pointer. It now recognizes TWO
+independent parts, either of which is sufficient (returns `None` only when neither survives): an open
+Evidence panel (`open` truthy + `exchange_id`, `str`/`int` with bool excluded, `[:128]` + `active_tab`
+in `_SCREEN_TABS = ("evidence", "chart", "table", "kpi", "sources")`) and/or a `source_state` (the
+Source Data Explorer filters/computed figures the user chose to share, sanitized by
+`context.sanitize_source_state`, which never raises and never lets raw rows through). The worker reads
+any referenced exchange's artifacts in OWNER-SCOPE: a forged id can only reveal the caller's own data.
+The UI gates the attachment behind an explicit, dismissible consent banner.
 
 ### 3.7 Agent profile validation: `validate_agent_meta` (FEATURE A, 2026-06-18)
 
@@ -322,6 +326,30 @@ and both become admin: the lock closes that race.
 `if not value and admin.is_admin(target) and admin.count_admins() <= 1` -> `400 cannot_remove_last_admin`.
 You can therefore never lock yourself out of the admin space by mistake.
 
+### 5.4 Admin impersonation ("act as user"): a TEMPORARY, read-only trust boundary
+
+`security/impersonation.py` lets an admin browse the webapp AS another user (to consult that user's
+real interface and conversations for agent improvement). It is TEMPORARY (kept for the beta) and
+self-contained: removing this module plus the fenced `# BEGIN/END impersonation` blocks in
+`api/routes.py` reverts the feature entirely.
+
+Contract (`effective_identity(real_identity)`):
+
+- The frontend sets a single header `X-OWI-Impersonate: <target_user_id>` on EVERY API call while
+  impersonation is active. It is honored server-side ONLY when ALL hold: storage is configured, the
+  target passes `validate_target_user_id`, AND the REAL caller (resolved from the DSS auth headers,
+  never the body) is an admin (`admin.is_admin`). Any failure degrades to the real identity.
+- It NEVER raises. As an optimization it never touches the DB when no header is present, so normal
+  traffic pays no cost.
+- READ routes scope their data to the EFFECTIVE (impersonated) user. WRITE routes are BLOCKED while
+  impersonating (`403 impersonation_read_only`): no `/chat/*` send/stop/feedback, no
+  `/benchmark/suggest*`, no `/admin/benchmark/override`, and `/track` drops analytics events so
+  adoption metrics reflect real users, not admin consultation.
+
+This is a genuine trust boundary: an admin can VIEW another user's data but never act, spend budget, or
+write under that user's name. It rides on top of the existing owner-scoping (the effective `user_id`
+becomes the scoping key for reads), not on per-user DSS rights.
+
 ## 6. Defense in depth: sanitize on read AND on write
 
 The validation at the gateway (section 3) is only one layer. SQL safety relies on central helpers
@@ -342,17 +370,23 @@ and surfaced to the admin via `storage_status()`.
 
 The frontend never chooses table, connection, or query: `physical_table(logical)` and `full_table(logical)`
 only compose names from LOGICAL constants (`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`,
-`webapp_usage_monthly_v1`, `webapp_artifacts_v1`, `webapp_user_quota_v1`), the connection comes from the admin dropdown (never
+`webapp_usage_monthly_v1`, `webapp_artifacts_v1`, `webapp_user_quota_v1`, `webapp_golden_suggestions_v1`,
+`webapp_events_v1`), the connection comes from the admin dropdown (never
 hardcoded), and `new_executor()` RAISES if no connection is configured rather than guessing. There is
 NO generic SQL route. The explicit COMMIT discipline (`post_queries=["COMMIT"]`) and the absence of
 destructive DDL round out the picture (detail in
 [04-backend/04-storage-and-data-model.md](04-storage-and-data-model.md) and
 [ADR-0003](../08-decisions/0003-sql-direct-sans-flow.md)).
 
-Beyond writes, the ONLY surface that re-executes SQL on READ (Evidence) does so in forced read-only mode
-(`SET LOCAL statement_timeout TO '30000'`, `SET LOCAL transaction_read_only TO on`), bounded and with a WHERE
-fragment re-validated on every query. This chain of defenses is documented in
-[04-backend/05-evidence-and-artifacts.md](05-evidence-and-artifacts.md).
+Beyond writes, the surfaces that re-execute SQL on READ (Evidence AND the Source Data Explorer) do so in
+forced read-only mode. Both draw their pre-queries from ONE consolidated helper,
+`sql_config.readonly_pre_queries()`, which returns a FRESH list (a caller that mutates it can never
+corrupt the shared definition) of `SET LOCAL statement_timeout TO '30000'` +
+`SET LOCAL transaction_read_only TO on`: a slow scan can never pin a worker thread of the mono-process
+backend, and any accidental write fails loudly. Every read is bounded and, on Evidence, carries a WHERE
+fragment re-validated on every query. The analytics write path (`storage/events.py`) applies its own
+`SET LOCAL statement_timeout` guard (it persists rows, so it cannot be read-only). This chain of defenses
+is documented in [04-backend/05-evidence-and-artifacts.md](05-evidence-and-artifacts.md).
 
 DSS discovery (listing projects/agents for the admin) is STRICTLY read-only and bounded (`MAX_PROJECTS = 500`,
 `MAX_AGENTS = 200`, an agent = any LLM whose id starts with `AGENT_ID_PREFIX = "agent:"`). No `set_*`/`save`/`delete`

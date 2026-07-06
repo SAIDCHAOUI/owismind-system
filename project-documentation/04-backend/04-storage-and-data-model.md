@@ -1,9 +1,10 @@
 # Backend - storage and data model
 
-> Audience: backend developer, DBA. Last updated: 2026-06-19. Summary: how the OWIsMind backend
-> persists all of its state in direct SQL (PostgreSQL via `SQLExecutor2`), with the detail of each
-> `_vN` table, the conversation tree, the 3-level usage accounting, the per-user monthly budget
-> system, and the instance safety guardrails.
+> Audience: backend developer, DBA. Last updated: 2026-07-06. Summary: how the OWIsMind backend
+> persists all of its state in direct SQL (PostgreSQL via `SQLExecutor2`), with the detail of each of
+> the 8 `_vN` tables (including `webapp_golden_suggestions_v1` and the `webapp_events_v1` analytics
+> table), the conversation tree, the 3-level usage accounting, the per-user monthly budget system, and
+> the instance safety guardrails.
 
 ## 1. Structuring principles
 
@@ -105,9 +106,11 @@ DDL lives ONLY here, never inline in a public route. Tables are created lazily o
 an internal guarded helper `_ensure_table()`. Strategy: a new row format = a new `_vN` table, never a
 structural `ALTER`.
 
-Logical names: `CHAT_V5_LOGICAL = "webapp_chat_v5"`, `USERS_V1_LOGICAL = "webapp_users_v1"`,
+Logical names (8 tables): `CHAT_V5_LOGICAL = "webapp_chat_v5"`, `USERS_V1_LOGICAL = "webapp_users_v1"`,
 `SETTINGS_V1_LOGICAL = "webapp_settings_v1"`, `USAGE_MONTHLY_V1_LOGICAL = "webapp_usage_monthly_v1"`,
-`ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"`, `USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"`.
+`ARTIFACTS_V1_LOGICAL = "webapp_artifacts_v1"`, `USER_QUOTA_V1_LOGICAL = "webapp_user_quota_v1"`,
+`GOLDEN_SUGGESTIONS_V1_LOGICAL = "webapp_golden_suggestions_v1"`, `EVENTS_V1_LOGICAL =
+"webapp_events_v1"`.
 
 Chat table history: v2 (+`generated_sql`) -> v3 (+feedback columns) -> v4
 (+`parent_exchange_id`) -> **v5 (+token/cost usage columns)**. At each switch the new table starts
@@ -116,7 +119,9 @@ surfacing).
 
 ### 3.1 Data model diagram
 
-Canonical home of the SQL data model (this page). The 6 tables and the `parent_exchange_id` tree edge:
+Canonical home of the SQL data model (this page). The 8 tables and the `parent_exchange_id` tree edge
+(the diagram shows the 6 chat/usage/artifact tables; `webapp_golden_suggestions_v1` and
+`webapp_events_v1` are two standalone append-only tables, described in section 3.2):
 
 ```mermaid
 erDiagram
@@ -194,7 +199,7 @@ owner scoping key. The `parent_exchange_id` edge is a logical self-reference (th
 section 7). The `webapp_user_quota_v1` relation is a logical join on `user_id`: a row exists ONLY
 for users who have an admin-set override; absent row = global default applies.
 
-### 3.2 The 6 tables and their columns
+### 3.2 The 8 tables and their columns
 
 **`webapp_chat_v5`**: one chat exchange per row, written in two phases.
 
@@ -220,6 +225,11 @@ for users who have an admin-set override; absent row = global default applies.
 | `output_tokens` | `INTEGER` | completion tokens of the run. |
 | `total_tokens` | `INTEGER` | total tokens of the run. |
 | `estimated_cost` | `DOUBLE PRECISION` | estimated cost of the run. |
+| `mode` | `VARCHAR(16)` | EFFECTIVE response mode of the run (`smart` / `pro` / `claude` / `NULL`), stamped at phase-one write; additive `ADD COLUMN IF NOT EXISTS` (section 3.3). |
+| `screen_ctx` | `TEXT` | durable, consented record of the screen context the user chose to attach (JSON, or `NULL`); additive `ADD COLUMN`. |
+
+The stable read order (`chat_v5._COLUMNS`) ends `..., input_tokens, output_tokens, total_tokens,
+estimated_cost, mode, screen_ctx`.
 
 The name/date prefix and the history injected into the agent are computed at build-time, never stored:
 the stored `user_text` remains the RAW message. The usage columns are **AUTHORITATIVE**:
@@ -264,6 +274,25 @@ An absent table is transparent: the `usage_status` JOIN returns no override row,
 default applies automatically. Per the no-ALTER rule, this is a brand-new `_v1` table; existing
 usage and settings tables are untouched.
 
+**`webapp_golden_suggestions_v1`**: one user-suggested benchmark question/answer per row (the plugin
+side of the benchmark loop; the `OWIsMind_LAB` project reads it cross-project and promotes accepted
+rows into the golden dataset). PK `suggestion_id`. Append-only, owner-scoped on the "my suggestions"
+read. Columns: `user_id`, `source` (`'chat'` or `'manual'`), `exchange_id`, `session_id`, `agent_key`,
+`question`, `agent_answer`, `answer_is_correct` (`BOOLEAN`), `reference_answer` (the answer the user
+vouches for), `missing_explanation`, `expected_value` + `expected_value_type` (a crisp anchor fact),
+`category`, `language`, `generated_sql_json`, `status` (`TEXT NOT NULL DEFAULT 'pending'`), `created_at`,
+`reviewed_by`, `reviewed_at`.
+
+**`webapp_events_v1`**: one product-analytics event per row (fed by `POST /track`). Append-only,
+best-effort. PK `event_id` (client-generated idempotency key, so a `sendBeacon` double-send is an
+`ON CONFLICT DO NOTHING` no-op). Columns: `ts` (`TIMESTAMPTZ NOT NULL`, the authoritative server
+receive time, `now()` inlined at write), `client_ts` + `seq` (nullable, order events WITHIN one
+session only, never trusted as wall-clock), `user_id` (`VARCHAR(128) NOT NULL`, resolved server-side),
+`app_session_id`, `event_name`, `event_category`, `view_name` (named thus because `VIEW` is a reserved
+PG keyword; the client field is still `view`), `conversation_id`, `agent_key`, `mode`, `props` (JSON
+text). Fixed-width columns bound each field at the storage layer, mirroring the `validate_events`
+truncation in `storage/events.py`.
+
 ### 3.3 Additive ADD COLUMN: the only relaxation of no-ALTER
 
 `_ALTERS_BY_LOGICAL` carries only `USERS_V1_LOGICAL`: 4 `ADD COLUMN IF NOT EXISTS` clauses
@@ -274,10 +303,13 @@ already has the column via its `CREATE` DDL.
 
 ### 3.4 Secondary indexes
 
-`_INDEXES_BY_LOGICAL` carries only `CHAT_V5_LOGICAL`: `(user_id, created_at DESC)` (suffix `uc_idx`,
-for the conversation list) and `(user_id, session_id, created_at DESC)` (suffix `usc_idx`, for
-per-session reads). `CREATE INDEX IF NOT EXISTS` is considered ADDITIVE (not a structural ALTER). The
-ancestors CTE walks up by PK `exchange_id`, so no dedicated index.
+`_INDEXES_BY_LOGICAL` carries indexes for three tables. `CHAT_V5_LOGICAL`: `(user_id, created_at DESC)`
+(suffix `uc_idx`, for the conversation list) and `(user_id, session_id, created_at DESC)` (suffix
+`usc_idx`, for per-session reads). `GOLDEN_SUGGESTIONS_V1_LOGICAL`: `(user_id, created_at DESC)` and
+`(status, created_at DESC)` (the LAB cross-project promotion scan). `EVENTS_V1_LOGICAL`: `(ts)`,
+`(user_id, ts)`, `(event_name, ts)` and `(app_session_id, seq)` (the analytics rollups and intra-session
+ordering). `CREATE INDEX IF NOT EXISTS` is considered ADDITIVE (not a structural ALTER). The ancestors
+CTE walks up by PK `exchange_id`, so no dedicated index.
 
 ### 3.5 `_ensure_table()` and the `ensure_*` wrappers
 
@@ -287,7 +319,8 @@ ancestors CTE walks up by PK `exchange_id`, so no dedicated index.
 `query_to_df("SELECT 1 ...", pre_queries=pre, post_queries=["COMMIT"])`. `CREATE TABLE IF NOT EXISTS`
 stays idempotent and concurrency-safe if two requests cross. Public wrappers, called on the first
 write of each domain: `ensure_chat_table()`, `ensure_users_table()`, `ensure_settings_table()`,
-`ensure_usage_monthly_table()`, `ensure_artifacts_table()`, `ensure_user_quota_table()`.
+`ensure_usage_monthly_table()`, `ensure_artifacts_table()`, `ensure_user_quota_table()`,
+`ensure_golden_suggestions_table()`, `ensure_events_table()`.
 
 ## 4. `chat_v5.py`: two-phase write, caps, reads
 

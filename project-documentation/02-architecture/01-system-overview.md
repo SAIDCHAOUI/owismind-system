@@ -1,10 +1,10 @@
 # Architecture overview
 
-> Audience: developer, architect. Last updated: 2026-06-19. Summary: this document
+> Audience: developer, architect. Last updated: 2026-07-06. Summary: this document
 > presents the big picture of OWIsMind (the four layers, their boundaries and their guiding
 > principles) and serves as an entry point into the detailed documentation for each layer.
 
-OWIsMind is a Dataiku DSS plugin (id `owismind`, version `0.0.1`) that delivers a portal for
+OWIsMind is a Dataiku DSS plugin (id `owismind`, version `1.1.0`) that delivers a portal for
 business agentic chat. Its architecture reads as four stacked layers, connected by deliberately
 narrow contracts. This document gives one sentence to each, draws the system context diagram
 (the canonical home of that diagram), states the cross-cutting guiding principles, then points
@@ -16,13 +16,23 @@ to the documents that go deeper into each layer.
 |---|---|---|
 | Vue 3 SPA (frontend) | `Plugin/owismind/frontend/`, built into static assets in `Plugin/owismind/resource/owismind-app/` | Renders the three screen areas (conversations sidebar, chat + timeline, Evidence Studio), sends opaque logical keys to the backend and displays the evidence. |
 | Flask backend (python-lib) | `Plugin/owismind/python-lib/owismind/`, Python 3.9.23 env | A Flask Blueprint mounted under `/owismind-api` that resolves identity, applies the agent whitelist, runs the agent in a worker, persists in direct SQL and re-derives Evidence. |
-| LLM Mesh agent layer (Code Agents) | `dataiku-agents/agents/`, pasted into DSS Code Agents, Python 3.11 env | The `OWIsMind_orchestrator` orchestrator routes to the revenue expert sub-agent `SalesDrive_revenue_expert` (`agent:bHrWLyOL`), both on LangGraph, which produce the answer and the SQL-grounded figures. |
-| PostgreSQL storage (direct SQL) | `SQL_owi` connection (schema `public`), queried via `SQLExecutor2` | Keeps conversations, messages, usage, settings and artifacts in `_vN` tables, with no Flow at runtime (except the write-only trace). |
+| LLM Mesh agent layer (Code Agents) | `dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/`, pasted into DSS Code Agents, Python 3.11 env | The `OWIsMind_orchestrator` orchestrator (DEV `038G7mlF` / PROD `Xrv7GvfG`) routes to the revenue expert sub-agent `SalesDrive_revenue_expert` (DEV `agent:bHrWLyOL` / PROD `agent:uO5hEzAs`), both on LangGraph, which produce the answer and the SQL-grounded figures. A second sub-agent (tickets expert, DEV `agent:NcE9LD2i`) exists in DEV only. |
+| PostgreSQL storage (direct SQL) | `SQL_owi` connection (schema `public`), queried via `SQLExecutor2` | Keeps conversations, messages, usage, settings, artifacts, golden-question suggestions and usage-analytics events in `_vN` tables (8 total), with no Flow at runtime (except the write-only trace). |
 
 The Vue 3 frontend and the Flask backend together form what the documentation calls "the webapp".
-The agent layer is separate: it does not live in the plugin zip, it is pasted by hand into two DSS
-Code Agents from the repository (the source of truth). The backend, for its part, stays
-model-agnostic: it consumes a generic LLM Mesh stream without knowing anything about LangGraph.
+The agent layer is separate: it does not live in the plugin zip, it is pasted by hand into the DSS
+Code Agents from the repository (the source of truth). The Code Agents are duplicated per DSS project
+under `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/`: development happens in DEV, then a
+scripted regeneration (`tools/promote_agents_to_prod.py`) promotes them to PROD. The backend, for its
+part, stays model-agnostic: it consumes a generic LLM Mesh stream without knowing anything about
+LangGraph.
+
+Beyond the core chat, the webapp also serves three subsystems that share the same backend and storage:
+the **Source Data Explorer** (no-AI dataset browsing and DB aggregates, backend `evidence/source_service.py`,
+`source_search.py`, `aggregate_core.py`, routes `/source/*` and `/evidence/aggregate`), the **benchmark
+consultation** page (backend package `benchmark_view/` reading the separate `OWIsMind_LAB` DSS project's
+results cross-project, plus golden-question suggestions in `webapp_golden_suggestions_v1`), and **usage
+analytics** (backend `storage/events.py`, table `webapp_events_v1`, best-effort route `/track`).
 
 ## System context diagram
 
@@ -45,7 +55,7 @@ flowchart TB
     end
 
     subgraph storage["PostgreSQL storage (SQL_owi connection)"]
-        chat[("webapp_chat_v5<br/>webapp_users_v1<br/>webapp_settings_v1<br/>webapp_usage_monthly_v1<br/>webapp_artifacts_v1<br/>webapp_user_quota_v1")]
+        chat[("webapp_chat_v5<br/>webapp_users_v1<br/>webapp_settings_v1<br/>webapp_usage_monthly_v1<br/>webapp_artifacts_v1<br/>webapp_user_quota_v1<br/>webapp_golden_suggestions_v1<br/>webapp_events_v1")]
         trace[("Trace dataset<br/>(write-only, optional)")]
     end
 
@@ -132,13 +142,15 @@ framework [04-security-model.md](04-security-model.md).
 
 ### Repo = source of truth for the agents
 
-The two Code Agents are not packaged in the plugin zip. They live in the repository
-(`dataiku-agents/agents/OWIsMind_orchestrator.py` and `SalesDrive_revenue_expert.py`), which is the
-source of truth, and are pasted by hand into their DSS Code Agents, in a Python 3.11 environment
-(langchain and langgraph are installed there). The runtime contrast is central: the backend runs on
-Python 3.9.23 (Flask, never langchain), while the agent layer requires Python 3.11 for LangGraph. When
-one of the two files changes, BOTH are re-pasted together (some fixes live on both sides), and the
-configuration ids are re-verified after pasting. See
+The Code Agents are not packaged in the plugin zip. They live in the repository under
+`dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/agents/` (files project-prefixed and
+duplicated per DSS project), which is the source of truth, and are pasted by hand into their DSS Code
+Agents, in a Python 3.11 environment (langchain and langgraph are installed there). The runtime
+contrast is central: the backend runs on Python 3.9.23 (Flask, never langchain), while the agent layer
+requires Python 3.11 for LangGraph. Development happens in DEV, then `tools/promote_agents_to_prod.py`
+regenerates the PROD variant (copy + PROD ids + surgical removal of the not-yet-promoted tickets block).
+When the orchestrator or the revenue expert changes, BOTH are re-pasted together (some fixes live on
+both sides), and the configuration ids are re-verified after pasting. See
 [0005-langgraph-code-agents-python-311.md](../08-decisions/0005-langgraph-code-agents-python-311.md)
 and the procedure in
 [05-agents/07-deploying-and-editing-agents.md](../05-agents/07-deploying-and-editing-agents.md).
@@ -190,17 +202,15 @@ The canonical home of the streaming-by-polling diagram is
 > IN FLUX: the agent layer (`dataiku-agents/`) is being edited live by another engineer; some of the
 > details below may diverge from the state of the repository at read time.
 
-- `attribute_lookup` (`dataiku-agents/tools/attribute_lookup_tool.py`) is BUILT and unit-tested, and
-  now WIRED as a BUILT-IN tool of the orchestrator (`LOOKUP_TOOL_NAME`, `_run_lookup` dispatch), but the
-  constant `LOOKUP_TOOL_ID` is still EMPTY: it is therefore not operational until an admin has created
-  the Custom Python tool in DSS and filled in the id (clean degradation to the specialist in the
-  meantime). Its predecessor, the managed tool `dataset_lookup` (`9FEzVZk`) and the `lookup` intent, were
-  REMOVED on 2026-06-18: attribute lookups (for example a client's account manager) are therefore in
-  transition.
+- `attribute_lookup` (Custom Python tool) is BUILT, unit-tested, and WIRED as a BUILT-IN tool of the
+  orchestrator; `LOOKUP_TOOL_ID` is now filled in DEV (`UUoynaL`; an empty value would mean
+  resolve-by-name). Its predecessor, the managed tool `dataset_lookup` (`9FEzVZk`) and the `lookup`
+  intent, were REMOVED on 2026-06-18.
 - `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value` are
-  ROADMAP, NOT wired in v3.
+  ROADMAP, NOT wired in v1.1.
 - The per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`) must match the
-  instance's LLM Mesh connection; a wrong id breaks the corresponding mode and must be verified in DSS.
+  instance's LLM Mesh connection; a wrong id breaks the corresponding mode. The modes are Smart / Pro /
+  Claude (internal keys `smart` / `pro` / `claude`), validated in DSS.
 - The monthly budget quota (50 USD per user per month): BOTH the storage AND the blocking are
   implemented (as of 2026-06-18). The table `webapp_user_quota_v1` holds per-user overrides;
   `storage/budget.py` resolves the effective limit; `POST /chat/start` calls `budget.has_budget`

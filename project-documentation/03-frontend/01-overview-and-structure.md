@@ -1,8 +1,9 @@
 # Frontend - overview and structure
 
-> Audience: frontend developer. Last updated: 2026-06-19. Summary: how the Vue
-> 3 + Vite application starts up (bootstrap, theme set before mount), how `src/` is organized, and how the
-> HASH router, i18n and theming are wired.
+> Audience: frontend developer. Last updated: 2026-07-06. Summary: how the Vue
+> 3 + Vite application starts up (bootstrap, theme set before mount), how `src/` is organized (12 Pinia
+> stores, 17 composables, the `components/sources/` and `features/admin-impersonate/` folders, the
+> `services/track.js` analytics client), and how the HASH router, i18n and theming are wired.
 
 The OWIsMind frontend is a Vue 3 + Vite SPA, located under `Plugin/owismind/frontend/`, built into
 static assets served by Dataiku DSS. This page covers the structure and bootstrapping of the source code;
@@ -32,12 +33,13 @@ graph TD
   SRC --> ROUTER["router/ (index.js, HASH)"]
   SRC --> I18N["i18n/ (index.js, messages.json, extra.js, langs.json)"]
   SRC --> STYLES["styles/ (tokens.css, base.css)"]
-  SRC --> STORES["stores/ (ui, session, chat, evidence, + pure modules)"]
-  SRC --> COMPO["composables/ (useTr, useMarkdown, budgetModel, timelineModel...)"]
+  SRC --> STORES["stores/ (ui, session, chat, evidence, sources, benchmark,<br/>promptContext, screenContext, + pure modules)"]
+  SRC --> COMPO["composables/ (useTr, useMarkdown, budgetModel, timelineModel,<br/>aggregateSurface, sourceModel, sourceViewMemory,<br/>screenContextModel, benchmarkResults, sqlPretty...)"]
   SRC --> REG["registries/ (timelineSteps, faqContent)"]
-  SRC --> SERV["services/ (backend.js)"]
-  SRC --> COMP["components/ (chat, evidence, pages, shell, ui)"]
-  SRC --> VIEWS["views/ (ChatView, SettingsView, AdminView, AgentsView...)"]
+  SRC --> SERV["services/ (backend.js, track.js, trackModel.js)"]
+  SRC --> COMP["components/ (chat, evidence, sources, pages, shell, ui)"]
+  SRC --> FEAT["features/ (admin-impersonate)"]
+  SRC --> VIEWS["views/ (ChatView, SettingsView, AdminView, AgentsView,<br/>BenchmarkSuggestView, ProjectView...)"]
   SRC --> ASSETS["assets/ (orange-logo.png)"]
 ```
 
@@ -48,12 +50,13 @@ graph TD
 | `router/` | HASH router (`index.js`): route table, admin guard. | This page. |
 | `i18n/` | EN/FR i18n: pristine `messages.json` + `extra.js` overrides + `langs.json`. | This page. |
 | `styles/` | Theme layer: `tokens.css` (design tokens, Orange charter), `base.css` (reset + keyframes). | This page. |
-| `stores/` | Pinia state: `ui`, `session`, `chat`, `evidence` + pure modules. | [State and stores](02-state-and-stores.md). |
-| `composables/` | Reusable logic: `useTr`, `useMarkdown`, `budgetModel`, `timelineModel`... | [Components and views](03-components-and-views.md). |
+| `stores/` | Pinia state (12 stores): `ui`, `session`, `chat`, `evidence`, `sources`, `benchmark`, `promptContext`, `screenContext` + pure modules (`prefs`, `conversationList`, `conversationTree`, `agentPick`). | [State and stores](02-state-and-stores.md). |
+| `composables/` | Reusable logic (17 files): `useTr`, `useMarkdown`, `budgetModel`, `timelineModel`, `evidenceModel`, `evidenceProof`, `aggregateSurface`, `sourceModel`, `sourceViewMemory`, `screenContextModel`, `promptContextModel`, `benchmarkResults`, `sqlPretty`, `useChatStream`, `useClickOutside`, `useReducedMotion`, `useToasts`. | [Components and views](03-components-and-views.md). |
 | `registries/` | Extensible data: `timelineSteps`, `faqContent`. (Note: `agentMeta.js` has been DELETED - agent profiles are now admin-authored, see below.) | [Components and views](03-components-and-views.md). |
-| `services/` | `backend.js`: one function per `/owismind-api/*` route. | [Backend communication](04-backend-communication.md). |
-| `components/` | Components by domain: `chat/`, `evidence/`, `pages/`, `shell/`, `ui/`. | [Components and views](03-components-and-views.md). |
-| `views/` | Routed views (lazy): `ChatView`, `SettingsView`, `AdminView`, `AgentsView`... | [Components and views](03-components-and-views.md). |
+| `services/` | `backend.js` (one function per `/owismind-api/*` route), `track.js` (usage-analytics client: queue + `sendBeacon` flush to `/track`), `trackModel.js` (its pure queue/drain model). | [Backend communication](04-backend-communication.md). |
+| `components/` | Components by domain: `chat/`, `evidence/`, `sources/` (the Source Data Explorer), `pages/`, `shell/`, `ui/`. | [Components and views](03-components-and-views.md). |
+| `features/` | Self-contained, removable feature bundles: `admin-impersonate/` (the TEMPORARY "act as user" surface: `impersonation.js`, `UserPicker.vue`, `ImpersonateBanner.vue`). | [Components and views](03-components-and-views.md). |
+| `views/` | Routed views (lazy): `ChatView`, `SettingsView`, `AdminView`, `AgentsView`, `BenchmarkSuggestView`, `ProjectView`, `FaqView`, `FeedbackView`, `PagePlaceholder`. | [Components and views](03-components-and-views.md). |
 
 The full map of modules by layer (Pinia stores, python-lib sub-packages, recipes) has its
 canonical home in [Component map](../02-architecture/02-component-map.md).
@@ -100,6 +103,7 @@ light. The `meta` carry i18n KEYS (`eyebrow`, `title`, `desc`), not text.
 | `feedback` | `/feedback` | `FeedbackView` | `eyebrow:'fb.eyebrow'`, `title:'fb.title'` |
 | `faq` | `/faq` | `FaqView` | `eyebrow:'faq.eyebrow'`, `title:'faq.title'` |
 | `agents` | `/agents/:agentId?` | `AgentsView` | `eyebrow:'ag.eyebrow'`, `title:'ag.title'` |
+| `benchmark` | `/benchmark` | `BenchmarkSuggestView` | `eyebrow:'bench.eyebrow'`, `title:'bench.title'` (ALL users, no admin guard) |
 | `project` | `/project/:projectId` | `ProjectView` | `eyebrow:'pj.eyebrow'`, `title:'sb.projects'` |
 | `support` / `releases` / `accessibility` / `cgu` / `privacy` / `about` | `/...` | `PagePlaceholder` | i18n keys per target |
 | `admin` | `/admin` | `AdminView` | `eyebrow:'admin.eyebrow'`, `title:'admin.title'`, `requiresAdmin:true` |
@@ -167,8 +171,12 @@ added there. The source `messages.json` does not need to be touched for this.
 Key families in `extra.js`: generic `x.*` (for example `x.close`), `set.*`, `sb.*`, `chat.*`,
 `fb.*`, `msg.*`, `faq.*`, `ag.*` (agents library including `ag.badge.*`), `pj.*`, `admin.*` (including
 `admin.tab.*` and `admin.quotas.*`), `ev.*` (Evidence Studio), `art.*` (artifacts
-tabs), `mode.*` (mode selector) and `ev.exp.*` (trust layer computation steps, frozen `kind`
-enum). The philosophy is the honest empty state: a "coming soon" label, never a fake figure.
+tabs), `mode.*` (mode selector), `ev.exp.*` (trust layer computation steps, frozen `kind`
+enum), `src.*` (the Source Data Explorer: chips, Calculer/aggregate, range pickers, column menu),
+`prompt.screen.*` / `prompt.ctx.*` (the screen-context detail + consent banner and the cell-to-prompt
+chips), `bench.*` (the benchmark suggestion and consultation page), `authgate.*` (the sign-in gate) and
+`impersonate.*` (the temporary admin "act as user" banner). The philosophy is the honest empty state:
+a "coming soon" label, never a fake figure.
 
 ### LIST interpolation
 
@@ -275,10 +283,13 @@ validates `'light' | 'dark'`, updates the ref, persists the key `owismind.theme`
 `document.body.dataset.theme`; `toggleTheme()` switches. The default is `'light'`, faithful to the mockup.
 
 localStorage keys managed by `ui.js`: `owismind.theme` (theme), `owismind.sidebarCollapsed`,
-`owi.sidebarW` and `owi.evidenceW` (mockup keys, widths), `owismind.contextMessages` (context
-window) and `owismind.modelMode`. The model mode is one of the keys `['eco', 'medium', 'high']`, default
-`'eco'`: eco = Gemini 3.1 Flash-Lite (fast, low-cost, default), medium = Gemini 3.5 Flash, high =
-Claude Sonnet. The fine-grained management of the `ui` store (and of the pure modules `prefs` / `conversationList` /
+`owi.sidebarW` and `owi.evidenceW` (mockup keys, widths), and `owismind.contextMessages` (context
+window). The model mode is one of `MODEL_MODES = ['smart', 'pro', 'claude']` (renamed from the internal
+eco/medium/high) with `MODELMODE_DEFAULT = 'smart'`. It is EPHEMERAL: the picker ALWAYS boots to Smart
+and is NEVER persisted (the legacy `owismind.modelMode` key is actively removed at boot). Choosing
+Pro/Claude applies to the NEXT sent question only; the chat store calls `resetModelMode()` right after
+each dispatch, and the effective mode is stamped server-side per answer (`chat_v5.mode`). The
+fine-grained management of the `ui` store (and of the pure modules `prefs` / `conversationList` /
 `conversationTree` / `agentPick`) is detailed in [State and stores](02-state-and-stores.md).
 
 > Theming gotcha (F2): in a `<style scoped>`, a theme override must place the ENTIRE SELECTOR

@@ -105,7 +105,7 @@ Les deux suites sont **pure-logic, sans environnement DSS et sans install** (run
 remplacent pas la validation EN DSS (voir matrice §11 de `PROJECT_STATE.md`) : elles verrouillent les
 invariants testables hors instance.
 
-### 3.1 Backend - `unittest` (65 tests, vérifié)
+### 3.1 Backend - `unittest` (790 tests, vérifié)
 
 ```bash
 python3 -m unittest discover -s Plugin/owismind/tests -v
@@ -114,13 +114,17 @@ python3 -m unittest discover -s Plugin/owismind/tests -v
 Hors `python-lib/`, donc **jamais packagé**. Les tests mettent `python-lib/` sur `sys.path` pour résoudre
 `owismind.*`. Détail des modules couverts → [`Plugin/owismind/tests/README.md`](../Plugin/owismind/tests/README.md).
 
-Couvert aujourd'hui (DSS-free) : `validation` (`/chat/start` shape+bornes), `validate_history_limit`/
-`validate_optional_exchange_id`, `validate_conversations_limit`, `validate_feedback`, les SQL builders
-purs (`build_conversation_list_query`, `build_session_messages_query`, `build_ancestor_chain_query` -
-**user-scopés + bornés**), `pagination` (cursor round-trip), `agents.context` (assemblage multi-tours),
-`security.identity.derive_full_name`.
+Couvert aujourd'hui (DSS-free) : `validation` (`/chat/start` shape+bornes, requêtes Evidence/Source,
+budget, suggestions benchmark, fiche d'agent), `validate_history_limit`/`validate_optional_exchange_id`,
+`validate_conversations_limit`, `validate_feedback`, les SQL builders purs (`build_conversation_list_query`,
+`build_session_messages_query`, `build_ancestor_chain_query` - **user-scopés + bornés**), `pagination`
+(cursor round-trip), `agents.context` (assemblage multi-tours), `security.identity.derive_full_name`, plus
+les cœurs purs des sous-systèmes récents : `evidence/` (`sql_parse`, `query_builders`, `whitelist`,
+`sql_explain`, `chart_payload`, `aggregate_core`, `source_search`), `storage/` (`events`, `budget`,
+`suggestions`), `benchmark_view/` (`aggregate`, `schemas`, `schema_check`, `agent_profile`) et
+`security/impersonation`.
 
-### 3.2 Frontend - `node:test` (27 tests, vérifié)
+### 3.2 Frontend - `node:test` (352 tests, vérifié)
 
 ```bash
 npm --prefix Plugin/owismind/frontend test          # = node --test test/*.test.js
@@ -128,8 +132,10 @@ npm --prefix Plugin/owismind/frontend test          # = node --test test/*.test.
 
 Tests **purs** sous `frontend/test/` (hors `src/`, jamais buildé/zippé) : `timeline` (reducer
 `applyEvent`), `prefs` (clamps de préférences), `conversationList`, `conversationTree` (arbre pur),
-`agentPick`. Garder ces unités **sans Vue ni dataiku** pour qu'elles restent testables par le runner natif
-(gotcha **F11**).
+`agentPick`, `evidenceModel`/`evidenceProof`, `aggregateSurface`, `sourceModel`/`sourceViewMemory`/
+`sourceAnalyze`, `budgetModel`, `benchmarkResults`, `screenContextModel`, `promptContextModel`, `sqlPretty`,
+`track` (`trackModel`) et `i18nExtraParity` (parité des clés FR/EN d'`extra.js`). Garder ces unités **sans
+Vue ni dataiku** pour qu'elles restent testables par le runner natif (gotcha **F11**).
 
 ### 3.3 Ce qui a besoin de DSS (non couvert) + reco TEST-01
 
@@ -264,9 +270,9 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 
 ### Taille attendue
 
-Le zip courant contient **64 entrées au total** (= **53 fichiers** + 11 dossiers + `plugin.json` à la
-racine). C'est ce que la mémoire désigne par « ~64 fichiers ». Un écart franc (p. ex. réapparition de
-`frontend/`/`node_modules/`, ou chute des `__init__.py`) signale un bug de packaging à corriger avant upload.
+Le zip courant (PROD v1.1.0) contient **95 entrées au total** (= **82 fichiers** + 13 dossiers, `plugin.json`
+à la racine inclus). Un écart franc (p. ex. réapparition de `frontend/`/`node_modules/`, ou chute des
+`__init__.py`) signale un bug de packaging à corriger avant upload.
 
 ---
 

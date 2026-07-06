@@ -1,9 +1,10 @@
 # Backend - API reference
 
-> Audience: backend developer, integrator. Last updated: 2026-06-19. Summary: complete
-> catalogue of all 21 `/owismind-api/*` endpoints (parameters, response shapes, error codes, HTTP
-> statuses, auth and owner-scoping), grouped by domain, including the monthly budget system added
-> in the 2026-06-18 session.
+> Audience: backend developer, integrator. Last updated: 2026-07-06. Summary: complete
+> catalogue of all 36 `/owismind-api/*` endpoints (parameters, response shapes, error codes, HTTP
+> statuses, auth and owner-scoping), grouped by domain, including the monthly budget system, the
+> Source Data Explorer (`/source/*`), usage analytics (`/track`), and benchmark consultation
+> (`/benchmark/*`, `/admin/benchmark/*`).
 
 All routes are mounted under the `/owismind-api` prefix (blueprint `owismind_api`, defined in
 `api/routes.py`). The Vue 3 frontend consumes ONLY logical keys and structured data: it
@@ -42,13 +43,14 @@ reference catalogue.
 
 ## Route summary table
 
-This table covers all 21 registered routes (mounted by `register_routes(app)` in `api/routes.py`).
+This table covers all 36 registered routes (mounted by `register_routes(app)` in `api/routes.py`).
 
 | Method | Path | Domain | Auth | Storage required |
 |---|---|---|---|---|
 | GET | `/ping` | health | no | no |
 | GET, POST | `/me` | identity | yes | no (tolerates pristine) |
 | GET | `/usage` | budget | yes | yes |
+| POST | `/track` | analytics | yes | yes |
 | GET | `/agents` | agents | yes | yes |
 | POST | `/chat/start` | chat | yes | yes |
 | GET | `/chat/poll` | chat | yes | yes |
@@ -58,7 +60,21 @@ This table covers all 21 registered routes (mounted by `register_routes(app)` in
 | GET | `/conversation` | conversations | yes | yes |
 | GET | `/evidence/meta` | evidence | yes | yes |
 | POST | `/evidence/rows` | evidence | yes | yes |
-| GET | `/evidence/distinct` | evidence | yes | yes |
+| POST | `/evidence/distinct` | evidence | yes | yes |
+| POST | `/evidence/aggregate` | evidence | yes | yes |
+| GET | `/source/meta` | source data | yes | yes |
+| POST | `/source/rows` | source data | yes | yes |
+| POST | `/source/distinct` | source data | yes | yes |
+| POST | `/source/aggregate` | source data | yes | yes |
+| GET | `/admin/sources/datasets` | admin / source data | yes | yes + admin |
+| POST | `/benchmark/suggest` | benchmark | yes | yes |
+| POST | `/benchmark/suggest-from-chat` | benchmark | yes | yes |
+| GET | `/benchmark/suggestions` | benchmark | yes | yes |
+| GET | `/benchmark/results` | benchmark | yes | yes |
+| GET | `/benchmark/attempt` | benchmark | yes | yes |
+| GET | `/admin/benchmark/tables` | admin / benchmark | yes | yes + admin |
+| POST | `/admin/benchmark/validate-table` | admin / benchmark | yes | yes + admin |
+| POST | `/admin/benchmark/override` | admin / benchmark | yes | yes + admin |
 | GET | `/admin/storage` | admin | yes | yes + admin |
 | GET | `/admin/users` | admin | yes | yes + admin |
 | POST | `/admin/users/set-admin` | admin | yes | yes + admin |
@@ -67,6 +83,11 @@ This table covers all 21 registered routes (mounted by `register_routes(app)` in
 | GET | `/admin/projects` | admin | yes | yes + admin |
 | GET | `/admin/projects/<project_key>/agents` | admin | yes | yes + admin |
 | GET, POST | `/admin/agents` | admin | yes | yes + admin |
+
+> Note: `/evidence/distinct` is documented in prose below as a GET but is registered as POST
+> (it carries a `filters` / `scope_q` body for cascading distincts). Detailed per-route sections
+> for the `/source/*`, `/track`, `/benchmark/*`, `/admin/benchmark/*`, `/admin/sources/datasets`
+> and `/evidence/aggregate` families are added at the end of this document (sections 9-12).
 
 ## 1. Health and identity
 
@@ -392,8 +413,8 @@ of a conversation in the sidebar.
 bounded by an absolute row cap (`SESSION_MESSAGES_CAP = 500`). The `rows` follow the stable column order
 `chat_v5._COLUMNS` (`exchange_id, session_id, user_id, user_display_name, user_groups, user_text,
 assistant_text, generated_sql, agent_key, created_at, answered_at, feedback_rating, feedback_reasons,
-feedback_comment, parent_exchange_id, input_tokens, output_tokens, total_tokens, estimated_cost`), so
-that the frontend reuses a single row->message mapper. The data model detail is in
+feedback_comment, parent_exchange_id, input_tokens, output_tokens, total_tokens, estimated_cost, mode,
+screen_ctx`), so that the frontend reuses a single row->message mapper. The data model detail is in
 [Storage and data model](04-storage-and-data-model.md).
 
 ```json
@@ -493,16 +514,18 @@ Bounded distinct values of ONE column (the value picker of the filter chips).
 ## 7. screen_context (sanitization, on `/chat/start`)
 
 The optional `screen_context` field of `POST /chat/start` is a bounded view of what the
-user is looking at (the exchange rendered in the Evidence panel and its tab). `_sanitize_screen_context`
-(in `api/routes.py`):
+user is looking at. `_sanitize_screen_context` (in `api/routes.py`) now recognizes TWO independent
+parts, either of which is sufficient:
 
-- `raw` non-dict or without a truthy `open` -> `None`.
-- `exchange_id` must be str or int (bool excluded) otherwise `None`.
-- Returns `{"open": True, "exchange_id": str(exch)[:128], "active_tab": tab if in _SCREEN_TABS else
-  None}`, with `_SCREEN_TABS = ("evidence", "chart", "table")`.
+- the Evidence panel OPEN on an exchange: `open` truthy + `exchange_id` (str or int, bool excluded) +
+  `active_tab` in `_SCREEN_TABS = ("evidence", "chart", "table", "kpi", "sources")`;
+- a `source_state`: the filters and computed figures the user shaped in the Source Data Explorer and
+  chose to share, sanitized by `context.sanitize_source_state` (never raises). Carried even when the
+  Evidence panel is closed (the explorer on the home screen).
 
-The worker reads the artifacts of this exchange OWNER-SCOPE, so a forged id can only reveal the
-caller's own data.
+Returns `None` only when NEITHER part survives. The worker turns a shared view into an `[ON SCREEN NOW]`
+prompt block; the exchange artifacts are read OWNER-SCOPE, so a forged id can only reveal the caller's
+own data. The consent to attach this context is explicit in the UI (a dismissible banner).
 
 ## 8. Admin
 
@@ -675,6 +698,144 @@ Reads or writes the whitelist of enableable agents.
 | `too_many_agents` | 400 | > 50 agents (POST) |
 | `storage_unavailable` | 500 | read failure (GET) or write failure (POST) |
 
+## 9. Usage analytics
+
+### `POST /track`
+
+Best-effort product-analytics ingest. **ALWAYS returns HTTP 200, never a 500.** The frontend
+(`services/track.js`) batches small events and posts them here, often via `navigator.sendBeacon`
+(Content-Type `text/plain`), so the body is parsed with `force=True`. Identity is resolved
+server-side; the batch is written under the auth-resolved `user_id` only. Body `{"events": [...]}`.
+
+Guarantees that tracking never affects the product (all degrade to `{"ok": true, "accepted": 0}`,
+still 200): unauthenticated, storage not configured, events sent while an admin IMPERSONATES (dropped
+so analytics reflect real users), a per-user token-bucket flood (`evidence_throttle.track_can_accept`),
+or any unexpected failure. `storage/events.py` owns the whitelist (`EVENT_CATEGORIES`, 41 names by
+category = the single source of truth), the pure `validate_events` (caps batch 40, props JSON 2000
+chars, dedup, never raises), and `record_events` (one multi-row INSERT ON CONFLICT DO NOTHING into
+`webapp_events_v1`). Response `{"ok": true, "accepted": <n>}`.
+
+## 10. Evidence aggregate
+
+### `POST /evidence/aggregate`
+
+Database-EXACT totals over the exchange's PRE-FILTERED evidence scope. Shares `_evidence_guard()` and
+the same STRUCTURED body as `/evidence/rows` (editable chips `{column, op, values}`, locked
+`kept_ids`, `include_advanced`, free-text `q`, `drill`, `table`) plus the aggregation spec (`group`,
+`measures`, `limit`) validated by `validate_evidence_aggregate_request`. The body never carries SQL:
+the aggregation is a structured spec resolved server-side by the SHARED `evidence/aggregate_core.py`
+planner (whitelisted measures, type gate from the live schema, mandatory group cap). It aggregates
+EVERY row of the scope pre-filtered by the answer's stored SQL, not the paginated window. Returns
+`{"status": "ok", "rows": [...], "totals": {...}, "truncated": <bool>}`.
+
+Errors: the `_evidence_guard()` set (401 / 409 / 500 / 429), `400 <ValidationError.code>` on an
+invalid spec, `<EvidenceError.code>`/`<status>` for a business error, `500 evidence_unavailable`
+otherwise.
+
+## 11. Source Data Explorer (browse an agent's raw datasets)
+
+Any authenticated user may explore the RAW datasets an admin attached to an agent (before or after
+prompting). The frontend sends only the opaque `agent` key + an integer `source` index +
+evidence-shaped filters + a free-text `q`; the server resolves the index to a discovered project
+dataset (never an arbitrary table). All four routes share `_source_guard()`: identity ->
+impersonation-effective identity (reads scope to the EFFECTIVE user) -> `is_configured()` ->
+per-user throttle (the Evidence token bucket). Unlike `_evidence_guard()`, there is NO chat-table
+bootstrap (the explorer reads project datasets, not chat storage). The service
+(`evidence/source_service.py`) inherits the same read-only + `statement_timeout` pre-queries as
+Evidence. A business error is `<EvidenceError.code>`/`<status>`; any other failure ->
+`500 source_unavailable`.
+
+| Route | Method | Body / params | Returns |
+|---|---|---|---|
+| `/source/meta` | GET | `agent` (opaque key), `source` (int index) | source label + live column list |
+| `/source/rows` | POST | `{agent, source, q?, filters?, limit?, offset?, sort?}` | one bounded, filtered/searched window |
+| `/source/distinct` | POST | `{agent, source, column, q?, filters?, scope_q?}` | bounded distinct values of ONE column; `filters`/`scope_q` make the picker CASCADING (only values compatible with the other active filters + the table search) |
+| `/source/aggregate` | POST | `{agent, source, q?, filters?, group?, measures, limit?}` | database-EXACT totals over the FULL filtered set (same `aggregate_core.py` planner as `/evidence/aggregate`); `{rows, totals, truncated}` |
+
+### `GET /admin/sources/datasets`
+
+Admin-gated (`_admin_guard()`). Returns the project's discovered SQL dataset NAMES for the admin's
+source picker (`source_service.list_source_dataset_names`). A listing failure degrades to
+`{"status": "ok", "datasets": [], "error": "source_unavailable"}` (never a 500 storm), so the admin
+form stays usable.
+
+## 12. Benchmark
+
+The plugin CONSULTS the benchmark run in the separate `OWIsMind_LAB` DSS project (it never launches a
+run; the LAB webapps do). Two write routes capture user golden-question suggestions; the rest is
+read-only consultation plus an admin human-in-the-loop override. The consultation routes resolve the
+opaque `agent` key server-side to the admin-configured benchmark table (`_benchmark_block_for_key`);
+the client NEVER supplies a table or connection.
+
+### `POST /benchmark/suggest`
+
+Persist a standalone (manual) benchmark suggestion. Body `{question, reference_answer,
+expected_value?, expected_value_type?, category?, language?}` (validated by
+`validate_suggestion_manual`). Owner-stamped into `webapp_golden_suggestions_v1`
+(`suggestions.save_suggestion`). WRITE route: **blocked while impersonating**
+(`403 impersonation_read_only`). Returns `{"status": "ok", "suggestion_id": ...}`.
+
+### `POST /benchmark/suggest-from-chat`
+
+Persist a suggestion built from one of the caller's OWN chat answers. Body `{exchange_id,
+answer_is_correct, reference_answer?, missing_explanation?, category?}`. The question, agent answer,
+`agent_key` and generated SQL are reconstructed from the PERSISTED exchange server-side (owner-scoped
+`chat_v5.read_exchange`), never trusted from the client. A "Yes" verdict stores the agent answer as
+the reference; a "No" requires a correction; a "Yes" on an exchange with no stored answer is rejected
+(`400 empty_agent_answer`) rather than persisting un-promotable data. A forged/other-user exchange ->
+`404 exchange_not_found`. WRITE route: **blocked while impersonating**. Returns `{"status": "ok",
+"suggestion_id": ...}`.
+
+### `GET /benchmark/suggestions`
+
+List the caller's OWN suggestions (newest first, owner-scoped + bounded). READ route: lists the
+EFFECTIVE (impersonated) user's suggestions. Returns `{"status": "ok", "count": ..., "suggestions":
+[...]}`.
+
+### `GET /benchmark/results`
+
+Consult one agent's benchmark results (any signed-in user, read-only, bounded). `agent` = opaque key
+resolved to the admin-set table; optional `benchmark_id` selects a named benchmark (most recent by
+default). Returns the consultation view-model (verdict, KPIs, per agent x mode, per category,
+per-question detail with attempt evolution + expected vs actual SQL/tool, plus the `benchmarks`
+selector), recomputed on the EFFECTIVE verdict (a human override wins over the judge). An unconfigured
+agent -> `{"configured": false, ...}`; a LAB read failure -> `{"configured": true, "read_error": ...}`
+(never a 500). Shaped by `benchmark_view/aggregate.py` over rows read via `benchmark_view/lab_io.py`.
+
+### `GET /benchmark/attempt`
+
+FULL detail of ONE attempt, loaded on demand. Same security as `/benchmark/results`; the four attempt
+keys (`run_id`, `question_id`, `agent_key`, `mode`) select the single row. Returns the complete agent
+answer + the SQL the agent actually generated + each query's captured result table (so a user sees WHY
+a verdict is what it is). One-row read.
+
+### `GET /admin/benchmark/tables`
+
+Admin-gated. Lists the public tables on a SQL connection (default `bench_profile.DEFAULT_CONNECTION`)
+for the agent-profile table picker. A read failure degrades to `{"tables": [], "error": ...}`.
+
+### `POST /admin/benchmark/validate-table`
+
+Admin-gated. Checks a candidate table has the columns the consultation needs
+(`benchmark_view/schema_check.py` against `REQUIRED_COLUMNS`) and reports the missing ones. Body
+`{connection?, table}`.
+
+### `POST /admin/benchmark/override`
+
+Admin-gated, human-in-the-loop. Overrides (or clears) the judge verdict on one scored row. Resolves
+the agent's benchmark table server-side, validates the override (`bench_aggregate.validate_override`),
+and writes the `human_*` columns via a bounded parametrized UPDATE (`lab_io.write_override`, a
+cross-project write into the LAB table). WRITE route: **blocked while impersonating**. Body carries
+`{agent, question_id, run_id, mode, verdict, ...}`.
+
+| Error code | HTTP status | Condition |
+|---|---|---|
+| `impersonation_read_only` | 403 | a write benchmark route called while an admin impersonates |
+| `exchange_not_found` | 404 | `/benchmark/suggest-from-chat`: forged / other-user / unknown exchange |
+| `empty_agent_answer` | 400 | `/benchmark/suggest-from-chat`: "Yes" verdict with no stored answer |
+| `agent_has_no_benchmark`, `invalid_override` | 400 | `/admin/benchmark/override` |
+| `<ValidationError.code>` | 400 | invalid suggestion payload |
+
 ## Consolidated error-code catalogue
 
 | Code | Status | Emitting endpoints |
@@ -692,16 +853,26 @@ Reads or writes the whitelist of enableable agents.
 | `missing_user_id`, `cannot_remove_last_admin` | 400 | `/admin/users/set-admin` |
 | `invalid_budget_amount`, `invalid_expires`, `invalid_user_ids`, `invalid_quota_note` | 400 | `/admin/budget`, `/admin/budget/users` |
 | `too_many_agents` | 400 | `/admin/agents` |
+| `agent_has_no_benchmark`, `invalid_override` | 400 | `/admin/benchmark/override` |
+| `empty_agent_answer` | 400 | `/benchmark/suggest-from-chat` |
 | `agent_not_enabled` | 404 | `/chat/start` |
 | `run_not_found` | 404 | `/chat/poll`, `/chat/stop` |
 | `project_not_found` | 404 | `/admin/projects/<key>/agents` |
+| `exchange_not_found` | 404 | `/benchmark/suggest-from-chat` |
+| `impersonation_read_only` | 403 | write routes while an admin impersonates (`/chat/*`, `/benchmark/suggest*`, `/admin/benchmark/override`) |
 | `monthly_quota_exceeded` | 402 | `/chat/start` (budget enforcement) |
-| `rate_limited` | 429 | `/chat/start`, `/evidence/*`, `/usage` |
+| `rate_limited` | 429 | `/chat/start`, `/evidence/*`, `/source/*`, `/usage` |
 | `busy` | 503 | `/chat/start` |
 | `storage_unavailable` | 500 | most storage-backed routes |
 | `agent_unavailable` | 500 | `/chat/start` |
 | `evidence_unavailable` | 500 | `/evidence/*` |
+| `source_unavailable` | 500 | `/source/*` (and degraded on `/admin/sources/datasets`) |
 | `discovery_unavailable` | 500 | `/admin/projects*` |
+
+> Note: `/track` never emits an error code - it always returns HTTP 200 with
+> `{"ok": true, "accepted": <n>}` (best-effort analytics). `/benchmark/results` and
+> `/benchmark/attempt` never 500 on a LAB read failure either: they return
+> `{"configured": true, "read_error": ...}` so the consultation UI degrades gracefully.
 
 ## See also
 - [Backend - overview and structure](01-overview-and-structure.md) - blueprint, sub-packages, cross-cutting guards.

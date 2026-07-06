@@ -13,7 +13,7 @@
 ## 1. Vue d'ensemble du backend
 
 Le backend est un **blueprint Flask** (`api`, `url_prefix="/owismind-api"`) défini dans
-`python-lib/owismind/api/routes.py` (`routes.py:60`). Toute la logique vit dans le package
+`python-lib/owismind/api/routes.py` (`routes.py:99`). Toute la logique vit dans le package
 `python-lib/owismind/` ; le `backend.py` de la webapp est un **bootstrap mince** qui ne fait que câbler
 le blueprint sur l'objet `app` fourni par DSS via le star-import `dataiku.customwebapp` :
 
@@ -24,7 +24,7 @@ from owismind.api.routes import register_routes
 register_routes(app)                        # enregistre le blueprint /owismind-api
 ```
 
-`register_routes(app)` (`routes.py:674`) enregistre le blueprint, applique le `log_level` configuré, log le
+`register_routes(app)` (`routes.py:1878`) enregistre le blueprint, applique le `log_level` configuré, log le
 `storage_status()` résolu et la **table de routes vivante** au boot (utile pour confirmer le build déployé).
 
 Caractéristiques transverses :
@@ -36,7 +36,7 @@ Caractéristiques transverses :
 - **SQL direct, paramétré, sans Flow** au runtime ; `COMMIT` explicite après chaque écriture.
 - **Transport = polling, pas SSE** : le proxy nginx interne de DSS bufferise un `text/event-stream` long
   (L019), donc l'agent tourne dans un thread de fond et le front poll des requêtes courtes.
-- **Hooks blueprint** : `_log_request_start` / `_log_request_end` (`routes.py:76`, `routes.py:86`) tracent
+- **Hooks blueprint** : `_log_request_start` / `_log_request_end` (`routes.py:116`, `routes.py:126`) tracent
   méthode + chemin + statut + durée pour chaque requête `/owismind-api/*` (jamais le contenu des messages).
 
 ---
@@ -59,6 +59,7 @@ Caractéristiques transverses :
 | `evidence/capture.py` | Capture **pure** opportuniste du résultat exact d'un tool SQL (`extract_result`) + caps miroir à la persistance (`cap_result` / `cap_sql_list` : 200 lignes, 50 colonnes, budgets JSON) - jamais de `_bounded()` texte sur ce JSON. |
 | `evidence/service.py` | Pipeline Evidence Studio **stateless** : charge le `generated_sql` (owner-scopé), parse, matche un dataset auto-découvert, résout colonnes/schéma live (cache TTL 300 s), re-exécute un SELECT borné **lecture seule** (timeout + `transaction_read_only` en `SET LOCAL`) ; **trust layer** (§3.5 : `verification` / `explanation` / `queries` / `result` / `drilldown`) calculé par des **fonctions pures testées** ; `EvidenceError(code, status)`. |
 | `evidence/sql_explain.py` | Explainer SQL **pur** (sans `dataiku`) du trust layer : `explain_select` décompose le SELECT stocké en étapes lisibles + expose les clés GROUP BY drillables ; ne lève jamais (module absent/échec = dégradation honnête, level plafonné). |
+| `evidence/aggregate_core.py` | Cœur **pur** (sans `dataiku`) des agrégats DB partagés Evidence/Source : whitelist de mesures (`count`/`count_distinct`/`sum`/`avg`/`median`/`min`/`max`), gate des types depuis le schéma live, groupe/bucket calendaire optionnel (LIMIT groupes 50), requête de totaux pour les % exacts - la donnée n'est jamais agrégée dans la fenêtre affichée mais sur le jeu filtré COMPLET côté DB. |
 | `evidence/chart_payload.py` | Façonnage **pur** du payload Chart.js (`build_chart_payload`) / KPI (`build_kpi_payload`) depuis le résultat SQL capturé + la spec d'artefact : l'agent ne choisit que x / y / type, le backend produit `{labels, datasets}` bornés (`{ok:false}` honnête si inconstructible). |
 | `evidence/throttle.py` | Token-bucket **par utilisateur** des routes lecture seule : `can_accept` (Evidence + Source), `usage_can_accept` (`/usage`), `track_can_accept` (`/track`) - absorbe le burst légitime, refuse une rafale scriptée qui pinnerait les threads du backend mono-process. |
 | `evidence/source_service.py` | Pipeline **Source Data Explorer** : résout `(agent_key, source_id)` vers un dataset **auto-découvert**, exécute une page **bornée lecture seule** (`source_meta` / `source_rows` / `source_distinct`) + liste les noms de datasets pour le picker admin ; `EvidenceError(code, status)`. |
@@ -95,7 +96,7 @@ SQL-backed **sans** l'entrée `(none)` : un multiselect vide signifie déjà « 
 - Sauf `/ping` et `/me`, les routes refusent si le stockage n'est pas configuré :
   `409 {"error":"storage_not_configured"}`.
 - Réponse de succès : toujours `{"status":"ok", ...}`. Réponse d'erreur : `{"status":"error","error":<code>}`.
-- Les routes `/admin/*` passent par `_admin_guard()` (`routes.py:1444`) : 401 / 409 / 403 (`forbidden`) / 500.
+- Les routes `/admin/*` passent par `_admin_guard()` (`routes.py:1551`) : 401 / 409 / 403 (`forbidden`) / 500.
 - **Impersonation admin (temporaire, supprimable)** : un admin peut consulter la webapp « à la place » d'un
   user via l'en-tête `X-OWI-Impersonate` (honoré **seulement si le caller réel est admin**,
   `security/impersonation.py`). Les routes de **LECTURE** basculent vers l'identité **effective** (la cible :
@@ -111,7 +112,7 @@ SQL-backed **sans** l'entrée `(none)` : un multiselect vide signifie déjà « 
 | `GET` | `/ping` | **Non** | - | `{status:"ok", python:"3.9.x"}` | - |
 | `GET` `POST` | `/me` | Oui | - | voir ci-dessous | `unauthenticated → 401` |
 
-**`/me`** (`routes.py:110`) - renvoie l'identité du caller + flags :
+**`/me`** (`routes.py:150`) - renvoie l'identité du caller + flags :
 `{status:"ok", user_id, display_name, groups, needs_config, is_admin}`.
 - `display_name` = défaut dérivé du login (`said.chaoui → Said`), jamais fourni par DSS (L011/L017).
 - `needs_config` = `not sql_config.is_configured()`.
@@ -119,7 +120,7 @@ SQL-backed **sans** l'entrée `(none)` : un multiselect vide signifie déjà « 
   registre **et** élection du 1er admin). GET reste **lecture seule** : un prefetch/scanner GET ne peut ni
   créer une ligne user ni gagner l'élection. Les deux méthodes renvoient la même forme. Le front émet POST
   une fois à l'init.
-- `/ping` (`routes.py:101`) n'expose **jamais** la config de stockage (atteignable sans auth) - celle-ci
+- `/ping` (`routes.py:141`) n'expose **jamais** la config de stockage (atteignable sans auth) - celle-ci
   n'est lisible que par un admin via `/admin/storage`.
 
 ### 3.2 Agents
@@ -128,7 +129,7 @@ SQL-backed **sans** l'entrée `(none)` : un multiselect vide signifie déjà « 
 |---|---|---|---|---|---|
 | `GET` | `/agents` | Oui | - | `{status:"ok", count, agents:[{key,label}]}` | `unauthenticated → 401` · `storage_not_configured → 409` · `storage_unavailable → 500` |
 
-**`/agents`** (`routes.py:724`) - liste les agents que l'admin a activés, pour le picker côté chat. Projette
+**`/agents`** (`routes.py:761`) - liste les agents que l'admin a activés, pour le picker côté chat. Projette
 `key` (= `logical_key` opaque) et `label` - jamais `agent_id` ni `project_key` (whitelist). Projette **aussi**
 la **fiche éditoriale** rédigée par l'admin (display-only, sûre à exposer) : `tagline`, `description`,
 `capabilities[]`, `tools[]`, `icon`, `badge`, le flag `modes` (le chat n'affiche le picker de mode de réponse
@@ -145,7 +146,7 @@ que si l'agent le supporte), `has_benchmark` (booléen **seul** - jamais la tabl
 | `POST` | `/chat/stop` | Oui | `{run_id}` | `{status:"ok"}` | `unauthenticated → 401` · `impersonation_read_only → 403` · `invalid_run_id → 400` · `run_not_found → 404` |
 | `POST` | `/chat/feedback` | Oui | corps JSON (voir) | `{status:"ok"}` | voir tableau dédié |
 
-#### `/chat/start` (`routes.py:160`)
+#### `/chat/start` (`routes.py:351`)
 
 Corps JSON (le front n'envoie que de la donnée logique) :
 
@@ -181,7 +182,7 @@ Codes d'erreur `/chat/start` :
 | `storage_unavailable` | 500 | échec de persistance du message user |
 | `agent_unavailable` | 500 | échec du démarrage du worker |
 
-#### `/chat/poll` (`routes.py:267`)
+#### `/chat/poll` (`routes.py:541`)
 
 Query params :
 
@@ -195,7 +196,7 @@ Réponse : `{status:"ok", events:[…], cursor, done, error}`. `events` = events
 terminal (`null` si OK). **Scope owner** : un `run_id` inconnu **ou appartenant à un autre user** → `run_not_found → 404`
 (sans révéler lequel). Cadence côté front : ~500 ms (un poll est une requête courte que le proxy ne bufferise pas).
 
-#### `/chat/stop` (`routes.py:539`)
+#### `/chat/stop` (`routes.py:576`)
 
 Corps JSON `{run_id}` (l'id opaque de `/chat/start`, ≤ 64 chars sinon `invalid_run_id → 400`). Demande un
 arrêt **coopératif** d'un run en vol du caller : le worker voit la requête entre deux chunks streamés, arrête
@@ -205,7 +206,7 @@ déjà terminé/évincé, ou appartenant à un autre user → `run_not_found →
 comme « déjà fini »). Route d'écriture : **bloquée en `impersonation_read_only → 403`** pendant une
 impersonation. Identité depuis les en-têtes, jamais le corps.
 
-#### `/chat/feedback` (`routes.py:577`)
+#### `/chat/feedback` (`routes.py:614`)
 
 Corps JSON :
 
@@ -227,12 +228,12 @@ d'autrui est un no-op silencieux (0 ligne). Erreurs : `unauthenticated → 401` 
 | `GET` | `/conversations` | Oui | `limit`, `cursor` | `{status:"ok", conversations:[{session_id,title,last_at}], next_cursor, has_more}` | `unauthenticated → 401` · `storage_not_configured → 409` · `invalid_cursor → 400` · `storage_unavailable → 500` |
 | `GET` | `/conversation` | Oui | `session_id` | `{status:"ok", session_id, count, rows:[…]}` | `unauthenticated → 401` · `storage_not_configured → 409` · `invalid_session_id → 400` · `storage_unavailable → 500` |
 
-**`/conversations`** (`routes.py:348`) - liste **noms seuls**, **keyset-paginée**, owner-scopée. `limit`
+**`/conversations`** (`routes.py:668`) - liste **noms seuls**, **keyset-paginée**, owner-scopée. `limit`
 clampé `[1, 60]` (défaut 30) ; `cursor` opaque base64 (≤ 512 chars sinon `invalid_cursor`), décodé en
-`(last_at, session_id)`. `title` = premier message user de la session, tronqué côté serveur (≤ 140 chars).
+`(last_at, session_id)`. `title` = premier message user de la session, tronqué côté serveur (`CONV_TITLE_MAXLEN = 56` chars).
 `next_cursor`/`has_more` calculés en fetchant 1 ligne de plus. Ne renvoie **jamais** de corps de message.
 
-**`/conversation`** (`routes.py:390`) - tous les messages d'**une** session du user, **chronologique**, borné
+**`/conversation`** (`routes.py:715`) - tous les messages d'**une** session du user, **chronologique**, borné
 (`SESSION_MESSAGES_CAP = 500`). Chargé **paresseusement** au clic sidebar. Strictement scopé `(user_id,
 session_id)` (une session d'autrui → 0 ligne). `rows` suit l'ordre de colonnes stable `chat_v5._COLUMNS`
 (`user_groups` / `generated_sql` / `feedback_reasons` décodés en listes), donc le front réutilise un seul mapper.
@@ -244,6 +245,7 @@ session_id)` (une session d'autrui → 0 ligne). `rows` suit l'ordre de colonnes
 | `GET` | `/evidence/meta` | Oui | `exchange_id` | `{status:"ok", available, …}` (voir ci-dessous) | voir ci-dessous |
 | `POST` | `/evidence/rows` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], has_more, offset}` | voir ci-dessous |
 | `POST` | `/evidence/distinct` | Oui | corps JSON (voir) | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
+| `POST` | `/evidence/aggregate` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], totals:{…}, truncated}` | voir ci-dessous |
 
 **Invariant central : le front n'envoie JAMAIS de SQL.** Il n'envoie qu'un
 `exchange_id`, des filtres **structurés** `{column, op, values}` (les chips éditables), des `kept_ids`
@@ -258,7 +260,7 @@ Le schéma live (`read_schema`, métadonnées) est lui aussi en cache TTL 300 s 
 que le cache de candidats : résolution **hors lock**, échec jamais mis en cache).
 Détail sécurité → [security.md](./security.md).
 
-**Garde commune `_evidence_guard()`** (`routes.py:509`) - chaîne : (1) identité
+**Garde commune `_evidence_guard()`** (`routes.py:841`) - chaîne : (1) identité
 (`resolve_identity` → `unauthenticated → 401`) ; (2) stockage configuré
 (`storage_not_configured → 409`) ; (3) bootstrap de la table chat (`ensure_chat_table` →
 `storage_unavailable → 500`) - ainsi, sur une instance configurée mais vierge, un `exchange_id`
@@ -268,7 +270,7 @@ par utilisateur** (`evidence_throttle.can_accept` → `rate_limited → 429`) : 
 une rafale scriptée qui pinnerait les threads du backend mono-process. Vérifié **après** le chemin
 auth/config/bootstrap (peu coûteux).
 
-#### `GET /evidence/meta` (`routes.py:541`)
+#### `GET /evidence/meta` (`routes.py:878`)
 
 Query : `exchange_id` (requis, ≤ 128 chars sinon `invalid_exchange_id → 400`). Owner-scopé : l'échange
 d'autrui (ou inexistant) → `exchange_not_found → 404` (sans révéler lequel).
@@ -326,7 +328,7 @@ Erreurs HTTP : `unauthenticated → 401` · `storage_not_configured → 409` · 
 `evidence_unavailable → 500` (inattendu). Log : une ligne par meta avec
 `available`/`reason`/`level`/`result_captured`/`drill_available`.
 
-#### `POST /evidence/rows` (`routes.py:578`)
+#### `POST /evidence/rows` (`routes.py:953`)
 
 Corps JSON (validé par `validate_evidence_rows_request`, `validation.py:258`) :
 
@@ -365,7 +367,7 @@ live / drill hors de l'ensemble dérivé serveur), tous les codes de
 dégradation ci-dessus + `query_failed → 409` (ici **pas** de forme dégradée : la route exige le contexte
 interactif) ; `evidence_unavailable → 500` (inattendu).
 
-#### `POST /evidence/distinct` (passé de GET à POST avec la cascade)
+#### `POST /evidence/distinct` (`routes.py:984`, passé de GET à POST avec la cascade)
 
 Corps : `{exchange_id, column, q?, exclude_id?, filters?, kept_ids?, include_advanced?, drill?, scope_q?}`
 (`exchange_id` requis ≤ 128 ; `column` requis ≤ 128 sinon `invalid_filter_column → 400` - forme seule,
@@ -385,6 +387,18 @@ tri de toutes les valeurs distinctes d'une grande table). Réponse :
 `truncated` sans faux positif), `NULL` exclus, trié. Mêmes erreurs que `/evidence/rows` (sans les codes
 de filtres) + `query_failed → 409` (erreur DB).
 
+#### `POST /evidence/aggregate` (`routes.py:1025`)
+
+Totaux **exacts calculés par la base** sur le **périmètre pré-filtré COMPLET** de l'échange (jamais sur la
+fenêtre de lignes affichée). Miroir de `/evidence/rows` pour le scope (chips éditables `filters`, chips
+verrouillées `kept_ids` re-dérivées serveur, fragment avancé, `q`, `drill`, `table`) mais la sortie est un
+agrégat **structuré** au lieu d'une page : le corps porte une **spec** (mesures whitelistées + un groupe /
+bucket calendaire optionnel), jamais de SQL. Validé par `validate_evidence_aggregate_request` ; exécuté par
+`evidence_service.evidence_aggregate` (cœur pur `evidence/aggregate_core.py`). Sa seule spécificité vs
+`/source/aggregate` : le scope est pré-filtré par le SQL stocké de la réponse. Réponse :
+`{"status":"ok", "rows":[…], "totals":{…}, "truncated":bool}` (LIMIT groupes 50). Mêmes familles d'erreurs
+que `/evidence/rows` + `evidence_unavailable → 500` (inattendu).
+
 ### 3.6 Admin (`_admin_guard()`, gardé serveur)
 
 Toutes en `unauthenticated → 401` / `storage_not_configured → 409` / `forbidden → 403` (non admin) / `storage_unavailable → 500`.
@@ -399,17 +413,17 @@ Toutes en `unauthenticated → 401` / `storage_not_configured → 409` / `forbid
 | `GET` `POST` | `/admin/agents` | GET - / POST `{agents:[{project_key,agent_id}]}` | `{status:"ok", count, agents:[…]}` | `invalid_payload → 400` · `too_many_agents → 400` |
 
 Détails :
-- **`/admin/storage`** (`routes.py:493`) - config de stockage résolue : `connection`, `project_key` (+ source),
+- **`/admin/storage`** (`routes.py:1573`) - config de stockage résolue : `connection`, `project_key` (+ source),
   `table_prefix` (+ `_input` / `_ignored`), `namespace`, `traces_dataset`, et les noms physiques calculés
   (`chat` / `users` / `settings`).
-- **`/admin/users/set-admin`** (`routes.py:516`) - garde **anti-lockout** : refuse de retirer le **dernier**
+- **`/admin/users/set-admin`** (`routes.py:1596`) - garde **anti-lockout** : refuse de retirer le **dernier**
   admin (`cannot_remove_last_admin`). Renvoie la liste users à jour.
-- **`/admin/projects/<project_key>/agents`** (`routes.py:557`) - le `project_key` est revalidé contre la liste
+- **`/admin/projects/<project_key>/agents`** (`routes.py:1744`) - le `project_key` est revalidé contre la liste
   des projets **visibles** avant le listing (un admin ne peut pas sonder une clé arbitraire/cachée).
-- **`/admin/agents` POST** (`routes.py:1663`) - chaque agent demandé est **re-validé serveur** contre les
+- **`/admin/agents` POST** (`routes.py:1771`) - chaque agent demandé est **re-validé serveur** contre les
   listings DSS vivants (projet visible **et** agent réellement présent) avant persistance ; cap
   `MAX_ENABLED_AGENTS = 50`. La `logical_key` opaque est dérivée d'un hash stable de `project_key:agent_id`
-  (`_logical_key`, `routes.py:100`) - le front ne reçoit jamais d'`agent_id` brut. Chaque agent porte aussi
+  (`_logical_key`, `routes.py:102`) - le front ne reçoit jamais d'`agent_id` brut. Chaque agent porte aussi
   son **profil** éditorial (`validate_agent_meta`, display-only borné : jamais une requête/table/connexion).
 
 ### 3.7 Source Data Explorer (lecture seule, datasets bruts configurés par agent)
@@ -418,7 +432,7 @@ Tout user authentifié peut explorer les datasets **bruts** qu'un admin a rattac
 prompt). Le front n'envoie qu'une **clé d'agent opaque** + un **index de source entier** (dans le bloc
 `sources` validé de la fiche d'agent) + des filtres Evidence-shaped + un `q` plein-texte ; le serveur résout
 l'index vers un dataset **auto-découvert** et exécute une page **bornée lecture seule**. Miroir de `/evidence/*`
-(même throttle, mêmes bornes de lignes). Garde commune `_source_guard()` (`routes.py:994`) : identité
+(même throttle, mêmes bornes de lignes). Garde commune `_source_guard()` (`routes.py:1067`) : identité
 (+ impersonation effective) + stockage configuré + throttle par-user, **sans** bootstrap de la table chat
 (l'explorer ne lit que des datasets projet, jamais le stockage chat).
 
@@ -427,21 +441,28 @@ l'index vers un dataset **auto-découvert** et exécute une page **bornée lectu
 | `GET` | `/source/meta` | Oui | `agent`, `source` | `{status:"ok", label, columns:[{name,type}]}` | voir ci-dessous |
 | `POST` | `/source/rows` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], has_more, offset}` | voir ci-dessous |
 | `POST` | `/source/distinct` | Oui | corps JSON (voir) | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
+| `POST` | `/source/aggregate` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], totals:{…}, truncated}` | voir ci-dessous |
 | `GET` | `/admin/sources/datasets` | **Admin** | - | `{status:"ok", datasets:[…]}` | dégrade à `{datasets:[], error}` |
 
-- **`/source/meta`** (`routes.py:1023`) - descripteur d'une source : son `label` + la liste des colonnes live.
+- **`/source/meta`** (`routes.py:1097`) - descripteur d'une source : son `label` + la liste des colonnes live.
   Params `agent` (clé opaque) + `source` (index int) ; table/connexion résolus serveur.
-- **`/source/rows`** (`routes.py:1049`) - une fenêtre bornée du dataset source, filtrée + éventuellement
+- **`/source/rows`** (`routes.py:1123`) - une fenêtre bornée du dataset source, filtrée + éventuellement
   cherchée. Corps `{agent, source, q?, filters?, limit?, offset?, sort?}` ; jamais de SQL : `filters` en
   `{column, op, values}`, `q` matché serveur sur **toutes** les colonnes ; `limit`/`offset` clampés (mêmes
   bornes que `/evidence/rows`). `LIMIT limit+1` → `has_more` sans `COUNT(*)`.
-- **`/source/distinct`** (POST, passé de GET avec la cascade) - valeurs distinctes bornées d'**une** colonne
+- **`/source/distinct`** (`routes.py:1150`, POST, passé de GET avec la cascade) - valeurs distinctes bornées d'**une** colonne
   (picker de chips). Corps `{agent, source, column, q?, filters?, scope_q?}` : le picker est **EN CASCADE** -
   `filters` (les **autres** chips actives, la chip éditée étant omise par le client) + `scope_q` (recherche
   table sur toutes les colonnes) le scopent via le **même** `_source_conditions` que `/source/rows` ; `q`
   reste la recherche du picker sur cette seule colonne. Sans `filters`/`scope_q`, byte-identique à l'ancien
   picker. Max **100** valeurs (`DISTINCT_LIMIT`), `NULL` exclus.
-- **`/admin/sources/datasets`** (`routes.py:1103`, **admin-gated**) - noms des datasets SQL **découverts** du
+- **`/source/aggregate`** (`routes.py:1181`) - totaux **exacts calculés par la base** sur le jeu filtré
+  **COMPLET** de la source (jamais sur la fenêtre affichée). Corps `{agent, source, q?, filters?, group?,
+  measures, limit?}` : mêmes `filters` + `q` que `/source/rows`, plus une spec d'agrégat structurée (mesures
+  whitelistées + groupe / bucket calendaire optionnel) ; jamais de SQL. Validé par
+  `validate_source_aggregate_request`, exécuté par `source_service.source_aggregate` (cœur pur partagé
+  `evidence/aggregate_core.py`). Réponse `{rows, totals, truncated}` (LIMIT groupes 50).
+- **`/admin/sources/datasets`** (`routes.py:1211`, **admin-gated**) - noms des datasets SQL **découverts** du
   projet, pour le picker admin de sources. Un échec de listing dégrade à `{datasets:[], error}` (jamais un 500).
 
 Erreurs `/source/*` (`source_service.EvidenceError(code, status)`) : `source_not_found → 404`,
@@ -462,21 +483,21 @@ Crédit mensuel glissant par user (défaut **$50**, mois calendaire, reset le 1e
 | `GET` `POST` | `/admin/budget` | **Admin** | GET - / POST `{limit_usd, enabled, temp_limit_usd?, temp_days?, clear_temp?}` | `{status:"ok", config, period_start, next_reset, users:[…]}` | `invalid_amount` / `invalid_expires → 400` |
 | `POST` | `/admin/budget/users` | **Admin** | `{user_ids:[…], clear?, limit_usd?, expires_days?, note?}` | `{status:"ok", config, …, users:[…]}` | `invalid_user_ids` / `too_many_users` / `invalid_amount` / `invalid_expires → 400` |
 
-- **`/usage`** (`routes.py:216`) - statut budget mensuel du **caller lui-même** (dépense, limite effective + sa
+- **`/usage`** (`routes.py:219`) - statut budget mensuel du **caller lui-même** (dépense, limite effective + sa
   SOURCE - défaut / boost global / override user -, restant, date de reset, tokens mois + lifetime). Strictement
   owner-scopé (identité résolue, jamais un champ du corps) ; throttlé par-user (`usage_can_accept`). Lecture seule.
-- **`/admin/budget`** (`routes.py:1515`) - GET = config globale + overview par user (dépense courante + limite
+- **`/admin/budget`** (`routes.py:1623`) - GET = config globale + overview par user (dépense courante + limite
   effective de chacun). POST persiste `{limit_usd, enabled}` **toujours** et gère le boost temporaire
   indépendamment : `clear_temp:true` le retire ; `temp_limit_usd` + `temp_days` en arme un frais ; ni l'un ni
   l'autre (l'édition du seul défaut) **préserve** le boost actif. Retourne l'overview rafraîchi.
-- **`/admin/budget/users`** (`routes.py:1575`) - pose/efface un override de limite **par user** pour un /
+- **`/admin/budget/users`** (`routes.py:1683`) - pose/efface un override de limite **par user** pour un /
   plusieurs / tous. `clear:true` retire l'override (retour à la limite globale) ; sinon upsert avec `limit_usd`
   (requis) + `expires_days` optionnel (absent = permanent, un int = boost temporaire) + `note`. Liste `user_ids`
   bornée, tout re-validé serveur.
 
 ### 3.9 Analytics d'usage (`POST /track`)
 
-**`POST /track`** (`routes.py:261`) - ingestion **best-effort** d'events d'usage produit batchés par le front
+**`POST /track`** (`routes.py:264`) - ingestion **best-effort** d'events d'usage produit batchés par le front
 (souvent via `navigator.sendBeacon`, Content-Type `text/plain` → `get_json(force=True)`). **Renvoie TOUJOURS
 `200`, jamais de `500`.** Identité résolue serveur (jamais du corps) ; le batch est écrit sous le `user_id`
 authentifié. Garanties « le tracking ne casse jamais le produit » : non-authentifié / stockage non configuré →
@@ -492,7 +513,7 @@ Deux pôles. Les users **suggèrent** des questions/réponses pour le golden-set
 `webapp_golden_suggestions_v1`), et tout user **consulte** les résultats de benchmark d'un agent (la table du
 scored vit dans le projet **LAB**, lue cross-projet par `benchmark_view/lab_io.py` ; la table/connexion sont
 résolues **serveur** depuis la fiche d'agent, jamais acceptées du client). L'admin peut **overrider** le verdict
-du juge (human-in-the-loop). Helper `_benchmark_block_for_key` (`routes.py:1289`) : résout la clé opaque → le
+du juge (human-in-the-loop). Helper `_benchmark_block_for_key` (`routes.py:1396`) : résout la clé opaque → le
 bloc `benchmark` validé, ou `None`.
 
 | Méthode | Chemin | Auth | Query / Corps | Succès | Erreurs spécifiques |
@@ -506,27 +527,27 @@ bloc `benchmark` validé, ou `None`.
 | `POST` | `/admin/benchmark/validate-table` | **Admin** | `{connection?, table}` | `{status:"ok", ok, missing:[…]}` | - |
 | `POST` | `/admin/benchmark/override` | **Admin** | `{agent, question_id, run_id, agent_key, mode, verdict, …}` | `{status:"ok", …}` | `agent_has_no_benchmark` / `invalid_override → 400` · `impersonation_read_only → 403` |
 
-- **`/benchmark/suggest`** (`routes.py:1129`) - suggestion **manuelle** (autonome) : question + réponse vouchée,
+- **`/benchmark/suggest`** (`routes.py:1237`) - suggestion **manuelle** (autonome) : question + réponse vouchée,
   bornée serveur, row owner-stamped. Écriture **bloquée en impersonation**.
-- **`/benchmark/suggest-from-chat`** (`routes.py:1180`) - suggestion bâtie depuis une réponse de chat du caller :
+- **`/benchmark/suggest-from-chat`** (`routes.py:1288`) - suggestion bâtie depuis une réponse de chat du caller :
   la question / réponse agent / `agent_key` / SQL sont **reconstruits de l'échange PERSISTÉ** (owner-scopé),
   jamais du client. « Oui » stocke la réponse agent comme référence (exemple positif) ; « Non » exige la
   correction. `empty_agent_answer → 400` si « Oui » sur un échange sans réponse stockée.
-- **`/benchmark/suggestions`** (`routes.py:1261`) - liste les suggestions **du caller** (newest-first,
+- **`/benchmark/suggestions`** (`routes.py:1369`) - liste les suggestions **du caller** (newest-first,
   owner-scopé + borné).
-- **`/benchmark/results`** (`routes.py:1306`) - consultation des résultats d'**un** agent (tout user). `agent`
+- **`/benchmark/results`** (`routes.py:1414`) - consultation des résultats d'**un** agent (tout user). `agent`
   = clé opaque (résolue serveur vers la table admin-configurée) ; `benchmark_id` sélectionne le benchmark nommé
   (le plus récent par défaut). Renvoie le view-model (verdict, KPIs, par agent×mode, par catégorie, détail par
   question + évolution des tentatives + attendu vs réel, sélecteur `benchmarks`), recalculé sur le **verdict
   effectif** (override admin prioritaire). Agent sans bloc benchmark → `{configured:false}`.
-- **`/benchmark/attempt`** (`routes.py:1339`) - détail **COMPLET** d'**une** tentative (chargé à la demande) :
+- **`/benchmark/attempt`** (`routes.py:1447`) - détail **COMPLET** d'**une** tentative (chargé à la demande) :
   les 4 clés (`run_id`, `question_id`, `agent_key`, `mode`) sélectionnent la ligne ; renvoie la réponse agent
   complète + le SQL réellement généré + le tableau capturé de chaque requête. Read-only, 1 ligne.
-- **`/admin/benchmark/tables`** (`routes.py:1374`) - tables `public` d'une connexion SQL, pour le picker de
+- **`/admin/benchmark/tables`** (`routes.py:1482`) - tables `public` d'une connexion SQL, pour le picker de
   table de la fiche d'agent. Un échec de lecture dégrade à `{tables:[], error}`.
-- **`/admin/benchmark/validate-table`** (`routes.py:1387`) - vérifie qu'une table candidate porte les colonnes
+- **`/admin/benchmark/validate-table`** (`routes.py:1495`) - vérifie qu'une table candidate porte les colonnes
   que la consultation exige (`bench_schema.check_columns`) ; rapporte les colonnes manquantes.
-- **`/admin/benchmark/override`** (`routes.py:1407`) - override (ou efface) le verdict du juge sur une ligne
+- **`/admin/benchmark/override`** (`routes.py:1515`) - override (ou efface) le verdict du juge sur une ligne
   scored : résout la table serveur depuis la clé opaque, valide, écrit les colonnes `human_*` via un UPDATE
   paramétré borné (`lab_io.write_override`). Écriture **bloquée en impersonation**.
 
@@ -572,7 +593,7 @@ Voir `agents/stream_manager.py` (orchestration) et `agents/streaming.py` (normal
 | `stopped` | - | worker (arrêt coopératif via `/chat/stop` ; la réponse partielle est persistée) |
 | `error` | `message` (`agent_unavailable`, `run_timeout`, `run_abandoned`) | worker (échec / coupe) |
 
-**Gate admission rate/capacité** (`can_accept`, `routes.py:226`) :
+**Gate admission rate/capacité** (`stream_manager.can_accept`, appelée dans `/chat/start` à `routes.py:425`) :
 - cap global concurrent `MAX_CONCURRENT_RUNS = 8` atteint → `busy` (**503**) ;
 - spacing par-user `MIN_START_INTERVAL_SECONDS = 1 s` → `rate_limited` (**429**).
 La pré-check évite une écriture inutile ; le cap dur dans `start_run` reste le vrai garde (lève `CapacityError`).

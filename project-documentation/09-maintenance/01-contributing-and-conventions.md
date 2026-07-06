@@ -1,6 +1,6 @@
 # Contributing - conventions and rules
 
-> Audience: every contributor (developer, documentation writer, maintainer). Last updated: 2026-06-19. Summary: this document gathers the project's NON-NEGOTIABLE rules, the memory protocol, the "repository = source of truth" principle for the agents, and the end-to-end contribution workflow (edit the source, build/package, deploy).
+> Audience: every contributor (developer, documentation writer, maintainer). Last updated: 2026-07-06. Summary: this document gathers the project's NON-NEGOTIABLE rules, the memory protocol (lean CONTEXT.md + path-scoped `.claude/rules/` + on-demand LESSONS/PROJECT_STATE), the "repository = source of truth" principle for the agents (DEV/PROD_V1 split + scripted promotion), and the end-to-end contribution workflow (edit the source, build/package, deploy).
 
 OWIsMind is a Dataiku DSS plugin running on a SHARED instance. Most of the rules below exist for a single reason: never harm that instance, nor users' trust. Before you touch the code, read this page in full. It does not replace the architecture or backend documentation; it sets the working invariants that every change must respect.
 
@@ -76,15 +76,16 @@ Violating the charter - including adding unsolicited orange accents, focus rings
 
 OWIsMind keeps a project memory under `memory/`, which TAKES PRECEDENCE over the guides in `docs/cadrage/`. The guides are starting points; the real names and the solutions that work live in memory. In case of a guide versus memory conflict, memory prevails. Likewise, the CODE prevails over outdated documentation.
 
-Three files structure this memory:
+Three memory files, plus a set of path-scoped rule files, structure this memory:
 
 | File | Role | When to read it |
 |---|---|---|
-| `memory/CONTEXT.md` | Short-term memory: current focus, last session, active gotchas | At EVERY session start. |
-| `memory/LESSONS.md` | `L0xx` lessons: what diverged from the guides, what failed then worked (context, failure, solution, proof, source, date) | When looking for the "why" of a non-obvious solution. |
-| `memory/PROJECT_STATE.md` | Durable state: architecture, canonical ids, validated / not-validated in DSS matrix | For the detail of a component and to know what is confirmed on the instance. |
+| `memory/CONTEXT.md` | Short-term memory kept LEAN (< 120 lines): current focus (1-2 last runs in full), a one-line-per-run session chain, active next steps. It no longer recites the gotchas. | At EVERY session start. |
+| `memory/LESSONS.md` | APPEND-ONLY `L0xx` lessons (context, failure, solution, proof, source, date). A reverted/superseded lesson gets a MARKER under its title; its body is never rewritten. | On demand, when looking for the "why" of a non-obvious solution. |
+| `memory/PROJECT_STATE.md` | Durable state: architecture, canonical ids, the validated / not-validated in DSS matrix (section 11 is authoritative on what is deployed). | On demand, for the detail of a component and what is confirmed on the instance. |
+| `.claude/rules/*.md` | **Path-scoped active gotchas.** Each file carries a YAML `paths:` frontmatter (`frontend.md`, `backend.md`, `agents.md`, `lab.md`, `memory.md`) and is meant to load when a matching path is edited. Any change to a gotcha goes into the RIGHT rule file, not into CONTEXT.md. | When editing files under the matching path. |
 
-The `.claude/hooks/session-start.sh` hook reminds you to read these three files (plus the knowledge graph) at the start of every session.
+The `.claude/hooks/session-start.sh` hook reminds you to read the memory files (plus the knowledge graph) at the start of every session. The hygiene protocol (P4, lesson L127) is itself recorded in `.claude/rules/memory.md`: CONTEXT.md stays lean, a new full focus block REPLACES the previous one (which drops to a one-line entry in the session chain), and gotchas live in `.claude/rules/`, never recited in CONTEXT.md.
 
 ### Continuous learning and end of session
 
@@ -108,20 +109,21 @@ The session commit is authorized (permanent user authorization). The PUSH never 
 
 ## 3. Repository = source of truth for the agents
 
-The two LangGraph Code Agents (`OWIsMind_orchestrator` and `SalesDrive_revenue_expert`) live in `dataiku-agents/agents/`. The REPOSITORY is the source of truth: we edit the code here, then RE-PASTE it by hand into the DSS Code Agents (on the Python 3.11 code env). A direct edit in DSS is overwritten at the next paste. The agents are STANDALONE files: they import only stdlib + `dataiku` + `langgraph`, with no import from the plugin.
+The LangGraph Code Agents (orchestrator `OWIsMind_orchestrator` + revenue expert `SalesDrive_revenue_expert`, plus an in-progress tickets expert) live under `dataiku-agents/OWISMIND/`, **duplicated per DSS project** in `OWISMIND_DEV/` and `OWISMIND_PROD_V1/` (files project-prefixed; ids are per-project). We DEVELOP in DEV, then PROMOTE to PROD (ADR-0019). The REPOSITORY is the source of truth: we edit the code here, then RE-PASTE it by hand into the DSS Code Agents (on the Python 3.11 code env). A direct edit in DSS is overwritten at the next paste. The agents are STANDALONE files: they import only stdlib + `dataiku` + `langgraph`, with no import from the plugin. The id map lives in `dataiku-agents/OWISMIND/README.md` and each `registry.json`.
+
+Promotion DEV -> PROD is SCRIPTED, not hand-edited: `tools/promote_agents_to_prod.py` REGENERATES every PROD_V1 file from its DEV source (copy DEV, substitute the PROD ids, surgically drop the tickets block on the orchestrator), so PROD parity is guaranteed by construction. The script refuses to write on any unexpected diff (surviving DEV id, missing marker, em/en dash) and compile-checks the output. Not everything is promoted by the script (registry `last_reviewed`, the per-project semantic-model README/MODEL.md, and the semantic-model helper scripts are updated by hand; the script's docstring lists these).
 
 This Python dual-path is intentional: the Flask backend runs on Python 3.9.23 (without langchain), whereas LangGraph/LangChain v1 require Python 3.10+. We therefore cannot put the agents in the backend; they live in a separate 3.11 env, deployed by copy-paste rather than by the zip. An agent-only change NEVER touches the zip (the webapp resolves the orchestrator by id via the whitelist).
 
 Agent deployment procedure (full detail in the dedicated agents document):
 
-1. Edit the file(s) in `dataiku-agents/agents/`, run the tests (`python3 -m unittest discover -s dataiku-agents/tests`).
-2. RE-PASTE BOTH Code Agents when either changes (some fixes live on both sides; the orchestrator resolves the sub-agent by id), on the Python 3.11 env.
-3. Check the config ids against the instance: the per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`), `SEMANTIC_TOOL_ID` (`v4oqA6R`), and `agent_id` (`agent:bHrWLyOL`). A wrong id breaks the corresponding mode or resolution.
-4. If `python-lib` also changed, rebuild + upload zip + restart backend.
+1. Edit the DEV file(s) in `dataiku-agents/OWISMIND/OWISMIND_DEV/`, run the tests (`python3 -m unittest discover -s dataiku-agents/tests`).
+2. RE-PASTE the changed Code Agents on the Python 3.11 env (the orchestrator resolves the sub-agent by id, so re-paste both when a fix lives on both sides).
+3. Check the config ids against the instance: the per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`), the semantic tool id, and the `agent_id` (DEV `agent:bHrWLyOL`, PROD `agent:uO5hEzAs`). A wrong id breaks the corresponding mode or resolution.
+4. To promote to PROD: run `python3 tools/promote_agents_to_prod.py` (regenerates `OWISMIND_PROD_V1/` from DEV), review the printed diff, then paste the four PROD files into the DSS prod project's Code Agents. Follow the runbook `docs/DEPLOY_PROD_V1_1.md`.
+5. If `python-lib` also changed, rebuild + upload zip + restart backend (agent-only changes never touch the zip).
 
-> IN FLUX: the `dataiku-agents/` folder is being edited live. As of 2026-06-18, the managed `dataset_lookup` tool (`9FEzVZk`) and its `lookup` intent have been REMOVED. Its replacement `attribute_lookup` (`tools/attribute_lookup_tool.py`, Custom Python) is, according to `dataiku-agents/CLAUDE.md`, now wired as a built-in tool of the ORCHESTRATOR (sub-agent unchanged); the security research pack still described it as "built but not wired". Status to confirm on the instance before relying on it.
-
-> ROADMAP: `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value` are NOT wired in v3.
+> ROADMAP: `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value` are NOT wired. The in-progress tickets expert (`CSSO_Trouble_Tickets_Expert`, DEV `agent:NcE9LD2i`) is deliberately kept in DEV only and absent from PROD (ADR-0019).
 
 ---
 
@@ -137,7 +139,8 @@ flowchart TD
     R --> PKG
     PKG --> ZIP["owismind-upload.zip"]
     ZIP --> UP["MANUAL upload into DSS"]
-    AG["Edit dataiku-agents/agents"] --> PASTE["Re-paste the 2 Code Agents env 3.11"]
+    AG["Edit dataiku-agents/OWISMIND/OWISMIND_DEV"] --> PASTE["Re-paste the Code Agents env 3.11"]
+    PASTE --> PROMO["promote_agents_to_prod.py -> paste PROD_V1"]
 ```
 
 ### 4.1 Build: skill `/build-plugin`
@@ -161,9 +164,9 @@ The `/package-plugin` skill stages ONLY the runtime (`plugin.json` at the root +
 | `webapp.json` / `app.js` / `style.css` only | no | yes | upload (+ Restart if `webapp.json` changes the backend) |
 | `vite.config.js` `base` or `outDir` | yes + re-wire `body.html` | yes | upload + refresh |
 | `plugin.json` (version/meta) | no | yes | upload |
-| `dataiku-agents/agents/**` (agent-only) | no | no | re-paste the 2 Code Agents, NO zip |
+| `dataiku-agents/OWISMIND/**` (agent-only) | no | no | re-paste the Code Agents (env 3.11), NO zip; promote to PROD via `promote_agents_to_prod.py` |
 
-Practical rule: a frontend-only change = build + package + upload + refresh (no backend restart). A `python-lib`/`backend` change = package + upload + mandatory BACKEND RESTART. An agent-only change = re-paste the Code Agents, no zip.
+Practical rule: a frontend-only change = build + package + upload + refresh (no backend restart). A `python-lib`/`backend` change = package + upload + mandatory BACKEND RESTART. An agent-only change = re-paste the Code Agents, no zip; a PROD promotion regenerates the PROD files by script, then pastes them.
 
 ### 4.4 DSS deployment (manual)
 

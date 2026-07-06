@@ -1,7 +1,7 @@
 # Using the chat
 
 > Audience: business user (analyst, sales representative, OWI/Orange manager). Last updated:
-> 2026-06-19. Summary: how to ask an agent a question in OWIsMind, set the cost/quality mode, follow
+> 2026-07-06. Summary: how to ask an agent a question in OWIsMind, set the cost/quality mode, follow
 > the agent working live, stop a generation, navigate the versions of a response and give feedback.
 
 The chat is the central screen of OWIsMind. There, you converse in natural language with an AI agent
@@ -79,35 +79,41 @@ conversation starts again from the last agent you used.
 > that the data "does not exist": this is the honesty firewall, detailed in
 > [the agent system](../05-agents/02-orchestrator.md).
 
-## Choosing a mode: Eco, Medium, High
+## Choosing a mode: Smart, Pro, Claude
 
 The mode selector (`ModelModePicker.vue`), next to the agent selector, is a cost/quality slider. It
 drives the power of the model that processes your question. A small pill displays the current mode with
-a colored dot (green, orange, red); clicking it opens an explanation window.
+a colored dot (green, orange, red); clicking it opens an explanation window. The modes were renamed
+Smart / Pro / Claude on 2026-06-24 (previously Eco / Medium / High).
 
 | Mode | What for | Cost | Speed |
 |---|---|---|---|
-| Eco (default, recommended) | the vast majority of everyday questions | low (1/5) | very fast (5/5) |
-| Medium | analyses that require a bit more finesse | moderate (3/5) | fast (3/5) |
-| High | complex questions that warrant in-depth reasoning | high (5/5) | more deliberate (2/5) |
+| Smart (default, recommended) | the vast majority of everyday questions | low (1/5) | very fast (5/5) |
+| Pro | analyses that require a bit more finesse | moderate (3/5) | fast (3/5) |
+| Claude | complex questions that warrant in-depth reasoning | high (5/5) | more deliberate (2/5) |
 
-Eco is the default mode and carries a "Recommended" badge: it is the best balance of performance /
-quality, and the most economical. The product recommendation is simple: stay in Eco, and reserve High
-for the questions that truly warrant it. The window also reminds you that the more powerful modes
-consume your monthly envelope of 50 € faster.
+Smart is the default mode and carries a "Recommended" badge: it is the best balance of performance /
+quality, and the most economical. The product recommendation is simple: stay in Smart, and reserve
+Claude for the questions that truly warrant it. The window also reminds you that the more powerful
+modes consume your monthly envelope of 50 € faster.
 
 The mode window presents the three modes as a list on the left and the detail of the selected mode on
 the right (description, cost gauge and speed gauge). Your choice applies only after you click
-**Apply** (i18n key `mode.validate`); **Cancel** closes it without changing anything. It is a
-preference that is attached to each question sent.
+**Apply** (i18n key `mode.validate`); **Cancel** closes it without changing anything.
 
-The popup also shows a reminder: more powerful modes use up your monthly budget faster. Reserve High
+The mode is **ephemeral**: the picker always returns to Smart after you send a question. A non-default
+mode is a one-shot choice, made deliberately for each question that needs it, not a sticky setting.
+The mode actually used is stamped on each answer and shown in the tokens/cost line under the response,
+so you can always see how a given answer was produced. Note: the mode picker appears only for agents
+that support modes; for others the whole turn runs on the default model.
+
+The popup also shows a reminder: more powerful modes use up your monthly budget faster. Reserve Claude
 for questions that genuinely warrant it (key `mode.envelope_note`, referencing a $50/month envelope).
 The actual limit for your account is set by an administrator and is visible in [My account and
 budget](05-account-and-budget.md).
 
 Cost tracking is also visible under each response: a discreet line shows the input tokens, the output
-tokens and the estimated cost of the exchange.
+tokens, the estimated cost and the mode (Smart/Pro/Claude) of the exchange.
 
 ## The live execution timeline
 
@@ -206,7 +212,7 @@ conversation later. It helps the OWI team improve the agents.
 |---|---|
 | Ask a question | Type in the bar, `Enter` to send, `Shift+Enter` for a new line |
 | Switch agent | Agent selector to the left of the bar (default: orchestrator) |
-| Set cost/quality | Mode selector (Eco recommended, Medium, High); validate in the window |
+| Set cost/quality | Mode selector (Smart recommended, Pro, Claude); validate in the window; resets to Smart after each send |
 | Follow the work live | The step timeline in the response bubble |
 | Stop | The send button becomes a stop button during generation |
 | Correct a question | Hover over your bubble, edit icon (creates a branch) |

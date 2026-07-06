@@ -1,6 +1,6 @@
 # Technology stack and dependencies
 
-> Audience: Developer. Last updated: 2026-06-19. Summary: an exact inventory of the languages,
+> Audience: Developer. Last updated: 2026-07-06. Summary: an exact inventory of the languages,
 > frameworks and versions across OWIsMind's four layers (Vue/Vite frontend, Flask Python 3.9 backend,
 > LangGraph Python 3.11 agents, PostgreSQL storage), an explanation of the dual 3.9/3.11 code environment
 > and of the NO INSTALL rule that governs all dependency management.
@@ -23,13 +23,14 @@ layers and their interactions, see
 |---|---|---|---|---|
 | Frontend | JavaScript (ES modules), Node for the build | Vue 3.5, Vite 8, Pinia 3, vue-router 5, vue-i18n 11 | Built into static assets under `resource/owismind-app/`, served by DSS | The BUILD (`resource/owismind-app/`), never the `frontend/` sources |
 | Backend | Python 3.9.23 (observed in DSS) | Flask (via `dataiku.customwebapp`), direct SQL `SQLExecutor2` | `python-lib/owismind/` package in the zip, restart the backend after upload | Yes |
-| Agents | Python 3.11 (separate DSS code env) | LangGraph, LangChain v1, native LLM Mesh calls | Code Agents pasted by hand from `dataiku-agents/agents/` | No (outside the zip) |
+| Agents | Python 3.11 (separate DSS code env) | LangGraph, LangChain v1, native LLM Mesh calls | Code Agents pasted by hand from `dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/agents/` | No (outside the zip) |
 | Storage | PostgreSQL (DSS connection `SQL_owi`) | Reached via `SQLExecutor2`, parameterized queries, explicit COMMIT | Tables prefixed `OWISMIND_DEV_owismind_...`, created on first use | No (external) |
 
-Canonical identifiers of the stack: plugin id `owismind` (version `0.0.1`, source of truth
+Canonical identifiers of the stack: plugin id `owismind` (version `1.1.0`, source of truth
 `Plugin/owismind/plugin.json`), webapp `webapp-owismind-ai-agents`, python-lib package `owismind`, resource
 folder `owismind-app`, API prefix `/owismind-api` (health `/owismind-api/ping`), SQL connection `SQL_owi`
-(PostgreSQL, schema `public`), project key `OWISMIND_DEV` resolved server-side, DSS platform 14.4.x.
+(PostgreSQL, schema `public`), project key `OWISMIND_DEV` (dev) / a separate prod project key resolved
+server-side, DSS platform 14.4.x.
 
 ---
 
@@ -131,10 +132,13 @@ framework; see [Backend - streaming and run lifecycle](../04-backend/03-streamin
 
 ### 4.1 Versions and frameworks
 
-The two Code Agents live in `dataiku-agents/agents/` (the repository is the source of truth):
-`OWIsMind_orchestrator.py` (the orchestrator) and `SalesDrive_revenue_expert.py` (the revenue expert
-sub-agent, `agent:bHrWLyOL`). They are pasted by hand into DSS Code Agents, on a **Python 3.11 code
-env** distinct from the backend.
+The Code Agents live under `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/agents/` (the
+repository is the source of truth, files project-prefixed and duplicated per DSS project):
+`*_OWIsMind_orchestrator.py` (the orchestrator, DEV `038G7mlF` / PROD `Xrv7GvfG`) and
+`*_SalesDrive_revenue_expert.py` (the revenue expert sub-agent, DEV `agent:bHrWLyOL` / PROD
+`agent:uO5hEzAs`), plus a DEV-only tickets sub-agent. They are pasted by hand into DSS Code Agents, on a
+**Python 3.11 code env** distinct from the backend; DEV agents are promoted to PROD via
+`tools/promote_agents_to_prod.py`.
 
 Their import stack is strictly standalone: stdlib plus `dataiku` plus `langchain`/`langgraph`,
 **no import of the plugin**. This is verifiable in the header of `OWIsMind_orchestrator.py`, which only
@@ -179,24 +183,23 @@ BOTH Code Agents, check the ids) lives in
 
 ### 4.3 Per-mode model ids (LLM Mesh)
 
-The loop models are selected by the user mode (eco / medium / high), a single model
-driving the entire turn (no escalation). The ids are declared VERBATIM at the top of each agent
-(`OWIsMind_orchestrator.py`, constants `GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`, mapped
-in `LOOP_LLM_BY_MODE`):
+The loop models are selected by the user mode (Smart / Pro / Claude, internal keys `smart` / `pro` /
+`claude`), a single model driving the entire turn (no escalation). The ids are declared VERBATIM at the
+top of each agent (orchestrator, constants `GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`,
+mapped by `ORCH_MODES`):
 
 | Mode | Constant | LLM Mesh id (verbatim) | Model |
 |---|---|---|---|
-| eco (default) | `GEMINI_FLASH_LITE_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite` | Gemini 3.1 Flash-Lite |
-| medium | `GEMINI_FLASH_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash` | Gemini 3.5 Flash |
-| high | `SONNET_ID` | `openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| Smart (`smart`, default) | `GEMINI_FLASH_LITE_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite` | Gemini 3.1 Flash-Lite |
+| Pro (`pro`) | `GEMINI_FLASH_ID` | `openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash` | Gemini 3.5 Flash |
+| Claude (`claude`) | `SONNET_ID` | `openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6` | Claude Sonnet 4.6 |
 
-> IN FLUX: these ids must match an id actually exposed by the instance's LLM Mesh connection. A wrong id
-> breaks the corresponding mode (the mode stops responding). They must be re-checked in DSS after each
-> re-paste of the Code Agents. The `dataiku-agents/` folder is moreover being edited live by another
-> engineer: the managed `dataset_lookup` tool (`9FEzVZk`) and its `lookup` intent were REMOVED on
-> 2026-06-18, and their replacement `attribute_lookup` (`tools/attribute_lookup_tool.py`) is BUILT and
-> unit-tested, now wired as a built-in tool of the orchestrator but with `LOOKUP_TOOL_ID` still
-> empty (not operational until the tool is created in DSS). The detail lives in
+> These ids must match an id actually exposed by the instance's LLM Mesh connection. A wrong id breaks
+> the corresponding mode (the mode stops responding). They must be re-checked in DSS after each re-paste
+> of the Code Agents. Note: the managed `dataset_lookup` tool (`9FEzVZk`) and its `lookup` intent were
+> REMOVED on
+> 2026-06-18, and their replacement `attribute_lookup` is BUILT, unit-tested and wired as a built-in
+> tool of the orchestrator, with `LOOKUP_TOOL_ID` now filled in DEV (`UUoynaL`). The detail lives in
 > [Agent tools and Semantic Model](../05-agents/04-tools-and-semantic-model.md).
 
 The Semantic Model Query tool (`revenue_semantic_query`, `v4oqA6R`), which actually writes the analytical
@@ -268,7 +271,7 @@ is no CI to date. The detail of the suites, their scope and what requires DSS li
 
 | Element | Value to cite |
 |---|---|
-| OWIsMind plugin | id `owismind`, version `0.0.1` |
+| OWIsMind plugin | id `owismind`, version `1.1.0` |
 | Platform | Dataiku DSS 14.4.x |
 | Frontend | Vue `^3.5.34`, Vite `^8.0.12`, Pinia `^3.0.4`, vue-router `^5.1.0`, vue-i18n `^11.4.4`, chart.js `^4.5.1`, markdown-it `^14.2.0`, dompurify `^3.4.8` |
 | Backend | Python 3.9.23, Flask (via DSS `customwebapp`), `SQLExecutor2` |

@@ -1,20 +1,23 @@
 # Deploying and editing agents
 
-> Audience: agent engineer. Last updated: 2026-06-19. Summary: how to edit the two Code
-> Agents in the repository (source of truth), re-paste them into a Python 3.11 env in DSS, verify the config
-> ids, and never break the frozen contracts the webapp depends on.
+> Audience: agent engineer. Last updated: 2026-07-06. Summary: how to edit the Code
+> Agents in the repository (source of truth), re-paste them into a Python 3.11 env in DSS, promote from
+> DEV to PROD_V1, verify the config ids, and never break the frozen contracts the webapp depends on.
 
-The two OWIsMind Code Agents (`OWIsMind_orchestrator` and `SalesDrive_revenue_expert`,
-`agent:bHrWLyOL`) live in `dataiku-agents/agents/`. The repository is the **source of truth**: you edit
-here, then **re-paste** the code into the corresponding DSS Code Agent. Any edit made directly in the DSS
-editor is overwritten at the next paste. This document describes the deployment procedure, the config
-ids to verify, the frozen contracts that must never be renamed, and the redeployment regimes
-depending on what changed (agent only, Flow recipes, plugin backend).
+The OWIsMind Code Agents (orchestrator + revenue expert, plus a tickets expert being built in DEV) live
+under `dataiku-agents/OWISMIND/`, split by DSS project into `OWISMIND_DEV/` and `OWISMIND_PROD_V1/`, one
+complete ready-to-paste copy per project with every deployable file prefixed by the project key. The
+repository is the **source of truth**: you edit the DEV copy, re-paste into the corresponding DSS Code
+Agent, then **promote** to PROD_V1. Any edit made directly in the DSS editor is overwritten at the next
+paste. This document describes the deployment procedure, the DEV -> PROD promotion, the config ids to
+verify, the frozen contracts that must never be renamed, and the redeployment regimes depending on what
+changed (agent only, Flow recipes, plugin backend).
 
-> IN FLUX: the `dataiku-agents/` layer is being edited live by another engineer. The names and ids
-> cited here were verified in the code on 2026-06-18. The `attribute_lookup` wiring is present in the
-> orchestrator source; it goes live on the next re-paste (see the dedicated section). Always check the
-> actual state of the file before relying on it.
+> The per-project id map is authoritative in `dataiku-agents/OWISMIND/README.md` and each
+> `registry.json`. Never hand-edit a PROD file: promote with `python3 tools/promote_agents_to_prod.py`
+> (it regenerates the `OWISMIND_PROD_V1_*` files from their DEV twins, substitutes PROD ids, removes the
+> orchestrator's tickets capability block, refuses to write on any unexpected state, and compile-checks
+> the output). See section 2.3.
 
 ## 1. The mental model: one repository, two Code Agents, one 3.11 env
 
@@ -29,10 +32,11 @@ while the Code Agents run on **Python 3.11** because LangGraph / LangChain v1 re
 Python 3.10. You therefore cannot host the agents inside the backend; they must be pasted into a
 distinct 3.11 code env. This is what justifies deployment by copy-paste rather than by the zip.
 
-| Element | Repo file | DSS Code Agent | Python env |
-|---|---|---|---|
-| Orchestrator | `agents/OWIsMind_orchestrator.py` | OWIsMind_orchestrator | 3.11 |
-| Revenue sub-agent | `agents/SalesDrive_revenue_expert.py` | SalesDrive_revenue_expert (`agent:bHrWLyOL`) | 3.11 |
+| Element | Repo file (DEV copy) | DSS Code Agent | DEV id | PROD_V1 id | Python env |
+|---|---|---|---|---|---|
+| Orchestrator | `OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` | OWIsMind_orchestrator | `038G7mlF` | `Xrv7GvfG` | 3.11 |
+| Revenue sub-agent | `OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py` | SalesDrive_revenue_expert | `bHrWLyOL` | `uO5hEzAs` | 3.11 |
+| Tickets sub-agent (DEV only) | `OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` | CSSO_Trouble_Tickets_Expert | `NcE9LD2i` (being built) | not in PROD yet | 3.11 |
 
 The rationale for the 3.11 env and the copy-paste decision are formalized in
 [ADR-0005](../08-decisions/0005-langgraph-code-agents-python-311.md). The rationale for the Flask backend
@@ -43,14 +47,14 @@ The rationale for the 3.11 env and the copy-paste decision are formalized in
 The canonical procedure lives in `dataiku-agents/README.md` (section "Deploy / update procedure") and
 `dataiku-agents/CLAUDE.md`. In five steps:
 
-1. **Edit** the file(s) in `dataiku-agents/agents/`, then run the pure-logic tests
-   (no DSS, no install):
+1. **Edit** the DEV file(s) in `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/`, then run the pure-logic
+   tests (no DSS, no install; they run against the DEV copies, 316 tests today):
    ```bash
    python3 -m unittest discover -s dataiku-agents/tests
    ```
 2. **Re-paste BOTH Code Agents** as soon as one changes, into the **Python 3.11** env:
-   `agents/OWIsMind_orchestrator.py` -> Code Agent **OWIsMind_orchestrator**, and
-   `agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**.
+   `OWISMIND_DEV_OWIsMind_orchestrator.py` -> Code Agent **OWIsMind_orchestrator** (`038G7mlF`), and
+   `OWISMIND_DEV_SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert** (`bHrWLyOL`).
 3. **Verify the config ids** against the instance (section 3).
 4. **Optional**: set `source_url` on the `revenue_expert` capability of the orchestrator registry
    (the Dataiku URL of the `DRIVE_Revenues` dataset) -> Evidence then renders the source as clickable.
@@ -84,6 +88,33 @@ code, it calls them via LLM Mesh. The backend restart is required only for a cha
 `python-lib` or `backend.py`. The full "what to rebuild when" matrix is in
 [06-operations/02-build-package-deploy.md](../06-operations/02-build-package-deploy.md).
 
+### 2.3 Promoting DEV -> PROD_V1 (scripted)
+
+You always develop and validate in `OWISMIND_DEV`, then promote the same change to `OWISMIND_PROD_V1`.
+Promotion is **scripted and idempotent**, never a hand edit of a PROD file:
+
+```bash
+python3 tools/promote_agents_to_prod.py
+```
+
+The script regenerates every `OWISMIND_PROD_V1_*` deployable from its DEV twin, guaranteeing functional
+parity by construction: it copies the DEV file, applies the per-project id substitutions (PROD ids baked
+into the script), and, for the orchestrator only, surgically removes the `tickets_expert` capability
+block so PROD ships revenue only. `BUSINESS_DOMAINS` in PROD still lists `tickets`, so PROD gives the
+**honest capability-gap answer** ("no agent for this domain yet") rather than pretending the data is
+missing. After regeneration the residual DEV<->PROD diff of each file is exactly: deploy-target headers +
+id lines + the tickets block; the script prints those diffs, refuses to write on any unexpected state (a
+marker not found, a surviving DEV id in a PROD file, an em/en dash glyph), and compile-checks the output.
+Then paste each generated PROD file into its PROD Code Agent / tool (env 3.11).
+
+Not covered by the script (update by hand when they change): each `registry.json` (bump `last_reviewed`,
+mirror any capability change), the per-project `semantic_model/` README/MODEL.md, and the semantic-model
+helper scripts that keep a per-project copy but are not promoted here. The tickets agent is the live
+example of the DEV-only state: finished in DEV, intentionally absent from PROD until validated. The
+per-project id map is in [`dataiku-agents/OWISMIND/README.md`]; if an id ever changes in DSS, update the
+substitution tables at the top of `promote_agents_to_prod.py` first. The full production runbook is
+[docs/DEPLOY_PROD_V1_1.md](../../docs/DEPLOY_PROD_V1_1.md).
+
 ## 3. The config ids to verify (verbatim)
 
 After each paste, verify that the config constants match the instance. A wrong LLM Mesh id does not
@@ -114,11 +145,13 @@ modes and the propagation is in
 
 ### 3.2 Tool and agent ids
 
-| Constant / field | Value (verbatim) | Where | Role |
-|---|---|---|---|
-| `SEMANTIC_TOOL_ID` | `v4oqA6R` | sub-agent | Semantic Model Query tool (`revenue_semantic_query`), the only real DSS tool called at runtime; writes and executes the analytical SQL on Sonnet in all modes. |
-| `agent_id` (capability `revenue_expert`) | `agent:bHrWLyOL` | orchestrator | resolution of the sub-agent by id (never exposed to the model). |
-| `LOOKUP_TOOL_ID` | `""` (empty) | orchestrator | id of the Custom Python tool `attribute_lookup`. Tool object EXISTS in DSS; filling this is optional (name-based fallback resolves `attribute_lookup`). See section 6. |
+Ids are per project (DEV / PROD_V1); the values baked into each `OWISMIND_<PROJ>_*` file must match its DSS project.
+
+| Constant / field | DEV | PROD_V1 | Where | Role |
+|---|---|---|---|---|
+| `SEMANTIC_TOOL_ID` | `v4oqA6R` | `sgk5pfln` | sub-agent | Semantic Model Query tool (`revenue_semantic_query`), the only real DSS tool called at runtime; writes and executes the analytical SQL on Sonnet in all modes. |
+| `agent_id` (capability `revenue_expert`) | `agent:bHrWLyOL` | `agent:uO5hEzAs` | orchestrator | resolution of the sub-agent by id (never exposed to the model). |
+| `LOOKUP_TOOL_ID` | `UUoynaL` | `szOZCoU` | orchestrator | id of the Custom Python tool `attribute_lookup` (orchestrator built-in). Live in both projects. See section 6. |
 
 `SEMANTIC_TOOL_ID_BY_MODE` is constant across the three modes (the tool has its own DSS model, Sonnet).
 The detail of the Semantic Model Query tool is in
@@ -183,8 +216,8 @@ python3 -m unittest dataiku-agents.tests.test_langgraph_agents
 > NOTE: a comment in `SalesDrive_revenue_expert.py` cites `test_orchestrator_v3.py` as the file
 > for the anti-drift test. That name is obsolete: the test actually lives in
 > `dataiku-agents/tests/test_langgraph_agents.py` (it compares `set(block_labels.keys())` to
-> `set(KNOWN_BLOCK_IDS)` and the equivalent for the tools). The agent test count (242 `test_` functions
-> as of 2026-06-18) is liable to change; run the suite rather than relying on a number.
+> `set(KNOWN_BLOCK_IDS)` and the equivalent for the tools). The agent test count (316 tests, 2 skipped,
+> as of 2026-07-06) is liable to change; run the suite rather than relying on a number.
 
 ### 4.5 The registry invariant (one capability per domain)
 
@@ -222,30 +255,22 @@ dataset names in its config, then add **one** entry to `CAPABILITIES`. The domai
 `satisfaction`, etc. already exist in `BUSINESS_DOMAINS`, so the capability gap message closes
 on its own once the agent is activated.
 
-## 6. In-flux point: activating `attribute_lookup`
+## 6. The `attribute_lookup` built-in tool
 
-> IN FLUX: the managed tool `dataset_lookup` (`9FEzVZk`) and the entire `lookup` intent of the sub-agent
-> were **REMOVED on 2026-06-18**. The replacement `attribute_lookup`
-> (`tools/attribute_lookup_tool.py`) is built, unit-tested, RUN-TEST validated in DSS, and its **Custom
-> Python tool object already exists on the instance** (`dataiku-agents/tools/README.md`, confirmed in
-> `dataiku-agents/CLAUDE.md`).
+The managed tool `dataset_lookup` (`9FEzVZk`) and the sub-agent's old `lookup` intent were removed; the
+replacement is the Custom Python tool `attribute_lookup` (`OWISMIND_<PROJ>_attribute_lookup_tool.py`),
+live in both projects.
 
-The current state:
+- It is declared as an orchestrator **built-in tool** (not a sub-agent capability): appended in
+  `build_tool_specs` and dispatched inline in `node_tools` (`_run_lookup`), like `show_table` or
+  `current_date`. It touches **no frozen `KNOWN_*` contract**, and the **sub-agents are unchanged**.
+- `LOOKUP_TOOL_ID` is baked per project (`UUoynaL` in DEV, `szOZCoU` in PROD_V1); a name-based fallback
+  (`LOOKUP_TOOL_NAME = "attribute_lookup"`) resolves it even if the id is ever cleared.
 
-- The **wiring is present in the orchestrator**: `attribute_lookup` is declared as a **built-in
-  tool** (not a sub-agent capability). It is appended in `build_tool_specs` and dispatched
-  inline in `node_tools` (`_run_lookup`), like `show_table` or `current_date`. It touches
-  **no frozen `KNOWN_*` contract**, and the **sub-agent is unchanged**.
-- `LOOKUP_TOOL_ID = ""` (empty). The name-based fallback (`LOOKUP_TOOL_NAME = "attribute_lookup"`)
-  resolves the tool without a code change, so filling `LOOKUP_TOOL_ID` is OPTIONAL (useful for a
-  direct bind and slightly faster resolution).
-- Activation requires only: **re-paste the ORCHESTRATOR alone** (env 3.11). This is an exception to
-  the "re-paste both" rule that applies only because this change does not touch the collaboration contract.
-
-After re-pasting, additionally: (1) update the `revenue_semantic_query` "Description for LLM" in DSS
-(drop the stale precondition about `resolve_filter_value`; the corrected text is in
-`dataiku-agents/tools/README.md`); (2) delete the `Drive_Revenues_resolve_filter_value` tool object
-(called by nobody, loads catalog into pandas RAM).
+Still pending in DSS (both projects): (1) update the `revenue_semantic_query` "Description for LLM" to
+drop the stale precondition about `resolve_filter_value` (corrected text in
+`dataiku-agents/OWISMIND/OWISMIND_<PROJ>/semantic_model/README.md`); (2) delete the dead
+`Drive_Revenues_resolve_filter_value` tool object (called by nobody, loads catalog into pandas RAM).
 
 ## 7. Recap of the traps
 

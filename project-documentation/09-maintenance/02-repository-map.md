@@ -1,7 +1,7 @@
 # Repository map
 
-> Audience: Developer. Last updated: 2026-06-19. Summary: where everything lives in the
-> OWIsMind repository (DSS plugin, agents, docs, memory, project documentation, Claude tooling), what is source vs generated, and
+> Audience: Developer. Last updated: 2026-07-06. Summary: where everything lives in the
+> OWIsMind repository (DSS plugin, agents, the OWIsMind_LAB benchmark mirror, top-level tools, docs, memory, project documentation, Claude tooling), what is source vs generated, and
 > what must never be edited by hand.
 
 This document is an orientation map: it describes the ROLE of each important folder, its Git status
@@ -9,14 +9,18 @@ This document is an orientation map: it describes the ROLE of each important fol
 editing rule. It does not detail the internal content of each layer: for that, follow the links in the
 `## See also` section. The cross-cutting golden rule: edit the SOURCE, never the OUTPUT.
 
-## 1. Overview: five zones, three Git statuses
+## 1. Overview: the zones, three Git statuses
 
-The repository mixes five zones of different natures:
+The repository mixes several zones of different natures:
 
 - `Plugin/owismind/`: the Dataiku DSS plugin itself (Vue frontend, Flask backend, webapp descriptor,
   resources). This is the core deliverable.
 - `dataiku-agents/`: the LangGraph Code Agents and the design-time fabrication (recipes, tools, semantic
-  model). This layer is deployed SEPARATELY (copy-paste into DSS), it never goes through the zip.
+  model), DUPLICATED per DSS project (`OWISMIND/OWISMIND_DEV`, `OWISMIND/OWISMIND_PROD_V1`). This layer is
+  deployed SEPARATELY (copy-paste into DSS), it never goes through the zip.
+- `OWIsMind_LAB/`: the repo mirror of the SEPARATE DSS benchmark project (`OWIsMind_LAB`), with its own
+  project-library and two Standard webapps. `tools/`: top-level maintenance scripts
+  (`build_dev_plugin.py`, `promote_agents_to_prod.py`).
 - `docs/`, `memory/`: the reference engineering documentation (in French) and the project's living memory.
 - `project-documentation/`: the structured English documentation set (architecture, backend, frontend,
   agents, operations, testing, decisions, maintenance). This folder is the canonical prose reference.
@@ -27,7 +31,7 @@ Three Git statuses coexist (defined in `.gitignore`):
 
 | Status | Meaning | Examples |
 |---|---|---|
-| Versioned source | Edited by hand, authoritative | `frontend/src/`, `python-lib/owismind/`, `webapps/`, `dataiku-agents/`, `docs/`, `memory/`, `.claude/settings.json` |
+| Versioned source | Edited by hand, authoritative | `frontend/src/`, `python-lib/owismind/`, `webapps/`, `dataiku-agents/`, `OWIsMind_LAB/`, `tools/`, `docs/`, `memory/`, `.claude/settings.json`, `.claude/rules/` |
 | Versioned generated output (exception) | Produced by a build but TRACKED because it is indispensable for packaging without a reinstall | `Plugin/owismind/resource/owismind-app/` |
 | Ignored generated output | Regenerated on demand, never committed | `Plugin/ready-for-dataiku/`, `node_modules/`, `graphify-out/`, `__pycache__/` |
 
@@ -39,7 +43,7 @@ packageable everywhere, the payload must travel inside the repository. This is t
 ## 2. `Plugin/owismind/`: the DSS plugin
 
 Root of the plugin on disk. The descriptor `Plugin/owismind/plugin.json` carries `"id": "owismind"` and
-`"version": "0.0.1"` (to be quoted verbatim; the id never changes, on pain of breaking the Vite paths
+`"version": "1.1.0"` (to be quoted verbatim; the id never changes, on pain of breaking the Vite paths
 already wired in `body.html`).
 
 | Path | Lives here | Status | Rule |
@@ -160,37 +164,42 @@ Documented mini-repo, deployed SEPARATELY from the plugin: the agents are pasted
 Agents on the Python 3.11 code env (the Flask backend, for its part, is on Python 3.9). This layer NEVER
 goes through the zip; an agent-only change does not touch `ready-for-dataiku/`.
 
-> IN FLUX: this folder is being edited live by another engineer. The file names and the list of
-> tools may shift from one day to the next; always confirm the actual state before relying on a precise
-> detail.
+The agents are DUPLICATED per DSS project under `dataiku-agents/OWISMIND/`: `OWISMIND_DEV/` (where we
+develop) and `OWISMIND_PROD_V1/` (regenerated from DEV, never hand-edited). Each project folder has the
+same `{agents, recipes, semantic_model, tools}/` sub-layout with PROJECT-PREFIXED filenames and its own
+`registry.json`. The id map is in `dataiku-agents/OWISMIND/README.md`.
 
 | Path | Lives here | Status |
 |---|---|---|
-| `agents/OWIsMind_orchestrator.py` | The orchestrator (LangGraph Code Agent, env 3.11): loop, `CAPABILITIES` registry, honesty firewall, modes | Source (= truth of the DSS Code Agent) |
-| `agents/SalesDrive_revenue_expert.py` | The revenue expert sub-agent (`agent:bHrWLyOL`): UNDERSTAND -> RESOLVE -> QUERY -> RENDER pipeline | Source |
-| `agents/README.md` | Agent system documentation (pipeline, deployment) | Source |
-| `recipes/` | Design-time Flow recipes: `profile_dataset_recipe.py`, `build_value_index_recipe.py`, `build_value_catalog_recipe.py` (+ `README.md`) | Source; deployed as Python recipes in the Flow, not via the zip |
-| `tools/` | Agent tools and semantic model: `attribute_lookup_tool.py` (full-text `ILIKE` resolver, wired as a built-in tool of the orchestrator as of 2026-06-18); `semantic_model/` sub-folder: `build_aligned_semantic_model.py`, `update_aligned_semantic_model.py`, `dump_semantic_model.py`, `migrate_semantic_model_to_project.py`, `remap_semantic_model.py`, `MODEL.md`, `README.md`; `README.md` | Source |
-| `tests/` | DSS-free agents `unittest` suite: `test_profiler.py`, `test_dataset_expert.py`, `test_langgraph_agents.py` (registry anti-drift test), `test_attribute_lookup.py` | Source |
-| `README.md`, `CLAUDE.md` | Master documentation and engineering notes | Source |
+| `OWISMIND/OWISMIND_DEV/agents/` | DEV Code Agents: the orchestrator (`038G7mlF`: loop, `CAPABILITIES`, honesty firewall, modes) and the revenue expert (`agent:bHrWLyOL`: UNDERSTAND -> RESOLVE -> QUERY -> RENDER), plus the in-progress tickets expert (`agent:NcE9LD2i`) | Source (= truth of the DSS Code Agents) |
+| `OWISMIND/OWISMIND_PROD_V1/agents/` | PROD_V1 Code Agents (orchestrator `Xrv7GvfG`, revenue expert `agent:uO5hEzAs`; NO tickets expert): REGENERATED from DEV by the promote script | Source (generated by script, reviewed) |
+| `OWISMIND/OWISMIND_{DEV,PROD_V1}/recipes/` | Design-time Flow recipes (profile, value_index, value_catalog) | Source; deployed as Python recipes in the Flow, not via the zip |
+| `OWISMIND/OWISMIND_{DEV,PROD_V1}/tools/` | The `attribute_lookup` tool (full-text `ILIKE` resolver, wired as an orchestrator built-in) | Source |
+| `OWISMIND/OWISMIND_{DEV,PROD_V1}/semantic_model/` | Semantic-model scripts (`build_/update_/dump_aligned_semantic_model.py`, `drop_column_and_reindex.py`), `MODEL.md`, `README.md` | Source |
+| `OWISMIND/README.md`, per-project `registry.json` | Master id map + per-project capability registry (anti-drift) | Source |
+| `tests/` | DSS-free agents `unittest` suite (loads the DEV files): `test_profiler.py`, `test_dataset_expert.py`, `test_langgraph_agents.py` (registry anti-drift test), `test_attribute_lookup.py` | Source |
+| `README.md`, `CLAUDE.md`, `PLAYBOOK_ADD_AGENT.md` | Master documentation and engineering notes | Source |
 
 The agents are standalone files: they import only stdlib + `dataiku` + `langgraph`, never the plugin
 package. Running the tests: `python3 -m unittest discover -s dataiku-agents/tests`.
 
-> IN FLUX: `tools/attribute_lookup_tool.py` is BUILT, unit-tested (`tests/test_attribute_lookup.py`),
-> and (as of 2026-06-18) wired as a BUILT-IN tool of the ORCHESTRATOR (dispatched inline in `node_tools`,
-> like `show_table`/`current_date`). The sub-agent is UNCHANGED. The predecessor managed tool
-> `dataset_lookup` (`9FEzVZk`) and the `lookup` intent were REMOVED on 2026-06-18. A DSS RUN TEST
-> validated the lookup path (~14 s for a fast attribute search). Remaining DSS action: update the Custom
-> Python tool in DSS, re-paste the orchestrator, and delete the old `Drive_Revenues_resolve_filter_value`
-> tool (never called, wastes pandas RAM).
+Promotion DEV -> PROD is done by `tools/promote_agents_to_prod.py` (regenerates `OWISMIND_PROD_V1/` from
+DEV: copy + PROD id substitution + surgical removal of the tickets block; refuses on any unexpected diff;
+compile-checks). See ADR-0019 and the runbook `docs/DEPLOY_PROD_V1_1.md`.
 
-> ROADMAP: the recipe `build_value_catalog_recipe.py` produces `DRIVE_Revenues_Value_Catalog`, and the
-> Python resolver `Drive_Revenues_resolve_filter_value` that would consume it, are planned but NOT wired
-> in v3. The current grounding remains read-only inline SQL on `DRIVE_Revenues_value_index`.
+> ROADMAP: `DRIVE_Revenues_Value_Catalog` and the Python resolver `Drive_Revenues_resolve_filter_value`
+> are planned but NOT wired; grounding remains read-only inline SQL on `DRIVE_Revenues_value_index`. The
+> tickets expert stays DEV-only until validated.
 
 The detail of the agent system lives in [Agent system](../05-agents/01-agent-system-overview.md) and the
 re-paste procedure in [Deploying and editing the agents](../05-agents/07-deploying-and-editing-agents.md).
+
+### 8.1 `OWIsMind_LAB/` and `tools/`
+
+| Path | Lives here | Status |
+|---|---|---|
+| `OWIsMind_LAB/` | Repo mirror of the SEPARATE DSS benchmark project: `project-library/python/{benchmark, benchmark_webapp}` (recolled as project-library packages), `webapps/{benchmark_launcher, benchmark_results}` (two Standard webapps' panes), `local-variables.example.json`, `README.md` (the repo<->DSS map). NOT part of the plugin (ADR-0018). | Source; deployed into its own DSS project by hand, never via the plugin zip |
+| `tools/` | Top-level maintenance scripts: `build_dev_plugin.py` (builds the coexisting DEV plugin id `owismind_dev`/`owismind_dev_v2`), `promote_agents_to_prod.py` (regenerates the PROD_V1 agents from DEV, ADR-0019) | Source; run locally, never packaged |
 
 ## 9. `docs/`: reference engineering documentation
 
@@ -212,14 +221,15 @@ figures, for example `chat_v4` vs the actual `chat_v5`, or old test/zip-entry co
 
 ## 10. `memory/`: the project's living memory
 
-The memory prevails over the `docs/cadrage/` guides. Maintained by the `/log-session` skill.
+The memory prevails over the `docs/cadrage/` guides. Maintained by the `/log-session` skill. The ACTIVE,
+path-scoped gotchas live in `.claude/rules/*.md` (section 12), not in `CONTEXT.md`.
 
 | Path | Lives here | Status |
 |---|---|---|
-| `CONTEXT.md` | Short-term memory, loaded every session (current focus, gotchas, next steps) | Source |
-| `PROJECT_STATE.md` | Detailed durable state (canonical identifiers, feature state) | Source |
-| `LESSONS.md` | Journal of the `L0xx` lessons (context / failure / solution / proof / source / date) | Source |
-| `sessions/` | One log per session day (~16 files `YYYY-MM-DD.md`) | Source |
+| `CONTEXT.md` | Short-term memory kept LEAN (< 120 lines): current focus, session chain, next steps. Does not recite gotchas. | Source |
+| `PROJECT_STATE.md` | Detailed durable state (canonical identifiers, feature state, section 11 = DSS validation matrix) | Source |
+| `LESSONS.md` | APPEND-ONLY journal of the `L0xx` lessons (context / failure / solution / proof / source / date; up to L140) | Source |
+| `sessions/` | One log per session day (`YYYY-MM-DD.md`, a `## run N` section appended when the day already has a file) | Source |
 
 ## 11. `project-documentation/`: the structured English documentation set
 
@@ -236,7 +246,7 @@ Structured documentation produced in 2026-06-18 (English, 53+ files). This is th
 | `05-agents/` | LangGraph agent system, orchestrator, sub-agent, tools, deployment | Source |
 | `06-operations/` | Build/package/deploy runbooks, monitoring | Source |
 | `07-testing/` | Test strategy and suites | Source |
-| `08-decisions/` | Architecture decision records (ADR-0001 to ADR-0015) | Source |
+| `08-decisions/` | Architecture decision records (ADR-0001 to ADR-0021) | Source |
 | `09-maintenance/` | Contributing conventions, repository map (this file), known gotchas | Source |
 | `presentation-customer-day/` | Customer Day pitch deck structure and speaker scripts | Source |
 | `.workdir/` | Internal research scratch (knowledge packs, conventions draft) - note: `.workdir/CONVENTIONS.md` section 1.3 states prose is French; that is STALE. The prose is English. | Source (scratch) |
@@ -248,9 +258,11 @@ local overrides and the graph are ignored.
 
 | Path | Lives here | Status |
 |---|---|---|
-| `.claude/settings.json` | Permissions (deny of install commands), hook wiring | Source |
+| `.claude/settings.json` | Permissions (deny of install commands), hook wiring (PreToolUse guardrail, PostToolUse dash-guard, SessionStart) | Source |
 | `.claude/settings.local.json` | Local permissions override | IGNORED (gitignore L43) |
-| `.claude/skills/` | Project skills: `build-plugin`, `package-plugin`, `log-session`, `agentique-python-dataiku` | Source |
+| `.claude/rules/*.md` | Path-scoped active gotchas (YAML `paths:` frontmatter): `frontend.md`, `backend.md`, `agents.md`, `lab.md`, `memory.md` | Source |
+| `.claude/skills/` | Project skills: `build-plugin`, `package-plugin`, `package-plugin-dev`, `log-session`, `agentique-python-dataiku` | Source |
+| `.claude/hooks/dash-guard.sh` | PostToolUse hook: flags an em/en dash introduced into an edited file (typographic rule #9) | Source |
 | `.claude/hooks/guardrail.sh` | PreToolUse hook: blocks installs, writes under `resource/owismind-app` and `ready-for-dataiku`, reminds of SQL safety | Source |
 | `.claude/hooks/session-start.sh` | SessionStart hook: injects the memory reminders and the non-negotiable rules | Source |
 | `graphify-out/` | Knowledge graph (HTML + index), regenerated by `/graphify` and the `post-commit` git hook | IGNORED (gitignore L46) |
@@ -266,9 +278,9 @@ an LLM) in the background. The detail of the build/hooks chain is in
 |---|---|---|
 | The UI | `frontend/src/` | `resource/owismind-app/`, `body.html` (regenerated by `/build-plugin`) |
 | The backend | `python-lib/owismind/` | `ready-for-dataiku/` (regenerated by `/package-plugin`) |
-| An agent | `dataiku-agents/agents/` (then re-paste the 2 Code Agents) | The zip (agent outside the zip) |
+| An agent | `dataiku-agents/OWISMIND/OWISMIND_DEV/` (re-paste the Code Agents; promote with `promote_agents_to_prod.py`) | `OWISMIND_PROD_V1/` by hand (regenerated by the script); the zip (agent outside the zip) |
 | The webapp config | `webapps/.../webapp.json` | `app.js`/`style.css` (empty, required by DSS, to keep) |
-| The memory / docs | `memory/`, `docs/` | `graphify-out/` (regenerated) |
+| The memory / active gotchas | `memory/`, `.claude/rules/` | `graphify-out/` (regenerated) |
 
 ## See also
 - [Component map](../02-architecture/02-component-map.md) - the modules by layer (canonical home of the diagram).

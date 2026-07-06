@@ -1,9 +1,9 @@
 # Security model (architecture)
 
-> Audience: developer, admin, security. Last updated: 2026-06-19. Summary: this document
+> Audience: developer, admin, security. Last updated: 2026-07-06. Summary: this document
 > frames OWIsMind's security posture at the architecture level (trust boundary, two identities,
-> agent whitelist, SQL safety, owner-scoping, admin gating, data sent to the LLM, log hygiene)
-> and points to the backend detail for the implementation rules.
+> agent whitelist, SQL safety, owner-scoping, admin gating, admin impersonation, data sent to the LLM,
+> log hygiene) and points to the backend detail for the implementation rules.
 
 OWIsMind is a MULTI-USER WebApp served by a SHARED Dataiku DSS instance: any user
 authenticated on the instance can open it. Security therefore does not rest on "who can reach the app",
@@ -22,8 +22,9 @@ agent. Four invariants structure the posture:
    `security/identity.py`).
 2. The front sends only LOGICAL data: `session_id`, `message`, an OPAQUE logical agent key
    (`agent_key`), a context-window size (`history_limit`), an optional `parent_exchange_id`, a
-   feedback, a `mode` (`eco`/`medium`/`high`) and `webapp_lang`. It NEVER chooses a table, column,
-   connection, query, or a raw `agent_id`.
+   feedback, a `mode` (`smart`/`pro`/`claude`) and `webapp_lang`. It NEVER chooses a table, column,
+   connection, query, or a raw `agent_id`. Source Data Explorer requests carry only STRUCTURED filters
+   (`{column, op, values}`) and an `agent_key`, never SQL or a table.
 3. No generic SQL surface. There is no `/execute-sql` or `/run-query` route; each SQL text is
    assembled server-side from controlled constants and parameterized values.
 4. Systematic shape and bounds validation. The pure `security/validation.py` module validates the SHAPE and
@@ -72,6 +73,22 @@ NOT a flaw: a different cookie produces a different fingerprint, so it can never
 another user's identity. Header values that may carry credentials are NEVER
 logged (only the key NAMES are, for diagnostics).
 
+### Admin impersonation (act as user, read-only)
+
+A TEMPORARY, easily removable feature (kept for the beta) lets an admin browse the webapp AS another
+user, to consult that user's real interface and conversations for agent improvement. It is a genuine
+trust boundary, so it is deliberately narrow (`security/impersonation.py`, plus FENCED blocks in
+`api/routes.py`):
+
+- the `X-OWI-Impersonate: <target_user_id>` header is honored ONLY server-side, and ONLY when the REAL
+  caller (resolved from the DSS auth headers, never the body) is an admin. A non-admin sending the
+  header gets no impersonation (effective user = themselves);
+- READ routes scope their data to the EFFECTIVE (impersonated) user;
+- WRITE routes are BLOCKED while impersonating (no sending, no feedback, no budget spend under the
+  target's name), and usage-analytics tracking is dropped. Consultation only.
+
+Removing the module plus the fenced blocks reverts the feature entirely.
+
 ## 3. Server-side agent whitelist (opaque logical key)
 
 Invariant (NON-NEGOTIABLE rule #4): the front only receives and sends an OPAQUE logical key; the backend
@@ -115,22 +132,27 @@ rule #3; the only exception: the write-only trace dataset). The safety invariant
   FRESH `SQLExecutor2` per call (transactional state not shared between threads) and RAISES if no connection
   is configured: never an implicit connection.
 - Fixed and controlled table: `physical_table(logical) = {PROJECT_KEY}_{namespace}_{logical}` on CONSTANT
-  logical names (`webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`, `webapp_usage_monthly_v1`,
-  `webapp_artifacts_v1`). The front never chooses the table.
+  logical names (the eight app tables: `webapp_chat_v5`, `webapp_users_v1`, `webapp_settings_v1`,
+  `webapp_usage_monthly_v1`, `webapp_artifacts_v1`, `webapp_user_quota_v1`,
+  `webapp_golden_suggestions_v1`, `webapp_events_v1`). The front never chooses the table.
 - Explicit COMMIT via `post_queries=["COMMIT"]` after each write; the `_vN` idiom (no structural `ALTER`);
   only `CREATE TABLE/INDEX IF NOT EXISTS`, `INSERT`, `UPDATE ... WHERE`, bounded `SELECT`.
 - Caps everywhere (row bounds): a session's messages `SESSION_MESSAGES_CAP = 500`, agent context window
   `[10, 50]`, ancestor chain `MAX_CHAIN_DEPTH = 200` + LIMIT, message length
   `MAX_MESSAGE_LENGTH = 8000`, persisted text `MAX_PERSISTED_TEXT_CHARS = 262_144`.
 
-Evidence Studio special case: it is the ONLY surface that re-executes SQL derived from agent content
-(the SELECT stored in `generated_sql`). The front NEVER sends SQL: only an `exchange_id`, STRUCTURED
-filters `{column, op, values}`, locked chip ids, a page and a sort. The
-re-execution is locked read-only via two TRANSACTION-scoped pre-queries
-(`SET LOCAL statement_timeout TO '30000'` = 30 s, `SET LOCAL transaction_read_only TO on`), on the connection
-OF the discovered dataset, without COMMIT. The non-decomposable WHERE fragment is RE-VALIDATED on every request
-(no `;`, no comment, no backslash, forbidden words, blocking of `pg_*` names). The full
-detail of this chain lives in [Backend - Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md).
+Evidence Studio and Source Data Explorer special case: these are the surfaces that read the agents'
+DISCOVERED source datasets (Evidence re-executes the SELECT stored in `generated_sql`; the Source Data
+Explorer browses the raw dataset and computes DB aggregates). The front NEVER sends SQL: only an
+`exchange_id` or `agent_key`, STRUCTURED filters `{column, op, values}`, whitelisted aggregate function
+names, locked chip ids, a page and a sort. Every read is locked read-only via two TRANSACTION-scoped
+pre-queries (`SET LOCAL statement_timeout TO '30000'` = 30 s, `SET LOCAL transaction_read_only TO on`),
+on the connection OF the discovered dataset, without COMMIT. Aggregate functions come from a fixed
+whitelist and are type-gated against the live schema; groups are capped with a mandatory LIMIT. The
+non-decomposable WHERE fragment is RE-VALIDATED on every request (no `;`, no comment, no backslash,
+forbidden words, blocking of `pg_*` names). The benchmark consultation reads the separate `OWIsMind_LAB`
+DSS project's result datasets cross-project, also read-only and bounded. The full detail lives in
+[Backend - Evidence Studio and artifacts](../04-backend/05-evidence-and-artifacts.md).
 
 This posture is recorded in [ADR-0003 - Direct SQL, no Flow at runtime](../08-decisions/0003-sql-direct-sans-flow.md).
 
@@ -191,9 +213,9 @@ No secret is present in the repository. The sensitive configuration is fully man
 - Project key: resolved env -> webapp config -> `dataiku.default_project_key()` -> fallback constant
   `OWISMIND_DEV`. It is an infrastructure constant, not a secret.
 
-> IN FLUX: the per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`, on the
-> `dataiku-agents/` side) must match the instance's LLM Mesh connection; a wrong id breaks the corresponding
-> mode and must be verified in DSS.
+> The per-mode LLM Mesh ids (`GEMINI_FLASH_LITE_ID`, `GEMINI_FLASH_ID`, `SONNET_ID`, on the
+> `dataiku-agents/` side) must match the instance's LLM Mesh connection; a wrong id breaks the
+> corresponding mode. Modes are Smart / Pro / Claude (keys `smart` / `pro` / `claude`).
 
 ## 8. Admin gating: bootstrap, server guards, anti-lockout
 
@@ -242,6 +264,11 @@ injected into a message cannot make the database write nor read outside the proj
 - READ-only DSS API (+ agent run): only read methods are called (auth resolution,
   webapp config, listing connections/projects/agents/datasets) plus agent execution; never
   `set_*`/`save`/`delete`/`set_variables`/`set_definition`. Discovery is strictly read-only and bounded.
+
+- Usage analytics privacy: the `webapp_events_v1` events (route `/track`) never carry message content;
+  search events record only a length, and error events strip the query string from paths (a HIGH finding
+  fixed in the L125 adversarial review). Tracking is best-effort, throttled, never returns 500, and is
+  dropped entirely under impersonation.
 
 > Budget enforcement is implemented (2026-06-18). See section 11 below for the detail.
 
@@ -294,6 +321,7 @@ The server-side gate remains authoritative; the client check is a proactive UI h
 | SQL safety | parameterized + read-only + caps + COMMIT + no generic route | backend (`storage/`, `evidence/`) |
 | LLM confidentiality | no raw rows, control tokens stripped | backend (`agents/context.py`) + agents |
 | Admin gating | `_admin_guard` (401/409/403) + bootstrap lock + anti-lockout | backend (`api/routes.py`, `storage/admin.py`) |
+| Admin impersonation | `X-OWI-Impersonate` honored only for an admin caller; reads scope to the target, WRITE routes blocked | backend (`security/impersonation.py`, fenced in `api/routes.py`) |
 | Monthly budget | `budget.has_budget` -> `402` if blocked (fail-open); per-user override or global default | backend (`storage/budget.py`, `api/routes.py`) |
 | Instance safety | concurrency caps, TTL, deadlines (single-process) | backend (`agents/stream_manager.py`) |
 
