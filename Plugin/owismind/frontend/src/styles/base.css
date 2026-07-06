@@ -1,7 +1,6 @@
 /* =============================================================================
  * OWIsMind - Global reset, scrollbar, selection, shared keyframes, utilities.
  *
- * Ported VERBATIM from the validated mockup's theme.css reset block.
  * Imported once (main.js) AFTER tokens.css. Non-scoped on purpose: these are the
  * document-level rules every screen relies on (fixed-viewport shell, internal
  * scroll regions only).

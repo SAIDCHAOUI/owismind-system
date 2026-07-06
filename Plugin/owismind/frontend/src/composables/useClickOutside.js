@@ -1,5 +1,5 @@
 // Detect clicks outside one or more elements and invoke a handler. Replaces the
-// maquette's one-time global document listeners (e.g. _dhDdListenerAdded) with a
+// maquette's one-time global document listeners with a
 // lifecycle-bound listener that registers on mount and cleans up on unmount.
 //
 // Usage:

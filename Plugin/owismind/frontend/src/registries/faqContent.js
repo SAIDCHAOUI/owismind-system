@@ -1,5 +1,4 @@
-// FAQ content registry - STATIC bilingual Q/A, ported verbatim from the original
-// mockup's FAQ data (window.OWI_DATA.faq). There is no FAQ backend; this is
+// FAQ content registry - STATIC bilingual Q/A. There is no FAQ backend; this is
 // curated documentation content. Extensibility: add a group or a {q,a} entry.
 //
 // Shape: [{ title: {fr,en}, qs: [{ q: {fr,en}, a: {fr,en} }] }]. Render the

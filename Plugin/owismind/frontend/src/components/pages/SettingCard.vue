@@ -1,8 +1,8 @@
 <script setup>
 // A settings card: a bordered surface with an optional uppercase eyebrow row
 // (label on the left, optional action on the right) and a content slot.
-// Mutualizes the maquette's `.set-card` + `.set-card-eyebrow-row` so Settings,
-// Feedback and Project reuse one card instead of re-implementing the chrome.
+// Mutualizes the settings-card chrome (surface + eyebrow row) so Settings,
+// Feedback and Project reuse one card instead of re-implementing it.
 defineProps({
   eyebrow: { type: String, default: '' },
 })

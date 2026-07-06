@@ -1,7 +1,6 @@
 <script setup>
 // Empty conversation state - centered title + subtitle (with a link to the agent
-// library). Visual spec ported from `.empty` / `.empty-title` / `.empty-sub`
-// (components.css). Suggestion cards (mock editorial in the maquette) are deferred.
+// library). Suggestion cards are deferred.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'

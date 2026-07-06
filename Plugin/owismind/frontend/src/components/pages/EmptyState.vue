@@ -45,7 +45,7 @@ defineProps({
   border-radius: 0;
   background: var(--surface);
 }
-/* 46x46 square icon box - matches mockup .empty .ei. */
+/* 46x46 square icon box. */
 .empty-state__icon {
   width: 46px;
   height: 46px;
@@ -68,7 +68,7 @@ defineProps({
   font-weight: 700;
   color: var(--text);
 }
-/* Orange "soon" tag: square, solid orange, white text - matches mockup .soon. */
+/* Orange "soon" tag: square, solid orange, white text. */
 .empty-state__tag {
   display: inline-block;
   font-size: 10px;

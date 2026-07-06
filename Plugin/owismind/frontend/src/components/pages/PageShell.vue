@@ -2,7 +2,7 @@
 // Shared secondary-page shell: ONE internal scroll region + a centered, padded
 // content column, with an OPTIONAL standard header (eyebrow / title / desc).
 // Factored out of PagePlaceholder so every Phase-3 page shares the exact same
-// outer layout (ported from the maquette's `.page` / `.page-inner`).
+// outer layout.
 //
 // Header strings are already-translated (pass via props). Pages needing a custom
 // header (e.g. Settings prefs row, the agent hero) provide the #header slot

@@ -2397,7 +2397,7 @@ function fmtDate(value) {
   padding: var(--s-6);
 }
 
-/* --- Suggest cards (ported from the original page) --- */
+/* --- Suggest cards --- */
 .bench-card {
   border: 1px solid var(--border-strong);
   border-radius: 0;

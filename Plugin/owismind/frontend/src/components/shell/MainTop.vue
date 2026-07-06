@@ -1,7 +1,6 @@
 <script setup>
 // Top bar - contextual title on the left; quick theme + language controls on the
-// right. Visual spec ported from `.main-top` / `.main-top-left|right` / `.top-action`
-// (components.css). When the sidebar is collapsed it also exposes an expand button.
+// right. When the sidebar is collapsed it also exposes an expand button.
 //
 // NOTE: the maquette houses theme/language inside Settings; we surface quick
 // controls here for V1 ergonomics. The canonical Settings page (Phase 3) keeps them too.
@@ -85,7 +84,6 @@ const langShort = computed(() => {
    Top bar - Orange brand. Flat, 56px, bottom hairline.
    Left: sidebar expand (when collapsed) + contextual title.
    Right: theme toggle + language selector.
-   Matches mockup .topbar / .icon-btn / .lang spec.
    ========================================================================= */
 .main-top {
   display: flex;
@@ -113,7 +111,7 @@ const langShort = computed(() => {
   font-family: var(--font-sans);
 }
 
-/* Icon buttons: sidebar toggle + theme toggle - per mockup .icon-btn */
+/* Icon buttons: sidebar toggle + theme toggle */
 .top-action {
   width: 34px;
   height: 34px;
@@ -129,7 +127,7 @@ const langShort = computed(() => {
 .top-action:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .top-action :deep(.ui-icon) { width: 18px; height: 18px; }
 
-/* Language selector: globe + short code, weight 600 - per mockup .lang */
+/* Language selector: globe + short code, weight 600 */
 .top-action--lang {
   width: auto;
   padding: 0 6px;

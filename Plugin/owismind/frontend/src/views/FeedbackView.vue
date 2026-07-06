@@ -1,6 +1,6 @@
 <script setup>
-// Feedback page (Phase 3). Faithful to the maquette's `.fb-grid` two-column
-// layout, but HONEST: there is NO feedback endpoint yet, so the submit button is
+// Feedback page (Phase 3). Two-column layout, but HONEST: there is NO feedback
+// endpoint yet, so the submit button is
 // disabled with a clear "coming soon" note, and the "your requests" column is an
 // empty state (no mock request list). The form fields are interactive (local
 // state only) so the page feels real without sending anything.

@@ -1,7 +1,7 @@
 <script setup>
-// User message bubble - the active version's prompt for one turn. Visual spec ported from
-// `.msg.user .bubble` (components.css): asymmetric rounded bubble, right-aligned. Text is
-// rendered via interpolation ({{ }}) - never v-html - so user input is always safe.
+// User message bubble - the active version's prompt for one turn. Asymmetric
+// rounded bubble, right-aligned. Text is rendered via interpolation ({{ }}) -
+// never v-html - so user input is always safe.
 //
 // Hover reveals two actions: Copy (clipboard) and Edit. Editing opens an inline textarea;
 // submitting calls chat.editTurn(turn, text), which creates a NEW SIBLING branch from this

@@ -1,7 +1,7 @@
 <script setup>
 // Single mount point for transient toasts (mounted once in App.vue). Teleports to
-// <body> and renders the shared `toasts` queue bottom-centre. Visual spec ported
-// from `.owi-toast` (v4-extras.css): inverted pill, soft shadow, top z-index.
+// <body> and renders the shared `toasts` queue bottom-centre. Visual spec:
+// docs/cadrage/CHARTE_ORANGE_UI.md - inverted pill, soft shadow, top z-index.
 import { useToasts } from '../../composables/useToasts.js'
 import Icon from './Icon.vue'
 

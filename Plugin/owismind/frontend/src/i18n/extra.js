@@ -1,6 +1,6 @@
-// Phase-3 domain catalog - UI strings that did NOT exist in the maquette
-// extraction (messages.json), added modularly and MERGED into vue-i18n (see
-// i18n/index.js) so messages.json stays a pristine 1:1 port of window.OWI_I18N.
+// Phase-3 domain catalog - UI strings added modularly (not part of the base
+// messages.json) and MERGED into vue-i18n (see i18n/index.js) so messages.json
+// stays a pristine, untouched catalog.
 //
 // These are mostly HONEST empty-state / "coming soon" strings: every secondary
 // feature without a backend (budget, usage, feedback submit, projects) shows a
@@ -105,7 +105,7 @@ export const extraMessages = {
     'pj.coming':
       'La gestion de projets sera bientôt disponible : regrouper des conversations, instructions personnalisées et suivi par projet.',
 
-    // Admin - the maquette kept all admin strings inline (al(fr,en)); ported here.
+    // Admin - admin strings live here in the domain catalog, not messages.json.
     'admin.eyebrow': "Console d'administration",
     'admin.title': 'Administration',
     'admin.desc': 'Gérez le stockage, les agents exposés et les administrateurs.',
@@ -930,7 +930,7 @@ export const extraMessages = {
     'pj.coming':
       'Project management will be available soon: grouping conversations, custom instructions and per-project tracking.',
 
-    // Admin - the maquette kept all admin strings inline (al(fr,en)); ported here.
+    // Admin - admin strings live here in the domain catalog, not messages.json.
     'admin.eyebrow': 'Admin console',
     'admin.title': 'Administration',
     'admin.desc': 'Manage storage, exposed agents and administrators.',

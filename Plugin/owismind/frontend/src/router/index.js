@@ -1,4 +1,4 @@
-// vue-router - replaces the maquette's STATE.page string + PAGES table.
+// vue-router - the app's client-side routing.
 //
 // HASH history on purpose: the DSS webapp is served at a fixed URL with no
 // server-side SPA rewrite, so path history would 404 on reload/deep-link. Hash

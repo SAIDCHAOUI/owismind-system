@@ -629,7 +629,7 @@ if (import.meta.env.DEV) {
           <div class="kpi">
             <span class="kpi-ico"><Icon name="database" :size="26" /></span>
             <span class="kpi-label">{{ t('admin.kpi.connection') }}</span>
-            <!-- Connection name uses mono per mockup k-val.mono -->
+            <!-- Connection name uses mono -->
             <span class="kpi-value mono">{{ storage?.connection || '-' }}</span>
           </div>
         </div>
@@ -1154,13 +1154,13 @@ if (import.meta.env.DEV) {
           </div>
         </div>
 
-        <!-- Live preview of the user-facing agent card (per mockup .pf-card) -->
+        <!-- Live preview of the user-facing agent card -->
         <aside class="editor-preview">
           <span class="preview-label">{{ t('admin.agents.preview') }}</span>
           <div class="preview-card">
-            <!-- Icon tile above name, per mockup -->
+            <!-- Icon tile above name -->
             <span class="preview-ico"><Icon :name="editForm.icon || 'robot'" :size="20" /></span>
-            <!-- Name + optional badge on same line, per mockup h5 -->
+            <!-- Name + optional badge on same line -->
             <div class="preview-name-row">
               <span class="preview-name">{{ editForm.label }}</span>
               <span v-if="editForm.badge" class="bdg" :class="editForm.badge">{{ t('ag.badge.' + editForm.badge) }}</span>
@@ -1201,7 +1201,7 @@ if (import.meta.env.DEV) {
 .admin-head { margin-bottom: var(--s-5); }
 
 .admin-eyebrow {
-  /* Orange uppercase eyebrow per mockup */
+  /* Orange uppercase eyebrow */
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1354,7 +1354,7 @@ if (import.meta.env.DEV) {
 .kpi-value.mono { font-family: var(--font-mono); font-size: 24px; }
 
 /* --- Storage key-value --- */
-/* Per mockup: 180px label column, mono values */
+/* 180px label column, mono values */
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 10px 24px; margin: 0 0 18px; }
 .kv dt { font-size: 13px; color: var(--text-2); }
 .kv dd { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--text); }
@@ -1441,21 +1441,21 @@ if (import.meta.env.DEV) {
 .pick-btn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
 .pick-btn :deep(.ui-icon) { width: 13px; height: 13px; }
 
-/* Exposed agents list - per mockup: square icon tile with orange border + glyph */
+/* Exposed agents list - square icon tile with orange border + glyph */
 .exposed-list { list-style: none; padding: 0; margin: 0 0 var(--s-5); display: flex; flex-direction: column; gap: 8px; }
 .exposed-row {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 16px;
-  /* Sharp border per mockup */
+  /* Sharp border */
   border: 1px solid var(--border);
   background: var(--bg);
   transition: border-color var(--dur) var(--ease);
 }
 .exposed-row:hover { border-color: var(--border-strong); }
 
-/* Square icon tile with orange border + orange glyph (per mockup .agent-ic) */
+/* Square icon tile with orange border + orange glyph */
 .exposed-ico {
   width: 40px;
   height: 40px;
@@ -1486,7 +1486,7 @@ if (import.meta.env.DEV) {
 
 .exposed-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-/* Ghost button: square, 1px border per mockup .btn.btn-sm */
+/* Ghost button: square, 1px border */
 .ghost-btn {
   display: inline-flex;
   align-items: center;
@@ -1503,7 +1503,7 @@ if (import.meta.env.DEV) {
 .ghost-btn:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
 .ghost-btn :deep(.ui-icon) { width: 14px; height: 14px; }
 
-/* X button: square, 1px border per mockup */
+/* X button: square, 1px border */
 .x-btn {
   width: 32px;
   height: 32px;
@@ -1530,7 +1530,7 @@ if (import.meta.env.DEV) {
 .unsaved :deep(.ui-icon) { width: 13px; height: 13px; }
 
 /* --- Users table --- */
-/* Per mockup: uppercase thead, 1px var(--border-strong) rule under header, rows divided by 1px var(--border) */
+/* Uppercase thead, 1px var(--border-strong) rule under header, rows divided by 1px var(--border) */
 .table-scroll { overflow-x: auto; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .admin-table th {
@@ -1547,7 +1547,7 @@ if (import.meta.env.DEV) {
 .admin-table td { padding: 16px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .admin-table tbody tr:last-child td { border-bottom: none; }
 .user-id { font-weight: 700; color: var(--text); }
-/* (you) in orange-deep per mockup */
+/* (you) in orange-deep */
 .you { color: var(--orange-text); font-size: 13px; font-weight: 600; margin-left: 6px; }
 .admin-yes { color: var(--success); }
 .admin-yes :deep(.ui-icon) { width: 16px; height: 16px; }
@@ -1573,7 +1573,7 @@ if (import.meta.env.DEV) {
 .q-input:focus { outline: none; border-color: var(--orange); }
 .q-field--grow .q-input { width: 100%; }
 
-/* Square checkbox - per mockup .chk (18px, 1.5px border, checked=orange fill + white check) */
+/* Square checkbox: 18px, 1.5px border, checked=orange fill + white check */
 .q-check {
   display: inline-flex;
   align-items: center;
@@ -1678,7 +1678,7 @@ if (import.meta.env.DEV) {
 .q-mini-fill.over { background: var(--danger); }
 .q-usage-amt { font-size: 12px; }
 
-/* Source tag: square bordered chip per mockup .src-tag */
+/* Source tag: square bordered chip */
 .q-src {
   display: inline-block;
   border: 1px solid var(--border);
@@ -1873,7 +1873,7 @@ if (import.meta.env.DEV) {
 .icon-opt.on { background: var(--orange); border-color: var(--orange); color: #fff; }
 .icon-opt :deep(.ui-icon) { width: 18px; height: 18px; }
 
-/* Badge pills: square bordered pills per mockup */
+/* Badge pills: square bordered pills */
 .badge-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .badge-opt {
   border: 1px solid var(--border);
@@ -1897,7 +1897,7 @@ if (import.meta.env.DEV) {
   color: var(--text-2);
 }
 
-/* Preview card: square border per mockup .pf-card */
+/* Preview card: square border */
 .preview-card {
   border: 1px solid var(--border);
   padding: 20px;
@@ -1920,7 +1920,7 @@ if (import.meta.env.DEV) {
 }
 .preview-ico :deep(.ui-icon) { width: 20px; height: 20px; }
 
-/* Name + badge on same line (per mockup h5 with src-tag) */
+/* Name + badge on same line */
 .preview-name-row {
   display: flex;
   flex-wrap: wrap;
@@ -1941,7 +1941,7 @@ if (import.meta.env.DEV) {
 .preview-caps li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); line-height: 1.4; }
 .preview-caps :deep(.ui-icon) { width: 15px; height: 15px; color: var(--orange); flex-shrink: 0; margin-top: 1px; }
 
-/* Tool chips: square border per mockup .chip */
+/* Tool chips: square border */
 .preview-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .preview-tool {
   border: 1px solid var(--border);

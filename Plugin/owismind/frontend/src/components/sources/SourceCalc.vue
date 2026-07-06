@@ -1,20 +1,18 @@
 <script setup>
-// Source Data "Calculate" zone - the business-user surface. Pick ONE column, then pick
-// WHICH of its type-driven measures to display, shown as BIG KPI cards computed by the
-// DATABASE over the FULL filtered set (the same search + filters as the table), never the
-// visible window. The measures a column CAN show depend on its TYPE (statsSpecFor):
-// numeric -> sum/average/median/min/max, temporal -> min/max, anything else -> distinct
-// count (never a hardcoded column name). The user chooses a subset (default = the sensible
-// starting set) so a column never shows all five figures at once, and a long value is
-// shown in full (wrapped, never CSS-clipped) with the exact figure in its tooltip.
-// PERSISTENT: it lives in the empty top-right area while the table stays visible, and it
-// follows the current filters (re-computes on every scope change).
+// Source Data "Calculate" zone - the business-user surface. Pick ONE column, then WHICH of
+// its type-driven measures to display, shown as BIG KPI cards computed by the DATABASE over
+// the FULL filtered set (same search + filters as the table), never the visible window.
+// Measures depend on the column TYPE (statsSpecFor): numeric -> sum/average/median/min/max,
+// temporal -> min/max, anything else -> distinct count (never a hardcoded column name). The
+// user picks a subset (default = the sensible starting set); a long value shows in full
+// (wrapped, never CSS-clipped) with the exact figure in its tooltip. PERSISTENT: lives
+// top-right while the table stays visible, re-computing on every filter/scope change.
 //
-// One code, two hosts: the `surface` prop is the aggregate surface (the Source explorer
-// store by DEFAULT, the Evidence store when mounted in the Evidence "Source data" tab).
-// Both expose the SAME aggregate API (calcColumn / calcFns / calcValues / setCalcColumn /
-// setCalcFns / ...). The `columns` prop supplies the active [{ name, type }] list (the
-// Source store carries its own `columns`; the Evidence host passes meta.columns).
+// One code, two hosts: the `surface` prop is the aggregate surface (Source explorer store by
+// DEFAULT, Evidence store in the Evidence "Source data" tab); both expose the SAME aggregate
+// API (calcColumn / calcFns / calcValues / setCalcColumn / setCalcFns / ...). The `columns`
+// prop supplies the active [{ name, type }] list (the Source store carries its own
+// `columns`; the Evidence host passes meta.columns).
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'

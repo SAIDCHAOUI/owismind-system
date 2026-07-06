@@ -1,14 +1,8 @@
-/* =============================================================================
- * OWIsMind - Icon registry.
- *
- * Ported VERBATIM from the original mockup's icon set (window.OWI_ICONS).
- * Each entry is an inline SVG string using `currentColor` (inherits text color)
- * and a 24x24 viewBox (sized by the consumer). Rendered by <Icon name="..."/>.
- *
- * Extensibility: add a new icon = add one entry here. The set is a plain map;
+/* Icon registry. Each entry is an inline SVG string using `currentColor`
+ * (inherits text color) and a 24x24 viewBox (sized by the consumer), rendered by
+ * <Icon name="..."/>. Add a new icon = add one entry here; the set is a plain map,
  * <Icon> looks up by name and falls back to empty (renders nothing) if missing.
- * Module-local: the only consumer is `iconStr` below (used by <Icon>).
- * ============================================================================= */
+ * Module-local: the only consumer is `iconStr` below. */
 
 const ICONS = {
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',

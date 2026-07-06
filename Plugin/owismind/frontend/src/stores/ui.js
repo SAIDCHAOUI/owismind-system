@@ -1,5 +1,5 @@
 // UI store - the SINGLE source of truth for user preferences (theme, language,
-// sidebar state, history window), replacing the maquette's window.STATE. Both the
+// sidebar state, history window). Both the
 // header (MainTop) and the Settings page read/write this store, so a change in one
 // place is instantly reflected in the other. Every preference is persisted to
 // localStorage with ONE key (no competing persistence systems): the language is

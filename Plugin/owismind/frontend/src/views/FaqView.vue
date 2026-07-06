@@ -1,7 +1,7 @@
 <script setup>
 // FAQ page (Phase 3). Static bilingual content from the faqContent registry,
 // rendered as native <details> accordions (faithful to the maquette). We ADD the
-// client-side search the maquette declared (`.faq-search`) but never wired:
+// client-side search the maquette declared but never wired:
 // it filters groups/questions on the current locale, case-insensitively.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'

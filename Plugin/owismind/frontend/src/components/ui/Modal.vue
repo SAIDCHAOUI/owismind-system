@@ -1,8 +1,7 @@
 <script setup>
-// Accessible modal - ONE implementation replacing the maquette's per-screen
-// modals. Visual spec ported from `.modal-scrim` / `.modal-card` / `.modal-*`
-// (v4-extras.css). Teleported to <body>, closes on Escape and scrim click,
-// moves focus into the card on open and restores it on close.
+// Accessible modal - ONE shared implementation. Visual spec:
+// docs/cadrage/CHARTE_ORANGE_UI.md. Teleported to <body>, closes on Escape and
+// scrim click, moves focus into the card on open and restores it on close.
 //
 // v-model carries the open state. Slots: #header (or `title` prop), default
 // (body), #footer (actions row, e.g. <Button> primitives).
@@ -141,7 +140,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   .ui-modal-card { animation: none; }
 }
 
-/* Square close button - matches mockup .modal-x. */
+/* Square close button. */
 .ui-modal-close {
   position: absolute;
   top: 12px;
@@ -164,7 +163,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   gap: 12px;
   padding-right: 30px;
 }
-/* Square icon tile - matches mockup sharp geometry. */
+/* Square icon tile - sharp geometry. */
 .ui-modal-icon {
   width: 38px;
   height: 38px;
@@ -178,7 +177,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 }
 .ui-modal-icon.danger { background: rgba(205, 60, 20, 0.10); color: var(--danger); }
 .ui-modal-icon :deep(.ui-icon) { width: 20px; height: 20px; }
-/* Heavy title - matches mockup .modal-title 20px/800. */
+/* Heavy title - 20px/800. */
 .ui-modal-title {
   font-size: 20px;
   font-weight: 800;

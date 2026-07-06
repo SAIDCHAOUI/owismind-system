@@ -228,7 +228,7 @@ function onUser(key) {
 <style scoped>
 /* =========================================================================
    Sidebar - Orange brand, flat/sharp surfaces.
-   Light rail bg = var(--bg) (#fff), dark = var(--bg) (#0a0a0a), matching mockup.
+   Light rail bg = var(--bg) (#fff), dark = var(--bg) (#0a0a0a).
    Orange is used ONLY as the logo mark background and the active-item accent.
    ========================================================================= */
 .sidebar {
@@ -401,7 +401,7 @@ function onUser(key) {
 .user-chip:hover,
 .user-chip.open { background: var(--surface); }
 .user-chip:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
-/* Avatar: 32px circle, var(--surface-2) background, bold initial - per mockup */
+/* Avatar: 32px circle, var(--surface-2) background, bold initial */
 .user-chip .avatar {
   width: 32px;
   height: 32px;
@@ -418,7 +418,7 @@ function onUser(key) {
 
 /* =========================================================================
    RAIL (collapsed): 56px icon-only column.
-   Matches mockup .rail: bg=var(--bg), right border, 14px top padding,
+   bg=var(--bg), right border, 14px top padding,
    items centered, labels hidden.
    ========================================================================= */
 /* Foot menus are 220px wide and NOT teleported; overflow must be visible so
@@ -431,7 +431,7 @@ function onUser(key) {
 .sidebar.rail .sidebar-primary { padding: 0 9px; gap: 4px; }
 .sidebar.rail .sidebar-foot { padding: 8px 9px; gap: 4px; }
 
-/* Labels hidden; items become 38px square icon targets - per mockup .rail-btn */
+/* Labels hidden; items become 38px square icon targets */
 .sidebar.rail .side-label { display: none; }
 .sidebar.rail .side-item {
   width: 38px;

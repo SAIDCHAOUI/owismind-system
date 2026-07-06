@@ -1,6 +1,6 @@
-// Reactive `prefers-reduced-motion` flag. The original mockup honored it almost
-// nowhere; gating animations on this composable fixes that gap centrally.
-// Components read `reduced.value` to skip/shorten non-essential motion.
+// Reactive `prefers-reduced-motion` flag. Gating animations on this composable
+// centralizes reduced-motion handling. Components read `reduced.value` to
+// skip/shorten non-essential motion.
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 export function useReducedMotion() {

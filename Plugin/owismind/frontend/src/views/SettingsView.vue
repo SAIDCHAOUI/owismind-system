@@ -306,7 +306,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   line-height: 1.05;
 }
 
-/* 52x4px solid orange title-bar, matches mockup */
+/* 52x4px solid orange title-bar */
 .title-bar {
   width: 52px;
   height: 4px;

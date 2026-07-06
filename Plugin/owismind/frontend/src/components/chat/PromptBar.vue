@@ -1,8 +1,7 @@
 <script setup>
 // Prompt bar - auto-growing textarea, agent picker (left), voice button (left,
-// placeholder: no STT backend), send (right). Visual spec ported from `.prompt`
-// / `.prompt-input` / `.prompt-row` / `.p-icon` / `.send-btn` (components.css).
-// Enter sends; Shift+Enter inserts a newline.
+// placeholder: no STT backend), send (right). Enter sends; Shift+Enter inserts a
+// newline.
 import { ref, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'

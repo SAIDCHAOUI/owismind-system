@@ -1,6 +1,6 @@
 <script setup>
-// Tabs primitive - ported from `.ev-tab` (components.css): underline-on-active
-// (orange), optional monospace count. v-model carries the active tab key.
+// Tabs primitive - underline-on-active (orange), optional monospace count.
+// v-model carries the active tab key.
 //
 // Extensibility: `items` is a plain array of { key, label, count? } so callers
 // (Evidence Studio tabs, settings sections, admin tabs) drive it from a registry.
