@@ -935,7 +935,12 @@
                 <h3>Cost modes</h3>
 
                 <p>A logical key chosen by the user drives the loop model. One model runs the whole turn
-                with no escalation. The mode propagates to the sub-agent.</p>
+                with no escalation. The mode propagates to the sub-agent. The three modes are
+                <strong>Smart</strong> (default), <strong>Pro</strong> and <strong>Claude</strong>;
+                these are the internal keys too (the older <code>eco</code>/<code>medium</code>/<code>high</code>
+                tokens were renamed to match the display names). Mode is ephemeral
+                (resets to Smart after each send) and the mode actually used is stamped per answer in
+                <code>webapp_chat_v5.mode</code>.</p>
 
                 <div class="card mt">
                   <table>
@@ -949,19 +954,19 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td><code>eco</code> <span class="badge orange">Default</span></td>
+                        <td><code>smart</code> <span class="badge orange">Default</span></td>
                         <td>Gemini 3.1 Flash-Lite (<code>GEMINI_FLASH_LITE_ID</code>)</td>
                         <td>OFF (strict act-first)</td>
                         <td>Default mode</td>
                       </tr>
                       <tr>
-                        <td><code>medium</code></td>
+                        <td><code>pro</code></td>
                         <td>Gemini 3.5 Flash (<code>GEMINI_FLASH_ID</code>)</td>
                         <td>ON</td>
                         <td>Balanced</td>
                       </tr>
                       <tr>
-                        <td><code>high</code></td>
+                        <td><code>claude</code></td>
                         <td>Claude Sonnet 4.6 (<code>SONNET_ID</code>)</td>
                         <td>ON</td>
                         <td>Full quality</td>
@@ -973,54 +978,41 @@
                 <aside class="callout callout-influx mt" role="note">
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                   <div class="callout-body">
-                    <p class="callout-title">In Flux: LLM Mesh model ids</p>
+                    <p class="callout-title">Deployment caveat: LLM Mesh model ids</p>
                     <p>The per-mode LLM Mesh ids (<code>GEMINI_FLASH_LITE_ID</code>, <code>GEMINI_FLASH_ID</code>, <code>SONNET_ID</code>)
                     must match the LLM Mesh connection of the Dataiku instance. A wrong id breaks the corresponding mode - for example,
-                    if the Flash-Lite id is wrong, eco mode (the default) will not answer. To be verified in DSS.</p>
+                    if the Flash-Lite id is wrong, Smart mode (the default) will not answer. The Smart/Pro/Claude modes were validated in DSS on 2026-06-24.</p>
                   </div>
                 </aside>
 
-                <h3>Items built but not yet validated in DSS</h3>
+                <h3>Later capabilities (shipped and validated in DSS)</h3>
 
-                <aside class="callout callout-influx mt" role="note">
-                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                <aside class="callout callout-note mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                   <div class="callout-body">
-                    <p class="callout-title">In Flux: Orange charter UI refactor</p>
-                    <p>The full Orange charter UI refactor (zip <code>index-BHeG2NRY.js</code>, 79 entries) is built and packaged but
-                    not yet confirmed in DSS. Square geometry, real <code>orange-logo.png</code> (not a CSS-generated mark),
-                    flat modals, token-based styling throughout.</p>
+                    <p class="callout-title">Shipped since the first overview</p>
+                    <p>Several capabilities noted here as "in flux" have since shipped and been validated in DSS: the Orange charter UI,
+                    the monthly budget enforcement ($50/user/month, HTTP 402 gate at <code>/chat/start</code>), the
+                    <code>attribute_lookup</code> orchestrator tool, and native artifacts (Chart.js charts, tables, KPIs) with live
+                    narration and <code>recall_prior_result</code>. Newer waves added the <strong>Source Data Explorer</strong>
+                    (browse an agent's raw datasets: searchable filters, cascading distincts, DB-side aggregates via
+                    <code>POST /source/aggregate</code>, a Calculer KPI zone, date ranges, per-view persistence, and an opt-in
+                    "share what is on screen" flow to the agent), <strong>usage analytics</strong> (<code>webapp_events_v1</code> +
+                    <code>POST /track</code>, 41 whitelisted events), the <strong>benchmark system</strong> (a separate
+                    <code>OWIsMind_LAB</code> DSS project with two admin webapps, plus in-plugin consultation and golden-question
+                    suggestions captured from chat), and <strong>admin impersonation</strong> (view the app as another user; kept for
+                    the beta, read-only, admin-gated). Evidence Studio v1 (the agent's SELECT replayed read-only) is live; the full
+                    six-tab panel remains deferred.</p>
                   </div>
                 </aside>
 
-                <aside class="callout callout-influx mt" role="note">
-                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                <aside class="callout callout-note mt" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                   <div class="callout-body">
-                    <p class="callout-title">In Flux: monthly budget enforcement</p>
-                    <p>The monthly budget quota ($50/user/month) is fully implemented - storage
-                    (<code>webapp_usage_monthly_v1</code>, <code>webapp_user_quota_v1</code>) AND server-side enforcement
-                    (HTTP 402 gate at <code>/chat/start</code>, fail-open). Not yet validated in DSS.
-                    A backend restart is required after python-lib upload.</p>
-                  </div>
-                </aside>
-
-                <aside class="callout callout-influx mt" role="note">
-                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                  <div class="callout-body">
-                    <p class="callout-title">In Flux: attribute_lookup tool wiring</p>
-                    <p>The <code>attribute_lookup</code> tool (<code>tools/attribute_lookup_tool.py</code>) is built, unit-tested, and
-                    wired as a built-in tool in the orchestrator. Its predecessor <code>dataset_lookup</code> (<code>9FEzVZk</code>)
-                    and the <code>lookup</code> intent were REMOVED on 2026-06-18. The built-in becomes operational only after the
-                    orchestrator is re-pasted into DSS. <code>LOOKUP_TOOL_ID = ""</code> means the tool is resolved by name.</p>
-                  </div>
-                </aside>
-
-                <aside class="callout callout-influx mt" role="note">
-                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                  <div class="callout-body">
-                    <p class="callout-title">In Flux: Evidence Studio</p>
-                    <p>Evidence Studio v1 works (the agent's SELECT is replayed read-only), but the user has indicated "it works well, but not yet the way he wants".
-                    The precise adjustments (labels, badge, layout, drill) have not yet been gathered. The full panel with six tabs
-                    (Evidence, Dataset, Chart, SQL, Trace, Cost) is deferred.</p>
+                    <p class="callout-title">Production v1.1</p>
+                    <p>The plugin is packaged at <strong>v1.1.0</strong> for the first production deployment. The agents are split
+                    DEV / PROD_V1 (see <code>dataiku-agents/OWISMIND/</code>), promoted with <code>tools/promote_agents_to_prod.py</code>;
+                    the tickets sub-agent stays DEV-only. The DSS deployment follows the runbook <code>docs/DEPLOY_PROD_V1_1.md</code>.</p>
                   </div>
                 </aside>
 
@@ -1030,10 +1022,10 @@
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
                   <div class="callout-body">
                     <p class="callout-title">Roadmap</p>
-                    <p>Not wired in v3: <code>DRIVE_Revenues_Value_Catalog</code> (richer alias catalog) and the Python resolver
-                    <code>Drive_Revenues_resolve_filter_value</code>. Also deferred: the multi-agent "360" analysis
-                    (single conversation, global timeline, one Evidence space per agent); the full Evidence Studio six-tab panel;
-                    export and report artifacts (Markdown, PDF, PowerPoint, Excel); tickets agent (which unblocks the 360 analysis).</p>
+                    <p>Still deferred: the multi-agent "360" analysis (single conversation, global timeline, one Evidence space per agent);
+                    the full Evidence Studio six-tab panel; export and report artifacts (Markdown, PDF, PowerPoint, Excel); promotion of
+                    the tickets sub-agent from DEV into PROD (it exists and works in DEV, and unblocks the 360 analysis); and a Dataiku
+                    adoption dashboard built on <code>webapp_events_v1</code>.</p>
                   </div>
                 </aside>
 

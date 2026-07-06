@@ -49,7 +49,7 @@
                      ============================================================ -->
                 <h2>Installation and configuration</h2>
 
-                <p>OWIsMind is deployed as three independent building blocks: a <strong>DSS plugin zip</strong> (Flask backend + built Vue frontend), two <strong>LangGraph Code Agents</strong> pasted by hand (outside the zip), and a small <strong>runtime configuration</strong> in the webapp Settings. This section walks through the complete sequence, from the first upload to the first conversation.</p>
+                <p>OWIsMind is deployed as three independent building blocks: a <strong>DSS plugin zip</strong> (Flask backend + built Vue frontend, currently v1.1.0), a set of <strong>LangGraph Code Agents</strong> pasted by hand (outside the zip), and a small <strong>runtime configuration</strong> in the webapp Settings. This section walks through the complete sequence, from the first upload to the first conversation. Development runs in the DSS project <code>OWISMIND_DEV</code>; the first production deployment lives in a separate prod project (agents <code>OWISMIND_PROD_V1</code>) and follows the runbook <code>docs/DEPLOY_PROD_V1_1.md</code>. The plugin id is single (<code>owismind</code>), and the agents whitelist is a dynamic, cross-project admin setting, so there is no plugin-side project hardcoding.</p>
 
                 <dl class="kv mt">
                   <dt>Plugin ID</dt>
@@ -63,7 +63,7 @@
                   <dt>SQL connection</dt>
                   <dd><code>SQL_owi</code> (PostgreSQL, schema <code>public</code>)</dd>
                   <dt>Default project key</dt>
-                  <dd><code>OWISMIND_DEV</code></dd>
+                  <dd><code>OWISMIND_DEV</code> (dev); a separate prod project hosts the v1.1 deployment (agents <code>OWISMIND_PROD_V1</code>)</dd>
                   <dt>DSS platform</dt>
                   <dd>14.4.x</dd>
                 </dl>
@@ -157,9 +157,9 @@
                   </div>
                 </aside>
 
-                <h3>Paste the two Code Agents (3.11 env)</h3>
+                <h3>Paste the Code Agents (3.11 env)</h3>
 
-                <p>The two LangGraph agents live in <code>dataiku-agents/agents/</code> (the repository is the source of truth) and must be pasted manually into DSS Code Agents on the <strong>Python 3.11 env</strong>. Always re-paste both when one changes.</p>
+                <p>The LangGraph agents live under <code>dataiku-agents/OWISMIND/</code> (the repository is the source of truth), duplicated per DSS project under <code>OWISMIND_DEV/</code> and <code>OWISMIND_PROD_V1/</code> (files project-prefixed). You develop in DEV; <code>tools/promote_agents_to_prod.py</code> regenerates the PROD copies (DEV logic plus PROD ids, tickets block removed). They are pasted manually into DSS Code Agents on the <strong>Python 3.11 env</strong>. Always re-paste the orchestrator together with any sub-agent that changed.</p>
 
                 <div class="card mt">
                   <table>
@@ -167,10 +167,14 @@
                       <tr><th>Source file (repo)</th><th>Target DSS Code Agent</th><th>Env</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td><code>dataiku-agents/agents/OWIsMind_orchestrator.py</code></td><td>OWIsMind_orchestrator</td><td>Python 3.11</td></tr>
-                      <tr><td><code>dataiku-agents/agents/SalesDrive_revenue_expert.py</code></td><td>SalesDrive_revenue_expert (<code>agent:bHrWLyOL</code>)</td><td>Python 3.11</td></tr>
+                      <tr><td><code>OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py</code></td><td>OWIsMind_orchestrator (DEV <code>038G7mlF</code>)</td><td>Python 3.11</td></tr>
+                      <tr><td><code>OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py</code></td><td>SalesDrive_revenue_expert (DEV <code>agent:bHrWLyOL</code>)</td><td>Python 3.11</td></tr>
+                      <tr><td><code>OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py</code></td><td>CSSO_Trouble_Tickets_Expert (DEV <code>agent:NcE9LD2i</code>, not in PROD)</td><td>Python 3.11</td></tr>
+                      <tr><td><code>OWISMIND_PROD_V1/agents/OWISMIND_PROD_V1_OWIsMind_orchestrator.py</code></td><td>OWIsMind_orchestrator (PROD <code>Xrv7GvfG</code>)</td><td>Python 3.11</td></tr>
+                      <tr><td><code>OWISMIND_PROD_V1/agents/OWISMIND_PROD_V1_SalesDrive_revenue_expert.py</code></td><td>SalesDrive_revenue_expert (PROD <code>agent:uO5hEzAs</code>)</td><td>Python 3.11</td></tr>
                     </tbody>
                   </table>
+                  <p class="block-note mt">Base paths are relative to <code>dataiku-agents/OWISMIND/</code>. The full prod deployment runbook is <code>docs/DEPLOY_PROD_V1_1.md</code>.</p>
                 </div>
 
                 <p class="mt">After pasting, verify the LLM Mesh ids in both files match exactly what your instance exposes:</p>
@@ -181,11 +185,11 @@
                       <tr><th>Constant</th><th>Mode / role</th><th>Observed format</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td><code>GEMINI_FLASH_LITE_ID</code></td><td>Eco (default)</td><td><code>openai:LLM-...:vertex_ai/gemini-3.1-flash-lite</code></td></tr>
-                      <tr><td><code>GEMINI_FLASH_ID</code></td><td>Medium</td><td><code>openai:LLM-...:vertex_ai/gemini-3.5-flash</code></td></tr>
-                      <tr><td><code>SONNET_ID</code></td><td>High + Semantic Model (all modes)</td><td><code>openai:LLM-...:vertex_ai/claude-sonnet-4-6</code></td></tr>
+                      <tr><td><code>GEMINI_FLASH_LITE_ID</code></td><td>Smart mode (key <code>smart</code>, default)</td><td><code>openai:LLM-...:vertex_ai/gemini-3.1-flash-lite</code></td></tr>
+                      <tr><td><code>GEMINI_FLASH_ID</code></td><td>Pro mode (key <code>pro</code>)</td><td><code>openai:LLM-...:vertex_ai/gemini-3.5-flash</code></td></tr>
+                      <tr><td><code>SONNET_ID</code></td><td>Claude mode (key <code>claude</code>) + Semantic Model (all modes)</td><td><code>openai:LLM-...:vertex_ai/claude-sonnet-4-6</code></td></tr>
                       <tr><td><code>SEMANTIC_TOOL_ID</code></td><td><code>revenue_semantic_query</code> tool</td><td><code>v4oqA6R</code></td></tr>
-                      <tr><td><code>agent_id</code> (sub-agent)</td><td>Orchestrator resolves the sub-agent</td><td><code>agent:bHrWLyOL</code></td></tr>
+                      <tr><td><code>agent_id</code> (sub-agent)</td><td>Orchestrator resolves the sub-agent (DEV)</td><td><code>agent:bHrWLyOL</code> (PROD <code>agent:uO5hEzAs</code>)</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -314,7 +318,7 @@
 
                     <!-- Agents path (separate, bottom) -->
                     <rect class="node-soft" x="12" y="16" width="200" height="30"/>
-                    <text x="112" y="35" text-anchor="middle" class="diagram" font-size="10">Edit dataiku-agents/agents/*.py</text>
+                    <text x="112" y="35" text-anchor="middle" class="diagram" font-size="10">Edit OWISMIND_DEV/agents/*.py</text>
 
                     <line class="edge" x1="212" y1="31" x2="310" y2="31"/>
                     <polygon class="arrowhead" points="310,26 320,31 310,36"/>
@@ -510,7 +514,7 @@ rm -rf /tmp/owi_buildcheck</code></pre>
 
                     <!-- Row 5: agents only -->
                     <rect class="node" x="0" y="206" width="300" height="40"/>
-                    <text x="10" y="230" class="diagram" font-size="10">dataiku-agents/agents/** (agent only)</text>
+                    <text x="10" y="230" class="diagram" font-size="10">dataiku-agents/OWISMIND/** (agent only)</text>
                     <rect class="node-soft" x="302" y="206" width="90" height="40"/>
                     <text x="347" y="231" text-anchor="middle" class="diagram text-muted" font-size="14">-</text>
                     <rect class="node-soft" x="394" y="206" width="90" height="40"/>
@@ -679,7 +683,7 @@ rm -rf /tmp/owi_buildcheck</code></pre>
                   <table>
                     <thead><tr><th>#</th><th>Check</th><th>Interpretation</th></tr></thead>
                     <tbody>
-                      <tr><td>1</td><td>Mode High?</td><td>A long Sonnet call is normal. Wait at least 20-30 s before concluding failure.</td></tr>
+                      <tr><td>1</td><td>Mode Claude?</td><td>A long Sonnet call is normal. Wait at least 20-30 s before concluding failure.</td></tr>
                       <tr><td>2</td><td>Backend restarted recently?</td><td>A restart kills in-memory state <code>_RUNS</code>; the in-flight run is lost.</td></tr>
                       <tr><td>3</td><td>Browser console: <code>run_not_found</code>?</td><td>Terminal code - the run has disappeared. User can simply resend the question.</td></tr>
                       <tr><td>4</td><td>Backend log: <code>agent_unavailable</code>?</td><td>The agent raised, or the deadline <code>MAX_RUN_SECONDS</code> (300 s) cut it off.</td></tr>
@@ -702,8 +706,8 @@ rm -rf /tmp/owi_buildcheck</code></pre>
 
                 <h3>Runbook 4: a mode does not answer (wrong LLM Mesh id)</h3>
 
-                <p><strong>Symptom:</strong> a specific mode fails systematically (often <strong>Eco</strong>, which is the default).</p>
-                <p><strong>Cause:</strong> a model id in <code>LOOP_LLM_BY_MODE</code> does not match any model exposed by the instance's LLM Mesh connection. Since <code>DEFAULT_MODE = "eco"</code>, a wrong <code>GEMINI_FLASH_LITE_ID</code> breaks almost all requests.</p>
+                <p><strong>Symptom:</strong> a specific mode fails systematically (often <strong>Smart</strong>, the default).</p>
+                <p><strong>Cause:</strong> a model id in <code>LOOP_LLM_BY_MODE</code> does not match any model exposed by the instance's LLM Mesh connection. Since <code>DEFAULT_MODE = "smart"</code>, a wrong <code>GEMINI_FLASH_LITE_ID</code> breaks almost all requests.</p>
                 <p><strong>Resolution:</strong> fix the offending id in <strong>both</strong> agent files, then re-paste both Code Agents on the Python 3.11 env.</p>
 
                 <aside class="callout callout-influx mt" role="note">
@@ -714,9 +718,9 @@ rm -rf /tmp/owi_buildcheck</code></pre>
                   </div>
                 </aside>
 
-                <h3>Runbook 5: slow answers in High mode</h3>
+                <h3>Runbook 5: slow answers in Claude mode</h3>
 
-                <p><strong>This is not necessarily a failure.</strong> High drives Claude Sonnet 4.6 end to end; Sonnet reasons longer. The polling transport does not stream word-by-word: the prose arrives in one block at the end. If latency exceeds ~5 min, <code>MAX_RUN_SECONDS = 300 s</code> cuts the run off (<code>run_timeout</code>). For speed, advise Eco (Gemini Flash-Lite, the default) or Medium (Gemini Flash).</p>
+                <p><strong>This is not necessarily a failure.</strong> Claude mode drives Claude Sonnet 4.6 end to end; Sonnet reasons longer. The polling transport does not stream word-by-word: the prose arrives in one block at the end. If latency exceeds ~5 min, <code>MAX_RUN_SECONDS = 300 s</code> cuts the run off (<code>run_timeout</code>). For speed, advise Smart (Gemini Flash-Lite, the default) or Pro (Gemini Flash).</p>
 
                 <h3>Runbook 6: empty chart in Evidence</h3>
 
@@ -773,9 +777,9 @@ rm -rf /tmp/owi_buildcheck</code></pre>
                       <tr><th>Suite</th><th>Location</th><th>Runner</th><th>Count (verified 2026-06-19)</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td>Backend</td><td><code>Plugin/owismind/tests/</code></td><td><code>python3 -m unittest</code></td><td>438 test_ functions (21 files)</td></tr>
-                      <tr><td>Frontend</td><td><code>Plugin/owismind/frontend/test/</code></td><td><code>node --test</code></td><td>124 test() calls (9 files)</td></tr>
-                      <tr><td>Agents</td><td><code>dataiku-agents/tests/</code></td><td><code>python3 -m unittest</code></td><td>267 test_ functions (4 files)</td></tr>
+                      <tr><td>Backend</td><td><code>Plugin/owismind/tests/</code></td><td><code>python3 -m unittest</code></td><td>790 test_ functions (35 files)</td></tr>
+                      <tr><td>Frontend</td><td><code>Plugin/owismind/frontend/test/</code></td><td><code>node --test</code></td><td>352 test() calls (18 files)</td></tr>
+                      <tr><td>Agents</td><td><code>dataiku-agents/tests/</code></td><td><code>python3 -m unittest</code></td><td>316 test_ functions (4 files)</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -795,15 +799,15 @@ npm --prefix Plugin/owismind/frontend test
 python3 -m unittest discover -s dataiku-agents/tests</code></pre>
                 </div>
 
-                <h3>Backend suite (438 tests)</h3>
+                <h3>Backend suite (790 tests)</h3>
 
                 <p>Located outside <code>python-lib/</code> so it is never packaged. Inserts <code>python-lib/</code> onto <code>sys.path</code> so that <code>owismind.*</code> imports resolve. Covers: payload validation, budget and quotas, pure SQL builders, pagination, agent context assembly, identity derivation, Evidence SQL parsing/explanation/capture, artifacts and usage accounting.</p>
 
-                <h3>Frontend suite (124 tests)</h3>
+                <h3>Frontend suite (352 tests)</h3>
 
-                <p>Uses Node's built-in test runner (<code>node --test test/*.test.js</code>) - no Vitest, no Jest. Tests stay without Vue or <code>dataiku</code>, forcing pure logic into testable modules. Covers: timeline reducer (<code>applyEvent</code>, 42 tests), Evidence model (23), Evidence proof derivation (28), budget/usage helpers (8), conversation tree/list (8), SQL pretty-printing (7), agent selection (3), preferences (5).</p>
+                <p>Uses Node's built-in test runner (<code>node --test test/*.test.js</code>) - no Vitest, no Jest. Tests stay without Vue or <code>dataiku</code>, forcing pure logic into testable modules. Covers: timeline reducer (<code>applyEvent</code>, 46 tests), Evidence model (38), Evidence proof derivation (28), Source Data Explorer model/analyze/view-memory (28 + 41 + 20), aggregate surface (16), screen and prompt context models (36 + 16), benchmark results (28), usage tracking (21), budget/usage helpers (8), conversation tree/list (8), SQL pretty-printing (7), agent selection (3), preferences (5), i18n parity (3).</p>
 
-                <h3>Agents suite (267 tests) and the anti-drift test</h3>
+                <h3>Agents suite (316 tests) and the anti-drift test</h3>
 
                 <p>Stubs <code>dataiku</code> AND <code>langgraph</code> before the agent files are loaded, so only pure logic is exercised. The graph itself is NOT executed (needs DSS). The most important test is the <strong>anti-drift test</strong>:</p>
 
@@ -979,7 +983,7 @@ rm -rf /tmp/owi_buildcheck</code></pre>
                     <!-- tests -->
                     <line class="edge" x1="370" y1="230" x2="400" y2="230"/>
                     <rect class="node-soft" x="400" y="214" width="200" height="28"/>
-                    <text x="500" y="232" text-anchor="middle" class="diagram" font-size="10">tests/ - agents unittest (267 tests)</text>
+                    <text x="500" y="232" text-anchor="middle" class="diagram" font-size="10">tests/ - agents unittest (316 tests)</text>
 
                     <!-- .claude: 2-line box, direct child of repo root (horizontal branch off root vertical bar) -->
                     <line class="edge" x1="120" y1="370" x2="230" y2="370"/>

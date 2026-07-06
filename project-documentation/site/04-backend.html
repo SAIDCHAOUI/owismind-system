@@ -50,12 +50,12 @@
                 <div class="grid-3 mt">
                   <div class="card kpi">
                     <p class="k-label">Routes</p>
-                    <p class="k-val mono">21</p>
+                    <p class="k-val mono">36</p>
                     <p class="k-sub">Mounted under /owismind-api</p>
                   </div>
                   <div class="card kpi">
                     <p class="k-label">SQL tables</p>
-                    <p class="k-val mono">6</p>
+                    <p class="k-val mono">8</p>
                     <p class="k-sub">Direct PostgreSQL, no Flow</p>
                   </div>
                   <div class="card kpi">
@@ -99,7 +99,7 @@ register_routes(app)</code></pre>
 
                 <h3>Sub-packages of python-lib/owismind/</h3>
 
-                <p>All logic lives in <code>python-lib/owismind/</code>, split into five thematic sub-packages. The dependency direction is fixed: <code>api/</code> calls everything; <code>agents/</code> and <code>evidence/</code> call <code>storage/</code>; nothing calls <code>api/</code> from below.</p>
+                <p>All logic lives in <code>python-lib/owismind/</code>, split into six thematic sub-packages: <code>api/</code>, <code>agents/</code>, <code>evidence/</code>, <code>storage/</code>, <code>security/</code> and <code>benchmark_view/</code>. The dependency direction is fixed: <code>api/</code> calls everything; <code>agents/</code>, <code>evidence/</code> and <code>benchmark_view/</code> call <code>storage/</code>; nothing calls <code>api/</code> from below. Later waves added modules inside these packages: Source Data Explorer (<code>evidence/source_service.py</code>, <code>evidence/source_search.py</code>, <code>evidence/aggregate_core.py</code>), usage analytics (<code>storage/events.py</code>), benchmark suggestions/consultation (<code>storage/suggestions.py</code> and the whole <code>benchmark_view/</code> package: <code>aggregate.py</code>, <code>agent_profile.py</code>, <code>lab_io.py</code>, <code>schema_check.py</code>, <code>schemas.py</code>), and admin impersonation (<code>security/impersonation.py</code>).</p>
 
                 <!-- Sub-package dependency diagram -->
                 <figure class="diagram-wrap">
@@ -245,7 +245,7 @@ register_routes(app)</code></pre>
                      ============================================================ -->
                 <h2>API reference</h2>
 
-                <p>All 21 routes are mounted under <code>/owismind-api</code> (blueprint <code>owismind_api</code>, defined in <code>api/routes.py</code>). The tables below group them by domain with method, purpose, key fields, and applicable error codes. The frontend consumes ONLY logical keys and structured data: it never chooses a table, a connection, a SQL query, or a raw <code>agent_id</code>.</p>
+                <p>All 36 routes are mounted under <code>/owismind-api</code> (blueprint <code>owismind_api</code>, defined in <code>api/routes.py</code>). The tables below group them by domain with method, purpose, key fields, and applicable error codes. The frontend consumes ONLY logical keys and structured data: it never chooses a table, a connection, a SQL query, or a raw <code>agent_id</code>. Beyond the core chat, evidence and admin routes documented here, later waves added three route families: <strong>Source Data Explorer</strong> (<code>GET /source/meta</code>, <code>POST /source/rows</code>, <code>POST /source/distinct</code>, <code>POST /source/aggregate</code>, <code>GET /admin/sources/datasets</code>, plus <code>POST /evidence/aggregate</code>), <strong>Benchmark consultation</strong> (<code>POST /benchmark/suggest</code>, <code>POST /benchmark/suggest-from-chat</code>, <code>GET /benchmark/suggestions</code>, <code>GET /benchmark/results</code>, <code>GET /benchmark/attempt</code>, and the admin trio <code>GET /admin/benchmark/tables</code>, <code>POST /admin/benchmark/validate-table</code>, <code>POST /admin/benchmark/override</code>), and <strong>usage analytics</strong> (<code>POST /track</code>, best-effort batch writes to <code>webapp_events_v1</code>). All obey the same server-side safety contract: read-only SQL, parameterized queries, whitelisted logical keys, no raw table or connection from the client.</p>
 
                 <h3>Error codes: consolidated catalogue</h3>
 
@@ -659,7 +659,7 @@ register_routes(app)</code></pre>
 
                 <p>The backend persists ALL application state in direct SQL via <code>SQLExecutor2</code> on a PostgreSQL connection (schema <code>public</code>). No Flow at runtime (single exception: the trace dataset, write-only). Every call creates a fresh <code>SQLExecutor2</code> instance. Writes always include an explicit <code>COMMIT</code>. All values are parameterized via <code>sql_value()</code>.</p>
 
-                <h3>The six tables (_vN naming)</h3>
+                <h3>The eight tables (_vN naming)</h3>
 
                 <div class="card mb">
                   <table>
@@ -673,6 +673,8 @@ register_routes(app)</code></pre>
                       <tr><td><code>webapp_usage_monthly_v1</code></td><td>Monthly usage bucket per (user, calendar month). Composite PK guarantees exactly one row per month without a reset job. Incremented by UPSERT on each run completion.</td><td><code>(user_id, period_start)</code></td></tr>
                       <tr><td><code>webapp_artifacts_v1</code></td><td>Artifact specs (chart/table/kpi) per exchange. Only the SPEC is stored; data rows are reused from the captured <code>generated_sql.result</code> via <code>/evidence/meta</code>.</td><td><code>exchange_id</code></td></tr>
                       <tr><td><code>webapp_user_quota_v1</code></td><td>Per-user monthly budget overrides. A row exists ONLY for users with a custom limit; absent row = global default applies. Created lazily on first write. Added 2026-06-18.</td><td><code>user_id</code></td></tr>
+                      <tr><td><code>webapp_golden_suggestions_v1</code></td><td>Benchmark golden-question suggestions captured from the chat ("..." menu). Feeds the OWIsMind_LAB benchmark project. Append-only, owner-stamped.</td><td><code>suggestion_id</code></td></tr>
+                      <tr><td><code>webapp_events_v1</code></td><td>Usage analytics: one row per tracked webapp event (41 whitelisted names). Written best-effort by <code>POST /track</code>; impersonated sessions are dropped before write.</td><td><code>(app_session_id, seq)</code></td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -776,7 +778,7 @@ register_routes(app)</code></pre>
                     <!-- no-FK note -->
                     <text x="380" y="390" text-anchor="middle" class="diagram text-muted" font-size="9">No physical FK constraints - coupling is at application level. user_id is the owner-scoping key throughout.</text>
                   </svg>
-                  <p class="diagram-caption">SQL data model: 6 tables, logical relationships only (no physical FK constraints). The self-referencing edge on <code>webapp_chat_v5</code> is the conversation tree. The <code>webapp_user_quota_v1</code> row exists only when an admin override is active.</p>
+                  <p class="diagram-caption">SQL data model: 8 tables, logical relationships only (no physical FK constraints). The self-referencing edge on <code>webapp_chat_v5</code> is the conversation tree. The <code>webapp_user_quota_v1</code> row exists only when an admin override is active. Two later tables complete the set: <code>webapp_golden_suggestions_v1</code> (benchmark suggestions captured from chat) and <code>webapp_events_v1</code> (usage analytics, one row per tracked event).</p>
                 </figure>
 
                 <h3>Conversation tree</h3>

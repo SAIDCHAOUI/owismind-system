@@ -391,25 +391,25 @@
                   </div>
                 </aside>
 
-                <h3>Choosing a response mode: Eco, Medium, High</h3>
+                <h3>Choosing a response mode: Smart, Pro, Claude</h3>
 
-                <p>The mode selector (next to the agent picker) is a cost/quality slider. A small pill displays the current mode with a colored dot (green for Eco, orange for Medium, red for High). Clicking it opens an explanation window with the three modes side by side, with cost and speed gauges.</p>
+                <p>The mode selector (next to the agent picker) is a cost/quality slider. A small pill displays the current mode with a colored dot (green for Smart, orange for Pro, red for Claude). Clicking it opens an explanation window with the three modes side by side, with cost and speed gauges. The selector only appears for agents whose profile enables modes. (Smart/Pro/Claude are the internal keys as well; the older eco/medium/high tokens were renamed.)</p>
 
                 <div class="grid-3 mt">
                   <div class="card kpi">
-                    <p class="k-label">Eco (default)</p>
+                    <p class="k-label">Smart (default)</p>
                     <p class="k-val" style="color:var(--green)">1/5</p>
                     <p class="k-sub">Recommended. Fast, economical. Best for the vast majority of everyday questions.</p>
                   </div>
                   <div class="card kpi">
-                    <p class="k-label">Medium</p>
+                    <p class="k-label">Pro</p>
                     <p class="k-val" style="color:var(--orange-deep)">3/5</p>
-                    <p class="k-sub">Moderate cost. Faster. For analyses that require a bit more finesse.</p>
+                    <p class="k-sub">Moderate cost, more finesse in the wording. For analyses that warrant a bit more.</p>
                   </div>
                   <div class="card kpi">
-                    <p class="k-label">High</p>
+                    <p class="k-label">Claude</p>
                     <p class="k-val" style="color:var(--red)">5/5</p>
-                    <p class="k-sub">High cost, more deliberate. For complex questions that warrant in-depth reasoning.</p>
+                    <p class="k-sub">Much more expensive, deliberate reasoning. Warns that it drains the $50 quota quickly.</p>
                   </div>
                 </div>
 
@@ -417,11 +417,11 @@
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   <div class="callout-body">
                     <p class="callout-title">SQL accuracy is the same in all modes</p>
-                    <p>The analytical SQL is always written by the same engine (the Semantic Model Query tool, on a fixed Sonnet model). Switching mode does not change the accuracy of the figure - it mainly changes the quality of the wording and the cost. Stay in Eco for most questions; reserve High for those that truly warrant in-depth reasoning.</p>
+                    <p>The analytical SQL is always written by the same engine (the Semantic Model Query tool, on a fixed Sonnet model). Switching mode does not change the accuracy of the figure - it mainly changes the quality of the wording and the cost. Stay in Smart for most questions; reserve Claude for those that truly warrant in-depth reasoning.</p>
                   </div>
                 </aside>
 
-                <p>Your choice takes effect only after you click <strong>Apply</strong> in the mode window. <strong>Cancel</strong> closes it without changing anything. The mode window also shows a reminder that the monthly budget of $50 is shared across all modes - the more powerful the mode, the faster the budget is consumed.</p>
+                <p>Your choice takes effect only after you click <strong>Apply</strong> in the mode window. <strong>Cancel</strong> closes it without changing anything. The mode is <strong>ephemeral</strong>: Smart is always the default, and after each message the selector resets to Smart, so Pro and Claude are a per-question opt-in rather than a sticky preference. The mode actually used is stamped on the exchange and shown in that answer's cost line. The mode window also reminds you that the monthly budget of $50 is shared across all modes - the more powerful the mode, the faster the budget is consumed.</p>
 
                 <p>A cost tracking line appears under each response: input tokens, output tokens and the estimated cost of that exchange.</p>
 
@@ -486,7 +486,7 @@
                     <tbody>
                       <tr><td>Ask a question</td><td>Type in the bar, <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a new line</td></tr>
                       <tr><td>Switch agent</td><td>Agent selector to the left of the bar</td></tr>
-                      <tr><td>Set cost/quality</td><td>Mode selector (Eco recommended, Medium, High) then Apply</td></tr>
+                      <tr><td>Set cost/quality</td><td>Mode selector (Smart recommended, Pro, Claude) then Apply</td></tr>
                       <tr><td>Follow work live</td><td>The step timeline in the response bubble</td></tr>
                       <tr><td>Stop</td><td>The send button becomes a stop button during generation</td></tr>
                       <tr><td>Correct a question</td><td>Hover over your bubble, edit icon (creates a branch)</td></tr>
@@ -552,11 +552,16 @@
                         <td>A key figure highlighted, with an optional variation (green arrow if up, red if down).</td>
                         <td>No</td>
                       </tr>
+                      <tr>
+                        <td><strong>Source data</strong></td>
+                        <td>The Source Data Explorer: browse the agent's raw dataset behind the answer. Search and filter columns (searchable two-step filters, cascading distincts, date ranges), compute your own figures in the Calculer zone (sum, average, median, min/max, counts, always on the full filtered set, DB-side), sort columns, and optionally forward the view you built to the agent for its next answer. Every figure shown is a database calculation, never a count of the visible rows.</td>
+                        <td>No</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
 
-                <p class="mt">Switching tabs does not affect the conversation thread. Charts, tables and KPIs are built server-side: the agent only states which field goes on the x-axis or y-axis, and the server does the rest. If the data does not lend itself to a plot, the tab shows an honest message rather than a false chart.</p>
+                <p class="mt">Switching tabs does not affect the conversation thread. Charts, tables and KPIs are built server-side: the agent only states which field goes on the x-axis or y-axis, and the server does the rest. If the data does not lend itself to a plot, the tab shows an honest message rather than a false chart. The Source Data Explorer is also reachable from a New Conversation screen, to browse an agent's data before asking anything.</p>
 
                 <h3>The trust badge: the five levels</h3>
 

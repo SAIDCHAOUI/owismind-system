@@ -599,6 +599,81 @@ window.SEARCH_INDEX = [
     title: 'See also',
     anchor: 'see-also',
     text: 'see also related pages architecture backend agents operations references'
+  },
+
+  /* ================================================================
+     Later capabilities (v1.1) - Source Data Explorer, analytics,
+     benchmark, impersonation, Smart/Pro/Claude modes, DEV/PROD agents
+     ================================================================ */
+  {
+    file: 'index.html',
+    page: 'Welcome',
+    title: 'Later capabilities (shipped and validated in DSS)',
+    anchor: 'later-capabilities-shipped-and-validated-in-dss',
+    text: 'shipped capabilities source data explorer usage analytics benchmark admin impersonation native artifacts narration recall monthly budget attribute_lookup validated DSS v1.1'
+  },
+  {
+    file: 'index.html',
+    page: 'Welcome',
+    title: 'Cost modes: Smart, Pro, Claude',
+    anchor: 'cost-modes',
+    text: 'cost modes Smart Pro Claude eco medium high ephemeral default reset per answer webapp_chat_v5 mode Gemini Flash Sonnet'
+  },
+  {
+    file: '01-experience.html',
+    page: 'The Experience',
+    title: 'Source data tab (Source Data Explorer)',
+    anchor: 'the-panel-tabs',
+    text: 'source data explorer browse raw dataset searchable filters cascading distincts date ranges calculer KPI sum average median sort share screen context to agent database calculation full filtered set'
+  },
+  {
+    file: '01-experience.html',
+    page: 'The Experience',
+    title: 'Choosing a response mode: Smart, Pro, Claude',
+    anchor: 'choosing-a-response-mode-smart-pro-claude',
+    text: 'response mode Smart Pro Claude default recommended ephemeral reset apply cost quality budget quota'
+  },
+  {
+    file: '03-frontend.html',
+    page: 'Frontend',
+    title: 'Source Data Explorer, benchmark and impersonation views',
+    anchor: 'views',
+    text: 'SourceExplorer SourcePanel SourceTable SourceChips SourceCalc SourceAnalyze ColumnMenu CellActionPopover RangePopoverFields BenchmarkSuggestView admin-impersonate stores sources screenContext promptContext benchmark composables aggregateSurface sourceModel sourceViewMemory track.js trackModel.js analytics'
+  },
+  {
+    file: '04-backend.html',
+    page: 'Backend',
+    title: 'Source Data, Benchmark and Analytics route families',
+    anchor: 'api-reference',
+    text: 'source meta rows distinct aggregate evidence aggregate admin sources datasets benchmark suggest suggestions results attempt admin benchmark tables validate-table override track usage analytics 36 routes'
+  },
+  {
+    file: '04-backend.html',
+    page: 'Backend',
+    title: 'The eight tables (webapp_golden_suggestions_v1, webapp_events_v1)',
+    anchor: 'storage-and-data-model',
+    text: 'eight tables 8 tables webapp_golden_suggestions_v1 benchmark suggestions webapp_events_v1 usage analytics events track chat_v5 users settings usage_monthly artifacts user_quota'
+  },
+  {
+    file: '05-agents.html',
+    page: 'The Agents (the brain)',
+    title: 'DEV / PROD_V1 split and the tickets sub-agent',
+    anchor: 'agent-system-overview',
+    text: 'DEV PROD_V1 split promotion promote_agents_to_prod orchestrator Xrv7GvfG revenue expert uO5hEzAs CSSO Trouble Tickets Expert NcE9LD2i second sub-agent honest refusal'
+  },
+  {
+    file: '06-operations.html',
+    page: 'Operations and Maintenance',
+    title: 'Production v1.1 deployment and agent promotion',
+    anchor: 'the-plugin-lifecycle-build-package-deploy',
+    text: 'production v1.1 v1.1.0 DEPLOY_PROD_V1_1 runbook promote_agents_to_prod OWISMIND_PROD_V1 prod project dynamic whitelist cross-project deploy package'
+  },
+  {
+    file: '07-decisions.html',
+    page: 'Decisions (ADR)',
+    title: 'Later decisions (post-0015)',
+    anchor: 'later-decisions-post-0015-not-yet-formal-adrs',
+    text: 'later decisions post 0015 native artifacts narration source data explorer usage analytics ephemeral modes benchmark separate project admin impersonation DEV PROD_V1 agent split not yet formal ADR ADR-0016'
   }
 
 ];

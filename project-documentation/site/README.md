@@ -29,8 +29,9 @@ each page, and a full-text search overlay (press `/` or `Ctrl+K`).
 
 - No external network requests. No CDN, no Google Fonts, no remote scripts.
 - All assets live under `site/assets/` (site.css, site.js, search-index.js, orange-logo.png).
-- The search index is pre-built in `assets/search-index.js` (80 entries covering every page
-  and its major sections).
+- The search index is pre-built in `assets/search-index.js` (89 entries covering every page
+  and its major sections, including the v1.1 capabilities: Source Data Explorer, usage
+  analytics, benchmark, admin impersonation, Smart/Pro/Claude modes, DEV/PROD_V1 agents).
 - Dark mode is supported via a CSS variable system toggled by the sun/moon button.
 
 ## Source of truth

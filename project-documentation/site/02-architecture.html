@@ -69,7 +69,7 @@
                   </div>
                   <div class="card kpi">
                     <p class="k-label">SQL tables</p>
-                    <p class="k-val mono">6</p>
+                    <p class="k-val mono">8</p>
                     <p class="k-sub">Direct PostgreSQL, no Flow at runtime</p>
                   </div>
                   <div class="card kpi">
@@ -190,8 +190,9 @@
 
                     <!-- PG tables list -->
                     <text x="30" y="458" font-size="9" font-weight="600" class="diagram">Application tables:</text>
-                    <text x="30" y="472" font-size="9" class="diagram text-muted">webapp_chat_v5 - webapp_users_v1 - webapp_settings_v1</text>
-                    <text x="30" y="486" font-size="9" class="diagram text-muted">webapp_usage_monthly_v1 - webapp_artifacts_v1 - webapp_user_quota_v1</text>
+                    <text x="30" y="466" font-size="9" class="diagram text-muted">webapp_chat_v5 - webapp_users_v1 - webapp_settings_v1</text>
+                    <text x="30" y="479" font-size="9" class="diagram text-muted">webapp_usage_monthly_v1 - webapp_artifacts_v1 - webapp_user_quota_v1</text>
+                    <text x="30" y="492" font-size="9" class="diagram text-muted">webapp_golden_suggestions_v1 - webapp_events_v1</text>
                     <text x="30" y="500" font-size="9" font-weight="600" class="diagram">All created lazily (CREATE IF NOT EXISTS), never ALTER-ed.</text>
                     <text x="30" y="514" font-size="9" class="diagram text-muted">One exception: trace dataset is write-only via DSS Flow (never re-read at runtime).</text>
 
@@ -242,7 +243,7 @@
                   <div class="card">
                     <div class="block">
                       <p class="block-title">LangGraph agent layer (Code Agents)</p>
-                      <p class="block-note">Where: <code>dataiku-agents/agents/</code>, pasted into DSS Code Agents - Python 3.11</p>
+                      <p class="block-note">Where: <code>dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/agents/</code>, pasted into DSS Code Agents - Python 3.11</p>
                     </div>
                     <div class="block">
                       <p><code>OWIsMind_orchestrator</code> routes to the revenue expert sub-agent <code>SalesDrive_revenue_expert</code> (<code>agent:bHrWLyOL</code>). Both use LangGraph with native LLM Mesh calls. The orchestrator holds the honesty firewall: it never holds a business figure. The repo is the source of truth; agents are pasted by hand, not zipped.</p>
@@ -287,7 +288,7 @@
 
                   <div class="card card-pad">
                     <p class="card-label">3 - Repo = source of truth for the agents</p>
-                    <p>The two Code Agents are NOT packaged in the plugin zip. They live in <code>dataiku-agents/agents/</code> (source of truth) and are pasted by hand into DSS Code Agents on a Python 3.11 env (where langchain/langgraph are installed). The backend runs on Python 3.9.23 (Flask, no langchain). When either file changes, BOTH are re-pasted together - some fixes live on both sides. Configuration ids are re-verified after pasting.</p>
+                    <p>The Code Agents are NOT packaged in the plugin zip. They live in <code>dataiku-agents/OWISMIND/</code> (source of truth), duplicated per DSS project under <code>OWISMIND_DEV/</code> and <code>OWISMIND_PROD_V1/</code> (files are project-prefixed). Development happens in DEV; a run of <code>tools/promote_agents_to_prod.py</code> regenerates the PROD copies (DEV logic plus PROD ids, with the tickets block surgically removed). They are pasted by hand into DSS Code Agents on a Python 3.11 env (where langchain/langgraph are installed). The backend runs on Python 3.9.23 (Flask, no langchain). When one file changes, the orchestrator and its sub-agents are re-pasted together - some fixes live on both sides. Configuration ids are re-verified after pasting.</p>
                     <div class="chips mt">
                       <span class="chip accent">ADR-0005</span>
                       <span class="chip">Python 3.11</span>
@@ -420,6 +421,8 @@
                     <text x="583" y="298" font-size="9" class="diagram text-muted">webapp_usage_monthly_v1</text>
                     <text x="583" y="312" font-size="9" class="diagram text-muted">webapp_artifacts_v1</text>
                     <text x="583" y="326" font-size="9" class="diagram text-muted">webapp_user_quota_v1</text>
+                    <text x="583" y="340" font-size="9" class="diagram text-muted">webapp_golden_suggestions_v1</text>
+                    <text x="583" y="354" font-size="9" class="diagram text-muted">webapp_events_v1</text>
 
                     <!-- ===== ARROWS ===== -->
                     <!-- FE -> BE -->
@@ -587,6 +590,16 @@
                         <td><code>webapp_user_quota_v1</code></td>
                         <td>Per-user monthly budget overrides (permanent or temporary)</td>
                         <td><code>NULL expires_at</code> = permanent; future timestamp = temporary boost</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_golden_suggestions_v1</code></td>
+                        <td>Benchmark golden-question suggestions captured from chat</td>
+                        <td>Append-only; feeds the separate OWIsMind_LAB benchmark project</td>
+                      </tr>
+                      <tr>
+                        <td><code>webapp_events_v1</code></td>
+                        <td>Usage analytics events (one row per tracked webapp event)</td>
+                        <td>Best-effort writes via <code>POST /track</code>; impersonation dropped</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1056,6 +1069,26 @@
                         <td><code>storage/budget.py</code>, <code>api/routes.py</code></td>
                       </tr>
                       <tr>
+                        <td>Admin impersonation (beta)</td>
+                        <td>Read-only, admin-gated; write routes blocked, analytics dropped</td>
+                        <td><code>security/impersonation.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Source data read access</td>
+                        <td>Read-only dataset browse: whitelisted logical keys, no raw table/connection from client</td>
+                        <td><code>evidence/source_service.py</code>, <code>evidence/source_search.py</code>, <code>evidence/aggregate_core.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Analytics privacy</td>
+                        <td>Whitelisted events; searches carry only a length; error paths strip query strings</td>
+                        <td><code>storage/events.py</code></td>
+                      </tr>
+                      <tr>
+                        <td>Benchmark consultation</td>
+                        <td>Cross-project reads (OWIsMind_LAB) are read-only + schema-validated</td>
+                        <td><code>benchmark_view/lab_io.py</code>, <code>benchmark_view/schema_check.py</code>, <code>storage/suggestions.py</code></td>
+                      </tr>
+                      <tr>
                         <td>Instance safety</td>
                         <td>Concurrency caps, TTL, deadlines (single-process)</td>
                         <td><code>agents/stream_manager.py</code></td>
@@ -1175,17 +1208,17 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td>eco (default)</td>
+                        <td>smart (default)</td>
                         <td><code>GEMINI_FLASH_LITE_ID</code></td>
                         <td>Gemini 3.1 Flash-Lite</td>
                       </tr>
                       <tr>
-                        <td>medium</td>
+                        <td>pro</td>
                         <td><code>GEMINI_FLASH_ID</code></td>
                         <td>Gemini 3.5 Flash</td>
                       </tr>
                       <tr>
-                        <td>high</td>
+                        <td>claude</td>
                         <td><code>SONNET_ID</code></td>
                         <td>Claude Sonnet 4.6</td>
                       </tr>

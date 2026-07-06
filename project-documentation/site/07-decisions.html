@@ -721,7 +721,7 @@
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                   <div class="callout-body">
                     <p class="callout-title">In Flux: agent layer being edited live</p>
-                    <p>ADR-0009, 0010, and 0011 carry elements not yet confirmed in DSS. The per-mode Gemini model ids must be verified on the instance. The <code>attribute_lookup</code> tool wiring and the EVPL smoke test via the orchestrator are pending. Details in the in-flux notes on each card below.</p>
+                    <p>This reflects the 2026-06-19 snapshot, when the agent layer was being edited live: ADR-0009, 0010, and 0011 then carried elements not yet confirmed in DSS. The per-mode Gemini model ids had to be verified on the instance; the <code>attribute_lookup</code> tool wiring and the EVPL smoke test via the orchestrator were pending. ADR-0009 and ADR-0010 have since been validated in DSS (see the in-flux summary at the end of this page); the per-card notes below preserve that original state.</p>
                   </div>
                 </aside>
 
@@ -927,15 +927,15 @@
                     <span class="adr-status influx">Accepted (in flux)</span>
                   </div>
                   <div class="adr-card-body">
-                    <p class="adr-card-decision">Decision: one model drives the entire turn, chosen by the user mode (<code>eco</code> = Gemini 3.1 Flash-Lite, <code>medium</code> = Gemini 3.5 Flash, <code>high</code> = Claude Sonnet 4.6). No escalation. The mode propagates to the sub-agent via a machine token <code>⟦owi:mode=...⟧</code> appended at the END of the message by the backend.</p>
+                    <p class="adr-card-decision">Decision: one model drives the entire turn, chosen by the user mode (<code>smart</code> = Gemini 3.1 Flash-Lite, <code>pro</code> = Gemini 3.5 Flash, <code>claude</code> = Claude Sonnet 4.6). No escalation. The mode propagates to the sub-agent via a machine token <code>⟦owi:mode=...⟧</code> appended at the END of the message by the backend.</p>
                     <p class="adr-card-rationale">
-                      The previous escalation architecture failed in DSS on gpt-5.4-mini: either the model escalated systematically (triggering a hardcoded transition message) or it narrated its intent then stopped without calling a single tool ("narrate-and-stop"). User instruction: stop the single-model hacks, aim for an architecture that works even on small models. A single model per mode is predictable and genuinely model-agnostic. Narration is OFF in eco mode (removes the "speak before acting" prompt that caused narrate-and-stop on the smallest tier). The token is read LAST by the orchestrator so that a user-typed fake mode token earlier in the message cannot force a more expensive model.
+                      The previous escalation architecture failed in DSS on gpt-5.4-mini: either the model escalated systematically (triggering a hardcoded transition message) or it narrated its intent then stopped without calling a single tool ("narrate-and-stop"). User instruction: stop the single-model hacks, aim for an architecture that works even on small models. A single model per mode is predictable and genuinely model-agnostic. Narration is OFF in smart mode (removes the "speak before acting" prompt that caused narrate-and-stop on the smallest tier). The token is read LAST by the orchestrator so that a user-typed fake mode token earlier in the message cannot force a more expensive model.
                     </p>
                     <aside class="callout callout-influx" role="note">
                       <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                       <div class="callout-body">
                         <p class="callout-title">In Flux: Gemini model ids must be verified</p>
-                        <p>The constants <code>GEMINI_FLASH_LITE_ID</code> and <code>GEMINI_FLASH_ID</code> follow the format observed on the LLM-7064-revforecast connection but must match the target instance exactly. A wrong id breaks the corresponding mode. Eco is the DEFAULT - a wrong eco id means no response at all.</p>
+                        <p>The constants <code>GEMINI_FLASH_LITE_ID</code> and <code>GEMINI_FLASH_ID</code> follow the format observed on the LLM-7064-revforecast connection but must match the target instance exactly. A wrong id breaks the corresponding mode. Smart is the DEFAULT - a wrong Flash-Lite id means no response at all.</p>
                       </div>
                     </aside>
                     <ul class="con-list">
@@ -1228,12 +1228,48 @@ grep -rlP '\xef\xbf\xbd' .</code></pre>
                 </article>
 
                 <!-- ============================================================
+                     SECTION: LATER DECISIONS (post-0015)
+                     ============================================================ -->
+                <h2>Later decisions (post-0015, not yet formal ADRs)</h2>
+
+                <p>
+                  Several significant architectural decisions were made after ADR-0015 and shipped (most validated in DSS).
+                  They are recorded in <code>memory/LESSONS.md</code> and the session logs; formal ADR-0016+ backfill is a
+                  documentation task still open. The decisions, in brief:
+                </p>
+
+                <div class="card">
+                  <table>
+                    <thead>
+                      <tr><th>Decision</th><th>Summary</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Native artifacts and narration</td><td>The agent emits chart/table/KPI SPECS only (no rows); the backend rebuilds Chart.js payloads from the captured result. Live narration and <code>recall_prior_result</code> added.</td></tr>
+                      <tr><td>Source Data Explorer</td><td>Read-only browse of an agent's raw datasets with DB-side aggregates. Rule: every figure shown is a database calculation on the full filtered set, never a count of visible rows. Opt-in "share what is on screen" forwards the view to the agent with consent.</td></tr>
+                      <tr><td>Usage analytics</td><td>One SQL table (<code>webapp_events_v1</code>) + <code>POST /track</code>, not a per-event folder. 41 whitelisted events; searches carry only a length; impersonated sessions are dropped.</td></tr>
+                      <tr><td>Ephemeral response modes</td><td>Smart is the permanent default; Pro/Claude are per-question opt-ins that reset on send. The mode used is stamped per exchange (<code>webapp_chat_v5.mode</code>, additive column).</td></tr>
+                      <tr><td>Benchmark as a separate project</td><td>Agent evaluation lives in a separate DSS project (<code>OWIsMind_LAB</code>) with two admin webapps; the plugin only consults results and captures golden-question suggestions.</td></tr>
+                      <tr><td>Admin impersonation (beta)</td><td>Temporary, fenced feature: an admin can view the app as another user. Read-only, admin-gated; write and analytics paths blocked while impersonating.</td></tr>
+                      <tr><td>DEV / PROD_V1 agent split</td><td>Agents duplicated per DSS project under <code>dataiku-agents/OWISMIND/</code>; promotion is scripted (<code>tools/promote_agents_to_prod.py</code>). The tickets sub-agent stays DEV-only; PROD gives an honest refusal for ticket questions.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ============================================================
                      SECTION: IN-FLUX SUMMARY
                      ============================================================ -->
                 <h2>In-flux summary</h2>
 
+                <aside class="callout callout-note" role="note">
+                  <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  <div class="callout-body">
+                    <p class="callout-title">Most of these are now resolved</p>
+                    <p>The table below reflects the 2026-06-19 snapshot. Since then, ADR-0009 (Smart/Pro/Claude modes), ADR-0010 (<code>attribute_lookup</code>), ADR-0014 (monthly budget) and ADR-0015 (Orange charter UI) have all been validated in DSS. The plugin is now packaged at v1.1.0 for its first production deployment (runbook <code>docs/DEPLOY_PROD_V1_1.md</code>).</p>
+                  </div>
+                </aside>
+
                 <p>
-                  Five ADRs carry elements not yet confirmed in DSS. Here is the consolidated list of what remains to be done:
+                  For historical reference, this is the 2026-06-19 list of what remained to be done at that time:
                 </p>
 
                 <div class="card">

@@ -470,12 +470,12 @@
                       <tr><td><code>sidebarW</code></td><td><code>owi.sidebarW</code></td><td>260 (clamp 200..420)</td></tr>
                       <tr><td><code>evidenceW</code></td><td><code>owi.evidenceW</code></td><td>480 (clamp min 360)</td></tr>
                       <tr><td><code>contextMessages</code></td><td><code>owismind.contextMessages</code></td><td>20 (clamp 10..50)</td></tr>
-                      <tr><td><code>modelMode</code></td><td><code>owismind.modelMode</code></td><td><code>'eco'</code></td></tr>
+                      <tr><td><code>modelMode</code></td><td>not persisted (ephemeral)</td><td><code>'smart'</code></td></tr>
                     </tbody>
                   </table>
                 </div>
 
-                <p>Model modes: <code>eco</code> = Gemini 3.1 Flash-Lite (fast, low-cost, default), <code>medium</code> = Gemini 3.5 Flash, <code>high</code> = Claude Sonnet. The frontend sends only the logical key <code>mode</code>; the real model id is resolved server-side.</p>
+                <p>Model modes (the older <code>eco</code>/<code>medium</code>/<code>high</code> tokens were renamed): <code>smart</code> = Gemini 3.1 Flash-Lite (fast, low-cost, default), <code>pro</code> = Gemini 3.5 Flash, <code>claude</code> = Claude Sonnet. The frontend sends only the logical key <code>mode</code>; the real model id is resolved server-side. Unlike the other preferences, <code>modelMode</code> lives ONLY in the <code>ui</code> store: it always boots to <code>'smart'</code> and is never persisted to localStorage. It is deliberately ephemeral: picking <code>pro</code> or <code>claude</code> applies to the next sent question only, and the chat store calls <code>resetModelMode()</code> right after each dispatch. The mode that actually ran a given answer comes back per-answer from the backend row (<code>webapp_chat_v5.mode</code>), not from local state.</p>
 
                 <aside class="callout callout-influx" role="note">
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
@@ -742,6 +742,14 @@
 
                 <p><strong>AdminView</strong>: admin console with five tabs (<code>Tabs.vue</code>): Overview, Agents (whitelist + profile editor modal), Users (admin flag toggle), Quotas (global config + per-user override table), and Activity (honest empty state - no backend yet). The Agents tab profile editor fields are bounded server-side by <code>validate_agent_meta</code>. Note: admins ARE subject to the monthly budget; there is no admin exemption.</p>
 
+                <p><strong>BenchmarkSuggestView</strong>: in-plugin consultation of the agent-benchmark results (read from the separate <code>OWIsMind_LAB</code> project via backend routes) plus the flow to suggest golden questions captured from a chat exchange. It never launches a run - launching stays in the LAB webapps.</p>
+
+                <p><strong>Source Data Explorer</strong>: a set of components under <code>components/sources/</code> (<code>SourceExplorer</code>, <code>SourcePanel</code>, <code>SourceTable</code>, <code>SourceChips</code>, <code>SourceCalc</code>, <code>SourceAnalyze</code>, <code>ColumnMenu</code>, <code>CellActionPopover</code>, <code>RangePopoverFields</code>) that let a user browse an agent's raw datasets: searchable two-step filters, cascading distincts, DB-side aggregates, a Calculer KPI zone, a column menu with three-state sort, and an opt-in "share what is on screen" banner that forwards the current view to the agent. State lives in <code>stores/sources.js</code>, <code>stores/screenContext.js</code> and <code>stores/promptContext.js</code>, backed by the composables <code>sourceModel.js</code>, <code>sourceViewMemory.js</code>, <code>aggregateSurface.js</code>, <code>screenContextModel.js</code> and <code>promptContextModel.js</code>. Benchmark state uses <code>stores/benchmark.js</code> + <code>composables/benchmarkResults.js</code>; the budget gauge uses <code>composables/budgetModel.js</code>; SQL pretty-printing uses <code>composables/sqlPretty.js</code>.</p>
+
+                <p><strong>Admin impersonation</strong> (temporary, fenced, kept for the beta): the <code>features/admin-impersonate/</code> module lets an admin view the app as another user. It is read-only and admin-gated; write routes are blocked while impersonating and analytics writes are dropped.</p>
+
+                <p>Usage analytics is wired through <code>services/track.js</code> (queue, flush every 5s or 20 events, <code>sendBeacon</code> on pagehide) and the pure <code>services/trackModel.js</code>, with thin hooks in the router and the stores.</p>
+
                 <aside class="callout callout-warning" role="note">
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <div class="callout-body">
@@ -872,7 +880,7 @@ return res.json();</code></pre>
   agent_key: agentKey,                // opaque logical key, resolved server-side
   history_limit: historyLimit,        // re-clamped [10,50] server-side
   parent_exchange_id: parentId|null,  // tree edge; null = new root branch
-  mode: mode || undefined,            // 'eco'|'medium'|'high'; server default = eco
+  mode: mode || undefined,            // 'smart'|'pro'|'claude'; server default = smart
   webapp_lang: webappLang || undefined,  // 'fr'|'en' (tie-break; message language wins)
   screen_context: screenContext || undefined,  // built only when Evidence panel is open
 })</code></pre>

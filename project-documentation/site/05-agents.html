@@ -52,15 +52,15 @@
                   <p class="eyebrow">Level 5 - The Brain</p>
                   <h1>The Agents</h1>
                   <span class="title-bar" aria-hidden="true"></span>
-                  <p class="page-sub">Two LangGraph Code Agents on Python 3.11 - the orchestrator that reasons and routes, and the revenue expert sub-agent that grounds every figure in SQL. This is the layer that cannot invent a number.</p>
+                  <p class="page-sub">LangGraph Code Agents on Python 3.11 - the orchestrator that reasons and routes, plus specialist sub-agents that ground every figure in SQL (revenue expert in DEV and PROD; a tickets expert in DEV). This is the layer that cannot invent a number.</p>
                 </header>
 
                 <!-- IN-FLUX global notice -->
                 <aside class="callout callout-influx" role="note">
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                   <div class="callout-body">
-                    <p class="callout-title">In Flux - dataiku-agents/ layer</p>
-                    <p>The <code>dataiku-agents/</code> folder is being edited live. This page reflects the repository state as of 2026-06-19. Points still in motion (notably <code>attribute_lookup</code> wiring) are individually flagged below.</p>
+                    <p class="callout-title">DEV / PROD_V1 split and second sub-agent</p>
+                    <p>The agents now live under <code>dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/</code> (one copy per DSS project, files project-prefixed). Development happens in DEV; <code>tools/promote_agents_to_prod.py</code> regenerates the PROD copies. PROD ids: orchestrator <code>Xrv7GvfG</code>, revenue expert <code>agent:uO5hEzAs</code>. A second sub-agent, <strong>CSSO_Trouble_Tickets_Expert</strong> (<code>agent:NcE9LD2i</code>), exists in DEV only and is deliberately NOT in PROD_V1 (in PROD the orchestrator gives an honest refusal for ticket questions). The prose below describes the orchestrator and revenue expert, which are identical in shape across DEV and PROD.</p>
                   </div>
                 </aside>
 
@@ -68,8 +68,8 @@
                 <div class="grid-3 mt">
                   <div class="card kpi">
                     <p class="k-label">Code Agents</p>
-                    <p class="k-val">2</p>
-                    <p class="k-sub">Orchestrator + revenue expert, Python 3.11</p>
+                    <p class="k-val">3</p>
+                    <p class="k-sub">Orchestrator + revenue expert + tickets expert (DEV), Python 3.11</p>
                   </div>
                   <div class="card kpi">
                     <p class="k-label">Active DSS tool (sub-agent)</p>
@@ -252,7 +252,7 @@
                         <td>DSS webapp env; does not need LangGraph</td>
                       </tr>
                       <tr>
-                        <td>The two Code Agents (<code>dataiku-agents/agents/</code>)</td>
+                        <td>The Code Agents (<code>dataiku-agents/OWISMIND/{OWISMIND_DEV,OWISMIND_PROD_V1}/agents/</code>)</td>
                         <td><span class="badge orange">3.11</span></td>
                         <td>stdlib + <code>dataiku</code> + <code>langchain</code>/<code>langgraph</code></td>
                         <td>LangGraph requires Python &gt;= 3.10; agents import langchain/langgraph</td>
@@ -900,7 +900,7 @@ PERIOD: 2026</code></pre>
                 <h3 id="per-mode-model-table">Per-mode model table</h3>
 
                 <figure class="diagram-wrap">
-                  <svg class="diagram diagram-svg" viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" aria-label="Per-mode model table showing eco=Gemini Flash-Lite (default, narration OFF), medium=Gemini Flash (narration ON), high=Sonnet (narration ON), and always Sonnet for the Semantic Model tool">
+                  <svg class="diagram diagram-svg" viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" aria-label="Per-mode model table showing smart=Gemini Flash-Lite (default, narration OFF), pro=Gemini Flash (narration ON), claude=Sonnet (narration ON), and always Sonnet for the Semantic Model tool">
 
                     <rect class="lane" x="0" y="0" width="700" height="280"/>
 
@@ -911,26 +911,26 @@ PERIOD: 2026</code></pre>
                     <text x="530" y="35" text-anchor="middle" fill="#fff" class="diagram" style="font-weight:700">Model</text>
                     <text x="650" y="35" text-anchor="middle" fill="#fff" class="diagram" style="font-weight:700">Narration</text>
 
-                    <!-- eco row (default) -->
+                    <!-- smart row (default) -->
                     <rect class="node-soft" x="10" y="50" width="680" height="50"/>
-                    <text x="90" y="72" text-anchor="middle" class="diagram text-accent" style="font-weight:700">eco</text>
+                    <text x="90" y="72" text-anchor="middle" class="diagram text-accent" style="font-weight:700">smart</text>
                     <text x="90" y="88" text-anchor="middle" class="diagram text-muted" style="font-size:10px">DEFAULT</text>
                     <text x="290" y="80" text-anchor="middle" class="diagram u-mono" style="font-size:10px">GEMINI_FLASH_LITE_ID</text>
                     <text x="290" y="94" text-anchor="middle" class="diagram text-muted" style="font-size:9px">...vertex_ai/gemini-3.1-flash-lite</text>
                     <text x="530" y="80" text-anchor="middle" class="diagram">Gemini 3.1 Flash-Lite</text>
                     <text x="650" y="80" text-anchor="middle" class="diagram text-muted">OFF</text>
 
-                    <!-- medium row -->
+                    <!-- pro row -->
                     <rect class="node" x="10" y="100" width="680" height="50"/>
-                    <text x="90" y="130" text-anchor="middle" class="diagram" style="font-weight:700">medium</text>
+                    <text x="90" y="130" text-anchor="middle" class="diagram" style="font-weight:700">pro</text>
                     <text x="290" y="122" text-anchor="middle" class="diagram u-mono" style="font-size:10px">GEMINI_FLASH_ID</text>
                     <text x="290" y="136" text-anchor="middle" class="diagram text-muted" style="font-size:9px">...vertex_ai/gemini-3.5-flash</text>
                     <text x="530" y="130" text-anchor="middle" class="diagram">Gemini 3.5 Flash</text>
                     <text x="650" y="130" text-anchor="middle" class="diagram text-accent">ON</text>
 
-                    <!-- high row -->
+                    <!-- claude row -->
                     <rect class="node-soft" x="10" y="150" width="680" height="50"/>
-                    <text x="90" y="180" text-anchor="middle" class="diagram" style="font-weight:700">high</text>
+                    <text x="90" y="180" text-anchor="middle" class="diagram" style="font-weight:700">claude</text>
                     <text x="290" y="172" text-anchor="middle" class="diagram u-mono" style="font-size:10px">SONNET_ID</text>
                     <text x="290" y="186" text-anchor="middle" class="diagram text-muted" style="font-size:9px">...vertex_ai/claude-sonnet-4-6</text>
                     <text x="530" y="180" text-anchor="middle" class="diagram">Claude Sonnet 4.6</text>
@@ -943,18 +943,18 @@ PERIOD: 2026</code></pre>
                     <text x="290" y="228" text-anchor="middle" class="diagram u-mono" style="font-size:10px">SEMANTIC_TOOL_ID = "v4oqA6R"</text>
                     <text x="290" y="244" text-anchor="middle" class="diagram text-muted" style="font-size:9px">revenue_semantic_query</text>
                     <text x="530" y="228" text-anchor="middle" class="diagram" style="font-weight:700">Sonnet (configured in DSS)</text>
-                    <text x="530" y="244" text-anchor="middle" class="diagram text-muted" style="font-size:10px">SQL quality never degrades in eco</text>
+                    <text x="530" y="244" text-anchor="middle" class="diagram text-muted" style="font-size:10px">SQL quality never degrades in smart</text>
                     <text x="650" y="236" text-anchor="middle" class="diagram text-accent">-</text>
 
                   </svg>
-                  <p class="diagram-caption">Per-mode models. The same three constants are declared VERBATIM at the top of both agent files (<code>LOOP_LLM_BY_MODE</code> in the orchestrator, <code>LLM_BY_MODE</code> in the sub-agent). The Semantic Model Query tool runs on Sonnet in ALL modes: SQL quality never degrades with the orchestration tier. Narration is OFF in eco to prevent narrate-and-stop on the smallest model.</p>
+                  <p class="diagram-caption">Per-mode models. The same three constants are declared VERBATIM at the top of both agent files (<code>LOOP_LLM_BY_MODE</code> in the orchestrator, <code>LLM_BY_MODE</code> in the sub-agent). The Semantic Model Query tool runs on Sonnet in ALL modes: SQL quality never degrades with the orchestration tier. Narration is OFF in smart to prevent narrate-and-stop on the smallest model.</p>
                 </figure>
 
                 <aside class="callout callout-influx" role="note">
                   <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                   <div class="callout-body">
                     <p class="callout-title">In Flux - verify LLM Mesh ids after every re-paste</p>
-                    <p>These ids are best-effort against the observed format. A wrong id is not visible at compile time: the corresponding mode simply does not respond in DSS. Since <code>eco</code> is the default, it is the first one to break. Verify each id in the LLM Mesh connection after every re-paste of the Code Agents. The orchestrator's ERROR event names the misconfigured <code>loop_llm</code> to point directly to the cause.</p>
+                    <p>These ids are best-effort against the observed format. A wrong id is not visible at compile time: the corresponding mode simply does not respond in DSS. Since <code>smart</code> is the default, it is the first one to break. Verify each id in the LLM Mesh connection after every re-paste of the Code Agents. The orchestrator's ERROR event names the misconfigured <code>loop_llm</code> to point directly to the cause.</p>
                   </div>
                 </aside>
 
@@ -1025,7 +1025,7 @@ resp = c.execute()
 
                 <p>The <code>[Context - ...]</code> block is human and stays visible to the model (it carries the language rule). The <code>⟦owi:mode=...⟧</code> / <code>⟦owi:lang=...⟧</code> tokens are machine-only: each agent parses them then STRIPS them from every replayed message so they never reach the model as text.</p>
 
-                <p><code>parse_mode</code> reads the LAST valid <code>⟦owi:mode=...⟧</code> token (default <code>eco</code>). Reading the LAST is a safeguard: a user who types a fake token earlier cannot force a more expensive model - the backend's authoritative token at the end always wins. The mode is then propagated to the sub-agent via a <code>MODE: eco/medium/high</code> header in <code>context_msg</code>, read by <code>forced_mode(context)</code>.</p>
+                <p><code>parse_mode</code> reads the LAST valid <code>⟦owi:mode=...⟧</code> token (default <code>smart</code>). Reading the LAST is a safeguard: a user who types a fake token earlier cannot force a more expensive model - the backend's authoritative token at the end always wins. The mode is then propagated to the sub-agent via a <code>MODE: smart/pro/claude</code> header in <code>context_msg</code>, read by <code>forced_mode(context)</code>.</p>
 
                 <a href="../05-agents/06-models-prompts-and-llm-mesh.md" class="source-ref">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -1044,7 +1044,7 @@ resp = c.execute()
                 <div class="card mt">
                   <div class="block">
                     <p class="block-title">1 - Edit and test locally</p>
-                    <p class="block-note">Edit in <code>dataiku-agents/agents/</code>. Run the pure-logic tests (no DSS, no install):</p>
+                    <p class="block-note">Edit in <code>dataiku-agents/OWISMIND/OWISMIND_DEV/agents/</code> (DEV is where you develop; promote to PROD with <code>tools/promote_agents_to_prod.py</code>). Run the pure-logic tests (no DSS, no install):</p>
                   </div>
                   <div class="block">
                     <div class="code-block">
@@ -1081,19 +1081,19 @@ resp = c.execute()
                         <td><code>GEMINI_FLASH_LITE_ID</code></td>
                         <td><code>openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite</code></td>
                         <td>Both agents</td>
-                        <td>eco mode (default)</td>
+                        <td>smart mode (default)</td>
                       </tr>
                       <tr>
                         <td><code>GEMINI_FLASH_ID</code></td>
                         <td><code>openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash</code></td>
                         <td>Both agents</td>
-                        <td>medium mode</td>
+                        <td>pro mode</td>
                       </tr>
                       <tr>
                         <td><code>SONNET_ID</code></td>
                         <td><code>openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6</code></td>
                         <td>Both agents</td>
-                        <td>high mode</td>
+                        <td>claude mode</td>
                       </tr>
                       <tr>
                         <td><code>SEMANTIC_TOOL_ID</code></td>
