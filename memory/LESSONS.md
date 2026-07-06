@@ -3239,5 +3239,45 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   verif-expert-semantic).
 - **Date** : 2026-07-06.
 
+## L141 - Bundle byte-identique impossible apres edit de commentaire dans un .vue : preuve par normalisation
+- **Contexte** : deep clean 2026-07-06/07, purge de commentaires frontend avec exigence "bundle
+  byte-identique = preuve de non-changement".
+- **Ce qui a echoue** : apres des edits commentaires-SEULS dans des .vue, 17/28 assets changeaient de
+  hash. Cause : @vitejs/plugin-vue derive le scoped id (`data-v-xxx`) de hash(path + SOURCE ENTIER,
+  commentaires inclus) ; l'id vit dans le JS ET le CSS (keyframes scopees incluses) et le graphe de
+  hashs Rollup propage le changement aux chunks dependants.
+- **Solution qui marche** : preuve en 3 volets : (1) determinisme (2 builds du meme source = hashs
+  identiques) ; (2) chunks purs JS/CSS = byte-identiques bruts ; (3) apres normalisation des SEULS
+  scoped ids Vue + hashs de noms d'imports Rollup, TOUS les assets + index.html byte-identiques =
+  zero delta reel. Les commentaires .js purs, eux, donnent des chunks strictement identiques.
+- **Preuve-verification** : sessions/2026-07-07.md (commit c1cef60, 28/28 assets normalises identiques).
+- **Source** : Vague 5 du deep clean.
+- **Date** : 2026-07-07.
+
+## L142 - Workflow structured-output : un scout peut bruler son budget et rendre un placeholder
+- **Contexte** : workflow recon 8 scouts (deep clean), schema JSON force via StructuredOutput.
+- **Ce qui a echoue** : 2 scouts Sonnet (backend + frontend) ont explore 130-180k tokens puis rendu
+  `{"area":"test","summary":"test",...}` : sortie schema-valide mais VIDE. La synthese avale ca sans
+  broncher -> plan ampute de 2 domaines, silencieusement.
+- **Solution qui marche** : TOUJOURS lire `workflowProgress[].resultPreview` (ou journal.jsonl) apres
+  un workflow, pas seulement le resultat final ; re-runner les agents fautifs en Opus avec la consigne
+  explicite "you must return REAL findings". Envisager un garde anti-placeholder dans le prompt
+  (interdire les valeurs de test) ou un check de plausibilite dans le script.
+- **Preuve-verification** : re-runs opus = 2 rapports riches (verdicts inverses du plan initial).
+- **Source** : session deep clean 2026-07-06/07.
+- **Date** : 2026-07-07.
+
+## L143 - Limite de session en plein workflow : resumeFromRunId rejoue le prefixe en cache
+- **Contexte** : workflow docs 8 agents ; 3 derniers agents (site + 2 verificateurs) tombes sur
+  "You've hit your session limit".
+- **Ce qui a echoue** : rien a corriger cote script : echec d'infrastructure, pas de logique.
+- **Solution qui marche** : relancer `Workflow({scriptPath, resumeFromRunId})` : les agents au prompt
+  inchange rendent leur resultat CACHE instantanement, seuls les echoues re-tournent. Committer les
+  livrables deja produits AVANT la reprise = point de preservation (le diff du working tree redevient
+  lisible pour les verificateurs).
+- **Preuve-verification** : reprise wf_74dbdae6-e15 = 8/8 done, 0 erreur, prefixe 5 agents servi du cache.
+- **Source** : session deep clean 2026-07-06/07.
+- **Date** : 2026-07-07.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

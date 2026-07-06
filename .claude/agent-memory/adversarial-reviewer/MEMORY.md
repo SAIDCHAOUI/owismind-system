@@ -1,0 +1,1 @@
+- [Memory/setup layout](repo-memory-layout.md) - where OWIsMind memory + gotchas live, how to verify slimming didn't lose info

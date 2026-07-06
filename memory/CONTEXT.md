@@ -7,6 +7,16 @@
 
 ## Focus courant
 
+**DEEP CLEAN (2026-07-06 soir -> 07) - branche `refactor/deep-clean-v1.2`, 9 commits, A TESTER par l'user.**
+Nettoyage/refactor pro SANS changement de logique (preuves : AST, bundle normalise, promote-script parity,
+revue adversariale 4 lentilles = 0 finding ; 790+316+343+352 verts sur l'etat final). Livre : READMEs
+racine/tools ; `readonly_pre_queries()` consolide (6 sites, +2 tests) ; en-tetes Code Agents condenses
+(PROD regeneree) ; provenance maquette morte purgee (29 fichiers front) ; SETUP CLAUDE CODE refondu pour
+Opus 4.8 (CONTEXT 61 l., gotchas -> `.claude/rules/` path-scopees, 4 subagents `.claude/agents/`,
+hook dash-guard) ; docs/ + project-documentation/ + site HTML remis a niveau v1.1 (fact-checkes, 6 ADR).
+Zip prod repackage sur la branche (95 entrees). Si l'user valide -> merge main = version de prod.
+Detail : `sessions/2026-07-07.md` + L141-L143.
+
 **Passage en production v1.1 (2026-07-06 Run 5) - repo PRET, RIEN encore deploye DSS.**
 La PROCHAINE session commence par le deploiement + smoke en suivant le runbook `docs/DEPLOY_PROD_V1_1.md`.
 - Agents promus DEV -> PROD_V1 par regeneration scriptee (`tools/promote_agents_to_prod.py`, idempotent :
@@ -17,16 +27,9 @@ La PROCHAINE session commence par le deploiement + smoke en suivant le runbook `
 - Whitelist webapp = DYNAMIQUE (admin, cross-projet) : zero id cote plugin ; seuls ids par projet = cablage interne.
 - 788 back + 352 node + 316 agents + 343 LAB verts, 0 tiret. Detail : `sessions/2026-07-06.md` (Run 5) + L139-L140.
 
-**Source Data v3 (2026-07-06 Runs 2-4) - VALIDE DSS par l'user (« tout marche super »), zip `index-DYvX83Tl.js`
-uploade + orchestrateur DEV recolle ; prod + dev stable INTACTS.**
-- Livre : popover filtres (fermeture structurelle), zone Calculer (mesures choisies), plages de dates sur
-  colonnes STRING a valeurs ISO, cascade `/source|/evidence/distinct` GET->POST, persistance des vues par (agent,
-  dataset), CONTEXTE ECRAN -> AGENT (bloc `[ON SCREEN NOW]` + bandeau de consentement), filtre depuis cellule
-  partout, menu de colonne + tri 3 etats + colonnes filtrees en orange.
-- Reste a la demande : promotion vers le plugin DEV principal puis PROD (rebuild + orchestrateur PROD `Xrv7GvfG`
-  avec le paragraphe SOURCE-DATA VIEW). Detail : `sessions/2026-07-06.md` (Runs 2-4) + L134-L138.
-
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-06 Runs 2-4 : Source Data v3 complet (popover, Calculer, plages string, cascade, persistance,
+  contexte ecran -> agent, menu de colonne). VALIDE DSS (« tout marche super »). L134-L138.
 - 2026-07-06 Run 1 : data tools sans IA (agregats DB + Calculer + plages + unification Evidence), plugin dev_v2. L132-L133.
 - 2026-07-03 Run 3 : optimisation des espaces page benchmark plugin (pickers en-tete, hero+stats, bande ref). Local. L131.
 - 2026-07-03 Runs 2 + 2b : refonte benchmark launcher LAB + page plugin modes conditionnels + hotfix CSS. Local. L128-L130.
@@ -53,6 +56,8 @@ uploade + orchestrateur DEV recolle ; prod + dev stable INTACTS.**
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- TESTER LA BRANCHE `refactor/deep-clean-v1.2` (user) : si OK, merge dans main = version de prod (le zip
+  95 entrees de la branche remplace celui de main) ; sinon debug avec Opus. Voir `sessions/2026-07-07.md`.
 - DEPLOYER LA PROD v1.1 : suivre `docs/DEPLOY_PROD_V1_1.md` (plugin, projet prod, agents scenario A/B, smoke dont refus honnete tickets). Promotions futures = `tools/promote_agents_to_prod.py` puis recoll. Voir `sessions/2026-07-06.md` (Run 5).
 - Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur PROD `Xrv7GvfG` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
 - LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
