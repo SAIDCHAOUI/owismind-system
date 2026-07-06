@@ -53,6 +53,7 @@ from owismind.storage.sql_config import (
     full_table,
     new_executor,
     pg_identifier,
+    readonly_pre_queries,
     sql_value,
 )
 
@@ -120,10 +121,7 @@ _schema_cache = {}  # dataset_name -> (ts, columns)
 # transaction_read_only is defense in depth: every query built here is already a
 # bare SELECT, but a read-only transaction makes any future regression (or an
 # unexpected fragment behaviour) fail loudly instead of writing.
-_EVIDENCE_TIMEOUT_PRE_QUERIES = [
-    "SET LOCAL statement_timeout TO '30000'",
-    "SET LOCAL transaction_read_only TO on",
-]
+_EVIDENCE_TIMEOUT_PRE_QUERIES = readonly_pre_queries()
 
 
 def _quote_value(value):

@@ -147,8 +147,6 @@ def save_user_message(
         screen_ctx = None
 
     table = full_table(CHAT_V5_LOGICAL)
-    #   columns:  ... agent_key, parent_exchange_id, mode, answered_at, screen_ctx
-    #   values:   ... {agent_key}, {parent}, {mode}, NULL, {screen_ctx}
     insert_sql = """
     INSERT INTO {table}
       (exchange_id, session_id, user_id, user_display_name, user_groups,

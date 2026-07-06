@@ -28,6 +28,7 @@ from owismind.storage.sql_config import (
     full_table,
     new_executor,
     nullable_value,
+    readonly_pre_queries,
     sql_value,
 )
 
@@ -58,10 +59,7 @@ _LANGUAGES = ("fr", "en")
 # Instance-safety guards (mirror storage/artifacts.py). The read runs READ-ONLY with a
 # statement_timeout; the write is bounded by the same timeout so a single-row INSERT can
 # never hang a worker thread.
-_READ_PRE_QUERIES = [
-    "SET LOCAL statement_timeout TO '30000'",
-    "SET LOCAL transaction_read_only TO on",
-]
+_READ_PRE_QUERIES = readonly_pre_queries()
 _WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
 
 # Columns returned by the owner-scoped "my suggestions" read (light: no agent_answer body /

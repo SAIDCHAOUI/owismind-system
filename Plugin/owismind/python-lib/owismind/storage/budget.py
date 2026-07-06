@@ -50,6 +50,7 @@ from owismind.storage.sql_config import (
     full_table,
     new_executor,
     nullable_value,
+    readonly_pre_queries,
     sql_value,
 )
 
@@ -72,10 +73,7 @@ MAX_OVERVIEW_USERS = 1000
 # every WRITE caps its own runtime - so a contended connection or a degraded plan can
 # never pin a backend worker thread indefinitely. The budget queries are O(1) PK lookups,
 # so this is a safety bound, not a perf necessity.
-_READ_PRE_QUERIES = [
-    "SET LOCAL statement_timeout TO '30000'",
-    "SET LOCAL transaction_read_only TO on",
-]
+_READ_PRE_QUERIES = readonly_pre_queries()
 _WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
 
 

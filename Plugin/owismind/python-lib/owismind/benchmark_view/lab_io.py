@@ -20,16 +20,18 @@ import logging
 from dataiku import SQLExecutor2
 
 from owismind.storage.serialization import rows_to_json_safe
-from owismind.storage.sql_config import pg_identifier, sql_value, nullable_value
+from owismind.storage.sql_config import (
+    nullable_value,
+    pg_identifier,
+    readonly_pre_queries,
+    sql_value,
+)
 from owismind.benchmark_view import schema_check, schemas
 
 logger = logging.getLogger(__name__)
 
 # Read-only guard mirrored from storage.settings: a contended table can never pin a worker past 30s.
-_READ_PRE = [
-    "SET LOCAL statement_timeout TO '30000'",
-    "SET LOCAL transaction_read_only TO on",
-]
+_READ_PRE = readonly_pre_queries()
 _WRITE_TIMEOUT_PRE = "SET LOCAL statement_timeout TO '30000'"
 
 # Backstop caps (a small benchmark table; these bound a misconfiguration, not a paginator).

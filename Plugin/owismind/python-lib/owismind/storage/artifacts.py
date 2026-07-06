@@ -17,7 +17,12 @@ import json
 import logging
 
 from owismind.storage.migrations import ARTIFACTS_V1_LOGICAL, ensure_artifacts_table
-from owismind.storage.sql_config import full_table, new_executor, sql_value
+from owismind.storage.sql_config import (
+    full_table,
+    new_executor,
+    readonly_pre_queries,
+    sql_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +40,7 @@ _ARTIFACT_KINDS = ("chart", "table", "kpi")
 # SELECT can never write and a runaway read is killed. The write cannot be
 # read-only (it persists), but the same statement_timeout bounds the tiny
 # single-row UPSERT so it can never hang a worker thread.
-_READ_PRE_QUERIES = [
-    "SET LOCAL statement_timeout TO '30000'",
-    "SET LOCAL transaction_read_only TO on",
-]
+_READ_PRE_QUERIES = readonly_pre_queries()
 _WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
 
 

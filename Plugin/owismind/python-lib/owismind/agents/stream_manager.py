@@ -2,30 +2,24 @@
 
 WHY POLLING (and not SSE)
 -------------------------
-DSS puts an internal nginx in front of every webapp Python backend. A long-lived
-``text/event-stream`` response can be buffered by that proxy, so agent events would
-reach the browser all at once at the end instead of live. The project's own Dash
-WebApp (in production on the same instance) sidesteps this BY DESIGN: it never
-exposes a long response to the browser. Instead it runs the agent in a background
-thread, accumulates progress in a module-level dict, and the front polls that dict
-on a short interval. Each poll is a normal short request the proxy never buffers.
-
-This module ports that proven pattern to the Flask/Vue stack, and ADDS the two
-safety nets the Dash version lacks: a concurrency cap (bounded threads) and a TTL
-eviction (no orphaned-run memory leak).
+DSS puts an internal nginx in front of every webapp backend that can buffer a long-lived
+``text/event-stream``, so SSE events would reach the browser all at once at the end, not live.
+The project's own Dash WebApp (production, same instance) sidesteps this BY DESIGN: it runs the
+agent in a background thread, accumulates progress in a module-level dict, and the front polls
+that dict on a short interval - each poll a short request the proxy never buffers. This module
+ports that proven pattern to Flask/Vue and ADDS the two safety nets the Dash version lacks: a
+concurrency cap (bounded threads) and TTL eviction (no orphaned-run memory leak).
 
 FLOW
 ----
 1. ``start_run`` registers a run, spawns ONE daemon worker thread, returns a run_id.
-2. The worker iterates ``streaming.run_agent_streamed`` (already-normalised events),
-   appends each event to the run's ``events`` list, accumulates the answer + any
-   generated SQL, then persists the assistant message (phase two) and marks ``done``.
+2. The worker iterates ``streaming.run_agent_streamed`` (already-normalised events), appends
+   each to the run's ``events`` list, accumulates the answer + any generated SQL, persists
+   the assistant message (phase two), then marks ``done``.
 3. ``poll`` returns the events appended since the caller's cursor, plus ``done``/``error``.
-
-Instance safety: exactly ONE agent run per call (no loop, no retry); a hard global
-cap on concurrent runs; TTL eviction of finished/orphaned runs. The agent_id is
-resolved server-side from the whitelist BEFORE this is ever called - nothing here
-accepts a raw id from the frontend.
+Instance safety: exactly ONE agent run per call (no loop, no retry), on top of the hard
+concurrency cap + TTL eviction of finished/orphaned runs above. The agent_id is resolved
+server-side from the whitelist BEFORE this is ever called - never a raw id from the frontend.
 """
 
 import logging

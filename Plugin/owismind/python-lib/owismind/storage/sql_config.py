@@ -208,6 +208,20 @@ def new_executor():
     return SQLExecutor2(connection=conn)
 
 
+def readonly_pre_queries():
+    """A FRESH list of the transaction-scoped pre-queries every dataset READ runs under.
+
+    Invariant: a 30s ``statement_timeout`` (a slow scan can never pin a worker thread of
+    the mono-process backend) plus ``transaction_read_only`` (defense in depth: any
+    accidental write fails loudly). A new list object is returned on every call, so a
+    caller that mutates the result can never corrupt this shared definition.
+    """
+    return [
+        "SET LOCAL statement_timeout TO '30000'",
+        "SET LOCAL transaction_read_only TO on",
+    ]
+
+
 def pg_identifier(name):
     """Validate and double-quote a PostgreSQL identifier.
 
