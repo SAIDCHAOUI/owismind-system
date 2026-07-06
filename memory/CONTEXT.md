@@ -5,10 +5,10 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🖥️ SESSION 2026-07-06 Run 2 (SOURCE DATA v3, nuit autonome sur 5 retours user : popover, mesures
-choisies, plages string, cascade, persistance, CONTEXTE ÉCRAN -> AGENT) - ✅ validé LOCAL (772 back
-+ 334 node + 316 agents verts, QA Playwright 8/8 + re-checks 4/4 sur bundles prouvés frais L132),
-zip dev_v2 RECONSTRUIT À UPLOADER (`index-BvJL4hQU.js`, 82 entrées), prod + dev stable INTACTS.**
+**🖥️ SESSION 2026-07-06 Runs 2-4 (SOURCE DATA v3 : popover, mesures choisies, plages intelligentes,
+cascade, persistance, CONTEXTE ÉCRAN -> AGENT + transparence, filtre depuis cellule partout, menu de
+colonne + tri 3 états + colonnes orange) - ✅ VALIDÉ DSS PAR L'USER (« tout marche super », zip final
+`index-DYvX83Tl.js` uploadé + orchestrateur DEV recollé) ; prod + dev stable INTACTS.**
 Livré : **(1)** popover filtres = fermeture structurelle (backdrop invisible + `closeOnWindowBlur`
 garde activeElement, SourceChips + EvidenceChips miroirs) ; **(2)** zone Calculer = mesures CHOISIES
 (`calcFns`, défauts par type num=Somme, dropdown checkboxes bi-hôte) + cartes GRANDES sans ellipsis
@@ -163,13 +163,13 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-06 Run 4 : filtre depuis cellule PARTOUT + menu de colonne Sort/Filter + colonne orange → détail `sessions/2026-07-06.md` (Run 4)
-- **✅ Validé local (QA M1-M6 PASS dont parcours Evidence complet stubbé ; revue 1/1 corrigé), NON
-  validé DSS.** Zip dev_v2 **`index-DYvX83Tl.js`** À UPLOADER (Runs 2+3+4 ; les Runs 2+3 webapp +
-  orchestrateur sont déjà VALIDÉS DSS par l'user : « ça marche à merveille »).
-- Fixes : `@filter` manquant dans EvidenceTable (Evidence Studio mort) + toasts sur tous les cas
-  (plus de no-op muet). Features : menu par en-tête (Trier asc/desc/**retirer** + Filtrer les
-  valeurs pré-réglé), clic nom = cycle 3 états, colonnes filtrées en ORANGE, partout.
+## 🧭 Dernière session - 2026-07-06 Runs 2-4 : Source Data v3 complet → détail `sessions/2026-07-06.md` (Runs 2-4) + **L134-L138**
+- **✅ VALIDÉ DSS par l'user (« tout marche super »)** : zip `index-DYvX83Tl.js` uploadé,
+  orchestrateur DEV recollé. Tout le chantier des 5 retours + les 3 retours du matin + le menu de
+  colonne est LIVE sur dev_v2.
+- Reste à la demande : promotion DEV principal puis PROD (rebuild + orchestrateur PROD `Xrv7GvfG`) ;
+  différés (refetch meta multi-table, export CSV d'agrégat, comparaison de périodes, profil de
+  colonne, contexte évidence legacy enrichi).
 
 ## 🧭 Avant - 2026-07-06 Run 2 : Source Data v3 (popover, mesures, plages string, cascade, persistance, contexte écran -> agent) → détail `sessions/2026-07-06.md` (Run 2) + **L134-L137**
 - **✅ Validé local (revue adversariale soldée + QA runtime 8/8 et re-checks 4/4), NON validé DSS.**
@@ -476,15 +476,12 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🖥️NEW (2026-07-06 Run 4). **UPLOADER + VALIDER le zip `owismind_dev_v2-upload.zip` reconstruit**
-   (**`index-DYvX83Tl.js`**, 82 entrées ; Runs 1 à 4 ; restart backend ; prod + dev stable intacts ;
-   Runs 2+3 déjà validés DSS par l'user). Smoke Run 4 : cellule -> « Filtrer sur cette valeur »
-   AVEC un filtre existant (autre colonne = nouvelle chip, même colonne = fusion IN, toast à chaque
-   fois, jamais muet) ; Evidence Studio table détectée : cellule -> Filtrer = chip user + colonne
-   orange (chips agent verrouillées intactes) ; chevron d'en-tête -> menu Trier asc/desc/**Ne plus
-   trier** + Filtrer les valeurs (picker pré-réglé) ; clic sur le NOM x3 = retour non trié ;
-   colonne filtrée = en-tête orange, redevient normale au retrait ; dark. Smoke Run 3 (si pas déjà
-   fait) : plage `year_month` sans erreur 409 ; ligne « Contexte écran joint » après F5. Smoke Run 2 : popover « Ajouter un filtre » se ferme au 1er clic extérieur
+0🖥️DONE (2026-07-06 Runs 2-4). **Source Data v3 ✅ VALIDÉ DSS** (« tout marche super », zip
+   `index-DYvX83Tl.js` + orchestrateur DEV recollé). Reste à la demande : **promotion** vers le
+   plugin DEV principal puis PROD (rebuild + package + orchestrateur PROD `Xrv7GvfG` avec le
+   paragraphe SOURCE-DATA VIEW) ; différés : refetch meta par table (lève la limitation
+   multi-table), export CSV d'agrégat, comparaison de périodes, profil de colonne, contexte
+   évidence legacy enrichi, événement analytics pour le menu de colonne. Ancien smoke Run 2 : popover « Ajouter un filtre » se ferme au 1er clic extérieur
    (y compris clic sur le chrome DSS) et à Échap ; zone CALCULER = 1 carte Somme par défaut, dropdown
    « Mesures » (dernier choix non-décochable avec tooltip), gros chiffre complet jamais tronqué ;
    filtre `year_month` (colonne string à valeurs ISO) = mode plage AUTO + bascule « Choisir des
