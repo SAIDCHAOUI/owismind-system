@@ -12,7 +12,7 @@
 > sub-agent engine is dataset-agnostic (its expertise lives in the Flow recipes +
 > the semantic model, not the code), and the orchestrator is registry-driven
 > (adding a domain is one CAPABILITIES entry). The repo source of truth for the
-> per-domain spec is [`registry.json`](registry.json); columns are in
+> per-project spec is [`registry.json`](OWISMIND/OWISMIND_DEV/registry.json); columns are in
 > [`DATASETS.md`](DATASETS.md).
 >
 > Legend: **[repo]** = done in this repo (already done for tickets, see below).
@@ -26,22 +26,23 @@
 These are committed; you do NOT need to write code. Re-paste / run them in DSS per
 the steps below.
 
-- `agents/TroubleTickets_expert.py` - the tickets sub-agent (same engine as
-  revenue, CONFIG header pointed at the tickets datasets; `SEMANTIC_TOOL_ID` is a
-  placeholder to fill in step 5; `FALLBACK_TO_DIRECT=True` so it works from the
-  profile even before the model is wired).
-- `agents/OWIsMind_orchestrator.py` - the `tickets_expert` CAPABILITIES entry
-  (routing, timeline labels, lookup dataset + search allowlist). Fill `agent_id`
-  in step 6.
-- `tools/attribute_lookup_tool.py` - now accepts a per-domain `searchable_columns`
-  allowlist (the orchestrator passes the tickets one server-side), and surfaces the
-  generic catalog's `value`-domain rows as "did you mean" suggestions.
-- `recipes/build_value_catalog_recipe.py` - now auto-IO + NA-safe +
-  dataset-adaptive (revenue keeps its curated catalog; any other dataset gets a
-  generic per-value catalog). The profile + value_index recipes are also NA-safe.
-- `semantic_model/update_tickets_semantic_model.py` (brain) +
-  `semantic_model/dump_semantic_model.py` (generic snapshot, TICKETS CONFIG).
-- `registry.json` + `DATASETS.md` - the spec + column inventory.
+- `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` - the
+  tickets sub-agent (same engine as revenue, CONFIG header pointed at the tickets
+  datasets; `SEMANTIC_TOOL_ID` already set to `nEirlso`; `FALLBACK_TO_DIRECT=True`
+  so it works from the profile even before the model is fully wired).
+- `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` - the
+  `tickets_expert` CAPABILITIES entry (routing, timeline labels, lookup dataset +
+  search allowlist), with `agent_id` already set to `agent:NcE9LD2i`.
+- `OWISMIND/OWISMIND_DEV/tools/OWISMIND_DEV_attribute_lookup_tool.py` - now accepts a
+  per-domain `searchable_columns` allowlist (the orchestrator passes the tickets one
+  server-side), and surfaces the generic catalog's `value`-domain rows as "did you
+  mean" suggestions.
+- `OWISMIND/OWISMIND_DEV/recipes/build_value_catalog_recipe.py` - now auto-IO +
+  NA-safe + dataset-adaptive (revenue keeps its curated catalog; any other dataset
+  gets a generic per-value catalog). The profile + value_index recipes are also NA-safe.
+- `OWISMIND/OWISMIND_DEV/semantic_model/update_tickets_semantic_model.py` (brain) +
+  `OWISMIND/OWISMIND_DEV/semantic_model/dump_semantic_model.py` (generic snapshot, TICKETS CONFIG).
+- `OWISMIND/OWISMIND_DEV/registry.json` + `DATASETS.md` - the spec + column inventory.
 - Tests are green: `python3 -m unittest discover -s dataiku-agents/tests`.
 
 ---
@@ -154,25 +155,27 @@ Paste the **Description for LLM** from
 `semantic_model/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
 tool's "Description for LLM" field - do NOT leave it empty.
 
-- Put that id in `agents/TroubleTickets_expert.py` -> `SEMANTIC_TOOL_ID`
-  (replace `TODO_TICKETS_SEMANTIC_TOOL_ID`).
-- Update `registry.json` -> `tickets_expert.semantic_model.tool_id`.
+- Confirm that id matches `SEMANTIC_TOOL_ID` (already set to `nEirlso`) in
+  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`; update
+  it if the DSS tool id differs.
+- Keep `OWISMIND/OWISMIND_DEV/registry.json` -> `tickets_expert.semantic_model.tool_id` in sync.
 
 ### 6. [DSS] Create the tickets Code Agent + wire the orchestrator
 
 - Create a new **Code Agent** on the **Python 3.11** code env; paste
-  `agents/TroubleTickets_expert.py`. Note its `agent:` id.
-- Put that id in `agents/OWIsMind_orchestrator.py` -> `CAPABILITIES["tickets_expert"]["agent_id"]`
-  (replace `agent:TODO_TICKETS`) and in `registry.json`.
-- **ORDER MATTERS**: fill the real `agent_id` (and create the Code Agent) BEFORE
-  re-pasting the orchestrator. `tickets_expert` ships `enabled:True` with a
-  placeholder id; if you re-paste the orchestrator while the id is still
-  `agent:TODO_TICKETS` and the Code Agent does not exist yet, tickets questions
-  get a graceful technical-error reply (not a crash) instead of an honest
-  "no agent yet". If you must paste early, set `"enabled": False` on
-  `tickets_expert` first (the `tickets` domain stays in `BUSINESS_DOMAINS`, so the
-  orchestrator gives the honest capability-gap reply), then flip it back to `True`
-  once the id is real.
+  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`. Confirm
+  its `agent:` id matches `CAPABILITIES["tickets_expert"]["agent_id"]` (already set
+  to `agent:NcE9LD2i`) in
+  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` and in
+  `OWISMIND/OWISMIND_DEV/registry.json`; update all three if the DSS id differs.
+- **ORDER MATTERS**: the real `agent_id` must be live (Code Agent created) BEFORE
+  re-pasting the orchestrator. `tickets_expert` ships `enabled:True` with the id
+  `agent:NcE9LD2i`; if you re-paste the orchestrator while that Code Agent does not
+  exist yet, tickets questions get a graceful technical-error reply (not a crash)
+  instead of an honest "no agent yet". If you must paste early, set
+  `"enabled": False` on `tickets_expert` first (the `tickets` domain stays in
+  `BUSINESS_DOMAINS`, so the orchestrator gives the honest capability-gap reply),
+  then flip it back to `True` once the Code Agent is live.
 - **Re-paste the orchestrator** (Python 3.11) so it learns `ask_tickets_expert`
   and the second lookup domain. Re-paste the **revenue** sub-agent only if you also
   changed it (you did not).

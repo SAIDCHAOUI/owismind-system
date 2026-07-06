@@ -6,61 +6,29 @@
 # above (env 3.11 for Code Agents).
 # ============================================================
 # =============================================================================
-# OWIsMind - ORCHESTRATOR AGENT (LangGraph, Dataiku Code Agent)
+# OWIsMind - ORCHESTRATOR AGENT (LangGraph Code Agent, "sub-agents as tools")
 # -----------------------------------------------------------------------------
-# An AGENTIC orchestrator built on LangGraph (Pattern A: sub-agents as tools).
-# It chats with the user, REASONS, decides which specialist sub-agent(s) to
-# call, can render data as a CHART or a TABLE in the web app side panel, then
-# presents/comments the result in the user's language. It never fetches business
-# data itself - every figure comes from a sub-agent (SQL-grounded), so it
-# structurally cannot invent a number.
+# Chats, REASONS, routes to specialist sub-agent(s), renders chart/table/KPI,
+# then comments in the user's language. It holds NO business data: every figure
+# comes from a sub-agent (SQL-grounded), so it cannot invent a number.
 #
-#   user turn ─► [agent] ──(tool calls?)──► [tools] ──► [agent] ──► … ──► [finish]
-#                  ▲                                        │
-#                  └────────────────loop────────────────────┘
+# NON-NEGOTIABLE RUNTIME:
+#   - langchain/langgraph -> MUST run on the Python 3.11 code env (set in DSS).
+#   - LLM via the NATIVE LLM Mesh completion API so reasoning is honored. NEVER
+#     force with_json_output on the orchestrator: in DSS 14 it silently disables
+#     reasoning. Reasoning effort is set ON the Mesh model.
+#   - Model-agnostic: each mode (smart/pro/claude) picks ONE model for the WHOLE
+#     turn, no mid-turn switch, no escalation (LOOP_LLM_BY_MODE).
 #
-# Tools exposed to the model (generated from the registry + built-ins):
-#   - ask_<capability>  : delegate a self-contained task to a specialist
-#                         sub-agent (e.g. ask_revenue_expert -> agent:uO5hEzAs).
-#   - attribute_lookup  : fast value lookup BUILT-IN (does a named value exist,
-#                         in which column, its exact spelling, a named record's
-#                         plain attribute). NOT a sub-agent; dispatched inline.
-#   - show_chart        : render the latest data result as a line/bar/pie chart.
-#   - show_table        : render the latest data result as a full table.
-#   - show_kpi          : render one headline figure (with a delta if present).
-#   - current_date      : return today's date.
+# FROZEN CONTRACTS (webapp / Evidence depend on these - never rename, only add):
+#   - Event kinds: START, PLANNING, CALLING_AGENT, AGENT_DONE, RUNNING_TOOL,
+#     TOOL_DONE, ARTIFACT, WRITING_ANSWER, DONE, ERROR, SUB_AGENT_*.
+#   - Sub-agent SQL reaches Evidence via the footer trace (append_trace, so the
+#     semantic-model-query spans surface here); usage/capture unchanged.
+#   - Registry = server-side whitelist (front sends a logical key; backend and
+#     this orchestrator resolve the real agent id).
 #
-# RUNTIME (NON NEGOTIABLE):
-#   - This file imports langchain/langgraph -> it MUST run on a Python >= 3.11
-#     code env. Assign the 3.11 code env to this Code Agent in DSS Settings.
-#   - The LLM is called via the NATIVE LLM Mesh completion API (new_completion)
-#     so that the model's REASONING is honored (configure reasoning effort ON the
-#     model in the LLM Mesh connection when the model supports it). We NEVER force
-#     a native JSON output (with_json_output) on the orchestrator - in DSS 14 that
-#     silently disables reasoning. The model emits tool calls (function calling)
-#     and free text; reasoning stays on.
-#   - MODEL-AGNOSTIC BY DESIGN: each user mode (smart/pro/claude) maps to ONE model
-#     for the WHOLE turn - no mid-turn model switching, no escalation. The system
-#     must shine on a small/fast model and excel on a large one; it never depends
-#     on a single model's quirks. Pick the model per mode in LOOP_LLM_BY_MODE below.
-#   - Live UX = events (the DSS proxy buffers long streams). Nodes emit fine
-#     timeline events through LangGraph's custom stream writer; the final answer
-#     arrives as text chunks at the end.
-#
-# FROZEN CONTRACTS (the web app / Evidence Studio depend on these - never
-# rename, only add):
-#   - Orchestrator event kinds: START, PLANNING, CALLING_AGENT, AGENT_DONE,
-#     RUNNING_TOOL, TOOL_DONE, ARTIFACT (NEW), WRITING_ANSWER, DONE, ERROR,
-#     SUB_AGENT_*.
-#   - Sub-agent SQL reaches Evidence through the footer TRACE: we
-#     trace.append_trace(sub_trace) so the "semantic-model-query" spans the
-#     sub-agent created surface in this agent's footer (Evidence capture + usage
-#     work unchanged).
-#   - Registry is the server-side whitelist (the front sends a logical key, the
-#     backend resolves the agent id; this orchestrator resolves sub-agent ids).
-#
-# STANDALONE file: stdlib + dataiku + langchain/langgraph only. Pasted into a
-# DSS Code Agent. No import of the plugin.
+# STANDALONE file: stdlib + dataiku + langchain/langgraph only, no plugin import.
 # =============================================================================
 
 import json

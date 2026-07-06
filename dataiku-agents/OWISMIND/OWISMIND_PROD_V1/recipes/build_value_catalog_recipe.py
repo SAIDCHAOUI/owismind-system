@@ -14,15 +14,15 @@ has NULLs, e.g. a duration empty for open tickets).
 
 STATUS (2026-06-18): this recipe builds the RICH value catalog (aliases,
 variants, business concepts, short account names). It IS used at runtime: the
-`attribute_lookup` tool (tools/attribute_lookup_tool.py, CATALOG_DATASET) reads
-it as its alias / suggestions fallback when the fast fact search finds no exact
-match. It is NOT the primary grounding path: the sub-agent
-(agents/SalesDrive_revenue_expert.py) grounds user terms with INLINE SQL on
-DRIVE_Revenues_value_index (built by recipes/build_value_index_recipe.py), and
-the sub-agent calls only ONE DSS tool at runtime (revenue_semantic_query). The
-old Custom Python tool Drive_Revenues_resolve_filter_value that used to read this
-catalog is being deleted; attribute_lookup superseded it. The managed
-dataset_lookup tool was removed (2026-06-18). See ../README.md and ../tools/README.md.
+`attribute_lookup` tool (../tools/, CATALOG_DATASET) reads it as its alias /
+suggestions fallback when the fast fact search finds no exact match. It is NOT
+the primary grounding path: the revenue sub-agent (../agents/) grounds user
+terms with INLINE SQL on DRIVE_Revenues_value_index (built by the sibling
+build_value_index_recipe.py), and the sub-agent calls only ONE DSS tool at
+runtime (revenue_semantic_query). The old Custom Python tool
+Drive_Revenues_resolve_filter_value that used to read this catalog is being
+deleted; attribute_lookup superseded it. The managed dataset_lookup tool was
+removed (2026-06-18). Full id map: ../../README.md (OWISMIND/README.md).
 
 Each row maps a user-typed phrase to a real (column, value) filter: account names
 (with short aliases for long names), the offer and business column values

@@ -6,63 +6,29 @@
 # above (env 3.11 for Code Agents).
 # ============================================================
 # =============================================================================
-# OWIsMind - DATASET EXPERT AGENT (generic, Dataiku Code Agent)
+# OWIsMind - DATASET EXPERT (generic revenue sub-agent, LangGraph Code Agent)
 # -----------------------------------------------------------------------------
-# A dataset-agnostic sub-agent: point it at a PROFILE dataset (built by
-# recipes/profile_dataset_recipe.py) and a VALUE INDEX dataset (built by
-# recipes/build_value_index_recipe.py) and it becomes an expert of that
-# dataset - it knows the columns, the metrics, the scenario values, the time
-# coverage and the exact catalog values.
+# Dataset-agnostic: point it at a PROFILE + VALUE INDEX dataset (built by
+# profile_dataset_recipe / build_value_index_recipe) and it becomes that dataset's
+# expert. Pipeline (StateGraph): UNDERSTAND (1 LLM, strict JSON, prompt generated
+# from the profile) -> RESOLVE (ground terms on the value index by inline read-only
+# SQL; ambiguity policy is code) -> QUERY (SQL_ENGINE "semantic_tool": the DSS
+# Semantic Model Query tool writes+runs the SQL; a TECHNICAL failure, not an empty
+# result, falls back to the deterministic "direct" engine) -> RENDER (figures
+# formatted by code, every cited number verified, "[Scope]" line, about_data
+# answered from the profile with 0 SQL). Execution is always read-only
+# (transaction_read_only + statement_timeout).
 #
-# Architecture : UNDERSTAND -> RESOLVE -> QUERY -> RENDER  (LangGraph StateGraph)
+# FROZEN collaboration contract with the orchestrator (never rename, only add):
+#   - blockIds: resolve, run_sql, format_output, clarify_user, out_of_scope_msg, about_data.
+#   - toolNames: resolve_filter_value, dataset_sql_query.
+#   - ONE final AGENT_RESULT {status, language, intent, resolvedFilters, sqlCount,
+#     rowCount, attempts}; status ready|need_clarification|out_of_scope|no_data|error.
+#   - One "semantic-model-query" trace subspan PER EXECUTED SQL, outputs {sql,
+#     success (observed), row_count} (+ rows/columns on the successful one).
 #
-#   1. UNDERSTAND  1 LLM call (strict JSON). The prompt is GENERATED from the
-#                  profile: metrics, scenario values, axes, synonyms - so the
-#                  same code understands any dataset.
-#   2. RESOLVE     User terms are grounded against the value index by INLINE SQL
-#                  (exact -> normalized -> fuzzy). Ambiguity policy and the
-#                  "VALUE (Column)" round-trip are deterministic code. Grounding
-#                  is NOT a tool - it is read-only SQL on DRIVE_Revenues_value_index.
-#   3. QUERY       Default SQL_ENGINE = "semantic_tool": the agent COMPOSEs a
-#                  maximally grounded natural-language question and hands it to
-#                  the DSS Semantic Model Query tool (revenue_semantic_query,
-#                  sgk5pfln), which WRITES AND RUNS the SQL. The semantic model
-#                  owns the SQL; every upstream layer feeds it the best context.
-#                  On a TECHNICAL failure (not an empty result) it FALLS BACK to
-#                  the "direct" engine: DETERMINISTIC SQL templates per structured
-#                  intent (total, breakdown, top_n, share_of_total,
-#                  compare_scenarios, compare_periods, trend, list_values,
-#                  count_distinct) + a guarded LLM only for the "custom" long tail
-#                  (single read-only SELECT on the one table, EXPLAIN dry-run, up
-#                  to 2 repairs). Execution is always read-only (transaction_read_only
-#                  + statement_timeout).
-#   4. RENDER      Markdown table + figures formatted BY CODE; a small LLM may
-#                  write the headline (OFF by default: the orchestrator writes the
-#                  analysis) and every number it cites is verified against the
-#                  result - unverifiable -> deterministic fallback. A "[Scope]"
-#                  line states scenario/period/entity/currency. "about_data"
-#                  questions are answered from the profile with ZERO SQL.
-#
-# Collaboration contract with the orchestrator (unchanged dialect):
-#   - AGENT_BLOCK_START blockIds: resolve, run_sql, format_output,
-#     clarify_user, out_of_scope_msg, about_data.
-#   - AGENT_TOOL_START toolNames: resolve_filter_value, dataset_sql_query.
-#   - ONE final AGENT_RESULT event {status, language, intent, resolvedFilters,
-#     sqlCount, rowCount, attempts} - status: ready | need_clarification |
-#     out_of_scope | no_data | error.
-#   - One trace subspan "semantic-model-query" PER EXECUTED SQL with outputs
-#     {sql, success (REAL, observed), row_count} (+ rows/columns on the
-#     successful one) - the orchestrator/webapp Evidence capture works as-is.
-#
-# Cornerstones (NON NEGOTIABLE, inherited from OWIsMind):
-#   - NEVER invents a figure: every number shown comes from the SQL result
-#     or the answer is refused/clarified.
-#   - Refuse rather than hallucinate; unresolved terms -> ask, never guess.
-#   - STANDALONE file: stdlib + dataiku + langgraph. Runs on the Python 3.11
-#     code env (LangGraph needs >= 3.10). Pasted into a DSS Code Agent.
-#   - LangGraph StateGraph (UNDERSTAND -> RESOLVE -> QUERY -> RENDER) on top of
-#     the SAME engine functions; the validated linear original lives in git
-#     history (commit before the LangGraph rework) for instant rollback.
+# NON-NEGOTIABLE: never invents a figure (else refuse/clarify); unresolved terms ->
+# ask, never guess. STANDALONE (stdlib + dataiku + langgraph), Python 3.11 code env.
 # =============================================================================
 
 import difflib

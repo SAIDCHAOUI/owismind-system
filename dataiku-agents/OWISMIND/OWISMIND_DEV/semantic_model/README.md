@@ -145,8 +145,10 @@ valid shapes), then the brain is injected by script:
 3. `dump_semantic_model.py` (TICKETS CONFIG): snapshot to
    `TroubleTickets_Semantic_Model.v1.json`.
 4. Create the `tickets_semantic_query` tool (Agent OFF, Sonnet, access-as-user)
-   bound to the model; put its id in `agents/TroubleTickets_expert.py`
-   (`SEMANTIC_TOOL_ID`) and in `registry.json`.
+   bound to the model; confirm its id matches `SEMANTIC_TOOL_ID` (already set to
+   `nEirlso`) in `../agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` and
+   `tickets_expert.semantic_model.tool_id` in `../registry.json` (update if the DSS
+   id differs).
 
 Full runbook: [`../../../PLAYBOOK_ADD_AGENT.md`](../../../PLAYBOOK_ADD_AGENT.md).
 

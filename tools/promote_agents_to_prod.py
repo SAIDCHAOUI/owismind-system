@@ -18,9 +18,11 @@ DEV id surviving in a PROD file, em/en dash glyphs), and compile-checks the
 generated files.
 
 NOT covered (update by hand when they change): registry.json (bump
-"last_reviewed" and mirror any capability change) and the per-project
-semantic_model README/MODEL.md. The id map lives in OWISMIND/README.md; if an
-id ever changes in DSS, update the substitution tables below first.
+"last_reviewed" and mirror any capability change), the per-project
+semantic_model README/MODEL.md, and the semantic_model helper scripts that keep
+a per-project copy but are not promoted here (drop_column_and_reindex.py,
+dump_semantic_model.py). The id map lives in OWISMIND/README.md; if an id ever
+changes in DSS, update the substitution tables below first.
 
 Usage: python3 tools/promote_agents_to_prod.py
 """

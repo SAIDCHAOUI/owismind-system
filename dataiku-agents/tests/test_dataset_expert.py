@@ -1,5 +1,5 @@
 """DSS-free unit tests for the revenue Dataset Expert (now the LangGraph agent
-``dataiku-agents/agents/SalesDrive_revenue_expert.py``).
+``dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py``).
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent file is loaded via
 importlib. Only PURE functions are tested (profile parsing, understanding

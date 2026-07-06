@@ -1,5 +1,5 @@
 """DSS-free unit tests for the attribute_lookup Custom Python agent tool
-(``dataiku-agents/tools/attribute_lookup_tool.py``).
+(``dataiku-agents/OWISMIND/OWISMIND_DEV/tools/OWISMIND_DEV_attribute_lookup_tool.py``).
 
 ``dataiku`` and ``dataiku.llm.agent_tools`` are stubbed BEFORE the tool file is
 loaded via importlib. Pure helpers (norm, search needle, attribute mapping, SQL

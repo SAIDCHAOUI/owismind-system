@@ -32,7 +32,7 @@
 3. The skill `agentique-python-dataiku` - how to build/audit DSS agents safely.
 4. `memory/PROJECT_STATE.md` + `memory/LESSONS.md` (repo root) - canonical ids and what really works (these PRIME over the cadrage guides).
 5. Sub-folder docs for detail (per project, DEV shown): [`recipes/README.md`](OWISMIND/OWISMIND_DEV/recipes/README.md), [`semantic_model/README.md`](OWISMIND/OWISMIND_DEV/semantic_model/README.md) + [`MODEL.md`](OWISMIND/OWISMIND_DEV/semantic_model/MODEL.md); `agents/` and `tools/` are documented by [`OWISMIND/README.md`](OWISMIND/README.md) + each project's `registry.json`.
-6. [`registry.json`](registry.json) (the per-domain spec: ids, dataset names, model + tool binding, lookup config, guardrails) + [`DATASETS.md`](DATASETS.md) (the column inventory) - the single source of truth for "which datasets / columns / tools / agents / ids exist". To add an agent, follow [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md).
+6. [`registry.json`](OWISMIND/OWISMIND_DEV/registry.json) (the per-project spec: ids, dataset names, model + tool binding, lookup config, guardrails) + [`DATASETS.md`](DATASETS.md) (the column inventory) - the single source of truth for "which datasets / columns / tools / agents / ids exist". To add an agent, follow [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md).
 
 To navigate the code ("where is X handled?"), query the knowledge graph first
 (`graphify query "..."`), not a full re-read.
@@ -80,13 +80,16 @@ surfaces in the Evidence panel.
 
 ---
 
-## 2. The two agents (detail: [`agents/README.md`](agents/README.md))
+## 2. The agents (detail: [`OWISMIND/README.md`](OWISMIND/README.md))
 
-| Agent | File | DSS Code Agent | Role |
+Files shown are the DEV copies; the PROD twins carry the `OWISMIND_PROD_V1_` prefix
+and PROD ids (full per-project id map in [`OWISMIND/README.md`](OWISMIND/README.md)).
+
+| Agent | File (DEV) | DSS Code Agent | Role |
 |---|---|---|---|
-| Orchestrator | `agents/OWIsMind_orchestrator.py` | **OWIsMind_orchestrator** (env 3.11) | Chats, reasons, routes to specialist sub-agent(s), runs the `attribute_lookup` built-in for fast reads, renders chart/table/KPI, writes the analysis. Honesty firewall: never denies that data exists, never invents a figure. Bounded parallel fan-out (`MAX_PARALLEL_AGENTS = 3`). |
-| Revenue sub-agent | `agents/SalesDrive_revenue_expert.py` | **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, env 3.11) | Expert of `DRIVE_Revenues`. UNDERSTAND -> RESOLVE -> QUERY -> RENDER. Owns ALL revenue figures across every Phase (ACTUALS / BUDGET / FORECAST / Q3F / HLF). |
-| Tickets sub-agent | `agents/TroubleTickets_expert.py` | **TroubleTickets_expert** (`agent:TODO_TICKETS`, env 3.11) | Expert of `TroubleTickets_year`. SAME engine, tickets CONFIG. Ticket counts, resolution durations, status / priority / category breakdowns. **CODED, pending DSS deploy** (see [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md)). |
+| Orchestrator | `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` | **OWIsMind_orchestrator** (`038G7mlF`, env 3.11) | Chats, reasons, routes to specialist sub-agent(s), runs the `attribute_lookup` built-in for fast reads, renders chart/table/KPI, writes the analysis. Honesty firewall: never denies that data exists, never invents a figure. Bounded parallel fan-out (`MAX_PARALLEL_AGENTS = 3`). |
+| Revenue sub-agent | `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py` | **SalesDrive_revenue_expert** (`agent:bHrWLyOL`, env 3.11) | Expert of `DRIVE_Revenues`. UNDERSTAND -> RESOLVE -> QUERY -> RENDER. Owns ALL revenue figures across every Phase (ACTUALS / BUDGET / FORECAST / Q3F / HLF). |
+| Tickets sub-agent | `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` | **CSSO_Trouble_Tickets_Expert** (`agent:NcE9LD2i`, env 3.11) | Expert of `TroubleTickets_year`. SAME engine, tickets CONFIG. Ticket counts, resolution durations, status / priority / category breakdowns. **DEV only, being built** (see [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md)). |
 
 Both are **standalone files** (stdlib + `dataiku` + `langgraph` only, no plugin
 import) pasted into a DSS Code Agent on the **Python 3.11 code env** (LangGraph
@@ -97,7 +100,7 @@ sub-agent's UNDERSTAND).
 
 ---
 
-## 3. The design-time Flow (detail: [`recipes/README.md`](recipes/README.md))
+## 3. The design-time Flow (detail: [`recipes/README.md`](OWISMIND/OWISMIND_DEV/recipes/README.md))
 
 Four datasets, three recipes. All four are read by the runtime, each by a
 different consumer.
@@ -120,7 +123,7 @@ low-cardinality enum values, a few samples), never raw rows.
 
 ---
 
-## 4. The DSS tools (detail: [`tools/README.md`](tools/README.md))
+## 4. The DSS tools (detail: [`OWISMIND/README.md`](OWISMIND/README.md))
 
 Three tool objects live in DSS, with two distinct callers.
 
@@ -134,7 +137,7 @@ Three tool objects live in DSS, with two distinct callers.
   (`vertex_ai/claude-sonnet-4-6`) in **linear pipeline mode (Agent mode OFF)**, so
   offer/column resolution stays strong in every orchestration tier. It writes AND
   runs the SQL against `Drive_Revenues_Semantic_Model`. Live config and the
-  corrected "Description for LLM" to paste are in [`tools/README.md`](tools/README.md).
+  corrected "Description for LLM" to paste are in [`semantic_model/TOOL_DESCRIPTIONS.md`](OWISMIND/OWISMIND_DEV/semantic_model/TOOL_DESCRIPTIONS.md).
 - `attribute_lookup` is an **orchestrator built-in** (appended in
   `build_tool_specs`, dispatched inline in `node_tools`), so it touches NO frozen
   `KNOWN_*` contract and the sub-agent is UNCHANGED. The model passes a logical
@@ -223,7 +226,7 @@ fresh, no re-paste needed.
 
 - Update the `revenue_semantic_query` tool's **"Description for LLM"** (drop the
   stale `resolve_filter_value` precondition; the corrected text is in
-  [`tools/README.md`](tools/README.md)).
+  [`semantic_model/TOOL_DESCRIPTIONS.md`](OWISMIND/OWISMIND_DEV/semantic_model/TOOL_DESCRIPTIONS.md)).
 - **Re-paste the ORCHESTRATOR** so the `attribute_lookup` built-in wiring is live;
   optionally set `LOOKUP_TOOL_ID`.
 - **Delete** the `Drive_Revenues_resolve_filter_value` tool object (no longer used).
@@ -235,7 +238,7 @@ fresh, no re-paste needed.
 > The **tickets** domain is the worked example and is already CODED in the repo
 > (sub-agent, orchestrator entry, semantic-model scripts, registry, tests). The
 > full ordered runbook is [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md); the
-> per-domain spec is [`registry.json`](registry.json), columns are in
+> per-project spec is [`registry.json`](OWISMIND/OWISMIND_DEV/registry.json), columns are in
 > [`DATASETS.md`](DATASETS.md). The steps in brief:
 
 1. Flow: wire the **same recipes** on the new dataset -> `X_profile` + `X_value_index`

@@ -3,7 +3,7 @@
     "what": "DEV-OWNED source of truth for the OWISMIND_DEV agent system: project key, real DSS ids, dataset names, semantic model + tool bindings, fast-lookup config, guardrails. Mirrors CAPABILITIES in OWISMIND_DEV_OWIsMind_orchestrator.py.",
     "project_is": "the DEVELOPMENT project. Build and validate everything HERE first, then promote the same change to OWISMIND_PROD_V1 (see ../OWISMIND_PROD_V1/registry.json and ../README.md) with the PROD ids.",
     "not_runtime": "NOT imported at runtime. The Code Agent files stay standalone-pasteable; CAPABILITIES is inlined in the orchestrator. Keep this file in sync by hand.",
-    "last_reviewed": "2026-06-22"
+    "last_reviewed": "2026-07-06"
   },
   "project": {
     "key": "OWISMIND_DEV",

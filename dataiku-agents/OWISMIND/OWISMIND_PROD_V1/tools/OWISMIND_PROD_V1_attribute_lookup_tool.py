@@ -6,35 +6,22 @@
 # above (env 3.11 for Code Agents).
 # ============================================================
 # -*- coding: utf-8 -*-
-"""attribute_lookup - Custom Python agent tool.
+"""attribute_lookup - Custom Python agent tool: a whole-dataset value search.
 
-A whole-dataset value search. It behaves like Dataiku's "Whole data" search box:
-a case- and accent-insensitive filter over every text column that returns the
-matching values of the other columns (or only the requested column).
+Case- and accent-insensitive filter over every text column (like Dataiku's "Whole
+data" box): returns the matching values of the other columns, or only the requested
+one. Answers "account manager of X", "what does X manage", "carrier code of X".
 
-Answers:
-  - "who is the account manager of <customer>?"  (the term is the customer)
-  - "what does <account_manager> manage?"        (the term is the manager)
-  - "carrier code / sales zone / parent group of <account>?"
+Flow: (1) SEARCH = ONE ILIKE over an accent-folded concat_ws of every text column;
+(2) SUMMARIZE distinct value(s) per matched column, capped ('found_in' carries
+rows_capped and multi_column); (3) FALLBACK, when nothing matched and no attribute
+was requested, queries the value catalog for close aliases as suggestions.
 
-Flow:
-  1. SEARCH one ILIKE over an accent-folded concat_ws of every text column (a
-     single predicate; casing via lower()/ILIKE, accents via a translate() map):
-     SELECT * FROM <fact> WHERE <folded concat> ILIKE '%term%' LIMIT <n>.
-  2. SUMMARIZE distinct value(s) per matched column (or only the requested ones),
-     capped. 'found_in' carries rows_capped (LIMIT hit, so a sample) and
-     multi_column (the term appears in several columns).
-  3. FALLBACK: nothing matched and no attribute requested -> query the value
-     catalog for close aliases and return them as suggestions.
-
-Execution is read-only (statement_timeout + transaction_read_only) and bounded by
-LIMIT; only schema-discovered column names reach the SQL; rows are streamed, not
-loaded into a dataframe. A bounded, TTL'd in-process cache holds recent results.
-
-To reuse for another dataset, change FACT_DATASET (and CATALOG_DATASET for the
-alias fallback) or pass `dataset` / `catalog` at call time. Optionally pass
-`searchable_columns` to restrict the broad search to named-entity / id columns
-(keeping long free-text columns out of a noisy match). No column name is hardcoded.
+Contracts: read-only (statement_timeout + transaction_read_only), bounded by LIMIT,
+only schema-discovered column names reach the SQL, rows streamed (never a dataframe),
+recent results in a bounded TTL cache. Reuse on another dataset via FACT_DATASET /
+CATALOG_DATASET (or the `dataset` / `catalog` call args); `searchable_columns`
+restricts the broad search to named-entity / id columns. No column name is hardcoded.
 """
 
 import re

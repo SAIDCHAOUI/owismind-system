@@ -1,6 +1,7 @@
-"""DSS-free unit tests for the LangGraph agents:
-  - agents/OWIsMind_orchestrator.py       (agentic tool-calling orchestrator)
-  - agents/SalesDrive_revenue_expert.py   (sub-agent: LangGraph wrapper, same engine)
+"""DSS-free unit tests for the LangGraph agents (DEV copies):
+  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py  (agentic tool-calling orchestrator)
+  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py  (revenue sub-agent)
+  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py  (tickets sub-agent)
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent files load (importlib),
 so only PURE logic is exercised - registry/tool specs, the honesty sources block,
