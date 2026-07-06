@@ -51,13 +51,13 @@ from owismind.security.identity import IdentityError, derive_full_name, resolve_
 from owismind.security.validation import (
     MAX_SESSION_ID_LENGTH,
     ValidationError,
-    _clean_source_query,
     validate_agent_meta,
     validate_budget_amount,
     validate_chat_start_request,
     validate_conversations_limit,
     validate_evidence_aggregate_request,
     validate_evidence_column,
+    validate_evidence_distinct_request,
     validate_evidence_rows_request,
     validate_expires_days,
     validate_feedback,
@@ -66,7 +66,7 @@ from owismind.security.validation import (
     validate_quota_note,
     validate_required_exchange_id,
     validate_source_aggregate_request,
-    validate_source_distinct_params,
+    validate_source_distinct_request,
     validate_source_meta_params,
     validate_source_rows_request,
     validate_sources_block,
@@ -309,25 +309,42 @@ def track_events():
         return jsonify({"ok": True, "accepted": 0})
 
 
-_SCREEN_TABS = ("evidence", "chart", "table")
+_SCREEN_TABS = ("evidence", "chart", "table", "kpi", "sources")
 
 
 def _sanitize_screen_context(raw):
-    """Tiny bounded view of what the user is looking at: which exchange (the one
-    rendered in the Evidence panel) and which tab. Untrusted input -> None unless it
-    is a dict with the panel open; the exchange's artifacts are read OWNER-SCOPED in
-    the worker, so a forged exchange_id can only ever reveal the caller's own data."""
-    if not isinstance(raw, dict) or not raw.get("open"):
+    """Tiny bounded view of what the user is looking at, or None when there is
+    nothing to describe. Two independent parts, either of which is sufficient:
+
+      - the Evidence panel OPEN on an exchange (``open`` + ``exchange_id`` + tab):
+        the artifacts are read OWNER-SCOPED in the worker, so a forged exchange_id
+        can only ever reveal the caller's own data;
+      - a ``source_state`` (the filters/computed figures the user shaped and chose
+        to share) sanitized by ``context.sanitize_source_state`` - carried even when
+        the Evidence panel is closed (the Source data explorer on the home screen).
+
+    Untrusted input; every field is whitelisted/bounded. Returns None only when
+    NEITHER a valid open+exchange part NOR a source_state survives."""
+    raw = raw if isinstance(raw, dict) else {}
+    source_state = context.sanitize_source_state(raw.get("source_state"))
+
+    open_part = None
+    if raw.get("open"):
+        exch = raw.get("exchange_id")
+        if isinstance(exch, (str, int)) and not isinstance(exch, bool):
+            tab = raw.get("active_tab")
+            open_part = {
+                "open": True,
+                "exchange_id": str(exch)[:128],
+                "active_tab": tab if tab in _SCREEN_TABS else None,
+            }
+
+    if open_part is None and source_state is None:
         return None
-    exch = raw.get("exchange_id")
-    if not isinstance(exch, (str, int)) or isinstance(exch, bool):
-        return None
-    tab = raw.get("active_tab")
-    return {
-        "open": True,
-        "exchange_id": str(exch)[:128],
-        "active_tab": tab if tab in _SCREEN_TABS else None,
-    }
+    out = open_part if open_part is not None else {"open": False}
+    if source_state is not None:
+        out["source_state"] = source_state
+    return out
 
 
 @api.route("/chat/start", methods=["POST"])
@@ -946,37 +963,38 @@ def evidence_rows():
     return jsonify({"status": "ok", **result})
 
 
-@api.route("/evidence/distinct", methods=["GET"])
+@api.route("/evidence/distinct", methods=["POST"])
 def evidence_distinct():
-    """Bounded distinct values of ONE column (the filter-chip picker).
+    """Bounded distinct values of ONE column (the CASCADING filter-chip picker).
 
-    ``exclude_id`` (optional, int) is the server id of the chip being edited:
-    its own predicate must not scope its own picker. Malformed values degrade
-    to None (the picker is then simply scoped by every locked predicate).
-    ``q`` (optional) is a free-text term narrowing the picker to values of that
-    column matching it; cleaned by ``_clean_source_query`` (never fails - an
-    unusable term degrades to no search), matched server-side.
+    POST (was GET): the frontend is the only consumer and the picker now carries the
+    same scope object /evidence/rows does. Body:
+    ``{exchange_id, column, q?, exclude_id?, filters?, kept_ids?, include_advanced?,
+    drill?, scope_q?}``. ``exclude_id`` is the server id of the chip being edited (its own
+    predicate must not scope its own picker; malformed -> None). ``filters`` / ``drill`` /
+    ``scope_q`` make the picker CASCADING - it only offers values compatible with the OTHER
+    active filters + the table-level search. ``q`` is the picker's own search on that one
+    column. A request without the new fields behaves exactly like the previous picker.
+
+    ``kept_ids`` is forwarded to the service: the picker's LOCKED scope is the agent's
+    non-editable predicates re-derived from the stored SQL, but ONLY those still kept by the
+    client apply (mirror of /evidence/rows), so removing a locked chip widens the picker just
+    like it widens the row window. The advanced fragment always applies; ``include_advanced``
+    is accepted for scope-object parity but the picker never drops it (validated only).
     """
     identity, err = _evidence_guard()
     if err:
         return err
     try:
-        exchange_id = validate_required_exchange_id(request.args.get("exchange_id"))
-        column = validate_evidence_column(request.args.get("column"))
+        (exchange_id, column, exclude_id, q, filters, kept_ids, _include_advanced,
+         drill, scope_q) = validate_evidence_distinct_request(request.get_json(silent=True))
     except ValidationError as exc:
         logger.warning("/evidence/distinct - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
-    raw_exclude = request.args.get("exclude_id")
-    try:
-        exclude_id = int(raw_exclude) if raw_exclude is not None else None
-        if exclude_id is not None and exclude_id < 0:
-            exclude_id = None
-    except (TypeError, ValueError, OverflowError):
-        exclude_id = None
-    q = _clean_source_query(request.args.get("q"))
     try:
         result = evidence_service.evidence_distinct(
             identity["user_id"], exchange_id, column, exclude_id, q,
+            filters, drill, scope_q, kept_ids=kept_ids,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
@@ -1111,25 +1129,29 @@ def source_rows():
     return jsonify({"status": "ok", **result})
 
 
-@api.route("/source/distinct", methods=["GET"])
+@api.route("/source/distinct", methods=["POST"])
 def source_distinct():
-    """Bounded distinct values of ONE source column (the filter-chip picker).
+    """Bounded distinct values of ONE source column (the CASCADING filter-chip picker).
 
-    Query params: ``agent`` (opaque logical key), ``source`` (int index), ``column``,
-    and an optional free-text ``q`` narrowing the picker to matching values.
+    POST (was GET): the frontend is the only consumer and the picker now carries the same
+    scope /source/rows does. Body: ``{agent, source, column, q?, filters?, scope_q?}``.
+    ``filters`` / ``scope_q`` make the picker CASCADING - it only offers values compatible
+    with the OTHER active filters + the table-level search; ``q`` is the picker's own
+    search on that one column. A request without filters / scope_q behaves exactly like the
+    previous picker. The body never carries SQL; the source index resolves to a dataset
+    server-side.
     """
     _identity, err = _source_guard()
     if err:
         return err
     try:
-        agent_key, source_id, column, q = validate_source_distinct_params(
-            request.args.get("agent"), request.args.get("source"),
-            request.args.get("column"), request.args.get("q"))
+        agent_key, source_id, column, q, filters, scope_q = validate_source_distinct_request(
+            request.get_json(silent=True))
     except ValidationError as exc:
-        logger.warning("/source/distinct - invalid params: %s", exc.code)
+        logger.warning("/source/distinct - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
     try:
-        result = source_service.source_distinct(agent_key, source_id, column, q)
+        result = source_service.source_distinct(agent_key, source_id, column, q, filters, scope_q)
     except source_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:

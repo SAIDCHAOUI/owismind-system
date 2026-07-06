@@ -298,16 +298,30 @@ export function fetchEvidenceAggregate(payload) {
   });
 }
 
-// Bounded distinct values of one column (the filter-chip picker).
-// `excludeId` (optional) is the server id of the chip being edited, so its own
-// predicate never scopes its own picker. `search` (optional) narrows the window
-// server-side over ALL values (accent/case-insensitive) instead of the top-N.
-// Returns { status, values, truncated }.
-export function fetchEvidenceDistinct(exchangeId, column, excludeId, search) {
-  let q = '?exchange_id=' + encodeURIComponent(exchangeId) + '&column=' + encodeURIComponent(column);
-  if (excludeId != null) q += '&exclude_id=' + encodeURIComponent(excludeId);
-  if (search) q += '&q=' + encodeURIComponent(search);
-  return request('/owismind-api/evidence/distinct' + q);
+// Bounded distinct values of one column (the CASCADING filter-chip picker). POST (was
+// GET): the picker now carries the same scope /evidence/rows does, so it only offers
+// values compatible with the OTHER active filters. `excludeId` (optional) is the server
+// id of the chip being edited, so its own predicate never scopes its own picker.
+// `search` (optional) is the picker's own search on THAT column. `extra` (optional) is
+// the scope object built by composables/evidenceModel.js buildEvidenceDistinctScope
+// ({ filters, kept_ids, include_advanced, drill?, scope_q? }) - the OTHER active chips
+// minus the one being edited. Omit `extra` for the legacy (no-cascade) picker. Returns
+// { status, values, truncated }.
+export function fetchEvidenceDistinct(exchangeId, column, excludeId, search, extra) {
+  const e = extra || {};
+  const body = { exchange_id: exchangeId, column };
+  if (excludeId != null) body.exclude_id = excludeId;
+  if (search) body.q = search;
+  if (e.filters) body.filters = e.filters;
+  if (e.kept_ids) body.kept_ids = e.kept_ids;
+  if (e.include_advanced != null) body.include_advanced = e.include_advanced;
+  if (e.drill) body.drill = e.drill;
+  if (e.scope_q) body.scope_q = e.scope_q;
+  return request('/owismind-api/evidence/distinct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 // --- Source Data Explorer -----------------------------------------------------
@@ -350,16 +364,23 @@ export function fetchSourceAggregate(payload) {
   });
 }
 
-// Bounded distinct values of one column of a source dataset (the filter picker).
-// `search` (optional) narrows the window server-side over ALL values (accent/
-// case-insensitive) instead of the top-N. Returns { status, values, truncated }.
-export function fetchSourceDistinct(agentKey, sourceId, column, search) {
-  let q =
-    '?agent=' + encodeURIComponent(agentKey) +
-    '&source=' + encodeURIComponent(sourceId) +
-    '&column=' + encodeURIComponent(column);
-  if (search) q += '&q=' + encodeURIComponent(search);
-  return request('/owismind-api/source/distinct' + q);
+// Bounded distinct values of one column of a source dataset (the CASCADING filter
+// picker). POST (was GET): the picker now carries the same scope /source/rows does, so it
+// only offers values compatible with the OTHER active filters. `search` (optional) is the
+// picker's own search on THAT column. `filters` (optional) are the OTHER active chips
+// (already shaped {column, op, values}, minus the one being edited) and `scopeQ` the
+// table-level search over ALL columns - together they make the picker cascade. Omit both
+// for the legacy (no-cascade) picker. Returns { status, values, truncated }.
+export function fetchSourceDistinct(agentKey, sourceId, column, search, filters, scopeQ) {
+  const body = { agent: agentKey, source: sourceId, column };
+  if (search) body.q = search;
+  if (filters && filters.length) body.filters = filters;
+  if (scopeQ) body.scope_q = scopeQ;
+  return request('/owismind-api/source/distinct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 // The project's SQL dataset NAMES, for the agent-profile source picker (admin only,

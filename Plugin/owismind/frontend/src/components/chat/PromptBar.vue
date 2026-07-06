@@ -3,11 +3,12 @@
 // placeholder: no STT backend), send (right). Visual spec ported from `.prompt`
 // / `.prompt-input` / `.prompt-row` / `.p-icon` / `.send-btn` (components.css).
 // Enter sends; Shift+Enter inserts a newline.
-import { ref, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
 import { useSessionStore } from '../../stores/session.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
+import { useScreenContextStore } from '../../stores/screenContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { contextKey } from '../../composables/promptContextModel.js'
 import { Icon } from '../ui'
@@ -18,7 +19,23 @@ const { t, locale } = useI18n()
 const chat = useChatStore()
 const session = useSessionStore()
 const promptContext = usePromptContextStore()
+const screenCtx = useScreenContextStore()
 const { push } = useToasts()
+
+// Dataset label shown by the accepted-context chip ('' when no snapshot is live).
+const screenDataset = computed(() => (screenCtx.offer ? screenCtx.offer.dataset : ''))
+
+// Fire the `offered` analytics ONCE per signature, at banner DISPLAY time (the store
+// guards duplicates via lastOfferedSig). The banner shows when it is eligible AND the
+// draft is non-empty; re-fire on a signature change while it stays displayed.
+watch(
+  [() => screenCtx.bannerEligible, () => chat.draft.trim() !== '', () => screenCtx.liveSig],
+  () => {
+    if (screenCtx.bannerEligible && chat.draft.trim() && screenCtx.liveSig != null) {
+      screenCtx.markOffered(screenCtx.liveSig)
+    }
+  },
+)
 
 // Chip identity + hover title for the picked data-context values.
 function ctxKey(it) {
@@ -83,6 +100,35 @@ const placeholder = () =>
 
 <template>
   <div class="prompt">
+    <!-- Consent banner: offers to attach the filtered SOURCE-DATA VIEW the user shaped
+         (filters / search / DB-computed figures) as context for the agent. Shows only once
+         the user starts typing; a decision is sticky per view signature (no nagging). -->
+    <div v-if="screenCtx.bannerEligible && chat.draft.trim()" class="prompt-screen-banner" role="status" aria-live="polite">
+      <span class="prompt-screen-msg">{{ t('prompt.screen.detected') }}</span>
+      <span class="prompt-screen-actions">
+        <button type="button" class="prompt-screen-btn" @click="screenCtx.accept()">
+          {{ t('prompt.screen.include') }}
+        </button>
+        <button type="button" class="prompt-screen-btn prompt-screen-btn--quiet" @click="screenCtx.decline()">
+          {{ t('prompt.screen.dismiss') }}
+        </button>
+      </span>
+    </div>
+    <!-- Accepted-context chip: the view is attached to every send while its signature is
+         unchanged. Removable (x -> decline) so the user is always in control. -->
+    <div v-if="screenCtx.chipVisible" class="prompt-screen">
+      <span class="prompt-ctx-chip" :title="t('prompt.screen.chip', [screenDataset])">
+        <span class="prompt-ctx-chip-text">{{ t('prompt.screen.chip', [screenDataset]) }}</span>
+        <button
+          type="button"
+          class="prompt-ctx-x"
+          :title="t('prompt.screen.chip_remove')"
+          @click="screenCtx.decline()"
+        >
+          <Icon name="x" />
+        </button>
+      </span>
+    </div>
     <!-- Picked data-context values (from Source Data cells): shown above the input,
          appended to the message as a readable block at send time. -->
     <div v-if="promptContext.hasItems" class="prompt-ctx">
@@ -172,6 +218,47 @@ const placeholder = () =>
   transition: border-color var(--dur) var(--ease);
 }
 .prompt:focus-within { border-color: var(--border-strong); }
+/* Screen-context consent banner: flat, square, sober. A single 4px orange left rail is
+   the only accent (charte); no fill, no glow. Sits at the very top of the prompt card. */
+.prompt-screen-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--orange);
+  border-radius: 0;
+}
+.prompt-screen-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.prompt-screen-actions { display: flex; align-items: center; gap: var(--s-3); flex: 0 0 auto; }
+.prompt-screen-btn {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--orange-text);
+  border-radius: 0;
+  transition: color var(--dur) var(--ease);
+}
+.prompt-screen-btn:hover { color: var(--orange-deep); }
+.prompt-screen-btn--quiet { color: var(--text-2); font-weight: var(--fw-regular); }
+.prompt-screen-btn--quiet:hover { color: var(--text); }
+/* Accepted-context chip row: same recipe as .prompt-ctx (below). */
+.prompt-screen {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding-bottom: var(--s-2);
+  margin-bottom: var(--s-1);
+  border-bottom: 1px solid var(--border);
+}
 /* Data-context chip row: compact, square, sober. Sits above the textarea inside the
    prompt card. Orange stays rare - chips are ink-on-surface with a 1px border. */
 .prompt-ctx {

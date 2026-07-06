@@ -135,6 +135,33 @@ export function buildEvidenceAggregatePayload(exchangeId, chips, includeAdvanced
   return payload
 }
 
+// Assemble the SCOPE object for /evidence/distinct (the CASCADING filter-chip picker):
+// the OTHER active chips the picker must be compatible with, so it never offers a value
+// that has zero rows under the current filters. Reuses the SAME chip partition as the rows
+// payload (editable/user chips -> {column, op, values} filters, locked agent chips ->
+// kept ids) but DROPS the chip currently being edited (`excludeChipKey`) so it never
+// self-scopes its own picker. `drill` / `scopeQ` (the table-level search over all columns)
+// are added only when meaningful. Pure + node-testable (no Vue). Returns
+// { filters, kept_ids, include_advanced, drill?, scope_q? } - the `extra` argument of
+// services/backend.js fetchEvidenceDistinct.
+export function buildEvidenceDistinctScope(chips, includeAdvanced, drill, scopeQ, excludeChipKey) {
+  const kept = excludeChipKey == null
+    ? (chips || [])
+    : (chips || []).filter((c) => c.key !== excludeChipKey)
+  const { filters, keptIds } = _evidenceFilters(kept)
+  const scope = {
+    filters,
+    kept_ids: keptIds,
+    include_advanced: !!includeAdvanced,
+  }
+  if (Array.isArray(drill) && drill.length) {
+    scope.drill = drill.map((d) => ({ column: d.column, value: d.value }))
+  }
+  const cleanQ = effectiveEvidenceQuery(scopeQ)
+  if (cleanQ) scope.scope_q = cleanQ
+  return scope
+}
+
 // Map ONE captured-result row to drill labels: pair each drillable column
 // (server-derived meta.drilldown.columns) with the row's value at that column's
 // index in the captured result. The name lookup is case-insensitive because the

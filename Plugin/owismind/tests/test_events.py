@@ -77,8 +77,8 @@ class EventCategoriesTests(unittest.TestCase):
             cats,
             {"nav", "chat", "ui", "evidence", "source", "feedback", "benchmark", "error"},
         )
-        # 38 whitelisted names across the contract's categories.
-        self.assertEqual(len(events.EVENT_CATEGORIES), 38)
+        # 41 whitelisted names across the contract's categories.
+        self.assertEqual(len(events.EVENT_CATEGORIES), 41)
 
     def test_known_name_maps(self):
         self.assertEqual(events.EVENT_CATEGORIES["question_sent"], "chat")
@@ -87,6 +87,10 @@ class EventCategoriesTests(unittest.TestCase):
         self.assertEqual(events.EVENT_CATEGORIES["evidence_proof_viewed"], "evidence")
         self.assertEqual(events.EVENT_CATEGORIES["source_data_viewed"], "evidence")
         self.assertEqual(events.EVENT_CATEGORIES["chart_viewed"], "evidence")
+        # Screen-context consent analytics (offer / include / dismiss).
+        self.assertEqual(events.EVENT_CATEGORIES["screen_context_offered"], "chat")
+        self.assertEqual(events.EVENT_CATEGORIES["screen_context_included"], "chat")
+        self.assertEqual(events.EVENT_CATEGORIES["screen_context_dismissed"], "chat")
 
 
 class ValidateEventsWhitelistTests(unittest.TestCase):

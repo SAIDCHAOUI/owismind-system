@@ -231,27 +231,38 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
 
 
 def _build_screen_block(user_id, history, screen_context):
-    """The ON-SCREEN context block (best-effort, never raises). Gated on the
-    frontend's live pointer: we only describe what is ACTUALLY on screen - the
-    exchange + tab the user is viewing with the Evidence panel OPEN. No read (and no
-    block) when the panel is closed: nothing is on screen then, and the prior answer
-    is already in the replayed history. Owner-scoped artifact read only. Returns ''
-    when there is nothing to surface."""
+    """The ON-SCREEN context block (best-effort, never raises). Two independent
+    sources, both already sanitized by the route:
+
+      - the rendered artifacts of the exchange the user is viewing with the Evidence
+        panel OPEN (owner-scoped read, gated on open + exchange_id); a closed panel
+        or a forged/absent exchange simply yields no artifacts;
+      - the SOURCE-DATA VIEW ``source_state`` the user shaped and chose to share
+        (filters/search/DB-computed figures), carried even with the panel closed.
+
+    Returns '' only when NEITHER artifacts nor a source_state are present."""
     try:
-        if not (isinstance(screen_context, dict) and screen_context.get("open")):
+        if not isinstance(screen_context, dict):
             return ""
-        exchange_id = screen_context.get("exchange_id")
-        if exchange_id is None:
+        source_state = screen_context.get("source_state")
+        source_state = source_state if isinstance(source_state, dict) else None
+
+        arts = []
+        if screen_context.get("open"):
+            exchange_id = screen_context.get("exchange_id")
+            if exchange_id is not None:
+                arts = artifacts_storage.read_artifacts(user_id, exchange_id) or []
+
+        if not arts and source_state is None:
             return ""
-        arts = artifacts_storage.read_artifacts(user_id, exchange_id)
-        if not arts:
-            return ""
+
         last_answer = ""
         for m in reversed(history or []):
             if m.get("role") == "assistant" and m.get("content"):
                 last_answer = m["content"].split("\n\n[SQL", 1)[0]
                 break
-        return context.build_screen_state(arts, last_answer, screen_context.get("active_tab"))
+        return context.build_screen_state(
+            arts, last_answer, screen_context.get("active_tab"), source_state=source_state)
     except Exception:
         logger.exception("screen-state assembly failed (non-fatal)")
         return ""

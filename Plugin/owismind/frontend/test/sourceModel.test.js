@@ -7,7 +7,14 @@ import {
   normalizeSourceOp,
   makeSourceChip,
   effectiveSourceQuery,
+  chipsToFilters,
   buildSourceRowsPayload,
+  statsSpecFor,
+  defaultCalcFnsFor,
+  monthRangeToBetween,
+  monthRangeToBetweenLexical,
+  betweenValuesToMonthRange,
+  looksLikeIsoDateValues,
   SOURCE_Q_MIN,
   SOURCE_Q_MAX,
   SOURCE_DEFAULT_LIMIT,
@@ -29,6 +36,22 @@ test('makeSourceChip: stable key, normalized op, cloned values', () => {
   values.push('B')
   assert.equal(chip.values.length, 1) // no aliasing with the source array
   assert.equal(makeSourceChip('c', ['A', 'B'], 4).op, 'IN')
+})
+
+test('chipsToFilters: shapes chips to {column, op, values}, skips empty, keeps BETWEEN', () => {
+  const chips = [
+    { key: 'u1', column: 'country', op: '=', values: ['FR'] },
+    { key: 'u2', column: 'solution', op: 'IN', values: ['OBS', 'OCD'] },
+    { key: 'u3', column: 'created', op: 'BETWEEN', values: ['2025-01-01', '2025-12-31'] },
+    { key: 'u4', column: '', values: ['x'] }, // no column -> skipped
+    { key: 'u5', column: 'c', values: [] }, // no values -> skipped
+  ]
+  assert.deepEqual(chipsToFilters(chips), [
+    { column: 'country', op: '=', values: ['FR'] },
+    { column: 'solution', op: 'IN', values: ['OBS', 'OCD'] },
+    { column: 'created', op: 'BETWEEN', values: ['2025-01-01', '2025-12-31'] },
+  ])
+  assert.deepEqual(chipsToFilters(null), [])
 })
 
 test('effectiveSourceQuery: trims, drops below the min, clamps to the max', () => {
@@ -123,4 +146,107 @@ test('extra.js covers every Source Explorer key (fr + en)', () => {
       assert.ok(v.length > 0, loc + ' empty ' + key)
     }
   }
+})
+
+// --- Calculate zone: default measure subset per column type --------------------
+
+test('defaultCalcFnsFor: numeric -> [sum], temporal -> [min,max], other -> [count_distinct]', () => {
+  // Numeric storage + PostgreSQL type names.
+  for (const t of ['int', 'bigint', 'float', 'double', 'decimal', 'numeric', 'money']) {
+    assert.deepEqual(defaultCalcFnsFor(t), ['sum'], 'numeric ' + t)
+  }
+  // Temporal type names (bare "time" is NOT temporal - falls through to the default).
+  for (const t of ['date', 'datetime', 'timestamp', 'timestamptz']) {
+    assert.deepEqual(defaultCalcFnsFor(t), ['min', 'max'], 'temporal ' + t)
+  }
+  // Anything else (text, boolean, unknown, empty).
+  for (const t of ['string', 'boolean', 'time', 'geopoint', '', null, undefined]) {
+    assert.deepEqual(defaultCalcFnsFor(t), ['count_distinct'], 'other ' + t)
+  }
+})
+
+test('defaultCalcFnsFor: every default fn is one the column type actually offers', () => {
+  for (const t of ['int', 'date', 'string', 'boolean', '']) {
+    const offered = new Set(statsSpecFor(t).map((s) => s.fn))
+    for (const fn of defaultCalcFnsFor(t)) {
+      assert.ok(offered.has(fn), t + ' default ' + fn + ' not in its spec')
+    }
+  }
+})
+
+// --- Date-like STRING columns: sniffing + TEXT-safe lexical BETWEEN bounds --------
+
+test('looksLikeIsoDateValues: YYYY-MM prefix with optional day/time tail -> true', () => {
+  assert.equal(looksLikeIsoDateValues(['2025-01', '2025-02', '2024-12']), true)
+  assert.equal(looksLikeIsoDateValues(['2025-01-15', '2025-02-28']), true)
+  assert.equal(looksLikeIsoDateValues(['2025-01-15T00:00:00', '2025-02-01 09:30']), true)
+  // Mixed month + full timestamp forms in the same window.
+  assert.equal(looksLikeIsoDateValues(['2025-01', '2025-02-28T23:59:59.999']), true)
+})
+
+test('looksLikeIsoDateValues: nulls / empties are ignored, all-empty -> false', () => {
+  assert.equal(looksLikeIsoDateValues([null, '2025-01', '', '2025-02']), true)
+  assert.equal(looksLikeIsoDateValues([null, null, '']), false)
+  assert.equal(looksLikeIsoDateValues([]), false)
+  assert.equal(looksLikeIsoDateValues(null), false)
+})
+
+test('looksLikeIsoDateValues: any non-date value -> false', () => {
+  assert.equal(looksLikeIsoDateValues(['2025-01', 'FR', '2025-02']), false)
+  assert.equal(looksLikeIsoDateValues(['2025', '2026']), false) // year only, no month
+  assert.equal(looksLikeIsoDateValues(['2025/01', '2025/02']), false) // wrong separator
+  assert.equal(looksLikeIsoDateValues(['25-01']), false) // 2-digit year
+  assert.equal(looksLikeIsoDateValues(['OBS', 'OCD']), false)
+})
+
+test('monthRangeToBetweenLexical: TEXT-safe bounds YYYY-MM .. YYYY-MM-99', () => {
+  assert.deepEqual(monthRangeToBetweenLexical('2025-01', '2025-03'), {
+    start: '2025-01', end: '2025-03-99',
+  })
+  // Reversed From > To is swapped (same span).
+  assert.deepEqual(monthRangeToBetweenLexical('2025-03', '2025-01'), {
+    start: '2025-01', end: '2025-03-99',
+  })
+  // Single-month range.
+  assert.deepEqual(monthRangeToBetweenLexical('2024-12', '2024-12'), {
+    start: '2024-12', end: '2024-12-99',
+  })
+  // Malformed input -> null (apply stays disabled).
+  assert.equal(monthRangeToBetweenLexical('2025-13', '2025-03'), null)
+  assert.equal(monthRangeToBetweenLexical('', '2025-03'), null)
+  assert.equal(monthRangeToBetweenLexical('2025-01', 'x'), null)
+})
+
+test('monthRangeToBetweenLexical: bounds order real text values correctly (both collations)', () => {
+  const { start, end } = monthRangeToBetweenLexical('2025-01', '2025-03')
+  // In-range month strings and full ISO days of the span sit within [start, end].
+  const inRange = ['2025-01', '2025-01-01', '2025-02-15', '2025-03', '2025-03-31',
+    '2025-03-31T23:59:59.999']
+  for (const v of inRange) {
+    assert.ok(start <= v && v <= end, 'byte-wise includes ' + v)
+  }
+  // The month before and the month after the span fall outside.
+  for (const v of ['2024-12', '2024-12-31', '2025-04', '2025-04-01']) {
+    assert.ok(!(start <= v && v <= end), 'byte-wise excludes ' + v)
+  }
+  // Punctuation-insensitive collation approximation: drop '-' then compare the digit run.
+  const strip = (s) => s.replace(/-/g, '')
+  const s2 = strip(start)
+  const e2 = strip(end)
+  for (const v of inRange) assert.ok(s2 <= strip(v) && strip(v) <= e2, 'digit-run includes ' + v)
+  for (const v of ['2024-12', '2025-04-01']) {
+    assert.ok(!(s2 <= strip(v) && strip(v) <= e2), 'digit-run excludes ' + v)
+  }
+})
+
+test('betweenValuesToMonthRange: round-trips BOTH bound styles', () => {
+  // Calendar-precise bounds (temporal columns).
+  const cal = monthRangeToBetween('2025-01', '2025-03')
+  assert.deepEqual(betweenValuesToMonthRange([cal.start, cal.end]), { from: '2025-01', to: '2025-03' })
+  // TEXT-safe lexical bounds (string columns).
+  const lex = monthRangeToBetweenLexical('2025-01', '2025-03')
+  assert.deepEqual(betweenValuesToMonthRange([lex.start, lex.end]), { from: '2025-01', to: '2025-03' })
+  // A lexical single-month range too.
+  const one = monthRangeToBetweenLexical('2024-12', '2024-12')
+  assert.deepEqual(betweenValuesToMonthRange([one.start, one.end]), { from: '2024-12', to: '2024-12' })
 })

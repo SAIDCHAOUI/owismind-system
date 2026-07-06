@@ -49,17 +49,56 @@ const isCountCall = (c) => c.group === null && c.measures.length === 1 && c.meas
 
 // --- Calculate zone ------------------------------------------------------------
 
-test('setCalcColumn: a numeric column fetches type-driven measures and maps values by position', async () => {
-  const h = makeSurface({ respond: () => ({ rows: [{ m0: 100, m1: 20, m2: 15, m3: 1, m4: 99 }] }) })
+test('setCalcColumn: a numeric column starts on the default measure subset and maps by position', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 100 }] }) })
   h.surface.setCalcColumn('amount')
   assert.equal(h.surface.calcColumn.value, 'amount')
+  // int default subset -> [sum] only (never all five figures at once)
+  assert.deepEqual(h.surface.calcFns.value, ['sum'])
   assert.equal(h.calls[0].group, null)
   assert.equal(h.calls[0].limit, 1)
-  // int -> sum, avg, median, min, max (statsSpecFor)
-  assert.deepEqual(h.calls[0].measures.map((m) => m.fn), ['sum', 'avg', 'median', 'min', 'max'])
+  assert.deepEqual(h.calls[0].measures.map((m) => m.fn), ['sum'])
+  assert.equal(h.calls[0].measures[0].column, 'amount')
   await flush()
-  assert.deepEqual(h.surface.calcValues.value, { sum: 100, avg: 20, median: 15, min: 1, max: 99 })
+  assert.deepEqual(h.surface.calcValues.value, { sum: 100 })
   assert.equal(h.surface.calcLoading.value, false)
+})
+
+test('setCalcColumn: a temporal column defaults to [min, max]; a text column to [count_distinct]', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 'a', m1: 'z' }] }) })
+  h.surface.setCalcColumn('sale_date')
+  assert.deepEqual(h.surface.calcFns.value, ['min', 'max'])
+  assert.deepEqual(h.calls[0].measures.map((m) => m.fn), ['min', 'max'])
+  await flush()
+  assert.deepEqual(h.surface.calcValues.value, { min: 'a', max: 'z' })
+  h.surface.setCalcColumn('country')
+  assert.deepEqual(h.surface.calcFns.value, ['count_distinct'])
+})
+
+test('setCalcFns: selecting a subset re-fetches ONLY those measures, mapped by position in spec order', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 20, m1: 1, m2: 99 }] }) })
+  h.surface.setCalcColumn('amount')
+  await flush()
+  const before = h.calls.length
+  // Ask for avg + max, out of order + with an unknown fn: sanitized to spec order [avg, max].
+  h.surface.setCalcFns(['max', 'bogus', 'avg'])
+  assert.deepEqual(h.surface.calcFns.value, ['avg', 'max'])
+  const call = h.calls[before]
+  assert.deepEqual(call.measures.map((m) => m.fn), ['avg', 'max'])
+  await flush()
+  // m0 -> avg, m1 -> max, m2 -> min (min not selected, so not present)
+  assert.deepEqual(h.surface.calcValues.value, { avg: 20, max: 1 })
+})
+
+test('setCalcFns: an empty (or all-unknown) selection is ignored - the current subset is kept', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 5 }] }) })
+  h.surface.setCalcColumn('amount')
+  await flush()
+  const n = h.calls.length
+  h.surface.setCalcFns([]) // empty -> no-op
+  h.surface.setCalcFns(['unknown_fn']) // nothing survives sanitize -> no-op
+  assert.deepEqual(h.surface.calcFns.value, ['sum'])
+  assert.equal(h.calls.length, n, 'no re-fetch fired')
 })
 
 test('setCalcColumn: re-picking the same column or an empty pick toggles the zone off', async () => {
@@ -77,8 +116,9 @@ test('setCalcColumn: re-picking the same column or an empty pick toggles the zon
 })
 
 test('setCalcColumn: a NULL value in the aggregate maps to null (rendered as a dash)', async () => {
-  const h = makeSurface({ respond: () => ({ rows: [{ m0: null, m1: 0, m2: null, m3: 0, m4: 0 }] }) })
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: null, m1: 0 }] }) })
   h.surface.setCalcColumn('amount')
+  h.surface.setCalcFns(['sum', 'avg']) // request two so both positions are covered
   await flush()
   assert.equal(h.surface.calcValues.value.sum, null)
   assert.equal(h.surface.calcValues.value.avg, 0) // a real 0 is preserved
@@ -86,7 +126,7 @@ test('setCalcColumn: a NULL value in the aggregate maps to null (rendered as a d
 
 test('reloadCalc after an error retries; a failing calc surfaces the error code', async () => {
   let fail = true
-  const h = makeSurface({ respond: () => { if (fail) throw new Error('boom'); return { rows: [{ m0: 5, m1: 5, m2: 5, m3: 5, m4: 5 }] } } })
+  const h = makeSurface({ respond: () => { if (fail) throw new Error('boom'); return { rows: [{ m0: 5 }] } } })
   h.surface.setCalcColumn('amount')
   await flush()
   assert.equal(h.surface.calcError.value, 'boom')
@@ -102,7 +142,7 @@ test('reloadCalc after an error retries; a failing calc surfaces the error code'
 
 test('afterScopeChange: a NEW scope fires the row count and reloads the Calculate zone', async () => {
   const h = makeSurface({
-    respond: (c) => (isCountCall(c) ? { rows: [{ m0: 7 }] } : { rows: [{ m0: 100, m1: 20, m2: 15, m3: 1, m4: 99 }] }),
+    respond: (c) => (isCountCall(c) ? { rows: [{ m0: 7 }] } : { rows: [{ m0: 100 }] }),
   })
   h.surface.setCalcColumn('amount')
   await flush()
@@ -111,7 +151,10 @@ test('afterScopeChange: a NEW scope fires the row count and reloads the Calculat
   await flush()
   const added = h.calls.slice(before)
   assert.ok(added.some(isCountCall), 'a count call fired')
-  assert.ok(added.some((c) => c.measures.length === 5), 'the calc zone reloaded')
+  assert.ok(
+    added.some((c) => !isCountCall(c) && c.measures[0] && c.measures[0].column === 'amount'),
+    'the calc zone reloaded',
+  )
   assert.equal(h.surface.totalCount.value, 7)
 })
 
@@ -190,6 +233,7 @@ test('resetDerived clears the calc + analyze + count state and the defaults', as
   await flush()
   h.surface.resetDerived()
   assert.equal(h.surface.calcColumn.value, null)
+  assert.deepEqual(h.surface.calcFns.value, [])
   assert.equal(h.surface.calcValues.value, null)
   assert.equal(h.surface.analyzeGroup.value, null)
   assert.equal(h.surface.analyzeOpen.value, false)

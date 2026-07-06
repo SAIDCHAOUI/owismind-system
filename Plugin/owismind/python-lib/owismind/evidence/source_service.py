@@ -225,21 +225,29 @@ def source_rows(agent_key, source_id, q, filters, limit, offset, sort):
     return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
-def source_distinct(agent_key, source_id, column, q=None):
-    """Bounded distinct values of ONE column (the filter-chip picker).
+def source_distinct(agent_key, source_id, column, q=None, filters=None, scope_q=None):
+    """Bounded distinct values of ONE column (the CASCADING filter-chip picker).
 
-    Unlike Evidence there are no locked agent predicates to scope by: this is raw
-    dataset exploration, so the picker shows the column's distinct values directly.
-    An optional free-text ``q`` narrows the picker to values of THAT column matching
-    the term (one accent-folded ILIKE over the single resolved column; empty / too-short
-    -> no search, i.e. the full distinct list). Raises 'invalid_filter_column' (400) when
-    the column is not on the live schema.
+    Unlike Evidence there are no locked agent predicates, but the picker is still
+    CASCADING: it only offers values that co-occur with the OTHER currently-active
+    filters + the table-level search, so a business user can never pick a value with
+    zero rows under an active filter. ``filters`` (the OTHER chips, the client omits the
+    one being edited) + ``scope_q`` (the table-level search over ALL columns) scope the
+    picker through the SHARED ``_source_conditions`` - byte-identical to the predicates
+    the row window builds. On top of that scope, the picker's OWN free-text ``q`` narrows
+    it to values of THAT column matching the term (one accent-folded ILIKE over the single
+    resolved column; empty / too-short -> no column search). With no filters and no
+    scope_q this is byte-identical to the old picker. Raises 'invalid_filter_column'
+    (400) when the picked column (or any filter column) is not on the live schema.
     """
     ctx = _resolve_source(agent_key, source_id)
     resolved_col = ctx["colmap"].get(column.lower())
     if resolved_col is None:
         raise EvidenceError("invalid_filter_column", 400)
-    conditions = []
+    # Cascading scope: the OTHER filters + the table-level search over ALL columns
+    # (scope_q travels as the shared conditions' q). Empty scope -> no conditions.
+    conditions = _source_conditions(ctx, scope_q or "", filters or [])
+    # The picker's OWN search on the TARGET column only, appended last (as before).
     search = build_search_condition(
         [resolved_col], q, pg_identifier, _quote_literal,
     )
@@ -254,9 +262,9 @@ def source_distinct(agent_key, source_id, column, q=None):
     values = [r["value"] for r in _run_source_query(ctx, query, "source_distinct")]
     truncated = len(values) > DISTINCT_LIMIT
     logger.info(
-        "source_distinct - agent=%s source=%d dataset=%s column=%s search=%s returned=%d truncated=%s",
+        "source_distinct - agent=%s source=%d dataset=%s column=%s search=%s conditions=%d returned=%d truncated=%s",
         agent_key, source_id, ctx["dataset"], resolved_col, search is not None,
-        min(len(values), DISTINCT_LIMIT), truncated,
+        len(conditions), min(len(values), DISTINCT_LIMIT), truncated,
     )
     return {"values": values[:DISTINCT_LIMIT], "truncated": truncated}
 

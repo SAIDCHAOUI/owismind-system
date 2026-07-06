@@ -28,6 +28,7 @@ import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
 import { useSourcesStore } from './sources.js'
+import { useScreenContextStore } from './screenContext.js'
 import { lastEvidenceExchangeId } from '../composables/evidenceModel.js'
 import { track } from '../services/track.js'
 
@@ -303,9 +304,26 @@ export const useChatStore = defineStore('chat', () => {
     // Screen awareness: tell the backend which exchange + tab the user is currently
     // viewing in the Evidence panel, so the agent knows what's on screen ("explain
     // this chart", "add the forecast"). Only when the panel is actually open.
+    //
+    // On CONSENT, also attach the SOURCE-DATA VIEW the user shaped (filters / search /
+    // DB-computed figures), read LIVE from the screen-context store (fresh numbers). It
+    // rides ALONGSIDE the open-panel pointer, or as { open: false, source_state } when the
+    // Evidence panel is closed (the standalone Source explorer case). Never concatenated to
+    // the visible message text (the cell-to-agent flow stays separate).
+    const screenCtx = useScreenContextStore()
+    const sourceState = screenCtx.snapshotForSend()
     const screenContext = (evidence.open && evidence.exchangeId)
-      ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab }
-      : undefined
+      ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab, ...(sourceState ? { source_state: sourceState } : {}) }
+      : (sourceState ? { open: false, source_state: sourceState } : undefined)
+    if (sourceState) {
+      // Analytics only: never the content, never the q text (privacy).
+      track('screen_context_included', {
+        surface: sourceState.surface,
+        filters: Array.isArray(sourceState.filters) ? sourceState.filters.length : 0,
+        has_calc: !!sourceState.calc,
+        has_analyze: !!sourceState.analyze,
+      }, { conversation_id: runSessionId, agent_key: exch.agentKey })
+    }
     try {
       await runChatStream({
         sessionId: activeSessionId.value,

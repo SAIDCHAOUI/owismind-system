@@ -21,13 +21,18 @@
 //                  leaving Analyze after a scope change had skipped it)
 //   errorCode:     string            - the host's default error code (e.g. 'source_unavailable')
 import { ref } from 'vue'
-import { statsSpecFor, isTemporalColType } from './sourceModel.js'
+import { statsSpecFor, isTemporalColType, defaultCalcFnsFor } from './sourceModel.js'
 
 export function createAggregateSurface(deps) {
   // --- DB-computed row count + the "Calculate" zone (persistent) -----------------
   const totalCount = ref(null) // number | null (DB row count over the filter)
   const totalLoading = ref(false)
   const calcColumn = ref(null) // string | null (the column being summarized)
+  // The ORDERED subset of measures the user chose to display (always a non-empty subset
+  // of statsSpecFor(calcColumn's type), kept in spec order). The user picks which figures
+  // to see so a column never shows all five numeric measures at once, and _reloadCalc
+  // only ever requests these.
+  const calcFns = ref([]) // string[] (selected fn keys, spec order)
   const calcValues = ref(null) // { <fn>: value|null } | null (mapped m0..mN by position)
   const calcLoading = ref(false)
   const calcError = ref('') // '' = none
@@ -72,6 +77,7 @@ export function createAggregateSurface(deps) {
     totalCount.value = null
     totalLoading.value = false
     calcColumn.value = null
+    calcFns.value = []
     calcValues.value = null
     calcLoading.value = false
     calcError.value = ''
@@ -125,20 +131,31 @@ export function createAggregateSurface(deps) {
   function _clearCalc() {
     calcSeq += 1
     calcColumn.value = null
+    calcFns.value = []
     calcValues.value = null
     calcError.value = ''
     calcLoading.value = false
   }
 
-  // Fetch the current calcColumn's key figures over the current filtered set. The measure
-  // list is chosen by the column TYPE (statsSpecFor); the single group-null aggregate is
-  // mapped back to { <fn>: value } by position (m0..mN). Guarded by calcSeq + the meta
-  // epoch. Returns the request promise so callers/tests can await it (behaviour unchanged).
+  // Sanitize a requested measure list against a column's offering: keep only fns that
+  // statsSpecFor(type) actually lists, in SPEC order (never the caller's order), so the
+  // KPI cards render in a stable, type-driven sequence. Returns [] when nothing survives
+  // (callers treat an empty result as "keep the current selection").
+  function _sanitizeCalcFns(column, fns) {
+    const wanted = new Set(fns || [])
+    return statsSpecFor(_colType(column)).map((s) => s.fn).filter((fn) => wanted.has(fn))
+  }
+
+  // Fetch the current calcColumn's key figures over the current filtered set. Only the
+  // SELECTED measures (calcFns, a type-driven subset the user chose) are requested; the
+  // single group-null aggregate is mapped back to { <fn>: value } by position (m0..mN)
+  // over that selected list. Guarded by calcSeq + the meta epoch. Returns the request
+  // promise so callers/tests can await it.
   function _reloadCalc() {
     const column = calcColumn.value
-    if (!deps.isActive() || !column) return Promise.resolve()
-    const spec = statsSpecFor(_colType(column))
-    const measures = spec.map((s) => ({ fn: s.fn, column }))
+    const fns = calcFns.value
+    if (!deps.isActive() || !column || !fns.length) return Promise.resolve()
+    const measures = fns.map((fn) => ({ fn, column }))
     const my = ++calcSeq
     const epoch = deps.getEpoch()
     calcValues.value = null
@@ -149,7 +166,7 @@ export function createAggregateSurface(deps) {
         if (my !== calcSeq || epoch !== deps.getEpoch()) return
         const first = (data.rows || [])[0] || {}
         const values = {}
-        spec.forEach((s, i) => { values[s.fn] = first['m' + i] == null ? null : first['m' + i] })
+        fns.forEach((fn, i) => { values[fn] = first['m' + i] == null ? null : first['m' + i] })
         calcValues.value = values
       })
       .catch((e) => {
@@ -172,6 +189,20 @@ export function createAggregateSurface(deps) {
       return
     }
     calcColumn.value = column
+    // A NEW column starts on its type's default measure subset (not all figures at once).
+    calcFns.value = defaultCalcFnsFor(_colType(column))
+    _reloadCalc()
+  }
+
+  // Change which measures the Calculate zone displays for the current column. The list is
+  // sanitized against the column's offering (spec order, unknown fns dropped); an empty
+  // result is IGNORED so at least one measure always stays selected. A real change
+  // re-fetches only the new subset.
+  function setCalcFns(fns) {
+    if (!calcColumn.value) return
+    const next = _sanitizeCalcFns(calcColumn.value, fns)
+    if (!next.length) return
+    calcFns.value = next
     _reloadCalc()
   }
 
@@ -285,8 +316,8 @@ export function createAggregateSurface(deps) {
 
   return {
     // DB-computed row count + the Calculate zone
-    totalCount, totalLoading, calcColumn, calcValues, calcLoading, calcError,
-    setCalcColumn, reloadCalc,
+    totalCount, totalLoading, calcColumn, calcFns, calcValues, calcLoading, calcError,
+    setCalcColumn, setCalcFns, reloadCalc,
     // Analyze (mini-pivot)
     analyzeOpen, analyzeGroup, analyzeBucket, analyzeFn, analyzeMeasureColumn,
     analyzeRows, analyzeTotals, analyzeTruncated, analyzeLoading, analyzeError,

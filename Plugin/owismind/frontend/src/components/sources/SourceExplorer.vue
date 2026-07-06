@@ -41,6 +41,15 @@ function clearQuery() {
 watch(() => sources.activeSourceId, () => {
   term.value = sources.q || ''
 })
+// The store's `q` can also change AFTER init - a view-memory restore sets it
+// asynchronously once meta has loaded, long after `term` was seeded with ''. Mirror
+// `sources.q` back into the local box so a restored search term is visible (and its
+// clear (X) reachable). Guarded on inequality so a normal keystroke -> setQuery
+// round-trip (which lands `q === term`) never fights typing or the debounce.
+watch(() => sources.q, (q) => {
+  const next = q || ''
+  if (next !== term.value) term.value = next
+})
 </script>
 
 <template>

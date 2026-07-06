@@ -7,6 +7,7 @@ import {
   chipsFromMeta,
   buildRowsPayload,
   buildEvidenceAggregatePayload,
+  buildEvidenceDistinctScope,
   buildDrillLabels,
   isModified,
   normalizeEditableOp,
@@ -250,6 +251,59 @@ test('buildEvidenceAggregatePayload: drill forwarded, absent optional scope adds
   assert.ok(!('drill' in bare))
   assert.ok(!('table' in bare))
   assert.ok(!('q' in bare))
+})
+
+// --- buildEvidenceDistinctScope (CASCADING filter-chip picker scope, A4) -------------
+
+test('buildEvidenceDistinctScope: partitions chips like rows (filters + kept ids)', () => {
+  const chips = chipsFromMeta(AGG_META) // one editable IN chip (id 0) + one locked chip (id 1)
+  const scope = buildEvidenceDistinctScope(chips, true, null, '', null)
+  assert.deepEqual(scope.filters, [{ column: 'solution', op: 'IN', values: ['OBS', 'OCD'] }])
+  assert.deepEqual(scope.kept_ids, [1])
+  assert.equal(scope.include_advanced, true)
+  // No drill / scope_q added when not meaningful.
+  assert.ok(!('drill' in scope))
+  assert.ok(!('scope_q' in scope))
+})
+
+test('buildEvidenceDistinctScope: drops the chip being edited so it never self-scopes', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'solution', op: 'IN', values: ['OBS'], editable: true, source: 'user' },
+    { key: 'u2', id: null, column: 'metric', op: '=', values: ['Actuals'], editable: true, source: 'user' },
+  ]
+  // Editing chip u1: only the OTHER chip (u2) stays in the picker scope.
+  const scope = buildEvidenceDistinctScope(chips, false, null, '', 'u1')
+  assert.deepEqual(scope.filters, [{ column: 'metric', op: '=', values: ['Actuals'] }])
+  assert.deepEqual(scope.kept_ids, [])
+})
+
+test('buildEvidenceDistinctScope: excludeChipKey null keeps every chip (ADD flow)', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'metric', op: '=', values: ['Actuals'], editable: true, source: 'user' },
+  ]
+  const scope = buildEvidenceDistinctScope(chips, false, null, '', null)
+  assert.deepEqual(scope.filters, [{ column: 'metric', op: '=', values: ['Actuals'] }])
+})
+
+test('buildEvidenceDistinctScope: drill + scope_q added only when meaningful', () => {
+  const withExtras = buildEvidenceDistinctScope(
+    [], false, [{ column: 'phase', value: null }], '  algerie ', null,
+  )
+  assert.deepEqual(withExtras.drill, [{ column: 'phase', value: null }])
+  assert.equal(withExtras.scope_q, 'algerie') // trimmed + effective
+  // A too-short scope_q is dropped (mirrors the effective-query threshold).
+  const shortQ = buildEvidenceDistinctScope([], false, null, 'a', null)
+  assert.ok(!('scope_q' in shortQ))
+  const noDrill = buildEvidenceDistinctScope([], false, [], '', null)
+  assert.ok(!('drill' in noDrill))
+})
+
+test('buildEvidenceDistinctScope: a USER BETWEEN chip forwards op BETWEEN untouched', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30'], editable: true, source: 'user' },
+  ]
+  const scope = buildEvidenceDistinctScope(chips, false, null, '', null)
+  assert.deepEqual(scope.filters, [{ column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30'] }])
 })
 
 // --- BETWEEN forwarding on the evidence rows + aggregate paths (temporal range chips) ---

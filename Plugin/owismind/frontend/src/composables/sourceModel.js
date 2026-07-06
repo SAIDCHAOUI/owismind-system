@@ -84,7 +84,10 @@ export function effectiveSourceQuery(q) {
 // defensively. A BETWEEN chip forwards its op + its 2 boundary values UNTOUCHED (the
 // server renders `col BETWEEN v1 AND v2`); any other chip re-derives `=`/`IN` from the
 // value count, never a stale chip op.
-function chipsToFilters(chips) {
+// Exported so the cascading distinct-value picker (sources store loadDistinct) reuses the
+// EXACT same chip -> filter shaping when it sends the OTHER active filters as the picker
+// scope (minus the chip being edited, which the store drops before calling this).
+export function chipsToFilters(chips) {
   const filters = []
   for (const c of chips || []) {
     if (!c || !c.column || !Array.isArray(c.values) || !c.values.length) continue
@@ -190,6 +193,20 @@ export function statsSpecFor(columnType) {
     ]
   }
   return [{ fn: 'count_distinct', labelKey: 'src.calc.distinct' }]
+}
+
+// The DEFAULT selected measures for the "Calculate" zone when a NEW column is picked,
+// chosen by column TYPE. statsSpecFor lists everything that CAN be selected per type;
+// this returns the small, sensible starting subset so the user is not shown all five
+// numeric figures at once (the feedback that drove this rework). Every returned fn is
+// guaranteed to be one of statsSpecFor(columnType)'s entries.
+//   numeric  -> sum (the single most-asked figure)
+//   temporal -> min, max (the span)
+//   anything else (text, boolean, ...) -> distinct count
+export function defaultCalcFnsFor(columnType) {
+  if (isNumericColType(columnType)) return ['sum']
+  if (isTemporalColType(columnType)) return ['min', 'max']
+  return ['count_distinct']
 }
 
 // Normalize a group spec to the frozen contract: null (no grouping) or
@@ -377,9 +394,60 @@ export function monthRangeToBetween(fromYM, toYM) {
   return { start, end }
 }
 
+// Build an inclusive BETWEEN range for a TEXT column that stores ISO date strings (a
+// live-schema "string" column whose values read as 'YYYY-MM' / 'YYYY-MM-DD...'). The
+// backend renders `col BETWEEN start AND end` as quoted literals compared as TEXT, so the
+// bounds must sort correctly under BOTH text collation families the DB may use:
+//   - byte-wise / "C" collation (compares raw code points), and
+//   - punctuation-insensitive collations (ignore '-', compare the digit run '20250399').
+// Reuses monthRangeToBetween's parse + reversed-range swap.
+//   start = 'YYYY-MM'      (the From month string itself)
+//   end   = 'YYYY-MM-99'   (the To month + a '-99' day sentinel)
+// Why these bounds hold in both collation families: after the shared 'YYYY-MM' prefix the
+// remaining characters are all DIGITS, so the comparison is decided by the digit sequence
+// alone (the '-' separators either compare equal byte-wise or are dropped) - identical in
+// both families. Lower bound: 'YYYY-MM' is a prefix of every 'YYYY-MM', 'YYYY-MM-DD...'
+// value of the From month (and of later months), so all of them sort >= start; earlier
+// months sort below it. Upper bound: every real day '01'..'31' (and a bare 'YYYY-MM')
+// sorts below the '99' sentinel, while the NEXT month ('YYYY-(MM+1)...') sorts above it,
+// so the To month is fully included and the following month is fully excluded.
+export function monthRangeToBetweenLexical(fromYM, toYM) {
+  const a = parseYearMonth(fromYM)
+  const b = parseYearMonth(toYM)
+  if (!a || !b) return null
+  const lo = yearMonthLE(a, b) ? a : b
+  const hi = yearMonthLE(a, b) ? b : a
+  const start = fmtYearMonth(lo.y, lo.m)
+  const end = fmtYearMonth(hi.y, hi.m) + '-99'
+  return { start, end }
+}
+
+// True when a distinct-values window looks like ISO date / month strings: the list is
+// non-empty and EVERY non-null / non-empty value starts with a 'YYYY-MM' prefix, optionally
+// followed by a day/time tail introduced by '-', 'T' or a space ('YYYY-MM', 'YYYY-MM-DD',
+// 'YYYY-MM-DDThh:mm:ss', 'YYYY-MM-DD hh:mm'). Null / empty entries are IGNORED; a window of
+// ONLY nulls/empties returns false (nothing to sniff on). Drives auto-entering range mode
+// over a STRING column that actually stores dates: the live schema types it text, so
+// isTemporalColType is false and the user would otherwise tick months one by one.
+export function looksLikeIsoDateValues(values) {
+  if (!Array.isArray(values) || !values.length) return false
+  let seen = 0
+  for (const v of values) {
+    if (v == null) continue
+    const s = String(v).trim()
+    if (!s) continue
+    seen += 1
+    if (!/^\d{4}-\d{2}([-T ].*)?$/.test(s)) return false
+  }
+  return seen > 0
+}
+
 // Inverse of monthRangeToBetween, for pre-filling the range popover when a BETWEEN chip
 // is edited: read the 'YYYY-MM' back from the stored [start, end] values (their leading
-// YYYY-MM prefix). Returns { from, to } or null when the pair is missing / unreadable.
+// YYYY-MM prefix). Works for both bound styles - the calendar-precise
+// 'YYYY-MM-01' / 'YYYY-MM-DDT23:59:59.999999' bounds AND the TEXT-safe 'YYYY-MM' /
+// 'YYYY-MM-99' bounds - since only the shared leading prefix is read. Returns
+// { from, to } or null when the pair is missing / unreadable.
 export function betweenValuesToMonthRange(values) {
   if (!Array.isArray(values) || values.length !== 2) return null
   const from = yearMonthPrefix(values[0])

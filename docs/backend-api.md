@@ -158,7 +158,7 @@ Corps JSON (le front n'envoie que de la donnée logique) :
 | `parent_exchange_id` | str | non | arête d'arbre ; valeur invalide → `None` (= branche racine) ; jamais d'erreur |
 | `mode` | str | non | mode de réponse (`smart`/`pro`/`claude`) résolu au **mode effectif** ; ignoré (→ `None`) si l'agent n'a pas le flag `modes` (le token `⟦owi:mode⟧` ne fuite alors jamais dans le prompt). Stampé sur la ligne à la phase un |
 | `webapp_lang` | str | non | langue courante de l'UI (`fr`/`en`) ; sert de départage pour détecter la langue de réponse du tour ; inconnue → `None` |
-| `screen_context` | obj | non | pointeur borné vers ce que l'utilisateur regarde `{open, exchange_id, active_tab}` (panneau Evidence) ; les artefacts sont relus **owner-scopés** par le worker (un id forgé ne révèle que ses propres données) |
+| `screen_context` | obj | non | pointeur borné vers ce que l'utilisateur regarde `{open, exchange_id, active_tab, source_state?}` ; les artefacts sont relus **owner-scopés** par le worker (un id forgé ne révèle que ses propres données). `source_state` (**opt-in par consentement**, bandeau du prompt) = résumé borné de la vue Source data façonnée par l'user `{surface, dataset, agent?, row_count?, q?, filters?, drill?, calc?, analyze?}`, sanitisé par `context.sanitize_source_state` (whitelist de clés, caps, strip `⟦⟧`, never-raises) et rendu dans le bloc `[ON SCREEN NOW]` (section SOURCE-DATA VIEW, budget 1200 chars avec dégradation) ; jamais de lignes brutes ; accepté même panneau Evidence fermé (`{open:false, source_state}`) |
 
 Comportement : (1) validation payload ; (2) résolution whitelist `settings.resolve_enabled_agent(agent_key)` ;
 (3) **gate d'admission AVANT toute écriture** `stream_manager.can_accept(user_id)` ; (4) **phase un** :
@@ -243,7 +243,7 @@ session_id)` (une session d'autrui → 0 ligne). `rows` suit l'ordre de colonnes
 |---|---|---|---|---|---|
 | `GET` | `/evidence/meta` | Oui | `exchange_id` | `{status:"ok", available, …}` (voir ci-dessous) | voir ci-dessous |
 | `POST` | `/evidence/rows` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], has_more, offset}` | voir ci-dessous |
-| `GET` | `/evidence/distinct` | Oui | `exchange_id`, `column`, `exclude_id?` | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
+| `POST` | `/evidence/distinct` | Oui | corps JSON (voir) | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
 
 **Invariant central : le front n'envoie JAMAIS de SQL.** Il n'envoie qu'un
 `exchange_id`, des filtres **structurés** `{column, op, values}` (les chips éditables), des `kept_ids`
@@ -365,15 +365,20 @@ live / drill hors de l'ensemble dérivé serveur), tous les codes de
 dégradation ci-dessus + `query_failed → 409` (ici **pas** de forme dégradée : la route exige le contexte
 interactif) ; `evidence_unavailable → 500` (inattendu).
 
-#### `GET /evidence/distinct` (`routes.py:610`)
+#### `POST /evidence/distinct` (passé de GET à POST avec la cascade)
 
-Query : `exchange_id` (requis, ≤ 128) + `column` (requis, ≤ 128 sinon `invalid_filter_column → 400` -
-forme seule, l'existence est revalidée contre le schéma live) + `q` (optionnel : terme rétrécissant le picker
-aux valeurs de cette colonne qui matchent, nettoyé par `_clean_source_query`, jamais d'erreur - un terme
-inutilisable dégrade en « pas de recherche »). Alimente le **picker** de valeurs des chips.
-Le picker est **scopé au scope dur de l'agent**, pas à toute la table : tout prédicat **verrouillé**
-(non éditable) et le fragment avancé sont toujours appliqués (les chips éditables sont précisément ce que
-l'utilisateur est en train de choisir - elles ne se self-scopent pas). Plan `subquery-LIMIT-puis-tri` :
+Corps : `{exchange_id, column, q?, exclude_id?, filters?, kept_ids?, include_advanced?, drill?, scope_q?}`
+(`exchange_id` requis ≤ 128 ; `column` requis ≤ 128 sinon `invalid_filter_column → 400` - forme seule,
+l'existence est revalidée contre le schéma live ; `q` optionnel : terme rétrécissant le picker aux valeurs
+de **cette** colonne qui matchent, nettoyé par `_clean_source_query`, jamais d'erreur). Alimente le
+**picker** de valeurs des chips, désormais **EN CASCADE** : en plus du scope dur de l'agent (tout prédicat
+**verrouillé** non éditable + fragment avancé, toujours appliqués ; `exclude_id` = id serveur de la chip en
+cours d'édition, qui ne se self-scope jamais), le picker honore les **autres** filtres actifs (`filters`,
+la chip éditée étant omise par le client), la recherche table (`scope_q`, sur toutes les colonnes) et le
+`drill` actif : une valeur à zéro ligne sous les autres filtres n'est plus proposée. `kept_ids` /
+`include_advanced` sont acceptés (parité de forme avec `/evidence/rows`) mais non retransmis (le scope
+verrouillé est re-dérivé serveur). Sans les nouveaux champs, comportement byte-identique à l'ancien picker.
+Plan `subquery-LIMIT-puis-tri` :
 le `DISTINCT … LIMIT` tourne dans une sous-requête et seul le résultat borné est trié (évite de forcer le
 tri de toutes les valeurs distinctes d'une grande table). Réponse :
 `{"status":"ok", "values":[…], "truncated":bool}` - max **100 valeurs** (`DISTINCT_LIMIT`, fetch 101 →
@@ -421,7 +426,7 @@ l'index vers un dataset **auto-découvert** et exécute une page **bornée lectu
 |---|---|---|---|---|---|
 | `GET` | `/source/meta` | Oui | `agent`, `source` | `{status:"ok", label, columns:[{name,type}]}` | voir ci-dessous |
 | `POST` | `/source/rows` | Oui | corps JSON (voir) | `{status:"ok", rows:[…], has_more, offset}` | voir ci-dessous |
-| `GET` | `/source/distinct` | Oui | `agent`, `source`, `column`, `q?` | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
+| `POST` | `/source/distinct` | Oui | corps JSON (voir) | `{status:"ok", values:[…], truncated}` | voir ci-dessous |
 | `GET` | `/admin/sources/datasets` | **Admin** | - | `{status:"ok", datasets:[…]}` | dégrade à `{datasets:[], error}` |
 
 - **`/source/meta`** (`routes.py:1023`) - descripteur d'une source : son `label` + la liste des colonnes live.
@@ -430,8 +435,12 @@ l'index vers un dataset **auto-découvert** et exécute une page **bornée lectu
   cherchée. Corps `{agent, source, q?, filters?, limit?, offset?, sort?}` ; jamais de SQL : `filters` en
   `{column, op, values}`, `q` matché serveur sur **toutes** les colonnes ; `limit`/`offset` clampés (mêmes
   bornes que `/evidence/rows`). `LIMIT limit+1` → `has_more` sans `COUNT(*)`.
-- **`/source/distinct`** (`routes.py:1076`) - valeurs distinctes bornées d'**une** colonne (picker de chips),
-  avec `q` optionnel rétrécissant sur cette colonne. Max **100** valeurs (`DISTINCT_LIMIT`), `NULL` exclus.
+- **`/source/distinct`** (POST, passé de GET avec la cascade) - valeurs distinctes bornées d'**une** colonne
+  (picker de chips). Corps `{agent, source, column, q?, filters?, scope_q?}` : le picker est **EN CASCADE** -
+  `filters` (les **autres** chips actives, la chip éditée étant omise par le client) + `scope_q` (recherche
+  table sur toutes les colonnes) le scopent via le **même** `_source_conditions` que `/source/rows` ; `q`
+  reste la recherche du picker sur cette seule colonne. Sans `filters`/`scope_q`, byte-identique à l'ancien
+  picker. Max **100** valeurs (`DISTINCT_LIMIT`), `NULL` exclus.
 - **`/admin/sources/datasets`** (`routes.py:1103`, **admin-gated**) - noms des datasets SQL **découverts** du
   projet, pour le picker admin de sources. Un échec de listing dégrade à `{datasets:[], error}` (jamais un 500).
 
@@ -598,7 +607,9 @@ avec un `code` **stable, machine-readable** renvoyé tel quel au front (jamais d
 | `validate_evidence_column` | nom de colonne | forme seule (≤ `MAX_EVIDENCE_COLUMN_CHARS = 128`) - l'existence est revalidée contre le schéma live par le service | `invalid_filter_column` |
 | `validate_evidence_rows_request` | payload `/evidence/rows` | filtres ≤20 (`op ∈ {=,IN}`, values 1..50, str ≤500, bool accepté, NaN/Inf rejetés) ; `kept_ids` ≤100 entiers ≥0 (bool rejeté) ; `limit` **clampée** `[1,100]` déf 50 + `offset` **clampée** `[0,500]` (ne lèvent jamais - bornent le coût du tri OFFSET : fenêtre 600 lignes avant de devoir filtrer) ; `sort` malformé → `None` ; `drill` ≤8 items `{column ≤128, value: str ≤500 \| nombre fini \| bool \| null}` - malformé **lève** (code unique `invalid_drill` ; un drill droppé en silence montrerait la page non drillée) ; `table` ≤256 chars malformé → `None` ; `q` nettoyé + capé 200 chars (ne lève jamais) | `invalid_payload`, `invalid_exchange_id`, `invalid_filters`, `invalid_filter_column`, `invalid_filter_op`, `invalid_filter_values`, `invalid_filter_value`, `filter_value_too_long`, `invalid_kept_ids`, `invalid_drill` |
 | `validate_source_rows_request` | payload `/source/rows` | miroir de `validate_evidence_rows_request` mais keyé `(agent, source)` : `agent` clé opaque ≤64, `source` index `[0,8)` (bool rejeté), `q` nettoyé ≤200, filtres ≤20, `limit`/`offset` clampés | `invalid_payload`, `invalid_agent`, `invalid_source`, `invalid_filters`, `invalid_filter_*` |
-| `validate_source_meta_params` / `validate_source_distinct_params` | query `/source/meta` \| `/source/distinct` | `(agent, source[, column, q])` : `agent` ≤64, `source` `[0,8)`, `column` forme seule (existence revalidée serveur), `q` nettoyé ≤200 (ne lève jamais) | `invalid_agent`, `invalid_source`, `invalid_filter_column` |
+| `validate_source_meta_params` | query `/source/meta` | `(agent, source)` : `agent` ≤64, `source` `[0,8)` | `invalid_agent`, `invalid_source` |
+| `validate_source_distinct_request` | payload `/source/distinct` (POST) | `{agent, source, column, q?, filters?, scope_q?}` : mêmes helpers que `/source/rows` (`filters` ≤20, ops `=`/`IN`/`BETWEEN`) ; `q` (recherche picker sur la colonne) et `scope_q` (recherche table) nettoyés ≤200, ne lèvent jamais | `invalid_payload`, `invalid_agent`, `invalid_source`, `invalid_filter_column`, `invalid_filter_*` |
+| `validate_evidence_distinct_request` | payload `/evidence/distinct` (POST) | `{exchange_id, column, q?, exclude_id?, filters?, kept_ids?, include_advanced?, drill?, scope_q?}` : mêmes parseurs que `/evidence/rows` ; `exclude_id` malformé → `None` (ne lève jamais) | `invalid_payload`, `invalid_exchange_id`, `invalid_filter_column`, `invalid_filter_*`, `invalid_kept_ids`, `invalid_drill` |
 | `validate_suggestion_manual` | payload `/benchmark/suggest` | `question` + `reference_answer` requis (bornés) ; `expected_value` optionnel exige son `expected_value_type` (enum) ; `category`, `language` (déf `fr`) | `invalid_payload`, `invalid_question`, `invalid_reference`, `invalid_expected_type`, `missing_expected_type` |
 | `validate_suggestion_from_chat` | payload `/benchmark/suggest-from-chat` | `exchange_id` requis + `answer_is_correct` bool strict ; verdict « Non » exige `reference_answer` ; `missing_explanation`/`category` optionnels ; Q/R/agent_key/SQL **non** pris du client | `invalid_payload`, `invalid_exchange_id`, `invalid_verdict`, `missing_reference` |
 | `validate_budget_amount` | montant USD | nombre **fini** `[0, 1 000 000]` (0 = blocage dur autorisé) ; NaN/Inf/négatif/bool rejetés ; `OverflowError` d'un entier JSON géant → 400 propre | `invalid_amount` |

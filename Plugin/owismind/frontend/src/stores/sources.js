@@ -27,9 +27,16 @@ import {
   makeSourceChip,
   normalizeSourceOp,
   chipOp,
+  chipsToFilters,
   effectiveSourceQuery,
 } from '../composables/sourceModel.js'
 import { createAggregateSurface } from '../composables/aggregateSurface.js'
+import {
+  createViewMemory,
+  sanitizeRestoredChips,
+  sanitizeRestoredSort,
+  sanitizeRestoredCalc,
+} from '../composables/sourceViewMemory.js'
 import { track } from '../services/track.js'
 
 // Limit/offset pagination (v2): the first load pulls a big window, then each
@@ -41,6 +48,11 @@ const MORE_LIMIT = 20
 // appends window after window, so a huge dataset must never grow the in-memory
 // array without bound. Past MAX_ROWS the sentinel stops (the user filters to narrow).
 const MAX_ROWS = 500
+
+// Per-(agent, dataset) view memory, one per app session (the store is a singleton). It
+// remembers a user's filters / search / sort / Calculate selection so they survive a panel
+// close/reopen and agent switches back and forth. Session-only (no localStorage).
+const viewMemory = createViewMemory()
 
 export const useSourcesStore = defineStore('sources', () => {
   const session = useSessionStore()
@@ -134,13 +146,44 @@ export const useSourcesStore = defineStore('sources', () => {
     surface.resetDerived()
   }
 
+  // Snapshot the LIVE working view (filters / search / sort / Calculate selection) as a
+  // plain, deep-copied shape. The Calculate part reads the shared surface refs. Sort is
+  // deliberately included (the user's chosen ordering is part of "their view").
+  function _snapshotView() {
+    return {
+      chips: chips.value.map((c) => ({
+        key: c.key, column: c.column, op: c.op, values: (c.values || []).slice(),
+      })),
+      q: q.value,
+      sort: sort.value ? { column: sort.value.column, dir: sort.value.dir } : null,
+      calcColumn: surface.calcColumn.value,
+      calcFns: (surface.calcFns.value || []).slice(),
+    }
+  }
+
+  // Persist (or forget) the CURRENT (agent, dataset) view before a view-destroying
+  // transition. Called with the live agentKey / activeSourceId still in place. Saves only a
+  // NON-trivial view (do not fill the memory with empty views); when the live view is
+  // trivial it DELETES any stored entry so clearing filters then leaving cannot resurrect
+  // stale chips on return.
+  function _persistCurrentView() {
+    const key = agentKey.value
+    const sourceId = activeSourceId.value
+    if (!key || sourceId == null) return
+    const trivial = !(chips.value.length || q.value || sort.value || surface.calcColumn.value)
+    if (trivial) viewMemory.remove(key, sourceId)
+    else viewMemory.save(key, sourceId, _snapshotView())
+  }
+
   // Ensure the store is populated for `key`, fetching the active source's meta+rows
   // LAZILY (only the first time that source is seen). Idempotent: re-calling it for an
   // already-loaded source is a no-op. Called when a surface becomes visible.
   function ensureAgent(key) {
     if (!key) return
     if (key !== agentKey.value) {
-      // A different agent: drop everything and adopt its source list.
+      // A different agent: remember the outgoing agent's live view, then drop everything
+      // and adopt the new agent's source list.
+      _persistCurrentView()
       seq += 1 // invalidate any in-flight request from the previous agent
       _resetAll()
       agentKey.value = key
@@ -165,6 +208,7 @@ export const useSourcesStore = defineStore('sources', () => {
     ensureAgent(key)
   }
   function closePanel() {
+    _persistCurrentView() // remember the view so reopening restores it
     seq += 1 // invalidate any in-flight request
     open.value = false
     _resetAll()
@@ -186,6 +230,25 @@ export const useSourcesStore = defineStore('sources', () => {
       if (data.label) {
         const entry = sourceList.value.find((s) => s.id === sourceId)
         if (entry) entry.label = data.label
+      }
+      // Restore any remembered view for THIS (agent, dataset) within the session, sanitized
+      // against the freshly loaded columns (a column may have changed since it was saved).
+      // Direct ref assignment (never setCalcColumn/setChipValues/setSort): the subsequent
+      // _loadRows -> surface.afterScopeChange(sig) fires EXACTLY ONE calc reload + one count
+      // when calcColumn is set, so a wrapper call here would only duplicate requests.
+      const saved = viewMemory.restore(agentKey.value, sourceId)
+      if (saved) {
+        // Re-key restored chips against the LIVE counter so they can never collide with a
+        // chip the user adds next (userChipSeq keeps climbing across sessions of the view).
+        chips.value = sanitizeRestoredChips(saved.chips, columns.value).map((c) => {
+          userChipSeq += 1
+          return { key: 'u' + userChipSeq, column: c.column, op: c.op, values: c.values }
+        })
+        q.value = saved.q || ''
+        sort.value = sanitizeRestoredSort(saved.sort, columns.value)
+        const cc = sanitizeRestoredCalc(saved.calcColumn, saved.calcFns, columns.value)
+        surface.calcColumn.value = cc.column
+        surface.calcFns.value = cc.column ? cc.fns : []
       }
       await _loadRows(mySeq)
     } catch (e) {
@@ -278,6 +341,7 @@ export const useSourcesStore = defineStore('sources', () => {
   function setSource(id) {
     if (id == null || id === activeSourceId.value) return
     if (!sourceList.value.some((s) => s.id === id)) return
+    _persistCurrentView() // remember the outgoing dataset's view before switching
     track('source_dataset_switched', { source: id }, { agent_key: agentKey.value || null })
     activeSourceId.value = id
     _loadMeta(id)
@@ -350,13 +414,23 @@ export const useSourcesStore = defineStore('sources', () => {
   }
 
   // Distinct values for the add/edit picker - returned to the caller (the popover owns
-  // its own transient open/loading state), never stored here. `q` (optional) narrows
-  // the window server-side over ALL values; empty/absent keeps the default top-N.
-  function loadDistinct(column, q) {
+  // its own transient open/loading state), never stored here. The picker is CASCADING:
+  // it only offers values compatible with the OTHER active filters + the table-level
+  // search, so it carries that scope. `search` (optional) is the picker's own search on
+  // THAT column; empty/absent keeps the default top-N. `excludeChipKey` (optional) is the
+  // key of the chip being EDITED: it is dropped from the scope so it never self-scopes its
+  // own picker (omit it for the ADD flow, where every chip applies). The table-level
+  // search (the store's `q`) travels as scope_q over ALL columns.
+  function loadDistinct(column, search, excludeChipKey) {
     if (activeSourceId.value == null || !agentKey.value) {
       return Promise.reject(new Error('source_unavailable'))
     }
-    return fetchSourceDistinct(agentKey.value, activeSourceId.value, column, q)
+    const scopeChips = excludeChipKey == null
+      ? chips.value
+      : chips.value.filter((c) => c.key !== excludeChipKey)
+    const filters = chipsToFilters(scopeChips)
+    const scopeQ = effectiveSourceQuery(q.value)
+    return fetchSourceDistinct(agentKey.value, activeSourceId.value, column, search, filters, scopeQ)
   }
 
   // Label of the source currently browsed - what a cell selection reports as its
@@ -374,10 +448,12 @@ export const useSourcesStore = defineStore('sources', () => {
     totalCount: surface.totalCount,
     totalLoading: surface.totalLoading,
     calcColumn: surface.calcColumn,
+    calcFns: surface.calcFns,
     calcValues: surface.calcValues,
     calcLoading: surface.calcLoading,
     calcError: surface.calcError,
     setCalcColumn: surface.setCalcColumn,
+    setCalcFns: surface.setCalcFns,
     reloadCalc: surface.reloadCalc,
     // Analyze (mini-pivot)
     analyzeOpen: surface.analyzeOpen,

@@ -1174,32 +1174,80 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
 
 
-def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None):
-    """Bounded distinct values of one column (the filter-chip picker).
+def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None,
+                      filters=None, drill=None, scope_q=None, kept_ids=None):
+    """Bounded distinct values of one column (the CASCADING filter-chip picker).
 
-    The picker shows values WITHIN the agent's remaining scope: the =/IN
-    predicates and the advanced fragment still apply, but the predicate the
-    user is currently EDITING (``exclude_id``, the chip's server id) never
-    self-scopes its own picker - every chip is editable in the UI, so a
-    comparison chip (>=, BETWEEN…) must be able to widen past its own bound.
-    An optional free-text ``q`` further narrows the picker to values of THAT
-    column matching the term (one accent-folded ILIKE over the single resolved
-    column; empty / too-short -> no search, the picker is unchanged).
+    The picker shows values WITHIN the agent's remaining scope: the locked (non-editable)
+    =/IN predicates and the advanced fragment still apply, but the predicate the user is
+    currently EDITING (``exclude_id``, the chip's server id) never self-scopes its own
+    picker - every chip is editable in the UI, so a comparison chip (>=, BETWEEN…) must be
+    able to widen past its own bound.
+
+    ``kept_ids`` mirrors ``_evidence_conditions`` (the row window) so removing a LOCKED
+    agent chip widens the picker exactly as it widens the rows: when a list is supplied,
+    a locked predicate scopes the picker ONLY when its id is in it (a removed locked chip,
+    no longer in ``kept_ids``, drops out). When ``kept_ids`` is None (a request that omits
+    it, or a direct call), the gate is skipped and EVERY locked predicate applies - the
+    pre-``kept_ids`` behaviour, byte-identical to before. ``exclude_id`` still drops the
+    single chip being edited on top of this.
+
+    On top of it the picker is now CASCADING: it also honours the OTHER currently-active
+    editable/user filters (``filters``), the table-level search (``scope_q``, over ALL live
+    columns) and any active drill (``drill``), so a value that has zero rows under the other
+    active filters is no longer offered (the trap the redesign removes). The client omits the
+    chip being edited from ``filters``, so it never self-scopes. These are rendered with the
+    SAME building blocks the row window uses (``render_predicate`` / ``build_search_condition``
+    / ``_drill_conditions``). Finally the picker's OWN free-text ``q`` narrows it to values of
+    THAT column matching the term (one accent-folded ILIKE over the single resolved column;
+    empty / too-short -> no column search). With none of the new fields present this is
+    byte-identical to the previous picker. Raises 'invalid_filter_column' (400) when the
+    picked column (or any filter column) is not on the live schema.
     """
     ctx = _context(user_id, exchange_id)
     resolved_col = ctx["colmap"].get(column.lower())
     if resolved_col is None:
         raise EvidenceError("invalid_filter_column", 400)
     conditions = []
+    # --- locked scope: the agent's non-editable predicates minus the chip being edited,
+    # gated by kept_ids (mirror of _evidence_conditions) so a removed locked chip widens
+    # the picker just like it widens the rows, plus the advanced fragment. With kept_ids
+    # None AND no cascading fields below, this is byte-identical to v1. ---
+    kept = set(kept_ids) if kept_ids is not None else None
     for pred in ctx["predicates"]:
         if pred["editable"]:
             continue  # =/IN chips are what the user is picking - don't self-scope
         if exclude_id is not None and pred["id"] == exclude_id:
             continue  # the chip being edited must not filter its own picker
+        if kept is not None and pred["id"] not in kept:
+            continue  # a locked chip removed by the user (dropped from kept_ids)
         conditions.append(_locked_condition(ctx, pred))
     if ctx["advanced"]:
         conditions.append(_advanced_condition(ctx))
-    # Optional free-text search on the picked column - ADDS to the locked scope.
+    # --- cascading scope (NEW): the OTHER active editable/user filters + the table-level
+    # search + drill, so the picker only offers values that co-occur with them. Rendered
+    # with the SAME blocks the row window uses (a BETWEEN date-range chip is passed as-is,
+    # every other op normalizes to =/IN). ---
+    for f in filters or []:
+        col = ctx["colmap"].get(f["column"].lower())
+        if col is None:
+            raise EvidenceError("invalid_filter_column", 400)
+        if f["op"] == "BETWEEN":
+            op = "BETWEEN"
+        else:
+            op = "=" if (f["op"] == "=" and len(f["values"]) == 1) else "IN"
+        conditions.append(render_predicate(
+            {"column": col, "op": op, "values": f["values"]},
+            pg_identifier, _quote_value,
+        ))
+    scope_search = build_search_condition(
+        [c["name"] for c in ctx["columns"]], scope_q, pg_identifier, _quote_literal,
+    )
+    if scope_search:
+        conditions.append(scope_search)
+    if drill:
+        conditions.extend(_drill_conditions(ctx, drill))
+    # --- the picker's OWN search on the TARGET column, appended last (as before) ---
     search = build_search_condition(
         [resolved_col], q, pg_identifier, _quote_literal,
     )
@@ -1215,9 +1263,9 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None):
     truncated = len(values) > DISTINCT_LIMIT
     values = values[:DISTINCT_LIMIT]
     logger.info(
-        "evidence_distinct - user_id=%s exchange_id=%s dataset=%s column=%s search=%s returned=%d truncated=%s",
+        "evidence_distinct - user_id=%s exchange_id=%s dataset=%s column=%s search=%s conditions=%d returned=%d truncated=%s",
         user_id, exchange_id, ctx["dataset"], resolved_col, search is not None,
-        len(values), truncated,
+        len(conditions), len(values), truncated,
     )
     return {"values": values, "truncated": truncated}
 

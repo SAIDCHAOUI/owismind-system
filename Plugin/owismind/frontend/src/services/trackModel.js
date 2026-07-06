@@ -25,6 +25,9 @@ export const CATEGORY_BY_NAME = {
   answer_version_switched: 'chat',
   cell_value_added_to_prompt: 'chat',
   cell_value_removed_from_prompt: 'chat',
+  screen_context_offered: 'chat',
+  screen_context_included: 'chat',
+  screen_context_dismissed: 'chat',
   // ui
   mode_changed: 'ui',
   agent_changed: 'ui',

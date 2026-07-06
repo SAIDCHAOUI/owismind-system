@@ -19,7 +19,9 @@ import {
   foldSearchTerm as fold,
   isTemporalColType,
   monthRangeToBetween,
+  monthRangeToBetweenLexical,
   betweenValuesToMonthRange,
+  looksLikeIsoDateValues,
   yearOfValue,
 } from '../../composables/sourceModel.js'
 import RangePopoverFields from '../sources/RangePopoverFields.vue'
@@ -56,6 +58,10 @@ const pickerSelected = ref([])
 // server id whose predicate must NOT scope its own picker (edited agent chip only).
 const pickerColumn = ref('')
 const pickerExcludeId = ref(null)
+// The local key of the chip currently being EDITED (null in the add flow): forwarded to
+// the cascading distinct picker so the edited chip is dropped from the scope and its own
+// values stay offered.
+const editedChipKey = ref(null)
 // Live search text: colSearch filters the column list, valSearch filters the
 // loaded value window (both client-side, accent/case-insensitive).
 const colSearch = ref('')
@@ -69,17 +75,24 @@ const serverFiltered = ref(false)
 // one currently open.
 let pickerSeq = 0
 
-// Temporal RANGE mode (a date filter picked in 1-2 clicks), rendered by the shared
+// RANGE mode (a date filter picked in 1-2 clicks), rendered by the shared
 // RangePopoverFields - the exact same behaviour as the Source Data explorer chips. It
-// applies ONLY to USER chips on a temporal column (a locked or editable AGENT-derived
-// chip keeps the distinct-values picker, untouched). While range mode is on, distinct
-// values still load in the background so the full-year control can offer the years
-// actually present in the column.
+// applies ONLY to USER chips (a locked or editable AGENT-derived chip keeps the
+// distinct-values picker, untouched), on a temporal column OR a STRING column whose values
+// sniff as ISO dates. `rangeLexical` selects the BETWEEN bounds (calendar-precise vs
+// TEXT-safe); `rangeAllowed` gates the whole feature to user chips / the add flow. While
+// range mode is on, distinct values still load in the background (full-year options + the
+// "pick exact values" list toggle).
 const rangeMode = ref(false)
+const rangeLexical = ref(false)
+const rangeAllowed = ref(false)
 const rangeFrom = ref('') // 'YYYY-MM'
 const rangeTo = ref('') // 'YYYY-MM'
 
-useClickOutside(zone, () => { pop.value = null })
+// Iframe-safe dismissal: also close on window blur (DSS chrome clicks never reach us),
+// guarded so opening a native month calendar does not self-close. A full-viewport backdrop
+// (template) + Escape are the other two layers.
+useClickOutside(zone, () => { pop.value = null }, { closeOnWindowBlur: true })
 
 const columns = computed(() => (evidence.meta && evidence.meta.columns) || [])
 const advanced = computed(() => evidence.meta && evidence.meta.advanced)
@@ -96,6 +109,12 @@ function colType(name) {
   const c = columns.value.find((x) => x.name === name)
   return c ? c.type : ''
 }
+// Whether a range toggle is meaningful in LIST mode: the context allows range (a user chip
+// or the add flow) AND the column is temporal, or its loaded values sniff as ISO dates.
+const rangeAvailable = computed(
+  () => rangeAllowed.value
+    && (isTemporalColType(colType(pickerColumn.value)) || looksLikeIsoDateValues(pickerValues.value)),
+)
 // The years present in the loaded distinct values of the temporal column, ascending. When
 // empty (not derivable / not loaded yet) the full-year control degrades to a 4-digit input.
 const rangeYearOptions = computed(() => {
@@ -106,8 +125,23 @@ const rangeYearOptions = computed(() => {
   }
   return Array.from(years).sort()
 })
-// Apply stays enabled only when both months are set and parse to a valid range.
-const rangeReady = computed(() => !!monthRangeToBetween(rangeFrom.value, rangeTo.value))
+// Apply stays enabled only when both months are set and parse to a valid range. Both
+// builders share the same parse/swap guards, so validity is identical - branch anyway so
+// the enabling predicate exactly mirrors the builder applyRange runs.
+const rangeReady = computed(() => !!(rangeLexical.value
+  ? monthRangeToBetweenLexical(rangeFrom.value, rangeTo.value)
+  : monthRangeToBetween(rangeFrom.value, rangeTo.value)))
+
+// Toggle between the month RANGE fields and the exact-values list (a quiet text link).
+// Entering range mode picks the bound style from the column type (lexical for a sniffed
+// string column, calendar-precise for a temporal one) and keeps any From / To already set.
+function enterRangeMode() {
+  rangeLexical.value = !isTemporalColType(colType(pickerColumn.value))
+  rangeMode.value = true
+}
+function exitRangeMode() {
+  rangeMode.value = false
+}
 
 // Client-side matching folds through the SAME accent map as the server (imported
 // `fold`), so a term behaves identically before and after a server-side escalation.
@@ -137,11 +171,16 @@ function rangeText(chip) {
 
 // Load one window of distinct values for `column`. `current` values are kept
 // selectable even outside the top-N (concatenated when missing). `excludeId` keeps
-// an edited agent chip from scoping its own picker; `serverQ` (when non-empty)
-// narrows the window server-side over ALL values, not just the top-N.
+// an edited agent chip from scoping its own predicate server-side; the cascade exclude
+// key is read from `editedChipKey` so the edited chip is dropped from the local scope and
+// its own values stay offered. `serverQ` (when non-empty) narrows the window server-side
+// over ALL values, not just the top-N. `sniffPrefill` (an array, or undefined to skip):
+// after a successful load, if the window sniffs as ISO date strings, auto-enter TEXT-safe
+// range mode prefilled from these values - the caller only passes it in a range-ALLOWED
+// context (a user chip or the add flow), so an agent chip never auto-flips.
 // Resolves true on success, false on failure, null when superseded - so a caller
 // (the server search) can gate its own state on the request that actually landed.
-async function _loadPicker(column, current, excludeId, serverQ) {
+async function _loadPicker(column, current, excludeId, serverQ, sniffPrefill) {
   const my = ++pickerSeq
   pickerLoading.value = true
   pickerError.value = false
@@ -149,7 +188,7 @@ async function _loadPicker(column, current, excludeId, serverQ) {
   pickerTruncated.value = false
   pickerSelected.value = current.slice()
   try {
-    const data = await evidence.loadDistinct(column, excludeId, serverQ)
+    const data = await evidence.loadDistinct(column, excludeId, serverQ, editedChipKey.value)
     if (my !== pickerSeq) return null
     const values = data.values || []
     // Keep the agent's original values selectable even outside the top-N.
@@ -159,6 +198,14 @@ async function _loadPicker(column, current, excludeId, serverQ) {
     const missing = current.filter((v) => !seen.has(String(v)))
     pickerValues.value = missing.concat(values)
     pickerTruncated.value = !!data.truncated
+    // A string column that actually stores dates: offer the 1-2 click range instead of a
+    // month-by-month tick. Only on the primary list load (sniffPrefill defined) and never
+    // over-riding an already-open range mode.
+    if (sniffPrefill !== undefined && !rangeMode.value && looksLikeIsoDateValues(pickerValues.value)) {
+      rangeLexical.value = true
+      _openRange(sniffPrefill)
+      rangeMode.value = true
+    }
     return true
   } catch (e) {
     if (my !== pickerSeq) return null
@@ -183,24 +230,39 @@ function openChipPicker(chip) {
   const excludeId = chip.source === 'agent' && chip.id != null ? chip.id : null
   pickerColumn.value = chip.column
   pickerExcludeId.value = excludeId
+  editedChipKey.value = chip.key
   valSearch.value = ''
   serverFiltered.value = false
-  // Range mode ONLY for a USER chip on a temporal column (an agent-derived chip, locked
-  // OR editable, keeps the distinct picker - untouched). Prefill From / To from the chip's
-  // stored BETWEEN bounds; load distinct in the background only to derive the year options.
-  if (chip.source === 'user' && isTemporalColType(colType(chip.column))) {
+  rangeMode.value = false
+  rangeLexical.value = false
+  // Range mode + sniffing are USER-chips-only: an agent-derived chip (locked OR editable)
+  // keeps its exact current distinct-picker behaviour.
+  const isUser = chip.source === 'user'
+  rangeAllowed.value = isUser
+  if (isUser && isTemporalColType(colType(chip.column))) {
+    // USER temporal chip: calendar-precise range. Prefill From / To from the chip; load
+    // distinct in the background for the year options and the "pick exact values" list.
     rangeMode.value = true
     _openRange(chip.values)
-    _loadPicker(chip.column, [], excludeId, '')
+    _loadPicker(chip.column, [], excludeId, '', undefined)
     return
   }
-  rangeMode.value = false
+  const between = chip.op === 'BETWEEN' && Array.isArray(chip.values) && chip.values.length === 2
+  if (isUser && between) {
+    // USER chip holding an existing lexical range on a string column: TEXT-safe range.
+    rangeMode.value = true
+    rangeLexical.value = true
+    _openRange(chip.values)
+    _loadPicker(chip.column, [], excludeId, '', undefined)
+    return
+  }
   // Pre-select the current values only for =/IN chips: for any other op
   // (!=, NOT IN, >=, BETWEEN, LIKE…) the stored values are NOT a selection -
   // pre-checking them and applying would silently INVERT or distort the
   // agent's filter. The user picks the values they want explicitly.
   const preselect = chip.op === '=' || chip.op === 'IN' ? chip.values : []
-  _loadPicker(chip.column, preselect, excludeId, '')
+  // Sniff for ISO-date strings only on a USER chip (agent chips never auto-flip).
+  _loadPicker(chip.column, preselect, excludeId, '', isUser ? chip.values : undefined)
 }
 function openAdd() {
   pickerSeq += 1 // kill any in-flight load (and its spinner) from a previous popover
@@ -209,6 +271,7 @@ function openAdd() {
   addStep.value = 'column'
   pickerColumn.value = ''
   pickerExcludeId.value = null
+  editedChipKey.value = null
   colSearch.value = ''
   valSearch.value = ''
   serverFiltered.value = false
@@ -216,11 +279,13 @@ function openAdd() {
   pickerSelected.value = []
   pickerTruncated.value = false
   rangeMode.value = false
+  rangeLexical.value = false
+  rangeAllowed.value = true // the add flow always creates a USER chip
   _openRange([])
 }
-// Add step 1 -> step 2: a column was chosen. A temporal column enters range mode (a new
-// user filter is always the user's own, so range mode applies) and loads distinct only to
-// derive the year options; any other column loads its first value window.
+// Add step 1 -> step 2: a column was chosen. A new user filter is always the user's own,
+// so range mode applies. A temporal column enters range mode (loads distinct only for the
+// year options + the list toggle); any other column loads its value window and sniffs it.
 function pickColumn(name) {
   if (!name) return
   addStep.value = 'value'
@@ -228,14 +293,16 @@ function pickColumn(name) {
   pickerExcludeId.value = null
   valSearch.value = ''
   serverFiltered.value = false
+  rangeMode.value = false
+  rangeLexical.value = false
+  rangeAllowed.value = true
   if (isTemporalColType(colType(name))) {
     rangeMode.value = true
     _openRange([])
-    _loadPicker(name, [], null, '')
+    _loadPicker(name, [], null, '', undefined)
     return
   }
-  rangeMode.value = false
-  _loadPicker(name, [], null, '')
+  _loadPicker(name, [], null, '', [])
 }
 // Add step 2 -> step 1: drop the in-flight value load, the picked values and the range.
 function backToColumns() {
@@ -250,6 +317,7 @@ function backToColumns() {
   pickerSelected.value = []
   pickerTruncated.value = false
   rangeMode.value = false
+  rangeLexical.value = false
   _openRange([])
 }
 // Enter in the value search. With a term: re-load the window narrowed server-side,
@@ -308,12 +376,15 @@ function applyPicker() {
 function cancelPicker() {
   pop.value = null
 }
-// Build ONE BETWEEN chip from the two month fields. monthRangeToBetween swaps a reversed
-// From > To and returns null when either month is missing / malformed (apply is disabled
-// then). The chip keeps its explicit op so it is never re-normalized to '=' / 'IN'.
+// Build ONE BETWEEN chip from the two month fields. A true temporal column uses
+// calendar-precise bounds; a string column sniffed as dates uses TEXT-safe bounds. Both
+// builders swap a reversed From > To and return null when a month is missing / malformed
+// (apply is disabled then). The chip keeps its explicit op so it is never re-normalized.
 function applyRange() {
   if (!pop.value) return
-  const range = monthRangeToBetween(rangeFrom.value, rangeTo.value)
+  const range = rangeLexical.value
+    ? monthRangeToBetweenLexical(rangeFrom.value, rangeTo.value)
+    : monthRangeToBetween(rangeFrom.value, rangeTo.value)
   if (!range) return
   const values = [range.start, range.end]
   if (pop.value.kind === 'chip') evidence.setChipValues(pop.value.key, values, 'BETWEEN')
@@ -324,6 +395,14 @@ function applyRange() {
 
 <template>
   <div ref="zone" class="ev-chips" @keydown.escape="pop = null">
+    <!-- Invisible full-viewport backdrop while a popover is open: makes dismissal
+         STRUCTURAL (a first click anywhere closes without activating what is underneath).
+         mousedown.prevent blocks focus-steal / text-selection; the popovers paint above it
+         (same z-index, later in DOM within this stacking context). -->
+    <div
+      v-if="pop" class="ev-backdrop"
+      @mousedown.prevent @click="pop = null"
+    ></div>
     <div class="ev-chips-head">
       <span class="ev-chips-title">{{ t('ev.filters') }}</span>
       <span v-if="evidence.modified" class="ev-modified">{{ t('ev.modified') }}</span>
@@ -353,9 +432,11 @@ function applyRange() {
         <!-- Edit an existing filter: a month RANGE picker for a USER temporal chip, the
              distinct-values picker otherwise. -->
         <div v-if="pop && pop.kind === 'chip' && pop.key === chip.key" class="ev-pop">
-          <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+          <!-- RANGE mode: From / To months + a one-click full-year fill + a link back to
+               the exact-values list. -->
           <div v-if="rangeMode" class="pop-range">
             <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
+            <button type="button" class="pop-toggle" @click="exitRangeMode">{{ t('src.range.pickList') }}</button>
             <div class="pop-foot">
               <div class="pop-actions">
                 <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
@@ -363,7 +444,7 @@ function applyRange() {
               </div>
             </div>
           </div>
-          <!-- Distinct-values picker (non-temporal / agent-derived column). -->
+          <!-- Distinct-values picker (non-range / agent-derived column, or list toggled on). -->
           <template v-else>
             <input
               v-model="valSearch" v-focus class="pop-search" type="text"
@@ -387,6 +468,9 @@ function applyRange() {
                   {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
                 </div>
               </div>
+              <button v-if="rangeAvailable" type="button" class="pop-toggle" @click="enterRangeMode">
+                {{ t('src.range.pickRange') }}
+              </button>
               <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
               <div class="pop-foot">
                 <span v-if="pickerSelected.length" class="pop-count">
@@ -443,9 +527,11 @@ function applyRange() {
               </button>
               <span class="pop-head-col">{{ pickerColumn }}</span>
             </div>
-            <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+            <!-- RANGE mode: From / To months + a one-click full-year fill + a link back to
+                 the exact-values list. -->
             <div v-if="rangeMode" class="pop-range">
               <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
+              <button type="button" class="pop-toggle" @click="exitRangeMode">{{ t('src.range.pickList') }}</button>
               <div class="pop-foot">
                 <div class="pop-actions">
                   <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
@@ -453,7 +539,7 @@ function applyRange() {
                 </div>
               </div>
             </div>
-            <!-- Distinct-values picker (non-temporal column). -->
+            <!-- Distinct-values picker (non-range column, or list toggled on). -->
             <template v-else>
               <input
                 v-model="valSearch" v-focus class="pop-search" type="text"
@@ -477,6 +563,9 @@ function applyRange() {
                     {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
                   </div>
                 </div>
+                <button v-if="rangeAvailable" type="button" class="pop-toggle" @click="enterRangeMode">
+                  {{ t('src.range.pickRange') }}
+                </button>
                 <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
                 <div class="pop-foot">
                   <span v-if="pickerSelected.length" class="pop-count">
@@ -503,6 +592,10 @@ function applyRange() {
    both) create sibling stacking contexts: without an explicit z-index the
    TABLE block paints over the picker popover. Keep the chips block above. */
 .ev-chips { display: flex; flex-direction: column; gap: var(--s-2); position: relative; z-index: 5; }
+/* Invisible full-viewport backdrop while a popover is open. Same stacking context as the
+   popover (this block has z-index:5); same z-index as .ev-pop but EARLIER in the DOM, so
+   the popover paints above it. Transparent - it only intercepts the dismiss click. */
+.ev-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); background: transparent; }
 .ev-chips-head { display: flex; align-items: center; gap: var(--s-3); }
 .ev-chips-title { font-size: var(--fs-xs); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
 .ev-modified {
@@ -559,6 +652,12 @@ function applyRange() {
 /* Temporal range picker wrapper - the fields live in the shared RangePopoverFields;
    this only stacks them above the apply / cancel foot. */
 .pop-range { display: flex; flex-direction: column; gap: var(--s-3); }
+/* Quiet text-link toggle between the range picker and the exact-values list. */
+.pop-toggle {
+  align-self: flex-start; padding: 2px 0; background: transparent; border: 0;
+  color: var(--text-2); font-size: var(--fs-xs); border-radius: 0; cursor: pointer;
+}
+.pop-toggle:hover { color: var(--text); }
 .pop-head { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .pop-back {
   display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px 2px 2px;

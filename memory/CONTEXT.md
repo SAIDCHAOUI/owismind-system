@@ -5,7 +5,28 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
-**🧮 SESSION 2026-07-06 (MANIPULATION DE DONNÉES SANS IA : agrégats DB + zone Calculer + plages de
+**🖥️ SESSION 2026-07-06 Run 2 (SOURCE DATA v3, nuit autonome sur 5 retours user : popover, mesures
+choisies, plages string, cascade, persistance, CONTEXTE ÉCRAN -> AGENT) - ✅ validé LOCAL (772 back
++ 334 node + 316 agents verts, QA Playwright 8/8 + re-checks 4/4 sur bundles prouvés frais L132),
+zip dev_v2 RECONSTRUIT À UPLOADER (`index-BvJL4hQU.js`, 82 entrées), prod + dev stable INTACTS.**
+Livré : **(1)** popover filtres = fermeture structurelle (backdrop invisible + `closeOnWindowBlur`
+garde activeElement, SourceChips + EvidenceChips miroirs) ; **(2)** zone Calculer = mesures CHOISIES
+(`calcFns`, défauts par type num=Somme, dropdown checkboxes bi-hôte) + cartes GRANDES sans ellipsis
+(wrap + title) ; **(3)** plages de dates sur colonnes STRING à valeurs ISO (sniffing
+`looksLikeIsoDateValues` -> mode plage auto + bascule liste/plage dans les 2 sens, bornes lexicales
+`['YYYY-MM','YYYY-MM-99']` sûres sous les 2 familles de collation) ; **(4)** CASCADE : `/source/
+distinct` + `/evidence/distinct` GET->POST avec `filters`/`scope_q` (+ evidence `kept_ids` honoré,
+`drill`, `exclude_id`), mêmes conditions que rows, chip éditée exclue côté store ; **(4bis)**
+persistance des vues par (agent, dataset) (`sourceViewMemory.js`, chips/q/sort/calc survivent
+fermeture/réouverture + mode agent d'Evidence) ; **(5)** CONTEXTE ÉCRAN -> AGENT : extension du canal
+EXISTANT `screen_context` -> bloc `[ON SCREEN NOW]` (section SOURCE-DATA VIEW budget 1200c, phrase de
+permission verbatim TOUJOURS préservée, `sanitize_source_state` never-raises), bandeau de consentement
+charte dans PromptBar (sticky par SIGNATURE de scope, chip retirable, jamais de lignes brutes, 3 events
+whitelistés 41/41) + paragraphe prompt orchestrateur DEV (repo, À RECOLLER DSS env 3.11). Revue
+adversariale 4 lentilles + réfutateurs : 7 confirmés / 3 réfutés, TOUS corrigés. Docs backend-api.md à
+jour. Voir `sessions/2026-07-06.md` (Run 2) + **L134-L137**.
+
+**🧮 SESSION 2026-07-06 Run 1 (MANIPULATION DE DONNÉES SANS IA : agrégats DB + zone Calculer + plages de
 dates + unification Evidence, livrés dans le plugin coexistant `owismind_dev_v2`) - ✅ vague 1
 VALIDÉE DSS par l'user, vagues 2+3 locales (QA runtime + revues), zip dev_v2 FINAL À UPLOADER.**
 Brainstorm (4 scouts Sonnet + 3 experts Opus) puis 3 vagues d'implémentation (agents Opus //) :
@@ -142,7 +163,15 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-06 : data tools sans IA (agrégats + Calculer + plages + unification Evidence) + plugin dev_v2 → détail `sessions/2026-07-06.md` + **L132-L133**
+## 🧭 Dernière session - 2026-07-06 Run 2 : Source Data v3 (popover, mesures, plages string, cascade, persistance, contexte écran -> agent) → détail `sessions/2026-07-06.md` (Run 2) + **L134-L137**
+- **✅ Validé local (revue adversariale soldée + QA runtime 8/8 et re-checks 4/4), NON validé DSS.**
+  Zip dev_v2 `index-BvJL4hQU.js` À UPLOADER (+ restart backend webapp dev_v2) ; paragraphe
+  orchestrateur DEV à recoller (env 3.11, sans lui la feature dégrade proprement).
+- Gros smoke : popover se ferme au clic extérieur, Calculer 1 carte Somme + dropdown Mesures,
+  `year_month` en mode plage auto, cascade Actuals->clients, réouverture = vue restaurée, bandeau
+  Inclure -> l'agent exploite les chiffres écran, dark.
+
+## 🧭 Avant - 2026-07-06 Run 1 : data tools sans IA (agrégats + Calculer + plages + unification Evidence) + plugin dev_v2 → détail `sessions/2026-07-06.md` + **L132-L133**
 - **✅ Vague 1 validée DSS (user, sur dev_v2) ; vagues 2+3 validées en local** (QA runtime parcours
   Evidence stubbé, 3 revues adversariales soldées) ; **zip FINAL `owismind_dev_v2-upload.zip` à uploader**.
 - Smoke DSS : CALCULER sur `amount_eur` (Médiane incluse), plage `year_month` + Année complète,
@@ -439,15 +468,23 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🧮NEW (2026-07-06). **UPLOADER + VALIDER le zip FINAL `owismind_dev_v2-upload.zip`** (remplace le
-   plugin dev_v2 en DSS, restart backend de sa webapp ; prod + dev stable intacts). Smoke : zone
-   CALCULER sur `amount_eur` (5 cartes dont Médiane) ; plage `year_month` De/À + « Année complète » ;
-   Analyser (Médiane de X, buckets chronologiques, note Top 50) ; Evidence -> onglet Source data :
-   chip agent verrouillé + zone Calculer + plage + compte, mêmes chiffres que la table ; ouverture
-   simple du panneau de preuves = AUCUN appel `/evidence/aggregate` (surface lazy) ; dark. Puis à la
-   demande : port vers le DEV principal / prod ; différés (refetch meta par table multi-source,
-   export CSV d'agrégat, vues sauvegardées, comparaison de périodes, profil de colonne). Voir
-   `sessions/2026-07-06.md` + **L132-L133**.
+0🖥️NEW (2026-07-06 Run 2). **UPLOADER + VALIDER le zip `owismind_dev_v2-upload.zip` reconstruit**
+   (`index-BvJL4hQU.js`, 82 entrées ; contient Run 1 + Run 2 ; restart backend de sa webapp ; prod +
+   dev stable intacts). Smoke Run 2 : popover « Ajouter un filtre » se ferme au 1er clic extérieur
+   (y compris clic sur le chrome DSS) et à Échap ; zone CALCULER = 1 carte Somme par défaut, dropdown
+   « Mesures » (dernier choix non-décochable avec tooltip), gros chiffre complet jamais tronqué ;
+   filtre `year_month` (colonne string à valeurs ISO) = mode plage AUTO + bascule « Choisir des
+   valeurs précises » (chip BETWEEN bornes `YYYY-MM`..`YYYY-MM-99`) ; CASCADE : filtre
+   `phase=ACTUALS` puis picker client = seuls les clients avec ACTUALS, éditer une chip = ses propres
+   valeurs restent proposées ; fermer/rouvrir le panneau = filtres + recherche (visible dans le
+   champ) + calc restaurés ; taper un prompt avec filtres actifs = bandeau -> Inclure -> chip
+   « Données à l'écran » -> la réponse exploite/cite les chiffres de l'écran ; refus = plus de
+   bandeau tant que la vue ne change pas ; dark. **PUIS recoller le prompt orchestrateur DEV**
+   (`dataiku-agents/.../OWISMIND_DEV_OWIsMind_orchestrator.py`, Code Agent 038G7mlF env 3.11 :
+   paragraphe SOURCE-DATA VIEW). Smoke Run 1 toujours valable (Analyser, Evidence lazy). Puis à la
+   demande : port DEV principal / prod ; différés (refetch meta par table multi-source, export CSV
+   d'agrégat, comparaison de périodes, profil de colonne, contexte évidence legacy enrichi). Voir
+   `sessions/2026-07-06.md` (Run 2) + **L134-L137**.
 0🏗️NEW (2026-07-03 Run 2). **RECOLLER + VALIDER la refonte benchmark.** LAB : coller les 3 panes
    launcher (`body.html` + `script.js` + `style.css` ; backend.py inchangé ce run mais la route
    `/api/config` du Run 1 reste à coller) et recharger. Plugin : uploader le zip DEV

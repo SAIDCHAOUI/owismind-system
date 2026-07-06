@@ -3108,5 +3108,68 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `python-lib/owismind/storage/sql_config.py`.
 - **Date** : 2026-07-06.
 
+## L134 - Workflow d'agents : « StructuredOutput retry cap exceeded » ne veut PAS dire travail perdu
+- **Contexte** : session 2026-07-06 Run 2, vagues d'implémentation en agents Opus via le tool
+  Workflow avec `schema` (sortie structurée forcée).
+- **Ce qui a échoué** : 3 agents sur 6 (A4, W2a, W2b) ont terminé leur rapport par
+  « StructuredOutput retry cap (5) exceeded » -> `parallel()` renvoie null, AUCUN rapport. Réflexe
+  naïf = relancer l'agent, ce qui aurait dupliqué ou écrasé des édits.
+- **Solution qui marche** : (1) `git status`/`git diff --stat` d'abord : dans les 3 cas le travail
+  était COMPLET (fichiers + tests en place) ; (2) lire la fin du transcript
+  (`subagents/workflows/<wf>/agent-*.jsonl`, derniers blocs assistant) : « All checks pass. Task
+  complete » ; (3) vérifier soi-même (suites, build) au lieu de relancer ; (4) pour les GROS agents
+  d'implémentation, ne pas exiger de schema : sortie texte simple (le schéma reste ok pour les
+  scouts/refutateurs courts).
+- **Preuve-vérification** : les 3 lots vérifiés verts sans aucune relance (721 -> 772 tests backend).
+- **Source** : sessions/2026-07-06.md Run 2.
+- **Date** : 2026-07-06.
+
+## L135 - Étendre un chemin de requête « frère » = refléter TOUT le scope du chemin de référence (pas seulement les morceaux évidents)
+- **Contexte** : cascade du picker distinct : `/evidence/distinct` devait refléter le scope de
+  `/evidence/rows` (filters + drill + search).
+- **Ce qui a échoué** : l'implémentation a câblé filters/drill/scope_q mais gardé la vieille boucle
+  de prédicats verrouillés qui IGNORE `kept_ids` : retirer une chip verrouillée non-=/IN élargissait
+  les lignes mais pas le picker (valeur visible impossible à cocher = exactement le piège que la
+  cascade devait supprimer). Le front envoyait même kept_ids, que la route jetait (`_kept_ids`).
+- **Solution qui marche** : dériver le scope du frère depuis la MÊME source de vérité
+  (`_evidence_conditions` : `kept = set(kept_ids) if kept_ids is not None else None`, skip des
+  prédicats hors kept) ; un underscore prefix sur un paramètre validé (`_kept_ids`) est un signal
+  d'alarme en revue. Trouvé par la revue adversariale (lentille SQL) + confirmé par refutateur.
+- **Preuve-vérification** : 4 tests ajoutés (retiré-non-scopé, gardé-scopé, None = tous, composition
+  avec exclude_id) ; 772 verts.
+- **Source** : sessions/2026-07-06.md Run 2 ; evidence/service.py `evidence_distinct`.
+- **Date** : 2026-07-06.
+
+## L136 - Bloc de prompt borné à dégradation : RÉSERVER la phrase contractuelle de queue avant la troncature dure
+- **Contexte** : section SOURCE-DATA VIEW du bloc `[ON SCREEN NOW]`, budget 1200 chars avec échelle
+  de dégradation, phrase de permission verbatim (« quote them VERBATIM... ») ajoutée en DERNIER.
+- **Ce qui a échoué** : la troncature finale `section[:1200] + '...'` coupe depuis la fin -> la
+  phrase de permission (la ligne LA PLUS importante, seule porteuse du cadrage quand le prompt
+  orchestrateur n'est pas encore recollé) sautait précisément dans les cas de débordement ; et
+  l'échelle ne dégradait jamais la ligne drill (6 items x 80c = déborde à elle seule).
+- **Solution qui marche** : construire le CORPS sans la phrase, réserver `len(permission)` dans le
+  budget, dégrader le corps (drop breakdown -> collapse filtres -> collapse drill -> tronquer le
+  corps), puis TOUJOURS appendre la phrase. Invariant testé : résultat <= MAX et contient la
+  permission dans TOUS les chemins de débordement.
+- **Preuve-vérification** : tests état-max sanitisé (2758c collapsé) : permission présente, <= 1200.
+- **Source** : sessions/2026-07-06.md Run 2 ; agents/context.py `_source_state_section`.
+- **Date** : 2026-07-06.
+
+## L137 - Un ref local miroir d'un champ de store casse dès que le store gagne un écrivain ASYNCHRONE
+- **Contexte** : `SourceExplorer.vue` garde un ref local `term` miroir de `sources.q` (synchronisé à
+  l'init + au watcher `activeSourceId`) ; la persistance des vues (Run 2) restaure `q` APRÈS le
+  fetch meta (asynchrone).
+- **Ce qui a échoué** : à la réouverture du panneau, lignes/compte/calc filtrés par la recherche
+  restaurée mais champ de recherche VIDE (et son X caché) : l'user voit des résultats filtrés sans
+  voir par quoi. Vu indépendamment par la revue (lentille state) ET par la QA runtime.
+- **Solution qui marche** : watcher `sources.q -> term` gardé par inégalité (`(q||'') !== term.value`)
+  : le round-trip normal de frappe (setQuery avec q === term) ne se bat jamais avec le debounce.
+  Règle générale : recenser TOUS les écrivains d'un champ de store avant d'en faire un miroir local ;
+  un nouvel écrivain asynchrone impose le watcher inverse.
+- **Preuve-vérification** : QA post-fix R1 : input value = 'Alpha' après réouverture, payloads
+  identiques.
+- **Source** : sessions/2026-07-06.md Run 2 ; components/sources/SourceExplorer.vue.
+- **Date** : 2026-07-06.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

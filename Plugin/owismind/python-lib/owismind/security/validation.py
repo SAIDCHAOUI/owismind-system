@@ -560,6 +560,23 @@ def _parse_evidence_table(raw_table):
     return None
 
 
+def _parse_optional_exclude_id(value):
+    """The server id of the chip being edited, or None. Never raises.
+
+    On /evidence/distinct the chip currently being edited must not scope its own picker,
+    so the client sends its predicate id here. A missing / malformed / negative value
+    (or a bool - the int-subclass trap) degrades to None (the picker is then simply
+    scoped by every locked predicate). Mirrors the old GET query-param parse verbatim.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return n if n >= 0 else None
+
+
 def validate_evidence_rows_request(payload):
     """Validate a /evidence/rows payload.
 
@@ -597,6 +614,40 @@ def validate_evidence_rows_request(payload):
     q = _clean_source_query(payload.get("q"))
     return (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
             drill, table, q)
+
+
+def validate_evidence_distinct_request(payload):
+    """Validate an /evidence/distinct payload (POST). Returns
+    ``(exchange_id, column, exclude_id, q, filters, kept_ids, include_advanced, drill,
+    scope_q)``.
+
+    The filter-chip picker is now CASCADING: it only offers values compatible with the
+    OTHER currently-active chips (the trap the redesign removes - picking a value with
+    zero rows under an active filter). The client therefore sends the same scope object
+    /evidence/rows does, so the scope fields are validated by the EXACT same parsers
+    (``_parse_evidence_filters`` with ``SOURCE_FILTER_OPS`` incl. a BETWEEN date-range
+    chip, ``_parse_evidence_kept_ids``, ``_parse_evidence_drill``, ``include_advanced``
+    coerced to a bool). ``column`` is the picked column (shape-only, existence checked
+    against the live schema by the service). Two independent search terms travel: ``q``
+    is the picker's own search on THAT column, ``scope_q`` the table-level search over
+    ALL columns (both cleaned by ``_clean_source_query``, never raise). ``exclude_id`` is
+    the server id of the chip being edited (its own predicate must not scope its own
+    picker; a malformed value degrades to None). A request WITHOUT the new scope fields
+    validates to empty scope and yields the same picker as before.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
+    column = validate_evidence_column(payload.get("column"))
+    exclude_id = _parse_optional_exclude_id(payload.get("exclude_id"))
+    q = _clean_source_query(payload.get("q"))
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
+    kept_ids = _parse_evidence_kept_ids(payload.get("kept_ids"))
+    include_advanced = bool(payload.get("include_advanced"))
+    drill = _parse_evidence_drill(payload.get("drill"))
+    scope_q = _clean_source_query(payload.get("scope_q"))
+    return (exchange_id, column, exclude_id, q, filters, kept_ids, include_advanced,
+            drill, scope_q)
 
 
 # --- Source Data Explorer ------------------------------------------------------
@@ -674,17 +725,30 @@ def validate_source_meta_params(agent, source):
     return _validate_source_agent(agent), _validate_source_id(source)
 
 
-def validate_source_distinct_params(agent, source, column, q=None):
-    """The ``(agent, source, column, q)`` query params on /source/distinct.
+def validate_source_distinct_request(payload):
+    """Validate a /source/distinct payload (POST). Returns
+    ``(agent_key, source_id, column, q, filters, scope_q)``.
 
-    Returns ``(agent_key, source_id, column, q)``; ``column`` is shape-only (existence
-    is checked against the live schema by the service), reusing ``validate_evidence_column``.
-    ``q`` is the OPTIONAL free-text search term over that one column: cleaned + capped by
-    ``_clean_source_query`` (never raises - a malformed value degrades to "", i.e. no
-    search; the service treats a folded needle < 2 chars as no search too).
+    The filter-chip picker is now CASCADING: it only offers values compatible with the
+    OTHER currently-active filters (so picking a value that has zero rows under an active
+    filter is no longer possible). The client sends the same scope /source/rows does, so
+    the agent / source / filters core is validated by the EXACT same helpers (same stable
+    codes, ``SOURCE_FILTER_OPS`` including a BETWEEN date-range chip). Two independent
+    search terms travel: ``q`` is the picker's own search on THAT column (cleaned + capped),
+    ``scope_q`` the table-level free-text search over ALL columns (both never raise). A
+    request WITHOUT filters/scope_q validates to empty scope and yields the same picker as
+    before. Column existence is checked against the live schema by the service; here only
+    shape/bounds.
     """
-    return (_validate_source_agent(agent), _validate_source_id(source),
-            validate_evidence_column(column), _clean_source_query(q))
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    agent_key = _validate_source_agent(payload.get("agent"))
+    source_id = _validate_source_id(payload.get("source"))
+    column = validate_evidence_column(payload.get("column"))
+    q = _clean_source_query(payload.get("q"))
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
+    scope_q = _clean_source_query(payload.get("scope_q"))
+    return agent_key, source_id, column, q, filters, scope_q
 
 
 # --- Source Data Explorer: safe aggregation -----------------------------------

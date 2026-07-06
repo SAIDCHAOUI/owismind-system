@@ -15,7 +15,7 @@ from owismind.security.validation import (  # noqa: E402
     validate_agent_meta,
     validate_evidence_rows_request,
     validate_source_aggregate_request,
-    validate_source_distinct_params,
+    validate_source_distinct_request,
     validate_source_meta_params,
     validate_source_rows_request,
     validate_sources_block,
@@ -251,32 +251,30 @@ class MetaDistinctParamTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "invalid_source")
 
     def test_distinct_params(self):
-        # q is absent -> the 4th element is "" (no search), byte-identical scope.
-        self.assertEqual(validate_source_distinct_params("ag_x", "2", "Customer Id"),
-                         ("ag_x", 2, "Customer Id", ""))
+        # agent / source / column / q core (through the POST request validator, the only
+        # production entry point): q absent -> the 4th element is "" (no search).
+        out = validate_source_distinct_request(
+            {"agent": "ag_x", "source": "2", "column": "Customer Id"})
+        self.assertEqual(out[:4], ("ag_x", 2, "Customer Id", ""))
         with self.assertRaises(ValidationError) as ctx:
-            validate_source_distinct_params("ag_x", "0", "")
+            validate_source_distinct_request({"agent": "ag_x", "source": "0", "column": ""})
         self.assertEqual(ctx.exception.code, "invalid_filter_column")
         with self.assertRaises(ValidationError) as ctx:
-            validate_source_distinct_params("ag_x", "0", "x" * 129)
+            validate_source_distinct_request(
+                {"agent": "ag_x", "source": "0", "column": "x" * 129})
         self.assertEqual(ctx.exception.code, "invalid_filter_column")
 
     def test_distinct_params_q_cleaned(self):
         # A valid q is trimmed/collapsed; a non-str degrades to "" (never raises);
         # an over-long q is capped; multiple/control spaces collapse to single ones.
-        self.assertEqual(
-            validate_source_distinct_params("ag_x", "0", "Customer Id", "  algerie ")[3],
-            "algerie")
-        self.assertEqual(
-            validate_source_distinct_params("ag_x", "0", "Customer Id", "a\t\nb   c")[3],
-            "a b c")
-        self.assertEqual(
-            validate_source_distinct_params("ag_x", "0", "Customer Id", 123)[3], "")
-        self.assertEqual(
-            validate_source_distinct_params("ag_x", "0", "Customer Id", None)[3], "")
-        long_q = validate_source_distinct_params(
-            "ag_x", "0", "Customer Id", "x" * (MAX_SOURCE_QUERY_CHARS + 50))[3]
-        self.assertEqual(len(long_q), MAX_SOURCE_QUERY_CHARS)
+        def _q(value):
+            return validate_source_distinct_request(
+                {"agent": "ag_x", "source": "0", "column": "Customer Id", "q": value})[3]
+        self.assertEqual(_q("  algerie "), "algerie")
+        self.assertEqual(_q("a\t\nb   c"), "a b c")
+        self.assertEqual(_q(123), "")
+        self.assertEqual(_q(None), "")
+        self.assertEqual(len(_q("x" * (MAX_SOURCE_QUERY_CHARS + 50))), MAX_SOURCE_QUERY_CHARS)
 
 
 def _agg(**over):

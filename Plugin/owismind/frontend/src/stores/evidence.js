@@ -15,6 +15,7 @@ import {
   chipsFromMeta,
   buildRowsPayload,
   buildEvidenceAggregatePayload,
+  buildEvidenceDistinctScope,
   buildDrillLabels,
   isModified,
   normalizeEditableOp,
@@ -510,13 +511,23 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // Distinct values for the picker - returned to the caller (the popover owns
   // its own transient open/loading state), never stored here. NOT staleness-
   // guarded: the popover must drop a result that resolves after the panel
-  // moved on (it closes on outside-click anyway). `excludeId` = server id of
-  // the chip being edited (its predicate must not scope its own picker). `q`
-  // (optional) narrows the window server-side over ALL values; empty/absent
-  // keeps the default top-N.
-  function loadDistinct(column, excludeId, q) {
+  // moved on (it closes on outside-click anyway). The picker is CASCADING: it
+  // only offers values compatible with the OTHER active chips + the table-level
+  // search, so it carries that scope (built minus the chip being edited).
+  // `excludeId` = server id of the locked chip being edited (its predicate must
+  // not scope its own picker). `search` (optional) is the picker's own search on
+  // THAT column; empty/absent keeps the default top-N. `excludeChipKey` (optional)
+  // is the local key of the chip being edited: it is dropped from the cascading
+  // scope so an editable/user chip never self-scopes either (omit it for the ADD
+  // flow, where every chip applies). The table-level search (the store's `q`)
+  // travels as scope_q over ALL columns.
+  function loadDistinct(column, excludeId, search, excludeChipKey) {
     if (!exchangeId.value) return Promise.reject(new Error('evidence_unavailable'))
-    return fetchEvidenceDistinct(exchangeId.value, column, excludeId, q)
+    const scope = buildEvidenceDistinctScope(
+      chips.value, includeAdvanced.value,
+      drill.value ? drill.value.labels : null, q.value, excludeChipKey,
+    )
+    return fetchEvidenceDistinct(exchangeId.value, column, excludeId, search, scope)
   }
 
   // Map each real tab key to a FIRST-CLASS analytics event, so dashboards read
@@ -561,10 +572,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
     totalCount: surface.totalCount,
     totalLoading: surface.totalLoading,
     calcColumn: surface.calcColumn,
+    calcFns: surface.calcFns,
     calcValues: surface.calcValues,
     calcLoading: surface.calcLoading,
     calcError: surface.calcError,
     setCalcColumn: surface.setCalcColumn,
+    setCalcFns: surface.setCalcFns,
     reloadCalc: surface.reloadCalc,
     analyzeOpen: surface.analyzeOpen,
     analyzeGroup: surface.analyzeGroup,

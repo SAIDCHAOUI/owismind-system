@@ -729,6 +729,11 @@ export const extraMessages = {
     'prompt.ctx.title': 'Contexte pour l\'agent',
     'prompt.ctx.clear': 'Tout retirer',
     'prompt.ctx.remove': 'Retirer cette valeur',
+    'prompt.screen.detected': 'Vous avez façonné une vue des données (filtres, recherche, calculs). La joindre comme contexte pour l\'agent ?',
+    'prompt.screen.include': 'Inclure',
+    'prompt.screen.dismiss': 'Non merci',
+    'prompt.screen.chip': 'Données à l\'écran : {0}',
+    'prompt.screen.chip_remove': 'Retirer ce contexte',
     'src.loading': 'Chargement…',
     'src.error': 'Impossible de charger les données.',
     'src.retry': 'Réessayer',
@@ -755,6 +760,8 @@ export const extraMessages = {
     // depend on the column TYPE, never a hardcoded column name.
     'src.calc.title': 'Calculer',
     'src.calc.choose': '- Choisir une colonne -',
+    'src.calc.measures': 'Mesures',
+    'src.calc.keepOne': 'Au moins une mesure reste affichée',
     'src.calc.sum': 'Somme',
     'src.calc.avg': 'Moyenne',
     'src.calc.median': 'Médiane',
@@ -794,6 +801,9 @@ export const extraMessages = {
     'src.range.fmt': 'AAAA-MM',
     'src.range.apply': 'Appliquer',
     'src.range.chip': '{0} à {1}',
+    // Quiet text-link toggles between the month RANGE picker and the exact-values list.
+    'src.range.pickList': 'Choisir des valeurs précises',
+    'src.range.pickRange': 'Filtrer par plage',
     // Chat - quiet "check this number" link under an agent answer (opens the proof panel
     // directly on the Source data tab).
     'ev.verify': 'Vérifier ce chiffre',
@@ -1515,6 +1525,11 @@ export const extraMessages = {
     'prompt.ctx.title': 'Context for the agent',
     'prompt.ctx.clear': 'Clear all',
     'prompt.ctx.remove': 'Remove this value',
+    'prompt.screen.detected': 'You shaped a data view (filters, search, calculations). Include it as context for the agent?',
+    'prompt.screen.include': 'Include',
+    'prompt.screen.dismiss': 'No thanks',
+    'prompt.screen.chip': 'On-screen data: {0}',
+    'prompt.screen.chip_remove': 'Remove this context',
     'src.loading': 'Loading…',
     'src.error': 'Could not load the data.',
     'src.retry': 'Retry',
@@ -1541,6 +1556,8 @@ export const extraMessages = {
     // depend on the column TYPE, never a hardcoded column name.
     'src.calc.title': 'Calculate',
     'src.calc.choose': '- Choose a column -',
+    'src.calc.measures': 'Measures',
+    'src.calc.keepOne': 'At least one measure stays shown',
     'src.calc.sum': 'Sum',
     'src.calc.avg': 'Average',
     'src.calc.median': 'Median',
@@ -1580,6 +1597,9 @@ export const extraMessages = {
     'src.range.fmt': 'YYYY-MM',
     'src.range.apply': 'Apply',
     'src.range.chip': '{0} to {1}',
+    // Quiet text-link toggles between the month RANGE picker and the exact-values list.
+    'src.range.pickList': 'Pick exact values',
+    'src.range.pickRange': 'Filter by range',
     // Chat - quiet "check this number" link under an agent answer (opens the proof panel
     // directly on the Source data tab).
     'ev.verify': 'Check this number',
