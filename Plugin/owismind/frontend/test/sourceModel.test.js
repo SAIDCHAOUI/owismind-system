@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   normalizeSourceOp,
+  nextSortDir,
   makeSourceChip,
   effectiveSourceQuery,
   chipsToFilters,
@@ -25,6 +26,16 @@ import { extraMessages } from '../src/i18n/extra.js'
 test('normalizeSourceOp: single value = "=", several = "IN"', () => {
   assert.equal(normalizeSourceOp(['x']), '=')
   assert.equal(normalizeSourceOp(['x', 'y']), 'IN')
+})
+
+test('nextSortDir: 3-state cycle none -> asc -> desc -> none', () => {
+  // Not sorted (null / undefined / '') starts the cycle at ascending.
+  assert.equal(nextSortDir(null), 'asc')
+  assert.equal(nextSortDir(undefined), 'asc')
+  assert.equal(nextSortDir(''), 'asc')
+  // asc -> desc -> back to no sort.
+  assert.equal(nextSortDir('asc'), 'desc')
+  assert.equal(nextSortDir('desc'), null)
 })
 
 test('makeSourceChip: stable key, normalized op, cloned values', () => {

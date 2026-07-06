@@ -21,7 +21,7 @@ import {
   normalizeEditableOp,
   effectiveEvidenceQuery,
 } from '../composables/evidenceModel.js'
-import { chipOp } from '../composables/sourceModel.js'
+import { chipOp, nextSortDir } from '../composables/sourceModel.js'
 import { createAggregateSurface } from '../composables/aggregateSurface.js'
 import { track } from '../services/track.js'
 
@@ -80,9 +80,14 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // user can recover (retry / change a filter) without losing the panel.
   const rowsError = ref('')
 
+  // A pulse from a header column menu asking the chips component to open the value picker
+  // pre-set to a column: { column, n } (n bumped each call so the same column re-fires).
+  const columnFilterRequest = ref(null)
+
   let seq = 0 // stale-response guard for open/close transitions
   let rowsSeq = 0 // per-rows-request guard: last REQUEST wins, not last response
   let userChipSeq = 0 // keys for user-added chips
+  let columnFilterSeq = 0 // monotonic counter behind columnFilterRequest.n
 
   const available = computed(() => !!(meta.value && meta.value.available))
   const modified = computed(
@@ -476,13 +481,25 @@ export const useEvidenceStore = defineStore('evidence', () => {
   }
 
   // --- table interactions ------------------------------------------------------
-  function setSort(column) {
-    sort.value =
-      sort.value && sort.value.column === column
-        ? { column, dir: sort.value.dir === 'asc' ? 'desc' : 'asc' }
-        : { column, dir: 'asc' }
+  // 3-state sort (mirrors the Source explorer). `dir` explicit ('asc' | 'desc' | null)
+  // sets that direction outright (null clears the sort); omitted, it CYCLES this column
+  // through nextSortDir (a header NAME click: none -> asc -> desc -> none). Sorting a
+  // DIFFERENT column starts at 'asc'. offset reset + refreshRows behaviour unchanged.
+  function setSort(column, dir) {
+    const current = sort.value && sort.value.column === column ? sort.value.dir : null
+    const nextDir = dir === undefined ? nextSortDir(current) : dir
+    sort.value = nextDir ? { column, dir: nextDir } : null
     offset.value = 0
     refreshRows()
+  }
+
+  // A header column menu asked to open the value picker pre-set to `column`. The chips
+  // component watches this ref; `n` is bumped every call so re-requesting the SAME column
+  // still re-fires the watcher (the popover reopens on the same column).
+  function requestColumnFilter(column) {
+    if (!column) return
+    columnFilterSeq += 1
+    columnFilterRequest.value = { column, n: columnFilterSeq }
   }
   // Switch the live rows table to another matched source dataset (multi-table
   // SQL). Resets the lazy state and re-queries page 0 of THAT table. A drill is
@@ -561,6 +578,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     open, exchangeId, meta, chips, includeAdvanced, rows, offset, hasMore, sort, drill, q,
     loading, rowsLoading, error, rowsError, available, modified,
     sources, hasMultipleSources, selectedTable, sourceTabKey,
+    columnFilterRequest, requestColumnFilter,
     activeTab, setActiveTab, setQuery,
     openForExchange, close, refreshRows, loadMoreRows,
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,

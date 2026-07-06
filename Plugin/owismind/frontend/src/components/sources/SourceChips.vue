@@ -8,7 +8,7 @@
 // The "add filter" popover is a two-step flow (searchable column list -> value
 // picker); the value picker is searchable client-side over the loaded window and,
 // when the server list is truncated, escalates to a server-side search on Enter.
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
 import { useClickOutside } from '../../composables/useClickOutside.js'
@@ -363,6 +363,24 @@ function rangeText(chip) {
   const r = betweenValuesToMonthRange(chip.values)
   return r ? t('src.range.chip', [r.from, r.to]) : displayValues(chip)
 }
+
+// A header column menu asked to open the value picker pre-set to a column: replay the add
+// flow (state reset + column pick) so the whole existing picker machinery is reused
+// (distinct load, cascade, sniffing, range mode). The store bumps `n` on every request so
+// re-picking the SAME column re-fires this watcher; ignore a column no longer present.
+watch(
+  () => sources.columnFilterRequest,
+  (req) => {
+    if (!req || !req.column) return
+    if (!columns.value.some((c) => c.name === req.column)) return
+    // At the backend filter cap the add popover body never renders (v-if canAddFilter):
+    // opening would arm the dismiss backdrop with NO picker behind it, a dead click trap.
+    // The column menu disables its Filter item at the cap; this is the belt.
+    if (!canAddFilter.value) return
+    openAdd()
+    pickColumn(req.column)
+  },
+)
 </script>
 
 <template>

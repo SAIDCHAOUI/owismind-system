@@ -11,9 +11,10 @@ import { useEvidenceStore } from '../../stores/evidence.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
-import { isNumericColType, formatStatNumber } from '../../composables/sourceModel.js'
+import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from '../sources/CellActionPopover.vue'
+import ColumnMenu from '../sources/ColumnMenu.vue'
 import { DataLoader, Icon } from '../ui'
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
@@ -21,6 +22,14 @@ import { DataLoader, Icon } from '../ui'
 // server keeps returning ALL columns; search still spans every column server-side.
 const COLS_INITIAL = 30
 const COLS_MORE = 20
+
+// Mirror of the backend per-request filter cap (EvidenceChips MAX_FILTERS, counted over
+// editable + user chips only): at the cap the add picker cannot render, so the column
+// menu's Filter item disables instead.
+const MAX_FILTERS = 20
+// Mirror of the picker's per-chip value cap (EvidenceChips MAX_FILTER_VALUES / backend
+// MAX_EVIDENCE_IN_VALUES): a single equality/membership chip never accumulates more.
+const MAX_FILTER_VALUES = 50
 
 const { t, locale } = useI18n()
 const evidence = useEvidenceStore()
@@ -46,7 +55,7 @@ const colsWindowed = computed(() => allColumns.value.length > columns.value.leng
 
 // Reset the visible window whenever the table's columns change (new exchange). A
 // column change also means a new source/exchange, so drop any open popover then.
-watch(allColumns, () => { colCount.value = COLS_INITIAL; closePopover() })
+watch(allColumns, () => { colCount.value = COLS_INITIAL; closePopover(); closeColMenu() })
 
 function sortDir(name) {
   const s = evidence.sort
@@ -93,6 +102,74 @@ function usePopoverValue() {
   else if (status === 'exists') push(t('src.cell.exists'), { icon: 'info' })
   else if (status === 'full') push(t('src.cell.full', [MAX_CONTEXT_VALUES]), { tone: 'warn', icon: 'info' })
   closePopover()
+}
+
+// Filter the table on the clicked cell's exact value, against the EVIDENCE store chips.
+// Merge target = an existing =/IN chip ON that column that we may edit: a user chip, or an
+// editable agent chip - prefer a user chip when both exist. A LOCKED agent chip (non-
+// editable) or a BETWEEN range chip is NEVER touched: if the column carries only those,
+// a fresh user chip is added via addFilter. Every outcome is acknowledged with a toast
+// (like the "use for agent" action): a no-op is never a silent close. The store's
+// setChipValues / addFilter already refetch rows + aggregates and fire their own tracking.
+function filterPopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const raw = p.value
+  const candidates = evidence.chips.filter(
+    (c) => c.column === p.column && chipOp(c) !== 'BETWEEN' && (c.source === 'user' || c.editable),
+  )
+  const chip = candidates.find((c) => c.source === 'user') || candidates[0]
+  if (chip) {
+    const values = chip.values || []
+    if (values.some((v) => String(v) === raw)) {
+      push(t('src.cell.filterExists'), { icon: 'info' })
+    } else if (values.length >= MAX_FILTER_VALUES) {
+      push(t('src.cell.filterFull', [MAX_FILTER_VALUES]), { tone: 'warn', icon: 'info' })
+    } else {
+      evidence.setChipValues(chip.key, values.concat([raw]))
+      push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
+    }
+  } else {
+    evidence.addFilter(p.column, [raw])
+    push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
+  }
+  closePopover()
+}
+
+// Filtered-column indicator + header column menu. `filteredColumns` is the set of every
+// column carrying a chip - agent-locked chips included, since they ALL constrain the view
+// (drives the orange header cue + the menu checkmark). The menu is a fixed-position card.
+const filteredColumns = computed(() => {
+  const set = new Set()
+  for (const c of evidence.chips) {
+    if (c && c.column) set.add(c.column)
+  }
+  return set
+})
+function isFiltered(name) {
+  return filteredColumns.value.has(name)
+}
+
+const colMenu = ref(null) // { x, y, column } | null
+function openColMenu(event, column) {
+  const r = event.currentTarget.getBoundingClientRect()
+  colMenu.value = { x: r.left, y: r.bottom + 4, column }
+}
+function closeColMenu() {
+  colMenu.value = null
+}
+const menuSortDir = computed(() => (colMenu.value ? sortDir(colMenu.value.column) || null : null))
+const menuFiltered = computed(() => (colMenu.value ? isFiltered(colMenu.value.column) : false))
+const menuCanFilter = computed(
+  () => evidence.chips.filter((c) => c.editable || c.source === 'user').length < MAX_FILTERS,
+)
+function onMenuSort(dir) {
+  if (colMenu.value) evidence.setSort(colMenu.value.column, dir)
+  closeColMenu()
+}
+function onMenuFilter() {
+  if (colMenu.value) evidence.requestColumnFilter(colMenu.value.column)
+  closeColMenu()
 }
 
 // ── Infinite scroll ───────────────────────────────────────────────────────────
@@ -170,9 +247,10 @@ watch(colSentinelEl, (el) => {
   else teardownColObserver()
 })
 
-// Close the popover when the table scrolls (its anchor coordinates would go stale).
+// Close the popover + header menu when the table scrolls (anchor coordinates go stale).
 function onScroll() {
   if (popover.value) closePopover()
+  if (colMenu.value) closeColMenu()
 }
 watch(scrollEl, (el, old) => {
   if (old) old.removeEventListener('scroll', onScroll)
@@ -197,7 +275,7 @@ onBeforeUnmount(() => {
       <table>
         <thead>
           <tr>
-            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name) }">
+            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name) }">
               <div class="th-inner">
                 <button type="button" class="th-btn" @click="evidence.setSort(c.name)">
                   <span class="th-label">{{ c.name }}</span>
@@ -217,6 +295,18 @@ onBeforeUnmount(() => {
                   :aria-pressed="evidence.calcColumn === c.name"
                   @click.stop="evidence.setCalcColumn(c.name)"
                 >&#931;</button>
+                <!-- Column menu trigger: 3-state sort + "Filter values...". Revealed on
+                     hover/focus, and pinned visible when the column is sorted or filtered. -->
+                <button
+                  type="button"
+                  class="th-menu"
+                  :class="{ pinned: sortDir(c.name) || isFiltered(c.name) }"
+                  :title="t('src.col.menu')"
+                  :aria-label="t('src.col.menu')"
+                  @click.stop="openColMenu($event, c.name)"
+                >
+                  <Icon name="chevronDown" />
+                </button>
               </div>
             </th>
             <!-- Horizontal column sentinel: reveals the next batch of columns when
@@ -288,7 +378,20 @@ onBeforeUnmount(() => {
     :source="popover.source"
     :can-use="popover.canUse"
     @use="usePopoverValue"
+    @filter="filterPopoverValue"
     @close="closePopover"
+  />
+  <ColumnMenu
+    v-if="colMenu"
+    :x="colMenu.x"
+    :y="colMenu.y"
+    :column="colMenu.column"
+    :sort-dir="menuSortDir"
+    :filtered="menuFiltered"
+    :can-filter="menuCanFilter"
+    @sort="onMenuSort"
+    @filter="onMenuFilter"
+    @close="closeColMenu"
   />
 </template>
 
@@ -328,6 +431,8 @@ thead th {
 }
 thead th:hover { color: var(--text); }
 thead th.sorted { color: var(--orange); }
+/* Filtered column: orange text cue (charte: orange text only, no background fill). */
+thead th.filtered { color: var(--orange-text); }
 .th-inner { display: flex; align-items: center; }
 .th-btn {
   display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
@@ -343,6 +448,18 @@ thead th.sorted { color: var(--orange); }
 }
 .th-sigma:hover { color: var(--text); background: var(--surface-hover); }
 .th-sigma.active { color: var(--orange-text); }
+/* Column-menu trigger: hidden until the header is hovered/focused, pinned visible when
+   the column is sorted or filtered. Square, no layout shift. */
+.th-menu {
+  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: 0;
+  color: var(--text-3); opacity: 0;
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+.th-menu :deep(.ui-icon) { width: 14px; height: 14px; display: block; }
+.th-menu:hover { color: var(--text); }
+thead th:hover .th-menu, thead th:focus-within .th-menu, .th-menu.pinned { opacity: 1; }
+/* Filtered column: the trigger is orange too (mirrors the header text cue). */
+thead th.filtered .th-menu { color: var(--orange-text); opacity: 1; }
 tbody td {
   padding: 7px 12px; border-bottom: 1px solid var(--border);
   color: var(--text); white-space: nowrap; overflow: hidden;

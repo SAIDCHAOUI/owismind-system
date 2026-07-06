@@ -100,6 +100,16 @@ export function chipsToFilters(chips) {
   return filters
 }
 
+// Next direction of a 3-state header sort cycle for ONE column: nothing -> ascending ->
+// descending -> nothing. `current` is that column's live direction ('asc' | 'desc') or
+// null/undefined (not sorted). Pure so the store (and node tests) share one source of
+// truth: a header-name click drives the cycle, the column menu sets a direction outright.
+export function nextSortDir(current) {
+  if (current === 'asc') return 'desc'
+  if (current === 'desc') return null
+  return 'asc'
+}
+
 // Assemble the /source/rows request body. `sourceId` is the integer id from the
 // agent's `sources` list; `chips` are the user filters; `sort` is {column, dir} or
 // null. Chips with no column or no values are skipped defensively.

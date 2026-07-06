@@ -163,14 +163,13 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-06 Run 3 : fix plages (type SQL réel) + filtre depuis cellule + transparence totale du contexte écran → détail `sessions/2026-07-06.md` (Run 3) + **L138**
-- **✅ Validé local (revue 2/2 confirmés corrigés + QA S1-S3 PASS), NON validé DSS.** Zip dev_v2
-  **`index-gYAOS4OQ.js`** À UPLOADER (contient Runs 2+3 ; restart backend ; colonne `screen_ctx`
-  se crée au 1er ensure). Paragraphe orchestrateur DEV (Run 2) toujours à recoller.
-- Bug user corrigé : bornes de plage = MIMENT le format observé des valeurs (L138, plus de
-  `invalid input syntax for type date`) ; + « Filtrer sur cette valeur » dans le popup de cellule ;
-  + transparence : chip pré-envoi cliquable (détail exact) et ligne « Contexte écran joint »
-  persistée sous le message (colonne `screen_ctx`, 3e usage ADD COLUMN IF NOT EXISTS).
+## 🧭 Dernière session - 2026-07-06 Run 4 : filtre depuis cellule PARTOUT + menu de colonne Sort/Filter + colonne orange → détail `sessions/2026-07-06.md` (Run 4)
+- **✅ Validé local (QA M1-M6 PASS dont parcours Evidence complet stubbé ; revue 1/1 corrigé), NON
+  validé DSS.** Zip dev_v2 **`index-DYvX83Tl.js`** À UPLOADER (Runs 2+3+4 ; les Runs 2+3 webapp +
+  orchestrateur sont déjà VALIDÉS DSS par l'user : « ça marche à merveille »).
+- Fixes : `@filter` manquant dans EvidenceTable (Evidence Studio mort) + toasts sur tous les cas
+  (plus de no-op muet). Features : menu par en-tête (Trier asc/desc/**retirer** + Filtrer les
+  valeurs pré-réglé), clic nom = cycle 3 états, colonnes filtrées en ORANGE, partout.
 
 ## 🧭 Avant - 2026-07-06 Run 2 : Source Data v3 (popover, mesures, plages string, cascade, persistance, contexte écran -> agent) → détail `sessions/2026-07-06.md` (Run 2) + **L134-L137**
 - **✅ Validé local (revue adversariale soldée + QA runtime 8/8 et re-checks 4/4), NON validé DSS.**
@@ -477,14 +476,15 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
-0🖥️NEW (2026-07-06 Runs 2+3). **UPLOADER + VALIDER le zip `owismind_dev_v2-upload.zip` reconstruit**
-   (**`index-gYAOS4OQ.js`**, 82 entrées ; contient Runs 1+2+3 ; restart backend de sa webapp ; prod +
-   dev stable intacts). Smoke Run 3 (retours du matin) : plage sur `year_month` = bornes qui miment
-   le format des valeurs (`...T00:00:00.000Z`/`...T23:59:59.999Z`), plus AUCUNE erreur 409
-   `invalid input syntax for type date` ; clic sur une cellule -> « Filtrer sur cette valeur »
-   (2e valeur de la même colonne = chip IN fusionnée) ; bandeau Inclure -> chip cliquable = détail
-   exact ; envoyer -> ligne « Contexte écran joint » dépliable sous le message, ENCORE LÀ après F5
-   (colonne `screen_ctx` créée au 1er ensure). Smoke Run 2 : popover « Ajouter un filtre » se ferme au 1er clic extérieur
+0🖥️NEW (2026-07-06 Run 4). **UPLOADER + VALIDER le zip `owismind_dev_v2-upload.zip` reconstruit**
+   (**`index-DYvX83Tl.js`**, 82 entrées ; Runs 1 à 4 ; restart backend ; prod + dev stable intacts ;
+   Runs 2+3 déjà validés DSS par l'user). Smoke Run 4 : cellule -> « Filtrer sur cette valeur »
+   AVEC un filtre existant (autre colonne = nouvelle chip, même colonne = fusion IN, toast à chaque
+   fois, jamais muet) ; Evidence Studio table détectée : cellule -> Filtrer = chip user + colonne
+   orange (chips agent verrouillées intactes) ; chevron d'en-tête -> menu Trier asc/desc/**Ne plus
+   trier** + Filtrer les valeurs (picker pré-réglé) ; clic sur le NOM x3 = retour non trié ;
+   colonne filtrée = en-tête orange, redevient normale au retrait ; dark. Smoke Run 3 (si pas déjà
+   fait) : plage `year_month` sans erreur 409 ; ligne « Contexte écran joint » après F5. Smoke Run 2 : popover « Ajouter un filtre » se ferme au 1er clic extérieur
    (y compris clic sur le chrome DSS) et à Échap ; zone CALCULER = 1 carte Somme par défaut, dropdown
    « Mesures » (dernier choix non-décochable avec tooltip), gros chiffre complet jamais tronqué ;
    filtre `year_month` (colonne string à valeurs ISO) = mode plage AUTO + bascule « Choisir des
