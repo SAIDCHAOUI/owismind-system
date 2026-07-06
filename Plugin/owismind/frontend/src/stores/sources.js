@@ -5,6 +5,11 @@
 // overwrite a newer one (`seq` for source/meta transitions, `rowsSeq` for out-of-order
 // rows). The per-exchange Evidence panel is exchange-scoped and does NOT use this store.
 //
+// The DB-computed aggregate surface (row count + Calculate zone + Analyze mini-pivot)
+// lives in the SHARED composables/aggregateSurface.js factory, so the Evidence "Source
+// data" tab offers the exact same tools from one code base. This store wires the factory
+// to its own columns / epoch / backend and re-exposes its state under the same names.
+//
 // SAFETY: NO query fires on store creation or on a hidden mount. The first fetch only
 // happens when a surface becomes visible and calls ensureAgent()/openPanel().
 import { defineStore } from 'pinia'
@@ -14,13 +19,17 @@ import {
   fetchSourceMeta,
   fetchSourceRows,
   fetchSourceDistinct,
+  fetchSourceAggregate,
 } from '../services/backend.js'
 import {
   buildSourceRowsPayload,
+  buildSourceAggregatePayload,
   makeSourceChip,
   normalizeSourceOp,
+  chipOp,
   effectiveSourceQuery,
 } from '../composables/sourceModel.js'
+import { createAggregateSurface } from '../composables/aggregateSurface.js'
 import { track } from '../services/track.js'
 
 // Limit/offset pagination (v2): the first load pulls a big window, then each
@@ -59,6 +68,32 @@ export const useSourcesStore = defineStore('sources', () => {
   // re-activation of an already-loaded source does NOT refetch.
   let loadedSourceId = null
 
+  // A stable signature of the aggregation SCOPE (source + search + filters). Sort is
+  // deliberately excluded: re-sorting the visible window does not change any total.
+  // JSON encoding keeps the boundaries unambiguous whatever a column name / value holds.
+  function _viewSignature() {
+    const chipSig = (chips.value || []).map((c) => [c.column, chipOp(c), c.values])
+    return JSON.stringify([activeSourceId.value, effectiveSourceQuery(q.value), chipSig])
+  }
+
+  // The shared aggregate surface. Every number is computed by the DATABASE over the FULL
+  // filtered set (not the visible window): the row count, the Calculate zone (persistent,
+  // follows the filters) and the Analyze mini-pivot. The store bumps `seq` on every meta
+  // transition, so in-flight aggregate requests are dropped by the epoch guard.
+  const surface = createAggregateSurface({
+    getColumns: () => columns.value,
+    isActive: () => activeSourceId.value != null,
+    getEpoch: () => seq,
+    fetchAggregate: (group, measures, limit) =>
+      fetchSourceAggregate(
+        buildSourceAggregatePayload(
+          agentKey.value, activeSourceId.value, q.value, chips.value, group, measures, limit,
+        ),
+      ),
+    refreshRows: () => refreshRows(),
+    errorCode: 'source_unavailable',
+  })
+
   // Read the agent's configured sources from the session store (never a fetch).
   function _agentSources(key) {
     const a = session.agents.find((x) => x.key === key)
@@ -82,6 +117,7 @@ export const useSourcesStore = defineStore('sources', () => {
     loading.value = false
     rowsLoading.value = false
     loadedSourceId = null
+    surface.resetDerived()
   }
 
   // Reset only the per-source view (chips/search/rows/sort): used when switching to
@@ -95,6 +131,7 @@ export const useSourcesStore = defineStore('sources', () => {
     hasMore.value = false
     sort.value = null
     rowsError.value = ''
+    surface.resetDerived()
   }
 
   // Ensure the store is populated for `key`, fetching the active source's meta+rows
@@ -186,6 +223,11 @@ export const useSourcesStore = defineStore('sources', () => {
         }
       } else {
         rows.value = newRows.slice(0, MAX_ROWS)
+        surface.clearRowsStale() // the table window now matches the current scope
+        // A FRESH window whose SCOPE changed (new source / search / filters, never a
+        // sort or an append): re-fire the DB row count, re-compute the Calculate zone,
+        // and re-run Analyze if it is open with a complete selection.
+        surface.afterScopeChange(_viewSignature())
       }
       offset.value = echoed
       hasMore.value = !!data.has_more && rows.value.length < MAX_ROWS
@@ -193,6 +235,12 @@ export const useSourcesStore = defineStore('sources', () => {
     } catch (e) {
       if (mySeq !== seq || myRows !== rowsSeq) return null
       rowsError.value = (e && e.message) || 'source_unavailable'
+      // A FAILED fresh load must still refresh the aggregates: the filters DID change,
+      // and keeping the previous scope's DB-exact count / figures on screen would show an
+      // authoritative number that no longer matches the active filter set. The count query
+      // is independent of the rows query; if it fails too, the count goes honest-null
+      // rather than stale.
+      if (!append) surface.afterScopeChange(_viewSignature())
       return false
     } finally {
       if (mySeq === seq && myRows === rowsSeq) rowsLoading.value = false
@@ -205,6 +253,14 @@ export const useSourcesStore = defineStore('sources', () => {
   function refreshRows() {
     if (activeSourceId.value == null) return Promise.resolve(null)
     rowsError.value = ''
+    if (surface.analyzeOpen.value) {
+      // The Data table is hidden behind the Analyze view: skip the (unused) 100-row
+      // window and refresh only the DB-computed aggregates (count + pivot). The table
+      // is marked stale and re-fetched lazily when the user returns to the Data view.
+      surface.markRowsStale()
+      surface.afterScopeChange(_viewSignature())
+      return Promise.resolve(true)
+    }
     return _loadRows(seq)
   }
 
@@ -251,19 +307,21 @@ export const useSourcesStore = defineStore('sources', () => {
   }
 
   // --- user filters (add / edit / remove / clear) ------------------------------
-  function addFilter(column, values) {
+  // `op` is optional: pass 'BETWEEN' (with exactly 2 boundary values) for a temporal
+  // range chip whose op is preserved; otherwise the op is derived from the value count.
+  function addFilter(column, values, op) {
     if (!column || !values || !values.length) return
     track('source_filter_added', { column }, { agent_key: agentKey.value || null })
     userChipSeq += 1
-    chips.value.push(makeSourceChip(column, values, userChipSeq))
+    chips.value.push(makeSourceChip(column, values, userChipSeq, op))
     offset.value = 0
     refreshRows()
   }
-  function setChipValues(key, values) {
+  function setChipValues(key, values, op) {
     const chip = chips.value.find((c) => c.key === key)
     if (!chip || !values.length) return
     chip.values = values.slice()
-    chip.op = normalizeSourceOp(values)
+    chip.op = op === 'BETWEEN' && values.length === 2 ? 'BETWEEN' : normalizeSourceOp(values)
     offset.value = 0
     refreshRows()
   }
@@ -312,6 +370,31 @@ export const useSourcesStore = defineStore('sources', () => {
     open, agentKey, sourceList, activeSourceId, columns, chips, q,
     rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
     activeSourceLabel,
+    // DB-computed row count + the Calculate zone (shared aggregate surface)
+    totalCount: surface.totalCount,
+    totalLoading: surface.totalLoading,
+    calcColumn: surface.calcColumn,
+    calcValues: surface.calcValues,
+    calcLoading: surface.calcLoading,
+    calcError: surface.calcError,
+    setCalcColumn: surface.setCalcColumn,
+    reloadCalc: surface.reloadCalc,
+    // Analyze (mini-pivot)
+    analyzeOpen: surface.analyzeOpen,
+    analyzeGroup: surface.analyzeGroup,
+    analyzeBucket: surface.analyzeBucket,
+    analyzeFn: surface.analyzeFn,
+    analyzeMeasureColumn: surface.analyzeMeasureColumn,
+    analyzeRows: surface.analyzeRows,
+    analyzeTotals: surface.analyzeTotals,
+    analyzeTruncated: surface.analyzeTruncated,
+    analyzeLoading: surface.analyzeLoading,
+    analyzeError: surface.analyzeError,
+    setAnalyzeOpen: surface.setAnalyzeOpen,
+    setAnalyzeGroup: surface.setAnalyzeGroup,
+    setAnalyzeBucket: surface.setAnalyzeBucket,
+    setAnalyzeMeasure: surface.setAnalyzeMeasure,
+    runAnalyze: surface.runAnalyze,
     ensureAgent, openPanel, closePanel, setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,

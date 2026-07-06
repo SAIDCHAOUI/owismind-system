@@ -129,6 +129,7 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 | Frontend source | `Plugin/owismind/frontend/` | repo |
 | Staging packaging | `Plugin/ready-for-dataiku/owismind-upload/` + `owismind-upload.zip` | repo |
 | Plugin DEV (coexistant, L094 ✅ DSS) | id `owismind_dev`, zip `Plugin/ready-for-dataiku/owismind_dev-upload.zip` (label "OWIsMind (DEV)", webapp "OWIsMind - AI Agents (DEV)") - généré par `tools/build_dev_plugin.py` / skill `/package-plugin-dev` | repo |
+| Plugin DEV v2 (3e coexistant, 2026-07-06) | id `owismind_dev_v2`, zip `owismind_dev_v2-upload.zip` (label "OWIsMind (DEV v2)", webapp "... (DEV v2)") - `tools/build_dev_plugin.py --v2` ; même pipeline, identité/staging/zip dédiés ; créé pour livrer les data tools sans toucher le dev stable pré-démo | repo |
 | Source de build DEV | UNE source `Plugin/owismind/` ; base Vite via env `OWI_PLUGIN_ID` (défaut `owismind`) ; package python renommé `owismind`->`owismind_dev` au packaging (L094) ; tables = create-if-not-exist, isolation = `table_prefix` optionnel au déploiement | repo |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) | guide SQL |
 | Project key DSS | `OWISMIND_DEV` (résolu via `dataiku.default_project_key()`, **reste la référence du repo**) ; variante test `OWISMIND_LAB` ; **projet PROD parallèle `OWISMIND_PROD_V1`** (table physique `OWISMIND_PROD_V1_drive_revenues` ; migration via `OWISMIND/migrate_semantic_model_to_project.py` qui dérive le remapping des clés - sinon Evidence dégradé, L090) | guide SQL ; 2026-06-18 |
@@ -637,6 +638,7 @@ Historique par session : memory/sessions/*.md.
 | Budget / quotas 50 $/mois (`webapp_user_quota_v1`) | ⏳ Codé, non validé DSS | - | `storage/budget.py` (2026-06-18) |
 | Analytics d'usage `webapp_events_v1` (+ `POST /track`) | ✅ Validé DSS | 2026-07-02 (Run 5) | L125 |
 | Source Data Explorer (admin + panneau + onglet Evidence + cell-to-agent) | ✅ Validé DSS | 2026-07-02 (Runs 3-4) | L121-L124 |
+| Data tools sans IA - agrégats DB (`/source/aggregate` + `/evidence/aggregate`, zone Calculer, plages BETWEEN, médiane, factory `aggregateSurface`) | 🟡 Vague 1 validée DSS sur dev_v2 ; vagues 2+3 validées local (QA runtime + 3 revues), zip final dev_v2 à uploader | 2026-07-05 (vague 1, user) | L132-L133 (`sessions/2026-07-06.md`) |
 | Benchmark - LAB (moteur + 2 webapps Standard) | ⏳ Codé, non déployé DSS ; launcher refondu 2026-07-03 (panes rééquilibrés, golden legacy fusionné, UI rename) | - | L102-L113/L128 (`OWIsMind_LAB/`) |
 | Benchmark - consultation plugin (+ détail attempt) | ⏳ Codé ; fix nom de table validé DSS ; page refondue 2026-07-03 (modes conditionnels, détail par onglets) | 2026-06-26 (fix L110) | L109-L111/L117/L129 |
 | Impersonation admin (read-only, « act as user ») | ✅ Validé DSS | 2026-06-19 (Run 3) | L095/L096 |

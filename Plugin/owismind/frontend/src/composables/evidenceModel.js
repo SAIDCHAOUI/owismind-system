@@ -10,6 +10,7 @@
 // The /evidence/rows payload NEVER carries SQL: editable chips travel as
 // structured {column, op, values} filters; locked agent chips travel as kept
 // ids only (the backend re-derives them from the stored SQL by id).
+import { chipOp, normalizeGroup, normalizeMeasures } from './sourceModel.js'
 
 // Minimum / maximum effective length of the exchange-table search term. Below the
 // min the term is dropped (mirrors the backend, which ignores a q shorter than 2
@@ -51,30 +52,27 @@ export function normalizeEditableOp(values) {
   return values.length > 1 ? 'IN' : '='
 }
 
-// Assemble the /evidence/rows request body. Pagination is limit/offset (v2):
-// `limit` is the window size (fresh load 100, "load more" 20), `offset` the
-// running count of already-loaded rows; the server clamps both. `drill`, `table`
-// and `q` are OPTIONAL trailing arguments (in that order) so every legacy
-// positional call keeps working and each key is added only when meaningful.
-export function buildRowsPayload(exchangeId, chips, includeAdvanced, limit, offset, sort, drill, table, q) {
+// Partition the local chips into the /evidence/rows contract: editable / user chips
+// travel as structured {column, op, values} filters (op via the shared chipOp: a 2-value
+// temporal range keeps op 'BETWEEN', everything else re-derives '='/'IN'); locked agent
+// chips travel as kept ids only (the backend re-derives them from the stored SQL by id).
+function _evidenceFilters(chips) {
   const filters = []
   const keptIds = []
   for (const c of chips) {
     if (c.editable || c.source === 'user') {
-      filters.push({ column: c.column, op: c.op === '=' ? '=' : 'IN', values: c.values.slice() })
+      filters.push({ column: c.column, op: chipOp(c), values: c.values.slice() })
     } else if (c.id != null) {
       keptIds.push(c.id)
     }
   }
-  const payload = {
-    exchange_id: exchangeId,
-    filters,
-    kept_ids: keptIds,
-    include_advanced: !!includeAdvanced,
-    limit: limit || EVIDENCE_DEFAULT_LIMIT,
-    offset: offset || 0,
-    sort: sort || null,
-  }
+  return { filters, keptIds }
+}
+
+// Append the OPTIONAL scope keys (drill / table / q) to a payload, in the frozen order,
+// each added only when meaningful. Shared by the rows and aggregate builders so the two
+// requests always describe the identical scope.
+function _applyOptionalScope(payload, drill, table, q) {
   // Drill-down (trust layer v2): only {column, value} pairs travel - the server
   // re-derives the drillable group keys from the STORED SQL and 400s anything
   // else, so this list is a request, never an authority.
@@ -94,6 +92,46 @@ export function buildRowsPayload(exchangeId, chips, includeAdvanced, limit, offs
   if (cleanQ) {
     payload.q = cleanQ
   }
+  return payload
+}
+
+// Assemble the /evidence/rows request body. Pagination is limit/offset (v2):
+// `limit` is the window size (fresh load 100, "load more" 20), `offset` the
+// running count of already-loaded rows; the server clamps both. `drill`, `table`
+// and `q` are OPTIONAL trailing arguments (in that order) so every legacy
+// positional call keeps working and each key is added only when meaningful.
+export function buildRowsPayload(exchangeId, chips, includeAdvanced, limit, offset, sort, drill, table, q) {
+  const { filters, keptIds } = _evidenceFilters(chips)
+  const payload = {
+    exchange_id: exchangeId,
+    filters,
+    kept_ids: keptIds,
+    include_advanced: !!includeAdvanced,
+    limit: limit || EVIDENCE_DEFAULT_LIMIT,
+    offset: offset || 0,
+    sort: sort || null,
+  }
+  return _applyOptionalScope(payload, drill, table, q)
+}
+
+// Assemble the /evidence/aggregate request body: the SAME scope as /evidence/rows
+// (exchange, editable filters + kept ids, include_advanced, drill, table, q) WITHOUT
+// limit/offset/sort, PLUS { group, measures, limit } shaped EXACTLY like /source/aggregate
+// (normalizeGroup / normalizeMeasures are the shared source-model normalizers). Pure and
+// node-testable so the DB-computed totals bar + Analyze pivot compute over the identical
+// predicate as the visible rows.
+export function buildEvidenceAggregatePayload(exchangeId, chips, includeAdvanced, drill, table, q, group, measures, limit) {
+  const { filters, keptIds } = _evidenceFilters(chips)
+  const payload = {
+    exchange_id: exchangeId,
+    filters,
+    kept_ids: keptIds,
+    include_advanced: !!includeAdvanced,
+  }
+  _applyOptionalScope(payload, drill, table, q)
+  payload.group = normalizeGroup(group)
+  payload.measures = normalizeMeasures(measures)
+  payload.limit = limit == null ? null : limit
   return payload
 }
 

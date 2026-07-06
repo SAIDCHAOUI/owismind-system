@@ -11,6 +11,8 @@ import { useSourcesStore } from '../../stores/sources.js'
 import { Icon } from '../ui'
 import SourceChips from './SourceChips.vue'
 import SourceTable from './SourceTable.vue'
+import SourceAnalyze from './SourceAnalyze.vue'
+import SourceCalc from './SourceCalc.vue'
 
 // `embedded` hides the internal dataset selector: hosted inside the Evidence
 // "Source data" tab, the unified selector there drives the dataset choice.
@@ -60,33 +62,64 @@ watch(() => sources.activeSourceId, () => {
       </button>
     </div>
 
-    <!-- Global search over the whole dataset - fires on Enter or the search button. -->
-    <div class="src-search">
-      <Icon name="search" class="src-search-ico" />
-      <input
-        v-model="term"
-        type="text"
-        class="src-search-input"
-        maxlength="200"
-        :placeholder="t('src.search.placeholder')"
-        :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
-        @keydown.enter.prevent="submitQuery"
-      />
-      <button v-if="term" type="button" class="src-search-clear" :title="t('x.close')" @click="clearQuery">
-        <Icon name="x" />
-      </button>
-      <button
-        type="button"
-        class="src-search-go"
-        :aria-label="t('src.search.go')"
-        :title="t('src.search.go')"
-        :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
-        @click="submitQuery"
-      >
-        <Icon name="search" />
-      </button>
+    <!-- Top area: the global search + the Data|Analyze switch sit on the LEFT, the
+         Calculate zone fills the empty RIGHT side. A flex row that wraps to a stacked
+         block on narrow widths (the explorer is also used in a 480px side panel). -->
+    <div class="src-top">
+      <div class="src-top-main">
+        <!-- Global search over the whole dataset - fires on Enter or the search button. -->
+        <div class="src-search">
+          <Icon name="search" class="src-search-ico" />
+          <input
+            v-model="term"
+            type="text"
+            class="src-search-input"
+            maxlength="200"
+            :placeholder="t('src.search.placeholder')"
+            :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
+            @keydown.enter.prevent="submitQuery"
+          />
+          <button v-if="term" type="button" class="src-search-clear" :title="t('x.close')" @click="clearQuery">
+            <Icon name="x" />
+          </button>
+          <button
+            type="button"
+            class="src-search-go"
+            :aria-label="t('src.search.go')"
+            :title="t('src.search.go')"
+            :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
+            @click="submitQuery"
+          >
+            <Icon name="search" />
+          </button>
+        </div>
+        <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
+
+        <!-- Data / Analyze view switch (segmented control). The filter chips are shared
+             context and stay visible in BOTH views; only the surface below swaps. Plain
+             toggle buttons (aria-pressed), NOT the ARIA tab pattern: tabs would promise
+             tabpanel wiring + arrow-key navigation this simple switch does not have. Shown
+             only once the dataset is loaded (same gate as the content below). -->
+        <div v-if="!sources.loading && !sources.error" class="src-viewseg">
+          <button
+            type="button"
+            class="src-viewseg-btn"
+            :class="{ active: !sources.analyzeOpen }"
+            :aria-pressed="!sources.analyzeOpen"
+            @click="sources.setAnalyzeOpen(false)"
+          >{{ t('src.view.data') }}</button>
+          <button
+            type="button"
+            class="src-viewseg-btn"
+            :class="{ active: sources.analyzeOpen }"
+            :aria-pressed="sources.analyzeOpen"
+            @click="sources.setAnalyzeOpen(true)"
+          >{{ t('src.view.analyze') }}</button>
+        </div>
+      </div>
+      <!-- Calculate zone (pick a column, see its key figures). Rendered once columns load. -->
+      <SourceCalc v-if="!sources.loading && !sources.error" class="src-top-calc" />
     </div>
-    <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
 
     <!-- States: meta loading / meta error / content. -->
     <div v-if="sources.loading" class="src-skeleton" :aria-label="t('src.loading')">
@@ -99,7 +132,8 @@ watch(() => sources.activeSourceId, () => {
     </div>
     <template v-else>
       <SourceChips />
-      <SourceTable />
+      <SourceTable v-if="!sources.analyzeOpen" />
+      <SourceAnalyze v-else />
     </template>
   </div>
 </template>
@@ -122,6 +156,26 @@ watch(() => sources.activeSourceId, () => {
 .src-dataset:disabled { opacity: 0.5; cursor: not-allowed; }
 .src-dataset.active { border-color: var(--orange); color: var(--orange-text); background: var(--orange-soft); }
 :global(body[data-theme="dark"] .src-dataset.active) { background: var(--orange-soft-dark); }
+
+/* Top area - the search + view switch on the left, the Calculate zone on the right. A
+   flex row that wraps to a stacked block on narrow widths (a 480px side panel). */
+.src-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4) var(--s-5); }
+.src-top-main { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.src-top-calc { flex: 1 1 240px; min-width: 0; }
+
+/* Data / Analyze segmented control - a 1px-bordered row; the active segment fills with
+   ink (charter recipe). Square, flat, self-sized (does not stretch full width). */
+.src-viewseg {
+  display: inline-flex; align-self: flex-start;
+  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
+}
+.src-viewseg-btn {
+  padding: 5px 16px; font-size: var(--fs-xs); color: var(--text-2);
+  background: var(--bg); transition: all var(--dur) var(--ease);
+}
+.src-viewseg-btn + .src-viewseg-btn { border-left: 1px solid var(--border-strong); }
+.src-viewseg-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
+.src-viewseg-btn.active { background: var(--text); color: var(--bg); font-weight: var(--fw-medium); }
 
 /* Search box - flat, square, 1px border; the icon and clear button are muted. */
 .src-search {

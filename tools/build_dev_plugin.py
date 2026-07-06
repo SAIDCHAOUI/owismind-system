@@ -27,6 +27,9 @@ existing ``node_modules``) and stages + zips everything under
 
 Usage:
   python3 tools/build_dev_plugin.py            # full DEV build + stage + zip
+  python3 tools/build_dev_plugin.py --v2       # same pipeline, THIRD coexisting
+                                               # plugin (id owismind_dev_v2) so a
+                                               # stable DEV install stays untouched
   python3 tools/build_dev_plugin.py --check    # validate the rewrite logic only,
                                                # on a /tmp copy of python-lib,
                                                # WITHOUT building or zipping
@@ -77,6 +80,26 @@ DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
 # Staging + zip outputs (live under ready-for-dataiku/, never in the plugin source).
 STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(DEV_ID))
 ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(DEV_ID))
+
+
+def use_v2_identity():
+    """Retarget the module identity to the THIRD coexisting plugin (owismind_dev_v2).
+
+    Same deterministic pipeline, different identity: id/label/webapp label/asset
+    base/staging/zip all move to the v2 names, so building v2 can never overwrite
+    the stable ``owismind_dev`` staging tree or zip (nor, as ever, the prod one).
+    The word-boundary rewrite patterns need no change: ``\\bowismind\\b`` rewrites
+    to whatever DEV_ID currently is, and never matches inside ``owismind_dev*``.
+    """
+    global DEV_ID, DEV_LABEL, DEV_WEBAPP_LABEL, _WEBAPP_DESC_HEAD_DEV
+    global DEV_BASE, STAGE_DIR, ZIP_PATH
+    DEV_ID = "owismind_dev_v2"
+    DEV_LABEL = "OWIsMind (DEV v2)"
+    DEV_WEBAPP_LABEL = "OWIsMind - AI Agents (DEV v2)"
+    _WEBAPP_DESC_HEAD_DEV = '"description": "[DEV v2] Chat with Dataiku AI agents.'
+    DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
+    STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(DEV_ID))
+    ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(DEV_ID))
 
 # Files excluded from the runtime zip - identical to /package-plugin's list.
 ZIP_EXCLUDE_BASENAMES = {"CLAUDE.md", "README.md", ".DS_Store"}
@@ -173,9 +196,10 @@ def assert_python_invariants(pkg_root, label):
     lines.append("OK  [{}] 0 'from owismind' / 0 'import owismind' (word-boundary)".format(label))
 
     # 2. The DEV package references are present (sanity: the rewrite actually ran).
-    n_dev = _grep_count(pkg_root, r"\bfrom owismind_dev\b") + _grep_count(pkg_root, r"\bimport owismind_dev\b")
-    assert n_dev > 0, "{}: rewrite produced no 'owismind_dev' references".format(label)
-    lines.append("OK  [{}] {} 'owismind_dev' package references present".format(label, n_dev))
+    n_dev = (_grep_count(pkg_root, r"\bfrom {}\b".format(DEV_ID))
+             + _grep_count(pkg_root, r"\bimport {}\b".format(DEV_ID)))
+    assert n_dev > 0, "{}: rewrite produced no '{}' references".format(label, DEV_ID)
+    lines.append("OK  [{}] {} '{}' package references present".format(label, n_dev, DEV_ID))
 
     # 3. Untouched literals: SQL namespace, API prefix, blueprint name.
     assert _any_file_contains(pkg_root, 'APP_NAMESPACE = "owismind"'), \
@@ -188,10 +212,10 @@ def assert_python_invariants(pkg_root, label):
 
     # 4. The root app logger was retargeted to DEV (and the prod one is gone).
     assert _any_file_contains(pkg_root, 'getLogger("{}")'.format(DEV_ID)), \
-        "{}: getLogger(\"owismind_dev\") missing".format(label)
+        "{}: getLogger(\"{}\") missing".format(label, DEV_ID)
     assert _grep_count(pkg_root, r'getLogger\((["\'])owismind\1\)') == 0, \
         "{}: getLogger(\"owismind\") still present".format(label)
-    lines.append('OK  [{}] getLogger("owismind") -> getLogger("owismind_dev")'.format(label))
+    lines.append('OK  [{}] getLogger("owismind") -> getLogger("{}")'.format(label, DEV_ID))
 
     # 5. The DEV package is importable (has its __init__.py at the root).
     assert os.path.isfile(os.path.join(pkg_root, "__init__.py")), \
@@ -242,9 +266,9 @@ def run_check():
         assert _RE_FROM_OWISMIND.search(backend_after) is None and _RE_IMPORT_OWISMIND.search(backend_after) is None, \
             "backend.py still references the prod package"
         assert "from {}.api.routes import register_routes".format(DEV_ID) in backend_after, \
-            "backend.py import not retargeted to owismind_dev"
+            "backend.py import not retargeted to {}".format(DEV_ID)
         assert backend_before != backend_after, "backend.py rewrite was a no-op"
-        print("    OK  [check/backend.py] import retargeted to owismind_dev.api.routes")
+        print("    OK  [check/backend.py] import retargeted to {}.api.routes".format(DEV_ID))
 
         print("=== --check PASSED (no build, no zip; /tmp copy discarded) ===")
         return 0
@@ -480,7 +504,15 @@ def main(argv=None):
         action="store_true",
         help="Validate the package/logger rewrite on a /tmp copy of python-lib WITHOUT building or zipping.",
     )
+    parser.add_argument(
+        "--v2",
+        action="store_true",
+        help="Build the THIRD coexisting plugin (id owismind_dev_v2, its own staging + zip); "
+             "the stable owismind_dev staging/zip and the prod plugin are never touched.",
+    )
     args = parser.parse_args(argv)
+    if args.v2:
+        use_v2_identity()
     if args.check:
         return run_check()
     return run_build()

@@ -14,7 +14,15 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { useClickOutside } from '../../composables/useClickOutside.js'
-import { SOURCE_Q_MIN, foldSearchTerm as fold } from '../../composables/sourceModel.js'
+import {
+  SOURCE_Q_MIN,
+  foldSearchTerm as fold,
+  isTemporalColType,
+  monthRangeToBetween,
+  betweenValuesToMonthRange,
+  yearOfValue,
+} from '../../composables/sourceModel.js'
+import RangePopoverFields from '../sources/RangePopoverFields.vue'
 import { Icon } from '../ui'
 
 const { t } = useI18n()
@@ -61,6 +69,16 @@ const serverFiltered = ref(false)
 // one currently open.
 let pickerSeq = 0
 
+// Temporal RANGE mode (a date filter picked in 1-2 clicks), rendered by the shared
+// RangePopoverFields - the exact same behaviour as the Source Data explorer chips. It
+// applies ONLY to USER chips on a temporal column (a locked or editable AGENT-derived
+// chip keeps the distinct-values picker, untouched). While range mode is on, distinct
+// values still load in the background so the full-year control can offer the years
+// actually present in the column.
+const rangeMode = ref(false)
+const rangeFrom = ref('') // 'YYYY-MM'
+const rangeTo = ref('') // 'YYYY-MM'
+
 useClickOutside(zone, () => { pop.value = null })
 
 const columns = computed(() => (evidence.meta && evidence.meta.columns) || [])
@@ -71,6 +89,25 @@ const canAddFilter = computed(
   () => evidence.chips.filter((c) => c.editable || c.source === 'user').length < MAX_FILTERS,
 )
 const tooManyValues = computed(() => pickerSelected.value.length > MAX_FILTER_VALUES)
+
+// Type of one column of the active exchange table ('' when unknown) - meta.columns is
+// already typed [{ name, type }]. Drives whether a USER chip enters temporal range mode.
+function colType(name) {
+  const c = columns.value.find((x) => x.name === name)
+  return c ? c.type : ''
+}
+// The years present in the loaded distinct values of the temporal column, ascending. When
+// empty (not derivable / not loaded yet) the full-year control degrades to a 4-digit input.
+const rangeYearOptions = computed(() => {
+  const years = new Set()
+  for (const v of pickerValues.value) {
+    const y = yearOfValue(v)
+    if (y) years.add(y)
+  }
+  return Array.from(years).sort()
+})
+// Apply stays enabled only when both months are set and parse to a valid range.
+const rangeReady = computed(() => !!monthRangeToBetween(rangeFrom.value, rangeTo.value))
 
 // Client-side matching folds through the SAME accent map as the server (imported
 // `fold`), so a term behaves identically before and after a server-side escalation.
@@ -87,6 +124,15 @@ const filteredValues = computed(() => {
 
 function displayValues(chip) {
   return chip.values.map((v) => String(v)).join(', ')
+}
+// A BETWEEN chip (a 2-value temporal range) reads as its month span; anything else lists
+// its values. The column name is always shown separately (chip.column).
+function isBetween(chip) {
+  return chip.op === 'BETWEEN' && Array.isArray(chip.values) && chip.values.length === 2
+}
+function rangeText(chip) {
+  const r = betweenValuesToMonthRange(chip.values)
+  return r ? t('src.range.chip', [r.from, r.to]) : displayValues(chip)
 }
 
 // Load one window of distinct values for `column`. `current` values are kept
@@ -124,19 +170,36 @@ async function _loadPicker(column, current, excludeId, serverQ) {
   }
 }
 
+// Pre-fill the range fields from a BETWEEN chip's stored [start, end] (empty when adding
+// fresh). The full-year control's own typed-year state resets on remount.
+function _openRange(values) {
+  const r = betweenValuesToMonthRange(values)
+  rangeFrom.value = r ? r.from : ''
+  rangeTo.value = r ? r.to : ''
+}
 function openChipPicker(chip) {
   pop.value = { kind: 'chip', key: chip.key }
-  // Pre-select the current values only for =/IN chips: for any other op
-  // (!=, NOT IN, >=, BETWEEN, LIKE…) the stored values are NOT a selection -
-  // pre-checking them and applying would silently INVERT or distort the
-  // agent's filter. The user picks the values they want explicitly.
-  const preselect = chip.op === '=' || chip.op === 'IN' ? chip.values : []
   // The chip's own server-side predicate must not scope its own picker.
   const excludeId = chip.source === 'agent' && chip.id != null ? chip.id : null
   pickerColumn.value = chip.column
   pickerExcludeId.value = excludeId
   valSearch.value = ''
   serverFiltered.value = false
+  // Range mode ONLY for a USER chip on a temporal column (an agent-derived chip, locked
+  // OR editable, keeps the distinct picker - untouched). Prefill From / To from the chip's
+  // stored BETWEEN bounds; load distinct in the background only to derive the year options.
+  if (chip.source === 'user' && isTemporalColType(colType(chip.column))) {
+    rangeMode.value = true
+    _openRange(chip.values)
+    _loadPicker(chip.column, [], excludeId, '')
+    return
+  }
+  rangeMode.value = false
+  // Pre-select the current values only for =/IN chips: for any other op
+  // (!=, NOT IN, >=, BETWEEN, LIKE…) the stored values are NOT a selection -
+  // pre-checking them and applying would silently INVERT or distort the
+  // agent's filter. The user picks the values they want explicitly.
+  const preselect = chip.op === '=' || chip.op === 'IN' ? chip.values : []
   _loadPicker(chip.column, preselect, excludeId, '')
 }
 function openAdd() {
@@ -152,8 +215,12 @@ function openAdd() {
   pickerValues.value = []
   pickerSelected.value = []
   pickerTruncated.value = false
+  rangeMode.value = false
+  _openRange([])
 }
-// Add step 1 -> step 2: a column was chosen, load its first value window.
+// Add step 1 -> step 2: a column was chosen. A temporal column enters range mode (a new
+// user filter is always the user's own, so range mode applies) and loads distinct only to
+// derive the year options; any other column loads its first value window.
 function pickColumn(name) {
   if (!name) return
   addStep.value = 'value'
@@ -161,9 +228,16 @@ function pickColumn(name) {
   pickerExcludeId.value = null
   valSearch.value = ''
   serverFiltered.value = false
+  if (isTemporalColType(colType(name))) {
+    rangeMode.value = true
+    _openRange([])
+    _loadPicker(name, [], null, '')
+    return
+  }
+  rangeMode.value = false
   _loadPicker(name, [], null, '')
 }
-// Add step 2 -> step 1: drop the in-flight value load and the picked values.
+// Add step 2 -> step 1: drop the in-flight value load, the picked values and the range.
 function backToColumns() {
   pickerSeq += 1
   pickerLoading.value = false
@@ -175,6 +249,8 @@ function backToColumns() {
   pickerValues.value = []
   pickerSelected.value = []
   pickerTruncated.value = false
+  rangeMode.value = false
+  _openRange([])
 }
 // Enter in the value search. With a term: re-load the window narrowed server-side,
 // meaningful when the window is incomplete (truncated top-N) OR already narrowed by
@@ -232,6 +308,18 @@ function applyPicker() {
 function cancelPicker() {
   pop.value = null
 }
+// Build ONE BETWEEN chip from the two month fields. monthRangeToBetween swaps a reversed
+// From > To and returns null when either month is missing / malformed (apply is disabled
+// then). The chip keeps its explicit op so it is never re-normalized to '=' / 'IN'.
+function applyRange() {
+  if (!pop.value) return
+  const range = monthRangeToBetween(rangeFrom.value, rangeTo.value)
+  if (!range) return
+  const values = [range.start, range.end]
+  if (pop.value.kind === 'chip') evidence.setChipValues(pop.value.key, values, 'BETWEEN')
+  else if (pickerColumn.value) evidence.addFilter(pickerColumn.value, values, 'BETWEEN')
+  pop.value = null
+}
 </script>
 
 <template>
@@ -249,50 +337,69 @@ function cancelPicker() {
             :class="{ user: chip.source === 'user' }">
         <button class="chip-main" @click="openChipPicker(chip)">
           <span class="col">{{ chip.column }}</span>
-          <span class="op mono">{{ chip.op }}</span>
-          <span class="val">{{ displayValues(chip) }}</span>
+          <template v-if="isBetween(chip)">
+            <span class="val">{{ rangeText(chip) }}</span>
+          </template>
+          <template v-else>
+            <span class="op mono">{{ chip.op }}</span>
+            <span class="val">{{ displayValues(chip) }}</span>
+          </template>
           <Icon name="chevronDown" />
         </button>
         <button class="chip-x" :title="t('ev.filters.remove')" @click="onRemoveChip(chip)">
           <Icon name="x" />
         </button>
 
-        <!-- Distinct-values picker (edit an existing filter) -->
+        <!-- Edit an existing filter: a month RANGE picker for a USER temporal chip, the
+             distinct-values picker otherwise. -->
         <div v-if="pop && pop.kind === 'chip' && pop.key === chip.key" class="ev-pop">
-          <input
-            v-model="valSearch" v-focus class="pop-search" type="text"
-            :placeholder="t('src.picker.searchVals')"
-            @keydown.enter.prevent="onValueSearchEnter"
-          />
-          <div v-if="pickerLoading" class="pop-state">{{ t('ev.loading') }}</div>
-          <template v-else>
-            <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
-            <template v-if="pickerTruncated">
-              <div class="pop-note">{{ t('ev.picker.truncated', [PICKER_LIMIT]) }}</div>
-              <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
-            </template>
-            <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
-            <div class="pop-list">
-              <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
-                <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
-                <span :title="String(v)">{{ String(v) }}</span>
-              </label>
-              <div v-if="!filteredValues.length" class="pop-state">
-                {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
-              </div>
-            </div>
-            <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
+          <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+          <div v-if="rangeMode" class="pop-range">
+            <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
             <div class="pop-foot">
-              <span v-if="pickerSelected.length" class="pop-count">
-                {{ t('src.picker.selected', [pickerSelected.length]) }}
-              </span>
               <div class="pop-actions">
                 <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
-                <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
-                  {{ t('ev.picker.apply') }}
-                </button>
+                <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
               </div>
             </div>
+          </div>
+          <!-- Distinct-values picker (non-temporal / agent-derived column). -->
+          <template v-else>
+            <input
+              v-model="valSearch" v-focus class="pop-search" type="text"
+              :placeholder="t('src.picker.searchVals')"
+              @keydown.enter.prevent="onValueSearchEnter"
+            />
+            <div v-if="pickerLoading" class="pop-state">{{ t('ev.loading') }}</div>
+            <template v-else>
+              <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
+              <template v-if="pickerTruncated">
+                <div class="pop-note">{{ t('ev.picker.truncated', [PICKER_LIMIT]) }}</div>
+                <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
+              </template>
+              <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
+              <div class="pop-list">
+                <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
+                  <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
+                  <span :title="String(v)">{{ String(v) }}</span>
+                </label>
+                <div v-if="!filteredValues.length" class="pop-state">
+                  {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
+                </div>
+              </div>
+              <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
+              <div class="pop-foot">
+                <span v-if="pickerSelected.length" class="pop-count">
+                  {{ t('src.picker.selected', [pickerSelected.length]) }}
+                </span>
+                <div class="pop-actions">
+                  <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
+                  <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
+                    {{ t('ev.picker.apply') }}
+                  </button>
+                </div>
+              </div>
+            </template>
           </template>
         </div>
       </span>
@@ -336,40 +443,53 @@ function cancelPicker() {
               </button>
               <span class="pop-head-col">{{ pickerColumn }}</span>
             </div>
-            <input
-              v-model="valSearch" v-focus class="pop-search" type="text"
-              :placeholder="t('src.picker.searchVals')"
-              @keydown.enter.prevent="onValueSearchEnter"
-            />
-            <div v-if="pickerLoading" class="pop-state">{{ t('ev.loading') }}</div>
-            <template v-else>
-              <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
-              <template v-if="pickerTruncated">
-                <div class="pop-note">{{ t('ev.picker.truncated', [PICKER_LIMIT]) }}</div>
-                <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
-              </template>
-              <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
-              <div class="pop-list">
-                <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
-                  <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
-                  <span :title="String(v)">{{ String(v) }}</span>
-                </label>
-                <div v-if="!filteredValues.length" class="pop-state">
-                  {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
-                </div>
-              </div>
-              <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
+            <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+            <div v-if="rangeMode" class="pop-range">
+              <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
               <div class="pop-foot">
-                <span v-if="pickerSelected.length" class="pop-count">
-                  {{ t('src.picker.selected', [pickerSelected.length]) }}
-                </span>
                 <div class="pop-actions">
                   <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
-                  <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
-                    {{ t('ev.picker.apply') }}
-                  </button>
+                  <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
                 </div>
               </div>
+            </div>
+            <!-- Distinct-values picker (non-temporal column). -->
+            <template v-else>
+              <input
+                v-model="valSearch" v-focus class="pop-search" type="text"
+                :placeholder="t('src.picker.searchVals')"
+                @keydown.enter.prevent="onValueSearchEnter"
+              />
+              <div v-if="pickerLoading" class="pop-state">{{ t('ev.loading') }}</div>
+              <template v-else>
+                <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
+                <template v-if="pickerTruncated">
+                  <div class="pop-note">{{ t('ev.picker.truncated', [PICKER_LIMIT]) }}</div>
+                  <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
+                </template>
+                <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
+                <div class="pop-list">
+                  <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
+                    <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
+                    <span :title="String(v)">{{ String(v) }}</span>
+                  </label>
+                  <div v-if="!filteredValues.length" class="pop-state">
+                    {{ pickerValues.length ? t('src.picker.noMatch') : t('ev.picker.empty') }}
+                  </div>
+                </div>
+                <div v-if="tooManyValues" class="pop-note">{{ t('ev.picker.max', [MAX_FILTER_VALUES]) }}</div>
+                <div class="pop-foot">
+                  <span v-if="pickerSelected.length" class="pop-count">
+                    {{ t('src.picker.selected', [pickerSelected.length]) }}
+                  </span>
+                  <div class="pop-actions">
+                    <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
+                    <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
+                      {{ t('ev.picker.apply') }}
+                    </button>
+                  </div>
+                </div>
+              </template>
             </template>
           </template>
         </div>
@@ -436,6 +556,9 @@ function cancelPicker() {
   border-radius: 0; background: var(--bg); color: var(--text); font-size: var(--fs-sm);
 }
 .pop-search::placeholder { color: var(--text-3); }
+/* Temporal range picker wrapper - the fields live in the shared RangePopoverFields;
+   this only stacks them above the apply / cancel foot. */
+.pop-range { display: flex; flex-direction: column; gap: var(--s-3); }
 .pop-head { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .pop-back {
   display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px 2px 2px;

@@ -3072,5 +3072,41 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-03.md Run 3 ; `.claude/hooks/guardrail.sh`.
 - **Date** : 2026-07-03.
 
+## L132 - QA runtime par agent : TOUJOURS prouver que le bundle testé contient les fixes (hash + marqueur)
+- **Contexte** : sessions à plusieurs vagues fix -> QA. L'agent QA rebuild l'app dans son harnais
+  stub et rejoue les parcours (pattern L129/L130).
+- **Ce qui a échoué** : DEUX fois dans la même session, l'agent QA a rapporté « PASS » sur des
+  assertions liées aux correctifs alors que son `qa-app` avait été buildé AVANT les fixes (bundle
+  `index-DOvZd2Qb.js` sans la borne `.999999`, puis `index-BbgTlY1C.js` sans la surface lazy). Les
+  captures étaient vraies, mais pour un code périmé : faux sentiment de validation.
+- **Solution qui marche** : après chaque lot de fixes, (1) builder soi-même depuis la source courante
+  et comparer le HASH du bundle avec celui du rapport QA ; (2) grep un MARQUEUR du fix dans le bundle
+  de la QA (`grep -c '999999' qa-app/assets/index-*.js` -> 0 = bundle périmé) ; (3) exiger un
+  re-check ciblé des seules assertions touchées sur le bundle frais (A/B/C, pas de re-run complet).
+  Cache navigateur : un rechargement anti-cache peut être nécessaire (l'index.html reste servi).
+- **Preuve-vérification** : re-checks ciblés 3/3 PASS sur `index-x5ZJorzW.js` (borne microseconde
+  reçue par le stub) puis `index-BdsILy9T.js` (0 EV_AGG à l'auto-open, catch-up au clic Source data).
+- **Source** : sessions/2026-07-06.md (vagues 2 et 3).
+- **Date** : 2026-07-06.
+
+## L133 - Classifieurs de types front = miroirs EXACTS des gates backend (jamais des heuristiques divergentes)
+- **Contexte** : la zone Calculer / le sigma / les buckets sont OFFERTS par le front selon le type de
+  colonne, et GATÉS par le backend (`sql_config.is_numeric_type`/`is_temporal_type`, exact-match).
+- **Ce qui a échoué** : le front utilisait des heuristiques par sous-chaîne (`'interval'.includes('int')`
+  -> vrai ; `'time'` dans `'timestamp'`). Résultat : sum/avg/median offerts sur `interval`/`geopoint`
+  (400 serveur, zone bloquée en erreur), plage de mois offerte sur `time` (échec SQL -> 500
+  query_failed), et `money`/`serial` (numériques côté backend) privés de sigma. 3 findings confirmés
+  sur 2 revues.
+- **Solution qui marche** : dupliquer le VOCABULAIRE exact du backend côté front (`NUMERIC_TYPE_NAMES`
+  Set exact-match + `isTemporalColType` = même logique date/datetime/timestamp-prefix, `time` exclu
+  des deux côtés) et le documenter comme « EXACT mirror of storage/sql_config ». Tester les deux
+  directions (offert-et-accepté / caché-et-refusé). Corollaire : `decimal(10,2)` n'est numérique
+  d'AUCUN côté -> l'UI ne doit pas l'offrir.
+- **Preuve-vérification** : tests node (miroir + faux amis) + QA DOM (sigma sur `money`, aucun sur
+  `interval`) ; 694 back + 268 node verts.
+- **Source** : sessions/2026-07-06.md ; `frontend/src/composables/sourceModel.js`,
+  `python-lib/owismind/storage/sql_config.py`.
+- **Date** : 2026-07-06.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

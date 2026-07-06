@@ -17,7 +17,7 @@ Routes:
   - ``/conversations`` : names-only, keyset-paginated conversation list (sidebar).
   - ``/conversation``  : all messages of ONE session, fetched lazily on click.
   - ``/evidence/*``    : Evidence Studio - meta / rows / distinct (owner-scoped, read-only, project datasets).
-  - ``/source/*``      : Source Data Explorer - meta / rows / distinct (browse the raw project datasets an agent is configured with, read-only).
+  - ``/source/*``      : Source Data Explorer - meta / rows / distinct / aggregate (browse the raw project datasets an agent is configured with, read-only).
   - ``/admin/*``       : storage view + user/admin + agent-whitelist + monthly-budget + source-dataset picker (admin-gated).
 
 Transport is polling, not SSE: DSS's internal nginx can buffer a long-lived
@@ -56,6 +56,7 @@ from owismind.security.validation import (
     validate_budget_amount,
     validate_chat_start_request,
     validate_conversations_limit,
+    validate_evidence_aggregate_request,
     validate_evidence_column,
     validate_evidence_rows_request,
     validate_expires_days,
@@ -64,6 +65,7 @@ from owismind.security.validation import (
     validate_optional_exchange_id,
     validate_quota_note,
     validate_required_exchange_id,
+    validate_source_aggregate_request,
     validate_source_distinct_params,
     validate_source_meta_params,
     validate_source_rows_request,
@@ -984,6 +986,42 @@ def evidence_distinct():
     return jsonify({"status": "ok", **result})
 
 
+@api.route("/evidence/aggregate", methods=["POST"])
+def evidence_aggregate():
+    """Database-EXACT totals over the exchange's PRE-FILTERED evidence scope.
+
+    Mirrors /evidence/rows (same guard + STRUCTURED body: editable chips as
+    {column, op, values}, locked chips as kept ids, optional advanced fragment,
+    free-text q and drill) but returns the exact aggregates the database computes over
+    EVERY row of that scope instead of a paginated window. The body never carries SQL:
+    the aggregation is a structured spec (whitelisted measures + an optional grouping /
+    calendar bucket) resolved server-side. Its only specificity vs /source/aggregate is
+    that the scope is pre-filtered by the answer's stored SQL. Returns
+    ``{rows, totals, truncated}``.
+    """
+    identity, err = _evidence_guard()
+    if err:
+        return err
+    try:
+        (exchange_id, filters, kept_ids, include_advanced, q, drill, table,
+         group, measures, limit) = validate_evidence_aggregate_request(
+            request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/evidence/aggregate - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        result = evidence_service.evidence_aggregate(
+            identity["user_id"], exchange_id, filters, kept_ids, include_advanced,
+            q, drill, table, group, measures, limit,
+        )
+    except evidence_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/evidence/aggregate - failed")
+        return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
+    return jsonify({"status": "ok", **result})
+
+
 # --- Source Data Explorer (browse the raw project datasets an agent is configured with) ----
 # Any authenticated user may explore the RAW datasets an admin attached to an agent
 # (before/after prompting). The frontend sends only the opaque agent key + an integer
@@ -1096,6 +1134,36 @@ def source_distinct():
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
         logger.exception("/source/distinct - failed")
+        return jsonify({"status": "error", "error": "source_unavailable"}), 500
+    return jsonify({"status": "ok", **result})
+
+
+@api.route("/source/aggregate", methods=["POST"])
+def source_aggregate():
+    """Database-EXACT totals over the FULL filtered set of a configured source dataset.
+
+    The table view is a paginated window; this computes exact aggregates (whitelisted
+    measures, an optional grouping / calendar bucket) over the SAME filters + free-text
+    ``q`` as /source/rows. Body: ``{agent, source, q?, filters?, group?, measures, limit?}``;
+    the body never carries SQL - the aggregation is a structured spec resolved server-side.
+    Returns ``{rows, totals, truncated}``.
+    """
+    _identity, err = _source_guard()
+    if err:
+        return err
+    try:
+        agent_key, source_id, q, filters, group, measures, limit = (
+            validate_source_aggregate_request(request.get_json(silent=True)))
+    except ValidationError as exc:
+        logger.warning("/source/aggregate - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        result = source_service.source_aggregate(
+            agent_key, source_id, q, filters, group, measures, limit)
+    except source_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/source/aggregate - failed")
         return jsonify({"status": "error", "error": "source_unavailable"}), 500
     return jsonify({"status": "ok", **result})
 

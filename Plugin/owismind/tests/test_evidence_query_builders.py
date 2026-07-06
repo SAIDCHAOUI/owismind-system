@@ -4,6 +4,7 @@ import os, sys, unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
 from owismind.evidence.query_builders import (  # noqa: E402
+    build_aggregate_query,
     build_distinct_query,
     build_exchange_sql_query,
     build_rows_query,
@@ -64,6 +65,53 @@ class DistinctQueryTests(unittest.TestCase):
         # The agent's locked predicates scope the picker to its evidence.
         q = build_distinct_query('public."REV"', '"sol"', 100, conditions=['"a" = V(1)'])
         self.assertIn('WHERE "sol" IS NOT NULL AND ("a" = V(1))', q)
+
+
+class AggregateQueryTests(unittest.TestCase):
+    def test_grouped_with_conditions_and_order(self):
+        q = build_aggregate_query(
+            table_ref='public."REV"',
+            select_exprs=['"country" AS key', 'SUM("amount") AS m0', 'COUNT(*) AS m1'],
+            conditions=['"country" = V(1)', "(x OR y)"],
+            group_exprs=['"country"'],
+            order_expr="m0", order_dir="desc", limit=51,
+        )
+        self.assertIn('SELECT "country" AS key, SUM("amount") AS m0, COUNT(*) AS m1', q)
+        # Each condition is defensively parenthesized (mirror of build_rows_query).
+        self.assertIn('WHERE ("country" = V(1)) AND ((x OR y))', q)
+        self.assertIn('GROUP BY "country"', q)
+        self.assertIn("ORDER BY m0 DESC NULLS LAST", q)
+        self.assertIn("LIMIT 51", q)
+
+    def test_ungrouped_has_no_group_by_no_order(self):
+        q = build_aggregate_query(
+            table_ref='t', select_exprs=['COUNT(*) AS m0'], conditions=[],
+            group_exprs=[], order_expr=None, order_dir=None, limit=1,
+        )
+        self.assertNotIn("GROUP BY", q)
+        self.assertNotIn("ORDER BY", q)
+        self.assertNotIn("WHERE", q)
+        self.assertIn("LIMIT 1", q)
+
+    def test_order_direction_is_normalized(self):
+        q = build_aggregate_query(
+            table_ref='t', select_exprs=['"k" AS key', 'COUNT(*) AS m0'],
+            conditions=[], group_exprs=['"k"'], order_expr="key",
+            order_dir="junk; DROP", limit=10,
+        )
+        self.assertIn("ORDER BY key ASC NULLS LAST", q)
+        self.assertNotIn("DROP", q)
+
+    def test_bucket_group_expr_passed_through(self):
+        # The caller renders the DATE_TRUNC; the builder just emits it verbatim in both
+        # the SELECT alias and the GROUP BY.
+        q = build_aggregate_query(
+            table_ref='t', select_exprs=['DATE_TRUNC(\'month\', "d") AS key', 'COUNT(*) AS m0'],
+            conditions=[], group_exprs=['DATE_TRUNC(\'month\', "d")'],
+            order_expr="key", order_dir="asc", limit=13,
+        )
+        self.assertIn('GROUP BY DATE_TRUNC(\'month\', "d")', q)
+        self.assertIn("ORDER BY key ASC NULLS LAST", q)
 
 
 class RenderPredicateTests(unittest.TestCase):

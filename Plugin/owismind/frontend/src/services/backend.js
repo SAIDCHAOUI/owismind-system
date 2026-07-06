@@ -281,6 +281,23 @@ export function fetchEvidenceRows(payload) {
   });
 }
 
+// DB-computed aggregation over the FULL filtered set of ONE exchange's evidence table
+// (the totals bar + the Analyze mini-pivot). The payload carries the SAME scope as
+// /evidence/rows (see composables/evidenceModel.js buildEvidenceAggregatePayload: chips as
+// filters + kept ids, include_advanced, optional drill/table/q) WITHOUT limit/offset/sort,
+// PLUS { group, measures, limit } - never SQL. Returns { status, rows, totals, truncated }
+// identical to /source/aggregate:
+//   - group null: rows = [{ m0, m1, ... }] (one row), totals = null.
+//   - group set:  rows = [{ key, m0, ... }] (ordered), totals = { m0, ... } over the
+//     same filter (for exact shares), truncated = true when the group cap bit.
+export function fetchEvidenceAggregate(payload) {
+  return request('/owismind-api/evidence/aggregate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 // Bounded distinct values of one column (the filter-chip picker).
 // `excludeId` (optional) is the server id of the chip being edited, so its own
 // predicate never scopes its own picker. `search` (optional) narrows the window
@@ -311,6 +328,22 @@ export function fetchSourceMeta(agentKey, sourceId) {
 // sort). Returns { status, rows, has_more, offset }.
 export function fetchSourceRows(payload) {
   return request('/owismind-api/source/rows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// DB-computed aggregation over the FULL filtered set of a source dataset (the totals
+// bar + the Analyze mini-pivot). The payload NEVER names a table/connection - see
+// composables/sourceModel.js buildSourceAggregatePayload for the exact shape (agent
+// key + integer source id + plain-text search + structured filters + optional group +
+// measures + group-rows limit). Returns { status, rows, totals, truncated }:
+//   - group null: rows = [{ m0, m1, ... }] (one row), totals = null.
+//   - group set:  rows = [{ key, m0, ... }] (ordered), totals = { m0, ... } over the
+//     same filter (for exact shares), truncated = true when the group cap bit.
+export function fetchSourceAggregate(payload) {
+  return request('/owismind-api/source/aggregate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

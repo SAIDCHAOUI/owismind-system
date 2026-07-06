@@ -37,6 +37,7 @@ from dataiku import SQLExecutor2
 
 from owismind.evidence import sql_parse
 from owismind.evidence.query_builders import (
+    build_aggregate_query,
     build_distinct_query,
     build_exchange_sql_query,
     build_rows_query,
@@ -962,6 +963,58 @@ def _drill_conditions(ctx, drill):
     )
 
 
+def _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill):
+    """The WHERE conditions for an evidence query: locked chips + client filters +
+    advanced fragment + free-text search + drill.
+
+    Shared by ``evidence_rows`` and ``evidence_aggregate`` so both build byte-identical
+    predicates over the SAME (re-)filtered scope. Locked (non-editable) chips are
+    re-derived from the stored SQL and kept only when their id is in ``kept_ids``;
+    editable chips travel as client ``filters`` (their CURRENT state). A ``BETWEEN`` chip
+    (validated upstream to exactly 2 values) is rendered as-is - a date-range low/high
+    whose bounds both quote through ``_quote_value`` (mirrors source_service._source_
+    conditions); every other op is normalized exactly as the row window does (a single
+    ``=`` value stays ``=``, otherwise ``IN``). The advanced fragment is appended
+    (re-gated) only when ``include_advanced`` and one is present; ``q`` adds one
+    accent-folded ILIKE over ALL live columns (empty / too-short -> no search); ``drill``
+    adds server-derived equality / IS NULL conditions re-derived from the stored SQL.
+    Returns the list of pre-rendered, caller-escaped conditions (unknown filter column ->
+    'invalid_filter_column').
+    """
+    conditions = []
+    kept = set(kept_ids)
+    for pred in ctx["predicates"]:
+        # Editable chips travel as client `filters` (their CURRENT state); locked
+        # chips are re-derived HERE from the stored SQL and only kept by id.
+        if pred["editable"] or pred["id"] not in kept:
+            continue
+        conditions.append(_locked_condition(ctx, pred))
+    for f in filters:
+        column = ctx["colmap"].get(f["column"].lower())
+        if column is None:
+            raise EvidenceError("invalid_filter_column", 400)
+        if f["op"] == "BETWEEN":
+            op = "BETWEEN"                            # date-range low/high, rendered as-is
+        else:
+            op = "=" if (f["op"] == "=" and len(f["values"]) == 1) else "IN"
+        conditions.append(render_predicate(
+            {"column": column, "op": op, "values": f["values"]},
+            pg_identifier, _quote_value,
+        ))
+    if include_advanced and ctx["advanced"]:
+        conditions.append(_advanced_condition(ctx))
+    # Free-text search over every live column: one accent-folded ILIKE (or None when
+    # the folded needle is < 2 chars), ANDed with the rest. Mirrors source_service.
+    search = build_search_condition(
+        [c["name"] for c in ctx["columns"]], q, pg_identifier, _quote_literal,
+    )
+    if search:
+        conditions.append(search)
+    if drill:
+        conditions.extend(_drill_conditions(ctx, drill))
+    return conditions
+
+
 def _run_evidence_query(ctx, query, op_name):
     """Execute one bounded read-only query on the matched dataset's connection.
 
@@ -1072,9 +1125,11 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     """One bounded window of the (re-)filtered evidence table. Read-only.
 
     ``limit``/``offset`` (validated + clamped upstream) define the row window: a
-    LIMIT of ``limit + 1`` yields ``has_more`` without a COUNT(*). ``q`` (optional)
-    is a free-text term matched over EVERY live column via one accent-folded ILIKE
-    (empty / too-short -> no search), mirroring the Source Data Explorer.
+    LIMIT of ``limit + 1`` yields ``has_more`` without a COUNT(*). ``filters`` are the
+    editable chips (``{column, op, values}``); a ``BETWEEN`` date-range chip is now
+    accepted too (rendered as-is), every other op normalizes to ``=``/``IN``. ``q``
+    (optional) is a free-text term matched over EVERY live column via one accent-folded
+    ILIKE (empty / too-short -> no search), mirroring the Source Data Explorer.
     ``drill`` (optional, validated upstream) narrows the window to ONE result
     group: every drill column is re-derived from the STORED SQL server-side
     (never trusted from the client) and rendered as an equality / IS NULL
@@ -1084,34 +1139,7 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     never picks an arbitrary table). Unknown / None -> the first matched table.
     """
     ctx = _context(user_id, exchange_id, preferred_table=table)
-    conditions = []
-    kept = set(kept_ids)
-    for pred in ctx["predicates"]:
-        # Editable chips travel as client `filters` (their CURRENT state); locked
-        # chips are re-derived HERE from the stored SQL and only kept by id.
-        if pred["editable"] or pred["id"] not in kept:
-            continue
-        conditions.append(_locked_condition(ctx, pred))
-    for f in filters:
-        column = ctx["colmap"].get(f["column"].lower())
-        if column is None:
-            raise EvidenceError("invalid_filter_column", 400)
-        op = "=" if (f["op"] == "=" and len(f["values"]) == 1) else "IN"
-        conditions.append(render_predicate(
-            {"column": column, "op": op, "values": f["values"]},
-            pg_identifier, _quote_value,
-        ))
-    if include_advanced and ctx["advanced"]:
-        conditions.append(_advanced_condition(ctx))
-    # Free-text search over every live column: one accent-folded ILIKE (or None when
-    # the folded needle is < 2 chars), ANDed with the rest. Mirrors source_service.
-    search = build_search_condition(
-        [c["name"] for c in ctx["columns"]], q, pg_identifier, _quote_literal,
-    )
-    if search:
-        conditions.append(search)
-    if drill:
-        conditions.extend(_drill_conditions(ctx, drill))
+    conditions = _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill)
 
     if sort:
         order_col = ctx["colmap"].get(sort["column"].lower())
@@ -1192,3 +1220,83 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None):
         len(values), truncated,
     )
     return {"values": values, "truncated": truncated}
+
+
+def evidence_aggregate(user_id, exchange_id, filters, kept_ids, include_advanced,
+                       q, drill=None, table=None, group=None, measures=None, limit=50):
+    """Database-EXACT aggregates over the exchange's (re-)filtered evidence scope. Read-only.
+
+    The interactive table is only a paginated window; this computes the exact totals the
+    database evaluates over EVERY row of the SAME (re-)filtered scope (shared
+    ``_evidence_conditions``: locked chips kept by id + client filters + advanced fragment
+    + free-text ``q`` + drill), so the aggregation matches what the user sees filtered. Its
+    only specificity vs the home Source Data explorer is that scope pre-filter derived from
+    the answer's stored SQL; the aggregation engine (measures, grouping, calendar bucket,
+    ORDER BY / cap rules) is the SHARED ``aggregate_core`` used by /source/aggregate.
+    ``measures`` are whitelisted aggregate functions (validated upstream), typed against the
+    LIVE schema here (sum/avg/median need a numeric column). ``group`` is optional:
+
+      - ``group is None``: one ungrouped totals row over the whole filtered set (a single
+        bounded query, LIMIT 1); ``totals`` is None, ``truncated`` is False.
+      - ``group`` set: the group column (optionally DATE_TRUNC'd by a whitelisted calendar
+        ``bucket`` - which requires a TEMPORAL column, 'invalid_group_bucket' otherwise) is
+        ranked by the first measure (ORDER BY m0 DESC) or, when bucketed, chronologically
+        (ORDER BY key ASC). The group list is CAPPED at ``limit`` (LIMIT ``limit + 1`` to
+        flag truncation without a COUNT) and a SECOND bounded query returns the ungrouped
+        ``totals`` over the same WHERE, so the caller can compute exact shares of total.
+
+    ``limit`` (the group cap) is clamped upstream to [1, MAX_AGG_GROUP_ROWS]; the route
+    always passes the validated value. Instance safety: read-only + statement_timeout
+    pre-queries are inherited from ``_run_evidence_query``; a request runs at most TWO
+    bounded queries and a grouped result is always capped, so no unbounded scan or result
+    set can pin the dataset connection. Returns ``{"rows", "totals", "truncated"}`` (JSON-safe).
+    """
+    ctx = _context(user_id, exchange_id, preferred_table=table)
+    conditions = _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill)
+    # Imported lazily: aggregate_core imports EvidenceError from THIS module, so a
+    # top-level import here would be circular (service is imported before EvidenceError
+    # is defined). The engine renders the same measure/group/bucket SQL fragments the
+    # Source Data explorer uses (one implementation, identical type gates).
+    from owismind.evidence.aggregate_core import build_aggregate_plan
+    plan = build_aggregate_plan(ctx["columns"], ctx["colmap"], group, measures)
+
+    if group is None:
+        # Ungrouped: an aggregate with no GROUP BY always yields exactly one row, so LIMIT 1
+        # is the whole result and no totals query or cap is needed.
+        query = build_aggregate_query(
+            table_ref=ctx["table_ref"], select_exprs=plan["select_exprs"],
+            conditions=conditions, group_exprs=plan["group_exprs"],
+            order_expr=plan["order_expr"], order_dir=plan["order_dir"], limit=1,
+        )
+        rows = _run_evidence_query(ctx, query, "evidence_aggregate")
+        logger.info(
+            "evidence_aggregate - user_id=%s exchange_id=%s dataset=%s grouped=False "
+            "measures=%d conditions=%d",
+            user_id, exchange_id, ctx["dataset"], len(measures), len(conditions),
+        )
+        return {"rows": rows, "totals": None, "truncated": False}
+
+    # Grouped: the plan aliases (and optionally buckets) the group column; two bounded queries.
+    group_query = build_aggregate_query(
+        table_ref=ctx["table_ref"], select_exprs=plan["select_exprs"], conditions=conditions,
+        group_exprs=plan["group_exprs"], order_expr=plan["order_expr"],
+        order_dir=plan["order_dir"],
+        limit=limit + 1,          # one extra group -> truncated without a COUNT
+    )
+    grouped_rows = _run_evidence_query(ctx, group_query, "evidence_aggregate")
+    truncated = len(grouped_rows) > limit
+
+    totals_query = build_aggregate_query(
+        table_ref=ctx["table_ref"], select_exprs=plan["measure_exprs"], conditions=conditions,
+        group_exprs=[], order_expr=None, order_dir=None, limit=1,
+    )
+    totals_rows = _run_evidence_query(ctx, totals_query, "evidence_aggregate")
+    totals = totals_rows[0] if totals_rows else None
+
+    logger.info(
+        "evidence_aggregate - user_id=%s exchange_id=%s dataset=%s grouped=True bucket=%s "
+        "measures=%d conditions=%d groups=%d truncated=%s",
+        user_id, exchange_id, ctx["dataset"], group["bucket"], len(measures),
+        len(conditions), min(len(grouped_rows), limit), truncated,
+    )
+    return {"rows": grouped_rows[:limit], "totals": totals, "truncated": truncated}

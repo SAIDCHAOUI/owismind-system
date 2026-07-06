@@ -354,7 +354,12 @@ MAX_EVIDENCE_COLUMN_CHARS = 128
 # bounded identifier string travels; the service re-validates it against the SQL's
 # own set of matched tables, so this is a request, never an authority.
 MAX_EVIDENCE_TABLE_CHARS = 256
+# Client-filter op whitelist. /evidence/rows stays equality + IN only (the editable
+# chips are always a single value or an IN list). The /source/* routes additionally
+# accept BETWEEN so a date-range chip (a low/high pair) can filter the raw dataset;
+# render_predicate already supports BETWEEN, and _source_conditions renders it as-is.
 EVIDENCE_FILTER_OPS = ("=", "IN")
+SOURCE_FILTER_OPS = ("=", "IN", "BETWEEN")
 # Drill-down labels (one per drillable group key): the server re-derives the
 # drillable column set from the STORED SQL, so only shape/bounds are checked
 # here. Mirrored by evidence.service.MAX_DRILL_CONDITIONS (defense in depth).
@@ -398,11 +403,16 @@ def _validate_evidence_value(v):
     raise ValidationError("invalid_filter_value")
 
 
-def _parse_evidence_filters(raw_filters):
+def _parse_evidence_filters(raw_filters, allowed_ops=EVIDENCE_FILTER_OPS):
     """Shape + bounds a list of ``{column, op, values}`` chips into normalized dicts.
 
-    Shared by /evidence/rows and /source/rows: same caps and stable codes. Column
-    EXISTENCE is checked against the live schema downstream; here only shape/bounds.
+    Shared by /evidence/rows and /source/rows: same caps and stable codes. ``allowed_ops``
+    is the op whitelist the ``op`` is checked against: /evidence/rows uses the default
+    ``EVIDENCE_FILTER_OPS`` (equality + IN only), while the /source/* routes pass
+    ``SOURCE_FILTER_OPS`` to also accept a BETWEEN date-range chip. Arity by op: ``=``
+    requires exactly 1 value, ``BETWEEN`` exactly 2 (the range low/high), ``IN`` 1..cap;
+    an out-of-arity op raises 'invalid_filter_values'. Column EXISTENCE is checked against
+    the live schema downstream; here only shape/bounds.
     """
     if not isinstance(raw_filters, list) or len(raw_filters) > MAX_EVIDENCE_FILTERS:
         raise ValidationError("invalid_filters")
@@ -412,12 +422,14 @@ def _parse_evidence_filters(raw_filters):
             raise ValidationError("invalid_filters")
         column = validate_evidence_column(item.get("column"))
         op = item.get("op")
-        if op not in EVIDENCE_FILTER_OPS:
+        if op not in allowed_ops:
             raise ValidationError("invalid_filter_op")
         values = item.get("values")
         if not isinstance(values, list) or not values or len(values) > MAX_EVIDENCE_IN_VALUES:
             raise ValidationError("invalid_filter_values")
         if op == "=" and len(values) != 1:
+            raise ValidationError("invalid_filter_values")
+        if op == "BETWEEN" and len(values) != 2:
             raise ValidationError("invalid_filter_values")
         filters.append({"column": column, "op": op,
                         "values": [_validate_evidence_value(v) for v in values]})
@@ -486,29 +498,14 @@ def _clean_source_query(value):
     return " ".join(spaced.split())[:MAX_SOURCE_QUERY_CHARS]
 
 
-def validate_evidence_rows_request(payload):
-    """Validate a /evidence/rows payload.
+def _parse_evidence_kept_ids(raw_kept):
+    """The locked-chip ids to keep: a bounded list of non-negative ints (bool refused).
 
-    Returns ``(exchange_id, filters, kept_ids, include_advanced, limit, offset,
-    sort, drill, table, q)``. Raises ValidationError (stable code) on structurally
-    invalid input; ``limit`` and ``offset`` are CLAMPED (never raise), mirroring the
-    old page helper. ``drill`` is the optional drill-down label list (<= 8 entries of
-    ``{column, value}``; value may be None - it renders an IS NULL test); the
-    drillable column SET is re-derived server-side from the stored SQL, so only
-    shape and bounds are validated here (single stable code: 'invalid_drill').
-    ``table`` is the OPTIONAL source-table selector (multi-table SQL): a bounded
-    identifier string or None; the service matches it against the SQL's own set
-    of matched tables (the client never picks an arbitrary table). ``q`` is the
-    OPTIONAL free-text search term (cleaned like /source/rows, effective only when
-    its folded form is >= 2 chars), matched server-side over every live column.
+    Shared by /evidence/rows and /evidence/aggregate. ``None`` / falsy -> ``[]``; a
+    non-list, an over-cap list, or any non-int / negative / bool element raises
+    'invalid_kept_ids'.
     """
-    if not isinstance(payload, dict):
-        raise ValidationError("invalid_payload")
-    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
-
-    filters = _parse_evidence_filters(payload.get("filters") or [])
-
-    raw_kept = payload.get("kept_ids") or []
+    raw_kept = raw_kept or []
     if not isinstance(raw_kept, list) or len(raw_kept) > MAX_EVIDENCE_KEPT_IDS:
         raise ValidationError("invalid_kept_ids")
     kept_ids = []
@@ -516,24 +513,22 @@ def validate_evidence_rows_request(payload):
         if isinstance(v, bool) or not isinstance(v, int) or v < 0:
             raise ValidationError("invalid_kept_ids")
         kept_ids.append(v)
+    return kept_ids
 
-    include_advanced = bool(payload.get("include_advanced"))
 
-    # Explicit row window (replaces the old page index). Both clamp, never raise.
-    limit = _parse_rows_limit(payload.get("limit"))
-    offset = _parse_rows_offset(payload.get("offset"))
+def _parse_evidence_drill(raw_drill):
+    """Optional drill-down labels: <= MAX_EVIDENCE_DRILL ``{column, value}`` entries.
 
-    # Optional sort: malformed input degrades to None (the service still
-    # validates the column against the live schema and errors there).
-    sort = _parse_evidence_sort(payload.get("sort"))
-
-    # Optional drill-down labels. Unlike sort, a malformed drill RAISES: a drill
-    # silently dropped would return the UNdrilled (wider) page while the UI
-    # believes it is showing one group - a scope-honesty violation, not a
-    # cosmetic degradation. Values reuse the filter-value gates (str <= 500,
-    # finite numbers, bool) with None additionally allowed (IS NULL drill).
+    Shared by /evidence/rows and /evidence/aggregate. ``None`` / falsy -> ``[]``. Unlike
+    sort, a malformed drill RAISES: a drill silently dropped would return the UNdrilled
+    (wider) scope while the UI believes it shows one group - a scope-honesty violation,
+    not a cosmetic degradation. Values reuse the filter-value gates (str <= cap, finite
+    numbers, bool) with None additionally allowed (IS NULL drill). One stable code for the
+    whole block ('invalid_drill'); the drillable column SET is re-derived server-side from
+    the stored SQL, so only shape/bounds are checked here.
+    """
     drill = []
-    raw_drill = payload.get("drill") or []
+    raw_drill = raw_drill or []
     if not isinstance(raw_drill, list) or len(raw_drill) > MAX_EVIDENCE_DRILL:
         raise ValidationError("invalid_drill")
     for item in raw_drill:
@@ -549,20 +544,57 @@ def validate_evidence_rows_request(payload):
             # describe filter problems; here the failing unit is the drill).
             raise ValidationError("invalid_drill")
         drill.append({"column": column, "value": value})
+    return drill
 
-    # Optional source-table selector (multi-table SQL). A malformed value
-    # degrades to None (default = first matched table); the service rejects an
-    # unknown table against the SQL's matched set, so only shape/bounds here.
-    table = None
-    raw_table = payload.get("table")
+
+def _parse_evidence_table(raw_table):
+    """Optional source-table selector (multi-table SQL): a bounded identifier or None.
+
+    Shared by /evidence/rows and /evidence/aggregate. A malformed value degrades to None
+    (default = first matched table); the service matches a given name against the SQL's
+    own set (the client never picks an arbitrary table), so only shape/bounds here.
+    """
     if (isinstance(raw_table, str) and raw_table
             and len(raw_table) <= MAX_EVIDENCE_TABLE_CHARS):
-        table = raw_table
+        return raw_table
+    return None
 
-    # Optional free-text search over every live column (cleaned + capped, never
-    # raises; the service treats a folded needle < 2 chars as no search).
+
+def validate_evidence_rows_request(payload):
+    """Validate a /evidence/rows payload.
+
+    Returns ``(exchange_id, filters, kept_ids, include_advanced, limit, offset,
+    sort, drill, table, q)``. Raises ValidationError (stable code) on structurally
+    invalid input; ``limit`` and ``offset`` are CLAMPED (never raise), mirroring the
+    old page helper. ``filters`` accept ``SOURCE_FILTER_OPS`` (equality + IN + a BETWEEN
+    date-range chip): the evidence table now takes the same date-range chip the Source
+    Data explorer does. ``drill`` is the optional drill-down label list (<= 8 entries of
+    ``{column, value}``; value may be None - it renders an IS NULL test); the
+    drillable column SET is re-derived server-side from the stored SQL, so only
+    shape and bounds are validated here (single stable code: 'invalid_drill').
+    ``table`` is the OPTIONAL source-table selector (multi-table SQL): a bounded
+    identifier string or None; the service matches it against the SQL's own set
+    of matched tables (the client never picks an arbitrary table). ``q`` is the
+    OPTIONAL free-text search term (cleaned like /source/rows, effective only when
+    its folded form is >= 2 chars), matched server-side over every live column.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
+    kept_ids = _parse_evidence_kept_ids(payload.get("kept_ids"))
+    include_advanced = bool(payload.get("include_advanced"))
+    # Explicit row window (replaces the old page index). Both clamp, never raise.
+    limit = _parse_rows_limit(payload.get("limit"))
+    offset = _parse_rows_offset(payload.get("offset"))
+    # Optional sort: malformed input degrades to None (the service still validates the
+    # column against the live schema and errors there).
+    sort = _parse_evidence_sort(payload.get("sort"))
+    drill = _parse_evidence_drill(payload.get("drill"))
+    table = _parse_evidence_table(payload.get("table"))
+    # Optional free-text search over every live column (cleaned + capped, never raises;
+    # the service treats a folded needle < 2 chars as no search).
     q = _clean_source_query(payload.get("q"))
-
     return (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
             drill, table, q)
 
@@ -620,15 +652,17 @@ def validate_source_rows_request(payload):
 
     Mirrors ``validate_evidence_rows_request`` (same filter/limit/offset/sort helpers
     and bounds) but keyed by an agent + source index instead of an exchange id, and with
-    a free-text ``q`` instead of locked chips / drill. Raises ValidationError (stable
-    code) on structurally invalid input; ``limit`` and ``offset`` are CLAMPED (never raise).
+    a free-text ``q`` instead of locked chips / drill. Filters accept ``SOURCE_FILTER_OPS``
+    (equality + IN + a BETWEEN date-range chip), unlike /evidence/rows. Raises
+    ValidationError (stable code) on structurally invalid input; ``limit`` and ``offset``
+    are CLAMPED (never raise).
     """
     if not isinstance(payload, dict):
         raise ValidationError("invalid_payload")
     agent_key = _validate_source_agent(payload.get("agent"))
     source_id = _validate_source_id(payload.get("source"))
     q = _clean_source_query(payload.get("q"))
-    filters = _parse_evidence_filters(payload.get("filters") or [])
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
     limit = _parse_rows_limit(payload.get("limit"))
     offset = _parse_rows_offset(payload.get("offset"))
     sort = _parse_evidence_sort(payload.get("sort"))
@@ -651,6 +685,149 @@ def validate_source_distinct_params(agent, source, column, q=None):
     """
     return (_validate_source_agent(agent), _validate_source_id(source),
             validate_evidence_column(column), _clean_source_query(q))
+
+
+# --- Source Data Explorer: safe aggregation -----------------------------------
+# The explorer's table view is only a paginated WINDOW; business users also need EXACT
+# totals computed by the DATABASE over the FULL filtered set. The frontend never sends
+# SQL: it sends a STRUCTURED spec (an optional grouping + whitelisted measures) resolved
+# server-side, over the SAME agent + source + {column, op, values} filters + free-text q
+# as /source/rows. Only whitelisted aggregate functions and calendar buckets travel; the
+# grouped result is always capped. Column EXISTENCE, the numeric-ness required by
+# sum/avg, and the temporal-ness required by a bucket are enforced against the LIVE
+# schema in the service - here only shape / whitelist / bounds are checked.
+AGG_FUNCTIONS = ("count", "count_distinct", "sum", "avg", "median", "min", "max")
+MAX_AGG_MEASURES = 8
+MAX_AGG_GROUP_ROWS = 50
+AGG_BUCKETS = ("month", "quarter", "year")
+
+
+def _parse_aggregate_limit(value):
+    """Clamp the group-rows cap to ``[1, MAX_AGG_GROUP_ROWS]``. Never raises.
+
+    Missing / malformed (including a bool - an int subclass that must not read as 0/1)
+    degrades to ``MAX_AGG_GROUP_ROWS``; a valid number is clamped into the band, so a
+    grouped aggregation can never return an unbounded group list.
+    """
+    if isinstance(value, bool):
+        return MAX_AGG_GROUP_ROWS
+    try:
+        limit = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return MAX_AGG_GROUP_ROWS
+    return max(1, min(MAX_AGG_GROUP_ROWS, limit))
+
+
+def _parse_aggregate_measures(raw_measures):
+    """Shape + whitelist a measures list into normalized ``{"fn", "column"}`` dicts.
+
+    A list of 1..MAX_AGG_MEASURES items; each ``fn`` must be in ``AGG_FUNCTIONS``.
+    ``count`` is COUNT(*) and takes NO column (a column present is a contract violation
+    -> 'invalid_aggregate'); every other fn REQUIRES a column, shape-checked via
+    ``validate_evidence_column`` (a missing / malformed column -> 'invalid_filter_column').
+    The column EXISTENCE and its numeric-ness (for sum/avg/median) are checked against the
+    live schema downstream. Any other structural problem raises 'invalid_aggregate'.
+    """
+    if (not isinstance(raw_measures, list) or not raw_measures
+            or len(raw_measures) > MAX_AGG_MEASURES):
+        raise ValidationError("invalid_aggregate")
+    measures = []
+    for item in raw_measures:
+        if not isinstance(item, dict):
+            raise ValidationError("invalid_aggregate")
+        fn = item.get("fn")
+        if fn not in AGG_FUNCTIONS:
+            raise ValidationError("invalid_aggregate")
+        raw_column = item.get("column")
+        if fn == "count":
+            if raw_column is not None:
+                raise ValidationError("invalid_aggregate")
+            column = None
+        else:
+            column = validate_evidence_column(raw_column)
+        measures.append({"fn": fn, "column": column})
+    return measures
+
+
+def _parse_aggregate_group(raw_group):
+    """An optional ``{"column", "bucket"}`` grouping, or None.
+
+    ``None`` means an ungrouped aggregation (one totals row). A dict must carry a
+    shape-valid ``column`` (``validate_evidence_column`` -> 'invalid_filter_column');
+    ``bucket`` is None (group by the raw value) or one of ``AGG_BUCKETS`` (a calendar
+    DATE_TRUNC, which additionally requires a temporal column - enforced against the live
+    schema in the service). A present-but-non-dict group raises 'invalid_group'; an
+    unknown bucket raises 'invalid_group_bucket'.
+    """
+    if raw_group is None:
+        return None
+    if not isinstance(raw_group, dict):
+        raise ValidationError("invalid_group")
+    column = validate_evidence_column(raw_group.get("column"))
+    bucket = raw_group.get("bucket")
+    if bucket is not None and bucket not in AGG_BUCKETS:
+        raise ValidationError("invalid_group_bucket")
+    return {"column": column, "bucket": bucket}
+
+
+def validate_source_aggregate_request(payload):
+    """Validate a /source/aggregate payload.
+
+    Returns ``(agent_key, source_id, q, filters, group, measures, limit)``. Mirrors
+    ``validate_source_rows_request`` for the agent / source / q / filters core (same
+    helpers, same stable codes, same ``SOURCE_FILTER_OPS`` filter ops including a BETWEEN
+    date-range chip) and adds a structured aggregation spec: an optional ``group``
+    ({column, bucket}) and 1..MAX_AGG_MEASURES whitelisted ``measures`` ({fn, column}).
+    Structural problems raise ValidationError with a stable code ('invalid_payload',
+    'invalid_aggregate', 'invalid_group', 'invalid_group_bucket', or a reused filter code);
+    ``limit`` is CLAMPED to ``[1, MAX_AGG_GROUP_ROWS]`` (never raises). Column existence and
+    type gating (numeric for sum/avg/median, temporal for a bucket) are enforced against the
+    LIVE schema by the service, not here.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    agent_key = _validate_source_agent(payload.get("agent"))
+    source_id = _validate_source_id(payload.get("source"))
+    q = _clean_source_query(payload.get("q"))
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
+    group = _parse_aggregate_group(payload.get("group"))
+    measures = _parse_aggregate_measures(payload.get("measures"))
+    limit = _parse_aggregate_limit(payload.get("limit"))
+    return agent_key, source_id, q, filters, group, measures, limit
+
+
+def validate_evidence_aggregate_request(payload):
+    """Validate an /evidence/aggregate payload.
+
+    Returns ``(exchange_id, filters, kept_ids, include_advanced, q, drill, table,
+    group, measures, limit)``. The base fields are validated EXACTLY like
+    ``validate_evidence_rows_request`` (same helpers, same stable codes) MINUS the row
+    window (limit/offset/sort), PLUS a structured aggregation spec resolved by the SAME
+    ``_parse_aggregate_*`` helpers /source/aggregate uses: an optional ``group``
+    ({column, bucket}) and 1..MAX_AGG_MEASURES whitelisted ``measures`` ({fn, column}).
+    ``filters`` accept ``SOURCE_FILTER_OPS`` (equality + IN + a BETWEEN date-range chip).
+    Structural problems raise ValidationError with a stable code ('invalid_payload',
+    'invalid_exchange_id', 'invalid_filter_op'/'invalid_filter_values'/'invalid_filter_value',
+    'invalid_kept_ids', 'invalid_drill', 'invalid_aggregate', 'invalid_group',
+    'invalid_group_bucket'); the aggregate ``limit`` (group cap) is CLAMPED to
+    ``[1, MAX_AGG_GROUP_ROWS]`` (never raises). Column existence and type gating (numeric
+    for sum/avg/median, temporal for a bucket) are enforced against the LIVE schema by the
+    service, not here.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
+    filters = _parse_evidence_filters(payload.get("filters") or [], allowed_ops=SOURCE_FILTER_OPS)
+    kept_ids = _parse_evidence_kept_ids(payload.get("kept_ids"))
+    include_advanced = bool(payload.get("include_advanced"))
+    q = _clean_source_query(payload.get("q"))
+    drill = _parse_evidence_drill(payload.get("drill"))
+    table = _parse_evidence_table(payload.get("table"))
+    group = _parse_aggregate_group(payload.get("group"))
+    measures = _parse_aggregate_measures(payload.get("measures"))
+    limit = _parse_aggregate_limit(payload.get("limit"))
+    return (exchange_id, filters, kept_ids, include_advanced, q, drill, table,
+            group, measures, limit)
 
 
 # --- Monthly budget / quota (admin) -------------------------------------------

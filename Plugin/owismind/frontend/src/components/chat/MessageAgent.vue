@@ -175,6 +175,27 @@ const isEvidenceOpen = computed(
 function openEvidence() {
   if (v.value.exchangeId) evidence.openForExchange(v.value.exchangeId)
 }
+// Quiet "check this number" affordance: open the proof panel for this exchange straight
+// on the Source data tab (where the underlying rows live). If the panel is already open
+// for this exchange, just switch the tab; otherwise open it landing on 'sources'.
+// Hidden once the exchange is KNOWN degraded (panel open, meta.available false): the
+// 'sources' tab does not exist there, so the link would be a dead click. Before meta is
+// known the link stays best-effort: opening falls back to the default proof tab.
+const verifyVisible = computed(
+  () => v.value.sql.length > 0 && !!v.value.exchangeId
+    && !(isEvidenceOpen.value && evidence.meta && evidence.meta.available === false),
+)
+function verifyNumber() {
+  const id = v.value.exchangeId
+  if (!id) return
+  if (isEvidenceOpen.value) {
+    // Panel already open for this exchange: switch tabs only when the interactive
+    // view exists (a degraded exchange has no 'sources' tab to land on).
+    if (evidence.meta && evidence.meta.available) evidence.setActiveTab('sources')
+  } else {
+    evidence.openForExchange(id, { tab: 'sources' })
+  }
+}
 
 // Whether this version produced any answer text at all.
 const hasAnswerText = computed(() => v.value.timeline.some((it) => it.kind === 'text' && (it.text || '').length > 0))
@@ -470,6 +491,13 @@ function nextVersion() {
         :title="t('ev.open')"
         @click="openEvidence"
       ><Icon name="shield" />{{ t('ev.open') }}</button>
+      <!-- Quiet "check this number" link - opens the proof panel on the Source data tab. -->
+      <button
+        v-if="verifyVisible"
+        class="verify-link"
+        :title="t('ev.verify')"
+        @click="verifyNumber"
+      >{{ t('ev.verify') }}</button>
       <button class="fb-btn" :class="{ primary: isUp }" :title="t('msg.like')" :aria-label="t('msg.like')" :aria-pressed="isUp" @click="like"><Icon name="thumbsUp" :size="15" /></button>
       <button class="fb-btn" :class="{ danger: isDown }" :title="t('msg.dislike')" :aria-label="t('msg.dislike')" :aria-pressed="isDown" @click="dislike"><Icon name="thumbsDown" :size="15" /></button>
       <!-- ⋯ detailed feedback - works for either rating (comment a 👍 or a 👎). -->
@@ -738,6 +766,12 @@ function nextVersion() {
 .msg-foot button :deep(.ui-icon) { width: 13px; height: 13px; }
 .msg-foot button.primary { color: var(--orange); font-weight: 500; }
 .msg-foot button.danger { color: var(--danger); font-weight: 500; }
+/* Quiet "check this number" link: reads as text, not a chip - muted, no hover fill,
+   underline on hover only. */
+.msg-foot button.verify-link {
+  padding: 4px 2px; color: var(--text-3); text-decoration: none;
+}
+.msg-foot button.verify-link:hover { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
 .ver-nav { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--s-2); }
 .ver-count { font-size: 11px; color: var(--text-3); padding: 0 2px; }
 </style>

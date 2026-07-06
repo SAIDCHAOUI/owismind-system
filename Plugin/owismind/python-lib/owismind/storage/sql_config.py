@@ -273,6 +273,56 @@ def bool_literal(value):
     return "true" if value else "false"
 
 
+# --- Column type classifiers (schema type -> aggregation capability) ---------
+# The Source Data Explorer's safe aggregation gate needs to know whether a column can be
+# summed/averaged (numeric) or bucketed by calendar period (temporal). Column types come
+# from the live dataset schema (``dataiku.Dataset.read_schema`` -> Dataiku STORAGE types
+# such as "string"/"bigint"/"double"/"date"), but a raw PostgreSQL type name can also
+# surface depending on how DSS exposes a dataset, so both vocabularies are covered. Both
+# classifiers are CONSERVATIVE: an unknown / empty / None type is neither numeric nor
+# temporal, so a measure or a bucket is refused rather than applied to a column the
+# database might reject at execution time.
+_NUMERIC_TYPE_NAMES = frozenset({
+    # Dataiku storage types.
+    "tinyint", "smallint", "int", "bigint", "float", "double", "decimal",
+    # PostgreSQL native type names + common aliases.
+    "integer", "int2", "int4", "int8", "smallserial", "serial", "bigserial",
+    "numeric", "real", "double precision", "float4", "float8", "money",
+})
+# Dataiku's only temporal storage type is "date"; PostgreSQL adds timestamp variants
+# (matched by prefix in ``is_temporal_type``). Bare "time" (time of day) and "interval"
+# are intentionally excluded: a month/quarter/year DATE_TRUNC is undefined (and errors)
+# on them.
+_TEMPORAL_TYPE_NAMES = frozenset({"date", "datetime", "timestamp", "timestamptz"})
+
+
+def _normalize_type(type_str):
+    """A schema type string lowercased + stripped, or "" for None / non-str / empty."""
+    if not type_str or not isinstance(type_str, str):
+        return ""
+    return type_str.strip().lower()
+
+
+def is_numeric_type(type_str):
+    """True when a live-schema column type is a number a measure can SUM/AVG.
+
+    Case-insensitive; None / "" / an unknown type -> False (conservative, so a numeric
+    measure is refused rather than applied to a column PostgreSQL might reject).
+    """
+    return _normalize_type(type_str) in _NUMERIC_TYPE_NAMES
+
+
+def is_temporal_type(type_str):
+    """True when a live-schema column type is a date/timestamp a bucket can DATE_TRUNC.
+
+    Case-insensitive; matches the Dataiku "date" storage type and every PostgreSQL
+    "timestamp..." spelling (with/without time zone), but NOT bare "time" or "interval"
+    (calendar bucketing is undefined there). None / "" / unknown -> False.
+    """
+    norm = _normalize_type(type_str)
+    return norm in _TEMPORAL_TYPE_NAMES or norm.startswith("timestamp")
+
+
 # --- Table naming ------------------------------------------------------------
 def _namespace():
     """Namespace segment: ``owismind`` or ``{prefix}-owismind`` when a prefix is set."""

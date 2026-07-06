@@ -8,16 +8,20 @@ import { ref, computed } from 'vue'
 import {
   fetchEvidenceMeta,
   fetchEvidenceRows,
+  fetchEvidenceAggregate,
   fetchEvidenceDistinct,
 } from '../services/backend.js'
 import {
   chipsFromMeta,
   buildRowsPayload,
+  buildEvidenceAggregatePayload,
   buildDrillLabels,
   isModified,
   normalizeEditableOp,
   effectiveEvidenceQuery,
 } from '../composables/evidenceModel.js'
+import { chipOp } from '../composables/sourceModel.js'
+import { createAggregateSurface } from '../composables/aggregateSurface.js'
 import { track } from '../services/track.js'
 
 // Limit/offset pagination (v2): the first load pulls a big window, then each
@@ -91,6 +95,70 @@ export const useEvidenceStore = defineStore('evidence', () => {
   })
   const hasMultipleSources = computed(() => sources.value.length > 1)
 
+  // A stable signature of the aggregation SCOPE (exchange + selected table + kept locked
+  // ids + advanced + effective search + editable/user filters + drill). It carries EXACTLY
+  // what buildEvidenceAggregatePayload sends, so afterScopeChange re-fires precisely when
+  // the DB-computed totals change. Sort/offset are excluded (they never change a total).
+  function _viewSignature() {
+    const filterSig = []
+    const keptIds = []
+    for (const c of chips.value) {
+      if (c.editable || c.source === 'user') filterSig.push([c.column, chipOp(c), c.values])
+      else if (c.id != null) keptIds.push(c.id)
+    }
+    keptIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    const drillSig = drill.value && Array.isArray(drill.value.labels)
+      ? drill.value.labels.map((l) => [l.column, l.value])
+      : null
+    return JSON.stringify([
+      exchangeId.value,
+      selectedTable.value || null,
+      keptIds,
+      !!includeAdvanced.value,
+      effectiveEvidenceQuery(q.value),
+      filterSig,
+      drillSig,
+    ])
+  }
+
+  // The shared aggregate surface (composables/aggregateSurface.js): the DB-computed row
+  // count + Calculate zone + Analyze mini-pivot, offered here exactly as in the standalone
+  // Source Data explorer. Columns come from the exchange meta (already typed [{name,type}]);
+  // an aggregate is meaningful only for an available exchange. The meta seq (`seq`) is the
+  // epoch, but it does NOT bump on a table/filter change, so the store calls invalidate()
+  // on a table switch / reset to drop any late aggregate response from the previous scope.
+  const surface = createAggregateSurface({
+    getColumns: () => (meta.value && meta.value.columns) || [],
+    isActive: () => !!(exchangeId.value && available.value),
+    getEpoch: () => seq,
+    fetchAggregate: (group, measures, limit) =>
+      fetchEvidenceAggregate(
+        buildEvidenceAggregatePayload(
+          exchangeId.value, chips.value, includeAdvanced.value,
+          drill.value ? drill.value.labels : null, selectedTable.value, q.value,
+          group, measures, limit,
+        ),
+      ),
+    refreshRows: () => refreshRows(),
+    errorCode: 'evidence_unavailable',
+  })
+
+  // The aggregate surface is LAZY: it belongs to the Source data tab, so a scope
+  // change only computes (COUNT + Calculate + pivot) while that tab is VISIBLE. Any
+  // other tab just marks the surface stale; opening the Source data tab catches up.
+  // Without this gate, the automatic end-of-generation reveal (which lands on the
+  // proof/artifact tab) would cost one extra dataset COUNT query per answer even
+  // when the user never opens the Source data tab.
+  let surfaceStale = false
+  function _notifyScopeChange() {
+    if (activeTab.value === 'sources') {
+      surfaceStale = false
+      surface.afterScopeChange(_viewSignature())
+    } else {
+      surfaceStale = true
+    }
+  }
+
   // Compute the default tab key for a given meta object: 'evidence' unless
   // there are artifacts, in which case the first artifact's kind wins.
   // 'evidence' is always valid (the base panel).
@@ -118,15 +186,24 @@ export const useEvidenceStore = defineStore('evidence', () => {
     loading.value = false
     rowsLoading.value = false
     activeTab.value = 'evidence' // reset to base tab; will be re-computed after meta loads
+    surfaceStale = false // nothing to catch up for a closed / brand-new exchange
+    // Drop the DB-computed aggregate surface for the new/closed exchange. invalidate()
+    // dumps any in-flight aggregate response (the caller bumps `seq` before _resetData, so
+    // the epoch guard already covers it, but this keeps _resetData self-sufficient).
+    surface.invalidate()
+    surface.resetDerived()
   }
 
   // Open the panel for one exchange. `auto` (the end-of-generation reveal) only
   // opens when meta says the interactive view is available - no degraded
   // auto-open (user decision). Manual open (the per-message button) opens
-  // immediately, degraded view included.
+  // immediately, degraded view included. `opts.tab` (manual only) lands the panel
+  // on a specific tab after meta loads (e.g. the "check this number" link opens
+  // straight on 'sources'); it overrides the artifact-derived default tab.
   async function openForExchange(id, opts) {
     if (!id) return
     const auto = !!(opts && opts.auto)
+    const wantTab = opts && opts.tab ? opts.tab : null
     if (auto) {
       // Staged auto-reveal: fetch meta WITHOUT touching the current panel
       // state; commit only when the interactive view is confirmed available
@@ -165,7 +242,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
       meta.value = m
       chips.value = chipsFromMeta(m)
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
-      activeTab.value = _defaultTab(m)
+      // Caller-requested tab wins over the artifact-derived default (e.g. land on
+      // 'sources' for the "check this number" link) - but only when the interactive
+      // view is available: on a degraded exchange the 'sources' tab is not rendered
+      // at all (EvidencePanel gates it on meta.available), so honoring the request
+      // would strand the panel on a tab that does not exist.
+      activeTab.value = (wantTab && m.available) ? wantTab : _defaultTab(m)
       if (m.available) await _loadRows(mySeq)
     } catch (e) {
       if (mySeq !== seq) return
@@ -208,6 +290,11 @@ export const useEvidenceStore = defineStore('evidence', () => {
         }
       } else {
         rows.value = newRows.slice(0, MAX_ROWS)
+        surface.clearRowsStale() // the table window now matches the current scope
+        // A FRESH window whose SCOPE changed (new exchange / table / filters / search /
+        // drill, never a sort or an append): refresh the aggregate surface - but only
+        // while its tab is visible (see _notifyScopeChange).
+        _notifyScopeChange()
       }
       offset.value = echoed
       // Stop paging once the server has no more rows OR the client cap is hit.
@@ -216,6 +303,10 @@ export const useEvidenceStore = defineStore('evidence', () => {
     } catch (e) {
       if (mySeq !== seq || myRows !== rowsSeq) return null
       rowsError.value = (e && e.message) || 'evidence_unavailable'
+      // A FAILED fresh load still refreshes the aggregates: the scope DID change, and
+      // keeping the previous scope's DB-exact count/figures would show an authoritative
+      // number that no longer matches the active filters (count query is independent).
+      if (!append) _notifyScopeChange()
       return false
     } finally {
       if (mySeq === seq && myRows === rowsSeq) rowsLoading.value = false
@@ -226,6 +317,16 @@ export const useEvidenceStore = defineStore('evidence', () => {
   function refreshRows() {
     error.value = ''
     rowsError.value = ''
+    if (surface.analyzeOpen.value) {
+      // The Data table is hidden behind the Analyze view: skip the (unused) rows window
+      // and refresh only the DB-computed aggregates (count + pivot). The table is marked
+      // stale and re-fetched lazily when the user returns to the Data view. The evidence
+      // rows fetch is the same windowed query as the Source explorer's, so this cheap
+      // path applies identically here.
+      surface.markRowsStale()
+      _notifyScopeChange()
+      return Promise.resolve(true)
+    }
     return _loadRows(seq)
   }
 
@@ -271,19 +372,22 @@ export const useEvidenceStore = defineStore('evidence', () => {
     offset.value = 0
     refreshRows()
   }
-  function setChipValues(key, values) {
+  // `op` is optional: pass 'BETWEEN' (with exactly 2 boundary values) for a temporal
+  // range chip whose op is preserved end to end; otherwise the op is derived from the
+  // value count (=/IN). Only USER chips ever reach range mode (see EvidenceChips).
+  function setChipValues(key, values, op) {
     const chip = chips.value.find((c) => c.key === key)
     if (!chip || !values.length) return
     chip.values = values.slice()
-    chip.op = normalizeEditableOp(values)
-    // Editing a comparison chip (>=, BETWEEN, LIKE…) converts it to =/IN of the
-    // picked values: it now travels as a structured client filter instead of a
-    // server-side kept id (see evidenceModel.buildRowsPayload).
+    chip.op = op === 'BETWEEN' && values.length === 2 ? 'BETWEEN' : normalizeEditableOp(values)
+    // Editing a comparison chip (>=, LIKE…) converts it to =/IN/BETWEEN of the picked
+    // values: it now travels as a structured client filter instead of a server-side kept
+    // id (see evidenceModel.buildRowsPayload, which forwards BETWEEN via chipOp).
     chip.editable = true
     offset.value = 0
     refreshRows()
   }
-  function addFilter(column, values) {
+  function addFilter(column, values, op) {
     if (!column || !values.length) return
     track('evidence_filter_added', { column })
     userChipSeq += 1
@@ -291,7 +395,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       key: 'u' + userChipSeq,
       id: null,
       column,
-      op: normalizeEditableOp(values),
+      op: op === 'BETWEEN' && values.length === 2 ? 'BETWEEN' : normalizeEditableOp(values),
       values: values.slice(),
       editable: true,
       source: 'user',
@@ -395,6 +499,11 @@ export const useEvidenceStore = defineStore('evidence', () => {
     sort.value = null
     drill.value = null
     offset.value = 0
+    // New schema: drop the Calculate/Analyze selection (its columns belonged to the
+    // previous table) and invalidate any in-flight aggregate response (the meta epoch
+    // does NOT bump on a table switch, so the epoch guard alone would not catch it).
+    surface.invalidate()
+    surface.resetDerived()
     refreshRows()
   }
 
@@ -426,6 +535,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // gate is gated on `evidence.open`, not on `activeTab` - F13 rule).
   function setActiveTab(key) {
     activeTab.value = key
+    // Lazy aggregate surface catch-up: scope changes that happened while the Source
+    // data tab was hidden were skipped (never computed); compute them now.
+    if (key === 'sources' && surfaceStale) {
+      surfaceStale = false
+      surface.afterScopeChange(_viewSignature())
+    }
     const name = _TAB_EVENT_BY_KEY[key]
     if (name) track(name, {})
     else track('evidence_tab_viewed', { tab: key })
@@ -440,5 +555,31 @@ export const useEvidenceStore = defineStore('evidence', () => {
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,
     drillIntoResultRow, exitDrill,
     setSort, setTable, loadDistinct,
+    // Shared aggregate surface (DB row count + Calculate zone + Analyze mini-pivot),
+    // re-exposed under the SAME names as the Source explorer store so SourceCalc /
+    // SourceAnalyze drive either host through one `surface` prop.
+    totalCount: surface.totalCount,
+    totalLoading: surface.totalLoading,
+    calcColumn: surface.calcColumn,
+    calcValues: surface.calcValues,
+    calcLoading: surface.calcLoading,
+    calcError: surface.calcError,
+    setCalcColumn: surface.setCalcColumn,
+    reloadCalc: surface.reloadCalc,
+    analyzeOpen: surface.analyzeOpen,
+    analyzeGroup: surface.analyzeGroup,
+    analyzeBucket: surface.analyzeBucket,
+    analyzeFn: surface.analyzeFn,
+    analyzeMeasureColumn: surface.analyzeMeasureColumn,
+    analyzeRows: surface.analyzeRows,
+    analyzeTotals: surface.analyzeTotals,
+    analyzeTruncated: surface.analyzeTruncated,
+    analyzeLoading: surface.analyzeLoading,
+    analyzeError: surface.analyzeError,
+    setAnalyzeOpen: surface.setAnalyzeOpen,
+    setAnalyzeGroup: surface.setAnalyzeGroup,
+    setAnalyzeBucket: surface.setAnalyzeBucket,
+    setAnalyzeMeasure: surface.setAnalyzeMeasure,
+    runAnalyze: surface.runAnalyze,
   }
 })

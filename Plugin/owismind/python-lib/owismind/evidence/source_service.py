@@ -25,7 +25,9 @@ from owismind.evidence.service import (
     _EVIDENCE_TIMEOUT_PRE_QUERIES,
     _quote_value,
 )
+from owismind.evidence.aggregate_core import build_aggregate_plan
 from owismind.evidence.query_builders import (
+    build_aggregate_query,
     build_distinct_query,
     build_rows_query,
     render_predicate,
@@ -147,6 +149,39 @@ def source_meta(agent_key, source_id):
     }
 
 
+def _source_conditions(ctx, q, filters):
+    """The WHERE conditions for a source query: structured filters + free-text search.
+
+    Shared by ``source_rows`` and ``source_aggregate`` so both paths build byte-identical
+    predicates over the SAME filtered set. Each ``{column, op, values}`` filter is
+    resolved against the LIVE colmap (unknown column -> 'invalid_filter_column'). A
+    ``BETWEEN`` chip (validated upstream to exactly 2 values, /source/* only) is rendered
+    as-is - a date-range low/high whose bounds both quote through the same ``_quote_value``;
+    any other op is normalized exactly as the row window does (a single ``=`` value stays
+    ``=``, otherwise ``IN``). ``q`` adds one accent-folded ILIKE over ALL columns (empty /
+    too-short -> no search). Returns a list of pre-rendered, caller-escaped conditions.
+    """
+    conditions = []
+    for f in filters:
+        column = ctx["colmap"].get(f["column"].lower())
+        if column is None:
+            raise EvidenceError("invalid_filter_column", 400)
+        if f["op"] == "BETWEEN":
+            op = "BETWEEN"
+        else:
+            op = "=" if (f["op"] == "=" and len(f["values"]) == 1) else "IN"
+        conditions.append(render_predicate(
+            {"column": column, "op": op, "values": f["values"]},
+            pg_identifier, _quote_value,
+        ))
+    search = build_search_condition(
+        [c["name"] for c in ctx["columns"]], q, pg_identifier, _quote_literal,
+    )
+    if search:
+        conditions.append(search)
+    return conditions
+
+
 def source_rows(agent_key, source_id, q, filters, limit, offset, sort):
     """One bounded window of the source dataset, filtered + optionally searched. Read-only.
 
@@ -159,21 +194,7 @@ def source_rows(agent_key, source_id, q, filters, limit, offset, sort):
     Returns ``{"rows", "has_more", "offset"}``.
     """
     ctx = _resolve_source(agent_key, source_id)
-    conditions = []
-    for f in filters:
-        column = ctx["colmap"].get(f["column"].lower())
-        if column is None:
-            raise EvidenceError("invalid_filter_column", 400)
-        op = "=" if (f["op"] == "=" and len(f["values"]) == 1) else "IN"
-        conditions.append(render_predicate(
-            {"column": column, "op": op, "values": f["values"]},
-            pg_identifier, _quote_value,
-        ))
-    search = build_search_condition(
-        [c["name"] for c in ctx["columns"]], q, pg_identifier, _quote_literal,
-    )
-    if search:
-        conditions.append(search)
+    conditions = _source_conditions(ctx, q, filters)
 
     if sort:
         order_col = ctx["colmap"].get(sort["column"].lower())
@@ -238,6 +259,78 @@ def source_distinct(agent_key, source_id, column, q=None):
         min(len(values), DISTINCT_LIMIT), truncated,
     )
     return {"values": values[:DISTINCT_LIMIT], "truncated": truncated}
+
+
+def source_aggregate(agent_key, source_id, q, filters, group, measures, limit):
+    """Database-EXACT aggregates over the FULL filtered set of a source dataset. Read-only.
+
+    The row window is only a page; this computes exact totals the database evaluates over
+    every matching row. The SAME ``filters`` + free-text ``q`` as ``source_rows`` scope
+    the set (shared ``_source_conditions``), so the aggregation matches what the user sees
+    filtered. ``measures`` are whitelisted aggregate functions (validated upstream), typed
+    against the LIVE schema here (sum/avg/median need a numeric column). ``group`` is optional:
+
+      - ``group is None``: one ungrouped totals row over the whole filtered set (a single
+        bounded query, LIMIT 1); ``totals`` is None, ``truncated`` is False.
+      - ``group`` set: the group column (optionally DATE_TRUNC'd by a whitelisted calendar
+        ``bucket`` - which requires a TEMPORAL column, 'invalid_group_bucket' otherwise) is
+        ranked by the first measure (ORDER BY m0 DESC) or, when bucketed, chronologically
+        (ORDER BY key ASC). The group list is CAPPED at ``limit`` (LIMIT ``limit + 1`` to
+        flag truncation without a COUNT) and a SECOND bounded query returns the ungrouped
+        ``totals`` over the same WHERE, so the caller can compute exact shares of total.
+
+    Instance safety: read-only + statement_timeout pre-queries are inherited from
+    ``_run_source_query``; a request runs at most TWO bounded queries and a grouped result
+    is always capped, so no unbounded scan or result set can pin the dataset connection.
+    Returns ``{"rows", "totals", "truncated"}`` (rows/totals are JSON-safe).
+    """
+    ctx = _resolve_source(agent_key, source_id)
+    conditions = _source_conditions(ctx, q, filters)
+    # Shared engine: the SAME measure/group/bucket rendering + type gates the Evidence
+    # aggregate path uses (one implementation, byte-identical SQL fragments).
+    plan = build_aggregate_plan(ctx["columns"], ctx["colmap"], group, measures)
+
+    if group is None:
+        # Ungrouped: an aggregate with no GROUP BY always yields exactly one row (COUNT 0 /
+        # SUM NULL over an empty set), so LIMIT 1 is the whole result and no totals query
+        # or cap is needed.
+        query = build_aggregate_query(
+            table_ref=ctx["table_ref"], select_exprs=plan["select_exprs"],
+            conditions=conditions, group_exprs=plan["group_exprs"],
+            order_expr=plan["order_expr"], order_dir=plan["order_dir"], limit=1,
+        )
+        rows = _run_source_query(ctx, query, "source_aggregate")
+        logger.info(
+            "source_aggregate - agent=%s source=%d dataset=%s grouped=False "
+            "measures=%d conditions=%d",
+            agent_key, source_id, ctx["dataset"], len(measures), len(conditions),
+        )
+        return {"rows": rows, "totals": None, "truncated": False}
+
+    # Grouped: the plan aliases (and optionally buckets) the group column; two bounded queries.
+    group_query = build_aggregate_query(
+        table_ref=ctx["table_ref"], select_exprs=plan["select_exprs"], conditions=conditions,
+        group_exprs=plan["group_exprs"], order_expr=plan["order_expr"],
+        order_dir=plan["order_dir"],
+        limit=limit + 1,          # one extra group -> truncated without a COUNT
+    )
+    grouped_rows = _run_source_query(ctx, group_query, "source_aggregate")
+    truncated = len(grouped_rows) > limit
+
+    totals_query = build_aggregate_query(
+        table_ref=ctx["table_ref"], select_exprs=plan["measure_exprs"], conditions=conditions,
+        group_exprs=[], order_expr=None, order_dir=None, limit=1,
+    )
+    totals_rows = _run_source_query(ctx, totals_query, "source_aggregate")
+    totals = totals_rows[0] if totals_rows else None
+
+    logger.info(
+        "source_aggregate - agent=%s source=%d dataset=%s grouped=True bucket=%s "
+        "measures=%d conditions=%d groups=%d truncated=%s",
+        agent_key, source_id, ctx["dataset"], group["bucket"], len(measures), len(conditions),
+        min(len(grouped_rows), limit), truncated,
+    )
+    return {"rows": grouped_rows[:limit], "totals": totals, "truncated": truncated}
 
 
 def list_source_dataset_names():

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import {
   chipsFromMeta,
   buildRowsPayload,
+  buildEvidenceAggregatePayload,
   buildDrillLabels,
   isModified,
   normalizeEditableOp,
@@ -194,6 +195,103 @@ test('buildRowsPayload q is independent of the drill and table keys', () => {
   assert.deepEqual(p.drill, [{ column: 'phase', value: null }])
   assert.equal(p.table, 'DRIVE_Revenues')
   assert.equal(p.q, 'total')
+})
+
+// --- buildEvidenceAggregatePayload (DB totals bar + Analyze pivot, shared with sources) ---
+
+const AGG_META = {
+  available: true,
+  chips: [
+    { id: 0, column: 'solution', op: 'IN', values: ['OBS', 'OCD'], editable: true },
+    { id: 1, column: 'period', op: '>=', values: ['2025-01'], editable: false },
+  ],
+}
+
+test('buildEvidenceAggregatePayload: same scope as rows, no limit/offset/sort, plus group/measures/limit', () => {
+  const chips = chipsFromMeta(AGG_META)
+  const p = buildEvidenceAggregatePayload(
+    'ex1', chips, true, null, 'Tickets', '  algerie ',
+    { column: 'period', bucket: 'quarter' }, [{ fn: 'sum', column: 'amount' }], 50,
+  )
+  // The rows-side scope, verbatim.
+  assert.equal(p.exchange_id, 'ex1')
+  assert.deepEqual(p.filters, [{ column: 'solution', op: 'IN', values: ['OBS', 'OCD'] }])
+  assert.deepEqual(p.kept_ids, [1])
+  assert.equal(p.include_advanced, true)
+  assert.equal(p.table, 'Tickets')
+  assert.equal(p.q, 'algerie') // trimmed, effective
+  // The aggregate additions, shaped exactly like /source/aggregate.
+  assert.deepEqual(p.group, { column: 'period', bucket: 'quarter' })
+  assert.deepEqual(p.measures, [{ fn: 'sum', column: 'amount' }])
+  assert.equal(p.limit, 50)
+  // Never the rows-only pagination keys (limit IS present: it is the group-rows cap).
+  assert.ok(!('offset' in p))
+  assert.ok(!('sort' in p))
+  assert.ok('limit' in p)
+})
+
+test('buildEvidenceAggregatePayload: group/measures normalized like the source builder', () => {
+  const p = buildEvidenceAggregatePayload('ex1', [], false, null, null, '', { bucket: 'month' }, [
+    { fn: 'count', column: 'ignored' }, // count never carries a column
+    { fn: 'bogus', column: 'x' }, // dropped
+  ], null)
+  assert.equal(p.group, null) // a column-less group is dropped to null
+  assert.deepEqual(p.measures, [{ fn: 'count', column: null }])
+  assert.equal(p.limit, null) // null limit passes through
+})
+
+test('buildEvidenceAggregatePayload: drill forwarded, absent optional scope adds no keys', () => {
+  const withDrill = buildEvidenceAggregatePayload(
+    'ex1', [], false, [{ column: 'phase', value: null }], null, '',
+    null, [{ fn: 'count', column: null }], 1,
+  )
+  assert.deepEqual(withDrill.drill, [{ column: 'phase', value: null }])
+  const bare = buildEvidenceAggregatePayload('ex1', [], false, null, null, '', null, [{ fn: 'count', column: null }], 1)
+  assert.ok(!('drill' in bare))
+  assert.ok(!('table' in bare))
+  assert.ok(!('q' in bare))
+})
+
+// --- BETWEEN forwarding on the evidence rows + aggregate paths (temporal range chips) ---
+
+test('buildRowsPayload: a USER BETWEEN chip forwards op BETWEEN + its 2 values untouched', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30T23:59:59.999999'], editable: true, source: 'user' },
+  ]
+  const p = buildRowsPayload('ex1', chips, false, 100, 0, null)
+  assert.deepEqual(p.filters, [
+    { column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30T23:59:59.999999'] },
+  ])
+})
+
+test('buildEvidenceAggregatePayload: a USER BETWEEN chip forwards op BETWEEN as well', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30T23:59:59.999999'], editable: true, source: 'user' },
+  ]
+  const p = buildEvidenceAggregatePayload('ex1', chips, false, null, null, '', null, [{ fn: 'count', column: null }], 1)
+  assert.deepEqual(p.filters, [
+    { column: 'sale_date', op: 'BETWEEN', values: ['2026-01-01', '2026-06-30T23:59:59.999999'] },
+  ])
+})
+
+test('buildRowsPayload: a mislabeled BETWEEN chip (not exactly 2 values) is re-derived to IN', () => {
+  const chips = [
+    { key: 'u1', id: null, column: 'sale_date', op: 'BETWEEN', values: ['a', 'b', 'c'], editable: true, source: 'user' },
+  ]
+  const p = buildRowsPayload('ex1', chips, false, 100, 0, null)
+  assert.deepEqual(p.filters, [{ column: 'sale_date', op: 'IN', values: ['a', 'b', 'c'] }])
+})
+
+test('buildRowsPayload: editable =/IN chips still travel as =/IN (chipOp regression guard)', () => {
+  const chips = [
+    { key: 'a0', id: 0, column: 'solution', op: 'IN', values: ['OBS', 'OCD'], editable: true, source: 'agent' },
+    { key: 'u1', id: null, column: 'country', op: '=', values: ['DZ'], editable: true, source: 'user' },
+  ]
+  const p = buildRowsPayload('ex1', chips, false, 100, 0, null)
+  assert.deepEqual(p.filters, [
+    { column: 'solution', op: 'IN', values: ['OBS', 'OCD'] },
+    { column: 'country', op: '=', values: ['DZ'] },
+  ])
 })
 
 // --- buildDrillLabels (captured-result row → drill labels) ---------------------------

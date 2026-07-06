@@ -746,6 +746,57 @@ export const extraMessages = {
     'src.admin.remove': 'Retirer',
     'src.admin.load_error': 'Impossible de charger la liste des jeux de données.',
     'src.admin.refresh': 'Actualiser la liste',
+
+    // Source Data - bottom-bar row count (DB-exact over the FULL filtered set) + the sigma
+    // affordance that sends a numeric column to the Calculate zone.
+    'src.stats.rows': '{0} lignes (total)',
+    'src.stats.toggle': 'Voir les chiffres clés de cette colonne',
+    // Source Data - Calculate zone (pick a column, see its key figures). The measures shown
+    // depend on the column TYPE, never a hardcoded column name.
+    'src.calc.title': 'Calculer',
+    'src.calc.choose': '- Choisir une colonne -',
+    'src.calc.sum': 'Somme',
+    'src.calc.avg': 'Moyenne',
+    'src.calc.median': 'Médiane',
+    'src.calc.min': 'Min',
+    'src.calc.max': 'Max',
+    'src.calc.distinct': 'Valeurs distinctes',
+    // Source Data - Data / Analyze view switch (segmented control).
+    'src.view.data': 'Données',
+    'src.view.analyze': 'Analyser',
+    // Source Data - Analyze mini-pivot (one group-by + one measure).
+    'src.an.group_by': 'Regrouper par',
+    'src.an.choose': '- Choisir une colonne -',
+    'src.an.bucket.month': 'Par mois',
+    'src.an.bucket.quarter': 'Par trimestre',
+    'src.an.bucket.year': 'Par année',
+    'src.an.bucket.label': 'Période',
+    'src.an.calc': 'Calculer',
+    'src.an.fn.count': 'Nombre de lignes',
+    'src.an.fn.sum': 'Somme de {0}',
+    'src.an.fn.avg': 'Moyenne de {0}',
+    'src.an.fn.median': 'Médiane de {0}',
+    'src.an.scope': 'Sur la sélection filtrée : {0}',
+    'src.an.col_group': 'Groupe',
+    'src.an.col_value': 'Valeur',
+    'src.an.share': '% du total',
+    'src.an.empty_group': '(vide)',
+    'src.an.truncated': 'Top {0} groupes affichés',
+    'src.an.prompt': 'Choisissez un regroupement et un calcul pour analyser vos données.',
+    'src.an.no_rows': 'Aucun groupe à afficher.',
+    // Source Data - temporal range filter (a date period in 1-2 clicks: From / To months
+    // or a full year). The chip reads as its month span.
+    'src.range.from': 'De',
+    'src.range.to': 'À',
+    'src.range.year': 'Année complète',
+    'src.range.year_choose': '- Année -',
+    'src.range.year_ph': 'AAAA',
+    'src.range.fmt': 'AAAA-MM',
+    'src.range.apply': 'Appliquer',
+    'src.range.chip': '{0} à {1}',
+    // Chat - quiet "check this number" link under an agent answer (opens the proof panel
+    // directly on the Source data tab).
+    'ev.verify': 'Vérifier ce chiffre',
   },
   en: {
     // Generic reusable
@@ -1481,5 +1532,56 @@ export const extraMessages = {
     'src.admin.remove': 'Remove',
     'src.admin.load_error': 'Could not load the dataset list.',
     'src.admin.refresh': 'Refresh list',
+
+    // Source Data - bottom-bar row count (DB-exact over the FULL filtered set) + the sigma
+    // affordance that sends a numeric column to the Calculate zone.
+    'src.stats.rows': '{0} rows (total)',
+    'src.stats.toggle': 'See this column\'s key figures',
+    // Source Data - Calculate zone (pick a column, see its key figures). The measures shown
+    // depend on the column TYPE, never a hardcoded column name.
+    'src.calc.title': 'Calculate',
+    'src.calc.choose': '- Choose a column -',
+    'src.calc.sum': 'Sum',
+    'src.calc.avg': 'Average',
+    'src.calc.median': 'Median',
+    'src.calc.min': 'Min',
+    'src.calc.max': 'Max',
+    'src.calc.distinct': 'Distinct values',
+    // Source Data - Data / Analyze view switch (segmented control).
+    'src.view.data': 'Data',
+    'src.view.analyze': 'Analyze',
+    // Source Data - Analyze mini-pivot (one group-by + one measure).
+    'src.an.group_by': 'Group by',
+    'src.an.choose': '- Choose a column -',
+    'src.an.bucket.month': 'By month',
+    'src.an.bucket.quarter': 'By quarter',
+    'src.an.bucket.year': 'By year',
+    'src.an.bucket.label': 'Period',
+    'src.an.calc': 'Calculate',
+    'src.an.fn.count': 'Row count',
+    'src.an.fn.sum': 'Sum of {0}',
+    'src.an.fn.avg': 'Average of {0}',
+    'src.an.fn.median': 'Median of {0}',
+    'src.an.scope': 'On the filtered selection: {0}',
+    'src.an.col_group': 'Group',
+    'src.an.col_value': 'Value',
+    'src.an.share': '% of total',
+    'src.an.empty_group': '(empty)',
+    'src.an.truncated': 'Top {0} groups shown',
+    'src.an.prompt': 'Pick a grouping and a calculation to analyze your data.',
+    'src.an.no_rows': 'No group to show.',
+    // Source Data - temporal range filter (a date period in 1-2 clicks: From / To months
+    // or a full year). The chip reads as its month span.
+    'src.range.from': 'From',
+    'src.range.to': 'To',
+    'src.range.year': 'Full year',
+    'src.range.year_choose': '- Year -',
+    'src.range.year_ph': 'YYYY',
+    'src.range.fmt': 'YYYY-MM',
+    'src.range.apply': 'Apply',
+    'src.range.chip': '{0} to {1}',
+    // Chat - quiet "check this number" link under an agent answer (opens the proof panel
+    // directly on the Source data tab).
+    'ev.verify': 'Check this number',
   },
 }

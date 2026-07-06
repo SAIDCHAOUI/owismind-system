@@ -5,6 +5,29 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🧮 SESSION 2026-07-06 (MANIPULATION DE DONNÉES SANS IA : agrégats DB + zone Calculer + plages de
+dates + unification Evidence, livrés dans le plugin coexistant `owismind_dev_v2`) - ✅ vague 1
+VALIDÉE DSS par l'user, vagues 2+3 locales (QA runtime + revues), zip dev_v2 FINAL À UPLOADER.**
+Brainstorm (4 scouts Sonnet + 3 experts Opus) puis 3 vagues d'implémentation (agents Opus //) :
+**(1)** `POST /source/aggregate` (spec structuré, fns whitelistées count/count_distinct/sum/avg/
+median/min/max, gate types du schéma live, LIMIT groupes 50 obligatoire, requête totals pour les %
+exacts, read-only+timeout+throttle hérités) + barre de totaux + Analyser + lien « Vérifier ce
+chiffre » ; **(2)** zone **CALCULER** en haut à droite (cartes KPI par TYPE de colonne, générique,
+persistante, le dataset reste visible), filtre **plage de dates** (2 month-pickers + « Année
+complète » -> chip `BETWEEN`, bornes `[YYYY-MM-01, dernier-jour T23:59:59.999999]`), médiane ;
+**(3)** UNIFICATION Evidence : `evidence/aggregate_core.py` partagé + `POST /evidence/aggregate`
+(agrège EXACTEMENT le périmètre pré-filtré par le SQL de la réponse : kept_ids + drill + filtres +
+search, prouvé par QA payloads), factory front unique `composables/aggregateSurface.js` (2 hôtes),
+`SourceCalc`/`SourceAnalyze` bi-hôtes, `RangePopoverFields` partagé, **surface paresseuse** (aucun
+COUNT à l'ouverture du panneau de preuves ; calcul au 1er affichage de l'onglet Source data +
+rattrapage). **RÈGLE PRODUIT : tout chiffre montré = calcul DB sur le jeu filtré COMPLET** (jamais
+sur la fenêtre affichée). 3 revues adversariales (8+6+6 confirmés, 1 réfuté, TOUS traités) + QA
+Playwright réelle (parcours Evidence complet stubbé) + re-checks post-fix (leçon bundle périmé,
+L132). **694 back + 268 node verts, Vite OK, 0 tiret. Zip `owismind_dev_v2-upload.zip` (82 entrées,
+`index-CRcrpMCq.js`) ; prod + dev stable INTACTS. `tools/build_dev_plugin.py --v2` = 3e plugin
+coexistant.** Limitation documentée : colonnes des pickers = table par défaut après un switch
+multi-table (convention pré-existante). Voir `sessions/2026-07-06.md` + **L132-L133**.
+
 **📐 SESSION 2026-07-03 Run 3 (PAGE BENCHMARK PLUGIN : optimisation des espaces, retour user) -
 ✅ local (QA runtime harnais L129), NON recollé DSS.** Retour user : vide en haut à droite, vide
 sous les tuiles KPI, Accuracy redondante avec le donut, aside "How this is measured" = une colonne
@@ -119,7 +142,14 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-03 Run 3 : optimisation des espaces page benchmark plugin → détail `sessions/2026-07-03.md` (Run 3) + **L131**
+## 🧭 Dernière session - 2026-07-06 : data tools sans IA (agrégats + Calculer + plages + unification Evidence) + plugin dev_v2 → détail `sessions/2026-07-06.md` + **L132-L133**
+- **✅ Vague 1 validée DSS (user, sur dev_v2) ; vagues 2+3 validées en local** (QA runtime parcours
+  Evidence stubbé, 3 revues adversariales soldées) ; **zip FINAL `owismind_dev_v2-upload.zip` à uploader**.
+- Smoke DSS : CALCULER sur `amount_eur` (Médiane incluse), plage `year_month` + Année complète,
+  Analyser (buckets chronologiques), Evidence -> Source data (chip agent verrouillé + zone + compte),
+  ouverture du panneau de preuves SEUL = zéro appel aggregate (lazy), dark.
+
+## 🧭 Avant - 2026-07-03 Run 3 : optimisation des espaces page benchmark plugin → détail `sessions/2026-07-03.md` (Run 3) + **L131**
 - **✅ Local (QA runtime réelle), NON recollé DSS.** Pickers dans l'en-tête (vide haut-droit comblé),
   hero + stats fusionnés (Accuracy supprimée, redondante donut), aside -> bande de référence en pied.
 - **Zip DEV `index-CZZt5we5.js` remplace `index-B61pkfo9.js`** (Runs 2+3) ; smoke DSS = layout
@@ -409,6 +439,15 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🧮NEW (2026-07-06). **UPLOADER + VALIDER le zip FINAL `owismind_dev_v2-upload.zip`** (remplace le
+   plugin dev_v2 en DSS, restart backend de sa webapp ; prod + dev stable intacts). Smoke : zone
+   CALCULER sur `amount_eur` (5 cartes dont Médiane) ; plage `year_month` De/À + « Année complète » ;
+   Analyser (Médiane de X, buckets chronologiques, note Top 50) ; Evidence -> onglet Source data :
+   chip agent verrouillé + zone Calculer + plage + compte, mêmes chiffres que la table ; ouverture
+   simple du panneau de preuves = AUCUN appel `/evidence/aggregate` (surface lazy) ; dark. Puis à la
+   demande : port vers le DEV principal / prod ; différés (refetch meta par table multi-source,
+   export CSV d'agrégat, vues sauvegardées, comparaison de périodes, profil de colonne). Voir
+   `sessions/2026-07-06.md` + **L132-L133**.
 0🏗️NEW (2026-07-03 Run 2). **RECOLLER + VALIDER la refonte benchmark.** LAB : coller les 3 panes
    launcher (`body.html` + `script.js` + `style.css` ; backend.py inchangé ce run mais la route
    `/api/config` du Run 1 reste à coller) et recharger. Plugin : uploader le zip DEV

@@ -11,6 +11,7 @@ import { useEvidenceStore } from '../../stores/evidence.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
+import { isNumericColType, formatStatNumber } from '../../composables/sourceModel.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from '../sources/CellActionPopover.vue'
 import { DataLoader, Icon } from '../ui'
@@ -21,11 +22,16 @@ import { DataLoader, Icon } from '../ui'
 const COLS_INITIAL = 30
 const COLS_MORE = 20
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const evidence = useEvidenceStore()
 const promptContext = usePromptContextStore()
 const { push } = useToasts()
 const allColumns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+
+// The DB-computed row count over the FULL filtered set, formatted locale-aware exact.
+function fmtStat(v) {
+  return formatStatNumber(v, locale.value)
+}
 
 // Provenance of a picked cell: the source table currently shown by the "Source data"
 // selector (the chosen table, else the first matched source, else empty).
@@ -192,12 +198,26 @@ onBeforeUnmount(() => {
         <thead>
           <tr>
             <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name) }">
-              <button type="button" class="th-btn" @click="evidence.setSort(c.name)">
-                <span class="th-label">{{ c.name }}</span>
-                <span v-if="sortDir(c.name)" class="th-sort">
-                  <Icon :name="sortDir(c.name) === 'asc' ? 'chevronUp' : 'chevronDown'" />
-                </span>
-              </button>
+              <div class="th-inner">
+                <button type="button" class="th-btn" @click="evidence.setSort(c.name)">
+                  <span class="th-label">{{ c.name }}</span>
+                  <span v-if="sortDir(c.name)" class="th-sort">
+                    <Icon :name="sortDir(c.name) === 'asc' ? 'chevronUp' : 'chevronDown'" />
+                  </span>
+                </button>
+                <!-- Sigma: send this numeric column to the Calculate zone (its key
+                     figures over the current filter). Same affordance as the Source table. -->
+                <button
+                  v-if="isNumericColType(c.type)"
+                  type="button"
+                  class="th-sigma"
+                  :class="{ active: evidence.calcColumn === c.name }"
+                  :title="t('src.stats.toggle')"
+                  :aria-label="t('src.stats.toggle')"
+                  :aria-pressed="evidence.calcColumn === c.name"
+                  @click.stop="evidence.setCalcColumn(c.name)"
+                >&#931;</button>
+              </div>
             </th>
             <!-- Horizontal column sentinel: reveals the next batch of columns when
                  scrolled into view (client-side column windowing). -->
@@ -244,10 +264,16 @@ onBeforeUnmount(() => {
       <span>{{ t('ev.error') }}</span>
       <button @click="evidence.refreshRows()">{{ t('ev.retry') }}</button>
     </div>
-    <!-- Footer: how many rows are loaded, how many columns are shown, and whether
-         more rows remain (lazy). -->
+    <!-- Footer: how many rows are loaded, the DB-EXACT row count over the current filter,
+         how many columns are shown, and whether more rows remain (lazy). -->
     <div class="ev-table-foot">
       <span class="mono page">{{ t('ev.table.loaded', [evidence.rows.length]) }}</span>
+      <span v-if="evidence.totalLoading && evidence.totalCount == null" class="db-count mono">
+        <span class="dots" aria-hidden="true"><i /><i /><i /></span>
+      </span>
+      <span v-else-if="evidence.totalCount != null" class="db-count mono">
+        {{ t('src.stats.rows', [fmtStat(evidence.totalCount)]) }}
+      </span>
       <span class="foot-spacer" />
       <span v-if="colsWindowed" class="cols-hint">{{ t('ev.table.cols', [columns.length, allColumns.length]) }}</span>
       <span v-if="evidence.hasMore" class="more-hint">{{ t('ev.table.more') }}</span>
@@ -302,11 +328,21 @@ thead th {
 }
 thead th:hover { color: var(--text); }
 thead th.sorted { color: var(--orange); }
+.th-inner { display: flex; align-items: center; }
 .th-btn {
-  display: flex; align-items: center; gap: 4px; width: 100%;
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
   padding: 8px 12px; color: inherit; text-align: left; cursor: pointer;
 }
 .th-sort :deep(.ui-icon) { width: 12px; height: 12px; vertical-align: -2px; }
+/* Sigma affordance in NUMERIC headers only: sends the column to the Calculate zone.
+   Subtle by default, orange text when active. Square, no layout shift. */
+.th-sigma {
+  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: 0;
+  font-size: 13px; line-height: 1; color: var(--text-3);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.th-sigma:hover { color: var(--text); background: var(--surface-hover); }
+.th-sigma.active { color: var(--orange-text); }
 tbody td {
   padding: 7px 12px; border-bottom: 1px solid var(--border);
   color: var(--text); white-space: nowrap; overflow: hidden;
@@ -356,4 +392,13 @@ tbody td.cell-click:hover { background: var(--surface-hover); }
 .ev-table-foot .foot-spacer { flex: 1; }
 .ev-table-foot .cols-hint { font-size: 11px; color: var(--text-3); }
 .ev-table-foot .more-hint { font-size: 11px; color: var(--text-3); }
+/* DB-exact row count over the current filter (from the shared aggregate surface). */
+.ev-table-foot .db-count { font-size: 11px; color: var(--text); font-weight: var(--fw-semibold); }
+/* Loading dots - three flat squares pulsing (no gradient, charter-safe). */
+.dots { display: inline-flex; align-items: center; gap: 3px; }
+.dots i { width: 4px; height: 4px; background: var(--text-3); border-radius: 0; animation: ev-dot-pulse 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.2s; }
+.dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ev-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .dots i { animation: none; } }
 </style>

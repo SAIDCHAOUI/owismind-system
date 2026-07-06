@@ -64,6 +64,44 @@ def build_distinct_query(table_ref, column_ident, limit, conditions=None):
     """.format(col=column_ident, table=table_ref, where=" AND ".join(where), n=n)
 
 
+def build_aggregate_query(table_ref, select_exprs, conditions, group_exprs,
+                          order_expr, order_dir, limit):
+    """One bounded, deterministic, read-only aggregation over the evidence/source table.
+
+    Every fragment is PRE-RENDERED and caller-escaped (same contract as
+    ``build_rows_query``); no raw user input is ever passed here.
+      - ``select_exprs``: already-aliased projections (e.g. ``SUM("Revenue") AS m0`` or
+        ``"country" AS key``), joined into the SELECT list in order.
+      - ``conditions``: the WHERE predicates; each is parenthesized here, then ANDed, so
+        a top-level OR inside one fragment can never widen the conjunction's scope.
+      - ``group_exprs``: the UNALIASED GROUP BY expressions; GROUP BY is emitted only when
+        the list is non-empty (an ungrouped aggregate yields a single row).
+      - ``order_expr``: an optional, already-rendered ORDER BY expression (an output alias
+        or an expression); emitted only when given, with ``order_dir`` normalized here
+        (anything not DESC becomes ASC). NULLS LAST is always emitted: PostgreSQL's
+        DESC default is NULLS FIRST, which would rank all-NULL SUM/AVG groups ABOVE the
+        real top values and (under the group cap) push genuine contributors out of view.
+      - ``limit``: MANDATORY (``int()``), so a grouped result is always capped.
+    """
+    n = int(limit)
+    where = ("WHERE " + " AND ".join("({})".format(c) for c in conditions)) if conditions else ""
+    group_by = ("GROUP BY " + ", ".join(group_exprs)) if group_exprs else ""
+    if order_expr:
+        direction = "DESC" if str(order_dir).upper() == "DESC" else "ASC"
+        order_by = "ORDER BY {} {} NULLS LAST".format(order_expr, direction)
+    else:
+        order_by = ""
+    return """
+    SELECT {columns}
+    FROM {table}
+    {where}
+    {group_by}
+    {order_by}
+    LIMIT {n}
+    """.format(columns=", ".join(select_exprs), table=table_ref, where=where,
+               group_by=group_by, order_by=order_by, n=n)
+
+
 def render_predicate(pred, quote_ident, quote_value):
     """One predicate dict -> one SQL condition string.
 

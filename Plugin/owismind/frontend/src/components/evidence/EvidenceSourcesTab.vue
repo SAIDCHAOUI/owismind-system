@@ -20,6 +20,8 @@ import { Icon } from '../ui'
 import EvidenceChips from './EvidenceChips.vue'
 import EvidenceTable from './EvidenceTable.vue'
 import SourceExplorer from '../sources/SourceExplorer.vue'
+import SourceCalc from '../sources/SourceCalc.vue'
+import SourceAnalyze from '../sources/SourceAnalyze.vue'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
@@ -144,6 +146,18 @@ function onExitDrill() {
   if (typeof fn === 'function') fn()
 }
 
+// The active exchange table's typed columns ([{ name, type }]), passed to the shared
+// SourceCalc / SourceAnalyze so their type-driven measures + numeric detection match the
+// legacy table. Empty until meta loads.
+// KNOWN LIMITATION (same convention as the rows-table headers): meta.columns are the
+// DEFAULT (first matched) table's live columns, captured once at open; switching to
+// another matched table (multi-source SQL) re-queries rows/aggregates against the
+// SELECTED table but does NOT refetch meta, so the pickers may list columns the
+// selected table lacks (the server then answers a clean 400, shown as the zone's
+// error state). Accepted trade-off: multi-table joins are rare and headers already
+// share it; a per-table meta refetch is the future fix.
+const evColumns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+
 // ── Exchange-table search (legacy mode) - Enter/button only, no debounce ────────
 const evSearchTerm = ref(evidence.q || '')
 const evOneChar = computed(() => evSearchTerm.value.trim().length === 1)
@@ -176,7 +190,8 @@ function clearEvSearch() {
     <!-- AGENT mode: the standalone explorer, driven by the unified selector. -->
     <SourceExplorer v-if="isAgentMode" embedded />
 
-    <!-- LEGACY mode: the exchange-scoped explorer (chips + drill + search + table). -->
+    <!-- LEGACY mode: the exchange-scoped explorer (chips + drill + search + Data/Analyze
+         segmented + Calculate zone + table swap). -->
     <template v-else>
       <EvidenceChips />
       <div v-if="drill" class="ev-drill-band">
@@ -187,26 +202,57 @@ function clearEvSearch() {
         </button>
       </div>
       <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
-      <!-- Full-text search over the WHOLE exchange table - Enter or button only. -->
-      <div class="ev-src-search">
-        <Icon name="search" class="ev-src-search-ico" />
-        <input
-          v-model="evSearchTerm"
-          type="text"
-          class="ev-src-search-input"
-          maxlength="200"
-          :placeholder="t('src.search.placeholder')"
-          @keydown.enter.prevent="submitEvSearch"
-        />
-        <button v-if="evSearchTerm" type="button" class="ev-src-search-clear" :title="t('x.close')" @click="clearEvSearch">
-          <Icon name="x" />
-        </button>
-        <button type="button" class="ev-src-search-go" :aria-label="t('src.search.go')" :title="t('src.search.go')" @click="submitEvSearch">
-          <Icon name="search" />
-        </button>
+
+      <!-- Top area: search + the Data|Analyze switch on the LEFT, the Calculate zone on the
+           RIGHT (wraps to a stacked block when narrow) - mirrors the standalone Source
+           explorer, driven by the SHARED SourceCalc on the evidence surface. -->
+      <div class="ev-src-top">
+        <div class="ev-src-top-main">
+          <!-- Full-text search over the WHOLE exchange table - Enter or button only. -->
+          <div class="ev-src-search">
+            <Icon name="search" class="ev-src-search-ico" />
+            <input
+              v-model="evSearchTerm"
+              type="text"
+              class="ev-src-search-input"
+              maxlength="200"
+              :placeholder="t('src.search.placeholder')"
+              @keydown.enter.prevent="submitEvSearch"
+            />
+            <button v-if="evSearchTerm" type="button" class="ev-src-search-clear" :title="t('x.close')" @click="clearEvSearch">
+              <Icon name="x" />
+            </button>
+            <button type="button" class="ev-src-search-go" :aria-label="t('src.search.go')" :title="t('src.search.go')" @click="submitEvSearch">
+              <Icon name="search" />
+            </button>
+          </div>
+          <div v-if="evOneChar" class="ev-src-search-hint">{{ t('src.search.min') }}</div>
+          <!-- Data / Analyze view switch. The chips above are shared context in BOTH views;
+               only the surface below swaps. Plain toggle buttons (aria-pressed). -->
+          <div class="ev-viewseg">
+            <button
+              type="button"
+              class="ev-viewseg-btn"
+              :class="{ active: !evidence.analyzeOpen }"
+              :aria-pressed="!evidence.analyzeOpen"
+              @click="evidence.setAnalyzeOpen(false)"
+            >{{ t('src.view.data') }}</button>
+            <button
+              type="button"
+              class="ev-viewseg-btn"
+              :class="{ active: evidence.analyzeOpen }"
+              :aria-pressed="evidence.analyzeOpen"
+              @click="evidence.setAnalyzeOpen(true)"
+            >{{ t('src.view.analyze') }}</button>
+          </div>
+        </div>
+        <!-- Calculate zone (pick a column, see its key figures over the current filter). -->
+        <SourceCalc class="ev-src-top-calc" :surface="evidence" :columns="evColumns" />
       </div>
-      <div v-if="evOneChar" class="ev-src-search-hint">{{ t('src.search.min') }}</div>
-      <EvidenceTable />
+
+      <!-- Data / Analyze swap of the table (chips + search stay above in both). -->
+      <EvidenceTable v-if="!evidence.analyzeOpen" />
+      <SourceAnalyze v-else :surface="evidence" :columns="evColumns" />
     </template>
   </div>
 </template>
@@ -226,6 +272,29 @@ function clearEvSearch() {
 .ev-src-tab :deep(.src-table-scroll) { flex: 1 1 auto; max-height: none; }
 /* The embedded explorer fills the column too. */
 .ev-src-tab :deep(.src-explorer) { flex: 1; min-height: 0; }
+/* The Analyze mini-pivot fills the column too (it keeps its own inner scroll cap). */
+.ev-src-tab :deep(.src-analyze) { flex: 1; min-height: 0; }
+
+/* Top area - the search + Data|Analyze switch on the left, the Calculate zone on the
+   right. A flex row that wraps to a stacked block on narrow widths (the Evidence panel
+   is often a ~480px column). Mirrors the standalone Source explorer's top area. */
+.ev-src-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4) var(--s-5); flex: none; }
+.ev-src-top-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.ev-src-top-calc { flex: 1 1 240px; min-width: 0; }
+
+/* Data / Analyze segmented control - a 1px-bordered row; the active segment fills with
+   ink (charter recipe). Square, flat, self-sized (does not stretch full width). */
+.ev-viewseg {
+  display: inline-flex; align-self: flex-start;
+  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
+}
+.ev-viewseg-btn {
+  padding: 5px 16px; font-size: var(--fs-xs); color: var(--text-2);
+  background: var(--bg); transition: all var(--dur) var(--ease);
+}
+.ev-viewseg-btn + .ev-viewseg-btn { border-left: 1px solid var(--border-strong); }
+.ev-viewseg-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
+.ev-viewseg-btn.active { background: var(--text); color: var(--bg); font-weight: var(--fw-medium); }
 
 /* Unified selector - small square chips, orange only on the active one. */
 .ev-src-selector {

@@ -12,7 +12,15 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
 import { useClickOutside } from '../../composables/useClickOutside.js'
-import { SOURCE_Q_MIN, foldSearchTerm as fold } from '../../composables/sourceModel.js'
+import {
+  SOURCE_Q_MIN,
+  foldSearchTerm as fold,
+  isTemporalColType,
+  monthRangeToBetween,
+  betweenValuesToMonthRange,
+  yearOfValue,
+} from '../../composables/sourceModel.js'
+import RangePopoverFields from './RangePopoverFields.vue'
 import { Icon } from '../ui'
 
 const { t } = useI18n()
@@ -56,11 +64,39 @@ const serverFiltered = ref(false)
 // one currently open.
 let pickerSeq = 0
 
+// Temporal RANGE mode (a date filter picked in 1-2 clicks): two 'YYYY-MM' month fields
+// (From / To) + a one-click full-year fill, rendered by the shared RangePopoverFields.
+// Used instead of the distinct-values list when the picker column is temporal; distinct
+// values still load in the background so the full-year control can offer the years
+// actually present in the column.
+const rangeFrom = ref('') // 'YYYY-MM'
+const rangeTo = ref('') // 'YYYY-MM'
+
 useClickOutside(zone, () => { pop.value = null })
 
 const columns = computed(() => sources.columns || [])
 const canAddFilter = computed(() => sources.chips.length < MAX_FILTERS)
 const tooManyValues = computed(() => pickerSelected.value.length > MAX_FILTER_VALUES)
+
+// Type of one column of the active source ('' when unknown).
+function colType(name) {
+  const c = columns.value.find((x) => x.name === name)
+  return c ? c.type : ''
+}
+// True when the popover's current column is temporal (range mode, not the distinct list).
+const isTemporalCol = computed(() => isTemporalColType(colType(pickerColumn.value)))
+// The years present in the loaded distinct values of the temporal column, ascending. When
+// empty (not derivable / not loaded yet) the full-year control degrades to a 4-digit input.
+const rangeYearOptions = computed(() => {
+  const years = new Set()
+  for (const v of pickerValues.value) {
+    const y = yearOfValue(v)
+    if (y) years.add(y)
+  }
+  return Array.from(years).sort()
+})
+// Apply stays enabled only when both months are set and parse to a valid range.
+const rangeReady = computed(() => !!monthRangeToBetween(rangeFrom.value, rangeTo.value))
 
 // Client-side matching folds through the SAME accent map as the server (imported
 // `fold`), so a term behaves identically before and after a server-side escalation.
@@ -112,12 +148,26 @@ async function _loadPicker(column, current, serverQ) {
   }
 }
 
+// Pre-fill the range fields from a BETWEEN chip's stored [start, end] (empty when adding
+// fresh). The full-year control's own typed-year state resets on remount.
+function _openRange(values) {
+  const r = betweenValuesToMonthRange(values)
+  rangeFrom.value = r ? r.from : ''
+  rangeTo.value = r ? r.to : ''
+}
 function openChipPicker(chip) {
   pop.value = { kind: 'chip', key: chip.key }
   pickerColumn.value = chip.column
   valSearch.value = ''
   serverFiltered.value = false
-  _loadPicker(chip.column, chip.values, '')
+  if (isTemporalColType(colType(chip.column))) {
+    // Range mode: pre-fill From / To from the chip, and load distinct in the background
+    // only to derive the full-year options (the list itself is not rendered).
+    _openRange(chip.values)
+    _loadPicker(chip.column, [], '')
+  } else {
+    _loadPicker(chip.column, chip.values, '')
+  }
 }
 function openAdd() {
   pickerSeq += 1 // kill any in-flight load (and its spinner) from a previous popover
@@ -131,17 +181,24 @@ function openAdd() {
   pickerValues.value = []
   pickerSelected.value = []
   pickerTruncated.value = false
+  _openRange([])
 }
-// Add step 1 -> step 2: a column was chosen, load its first value window.
+// Add step 1 -> step 2: a column was chosen. A temporal column enters range mode (and
+// loads distinct only to derive year options); any other loads its first value window.
 function pickColumn(name) {
   if (!name) return
   addStep.value = 'value'
   pickerColumn.value = name
   valSearch.value = ''
   serverFiltered.value = false
-  _loadPicker(name, [], '')
+  if (isTemporalColType(colType(name))) {
+    _openRange([])
+    _loadPicker(name, [], '')
+  } else {
+    _loadPicker(name, [], '')
+  }
 }
-// Add step 2 -> step 1: drop the in-flight value load and the picked values.
+// Add step 2 -> step 1: drop the in-flight value load, the picked values and the range.
 function backToColumns() {
   pickerSeq += 1
   pickerLoading.value = false
@@ -152,6 +209,7 @@ function backToColumns() {
   pickerValues.value = []
   pickerSelected.value = []
   pickerTruncated.value = false
+  _openRange([])
 }
 // Enter in the value search. With a term: re-load the window narrowed server-side,
 // meaningful when the window is incomplete (truncated top-N) OR already narrowed by
@@ -202,6 +260,31 @@ function applyPicker() {
 function cancelPicker() {
   pop.value = null
 }
+
+// --- temporal range apply ------------------------------------------------------
+// Build ONE BETWEEN chip from the two month fields. monthRangeToBetween swaps a reversed
+// From > To and returns null when either month is missing / malformed (apply is disabled
+// then). The chip keeps its explicit op so it is never re-normalized to '=' / 'IN'.
+function applyRange() {
+  if (!pop.value) return
+  const range = monthRangeToBetween(rangeFrom.value, rangeTo.value)
+  if (!range) return
+  const values = [range.start, range.end]
+  if (pop.value.kind === 'chip') sources.setChipValues(pop.value.key, values, 'BETWEEN')
+  else if (pickerColumn.value) sources.addFilter(pickerColumn.value, values, 'BETWEEN')
+  pop.value = null
+}
+
+// --- chip display --------------------------------------------------------------
+// A BETWEEN chip (a 2-value temporal range) reads as its month span; anything else lists
+// its values. The column name is always shown separately (chip.column).
+function isBetween(chip) {
+  return chip.op === 'BETWEEN' && Array.isArray(chip.values) && chip.values.length === 2
+}
+function rangeText(chip) {
+  const r = betweenValuesToMonthRange(chip.values)
+  return r ? t('src.range.chip', [r.from, r.to]) : displayValues(chip)
+}
 </script>
 
 <template>
@@ -217,82 +300,34 @@ function cancelPicker() {
       <span v-for="chip in sources.chips" :key="chip.key" class="src-chip">
         <button class="chip-main" @click="openChipPicker(chip)">
           <span class="col">{{ chip.column }}</span>
-          <span class="op mono">{{ chip.op }}</span>
-          <span class="val">{{ displayValues(chip) }}</span>
+          <template v-if="isBetween(chip)">
+            <span class="val">{{ rangeText(chip) }}</span>
+          </template>
+          <template v-else>
+            <span class="op mono">{{ chip.op }}</span>
+            <span class="val">{{ displayValues(chip) }}</span>
+          </template>
           <Icon name="chevronDown" />
         </button>
         <button class="chip-x" :title="t('src.filters.remove')" @click="onRemoveChip(chip)">
           <Icon name="x" />
         </button>
 
-        <!-- Distinct-values picker (edit an existing filter) -->
+        <!-- Edit an existing filter: a month RANGE picker for a temporal column, the
+             distinct-values picker otherwise. -->
         <div v-if="pop && pop.kind === 'chip' && pop.key === chip.key" class="src-pop">
-          <input
-            v-model="valSearch" v-focus class="pop-search" type="text"
-            :placeholder="t('src.picker.searchVals')"
-            @keydown.enter.prevent="onValueSearchEnter"
-          />
-          <div v-if="pickerLoading" class="pop-state">{{ t('src.loading') }}</div>
-          <template v-else>
-            <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
-            <template v-if="pickerTruncated">
-              <div class="pop-note">{{ t('src.picker.truncated', [PICKER_LIMIT]) }}</div>
-              <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
-            </template>
-            <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
-            <div class="pop-list">
-              <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
-                <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
-                <span :title="String(v)">{{ String(v) }}</span>
-              </label>
-              <div v-if="!filteredValues.length" class="pop-state">
-                {{ pickerValues.length ? t('src.picker.noMatch') : t('src.picker.empty') }}
-              </div>
-            </div>
-            <div v-if="tooManyValues" class="pop-note">{{ t('src.picker.max', [MAX_FILTER_VALUES]) }}</div>
+          <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+          <div v-if="isTemporalCol" class="pop-range">
+            <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
             <div class="pop-foot">
-              <span v-if="pickerSelected.length" class="pop-count">
-                {{ t('src.picker.selected', [pickerSelected.length]) }}
-              </span>
               <div class="pop-actions">
                 <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
-                <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
-                  {{ t('src.picker.apply') }}
-                </button>
+                <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
               </div>
             </div>
-          </template>
-        </div>
-      </span>
-
-      <!-- Add a filter on any column (hidden at the backend filter cap) -->
-      <span v-if="canAddFilter" class="src-chip add">
-        <button class="chip-main" @click="openAdd">
-          <Icon name="plus" /><span>{{ t('src.filters.add') }}</span>
-        </button>
-        <div v-if="pop && pop.kind === 'add'" class="src-pop">
-          <!-- Step 1: search + pick a column -->
-          <template v-if="addStep === 'column'">
-            <input
-              v-model="colSearch" v-focus class="pop-search" type="text"
-              :placeholder="t('src.picker.searchCols')"
-            />
-            <div class="pop-list">
-              <button v-for="c in filteredColumns" :key="c.name" class="pop-col" @click="pickColumn(c.name)">
-                <span class="pop-col-name">{{ c.name }}</span>
-                <span v-if="c.type" class="pop-col-type mono">{{ c.type }}</span>
-              </button>
-              <div v-if="!filteredColumns.length" class="pop-state">{{ t('src.picker.noColMatch') }}</div>
-            </div>
-          </template>
-          <!-- Step 2: pick values for the chosen column -->
+          </div>
+          <!-- Distinct-values picker (non-temporal column). -->
           <template v-else>
-            <div class="pop-head">
-              <button class="pop-back" @click="backToColumns">
-                <Icon name="chevronLeft" /><span>{{ t('src.picker.back') }}</span>
-              </button>
-              <span class="pop-head-col">{{ pickerColumn }}</span>
-            </div>
             <input
               v-model="valSearch" v-focus class="pop-search" type="text"
               :placeholder="t('src.picker.searchVals')"
@@ -327,6 +362,86 @@ function cancelPicker() {
                   </button>
                 </div>
               </div>
+            </template>
+          </template>
+        </div>
+      </span>
+
+      <!-- Add a filter on any column (hidden at the backend filter cap) -->
+      <span v-if="canAddFilter" class="src-chip add">
+        <button class="chip-main" @click="openAdd">
+          <Icon name="plus" /><span>{{ t('src.filters.add') }}</span>
+        </button>
+        <div v-if="pop && pop.kind === 'add'" class="src-pop">
+          <!-- Step 1: search + pick a column -->
+          <template v-if="addStep === 'column'">
+            <input
+              v-model="colSearch" v-focus class="pop-search" type="text"
+              :placeholder="t('src.picker.searchCols')"
+            />
+            <div class="pop-list">
+              <button v-for="c in filteredColumns" :key="c.name" class="pop-col" @click="pickColumn(c.name)">
+                <span class="pop-col-name">{{ c.name }}</span>
+                <span v-if="c.type" class="pop-col-type mono">{{ c.type }}</span>
+              </button>
+              <div v-if="!filteredColumns.length" class="pop-state">{{ t('src.picker.noColMatch') }}</div>
+            </div>
+          </template>
+          <!-- Step 2: pick values for the chosen column -->
+          <template v-else>
+            <div class="pop-head">
+              <button class="pop-back" @click="backToColumns">
+                <Icon name="chevronLeft" /><span>{{ t('src.picker.back') }}</span>
+              </button>
+              <span class="pop-head-col">{{ pickerColumn }}</span>
+            </div>
+            <!-- Temporal RANGE mode: From / To months + a one-click full-year fill. -->
+            <div v-if="isTemporalCol" class="pop-range">
+              <RangePopoverFields v-model:from="rangeFrom" v-model:to="rangeTo" :year-options="rangeYearOptions" />
+              <div class="pop-foot">
+                <div class="pop-actions">
+                  <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
+                  <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
+                </div>
+              </div>
+            </div>
+            <!-- Distinct-values picker (non-temporal column). -->
+            <template v-else>
+              <input
+                v-model="valSearch" v-focus class="pop-search" type="text"
+                :placeholder="t('src.picker.searchVals')"
+                @keydown.enter.prevent="onValueSearchEnter"
+              />
+              <div v-if="pickerLoading" class="pop-state">{{ t('src.loading') }}</div>
+              <template v-else>
+                <div v-if="pickerError" class="pop-error">{{ t('src.picker.error') }}</div>
+                <template v-if="pickerTruncated">
+                  <div class="pop-note">{{ t('src.picker.truncated', [PICKER_LIMIT]) }}</div>
+                  <div class="pop-hint">{{ t('src.picker.searchHint') }}</div>
+                </template>
+                <div v-else-if="serverFiltered" class="pop-hint">{{ t('src.picker.serverFiltered') }}</div>
+                <div class="pop-list">
+                  <label v-for="v in filteredValues" :key="typeof v + ':' + String(v)" class="pop-item">
+                    <input type="checkbox" :checked="isSelected(v)" @change="toggleValue(v)" />
+                    <span :title="String(v)">{{ String(v) }}</span>
+                  </label>
+                  <div v-if="!filteredValues.length" class="pop-state">
+                    {{ pickerValues.length ? t('src.picker.noMatch') : t('src.picker.empty') }}
+                  </div>
+                </div>
+                <div v-if="tooManyValues" class="pop-note">{{ t('src.picker.max', [MAX_FILTER_VALUES]) }}</div>
+                <div class="pop-foot">
+                  <span v-if="pickerSelected.length" class="pop-count">
+                    {{ t('src.picker.selected', [pickerSelected.length]) }}
+                  </span>
+                  <div class="pop-actions">
+                    <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
+                    <button class="pop-apply" :disabled="!pickerSelected.length || tooManyValues" @click="applyPicker">
+                      {{ t('src.picker.apply') }}
+                    </button>
+                  </div>
+                </div>
+              </template>
             </template>
           </template>
         </div>
@@ -385,6 +500,10 @@ function cancelPicker() {
   border-radius: 0; background: var(--bg); color: var(--text); font-size: var(--fs-sm);
 }
 .pop-search::placeholder { color: var(--text-3); }
+
+/* Temporal range picker wrapper - the From / To fields + full-year control live in the
+   shared RangePopoverFields; this only stacks them above the apply / cancel foot. */
+.pop-range { display: flex; flex-direction: column; gap: var(--s-3); }
 .pop-head { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .pop-back {
   display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px 2px 2px;
