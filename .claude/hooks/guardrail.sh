@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# OWIsMind PreToolUse guardrail — deterministic safety net (belt-and-suspenders with settings.json).
+# OWIsMind PreToolUse guardrail - deterministic safety net (belt-and-suspenders with settings.json).
 # Reads the hook payload (JSON) on stdin. To BLOCK a tool call: print a reason to stderr and exit 2.
-# Pure bash + grep on the raw JSON payload — no jq/python dependency, so it never breaks a session.
+# Pure bash + grep on the raw JSON payload - no jq/python dependency, so it never breaks a session.
 #
 # Rules enforced:
-#   1. NO INSTALL — agents must never install dependencies; only the user does. Safety first.
+#   1. NO INSTALL - agents must never install dependencies; only the user does. Safety first.
 #   2. Generated outputs (resource/owismind-app/, ready-for-dataiku/) must not be hand-edited.
 #   3. Soft reminder about Dataiku-instance safety on backend code.
 set -uo pipefail
@@ -19,7 +19,7 @@ block() {
 
 # --- Rule 1: forbid any package install (matches the "command" field of a Bash call) ---
 if printf '%s' "$payload" | grep -Eiq '"command"[[:space:]]*:[^}]*(npm[[:space:]]+(install|ci|add|update)|npm[[:space:]]+i[[:space:]"]|yarn[[:space:]]+(add|install)|pnpm[[:space:]]+(add|install|i[[:space:]"])|pip3?[[:space:]]+install|pipenv[[:space:]]+install|poetry[[:space:]]+(add|install)|conda[[:space:]]+install|brew[[:space:]]+install|npx[[:space:]])'; then
-  block "package installs are forbidden for agents. Ask the user to run it manually — only the user installs dependencies (safety first)."
+  block "package installs are forbidden for agents. Ask the user to run it manually - only the user installs dependencies (safety first)."
 fi
 
 # --- Rule 2: forbid manual edits of build/package OUTPUTS (they are generated) ---

@@ -2,17 +2,17 @@
 name: agentique-python-dataiku
 description: >-
   Use when designing, building, orchestrating, prompting, reviewing, or debugging
-  code-based AI agents in Python — single agents, orchestrators, or specialized
-  sub-agents — with LangChain, LangGraph, or Dataiku DSS. Triggers: créer/auditer
+  code-based AI agents in Python - single agents, orchestrators, or specialized
+  sub-agents - with LangChain, LangGraph, or Dataiku DSS. Triggers: créer/auditer
   un agent ou orchestrateur, multi-agents, sous-agents spécialisés, tool calling,
   LLM Mesh, Code Agent Dataiku, mémoire/persistance, RAG, structured output,
   tracing/guardrails/évaluation, ou choix du niveau d'abstraction
   (create_agent vs LangGraph vs visual/code agent) et du runtime Python (3.9 vs 3.11).
 ---
 
-# Agentique Python — LangChain, LangGraph & Dataiku DSS
+# Agentique Python - LangChain, LangGraph & Dataiku DSS
 
-> **À jour : juin 2026** — LangChain 1.x, LangGraph 1.x, Dataiku DSS 14.x.
+> **À jour : juin 2026** - LangChain 1.x, LangGraph 1.x, Dataiku DSS 14.x.
 > Prose en français, code en anglais. Skill de référence : ce `SKILL.md` est l'aiguillage,
 > le détail vit dans `references/` (lecture à la demande).
 
@@ -22,7 +22,7 @@ Un bon agent n'est pas un « gros prompt malin », c'est une **architecture** : 
 
 ## ⚠️ Deux faits non négociables (lire avant de coder)
 
-### 1. Double chemin Python sur Dataiku — 3.9 ET 3.11
+### 1. Double chemin Python sur Dataiku - 3.9 ET 3.11
 
 L'instance Dataiku a **deux** code environments : **Python 3.9** et **Python 3.11**.
 
@@ -31,7 +31,7 @@ L'instance Dataiku a **deux** code environments : **Python 3.9** et **Python 3.1
 | **Code Agent / recette sur code env 3.11** | 3.11 | ✅ **utilisables** (`import langchain` OK) | `create_agent`, `StateGraph`, un LLM Mesh enveloppé en chat model LangChain\*, ou APIs Mesh |
 | **Backend webapp OWIsMind** (et tout contexte 3.9) | 3.9.23 | ❌ **interdits** | **stdlib-only**, APIs Dataiku natives (LLM Mesh / agent tools) **directement**, **aucun** `import langchain` |
 
-> \* L'import exact `DKUChatModel` (`dataiku.langchain.dku_llm`) est **non confirmé** contre la doc publiée — préférer `llm.as_langchain_chat_model()` ; cf. `references/dataiku-code-agents.md`.
+> \* L'import exact `DKUChatModel` (`dataiku.langchain.dku_llm`) est **non confirmé** contre la doc publiée - préférer `llm.as_langchain_chat_model()` ; cf. `references/dataiku-code-agents.md`.
 
 **Ne JAMAIS importer `langchain`/`langgraph` dans un contexte 3.9.** Si du code agentique doit tourner côté backend 3.9, on appelle le LLM Mesh / les agents / les tools **via les APIs Dataiku** (cf. `references/dataiku-code-agents.md` et le pattern `get_agent_tool().run()` dans `references/code-patterns-dataiku.md`).
 
@@ -83,7 +83,7 @@ L'instance Dataiku a **deux** code environments : **Python 3.9** et **Python 3.1
 | Anti-patterns, dépréciations, vérité des versions (2026) | `references/anti-patterns-deprecations-versions.md` |
 | Patterns de code prêts à l'emploi (3.9 ET 3.11) | `references/code-patterns-dataiku.md` |
 
-## Red flags — STOP si tu te surprends à…
+## Red flags - STOP si tu te surprends à…
 
 - …`import langchain` dans un contexte **Python 3.9** → utiliser les APIs Dataiku natives.
 - …recommander `create_react_agent`, `AgentExecutor` ou `initialize_agent` comme la voie moderne → `create_agent`.

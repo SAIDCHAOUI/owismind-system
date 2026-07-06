@@ -12,13 +12,19 @@ convertie, a été supprimée du repo le 2026-06-11).
 ## Mémoire (protocole)
 @memory/CONTEXT.md
 
-- **Au démarrage** : lire `memory/CONTEXT.md` (auto-importé ci-dessus), puis `memory/LESSONS.md` et
-  `memory/PROJECT_STATE.md` pour le détail. Vérifier qu'un fichier/flag cité existe encore avant de t'y fier.
+- **`memory/` (versionné git) = source de vérité d'équipe.** La mémoire native de Claude Code (auto-memory)
+  n'est qu'un **cache personnel** : ne jamais s'en servir comme référence partagée.
+- **Au démarrage** : `memory/CONTEXT.md` (auto-importé ci-dessus) = focus courant + chaîne des sessions +
+  pointeurs, tenu LEAN (< 120 lignes). Lire `memory/LESSONS.md` et `memory/PROJECT_STATE.md` **à la demande**
+  pour le détail. Vérifier qu'un fichier/flag cité existe encore avant de t'y fier.
+- **Gotchas techniques = `.claude/rules/*.md`** (path-scoped, frontmatter `paths:`) : chargées
+  **automatiquement** selon les fichiers touchés (frontend / backend / agents / lab / memory), plus dans CONTEXT.md.
 - **Source de vérité** : `memory/PROJECT_STATE.md` + `memory/LESSONS.md` **priment sur les guides** de
   `docs/cadrage/` (ceux-ci sont des points de départ). Les noms réels et les solutions qui marchent vivent en mémoire.
 - **Apprentissage continu** : dès qu'une solution diverge des guides, ou qu'un truc échoue puis marche →
-  **appende** une entrée dans `memory/LESSONS.md` (contexte / échec / solution / preuve / source / date).
-- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + `memory/sessions/`).
+  **appende** une entrée dans `memory/LESSONS.md` (contexte / échec / solution / preuve / source / date). Un
+  changement de gotcha va dans le bon fichier `.claude/rules/`, pas dans CONTEXT.md.
+- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + `memory/sessions/` + graphe + commit).
 
 ## Identifiants canoniques (détail → `memory/PROJECT_STATE.md`)
 - Plugin id `owismind` · WebApp `webapp-owismind-ai-agents` · package `python-lib/owismind` · resource `owismind-app`
@@ -69,7 +75,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 7. **Code en anglais** (code + commentaires), optimisé, standard pro, bien commenté. La communication avec
    l'utilisateur reste en **français**.
 8. Ne pas affirmer que Python 3.11 / FastAPI marchent sans preuve (backend observé = 3.9.23).
-9. **JAMAIS de tiret cadratin `—` (U+2014) ni de tiret demi-cadratin `–` (U+2013)** - bannis à tout jamais,
+9. **JAMAIS de tiret cadratin (U+2014) ni de tiret demi-cadratin (U+2013)** - bannis à tout jamais,
    PARTOUT : chaînes i18n / texte UI, code, commentaires, mémoire, messages de commit ET réponses dans le chat.
    C'est une signature typographique d'IA, l'user l'interdit absolument. Utiliser `-`, `:`, `,` ou des
    parenthèses à la place. (Décision user 2026-06-17.)
@@ -82,6 +88,14 @@ convertie, a été supprimée du repo le 2026-06-11).
    dégradés, glow/grosses ombres, emoji, focus-ring orange global, **et visuel de marque reconstruit en CSS**
    (toujours la VRAIE image `frontend/src/assets/orange-logo.png`, jamais un carré généré). Dark via
    `body[data-theme]` + tokens. (Décision user 2026-06-18 : « à chaque fois qu'on fait du style, comme ça ».)
+
+## Style de travail (tâches lourdes)
+- **Monter l'effort** sur le travail difficile (conception, refactor, revue) ; ne pas sous-traiter le
+  raisonnement à des appels d'outils prématurés.
+- **Fan-out = sous-agents/workflows** quand plusieurs pistes indépendantes existent (Opus, pas Fable) ;
+  l'instruire explicitement (Opus 4.8 spawn peu de sous-agents par défaut).
+- **Gates de vérification avant de déclarer « fait »** : lancer les tests / le build et LIRE la sortie ;
+  jamais d'affirmation de succès sans preuve.
 
 ## Référence
 - `docs/cadrage/CHARTE_ORANGE_UI.md` - **charte de style UI (règle #10), auto-suffisante** : tokens, géométrie carrée, recettes de composants, interdits. À lire avant tout travail de style (la maquette HTML d'origine a été supprimée, cette charte la remplace).

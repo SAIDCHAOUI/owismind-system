@@ -3,7 +3,7 @@ name: log-session
 description: Write an end-of-session log for OWIsMind, refresh the short-term memory (memory/CONTEXT.md), append any new lesson to memory/LESSONS.md, update the knowledge graph (graphify --update) and commit the session. Use at the end of a session, or when the user asks to log the session or update memory.
 ---
 
-# /log-session — End-of-session log + memory refresh + graph update + commit
+# /log-session - End-of-session log + memory refresh + graph update + commit
 
 Captures what happened this session, keeps the memory current, keeps the knowledge graph fresh,
 and commits the session snapshot. Communicate in French.
@@ -14,18 +14,21 @@ and commits the session snapshot. Communicate in French.
 
 2. **Write the session log** at `memory/sessions/<YYYY-MM-DD>.md` (if the file exists, append a new
    `## <HH:MM or run N>` section instead of overwriting). Include:
-   - **Objectif** — what the session set out to do.
-   - **Fait** — concrete changes (files created/edited, builds, packages). Be specific.
-   - **Décisions** — choices made and why.
-   - **Validé / non validé** — what was proven vs. assumed.
-   - **Prochaines étapes** — next actions.
+   - **Objectif** - what the session set out to do.
+   - **Fait** - concrete changes (files created/edited, builds, packages). Be specific.
+   - **Décisions** - choices made and why.
+   - **Validé / non validé** - what was proven vs. assumed.
+   - **Prochaines étapes** - next actions.
 
-3. **Refresh `memory/CONTEXT.md`** (short-term memory, loaded every session). Update:
-   - 🎯 Focus courant
-   - 🧭 Dernière session (3 lines max, dated)
-   - ⚠️ Top gotchas / règles actives (only what's currently relevant)
-   - 🔜 Prochaines étapes
-   Keep it short — detail belongs in `PROJECT_STATE.md`.
+3. **Refresh `memory/CONTEXT.md`** (short-term memory, auto-imported every session). Keep it **under 120
+   lines** and follow the pointer discipline (see `.claude/rules/memory.md`):
+   - **Focus courant** : the 1-2 latest runs in full. A new run's full block **replaces** the previous one,
+     which collapses to a single line in the session chain.
+   - **Chaine des sessions** : ONE line per run (pointer to `sessions/<date>.md` + lesson numbers).
+   - **Regles** : 2 lines pointing to `CLAUDE.md` (rules #9/#10) and `.claude/rules/`. Do NOT restate gotchas here.
+   - **Prochaines etapes** : still-active items only, one line each with a session-file pointer (drop DONE entries).
+   Technical gotchas do NOT live in CONTEXT.md: any gotcha change goes into the right `.claude/rules/*.md`
+   (path-scoped). Detail belongs in `PROJECT_STATE.md` / `sessions/`.
 
 4. **Append lessons** to `memory/LESSONS.md` if anything diverged from the cadrage guides, or failed
    then worked. Use the next `L0xx` id and the format: Contexte / Ce qui a échoué / Solution qui
@@ -38,7 +41,7 @@ and commits the session snapshot. Communicate in French.
    `/graphify --update` incremental pipeline on the repo root. Changed **code-only** files →
    AST-only re-extraction (free, no LLM). Changed **docs/memory** files → semantic re-extraction of
    those files only (subagents; the extraction cache makes this cheap). If graphify is unavailable,
-   say so in the report — never skip silently. NO INSTALL still applies (never pip install graphify;
+   say so in the report - never skip silently. NO INSTALL still applies (never pip install graphify;
    ask the user).
 
 7. **Commit the session** (standing user authorization 2026-06-11): `git add -A`, then commit with
@@ -50,6 +53,8 @@ and commits the session snapshot. Communicate in French.
    touched, the graph update result (files re-extracted / AST-only / unavailable) and the commit hash.
 
 ## Notes
-- This skill writes memory files, updates the knowledge graph and commits — no build, no package,
+- This skill writes memory files, updates the knowledge graph and commits - no build, no package,
   no upload, no push.
 - Never invent results: if something was skipped or failed, record it as such.
+- **Zero em dash (U+2014) / en dash (U+2013)** in anything you write (rule #9). A PostToolUse hook
+  (`.claude/hooks/dash-guard.sh`) flags them after each edit; verify with a python3 codepoint count, never BSD `grep -P`.

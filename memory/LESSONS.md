@@ -4,6 +4,11 @@
 > marcher → ajouter une entrée : **Contexte / Ce qui a échoué / Solution qui marche /
 > Preuve-vérification / Source / Date**. Ce fichier + `PROJECT_STATE.md` priment sur les guides.
 
+> **Navigation** : lecture à la demande, pas en entier. Sauter à une leçon = `grep '^## L' memory/LESSONS.md`
+> (ou `grep -n '^## L0xx'`). Les balises de statut par leçon (`✅ DSS`, `obsolète`, `reverté`, `⏳`) sont
+> **historiques** = ce qui était vrai à la date de la leçon ; pour savoir ce qui est **réellement déployé
+> aujourd'hui**, c'est `PROJECT_STATE.md` section 11 (matrice de validation) qui fait foi.
+
 > ⚠️ **Chemins historiques (nettoyage du 2026-06-11)** : `maquette/`, `docs/superpowers/plans/` et
 > `.demo-screens/` ont été **supprimés du repo** (conversion Vue 3 terminée). Les leçons qui les citent
 > restent valides comme HISTORIQUE - ne pas chercher ces fichiers sur le disque. Les specs gelées

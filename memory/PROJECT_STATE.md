@@ -3,7 +3,15 @@
 > Référence canonique de l'état du projet. Mise à jour à la demande / en fin de session.
 > En cas de conflit avec les guides de `docs/cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
-> Dernière mise à jour : **2026-06-26 - NETTOYAGE REPO** (L108) : grand ménage (0 code touché). Supprimés :
+> Dernière mise à jour : **2026-07-06 - PASSAGE EN PRODUCTION v1.1** (L139-L140, Run 5) : agents promus
+> DEV -> PROD_V1 par régénération scriptée (`tools/promote_agents_to_prod.py`, idempotent : copie DEV +
+> ids PROD + retrait du bloc `tickets_expert`) ; `plugin.json` 0.0.1 -> 1.1.0 + zip prod
+> (`owismind-upload.zip`, 95 entrées, bundle `index-DDxpe_gw.js`) ; plugins dev supprimés du disque ;
+> impersonation gardée pour la bêta ; tickets expert HORS PROD. **Repo PRÊT, RIEN encore déployé DSS** :
+> suivre le runbook `docs/DEPLOY_PROD_V1_1.md`. Avant : **2026-07-06 Runs 2-4 - Source Data v3 VALIDÉ DSS**
+> (popover filtres, mesures choisies, plages de dates sur colonnes string, cascade, persistance des vues,
+> contexte écran -> agent). Détail : `sessions/2026-07-06.md` + `CONTEXT.md`.
+> Antérieur : **2026-06-26 - NETTOYAGE REPO** (L108) : grand ménage (0 code touché). Supprimés :
 > junk (16 `.DS_Store` + 31 `__pycache__`) + 56 fichiers suivis docs/scratch/maquettes (`docs/scaling/.workdir`
 > + `project-documentation/.workdir`, `style-reference/`, `benchmark_webapp/mockup/`, plan orphelin
 > `docs/superpowers/plans/`, `docs/screenshots/`, `docs/scaling/PLAN_*` -> dossiers `docs/scaling/` et
@@ -431,6 +439,13 @@ Plugin/ready-for-dataiku/owismind-upload/   (+ owismind-upload.zip)
   DSS** (PLAYBOOK) : override métrique COUNT, modèle sémantique, tool, Code Agent + `agent_id` réel, re-coll
   orchestrateur (pas de zip). Datasets : `TroubleTickets_year` + `_profile` + `_value_index` (sur `SQL_owi`) +
   `_value_catalogue`. Débloque la fiche client 360 (pont `Account_name`/`Customer_id`). Détail → `sessions/2026-06-19.md` Run 4.
+- **Audit + durcissement des agents (2026-07-02 Run 1, L118, repo DEV)** : 20 findings confirmés
+  implémentés (orchestrateur, expert revenus, cerveau sémantique, tool lookup) ; contrat `AMBIGUOUS TERM`
+  porté agent + modèle sémantique ENSEMBLE (`update_aligned_semantic_model.py`). Détail → `sessions/2026-07-02.md` (Run 1).
+- **Promotion DEV -> PROD_V1 scriptée (2026-07-06 Run 5, L139)** : `tools/promote_agents_to_prod.py`
+  (idempotent : copie DEV + substitution des ids PROD + retrait chirurgical du bloc `tickets_expert`)
+  régénère les fichiers PROD ; JAMAIS d'édition manuelle d'un fichier PROD. Ids PROD : orchestrateur
+  `Xrv7GvfG`, revenue expert `agent:uO5hEzAs`. Détail → `sessions/2026-07-06.md` (Run 5) + `dataiku-agents/OWISMIND/README.md`.
 
 ---
 
