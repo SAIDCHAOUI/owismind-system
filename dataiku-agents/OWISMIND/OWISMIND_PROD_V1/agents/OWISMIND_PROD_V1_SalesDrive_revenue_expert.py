@@ -196,6 +196,16 @@ NO_DATA_TEXT = {
     "fr": "Aucune donnée trouvée pour les filtres et la période demandés.",
     "en": "No data found for the requested filters and period.",
 }
+# The query DID return rows, but the result set was too large to serialize in
+# full so the rows were dropped. Distinct from a genuine empty result: ask the
+# user to narrow instead of wrongly saying "no data".
+OVERSIZE_RESULT_TEXT = {
+    "fr": ("Le résultat existe mais il est trop volumineux pour être affiché en "
+           "entier. Pouvez-vous préciser la question (ajouter un filtre ou "
+           "demander un top N) ?"),
+    "en": ("The result exists but is too large to display in full. Could you "
+           "narrow the question (add a filter or ask for a top N)?"),
+}
 NO_DATA_HINT_SCENARIO = {
     "fr": " Scénarios disponibles : {values}.",
     "en": " Available scenarios: {values}.",
@@ -259,6 +269,14 @@ DEGRADED_COMPARISON_NOTE = {
           "élément à comparer a été identifié) - voici le chiffre correspondant._",
     "en": "_Note: I couldn't build the requested comparison (only one item to "
           "compare was identified) - here is the corresponding figure._",
+}
+# Transparency note when the model asked for a specific period but the bounds
+# could not be interpreted - the answer then covers every available month.
+INVALID_PERIOD_NOTE = {
+    "fr": "_Note : la période demandée n'a pas pu être interprétée ; la réponse "
+          "couvre l'ensemble des mois disponibles._",
+    "en": "_Note: the requested period could not be interpreted; the answer "
+          "covers all available months._",
 }
 HEADLINE_SINGLE = {
     "fr": "{metric} ({scope}) : {value}.",
@@ -474,6 +492,11 @@ def _validate_period(raw):
             and _DATE_RE.match(end) and start <= end):
         label = str(raw.get("label") or "").strip()[:60] or ("%s → %s" % (start, end))
         return {"mode": "explicit", "start": start, "end": end, "label": label}
+    if raw.get("mode") == "explicit":
+        # The model asked for a SPECIFIC period but the bounds are missing or
+        # invalid: fall back to all months, and flag it so the answer can say so
+        # (distinct from "no period requested at all", which stays unflagged).
+        return {"mode": "all_available", "invalid_explicit": True}
     return {"mode": "all_available"}
 
 
@@ -592,7 +615,7 @@ def validate_understanding(parsed, profile, instruction):
         else:
             out["intent"] = "custom"
 
-    terms, seen = [], set()
+    terms, seen, dropped = [], set(), 0
     stop = _term_stopwords(profile)
     for t in parsed.get("terms") or []:
         t = str(t).strip()
@@ -600,10 +623,15 @@ def validate_understanding(parsed, profile, instruction):
         if not t or not key or key in stop or key in seen:
             continue
         seen.add(key)
-        terms.append(t[:80])
         if len(terms) >= MAX_TERMS:
-            break
+            dropped += 1          # distinct valid term over the cap -> not grounded
+            continue
+        terms.append(t[:80])
     out["terms"] = terms
+    if dropped:
+        # Signal the truncation downstream so build_semantic_question can tell the
+        # semantic tool to ground the remaining named values from the question.
+        out["terms_dropped"] = dropped
 
     out["clarification"] = str(parsed.get("clarification") or "").strip()[:500]
     return out
@@ -1325,7 +1353,9 @@ _FORBIDDEN_SQL = re.compile(
     r"\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|"
     r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into)\b",
     re.IGNORECASE)
-_LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
+# Trailing LIMIT, optionally followed by an OFFSET clause (Postgres allows
+# `LIMIT n OFFSET m`). The OFFSET is preserved when the LIMIT is capped.
+_LIMIT_RE = re.compile(r"\blimit\s+(\d+)(\s+offset\s+\d+)?\s*;?\s*$", re.IGNORECASE)
 # Single-quoted string literals ('' = escaped quote). Blanked before keyword/table
 # scanning so a literal like 'a set of products' never triggers a false rejection
 # and never hides a table-name scan.
@@ -1405,7 +1435,8 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
     lm = _LIMIT_RE.search(s)
     if lm:
         if int(lm.group(1)) > max_rows:
-            s = _LIMIT_RE.sub("LIMIT %d" % max_rows, s)
+            offset = lm.group(2) or ""     # e.g. " OFFSET 20", kept verbatim
+            s = _LIMIT_RE.sub("LIMIT %d%s" % (max_rows, offset), s)
     else:
         s = s + " LIMIT %d" % max_rows
     return (s, None)
@@ -1565,11 +1596,11 @@ def build_semantic_question(u, profile, filters):
 
     # Resolver findings, presented as hints (not orders). A value matched to a
     # single column is a confident, catalog-exact spelling (e.g. a customer name)
-    # and is suggested directly. A value present in several columns (an ambiguous
-    # offer term like 'EVPL', both a Product and a sirano_product) is not pinned to a
-    # column: the semantic model resolves it with its own hierarchy rules and the
-    # user's intent, which is more reliable than a fixed column pick (a fixed pick
-    # can be wrong - e.g. defaulting to sirano_product).
+    # and is suggested directly. A value present in SEVERAL columns is not pinned
+    # to a column: the semantic model resolves it with its own rules (offer
+    # hierarchy when the columns are offer levels, identity roles when they are
+    # account/partner/group columns) and the user's intent, which is more reliable
+    # than a fixed column pick (a fixed pick can be the wrong level or role).
     if filters:
         confident = [f for f in filters if not f.get("alt_columns")]
         ambiguous = [f for f in filters if f.get("alt_columns")]
@@ -1597,10 +1628,12 @@ def build_semantic_question(u, profile, filters):
         for f in ambiguous:
             cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])]
             parts.append(
-                "AMBIGUOUS OFFER TERM - \"%s\" is a real data value present in "
+                "AMBIGUOUS TERM - \"%s\" is a real data value present in "
                 "SEVERAL columns (%s). Do NOT take a pinned column from the "
-                "helper here: YOU resolve it, using your offer-hierarchy rules "
-                "and the user's intent, then disclose the level you picked."
+                "helper here: YOU resolve it, using YOUR semantic-model rules "
+                "(the offer hierarchy when these are offer levels, the identity "
+                "roles when they are account / partner / group columns) and the "
+                "user's intent, then disclose the interpretation you picked."
                 % (f["value"], ", ".join(cols)))
         if len(confident) > 1:
             parts.append(
@@ -1609,21 +1642,30 @@ def build_semantic_question(u, profile, filters):
                 "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
                 "sales channel + an offer) with AND. (Guidance - your judgment.)")
 
-    # Offer terms the resolver could NOT confidently ground and DEFERRED to you
-    # (multi-column ambiguity, no single confident match). You have the full catalog
-    # and the hierarchy - resolve them yourself; never default to sirano_product.
+    # Terms the resolver could NOT confidently ground and DEFERRED to you
+    # (multi-column ambiguity, no single confident match). You have the full
+    # catalog - resolve them yourself with your own rules and disclose the choice.
     for ot in (u.get("offer_terms_for_model") or []):
         samples = "; ".join("%s: '%s'" % (s.get("column", ""),
                                           str(s.get("value", "")).replace("'", "''"))
                             for s in (ot.get("samples") or []))
         parts.append(
-            "AMBIGUOUS OFFER TERM (no confident match) - the user named \"%s\". "
+            "AMBIGUOUS TERM (no confident match) - the user named \"%s\". "
             "The grounding helper found only PARTIAL, cross-column matches (%s) and "
             "did NOT pin a column. Resolve \"%s\" yourself from YOUR catalog using "
-            "the offer hierarchy (prefer the most granular BUSINESS level - Product, "
-            "then SolutionLine; NEVER default to sirano_product), then "
-            "DISCLOSE the level you used so the user can ask for another."
+            "YOUR semantic-model rules (the offer hierarchy when these are offer "
+            "levels, the identity roles when they are account / partner / group "
+            "columns) and the user's intent, then DISCLOSE the interpretation you "
+            "used so the user can ask for another."
             % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
+
+    # The named values were capped for grounding: tell the tool to ground the
+    # remaining ones itself from the user question (still passed as source of truth).
+    if u.get("terms_dropped"):
+        parts.append(
+            "NOTE: only the first %d named values were checked against the live "
+            "catalog; ground any REMAINING named values from the USER QUESTION "
+            "above yourself." % MAX_TERMS)
 
     if scen and intent not in ("list_values",):
         parts.append("SCENARIO (guidance): unless the question implies "
@@ -1697,7 +1739,10 @@ def extract_tabular_node(outputs):
         except Exception:
             return None
         if len(serialized) > _RESULT_JSON_MAX_CHARS:
-            return {"columns": columns, "rows": [], "truncated": True}
+            # Too large to serialize: drop the rows but keep the count so the
+            # caller can tell "result too large" from a genuine empty result.
+            return {"columns": columns, "rows": [], "truncated": True,
+                    "row_count": len(rows)}
         return result
     return None
 
@@ -1731,8 +1776,16 @@ def extract_semantic_payload(raw_output):
             found = extract_tabular_node(node)
             if found is not None:
                 payload["result"] = found          # last occurrence wins
-            if isinstance(node.get("row_count"), int):
-                payload["row_count"] = node["row_count"]   # last wins
+                # The row count MUST describe the same node as the captured table,
+                # never a different message. Prefer the node's own row_count; else
+                # the count the table carries (an oversize-dropped table keeps its
+                # pre-drop count); else the number of rows actually captured.
+                if isinstance(node.get("row_count"), int):
+                    payload["row_count"] = node["row_count"]
+                elif isinstance(found.get("row_count"), int):
+                    payload["row_count"] = found["row_count"]
+                else:
+                    payload["row_count"] = len(found.get("rows") or [])
             for key, prio in _SEM_ANSWER_KEY_PRIORITY.items():
                 val = node.get(key)
                 if isinstance(val, str) and val.strip():
@@ -1750,8 +1803,8 @@ def extract_semantic_payload(raw_output):
         payload["answer"] = max((c for c in answer_candidates
                                  if c[0] == best_prio),
                                 key=lambda c: c[1])[2]
-    if payload["row_count"] is None and payload["result"] is not None:
-        payload["row_count"] = len(payload["result"]["rows"])
+    # row_count is set together with the captured result (above) and stays None
+    # when no tabular result was found - no independent, mismatched derivation.
     return payload
 
 
@@ -1806,9 +1859,13 @@ def shape_result(columns, row_tuples):
     try:
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except Exception:
-        return {"columns": cols, "rows": [], "truncated": True}
+        # Rows dropped (unserializable): keep the count so callers can tell
+        # "result too large" from a genuine empty result.
+        return {"columns": cols, "rows": [], "truncated": True,
+                "row_count": len(rows)}
     if len(serialized) > _RESULT_JSON_MAX_CHARS:
-        return {"columns": cols, "rows": [], "truncated": True}
+        return {"columns": cols, "rows": [], "truncated": True,
+                "row_count": len(rows)}
     return result
 
 
@@ -2470,18 +2527,23 @@ class MyLLM(BaseLLM):
         history for rollback) - only the control flow is a graph; behavior is
         identical. Live timeline events are emitted through LangGraph's custom
         stream writer."""
+        # Fallback reply language, resolved as early as possible so the outer
+        # `except` (which may fire before the context is parsed) never references
+        # an unbound name and always honors the orchestrator's pinned language.
+        lang = "fr"
         try:
             project = dataiku.api_client().get_default_project()
             instruction, conversation_context = self._extract_input(query)
+            lang = forced_language(conversation_context) or lang
             if not instruction:
-                yield {"chunk": {"text": INTERNAL_ERROR_TEXT["fr"]}}
+                yield {"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}}
                 yield _agent_result("error", None)
                 return
             try:
                 profile = self._get_profile()
             except Exception:
                 logger.exception("Profile unavailable")
-                yield {"chunk": {"text": PROFILE_MISSING_TEXT["fr"]}}
+                yield {"chunk": {"text": PROFILE_MISSING_TEXT[lang]}}
                 yield _agent_result("error", None)
                 return
             # Model tier for THIS run, propagated by the orchestrator
@@ -2499,7 +2561,7 @@ class MyLLM(BaseLLM):
                 yield chunk
         except Exception:
             logger.exception("Dataset expert failure")
-            yield {"chunk": {"text": INTERNAL_ERROR_TEXT["fr"]}}
+            yield {"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}}
             yield _agent_result("error", None)
 
     # ---- LangGraph wiring (nodes call the SAME engine; closures bind ctx) ---
@@ -2531,7 +2593,9 @@ class MyLLM(BaseLLM):
                     u["language"] = pinned
                 sp.outputs["understanding"] = u
             if u is None:
-                writer({"chunk": {"text": INTERNAL_ERROR_TEXT["fr"]}})
+                # No understanding to carry a language: fall back to the pinned
+                # one (the USER's real language) before the default.
+                writer({"chunk": {"text": INTERNAL_ERROR_TEXT[pinned or "fr"]}})
                 writer(_agent_result("error", None))
                 return {"done": True}
             lang = u["language"]
@@ -2693,15 +2757,23 @@ class MyLLM(BaseLLM):
                     # the chart cannot render (fix for the multi-SQL case).
                     last_i = len(sqls) - 1
                     for i, sql in enumerate(sqls):
+                        is_last = (i == last_i)
                         with trace.subspan("semantic-model-query") as qsp:
                             qsp.outputs["sql"] = sql
                             qsp.outputs["success"] = True
-                            qsp.outputs["row_count"] = tool_row_count
-                            if i == last_i and result is not None:
-                                qsp.outputs["columns"] = result["columns"]
-                                qsp.outputs["rows"] = result["rows"]
-                        executed.append({"sql": sql, "success": True,
-                                         "row_count": tool_row_count})
+                            # The tool reports ONE row_count, for its FINAL query.
+                            # Only the last span carries it; the intermediate
+                            # probe/repair spans have none (stamping them all with
+                            # the final count is dishonest).
+                            if is_last:
+                                qsp.outputs["row_count"] = tool_row_count
+                                if result is not None:
+                                    qsp.outputs["columns"] = result["columns"]
+                                    qsp.outputs["rows"] = result["rows"]
+                        item = {"sql": sql, "success": True}
+                        if is_last:
+                            item["row_count"] = tool_row_count
+                        executed.append(item)
 
             if engine == "direct" and u["intent"] != "custom":
                 try:
@@ -2716,12 +2788,16 @@ class MyLLM(BaseLLM):
                         try:
                             columns, rows = sa._run_sql(profile.dataset_name, sql)
                             result = shape_result(columns, rows)
+                            # An oversize result keeps its pre-drop count on the
+                            # dict; report THAT, not the emptied rows list, so the
+                            # Evidence count matches the "too large" answer.
+                            n_rows = result.get("row_count", len(result["rows"]))
                             sp.outputs["success"] = True
-                            sp.outputs["row_count"] = len(result["rows"])
+                            sp.outputs["row_count"] = n_rows
                             sp.outputs["columns"] = result["columns"]
                             sp.outputs["rows"] = result["rows"]
                             executed.append({"sql": sql, "success": True,
-                                             "row_count": len(result["rows"])})
+                                             "row_count": n_rows})
                         except Exception as e:
                             logger.exception("Deterministic SQL failed -> "
                                              "falling back to custom path")
@@ -2782,12 +2858,14 @@ class MyLLM(BaseLLM):
                             sa._explain(profile.dataset_name, sql)
                             columns, rows = sa._run_sql(profile.dataset_name, sql)
                             result = shape_result(columns, rows)
+                            # Same oversize rule as the deterministic path above.
+                            n_rows = result.get("row_count", len(result["rows"]))
                             sp.outputs["success"] = True
-                            sp.outputs["row_count"] = len(result["rows"])
+                            sp.outputs["row_count"] = n_rows
                             sp.outputs["columns"] = result["columns"]
                             sp.outputs["rows"] = result["rows"]
                             executed.append({"sql": sql, "success": True,
-                                             "row_count": len(result["rows"])})
+                                             "row_count": n_rows})
                             break
                         except Exception as e:
                             last_error = str(e)[:500]
@@ -2824,12 +2902,33 @@ class MyLLM(BaseLLM):
             # this answer covers (relayed by the orchestrator into natural prose).
             scope_note = build_scope_note(u, profile, state.get("filters") or [], lang)
             scope_prefix = (scope_note + "\n\n") if scope_note else ""
+            # Transparency: an explicit period the model asked for could not be
+            # interpreted -> the answer covers all months; say so on every branch
+            # that renders an answer. NOT for compare_periods: there the query is
+            # governed by the u["periods"] list, so a stray malformed singular
+            # period must not attach a false disclaimer to a correct comparison.
+            invalid_period = ""
+            if (u.get("intent") != "compare_periods"
+                    and (u.get("period") or {}).get("invalid_explicit")):
+                invalid_period = "\n\n" + INVALID_PERIOD_NOTE[lang]
             writer(_block("format_output"))
             if (not result or not result.get("rows")) and tool_answer:
                 writer({"chunk": {"text": scope_prefix + tool_answer
-                        + (("\n\n" + disclosure) if disclosure else "")}})
+                        + (("\n\n" + disclosure) if disclosure else "")
+                        + invalid_period}})
                 writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                        sql_count=len(executed), row_count=tool_row_count,
+                       attempts=len(executed)))
+                return {"done": True}
+            # A legitimate result whose rows were dropped because it was too large
+            # to serialize (see shape_result / extract_tabular_node): the count
+            # survives on the result. Never report this as "no data" - ask the user
+            # to narrow. A genuine empty result carries no positive row_count here.
+            if (result and result.get("truncated") and not result.get("rows")
+                    and (result.get("row_count") or 0) > 0):
+                writer({"chunk": {"text": scope_prefix + OVERSIZE_RESULT_TEXT[lang]}})
+                writer(_agent_result("ready", u, resolved_filters=resolved_filters,
+                       sql_count=len(executed), row_count=result.get("row_count"),
                        attempts=len(executed)))
                 return {"done": True}
             if not result or not result.get("rows"):
@@ -2843,7 +2942,8 @@ class MyLLM(BaseLLM):
                                                                  or tm.get("max")):
                     hint += NO_DATA_HINT_PERIOD[lang].format(min=tm.get("min"),
                                                              max=tm.get("max"))
-                writer({"chunk": {"text": NO_DATA_TEXT[lang] + hint}})
+                writer({"chunk": {"text": scope_prefix + NO_DATA_TEXT[lang] + hint
+                        + invalid_period}})
                 writer(_agent_result("no_data", u,
                        resolved_filters=resolved_filters,
                        sql_count=len(executed), row_count=0,
@@ -2882,7 +2982,8 @@ class MyLLM(BaseLLM):
                     and u["intent"] not in ("compare_scenarios", "compare_periods")):
                 degraded = "\n\n" + DEGRADED_COMPARISON_NOTE[lang]
             writer({"chunk": {"text": scope_prefix + headline + "\n\n" + table_md
-                    + (("\n\n" + disclosure) if disclosure else "") + degraded}})
+                    + (("\n\n" + disclosure) if disclosure else "")
+                    + degraded + invalid_period}})
             writer(_agent_result("ready", u, resolved_filters=resolved_filters,
                    sql_count=len(executed), row_count=len(result["rows"]),
                    attempts=len(executed)))

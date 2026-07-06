@@ -5,6 +5,23 @@
 > (`python-lib/owismind/`) qui parle aux agents via **LLM Mesh** et stocke en **SQL direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 ## 🎯 Focus courant
+**🚀 SESSION 2026-07-06 Run 5 (PASSAGE EN PRODUCTION v1.1 : promotion agents DEV -> PROD_V1 +
+zip prod v1.1.0 + nettoyage dev) - ✅ repo PRÊT, RIEN encore déployé DSS (runbook :
+`docs/DEPLOY_PROD_V1_1.md`).** Contexte : user très content (« tout fonctionne convenablement »),
+nouveau projet DSS « OWIsMind prod v1 » créé par lui pour la webapp + datasets. Livré :
+**(1)** agents promus DEV -> PROD_V1 par **régénération scriptée** (`tools/promote_agents_to_prod.py`,
+idempotent : copie DEV + ids PROD + retrait bloc `tickets_expert`, BUSINESS_DOMAINS garde tickets =
+refus honnête ; PROD rattrapé de 650 lignes de retard, contrat AMBIGUOUS TERM porté dans
+`update_aligned_semantic_model.py` PROD) ; **(2)** plugin.json 0.0.1 -> **1.1.0**, build + package
+prod : `owismind-upload.zip` 95 entrées, bundle `index-DDxpe_gw.js` ; **(3)** nettoyage : plugins dev
+SUPPRIMÉS du disque (`owismind_dev`, `owismind_dev_v2` : zips + staging), `__pycache__`/.DS_Store ;
+CONSERVÉS (choix user) : outillage dev, `project-documentation/`, mail relance, **impersonation
+GARDÉE pour la bêta** ; **(4)** README semantic_model PROD réécrit (était une copie DEV avec ids DEV) ;
+**(5)** vérification adversariale 3 Opus : exécutables 0 finding, 2 findings doc corrigés.
+788 back + 352 node + 316 agents + 343 LAB verts, 0 tiret. La whitelist webapp est DYNAMIQUE
+(admin, cross-projet) : zéro id côté plugin ; seuls ids par projet = câblage interne entre Code
+Agents. Voir `sessions/2026-07-06.md` (Run 5) + **L139-L140**.
+
 **🖥️ SESSION 2026-07-06 Runs 2-4 (SOURCE DATA v3 : popover, mesures choisies, plages intelligentes,
 cascade, persistance, CONTEXTE ÉCRAN -> AGENT + transparence, filtre depuis cellule partout, menu de
 colonne + tri 3 états + colonnes orange) - ✅ VALIDÉ DSS PAR L'USER (« tout marche super », zip final
@@ -163,7 +180,13 @@ avatars ronds) ; aplats/filets 1px ; **H1 36/800 + eyebrow orange + title-bar 52
 (`frontend/src/styles/tokens.css`, texte orange = `--orange-text`) ; bans : `color-mix`/blur/dégradé/glow/emoji/
 focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE image `orange-logo.png`)**. Voir **L092**.
 
-## 🧭 Dernière session - 2026-07-06 Runs 2-4 : Source Data v3 complet → détail `sessions/2026-07-06.md` (Runs 2-4) + **L134-L138**
+## 🧭 Dernière session - 2026-07-06 Run 5 : passage en production v1.1 → détail `sessions/2026-07-06.md` (Run 5) + **L139-L140**
+- **✅ Repo prêt, RIEN déployé DSS** : agents PROD_V1 promus (régénération scriptée, 3 revues Opus,
+  2 findings doc corrigés), zip prod v1.1.0 (`index-DDxpe_gw.js`, 95 entrées), plugins dev supprimés.
+- Déploiement = suivre **`docs/DEPLOY_PROD_V1_1.md`** (plugin §1, projet prod §2, agents A/B §3,
+  smoke §5). Tickets expert volontairement HORS PROD ; impersonation gardée pour la bêta.
+
+## 🧭 Avant - 2026-07-06 Runs 2-4 : Source Data v3 complet → détail `sessions/2026-07-06.md` (Runs 2-4) + **L134-L138**
 - **✅ VALIDÉ DSS par l'user (« tout marche super »)** : zip `index-DYvX83Tl.js` uploadé,
   orchestrateur DEV recollé. Tout le chantier des 5 retours + les 3 retours du matin + le menu de
   colonne est LIVE sur dev_v2.
@@ -476,6 +499,17 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
    ne fournit que x/y/type/style. Best-effort (un échec de stockage ne casse jamais la réponse).
 
 ## 🔜 Prochaines étapes
+0🚀NEW (2026-07-06 Run 5). **DÉPLOYER LA PROD v1.1 - suivre `docs/DEPLOY_PROD_V1_1.md`.**
+   (1) Instance : supprimer les plugins dev `owismind_dev`/`owismind_dev_v2`, uploader
+   `Plugin/ready-for-dataiku/owismind-upload.zip` (id `owismind`, v1.1.0). (2) Projet DSS prod :
+   datasets DRIVE_Revenues + 3 recettes Flow, créer la webapp (connexion `SQL_owi`), permissions ;
+   les tables se créent seules préfixées par la clé du projet (prod démarre à zéro, voulu).
+   (3) Agents : scénario A (Code Agents restent dans `OWISMIND_PROD_V1`) = coller les 4 fichiers
+   promus tels quels (`Xrv7GvfG`, `uO5hEzAs` env 3.11, tool `szOZCoU`, script semantic model en
+   notebook puis re-dump) et ajouter l'orchestrateur via l'admin (whitelist dynamique cross-projet) ;
+   scénario B (agents recréés dans le nouveau projet) = §3B du runbook (liste exacte des ids à
+   remplacer). (4) Smoke §5 (dont refus honnête tickets). Promotions futures des agents =
+   `python3 tools/promote_agents_to_prod.py` puis re-coller. Après validation : tag v1.1.0 possible.
 0🖥️DONE (2026-07-06 Runs 2-4). **Source Data v3 ✅ VALIDÉ DSS** (« tout marche super », zip
    `index-DYvX83Tl.js` + orchestrateur DEV recollé). Reste à la demande : **promotion** vers le
    plugin DEV principal puis PROD (rebuild + package + orchestrateur PROD `Xrv7GvfG` avec le

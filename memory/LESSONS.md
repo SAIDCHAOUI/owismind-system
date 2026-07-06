@@ -3193,5 +3193,46 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-06.md Run 3 ; sourceModel.js `sampleIsoShape`/`monthRangeToBetweenSmart` ; log DSS user.
 - **Date** : 2026-07-06.
 
+## L139 - Promotion DEV -> PROD des agents : REGENERER depuis DEV par script, jamais editer le fichier PROD a la main
+
+- **Contexte** : passage en production v1.1 (2026-07-06 Run 5). Le workflow documente (README OWISMIND :
+  « copy the change into the matching PROD file ») etait applique A LA MAIN a chaque promotion.
+- **Ce qui a echoue** : la promotion manuelle ne suit pas le rythme du DEV : l'orchestrateur PROD avait
+  650 lignes de retard (audit L118, SOURCE-DATA VIEW, narration...), le tool lookup une cache key
+  perimee, le script semantic model 64 lignes de retard, et la doc du dossier PROD etait une copie DEV
+  avec des ids DEV (README semantic_model, commentaire dump) passee inapercue pendant des semaines.
+- **Solution qui marche** : `tools/promote_agents_to_prod.py` = REGENERATION : copie du fichier DEV +
+  table de substitutions d'ids PROD (appliquees globalement, commentaires inclus) + retrait chirurgical
+  du bloc capability non promu (tickets), avec garde-fous qui font echouer le script (substitution
+  introuvable, id DEV residuel via liste DEV_IDS, tirets, py_compile) et affichage des diffs residuels.
+  Parite fonctionnelle PAR CONSTRUCTION ; critere de revue simple : diff DEV<->PROD == en-tetes + ids +
+  bloc tickets, rien d'autre. Idempotent (re-run = memes fichiers).
+- **Preuve-verification** : 3 verificateurs Opus adversariaux (parite orchestrateur / ids+registry /
+  expert+semantic) : 0 finding sur les executables ; piege d'alignement diff connu (revenue_expert et
+  tickets_expert finissent par les 3 memes lignes -> le window du diff PARAIT mordre sur revenue ;
+  verifier par lecture directe). Les 2 findings restants etaient la doc non couverte par le script
+  (README + commentaire dump), corriges ; le docstring du script liste explicitement ce qu'il ne
+  couvre PAS (registry last_reviewed, README/MODEL.md).
+- **Source** : `tools/promote_agents_to_prod.py` ; `sessions/2026-07-06.md` Run 5 ; `docs/DEPLOY_PROD_V1_1.md` §4.
+- **Date** : 2026-07-06.
+
+## L140 - Sous-agents background : le texte final n'est PAS relaye a la session principale ; exiger un SendMessage to="main" dans le prompt
+
+- **Contexte** : verification adversariale Run 5 : 3 agents Opus lances en background via l'outil Agent.
+- **Ce qui a echoue** : les 3 agents ont termine leur analyse puis sont passes « idle » SANS que leur
+  rapport ne parvienne a la session principale (2 notifications idle successives, zero contenu). Leur
+  texte final n'est pas retransmis automatiquement quand ils tournent en background.
+- **Solution qui marche** : leur envoyer (ou mettre DES LE PROMPT INITIAL) la consigne explicite :
+  « rends ton rapport via l'outil SendMessage avec to="main" ». Les 3 rapports sont arrives
+  immediatement apres. A graver dans tout prompt de sous-agent background dont on attend un livrable.
+- **Piege associe** : un verificateur parallele peut lire un fichier AVANT un fix fait pendant sa
+  revue (ici : il a signale les tirets du script de promotion deja corriges par echappements unicode).
+  Toujours re-verifier un finding contre l'ETAT COURANT du fichier avant de le traiter.
+- **Preuve-verification** : sessions/2026-07-06.md Run 5 (3 rapports recus apres consigne SendMessage ;
+  re-scan tirets = 0 au moment du finding).
+- **Source** : session 2026-07-06 Run 5 (verificateurs verif-orchestrateur / verif-ids-registry /
+  verif-expert-semantic).
+- **Date** : 2026-07-06.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

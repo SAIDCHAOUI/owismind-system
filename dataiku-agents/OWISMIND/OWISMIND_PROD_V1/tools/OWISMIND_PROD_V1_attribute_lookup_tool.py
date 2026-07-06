@@ -399,13 +399,14 @@ class MyAgentTool(BaseAgentTool):
             return []
 
     # --- cache ----------------------------------------------------------------
-    def _cache_key(self, dataset, term, raw_attributes, search_columns=None):
-        """Key: dataset + accent-folded needle + requested attribute names + the
-        resolved search-column allowlist (case/space-insensitive). The allowlist
-        is part of the key because it changes which columns are scanned."""
+    def _cache_key(self, dataset, catalog, term, raw_attributes, search_columns=None):
+        """Key: dataset + catalog + accent-folded needle + requested attribute
+        names + the resolved search-column allowlist (case/space-insensitive).
+        The allowlist is part of the key because it changes which columns are
+        scanned; the catalog because it feeds the not_found/suggestions path."""
         attrs = tuple(sorted(n for n in (norm(a) for a in raw_attributes or []) if n))
         scols = tuple(sorted(search_columns or []))
-        return (dataset, search_value(term), attrs, scols)
+        return (dataset, catalog or "", search_value(term), attrs, scols)
 
     def _cache_get(self, key):
         hit = self._cache.get(key)
@@ -544,7 +545,8 @@ class MyAgentTool(BaseAgentTool):
                                        "real column."})
 
         # The SQL work below is cacheable; the validation branches above are not.
-        cache_key = self._cache_key(dataset, term, raw_attributes, search_columns)
+        cache_key = self._cache_key(dataset, catalog, term, raw_attributes,
+                                    search_columns)
         cached = self._cache_get(cache_key)
         if cached is not None:
             return out(cached)

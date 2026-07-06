@@ -20,7 +20,7 @@ import json
 import dataiku
 
 # CONFIG ----------------------------------------------------------------------
-# The semantic model the revenue_semantic_query tool (v4oqA6R) points at.
+# The semantic model the revenue_semantic_query tool (sgk5pfln) points at.
 # Fill MODEL_ID with the model's technical id (DSS: the tool's "Semantic Model"
 # setting), or leave it empty to resolve by name.
 MODEL_ID = "a7K9jYk"                                   # e.g. "AbCdEf01"

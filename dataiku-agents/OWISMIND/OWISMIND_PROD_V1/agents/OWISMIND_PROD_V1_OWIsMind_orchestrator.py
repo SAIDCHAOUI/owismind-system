@@ -108,11 +108,11 @@ SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"           
 # model that drives the ENTIRE turn - no escalation, no mid-turn switching. The
 # quality difference between modes is purely the model tier; the orchestration
 # logic is identical for all of them.
-#   smart    : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
+#   smart  : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
 #            Its lead-in narration is kept OFF (smallest tier; the deterministic
 #            ticker covers the wait) - see narration_enabled.
-#   pro : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
-#   claude   : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
+#   pro    : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
+#   claude : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
 #            the semantic model. Max quality; the most expensive.
 # The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
 # The DSS-configured Semantic Model Query tool (which actually writes the SQL) stays
@@ -131,6 +131,66 @@ LOOP_LLM_BY_MODE = {
 # the wait is covered by the deterministic ticker instead.
 def narration_enabled(mode):
     return mode != "smart"
+
+
+# Progress-note tool (smart mode only). The mini model cannot reliably write chat
+# text alongside a tool call (narrate-and-stop), so narration becomes a TOOL CALL
+# instead: a promise spoken through a tool never ends the turn - the loop keeps
+# running and the tool ack pushes the model to follow through. Exposed at run
+# time only when narration_enabled() is False; pro/claude narrate in plain text.
+PROGRESS_TOOL_NAME = "tell_user"
+MAX_PROGRESS_NOTES_PER_BATCH = 2
+PROGRESS_TOOL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": PROGRESS_TOOL_NAME,
+        "description": (
+            "Show ONE short progress sentence to the user immediately, WITHOUT "
+            "ending your turn ('Je récupère les revenus 2025-2026 du client A…'). "
+            "Call it in the SAME turn as the slow tool call it announces (a "
+            "specialist call, a chart). NEVER end the run on a note alone - the "
+            "announced tool call must follow. Never use it for the final answer."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string",
+                            "description": "One short sentence, in the user's language."},
+            },
+            "required": ["message"],
+        },
+    },
+}
+
+# Prior-result recall tool: exposed only when the backend shipped recallable
+# results ([PRIOR DATA] note + ⟦owi:prior⟧ token). Loading is INSTANT (the data
+# is already in state) - the whole point is answering follow-ups without paying
+# a 30-60s specialist round-trip for figures the conversation already holds.
+RECALL_TOOL_NAME = "recall_prior_result"
+RECALL_TOOL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": RECALL_TOOL_NAME,
+        "description": (
+            "INSTANTLY reload a data result already fetched earlier in this "
+            "conversation (listed in the [PRIOR DATA] note) - no new query, no "
+            "waiting. Use it when the follow-up can be answered from that data: "
+            "reading a value, comparing figures already present, interpreting, "
+            "or re-displaying it (another chart type, a table). After recalling "
+            "you can call show_chart / show_table / show_kpi on it. For data "
+            "NOT in the note (new entity, period, scenario, metric or a "
+            "different aggregation), call the specialist instead."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "turn": {"type": "integer",
+                         "description": "Which prior result to reload: 1 = most "
+                                        "recent (default), 2 = the one before, "
+                                        "3 = the one before that."},
+            },
+            "required": [],
+        },
+    },
+}
 # Machine-only control tokens the backend appends to the END of the current turn
 # (model mode + the authoritative reply language). Parsed for our logic, then
 # STRIPPED from every replayed message so the model never sees them as text.
@@ -142,7 +202,15 @@ _CTRL_TOKEN_RE = re.compile(r"⟦owi:[a-z_]+=[^⟧]*⟧")
 # block). The MODEL must see them (recency-anchored language rule + screen awareness),
 # but our own derived uses - sub-agent continuity, fallback detection - want the raw
 # question, so we strip from the FIRST appended block to the end.
-_CTX_BLOCK_RE = re.compile(r"\n\n\[(?:ON SCREEN NOW|Context -).*\Z", re.DOTALL)
+_CTX_BLOCK_RE = re.compile(
+    r"\n\n\[(?:ON SCREEN NOW|PRIOR DATA|Context -).*\Z", re.DOTALL)
+# Machine token carrying the previous turns' captured SQL results (built by the
+# backend). Parsed into state at run start, stripped before ANY model call (the
+# generic _CTRL_TOKEN_RE strip also covers it on every replayed message).
+_PRIOR_TOKEN_RE = re.compile(r"⟦owi:prior=([^⟧]*)⟧")
+MAX_PRIOR_RESULTS = 3
+PRIOR_MAX_ROWS = 30
+PRIOR_MAX_COLS = 40
 
 MAX_TOOL_LOOPS = 8                 # hard bound on agent<->tools cycles per turn
 MAX_PARALLEL_AGENTS = 3            # bounded fan-out (instance safety)
@@ -237,7 +305,7 @@ CAPABILITIES = {
         "lookup_catalog": "DRIVE_Revenues_Value_Catalog",
         # OPTIONAL allowlist of text columns the fast lookup may search for this
         # domain (server-side; "" / absent = search every text column, today's
-        # behaviour). Revenue keeps the full search (validated); see tickets below.
+        # behaviour). Revenue keeps the full search (validated).
         "lookup_search_columns": [],
         "pass_context": True,
         "enabled": True,
@@ -255,7 +323,8 @@ BUSINESS_DOMAINS = {
     "satisfaction": {"fr": "satisfaction client", "en": "customer satisfaction"},
     "opportunities": {"fr": "opportunités commerciales", "en": "sales opportunities"},
     "delivery": {"fr": "livraison et déploiement", "en": "delivery and deployment"},
-    "billing": {"fr": "facturation détaillée", "en": "detailed billing"},
+    "billing": {"fr": "documents de facturation (factures, lignes de facture)",
+                "en": "invoice documents (itemized invoice lines)"},
 }
 
 
@@ -313,8 +382,7 @@ def build_tool_specs(caps):
                     "does NOT see the conversation, so name the exact entity, "
                     "the scenario/phase and the exact period inside the task. "
                     "EXAMPLE task: 'YTD 2026 revenue for EVPL, actuals vs "
-                    "budget'. The specialist returns the figures AND a rendering "
-                    "hint telling you which chart/table to show next."),
+                    "budget'."),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -343,9 +411,15 @@ def build_tool_specs(caps):
                 "evolution over time; 'bar' = compare/breakdown across categories "
                 "(use style 'grouped' for several series, 'horizontal' for long "
                 "labels); 'pie' = share of a total (style 'donut'). x and y MUST "
-                "be EXACT column names of the latest result.\n"
+                "be EXACT column names of the latest result. You MAY call this "
+                "tool SEVERAL times in one turn (e.g. one chart per scenario) - "
+                "every chart reads the SAME latest result, so pick different y "
+                "columns per chart. Always give a clear title, both axis labels, "
+                "the unit and a one-sentence description.\n"
                 "EXAMPLE: {\"chart_type\":\"line\",\"x\":\"month\","
-                "\"y\":[\"Revenue_EUR\"],\"title\":\"Monthly revenue 2026\"} -> a "
+                "\"y\":[\"Revenue_EUR\"],\"title\":\"Monthly revenue 2026\","
+                "\"x_label\":\"Month\",\"y_label\":\"Revenue\",\"unit\":\"EUR\","
+                "\"description\":\"Monthly ACTUALS revenue over 2026.\"} -> a "
                 "line chart appears; you then write 'Revenue peaked in March.'"),
             "parameters": {
                 "type": "object",
@@ -361,6 +435,15 @@ def build_tool_specs(caps):
                               "description": "Optional style: line -> 'area'/'smooth'/"
                                              "'stepped'; bar -> 'horizontal'/'grouped'/"
                                              "'stacked'; pie -> 'donut'."},
+                    "x_label": {"type": "string",
+                                "description": "Human x-axis label (e.g. 'Month')."},
+                    "y_label": {"type": "string",
+                                "description": "Human y-axis label (e.g. 'Revenue')."},
+                    "unit": {"type": "string",
+                             "description": "Unit of the values (e.g. 'EUR', '%')."},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the chart "
+                                                   "shows (scope, period, scenario)."},
                 },
                 "required": ["chart_type", "x", "y"],
             },
@@ -378,7 +461,12 @@ def build_tool_specs(caps):
                 "show a table."),
             "parameters": {
                 "type": "object",
-                "properties": {"title": {"type": "string"}},
+                "properties": {
+                    "title": {"type": "string"},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the table "
+                                                   "shows (scope, period, scenario)."},
+                },
                 "required": [],
             },
         },
@@ -406,6 +494,11 @@ def build_tool_specs(caps):
                               "description": "Optional column with the absolute variation."},
                     "delta_pct": {"type": "string",
                                   "description": "Optional column with the % variation."},
+                    "unit": {"type": "string",
+                             "description": "Unit of the figure (e.g. 'EUR', '%')."},
+                    "description": {"type": "string",
+                                    "description": "One short sentence: what the figure "
+                                                   "represents (scope, period, scenario)."},
                 },
                 "required": ["label", "value"],
             },
@@ -535,6 +628,8 @@ _L = {
     "tool_kpi": {"fr": "Préparation de l'indicateur", "en": "Preparing the KPI"},
     "tool_date": {"fr": "Date du jour", "en": "Current date"},
     "tool_lookup": {"fr": "Recherche rapide d'une valeur", "en": "Fast value lookup"},
+    "tool_recall": {"fr": "Relecture d'un résultat précédent",
+                    "en": "Recalling a previous result"},
     "tool_done": {"fr": "Outil terminé", "en": "Tool done"},
     "artifact_chart": {"fr": "Graphique prêt", "en": "Chart ready"},
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
@@ -923,7 +1018,9 @@ def _lookup_evidence_item(payload, step_index, n, source_url="",
     item = {
         "sql": sql,
         "success": True,
-        "row_count": payload.get("rows_matched"),
+        # Count the (column, value) pairs actually captured and shown, not the raw
+        # ILIKE scan count (rows_matched), so the Evidence count matches the display.
+        "row_count": len(rows),
         "sql_id": "s%dlk%d" % (step_index, n),
         "step_index": step_index,
         "agent_key": agent_key or LOOKUP_SOURCE_CAP,
@@ -972,6 +1069,56 @@ def parse_lang(text):
     return None
 
 
+def parse_prior(text):
+    """``(prior_results, cleaned_text)`` from the backend's ⟦owi:prior=…⟧ token.
+
+    The payload is server-built, but it is still re-validated structurally here:
+    on ANY anomaly the results are dropped and the turn behaves exactly as
+    before the feature. Each result: {question, sql, columns, rows, row_count,
+    truncated}, newest first (turn 1 = most recent), bounded."""
+    if not text:
+        return [], text
+    matches = list(_PRIOR_TOKEN_RE.finditer(text))
+    if not matches:
+        return [], text
+    # LAST token wins (same security contract as the mode/lang tokens): the
+    # backend appends its authoritative token at the END of the message, so a
+    # fake token typed EARLIER by the user can never override it.
+    m = matches[-1]
+    cleaned = _PRIOR_TOKEN_RE.sub("", text).strip()
+    try:
+        data = json.loads(m.group(1))
+    except Exception:
+        return [], cleaned
+    out = []
+    if isinstance(data, list):
+        for entry in data[:MAX_PRIOR_RESULTS]:
+            if not isinstance(entry, dict):
+                continue
+            columns = entry.get("columns")
+            rows = entry.get("rows")
+            if not (isinstance(columns, list) and isinstance(rows, list)):
+                continue
+            columns = [str(c)[:128] for c in columns[:PRIOR_MAX_COLS]]
+            safe_rows = [[str(c)[:128] for c in r[:PRIOR_MAX_COLS]]
+                         for r in rows[:PRIOR_MAX_ROWS] if isinstance(r, list)]
+            if not columns or not safe_rows:
+                continue
+            row_count = entry.get("row_count")
+            if isinstance(row_count, bool) or not isinstance(row_count, int):
+                row_count = None
+            out.append({
+                "question": str(entry.get("question") or "")[:160],
+                "sql": str(entry.get("sql") or "")[:800],
+                "sql_truncated": bool(entry.get("sql_truncated")),
+                "columns": columns,
+                "rows": safe_rows,
+                "row_count": row_count,
+                "truncated": bool(entry.get("truncated")),
+            })
+    return out, cleaned
+
+
 def _strip_context_block(text):
     """Remove the backend's end-of-prompt human [Context -…] block. Used for our
     OWN derived text (sub-agent continuity, fallback detection); the MODEL still
@@ -985,15 +1132,32 @@ def _strip_context_block(text):
 # screen-explanation answers are never forced to call a tool.
 _LEADIN_RE = re.compile(
     r"(?i)("
-    r"\bje (vais|récupère|recupere|rajoute|regarde|consulte|cherche|prépare|prepare|extrais|sors|charge)\b|"
-    r"\bj'(ajoute|extrais)\b|"
-    r"\blet me (pull|get|fetch|check|look|add|compute|grab|see|run)\b|"
-    r"\bi'?ll (pull|get|fetch|check|look|add|compute|grab|run)\b|"
-    r"\bi'?m going to (pull|get|fetch|check|look|add|run)\b|"
-    r"\blet'?s (look|check|pull|see|run)\b|"
+    # French first-person cues: only FORWARD-LOOKING fetch/start verbs. Analysis
+    # verbs (calcule/analyse/compare/verifie...) are excluded on purpose - they
+    # are natural in FINISHED analytical prose ("Si je compare 2025 et 2026, le
+    # revenu progresse de 12 %") and would misclassify real answers.
+    r"\bje (vais|récupère|recupere|rajoute|regarde|consulte|cherche|prépare|prepare|"
+    r"extrais|sors|charge|commence|démarre|demarre|lance|appelle|interroge|contacte|"
+    r"demande|collecte|explore)\b|"
+    r"\bj'(ajoute|extrais|interroge|appelle|explore)\b|"
+    r"\blet me (pull|get|fetch|check|look|add|compute|grab|see|run|start|ask|query|"
+    r"call|build|create|chart|show)\b|"
+    r"\bi'?ll (pull|get|fetch|check|look|add|compute|grab|run|ask|call|query|start|"
+    r"build|create|chart|show|now)\b|"
+    r"\bi (will|shall) (pull|get|fetch|check|look|add|compute|run|ask|call|query|"
+    r"start|build|create|chart|show|now)\b|"
+    r"\bi'?m going to (pull|get|fetch|check|look|add|run|ask|call|query|build|"
+    r"create|show)\b|"
+    r"\blet'?s (look|check|pull|see|run|start|ask|query)\b|"
+    r"\bstarting (by|with)\b|"
+    # Bare gerunds: only the unambiguous progress ones (the analysis gerunds -
+    # analyzing/asking/building... - appear in finished answers and questions).
     r"\b(fetching|pulling|loading|retrieving|gathering|querying|checking)\b|"
     r"\bone moment\b|\bun instant\b"
     r")")
+# How many times per run the model gets nudged after a premature stop before we
+# give up and ship its text (each nudge costs one extra LLM call, so keep it low).
+_MAX_NUDGES = 2
 # Nudge injected once when a premature stop is detected (instruction to the model;
 # kept bilingual so it never bleeds a stray language into the model's context).
 _NUDGE_MSG = {
@@ -1014,7 +1178,11 @@ def _looks_like_premature_stop(text):
     is NOT enough on its own (a stylistic '…' must not trigger a nudge), and long
     declarative answers (a real on-screen explanation) are never premature."""
     t = (text or "").strip()
-    if not t or len(t) > 240:
+    if not t or len(t) > 480:
+        return False
+    # A question is a legitimate terminal turn (clarification relay, rule 5) -
+    # never nudge it, whatever verbs it happens to contain.
+    if "?" in t:
         return False
     if not staffed_domains():
         return False
@@ -1088,6 +1256,14 @@ PERSONA = (
     "fits - `show_chart` (you pick line/bar/pie + the x and y columns), "
     "`show_table` (a list/ranking), or `show_kpi` (one headline figure, with a "
     "delta if present) - then write the analysis. Pick freely what reads best.\n"
+    "- You MAY render SEVERAL artifacts in one turn when it genuinely helps: "
+    "one chart per scenario (e.g. an ACTUALS chart and a BUDGET chart), or a "
+    "chart plus a table/KPI. Every artifact reads the LATEST specialist result, "
+    "so ask for ALL the series in ONE task, then split them across charts via "
+    "the y columns.\n"
+    "- Make every chart self-explanatory: clear title, x_label and y_label, the "
+    "unit (e.g. EUR), and a one-sentence description of what it shows (scope, "
+    "period, scenario). Mention missing data or limits in your text.\n"
     "- Your prose REFERENCES the artifact ('the chart shows…') and gives the "
     "INSIGHT - the trend, the outlier, the key figure, the 'so what'. Spend your "
     "effort on the ANALYSIS, not on repeating numbers. A single figure / one-line "
@@ -1114,6 +1290,29 @@ PERSONA = (
     "on screen directly. To CHANGE it or add ANY new figure (e.g. 'add the "
     "forecast'), CALL the specialist to fetch the data, then re-render - never just "
     "say you did it, and never invent a number.\n"
+    "The [ON SCREEN NOW] note may also describe a FILTERED SOURCE-DATA VIEW the user shaped in the "
+    "app: a dataset, active filters, a search term, a DB row count, computed figures (sum, average, "
+    "median, min, max, distinct count) and a small breakdown. Those numbers were computed by the "
+    "DATABASE over the user's FULL filtered set - they are grounded, exactly like [PRIOR DATA] rows. "
+    "When the question is about that view ('these rows', 'this total', 'why is the median X'), answer "
+    "from the note and quote its figures VERBATIM - never recompute, extrapolate or invent a figure "
+    "that is not listed, and weave the view's scope (dataset + filters) into your reply like any other "
+    "figure. For a DIFFERENT scope, period, entity or metric - or to verify or extend the view - call "
+    "the specialist as usual, and RESTATE the relevant filters from the note in the specialist's task "
+    "text (the note itself is not forwarded to it).\n\n"
+    "# PRIOR TURN DATA (recall instead of re-querying)\n"
+    "When the user's message carries a [PRIOR DATA] note, those results were "
+    "already fetched by a specialist earlier in THIS conversation and reload "
+    "INSTANTLY with `recall_prior_result` (pick the turn number from the note; "
+    "a specialist call takes 30-60s, a recall takes none). For a follow-up "
+    "answered by that data - reading a value, comparing figures already "
+    "present, interpreting a result, or re-displaying it (another chart type, "
+    "a table) - recall it FIRST instead of re-calling the specialist, then "
+    "answer with figures taken VERBATIM from the recalled rows (they are "
+    "SQL-grounded; simple reading and comparison of visible values is fine, "
+    "but never invent a figure that is not in them). Call a specialist ONLY "
+    "for data NOT in the note: a new entity, period, scenario, metric, or an "
+    "aggregation the rows cannot answer.\n"
 )
 
 
@@ -1167,7 +1366,10 @@ def build_system_prompt(caps, lang_hint, narrate=True):
         "show_chart / show_table / show_kpi (you choose what fits; use ONLY the "
         "exact result columns), then WRITE your answer: short, factual, every "
         "figure EXACT, in the user's language - comment on the artifact and give "
-        "the INSIGHT (trend, key figure, the so-what). Never reprint a table.\n"
+        "the INSIGHT (trend, key figure, the so-what). Never reprint a table. "
+        "Several artifacts are fine when they genuinely help (e.g. one chart per "
+        "scenario); fill title / x_label / y_label / unit / description so each "
+        "chart stands on its own.\n"
         "5. If a specialist asks for clarification or says it's out of scope, "
         "relay that honestly and ask the user - do not invent an answer.\n")
     # Live narration is a SEPARATE instruction, enabled only for capable models
@@ -1178,13 +1380,27 @@ def build_system_prompt(caps, lang_hint, narrate=True):
     if narrate:
         parts.append(
             "\n# NARRATE AS YOU GO (live progress, SAVED as part of your reply)\n"
-            "Right before you call a tool, write ONE short, natural sentence in the "
-            "user's language saying what you're about to do ('Let me pull EVPL revenue, "
-            "actuals vs budget…'). It MUST come TOGETHER WITH the tool call on the SAME "
-            "turn - NEVER the sentence alone (a sentence with no tool call is the FAILURE "
-            "from rule 1). Keep these progress lines brief and human; don't narrate "
-            "trivial steps. When the data comes back, continue the SAME message into "
-            "your analysis - do not repeat the lead-in.\n")
+            "Work like a transparent analyst: right before EACH tool call, write ONE "
+            "short, natural sentence in the user's language saying what you're about "
+            "to do and why ('Let me pull EVPL revenue, actuals vs budget…'). It MUST "
+            "come TOGETHER WITH the tool call on the SAME turn - NEVER the sentence "
+            "alone (a sentence with no tool call is the FAILURE from rule 1). Do it at "
+            "EVERY phase: announce the specialist call; then, once its data is back, "
+            "announce what you'll render and why it fits ('The monthly figures are in "
+            "- I'll chart ACTUALS and BUDGET separately…') together with the "
+            "show_chart/show_table/show_kpi call(s). Keep these progress lines brief "
+            "and human; don't narrate trivial steps. When the data comes back, "
+            "continue the SAME message into your analysis - do not repeat the "
+            "lead-in.\n")
+    else:
+        parts.append(
+            "\n# PROGRESS NOTES (tell_user)\n"
+            "Before a SLOW tool call (a specialist), ALSO call `tell_user` with ONE "
+            "short sentence in the user's language saying what you are doing ('Je "
+            "récupère les revenus du client A…') - in the SAME turn as the real "
+            "call. The note shows instantly and does NOT end your turn. Never call "
+            "tell_user alone (the announced tool call must be in the same turn), "
+            "and never use it for the final answer.\n")
     # Re-state the reply language LAST (recency slot of the system message). The
     # backend also appends it at the end of the user's message; both anchor it.
     lang_label = {"fr": "French", "en": "English"}.get(lang_hint, "the user's language")
@@ -1209,11 +1425,14 @@ class OrchState(TypedDict, total=False):
     statuses: Annotated[list, operator.add]        # sub-agent AGENT_RESULT statuses
     used_caps: Annotated[list, _add_unique]        # capability keys consulted
     latest: dict                                   # {columns, rows} last result w/ rows
+    latest_sql_id: str                             # sql_id backing 'latest' (artifact binding)
+    prior_results: list                            # recallable results of previous turns
+    recalled: bool                                 # a prior result was recalled this run
     preamble: str                                  # model's own lead-in for this turn's tools
     step: int                                      # tool-loop counter
     final_text: str
     started: bool
-    nudged: bool                                   # narrate-and-stop nudge spent (once/run)
+    nudged: int                                    # narrate-and-stop nudges spent (max _MAX_NUDGES/run)
 
 
 # =============================================================================
@@ -1494,9 +1713,21 @@ class MyLLM(BaseLLM):
         def resolve(col):
             return lower.get(str(col).lower())
 
+        def annotate(artifact):
+            # Optional presentation metadata + the sql_id of the result the
+            # artifact renders (per-artifact Evidence binding). Purely additive:
+            # absent fields keep the historical spec byte-identical.
+            desc = args.get("description")
+            if isinstance(desc, str) and desc.strip():
+                artifact["description"] = desc.strip()[:280]
+            sql_id = state.get("latest_sql_id")
+            if isinstance(sql_id, str) and sql_id:
+                artifact["sql_id"] = sql_id
+            return artifact
+
         if name == "show_table":
             title = str(args.get("title") or "")[:200]
-            return ({"kind": "table", "title": title, "chart": None},
+            return (annotate({"kind": "table", "title": title, "chart": None}),
                     "A table of the latest result is now shown in the side "
                     "panel. Comment on it; do not repeat all the rows.")
         if name == "show_kpi":
@@ -1511,7 +1742,11 @@ class MyLLM(BaseLLM):
             delta_pct = resolve(args.get("delta_pct"))
             if delta_pct:
                 kpi["delta_pct"] = delta_pct
-            return ({"kind": "kpi", "title": kpi["label"], "chart": None, "kpi": kpi},
+            unit = args.get("unit")
+            if isinstance(unit, str) and unit.strip():
+                kpi["unit"] = unit.strip()[:16]
+            return (annotate({"kind": "kpi", "title": kpi["label"], "chart": None,
+                              "kpi": kpi}),
                     "A KPI card for '%s' is now shown in the side panel. State "
                     "the figure in one short sentence." % value)
         # show_chart
@@ -1531,7 +1766,11 @@ class MyLLM(BaseLLM):
         style = args.get("style")
         if isinstance(style, str) and style.strip():
             chart["style"] = style.strip()[:24]
-        return ({"kind": "chart", "title": title, "chart": chart},
+        for key, cap in (("x_label", 80), ("y_label", 80), ("unit", 16)):
+            v = args.get(key)
+            if isinstance(v, str) and v.strip():
+                chart[key] = v.strip()[:cap]
+        return (annotate({"kind": "chart", "title": title, "chart": chart}),
                 "A %s chart of the latest result is now shown in the side "
                 "panel. Comment on what it reveals; do not repeat the rows."
                 % ctype)
@@ -1563,19 +1802,20 @@ class MyLLM(BaseLLM):
             usage = _usage_from_resp(resp)
             text = (getattr(resp, "text", None) or "").strip()
             tcs = list(getattr(resp, "tool_calls", None) or [])
-            # Narrate-and-stop guard (ONCE per RUN, model-agnostic): the model wrote a
+            # Narrate-and-stop guard (model-agnostic): the model wrote a
             # forward-looking lead-in that PROMISES a data action ("je rajoute le
             # forecast…") but emitted NO tool call. That is a premature stop, not an
-            # answer - nudge once and re-ask so the promise actually triggers the fetch.
-            # Gated by a per-run `nudged` flag (not "before any specialist"), so it also
+            # answer - nudge and re-ask so the promise actually triggers the fetch.
+            # Gated by a per-run counter (not "before any specialist"), so it also
             # catches a narrate-and-stop on a FOLLOW-UP turn after a sub-agent already
-            # ran. Bounded to one extra call total (no loop risk).
-            nudged = bool(state.get("nudged"))
-            if not tcs and not nudged and _looks_like_premature_stop(text):
+            # ran. Bounded to _MAX_NUDGES extra calls per run (no loop risk: small
+            # models sometimes re-promise once before finally acting).
+            nudged = int(state.get("nudged") or 0)
+            while not tcs and nudged < _MAX_NUDGES and _looks_like_premature_stop(text):
                 if text:
                     chat.add_message(text, role="assistant")
                 chat.add_message(_NUDGE_MSG.get(lang, _NUDGE_MSG["en"]), role="user")
-                nudged = True
+                nudged += 1
                 writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
                 resp = _run_llm()
                 usage = _sum_usage(usage, _usage_from_resp(resp))
@@ -1641,8 +1881,98 @@ class MyLLM(BaseLLM):
                        "statuses": [], "used_caps": [], "pending_tool_calls": []}
             base_step = state.get("step", 1)
 
+            # --- progress notes FIRST (smart mode) ---
+            # tell_user notes stream BEFORE the slow specialist calls so the user
+            # reads "what I'm doing" while the work actually runs. The note is
+            # persisted REAL answer text (same channel as the pro/claude lead-in);
+            # the ack pushes the model to follow through with the announced call.
+            notes_shown = 0
+            note_calls = [c for c in local_calls if c[1] == PROGRESS_TOOL_NAME]
+            local_calls = [c for c in local_calls if c[1] != PROGRESS_TOOL_NAME]
+            for (tc, name, args) in note_calls:
+                msg = str(args.get("message") or "").strip()[:300]
+                if msg and notes_shown < MAX_PROGRESS_NOTES_PER_BATCH:
+                    writer(_txt(msg + "\n\n"))
+                    notes_shown += 1
+                    _pair("Shown to the user. Now IMMEDIATELY make the tool call "
+                          "you announced - never end the run on a note.", tc.get("id"))
+                else:
+                    _pair("Note skipped (limit reached or empty). Proceed with the "
+                          "real tool call now.", tc.get("id"))
+            if notes_shown:
+                # The model just narrated through the tool - the deterministic
+                # ticker fillers would double it.
+                model_narrated = True
+
+            # --- prior-result recall (before specialists AND artifacts) ---
+            # Instant: the data was parsed from the backend token at run start.
+            # Runs BEFORE the specialists so a specialist result in the same
+            # batch wins `latest` (freshest data charts by default), and before
+            # the artifact tools so a show_* in the same batch validates against
+            # the recalled columns.
+            recall_calls = [c for c in local_calls if c[1] == RECALL_TOOL_NAME]
+            local_calls = [c for c in local_calls if c[1] != RECALL_TOOL_NAME]
+            for (tc, name, args) in recall_calls:
+                writer(_ev("RUNNING_TOOL", {"toolKey": name, "stepIndex": base_step,
+                                            "label": _L["tool_recall"][lang]}))
+                prior = state.get("prior_results") or []
+                turn = args.get("turn")
+                idx = (turn - 1) if isinstance(turn, int) and not isinstance(turn, bool) \
+                    and 1 <= turn <= len(prior) else 0
+                entry = prior[idx] if prior else None
+                if entry is None:
+                    writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
+                                             "status": "skipped",
+                                             "label": _L["tool_done"][lang]}))
+                    _pair("No prior result is available in this conversation. "
+                          "Call the appropriate specialist instead.", tc.get("id"))
+                    continue
+                result = {"columns": entry["columns"], "rows": entry["rows"],
+                          "truncated": bool(entry.get("truncated"))}
+                updates["latest"] = result
+                # Data-presence signal for node_finish's safety nets (auto-table
+                # + honest fallback): a recall counts like a specialist result.
+                updates["recalled"] = True
+                # Unstamped on purpose: the recalled data is re-emitted below as
+                # THIS exchange's evidence span, and unstamped artifacts bind to
+                # the exchange's active captured result - which is that span.
+                # Known narrow edge: a successful lookup LATER in the same turn
+                # becomes the active span instead; a chart rendered on the recall
+                # then degrades to an honest empty state (never wrong data).
+                updates["latest_sql_id"] = None
+                # Same frozen span the lookup uses: the Evidence panel of THIS
+                # exchange shows the original SQL + the recalled rows.
+                sql_text = entry.get("sql") or "(recalled prior result)"
+                if entry.get("sql_truncated"):
+                    # Honest provenance: the recalled copy only carries a prefix
+                    # of the original query (full SQL in the original turn).
+                    sql_text += "\n-- truncated copy: see the original turn for the full SQL"
+                try:
+                    with trace.subspan("semantic-model-query") as rsp:
+                        rsp.outputs["sql"] = sql_text
+                        rsp.outputs["success"] = True
+                        rsp.outputs["row_count"] = entry.get("row_count")
+                        rsp.outputs["columns"] = entry["columns"]
+                        rsp.outputs["rows"] = entry["rows"]
+                except Exception:
+                    logger.exception("recall evidence span failed (non-fatal)")
+                writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
+                                         "status": "ok",
+                                         "label": _L["tool_done"][lang]}))
+                headline = ('Recalled the result of the earlier question "%s" '
+                            "(no new query was run). Answer from these rows; "
+                            "every figure verbatim."
+                            % (entry.get("question") or "?"))
+                _pair(_subagent_tool_output(headline, result), tc.get("id"))
+
             # --- specialists (parallel when more than one) ---
             if sub_calls:
+                # A fan-out consumes step indices base_step..base_step+N-1 (each
+                # specialist's sql_id is derived from its index). Advance the
+                # step PAST the consumed range so the next turn can never reuse
+                # an index - sql_id must stay unique within the exchange (the
+                # per-artifact Evidence binding is keyed on it).
+                updates["step"] = base_step + len(sub_calls)
                 results = self._run_subagents(project, trace, sub_calls,
                                               context_msg, lang, base_step, writer,
                                               model_narrated)
@@ -1664,6 +1994,16 @@ class MyLLM(BaseLLM):
                     updates["used_caps"].append(cap_key)
                     if result and result.get("rows"):
                         updates["latest"] = result
+                        # Remember WHICH captured SQL backs this result so the
+                        # artifacts rendered from it can carry the reference
+                        # (per-artifact Evidence data binding). The specialist
+                        # attaches the captured rows to its LAST SQL item.
+                        sid = None
+                        for it in reversed(res.get("sql_items") or []):
+                            if it.get("result") and it.get("sql_id"):
+                                sid = it.get("sql_id")
+                                break
+                        updates["latest_sql_id"] = sid
 
             # --- local presentation / utility tools ---
             for (tc, name, args) in local_calls:
@@ -1687,6 +2027,8 @@ class MyLLM(BaseLLM):
                             "kind": akind, "title": artifact.get("title", ""),
                             "chart": artifact.get("chart"),
                             "kpi": artifact.get("kpi"),
+                            "description": artifact.get("description", ""),
+                            "sql_id": artifact.get("sql_id"),
                             "label": _L["artifact_%s" % akind][lang]}))
                     writer(_ev("TOOL_DONE", {"toolKey": name, "stepIndex": base_step,
                                              "status": "ok" if artifact else "skipped",
@@ -1748,22 +2090,26 @@ class MyLLM(BaseLLM):
             latest = state.get("latest") or {}
             rows = latest.get("rows") or []
             rendered = list(state.get("rendered") or [])
-            if state.get("used_caps") and not rendered and len(rows) >= 2:
+            # A recalled prior result is data-in-hand exactly like a specialist
+            # result: both must trigger the same safety nets below.
+            has_data = bool(state.get("used_caps") or state.get("recalled"))
+            if has_data and not rendered and len(rows) >= 2:
                 writer(_ev("ARTIFACT", {"kind": "table", "title": "", "chart": None,
+                                        "sql_id": state.get("latest_sql_id"),
                                         "label": _L["artifact_table"][lang]}))
                 rendered.append("table")
-            if state.get("used_caps"):
+            if has_data:
                 writer(_narr(_NARR["writing"][lang]))   # live: "writing the answer…"
             writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
             text = (state.get("final_text") or "").strip()
             # When the data is in the panel, drop any table the model still typed
-            # (keeps the prose clean) - but never blank out a pure-text answer.
+            # (keeps the prose clean). Always strip: an answer that is NOTHING but a
+            # forbidden table collapses to '' here and then falls into the honest
+            # "data is in the panel" fallback below, instead of shipping the table.
             if rendered:
-                stripped = _strip_markdown_tables(text)
-                if stripped:
-                    text = stripped
+                text = _strip_markdown_tables(text)
             if not text:
-                if state.get("used_caps") and rows:
+                if has_data and rows:
                     # Data WAS gathered and is in the panel (e.g. the rare loop-cap
                     # case) - point the user to it instead of an opaque failure.
                     text = ("Voici les données demandées - le détail est dans le "
@@ -1832,28 +2178,46 @@ class MyLLM(BaseLLM):
         # parallel fan-out: workers stream to a queue, we relay on this thread.
         out_q = queue.Queue()
         results = [None] * n
-        # workers must not touch trace/usage/writer; they capture and push.
+        # workers must not touch trace/usage/writer; they capture and push. The
+        # final "done" put is GUARANTEED (finally): the drain loop below waits for
+        # every worker, so a worker that died without reporting would hang the turn.
         def worker(i, tc, name, args):
-            cap_key = self._tool_to_cap[name]
-            res = self._consume_subagent(
-                project, trace, cap_key, str(args.get("task") or ""),
-                context_msg, base_step + i, lang,
-                lambda p: out_q.put(("event", p)))
-            out_q.put(("done", i, cap_key, res))
+            cap_key = self._tool_to_cap.get(name, name)
+            res = None
+            try:
+                res = self._consume_subagent(
+                    project, trace, cap_key, str(args.get("task") or ""),
+                    context_msg, base_step + i, lang,
+                    lambda p: out_q.put(("event", p)))
+            finally:
+                if res is None:
+                    res = {"ok": False, "answer": "", "sql_items": [],
+                           "usage": {}, "status": "error", "result": None,
+                           "duration_ms": 0}
+                out_q.put(("done", i, cap_key, res))
 
         deadline = time.monotonic() + PARALLEL_TOTAL_TIMEOUT_S
+        warned = False
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_AGENTS, n)) as ex:
             for i, (tc, name, args) in enumerate(sub_calls):
                 ex.submit(worker, i, tc, name, args)
             pending = n
+            # Drain until EVERY worker reports done. The pool exit blocks on
+            # shutdown(wait=True) anyway, so breaking out early would not shorten
+            # the wall-clock - it would only fabricate 'error' results for
+            # specialists that actually completed. Past the deadline we log ONE
+            # warning and keep draining (the get() timeout is just a wake-up to
+            # check the deadline), so a completed worker is never reported failed.
             while pending > 0:
-                timeout = max(0.1, deadline - time.monotonic())
                 try:
-                    msg = out_q.get(timeout=timeout)
+                    msg = out_q.get(timeout=1.0)
                 except queue.Empty:
-                    logger.warning("orchestrator - parallel fan-out timed out, "
-                                   "%d sub-agent(s) still pending", pending)
-                    break
+                    if not warned and time.monotonic() > deadline:
+                        logger.warning("orchestrator - parallel fan-out exceeded "
+                                       "%ss, %d sub-agent(s) still pending",
+                                       PARALLEL_TOTAL_TIMEOUT_S, pending)
+                        warned = True
+                    continue
                 if msg[0] == "event":
                     writer(msg[1])
                 elif msg[0] == "done":
@@ -1895,6 +2259,11 @@ class MyLLM(BaseLLM):
             # local detection); the model also sees the human [Context -…] block in
             # the replayed history, which re-states the rule in the recency slot.
             token_lang = parse_lang(last_user)
+            # Recallable prior-turn results (backend-shipped machine token):
+            # parsed into state, stripped from every text the model ever sees.
+            # MUST run BEFORE parse_mode: parse_mode's cleanup strips EVERY
+            # ⟦owi:*⟧ token (including ours) from the text it returns.
+            prior_results, last_user = parse_prior(last_user)
             mode, last_user = parse_mode(last_user)
             last_user = _strip_context_block(last_user)   # raw question for OUR uses
             if not last_user:
@@ -1909,8 +2278,15 @@ class MyLLM(BaseLLM):
             loop_llm = pick_loop_llm(mode)
             system_prompt = build_system_prompt(self._caps, lang,
                                                 narrate=narration_enabled(mode))
+            # smart narrates through the tell_user TOOL (turn-safe on the mini
+            # model); pro/claude narrate in plain text and do not get the tool.
+            tool_specs = (list(self._tool_specs) if narration_enabled(mode)
+                          else list(self._tool_specs) + [PROGRESS_TOOL_SPEC])
+            # The recall tool only exists when there is something to recall.
+            if prior_results:
+                tool_specs.append(RECALL_TOOL_SPEC)
             chat = self._new_chat(project, system_prompt, history, loop_llm,
-                                  self._tool_specs)
+                                  tool_specs)
             # Context handed to the sub-agent (pass_context=True). ALWAYS carries the
             # authoritative reply language so the specialist writes any clarification /
             # no-data / out-of-scope message in the user's language (it no longer
@@ -1933,7 +2309,7 @@ class MyLLM(BaseLLM):
             initial = {"pending_tool_calls": [], "captured": [], "usage": {},
                        "artifacts": [], "rendered": [], "statuses": [],
                        "used_caps": [], "step": 0, "final_text": "",
-                       "started": False}
+                       "started": False, "prior_results": prior_results}
             # NON-DURABLE by design: no checkpointer, ephemeral per-request run. The
             # nodes are NOT idempotent (they stream real text, append trace, run
             # sub-agents and mutate `chat`), so a checkpointer must NOT be added

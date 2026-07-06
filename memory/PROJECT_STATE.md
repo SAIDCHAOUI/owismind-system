@@ -645,10 +645,11 @@ Historique par session : memory/sessions/*.md.
 | Benchmark - consultation plugin (+ détail attempt) | ⏳ Codé ; fix nom de table validé DSS ; page refondue 2026-07-03 (modes conditionnels, détail par onglets) | 2026-06-26 (fix L110) | L109-L111/L117/L129 |
 | Impersonation admin (read-only, « act as user ») | ✅ Validé DSS | 2026-06-19 (Run 3) | L095/L096 |
 | Auth gate (écran « non identifié » sur `/me` 401) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094-L096 |
-| Plugin DEV coexistant (`owismind_dev`) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094 |
+| Plugin DEV coexistant (`owismind_dev` / `owismind_dev_v2`) | 🗑 Zips + staging SUPPRIMÉS du disque (2026-07-06 Run 5, passage prod) ; outillage `tools/build_dev_plugin.py` + skill conservés, re-créable à la demande | 2026-06-19 (Run 3, historique) | L094 (`sessions/2026-07-06.md` Run 5) |
+| **Plugin PROD v1.1.0** (`owismind-upload.zip`, 95 entrées, `index-DDxpe_gw.js`) | ⏳ Packagé (repo), À UPLOADER + déployer dans le projet DSS prod : runbook `docs/DEPLOY_PROD_V1_1.md` | - | `sessions/2026-07-06.md` Run 5 |
 | Agents DEV - orchestrateur + expert revenus | ✅ Validés DSS ; audit L118 en attente de re-validation | 2026-07-02 (Run 2) | L055-L058/L118-L120 |
 | Agents DEV - expert tickets d'incidents | 🟡 Testé DSS (« marche plutôt bien »), à finaliser | 2026-06-19 (Run 4) | L097/L098 |
-| Agents PROD (`OWISMIND_PROD_V1`) - revenus (tickets non promu) | ✅ Déployés PROD (live) | 2026-06-18 (debug PROD) | L090/L099 |
+| Agents PROD (`OWISMIND_PROD_V1`) - revenus (tickets non promu, refus honnête) | 🟡 Fichiers repo PROMUS depuis DEV le 2026-07-06 (Run 5 : régénération scriptée `tools/promote_agents_to_prod.py`, parité vérifiée par 3 revues Opus) ; À RE-COLLER en DSS (runbook §3) ; dernier collage DSS = 2026-06-18 | 2026-06-18 (debug PROD, version antérieure) | L090/L099/**L139** |
 | Suivi tokens/coûts (ligne usage sous chaque réponse) | ✅ Validé DSS (ligne usage affichée, confirmée Run 6) | 2026-07-02 | L049/L126 |
 
 ## 12. Prochaines étapes
