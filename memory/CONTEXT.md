@@ -185,6 +185,8 @@ focus-ring global **+ visuel de marque reconstruit en CSS (toujours la VRAIE ima
   2 findings doc corrigés), zip prod v1.1.0 (`index-DDxpe_gw.js`, 95 entrées), plugins dev supprimés.
 - Déploiement = suivre **`docs/DEPLOY_PROD_V1_1.md`** (plugin §1, projet prod §2, agents A/B §3,
   smoke §5). Tickets expert volontairement HORS PROD ; impersonation gardée pour la bêta.
+- **Test DSS reporté par l'user (pas le temps en fin de session) : la PROCHAINE session commence
+  par le déploiement + smoke du runbook.**
 
 ## 🧭 Avant - 2026-07-06 Runs 2-4 : Source Data v3 complet → détail `sessions/2026-07-06.md` (Runs 2-4) + **L134-L138**
 - **✅ VALIDÉ DSS par l'user (« tout marche super »)** : zip `index-DYvX83Tl.js` uploadé,
