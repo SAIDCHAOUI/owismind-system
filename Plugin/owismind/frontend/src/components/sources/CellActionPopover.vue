@@ -1,7 +1,8 @@
 <script setup>
 // Cell action popover - a small fixed-position card anchored to a clicked Source Data
-// cell. Shows the column, the full value, and a primary "use this value" action (or a
-// note when the value is too long to send). Closes on outside-click or Escape. Its
+// cell. Shows the column, the full value, a primary "use this value" action (or a note
+// when the value is too long to send), and a "filter on this value" action that adds an
+// equality filter on the cell's column. Closes on outside-click or Escape. Its
 // coordinates are clamped so it never overflows the viewport edges.
 import { nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -15,7 +16,7 @@ const props = defineProps({
   source: { type: String, default: '' },
   canUse: { type: Boolean, default: true },
 })
-const emit = defineEmits(['use', 'close'])
+const emit = defineEmits(['use', 'filter', 'close'])
 
 const { t } = useI18n()
 
@@ -90,6 +91,16 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
         {{ t('src.cell.use') }}
       </button>
       <p v-else class="cell-pop-note">{{ t('src.cell.tooLong') }}</p>
+      <!-- Filter the table on this exact value (no length cap: filtering does not send
+           the value to the agent, so an oversized cell still offers it). The popover only
+           opens for a non-empty cell, so this action never carries an empty value. -->
+      <button
+        type="button"
+        class="cell-pop-filter"
+        @click="emit('filter')"
+      >
+        {{ t('src.cell.filter') }}
+      </button>
     </div>
   </Teleport>
 </template>
@@ -146,6 +157,23 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
 .cell-pop-use:hover {
   background: var(--text);
   color: var(--bg);
+}
+/* Secondary ghost button (charte): lighter 1px border than the primary use action so
+   the two read as a small hierarchy; still square, inverts on hover. */
+.cell-pop-filter {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.cell-pop-filter:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .cell-pop-note {
   font-size: var(--fs-xs);

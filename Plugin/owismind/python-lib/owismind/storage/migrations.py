@@ -89,6 +89,11 @@ EVENTS_V1_LOGICAL = "webapp_events_v1"
 # no-ALTER rule already used for the users usage counters (see _ALTERS_BY_LOGICAL). Bumping
 # to _v6 for one nullable column would hide every existing conversation, which is why the
 # additive ALTER is preferred here; old rows read back with mode NULL (shown as nothing).
+# ``screen_ctx`` (nullable TEXT) is the durable, consented record of WHAT the user chose to
+# share with the agent for THIS turn (the sanitized source_state, JSON-encoded verbatim at
+# phase-one write) - so the UI can later show exactly what was given to the agent, hiding
+# nothing. It follows the same both-here-AND-additive-ALTER relaxation as ``mode``; old rows
+# read back with screen_ctx NULL (nothing was shared, or the row predates the feature).
 _CHAT_V5_DDL = """
 CREATE TABLE IF NOT EXISTS {full_table} (
     exchange_id        TEXT       PRIMARY KEY,
@@ -111,7 +116,8 @@ CREATE TABLE IF NOT EXISTS {full_table} (
     output_tokens      INTEGER,
     total_tokens       INTEGER,
     estimated_cost     DOUBLE PRECISION,
-    mode               VARCHAR(16)
+    mode               VARCHAR(16),
+    screen_ctx         TEXT
 )
 """
 
@@ -282,9 +288,10 @@ _DDL_BY_LOGICAL = {
 # (the "ALTER TABLE <t> " prefix is added by _ensure_table).
 #   - users_v1: additive lifetime counters whose rows (admin flags, first_seen) must be
 #     preserved (explicit user authorization, 2026-06-11).
-#   - chat_v5: the nullable ``mode`` column (effective response mode per exchange) - a
+#   - chat_v5: the nullable ``mode`` column (effective response mode per exchange) AND the
+#     nullable ``screen_ctx`` column (consented shared screen-context JSON per exchange) - a
 #     _v6 bump for one nullable column would hide every existing conversation, so the same
-#     additive-ALTER relaxation applies; pre-existing rows get mode NULL.
+#     additive-ALTER relaxation applies; pre-existing rows get mode / screen_ctx NULL.
 _ALTERS_BY_LOGICAL = {
     USERS_V1_LOGICAL: [
         "ADD COLUMN IF NOT EXISTS total_input_tokens  BIGINT NOT NULL DEFAULT 0",
@@ -294,6 +301,7 @@ _ALTERS_BY_LOGICAL = {
     ],
     CHAT_V5_LOGICAL: [
         "ADD COLUMN IF NOT EXISTS mode VARCHAR(16)",
+        "ADD COLUMN IF NOT EXISTS screen_ctx TEXT",
     ],
 }
 

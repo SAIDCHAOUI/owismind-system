@@ -12,7 +12,8 @@ import {
   statsSpecFor,
   defaultCalcFnsFor,
   monthRangeToBetween,
-  monthRangeToBetweenLexical,
+  monthRangeToBetweenSmart,
+  sampleIsoShape,
   betweenValuesToMonthRange,
   looksLikeIsoDateValues,
   SOURCE_Q_MIN,
@@ -199,54 +200,143 @@ test('looksLikeIsoDateValues: any non-date value -> false', () => {
   assert.equal(looksLikeIsoDateValues(['OBS', 'OCD']), false)
 })
 
-test('monthRangeToBetweenLexical: TEXT-safe bounds YYYY-MM .. YYYY-MM-99', () => {
-  assert.deepEqual(monthRangeToBetweenLexical('2025-01', '2025-03'), {
-    start: '2025-01', end: '2025-03-99',
+test('sampleIsoShape: user repro (day + T + time + frac3 + Z)', () => {
+  assert.deepEqual(sampleIsoShape(['2025-09-01T00:00:00.000Z']), {
+    hasDay: true, sep: 'T', hasTime: true, hasSeconds: true, fracLen: 3, suffix: 'Z',
   })
+})
+
+test('sampleIsoShape: space-separated shape', () => {
+  assert.deepEqual(sampleIsoShape(['2025-09-01 09:30:00']), {
+    hasDay: true, sep: ' ', hasTime: true, hasSeconds: true, fracLen: 0, suffix: '',
+  })
+  // Space + minute-only time (no seconds) still reads as a time, without seconds.
+  assert.deepEqual(sampleIsoShape(['2025-02-01 09:30']), {
+    hasDay: true, sep: ' ', hasTime: true, hasSeconds: false, fracLen: 0, suffix: '',
+  })
+})
+
+test('sampleIsoShape: bare YYYY-MM shape', () => {
+  assert.deepEqual(sampleIsoShape(['2025-09', '2025-10']), {
+    hasDay: false, sep: null, hasTime: false, hasSeconds: false, fracLen: 0, suffix: '',
+  })
+})
+
+test('sampleIsoShape: YYYY-MM-DD shape (day, no time)', () => {
+  assert.deepEqual(sampleIsoShape(['2025-09-01', '2025-10-15']), {
+    hasDay: true, sep: null, hasTime: false, hasSeconds: false, fracLen: 0, suffix: '',
+  })
+})
+
+test('sampleIsoShape: numeric timezone offset suffixes', () => {
+  assert.deepEqual(sampleIsoShape(['2025-09-01T00:00:00+02:00']), {
+    hasDay: true, sep: 'T', hasTime: true, hasSeconds: true, fracLen: 0, suffix: '+02:00',
+  })
+  assert.deepEqual(sampleIsoShape(['2025-09-01T00:00:00.123456-05:30']), {
+    hasDay: true, sep: 'T', hasTime: true, hasSeconds: true, fracLen: 6, suffix: '-05:30',
+  })
+  // Compact +02 offset (no minutes).
+  assert.deepEqual(sampleIsoShape(['2025-09-01T00:00:00+02']), {
+    hasDay: true, sep: 'T', hasTime: true, hasSeconds: true, fracLen: 0, suffix: '+02',
+  })
+})
+
+test('sampleIsoShape: null / empty / non-date -> null; first usable sample drives it', () => {
+  assert.equal(sampleIsoShape([]), null)
+  assert.equal(sampleIsoShape([null, '', null]), null)
+  assert.equal(sampleIsoShape(null), null)
+  assert.equal(sampleIsoShape(['FR', 'DZ']), null) // nothing looks like YYYY-MM
+  // Leading null / empty / non-date entries are skipped; the first YYYY-MM sample wins.
+  assert.deepEqual(sampleIsoShape([null, '', 'FR', '2025-09-01T00:00:00.000Z']), {
+    hasDay: true, sep: 'T', hasTime: true, hasSeconds: true, fracLen: 3, suffix: 'Z',
+  })
+})
+
+test('monthRangeToBetweenSmart: user repro -> ISO literals parseable as date AND text-ordered', () => {
+  // The live bug: schema says year_month is "string" but the PG column is DATE, and the old
+  // 'YYYY-MM' / 'YYYY-MM-99' bounds threw "invalid input syntax for type date". The mimicking
+  // bounds are valid ISO 8601 literals that the date/timestamp parsers accept.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2026-01', '2026-06', ['2025-09-01T00:00:00.000Z']),
+    { start: '2026-01-01T00:00:00.000Z', end: '2026-06-30T23:59:59.999Z' },
+  )
+})
+
+test('monthRangeToBetweenSmart: bounds per detected shape', () => {
+  // Bare 'YYYY-MM' values -> the month strings themselves (uniform inclusive text).
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-01', '2025-03', ['2025-01', '2025-02']),
+    { start: '2025-01', end: '2025-03' },
+  )
+  // 'YYYY-MM-DD' values (day, no time) -> first / last calendar day.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-01', '2025-03', ['2025-01-15']),
+    { start: '2025-01-01', end: '2025-03-31' },
+  )
+  // Space-separated timestamp, no fraction -> mimic the space separator, no frac.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-01', '2025-02', ['2025-01-15 09:30:00']),
+    { start: '2025-01-01 00:00:00', end: '2025-02-28 23:59:59' },
+  )
+  // Minute-only time ('hh:mm', no seconds) -> bounds mimic the same width, otherwise a
+  // longer '00:00:00' start would sort above (exclude) an exact-midnight text value.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-01', '2025-02', ['2025-01-15 09:30']),
+    { start: '2025-01-01 00:00', end: '2025-02-28 23:59' },
+  )
+  // Timestamp with an offset suffix and microsecond fraction.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-03', '2025-03', ['2025-03-10T12:00:00.000000+02:00']),
+    { start: '2025-03-01T00:00:00.000000+02:00', end: '2025-03-31T23:59:59.999999+02:00' },
+  )
+})
+
+test('monthRangeToBetweenSmart: no sample / non-date sample -> calendar-precise temporal fallback', () => {
+  const cal = monthRangeToBetween('2025-01', '2025-03')
+  // No sample at all.
+  assert.deepEqual(monthRangeToBetweenSmart('2025-01', '2025-03', []), cal)
+  assert.deepEqual(monthRangeToBetweenSmart('2025-01', '2025-03', null), cal)
+  // A window with nothing YYYY-MM-shaped falls back too.
+  assert.deepEqual(monthRangeToBetweenSmart('2025-01', '2025-03', ['FR', 'DZ']), cal)
+  // Fallback shape sanity: parseable on a temporal column, still text-sortable.
+  assert.equal(cal.start, '2025-01-01')
+  assert.equal(cal.end, '2025-03-31T23:59:59.999999')
+})
+
+test('monthRangeToBetweenSmart: leap-year last day + reversed swap + malformed', () => {
+  // February of a leap year -> last day 29 (day-precision shape).
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2024-02', '2024-02', ['2024-02-10']),
+    { start: '2024-02-01', end: '2024-02-29' },
+  )
+  // Non-leap February -> 28.
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-02', '2025-02', ['2025-02-10']),
+    { start: '2025-02-01', end: '2025-02-28' },
+  )
   // Reversed From > To is swapped (same span).
-  assert.deepEqual(monthRangeToBetweenLexical('2025-03', '2025-01'), {
-    start: '2025-01', end: '2025-03-99',
-  })
-  // Single-month range.
-  assert.deepEqual(monthRangeToBetweenLexical('2024-12', '2024-12'), {
-    start: '2024-12', end: '2024-12-99',
-  })
-  // Malformed input -> null (apply stays disabled).
-  assert.equal(monthRangeToBetweenLexical('2025-13', '2025-03'), null)
-  assert.equal(monthRangeToBetweenLexical('', '2025-03'), null)
-  assert.equal(monthRangeToBetweenLexical('2025-01', 'x'), null)
+  assert.deepEqual(
+    monthRangeToBetweenSmart('2025-03', '2025-01', ['2025-01-01T00:00:00.000Z']),
+    { start: '2025-01-01T00:00:00.000Z', end: '2025-03-31T23:59:59.999Z' },
+  )
+  // Malformed month -> null (apply stays disabled), sample notwithstanding.
+  assert.equal(monthRangeToBetweenSmart('2025-13', '2025-03', ['2025-01-01']), null)
+  assert.equal(monthRangeToBetweenSmart('', '2025-03', ['2025-01-01']), null)
+  assert.equal(monthRangeToBetweenSmart('2025-01', 'x', ['2025-01-01']), null)
 })
 
-test('monthRangeToBetweenLexical: bounds order real text values correctly (both collations)', () => {
-  const { start, end } = monthRangeToBetweenLexical('2025-01', '2025-03')
-  // In-range month strings and full ISO days of the span sit within [start, end].
-  const inRange = ['2025-01', '2025-01-01', '2025-02-15', '2025-03', '2025-03-31',
-    '2025-03-31T23:59:59.999']
-  for (const v of inRange) {
-    assert.ok(start <= v && v <= end, 'byte-wise includes ' + v)
-  }
-  // The month before and the month after the span fall outside.
-  for (const v of ['2024-12', '2024-12-31', '2025-04', '2025-04-01']) {
-    assert.ok(!(start <= v && v <= end), 'byte-wise excludes ' + v)
-  }
-  // Punctuation-insensitive collation approximation: drop '-' then compare the digit run.
-  const strip = (s) => s.replace(/-/g, '')
-  const s2 = strip(start)
-  const e2 = strip(end)
-  for (const v of inRange) assert.ok(s2 <= strip(v) && strip(v) <= e2, 'digit-run includes ' + v)
-  for (const v of ['2024-12', '2025-04-01']) {
-    assert.ok(!(s2 <= strip(v) && strip(v) <= e2), 'digit-run excludes ' + v)
-  }
-})
-
-test('betweenValuesToMonthRange: round-trips BOTH bound styles', () => {
+test('betweenValuesToMonthRange: round-trips EVERY smart bound style', () => {
   // Calendar-precise bounds (temporal columns).
   const cal = monthRangeToBetween('2025-01', '2025-03')
   assert.deepEqual(betweenValuesToMonthRange([cal.start, cal.end]), { from: '2025-01', to: '2025-03' })
-  // TEXT-safe lexical bounds (string columns).
-  const lex = monthRangeToBetweenLexical('2025-01', '2025-03')
-  assert.deepEqual(betweenValuesToMonthRange([lex.start, lex.end]), { from: '2025-01', to: '2025-03' })
-  // A lexical single-month range too.
-  const one = monthRangeToBetweenLexical('2024-12', '2024-12')
+  // Shape-mimicking bounds: bare month, day, and full timestamp forms.
+  const bareMonth = monthRangeToBetweenSmart('2025-01', '2025-03', ['2025-01'])
+  assert.deepEqual(betweenValuesToMonthRange([bareMonth.start, bareMonth.end]), { from: '2025-01', to: '2025-03' })
+  const dayOnly = monthRangeToBetweenSmart('2025-01', '2025-03', ['2025-01-15'])
+  assert.deepEqual(betweenValuesToMonthRange([dayOnly.start, dayOnly.end]), { from: '2025-01', to: '2025-03' })
+  const stamped = monthRangeToBetweenSmart('2026-01', '2026-06', ['2025-09-01T00:00:00.000Z'])
+  assert.deepEqual(betweenValuesToMonthRange([stamped.start, stamped.end]), { from: '2026-01', to: '2026-06' })
+  // A single-month range too.
+  const one = monthRangeToBetweenSmart('2024-12', '2024-12', ['2024-12-01'])
   assert.deepEqual(betweenValuesToMonthRange([one.start, one.end]), { from: '2024-12', to: '2024-12' })
 })

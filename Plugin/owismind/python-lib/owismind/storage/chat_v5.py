@@ -68,6 +68,15 @@ logger = logging.getLogger(__name__)
 MAX_PERSISTED_TEXT_CHARS = 262_144
 
 
+# Belt on the STORED consented screen-context JSON. The frontend only ever sends a bounded
+# sanitized source_state (each field caps out around ~1.2 KB serialized, see
+# routes._sanitize_screen_context -> context.sanitize_source_state), so this is a pure safety
+# belt against a malformed / oversize payload: a value longer than this is DROPPED to None
+# (never truncated - a mid-JSON cut would produce a cell the frontend cannot decode). Comfortably
+# above the real worst case, well under any log-materialising row limit.
+MAX_SCREEN_CTX_CHARS = 4_000
+
+
 def _bounded(text):
     """Trim text to MAX_PERSISTED_TEXT_CHARS, appending a marker when truncated."""
     if text is None:
@@ -81,20 +90,24 @@ def _bounded(text):
 
 
 # Columns selected for a conversation readback, in a stable order (includes generated_sql,
-# the per-message feedback columns, parent_exchange_id, the per-exchange usage columns, and
-# the effective response ``mode`` - which feed /conversation -> frontend coloring,
-# conversation-tree reconstruction, and the per-message tokens/cost/mode line on reload).
-# ``mode`` reads back NULL-safe (None for pre-mode rows / modes-disabled agents).
+# the per-message feedback columns, parent_exchange_id, the per-exchange usage columns, the
+# effective response ``mode``, and the consented ``screen_ctx`` - which feed /conversation ->
+# frontend coloring, conversation-tree reconstruction, the per-message tokens/cost/mode line
+# on reload, and the durable "what was shared with the agent" view). Both ``mode`` and
+# ``screen_ctx`` read back NULL-safe (None for pre-feature rows / when nothing was shared);
+# ``screen_ctx`` is returned as its VERBATIM stored JSON string (the frontend wave decodes it),
+# exactly like any other scalar column - NOT decoded here.
 _COLUMNS = (
     "exchange_id, session_id, user_id, user_display_name, user_groups, "
     "user_text, assistant_text, generated_sql, agent_key, created_at, answered_at, "
     "feedback_rating, feedback_reasons, feedback_comment, parent_exchange_id, "
-    "input_tokens, output_tokens, total_tokens, estimated_cost, mode"
+    "input_tokens, output_tokens, total_tokens, estimated_cost, mode, screen_ctx"
 )
 
 
 def save_user_message(
-    session_id, identity, user_text, agent_key, parent_exchange_id=None, mode=None
+    session_id, identity, user_text, agent_key, parent_exchange_id=None, mode=None,
+    screen_ctx=None,
 ):
     """Persist the user side of an exchange and return its ``exchange_id``.
 
@@ -112,6 +125,14 @@ def save_user_message(
     stamped here so the exchange records the mode of its own answer (NULL-safe). Edit /
     regenerate turns are sibling exchange rows written through this same path, so each
     carries its own mode.
+
+    ``screen_ctx`` is the durable, consented record of WHAT the user chose to share with
+    the agent for THIS turn: the already-sanitized source_state serialized to a compact JSON
+    STRING by the caller (routes.chat_start), stored VERBATIM as TEXT (None when nothing was
+    shared). It exists so the UI can later show exactly what was given to the agent, hiding
+    nothing. As a pure safety belt an over-long value (> MAX_SCREEN_CTX_CHARS) is DROPPED to
+    None rather than truncated - a mid-JSON cut would corrupt decoding (the sanitized payload
+    is already bounded to ~1.2 KB, so this never fires on a real client).
     """
     exchange_id = uuid4().hex
     groups = identity.get("groups") or []
@@ -120,16 +141,21 @@ def save_user_message(
     groups_json = json.dumps(groups)
     # Bound the stored body so the INSERT statement text stays small (CRU log safety).
     user_text = _bounded(user_text)
+    # Belt: drop (never truncate) an over-long screen-context JSON so the stored cell is
+    # always either NULL or a complete, decodable JSON string.
+    if screen_ctx is not None and len(str(screen_ctx)) > MAX_SCREEN_CTX_CHARS:
+        screen_ctx = None
 
     table = full_table(CHAT_V5_LOGICAL)
-    #   columns:  ... agent_key, parent_exchange_id, mode, answered_at
-    #   values:   ... {agent_key}, {parent}, {mode}, NULL
+    #   columns:  ... agent_key, parent_exchange_id, mode, answered_at, screen_ctx
+    #   values:   ... {agent_key}, {parent}, {mode}, NULL, {screen_ctx}
     insert_sql = """
     INSERT INTO {table}
       (exchange_id, session_id, user_id, user_display_name, user_groups,
-       user_text, assistant_text, generated_sql, agent_key, parent_exchange_id, mode, answered_at)
+       user_text, assistant_text, generated_sql, agent_key,
+       parent_exchange_id, mode, answered_at, screen_ctx)
     VALUES ({exchange_id}, {session_id}, {user_id}, {display_name}, {groups},
-       {user_text}, NULL, NULL, {agent_key}, {parent}, {mode}, NULL)
+       {user_text}, NULL, NULL, {agent_key}, {parent}, {mode}, NULL, {screen_ctx})
     """.format(
         table=table,
         exchange_id=sql_value(exchange_id),
@@ -141,6 +167,7 @@ def save_user_message(
         agent_key=sql_value(agent_key),
         parent=nullable_value(parent_exchange_id),
         mode=nullable_value(mode),
+        screen_ctx=nullable_value(screen_ctx),
     )
     logger.info(
         "save_user_message - INSERT into %s exchange_id=%s session_id=%s user_id=%s "

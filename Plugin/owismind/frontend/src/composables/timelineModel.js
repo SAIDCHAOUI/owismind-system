@@ -47,6 +47,12 @@ export function createAnswerState(over) {
     // (shown in the usage line); never affects the timeline. Stamped by the chat store at
     // send time (live path) or rebuilt from the persisted row on reload (modeFromRow).
     mode: null,
+    // The on-screen SOURCE-DATA context the user consented to attach to THIS message (the
+    // sanitized source_state object: dataset / filters / search / figures / breakdown) or
+    // null when none was shared. Display-only (renders the full-transparency detail under
+    // the user bubble); never affects the timeline. Stamped by the chat store at send time
+    // (live path) or rebuilt from the persisted row on reload (screenCtxFromRow).
+    screenCtx: null,
     feedbackRating: null, // 1 (up) | 0 (down) | null (none)
     feedbackReasons: [], // reason codes (down)
     feedbackComment: '', // free-text (down)
@@ -281,6 +287,25 @@ export const ANSWER_MODES = ['smart', 'pro', 'claude']
 export function modeFromRow(row) {
   if (!row) return null
   return ANSWER_MODES.includes(row.mode) ? row.mode : null
+}
+
+/**
+ * Rebuild the on-screen SOURCE-DATA context of a RELOADED exchange from its persisted
+ * /conversation row: `row.screen_ctx` is a JSON string (the sanitized source_state) or
+ * null. Returns the parsed plain object, or null for a missing / empty / malformed value
+ * or a non-object JSON payload (e.g. '42', 'true', '"x"'). Mirrors modeFromRow - a null
+ * result means the user bubble shows no shared-context line. NEVER throws.
+ */
+export function screenCtxFromRow(row) {
+  if (!row || row.screen_ctx == null) return null
+  const raw = row.screen_ctx
+  if (typeof raw !== 'string' || !raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch (e) {
+    return null
+  }
 }
 
 /** The full answer text = concatenation of the timeline's text blocks (for copy). */

@@ -17,6 +17,7 @@ import {
   snapshotFromEvidence,
   pickSnapshot,
   snapshotSignature,
+  describeSnapshot,
 } from '../src/composables/screenContextModel.js'
 
 // --- caps mirror the backend -------------------------------------------------
@@ -352,4 +353,126 @@ test('snapshotSignature: a changed calc COLUMN re-offers', () => {
 
 test('snapshotSignature: null snapshot -> null signature', () => {
   assert.equal(snapshotSignature(null), null)
+})
+
+// --- describeSnapshot: full-transparency ordered projection ------------------
+test('describeSnapshot: null / non-object -> []', () => {
+  assert.deepEqual(describeSnapshot(null), [])
+  assert.deepEqual(describeSnapshot(undefined), [])
+  assert.deepEqual(describeSnapshot(42), [])
+  assert.deepEqual(describeSnapshot('x'), [])
+})
+
+test('describeSnapshot: empty-but-object snapshot -> []', () => {
+  assert.deepEqual(describeSnapshot({}), [])
+})
+
+test('describeSnapshot: full snapshot -> ordered rows covering every field', () => {
+  const snap = {
+    surface: 'explorer',
+    dataset: 'Sales',
+    agent: 'Revenue expert',
+    filters: [
+      { column: 'country', op: '=', values: ['FR'] },
+      { column: 'city', op: 'IN', values: ['a', 'b'], more: 3 },
+      { column: 'year_month', op: 'BETWEEN', values: ['2025-01-01', '2025-12-31'] },
+    ],
+    q: 'acme',
+    row_count: 128,
+    drill: [{ column: 'region', value: 'EMEA' }],
+    calc: { column: 'amount_eur', measures: [{ fn: 'sum', value: '1234' }, { fn: 'count_distinct', value: '7' }] },
+    analyze: {
+      group: 'order_date', bucket: 'month', fn: 'sum', measure_column: 'amount',
+      rows: [{ key: '2025-01', value: '300' }, { key: '2025-02', value: '700' }],
+      total: '1000', truncated: true,
+    },
+  }
+  const rows = describeSnapshot(snap)
+  // Ordered: dataset, agent, 3 filters, q, rows, drill, 2 calc, analyze = 10 entries.
+  assert.deepEqual(rows.map((r) => r.key), [
+    'dataset', 'agent', 'filter-0', 'filter-1', 'filter-2', 'q', 'rows', 'drill-0',
+    'calc-0', 'calc-1', 'analyze',
+  ])
+  assert.deepEqual(rows.map((r) => r.labelKey), [
+    'prompt.screen.d.dataset', 'prompt.screen.d.agent',
+    'prompt.screen.d.filter', 'prompt.screen.d.filter', 'prompt.screen.d.filter',
+    'prompt.screen.d.q', 'prompt.screen.d.rows', 'prompt.screen.d.drill',
+    'prompt.screen.d.calc', 'prompt.screen.d.calc', 'prompt.screen.d.analyze',
+  ])
+  // Values verbatim.
+  assert.equal(rows[0].text, 'Sales')
+  assert.equal(rows[1].text, 'Revenue expert')
+  assert.equal(rows[5].text, '"acme"') // q quoted
+  assert.equal(rows[6].text, '128')    // row_count as string
+  assert.equal(rows[7].text, 'region = EMEA')
+})
+
+test('describeSnapshot: filter texts render =, IN (+more), BETWEEN', () => {
+  const rows = describeSnapshot({
+    dataset: 'Sales',
+    filters: [
+      { column: 'country', op: '=', values: ['FR'] },
+      { column: 'city', op: 'IN', values: ['a', 'b'], more: 3 },
+      { column: 'year_month', op: 'BETWEEN', values: ['2025-01-01', '2025-12-31'] },
+    ],
+  })
+  const f = rows.filter((r) => r.labelKey === 'prompt.screen.d.filter')
+  assert.deepEqual(f.map((r) => r.text), [
+    'country = "FR"',
+    'city IN ("a", "b")',
+    'year_month BETWEEN 2025-01-01 AND 2025-12-31',
+  ])
+  // The overflow marker is NOT baked into the text: the row carries `more` so the
+  // component renders it translated ((+3 autres) / (+3 more)).
+  assert.deepEqual(f.map((r) => r.more), [0, 3, 0])
+})
+
+test('describeSnapshot: calc rows carry the src.calc.* fnKey (count_distinct -> distinct)', () => {
+  const rows = describeSnapshot({
+    dataset: 'Sales',
+    calc: { column: 'amount_eur', measures: [
+      { fn: 'sum', value: '1234' },
+      { fn: 'median', value: '42' },
+      { fn: 'count_distinct', value: '7' },
+    ] },
+  })
+  const calc = rows.filter((r) => r.labelKey === 'prompt.screen.d.calc')
+  assert.deepEqual(calc.map((r) => r.fnKey), ['src.calc.sum', 'src.calc.median', 'src.calc.distinct'])
+  assert.equal(calc[0].text, '(amount_eur) = 1234')
+})
+
+test('describeSnapshot: analyze one-liner (sum/measure/bucket) + rows joined + truncated flag', () => {
+  const [line] = describeSnapshot({
+    dataset: 'Sales',
+    analyze: {
+      group: 'order_date', bucket: 'month', fn: 'sum', measure_column: 'amount',
+      rows: [{ key: '2025-01', value: '300' }, { key: '2025-02', value: '700' }],
+      truncated: true,
+    },
+  }).filter((r) => r.labelKey === 'prompt.screen.d.analyze')
+  // Fully structured: the component translates every connector; only identifiers and
+  // values stay verbatim here.
+  assert.equal(line.fnKey, 'src.calc.sum')
+  assert.equal(line.measureText, 'amount')
+  assert.equal(line.group, 'order_date')
+  assert.equal(line.bucketKey, 'src.an.bucket.month')
+  assert.equal(line.topText, '2025-01 = 300; 2025-02 = 700')
+  assert.equal(line.truncated, true)
+})
+
+test('describeSnapshot: analyze count uses "rows" as the measure and drops the bucket when absent', () => {
+  const [line] = describeSnapshot({
+    dataset: 'Sales',
+    analyze: {
+      group: 'country', bucket: null, fn: 'count', measure_column: null,
+      rows: [{ key: 'FR', value: '5' }], truncated: false,
+    },
+  }).filter((r) => r.labelKey === 'prompt.screen.d.analyze')
+  // count has no measured column: measureText is null (the component shows the
+  // translated "rows" word) and the absent bucket yields no bucketKey.
+  assert.equal(line.fnKey, 'src.calc.count')
+  assert.equal(line.measureText, null)
+  assert.equal(line.bucketKey, null)
+  assert.equal(line.topText, 'FR = 5')
+  assert.equal(line.truncated, false)
 })

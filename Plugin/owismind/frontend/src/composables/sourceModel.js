@@ -394,31 +394,102 @@ export function monthRangeToBetween(fromYM, toYM) {
   return { start, end }
 }
 
-// Build an inclusive BETWEEN range for a TEXT column that stores ISO date strings (a
-// live-schema "string" column whose values read as 'YYYY-MM' / 'YYYY-MM-DD...'). The
-// backend renders `col BETWEEN start AND end` as quoted literals compared as TEXT, so the
-// bounds must sort correctly under BOTH text collation families the DB may use:
-//   - byte-wise / "C" collation (compares raw code points), and
-//   - punctuation-insensitive collations (ignore '-', compare the digit run '20250399').
-// Reuses monthRangeToBetween's parse + reversed-range swap.
-//   start = 'YYYY-MM'      (the From month string itself)
-//   end   = 'YYYY-MM-99'   (the To month + a '-99' day sentinel)
-// Why these bounds hold in both collation families: after the shared 'YYYY-MM' prefix the
-// remaining characters are all DIGITS, so the comparison is decided by the digit sequence
-// alone (the '-' separators either compare equal byte-wise or are dropped) - identical in
-// both families. Lower bound: 'YYYY-MM' is a prefix of every 'YYYY-MM', 'YYYY-MM-DD...'
-// value of the From month (and of later months), so all of them sort >= start; earlier
-// months sort below it. Upper bound: every real day '01'..'31' (and a bare 'YYYY-MM')
-// sorts below the '99' sentinel, while the NEXT month ('YYYY-(MM+1)...') sorts above it,
-// so the To month is fully included and the following month is fully excluded.
-export function monthRangeToBetweenLexical(fromYM, toYM) {
+// Detect the ISO value SHAPE of a distinct-values window so a range filter can mimic it.
+// Scans the non-null / non-empty String(v) values; the FIRST one matching a 'YYYY-MM'
+// prefix defines the shape, returned as:
+//   { hasDay, sep ('T' | ' ' | null), hasTime, hasSeconds, fracLen, suffix ('' | 'Z' | '+02' | '+02:00' | '-05:30') }
+//     - hasDay:     a '-DD' day component follows the month.
+//     - sep:        the character between date and time ('T' or ' '), or null when there is no time.
+//     - hasTime:    a 'hh:mm[:ss]' time-of-day component is present.
+//     - hasSeconds: the time carries a ':ss' seconds part ('hh:mm:ss' vs bare 'hh:mm').
+//     - fracLen:    digits after the '.' fractional-seconds dot (0 when none).
+//     - suffix:     a trailing 'Z' or a numeric timezone offset, verbatim ('' when none).
+// Returns null when no usable sample exists (empty / all-null window, or nothing that
+// starts with a 'YYYY-MM' prefix). Non-'YYYY-MM' entries are skipped, never fail the scan.
+export function sampleIsoShape(values) {
+  if (!Array.isArray(values)) return null
+  for (const v of values) {
+    if (v == null) continue
+    const s = String(v).trim()
+    if (!s) continue
+    // Prefix 'YYYY-MM', then optional '-DD' day, then optional (sep + 'hh:mm[:ss]' +
+    // optional '.frac' + optional 'Z'/offset). Only a leading 'YYYY-MM' is required.
+    const m = s.match(
+      /^\d{4}-\d{2}(-\d{2})?(?:([T ])(\d{2}:\d{2}(?::\d{2})?)(\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)?)?/,
+    )
+    if (!m) continue
+    const hasTime = !!m[3]
+    return {
+      hasDay: !!m[1],
+      sep: hasTime ? m[2] : null,
+      hasTime,
+      // Whether the sample carries seconds ('hh:mm:ss' vs bare 'hh:mm'): the bounds must
+      // mimic that width too, otherwise a longer '00:00:00' start bound sorts ABOVE a
+      // bare-midnight 'hh:mm' text value and silently excludes it from the range.
+      hasSeconds: hasTime && m[3].length >= 8,
+      fracLen: m[5] ? m[5].length : 0,
+      suffix: m[6] || '',
+    }
+  }
+  return null
+}
+
+// Build an inclusive BETWEEN range for a live-schema "string" column whose values are
+// really ISO dates. The schema type LIES here (it reports 'string' while the underlying
+// PostgreSQL column may be DATE / TIMESTAMP), so we cannot know which comparison the DB
+// will run. The only bounds that survive BOTH realities are bounds that MIMIC THE OBSERVED
+// VALUE FORMAT:
+//   (a) on a genuine TEXT column the values are uniform, so a same-shape bound sorts
+//       lexicographically == chronologically; and
+//   (b) on a genuine date/timestamp(tz) column the same-shape bound is a valid ISO 8601
+//       literal that PostgreSQL's date / timestamp input parsers accept (they accept the
+//       'YYYY-MM-DDThh:mm:ss.fff' + 'Z'/offset form), so no "invalid input syntax for type
+//       date" is raised. A raw 'YYYY-MM' bound (the old lexical sentinel style) would parse
+//       fine as text but throws on a DATE column - which is the live bug this replaces.
+// Reuses monthRangeToBetween's parse + reversed-From>To swap. The bounds by detected shape:
+//   - no shape (no usable sample) OR mixed/unmatchable -> monthRangeToBetween's calendar-
+//     precise temporal bounds ('YYYY-MM-01' .. 'YYYY-MM-<lastDay>T23:59:59.999999'): they
+//     parse on a temporal column, the risky unknown case, and still sort correctly as text.
+//   - shape without a day ('YYYY-MM' values) -> start = 'YYYY-MM' (From), end = 'YYYY-MM' (To).
+//   - shape with a day, no time -> start 'YYYY-MM-01', end 'YYYY-MM-<lastDay>'.
+//   - shape with time -> start 'YYYY-MM-01' + sep + '00:00:00' [+ '.' + '0'*fracLen] + suffix,
+//                        end   'YYYY-MM-<lastDay>' + sep + '23:59:59' [+ '.' + '9'*fracLen] + suffix.
+// Residual edge: a TEXT column with MIXED value shapes (only the first sample drives the
+// bound) falls back to the best-effort temporal bounds via the no-shape / first-sample rule.
+export function monthRangeToBetweenSmart(fromYM, toYM, sampleValues) {
   const a = parseYearMonth(fromYM)
   const b = parseYearMonth(toYM)
   if (!a || !b) return null
   const lo = yearMonthLE(a, b) ? a : b
   const hi = yearMonthLE(a, b) ? b : a
-  const start = fmtYearMonth(lo.y, lo.m)
-  const end = fmtYearMonth(hi.y, hi.m) + '-99'
+  const shape = sampleIsoShape(sampleValues)
+  // No usable sample: fall back to calendar-precise temporal bounds (parseable on a real
+  // date/timestamp column, and still text-sortable).
+  if (!shape) return monthRangeToBetween(fromYM, toYM)
+
+  const loMonth = fmtYearMonth(lo.y, lo.m)
+  const hiMonth = fmtYearMonth(hi.y, hi.m)
+  // Bare 'YYYY-MM' values: uniform text, so the month strings themselves are the bounds.
+  if (!shape.hasDay) return { start: loMonth, end: hiMonth }
+
+  // Day 0 of the NEXT month resolves to the last calendar day of the hi month (leap years
+  // included), matching monthRangeToBetween's calendar arithmetic.
+  const lastDay = new Date(Date.UTC(hi.y, hi.m, 0)).getUTCDate()
+  const startDay = loMonth + '-01'
+  const endDay = hiMonth + '-' + String(lastDay).padStart(2, '0')
+  // Day precision only.
+  if (!shape.hasTime) return { start: startDay, end: endDay }
+
+  // Time precision: mimic the sample's separator, seconds width, fractional-seconds width
+  // and suffix so the literal is both chronologically-ordered text AND a parseable ISO 8601
+  // date/timestamp. Seconds mimicry matters on TEXT columns: a '00:00:00' start against
+  // bare 'hh:mm' values would sort above (and so exclude) an exact-midnight value.
+  const startFrac = shape.fracLen > 0 ? '.' + '0'.repeat(shape.fracLen) : ''
+  const endFrac = shape.fracLen > 0 ? '.' + '9'.repeat(shape.fracLen) : ''
+  const startTime = shape.hasSeconds ? '00:00:00' : '00:00'
+  const endTime = shape.hasSeconds ? '23:59:59' : '23:59'
+  const start = startDay + shape.sep + startTime + startFrac + shape.suffix
+  const end = endDay + shape.sep + endTime + endFrac + shape.suffix
   return { start, end }
 }
 
@@ -444,10 +515,10 @@ export function looksLikeIsoDateValues(values) {
 
 // Inverse of monthRangeToBetween, for pre-filling the range popover when a BETWEEN chip
 // is edited: read the 'YYYY-MM' back from the stored [start, end] values (their leading
-// YYYY-MM prefix). Works for both bound styles - the calendar-precise
-// 'YYYY-MM-01' / 'YYYY-MM-DDT23:59:59.999999' bounds AND the TEXT-safe 'YYYY-MM' /
-// 'YYYY-MM-99' bounds - since only the shared leading prefix is read. Returns
-// { from, to } or null when the pair is missing / unreadable.
+// YYYY-MM prefix). Works for EVERY bound style monthRangeToBetweenSmart can emit - the
+// calendar-precise 'YYYY-MM-01' / 'YYYY-MM-DDT23:59:59.999999' bounds AND the shape-mimicking
+// 'YYYY-MM' / 'YYYY-MM-DD' / 'YYYY-MM-DDThh:mm:ss.fffZ' bounds - since only the shared
+// leading 'YYYY-MM' prefix is read. Returns { from, to } or null when unreadable.
 export function betweenValuesToMonthRange(values) {
   if (!Array.isArray(values) || values.length !== 2) return null
   const from = yearMonthPrefix(values[0])

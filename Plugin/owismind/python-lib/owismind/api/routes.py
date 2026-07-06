@@ -466,14 +466,33 @@ def chat_start():
     # other agent the ⟦owi:prior⟧ payload would leak into its prompt as raw text.
     prior_recall_enabled = supports_modes
 
-    # Phase one: persist the user message (stamped with the effective mode). Done in
-    # the request thread so a write error surfaces as a clean HTTP error rather than
-    # inside the worker. Edit / regenerate turns branch through this same path (they
-    # pass parent_exchange_id), so each sibling exchange records its own run mode.
+    # Screen-awareness pointer + consented shared view. Sanitized to a tiny bounded dict
+    # (pure, never raises): the Evidence panel the user is viewing AND/OR the source_state
+    # (filters + computed figures) they explicitly chose to share. Computed BEFORE the
+    # phase-one write so the SAME sanitized object both (a) durably records what was shared
+    # on the exchange row and (b) is handed to the worker below - one source of truth, no
+    # behavior change for the run. When a source_state survived, it is serialized to a
+    # compact JSON string and persisted verbatim on the row (nothing hidden from the UI);
+    # otherwise nothing is stored. The panel-open pointer alone is NOT persisted (it is a
+    # transient viewport hint, not shared data). The worker still reads any pointed exchange
+    # OWNER-SCOPED, so a forged id reveals nothing.
+    screen_context = _sanitize_screen_context(body.get("screen_context"))
+    screen_ctx_json = None
+    if screen_context and screen_context.get("source_state") is not None:
+        screen_ctx_json = json.dumps(
+            screen_context["source_state"], ensure_ascii=False, separators=(",", ":")
+        )
+
+    # Phase one: persist the user message (stamped with the effective mode + the consented
+    # shared screen-context JSON). Done in the request thread so a write error surfaces as a
+    # clean HTTP error rather than inside the worker. Edit / regenerate turns branch through
+    # this same path (they pass parent_exchange_id), so each sibling exchange records its own
+    # run mode and its own shared context.
     try:
         ensure_chat_table()
         exchange_id = chat_v5.save_user_message(
-            session_id, identity, message, agent_key, parent_exchange_id, mode=mode
+            session_id, identity, message, agent_key, parent_exchange_id, mode=mode,
+            screen_ctx=screen_ctx_json,
         )
     except Exception:
         logger.exception("/chat/start - failed to persist user message")
@@ -496,10 +515,8 @@ def chat_start():
         webapp_lang=webapp_lang, prompt_lang=prompt_lang, mode=mode,
     )
 
-    # Optional screen-awareness pointer (the exchange + tab the user is currently
-    # viewing in the Evidence panel). Sanitized to a tiny bounded dict; the worker
-    # reads that exchange's artifacts OWNER-SCOPED, so a forged id reveals nothing.
-    screen_context = _sanitize_screen_context(body.get("screen_context"))
+    # ``screen_context`` (the sanitized viewport + consented shared view) was already
+    # computed above, before the phase-one write, and handed to the worker unchanged here.
 
     # Spawn the bounded background worker. The agent_id stays server-side; the front
     # only ever receives the opaque run_id.

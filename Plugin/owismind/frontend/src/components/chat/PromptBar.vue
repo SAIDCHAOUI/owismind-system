@@ -10,10 +10,12 @@ import { useSessionStore } from '../../stores/session.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useScreenContextStore } from '../../stores/screenContext.js'
 import { useToasts } from '../../composables/useToasts.js'
+import { useClickOutside } from '../../composables/useClickOutside.js'
 import { contextKey } from '../../composables/promptContextModel.js'
 import { Icon } from '../ui'
 import AgentPicker from './AgentPicker.vue'
 import ModelModePicker from './ModelModePicker.vue'
+import ScreenContextDetail from './ScreenContextDetail.vue'
 
 const { t, locale } = useI18n()
 const chat = useChatStore()
@@ -24,6 +26,16 @@ const { push } = useToasts()
 
 // Dataset label shown by the accepted-context chip ('' when no snapshot is live).
 const screenDataset = computed(() => (screenCtx.offer ? screenCtx.offer.dataset : ''))
+
+// Full transparency: clicking the accepted chip toggles a popover previewing the EXACT
+// LIVE snapshot (screenCtx.offer) that will be attached on the next send. Anchored inside
+// the prompt card, closed on outside click / Escape. Reset when the chip disappears.
+const ctxPopoverOpen = ref(false)
+const ctxChipRef = ref(null)
+useClickOutside(ctxChipRef, () => { ctxPopoverOpen.value = false })
+watch(() => screenCtx.chipVisible, (visible) => {
+  if (!visible) ctxPopoverOpen.value = false
+})
 
 // Fire the `offered` analytics ONCE per signature, at banner DISPLAY time (the store
 // guards duplicates via lastOfferedSig). The banner shows when it is eligible AND the
@@ -117,8 +129,16 @@ const placeholder = () =>
     <!-- Accepted-context chip: the view is attached to every send while its signature is
          unchanged. Removable (x -> decline) so the user is always in control. -->
     <div v-if="screenCtx.chipVisible" class="prompt-screen">
-      <span class="prompt-ctx-chip" :title="t('prompt.screen.chip', [screenDataset])">
-        <span class="prompt-ctx-chip-text">{{ t('prompt.screen.chip', [screenDataset]) }}</span>
+      <span ref="ctxChipRef" class="prompt-ctx-chip prompt-ctx-chip--live" @keydown.escape="ctxPopoverOpen = false">
+        <button
+          type="button"
+          class="prompt-ctx-open"
+          :title="t('prompt.screen.view')"
+          :aria-expanded="ctxPopoverOpen"
+          @click="ctxPopoverOpen = !ctxPopoverOpen"
+        >
+          <span class="prompt-ctx-chip-text">{{ t('prompt.screen.chip', [screenDataset]) }}</span>
+        </button>
         <button
           type="button"
           class="prompt-ctx-x"
@@ -127,6 +147,10 @@ const placeholder = () =>
         >
           <Icon name="x" />
         </button>
+        <!-- Live preview: EXACTLY what rides on the next send (nothing hidden). -->
+        <div v-if="ctxPopoverOpen && screenCtx.offer" class="prompt-ctx-pop" role="dialog">
+          <ScreenContextDetail :snap="screenCtx.offer" />
+        </div>
       </span>
     </div>
     <!-- Picked data-context values (from Source Data cells): shown above the input,
@@ -295,6 +319,22 @@ const placeholder = () =>
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The accepted-context chip is clickable to preview the live snapshot: anchor the popover
+   and let the label read as an interactive control. */
+.prompt-ctx-chip--live { position: relative; }
+.prompt-ctx-open {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.prompt-ctx-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-menu);
 }
 .prompt-ctx-x {
   display: grid;

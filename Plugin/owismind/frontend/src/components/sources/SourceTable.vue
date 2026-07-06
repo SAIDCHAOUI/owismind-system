@@ -10,7 +10,7 @@ import { useSourcesStore } from '../../stores/sources.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
-import { isNumericColType, formatStatNumber } from '../../composables/sourceModel.js'
+import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from './CellActionPopover.vue'
 import { DataLoader, Icon } from '../ui'
@@ -20,6 +20,10 @@ import { DataLoader, Icon } from '../ui'
 // server keeps returning ALL columns; search still spans every column server-side.
 const COLS_INITIAL = 30
 const COLS_MORE = 20
+
+// Mirror of the filter picker's per-chip value cap (SourceChips.vue MAX_FILTER_VALUES):
+// a single equality/membership chip never accumulates more than this many values.
+const MAX_FILTER_VALUES = 50
 
 const { t, locale } = useI18n()
 const sources = useSourcesStore()
@@ -83,6 +87,32 @@ function usePopoverValue() {
   if (status === 'added') push(t('src.cell.added'), { tone: 'ok', icon: 'check' })
   else if (status === 'exists') push(t('src.cell.exists'), { icon: 'info' })
   else if (status === 'full') push(t('src.cell.full', [MAX_CONTEXT_VALUES]), { tone: 'warn', icon: 'info' })
+  closePopover()
+}
+
+// Filter the table on the clicked cell's exact value, against the ACTIVE host sources
+// store (home explorer OR the embedded agent-mode explorer in Evidence). The value is
+// used RAW (the same string the popover carries for the context action), never merged
+// into a temporal BETWEEN chip:
+//   - an existing '=' / 'IN' chip on that column absorbs the value (deduped, capped at
+//     MAX_FILTER_VALUES); if already present or at the cap, this is a silent close.
+//   - otherwise (only BETWEEN chips, or none) a fresh '=' chip is added.
+// The store's setChipValues / addFilter already refetch rows + aggregates and fire the
+// existing source_filter_added tracking, so no extra analytics event is emitted here.
+function filterPopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const raw = p.value
+  const chip = sources.chips.find((c) => c.column === p.column && chipOp(c) !== 'BETWEEN')
+  if (chip) {
+    const values = chip.values || []
+    const present = values.some((v) => String(v) === raw)
+    if (!present && values.length < MAX_FILTER_VALUES) {
+      sources.setChipValues(chip.key, values.concat([raw]))
+    }
+  } else {
+    sources.addFilter(p.column, [raw])
+  }
   closePopover()
 }
 
@@ -280,6 +310,7 @@ onBeforeUnmount(() => {
     :source="popover.source"
     :can-use="popover.canUse"
     @use="usePopoverValue"
+    @filter="filterPopoverValue"
     @close="closePopover"
   />
 </template>

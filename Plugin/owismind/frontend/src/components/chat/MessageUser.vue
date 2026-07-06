@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { Icon } from '../ui'
+import ScreenContextDetail from './ScreenContextDetail.vue'
 
 const props = defineProps({
   turn: { type: Object, required: true },
@@ -24,6 +25,13 @@ const { push } = useToasts()
 const text = computed(() => props.turn.exchange.userText)
 const editing = ref(false)
 const draft = ref('')
+
+// Full transparency: the on-screen SOURCE-DATA context the user consented to share with
+// THIS message (stamped on the answer version at send, rebuilt from the row on reload).
+// Null when nothing was attached - the line then does not render at all.
+const screenCtx = computed(() => props.turn.exchange.version && props.turn.exchange.version.screenCtx)
+const screenDataset = computed(() => (screenCtx.value && screenCtx.value.dataset) || '')
+const ctxOpen = ref(false)
 
 function startEdit() {
   draft.value = text.value
@@ -52,6 +60,23 @@ async function copy() {
   <div class="msg user u-no-shrink">
     <div v-if="!editing" class="bubble-wrap">
       <div class="bubble">{{ text }}</div>
+      <!-- On-screen context shared with this message: an elegant, discreet line that
+           expands the FULL detail inline (nothing hidden). Renders only when a context
+           was actually attached. -->
+      <div v-if="screenCtx" class="sc-line">
+        <button
+          type="button"
+          class="sc-toggle"
+          :aria-expanded="ctxOpen"
+          @click="ctxOpen = !ctxOpen"
+        >
+          <Icon name="database" class="sc-ic" />
+          <span class="sc-sent">{{ t('prompt.screen.sent') }}</span>
+          <span v-if="screenDataset" class="sc-ds">{{ screenDataset }}</span>
+          <Icon :name="ctxOpen ? 'chevronUp' : 'chevronDown'" class="sc-chev" />
+        </button>
+        <ScreenContextDetail v-if="ctxOpen" :snap="screenCtx" class="sc-inline" />
+      </div>
       <div class="u-actions">
         <button :title="t('msg.copy')" @click="copy"><Icon name="copy" /></button>
         <button :title="t('msg.edit')" :disabled="!chat.canSend" @click="startEdit"><Icon name="edit" /></button>
@@ -94,6 +119,38 @@ async function copy() {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* On-screen context line: discreet, right-aligned under the bubble, with a 1px top
+   separator. Ink-on-nothing, orange stays absent here (charte: rare). */
+.sc-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: 100%;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.sc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  transition: color var(--dur) var(--ease);
+}
+.sc-toggle:hover { color: var(--text-2); }
+.sc-toggle .sc-ic :deep(.ui-icon) { width: 12px; height: 12px; }
+.sc-ds {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-chev :deep(.ui-icon) { width: 12px; height: 12px; }
+.sc-inline { align-self: stretch; }
 
 /* Hidden by default, revealed on hover (or focus-within for keyboard users). */
 .u-actions {

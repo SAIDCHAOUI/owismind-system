@@ -69,6 +69,7 @@ Les constantes de noms logiques : `CHAT_V5_LOGICAL` / `USERS_V1_LOGICAL` / `SETT
 | `total_tokens` | `INTEGER` | Total tokens du run (nullable) - enregistrement **autoritatif** par échange ; les cumuls users + mensuels sont reconstructibles depuis lui (`migrations.py:81-84`, `migrations.py:112`). |
 | `estimated_cost` | `DOUBLE PRECISION` | Coût Mesh estimé du run (USD), nullable (`migrations.py:113`). |
 | `mode` | `VARCHAR(16)` | Mode de réponse **effectif** du run (`'smart'`/`'pro'`/`'claude'`/`NULL`), stampé à la phase 1 à côté de la ligne d'usage. Ajouté via `ADD COLUMN IF NOT EXISTS` (2e usage de l'exception ALTER §1) - les vieilles lignes se relisent `mode NULL` (rendu : rien) (`migrations.py:85-91`, `migrations.py:114`, `migrations.py:295-297`). |
+| `screen_ctx` | `TEXT` | **Transparence du contexte écran** : le `source_state` **consenti** (résumé de la vue Source data partagée avec l'agent) sérialisé en JSON compact, stampé à la phase 1 quand l'utilisateur a accepté le bandeau ; `NULL` sinon (le pointeur panneau-ouvert seul n'est PAS persisté). Belt : > 4000 chars -> `NULL` (jamais de JSON partiel). Relu verbatim par `/conversation` (le front `JSON.parse` défensif) pour afficher durablement « contexte écran joint » sous le message. Ajouté via `ADD COLUMN IF NOT EXISTS` (3e usage de l'exception ALTER §1, 2026-07-06). |
 
 **Index** (secondaires, idempotents - `migrations.py:307-329`) :
 

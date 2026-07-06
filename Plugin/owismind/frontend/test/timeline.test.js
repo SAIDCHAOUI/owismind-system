@@ -16,6 +16,7 @@ import {
   stepStampDiff,
   usageFromRow,
   modeFromRow,
+  screenCtxFromRow,
 } from '../src/composables/timelineModel.js'
 import { resolveTimelineStep, timelineMessages } from '../src/registries/timelineSteps.js'
 
@@ -27,7 +28,7 @@ function feed(events) {
 const kinds = (s) => s.timeline.map((i) => i.kind)
 const texts = (s) => s.timeline.filter((i) => i.kind === 'text').map((i) => i.text)
 
-// #4 — chronological alternation: event → text → event → text (the headline fix).
+// #4 - chronological alternation: event → text → event → text (the headline fix).
 test('chronological alternation: event → text → event → text', () => {
   const s = feed([
     { type: 'run_started', exchangeId: 'x1' },
@@ -50,7 +51,7 @@ test('chronological alternation: event → text → event → text', () => {
   assert.equal(s.timeline[3].status, 'done')
 })
 
-// #5 — successive text chunks merge into ONE block (no duplication, no fragmentation).
+// #5 - successive text chunks merge into ONE block (no duplication, no fragmentation).
 test('successive text chunks merge into one block', () => {
   const s = feed([
     { type: 'answer_delta', text: 'Hello ' },
@@ -62,7 +63,7 @@ test('successive text chunks merge into one block', () => {
   assert.equal(answerText(s), 'Hello world!')
 })
 
-// #6 — final answer after streamed text must NOT be duplicated.
+// #6 - final answer after streamed text must NOT be duplicated.
 test('final answer after streamed text is not duplicated', () => {
   const s = feed([
     { type: 'agent_event', eventKind: 'AGENT_TURN_START' },
@@ -87,7 +88,7 @@ test('structured agent: final answer with no prior deltas is shown once', () => 
   assert.equal(answerText(s), 'Whole answer at the end.')
 })
 
-// #7 (partial) — error is appended in place, status flips, partial text is preserved.
+// #7 (partial) - error is appended in place, status flips, partial text is preserved.
 test('error after partial text: appended in place, partial kept', () => {
   const s = feed([
     { type: 'agent_event', eventKind: 'AGENT_TURN_START' },
@@ -237,6 +238,37 @@ test('modeFromRow returns a valid mode or null (reload path)', () => {
   assert.equal(modeFromRow({ mode: 'ultra' }), null)
   assert.equal(modeFromRow({ mode: 'SMART' }), null)
   assert.equal(modeFromRow({ mode: 42 }), null)
+})
+
+test('createAnswerState defaults screenCtx to null and accepts an override', () => {
+  // Full-transparency feature: a live version is stamped with the shared source_state via
+  // this override (newVersion / version.screenCtx = ...); no context -> null.
+  assert.equal(createAnswerState().screenCtx, null)
+  const snap = { surface: 'explorer', dataset: 'Sales' }
+  assert.deepEqual(createAnswerState({ screenCtx: snap }).screenCtx, snap)
+})
+
+test('screenCtxFromRow parses the persisted JSON string or returns null (reload path)', () => {
+  // A valid object JSON round-trips to a plain object.
+  assert.deepEqual(
+    screenCtxFromRow({ screen_ctx: '{"surface":"explorer","dataset":"Sales"}' }),
+    { surface: 'explorer', dataset: 'Sales' },
+  )
+  // Garbage / malformed JSON -> null (never throws).
+  assert.equal(screenCtxFromRow({ screen_ctx: 'not json {' }), null)
+  // Non-object JSON payloads are rejected (only a source_state object is valid).
+  assert.equal(screenCtxFromRow({ screen_ctx: '42' }), null)
+  assert.equal(screenCtxFromRow({ screen_ctx: 'true' }), null)
+  assert.equal(screenCtxFromRow({ screen_ctx: '"x"' }), null)
+  assert.equal(screenCtxFromRow({ screen_ctx: '[1,2]' }), null)
+  // Empty / null / missing column, or no row at all -> null.
+  assert.equal(screenCtxFromRow({ screen_ctx: '' }), null)
+  assert.equal(screenCtxFromRow({ screen_ctx: null }), null)
+  assert.equal(screenCtxFromRow({}), null)
+  assert.equal(screenCtxFromRow(null), null)
+  assert.equal(screenCtxFromRow(undefined), null)
+  // A non-string (already-parsed) value is rejected defensively.
+  assert.equal(screenCtxFromRow({ screen_ctx: { surface: 'x' } }), null)
 })
 
 test('timelineSignature changes as text grows (drives auto-scroll re-check)', () => {
@@ -401,7 +433,7 @@ test('agent_event label is capped at 300 chars (streaming.py mirror)', () => {
   assert.equal(s.timeline[0].label.length, 300)
 })
 
-// F8 invariant: the label is display-only — ids, seq and the signature that gates the
+// F8 invariant: the label is display-only - ids, seq and the signature that gates the
 // chat auto-scroll must be byte-identical with or without labels.
 test('timelineSignature and ids are identical with and without labels (F8)', () => {
   const mk = (label) =>

@@ -3171,5 +3171,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-06.md Run 2 ; components/sources/SourceExplorer.vue.
 - **Date** : 2026-07-06.
 
+## L138 - Le schéma DSS peut MENTIR sur le type SQL réel : les bornes BETWEEN d'une colonne « string » à valeurs dates doivent MIMER le format observé des valeurs
+- **Contexte** : plage de mois sur une colonne que le schéma DSS déclare `string` mais dont la
+  colonne PostgreSQL sous-jacente est `date` (valeurs rendues `2025-09-01T00:00:00.000Z`).
+- **Ce qui a échoué** : les bornes lexicales « sûres pour texte » `'2026-01'..'2026-06-99'`
+  (sentinelle `-99`) jettent `invalid input syntax for type date: "2026-01"` en DSS : PG parse les
+  littéraux dans le type de la colonne RÉELLE, pas celui du schéma déclaré. Trouvé par l'user au
+  réveil (409 sur /source/rows ET /source/aggregate).
+- **Solution qui marche** : dériver la FORME des bornes du 1er échantillon de valeurs
+  (`sampleIsoShape` : jour, séparateur T/espace, secondes, fraction, suffixe Z/offset) et émettre
+  des bornes qui la MIMENT (`'2026-01-01T00:00:00.000Z'..'2026-06-30T23:59:59.999Z'`) : sur une
+  vraie colonne texte le format uniforme rend le tri lexicographique == chronologique, et sur une
+  colonne date/timestamp le même littéral est un ISO 8601 valide pour les parseurs PG. Jamais de
+  sentinelle non parseable. Corollaires : mimer AUSSI la largeur des secondes (`hh:mm` vs
+  `hh:mm:ss`, sinon la borne plus longue exclut minuit pile en texte) ; désactiver Apply tant que
+  les échantillons ne sont pas chargés en mode lexical (sinon fallback silencieux sur des bornes
+  calendaires qui ratent le mois From sur une colonne texte `YYYY-MM`).
+- **Preuve-vérification** : QA runtime : payload /source/rows porte EXACTEMENT
+  `['2026-01-01T00:00:00.000Z','2026-03-31T23:59:59.999Z']` ; tests node par forme (T/espace/
+  YYYY-MM/offsets/hh:mm) ; 351 node + 788 back verts.
+- **Source** : sessions/2026-07-06.md Run 3 ; sourceModel.js `sampleIsoShape`/`monthRangeToBetweenSmart` ; log DSS user.
+- **Date** : 2026-07-06.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

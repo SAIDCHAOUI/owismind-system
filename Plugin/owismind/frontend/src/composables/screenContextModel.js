@@ -254,6 +254,96 @@ export function pickSnapshot({ sourcesState, evidenceState, agentLabels } = {}) 
   return null
 }
 
+// Map a calc / aggregate function name to its EXISTING i18n label key (the src.calc.*
+// keys the "Calculate" zone already ships, sourceModel.statsSpecFor). count_distinct has
+// a bespoke label; every other whitelisted fn maps 1:1 to src.calc.<fn>. Returned as a
+// KEY (never a translated string) so the model stays locale-neutral.
+function _calcFnKey(fn) {
+  return fn === 'count_distinct' ? 'src.calc.distinct' : 'src.calc.' + fn
+}
+
+// Render one filter into a compact, locale-neutral value string (raw values verbatim):
+//   =        -> country = "FR"
+//   IN       -> city IN ("a", "b")
+//   BETWEEN  -> year_month BETWEEN 2025-01-01 AND 2025-12-31
+//   other op -> column <op> "v"
+// SQL keywords stay verbatim (they ARE the predicate); the "+N more" overflow marker is
+// NOT baked in here: the row carries `more` so the component renders it TRANSLATED.
+function _filterText(f) {
+  const col = f.column
+  const vals = Array.isArray(f.values) ? f.values : []
+  if (f.op === 'BETWEEN' && vals.length >= 2) {
+    return col + ' BETWEEN ' + vals[0] + ' AND ' + vals[1]
+  }
+  const quoted = vals.map((v) => '"' + v + '"')
+  if (f.op === 'IN' || vals.length > 1) {
+    return col + ' IN (' + quoted.join(', ') + ')'
+  }
+  return col + ' ' + f.op + ' ' + (quoted.length ? quoted[0] : '""')
+}
+
+// FULL-TRANSPARENCY projection of a source_state snapshot into an ORDERED list of readable
+// rows for the "on-screen context" detail (nothing hidden - every present field surfaces).
+// Each row is { key, labelKey, text }: `key` is a stable v-for key, `labelKey` an i18n key
+// for the label column, `text` the RAW value verbatim. Some rows carry EXTRA structured
+// fields the component translates (the model itself stays locale-neutral, returning KEYS
+// only, never prose): a FILTER row carries `more` (count of values cut by the cap); a CALC
+// row carries `fnKey` (the src.calc.* key of its aggregation); the ANALYZE row is fully
+// structured ({ fnKey, measureText, group, bucketKey, topText, truncated }) so every
+// connector word is translated by the component, never hardcoded English. A null /
+// non-object snapshot -> []. Never throws.
+export function describeSnapshot(snap) {
+  if (!snap || typeof snap !== 'object') return []
+  const rows = []
+  if (snap.dataset) rows.push({ key: 'dataset', labelKey: 'prompt.screen.d.dataset', text: String(snap.dataset) })
+  if (snap.agent) rows.push({ key: 'agent', labelKey: 'prompt.screen.d.agent', text: String(snap.agent) })
+  const filters = Array.isArray(snap.filters) ? snap.filters : []
+  filters.forEach((f, i) => {
+    if (!f || !f.column) return
+    rows.push({
+      key: 'filter-' + i,
+      labelKey: 'prompt.screen.d.filter',
+      text: _filterText(f),
+      more: f.more >= 1 ? f.more : 0,
+    })
+  })
+  if (snap.q) rows.push({ key: 'q', labelKey: 'prompt.screen.d.q', text: '"' + snap.q + '"' })
+  if (snap.row_count != null) rows.push({ key: 'rows', labelKey: 'prompt.screen.d.rows', text: String(snap.row_count) })
+  const drill = Array.isArray(snap.drill) ? snap.drill : []
+  drill.forEach((d, i) => {
+    if (!d || !d.column) return
+    rows.push({ key: 'drill-' + i, labelKey: 'prompt.screen.d.drill', text: d.column + ' = ' + d.value })
+  })
+  if (snap.calc && snap.calc.column && Array.isArray(snap.calc.measures)) {
+    snap.calc.measures.forEach((m, i) => {
+      if (!m || !m.fn) return
+      rows.push({
+        key: 'calc-' + i,
+        labelKey: 'prompt.screen.d.calc',
+        fnKey: _calcFnKey(m.fn),
+        text: '(' + snap.calc.column + ') = ' + m.value,
+      })
+    })
+  }
+  if (snap.analyze && snap.analyze.group) {
+    const a = snap.analyze
+    const arows = Array.isArray(a.rows) ? a.rows : []
+    rows.push({
+      key: 'analyze',
+      labelKey: 'prompt.screen.d.analyze',
+      // Structured so the component TRANSLATES every connector ('of'/'by'/'rows') and the
+      // bucket label; only raw identifiers/values stay verbatim.
+      fnKey: _calcFnKey(a.fn),
+      measureText: a.fn === 'count' || !a.measure_column ? null : a.measure_column,
+      group: a.group,
+      bucketKey: a.bucket ? 'src.an.bucket.' + a.bucket : null,
+      topText: arows.length ? arows.map((r) => r.key + ' = ' + r.value).join('; ') : '',
+      truncated: !!a.truncated,
+    })
+  }
+  return rows
+}
+
 // Stable scope signature of a snapshot (for the sticky-per-signature consent). Excludes
 // the volatile figures (row_count, calc measure values, analyze rows/total) so a refetch
 // of the numbers never churns the decision; a change to any FILTER / search / drill /

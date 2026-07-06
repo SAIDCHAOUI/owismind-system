@@ -17,7 +17,7 @@ import {
   foldSearchTerm as fold,
   isTemporalColType,
   monthRangeToBetween,
-  monthRangeToBetweenLexical,
+  monthRangeToBetweenSmart,
   betweenValuesToMonthRange,
   looksLikeIsoDateValues,
   yearOfValue,
@@ -74,9 +74,9 @@ let pickerSeq = 0
 // + a one-click full-year fill, rendered by the shared RangePopoverFields. Used instead of
 // the distinct-values list when the picker column is temporal OR its values sniff as ISO
 // date strings (a STRING column that actually stores dates). `rangeLexical` selects the
-// BETWEEN bounds: calendar-precise for a true temporal column, TEXT-safe for a sniffed
-// string column. Distinct values still load in the background (full-year options + the
-// "pick exact values" list toggle).
+// BETWEEN bounds: calendar-precise for a true temporal column, shape-mimicking (built from
+// the loaded distinct values) for a sniffed string column. Distinct values still load in the
+// background (full-year options, the shape sample, + the "pick exact values" list toggle).
 const rangeMode = ref(false)
 const rangeLexical = ref(false)
 const rangeFrom = ref('') // 'YYYY-MM'
@@ -115,9 +115,13 @@ const rangeYearOptions = computed(() => {
 })
 // Apply stays enabled only when both months are set and parse to a valid range. Both
 // builders share the same parse/swap guards, so validity is identical - branch anyway so
-// the enabling predicate exactly mirrors the builder applyRange runs.
+// the enabling predicate exactly mirrors the builder applyRange runs. In LEXICAL mode the
+// template additionally disables Apply while the distinct window is loading: the smart
+// bounds mimic the SAMPLE values' shape, so applying against a not-yet-loaded (empty)
+// window would silently fall back to calendar bounds that can miss rows on a bare
+// 'YYYY-MM' text column.
 const rangeReady = computed(() => !!(rangeLexical.value
-  ? monthRangeToBetweenLexical(rangeFrom.value, rangeTo.value)
+  ? monthRangeToBetweenSmart(rangeFrom.value, rangeTo.value, pickerValues.value)
   : monthRangeToBetween(rangeFrom.value, rangeTo.value)))
 
 // Toggle between the month RANGE fields and the exact-values list (a quiet text link).
@@ -333,13 +337,14 @@ function cancelPicker() {
 
 // --- range apply ---------------------------------------------------------------
 // Build ONE BETWEEN chip from the two month fields. A true temporal column uses
-// calendar-precise bounds; a string column sniffed as dates uses TEXT-safe bounds. Both
-// builders swap a reversed From > To and return null when a month is missing / malformed
+// calendar-precise bounds; a string column sniffed as dates uses bounds that mimic the
+// loaded distinct-values shape (parseable on either a text OR a lying date/timestamp column).
+// Both builders swap a reversed From > To and return null when a month is missing / malformed
 // (apply is disabled then). The chip keeps its explicit op so it is never re-normalized.
 function applyRange() {
   if (!pop.value) return
   const range = rangeLexical.value
-    ? monthRangeToBetweenLexical(rangeFrom.value, rangeTo.value)
+    ? monthRangeToBetweenSmart(rangeFrom.value, rangeTo.value, pickerValues.value)
     : monthRangeToBetween(rangeFrom.value, rangeTo.value)
   if (!range) return
   const values = [range.start, range.end]
@@ -405,7 +410,7 @@ function rangeText(chip) {
             <div class="pop-foot">
               <div class="pop-actions">
                 <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
-                <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
+                <button class="pop-apply" :disabled="!rangeReady || (rangeLexical && pickerLoading)" @click="applyRange">{{ t('src.range.apply') }}</button>
               </div>
             </div>
           </div>
@@ -489,7 +494,7 @@ function rangeText(chip) {
               <div class="pop-foot">
                 <div class="pop-actions">
                   <button class="pop-cancel" @click="cancelPicker">{{ t('src.picker.cancel') }}</button>
-                  <button class="pop-apply" :disabled="!rangeReady" @click="applyRange">{{ t('src.range.apply') }}</button>
+                  <button class="pop-apply" :disabled="!rangeReady || (rangeLexical && pickerLoading)" @click="applyRange">{{ t('src.range.apply') }}</button>
                 </div>
               </div>
             </div>

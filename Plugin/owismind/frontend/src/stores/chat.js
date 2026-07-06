@@ -23,7 +23,7 @@ import { ref, reactive, computed } from 'vue'
 import { useSessionStore } from './session.js'
 import { useUiStore } from './ui.js'
 import { runChatStream } from '../composables/useChatStream.js'
-import { createAnswerState, usageFromRow, modeFromRow } from '../composables/timelineModel.js'
+import { createAnswerState, usageFromRow, modeFromRow, screenCtxFromRow } from '../composables/timelineModel.js'
 import { fetchConversation, stopChat } from '../services/backend.js'
 import { buildActivePath } from './conversationTree.js'
 import { useEvidenceStore } from './evidence.js'
@@ -129,6 +129,10 @@ export const useChatStore = defineStore('chat', () => {
       // Persisted response mode ('smart'|'pro'|'claude', null for a non-supporting agent
       // or a legacy row) - shown in the usage line, same path as usage.
       mode: modeFromRow(r),
+      // Persisted on-screen SOURCE-DATA context shared with this message (parsed from the
+      // stored JSON string, null when none) - so a reloaded conversation shows the same
+      // full-transparency line under the user bubble as the live send. Same path as mode.
+      screenCtx: screenCtxFromRow(r),
       status: 'done',
       exchangeId: r.exchange_id || null,
       feedbackRating: r.feedback_rating === 0 || r.feedback_rating === 1 ? r.feedback_rating : null,
@@ -312,6 +316,11 @@ export const useChatStore = defineStore('chat', () => {
     // the visible message text (the cell-to-agent flow stays separate).
     const screenCtx = useScreenContextStore()
     const sourceState = screenCtx.snapshotForSend()
+    // Stamp the SAME source_state object onto the version (null when none) - mirrors the
+    // mode stamp above (newVersion({ mode })). The user bubble renders it verbatim as the
+    // full-transparency "context shared with this message" detail; the backend persists it
+    // (chat_v5.screen_ctx) so a reload rebuilds the same line via screenCtxFromRow.
+    version.screenCtx = sourceState || null
     const screenContext = (evidence.open && evidence.exchangeId)
       ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab, ...(sourceState ? { source_state: sourceState } : {}) }
       : (sourceState ? { open: false, source_state: sourceState } : undefined)
