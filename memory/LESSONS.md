@@ -3279,5 +3279,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session deep clean 2026-07-06/07.
 - **Date** : 2026-07-07.
 
+## L144 - Prod par CLONAGE du projet DEV : le dossier OWISMIND_PROD_V1/ n'est PAS la prod reelle
+- **Contexte** : 2026-07-07, l'user cree sa prod en DUPLIQUANT le projet DSS DEV (memes ids agents/
+  tools/modeles), au lieu de l'approche v1.1 (projet a ids separes, tickets exclu).
+- **Ce qui a echoue** : confusion immediate : l'user cherche l'agent tickets dans
+  `dataiku-agents/OWISMIND/OWISMIND_PROD_V1/agents/` et croit que la branche clean l'a supprime.
+  En realite ce dossier est le miroir de l'ANCIENNE approche (le promote script y retire le bloc
+  tickets par design) ; le cablage tickets DEV n'a jamais bouge.
+- **Solution qui marche** : pour un prod CLONE de DEV, la source de verite = les fichiers
+  `OWISMIND_DEV_*` colles TELS QUELS (zero substitution d'id). `OWISMIND_PROD_V1/` +
+  `tools/promote_agents_to_prod.py` = legacy a ignorer (mise en coherence du repo a faire).
+  Promotion future = re-coller le fichier DEV dans le clone.
+- **Preuve-verification** : diff main<->branche orchestrateur DEV = commentaires seuls (0 ligne de
+  code) ; AST docstrings-retires identique ; bloc `tickets_expert` enabled:true present (l.285/332).
+- **Source** : sessions/2026-07-07.md (Run 2).
+- **Date** : 2026-07-07.
+
+## L145 - graph.json corrompu par ecritures concurrentes (hook post-commit vs session)
+- **Contexte** : cloture de session 2026-07-07 ; fusion semantique manuelle dans graph.json pendant
+  que le rebuild background du hook post-commit tournait encore.
+- **Ce qui a echoue** : deux ecrivains simultanes -> graph.json invalide (JSONDecodeError char 123008).
+  Le rebuild CLI `graphify update .` repare la structure mais reconstruit CODE-only : la couche
+  semantique historique (~4300 noeuds) est PERDUE car le cache semantique ne couvre que les fichiers
+  dont le hash actuel matche (20 fichiers extraits ce jour ; les autres docs ont change entre-temps).
+- **Solution qui marche** : (1) TOUJOURS verifier que le rebuild background est fini avant d'ecrire
+  graph.json (tail ~/.cache/graphify-rebuild.log) ; (2) apres corruption : rebuild CLI + re-merge du
+  cache semantique valide ; (3) la couche perdue se regenere par une re-extraction semantique complete
+  (/graphify sur les docs, ~14 chunks) : A FAIRE prochaine session.
+- **Preuve-verification** : graph.json VALID, 7039 noeuds / 10891 aretes / 451 communautes apres
+  reparation ; 309 fichiers non couverts semantiquement (sortie check_semantic_cache).
+- **Source** : sessions/2026-07-07.md (Run 2, cloture).
+- **Date** : 2026-07-07.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

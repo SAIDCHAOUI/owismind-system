@@ -7,7 +7,17 @@
 
 ## Focus courant
 
-**DEEP CLEAN (2026-07-06 soir -> 07) - branche `refactor/deep-clean-v1.2`, 9 commits, A TESTER par l'user.**
+**PROD PAR CLONAGE (2026-07-07 soir) - la prod reelle = DUPLICATION du projet DSS DEV (memes ids),
+TICKETS INCLUS ; « tout marche a peu pres bien », corrections en NOUVELLE session (L144).**
+- Fichiers a coller dans le clone = `OWISMIND_DEV_*` de la branche clean TELS QUELS (zero substitution) ;
+  `OWISMIND_PROD_V1/` + `tools/promote_agents_to_prod.py` = LEGACY a ignorer (mise en coherence a faire).
+- Tools du clone : garder attribute_lookup (UUoynaL) + revenue_semantic_query (v4oqA6R) +
+  tickets_semantic_query (nEirlso) ; Drive_Revenues_resolve_filter_value SUPPRIME (supplante).
+- Reste : smoke complet (tickets end-to-end, resolution sous-agent DANS le clone, ids si tools recrees),
+  cle exacte du projet clone. Detail : `sessions/2026-07-07.md` (Run 2).
+
+**DEEP CLEAN (2026-07-06 soir -> 07) - branche `refactor/deep-clean-v1.2`, 9 commits, EN COURS DE TEST
+par l'user (appliquee au clone prod).**
 Nettoyage/refactor pro SANS changement de logique (preuves : AST, bundle normalise, promote-script parity,
 revue adversariale 4 lentilles = 0 finding ; 790+316+343+352 verts sur l'etat final). Livre : READMEs
 racine/tools ; `readonly_pre_queries()` consolide (6 sites, +2 tests) ; en-tetes Code Agents condenses
@@ -17,15 +27,8 @@ hook dash-guard) ; docs/ + project-documentation/ + site HTML remis a niveau v1.
 Zip prod repackage sur la branche (95 entrees). Si l'user valide -> merge main = version de prod.
 Detail : `sessions/2026-07-07.md` + L141-L143.
 
-**Passage en production v1.1 (2026-07-06 Run 5) - repo PRET, RIEN encore deploye DSS.**
-La PROCHAINE session commence par le deploiement + smoke en suivant le runbook `docs/DEPLOY_PROD_V1_1.md`.
-- Agents promus DEV -> PROD_V1 par regeneration scriptee (`tools/promote_agents_to_prod.py`, idempotent :
-  copie DEV + ids PROD + retrait du bloc `tickets_expert`) ; 3 revues Opus, 2 findings doc corriges.
-- Plugin : `plugin.json` 0.0.1 -> 1.1.0, zip prod `owismind-upload.zip` (95 entrees, bundle `index-DDxpe_gw.js`).
-- Nettoyage : plugins dev `owismind_dev`/`owismind_dev_v2` supprimes du disque ; conserves (choix user) :
-  outillage dev, `project-documentation/`, mail relance ; impersonation GARDEE pour la beta ; tickets expert HORS PROD.
-- Whitelist webapp = DYNAMIQUE (admin, cross-projet) : zero id cote plugin ; seuls ids par projet = cablage interne.
-- 788 back + 352 node + 316 agents + 343 LAB verts, 0 tiret. Detail : `sessions/2026-07-06.md` (Run 5) + L139-L140.
+(La strategie « prod v1.1 a ids separes » du 2026-07-06 Run 5, runbook `docs/DEPLOY_PROD_V1_1.md`, est
+SUPPLANTEE par le clonage ci-dessus ; elle reste documentee dans `sessions/2026-07-06.md` + L139-L140.)
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
 - 2026-07-06 Runs 2-4 : Source Data v3 complet (popover, Calculer, plages string, cascade, persistance,
@@ -56,9 +59,11 @@ La PROCHAINE session commence par le deploiement + smoke en suivant le runbook `
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- TESTER LA BRANCHE `refactor/deep-clean-v1.2` (user) : si OK, merge dans main = version de prod (le zip
-  95 entrees de la branche remplace celui de main) ; sinon debug avec Opus. Voir `sessions/2026-07-07.md`.
-- DEPLOYER LA PROD v1.1 : suivre `docs/DEPLOY_PROD_V1_1.md` (plugin, projet prod, agents scenario A/B, smoke dont refus honnete tickets). Promotions futures = `tools/promote_agents_to_prod.py` puis recoll. Voir `sessions/2026-07-06.md` (Run 5).
+- NOUVELLE SESSION : corrections restantes + smoke complet du CLONE prod (tickets end-to-end, resolution
+  sous-agent dans le clone, ids des tools si recrees, cle exacte du projet) + mise en coherence repo
+  (PROD_V1 legacy, README/registry/rules agents). Voir `sessions/2026-07-07.md` (Run 2) + L144.
+- FINIR la validation de la branche `refactor/deep-clean-v1.2` (appliquee au clone) : si OK, merge dans
+  main = version de prod ; sinon debug avec Opus. Voir `sessions/2026-07-07.md`.
 - Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur PROD `Xrv7GvfG` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
 - LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
 - Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `update_aligned_semantic_model.py` + re-dump) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).

@@ -3,7 +3,14 @@
 > Référence canonique de l'état du projet. Mise à jour à la demande / en fin de session.
 > En cas de conflit avec les guides de `docs/cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
-> Dernière mise à jour : **2026-07-07 - DEEP CLEAN sur branche `refactor/deep-clean-v1.2`** (L141-L143,
+> Dernière mise à jour : **2026-07-07 soir - STRATÉGIE PROD CHANGÉE : prod = CLONE du projet DEV**
+> (L144) : la prod réelle (« OWIsMind_PRD_V1_2 », clé à confirmer) est une duplication du projet DSS DEV,
+> mêmes ids agents/tools/modèles, **expert tickets INCLUS en prod**. Source de vérité du clone = les
+> fichiers `OWISMIND_DEV_*` collés tels quels (zéro substitution). `dataiku-agents/OWISMIND/
+> OWISMIND_PROD_V1/` + `tools/promote_agents_to_prod.py` = approche LEGACY (ids séparés, tickets exclu),
+> conservés pour l'historique ; mise en cohérence du repo à faire. Tool `Drive_Revenues_resolve_filter_value`
+> supprimé du clone (supplanté par attribute_lookup).
+> Avant : **2026-07-07 - DEEP CLEAN sur branche `refactor/deep-clean-v1.2`** (L141-L143,
 > NON mergée, à tester par l'user) : refactor zéro-comportement prouvé (AST / bundle normalisé / promote
 > parity / revue adversariale 0 finding), `readonly_pre_queries()` consolidé (backend 788 -> **790** tests),
 > setup Claude Code refondu pour Opus 4.8 (CONTEXT lean + `.claude/rules/` path-scopées + 4 subagents
