@@ -3311,5 +3311,29 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-07.md (Run 2, cloture).
 - **Date** : 2026-07-07.
 
+## L146 - Cloner un projet DSS ne repointe PAS les modeles semantiques : remap de cle projet
+- **Contexte** : prod = duplication du projet DSS DEV (clone `OWISMIND_PRD_V1_2`). Il fallait aussi
+  re-ajouter au modele revenus la colonne d'offre `Solution` (retiree le 2026-06-22, cf. `e6ba899`).
+- **Ce qui a echoue / le piege** : dupliquer un projet DSS ne reecrit PAS les references dataset des
+  modeles semantiques. Dans le clone, le `datasetRef` des entites reste `OWISMIND_DEV.DRIVE_Revenues` et
+  les golden queries gardent la table `OWISMIND_DEV_drive_revenues` -> le SQL genere tape la table DEV
+  (cross-projet). L'UI DSS ne permet pas de changer ca.
+- **Solution qui marche** : remap de la cle projet sur le raw config du modele, sous ses **2 formes** :
+  `<KEY>.` (datasetRef logique) ET `<KEY>_` (table physique des golden queries), puis re-index distinct
+  values. Ces deux formes sont normales et distinctes : `datasetRef` = `CLE.Dataset` (point, casse
+  preservee) ; table physique = `CLE_dataset` (underscore, minuscules). Pour re-ajouter une colonne
+  retiree = **inverse exact de `drop_column_and_reindex.py`** (attribut indexe + metrique + description
+  entite + section hierarchie des instructions + glossaire + libelle golden query). Scripts livres :
+  `dataiku-agents/OWISMIND/add_solution_and_repoint_prod_clone.py` (Solution + repoint revenus) et
+  `repoint_tickets_prod_clone.py` (repoint pur). Cle cible derivee du projet courant, modele resolu par
+  nom, DRY_RUN par defaut.
+- **Preuve-verification** : user a execute le script revenus sur le clone -> `datasetRef =
+  OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`. Simulation
+  end-to-end (faux module `dataiku`, vrais JSON) : revenus 17/17, tickets 4/4. Cle clone confirmee
+  `OWISMIND_PRD_V1_2`, ids DEV conserves (modele revenus `AHUh9hb`).
+- **Source** : sessions/2026-07-08.md (Run 1). Voir aussi `migrate_semantic_model_to_project.py` /
+  `remap_semantic_model.py` (memes 2 regles de remap).
+- **Date** : 2026-07-08.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

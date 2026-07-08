@@ -3,8 +3,14 @@
 > Référence canonique de l'état du projet. Mise à jour à la demande / en fin de session.
 > En cas de conflit avec les guides de `docs/cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
-> Dernière mise à jour : **2026-07-07 soir - STRATÉGIE PROD CHANGÉE : prod = CLONE du projet DEV**
-> (L144) : la prod réelle (« OWIsMind_PRD_V1_2 », clé à confirmer) est une duplication du projet DSS DEV,
+> Dernière mise à jour : **2026-07-08 - Modèle sémantique REVENUS du clone : colonne `Solution` RE-AJOUTÉE
+> + règle de priorité d'offre restaurée, et les 2 modèles (revenus + tickets) REPOINTÉS vers le dataset du
+> clone** (L146 ; scripts `dataiku-agents/OWISMIND/add_solution_and_repoint_prod_clone.py` +
+> `repoint_tickets_prod_clone.py`). Revenus VALIDÉ DSS par l'user (`datasetRef =
+> OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) ; tickets à lancer.
+> Clé du clone **CONFIRMÉE = `OWISMIND_PRD_V1_2`** (ids DEV conservés, modèle revenus `AHUh9hb`).
+> Avant : **2026-07-07 soir - STRATÉGIE PROD CHANGÉE : prod = CLONE du projet DEV**
+> (L144) : la prod réelle (`OWISMIND_PRD_V1_2`) est une duplication du projet DSS DEV,
 > mêmes ids agents/tools/modèles, **expert tickets INCLUS en prod**. Source de vérité du clone = les
 > fichiers `OWISMIND_DEV_*` collés tels quels (zéro substitution). `dataiku-agents/OWISMIND/
 > OWISMIND_PROD_V1/` + `tools/promote_agents_to_prod.py` = approche LEGACY (ids séparés, tickets exclu),
@@ -678,6 +684,8 @@ Historique par session : memory/sessions/*.md.
 | Agents DEV - orchestrateur + expert revenus | ✅ Validés DSS ; audit L118 en attente de re-validation | 2026-07-02 (Run 2) | L055-L058/L118-L120 |
 | Agents DEV - expert tickets d'incidents | 🟡 Testé DSS (« marche plutôt bien »), à finaliser | 2026-06-19 (Run 4) | L097/L098 |
 | Agents PROD (`OWISMIND_PROD_V1`) - revenus (tickets non promu, refus honnête) | 🟡 Fichiers repo PROMUS depuis DEV le 2026-07-06 (Run 5 : régénération scriptée `tools/promote_agents_to_prod.py`, parité vérifiée par 3 revues Opus) ; À RE-COLLER en DSS (runbook §3) ; dernier collage DSS = 2026-06-18 | 2026-06-18 (debug PROD, version antérieure) | L090/L099/**L139** |
+| Modèle sémantique REVENUS du CLONE (`OWISMIND_PRD_V1_2`, id `AHUh9hb`) - `Solution` re-ajoutée + règle priorité restaurée + repointé | ✅ Validé DSS par l'user (`datasetRef = OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) | 2026-07-08 | **L146** (`add_solution_and_repoint_prod_clone.py`) |
+| Modèle sémantique TICKETS du CLONE - repoint pur vers le dataset du clone | ⏳ Script prêt + simulé (4/4), non lancé DSS | - | **L146** (`repoint_tickets_prod_clone.py`) |
 | Suivi tokens/coûts (ligne usage sous chaque réponse) | ✅ Validé DSS (ligne usage affichée, confirmée Run 6) | 2026-07-02 | L049/L126 |
 
 ## 12. Prochaines étapes

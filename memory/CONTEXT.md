@@ -7,30 +7,28 @@
 
 ## Focus courant
 
-**PROD PAR CLONAGE (2026-07-07 soir) - la prod reelle = DUPLICATION du projet DSS DEV (memes ids),
-TICKETS INCLUS ; « tout marche a peu pres bien », corrections en NOUVELLE session (L144).**
-- Fichiers a coller dans le clone = `OWISMIND_DEV_*` de la branche clean TELS QUELS (zero substitution) ;
-  `OWISMIND_PROD_V1/` + `tools/promote_agents_to_prod.py` = LEGACY a ignorer (mise en coherence a faire).
-- Tools du clone : garder attribute_lookup (UUoynaL) + revenue_semantic_query (v4oqA6R) +
-  tickets_semantic_query (nEirlso) ; Drive_Revenues_resolve_filter_value SUPPRIME (supplante).
-- Reste : smoke complet (tickets end-to-end, resolution sous-agent DANS le clone, ids si tools recrees),
-  cle exacte du projet clone. Detail : `sessions/2026-07-07.md` (Run 2).
+**MODELE SEMANTIQUE DU CLONE PROD (2026-07-08) - colonne `Solution` RE-AJOUTEE au modele revenus + regle
+de priorite d'offre restauree, et les 2 modeles (revenus + tickets) REPOINTES vers le dataset du clone (L146).**
+- Clone prod CONFIRME = **`OWISMIND_PRD_V1_2`** (duplication de DEV, ids DEV conserves, modele revenus `AHUh9hb`).
+  Piege : dupliquer un projet DSS ne repointe PAS les modeles semantiques (`datasetRef` + table des golden
+  queries restent sur DEV) ; l'UI ne le corrige pas -> scripts de repoint depuis un notebook DU CLONE :
+  `dataiku-agents/OWISMIND/add_solution_and_repoint_prod_clone.py` (revenus + Solution) et
+  `repoint_tickets_prod_clone.py` (tickets, repoint pur). DRY_RUN puis re-index ; remap `<KEY>.` + `<KEY>_`.
+- REVENUS **VALIDE DSS** par l'user (`datasetRef = OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL
+  `FROM "OWISMIND_PRD_V1_2_drive_revenues"`). TICKETS : script pret + simule (4/4), a LANCER sur le clone.
+- Hierarchie d'offre restauree : `SolutionLine > Solution > Product` ; preference 1.Product 2.Solution
+  3.SolutionLine 4.sirano_product. Detail : `sessions/2026-07-08.md` + L146.
 
-**DEEP CLEAN (2026-07-06 soir -> 07) - branche `refactor/deep-clean-v1.2`, 9 commits, EN COURS DE TEST
-par l'user (appliquee au clone prod).**
-Nettoyage/refactor pro SANS changement de logique (preuves : AST, bundle normalise, promote-script parity,
-revue adversariale 4 lentilles = 0 finding ; 790+316+343+352 verts sur l'etat final). Livre : READMEs
-racine/tools ; `readonly_pre_queries()` consolide (6 sites, +2 tests) ; en-tetes Code Agents condenses
-(PROD regeneree) ; provenance maquette morte purgee (29 fichiers front) ; SETUP CLAUDE CODE refondu pour
-Opus 4.8 (CONTEXT 61 l., gotchas -> `.claude/rules/` path-scopees, 4 subagents `.claude/agents/`,
-hook dash-guard) ; docs/ + project-documentation/ + site HTML remis a niveau v1.1 (fact-checkes, 6 ADR).
-Zip prod repackage sur la branche (95 entrees). Si l'user valide -> merge main = version de prod.
-Detail : `sessions/2026-07-07.md` + L141-L143.
-
-(La strategie « prod v1.1 a ids separes » du 2026-07-06 Run 5, runbook `docs/DEPLOY_PROD_V1_1.md`, est
-SUPPLANTEE par le clonage ci-dessus ; elle reste documentee dans `sessions/2026-07-06.md` + L139-L140.)
+**Contexte prod (clone, 2026-07-07) :** source de verite du clone = fichiers `OWISMIND_DEV_*` colles TELS
+QUELS (zero substitution) ; `OWISMIND_PROD_V1/` + `promote_agents_to_prod.py` = LEGACY a ignorer (mise en
+coherence a faire) ; `Drive_Revenues_resolve_filter_value` SUPPRIME du clone (supplante par attribute_lookup).
+Branche git courante = `refactor/deep-clean-v1.2` (deep clean 07-07 = refactor zero-comportement prouve,
+appliquee au clone, EN TEST ; si OK -> merge main). Detail : `sessions/2026-07-07.md` + L139-L144.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
+- 2026-07-07 Run 2 : bascule strategie prod = CLONE du projet DSS DEV (memes ids, tickets inclus). L144.
+- 2026-07-07 Run 1 : deep clean pro sur branche `refactor/deep-clean-v1.2` (refactor zero-comportement, prouve ; setup Claude Code refondu ; docs v1.1). L141-L143.
 - 2026-07-06 Runs 2-4 : Source Data v3 complet (popover, Calculer, plages string, cascade, persistance,
   contexte ecran -> agent, menu de colonne). VALIDE DSS (« tout marche super »). L134-L138.
 - 2026-07-06 Run 1 : data tools sans IA (agregats DB + Calculer + plages + unification Evidence), plugin dev_v2. L132-L133.
@@ -59,9 +57,10 @@ SUPPLANTEE par le clonage ci-dessus ; elle reste documentee dans `sessions/2026-
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- NOUVELLE SESSION : corrections restantes + smoke complet du CLONE prod (tickets end-to-end, resolution
-  sous-agent dans le clone, ids des tools si recrees, cle exacte du projet) + mise en coherence repo
-  (PROD_V1 legacy, README/registry/rules agents). Voir `sessions/2026-07-07.md` (Run 2) + L144.
+- CLONE prod : lancer `repoint_tickets_prod_clone.py` sur le clone + smoke tickets end-to-end + tester le
+  grounding `Solution` dans le Playground revenus. Puis smoke complet (resolution sous-agent dans le clone,
+  ids des tools si recrees) + mise en coherence repo (PROD_V1 legacy, README/registry). Voir
+  `sessions/2026-07-08.md` + L146 (revenus + repoint = FAITS, valides DSS).
 - FINIR la validation de la branche `refactor/deep-clean-v1.2` (appliquee au clone) : si OK, merge dans
   main = version de prod ; sinon debug avec Opus. Voir `sessions/2026-07-07.md`.
 - Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur PROD `Xrv7GvfG` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
