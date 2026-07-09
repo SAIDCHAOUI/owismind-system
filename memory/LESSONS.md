@@ -3335,5 +3335,37 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `remap_semantic_model.py` (memes 2 regles de remap).
 - **Date** : 2026-07-08.
 
+## L147 - Renommer un dossier racine casse SILENCIEUSEMENT les regles path-scoped
+- **Contexte** : restructuration 2026-07-10, `dataiku-agents/` -> `OWIsMind_PRD_V1_2/` (miroir DSS prod).
+- **Ce qui a echoue / le piege** : `.claude/rules/agents.md` porte un frontmatter
+  `paths: ["dataiku-agents/**"]`. Apres le renommage du dossier, le glob ne matche plus RIEN : la
+  regle (gotchas agents, P0/P3, process de recoll) aurait cesse de se charger automatiquement, sans
+  aucune erreur ni avertissement. Detecte par le scout de references AVANT d'executer le renommage.
+- **Solution qui marche** : tout renommage de dossier de premier niveau DOIT s'accompagner d'un grep
+  des frontmatters `paths:` de `.claude/rules/*.md` (et des `description` de skills/subagents qui
+  citent des chemins). Ici : glob mis a jour vers `OWIsMind_PRD_V1_2/**` dans le meme commit que le mv.
+- **Preuve-verification** : revue adversariale du diff complet (PASS) a re-verifie le frontmatter ;
+  la regle s'est chargee automatiquement dans la session en touchant `OWIsMind_PRD_V1_2/*`.
+- **Source** : sessions/2026-07-10.md.
+- **Date** : 2026-07-10.
+
+## L148 - Zips versionnes : le slot `--version` de build_dev_plugin collisionnait avec le zip PROD
+- **Contexte** : merge de la branche `OWIsMind_PRD_V1_2` (zips prod versionnes
+  `owismind-v<MAJ_MIN>-upload.zip` derives de plugin.json) dans `OWIsMind_PRD_V1_3-dev` (WIP qui
+  avait ajoute a `tools/build_dev_plugin.py` un slot `--version 1.3` -> zip `owismind-v1_3-upload.zip`).
+- **Ce qui a echoue / le piege** : les deux conventions, nees independamment sur 2 branches, produisent
+  LE MEME nom de fichier : le zip du plugin coexistant `--version 1.3` et le futur zip PROD v1.3
+  s'appelleraient tous deux `owismind-v1_3-upload.zip` (contenus differents : id `owismind_v1_3` vs
+  `owismind`). En prime, le reset du skill `/package-plugin` (`rm owismind-v*-upload*`) l'aurait efface.
+- **Solution qui marche** : le zip du slot `--version` prend la forme UNDERSCORE derivee de l'id du
+  plugin : `owismind_vX_Y-upload.zip` (= `"{id}-upload.zip"`, meme convention que l'ancien
+  `owismind_dev-upload.zip`). La forme dash reste reservee aux artefacts derives de plugin.json
+  (`owismind-v1_2-upload.zip` prod, `owismind-v1_2-dev-upload.zip` dev) ; les globs de cleanup prod
+  (`owismind-v*-upload*`) ne matchent pas la forme underscore.
+- **Preuve-verification** : `py_compile` + `python3 tools/build_dev_plugin.py --check` et
+  `--check --version 1.3` passent apres resolution (rewrite `owismind_v1_3` OK) ; plugin 790 tests OK.
+- **Source** : sessions/2026-07-10.md (resolution du merge `5469a65`).
+- **Date** : 2026-07-10.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

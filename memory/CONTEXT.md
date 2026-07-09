@@ -13,14 +13,18 @@
   -> sous-agents revenus `agent:bHrWLyOL` + tickets `agent:NcE9LD2i`). L'ancien `dataiku-agents/` a
   DISPARU ; `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` (jumeau prod a la main) = LEGACY SUPPRIMES.
 - Plugin `plugin.json` **1.2.0** ; zip prod versionne **`Plugin/ready-for-dataiku/owismind-v1_2-upload.zip`**
-  (nom derive de la version, `.` -> `_`, major_minor). Mecanisme dev coexistant CONSERVE
-  (`tools/build_dev_plugin.py`, id `owismind_dev`, zip `owismind-v<VER>-dev-upload.zip`).
+  REGENERE (95 entrees, propre ; legacy `owismind-upload.zip` + `owismind-v1_3-upload.zip` supprimes).
+  Mecanisme dev coexistant CONSERVE (`tools/build_dev_plugin.py`, id `owismind_dev`, zip
+  `owismind-v<VER>-dev-upload.zip` ; slot `--version` -> `owismind_vX_Y-upload.zip`, L148).
 - Git = **une branche par version**, nommee comme le projet DSS prod : `OWIsMind_PRD_V1_2` = prod courante
-  (source de verite) ; `OWIsMind_PRD_V1_3-dev` = prochaine version (feedback hub WIP, PRESERVE) ; suffixe
-  `-dev` retire a la validation ; `main` DEPRECIEE. Detail : `sessions/2026-07-10.md`.
+  (source de verite) ; `OWIsMind_PRD_V1_3-dev` = prochaine version (feedback hub WIP preserve, structure
+  mergee, plugin.json 1.3.0) ; suffixe `-dev` retire a la validation ; `main` DEPRECIEE.
+- Revue adversariale du diff complet : **PASS** (0 bloquant ; neutralite comportementale des .py miroir
+  prouvee AST ; 46/46 fichiers comptabilises). 3 suites vertes (miroir 316, LAB 343, plugin 790).
+  Detail : `sessions/2026-07-10.md` + L147-L148.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-10 : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne `owismind-v1_2-upload.zip`, branches par version ; legacy `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimes). Voir `sessions/2026-07-10.md`.
+- 2026-07-10 : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne, branches par version, merge dans `OWIsMind_PRD_V1_3-dev` + bump 1.3.0 ; legacy `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimes). L147-L148. Voir `sessions/2026-07-10.md`.
 - 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
 - 2026-07-07 Run 2 : bascule strategie prod = CLONE du projet DSS DEV (memes ids, tickets inclus). L144.
 - 2026-07-07 Run 1 : deep clean pro sur branche `refactor/deep-clean-v1.2` (refactor zero-comportement, prouve ; setup Claude Code refondu ; docs v1.1). L141-L143.
@@ -52,6 +56,8 @@
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- Upload `owismind-v1_2-upload.zip` en DSS (runbook `docs/DEPLOY_PROD_V1_2.md`) pour aligner la version
+  affichee (instance encore en 1.1.0) ; puis re-dump du JSON revenus (anterieur au re-add `Solution`).
 - CLONE prod : lancer `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
   (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146
