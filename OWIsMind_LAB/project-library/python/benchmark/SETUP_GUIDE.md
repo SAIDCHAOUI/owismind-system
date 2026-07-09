@@ -161,7 +161,8 @@ un filtre `run_id` fixe au dernier run.
 
 ## Plus tard (hors scope maintenant)
 
-Promotion PROD : changer `benchmark.agents` pour l'orchestrateur PROD
-(`project_key: "OWISMIND_PROD_V1"`, `agent_id: "agent:Xrv7GvfG"`). Section webapp
+Pointer sur la PROD : changer `benchmark.agents` pour l'orchestrateur du projet prod
+(`project_key: "OWISMIND_PRD_V1_2"`, `agent_id: "agent:038G7mlF"` ; prod = clone de DEV,
+ids preserves). Section webapp
 de benchmark, juge en panel, runs planifies : differes (les schemas restent
 compatibles).

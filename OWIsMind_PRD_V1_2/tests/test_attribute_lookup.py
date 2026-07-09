@@ -1,5 +1,5 @@
 """DSS-free unit tests for the attribute_lookup Custom Python agent tool
-(``dataiku-agents/OWISMIND/OWISMIND_DEV/tools/OWISMIND_DEV_attribute_lookup_tool.py``).
+(``OWIsMind_PRD_V1_2/tools/attribute_lookup_tool.py``).
 
 ``dataiku`` and ``dataiku.llm.agent_tools`` are stubbed BEFORE the tool file is
 loaded via importlib. Pure helpers (norm, search needle, attribute mapping, SQL
@@ -10,7 +10,7 @@ fallback are covered without an instance. Real SQL execution must be validated o
 the DSS instance.
 
 Run from the repo root:
-    python3 -m unittest discover -s dataiku-agents/tests -v
+    python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests -v
 """
 
 import importlib.util
@@ -51,8 +51,8 @@ def _install_stubs():
 _install_stubs()
 
 _TOOL_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", "tools",
-    "OWISMIND_DEV_attribute_lookup_tool.py"))
+    os.path.dirname(__file__), "..", "tools",
+    "attribute_lookup_tool.py"))
 _SPEC = importlib.util.spec_from_file_location("attribute_lookup_under_test",
                                                _TOOL_PATH)
 al = importlib.util.module_from_spec(_SPEC)

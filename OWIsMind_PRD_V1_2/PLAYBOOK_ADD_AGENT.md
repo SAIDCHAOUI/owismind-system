@@ -1,19 +1,24 @@
 # PLAYBOOK - add a specialist sub-agent (worked for: tickets)
 
-> **Per-project layout (2026-06-22, L099):** agent files now live under
-> `OWISMIND/OWISMIND_DEV/` (develop here) and `OWISMIND/OWISMIND_PROD_V1/` (promote
-> here), prefixed with the project key, with per-project ids. Build a new specialist
-> in **DEV** first; once validated, promote it to PROD with the PROD ids. Id map +
-> workflow: [`OWISMIND/README.md`](OWISMIND/README.md). Below, read `registry.json`
-> as the **DEV** project's `OWISMIND/OWISMIND_DEV/registry.json`.
+> **Environment (2026-07):** this is the repo mirror of the DSS **production**
+> project `OWIsMind_PRD_V1_2` (key `OWISMIND_PRD_V1_2`), a **clone of DEV** with the
+> DEV ids preserved. The **tickets** domain is therefore already INCLUDED in prod by
+> the duplication (Code Agent, semantic model, and tool all present); the only
+> remaining tickets work is to **launch the repoint script + finish curation** (see
+> section A and the "Still pending" note in `CLAUDE.md`).
 >
-> The concrete, ordered runbook to take a new domain from a base dataset to a live
-> specialist routed by the orchestrator. The architecture is built for this: the
-> sub-agent engine is dataset-agnostic (its expertise lives in the Flow recipes +
-> the semantic model, not the code), and the orchestrator is registry-driven
-> (adding a domain is one CAPABILITIES entry). The repo source of truth for the
-> per-project spec is [`registry.json`](OWISMIND/OWISMIND_DEV/registry.json); columns are in
-> [`DATASETS.md`](DATASETS.md).
+> **How a NEW domain lands in prod.** There is no "develop in a second DSS project
+> then promote" step anymore. Build the new specialist on the **next dev branch**
+> (`OWIsMind_PRD_V1_3-dev`), validate it in the DSS clone, then promote by **dropping
+> the `-dev` suffix**: the validated dev branch becomes the new prod branch and the
+> next version starts (git model in `README.md` section 9).
+>
+> The concrete, ordered runbook below takes a new domain from a base dataset to a
+> live specialist routed by the orchestrator. The architecture is built for this:
+> the sub-agent engine is dataset-agnostic (its expertise lives in the Flow recipes
+> + the semantic model, not the code), and the orchestrator is registry-driven
+> (adding a domain is one CAPABILITIES entry). The repo source of truth for the spec
+> is [`registry.json`](registry.json); columns are in [`flow/DATASETS.md`](flow/DATASETS.md).
 >
 > Legend: **[repo]** = done in this repo (already done for tickets, see below).
 > **[DSS]** = you do it on the instance. **[curate]** = the irreducible human
@@ -23,27 +28,30 @@
 
 ## A. What is ALREADY done in the repo for tickets
 
-These are committed; you do NOT need to write code. Re-paste / run them in DSS per
-the steps below.
+These are committed; you do NOT need to write code. Because prod is a clone of DEV,
+the tickets objects already EXIST in the DSS clone too: the steps below are the
+remaining **repoint + curation**, not a from-scratch build.
 
-- `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` - the
-  tickets sub-agent (same engine as revenue, CONFIG header pointed at the tickets
-  datasets; `SEMANTIC_TOOL_ID` already set to `nEirlso`; `FALLBACK_TO_DIRECT=True`
-  so it works from the profile even before the model is fully wired).
-- `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` - the
-  `tickets_expert` CAPABILITIES entry (routing, timeline labels, lookup dataset +
-  search allowlist), with `agent_id` already set to `agent:NcE9LD2i`.
-- `OWISMIND/OWISMIND_DEV/tools/OWISMIND_DEV_attribute_lookup_tool.py` - now accepts a
-  per-domain `searchable_columns` allowlist (the orchestrator passes the tickets one
-  server-side), and surfaces the generic catalog's `value`-domain rows as "did you
-  mean" suggestions.
-- `OWISMIND/OWISMIND_DEV/recipes/build_value_catalog_recipe.py` - now auto-IO +
-  NA-safe + dataset-adaptive (revenue keeps its curated catalog; any other dataset
-  gets a generic per-value catalog). The profile + value_index recipes are also NA-safe.
-- `OWISMIND/OWISMIND_DEV/semantic_model/update_tickets_semantic_model.py` (brain) +
-  `OWISMIND/OWISMIND_DEV/semantic_model/dump_semantic_model.py` (generic snapshot, TICKETS CONFIG).
-- `OWISMIND/OWISMIND_DEV/registry.json` + `DATASETS.md` - the spec + column inventory.
-- Tests are green: `python3 -m unittest discover -s dataiku-agents/tests`.
+- `agents/CSSO_Trouble_Tickets_Expert.py` - the tickets sub-agent (same engine as
+  revenue, CONFIG header pointed at the tickets datasets; `SEMANTIC_TOOL_ID` already
+  set to `nEirlso`; `FALLBACK_TO_DIRECT=True` so it works from the profile even
+  before the model is fully wired).
+- `agents/OWIsMind_orchestrator.py` - the `tickets_expert` CAPABILITIES entry
+  (routing, timeline labels, lookup dataset + search allowlist), with `agent_id`
+  already set to `agent:NcE9LD2i`.
+- `tools/attribute_lookup_tool.py` - accepts a per-domain `searchable_columns`
+  allowlist (the orchestrator passes the tickets one server-side), and surfaces the
+  generic catalog's `value`-domain rows as "did you mean" suggestions.
+- `flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_catalogue.py` (and the
+  profile + value_index recipes) - auto-IO + NA-safe + dataset-adaptive (revenue
+  keeps its curated catalog; any other dataset gets a generic per-value catalog).
+- `semantic-models/scripts/update_tickets_semantic_model.py` (brain) +
+  `semantic-models/scripts/dump_semantic_model.py` (generic snapshot, TICKETS
+  CONFIG) + `semantic-models/scripts/repoint_tickets_prod_clone.py` (repoints the
+  tickets model `dM4jA4G` to the clone dataset; READY, simulated 4/4, NOT YET
+  LAUNCHED on the clone).
+- `registry.json` + `flow/DATASETS.md` - the spec + column inventory.
+- Tests are green: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`.
 
 ---
 
@@ -136,14 +144,14 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 - In DSS, create a semantic model on `TroubleTickets_year` (the UI auto-discovers
   entities/attributes from the schema, with valid shapes). Name it
   `TroubleTickets_Semantic_Model`. Let it index distinct values once.
-- [curate] Run `semantic_model/update_tickets_semantic_model.py` in a notebook
+- [curate] Run `semantic-models/scripts/update_tickets_semantic_model.py` in a notebook
   (set `NEW_MODEL_ID`) to inject the tickets instructions + golden queries + the
   entity / attribute descriptions + the metrics (`COUNT(DISTINCT id)`). The
   duration unit (minutes) is already baked in; only the exact `CurrentStatus`
   open/closed values are data-dependent (read them from the value index, the
   instructions already tell the model to use the exact catalog values). Optionally
   add named filters / glossary synonyms in the model UI.
-- Snapshot it: run `semantic_model/dump_semantic_model.py` with the TICKETS config
+- Snapshot it: run `semantic-models/scripts/dump_semantic_model.py` with the TICKETS config
   (see its CONFIG comment) and commit `TroubleTickets_Semantic_Model.v1.json`.
 
 ### 5. [DSS] Create the tickets Semantic Model Query tool
@@ -152,22 +160,22 @@ Create a NEW agent tool of type **Semantic Model Query** bound to
 `TroubleTickets_Semantic_Model`: **Agent mode OFF** (linear pipeline), LLM
 `vertex_ai/claude-sonnet-4-6`, access datasets as the calling user. Note its id.
 Paste the **Description for LLM** from
-`semantic_model/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
+`semantic-models/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
 tool's "Description for LLM" field - do NOT leave it empty.
 
 - Confirm that id matches `SEMANTIC_TOOL_ID` (already set to `nEirlso`) in
-  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`; update
+  `agents/CSSO_Trouble_Tickets_Expert.py`; update
   it if the DSS tool id differs.
-- Keep `OWISMIND/OWISMIND_DEV/registry.json` -> `tickets_expert.semantic_model.tool_id` in sync.
+- Keep `registry.json` -> `tickets_expert.semantic_model.tool_id` in sync.
 
 ### 6. [DSS] Create the tickets Code Agent + wire the orchestrator
 
 - Create a new **Code Agent** on the **Python 3.11** code env; paste
-  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`. Confirm
+  `agents/CSSO_Trouble_Tickets_Expert.py`. Confirm
   its `agent:` id matches `CAPABILITIES["tickets_expert"]["agent_id"]` (already set
   to `agent:NcE9LD2i`) in
-  `OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` and in
-  `OWISMIND/OWISMIND_DEV/registry.json`; update all three if the DSS id differs.
+  `agents/OWIsMind_orchestrator.py` and in
+  `registry.json`; update all three if the DSS id differs.
 - **ORDER MATTERS**: the real `agent_id` must be live (Code Agent created) BEFORE
   re-pasting the orchestrator. `tickets_expert` ships `enabled:True` with the id
   `agent:NcE9LD2i`; if you re-paste the orchestrator while that Code Agent does not

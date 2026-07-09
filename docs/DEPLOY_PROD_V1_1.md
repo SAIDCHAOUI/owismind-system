@@ -1,5 +1,11 @@
 # Déploiement PROD v1.1 - runbook (2026-07-06)
 
+> ⚠️ **RUNBOOK SUPERSÉDÉ (historique).** Ce document décrit la release **v1.1.0** et l'ancien modèle
+> de promotion (projet DSS `OWISMIND_PROD_V1` + `tools/promote_agents_to_prod.py` : promotion fichier
+> par fichier depuis DEV, ids PROD distincts). Ce modèle **n'existe plus** : la prod est désormais un
+> **clone du projet DEV** (`OWISMIND_PRD_V1_2`, ids DEV conservés, `OWISMIND_PROD_V1` = legacy supprimé).
+> Conservé **pour l'historique uniquement**. Runbook courant : **[DEPLOY_PROD_V1_2.md](DEPLOY_PROD_V1_2.md)**.
+
 > Checklist de mise en production d'OWIsMind v1.1.0 dans le projet DSS de production
 > (« OWIsMind prod v1 »). Tout ce qui est repo est DÉJÀ PRÊT (zip packagé, agents PROD
 > promus depuis DEV) ; ce document liste les gestes DSS, dans l'ordre.

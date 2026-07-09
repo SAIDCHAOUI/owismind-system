@@ -2081,7 +2081,7 @@ def build_about_answer(profile, lang):
 
 # Declared event contract (FROZEN): every blockId / toolName this agent can
 # emit. The orchestrator registry MUST label exactly these ids - the
-# anti-drift test (dataiku-agents/tests/test_orchestrator_v3.py) enforces it.
+# anti-drift test (OWIsMind_PRD_V1_2/tests/test_langgraph_agents.py) enforces it.
 KNOWN_BLOCK_IDS = ("resolve", "run_sql", "format_output", "clarify_user",
                    "out_of_scope_msg", "about_data")
 KNOWN_TOOL_NAMES = ("resolve_filter_value", "dataset_sql_query")

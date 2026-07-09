@@ -28,16 +28,17 @@ convertie, a été supprimée du repo le 2026-06-11).
 
 ## Identifiants canoniques (détail → `memory/PROJECT_STATE.md`)
 - Plugin id `owismind` · WebApp `webapp-owismind-ai-agents` · package `python-lib/owismind` · resource `owismind-app`
-- Racine plugin sur disque : `Plugin/owismind/` · staging zip : `Plugin/ready-for-dataiku/owismind-upload/`
+- Racine plugin sur disque : `Plugin/owismind/` · staging zip **versionné** : `Plugin/ready-for-dataiku/owismind-v1_2-upload.zip` (nom dérivé de `plugin.json` 1.2.0)
 - Vite `base` `/plugins/owismind/resource/owismind-app/` → `outDir ../resource/owismind-app`
-- SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key `OWISMIND_DEV` (via `default_project_key()`)
-- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) **dupliqués
-  par projet DSS** sous `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/` (fichiers préfixés
-  par le projet ; **on développe en DEV puis on promeut en PROD**). Carte des IDs + workflow :
-  **`dataiku-agents/OWISMIND/README.md`** (et chaque `registry.json`). Orchestrateur **OWIsMind_orchestrator**
-  (DEV `038G7mlF` / PROD `Xrv7GvfG`) → sous-agent revenus **SalesDrive_revenue_expert** (DEV `agent:bHrWLyOL`
-  / PROD `agent:uO5hEzAs`) ; 2e sous-agent **CSSO_Trouble_Tickets_Expert** (DEV `agent:NcE9LD2i`, en cours,
-  pas encore en PROD).
+- SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key **PROD `OWISMIND_PRD_V1_2`**, **DEV `OWISMIND_DEV`** (résolu au runtime via `dataiku.default_project_key()`)
+- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) : le projet DSS
+  PROD **`OWISMIND_PRD_V1_2` = CLONE du projet DEV `OWISMIND_DEV`** (ids DEV conservés), miroité dans le repo
+  sous **`OWIsMind_PRD_V1_2/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`, `tests/`). Carte des IDs :
+  **`OWIsMind_PRD_V1_2/README.md`** + `OWIsMind_PRD_V1_2/registry.json`. Orchestrateur **OWIsMind_orchestrator**
+  (`038G7mlF`) → sous-agents **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) et **CSSO_Trouble_Tickets_Expert**
+  (`agent:NcE9LD2i`) - mêmes ids en DEV et dans le clone.
+- Git : **une branche par version**, nommée comme le projet DSS prod (`OWIsMind_PRD_V1_2` = prod courante,
+  `OWIsMind_PRD_V1_3-dev` = dev en cours, suffixe `-dev` retiré à la validation ; `main` dépréciée).
 - API `/owismind-api/*` (santé `/owismind-api/ping`)
 - **Benchmark / éval des agents = projet DSS SÉPARÉ `OWIsMind_LAB`** (≠ le plugin), miroir repo
   **`OWIsMind_LAB/`** : `project-library/python/{benchmark, benchmark_webapp}` (recollés en project-library,
@@ -49,7 +50,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
 - `/build-plugin` : `npm run build` (frontend) → `resource/owismind-app/`, puis `index.html` → `body.html`.
-- `/package-plugin` : stage runtime → zip `ready-for-dataiku/owismind-upload.zip` (sans frontend/node_modules).
+- `/package-plugin` : stage runtime → zip versionné `ready-for-dataiku/owismind-v1_2-upload.zip` (sans frontend/node_modules).
 - `/log-session` : log de fin de session + refresh mémoire courte + `/graphify --update` + commit de session.
 
 ## Graphe de connaissances (`graphify-out/`, git-ignoré)

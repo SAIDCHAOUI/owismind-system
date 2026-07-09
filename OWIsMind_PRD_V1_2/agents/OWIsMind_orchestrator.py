@@ -279,7 +279,7 @@ CAPABILITIES = {
         "enabled": True,
     },
     # --- Incident tickets (TroubleTickets_year) -----------------------------
-    # Second specialist. The engine file OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py
+    # Second specialist. The engine file CSSO_Trouble_Tickets_Expert.py
     # mirrors the revenue sub-agent's frozen KNOWN_BLOCK_IDS / KNOWN_TOOL_NAMES, so
     # the block_labels / tool_labels below are the same keys (anti-drift test).
     "tickets_expert": {

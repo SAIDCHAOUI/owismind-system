@@ -44,7 +44,7 @@ _DATE_DSS_TYPES = ("date", "datetime")
 
 
 # =============================================================================
-# PURE HELPERS (unit-tested in dataiku-agents/tests/test_profiler.py)
+# PURE HELPERS (unit-tested in OWIsMind_PRD_V1_2/tests/test_profiler.py)
 # =============================================================================
 
 def norm_value(value):

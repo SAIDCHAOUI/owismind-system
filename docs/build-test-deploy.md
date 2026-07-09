@@ -51,7 +51,8 @@ Référence figée → [`memory/PROJECT_STATE.md` §3](../memory/PROJECT_STATE.m
 | Préfixe API | `/owismind-api` (santé `/owismind-api/ping`) | backend |
 | Racine plugin (disque) | `Plugin/owismind/` (P majuscule) | repo |
 | Frontend source | `Plugin/owismind/frontend/` | repo |
-| Staging packaging | `Plugin/ready-for-dataiku/owismind-upload/` + `owismind-upload.zip` | repo |
+| Staging packaging | `Plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/` + `owismind-v<MAJ_MIN>-upload.zip` (nom dérivé de `plugin.json`, ex. v1.2.0 → `owismind-v1_2-upload.zip`) | repo |
+| Version courante | `1.2.0` (plugin id `owismind`) | `Plugin/owismind/plugin.json` |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) - sélectionnée dans les Settings de la webapp | guide SQL |
 | Project key DSS | `OWISMIND_DEV` (résolu serveur via `dataiku.default_project_key()`) | guide SQL |
 | Plateforme / Python | Dataiku DSS 14.4.x · backend **Python 3.9.23** (3.11/FastAPI NON validés) | `/ping` |
@@ -156,7 +157,7 @@ et `PROJECT_STATE.md` §12.4.
 
 ```
 [edit frontend/src]──► /build-plugin ──► resource/owismind-app/ + body.html ──┐
-                                                                              ├─► /package-plugin ──► owismind-upload.zip ──► upload MANUEL DSS
+                                                                              ├─► /package-plugin ──► owismind-v1_2-upload.zip ──► upload MANUEL DSS
 [edit python-lib / webapps]───────────────────────────────────────────────────┘
 ```
 
@@ -212,25 +213,29 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 **Précondition** : frontend déjà buildé + `body.html` câblé (lancer `/build-plugin` en cas de doute).
 **On ne stage que le runtime.**
 
+> Le nom du zip (et du dossier de staging) est **dérivé de `plugin.json`** : version `MAJEUR.MINEUR.PATCH`
+> → `owismind-v<MAJEUR>_<MINEUR>-upload.zip` (patch ignoré). En v1.2.0 → `owismind-v1_2-upload.zip`.
+> Les exemples ci-dessous utilisent ce nom courant ; le skill le recalcule depuis `plugin.json`.
+
 1. **Reset staging** (`rm -rf` → peut demander une approbation, attendu) :
    ```bash
-   rm -rf Plugin/ready-for-dataiku/owismind-upload Plugin/ready-for-dataiku/owismind-upload.zip
-   mkdir -p Plugin/ready-for-dataiku/owismind-upload
+   rm -rf Plugin/ready-for-dataiku/owismind-v1_2-upload Plugin/ready-for-dataiku/owismind-v1_2-upload.zip
+   mkdir -p Plugin/ready-for-dataiku/owismind-v1_2-upload
    ```
 
 2. **Stager le runtime uniquement** (`plugin.json` à la **racine** du staging - pas de `_/plugin.json`
    dans ce repo, cf. [LESSONS L002](../memory/LESSONS.md)) :
    ```bash
-   cp Plugin/owismind/plugin.json Plugin/ready-for-dataiku/owismind-upload/
+   cp Plugin/owismind/plugin.json Plugin/ready-for-dataiku/owismind-v1_2-upload/
    cp -R Plugin/owismind/python-lib Plugin/owismind/resource Plugin/owismind/webapps \
-         Plugin/ready-for-dataiku/owismind-upload/
+         Plugin/ready-for-dataiku/owismind-v1_2-upload/
    ```
 
 3. **Zipper depuis le staging** (pour que `plugin.json` soit à la racine de l'archive), en excluant les
    docs dev et les caches Python - **par nom, jamais par glob large** :
    ```bash
-   ( cd Plugin/ready-for-dataiku/owismind-upload && \
-     zip -r ../owismind-upload.zip . \
+   ( cd Plugin/ready-for-dataiku/owismind-v1_2-upload && \
+     zip -r ../owismind-v1_2-upload.zip . \
        -x "*.DS_Store" "__MACOSX/*" \
           "*/CLAUDE.md" "CLAUDE.md" "*/README.md" "README.md" \
           "*/__pycache__/*" "__pycache__/*" "*.pyc" )
@@ -247,7 +252,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 
 4. **Vérifier que l'archive est propre** (doit afficher « ZIP clean ») :
    ```bash
-   unzip -Z1 Plugin/ready-for-dataiku/owismind-upload.zip \
+   unzip -Z1 Plugin/ready-for-dataiku/owismind-v1_2-upload.zip \
      | grep -Eq '(^|/)(frontend|node_modules)(/|$)|(^|/)_/|(^|/)CLAUDE\.md$|(^|/)README\.md$|__pycache__|\.pyc$' \
      && echo "ERROR: zip polluted" || echo "ZIP clean"
    ```
@@ -260,7 +265,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
             webapps/webapp-owismind-ai-agents/body.html \
             webapps/webapp-owismind-ai-agents/backend.py \
             python-lib/owismind/__init__.py; do
-     unzip -Z1 Plugin/ready-for-dataiku/owismind-upload.zip | grep -qx "$f" \
+     unzip -Z1 Plugin/ready-for-dataiku/owismind-v1_2-upload.zip | grep -qx "$f" \
        && echo "OK  $f" || echo "MISSING  $f"
    done
    ```
@@ -270,9 +275,9 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 
 ### Taille attendue
 
-Le zip courant (PROD v1.1.0) contient **95 entrées au total** (= **82 fichiers** + 13 dossiers, `plugin.json`
-à la racine inclus). Un écart franc (p. ex. réapparition de `frontend/`/`node_modules/`, ou chute des
-`__init__.py`) signale un bug de packaging à corriger avant upload.
+Le zip PROD (v1.2.0) contient de l'ordre de **~95 entrées** (`plugin.json` à la racine inclus ; ordre de
+grandeur de référence, à revérifier après un build). Un écart franc (p. ex. réapparition de
+`frontend/`/`node_modules/`, ou chute des `__init__.py`) signale un bug de packaging à corriger avant upload.
 
 ---
 

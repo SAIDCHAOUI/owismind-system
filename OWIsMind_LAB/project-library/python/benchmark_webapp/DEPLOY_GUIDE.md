@@ -59,10 +59,10 @@ Tableau "quel fichier du repo va ou dans DSS" :
 
 | Fichier du repo | Va dans DSS |
 | --- | --- |
-| `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (DEV, env 3.11) |
-| `..._SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (DEV, env 3.11) |
-| `..._CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (DEV, env 3.11) si deploye |
-| `Plugin/ready-for-dataiku/owismind_dev-upload.zip` | Plugin DSS `owismind_dev` |
+| `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (env 3.11) |
+| `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (env 3.11) |
+| `OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (env 3.11) |
+| `Plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` | Plugin DSS `owismind_dev` |
 | `OWIsMind_LAB/project-library/python/benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
 | `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
@@ -98,22 +98,22 @@ maintenant `smart/pro/claude`. Les MODELES sont identiques.
 
 ### A1. Re-coller l'orchestrateur (DEV)
 1. Ouvre le fichier repo
-   `dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py`.
+   `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py`.
 2. Dans DSS, projet `OWISMIND_DEV` -> le Code Agent **OWIsMind_orchestrator** (id `038G7mlF`,
    code env **3.11**) -> remplace tout son code par le contenu du fichier repo -> Save.
 
 ### A2. Re-coller le sous-agent revenus (DEV)
-Pareil avec `OWISMIND_DEV_SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
+Pareil avec `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
 (id `bHrWLyOL`, env 3.11).
 
 ### A3. Re-coller le sous-agent tickets (DEV), s'il est deploye
 Si le Code Agent **CSSO_Trouble_Tickets_Expert** (id `NcE9LD2i`) existe deja dans `OWISMIND_DEV`,
-recolle aussi `OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
+recolle aussi `OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
 cette etape.)
 
 Pas de zip ni de redemarrage backend pour les agents : un Code Agent prend effet des qu'il est
-sauvegarde. (PROD : les fichiers `OWISMIND_PROD_V1_*` du repo sont deja a jour ; on promeut en PROD
-plus tard, une fois le DEV valide.)
+sauvegarde. (PROD = clone du projet DEV, ids preserves : le projet prod `OWISMIND_PRD_V1_2` est une
+duplication de `OWISMIND_DEV`, donc recoller le meme code agent le met a jour cote prod aussi.)
 
 Verification : ouvre une conversation dans la webapp (apres la Partie B), ouvre le selecteur de
 mode, choisis Claude sur une vraie question complexe ; la reponse doit etre traitee par Sonnet
@@ -124,11 +124,11 @@ mode, choisis Claude sur une vraie question complexe ; la reponse doit etre trai
 ## 3. PARTIE B - Le plugin (capture des suggestions + selecteur de mode)
 
 ### B1. Recuperer le zip DEV
-`Plugin/ready-for-dataiku/owismind_dev-upload.zip` (deja construit dans le repo). C'est le plugin
+`Plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` (deja construit dans le repo). C'est le plugin
 **DEV** (id `owismind_dev`), qui s'installe a cote de la prod sans l'ecraser.
 
 ### B2. Uploader le plugin
-1. Menu DSS -> **Plugins** -> **Add plugin** -> **Upload** -> choisis `owismind_dev-upload.zip`,
+1. Menu DSS -> **Plugins** -> **Add plugin** -> **Upload** -> choisis `owismind-v1_2-dev-upload.zip`,
    installe-le comme plugin **Uploaded** (PAS "Development").
 2. Si une version `owismind_dev` existe deja en "Development", supprime-la d'abord puis re-uploade.
 3. Si DSS demande un code env pour le plugin, prends celui de la prod (meme version Python). On
@@ -324,12 +324,12 @@ montre PLUSIEURS runs dans le selecteur (l'historique s'accumule, cf. C8).
 
 ## 8. Plus tard (hors de ce guide)
 
-- Promotion en PROD : recoller les `OWISMIND_PROD_V1_*` (agents) une fois le DEV valide, refaire la
-  Partie B avec le zip de prod (`/build-plugin` + `/package-plugin`), pointer le benchmark sur
-  l'orchestrateur PROD.
+- Prod = clone du projet DEV (ids preserves) : le projet prod `OWISMIND_PRD_V1_2` est une duplication
+  de `OWISMIND_DEV`. Pour le benchmark, pointer sur l'orchestrateur du projet voulu (`OWISMIND_DEV` ou
+  `OWISMIND_PRD_V1_2`, meme id `038G7mlF`) via la variable `benchmark` (`agents[]`).
 - Synchroniser le statut "acceptee/refusee" vers la table du plugin (l'utilisateur voit "en attente").
 - Garde-fou programmatique anti-recette sur `golden_dataset`.
 
 Reference technique courte (mapping fichiers, permissions, caveats) : `benchmark_webapp/README.md`.
 Reference du moteur benchmark : `benchmark/SETUP_GUIDE.md`. Carte des ids d'agents :
-`dataiku-agents/OWISMIND/README.md`.
+`OWIsMind_PRD_V1_2/README.md`.

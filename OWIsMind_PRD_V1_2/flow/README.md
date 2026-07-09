@@ -1,119 +1,122 @@
-# recipes/ - the design-time Flow
+# flow/ - the design-time Flow (two agent zones)
 
-> Three Python recipes that turn `DRIVE_Revenues` into the knowledge artifacts the
-> sub-agent consumes. They run **design-time** in the DSS Flow (pandas allowed),
-> never at chat runtime. A refresh scenario keeps the outputs fresh; the agent
-> always reads live, no re-paste needed when a recipe re-runs.
+> The Python recipes that turn each source dataset into the knowledge artifacts the
+> sub-agents consume. They run **design-time** in the DSS Flow (pandas allowed),
+> never at chat runtime. A refresh scenario keeps the outputs fresh; the agents
+> always read live, so no re-paste is needed when a recipe re-runs.
+
+This mirror holds the recipe code of the two data-preparation Flow zones of the
+production project **OWISMIND_PRD_V1_2**. Column inventories:
+[`DATASETS.md`](DATASETS.md). The runtime datasets written by the webapp (not built
+by any recipe) are documented in [`Webapp_Zone/README.md`](Webapp_Zone/README.md).
+
+## The two zones (exact DSS names)
+
+### `SalesDrive_Revenue_Expert`  (revenue sub-agent)
 
 ```
-DRIVE_Revenues ──► [profile_dataset_recipe]    ──► DRIVE_Revenues_profile        (the business brain)        USED BY v3 (sub-agent)
-               ──► [build_value_index_recipe]  ──► DRIVE_Revenues_value_index    (exact-value grounding)     USED BY v3 (sub-agent)
-               ──► [build_value_catalog_recipe]──► DRIVE_Revenues_Value_Catalog  (rich alias catalog)        USED BY v3 (attribute_lookup fallback)
+DRIVE.Revenues ──sync──► DRIVE_Revenues ──► compute_DRIVE_Revenues_profile        ──► DRIVE_Revenues_profile         (business brain)
+                                        ──► compute_DRIVE_Revenues_value_index    ──► DRIVE_Revenues_value_index     (exact-value grounding, SQL_owi)
+                                        ──► compute_DRIVE_Revenues_Value_Catalog   ──► DRIVE_Revenues_Value_Catalog   (rich alias catalog)
 ```
 
-Who reads what: `profile` + `value_index` are read by the **sub-agent**
-(`SalesDrive_revenue_expert`); `Value_Catalog` is read by the **`attribute_lookup`**
-tool (an orchestrator built-in) as its alias / suggestions fallback. `DRIVE_Revenues`
-itself is read by the semantic model (SQL) and by `attribute_lookup` (fact search).
+### `CSC_ticket_AI_Agent`  (tickets sub-agent)
 
----
+```
+IC_DATA.TroubleTickets_year ──sync──► TroubleTickets_year ──► compute_TroubleTickets_year_profile          ──► TroubleTickets_year_profile
+                                                           ──► compute_TroubleTickets_year_value_index      ──► TroubleTickets_year_value_index      (SQL_owi)
+                                                           ──► compute_TroubleTickets_year_value_catalogue   ──► TroubleTickets_year_value_catalogue
+```
 
-## The four datasets
+Who reads what: `*_profile` + `*_value_index` are read by the domain **sub-agent**
+(`SalesDrive_revenue_expert` / `CSSO_Trouble_Tickets_Expert`); the `*_Value_Catalog`
+/ `*_value_catalogue` is read by the **`attribute_lookup`** tool (an orchestrator
+built-in, [`../tools/`](../tools/README.md)) as its alias / suggestions fallback.
+Each source base (`DRIVE_Revenues`, `TroubleTickets_year`) is also read directly by
+its semantic model (SQL) and by `attribute_lookup` (fact search).
 
-### `DRIVE_Revenues` (source, ~175 k rows, 19 columns)
+## Six DSS recipes, three template codes
 
-The revenue base. Grain: roughly one row per (Phase, offer, account, month).
+There are **three generic recipe codes**, each pasted **verbatim twice** (once per
+zone), giving the six files here:
 
-| Column | Type | Role |
+| Template code | Revenue zone file | Tickets zone file |
 |---|---|---|
-| `Phase` | text | **scenario** column: ACTUALS / BUDGET / FORECAST / Q3F / HLF (never sum across) |
-| `booking_type` | text | booking type |
-| `SolutionLine`, `Product`, `sirano_product` | text | the **offer hierarchy** (most granular = Product, then SolutionLine; `sirano_product` is the lowest technical level, never the default; the `Solution` level was removed) |
-| `Account_name` | text | customer name |
-| `Account_partner` | text | indirect reseller / partner |
-| `distribution_type` | text | Direct_distribution / Indirect_distribution/Resseler |
-| `Parent_Group` | text | account parent group |
-| `carrier_code` | text | carrier code |
-| `diamond_id` | text | customer id (display pair: `Account_name`) |
-| `year_month` | date | the **time** column |
-| `amount_eur` | decimal | the **measure** (revenue, EUR) - the `metric_unit` derives the `EUR` currency from this column name |
-| `sales_entity` | text | GCS (external) / GCP (internal Orange) |
-| `sales_zone` | text | sales zone |
-| `account_manager`, `area_manager`, `sales_director` | e-mail | attribute columns (typical `lookup` targets) |
-| `original_dataset` | text | provenance |
+| profile | `SalesDrive_Revenue_Expert/compute_DRIVE_Revenues_profile.py` | `CSC_ticket_AI_Agent/compute_TroubleTickets_year_profile.py` |
+| value index | `SalesDrive_Revenue_Expert/compute_DRIVE_Revenues_value_index.py` | `CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_index.py` |
+| value catalog | `SalesDrive_Revenue_Expert/compute_DRIVE_Revenues_Value_Catalog.py` | `CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_catalogue.py` |
 
-### `DRIVE_Revenues_profile` (`{key, payload}`, built by `profile_dataset_recipe.py`)
+The two copies of each template are **byte-identical**: the recipes are
+**dataset-agnostic** and auto-detect INPUT/OUTPUT from the DSS Flow wiring
+(`dataiku.recipe.get_inputs_as_datasets()` / `get_outputs_as_datasets()`), never
+from code constants. The literal dataset names inside the code (which are
+revenue-named, e.g. `DRIVE_Revenues`) are only **fallback constants for a
+standalone run outside a recipe**; in DSS the Flow wiring always wins, so the
+same revenue-named code drives the tickets zone unchanged and the constants are
+harmless. Do not "fix" them per zone: the files must stay identical to what is
+pasted in DSS.
 
-The business brain. Profile **contract v1**: one `__dataset__` row (table-level:
-metrics, scenario, time, grain, descriptions) + one row per column (role,
-descriptions, synonyms, enum values, display pairs, stats). Two passes:
-deterministic stats (zero LLM), then an LLM enrichment that sends **aggregated
-metadata only** (schema, stats, low-cardinality enums, a few samples), never raw
-rows. Everything the LLM wrote is flagged `llm_generated: true`.
+## Rules that matter when you (re)wire a recipe
 
-**Human overrides (the step that makes quality).** Create an editable dataset
-`DRIVE_Revenues_profile_overrides` with columns `{key, field, value}`, add it as
-the recipe's 2nd input, re-run. Overrides are applied LAST (humans always win) and
-survive re-runs. Set the scenario default (ACTUALS), metric currency, display
-pairs, synonyms. Configure `ENRICH_LLM_ID` to the strongest available Mesh model
-(it runs once per dataset; cost is amortized).
+- **`*_value_index` outputs MUST live on the SQL connection `SQL_owi`.** The
+  sub-agent queries the value index **in SQL at runtime** to ground typed terms to
+  exact cell values, so the output has to be a SQL dataset on `SQL_owi` (the same
+  connection as the source), not a filesystem dataset.
+- **The profile recipe takes an OPTIONAL 2nd input: a `*_profile_overrides`
+  dataset** (`{key, field, value}`). When wired, overrides are applied LAST (humans
+  always win) and survive re-runs: use it to pin the scenario default, metric
+  currency/unit, display pairs, synonyms, the default metric (e.g. ticket COUNT).
+  Without it the profile is fully auto-generated (deterministic stats + one LLM
+  enrichment pass on aggregated metadata only, never raw rows; everything the LLM
+  wrote is flagged `llm_generated: true`).
+- **The reads are NA-safe**: they fall back to pandas inference when an integer
+  column contains NULLs (e.g. a resolution duration empty for open tickets, which
+  otherwise raises "Integer column has NA values").
+- **`build_value_catalog` is dataset-adaptive**: the revenue-shaped dataset gets
+  the rich curated catalog (account resolvers, offer/business resolvers, hand-crafted
+  business-concept aliases); any other dataset (e.g. tickets) gets a generic
+  per-value catalog (`search_domain` "value") that feeds the `attribute_lookup`
+  "did you mean" fallback.
 
-### `DRIVE_Revenues_value_index` (`{column_name, value, value_norm, occurrences}`, ~3.6 k rows)
+## The output datasets, per zone
 
-Built by `build_value_index_recipe.py`. Every distinct value of every groundable
-text column + its normalized form (lowercase, accents stripped, whitespace
-collapsed - the FROZEN `norm_value`, shared with the sub-agent's `_norm`). The
-sub-agent queries this **in SQL at runtime** to ground typed terms into exact cell
-values, so **create the output ON THE SOURCE SQL CONNECTION** (`SQL_owi`).
+| Output dataset | Built by | Read at runtime by | Role |
+|---|---|---|---|
+| `DRIVE_Revenues_profile` | `compute_DRIVE_Revenues_profile` | revenue sub-agent (UNDERSTAND, about_data) | business brain (`{key, payload}` contract v1) |
+| `DRIVE_Revenues_value_index` | `compute_DRIVE_Revenues_value_index` | revenue sub-agent (RESOLVE, inline SQL) | exact-value grounding; on `SQL_owi` |
+| `DRIVE_Revenues_Value_Catalog` | `compute_DRIVE_Revenues_Value_Catalog` | `attribute_lookup` (alias fallback) | rich alias / suggestions catalog |
+| `TroubleTickets_year_profile` | `compute_TroubleTickets_year_profile` | tickets sub-agent | business brain (`{key, payload}` v1) |
+| `TroubleTickets_year_value_index` | `compute_TroubleTickets_year_value_index` | tickets sub-agent (RESOLVE, inline SQL) | exact-value grounding; on `SQL_owi` |
+| `TroubleTickets_year_value_catalogue` | `compute_TroubleTickets_year_value_catalogue` | `attribute_lookup` (generic fallback) | per-value catalog |
 
-### `DRIVE_Revenues_Value_Catalog` (12 columns, approx. 4.9 k rows) - USED BY v3 (alias fallback)
+The `*_profile` payload is the **profile contract v1**: one `__dataset__` row
+(table-level: metrics, scenario, time, grain, descriptions) + one row per column
+(role, descriptions, synonyms, enum values, display pairs, stats). The
+`*_value_index` shape is `{column_name, value, value_norm, occurrences}`: every
+distinct value of every groundable text column + its FROZEN normalized form
+(lowercase, accents stripped, whitespace collapsed - shared with the sub-agent's
+`_norm`). The `*_Value_Catalog` shape is `{search_domain, source_column,
+target_column, target_value, matched_value, display_value, normalized_value,
+frequency, canonical_account_name, canonical_carrier_code, parent_group, is_alias}`.
 
-Built by `build_value_catalog_recipe.py`. A RICHER catalog than the value index:
-account resolvers with short-name aliases, the offer/business resolvers, AND
-hand-crafted **business concept aliases** maintained in code (e.g. "indirect" /
-"reseller" -> `distribution_type`, "gcp" -> `sales_entity`, "roaming hub" ->
-`Product`). Columns: `search_domain, source_column, target_column, target_value,
-matched_value, display_value, normalized_value, frequency,
-canonical_account_name, canonical_carrier_code, parent_group, is_alias`.
+## Re-paste a recipe into DSS
 
-This catalog is read **at runtime** by the `attribute_lookup` tool
-(the `attribute_lookup` tool (`../tools/`),
-`CATALOG_DATASET`): when the fast search finds no exact match, the tool queries
-the catalog (`search_domain` in account / account_group / alias) to return close
-**suggestions** ("did you mean ..."). It is the tool's alias fallback, NOT the
-primary grounding path (the primary path is inline SQL on `value_index`). The
-old `Drive_Revenues_resolve_filter_value` tool that used to read this catalog is
-being deleted; `attribute_lookup` superseded it.
-
----
-
-## Reusable for any dataset (auto-IO + NA-safe)
-
-All three recipes are **dataset-agnostic**: they auto-detect INPUT/OUTPUT from the
-Flow wiring (`recipe.get_inputs_as_datasets()` / `get_outputs_as_datasets()`), so to
-onboard a new domain (e.g. tickets) you wire them on the new base dataset with NO
-code edit. The reads are **NA-safe** (they fall back to pandas inference when an
-integer column contains NULLs, e.g. a resolution duration empty for open tickets,
-which otherwise raises "Integer column has NA values"). `build_value_catalog_recipe`
-is **dataset-adaptive**: the revenue-shaped dataset gets the rich curated catalog;
-any other dataset gets a generic per-value catalog (search_domain "value") that
-feeds the `attribute_lookup` "did you mean" fallback. Worked example + the column
-inventory: [`../../../PLAYBOOK_ADD_AGENT.md`](../../../PLAYBOOK_ADD_AGENT.md) and
-[`../../../DATASETS.md`](../../../DATASETS.md).
-
-## Deploy a recipe
-
-1. Flow: `+ Recipe -> Code -> Python`. Input the base dataset (+ optional overrides
-   input for the profile). Output = the target dataset (the value index MUST be on
-   the SQL connection).
-2. Paste the recipe code; review the CONFIG block (`ENRICH_LLM_ID` for the profile,
-   the column selection thresholds for the value index).
-3. Run. Add a **refresh scenario** (weekly or after each source refresh) so the
+1. Flow: open the target zone, `+ Recipe -> Code -> Python` (or edit the existing
+   recipe). Set the INPUT to the base dataset (+ the optional `*_profile_overrides`
+   input for a profile recipe). Set the OUTPUT to the target dataset (the value
+   index MUST be on the `SQL_owi` connection).
+2. Paste the recipe code verbatim from the matching file here. Review the CONFIG
+   block (`ENRICH_LLM_ID` for the profile, the column-selection thresholds for the
+   value index). Do not per-zone-edit the fallback constants.
+3. Run. Keep a **refresh scenario** (weekly, or after each source refresh) so the
    profile + index stay fresh.
+
+To onboard a NEW domain you wire the same three recipes on the new base dataset
+with no code edit. Worked example: [`../PLAYBOOK_ADD_AGENT.md`](../PLAYBOOK_ADD_AGENT.md).
 
 ## Tests
 
-`profile_dataset_recipe.py` and `build_value_index_recipe.py` have pure helpers
-unit-tested in `../tests/test_profiler.py` (norm, time-format detection,
-enrichment validation, column selection). Run:
-`python3 -m unittest discover -s dataiku-agents/tests`.
+The profile and value-index templates have pure helpers unit-tested in
+[`../tests/test_profiler.py`](../tests/test_profiler.py) (norm, time-format
+detection, enrichment validation, column selection). Run:
+`python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`.

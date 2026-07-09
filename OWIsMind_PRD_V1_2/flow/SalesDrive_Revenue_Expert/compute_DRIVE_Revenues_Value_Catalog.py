@@ -2,8 +2,8 @@
 """
 Build a dataset's Value Catalog (generic, auto-IO).
 
-INPUT / OUTPUT are auto-detected from the recipe (like profile_dataset_recipe and
-build_value_index_recipe); the INPUT_DATASET / OUTPUT_DATASET constants are only a
+INPUT / OUTPUT are auto-detected from the recipe (like the profile and
+value_index recipes); the INPUT_DATASET / OUTPUT_DATASET constants are only a
 fallback for a non-recipe run. The recipe is DATASET-ADAPTIVE: for the
 revenue-shaped dataset (the REVENUE_SIGNATURE columns are present) it builds the
 RICH curated catalog described below; for ANY other dataset (e.g. tickets) it
@@ -14,15 +14,15 @@ has NULLs, e.g. a duration empty for open tickets).
 
 STATUS (2026-06-18): this recipe builds the RICH value catalog (aliases,
 variants, business concepts, short account names). It IS used at runtime: the
-`attribute_lookup` tool (../tools/, CATALOG_DATASET) reads it as its alias /
+`attribute_lookup` tool (../../tools/, CATALOG_DATASET) reads it as its alias /
 suggestions fallback when the fast fact search finds no exact match. It is NOT
-the primary grounding path: the revenue sub-agent (../agents/) grounds user
+the primary grounding path: the revenue sub-agent (../../agents/) grounds user
 terms with INLINE SQL on DRIVE_Revenues_value_index (built by the sibling
-build_value_index_recipe.py), and the sub-agent calls only ONE DSS tool at
+value_index recipe), and the sub-agent calls only ONE DSS tool at
 runtime (revenue_semantic_query). The old Custom Python tool
 Drive_Revenues_resolve_filter_value that used to read this catalog is being
 deleted; attribute_lookup superseded it. The managed dataset_lookup tool was
-removed (2026-06-18). Full id map: ../../README.md (OWISMIND/README.md).
+removed (2026-06-18). Full id map: ../../README.md (OWIsMind_PRD_V1_2/README.md).
 
 Each row maps a user-typed phrase to a real (column, value) filter: account names
 (with short aliases for long names), the offer and business column values
@@ -63,7 +63,7 @@ OUTPUT_DATASET = "DRIVE_Revenues_Value_Catalog"
 # A dataset is "revenue-shaped" (gets the rich curated catalog) when it carries
 # these signature columns; any other dataset gets the generic catalog instead.
 REVENUE_SIGNATURE = {"diamond_id", "Account_name", "Phase", "amount_eur"}
-# Generic catalog caps (mirror build_value_index_recipe): skip numeric/date and
+# Generic catalog caps (mirror the value_index recipe): skip numeric/date and
 # quasi-unique / very-high-cardinality / long free-text columns.
 GENERIC_NUMERIC_TYPES = {"tinyint", "smallint", "int", "bigint", "float",
                          "double", "decimal"}
@@ -483,7 +483,7 @@ if not is_revenue_shaped:
         avg_len = series.str.len().mean()
         if avg_len and avg_len > GENERIC_MAX_AVG_LEN:
             continue
-        # Quasi-unique id guard (mirror build_value_index_recipe): a near-unique
+        # Quasi-unique id guard (mirror the value_index recipe): a near-unique
         # long-ish column is an identifier, not a nameable catalog value.
         if n_total > 1000 and nuniq >= 0.95 * n_total and avg_len and avg_len > 24:
             continue

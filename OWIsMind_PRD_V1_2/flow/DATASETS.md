@@ -4,7 +4,8 @@
 > types, role, and which runtime consumer reads it. This replaces the column
 > lists that used to be duplicated across the READMEs. The per-domain spec (ids,
 > dataset names, semantic model + tool binding, lookup config, guardrails) lives
-> in [`registry.json`](registry.json). Last reviewed 2026-06-19.
+> in [`../registry.json`](../registry.json). Last reviewed 2026-07-08 (the
+> `Solution` offer level was RE-ADDED to the revenue model on the prod clone).
 
 ## How to read the role columns
 
@@ -24,7 +25,7 @@ The four design-time datasets per domain (built by the Flow recipes): `<base>`
 
 ---
 
-## DRIVE_Revenues  (revenue_expert)  -  175,780 rows, 19 cols, connection SQL_owi
+## DRIVE_Revenues  (revenue_expert)  -  175,780 rows, 20 cols, connection SQL_owi
 
 Base table of the revenue domain. Read by the semantic model (SQL) and by
 `attribute_lookup`. The business meaning lives in `DRIVE_Revenues_profile` and the
@@ -34,8 +35,9 @@ semantic model `Drive_Revenues_Semantic_Model`.
 |---|---|---|---|---|---|
 | `Phase` | string | dimension | yes | no | scenario: ACTUALS / BUDGET / FORECAST / Q3F / HLF (default ACTUALS) |
 | `booking_type` | string | dimension | yes | no | financial bucket within a Phase (additive) |
-| `SolutionLine` | string | dimension | yes | no | offer hierarchy (broadest) |
-| `Product` | string | dimension | yes | no | offer hierarchy (most granular business level; the `Solution` level was removed) |
+| `SolutionLine` | string | dimension | yes | no | offer hierarchy (broadest business level) |
+| `Solution` | string | dimension | yes | no | offer hierarchy (mid business level, between SolutionLine and Product); removed 2026-06-22, RE-ADDED to the clone model 2026-07-08 |
+| `Product` | string | dimension | yes | no | offer hierarchy (most granular business level) |
 | `Account_name` | string | dimension | yes | no | customer display name (group by diamond_id, display this) |
 | `Account_partner` | string | dimension | yes | no | reseller in an indirect deal |
 | `distribution_type` | string | dimension | yes | no | Direct_distribution / Indirect_distribution/Resseler |
@@ -51,6 +53,13 @@ semantic model `Drive_Revenues_Semantic_Model`.
 | `diamond_id` | string | identifier | yes | no | master customer key (GROUP BY this) |
 | `sirano_product` | string | dimension | yes | no | secondary technical code (never default an offer term to it) |
 | `original_dataset` | string | free_text | no | no | lineage |
+
+> **Offer hierarchy** (broadest to most granular): `SolutionLine > Solution >
+> Product`; `sirano_product` is a secondary technical code, never the default.
+> Grounding preference order when a term could match several offer columns:
+> 1. `Product`, 2. `Solution`, 3. `SolutionLine`, 4. `sirano_product`. (The
+> `Solution` level was removed 2026-06-22 then RE-ADDED to the clone model
+> 2026-07-08 with this priority restored.)
 
 > Revenue keeps the FULL lookup search (no allowlist) - validated in DSS. The
 > lookup is wired by the orchestrator registry, not a column flag.
@@ -103,6 +112,6 @@ ticket COUNT; resolution time = `Duration_ticket_total`. `Account_name` and
 - **`CurrentStatus` exact values**: the open vs closed states (from the value
   index after the recipe runs). Pin them in the semantic-model instructions.
 - **Default metric**: COUNT of tickets (not SUM of duration). Enforce via the
-  `TroubleTickets_year_profile_overrides` dataset (see `recipes/README.md`):
+  `TroubleTickets_year_profile_overrides` dataset (see [`README.md`](README.md)):
   `__dataset__ / default_metric = ticket_count`, plus `ticket_count` (COUNT) and
   `avg_duration` (AVG of Duration_ticket_total, format `number`) in `metrics`.

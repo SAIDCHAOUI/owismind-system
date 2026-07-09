@@ -7,25 +7,20 @@
 
 ## Focus courant
 
-**MODELE SEMANTIQUE DU CLONE PROD (2026-07-08) - colonne `Solution` RE-AJOUTEE au modele revenus + regle
-de priorite d'offre restauree, et les 2 modeles (revenus + tickets) REPOINTES vers le dataset du clone (L146).**
-- Clone prod CONFIRME = **`OWISMIND_PRD_V1_2`** (duplication de DEV, ids DEV conserves, modele revenus `AHUh9hb`).
-  Piege : dupliquer un projet DSS ne repointe PAS les modeles semantiques (`datasetRef` + table des golden
-  queries restent sur DEV) ; l'UI ne le corrige pas -> scripts de repoint depuis un notebook DU CLONE :
-  `dataiku-agents/OWISMIND/add_solution_and_repoint_prod_clone.py` (revenus + Solution) et
-  `repoint_tickets_prod_clone.py` (tickets, repoint pur). DRY_RUN puis re-index ; remap `<KEY>.` + `<KEY>_`.
-- REVENUS **VALIDE DSS** par l'user (`datasetRef = OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL
-  `FROM "OWISMIND_PRD_V1_2_drive_revenues"`). TICKETS : script pret + simule (4/4), a LANCER sur le clone.
-- Hierarchie d'offre restauree : `SolutionLine > Solution > Product` ; preference 1.Product 2.Solution
-  3.SolutionLine 4.sirano_product. Detail : `sessions/2026-07-08.md` + L146.
-
-**Contexte prod (clone, 2026-07-07) :** source de verite du clone = fichiers `OWISMIND_DEV_*` colles TELS
-QUELS (zero substitution) ; `OWISMIND_PROD_V1/` + `promote_agents_to_prod.py` = LEGACY a ignorer (mise en
-coherence a faire) ; `Drive_Revenues_resolve_filter_value` SUPPRIME du clone (supplante par attribute_lookup).
-Branche git courante = `refactor/deep-clean-v1.2` (deep clean 07-07 = refactor zero-comportement prouve,
-appliquee au clone, EN TEST ; si OK -> merge main). Detail : `sessions/2026-07-07.md` + L139-L144.
+**RESTRUCTURATION DU REPO EN MIROIR EXACT DU PROJET DSS PROD `OWIsMind_PRD_V1_2` (2026-07-10).**
+- Nouvelle arborescence racine **`OWIsMind_PRD_V1_2/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`,
+  `tests/`) = miroir 1:1 du projet DSS prod (CLONE de DEV, ids DEV conserves ; orchestrateur `038G7mlF`
+  -> sous-agents revenus `agent:bHrWLyOL` + tickets `agent:NcE9LD2i`). L'ancien `dataiku-agents/` a
+  DISPARU ; `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` (jumeau prod a la main) = LEGACY SUPPRIMES.
+- Plugin `plugin.json` **1.2.0** ; zip prod versionne **`Plugin/ready-for-dataiku/owismind-v1_2-upload.zip`**
+  (nom derive de la version, `.` -> `_`, major_minor). Mecanisme dev coexistant CONSERVE
+  (`tools/build_dev_plugin.py`, id `owismind_dev`, zip `owismind-v<VER>-dev-upload.zip`).
+- Git = **une branche par version**, nommee comme le projet DSS prod : `OWIsMind_PRD_V1_2` = prod courante
+  (source de verite) ; `OWIsMind_PRD_V1_3-dev` = prochaine version (feedback hub WIP, PRESERVE) ; suffixe
+  `-dev` retire a la validation ; `main` DEPRECIEE. Detail : `sessions/2026-07-10.md`.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-10 : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne `owismind-v1_2-upload.zip`, branches par version ; legacy `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimes). Voir `sessions/2026-07-10.md`.
 - 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
 - 2026-07-07 Run 2 : bascule strategie prod = CLONE du projet DSS DEV (memes ids, tickets inclus). L144.
 - 2026-07-07 Run 1 : deep clean pro sur branche `refactor/deep-clean-v1.2` (refactor zero-comportement, prouve ; setup Claude Code refondu ; docs v1.1). L141-L143.
@@ -57,14 +52,12 @@ appliquee au clone, EN TEST ; si OK -> merge main). Detail : `sessions/2026-07-0
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- CLONE prod : lancer `repoint_tickets_prod_clone.py` sur le clone + smoke tickets end-to-end + tester le
-  grounding `Solution` dans le Playground revenus. Puis smoke complet (resolution sous-agent dans le clone,
-  ids des tools si recrees) + mise en coherence repo (PROD_V1 legacy, README/registry). Voir
-  `sessions/2026-07-08.md` + L146 (revenus + repoint = FAITS, valides DSS).
-- FINIR la validation de la branche `refactor/deep-clean-v1.2` (appliquee au clone) : si OK, merge dans
-  main = version de prod ; sinon debug avec Opus. Voir `sessions/2026-07-07.md`.
-- Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur PROD `Xrv7GvfG` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
+- CLONE prod : lancer `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
+  + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
+  (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146
+  (revenus + repoint = FAITS, valides DSS).
+- Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur prod (clone) `038G7mlF` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
 - LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
 - Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `update_aligned_semantic_model.py` + re-dump) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).
-- 2e agent TICKETS : finaliser + pofiner (`dataiku-agents/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
+- 2e agent TICKETS : finaliser + pofiner (`OWIsMind_PRD_V1_2/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
 - Backlog differe : recueillir les ajustements user sur le trust layer ; consolidation SalesDrive v2 (cas d'ambiguite reelle) ; re-tester en DSS L040/L041 ; Evidence v3 (restriction admin datasets, keyset pagination) ; 2e task mentionnee par l'user le 2026-06-09 (a clarifier).

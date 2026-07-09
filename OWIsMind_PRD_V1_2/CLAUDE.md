@@ -1,50 +1,29 @@
-# CLAUDE.md - dataiku-agents/
+# CLAUDE.md - OWIsMind_PRD_V1_2/
 
 > Orientation for any Claude session touching the agent system, written to be
 > self-sufficient: read this and you understand how the OWIsMind agents work
-> without anyone pasting code. Full architecture: [`README.md`](README.md).
-> Engineering reference for building agents safely: the skill
-> `agentique-python-dataiku`. Project memory (source of truth, PRIMES over the
+> without anyone pasting code. Full architecture + the repo <-> DSS map:
+> [`README.md`](README.md). Engineering reference for building agents safely: the
+> skill `agentique-python-dataiku`. Project memory (source of truth, PRIMES over the
 > cadrage guides): `memory/PROJECT_STATE.md` + `memory/LESSONS.md`.
 
 ## What this is
 
 OWIsMind is the internal data assistant of Orange Wholesale International, running
 as agents inside Dataiku DSS and used through a Vue web app. This folder is the
-**source of truth** for those agents: an **orchestrator** that chats and routes,
-a **revenue sub-agent** expert of `DRIVE_Revenues`, a second **tickets sub-agent**
-(being built), the **Flow recipes** that fabricate the sub-agents' knowledge, and
-the **semantic models** that write the SQL. You edit HERE, then paste back into the
-DSS Code Agents (env 3.11); DSS direct edits are overwritten on the next paste.
+**repo mirror and source of truth** for the DSS **production** project
+`OWIsMind_PRD_V1_2` (project key `OWISMIND_PRD_V1_2`): an **orchestrator** that
+chats and routes, a **revenue sub-agent** expert of `DRIVE_Revenues`, a **tickets
+sub-agent** expert of `TroubleTickets_year`, the **Flow recipes** that fabricate the
+sub-agents' knowledge, and the **semantic models** that write the SQL. You edit
+HERE, then paste back into the DSS objects (env 3.11 for Code Agents); DSS direct
+edits are overwritten on the next paste.
 
-## Two DSS projects, one design - develop in DEV, promote to PROD
-
-The agents live in **two Dataiku projects** with the **same design** but
-**different object ids**. The code is split accordingly under
-[`OWISMIND/`](OWISMIND/README.md), one complete ready-to-paste copy per project,
-every deployable file **prefixed with the project key**:
-
-```
-OWISMIND/
-  README.md                 <- the DEV->PROD workflow + the full id map (read this)
-  OWISMIND_DEV/             develop + validate HERE first  (revenue + tickets)
-    agents/          OWISMIND_DEV_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py /
-                     _CSSO_Trouble_Tickets_Expert.py
-    tools/           OWISMIND_DEV_attribute_lookup_tool.py
-    recipes/  semantic_model/ (scripts + MODEL.md + <ModelName>.v1.json config)  registry.json
-  OWISMIND_PROD_V1/         promote here once DEV is good  (revenue only, no tickets yet)
-    agents/          OWISMIND_PROD_V1_OWIsMind_orchestrator.py / _SalesDrive_revenue_expert.py
-    tools/           OWISMIND_PROD_V1_attribute_lookup_tool.py
-    recipes/  semantic_model/  registry.json
-  migrate_semantic_model_to_project.py  remap_semantic_model.py   (cross-project utils)
-```
-
-**Workflow:** make every change in `OWISMIND_DEV`, paste into the DEV DSS objects,
-validate; then port the same change into the matching `OWISMIND_PROD_V1_*` file
-(PROD ids already baked in) and paste into PROD. Never edit PROD untested. The
-tickets agent is the live example: finished in DEV, intentionally **absent from
-PROD** until validated. The **per-project id map** is in
-[`OWISMIND/README.md`](OWISMIND/README.md) and each `registry.json`.
+**This project is a clone of the DEV project `OWISMIND_DEV`.** It was created by
+**duplicating** DEV, so every DSS object id is the **DEV id, preserved**.
+Production launched 2026-07, demoed and in active use. There is no separate "PROD
+twin with different ids" anymore; prod IS the clone. Versions advance by git branch
+(see below), not by hand-porting between two DSS projects.
 
 ## The mechanism, end to end (one chat turn)
 
@@ -59,110 +38,119 @@ python-lib Flask backend  (repo root, not this folder)
 OWIsMind_orchestrator  (LangGraph Code Agent, "sub-agents as tools")
    │  ONE model drives the whole turn (picked by the user's mode: smart/pro/claude).
    │  It REASONS, then on the SAME turn either:
-   │    - calls attribute_lookup (built-in)  for a fast value read, OR
-   │    - calls ask_revenue_expert           to delegate a computed figure, OR
+   │    - calls attribute_lookup (built-in)   for a fast value read, OR
+   │    - calls ask_revenue_expert / ask_tickets_expert  to delegate a computed figure, OR
    │    - renders the last result (show_chart / show_table / show_kpi), then writes the analysis.
    │  Honesty firewall: it holds NO business data, never invents or denies a figure;
    │  it may only admit "no AGENT for this domain", never "the data is missing".
    ├──────────────────────────────┬──────────────────────────────────────────────┐
    ▼ (fast read)                   ▼ (computed figure, slow)                       │
-attribute_lookup                SalesDrive_revenue_expert  (LangGraph Code Agent)  │
+attribute_lookup                revenue / tickets sub-agent  (LangGraph Code Agents)│
   Custom Python tool              UNDERSTAND -> RESOLVE -> QUERY -> RENDER          │
-  one ILIKE over DRIVE_Revenues     1. UNDERSTAND : 1 LLM (strict JSON), prompt     │
+  one ILIKE over the base           1. UNDERSTAND : 1 LLM (strict JSON), prompt     │
   text columns; Value_Catalog          generated from the profile                  │
   alias fallback; read-only         2. RESOLVE   : ground user terms by INLINE      │
                                        read-only SQL on value_index (exact->fuzzy)  │
-                                    3. QUERY     : hand a grounded question to       │
-                                       revenue_semantic_query -> it writes+runs SQL │
+                                    3. QUERY     : hand a grounded question to the   │
+                                       semantic-query tool -> it writes+runs SQL    │
                                        (technical failure -> own direct-SQL fallback)│
                                     4. RENDER    : table + figures by code, "[Scope]"│
                                        line; about_data answered from profile (0 SQL)│
                                           │                                          │
                                           ▼                                          │
-                                  revenue_semantic_query (Semantic Model Query tool) │
+                                  revenue_semantic_query / tickets_semantic_query    │
                                           ▼                                          │
-                                  Drive_Revenues semantic model -> PostgreSQL (read-only)
+                                  the domain semantic model -> PostgreSQL (read-only)
 ```
 
 Everything the user sees as a figure is SQL-grounded: the orchestrator cannot
 invent a number because it owns none. Work shows live on the timeline; executed
 SQL surfaces in the Evidence panel (every SQL emits a `semantic-model-query` span).
 
-## Live inventory (per project - full id map in OWISMIND/README.md)
+## Live inventory (ids preserved from DEV by the clone; full map in README.md)
 
 ### Code Agents (env 3.11)
 
-| Code Agent | File (per project) | DEV id | PROD id |
-|---|---|---|---|
-| OWIsMind_orchestrator | `OWISMIND_<PROJ>_OWIsMind_orchestrator.py` | `038G7mlF` | `Xrv7GvfG` |
-| SalesDrive_revenue_expert | `OWISMIND_<PROJ>_SalesDrive_revenue_expert.py` | `bHrWLyOL` | `uO5hEzAs` |
-| CSSO_Trouble_Tickets_Expert | `OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py` | `NcE9LD2i` (being built) | not in PROD yet |
+| Code Agent | File | Id |
+|---|---|---|
+| OWIsMind_orchestrator | `agents/OWIsMind_orchestrator.py` | `038G7mlF` (`agent:038G7mlF`) |
+| SalesDrive_revenue_expert | `agents/SalesDrive_revenue_expert.py` | `bHrWLyOL` (`agent:bHrWLyOL`) |
+| CSSO_Trouble_Tickets_Expert | `agents/CSSO_Trouble_Tickets_Expert.py` | `NcE9LD2i` (`agent:NcE9LD2i`) |
+
+`SalesDrive_AI_Agent` (`rNTZ781a`) is a LEGACY early agent, still listed in DSS but
+NOT in the runtime chain and NOT mirrored in this repo. Ignore it.
 
 ### DSS agent tools
 
-| Tool | Type | DEV id | PROD id | Called by |
-|---|---|---|---|---|
-| `revenue_semantic_query` | Semantic Model Query | `v4oqA6R` | `sgk5pfln` | the **revenue sub-agent** (QUERY) |
-| `tickets_semantic_query` | Semantic Model Query | `nEirlso` | not in PROD yet | the **tickets sub-agent** (QUERY) |
-| `attribute_lookup` | Custom Python (`OWISMIND_<PROJ>_attribute_lookup_tool.py`) | `UUoynaL` | `szOZCoU` | the **orchestrator** (built-in, both domains) |
-
-`Drive_Revenues_resolve_filter_value` (old Custom Python, called by nobody) is
-**TO DELETE** in both projects (superseded by `attribute_lookup`). `dataset_lookup`
-(managed, `9FEzVZk`) was already removed. The names `resolve_filter_value` /
-`dataset_sql_query` survive only as frozen **timeline event labels** in the
-sub-agent (`KNOWN_TOOL_NAMES`), not as tool calls.
-
-Each `revenue_semantic_query` runs **Agent mode OFF (linear SQL pipeline)**, LLM
-`vertex_ai/claude-sonnet-4-6`, embedding `vertex_ai/text-embedding-005`, access
-datasets as the calling user. Its DSS "Description for LLM" must drop the stale
-`resolve_filter_value` precondition (corrected text in the semantic_model README).
-
-### Datasets (Flow, design time -> read at runtime; same names in both projects)
-
-| Dataset | Built by (per-project `recipes/`) | Read at runtime by | Role |
+| Tool | Type | Id | Called by |
 |---|---|---|---|
-| `DRIVE_Revenues` | source (175,780 rows, 19 cols) | semantic model (SQL); `attribute_lookup` | the revenue base |
-| `DRIVE_Revenues_profile` | `profile_dataset_recipe.py` | revenue sub-agent (UNDERSTAND, about_data) | business brain (`{key, payload}` v1) |
-| `DRIVE_Revenues_value_index` | `build_value_index_recipe.py` | revenue sub-agent (RESOLVE, inline SQL) | exact-value grounding; MUST be on the SQL connection |
-| `DRIVE_Revenues_Value_Catalog` | `build_value_catalog_recipe.py` | `attribute_lookup` (alias fallback) | rich alias / suggestions catalog |
-| `TroubleTickets_year` (+ `_profile`, `_value_index`, `_value_catalogue`) | the same three recipes (generic path) | tickets sub-agent / `attribute_lookup` | the incident-tickets base (DEV only, being built) |
+| `revenue_semantic_query` | Semantic Model Query (Custom_agent_tool) | `v4oqA6R` | the **revenue sub-agent** (QUERY) |
+| `tickets_semantic_query` | Semantic Model Query (Custom_agent_tool) | `nEirlso` | the **tickets sub-agent** (QUERY) |
+| `attribute_lookup_tool` | Custom Python (`tools/attribute_lookup_tool.py`) | `UUoynaL` | the **orchestrator** (built-in, both domains) |
+
+`Drive_Revenues_resolve_filter_value` (old Custom Python, `aNxeOc4`, called by
+nobody) is **legacy, pending DSS deletion** (superseded by `attribute_lookup_tool`).
+`dataset_lookup` (managed, `9FEzVZk`) was already removed. The names
+`resolve_filter_value` / `dataset_sql_query` survive only as frozen **timeline event
+labels** in the sub-agent (`KNOWN_TOOL_NAMES`), not as tool calls - do not conflate
+them with the dead `Drive_Revenues_resolve_filter_value` tool.
+
+Each Semantic Model Query tool runs **Agent mode OFF (linear SQL pipeline)**, LLM
+`vertex_ai/claude-sonnet-4-6`, embedding `vertex_ai/text-embedding-005`, access
+datasets as the calling user. The "Description for LLM" to paste is in
+`semantic-models/TOOL_DESCRIPTIONS.md`.
+
+### Datasets (Flow, design time -> read at runtime)
+
+| Dataset | Built by (per-zone recipe) | Read at runtime by | Role |
+|---|---|---|---|
+| `DRIVE_Revenues` | source (sync from `DRIVE.Revenues`, ~176 k rows, 20 cols) | semantic model (SQL); `attribute_lookup` | the revenue base |
+| `DRIVE_Revenues_profile` | `compute_DRIVE_Revenues_profile` | revenue sub-agent (UNDERSTAND, about_data) | business brain (`{key, payload}` v1) |
+| `DRIVE_Revenues_value_index` | `compute_DRIVE_Revenues_value_index` | revenue sub-agent (RESOLVE, inline SQL) | exact-value grounding; MUST be on the SQL connection |
+| `DRIVE_Revenues_Value_Catalog` | `compute_DRIVE_Revenues_Value_Catalog` | `attribute_lookup` (alias fallback) | rich alias / suggestions catalog |
+| `TroubleTickets_year` (+ `_profile`, `_value_index`, `_value_catalogue`) | the same three recipes in the `CSC_ticket_AI_Agent` zone | tickets sub-agent / `attribute_lookup` | the incident-tickets base |
+
+The `Webapp Zone` also holds two runtime datasets written by the plugin backend
+(not by these recipes): `OWISMIND_PRD_V1_2_beta_owismind_webapp_events_v1` (usage
+analytics) and `beta-owismind_webapp_traces_v2` (agent traces).
 
 ### Semantic models
 
-- **revenue**: 3 entities (`revenue_record`, `customer_account`, `commercial_offer`)
-  all mapping to ONE physical table (`DRIVE_Revenues`, never JOIN), a
-  `Total Revenue (EUR)` metric, named filters, golden queries, a glossary, and the
-  SQL instructions (Phase=ACTUALS default; offer priority Product > SolutionLine >
-  sirano_product, the `Solution` level was removed; never-default-sirano +
-  transparency; GROUP BY diamond_id, display Account_name + carrier_code). DEV =
-  `Drive_Revenues_Semantic_Model` (`AHUh9hb`); PROD = `Drive_Revenues_Model`
-  (`a7K9jYk`). Readable snapshot: each project's
-  `semantic_model/MODEL.md`.
-- **tickets** (DEV only, being built): `TroubleTickets_Semantic_Model` (`dM4jA4G`).
+- **revenue** (`Drive_Revenues_Semantic_Model`, `AHUh9hb`): 3 entities
+  (`revenue_record`, `customer_account`, `commercial_offer`) all mapping to ONE
+  physical table (`DRIVE_Revenues`, never JOIN), a `Total Revenue (EUR)` metric,
+  named filters, golden queries, a glossary, and the SQL instructions (Phase=ACTUALS
+  default; offer priority `Product > Solution > SolutionLine > sirano_product`;
+  never-default-sirano + transparency; GROUP BY diamond_id, display Account_name +
+  carrier_code). **Repointed to the clone dataset** (`datasetRef
+  OWISMIND_PRD_V1_2.DRIVE_Revenues`, table `"OWISMIND_PRD_V1_2_drive_revenues"`) and
+  the **`Solution` offer column re-added 2026-07-08**, VALIDATED in DSS. Readable
+  snapshot: `semantic-models/MODEL.md`.
+- **tickets** (`TroubleTickets_Semantic_Model`, `dM4jA4G`): default metric
+  `COUNT(DISTINCT id)`, `Duration_ticket_total` in minutes (AVG). Repoint script
+  `semantic-models/scripts/repoint_tickets_prod_clone.py` READY, simulated 4/4, not
+  yet launched on the clone.
 
 ### Modes (model per turn)
 
 `smart` (default) = `vertex_ai/gemini-3.1-flash-lite`; `pro` =
 `vertex_ai/gemini-3.5-flash`; `claude` = `vertex_ai/claude-sonnet-4-6` (all with the
 connection prefix `openai:LLM-7064-revforecast:`). One model drives the whole
-turn (no escalation); the mode is propagated to the sub-agent; the semantic tool
-stays on Sonnet in every mode.
+turn (no escalation); the mode is propagated to the sub-agent; each semantic tool
+stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
 
 ## Folder map
 
 | Path | What |
 |---|---|
-| `README.md` | Master guide: architecture, Flow, models, deploy, extend, roadmap, contracts. |
-| [`OWISMIND/README.md`](OWISMIND/README.md) | The DEV->PROD workflow + the full per-project id map. **Start here for deploy.** |
-| `OWISMIND/<PROJ>/agents/` | The Code Agent files (orchestrator + sub-agents), prefixed, per-project ids baked in + a deploy-target header. Paste each into its DSS Code Agent (env 3.11). |
-| `OWISMIND/<PROJ>/tools/` | The `attribute_lookup` Custom Python tool, prefixed, per-project id. |
-| `OWISMIND/<PROJ>/recipes/` | The three Flow recipes (profile, value index, value catalog). Dataset-agnostic, identical across projects. |
-| `OWISMIND/<PROJ>/semantic_model/` | Build/update/dump/drop scripts (per-project ids) + `MODEL.md` (readable live model) + `<ModelName>.v1.json` (the live model config, paste a `dump_*.py` output here so it never needs pasting in chat). |
-| `OWISMIND/<PROJ>/registry.json` | Per-project DEV-OWNED manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
-| `OWISMIND/migrate_…` , `remap_…` | Cross-project promotion utilities (copy / repoint a semantic model DEV->PROD). |
-| `DATASETS.md` | Canonical column inventory per dataset. |
+| `README.md` | Master guide: the repo <-> DSS map, architecture, Flow, models, tools, git model, contracts. |
+| `agents/` | The three Code Agent files (orchestrator + revenue + tickets sub-agents). Paste each into its DSS Code Agent (env 3.11). Ids baked into each CONFIG. |
+| `tools/attribute_lookup_tool.py` | The `attribute_lookup` Custom Python tool (`UUoynaL`). |
+| `flow/` | The Flow recipes per zone (`SalesDrive_Revenue_Expert/`, `CSC_ticket_AI_Agent/`, `Webapp_Zone/`) + `README.md` + `DATASETS.md`. Dataset IO comes from the DSS Flow wiring, not code constants. |
+| `semantic-models/` | Per-model `.v1.json` snapshots + `scripts/` (build / update / dump / drop / migrate / remap / repoint) + `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. |
+| `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
 | `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). |
-| `tests/` | DSS-free unit tests, run against the **DEV** copies: `python3 -m unittest discover -s dataiku-agents/tests`. |
+| `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. |
 
 ## Rules you must not break
 
@@ -174,9 +162,9 @@ stays on Sonnet in every mode.
    `AGENT_RESULT`, `sql_id`, registry `block_labels`/`tool_labels` <-> sub-agent
    `KNOWN_*`, the profile contract v1). The webapp / Evidence depend on them.
    Never rename, only add. An anti-drift test guards the registry <-> sub-agent.
-3. **Two callers, two tools, never crossed**: the sub-agent calls only
-   `revenue_semantic_query`; the orchestrator calls only `attribute_lookup`. The
-   sub-agent is UNCHANGED by the lookup wiring (it is an orchestrator built-in).
+3. **Two callers, two tools, never crossed**: a sub-agent calls only its
+   `*_semantic_query` tool; the orchestrator calls only `attribute_lookup`. The
+   sub-agents are UNCHANGED by the lookup wiring (it is an orchestrator built-in).
 4. **One enabled capability per business domain** (rollback = re-flip the flags).
 5. **Standalone files**: agents import only stdlib + `dataiku` + `langgraph`
    (env 3.11); recipes may use pandas (design-time). No plugin import.
@@ -185,33 +173,37 @@ stays on Sonnet in every mode.
    (deterministic extraction) and NEVER on the orchestrator (it disables
    reasoning in DSS 14).
 7. **Dataiku safety**: read-only SQL, statement timeout, bounded parallelism,
-   no raw-row data sent to the LLM. Conseil avant toute suppression de
-   feature/dataset (lesson L087). Ask before anything risky for the instance.
+   no raw-row data sent to the LLM. Ask before any deletion of a feature/dataset
+   (lesson L087) or anything risky for the instance.
 8. **Code + comments in English**; no em dash (U+2014) or en dash (U+2013)
    anywhere (project rule #9).
-9. **DEV before PROD**: never paste an untested change into a PROD object. Keep
-   the DEV and PROD copies in sync only through the deliberate promotion step, and
-   keep each `registry.json` matching its orchestrator's CAPABILITIES.
+9. **Changes land through the next `-dev` branch, then promote by version.**
+   Develop and validate a change on the current dev branch (`OWIsMind_PRD_V1_3-dev`),
+   validate it in the DSS clone, then promote by **dropping the `-dev` suffix** so
+   the validated dev branch becomes the new prod branch. Never paste an untested
+   change into the live prod objects. Keep `registry.json` matching the
+   orchestrator's CAPABILITIES.
 
 ## Deploy reminder
 
-A change is deployed by **pasting the matching `OWISMIND_<PROJ>_*` file** into its
-DSS Code Agent / Custom Python tool (env 3.11 for Code Agents). The ids are already
-baked into each file's CONFIG + deploy-target header; verify them against
-[`OWISMIND/README.md`](OWISMIND/README.md) / the project `registry.json`. Recipe
-changes deploy in the Flow (refresh scenario). Agent-only changes need no zip
-upload; a `python-lib` backend change does (upload zip + restart backend).
+A change is deployed by **pasting the matching file** into its DSS Code Agent /
+Custom Python tool (env 3.11 for Code Agents). The ids are baked into each file's
+CONFIG; verify them against `README.md` / `registry.json`. Recipe changes deploy in
+the Flow (refresh scenario). Agent-only changes need no zip upload; a `python-lib`
+backend change does (upload the versioned zip + restart the backend).
 
-**Promotion DEV -> PROD:** validate in DEV, then copy the change into the
-`OWISMIND_PROD_V1_*` twin (PROD ids already set) and paste into PROD.
+**Version flow (git model).** The prod project IS the clone of DEV: there is no
+hand-port between two DSS projects. New domains and changes are built on the next
+`-dev` branch (`OWIsMind_PRD_V1_3-dev`), validated in the DSS clone, then promoted
+to prod by dropping the `-dev` suffix (the dev branch becomes the new prod branch).
+`main` is deprecated. See `README.md` section 9.
 
 **Still pending in DSS:** (1) drop the stale `resolve_filter_value` precondition
-from each `revenue_semantic_query` "Description for LLM"; (2) delete the dead
-`Drive_Revenues_resolve_filter_value` tool object in both projects; (3) finish the
-**tickets agent in DEV** (see [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md):
-profile + value_index + COUNT default metric, create `TroubleTickets_Semantic_Model`
-and inject the brain, create the `tickets_semantic_query` tool, create the
-`CSSO_Trouble_Tickets_Expert` Code Agent, re-paste the DEV orchestrator), then
-promote tickets to PROD with PROD ids. Order matters: in DEV, fill the real tickets
-`agent_id` (and create the Code Agent) BEFORE re-pasting the orchestrator, or set
-`enabled:False` first (honest capability-gap via `BUSINESS_DOMAINS`).
+from each `revenue_semantic_query` "Description for LLM" (corrected text in
+`semantic-models/TOOL_DESCRIPTIONS.md`); (2) delete the dead
+`Drive_Revenues_resolve_filter_value` tool object (`aNxeOc4`); (3) finish the
+**tickets** curation - launch `semantic-models/scripts/repoint_tickets_prod_clone.py`
+on the clone (repoints `TroubleTickets_Semantic_Model` `dM4jA4G` to the clone
+dataset; simulated 4/4), apply the profile overrides (COUNT_DISTINCT id,
+time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the
+`.v1.json`, then smoke-test tickets end-to-end (see `PLAYBOOK_ADD_AGENT.md`).

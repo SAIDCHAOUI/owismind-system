@@ -12,10 +12,16 @@ name) deterministically; the prod build/package is left untouched. Invoked by th
 skill. `--v2` emits a third coexisting plugin (`owismind_dev_v2`); `--check` validates the rewrite logic
 without building.
 
-## `promote_agents_to_prod.py`
+Artifact names are **version-derived** from `Plugin/owismind/plugin.json` (`major_minor` with
+underscores, e.g. `1.2.0` -> `1_2`), matching the one-branch-per-version model:
 
-Regenerates the `OWISMIND_PROD_V1_*` Code Agent files from their `OWISMIND_DEV_*` sources, applying the
-per-project id substitutions and surgically removing the tickets-expert block (intentionally absent
-from prod until validated). Idempotent: it prints the DEV/PROD diff for review, refuses to write on any
-unexpected state, and compile-checks the generated files. The id map lives in
-`dataiku-agents/OWISMIND/README.md`.
+- DEV:    `Plugin/ready-for-dataiku/owismind-v{VER}-dev-upload.zip`
+- DEV v2: `Plugin/ready-for-dataiku/owismind-v{VER}-dev-v2-upload.zip`
+
+Before a build the script clears stale `owismind-v*-dev-*upload*` artifacts and the legacy fixed
+`owismind_dev-upload*` names, keeping only the current version's DEV / DEV-v2 pair.
+
+> Prod promotion is no longer a script. Since 2026-07, PROD is a **clone of the DEV DSS project**
+> (`OWISMIND_PRD_V1_2` duplicates `OWISMIND_DEV`, all object ids preserved), so there is no per-project
+> id substitution to run. When an agent needs re-pasting, its source lives at `OWIsMind_PRD_V1_2/agents/`
+> (id map in `OWIsMind_PRD_V1_2/README.md` + `OWIsMind_PRD_V1_2/registry.json`).

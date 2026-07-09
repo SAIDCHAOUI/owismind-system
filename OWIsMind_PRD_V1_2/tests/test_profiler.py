@@ -6,7 +6,7 @@ functions are tested; pandas-dependent paths are skipped when pandas is not
 installed locally (they run in DSS where pandas is guaranteed).
 
 Run from the repo root:
-    python3 -m unittest discover -s dataiku-agents/tests -v
+    python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests -v
 """
 
 import importlib.util
@@ -52,9 +52,9 @@ def _load(name, rel_path):
 
 
 prof = _load("profiler_under_test",
-             "OWISMIND/OWISMIND_DEV/recipes/profile_dataset_recipe.py")
+             "flow/SalesDrive_Revenue_Expert/compute_DRIVE_Revenues_profile.py")
 vidx = _load("value_index_under_test",
-             "OWISMIND/OWISMIND_DEV/recipes/build_value_index_recipe.py")
+             "flow/SalesDrive_Revenue_Expert/compute_DRIVE_Revenues_value_index.py")
 
 try:
     import pandas  # noqa: F401

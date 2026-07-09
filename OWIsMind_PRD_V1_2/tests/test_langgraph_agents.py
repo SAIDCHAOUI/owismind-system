@@ -1,7 +1,7 @@
 """DSS-free unit tests for the LangGraph agents (DEV copies):
-  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_OWIsMind_orchestrator.py  (agentic tool-calling orchestrator)
-  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py  (revenue sub-agent)
-  - OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py  (tickets sub-agent)
+  - OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py  (agentic tool-calling orchestrator)
+  - OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py  (revenue sub-agent)
+  - OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py  (tickets sub-agent)
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent files load (importlib),
 so only PURE logic is exercised - registry/tool specs, the honesty sources block,
@@ -9,7 +9,7 @@ trace SQL/usage extraction, artifact validation, language detection, and the fro
 cross-file event contract (anti-drift). The graph itself is NOT run (it needs DSS).
 
 Run from the repo root:
-    python3 -m unittest discover -s dataiku-agents/tests -v
+    python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests -v
 """
 
 import importlib.util
@@ -85,16 +85,16 @@ _install_stubs()
 def _load(mod_name, filename):
     # Tests run against the DEV copies (the development source of truth).
     path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", "agents", filename))
+        os.path.dirname(__file__), "..", "agents", filename))
     spec = importlib.util.spec_from_file_location(mod_name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-orch = _load("orchestrator_under_test", "OWISMIND_DEV_OWIsMind_orchestrator.py")
-dx = _load("dataset_expert_lg_under_test", "OWISMIND_DEV_SalesDrive_revenue_expert.py")
-tx = _load("tickets_expert_under_test", "OWISMIND_DEV_CSSO_Trouble_Tickets_Expert.py")
+orch = _load("orchestrator_under_test", "OWIsMind_orchestrator.py")
+dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
+tx = _load("tickets_expert_under_test", "CSSO_Trouble_Tickets_Expert.py")
 
 
 class TestModelIds(unittest.TestCase):

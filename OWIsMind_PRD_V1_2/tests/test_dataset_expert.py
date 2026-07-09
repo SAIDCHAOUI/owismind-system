@@ -1,5 +1,5 @@
 """DSS-free unit tests for the revenue Dataset Expert (now the LangGraph agent
-``dataiku-agents/OWISMIND/OWISMIND_DEV/agents/OWISMIND_DEV_SalesDrive_revenue_expert.py``).
+``OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py``).
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent file is loaded via
 importlib. Only PURE functions are tested (profile parsing, understanding
@@ -9,7 +9,7 @@ linear ``dataset_expert_agent.py``, so coverage is preserved on the ACTIVE file.
 Anything touching LLM Mesh / SQLExecutor2 must be validated on the DSS instance.
 
 Run from the repo root:
-    python3 -m unittest discover -s dataiku-agents/tests -v
+    python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests -v
 """
 
 import importlib.util
@@ -81,8 +81,8 @@ def _install_stubs():
 _install_stubs()
 
 _AGENT_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "OWISMIND", "OWISMIND_DEV", "agents",
-    "OWISMIND_DEV_SalesDrive_revenue_expert.py"))
+    os.path.dirname(__file__), "..", "agents",
+    "SalesDrive_revenue_expert.py"))
 _SPEC = importlib.util.spec_from_file_location("dataset_expert_under_test",
                                                _AGENT_PATH)
 dx = importlib.util.module_from_spec(_SPEC)

@@ -9,7 +9,7 @@ matching block verbatim. Keep it in sync with the model instructions
 
 ---
 
-## tickets_semantic_query  (model TroubleTickets_Semantic_Model, DEV id nEirlso)
+## tickets_semantic_query  (model TroubleTickets_Semantic_Model, id nEirlso)
 
 ```
 Queries the OWI incident-tickets data (TroubleTickets) and returns a result table that is
@@ -52,7 +52,7 @@ Empty result: say "no data found for [the filters and period]"; never relax filt
 
 ---
 
-## revenue_semantic_query  (model Drive_Revenues_Semantic_Model, DEV id v4oqA6R)
+## revenue_semantic_query  (model Drive_Revenues_Semantic_Model, id v4oqA6R)
 
 Replaces the stale text that referenced the deleted `Drive_Revenues_resolve_filter_value`
 precondition (grounding is now inline; that tool is being removed).

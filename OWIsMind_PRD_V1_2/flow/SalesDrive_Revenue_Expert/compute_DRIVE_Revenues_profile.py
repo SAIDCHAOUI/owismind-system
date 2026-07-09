@@ -58,7 +58,7 @@ PROFILE_VERSION = 1
 # extracts a named entity (e.g. a customer name) as a term, grounding is skipped
 # and the SQL writer is left to GUESS the value. Keep INDEX_MAX_DISTINCT /
 # INDEX_ID_UNIQUENESS_RATIO and should_index_value_column() in sync with
-# build_value_index_recipe.py (same rule, intentionally duplicated like norm_value).
+# the value_index recipe (same rule, intentionally duplicated like norm_value).
 INDEX_MAX_DISTINCT = 20000
 INDEX_ID_UNIQUENESS_RATIO = 0.95
 
@@ -294,7 +294,7 @@ def safe_json_parse(text):
 
 def should_index_value_column(dss_type, distinct_count, row_count, avg_len):
     """Whether this column will be grounded in the value index. MUST mirror
-    build_value_index_recipe.should_index_column (minus the per-recipe
+    the value_index recipe should_index_column (minus the per-recipe
     INCLUDE/EXCLUDE allowlists). Drives the profile `indexed` flag so UNDERSTAND
     advertises the right groundable columns and RESOLVE filters candidates to
     them. Skips numbers, dates, free text and quasi-unique long ids."""

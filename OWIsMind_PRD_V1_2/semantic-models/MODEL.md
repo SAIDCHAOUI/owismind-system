@@ -3,10 +3,11 @@
 > Human-readable snapshot of the **live** semantic model that the
 > `revenue_semantic_query` tool queries. This file is the readable truth; the
 > canonical SQL-generation rules live verbatim in
-> [`build_aligned_semantic_model.py`](build_aligned_semantic_model.py)
+> [`scripts/build_aligned_semantic_model.py`](scripts/build_aligned_semantic_model.py)
 > (`NEW_INSTRUCTIONS`); the full machine config can be exported with
-> [`dump_semantic_model.py`](dump_semantic_model.py). Last reviewed 2026-06-22
-> (the `Solution` offer level was removed from the dataset).
+> [`scripts/dump_semantic_model.py`](scripts/dump_semantic_model.py). This snapshot
+> was last reviewed 2026-06-22 and predates the 2026-07-08 `Solution` re-add +
+> repoint to the clone dataset (see [`README.md`](README.md); re-dump pending).
 
 ## Where it sits in the system
 
@@ -21,7 +22,7 @@ sub-agent SalesDrive_revenue_expert
    Drive_Revenues_Semantic_Model  (this model, version v1 / Active)
        │
        ▼
-   PostgreSQL  →  OWISMIND_DEV.DRIVE_Revenues   (read as the calling user)
+   PostgreSQL  →  OWISMIND_PRD_V1_2.DRIVE_Revenues   (read as the calling user)
 ```
 
 The sub-agent never writes the final SQL when `SQL_ENGINE="semantic_tool"` (the
@@ -34,7 +35,7 @@ technical fallback (`FALLBACK_TO_DIRECT=True`).
 | Setting | Value |
 |---|---|
 | Tool name / id | `revenue_semantic_query` / `v4oqA6R` |
-| Project | `OWISMIND_DEV` |
+| Project | `OWISMIND_PRD_V1_2` |
 | Semantic Model | `Drive_Revenues_Semantic_Model` |
 | Version | Active (default) = `v1` |
 | LLM (SQL generation) | `vertex_ai/claude-sonnet-4-6` |
@@ -53,12 +54,12 @@ model binding.
 > has confirmed all business terms are resolved"*. That precondition is wrong:
 > `Drive_Revenues_resolve_filter_value` is being deleted and grounding is now
 > done inline by the caller. The corrected text to paste is in
-> [`../README.md`](../README.md) ("Description for LLM to paste").
+> [`TOOL_DESCRIPTIONS.md`](TOOL_DESCRIPTIONS.md) (the `revenue_semantic_query` block).
 
 ## One physical table, three logical entities, NEVER a JOIN
 
 All three entities map to the **same** physical table
-(`OWISMIND_DEV.DRIVE_Revenues`). They are a documentation lens over one
+(`OWISMIND_PRD_V1_2.DRIVE_Revenues`). They are a documentation lens over one
 denormalized table; the SQL-generation instructions forbid emitting any JOIN
 (and in particular any self-join). The two declared relationships exist only to
 describe the shared keys, they are never materialized as SQL JOINs.
