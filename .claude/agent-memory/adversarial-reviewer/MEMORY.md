@@ -1,1 +1,2 @@
 - [Memory/setup layout](repo-memory-layout.md) - where OWIsMind memory + gotchas live, how to verify slimming didn't lose info
+- [Frontend review patterns](owismind-frontend-review-patterns.md) - always verify scope claims via git status yourself; this repo's frontend sessions tend to be genuinely clean/well-tested

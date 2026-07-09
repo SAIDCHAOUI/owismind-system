@@ -1056,6 +1056,148 @@ def validate_target_user_id(value):
     return value
 
 
+# --- Help & Support hub: general feedback (feature A) -------------------------
+# A signed-in user submits general UI/UX/product feedback with an optional category tag
+# and an optional pointer to the conversation it is about. The frontend sends only
+# logical display text (message, category) + an optional session id - never a table,
+# query or admin field. The category ENUM itself is enforced at the storage layer
+# (storage/feedback.py, closed list -> 'other' fallback); here only shape/bounds.
+MAX_FEEDBACK_MESSAGE_CHARS = 8000
+MAX_FEEDBACK_CATEGORY_CHARS = 40
+
+
+def validate_feedback_submission(payload):
+    """Validate a /feedback/submit payload. Returns a clean dict.
+
+    Required: ``message`` (non-empty, bounded). Optional: ``category`` (a bounded
+    display string - the closed enum + 'other' fallback is enforced at the storage
+    layer, not here), ``linked_session_id`` (bounded like every other session id).
+    Raises ``ValidationError`` (stable code) on a structurally invalid payload.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    message = payload.get("message")
+    if not isinstance(message, str):
+        raise ValidationError("missing_message")
+    message = message.strip()
+    if not message:
+        raise ValidationError("empty_message")
+    if len(message) > MAX_FEEDBACK_MESSAGE_CHARS:
+        raise ValidationError("message_too_long")
+    return {
+        "message": message,
+        "category": _optional_suggest_text(payload, "category", MAX_FEEDBACK_CATEGORY_CHARS),
+        "linked_session_id": _optional_suggest_text(
+            payload, "linked_session_id", MAX_SESSION_ID_LENGTH
+        ),
+    }
+
+
+# --- Help & Support hub: agent-data request (feature B) ------------------------
+# A signed-in user requests a new data agent scoped to some of THEIR OWN DSS project's
+# SQL tables. The frontend sends a project (key + label, picked from the impersonated
+# catalog OR typed manually when the catalog is unavailable), a bounded list of
+# ``{dataset, table, connection}`` entries (the catalog picks) OR plain table-name
+# strings (the manual fallback - normalized to the same shape here), plus free-text
+# business case / use cases / importance. Never a raw SQL query, connection secret or
+# admin field.
+MAX_AGENT_REQUEST_DATASETS = 25
+MAX_AGENT_REQUEST_FIELD_CHARS = 128
+MAX_PROJECT_KEY_CHARS = 128
+MAX_PROJECT_LABEL_CHARS = 200
+MAX_BUSINESS_CASE_CHARS = 4000
+MAX_USE_CASES_CHARS = 4000
+MAX_IMPORTANCE_CHARS = 200
+
+
+def _clean_dataset_entry(item):
+    """Normalize one dataset pick into a bounded ``{dataset, table, connection}`` dict.
+
+    Accepts either a catalog-shaped dict (``{dataset, table, connection}``, each an
+    optional bounded string) or a plain string (the manual free-text fallback). ``dataset``
+    is the DSS dataset/object name and is the entry's PRIMARY key at the storage layer
+    (storage/agent_requests.py drops any entry lacking it, table/connection alone are not
+    enough) - a plain string, or a dict missing ``dataset`` but carrying ``table``, is
+    therefore normalized into the ``dataset`` field so a manual entry is never silently
+    discarded downstream. Any other shape, or an entry with nothing usable, is dropped
+    (returns None) rather than failing the whole list - a malformed entry must not block
+    every other well-formed one.
+    """
+    if isinstance(item, str):
+        name = item.strip()[:MAX_AGENT_REQUEST_FIELD_CHARS]
+        if not name:
+            return None
+        return {"dataset": name, "table": None, "connection": None}
+    if isinstance(item, dict):
+        def _field(key):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:MAX_AGENT_REQUEST_FIELD_CHARS]
+            return None
+
+        dataset = _field("dataset")
+        table = _field("table")
+        connection = _field("connection")
+        if not dataset:
+            # No catalog dataset name known (manual entry with only a table typed in):
+            # fall back to the table value so the entry still carries the primary key
+            # the storage layer requires.
+            dataset = table
+        if not dataset:
+            return None
+        return {"dataset": dataset, "table": table, "connection": connection}
+    return None
+
+
+def _clean_datasets(raw):
+    """A bounded list of normalized dataset picks (see ``_clean_dataset_entry``).
+
+    Never raises: a non-list degrades to an empty list, malformed entries are simply
+    dropped, and the result is capped at ``MAX_AGENT_REQUEST_DATASETS``.
+    """
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        cleaned = _clean_dataset_entry(item)
+        if cleaned:
+            out.append(cleaned)
+        if len(out) >= MAX_AGENT_REQUEST_DATASETS:
+            break
+    return out
+
+
+def validate_agent_request(payload):
+    """Validate an /agent-request/submit payload. Returns a clean dict.
+
+    Required: ``business_case`` (non-empty, bounded). Optional: ``project_key`` /
+    ``project_label`` (the chosen or manually-typed project), ``datasets`` (a bounded
+    list, catalog picks or manual strings - normalized by ``_clean_datasets``),
+    ``use_cases``, ``importance``. Raises ``ValidationError`` (stable code) on a
+    structurally invalid payload.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    business_case = payload.get("business_case")
+    if not isinstance(business_case, str):
+        raise ValidationError("missing_business_case")
+    business_case = business_case.strip()
+    if not business_case:
+        raise ValidationError("empty_business_case")
+    if len(business_case) > MAX_BUSINESS_CASE_CHARS:
+        raise ValidationError("business_case_too_long")
+    return {
+        "business_case": business_case,
+        "project_key": _optional_suggest_text(payload, "project_key", MAX_PROJECT_KEY_CHARS),
+        "project_label": _optional_suggest_text(
+            payload, "project_label", MAX_PROJECT_LABEL_CHARS
+        ),
+        "datasets": _clean_datasets(payload.get("datasets")),
+        "use_cases": _optional_suggest_text(payload, "use_cases", MAX_USE_CASES_CHARS),
+        "importance": _optional_suggest_text(payload, "importance", MAX_IMPORTANCE_CHARS),
+    }
+
+
 def validate_sources_block(raw):
     """Sanitize an admin-authored SOURCES list into bounded ``{dataset, label}`` entries.
 

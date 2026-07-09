@@ -41,6 +41,7 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 from owismind.agents import context, discovery, stream_manager
+from owismind.agents import user_catalog
 from owismind.evidence import chart_payload
 from owismind.evidence import service as evidence_service
 from owismind.evidence import source_service
@@ -49,9 +50,11 @@ from owismind.storage import artifacts as artifacts_storage
 from owismind.storage import events as events_storage
 from owismind.security.identity import IdentityError, derive_full_name, resolve_identity
 from owismind.security.validation import (
+    MAX_PROJECT_KEY_CHARS,
     MAX_SESSION_ID_LENGTH,
     ValidationError,
     validate_agent_meta,
+    validate_agent_request,
     validate_budget_amount,
     validate_chat_start_request,
     validate_conversations_limit,
@@ -61,6 +64,7 @@ from owismind.security.validation import (
     validate_evidence_rows_request,
     validate_expires_days,
     validate_feedback,
+    validate_feedback_submission,
     validate_history_limit,
     validate_optional_exchange_id,
     validate_quota_note,
@@ -75,6 +79,8 @@ from owismind.security.validation import (
     validate_user_id_list,
 )
 from owismind.storage import admin, budget, chat_v5, settings, sql_config
+from owismind.storage import agent_requests as agent_requests_storage
+from owismind.storage import feedback as feedback_storage
 from owismind.storage import suggestions as suggestions_storage
 from owismind.storage.migrations import ensure_chat_table
 from owismind.benchmark_view import aggregate as bench_aggregate
@@ -1389,6 +1395,221 @@ def benchmark_my_suggestions():
         identity["user_id"], len(suggestions),
     )
     return jsonify({"status": "ok", "count": len(suggestions), "suggestions": suggestions})
+
+
+# --- Help & Support hub (feature A: general feedback, feature B: agent-data request) ---
+# Two independent user-facing flows, both owner-stamped and WRITE-blocked while an admin
+# impersonates a user (read-only consultation), mirroring /chat/feedback and the benchmark
+# suggestion routes above. Feature B additionally exposes a small impersonated CATALOG
+# (agents/user_catalog.py) so the user can pick one of THEIR OWN DSS projects + SQL tables
+# instead of typing them manually; a catalog failure (permission missing, DSS error) always
+# degrades to {"ok": False} - never the admin's catalog, never a full-instance scan - and the
+# frontend falls back to manual entry. The catalog itself resolves the caller from the DSS
+# browser auth headers directly (the real DSS user of the session), independently of
+# OWIsMind's own X-OWI-Impersonate consultation header.
+
+
+@api.route("/catalog/projects", methods=["GET"])
+def catalog_projects():
+    """List the caller's OWN DSS projects (impersonated discovery), for the agent-request form.
+
+    READ, no write-block: this only ever lists what the CALLER can already see in DSS -
+    never an admin's own catalog, never every project on the instance. Best-effort: any
+    failure (permission missing, DSS error) degrades to ``{ok: False}`` so the frontend
+    falls back to manual project-key entry.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/catalog/projects - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # READ route: mirrors every other consultation read (identity swapped to the
+    # EFFECTIVE user for logging); the catalog itself resolves the real DSS browser
+    # user independently of this header (see the module-level note above).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
+    result = user_catalog.list_user_projects(request.headers)
+    logger.info(
+        "/catalog/projects - user_id=%s ok=%s count=%d",
+        identity["user_id"], result.get("ok"), len(result.get("projects") or []),
+    )
+    return jsonify(result)
+
+
+@api.route("/catalog/datasets", methods=["GET"])
+def catalog_datasets():
+    """List the SQL datasets of ONE of the caller's own projects (impersonated discovery).
+
+    Query param: ``project_key`` (required, bounded). READ, no write-block; best-effort
+    like /catalog/projects (a failure degrades to ``{ok: False}``, never raises).
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/catalog/datasets - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
+    project_key = (request.args.get("project_key") or "").strip()
+    if not project_key or len(project_key) > MAX_PROJECT_KEY_CHARS:
+        return jsonify({"status": "error", "error": "invalid_project_key"}), 400
+
+    result = user_catalog.list_user_sql_datasets(request.headers, project_key)
+    logger.info(
+        "/catalog/datasets - user_id=%s project_key=%s ok=%s count=%d",
+        identity["user_id"], project_key, result.get("ok"),
+        len(result.get("datasets") or []),
+    )
+    return jsonify(result)
+
+
+@api.route("/feedback/submit", methods=["POST"])
+def feedback_submit():
+    """Persist a general feedback submission from the caller (Help & Support hub, feature A).
+
+    Body: ``{message, category?, linked_session_id?}``. Identity comes from the auth
+    headers (never the body); the row is owner-stamped. Returns
+    ``{status:'ok', feedback_id}``.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/feedback/submit - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
+    # submit feedback under the inspected user's name; checked before any work.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/feedback/submit - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/feedback/submit - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    try:
+        fields = validate_feedback_submission(request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/feedback/submit - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    try:
+        feedback_id = feedback_storage.save_feedback(
+            identity["user_id"], fields["category"], fields["message"],
+            linked_session_id=fields["linked_session_id"],
+        )
+    except Exception:
+        logger.exception("/feedback/submit - save failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    logger.info(
+        "/feedback/submit - user_id=%s feedback_id=%s category=%s",
+        identity["user_id"], feedback_id, fields["category"],
+    )
+    return jsonify({"status": "ok", "feedback_id": feedback_id})
+
+
+@api.route("/feedback/mine", methods=["GET"])
+def feedback_mine():
+    """List the caller's OWN feedback submissions (newest first, owner-scoped + bounded)."""
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/feedback/mine - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # READ route: list the EFFECTIVE user's feedback (the impersonated target for an admin).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/feedback/mine - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    items = feedback_storage.list_my_feedback(identity["user_id"])
+    logger.info("/feedback/mine - user_id=%s returned %d", identity["user_id"], len(items))
+    return jsonify({"status": "ok", "items": items})
+
+
+@api.route("/agent-request/submit", methods=["POST"])
+def agent_request_submit():
+    """Persist a new-agent request from the caller (Help & Support hub, feature B).
+
+    Body: ``{project_key?, project_label?, datasets?, business_case, use_cases?,
+    importance?}``. Identity comes from the auth headers (never the body); the row is
+    owner-stamped. Returns ``{status:'ok', request_id}``.
+    """
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/agent-request/submit - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
+    # submit an agent request under the inspected user's name; checked before any work.
+    if impersonation.effective_identity(identity).get("impersonating"):
+        logger.info("/agent-request/submit - blocked while impersonating (read-only)")
+        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/agent-request/submit - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    try:
+        fields = validate_agent_request(request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/agent-request/submit - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+
+    try:
+        request_id = agent_requests_storage.save_agent_request(
+            identity["user_id"], fields["project_key"], fields["project_label"],
+            fields["datasets"], fields["business_case"], fields["use_cases"],
+            fields["importance"],
+        )
+    except Exception:
+        logger.exception("/agent-request/submit - save failed")
+        return jsonify({"status": "error", "error": "storage_unavailable"}), 500
+
+    logger.info(
+        "/agent-request/submit - user_id=%s request_id=%s project_key=%s",
+        identity["user_id"], request_id, fields["project_key"],
+    )
+    return jsonify({"status": "ok", "request_id": request_id})
+
+
+@api.route("/agent-request/mine", methods=["GET"])
+def agent_request_mine():
+    """List the caller's OWN agent requests (newest first, owner-scoped + bounded)."""
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/agent-request/mine - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+    # --- BEGIN impersonation (temporary, removable) ---
+    # READ route: list the EFFECTIVE user's requests (the impersonated target for an admin).
+    identity = impersonation.effective_identity(identity)
+    # --- END impersonation ---
+
+    if not sql_config.is_configured():
+        logger.warning("/agent-request/mine - storage not configured")
+        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
+
+    items = agent_requests_storage.list_my_agent_requests(identity["user_id"])
+    logger.info("/agent-request/mine - user_id=%s returned %d", identity["user_id"], len(items))
+    return jsonify({"status": "ok", "items": items})
 
 
 # --- benchmark consultation (any signed-in user) + admin review/override -----

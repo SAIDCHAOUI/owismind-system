@@ -1,0 +1,1 @@
+- [Devs self-audit before review](feedback_devs_self_audit_charter.md) - new views ship with explicit charter-compliance comments/markers; verify claims, don't assume violations.

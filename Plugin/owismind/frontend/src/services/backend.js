@@ -398,6 +398,68 @@ export function fetchAgents() {
   return request('/owismind-api/agents', { method: 'GET' });
 }
 
+// --- Help & Support hub (general feedback + agent-on-data requests) ----------
+
+// The caller's own DSS projects, for the "request an agent" project picker. The
+// server resolves them via impersonation (the real DSS user behind the browser auth
+// headers) - bounded, on-demand only, never a scan of every project on the instance.
+// Returns { ok:true, projects:[{key,label}] } or { ok:false, reason }. A `false` or
+// EMPTY response means the picker must fall back to manual entry - see
+// composables/catalogFallback.js for the exact rule.
+export function getCatalogProjects() {
+  return request('/owismind-api/catalog/projects', { method: 'GET' });
+}
+
+// The SQL datasets of ONE of the caller's own DSS projects (same impersonation
+// mechanism as getCatalogProjects, called only once a project is picked). Returns
+// { ok:true, datasets:[{dataset, table, connection, type}] } or { ok:false, reason }.
+export function getCatalogDatasets(projectKey) {
+  return request('/owismind-api/catalog/datasets?project_key=' + encodeURIComponent(projectKey || ''), {
+    method: 'GET',
+  });
+}
+
+// Submit a general feedback item (bug / wrong answer / feature / UX / perf / data /
+// routing / other). `payload` = { category?, message, linked_session_id? }. Returns
+// { status:'ok', feedback_id }; throws 'impersonation_read_only' (403 - the server
+// blocks writes while an admin is viewing as another user, same fence as every other
+// WRITE route) or the backend's stable error code on any other non-2xx.
+// Named `submitGeneralFeedback` (not `submitFeedback`) to avoid colliding with the
+// existing per-message thumbs-up/down `submitFeedback` above.
+export function submitGeneralFeedback(payload) {
+  return request('/owismind-api/feedback/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// The caller's own feedback history (newest first), including the admin status /
+// response once set. Returns { status:'ok', items:[...] }. Owner-scoped server-side.
+export function getMyFeedback() {
+  return request('/owismind-api/feedback/mine', { method: 'GET' });
+}
+
+// Submit a "request a new agent on my data" form. `payload` = { project_key,
+// project_label, datasets:[{dataset, table, connection}], business_case, use_cases,
+// importance }. `datasets` may be an empty array (manual-catalog fallback still fills
+// each entry the same shape - see composables/catalogFallback.js). Returns
+// { status:'ok', request_id }; throws 'impersonation_read_only' (403, same write
+// fence as submitGeneralFeedback) or the backend's stable error code.
+export function submitAgentRequest(payload) {
+  return request('/owismind-api/agent-request/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// The caller's own agent requests (newest first), including the admin status /
+// response once set. Returns { status:'ok', items:[...] }. Owner-scoped server-side.
+export function getMyAgentRequests() {
+  return request('/owismind-api/agent-request/mine', { method: 'GET' });
+}
+
 // --- Monthly budget / usage ---------------------------------------------------
 
 // The caller's own monthly budget status. Returns { status, usage: {...} } where usage

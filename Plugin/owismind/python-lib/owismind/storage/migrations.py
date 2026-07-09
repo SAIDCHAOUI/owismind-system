@@ -65,6 +65,26 @@ EVENTS_V1_LOGICAL = "webapp_events_v1"
 # appended to an admin-selected Flow dataset via the Dataset API (see storage/chat_traces.py),
 # which keeps the large JSON out of any SQL statement text (and out of DSS CRU logs).
 
+# One row per general feedback submission a user makes from the Help & Support hub
+# (UI/UX/product suggestions - distinct from the per-message thumbs feedback on chat_v5).
+# ``category`` is a bounded display string (the closed enum + 'other' fallback is enforced
+# at the storage layer, storage/feedback.py); ``linked_session_id`` optionally points at
+# the conversation the feedback is about (a display hint, not a foreign key - read owner-
+# scoped like everything else). ``status`` starts 'open'; v1 has no in-app admin-response
+# screen (see the feedback-hub design spec), so an admin answers by editing
+# ``admin_response`` (+ stamping ``responded_at``) directly on the table. Brand new _v1
+# table per the no-ALTER rule; owner-scoped on the "my feedback" read.
+FEEDBACK_V1_LOGICAL = "webapp_feedback_v1"
+# One row per "request a new data agent" submission from the Help & Support hub. The user
+# picks one of THEIR OWN DSS projects (impersonated discovery, agents/user_catalog.py) then
+# some SQL tables of that project, or falls back to manual free-text entry when the catalog
+# is unavailable. ``datasets_json`` is a JSON-encoded list of the picked/typed
+# ``{dataset, table, connection}`` entries; ``project_key`` / ``project_label`` are the
+# chosen (or manually-typed) project. ``status`` / ``admin_response`` / ``responded_at``
+# mirror webapp_feedback_v1. Brand new _v1 table per the no-ALTER rule; owner-scoped on the
+# "my requests" read.
+AGENT_REQUESTS_V1_LOGICAL = "webapp_agent_requests_v1"
+
 # One chat exchange per row, written in two phases (user message, then reply).
 # Versioned _v5: over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's
 # per-message feedback columns, over _v2's ``generated_sql``), it adds the per-exchange
@@ -266,6 +286,48 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# General feedback from the Help & Support hub (feature A). ``message`` is the free-text
+# feedback body; ``category`` an optional display tag (the closed enum + 'other' fallback
+# is enforced at the storage layer, see storage/feedback.py). ``status`` defaults 'open';
+# an admin answers by editing ``admin_response`` (+ stamping ``responded_at``) directly on
+# the table (v1 has no in-app admin-response screen, see the feedback-hub design spec).
+_FEEDBACK_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    feedback_id        TEXT         PRIMARY KEY,
+    user_id            TEXT         NOT NULL,
+    category           TEXT,
+    message            TEXT,
+    linked_session_id  TEXT,
+    status             TEXT         NOT NULL DEFAULT 'open',
+    admin_response     TEXT,
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    responded_at       TIMESTAMPTZ
+)
+"""
+
+# "Request a new data agent" submissions from the Help & Support hub (feature B).
+# ``datasets_json`` is a JSON-encoded list of ``{dataset, table, connection}`` entries -
+# either picked via the impersonated catalog (agents/user_catalog.py) or typed manually
+# when the catalog is unavailable, normalized to the same shape before write (see
+# storage/agent_requests.py). ``status`` / ``admin_response`` / ``responded_at`` mirror
+# webapp_feedback_v1 (same v1 no-in-app-response-screen rule).
+_AGENT_REQUESTS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    request_id      TEXT         PRIMARY KEY,
+    user_id         TEXT         NOT NULL,
+    project_key     TEXT,
+    project_label   TEXT,
+    datasets_json   TEXT,
+    business_case   TEXT,
+    use_cases       TEXT,
+    importance      TEXT,
+    status          TEXT         NOT NULL DEFAULT 'open',
+    admin_response  TEXT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    responded_at    TIMESTAMPTZ
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -277,6 +339,8 @@ _DDL_BY_LOGICAL = {
     USER_QUOTA_V1_LOGICAL: _USER_QUOTA_V1_DDL,
     GOLDEN_SUGGESTIONS_V1_LOGICAL: _GOLDEN_SUGGESTIONS_V1_DDL,
     EVENTS_V1_LOGICAL: _EVENTS_V1_DDL,
+    FEEDBACK_V1_LOGICAL: _FEEDBACK_V1_DDL,
+    AGENT_REQUESTS_V1_LOGICAL: _AGENT_REQUESTS_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -333,6 +397,14 @@ _INDEXES_BY_LOGICAL = {
         ("nts_idx", "(event_name, ts)"),
         # Intra-session ordering (reconstruct one app session in sequence order).
         ("as_idx", "(app_session_id, seq)"),
+    ],
+    FEEDBACK_V1_LOGICAL: [
+        # "My feedback" read = WHERE user_id ORDER BY created_at DESC.
+        ("uc_idx", "(user_id, created_at DESC)"),
+    ],
+    AGENT_REQUESTS_V1_LOGICAL: [
+        # "My requests" read = WHERE user_id ORDER BY created_at DESC.
+        ("uc_idx", "(user_id, created_at DESC)"),
     ],
 }
 
@@ -424,3 +496,13 @@ def ensure_golden_suggestions_table():
 def ensure_events_table():
     """Ensure the product-analytics events table exists (create-if-missing), once per process."""
     _ensure_table(EVENTS_V1_LOGICAL)
+
+
+def ensure_feedback_table():
+    """Ensure the general feedback table (Help & Support hub) exists, once per process."""
+    _ensure_table(FEEDBACK_V1_LOGICAL)
+
+
+def ensure_agent_requests_table():
+    """Ensure the agent-request table (Help & Support hub) exists, once per process."""
+    _ensure_table(AGENT_REQUESTS_V1_LOGICAL)

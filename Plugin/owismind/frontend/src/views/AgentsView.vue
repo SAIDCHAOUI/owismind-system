@@ -59,6 +59,11 @@ function startConversation(card) {
   session.selectAgent(card.key)
   router.push('/chat')
 }
+// Entry point into the Help & Support hub's "Request an agent" tab (a new agent on
+// data, guided form). See views/HelpSupportView.vue.
+function requestAgent() {
+  router.push('/support?tab=agent')
+}
 function badgeLabel(b) {
   return b ? t('ag.badge.' + b) : ''
 }
@@ -67,6 +72,10 @@ function badgeLabel(b) {
 <template>
   <!-- ============================== LIST ============================== -->
   <PageShell v-if="!selectedId" wide :eyebrow="t('ag.eyebrow')" :title="t('ag.title')" :desc="t('ag.desc')">
+    <div class="ag-actions-row">
+      <Button variant="ghost" icon="userPlus" @click="requestAgent">{{ t('ag.request_agent') }}</Button>
+    </div>
+
     <EmptyState v-if="!cards.length" bordered icon="bookOpen" :title="t('ag.no_agents')" />
 
     <template v-else>
@@ -166,6 +175,13 @@ function badgeLabel(b) {
  * 1px solid borders, hover = near-black border, orange as a RARE accent.
  * No gradients, no blur, no glow, no soft drop shadows.
  * ============================================================================= */
+
+/* --- Actions row (Request an agent CTA, above the toolbar/grid) ---------- */
+.ag-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--s-6);
+}
 
 /* --- Toolbar (search + count) ------------------------------------------- */
 .ag-toolbar {

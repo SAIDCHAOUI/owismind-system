@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Build a coexisting DEV copy of the OWIsMind DSS plugin from the single source.
+"""Build a coexisting copy of the OWIsMind DSS plugin from the single source.
 
 There is ONE source of truth: ``Plugin/owismind/``. The PROD build/package
-(``/build-plugin`` + ``/package-plugin``) is untouched. This tool emits a SECOND,
-independent plugin (id ``owismind_dev``) that can be installed alongside the prod
-one on the same DSS instance, for testing.
+(``/build-plugin`` + ``/package-plugin``) is untouched, always. This tool emits
+ONE independent, coexisting plugin per run - the default DEV copy (id
+``owismind_dev``), a fixed third slot (``--v2``, id ``owismind_dev_v2``), or a
+VERSION-NAMED copy (``--version 1.3``, id ``owismind_v1_3``) - that can be
+installed alongside the prod one (and alongside each other) on the same DSS
+instance, for testing.
 
-Two installed plugins on the same instance collide on three axes unless renamed:
-  1. plugin id            -> must be globally unique          (``owismind`` -> ``owismind_dev``)
+Two plugins installed on the same instance collide on three axes unless renamed:
+  1. plugin id            -> must be globally unique          (``owismind`` -> ``owismind_dev`` / ``owismind_v1_3``)
   2. Vite asset base      -> ``/plugins/<id>/resource/...``    (driven by env OWI_PLUGIN_ID)
   3. python package name  -> ``import owismind`` is process-global across plugins
-                             on the same code env             (``owismind`` -> ``owismind_dev``)
+                             on the same code env             (``owismind`` -> ``owismind_dev`` / ``owismind_v1_3``)
 
-What MUST NOT change (so DEV behaves like PROD, just isolated):
+What MUST NOT change (so a coexisting copy behaves like PROD, just isolated):
   - ``APP_NAMESPACE = "owismind"``  (SQL table namespace; data isolation is a
     deploy-time choice: a dedicated project or ``table_prefix="dev"``, NOT code).
   - the HTTP prefix ``/owismind-api`` and the Flask blueprint name ``owismind_api``.
@@ -30,9 +33,26 @@ Usage:
   python3 tools/build_dev_plugin.py --v2       # same pipeline, THIRD coexisting
                                                # plugin (id owismind_dev_v2) so a
                                                # stable DEV install stays untouched
+  python3 tools/build_dev_plugin.py --version 1.3
+                                               # same pipeline, a VERSION-NAMED
+                                               # coexisting plugin (id owismind_v1_3,
+                                               # zip owismind-v1_3-upload.zip) so a
+                                               # given release can be tested side by
+                                               # side with prod and DEV; --version 1.4,
+                                               # 1.5, ... need no new code
   python3 tools/build_dev_plugin.py --check    # validate the rewrite logic only,
                                                # on a /tmp copy of python-lib,
                                                # WITHOUT building or zipping
+  python3 tools/build_dev_plugin.py --check --version 1.3
+                                               # same dry validation, for the
+                                               # owismind_v1_3 identity only
+
+This tool emits exactly ONE coexisting plugin per invocation, selected by flag:
+the default ``owismind_dev``, the fixed third slot ``owismind_dev_v2`` (``--v2``),
+or a version-named slot such as ``owismind_v1_3`` (``--version 1.3``). All three
+share the same deterministic rewrite machinery (see ``use_v2_identity`` /
+``use_version_identity`` below) and never touch each other's staging tree or zip,
+nor the prod plugin.
 
 Python 3, standard library only. No installs of any kind.
 """
@@ -59,7 +79,12 @@ WEBAPP_REL = os.path.join("webapps", "webapp-owismind-ai-agents")
 BODY_HTML_REL = os.path.join(WEBAPP_REL, "body.html")
 BACKEND_PY_REL = os.path.join(WEBAPP_REL, "backend.py")
 
-# --- DEV identity ------------------------------------------------------------
+# --- Active (coexisting) identity ---------------------------------------------
+# These DEV_* globals hold the DEFAULT identity (owismind_dev) at import time, but
+# are the single mutable "active identity" for the whole module: use_v2_identity()
+# and use_version_identity() reassign them (via `global`) to switch to the v2 or a
+# version-named identity before run_check()/run_build() read them. Kept as DEV_*
+# rather than renamed, to reuse the existing rewrite/staging code unchanged.
 PROD_ID = "owismind"
 DEV_ID = "owismind_dev"
 PROD_LABEL = "OWIsMind"
@@ -100,6 +125,64 @@ def use_v2_identity():
     DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
     STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(DEV_ID))
     ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(DEV_ID))
+
+
+_RE_VERSION = re.compile(r"^\d+(\.\d+)+$")
+
+
+def _version_names(version):
+    """Compute a VERSION-NAMED coexisting-plugin identity from a dotted version string.
+
+    Single source of truth for the naming scheme, so ``--version 1.4``, ``1.5``, ...
+    need no new code - only a different string. ``version`` must look like ``'1.3'``
+    or ``'1.4.0'`` (digits and dots only; DSS plugin ids only allow ``A-Za-z0-9_-``,
+    so dots become underscores in the id/zip forms while the human labels keep the
+    dotted form).
+
+    Returns a dict: ``id`` (plugin id / python package name), ``label`` (plugin
+    meta.label), ``webapp_label`` (webapp meta.label), ``desc_head`` (webapp
+    description prefix, matched against ``_WEBAPP_DESC_HEAD``), and ``zip_stem``
+    (shared basename for the staging dir and the zip).
+    """
+    version = version.strip()
+    if not _RE_VERSION.match(version):
+        raise SystemExit(
+            "ERROR: --version must be digits and dots only, e.g. '1.3' or '1.4.0' "
+            "(got {!r}).".format(version)
+        )
+    id_suffix = "v" + version.replace(".", "_")  # '1.3' -> 'v1_3'
+    return {
+        "id": "owismind_{}".format(id_suffix),  # 'owismind_v1_3' (plugin id + python package)
+        "label": "OWIsMind v{}".format(version),  # 'OWIsMind v1.3'
+        "webapp_label": "OWIsMind AI Agents v{}".format(version),  # 'OWIsMind AI Agents v1.3'
+        "desc_head": '"description": "[v{}] Chat with Dataiku AI agents.'.format(version),
+        "zip_stem": "owismind-{}".format(id_suffix),  # 'owismind-v1_3' (staging dir + zip basename)
+    }
+
+
+def use_version_identity(version):
+    """Retarget the module identity to a VERSION-NAMED coexisting plugin.
+
+    Same deterministic pipeline as ``use_v2_identity``, driven by ``_version_names``
+    so a future version is just a different ``--version`` argument, never new code.
+    Independent of ``owismind`` (prod) and of the fixed ``owismind_dev`` /
+    ``owismind_dev_v2`` slots: each version gets its own id, staging tree and zip
+    (``owismind_v1_3``, ``owismind-v1_3-upload.zip``, ...), so v1.3 and a later v1.4
+    can both be installed and tested side by side. The word-boundary rewrite
+    patterns need no change, for the same reason documented in ``use_v2_identity``:
+    ``\\bowismind\\b`` never matches inside ``owismind_v1_3`` (``_`` is a word char).
+    """
+    global DEV_ID, DEV_LABEL, DEV_WEBAPP_LABEL, _WEBAPP_DESC_HEAD_DEV
+    global DEV_BASE, STAGE_DIR, ZIP_PATH
+    names = _version_names(version)
+    DEV_ID = names["id"]
+    DEV_LABEL = names["label"]
+    DEV_WEBAPP_LABEL = names["webapp_label"]
+    _WEBAPP_DESC_HEAD_DEV = names["desc_head"]
+    DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
+    STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(names["zip_stem"]))
+    ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(names["zip_stem"]))
+
 
 # Files excluded from the runtime zip - identical to /package-plugin's list.
 ZIP_EXCLUDE_BASENAMES = {"CLAUDE.md", "README.md", ".DS_Store"}
@@ -498,11 +581,14 @@ def run_build():
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Build the coexisting DEV OWIsMind plugin (id owismind_dev).")
+    parser = argparse.ArgumentParser(
+        description="Build a coexisting OWIsMind plugin (default DEV, --v2, or a version-named build)."
+    )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Validate the package/logger rewrite on a /tmp copy of python-lib WITHOUT building or zipping.",
+        help="Validate the package/logger rewrite on a /tmp copy of python-lib WITHOUT building or zipping. "
+             "Combine with --version (or --v2) to validate that identity instead of the default DEV one.",
     )
     parser.add_argument(
         "--v2",
@@ -510,8 +596,21 @@ def main(argv=None):
         help="Build the THIRD coexisting plugin (id owismind_dev_v2, its own staging + zip); "
              "the stable owismind_dev staging/zip and the prod plugin are never touched.",
     )
+    parser.add_argument(
+        "--version",
+        metavar="X.Y",
+        default=None,
+        help="Build a VERSION-NAMED coexisting plugin, e.g. --version 1.3 -> id owismind_v1_3, "
+             "webapp label 'OWIsMind AI Agents v1.3', zip owismind-v1_3-upload.zip. Independent "
+             "of --v2/default DEV (its own staging + zip); reuses the same deterministic rewrite, "
+             "so --version 1.4 (etc.) needs no new code.",
+    )
     args = parser.parse_args(argv)
-    if args.v2:
+    if args.v2 and args.version:
+        parser.error("--v2 and --version are mutually exclusive: pick one coexisting identity.")
+    if args.version:
+        use_version_identity(args.version)
+    elif args.v2:
         use_v2_identity()
     if args.check:
         return run_check()

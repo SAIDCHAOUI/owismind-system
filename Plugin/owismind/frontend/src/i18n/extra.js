@@ -91,15 +91,58 @@ export const extraMessages = {
     'msg.usage_cost': 'Coût estimé de cet échange',
     'msg.usage_mode': 'Mode de réponse utilisé pour cet échange',
 
-    // Feedback - no submit endpoint yet
-    'fb.soon_note': "L'envoi de feedback sera bientôt disponible. L'équipe OWI prépare ce service.",
-    'fb.empty': "Vous n'avez pas encore de demande.",
+    // Help & Support hub (route /support) - eyebrow/title/desc + the 2 tabs
+    'sup.eyebrow': 'Aide & support',
+    'sup.title': 'Aide & support',
+    'sup.desc':
+      "Envoyez un retour général ou demandez un nouvel agent sur vos données. L'équipe OWI examine chaque demande.",
+    'sup.tab.feedback': 'Feedback général',
+    'sup.tab.agent': 'Demander un agent',
+
+    // Feedback tab - additions on top of messages.json's fb.* base catalog
+    'fb.cat.other': 'Autre',
+    'fb.sent': 'Merci, votre feedback a été envoyé.',
+    'fb.send_failed': "Échec de l'envoi du feedback.",
+    'fb.mine.loading': 'Chargement de vos retours…',
+    'fb.mine.empty': "Vous n'avez pas encore envoyé de feedback.",
+    'fb.admin_response': "Réponse de l'équipe",
+
+    // Request-an-agent tab (guided form: project -> SQL tables -> business case)
+    'ar.step_project': 'Projet DSS',
+    'ar.step_tables': 'Tables SQL',
+    'ar.step_details': 'Votre besoin',
+    'ar.choose_project': 'Choisir un projet…',
+    'ar.loading_projects': 'Chargement de vos projets…',
+    'ar.manual_note': 'Aucun projet détecté automatiquement. Indiquez la clé du projet DSS.',
+    'ar.project_key_label': 'Clé du projet',
+    'ar.project_key_placeholder': 'Exemple : MON_PROJET',
+    'ar.select_project_first': "Choisissez d'abord un projet.",
+    'ar.loading_datasets': 'Chargement des tables SQL…',
+    'ar.no_datasets': 'Aucune table SQL trouvée pour ce projet.',
+    'ar.manual_tables_note': 'Catalogue indisponible. Saisissez les noms de tables (un par ligne).',
+    'ar.manual_tables_label': 'Noms des tables',
+    'ar.manual_tables_placeholder': 'nom_table_1\nnom_table_2',
+    'ar.selected_count': '{0} table(s) sélectionnée(s)',
+    'ar.business_case_label': 'Cas métier (obligatoire)',
+    'ar.business_case_placeholder': 'Décrivez le besoin métier et ce que cet agent doit permettre de faire.',
+    'ar.use_cases_label': "Cas d'usage (optionnel)",
+    'ar.use_cases_placeholder': "Exemples concrets de questions ou de scénarios.",
+    'ar.importance_label': 'Importance / urgence (optionnel)',
+    'ar.importance_placeholder': 'Pourquoi et pour quand ce besoin est important.',
+    'ar.submit': 'Envoyer la demande',
+    'ar.sent': 'Votre demande a été envoyée.',
+    'ar.send_failed': "Échec de l'envoi de la demande.",
+    'ar.mine.title': 'Mes demandes',
+    'ar.mine.loading': 'Chargement de vos demandes…',
+    'ar.mine.empty': "Vous n'avez pas encore fait de demande.",
+    'ar.admin_response': "Réponse de l'équipe",
 
     // FAQ - client-side search (the maquette never wired it)
     'faq.no_results': 'Aucun résultat pour « {0} ».',
 
     // Agents - fallbacks for agents not described in the local registry
     'ag.no_agents': "Aucun agent n'est activé pour votre compte. Contactez un administrateur.",
+    'ag.request_agent': 'Demander un agent',
 
     // Project - no project API yet
     'pj.coming':
@@ -916,15 +959,58 @@ export const extraMessages = {
     'msg.usage_cost': 'Estimated cost of this exchange',
     'msg.usage_mode': 'Response mode used for this exchange',
 
-    // Feedback - no submit endpoint yet
-    'fb.soon_note': 'Feedback submission will be available soon. The OWI team is preparing this service.',
-    'fb.empty': "You don't have any request yet.",
+    // Help & Support hub (route /support) - eyebrow/title/desc + the 2 tabs
+    'sup.eyebrow': 'Help & support',
+    'sup.title': 'Help & support',
+    'sup.desc':
+      'Send general feedback or request a new agent on your data. The OWI team reviews every request.',
+    'sup.tab.feedback': 'General feedback',
+    'sup.tab.agent': 'Request an agent',
+
+    // Feedback tab - additions on top of messages.json's fb.* base catalog
+    'fb.cat.other': 'Other',
+    'fb.sent': 'Thanks, your feedback has been sent.',
+    'fb.send_failed': 'Could not send your feedback.',
+    'fb.mine.loading': 'Loading your feedback…',
+    'fb.mine.empty': "You haven't sent any feedback yet.",
+    'fb.admin_response': 'Team response',
+
+    // Request-an-agent tab (guided form: project -> SQL tables -> business case)
+    'ar.step_project': 'DSS project',
+    'ar.step_tables': 'SQL tables',
+    'ar.step_details': 'Your need',
+    'ar.choose_project': 'Choose a project…',
+    'ar.loading_projects': 'Loading your projects…',
+    'ar.manual_note': 'No project detected automatically. Enter the DSS project key.',
+    'ar.project_key_label': 'Project key',
+    'ar.project_key_placeholder': 'Example: MY_PROJECT',
+    'ar.select_project_first': 'Choose a project first.',
+    'ar.loading_datasets': 'Loading SQL tables…',
+    'ar.no_datasets': 'No SQL table found for this project.',
+    'ar.manual_tables_note': 'Catalog unavailable. Enter table names (one per line).',
+    'ar.manual_tables_label': 'Table names',
+    'ar.manual_tables_placeholder': 'table_name_1\ntable_name_2',
+    'ar.selected_count': '{0} table(s) selected',
+    'ar.business_case_label': 'Business case (required)',
+    'ar.business_case_placeholder': 'Describe the business need and what this agent should do.',
+    'ar.use_cases_label': 'Use cases (optional)',
+    'ar.use_cases_placeholder': 'Concrete examples of questions or scenarios.',
+    'ar.importance_label': 'Importance / urgency (optional)',
+    'ar.importance_placeholder': 'Why and by when this need matters.',
+    'ar.submit': 'Submit request',
+    'ar.sent': 'Your request has been sent.',
+    'ar.send_failed': 'Could not send your request.',
+    'ar.mine.title': 'My requests',
+    'ar.mine.loading': 'Loading your requests…',
+    'ar.mine.empty': "You haven't made a request yet.",
+    'ar.admin_response': 'Team response',
 
     // FAQ - client-side search (the maquette never wired it)
     'faq.no_results': 'No result for "{0}".',
 
     // Agents - fallbacks for agents not described in the local registry
     'ag.no_agents': 'No agent is enabled for your account. Please contact an administrator.',
+    'ag.request_agent': 'Request an agent',
 
     // Project - no project API yet
     'pj.coming':
