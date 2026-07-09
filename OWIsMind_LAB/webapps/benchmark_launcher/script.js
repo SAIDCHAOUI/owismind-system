@@ -659,7 +659,7 @@
     // Projects + their agents for the add-agent picker (GET /api/agents/projects + project-agents).
     projects: [
       { project_key: "OWISMIND_DEV", name: "OWIsMind (DEV)" },
-      { project_key: "OWISMIND_PROD_V1", name: "OWIsMind (PROD)" },
+      { project_key: "OWISMIND_PRD_V1_2", name: "OWIsMind (PROD)" },
       { project_key: "DKU_EXAM_GEN_AI", name: "Exam Gen AI" }
     ],
     project_agents: {
@@ -668,9 +668,10 @@
         { agent_id: "agent:bHrWLyOL", name: "SalesDrive Revenue Expert" },
         { agent_id: "agent:NcE9LD2i", name: "CSSO Trouble Tickets Expert" }
       ],
-      OWISMIND_PROD_V1: [
-        { agent_id: "agent:Xrv7GvfG", name: "OWIsMind Orchestrator (PROD)" },
-        { agent_id: "agent:uO5hEzAs", name: "SalesDrive Revenue Expert (PROD)" }
+      OWISMIND_PRD_V1_2: [
+        { agent_id: "agent:038G7mlF", name: "OWIsMind Orchestrator (PROD)" },
+        { agent_id: "agent:bHrWLyOL", name: "SalesDrive Revenue Expert (PROD)" },
+        { agent_id: "agent:NcE9LD2i", name: "CSSO Trouble Tickets Expert (PROD)" }
       ],
       DKU_EXAM_GEN_AI: [
         { agent_id: "agent:OTYmUI9v", name: "Exam Assistant" }

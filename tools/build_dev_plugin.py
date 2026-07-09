@@ -28,6 +28,13 @@ scratch outDir with ``OWI_PLUGIN_ID=owismind_dev`` (no install: relies on the
 existing ``node_modules``) and stages + zips everything under
 ``Plugin/ready-for-dataiku/``.
 
+Artifact names are VERSION-DERIVED from ``Plugin/owismind/plugin.json`` (``major_minor``
+with underscores, e.g. ``1.2.0`` -> ``1_2``), matching the one-branch-per-version model:
+  - DEV:     ``owismind-v{VER}-dev-upload`` / ``owismind-v{VER}-dev-upload.zip``
+  - DEV v2:  ``owismind-v{VER}-dev-v2-upload`` / ``owismind-v{VER}-dev-v2-upload.zip``
+Older ``owismind-v*-dev-*upload*`` artifacts and the legacy fixed ``owismind_dev-upload*``
+names are removed before a build (only the current version's artifacts remain).
+
 Usage:
   python3 tools/build_dev_plugin.py            # full DEV build + stage + zip
   python3 tools/build_dev_plugin.py --v2       # same pipeline, THIRD coexisting
@@ -36,7 +43,7 @@ Usage:
   python3 tools/build_dev_plugin.py --version 1.3
                                                # same pipeline, a VERSION-NAMED
                                                # coexisting plugin (id owismind_v1_3,
-                                               # zip owismind-v1_3-upload.zip) so a
+                                               # zip owismind_v1_3-upload.zip) so a
                                                # given release can be tested side by
                                                # side with prod and DEV; --version 1.4,
                                                # 1.5, ... need no new code
@@ -58,6 +65,7 @@ Python 3, standard library only. No installs of any kind.
 """
 
 import argparse
+import glob
 import os
 import re
 import shutil
@@ -78,6 +86,30 @@ READY_DIR = os.path.join(REPO_ROOT, "Plugin", "ready-for-dataiku")
 WEBAPP_REL = os.path.join("webapps", "webapp-owismind-ai-agents")
 BODY_HTML_REL = os.path.join(WEBAPP_REL, "body.html")
 BACKEND_PY_REL = os.path.join(WEBAPP_REL, "backend.py")
+
+
+# --- Version (drives the artifact names) -------------------------------------
+# Match the FIRST "version": "X.Y..." in plugin.json. The file is JSONC (it carries
+# // comments), so parse with a regex rather than json.load (which would choke on them).
+_RE_PLUGIN_VERSION = re.compile(r'"version"\s*:\s*"(\d+)\.(\d+)')
+
+
+def read_plugin_version_ver():
+    """Return the ``major_minor`` version tag with underscores, e.g. ``1_2`` for 1.2.0.
+
+    Reads ``"version"`` from ``Plugin/owismind/plugin.json`` (JSONC, // comments) and
+    reduces it to ``major_minor`` (dots -> underscores) - the tag baked into every DEV
+    artifact name so a new version's zip never collides with the previous one's.
+    """
+    plugin_json = os.path.join(PLUGIN_SRC, "plugin.json")
+    with open(plugin_json, "r", encoding="utf-8") as fh:
+        m = _RE_PLUGIN_VERSION.search(fh.read())
+    if not m:
+        raise SystemExit("ERROR: could not read \"version\" from {}.".format(plugin_json))
+    return "{}_{}".format(m.group(1), m.group(2))
+
+
+VER = read_plugin_version_ver()
 
 # --- Active (coexisting) identity ---------------------------------------------
 # These DEV_* globals hold the DEFAULT identity (owismind_dev) at import time, but
@@ -103,8 +135,11 @@ PROD_BASE = "/plugins/{}/resource/{}/".format(PROD_ID, APP_DIR_NAME)
 DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
 
 # Staging + zip outputs (live under ready-for-dataiku/, never in the plugin source).
-STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(DEV_ID))
-ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(DEV_ID))
+# Names are version-derived: owismind-v{VER}-dev-upload(.zip). The plugin id stays
+# owismind_dev (DEV_ID, used for the package/asset-base rewrites); only the artifact
+# file names carry the VER tag so a new version's zip never collides with the old one's.
+STAGE_DIR = os.path.join(READY_DIR, "owismind-v{}-dev-upload".format(VER))
+ZIP_PATH = os.path.join(READY_DIR, "owismind-v{}-dev-upload.zip".format(VER))
 
 
 def use_v2_identity():
@@ -123,8 +158,8 @@ def use_v2_identity():
     DEV_WEBAPP_LABEL = "OWIsMind - AI Agents (DEV v2)"
     _WEBAPP_DESC_HEAD_DEV = '"description": "[DEV v2] Chat with Dataiku AI agents.'
     DEV_BASE = "/plugins/{}/resource/{}/".format(DEV_ID, APP_DIR_NAME)
-    STAGE_DIR = os.path.join(READY_DIR, "{}-upload".format(DEV_ID))
-    ZIP_PATH = os.path.join(READY_DIR, "{}-upload.zip".format(DEV_ID))
+    STAGE_DIR = os.path.join(READY_DIR, "owismind-v{}-dev-v2-upload".format(VER))
+    ZIP_PATH = os.path.join(READY_DIR, "owismind-v{}-dev-v2-upload.zip".format(VER))
 
 
 _RE_VERSION = re.compile(r"^\d+(\.\d+)+$")
@@ -156,7 +191,7 @@ def _version_names(version):
         "label": "OWIsMind v{}".format(version),  # 'OWIsMind v1.3'
         "webapp_label": "OWIsMind AI Agents v{}".format(version),  # 'OWIsMind AI Agents v1.3'
         "desc_head": '"description": "[v{}] Chat with Dataiku AI agents.'.format(version),
-        "zip_stem": "owismind-{}".format(id_suffix),  # 'owismind-v1_3' (staging dir + zip basename)
+        "zip_stem": "owismind_{}".format(id_suffix),  # 'owismind_v1_3' = the plugin id (staging dir + zip basename; underscore form so it never collides with the prod zip owismind-v1_3-upload.zip)
     }
 
 
@@ -167,7 +202,7 @@ def use_version_identity(version):
     so a future version is just a different ``--version`` argument, never new code.
     Independent of ``owismind`` (prod) and of the fixed ``owismind_dev`` /
     ``owismind_dev_v2`` slots: each version gets its own id, staging tree and zip
-    (``owismind_v1_3``, ``owismind-v1_3-upload.zip``, ...), so v1.3 and a later v1.4
+    (``owismind_v1_3``, ``owismind_v1_3-upload.zip``, ...), so v1.3 and a later v1.4
     can both be installed and tested side by side. The word-boundary rewrite
     patterns need no change, for the same reason documented in ``use_v2_identity``:
     ``\\bowismind\\b`` never matches inside ``owismind_v1_3`` (``_`` is a word char).
@@ -524,9 +559,34 @@ def _assert_dev_base(body_html_path):
     assert PROD_BASE not in body, "body.html still carries PROD base {}".format(PROD_BASE)
 
 
+def _cleanup_stale_dev_artifacts():
+    """Remove stale DEV artifacts under ready-for-dataiku/ before a fresh build.
+
+    Sweeps every ``owismind-v*-dev-*upload*`` staging dir / zip and the legacy fixed
+    ``owismind_dev-upload*`` names, KEEPING only the two current-version identities
+    (``owismind-v{VER}-dev-upload*`` and ``owismind-v{VER}-dev-v2-upload*``) so a stable
+    same-version DEV/DEV-v2 pair can coexist while old versions are cleared out.
+    """
+    keep_prefixes = (
+        "owismind-v{}-dev-upload".format(VER),
+        "owismind-v{}-dev-v2-upload".format(VER),
+    )
+    patterns = ("owismind-v*-dev-*upload*", "owismind_dev-upload*")
+    for pattern in patterns:
+        for path in glob.glob(os.path.join(READY_DIR, pattern)):
+            base = os.path.basename(path)
+            if any(base.startswith(p) for p in keep_prefixes):
+                continue
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                os.remove(path)
+
+
 def run_build():
     """Full DEV pipeline: build -> stage -> rewrite -> zip -> assert + print invariants."""
     os.makedirs(READY_DIR, exist_ok=True)
+    _cleanup_stale_dev_artifacts()
 
     # Fresh staging tree (never the canonical source; only under ready-for-dataiku/).
     if os.path.exists(STAGE_DIR):
@@ -601,7 +661,7 @@ def main(argv=None):
         metavar="X.Y",
         default=None,
         help="Build a VERSION-NAMED coexisting plugin, e.g. --version 1.3 -> id owismind_v1_3, "
-             "webapp label 'OWIsMind AI Agents v1.3', zip owismind-v1_3-upload.zip. Independent "
+             "webapp label 'OWIsMind AI Agents v1.3', zip owismind_v1_3-upload.zip. Independent "
              "of --v2/default DEV (its own staging + zip); reuses the same deterministic rewrite, "
              "so --version 1.4 (etc.) needs no new code.",
     )

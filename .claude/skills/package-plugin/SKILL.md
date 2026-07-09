@@ -1,16 +1,20 @@
 ---
 name: package-plugin
-description: Package the OWIsMind DSS plugin runtime into ready-for-dataiku/owismind-upload.zip (plugin.json + python-lib + resource + webapps only - no frontend/node_modules). Use when the user asks to package the plugin, build the zip, or prepare the upload. Never uploads.
+description: Package the OWIsMind DSS plugin runtime into a version-derived zip under ready-for-dataiku/ (e.g. owismind-v1_2-upload.zip, plugin.json + python-lib + resource + webapps only - no frontend/node_modules). Use when the user asks to package the plugin, build the zip, or prepare the upload. Never uploads.
 ---
 
 # /package-plugin - Package the runtime into the upload zip
 
 Stages the **runtime only** and zips it for a DSS plugin upload. **Never uploads anything.**
 
+The zip name is **derived from the plugin version** in `Plugin/owismind/plugin.json`
+(`major_minor`, dots -> underscores): version `1.2.0` -> `owismind-v1_2-upload.zip`. One
+branch per version ships one zip, so the old version's zip is removed before staging.
+
 ## Canonical paths (see memory/PROJECT_STATE.md)
 - Plugin root: `Plugin/owismind`
-- Staging dir: `Plugin/ready-for-dataiku/owismind-upload`
-- Zip output:  `Plugin/ready-for-dataiku/owismind-upload.zip`
+- Staging dir: `Plugin/ready-for-dataiku/owismind-v${VER}-upload`
+- Zip output:  `Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip`
 - Runtime to include: `plugin.json` (at zip root), `python-lib/`, `resource/`, `webapps/`
 - Must be EXCLUDED: `frontend/`, `node_modules/`, any `_/`, `.DS_Store`, `__MACOSX/`,
   dev docs (`CLAUDE.md`, `README.md`) and Python caches (`__pycache__/`, `*.pyc`).
@@ -23,24 +27,37 @@ Stages the **runtime only** and zips it for a DSS plugin upload. **Never uploads
 
 ## Steps
 
-1. **Reset staging.** Clearing the old staging dir uses `rm -rf` and will prompt for approval (safety first) - that is expected:
+0. **Preflight - derive `VER` from the plugin version.** Read `"version"` from
+   `Plugin/owismind/plugin.json` and reduce it to `major_minor` with underscores
+   (e.g. `1.2.0` -> `1_2`). Every later step reuses `$VER`, so never hardcode `1_2`:
    ```bash
-   rm -rf Plugin/ready-for-dataiku/owismind-upload Plugin/ready-for-dataiku/owismind-upload.zip
-   mkdir -p Plugin/ready-for-dataiku/owismind-upload
+   VER=$(grep -Eo '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+' Plugin/owismind/plugin.json \
+         | grep -Eo '[0-9]+\.[0-9]+' | head -1 | tr '.' '_')
+   echo "VER=$VER"   # sanity: must print e.g. VER=1_2
+   test -n "$VER" || { echo "ERROR: could not derive VER from plugin.json"; }
+   ```
+
+1. **Reset staging - remove ALL previous artifacts** (every prior `owismind-v*-upload`
+   staging dir + zip, and the legacy fixed `owismind-upload` names), then make the fresh
+   staging dir. `rm -rf` will prompt for approval (safety first) - that is expected:
+   ```bash
+   rm -rf Plugin/ready-for-dataiku/owismind-v*-upload Plugin/ready-for-dataiku/owismind-v*-upload.zip \
+          Plugin/ready-for-dataiku/owismind-upload Plugin/ready-for-dataiku/owismind-upload.zip
+   mkdir -p "Plugin/ready-for-dataiku/owismind-v${VER}-upload"
    ```
 
 2. **Stage runtime only** (`plugin.json` goes to the staging ROOT):
    ```bash
-   cp Plugin/owismind/plugin.json Plugin/ready-for-dataiku/owismind-upload/
+   cp Plugin/owismind/plugin.json "Plugin/ready-for-dataiku/owismind-v${VER}-upload/"
    cp -R Plugin/owismind/python-lib Plugin/owismind/resource Plugin/owismind/webapps \
-         Plugin/ready-for-dataiku/owismind-upload/
+         "Plugin/ready-for-dataiku/owismind-v${VER}-upload/"
    ```
 
 3. **Zip from the staging dir** (so `plugin.json` is at the archive root). Exclude
    dev-only docs and Python caches so the runtime upload stays clean:
    ```bash
-   ( cd Plugin/ready-for-dataiku/owismind-upload && \
-     zip -r ../owismind-upload.zip . \
+   ( cd "Plugin/ready-for-dataiku/owismind-v${VER}-upload" && \
+     zip -r "../owismind-v${VER}-upload.zip" . \
        -x "*.DS_Store" "__MACOSX/*" \
           "*/CLAUDE.md" "CLAUDE.md" "*/README.md" "README.md" \
           "*/__pycache__/*" "__pycache__/*" "*.pyc" )
@@ -48,7 +65,7 @@ Stages the **runtime only** and zips it for a DSS plugin upload. **Never uploads
 
 4. **Verify the archive is clean** (must print "ZIP clean"):
    ```bash
-   unzip -Z1 Plugin/ready-for-dataiku/owismind-upload.zip \
+   unzip -Z1 "Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" \
      | grep -Eq '(^|/)(frontend|node_modules)(/|$)|(^|/)_/|(^|/)CLAUDE\.md$|(^|/)README\.md$|__pycache__|\.pyc$' \
      && echo "ERROR: zip polluted" || echo "ZIP clean"
    ```
@@ -60,13 +77,14 @@ Stages the **runtime only** and zips it for a DSS plugin upload. **Never uploads
             webapps/webapp-owismind-ai-agents/body.html \
             webapps/webapp-owismind-ai-agents/backend.py \
             python-lib/owismind/__init__.py; do
-     unzip -Z1 Plugin/ready-for-dataiku/owismind-upload.zip | grep -qx "$f" \
+     unzip -Z1 "Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" | grep -qx "$f" \
        && echo "OK  $f" || echo "MISSING  $f"
    done
    ```
 
-6. **Report** (in French): zip path, file count, clean/polluted verdict, required-files check.
-   Remind the user the upload to DSS is **manual** (this skill does not upload).
+6. **Report** (in French): zip path (`owismind-v${VER}-upload.zip`), file count, clean/polluted
+   verdict, required-files check. Remind the user the upload to DSS is **manual** (this skill
+   does not upload).
 
 ## Notes
 - Do not edit anything under `ready-for-dataiku/` by hand - it is regenerated by this skill.

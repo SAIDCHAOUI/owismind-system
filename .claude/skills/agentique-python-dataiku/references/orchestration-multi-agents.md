@@ -1,8 +1,8 @@
 # Orchestration & multi-agents (superviseur, sous-agents, handoffs, hiérarchie, swarm)
 
-> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`orchestrator_agent.py`, `dataset_expert_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16 puis réorg par projet 2026-06-22). Les agents vivent désormais sous `dataiku-agents/OWISMIND/<PROJET>/agents/<PROJET>_*.py`. Les extraits et numéros de ligne restent valables comme matériel pédagogique.
+> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`orchestrator_agent.py`, `dataset_expert_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16, réorg par projet 2026-06-22, puis restructuration en miroir du projet DSS prod 2026-07-10). Les agents vivent désormais sous `OWIsMind_PRD_V1_2/agents/` (`OWIsMind_orchestrator.py`, `SalesDrive_revenue_expert.py`, `CSSO_Trouble_Tickets_Expert.py`) et les tests sous `OWIsMind_PRD_V1_2/tests/`. Les extraits et numéros de ligne restent valables comme matériel pédagogique.
 
-> À jour : juin 2026 — LangChain 1.x / LangGraph 1.x, Dataiku DSS 14.x. Fichier de référence du skill `agentique-python-dataiku` (parent : `SKILL.md`). Pour les fondations LangGraph (state/nodes/edges, persistence, streaming) : voir `references/langgraph-v1.md` ; pour `create_agent`, middleware, structured output : `references/langchain-v1.md` ; pour LLM Mesh, tools managés, gouvernance : `references/dataiku-code-agents.md`.
+> À jour : juin 2026 - LangChain 1.x / LangGraph 1.x, Dataiku DSS 14.x. Fichier de référence du skill `agentique-python-dataiku` (parent : `SKILL.md`). Pour les fondations LangGraph (state/nodes/edges, persistence, streaming) : voir `references/langgraph-v1.md` ; pour `create_agent`, middleware, structured output : `references/langchain-v1.md` ; pour LLM Mesh, tools managés, gouvernance : `references/dataiku-code-agents.md`.
 
 ---
 
@@ -20,7 +20,7 @@ Passer multi-agent quand, et seulement quand (https://docs.langchain.com/oss/pyt
 | Parallélisme réel | lancer des workers concurrents sur sous-tâches indépendantes |
 | Contraintes séquentielles / gating | débloquer des capacités après conditions (machine à états par handoff) |
 
-> Avant même d'ajouter un agent : le pattern **Skills** (un seul agent qui charge prompt/connaissance spécialisés à la demande) est le moins cher pour du mono-domaine répété (~15K tokens vs ~9K pour subagents/router sur une tâche 3 domaines) (https://docs.langchain.com/oss/python/langchain/multi-agent). Coût Anthropic du réflexe inverse : un système de recherche multi-agent peut brûler **~15× les tokens** d'un chat simple — réservé au travail à forte valeur et parallélisable (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents).
+> Avant même d'ajouter un agent : le pattern **Skills** (un seul agent qui charge prompt/connaissance spécialisés à la demande) est le moins cher pour du mono-domaine répété (~15K tokens vs ~9K pour subagents/router sur une tâche 3 domaines) (https://docs.langchain.com/oss/python/langchain/multi-agent). Coût Anthropic du réflexe inverse : un système de recherche multi-agent peut brûler **~15× les tokens** d'un chat simple - réservé au travail à forte valeur et parallélisable (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents).
 
 Corpus et source ChatGPT s'accordent : démarrer simple, descendre en complexité par paliers (single call → workflow → agent → multi-agent), et chaque palier doit se justifier par une éval.
 
@@ -50,7 +50,7 @@ Mapping Anthropic : **orchestrator-workers** = supervisor ; **routing workflow**
 
 ## 2. Le primitif de handoff : `Command`
 
-`Command` est l'objet qu'un **node ou un tool** retourne pour **mettre à jour le state ET choisir le prochain node** en une seule étape — il remplace les edges explicites et rend naturels les graphes « sans arêtes » / dynamiques (https://www.langchain.com/blog/command-a-new-tool-for-multi-agent-architectures-in-langgraph).
+`Command` est l'objet qu'un **node ou un tool** retourne pour **mettre à jour le state ET choisir le prochain node** en une seule étape - il remplace les edges explicites et rend naturels les graphes « sans arêtes » / dynamiques (https://www.langchain.com/blog/command-a-new-tool-for-multi-agent-architectures-in-langgraph).
 
 ```python
 from langgraph.types import Command
@@ -64,7 +64,7 @@ def agent(state: MessagesState) -> Command[Literal["other_agent", "__end__"]]:
     )
 ```
 
-**`Command` vs edge conditionnel** : un edge conditionnel (`add_conditional_edges`) quand un node *route seulement* sans toucher au state ; `Command` quand il faut *router ET mettre à jour* dans la même étape (le cas du handoff). ⚠️ Signature à jour : `add_conditional_edges(source, path, path_map=None)` — **pas de paramètre `then=`** (https://reference.langchain.com/python/langgraph/graph/state/StateGraph/add_conditional_edges).
+**`Command` vs edge conditionnel** : un edge conditionnel (`add_conditional_edges`) quand un node *route seulement* sans toucher au state ; `Command` quand il faut *router ET mettre à jour* dans la même étape (le cas du handoff). ⚠️ Signature à jour : `add_conditional_edges(source, path, path_map=None)` - **pas de paramètre `then=`** (https://reference.langchain.com/python/langgraph/graph/state/StateGraph/add_conditional_edges).
 
 **Franchir une frontière de subgraph : `graph=Command.PARENT`.** Quand chaque agent est lui-même un subgraph compilé ajouté comme node, un tool *interne* qui veut sauter vers un agent *frère* doit router dans le graphe parent. `Command.PARENT` est le seul saut supporté ; le multi-niveaux se compose en ré-émettant `Command.PARENT` à chaque palier.
 
@@ -95,11 +95,11 @@ def transfer_to_sales(runtime: ToolRuntime) -> Command:
     )
 ```
 
-**Handoff = reconfiguration sur place (mono-agent, sans second agent).** Un tool peut basculer une variable d'état (`current_step`) qu'un **middleware** lit pour échanger system prompt + jeu d'outils au tour suivant — un seul agent qui se comporte en machine à états (https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs). Pattern portable hors de toute lib de handoff (voir `references/langchain-v1.md` pour `wrap_model_call` / `request.override(...)`).
+**Handoff = reconfiguration sur place (mono-agent, sans second agent).** Un tool peut basculer une variable d'état (`current_step`) qu'un **middleware** lit pour échanger system prompt + jeu d'outils au tour suivant - un seul agent qui se comporte en machine à états (https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs). Pattern portable hors de toute lib de handoff (voir `references/langchain-v1.md` pour `wrap_model_call` / `request.override(...)`).
 
 ---
 
-## 3. Pattern A — Subagents / « agents-as-tools » (DÉFAUT recommandé)
+## 3. Pattern A - Subagents / « agents-as-tools » (DÉFAUT recommandé)
 
 L'agent principal appelle chaque sous-agent **comme un tool** : il décide qui invoquer, avec quelle entrée, et comment combiner les résultats. Les sous-agents sont **stateless** (la conversation est tenue par le principal) → chaque invocation a une **fenêtre de contexte propre**. Le principal peut invoquer **plusieurs sous-agents dans un même tour** (parallélisme) (https://docs.langchain.com/oss/python/langchain/multi-agent/subagents).
 
@@ -122,11 +122,11 @@ Choix de design (https://docs.langchain.com/oss/python/langchain/multi-agent/sub
 - **Contexte de routage** : le principal route *uniquement* sur les **noms + descriptions** des tools-agents. Noms orientés action (`research_agent`, `code_reviewer`), descriptions « quand m'appeler ». Pour beaucoup d'agents / agents dynamiques : un tool `list_agents` (divulgation progressive) plutôt que tout empiler dans le prompt.
 - **Sync vs async** : tool synchrone = bloque jusqu'à la fin, défaut quand le principal a besoin du résultat pour continuer ; pour les jobs longs/indépendants, pattern async à 3 tools (start → check status → fetch result). Corpus et ChatGPT concordent.
 
-**Pourquoi recommandé** : isolation de contexte propre, parallélisme facile, zéro câblage d'edges, et c'est « le plus générique » — fonctionne même avec des agents tiers/opaques (https://www.langchain.com/blog/benchmarking-multi-agent-architectures). **Quarantaine de contexte** (terme Deep Agents, équivalent ChatGPT/Anthropic) : on délègue le travail lourd dans une fenêtre isolée, on ne remonte qu'un **résumé synthétique** (~1 000–2 000 tokens), jamais la trace brute (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents). **Deep Agents** (`deepagents`) est le harness clé-en-main au-dessus de `create_agent` qui bundle ce pattern (filesystem, subagents, planning, gestion de contexte) (https://github.com/langchain-ai/deepagents).
+**Pourquoi recommandé** : isolation de contexte propre, parallélisme facile, zéro câblage d'edges, et c'est « le plus générique » - fonctionne même avec des agents tiers/opaques (https://www.langchain.com/blog/benchmarking-multi-agent-architectures). **Quarantaine de contexte** (terme Deep Agents, équivalent ChatGPT/Anthropic) : on délègue le travail lourd dans une fenêtre isolée, on ne remonte qu'un **résumé synthétique** (~1 000-2 000 tokens), jamais la trace brute (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents). **Deep Agents** (`deepagents`) est le harness clé-en-main au-dessus de `create_agent` qui bundle ce pattern (filesystem, subagents, planning, gestion de contexte) (https://github.com/langchain-ai/deepagents).
 
 ---
 
-## 4. Pattern B — Supervisor (`langgraph-supervisor`)
+## 4. Pattern B - Supervisor (`langgraph-supervisor`)
 
 Un superviseur LLM délègue à une liste de workers via des **tools de handoff auto-générés** ; les workers rendent le contrôle au superviseur, qui possède la réponse finale. `create_supervisor()` renvoie un `StateGraph` à `.compile()`.
 
@@ -151,7 +151,7 @@ workflow = create_supervisor(
 app = workflow.compile()
 ```
 
-⚠️ Chaque worker DOIT recevoir un `name=` — les tools de handoff et l'attribution des messages en dépendent. `include_agent_name="inline"` injecte les noms en balises XML pour une attribution fiable.
+⚠️ Chaque worker DOIT recevoir un `name=` - les tools de handoff et l'attribution des messages en dépendent. `include_agent_name="inline"` injecte les noms en balises XML pour une attribution fiable.
 
 Paramètres clés de `create_supervisor` (v0.0.31, https://reference.langchain.com/python/langgraph-supervisor/supervisor/create_supervisor) :
 
@@ -179,7 +179,7 @@ workflow = create_supervisor([research_agent, math_agent], model=model,
 
 ---
 
-## 5. Pattern C — Hierarchical (superviseurs de superviseurs)
+## 5. Pattern C - Hierarchical (superviseurs de superviseurs)
 
 Quand un superviseur a trop de workers : grouper en équipes, chacune avec son superviseur, sous un superviseur top-level. Comme `create_supervisor(...).compile()` renvoie un graphe compilé, **un superviseur compilé est lui-même un « agent » valide** à passer à un superviseur supérieur (https://github.com/langchain-ai/langgraph-supervisor-py/blob/main/README.md).
 
@@ -197,9 +197,9 @@ top = create_supervisor([research_team, writing_team], model=model,
 
 ---
 
-## 6. Pattern D — Swarm / Network (`langgraph-swarm`)
+## 6. Pattern D - Swarm / Network (`langgraph-swarm`)
 
-Pair-à-pair : les agents se passent le contrôle **directement** via `Command` — **sans retour par un superviseur**. Exactement un agent « actif » à la fois ; le swarm **mémorise le dernier agent actif** pour reprendre au tour suivant avec lui (https://github.com/langchain-ai/langgraph-swarm-py/blob/main/README.md). `langgraph-swarm` 0.1.0 (déc. 2025, Python ≥ 3.10).
+Pair-à-pair : les agents se passent le contrôle **directement** via `Command` - **sans retour par un superviseur**. Exactement un agent « actif » à la fois ; le swarm **mémorise le dernier agent actif** pour reprendre au tour suivant avec lui (https://github.com/langchain-ai/langgraph-swarm-py/blob/main/README.md). `langgraph-swarm` 0.1.0 (déc. 2025, Python ≥ 3.10).
 
 ```python
 from langgraph.checkpoint.memory import InMemorySaver
@@ -225,7 +225,7 @@ Benchmark : superviseur et swarm restent **plats en tokens** quand les domaines 
 
 ---
 
-## 7. Subgraphs — le substrat de composition
+## 7. Subgraphs - le substrat de composition
 
 Un système multi-agent est un subgraph-de-subgraphs. Deux modes d'intégration (https://docs.langchain.com/oss/python/langgraph/use-subgraphs) :
 
@@ -244,8 +244,8 @@ Persistance du subgraph (au `.compile()`) : par-invocation (défaut, state frais
 
 ## 8. Async vs sync delegation & garde-fous de boucle
 
-- **Sync** : défaut quand le superviseur a besoin du résultat pour continuer (la chaîne est sérielle). **Async** : tâches indépendantes longues — fan-out parallèle (subagents multiples, ou `parallel_tool_calls=True` sur OpenAI/Anthropic), ou pattern async 3-tools.
-- **`recursion_limit` par défaut = 25** (PAS 1000). Le dépassement lève `GraphRecursionError`. Le relever **par invocation**, pas en changeant un défaut : `graph.invoke(inputs, config={"recursion_limit": 100})` (https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT). Les sous-agents héritent silencieusement de 25 — penser à le passer aux subgraphs.
+- **Sync** : défaut quand le superviseur a besoin du résultat pour continuer (la chaîne est sérielle). **Async** : tâches indépendantes longues - fan-out parallèle (subagents multiples, ou `parallel_tool_calls=True` sur OpenAI/Anthropic), ou pattern async 3-tools.
+- **`recursion_limit` par défaut = 25** (PAS 1000). Le dépassement lève `GraphRecursionError`. Le relever **par invocation**, pas en changeant un défaut : `graph.invoke(inputs, config={"recursion_limit": 100})` (https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT). Les sous-agents héritent silencieusement de 25 - penser à le passer aux subgraphs.
 - **`durability` par défaut = `"async"`** (persistance asynchrone pendant l'étape suivante). Passer `durability=` explicitement dans tout exemple où ça compte (`"exit"` le plus rapide / `"sync"` le plus durable).
 - **`astream_events` : version par défaut = `v2`** ; `v3` est opt-in/expérimental et exige LangChain ≥ 1.3 (le content-block protocol). Épingler `version="v2"` sauf besoin explicite du v3.
 - ⚠️ **API périmée** : `create_react_agent` (de `langgraph.prebuilt`) est **DÉPRÉCIÉ** en LangGraph v1 → utiliser `langchain.agents.create_agent`. `AgentExecutor` / `initialize_agent` vivent dans `langchain-classic` (maintenu jusqu'à déc. 2026).
@@ -256,7 +256,7 @@ Persistance du subgraph (au `.compile()`) : par-invocation (défaut, state frais
 
 Correspondance plateforme du supervisor pattern (source ChatGPT, taxonomie Dataiku ; détail API dans `references/dataiku-code-agents.md`) :
 
-- **Tool « Query an LLM/Agent »** : permet à un agent principal de **déléguer à un autre agent ou LLM**. Trois bénéfices documentés : séparation des responsabilités, garder le superviseur « sur les rails » quand il a trop d'outils, et arbitrage coût/performance (ne déléguer que les cas difficiles à un modèle plus puissant) — l'exact analogue du routing/cost-tiering.
+- **Tool « Query an LLM/Agent »** : permet à un agent principal de **déléguer à un autre agent ou LLM**. Trois bénéfices documentés : séparation des responsabilités, garder le superviseur « sur les rails » quand il a trop d'outils, et arbitrage coût/performance (ne déléguer que les cas difficiles à un modèle plus puissant) - l'exact analogue du routing/cost-tiering.
 - Chaque agent Dataiku devient un **« Virtual LLM » dans le LLM Mesh** → réutilisable partout où le Mesh est exposé, avec audit/sécurité/guardrails. L'agent n'est pas qu'un bout de code : c'est un objet gouverné.
 - **Workflow multi-agents séquentiel** (tutoriel officiel Dataiku) = chaînage d'agents façon prompt-chaining.
 - **Agent Hub** : orchestrer plusieurs agents dans une même interface de chat. **External Agents** : raccorder des agents Databricks/Bedrock/Vertex AI comme agents managés gouvernés. Publication d'agents Dataiku comme **MCP Tools**.
@@ -274,14 +274,14 @@ C'est l'implémentation 3.9-native, validée DSS, qui matérialise le supervisor
 
 ### 10.1 Le pare-feu d'honnêteté & routage
 
-**Bug central corrigé** (confirmé sur 817 questions réelles, ~10 plaintes identiques) : l'orchestrateur **niait/inventait au lieu de router** — « budget 2026 pour le Roaming Hub » → « je n'ai pas de données budget » *sans jamais appeler l'agent revenus*, alors que le sous-agent lit une colonne `Phase` dont les valeurs incluent `BUDGET`. Cause racine : les règles interdisaient le *sur*-promesse mais rien n'interdisait le *sous*-promesse (inventer une limite inexistante).
+**Bug central corrigé** (confirmé sur 817 questions réelles, ~10 plaintes identiques) : l'orchestrateur **niait/inventait au lieu de router** - « budget 2026 pour le Roaming Hub » → « je n'ai pas de données budget » *sans jamais appeler l'agent revenus*, alors que le sous-agent lit une colonne `Phase` dont les valeurs incluent `BUDGET`. Cause racine : les règles interdisaient le *sur*-promesse mais rien n'interdisait le *sous*-promesse (inventer une limite inexistante).
 
-Le pare-feu (architectural, pas seulement prompt — `orchestrator_agent.py:55-63, 665-674`) :
+Le pare-feu (architectural, pas seulement prompt - `orchestrator_agent.py:55-63, 665-674`) :
 
-- **L'orchestrateur n'émet JAMAIS un fait métier.** Le seul « non » qu'il peut écrire = **« je n'ai pas d'agent pour ce DOMAINE »** (`CAPABILITY_GAP`) — *jamais* « la donnée n'existe pas » (cela appartient à l'expert via `out_of_scope`/`no_data`). **Dans le doute → router.**
-- `BUSINESS` est le **défaut** pour tout ce qui touche un domaine *qui a* un agent, « MÊME si tu n'es pas sûr que le chiffre précis existe — seul l'agent peut confirmer » (`:622-624`).
+- **L'orchestrateur n'émet JAMAIS un fait métier.** Le seul « non » qu'il peut écrire = **« je n'ai pas d'agent pour ce DOMAINE »** (`CAPABILITY_GAP`) - *jamais* « la donnée n'existe pas » (cela appartient à l'expert via `out_of_scope`/`no_data`). **Dans le doute → router.**
+- `BUSINESS` est le **défaut** pour tout ce qui touche un domaine *qui a* un agent, « MÊME si tu n'es pas sûr que le chiffre précis existe - seul l'agent peut confirmer » (`:622-624`).
 - **Intents non-business = templates déterministes, pas de prose libre** (la prose libre était la fuite des faits hallucinés) : `CAPABILITY_GAP` / `OUT_OF_SCOPE` rendus depuis des **templates sourcés du registre** (`render_non_business_text :1010-1019`) ; nouvel intent `CONCEPT` (notions télécom générales, ex. SS7 vs LTE, explicitement « connaissance générale, aucun chiffre OWI » `:628-632`) ; `CLARIFY` borné à « demander seulement ».
-- **`BUSINESS_DOMAINS`** (`:356-363`) = carte noms-seulement qui distingue un domaine *réel mais non staffé* (→ CAPABILITY_GAP honnête) d'une question *non-OWI* (→ OUT_OF_SCOPE). Un domaine devient « staffé » automatiquement quand un agent activé le déclare (`staffed_domains :366-369`) — **ajouter un agent referme le gap sans changer un prompt**.
+- **`BUSINESS_DOMAINS`** (`:356-363`) = carte noms-seulement qui distingue un domaine *réel mais non staffé* (→ CAPABILITY_GAP honnête) d'une question *non-OWI* (→ OUT_OF_SCOPE). Un domaine devient « staffé » automatiquement quand un agent activé le déclare (`staffed_domains :366-369`) - **ajouter un agent referme le gap sans changer un prompt**.
 - **Test anti-dérive** : il importe les `KNOWN_PHASES` du sous-agent et échoue si la description du planner re-rétrécit le scope (`test_manifest_antidrift.py:44,59`). L'invariant métier vit dans un **test**, pas dans la logique de l'agent (règle P3).
 
 ### 10.2 Registre-as-manifest (whitelist serveur)
@@ -319,7 +319,7 @@ Le mono-step est inchangé : un seul step **relaie sa réponse verbatim (0 coût
 
 ## 11. UNDERSTAND → RESOLVE → COMPOSE → QUERY → RENDER (le pattern d'orchestration concret du sous-agent)
 
-C'est le pipeline en 5 étapes partagé par le Dataset Expert générique et les agents revenus (`dataset_expert_agent.py:11-33`). **La répartition du travail EST le pattern** : le LLM fait *seulement* de la linguistique et une phrase vérifiée ; tout ce qui est load-bearing est du Python déterministe. C'est l'opposé d'une boucle tool-calling autonome — « le LLM ne décide plus rien pendant l'exécution » — justifié par l'évidence SOTA (semantic layer + templates ≫ LLM-SQL libre, 98-100 % vs 84-90 %) et par le transport DSS buffé qui récompense des appels peu nombreux et bien formés.
+C'est le pipeline en 5 étapes partagé par le Dataset Expert générique et les agents revenus (`dataset_expert_agent.py:11-33`). **La répartition du travail EST le pattern** : le LLM fait *seulement* de la linguistique et une phrase vérifiée ; tout ce qui est load-bearing est du Python déterministe. C'est l'opposé d'une boucle tool-calling autonome - « le LLM ne décide plus rien pendant l'exécution » - justifié par l'évidence SOTA (semantic layer + templates ≫ LLM-SQL libre, 98-100 % vs 84-90 %) et par le transport DSS buffé qui récompense des appels peu nombreux et bien formés.
 
 | Étape | Le LLM fait | Le CODE fait (déterministe) |
 |---|---|---|
@@ -330,9 +330,9 @@ C'est le pipeline en 5 étapes partagé par le Dataset Expert générique et les
 | **RENDER** | une **headline**, chaque chiffre vérifié | formate la table et les chiffres par code ; headline de fallback déterministe |
 
 Points d'orchestration transférables :
-- **UNDERSTAND** : prompt **généré depuis le profil** (le même code comprend n'importe quel dataset). 2 tentatives : JSON natif (`with_json_output(schema=...)`) puis fallback prompt-only. Dégradations déterministes (intent inconnu → `custom` ; `compare_scenarios` à un seul scénario → préfixer le défaut factuel du profil — généralise « gap vs budget » sans aucun hardcode).
+- **UNDERSTAND** : prompt **généré depuis le profil** (le même code comprend n'importe quel dataset). 2 tentatives : JSON natif (`with_json_output(schema=...)`) puis fallback prompt-only. Dégradations déterministes (intent inconnu → `custom` ; `compare_scenarios` à un seul scénario → préfixer le défaut factuel du profil - généralise « gap vs budget » sans aucun hardcode).
 - **RESOLVE = la couche anti-résultat-vide** : un filtre non ancré renvoie 0 ligne en silence. Un **value index** (`{column_name, value, value_norm, occurrences}`) interrogé par SQL mappe « algerie telecom »/« ipl » à la **valeur cellule exacte + sa colonne**. `_norm` (NFKD→ASCII→lower→collapse) est **GELÉE et partagée** entre recette et agent. Politique d'ambiguïté déterministe en 3 étapes (terme qualifié `VALUE (Column)` → préférence valeur-exacte stricte → auto-pick par priorité de colonne du profil).
-- **COMPOSE pour le tool semantic (moteur hybride, décision DSS la plus récente)** : **« la QUESTION USER MÈNE »**. Question user verbatim EN TÊTE, puis intent hint (guidance), puis **valeurs exactes groupées par colonne → sémantique `IN` par colonne, jamais `Product = A AND Product = B`** (le bug impossible-AND), règle d'énumération (lister plusieurs items → OR + une ligne par item), scénario/période explicites, note de destination (« retourne une table propre avec alias de colonnes, jamais de prose »). On laisse le **Semantic Model Query tool posséder le SQL** ; le moteur SQL direct code-owned devient un **fallback technique** (`FALLBACK_TO_DIRECT`) — un résultat vide légitime n'est PAS un échec (reste `no_data` honnête).
+- **COMPOSE pour le tool semantic (moteur hybride, décision DSS la plus récente)** : **« la QUESTION USER MÈNE »**. Question user verbatim EN TÊTE, puis intent hint (guidance), puis **valeurs exactes groupées par colonne → sémantique `IN` par colonne, jamais `Product = A AND Product = B`** (le bug impossible-AND), règle d'énumération (lister plusieurs items → OR + une ligne par item), scénario/période explicites, note de destination (« retourne une table propre avec alias de colonnes, jamais de prose »). On laisse le **Semantic Model Query tool posséder le SQL** ; le moteur SQL direct code-owned devient un **fallback technique** (`FALLBACK_TO_DIRECT`) - un résultat vide légitime n'est PAS un échec (reste `no_data` honnête).
 - **Appel du tool managé directement** (rend la capture Evidence déterministe) : `project.get_agent_tool(id).run({...})` et lecture SQL+rows depuis la **valeur de retour**, pas depuis des clés de trace devinées. Clé d'entrée auto-détectée du descriptor (`question` observé). En mode Agent, extraction = **priorité de clés puis DERNIÈRE occurrence** (la finale, pas le préambule « I'll start by exploring the schema… »).
 - **RENDER = frontière de confiance** : table et chiffres formatés par code ; la headline LLM est **rejetée si elle cite un chiffre hors de l'ensemble des chiffres autorisés du résultat**, fallback déterministe sinon. Le modèle n'introduit jamais un chiffre invérifiable.
 
@@ -356,7 +356,7 @@ Points d'orchestration transférables :
 ## 13. Anti-patterns & pièges
 
 - Multi-agent trop tôt (perd en qualité ET latence à 1 domaine) · oublier la paire AIMessage/ToolMessage → historique malformé · omettre `graph=Command.PARENT` aux frontières → routage dans le mauvais graphe · clé d'`update` absente du schéma → silencieusement perdue · subgraph à schéma différent ajouté directement comme node → erreur · `output_mode="full_history"` par réflexe → explosion de tokens + fuite de contexte · swarm sans checkpointer → perd l'agent actif · `langgraph-supervisor` ≤ 0.0.29 sur langgraph ≥ 1.0 → casse · per-thread subgraph + parallel tool calls → conflits (gater `ToolCallLimitMiddleware`) · `create_react_agent` (`langgraph.prebuilt`) → déprécié, utiliser `create_agent`.
-- **Versions UNVERIFIED** : `gpt-5.5`, `gemini-3.5-flash` (cités dans certains exemples du corpus) ne sont **pas vérifiés** — confirmer côté OpenAI/Google avant usage. Les ids Anthropic `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5` sont réels/courants. La surface `project.get_semantic_model(...)` + `get_raw()`/`save()`/`versions` est **non vérifiée dans la doc publique** (project-interne) — confirmer au runtime via `dir(project)`.
+- **Versions UNVERIFIED** : `gpt-5.5`, `gemini-3.5-flash` (cités dans certains exemples du corpus) ne sont **pas vérifiés** - confirmer côté OpenAI/Google avant usage. Les ids Anthropic `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5` sont réels/courants. La surface `project.get_semantic_model(...)` + `get_raw()`/`save()`/`versions` est **non vérifiée dans la doc publique** (project-interne) - confirmer au runtime via `dir(project)`.
 
 ---
 
@@ -373,9 +373,9 @@ Points d'orchestration transférables :
 - Hierarchical agent teams : https://langchain-ai.github.io/langgraph/tutorials/multi_agent/hierarchical_agent_teams/
 - Deep Agents : https://github.com/langchain-ai/deepagents
 - `recursion_limit` : https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT · `add_conditional_edges` : https://reference.langchain.com/python/langgraph/graph/state/StateGraph/add_conditional_edges
-- Anthropic — context engineering (quarantaine, ~15× tokens) : https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents · building effective agents : https://www.anthropic.com/research/building-effective-agents
-- OpenAI — Practical Guide to Building Agents : https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf
+- Anthropic - context engineering (quarantaine, ~15× tokens) : https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents · building effective agents : https://www.anthropic.com/research/building-effective-agents
+- OpenAI - Practical Guide to Building Agents : https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf
 - Supervisor vs swarm tradeoffs : https://dev.to/focused_dot_io/multi-agent-orchestration-in-langgraph-supervisor-vs-swarm-tradeoffs-and-architecture-1b7e
 - Dataiku DSS 14 release notes (Semantic Models 14.4, Local MCP 14.2) : https://doc.dataiku.com/dss/latest/release_notes/14.html
 - DSS BaseLLM custom-LLM (`process_stream`) : https://developer.dataiku.com/latest/tutorials/plugins/agent/generality/index.html
-- OWIsMind repo (corpus `owismind-project-patterns.md`) : `dataiku-agents/agents/orchestrator_agent.py`, `dataiku-agents/agents/dataset_expert_agent.py`, `orchestrator/tests/test_manifest_antidrift.py` ; leçons `memory/LESSONS.md` L047/L048/L050/L051/L052.
+- OWIsMind repo (corpus `owismind-project-patterns.md`) : `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py`, `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py`, `OWIsMind_PRD_V1_2/tests/` (fichiers historiques renommes, cf. note en tete) ; leçons `memory/LESSONS.md` L047/L048/L050/L051/L052.

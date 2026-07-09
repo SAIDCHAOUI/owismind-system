@@ -15,9 +15,9 @@ versioned in this repo as the source of truth and pasted into DSS. Agent evaluat
 | Path | Purpose |
 | --- | --- |
 | `Plugin/` | The DSS plugin: Vue 3 frontend (`owismind/frontend/`), Flask backend (`owismind/python-lib/`), webapps, and the packaged upload zip. |
-| `dataiku-agents/` | LangGraph Code Agents (orchestrator + revenue/tickets experts), per DSS project, plus the semantic model tooling. Map: `dataiku-agents/OWISMIND/README.md`. |
+| `OWIsMind_PRD_V1_2/` | Exact repo mirror of the DSS production project `OWISMIND_PRD_V1_2` (a clone of DEV, ids preserved): `flow/`, LangGraph Code Agents (`agents/`), `tools/`, `semantic-models/`, and `tests/`. Map: `OWIsMind_PRD_V1_2/README.md`. |
 | `OWIsMind_LAB/` | The separate benchmark/evaluation DSS project (repo mirror). Map: `OWIsMind_LAB/README.md`. |
-| `tools/` | Repo-level Python helper scripts (DEV plugin build, agent promotion). See `tools/README.md`. |
+| `tools/` | Repo-level Python helper scripts (DEV plugin build). See `tools/README.md`. |
 | `docs/` | Engineering reference (architecture, API, data model, security, build/deploy) and framing guides in `docs/cadrage/`. See `docs/README.md`. |
 | `memory/` | Persistent project memory: current context, lessons, durable state, session logs. |
 | `project-documentation/` | Full engineering documentation site (read on demand; may lag behind `memory/` + `docs/`). |
@@ -30,7 +30,7 @@ versioned in this repo as the source of truth and pasted into DSS. Agent evaluat
 python3 -m unittest discover -s Plugin/owismind/tests
 
 # Agents (LangGraph orchestrator + experts)
-python3 -m unittest discover -s dataiku-agents/tests
+python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests
 
 # Benchmark LAB project
 python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python

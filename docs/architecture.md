@@ -243,15 +243,21 @@ toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` 
 ```
 owismind/
 ├── CLAUDE.md                       # instructions projet (règles NON NÉGOCIABLES)
-├── dataiku-agents/                 # SYSTÈME D'AGENTS (source de vérité, recollé dans les Code Agents DSS)
-│   ├── README.md                   #   guide maître : carte des IDs DEV/PROD + workflow de promotion
-│   ├── CLAUDE.md                   #   orientation Claude (contrats gelés, règles, pointeurs)
-│   ├── OWISMIND/                   #   agents DUPLIQUÉS PAR PROJET DSS (on développe en DEV puis on promeut)
-│   │   ├── OWISMIND_DEV/           #     {agents, recipes, semantic_model, tools} (fichiers préfixés DEV)
-│   │   └── OWISMIND_PROD_V1/       #     miroir promu (tools/promote_agents_to_prod.py ; tickets expert HORS PROD)
+├── OWIsMind_PRD_V1_2/              # SYSTÈME D'AGENTS du projet de prod (source de vérité, recollé dans DSS)
+│   │                               #   prod = CLONE du projet DEV (ids DEV conservés) → miroir verbatim
+│   ├── README.md                   #   guide maître : carte des IDs (agents/tools/modèles) + workflow
+│   ├── CLAUDE.md                   #   orientation Claude (contrats, règles, pointeurs)
+│   ├── PLAYBOOK_ADD_AGENT.md       #   procédure d'ajout d'un sous-agent
+│   ├── registry.json               #   registre des ids DSS (agents, tools, modèles, datasets)
+│   ├── agents/                     #   OWIsMind_orchestrator.py · SalesDrive_revenue_expert.py ·
+│   │                               #     CSSO_Trouble_Tickets_Expert.py (verbatim des Code Agents DSS)
+│   ├── tools/                      #   attribute_lookup_tool.py (Custom Python tool)
+│   ├── flow/                       #   recettes Flow par zone (SalesDrive_Revenue_Expert, CSC_ticket_AI_Agent,
+│   │                               #     Webapp_Zone) + DATASETS.md
+│   ├── semantic-models/            #   Drive_Revenues_Semantic_Model + TroubleTickets_Semantic_Model
+│   │                               #     (.v1.json) + scripts/ (repoint, remap, dump, re-index)
 │   └── tests/                      #   tests unitaires DSS-free
-├── tools/                          # OUTILLAGE repo : build_dev_plugin.py (plugin dev coexistant),
-│                                   #   promote_agents_to_prod.py (régénération DEV → PROD_V1 idempotente)
+├── tools/                          # OUTILLAGE repo : build_dev_plugin.py (plugin dev coexistant owismind_dev)
 ├── OWIsMind_LAB/                   # PROJET DSS SÉPARÉ (benchmark / éval des agents), miroir repo
 │   ├── README.md                   #   carte repo↔DSS
 │   ├── project-library/python/     #   packages benchmark + benchmark_webapp
@@ -267,7 +273,7 @@ owismind/
 │   └── superpowers/specs/          #   specs de conception gelées
 └── Plugin/
     └── owismind/                   # RACINE DU PLUGIN DSS
-        ├── plugin.json             # id="owismind" v1.1.0 (racine du zip)
+        ├── plugin.json             # id="owismind" v1.2.0 (racine du zip)
         ├── frontend/               # SOURCE Vue 3 + Vite (JAMAIS dans le zip)
         │   ├── src/                #   main.js, App.vue, router/, stores/, components/, views/,
         │   │                       #   composables/, registries/, services/backend.js, i18n/, styles/
@@ -297,9 +303,16 @@ owismind/
             ├── app.js / style.css  #   slots STANDARD vidés (jamais supprimés)
 ```
 
-Staging d'upload (généré par `/package-plugin`) : `Plugin/ready-for-dataiku/owismind-upload/`
-(+ `owismind-upload.zip`) - runtime uniquement (`plugin.json` + `python-lib/` + `resource/` + `webapps/`),
-**sans** `frontend/` ni `node_modules/`. Voir [`build-test-deploy.md`](./build-test-deploy.md).
+Staging d'upload (généré par `/package-plugin`) : `Plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/`
+(+ `owismind-v<MAJ_MIN>-upload.zip`, nom dérivé de `plugin.json` : v1.2.0 → `owismind-v1_2-upload.zip`) -
+runtime uniquement (`plugin.json` + `python-lib/` + `resource/` + `webapps/`), **sans** `frontend/` ni
+`node_modules/`. Voir [`build-test-deploy.md`](./build-test-deploy.md).
+
+> **Modèle git : une branche par version**, nommée d'après le projet DSS de prod (`OWIsMind_PRD_V1_2` =
+> branche de prod courante = source de vérité ; la prochaine version se développe sur `OWIsMind_PRD_V1_3-dev`
+> avec le plugin dev coexistant `owismind_dev`, le suffixe `-dev` tombe à la validation). `main` est dépréciée.
+> Prod = **clone** du projet DSS DEV (ids conservés) : plus de promotion fichier par fichier
+> (`OWISMIND_PROD_V1` et `tools/promote_agents_to_prod.py` supprimés). Runbook : [`DEPLOY_PROD_V1_2.md`](./DEPLOY_PROD_V1_2.md).
 
 ---
 

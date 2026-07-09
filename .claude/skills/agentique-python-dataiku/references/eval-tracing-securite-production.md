@@ -200,7 +200,7 @@ def test_trajectory_accuracy():
 ```
 Utilitaires : `t.log_inputs/log_outputs/log_reference_outputs`, `t.log_feedback(key=..., score=...)`, `with t.trace_feedback():`. Assertions : `expect(sql).to_contain("customers")`, `expect.embedding_distance(...).to_be_less_than(0.5)`, `expect.edit_distance(...)`. Run : `pytest test_x.py --langsmith-output`. **Cacher les appels LLM** (`LANGSMITH_TEST_CACHE=tests/cassettes`) → CI rapide/déterministe/peu chère ; `LANGSMITH_TEST_TRACKING=false` pour ne pas uploader en local. (source : https://docs.langchain.com/langsmith/pytest)
 
-> **OWIsMind (3.9) :** la régression côté backend = `unittest` stdlib (des centaines de cas), avec **LLM mocké** dans le *scaffolding* déterministe (loop caps, extraction, rendering, paramétrage) + **golden queries** depuis `docs/questions_asked.md` + **tests anti-dérive** (`KNOWN_TOOL_NAMES`/`KNOWN_BLOCK_IDS` ↔ registre). Lancement : `python3 -m unittest discover -s dataiku-agents/tests`.
+> **OWIsMind (3.9) :** la régression côté backend = `unittest` stdlib (des centaines de cas), avec **LLM mocké** dans le *scaffolding* déterministe (loop caps, extraction, rendering, paramétrage) + **golden queries** depuis `docs/questions_asked.md` + **tests anti-dérive** (`KNOWN_TOOL_NAMES`/`KNOWN_BLOCK_IDS` ↔ registre). Lancement : `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`.
 
 ### 3.5 LLM-as-judge — bien le faire
 

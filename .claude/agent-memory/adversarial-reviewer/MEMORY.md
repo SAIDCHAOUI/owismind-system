@@ -1,2 +1,6 @@
 - [Memory/setup layout](repo-memory-layout.md) - where OWIsMind memory + gotchas live, how to verify slimming didn't lose info
 - [Frontend review patterns](owismind-frontend-review-patterns.md) - always verify scope claims via git status yourself; this repo's frontend sessions tend to be genuinely clean/well-tested
+- [Repo review pitfalls](repo-review-pitfalls.md) - recurring verification points (read-only SQL guard, prod=clone, agent comment-neutrality, generated assets, dash scan, baseline test counts)
+- [Verifying zero-behavior cleanup](verifying-zero-behavior-cleanup.md) - AST-diff method to prove comment/doc-only Python changes and byte-identical consolidations
+- [Security invariants](security-invariants.md) - read-only pre-queries, agent whitelist, hooks; how to prove a diff didn't weaken them
+- [Mirror layout at repo root + version-derived artifacts](mirror-layout-and-versioned-artifacts.md) - OWIsMind_PRD_V1_2/ at root (not dataiku-agents/); zips derive name from plugin.json major_minor

@@ -29,8 +29,14 @@ What MUST NOT change (so DEV behaves like PROD, just isolated):
 ## Canonical paths
 - Source plugin:  `Plugin/owismind` (untouched)
 - Script:         `tools/build_dev_plugin.py`
-- Staging dir:    `Plugin/ready-for-dataiku/owismind_dev-upload`
-- Zip output:     `Plugin/ready-for-dataiku/owismind_dev-upload.zip`
+- Staging dir:    `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload`
+- Zip output:     `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`
+
+The `${VER}` tag is **derived from the plugin version** in `Plugin/owismind/plugin.json`
+(`major_minor`, dots -> underscores). While `plugin.json` is `1.2.0` the zip is
+`owismind-v1_2-dev-upload.zip` (and `--v2` -> `owismind-v1_2-dev-v2-upload.zip`). The
+script computes `VER`, names the artifacts, and clears stale older-version / legacy
+`owismind_dev-upload*` artifacts on its own.
 
 ## Steps
 
@@ -61,7 +67,7 @@ What MUST NOT change (so DEV behaves like PROD, just isolated):
      (`from owismind` / `import owismind` word-boundary, `getLogger("owismind")`);
    - stages `resource/` (DEV-base app + `compute_available_connections.py`) and `webapps/`
      (`backend.py` import rewritten, `body.html` = DEV-base `index.html`);
-   - zips to `Plugin/ready-for-dataiku/owismind_dev-upload.zip`, excluding the SAME dev-only
+   - zips to `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`, excluding the SAME dev-only
      files as `/package-plugin` (frontend, node_modules, CLAUDE.md, README.md, `__pycache__`,
      `*.pyc`, `.DS_Store`);
    - prints and ASSERTS the invariants (fails loudly if any is violated).
@@ -81,7 +87,7 @@ What MUST NOT change (so DEV behaves like PROD, just isolated):
 - Zip is clean (no frontend/node_modules/docs/caches) and carries the required runtime files.
 
 ## Upload + data isolation (manual; this skill does NOT upload)
-- Upload `owismind_dev-upload.zip` to DSS as an **Uploaded** plugin. Its id `owismind_dev` is
+- Upload `owismind-v${VER}-dev-upload.zip` to DSS as an **Uploaded** plugin. Its id `owismind_dev` is
   distinct from the prod `owismind`, so both can be installed at once. (A *Development* plugin
   with the same id cannot be updated by zip upload; delete it first, then upload - see the build
   guide in `docs/cadrage/`.)
