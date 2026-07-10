@@ -1,0 +1,110 @@
+{
+  "revenue_expert": {
+    "kind": "agent",
+    "agent_id": "agent:bHrWLyOL",
+    "domain": "revenue",
+    "label_fr": "Expert revenus (Drive)",
+    "label_en": "Revenue expert (Drive)",
+    "tool_name": "ask_revenue_expert",
+    "planner_description": "The OWI customer revenue expert. Owns ALL revenue figures of the DRIVE_Revenues dataset across every phase/scenario (ACTUALS, BUDGET, FORECAST, Q3F, HLF): totals, breakdowns, rankings, share of total, scenario or period comparisons, trends over time, distinct values, and 'what does this data contain' questions. Route here ANY question about revenue, billing, customers, products, amounts, budget or forecast.",
+    "block_labels": {
+      "resolve": {
+        "fr": "analyse de la question",
+        "en": "understanding the question"
+      },
+      "run_sql": {
+        "fr": "interrogation des données",
+        "en": "querying the data"
+      },
+      "format_output": {
+        "fr": "mise en forme du résultat",
+        "en": "formatting the result"
+      },
+      "clarify_user": {
+        "fr": "demande de précision",
+        "en": "asking for clarification"
+      },
+      "out_of_scope_msg": null,
+      "about_data": {
+        "fr": "description des données",
+        "en": "describing the data"
+      }
+    },
+    "tool_labels": {
+      "resolve_filter_value": {
+        "fr": "résolution des noms exacts",
+        "en": "resolving exact names"
+      },
+      "dataset_sql_query": {
+        "fr": "génération et exécution du SQL",
+        "en": "generating and running SQL"
+      }
+    },
+    "dataset_label_fr": "Base des revenus clients OWI (DRIVE_Revenues)",
+    "dataset_label_en": "OWI customer revenue base (DRIVE_Revenues)",
+    "source_url": "",
+    "lookup_dataset": "DRIVE_Revenues",
+    "lookup_catalog": "DRIVE_Revenues_Value_Catalog",
+    "lookup_search_columns": [],
+    "pass_context": true,
+    "enabled": true
+  },
+  "tickets_expert": {
+    "kind": "agent",
+    "agent_id": "agent:NcE9LD2i",
+    "domain": "tickets",
+    "label_fr": "Expert tickets (incidents)",
+    "label_en": "Tickets expert (incidents)",
+    "tool_name": "ask_tickets_expert",
+    "planner_description": "The OWI incident-tickets expert. Owns ALL figures of the TroubleTickets dataset: ticket counts and breakdowns by status, priority, category, problem category, origin and type; resolution durations (minutes); open vs closed; rankings and top-N; trends over creation / detection / closed dates; per customer, account, service or product; LD lookups (the status of an LD, whether an LD is closed, the account of an LD, or the LDs of a customer - LD codes like 'LD016835'); distinct values; and 'what does this data contain' questions. Route here ANY question about tickets, incidents, support, problems, outages, LDs, SLAs or resolution times.",
+    "block_labels": {
+      "resolve": {
+        "fr": "analyse de la question",
+        "en": "understanding the question"
+      },
+      "run_sql": {
+        "fr": "interrogation des données",
+        "en": "querying the data"
+      },
+      "format_output": {
+        "fr": "mise en forme du résultat",
+        "en": "formatting the result"
+      },
+      "clarify_user": {
+        "fr": "demande de précision",
+        "en": "asking for clarification"
+      },
+      "out_of_scope_msg": null,
+      "about_data": {
+        "fr": "description des données",
+        "en": "describing the data"
+      }
+    },
+    "tool_labels": {
+      "resolve_filter_value": {
+        "fr": "résolution des noms exacts",
+        "en": "resolving exact names"
+      },
+      "dataset_sql_query": {
+        "fr": "génération et exécution du SQL",
+        "en": "generating and running SQL"
+      }
+    },
+    "dataset_label_fr": "Base des tickets d'incidents OWI (TroubleTickets_year)",
+    "dataset_label_en": "OWI incident tickets base (TroubleTickets_year)",
+    "source_url": "",
+    "lookup_dataset": "TroubleTickets_year",
+    "lookup_catalog": "TroubleTickets_year_value_catalogue",
+    "lookup_search_columns": [
+      "Account_name",
+      "CustomerRepresentative_Name",
+      "Service_id",
+      "Service_Specification_id",
+      "Service_id_1",
+      "Product",
+      "id"
+    ],
+    "pass_context": true,
+    "enabled": true
+  }
+}

@@ -1,0 +1,274 @@
+"""Semantic model creation and configuration through the official API.
+
+The strategy is the one this project already VALIDATED in production
+(build_aligned_semantic_model.py, 2026-06): never hand-craft a full raw config
+from nothing. Instead:
+
+1. ``create_semantic_model(name)`` + ``new_version("v1")`` so the SERVER
+   initializes a structurally valid empty version,
+2. merge our content into that raw dict (one entity built from the base
+   dataset's schema, indexing settings + embedding LLM copied from the living
+   template model),
+3. ``save()`` + ``set_active_version_id`` + one explicit indexing pass.
+
+The wizard config (see wizard.py) is applied on top with apply_config():
+descriptions, resolvable flags, metrics, filters, glossary, golden queries and
+the SQL generation instructions.
+
+Raw shapes were extracted from the committed v1.json dumps of the two live
+models: attributes carry {name, description, dssType, type: "COLUMN", column,
+distinctValuesHandlingMode: "AUTO_INDEX"|"NONE", manualValues, indexDistinctValues,
+resolveInUserRequests, sqlGenerationConfig}; metrics {name, description,
+pseudoSQLExpression, llmInstructions, created}; filters {name, description,
+pseudoSQLExpression, created}; goldenQueries {name, question, generatedSql};
+glossaryTerms {id, term, source, synonyms, ...}.
+"""
+
+import copy
+import uuid
+
+
+# ------------------------------------------------------------------- structure
+
+def build_attribute(column_name, dss_type, description="", resolvable=False):
+    return {
+        "name": column_name,
+        "description": description or "",
+        "dssType": dss_type or "string",
+        "type": "COLUMN",
+        "column": column_name,
+        "distinctValuesHandlingMode": "AUTO_INDEX" if resolvable else "NONE",
+        "manualValues": [],
+        "indexDistinctValues": bool(resolvable),
+        "resolveInUserRequests": bool(resolvable),
+        "sqlGenerationConfig": {},
+    }
+
+
+def build_entity(project, spec, entity_name=None, description=""):
+    """One entity mapped to the base dataset, attributes from the live schema."""
+    dataset = project.get_dataset(spec.base_dataset)
+    schema = dataset.get_schema() or {}
+    columns = schema.get("columns") or []
+    attributes = [build_attribute(c.get("name"), c.get("type")) for c in columns if c.get("name")]
+    return {
+        "name": entity_name or ("%s_record" % spec.domain),
+        "description": description or "",
+        "tags": [],
+        "type": "DATASET",
+        "datasetRef": "%s.%s" % (project.project_key, spec.base_dataset),
+        "attributes": attributes,
+        "metrics": [],
+        "filters": [],
+        "primaryKey": {"attributes": []},
+        "foreignKeys": [],
+    }
+
+
+def read_model_raw(project, model_id, version_id=None):
+    model = project.get_semantic_model(model_id)
+    if version_id is None:
+        version_id = model.get_active_version_id()
+    version = model.get_version(version_id)
+    return version.get_settings().get_raw()
+
+
+# ---------------------------------------------------------------------- seeding
+
+def find_model_by_name(project, name):
+    try:
+        for item in project.list_semantic_models():
+            item_name = item.name if hasattr(item, "name") else item.get("name")
+            if item_name == name:
+                return item.to_semantic_model() if hasattr(item, "to_semantic_model") else None
+    except Exception:
+        pass
+    return None
+
+
+def seed_model(ctx, spec, settings, entity_description=""):
+    """Create the semantic model shell with one schema-derived entity.
+
+    Returns the model id (or None in dry-run / on failure). Indexing settings
+    and the embedding LLM are copied from the template model so the new model
+    indexes exactly like the validated ones.
+    """
+    existing = find_model_by_name(ctx.project, spec.semantic_model_name)
+    if existing is not None:
+        ctx.skip("semantic_model", "model %s already exists (id %s)"
+                 % (spec.semantic_model_name, getattr(existing, "id", "?")))
+        return getattr(existing, "id", None)
+
+    template_id = (settings or {}).get("template_semantic_model_id") or ""
+
+    def _seed():
+        model = ctx.project.create_semantic_model(spec.semantic_model_name)
+        version_settings = model.new_version("v1")
+        raw = version_settings.get_raw()
+
+        raw["entities"] = [build_entity(ctx.project, spec, description=entity_description)]
+        raw.setdefault("relationships", [])
+        raw.setdefault("goldenQueries", [])
+        raw.setdefault("glossaryTerms", [])
+        raw.setdefault("glossaryBindings", [])
+        raw.setdefault("sqlGenerationConfig", {})
+        raw["sqlGenerationConfig"].setdefault("instructions", "")
+        raw["sqlGenerationConfig"].setdefault("vocabularyTermIds", [])
+
+        # Copy the proven indexing setup from the template model (read-only).
+        if template_id:
+            try:
+                template_raw = read_model_raw(ctx.project, template_id)
+                if template_raw.get("indexingSettings"):
+                    raw["indexingSettings"] = copy.deepcopy(template_raw["indexingSettings"])
+                embedding = (template_raw.get("privateEditorData") or {}).get("embeddingLlmId")
+                if embedding:
+                    raw.setdefault("privateEditorData", {})
+                    raw["privateEditorData"]["embeddingLlmId"] = embedding
+            except Exception:
+                # The template is an optimization, not a requirement: the server
+                # defaults remain valid without it.
+                pass
+
+        version_settings.save()
+        model.set_active_version_id("v1")
+        return model.id if hasattr(model, "id") else model.semantic_model_id
+
+    return ctx.act("semantic_model",
+                   "create semantic model %s (1 entity from %s schema, indexing copied "
+                   "from template %s)" % (spec.semantic_model_name, spec.base_dataset,
+                                          template_id or "none"),
+                   _seed)
+
+
+# ----------------------------------------------------------------- apply config
+
+def _wizard_metric(m):
+    return {
+        "name": m.get("name") or "",
+        "description": m.get("description") or "",
+        "pseudoSQLExpression": m.get("pseudo_sql") or m.get("pseudoSQLExpression") or "",
+        "llmInstructions": m.get("llm_instructions") or m.get("llmInstructions") or "",
+        "created": {},
+    }
+
+
+def _wizard_filter(f):
+    return {
+        "name": f.get("name") or "",
+        "description": f.get("description") or "",
+        "pseudoSQLExpression": f.get("pseudo_sql") or f.get("pseudoSQLExpression") or "",
+        "created": {},
+    }
+
+
+def _wizard_glossary_term(t):
+    return {
+        "id": str(uuid.uuid4()),
+        "term": t.get("term") or "",
+        "source": "MANUAL",
+        "userModified": True,
+        "created": {},
+        "synonyms": list(t.get("synonyms") or []),
+        "privateEditorData": {},
+    }
+
+
+def apply_config(ctx, model_id, config, version_id=None):
+    """Merge a wizard config (see wizard.DRAFT_SCHEMA) into the live model.
+
+    In-place update of the active version, exactly like the validated
+    update_*_semantic_model.py scripts: no re-create, no re-index here
+    (indexing is its own explicit step).
+    """
+    if not model_id:
+        ctx.manual("semantic_config",
+                   "no semantic model id available: apply the wizard config by hand "
+                   "(update_*_semantic_model.py pattern) once the model exists")
+        return None
+
+    def _apply():
+        model = ctx.project.get_semantic_model(model_id)
+        vid = version_id or model.get_active_version_id()
+        version_settings = model.get_version(vid).get_settings()
+        raw = version_settings.get_raw()
+        entities = raw.get("entities") or []
+        if not entities:
+            raise RuntimeError("model %s has no entity to configure" % model_id)
+        entity = entities[0]
+
+        if config.get("entity_name"):
+            entity["name"] = config["entity_name"]
+        if config.get("entity_description"):
+            entity["description"] = config["entity_description"]
+        if config.get("primary_key"):
+            entity["primaryKey"] = {"attributes": list(config["primary_key"])}
+
+        by_column = {a.get("column"): a for a in entity.get("attributes") or []}
+        for att in config.get("attributes") or []:
+            live = by_column.get(att.get("column") or att.get("name"))
+            if live is None:
+                continue
+            if att.get("description"):
+                live["description"] = att["description"]
+            if att.get("resolvable") is not None:
+                resolvable = bool(att["resolvable"])
+                live["indexDistinctValues"] = resolvable
+                live["resolveInUserRequests"] = resolvable
+                live["distinctValuesHandlingMode"] = "AUTO_INDEX" if resolvable else "NONE"
+
+        if config.get("metrics"):
+            entity["metrics"] = [_wizard_metric(m) for m in config["metrics"]]
+        if config.get("filters"):
+            entity["filters"] = [_wizard_filter(f) for f in config["filters"]]
+        if config.get("instructions"):
+            raw.setdefault("sqlGenerationConfig", {})
+            raw["sqlGenerationConfig"]["instructions"] = config["instructions"]
+        if config.get("glossary"):
+            raw["glossaryTerms"] = [_wizard_glossary_term(t) for t in config["glossary"]]
+
+        golden = []
+        for gq in config.get("golden_queries") or []:
+            # A golden query without its SQL is not usable by the model: keep
+            # only complete ones, the rest surface in the report as curation TODOs.
+            if gq.get("generatedSql") or gq.get("sql"):
+                golden.append({
+                    "name": gq.get("name") or (gq.get("question") or "")[:60],
+                    "question": gq.get("question") or "",
+                    "generatedSql": gq.get("generatedSql") or gq.get("sql"),
+                })
+        if golden:
+            raw["goldenQueries"] = golden
+
+        version_settings.save()
+        return model_id
+
+    return ctx.act("semantic_config",
+                   "apply wizard config to model %s (descriptions, resolvable flags, "
+                   "metrics, filters, glossary, instructions, golden queries)" % model_id,
+                   _apply)
+
+
+# --------------------------------------------------------------------- indexing
+
+def start_indexing(ctx, model_id, wait=True):
+    """One explicit distinct-values indexing pass (uses the embedding LLM).
+
+    Triggered ONCE per creation, never in a loop: indexing consumes LLM Mesh
+    embedding calls and scans the dataset.
+    """
+    if not model_id:
+        ctx.skip("semantic_index", "no model id (dry run or earlier failure)")
+        return None
+
+    def _index():
+        model = ctx.project.get_semantic_model(model_id)
+        version = model.get_version(model.get_active_version_id())
+        future = version.start_update_distinct_values()
+        if wait and future is not None:
+            future.wait_for_result()
+        return True
+
+    return ctx.act("semantic_index",
+                   "index distinct values of model %s (one pass, embedding LLM)" % model_id,
+                   _index)

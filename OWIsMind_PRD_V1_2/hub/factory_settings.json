@@ -1,0 +1,13 @@
+{
+  "sql_connection": "SQL_owi",
+  "code_env_311": "",
+  "llm_sonnet": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6",
+  "template_semantic_model_id": "AHUh9hb",
+  "template_semantic_tool_id": "v4oqA6R",
+  "template_zone_recipes": {
+    "profile": "compute_DRIVE_Revenues_profile",
+    "value_index": "compute_DRIVE_Revenues_value_index",
+    "value_catalog": "compute_DRIVE_Revenues_Value_Catalog"
+  },
+  "orchestrator_agent_id": "038G7mlF"
+}
