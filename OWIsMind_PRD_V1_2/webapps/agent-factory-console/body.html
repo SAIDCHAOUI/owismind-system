@@ -1,0 +1,49 @@
+<!-- OWIsMind - Agent Factory Console: BODY content only (no html/head).
+     Paste into the DSS Standard webapp HTML pane. script.js clones the
+     <template id="afc-shell"> below into #afc once, then renders each screen
+     (Vue d'ensemble / Sonde / Nouveau domaine / Prompts) into #afcMain.
+     French-only UI (internal admin tool). Orange charter styling lives in style.css. -->
+<div id="afc" data-theme="light">
+  <p class="afc-boot">Chargement de la console...</p>
+</div>
+<noscript>
+  <p style="padding:24px;">Cette console requiert l'activation de JavaScript.</p>
+</noscript>
+
+<!-- ===== Shell: header, tabs, main container, toast, modal (built once) ===== -->
+<template id="afc-shell">
+  <header class="afc-header">
+    <div class="afc-brand">
+      <p class="afc-eyebrow">OWIsMind - Usine a agents</p>
+      <h1 class="afc-h1">Console d'usine a agents</h1>
+      <div class="afc-titlebar"></div>
+    </div>
+    <div class="afc-controls">
+      <button class="afc-theme" id="afcTheme" title="Basculer le theme" aria-label="Basculer le theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="afc-tabs" id="afcTabs">
+    <button class="afc-tab afc-tab--on" data-tab="overview">Vue d'ensemble</button>
+    <button class="afc-tab" data-tab="probe">Sonde</button>
+    <button class="afc-tab" data-tab="domain">Nouveau domaine</button>
+    <button class="afc-tab" data-tab="prompts">Prompts</button>
+  </nav>
+
+  <main class="afc-main" id="afcMain"></main>
+
+  <div class="afc-toast" id="afcToast">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>
+    <span id="afcToastMsg"></span>
+  </div>
+
+  <div class="afc-modal-scrim" id="afcModalScrim" aria-hidden="true">
+    <div class="afc-modal" role="dialog" aria-modal="true" aria-labelledby="afcModalTitle">
+      <div class="afc-modal-head"><h2 class="afc-modal-title" id="afcModalTitle"></h2></div>
+      <div class="afc-modal-body" id="afcModalBody"></div>
+      <div class="afc-modal-foot" id="afcModalFoot"></div>
+    </div>
+  </div>
+</template>
