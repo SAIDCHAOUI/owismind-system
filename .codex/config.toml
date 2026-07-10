@@ -1,0 +1,6 @@
+# Default model for delegations: Terra is close to Claude Fable/Opus in agentic
+# coding, but burns about half the ChatGPT limits of Sol.
+# Overrides: /codex:rescue --model gpt-5.6-sol --effort high  (hard tasks)
+#            /codex:rescue --model gpt-5.6-luna               (bulk mechanical work)
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"

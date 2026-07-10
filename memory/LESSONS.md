@@ -3349,5 +3349,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : `tests/test_factory_registry.py::TestValidatorsAgree` (10 cas, meme verdict, zero exception) ; suite 379 OK.
 - **Source** : revue adversariale session 2026-07-10 Run 2, commit 05d4640.
 
+## L151 - Config projet Codex ignoree sans trust + codex exec bloque sur stdin (2026-07-10)
+- **Contexte** : setup orchestration Claude + Codex/GPT-5.6 (plugin `codex@openai-codex`, config projet `.codex/config.toml` avec `model = "gpt-5.6-terra"`).
+- **Ce qui a echoue** : (1) le test `codex exec` depuis owismind partait en `gpt-5.6-sol` (modele global de `~/.codex/config.toml`) malgre la config projet ; (2) `codex exec` lance depuis un script se bloque indefiniment sur "Reading additional input from stdin...".
+- **Solution qui marche** : (1) la config projet n'est lue que si le projet est TRUSTED : ajouter `[projects."/Users/saidchaoui/projects/owismind"] trust_level = "trusted"` dans `~/.codex/config.toml` -> le meme test part en terra ; (2) toujours rediriger `</dev/null` (le plugin le gere lui-meme).
+- **Preuve-verification** : session Codex jsonl avant trust `"model":"gpt-5.6-sol"`, apres trust `"model":"gpt-5.6-terra"` avec `"cwd":".../owismind"` ; reponse "OK" recue.
+- **Source** : sessions/2026-07-10.md (Run 3) ; doctrine dans `.claude/rules/model-routing.md`.
+- **Date** : 2026-07-10.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

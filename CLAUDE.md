@@ -97,6 +97,11 @@ convertie, a été supprimée du repo le 2026-06-11).
   l'instruire explicitement (Opus 4.8 spawn peu de sous-agents par défaut).
 - **Gates de vérification avant de déclarer « fait »** : lancer les tests / le build et LIRE la sortie ;
   jamais d'affirmation de succès sans preuve.
+- **Routage multi-modèles : `.claude/rules/model-routing.md`** - Claude orchestre, subagents Opus/Sonnet
+  implémentent, Codex (GPT-5.6, plugin `codex@openai-codex`, instructions `AGENTS.md` racine) exécute les
+  tâches bornées (`/codex:rescue`) et les reviews croisées (`/codex:review`). Jamais deux agents sur les
+  mêmes fichiers ; tout diff Codex re-vérifié côté Claude ; zones sensibles (SQL sécurité, artefacts
+  générés, `memory/`, instance DSS) interdites à Codex seul.
 
 ## Référence
 - `docs/cadrage/CHARTE_ORANGE_UI.md` - **charte de style UI (règle #10), auto-suffisante** : tokens, géométrie carrée, recettes de composants, interdits. À lire avant tout travail de style (la maquette HTML d'origine a été supprimée, cette charte la remplace).

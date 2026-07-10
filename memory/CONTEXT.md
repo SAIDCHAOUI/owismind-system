@@ -7,6 +7,13 @@
 
 ## Focus courant
 
+**ORCHESTRATION CLAUDE + CODEX/GPT-5.6 EN PLACE (2026-07-10 Run 3).** Doctrine complete :
+`.claude/rules/model-routing.md` (Claude orchestre ; subagents Opus ; Codex Terra par defaut via
+`/codex:rescue`, review croisee `/codex:review --base OWIsMind_PRD_V1_2`). Instructions Codex =
+`AGENTS.md` racine ; config = `.codex/config.toml` (terra, effort high). Verifie en reel (terra,
+cwd owismind) apres ajout du trust projet dans `~/.codex/config.toml` (piege L151). Reste a valider :
+une premiere vraie delegation de code end-to-end.
+
 **AGENT FACTORY v1.3 IMPLEMENTEE (2026-07-10 Run 2, session de nuit, branche `OWIsMind_PRD_V1_3-dev`).**
 - **`OWIsMind_PRD_V1_2/project-library/python/owismind_factory/`** (13 modules, stdlib+dataiku 3.9,
   dry-run, idempotent, ZERO delete) : table source -> zone + 3 recettes clonees + datasets -> modele
@@ -25,6 +32,7 @@
   **`OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md`** (phases A-G), sondes a lancer par l'user.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 1 (branche prod) : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne, branches par version). L147-L148 (sur la branche `OWIsMind_PRD_V1_2`).
 - 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
@@ -58,6 +66,7 @@
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- CODEX : valider le flux end-to-end sur un vrai 2e chantier (`/codex:rescue`) + une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`. Voir `sessions/2026-07-10.md` Run 3.
 - **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.
 - CLONE prod : lancer `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
