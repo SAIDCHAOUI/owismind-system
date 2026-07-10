@@ -149,7 +149,8 @@ stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
 | `flow/` | The Flow recipes per zone (`SalesDrive_Revenue_Expert/`, `CSC_ticket_AI_Agent/`, `Webapp_Zone/`) + `README.md` + `DATASETS.md`. Dataset IO comes from the DSS Flow wiring, not code constants. |
 | `semantic-models/` | Per-model `.v1.json` snapshots + `scripts/` (build / update / dump / drop / migrate / remap / repoint) + `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. |
 | `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
-| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). |
+| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the v1.3 **agent factory**: `factory-docs/README.md` (deploy: `factory-docs/DEPLOY_V1_3_DEV.md`). |
+| `project-library/`, `notebooks/`, `hub/`, `webapps/`, `factory-docs/` | The v1.3 agent factory: engine package, runner notebooks 00-06, Config & Prompt Hub seeds (agents load `/owismind_hub/` overrides at start, embedded fallback), the console Standard webapp, the docs. |
 | `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. |
 
 ## Rules you must not break

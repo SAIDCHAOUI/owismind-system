@@ -115,8 +115,13 @@ recipes.
 | Repo path | What |
 |---|---|
 | `README.md`, `CLAUDE.md` | This map + the session-orientation doc. |
-| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). |
+| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). The v1.3 **agent factory** automates most of it: see `factory-docs/README.md`. |
 | `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
+| `project-library/python/owismind_factory/` | **v1.3 agent factory engine** (pasted into the DSS project library): probe, flow/semantic/tool/agent builders, wizard, pipeline, clone aligner, prompt doctor. |
+| `notebooks/` | Factory runners 00-06 (probe, hub push, align clone, create domain, wizard, logging, doctor). |
+| `hub/` | Repo seeds of the DSS Config & Prompt Hub (`/owismind_hub/` in the project library): prompts + runtime CAPABILITIES, loaded by the agents at start with embedded fallback. |
+| `webapps/agent-factory-console/` | Standard webapp (separate from the Vue plugin app) driving the factory: probe / plan / execute / wizard / prompt editing. |
+| `factory-docs/` | Factory architecture (`README.md`), the v1.3-dev deployment guide (`DEPLOY_V1_3_DEV.md`), the Phase 0 capability matrix. |
 | `flow/README.md`, `flow/DATASETS.md` | The Flow recipes explained + the canonical column inventory per dataset. |
 | `semantic-models/README.md`, `MODEL.md`, `TOOL_DESCRIPTIONS.md` | The SQL brain: scripts index, readable model snapshot, ready-to-paste tool "Description for LLM". |
 | `tests/` | DSS-free unit tests (profiler + dataset-expert + langgraph + attribute_lookup). Run: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. |
