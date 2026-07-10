@@ -7,20 +7,26 @@
 
 ## Focus courant
 
-**RESTRUCTURATION DU REPO EN MIROIR EXACT DU PROJET DSS PROD `OWIsMind_PRD_V1_2` (2026-07-10).**
-- Nouvelle arborescence racine **`OWIsMind_PRD_V1_2/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`,
-  `tests/`) = miroir 1:1 du projet DSS prod (CLONE de DEV, ids DEV conserves ; orchestrateur `038G7mlF`
-  -> sous-agents revenus `agent:bHrWLyOL` + tickets `agent:NcE9LD2i`). L'ancien `dataiku-agents/` a
-  DISPARU ; `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` (jumeau prod a la main) = LEGACY SUPPRIMES.
-- Plugin `plugin.json` **1.2.0** ; zip prod versionne **`Plugin/ready-for-dataiku/owismind-v1_2-upload.zip`**
-  (nom derive de la version, `.` -> `_`, major_minor). Mecanisme dev coexistant CONSERVE
-  (`tools/build_dev_plugin.py`, id `owismind_dev`, zip `owismind-v<VER>-dev-upload.zip`).
-- Git = **une branche par version**, nommee comme le projet DSS prod : `OWIsMind_PRD_V1_2` = prod courante
-  (source de verite) ; `OWIsMind_PRD_V1_3-dev` = prochaine version (feedback hub WIP, PRESERVE) ; suffixe
-  `-dev` retire a la validation ; `main` DEPRECIEE. Detail : `sessions/2026-07-10.md`.
+**AGENT FACTORY v1.3 IMPLEMENTEE (2026-07-10 Run 2, session de nuit, branche `OWIsMind_PRD_V1_3-dev`).**
+- **`OWIsMind_PRD_V1_2/project-library/python/owismind_factory/`** (13 modules, stdlib+dataiku 3.9,
+  dry-run, idempotent, ZERO delete) : table source -> zone + 3 recettes clonees + datasets -> modele
+  semantique (wizard LLM `with_json_output` + questions FR) -> tool semantic query (GATE) -> Code Agent
+  (GATE) -> enregistrement capability. Gates = sondes Phase 0 (`notebooks/00_probe_capabilities.py`) ;
+  sans confirmation, fallback = checklist manuelle precise. Notebooks 00-06 ; `align.py` = repoint
+  generique de TOUS les modeles d'un clone ; `doctor.py` = prompt doctor (proposition, jamais d'apply).
+- **Config & Prompt Hub** `/owismind_hub/` (project library) : PERSONA + capabilities.json + regles
+  additives par domaine, charges par les 3 agents au demarrage (validation stricte, fallback silencieux
+  durci post-revue adversariale). Seeds repo `OWIsMind_PRD_V1_2/hub/` = equivalence byte-a-byte avec les
+  defauts embarques (test anti-derive). Iterer un prompt = editer le hub + redemarrer l'agent (0 re-paste).
+- **Console** `webapps/agent-factory-console/` (webapp Standard SEPAREE du plugin, charte Orange PASS) :
+  sonde / plan dry-run / execution journalisee / wizard Q&A / editeur de prompts ; confirm:true partout.
+- 379 tests verts ; revue adversariale Opus (2 findings corriges) ; 8 commits POUSSES sur origin
+  (autorisation user explicite). RIEN n'a ete execute contre DSS : deploiement = 
+  **`OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md`** (phases A-G), sondes a lancer par l'user.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-10 : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne `owismind-v1_2-upload.zip`, branches par version ; legacy `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimes). Voir `sessions/2026-07-10.md`.
+- 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
+- 2026-07-10 Run 1 (branche prod) : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne, branches par version). L147-L148 (sur la branche `OWIsMind_PRD_V1_2`).
 - 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
 - 2026-07-07 Run 2 : bascule strategie prod = CLONE du projet DSS DEV (memes ids, tickets inclus). L144.
 - 2026-07-07 Run 1 : deep clean pro sur branche `refactor/deep-clean-v1.2` (refactor zero-comportement, prouve ; setup Claude Code refondu ; docs v1.1). L141-L143.
@@ -52,6 +58,7 @@
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.
 - CLONE prod : lancer `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
   (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146

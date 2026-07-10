@@ -388,6 +388,23 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
   Nommage `{PROJECT_KEY}_{prefix-}owismind_{logical}` (préfixe optionnel après le project key).
 - Tables futures (cahier) : `_messages`, `_runs`, `_run_events`, etc. (toujours `_vN`, jamais d'ALTER).
 
+## 7b. Agent Factory v1.3 (2026-07-10 Run 2, branche `OWIsMind_PRD_V1_3-dev`, ⏳ repo only, NON deploye DSS)
+
+- **But** : industrialiser l'ajout d'un specialiste par dataset (table -> zone + recettes ->
+  modele semantique assiste LLM -> tool -> Code Agent -> capability) + sortir les prompts du code.
+- **Pieces** : package `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/` (13 modules,
+  stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, zero delete) ; notebooks 00-06 ; **Config &
+  Prompt Hub** `/owismind_hub/` (project library ; seeds repo `hub/`, equivalence byte-a-byte testee ;
+  les 3 agents chargent PERSONA/CAPABILITIES/regles additives au demarrage, fallback silencieux) ;
+  console webapp Standard `webapps/agent-factory-console/` (charte Orange PASS) ; docs
+  `factory-docs/{README,DEPLOY_V1_3_DEV,CAPABILITY_MATRIX}.md`.
+- **Verite API** (L149) : `create_agent(name,"PYTHON_AGENT")`, `create_semantic_model`,
+  `new_agent_tool(type)`, `create_llm_interaction_logging_dataset` = presents dans le client officiel
+  (source GitHub grep) ; schemas `pythonAgentSettings` (code/env) et params du tool semantic query =
+  NON documentes -> gates, a confirmer par `notebooks/00_probe_capabilities.py` sur l'instance.
+- **Statut** : 379 tests verts, revue adversariale corrigee (L150), 8 commits pousses. RIEN execute
+  contre DSS. Deploiement = `factory-docs/DEPLOY_V1_3_DEV.md` (phases A-G).
+
 ## 8. Agents & streaming
 
 - **✅ VALIDÉ DSS 2026-07-02 Run 2 - artefacts natifs + narration + recall** (commits user

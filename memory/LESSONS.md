@@ -3335,5 +3335,19 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `remap_semantic_model.py` (memes 2 regles de remap).
 - **Date** : 2026-07-08.
 
+## L149 - Doc rendue != API reelle : trancher par la SOURCE du client officiel (2026-07-10)
+- **Contexte** : recherche v1.3 sur l'automatisation (create_agent, create_semantic_model, new_agent_tool). Les pages developer.dataiku.com sont ENORMES et le summarizer de WebFetch les tronque : deux passes de recherche se contredisaient (methodes "CONFIRMEES" avec citation exacte vs "ABSENTES" sur la meme page).
+- **Ce qui a echoue** : re-fetcher la page en boucle (chaque passe resume une tranche differente ; l'absence dans un resume ne prouve rien).
+- **Solution qui marche** : `curl` + `grep` sur la source brute du client officiel GitHub `dataiku/dataiku-api-client-python` (`dataikuapi/dss/project.py` etc.) = verdict deterministe, docstrings + enums exacts (PYTHON_AGENT/PLUGIN_AGENT/TOOLS_USING_AGENT/STRUCTURED_AGENT ; `versions[*].pythonAgentSettings`). Caveat : le client master peut devancer le serveur -> confirmer cote instance par une sonde (hasattr + get_raw d'objets vivants).
+- **Preuve** : `project.py` L2830-2963 (create_semantic_model, list/get/create_agent, new_agent_tool, create_llm_interaction_logging_dataset) ; `agent.py` L422-507 (_get_internal_agent_settings, settings_key_by_type).
+- **Source** : session 2026-07-10 Run 2 (workflow de recherche + greps).
+
+## L150 - Un loader de config module-level d'agent doit etre incrassable (fallback belt-and-braces) (2026-07-10)
+- **Contexte** : hub loaders v1.3 (l'orchestrateur charge PERSONA + CAPABILITIES depuis la project library au demarrage, fallback = defauts embarques).
+- **Ce qui a echoue** (finding MAJOR de la revue adversariale, avant tout deploiement) : le validateur faisait `.keys()` sur `block_labels` sans isinstance ; un capabilities.json edite a la main avec une liste (JSON valide, mauvaise forme) levait AttributeError HORS try -> l'import du module avortait -> le Code Agent ne demarrait plus (panne dure au lieu du fallback documente).
+- **Solution qui marche** : (1) isinstance avant tout acces de forme dans le validateur ; (2) l'appel de validation DANS le try ; (3) la resolution module-level elle-meme enveloppee (`try: X = load() or DEFAULT except: X = DEFAULT`) ; (4) le validateur cote factory (ecriture) doit etre AU MOINS aussi strict que celui cote agent (lecture), sinon la console ecrit un fichier que l'agent rejettera silencieusement ; un test execute les DEUX validateurs (extraction ast du vrai code) sur les memes cas limites.
+- **Preuve** : `tests/test_factory_registry.py::TestValidatorsAgree` (10 cas, meme verdict, zero exception) ; suite 379 OK.
+- **Source** : revue adversariale session 2026-07-10 Run 2, commit 05d4640.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 

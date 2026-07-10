@@ -4,3 +4,4 @@
 - [Verifying zero-behavior cleanup](verifying-zero-behavior-cleanup.md) - AST-diff method to prove comment/doc-only Python changes and byte-identical consolidations
 - [Security invariants](security-invariants.md) - read-only pre-queries, agent whitelist, hooks; how to prove a diff didn't weaken them
 - [Mirror layout at repo root + version-derived artifacts](mirror-layout-and-versioned-artifacts.md) - OWIsMind_PRD_V1_2/ at root (not dataiku-agents/); zips derive name from plugin.json major_minor
+- [Factory + hub-loader review](factory-hub-loader-review.md) - the two capability validators diverge (orchestrator loader crashes on non-dict labels, not swallowed); factory dry-run/act safety verified clean; AST-exec method for the standalone agent
