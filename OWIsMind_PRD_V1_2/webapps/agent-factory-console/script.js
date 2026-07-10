@@ -155,10 +155,10 @@
 
   function statusChip(status) {
     var map = {
-      PLANNED: { cls: "planned", txt: "PLANIFIE" },
+      PLANNED: { cls: "planned", txt: "PLANIFIÉ" },
       DONE: { cls: "done", txt: "FAIT" },
-      SKIPPED: { cls: "skipped", txt: "IGNORE" },
-      FAILED: { cls: "failed", txt: "ECHEC" },
+      SKIPPED: { cls: "skipped", txt: "IGNORÉ" },
+      FAILED: { cls: "failed", txt: "ÉCHEC" },
       MANUAL: { cls: "manual", txt: "MANUEL" }
     };
     var m = map[status] || { cls: "planned", txt: String(status || "") };
@@ -177,7 +177,7 @@
         '</tr>';
     }).join("");
     return '<div class="afc-table-wrap"><table class="afc-table">' +
-      '<thead><tr><th class="col-status">Statut</th><th class="col-step">Etape</th><th>Detail</th></tr></thead>' +
+      '<thead><tr><th class="col-status">Statut</th><th class="col-step">Étape</th><th>Détail</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>';
   }
 
@@ -187,7 +187,7 @@
     var items = manuals.map(function (a) {
       return '<li><span class="step">' + esc(a.step) + '</span> : ' + esc(a.detail || "") + '</li>';
     }).join("");
-    return '<div class="afc-manual"><h4>Etapes manuelles restantes (' + manuals.length + ')</h4>' +
+    return '<div class="afc-manual"><h4>Étapes manuelles restantes (' + manuals.length + ')</h4>' +
       '<ol>' + items + '</ol></div>';
   }
 
@@ -201,11 +201,11 @@
       var text = getText();
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(
-          function () { toast("Copie dans le presse-papiers."); },
+          function () { toast("Copié dans le presse-papiers."); },
           function () { toast("Copie impossible."); }
         );
       } else {
-        toast("Copie non supportee par le navigateur.");
+        toast("Copie non supportée par le navigateur.");
       }
     };
   }
@@ -213,7 +213,7 @@
   function backendBanner() {
     if (hasBackend()) { return ""; }
     return '<div class="afc-note afc-note--warn">Backend indisponible : cette page est ouverte hors du contexte DSS. ' +
-      'Les appels au moteur d\'usine ne fonctionneront qu\'une fois la webapp deployee dans DSS.</div>';
+      'Les appels au moteur d\'usine ne fonctionneront qu\'une fois la webapp déployée dans DSS.</div>';
   }
 
   /* ============================ datasets (shared picker source) ============================ */
@@ -266,12 +266,12 @@
     var html = '<div class="afc-panel">' + backendBanner();
 
     if (S.overview.loading && !S.overview.loaded) {
-      html += '<p class="afc-loading">Chargement de l\'etat du projet...</p></div>';
+      html += '<p class="afc-loading">Chargement de l\'état du projet...</p></div>';
       setMain(html); return;
     }
     if (S.overview.error && !S.overview.loaded) {
-      html += '<div class="afc-note afc-note--error">Impossible de charger l\'etat du projet (' + esc(S.overview.error) + ').</div>' +
-        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRetry">' + I.refresh + 'Reessayer</button></div></div>';
+      html += '<div class="afc-note afc-note--error">Impossible de charger l\'état du projet (' + esc(S.overview.error) + ').</div>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRetry">' + I.refresh + 'Réessayer</button></div></div>';
       setMain(html);
       if (byId("ovRetry")) { byId("ovRetry").onclick = loadOverview; }
       return;
@@ -281,37 +281,37 @@
     var settings = d.settings || {};
     var caps = d.capabilities || {};
     var hubChip = d.hub_ready
-      ? '<span class="afc-chip afc-chip--on">HUB PRET</span>'
+      ? '<span class="afc-chip afc-chip--on">HUB PRÊT</span>'
       : '<span class="afc-chip afc-chip--off">HUB ABSENT</span>';
 
     // Project + hub status
     html += '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Projet</p>' +
       '<h2 class="afc-sec-title">Vue d\'ensemble</h2>' +
-      '<p class="afc-sec-note">Etat du projet DSS et du Config &amp; Prompt Hub (/owismind_hub). ' +
-      'C\'est le tableau de bord de l\'usine a agents : rien n\'est modifie ici.</p>' +
+      '<p class="afc-sec-note">État du projet DSS et du Config &amp; Prompt Hub (/owismind_hub). ' +
+      'C\'est le tableau de bord de l\'usine à agents : rien n\'est modifié ici.</p>' +
       '<div class="afc-card"><dl class="afc-kv">' +
-      '<dt>Cle de projet</dt><dd>' + esc(d.project_key || "-") + '</dd>' +
+      '<dt>Clé de projet</dt><dd>' + esc(d.project_key || "-") + '</dd>' +
       '<dt>Hub</dt><dd>' + hubChip + '</dd>' +
       '</dl></div></div>';
 
     // Settings summary
-    html += '<div class="afc-sec"><p class="afc-mlabel">Reglages de l\'usine (factory_settings.json)</p>' +
+    html += '<div class="afc-sec"><p class="afc-mlabel">Réglages de l\'usine (factory_settings.json)</p>' +
       '<div class="afc-card"><dl class="afc-kv">' +
       '<dt>Connexion SQL</dt><dd>' + esc(settings.sql_connection || "-") + '</dd>' +
-      '<dt>Code env 3.11</dt><dd>' + esc(settings.code_env_311 || "(defaut projet)") + '</dd>' +
+      '<dt>Code env 3.11</dt><dd>' + esc(settings.code_env_311 || "(défaut projet)") + '</dd>' +
       '<dt>LLM sonnet</dt><dd>' + esc(settings.llm_sonnet || "-") + '</dd>' +
-      '<dt>Modele semantique modele</dt><dd>' + esc(settings.template_semantic_model_id || "-") + '</dd>' +
-      '<dt>Outil semantique modele</dt><dd>' + esc(settings.template_semantic_tool_id || "-") + '</dd>' +
+      '<dt>Modèle sémantique modèle</dt><dd>' + esc(settings.template_semantic_model_id || "-") + '</dd>' +
+      '<dt>Outil sémantique modèle</dt><dd>' + esc(settings.template_semantic_tool_id || "-") + '</dd>' +
       '<dt>Orchestrateur</dt><dd>' + esc(settings.orchestrator_agent_id || "-") + '</dd>' +
       '</dl></div></div>';
 
     // Capabilities cards
     var capKeys = Object.keys(caps);
-    html += '<div class="afc-sec"><p class="afc-mlabel">Capacites enregistrees (' + capKeys.length + ')</p>';
+    html += '<div class="afc-sec"><p class="afc-mlabel">Capacités enregistrées (' + capKeys.length + ')</p>';
     if (!capKeys.length) {
-      html += '<div class="afc-note afc-note--info">Aucune capacite dans le hub. ' +
-        'Soit le hub n\'est pas encore pousse dans la project library, soit l\'orchestrateur utilise ses CAPABILITIES embarquees par defaut.</div>';
+      html += '<div class="afc-note afc-note--info">Aucune capacité dans le hub. ' +
+        'Soit le hub n\'est pas encore poussé dans la project library, soit l\'orchestrateur utilise ses CAPABILITIES embarquées par défaut.</div>';
     } else {
       html += '<div class="afc-cap-grid">';
       capKeys.forEach(function (k) {
@@ -349,8 +349,8 @@
       '<p class="afc-sec-eyebrow">Phase 0</p>' +
       '<h2 class="afc-sec-title">Sonde de l\'instance</h2>' +
       '<p class="afc-sec-note">Les sondes lecture seule inspectent l\'instance DSS (API des Code Agents, ' +
-      'schema des outils Semantic Model Query, disponibilite de create_agent) pour savoir ce que l\'usine ' +
-      'peut automatiser en toute securite. Elles ne creent, ne modifient et ne suppriment rien. Lancez-les ' +
+      'schéma des outils Semantic Model Query, disponibilité de create_agent) pour savoir ce que l\'usine ' +
+      'peut automatiser en toute sécurité. Elles ne créent, ne modifient et ne suppriment rien. Lancez-les ' +
       'une fois, puis collez le rapport dans le repo.</p>';
 
     if (p.running) {
@@ -362,7 +362,7 @@
     }
 
     if (p.error) {
-      html += '<div class="afc-note afc-note--error">Echec de la sonde : ' + esc(p.error) + '</div>';
+      html += '<div class="afc-note afc-note--error">Échec de la sonde : ' + esc(p.error) + '</div>';
     }
     if (p.report) {
       html += '<div class="afc-sec" style="margin-top:24px;">' +
@@ -377,7 +377,7 @@
         openConfirm({
           title: "Lancer les sondes ?",
           bodyHtml: "Les sondes sont en <b>lecture seule</b> : elles inspectent l\'instance et ne modifient rien. " +
-            "Le rapport apparaitra ci-dessous une fois termine.",
+            "Le rapport apparaîtra ci-dessous une fois terminé.",
           confirmLabel: "Lancer",
           onConfirm: startProbe
         });
@@ -402,7 +402,7 @@
         p.running = false;
         p.report = (result && (result.report || result.markdown)) || "(rapport vide)";
         renderProbe();
-        toast("Sondes terminees.");
+        toast("Sondes terminées.");
       }, function (err) {
         p.running = false;
         p.error = err;
@@ -427,19 +427,19 @@
     // --- creation form ---
     html += '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Usine</p>' +
-      '<h2 class="afc-sec-title">Nouveau domaine specialiste</h2>' +
-      '<p class="afc-sec-note">Decrivez le domaine, planifiez en dry-run (aucune ecriture DSS), verifiez le plan, ' +
-      'puis executez. Les etapes que l\'usine ne peut pas automatiser en securite apparaissent en MANUEL avec la marche a suivre.</p>' +
+      '<h2 class="afc-sec-title">Nouveau domaine spécialiste</h2>' +
+      '<p class="afc-sec-note">Décrivez le domaine, planifiez en dry-run (aucune écriture DSS), vérifiez le plan, ' +
+      'puis exécutez. Les étapes que l\'usine ne peut pas automatiser en sécurité apparaissent en MANUEL avec la marche à suivre.</p>' +
       '<div class="afc-card">';
 
-    html += field("Cle de domaine (snake_case)", inputEl("dmDomain", f.domain, "ex. satisfaction"),
-      "Minuscules, chiffres et underscores. Sert a nommer la capacite, l\'outil et le scenario.");
+    html += field("Clé de domaine (snake_case)", inputEl("dmDomain", f.domain, "ex. satisfaction"),
+      "Minuscules, chiffres et underscores. Sert à nommer la capacité, l\'outil et le scénario.");
 
     // source mode segmented
-    html += '<div class="afc-field"><span class="afc-field-label">Source des donnees</span>' +
+    html += '<div class="afc-field"><span class="afc-field-label">Source des données</span>' +
       '<div class="afc-seg" id="dmSeg">' +
       '<button data-mode="existing"' + (f.sourceMode === "existing" ? ' class="on"' : "") + '>Dataset existant</button>' +
-      '<button data-mode="source"' + (f.sourceMode === "source" ? ' class="on"' : "") + '>Table SQL a importer</button>' +
+      '<button data-mode="source"' + (f.sourceMode === "source" ? ' class="on"' : "") + '>Table SQL à importer</button>' +
       '</div></div>';
 
     if (f.sourceMode === "existing") {
@@ -447,32 +447,32 @@
         ? '<p class="afc-loading">Chargement des datasets...</p>'
         : '<select class="afc-select" id="dmBaseSelect">' + datasetOptions(f.base_dataset) + '</select>';
       html += field("Dataset de base", dsField,
-        "Le dataset deja present dans le projet dont ce specialiste sera l\'expert.");
+        "Le dataset déjà présent dans le projet dont ce spécialiste sera l\'expert.");
     } else {
       html += '<div class="afc-grid-2">' +
-        fieldRaw("Nom du dataset de base a creer", inputEl("dmBaseName", f.base_dataset, "ex. Satisfaction")) +
+        fieldRaw("Nom du dataset de base à créer", inputEl("dmBaseName", f.base_dataset, "ex. Satisfaction")) +
         fieldRaw("Connexion SQL", inputEl("dmConn", f.connection, "SQL_owi")) +
-        fieldRaw("Schema (optionnel)", inputEl("dmSchema", f.schema, "public")) +
+        fieldRaw("Schéma (optionnel)", inputEl("dmSchema", f.schema, "public")) +
         fieldRaw("Table source", inputEl("dmTable", f.table, "ex. Satisfaction")) +
         '</div>' +
         field("Catalogue (optionnel)", inputEl("dmCatalog", f.catalog, ""), "");
     }
 
     html += '<div class="afc-grid-2">' +
-      fieldRaw("Libelle FR", inputEl("dmLabelFr", f.label_fr, "ex. Satisfaction client")) +
-      fieldRaw("Libelle EN", inputEl("dmLabelEn", f.label_en, "ex. Customer satisfaction")) +
+      fieldRaw("Libellé FR", inputEl("dmLabelFr", f.label_fr, "ex. Satisfaction client")) +
+      fieldRaw("Libellé EN", inputEl("dmLabelEn", f.label_en, "ex. Customer satisfaction")) +
       '</div>';
 
     html += field("Colonnes de recherche du lookup (une par ligne, optionnel)",
       '<textarea class="afc-textarea mono" id="dmLookup" placeholder="Account_name&#10;carrier_code">' + esc(f.lookup) + '</textarea>',
-      "Liste blanche des colonnes texte utilisees par attribute_lookup. Vide = toutes les colonnes texte.");
+      "Liste blanche des colonnes texte utilisées par attribute_lookup. Vide = toutes les colonnes texte.");
 
     html += '<div class="afc-actions">' +
       '<button class="afc-btn afc-btn--ghost" id="dmPlan"' + (S.domain.planning ? " disabled" : "") + '>' +
       (S.domain.planning ? "Planification..." : "Planifier (dry-run)") + '</button>';
     if (S.domain.plan) {
       html += '<button class="afc-btn afc-btn--primary" id="dmExec"' + (S.domain.executing ? " disabled" : "") + '>' + I.play +
-        (S.domain.executing ? "Execution..." : "Executer") + '</button>';
+        (S.domain.executing ? "Exécution..." : "Exécuter") + '</button>';
     }
     html += '</div>';
 
@@ -486,19 +486,19 @@
       var pl = S.domain.plan;
       var counts = pl.counts || {};
       html += '<div class="afc-sec"><p class="afc-mlabel">Plan (dry-run) - ' +
-        (pl.actions ? pl.actions.length : 0) + ' etapes</p>' +
+        (pl.actions ? pl.actions.length : 0) + ' étapes</p>' +
         '<p class="afc-count">' + countsLine(counts) + '</p>' +
         actionsTable(pl.actions) + '</div>';
     }
 
     // --- execution journal ---
     if (S.domain.executing || S.domain.execResult || S.domain.execError) {
-      html += '<div class="afc-sec"><p class="afc-mlabel">Journal d\'execution</p>';
+      html += '<div class="afc-sec"><p class="afc-mlabel">Journal d\'exécution</p>';
       if (S.domain.executing) {
-        html += '<div class="afc-note afc-note--info">Execution en cours...</div>';
+        html += '<div class="afc-note afc-note--info">Exécution en cours...</div>';
       }
       if (S.domain.execError) {
-        html += '<div class="afc-note afc-note--error">Echec de l\'execution : ' + esc(S.domain.execError) + '</div>';
+        html += '<div class="afc-note afc-note--error">Échec de l\'exécution : ' + esc(S.domain.execError) + '</div>';
       }
       var execActions = (S.domain.execResult && S.domain.execResult.actions) || S.domain.execActions || [];
       html += actionsTable(execActions);
@@ -518,21 +518,21 @@
     var w = S.domain.wizard;
     var html = '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Assistant</p>' +
-      '<h2 class="afc-sec-title">Wizard semantique</h2>' +
-      '<p class="afc-sec-note">Genere un brouillon de configuration du modele semantique (entites, attributs, ' +
-      'metriques, filtres, glossaire, instructions SQL, requetes golden) a partir du dataset de profil. ' +
-      'Seules des metadonnees agregees sont envoyees au LLM, jamais des lignes brutes.</p>' +
+      '<h2 class="afc-sec-title">Wizard sémantique</h2>' +
+      '<p class="afc-sec-note">Génère un brouillon de configuration du modèle sémantique (entités, attributs, ' +
+      'métriques, filtres, glossaire, instructions SQL, requêtes golden) à partir du dataset de profil. ' +
+      'Seules des métadonnées agrégées sont envoyées au LLM, jamais des lignes brutes.</p>' +
       '<div class="afc-card">';
 
     var dsField = S.datasets.loading
       ? '<p class="afc-loading">Chargement des datasets...</p>'
       : '<select class="afc-select" id="wzProfile">' + datasetOptions(w.profileDataset) + '</select>';
     html += field("Dataset de profil", dsField,
-      "En general <base>_profile. Sa metadonnee agregee alimente le brouillon.");
+      "En général <base>_profile. Sa métadonnée agrégée alimente le brouillon.");
 
     html += '<div class="afc-actions">' +
       '<button class="afc-btn afc-btn--ghost" id="wzDraft"' + (w.running ? " disabled" : "") + '>' +
-      (w.running ? "Generation..." : "Generer le brouillon") + '</button></div>';
+      (w.running ? "Génération..." : "Générer le brouillon") + '</button></div>';
 
     if (w.error) {
       html += '<div class="afc-note afc-note--error">Wizard impossible : ' + esc(w.error) + '</div>';
@@ -561,10 +561,10 @@
         });
         html += '<div class="afc-actions">' +
           '<button class="afc-btn afc-btn--ghost" id="wzRegen"' + (w.regenerating ? " disabled" : "") + '>' +
-          (w.regenerating ? "Regeneration..." : "Regenerer avec mes reponses") + '</button></div></div>';
+          (w.regenerating ? "Régénération..." : "Régénérer avec mes réponses") + '</button></div></div>';
       }
 
-      html += '<div class="afc-sec" style="margin-top:20px;"><p class="afc-mlabel">Configuration du modele (brouillon)</p>' +
+      html += '<div class="afc-sec" style="margin-top:20px;"><p class="afc-mlabel">Configuration du modèle (brouillon)</p>' +
         '<div class="afc-actions" style="margin-top:0;">' + copyButton("wzCopy", "Copier le JSON") + '</div>' +
         '<pre class="afc-pre" id="wzJson">' + esc(JSON.stringify(cfg, null, 2)) + '</pre></div>';
     }
@@ -653,16 +653,16 @@
       .filter(function (a) { return a.status === "PLANNED"; })
       .map(function (a) { return '<li><span class="mono">' + esc(a.step) + '</span> : ' + esc(a.detail || "") + '</li>'; })
       .join("");
-    var body = '<p>Vous allez executer la creation du domaine <b class="mono">' + esc(spec.domain || "(sans nom)") + '</b> ' +
-      'reellement sur le projet DSS. Les etapes marquees MANUEL ne seront pas automatisees.</p>';
+    var body = '<p>Vous allez exécuter la création du domaine <b class="mono">' + esc(spec.domain || "(sans nom)") + '</b> ' +
+      'réellement sur le projet DSS. Les étapes marquées MANUEL ne seront pas automatisées.</p>';
     if (willCreate) {
-      body += '<p style="margin-top:10px;">Etapes planifiees :</p><ul>' + willCreate + '</ul>';
+      body += '<p style="margin-top:10px;">Étapes planifiées :</p><ul>' + willCreate + '</ul>';
     }
-    body += '<p style="margin-top:10px;">Aucune suppression n\'est effectuee. Vous pourrez revoir le journal etape par etape.</p>';
+    body += '<p style="margin-top:10px;">Aucune suppression n\'est effectuée. Vous pourrez revoir le journal étape par étape.</p>';
     openConfirm({
-      title: "Executer la creation ?",
+      title: "Exécuter la création ?",
       bodyHtml: body,
-      confirmLabel: "Executer",
+      confirmLabel: "Exécuter",
       onConfirm: executeDomain
     });
   }
@@ -685,7 +685,7 @@
         S.domain.executing = false;
         S.domain.execResult = result || { actions: actions };
         renderDomainNow();
-        toast("Execution terminee.");
+        toast("Exécution terminée.");
       }, function (err, actions) {
         S.domain.executing = false;
         S.domain.execError = err;
@@ -715,7 +715,7 @@
         w.running = false; w.regenerating = false;
         w.config = result || {};
         renderDomainNow();
-        toast("Brouillon genere.");
+        toast("Brouillon généré.");
       }, function (err) {
         w.running = false; w.regenerating = false;
         w.error = err;
@@ -735,7 +735,7 @@
     html += '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Hub</p>' +
       '<h2 class="afc-sec-title">Prompts de persona</h2>' +
-      '<p class="afc-sec-note">Editez un fichier de prompt du hub (/owismind_hub/prompts/...). ' +
+      '<p class="afc-sec-note">Éditez un fichier de prompt du hub (/owismind_hub/prompts/...). ' +
       'L\'orchestrateur charge sa persona depuis orchestrator_persona.md ; les sous-agents peuvent charger ' +
       'un ajout prompts/&lt;domaine&gt;/understand_extra.md. Le chemin doit commencer par /owismind_hub/prompts/.</p>' +
       '<div class="afc-card">';
@@ -752,7 +752,7 @@
 
     html += '<div class="afc-field"><span class="afc-field-label">Contenu</span>' +
       '<textarea class="afc-textarea code" id="prContent" placeholder="' +
-      (pr.loaded ? "" : "Cliquez sur Charger pour recuperer le contenu du fichier.") + '">' + esc(pr.content) + '</textarea></div>';
+      (pr.loaded ? "" : "Cliquez sur Charger pour récupérer le contenu du fichier.") + '">' + esc(pr.content) + '</textarea></div>';
 
     html += '<div class="afc-actions">' +
       '<button class="afc-btn afc-btn--primary" id="prSave"' + (pr.saving || !pr.loaded ? " disabled" : "") + '>' + I.save +
@@ -762,10 +762,10 @@
     // --- capabilities editor ---
     var caps = pr.caps;
     html += '<div class="afc-sec"><p class="afc-sec-eyebrow">Hub</p>' +
-      '<h2 class="afc-sec-title">Capacites (capabilities.json)</h2>' +
-      '<p class="afc-sec-note">Le registre runtime des capacites de l\'orchestrateur. Il est valide cote serveur ' +
-      '(cles requises, dictionnaires de libelles, une seule capacite active par domaine) avant ecriture ; ' +
-      'une sauvegarde du fichier precedent est faite automatiquement.</p>' +
+      '<h2 class="afc-sec-title">Capacités (capabilities.json)</h2>' +
+      '<p class="afc-sec-note">Le registre runtime des capacités de l\'orchestrateur. Il est validé côté serveur ' +
+      '(clés requises, dictionnaires de libellés, une seule capacité active par domaine) avant écriture ; ' +
+      'une sauvegarde du fichier précédent est faite automatiquement.</p>' +
       '<div class="afc-card">';
 
     html += '<div class="afc-actions" style="margin-top:0;">' +
@@ -778,10 +778,10 @@
 
     html += '<div class="afc-field" style="margin-top:16px;"><span class="afc-field-label">capabilities.json</span>' +
       '<textarea class="afc-textarea code" id="capContent" placeholder="' +
-      (caps.loaded ? "" : "Cliquez sur Charger pour recuperer le JSON.") + '">' + esc(caps.text) + '</textarea></div>';
+      (caps.loaded ? "" : "Cliquez sur Charger pour récupérer le JSON.") + '">' + esc(caps.text) + '</textarea></div>';
 
     if (caps.problems && caps.problems.length) {
-      html += '<div class="afc-note afc-note--error"><b>Validation refusee :</b><ul>' +
+      html += '<div class="afc-note afc-note--error"><b>Validation refusée :</b><ul>' +
         caps.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul></div>';
     }
 
@@ -830,8 +830,8 @@
     var pr = S.prompts;
     openConfirm({
       title: "Enregistrer le prompt ?",
-      bodyHtml: "Le fichier <span class=\"mono\">" + esc(pr.path) + "</span> sera ecrit dans la project library du projet. " +
-        "Les agents rechargeront ce prompt a leur prochain demarrage.",
+      bodyHtml: "Le fichier <span class=\"mono\">" + esc(pr.path) + "</span> sera écrit dans la project library du projet. " +
+        "Les agents rechargeront ce prompt à leur prochain démarrage.",
       confirmLabel: "Enregistrer",
       onConfirm: savePrompt
     });
@@ -844,7 +844,7 @@
     callApi("POST", "hub/prompt", { confirm: true, path: pr.path, content: pr.content }).then(function (r) {
       pr.saving = false;
       if (r.data && r.data.status === "ok") {
-        toast("Prompt enregistre.");
+        toast("Prompt enregistré.");
       } else {
         toast("Enregistrement impossible.");
         pr.loadError = errorText(r.data);
@@ -881,9 +881,9 @@
     }
     caps._parsed = parsed;
     openConfirm({
-      title: "Enregistrer les capacites ?",
-      bodyHtml: "Le fichier <span class=\"mono\">capabilities.json</span> sera valide puis ecrit (avec sauvegarde du precedent). " +
-        "Une validation refusee n\'ecrit rien et affiche les problemes.",
+      title: "Enregistrer les capacités ?",
+      bodyHtml: "Le fichier <span class=\"mono\">capabilities.json</span> sera validé puis écrit (avec sauvegarde du précédent). " +
+        "Une validation refusée n\'écrit rien et affiche les problèmes.",
       confirmLabel: "Valider et enregistrer",
       onConfirm: saveCaps
     });
@@ -896,7 +896,7 @@
     callApi("POST", "hub/capabilities", { confirm: true, capabilities: caps._parsed }).then(function (r) {
       caps.saving = false;
       if (r.data && r.data.status === "ok") {
-        toast("Capacites enregistrees.");
+        toast("Capacités enregistrées.");
       } else if (r.data && r.data.problems) {
         caps.problems = r.data.problems;
       } else {

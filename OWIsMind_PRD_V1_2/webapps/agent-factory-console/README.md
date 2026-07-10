@@ -59,9 +59,9 @@ automatically inside the webapp iframe).
   markdown report (copy button). The probes inspect the instance (Code Agent API shape, Semantic
   Model Query tool schema, `create_agent` availability) and create / modify / delete nothing.
 - **Nouveau domaine**: a form (domain key, base dataset or SQL source table, FR/EN labels, lookup
-  search columns) -> "Planifier (dry-run)" renders the action plan as a table -> "Executer"
+  search columns) -> "Planifier (dry-run)" renders the action plan as a table -> "Exécuter"
   (confirm modal) runs the pipeline in a background job with a live journal; MANUAL steps are listed
-  as a checklist at the end. A "Wizard semantique" section drafts the semantic model config from a
+  as a checklist at the end. A "Wizard sémantique" section drafts the semantic model config from a
   profile dataset (LLM call), asks clarifying questions, and re-drafts with the answers.
 - **Prompts**: edit a hub prompt file (path constrained to `/owismind_hub/prompts/`) and the
   `capabilities.json` registry (server-side validated, previous version backed up).
@@ -69,7 +69,7 @@ automatically inside the webapp iframe).
 ## Safety model
 
 - **Dry-run first**: "Planifier" builds a plan with `FactoryContext(dry_run=True)`; it never touches
-  DSS. "Executer" runs for real but every step is idempotent (`ensure_*`), and there is **no
+  DSS. "Exécuter" runs for real but every step is idempotent (`ensure_*`), and there is **no
   deletion path anywhere** in the factory or this console.
 - **Confirm on every mutation**: every mutating endpoint (`/api/execute`, `/api/probe`,
   `/api/wizard/draft`, `/api/hub/prompt` POST, `/api/hub/capabilities` POST) requires the JSON body
