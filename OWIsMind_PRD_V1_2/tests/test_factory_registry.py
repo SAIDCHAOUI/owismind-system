@@ -119,6 +119,79 @@ class TestFactoryEntryCompatibility(unittest.TestCase):
         self.assertTrue(any("already has an enabled capability" in p for p in problems))
 
 
+def _extract_orchestrator_validator():
+    """Compile the orchestrator's REAL _hub_capabilities_problems (via ast).
+
+    Executing the actual source (not a re-implementation) is what makes the
+    validator-equivalence test meaningful.
+    """
+    source = open(_ORCH).read()
+    tree = ast.parse(source)
+    namespace = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id in ("_HUB_REQUIRED_CAPABILITY_KEYS",
+                                           "_HUB_KNOWN_BLOCK_IDS",
+                                           "_HUB_KNOWN_TOOL_NAMES"):
+            namespace[node.targets[0].id] = ast.literal_eval(node.value)
+        if isinstance(node, ast.FunctionDef) and node.name == "_hub_capabilities_problems":
+            segment = ast.get_source_segment(source, node)
+            exec(segment, namespace)  # noqa: S102 - our own source, test only
+    return namespace["_hub_capabilities_problems"]
+
+
+class TestValidatorsAgree(unittest.TestCase):
+    """The factory validator and the orchestrator's loader validator must give
+    the SAME verdict on the same input, and the orchestrator's must NEVER raise
+    (a crash at agent import would be a hard outage: adversarial finding 1)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.orch_validate = staticmethod(_extract_orchestrator_validator())
+        cls.seed = json.load(open(os.path.join(_HUB_DIR, "capabilities.json")))
+
+    def _entry(self, **overrides):
+        entry = json.loads(json.dumps(self.seed["revenue_expert"]))
+        entry.update(overrides)
+        return entry
+
+    def _cases(self):
+        return {
+            "valid_seed": self.seed,
+            "block_labels_none": {"x": self._entry(block_labels=None)},
+            "block_labels_list": {"x": self._entry(block_labels=["resolve"])},
+            "block_labels_wrong_keys": {"x": self._entry(block_labels={"foo": "bar"})},
+            "block_labels_extra_key": {"x": self._entry(
+                block_labels=dict(self.seed["revenue_expert"]["block_labels"], extra={"fr": "x", "en": "x"}))},
+            "tool_labels_subset": {"x": self._entry(tool_labels={"resolve_filter_value": {"fr": "a", "en": "b"}})},
+            "bad_agent_id": {"x": self._entry(agent_id="bHrWLyOL")},
+            "dup_enabled_domain": {"a": self._entry(), "b": self._entry()},
+            "non_dict_entry": {"x": 42},
+            "empty": {},
+        }
+
+    def test_same_verdict_and_no_crash(self):
+        for name, case in self._cases().items():
+            try:
+                orch_problems = self.orch_validate(case)
+            except Exception as exc:  # noqa: BLE001 - the assertion IS the point
+                self.fail("orchestrator validator RAISED on %r: %s (must return problems)"
+                          % (name, exc))
+            factory_problems = hub.validate_capabilities(case)
+            self.assertEqual(bool(orch_problems), bool(factory_problems),
+                             "validators disagree on %r: orchestrator=%s factory=%s"
+                             % (name, orch_problems[:2], factory_problems[:2]))
+
+    def test_only_valid_seed_accepted(self):
+        cases = self._cases()
+        self.assertEqual(hub.validate_capabilities(cases["valid_seed"]), [])
+        for name, case in cases.items():
+            if name != "valid_seed":
+                self.assertTrue(hub.validate_capabilities(case),
+                                "factory validator should reject %r" % name)
+
+
 class TestSubAgentHubBlocks(unittest.TestCase):
     """The two specialists carry the additive hub loader with the right domain."""
 

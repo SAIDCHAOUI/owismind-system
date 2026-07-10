@@ -143,8 +143,14 @@ def validate_capabilities(obj):
     """Validate a full capabilities mapping. Returns a list of problems (empty = valid).
 
     The SAME semantic checks are duplicated inside the orchestrator's hub loader
-    (standalone file rule); a unit test keeps the two in sync.
+    (standalone file rule). The two validators must give the same verdict on the
+    same input, otherwise the console/factory would happily write a file the
+    orchestrator then silently rejects at load time: the equivalence is enforced
+    by tests/test_factory_registry.py (TestValidatorsAgree), which executes the
+    orchestrator's real validator side by side with this one.
     """
+    from .registry import KNOWN_BLOCK_IDS, KNOWN_TOOL_NAMES
+
     problems = []
     if not isinstance(obj, dict) or not obj:
         return ["capabilities must be a non-empty JSON object"]
@@ -166,10 +172,23 @@ def validate_capabilities(obj):
                     problems.append("%s: domain %r already has an enabled capability "
                                     "(one enabled capability per domain)" % (key, domain))
                 enabled_domains.append(domain)
-        for label_key in ("block_labels", "tool_labels"):
-            labels = cap.get(label_key)
-            if labels is not None and not isinstance(labels, dict):
-                problems.append("%s: %s must be an object" % (key, label_key))
+            # The frozen sub-agent dialect: the timeline labels must cover exactly
+            # the KNOWN block ids / tool names (same rule as the orchestrator).
+            block_labels = cap.get("block_labels")
+            if not isinstance(block_labels, dict) \
+                    or set(block_labels.keys()) != set(KNOWN_BLOCK_IDS):
+                problems.append("%s: block_labels must be an object with exactly the keys %s"
+                                % (key, list(KNOWN_BLOCK_IDS)))
+            tool_labels = cap.get("tool_labels")
+            if not isinstance(tool_labels, dict) \
+                    or set(tool_labels.keys()) != set(KNOWN_TOOL_NAMES):
+                problems.append("%s: tool_labels must be an object with exactly the keys %s"
+                                % (key, list(KNOWN_TOOL_NAMES)))
+        else:
+            for label_key in ("block_labels", "tool_labels"):
+                labels = cap.get(label_key)
+                if labels is not None and not isinstance(labels, dict):
+                    problems.append("%s: %s must be an object" % (key, label_key))
     return problems
 
 

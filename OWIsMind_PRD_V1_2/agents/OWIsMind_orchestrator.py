@@ -1405,11 +1405,15 @@ def _hub_capabilities_problems(obj):
                 if domain in enabled_domains:
                     problems.append("%s: domain %r already staffed" % (key, domain))
                 enabled_domains.append(domain)
-            if set((cap.get("block_labels") or {}).keys()) != set(_HUB_KNOWN_BLOCK_IDS):
-                problems.append("%s: block_labels keys must be exactly %s"
+            block_labels = cap.get("block_labels")
+            if not isinstance(block_labels, dict) \
+                    or set(block_labels.keys()) != set(_HUB_KNOWN_BLOCK_IDS):
+                problems.append("%s: block_labels must be an object with exactly the keys %s"
                                 % (key, list(_HUB_KNOWN_BLOCK_IDS)))
-            if set((cap.get("tool_labels") or {}).keys()) != set(_HUB_KNOWN_TOOL_NAMES):
-                problems.append("%s: tool_labels keys must be exactly %s"
+            tool_labels = cap.get("tool_labels")
+            if not isinstance(tool_labels, dict) \
+                    or set(tool_labels.keys()) != set(_HUB_KNOWN_TOOL_NAMES):
+                problems.append("%s: tool_labels must be an object with exactly the keys %s"
                                 % (key, list(_HUB_KNOWN_TOOL_NAMES)))
     return problems
 
@@ -1432,18 +1436,28 @@ def _load_hub_capabilities():
         return None
     try:
         obj = json.loads(raw)
+        problems = _hub_capabilities_problems(obj)
     except Exception:
-        logger.warning("hub capabilities.json is not valid JSON: using defaults")
+        # A hand-edited hub file must NEVER prevent the agent from starting:
+        # any parse or validation crash falls back to the embedded defaults.
+        logger.warning("hub capabilities.json unreadable or validation crashed: using defaults")
         return None
-    problems = _hub_capabilities_problems(obj)
     if problems:
         logger.warning("hub capabilities.json rejected: %s", "; ".join(problems[:5]))
         return None
     return obj
 
 
-PERSONA = _load_hub_persona() or PERSONA_DEFAULT
-_hub_capabilities = _load_hub_capabilities()
+# Module-level resolution, hardened: an exception here would abort the whole
+# agent import (hard outage), so both loaders are belt-and-braces wrapped.
+try:
+    PERSONA = _load_hub_persona() or PERSONA_DEFAULT
+except Exception:
+    PERSONA = PERSONA_DEFAULT
+try:
+    _hub_capabilities = _load_hub_capabilities()
+except Exception:
+    _hub_capabilities = None
 if _hub_capabilities is not None:
     CAPABILITIES = _hub_capabilities
     logger.info("CAPABILITIES loaded from the config hub (%d entries)", len(CAPABILITIES))
