@@ -227,7 +227,7 @@ LOOKUP_RESULT_MAX_ROWS = 25               # cap on found_in rows shaped for Evid
 # figures (a second revenue agent must flip the first to enabled=False).
 # =============================================================================
 
-CAPABILITIES = {
+CAPABILITIES_DEFAULT = {
     # --- Revenue / billing / budget / forecast (the live revenue expert) ----
     "revenue_expert": {
         "kind": "agent",
@@ -331,8 +331,13 @@ CAPABILITIES = {
         "pass_context": True,
         "enabled": True,
     },
-    # Adding a sub-agent (e.g. another domain expert) is one more entry here.
+    # Adding a sub-agent (e.g. another domain expert) is one more entry here,
+    # or one validated entry in the hub's capabilities.json (section 7b).
 }
+
+# CAPABILITIES resolves to the hub override or this default in section 7b below
+# (after PERSONA_DEFAULT). Runtime code only ever reads the resolved CAPABILITIES.
+CAPABILITIES = CAPABILITIES_DEFAULT
 
 # Business domains OWI cares about. A domain is "staffed" when an enabled agent
 # declares it. This lets the model give an honest CAPABILITY GAP ("no agent for
@@ -1229,7 +1234,7 @@ def pick_loop_llm(mode):
 # 7. SYSTEM PROMPT (English; honesty firewall; replies in the user's language)
 # =============================================================================
 
-PERSONA = (
+PERSONA_DEFAULT = (
     "# WHO YOU ARE\n"
     "You are OWIsMind, the internal data assistant of Orange Wholesale "
     "International (OWI). You run as an AI agent inside Dataiku DSS and you are "
@@ -1335,6 +1340,113 @@ PERSONA = (
     "for data NOT in the note: a new entity, period, scenario, metric, or an "
     "aggregation the rows cannot answer.\n"
 )
+
+
+# =============================================================================
+# 7b. CONFIG HUB - optional overrides from the project library (/owismind_hub/)
+# -----------------------------------------------------------------------------
+# The hub (see project-library/python/owismind_factory/hub.py and the notebook
+# 01_push_config_hub.py) lets the team iterate the PERSONA and register new
+# capabilities WITHOUT re-pasting this file. Loaded ONCE at agent start through
+# the public API (no import: the standalone-file rule holds). STRICT validation
+# + silent fallback: any failure, any invalid entry -> the embedded defaults
+# above. Editing a hub file takes effect on the next agent process start
+# (re-save the agent or shutdown/wake it in DSS).
+# =============================================================================
+
+_HUB_PERSONA_PATH = "/owismind_hub/prompts/orchestrator_persona.md"
+_HUB_CAPABILITIES_PATH = "/owismind_hub/capabilities.json"
+# Mirror of owismind_factory.hub.REQUIRED_CAPABILITY_KEYS (anti-drift test
+# tests/test_factory_registry.py keeps the two tuples identical).
+_HUB_REQUIRED_CAPABILITY_KEYS = (
+    "kind", "agent_id", "domain", "label_fr", "label_en", "tool_name",
+    "planner_description", "block_labels", "tool_labels",
+    "dataset_label_fr", "dataset_label_en", "source_url",
+    "lookup_dataset", "lookup_catalog", "lookup_search_columns",
+    "pass_context", "enabled",
+)
+# Frozen sub-agent dialect: hub entries must label exactly these ids.
+_HUB_KNOWN_BLOCK_IDS = ("resolve", "run_sql", "format_output",
+                        "clarify_user", "out_of_scope_msg", "about_data")
+_HUB_KNOWN_TOOL_NAMES = ("resolve_filter_value", "dataset_sql_query")
+
+
+def _hub_read_text(path):
+    """Public-API read of a project-library file. None on ANY failure."""
+    try:
+        library = dataiku.api_client().get_default_project().get_library()
+        f = library.get_file(path)
+        if f is None:
+            return None
+        return f.read()
+    except Exception:
+        return None
+
+
+def _hub_capabilities_problems(obj):
+    """Same semantic checks as owismind_factory.hub.validate_capabilities, plus
+    the frozen block/tool label keys. Returns a list of problems (empty = valid)."""
+    problems = []
+    if not isinstance(obj, dict) or not obj:
+        return ["capabilities must be a non-empty object"]
+    enabled_domains = []
+    for key, cap in obj.items():
+        if not isinstance(cap, dict):
+            problems.append("%s: entry must be an object" % key)
+            continue
+        for req in _HUB_REQUIRED_CAPABILITY_KEYS:
+            if req not in cap:
+                problems.append("%s: missing key %r" % (key, req))
+        if cap.get("kind") == "agent":
+            if not str(cap.get("agent_id") or "").startswith("agent:"):
+                problems.append("%s: agent_id must start with 'agent:'" % key)
+            if cap.get("enabled"):
+                domain = cap.get("domain")
+                if domain in enabled_domains:
+                    problems.append("%s: domain %r already staffed" % (key, domain))
+                enabled_domains.append(domain)
+            if set((cap.get("block_labels") or {}).keys()) != set(_HUB_KNOWN_BLOCK_IDS):
+                problems.append("%s: block_labels keys must be exactly %s"
+                                % (key, list(_HUB_KNOWN_BLOCK_IDS)))
+            if set((cap.get("tool_labels") or {}).keys()) != set(_HUB_KNOWN_TOOL_NAMES):
+                problems.append("%s: tool_labels keys must be exactly %s"
+                                % (key, list(_HUB_KNOWN_TOOL_NAMES)))
+    return problems
+
+
+def _load_hub_persona():
+    """Persona override: sane size window, else keep the embedded default."""
+    text = _hub_read_text(_HUB_PERSONA_PATH)
+    if not text:
+        return None
+    text = text.strip()
+    if len(text) < 500 or len(text) > 20000:
+        logger.warning("hub persona ignored (suspicious size %d)", len(text))
+        return None
+    return text
+
+
+def _load_hub_capabilities():
+    raw = _hub_read_text(_HUB_CAPABILITIES_PATH)
+    if not raw:
+        return None
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        logger.warning("hub capabilities.json is not valid JSON: using defaults")
+        return None
+    problems = _hub_capabilities_problems(obj)
+    if problems:
+        logger.warning("hub capabilities.json rejected: %s", "; ".join(problems[:5]))
+        return None
+    return obj
+
+
+PERSONA = _load_hub_persona() or PERSONA_DEFAULT
+_hub_capabilities = _load_hub_capabilities()
+if _hub_capabilities is not None:
+    CAPABILITIES = _hub_capabilities
+    logger.info("CAPABILITIES loaded from the config hub (%d entries)", len(CAPABILITIES))
 
 
 def build_system_prompt(caps, lang_hint, narrate=True):

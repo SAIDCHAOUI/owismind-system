@@ -662,7 +662,43 @@ def build_understand_schema(profile):
             "required": ["scope", "language"]}
 
 
+# --- Config hub (optional ADDITIVE team rules, loaded once at agent start) ----
+# /owismind_hub/prompts/<HUB_DOMAIN>/understand_extra.md appends team rules to
+# the UNDERSTAND system prompt (never replaces it, frozen contracts untouched).
+# Public-API read, no import: the standalone-file rule holds. Any failure -> "".
+# Editing the hub file takes effect on the next agent process start.
+HUB_DOMAIN = "revenue"
+
+
+def _hub_understand_extra():
+    try:
+        library = dataiku.api_client().get_default_project().get_library()
+        f = library.get_file("/owismind_hub/prompts/%s/understand_extra.md" % HUB_DOMAIN)
+        text = f.read() if f is not None else None
+    except Exception:
+        return ""
+    if not text:
+        return ""
+    text = text.strip()
+    if len(text) > 4000:
+        logger.warning("hub understand_extra ignored (too long: %d chars)", len(text))
+        return ""
+    return text
+
+
+HUB_UNDERSTAND_EXTRA = _hub_understand_extra()
+
+
 def build_understand_prompt(profile, current_date, lang_hint="fr"):
+    """Hub-aware wrapper: base prompt + optional additive rules from the hub."""
+    prompt = _build_understand_prompt_base(profile, current_date, lang_hint=lang_hint)
+    if HUB_UNDERSTAND_EXTRA:
+        prompt += ("\n\nADDITIONAL TEAM RULES (config hub, additive only):\n"
+                   + HUB_UNDERSTAND_EXTRA)
+    return prompt
+
+
+def _build_understand_prompt_base(profile, current_date, lang_hint="fr"):
     """System prompt of the UNDERSTAND call, GENERATED from the profile."""
     metrics_block = "\n".join(
         '- "%s": %s / %s%s' % (m["name"], m.get("label_fr", ""), m.get("label_en", ""),
