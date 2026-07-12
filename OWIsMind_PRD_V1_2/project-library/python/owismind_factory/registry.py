@@ -13,17 +13,21 @@ KNOWN_BLOCK_IDS = ("resolve", "run_sql", "format_output",
                    "clarify_user", "out_of_scope_msg", "about_data")
 KNOWN_TOOL_NAMES = ("resolve_filter_value", "dataset_sql_query")
 
+# French labels carry their accents: they are user-visible timeline strings and
+# MUST match the orchestrator's embedded CAPABILITIES labels byte for byte
+# (agents/OWIsMind_orchestrator.py), otherwise factory-created domains would
+# render degraded ASCII labels next to the accented live ones.
 _BLOCK_LABELS = {
     "resolve": {"fr": "analyse de la question", "en": "understanding the question"},
-    "run_sql": {"fr": "interrogation des donnees", "en": "querying the data"},
-    "format_output": {"fr": "mise en forme du resultat", "en": "formatting the result"},
-    "clarify_user": {"fr": "demande de precision", "en": "asking for clarification"},
+    "run_sql": {"fr": "interrogation des données", "en": "querying the data"},
+    "format_output": {"fr": "mise en forme du résultat", "en": "formatting the result"},
+    "clarify_user": {"fr": "demande de précision", "en": "asking for clarification"},
     "out_of_scope_msg": None,
-    "about_data": {"fr": "description des donnees", "en": "describing the data"},
+    "about_data": {"fr": "description des données", "en": "describing the data"},
 }
 _TOOL_LABELS = {
-    "resolve_filter_value": {"fr": "resolution des noms exacts", "en": "resolving exact names"},
-    "dataset_sql_query": {"fr": "generation et execution du SQL", "en": "generating and running SQL"},
+    "resolve_filter_value": {"fr": "résolution des noms exacts", "en": "resolving exact names"},
+    "dataset_sql_query": {"fr": "génération et exécution du SQL", "en": "generating and running SQL"},
 }
 
 

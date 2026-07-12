@@ -417,6 +417,53 @@ class TestDeletionConfinement(unittest.TestCase):
         self.assertTrue(handle.deleted)
 
 
+class TestPlaceholderAgentIdRejected(unittest.TestCase):
+    """Both validators must refuse placeholder agent ids (agent:FILL_ME)."""
+
+    def _valid_caps(self):
+        import json as _json
+        seed_path = os.path.join(os.path.dirname(__file__), "..",
+                                 "hub", "capabilities.json")
+        with open(seed_path) as fh:
+            return _json.load(fh)
+
+    def test_factory_validator_rejects_placeholder(self):
+        caps = self._valid_caps()
+        key = next(k for k, c in caps.items() if c.get("kind") == "agent")
+        self.assertEqual(hub.validate_capabilities(caps), [])
+        caps[key]["agent_id"] = "agent:FILL_ME"
+        self.assertTrue(any("not a real DSS id" in p
+                            for p in hub.validate_capabilities(caps)))
+        caps[key]["agent_id"] = "agent:"
+        self.assertTrue(hub.validate_capabilities(caps))
+
+
+class TestRegistryLabelsMatchLiveCapabilities(unittest.TestCase):
+    """registry.py label constants must equal the live accented labels.
+
+    The hub capabilities seed is byte-equal to the orchestrator's embedded
+    CAPABILITIES (existing equivalence test), so comparing against the seed
+    pins factory-generated entries to the exact live label strings (accents
+    included).
+    """
+
+    def test_block_and_tool_labels_match_seed(self):
+        import json as _json
+        from owismind_factory import registry as reg
+        seed_path = os.path.join(os.path.dirname(__file__), "..",
+                                 "hub", "capabilities.json")
+        with open(seed_path) as fh:
+            seed = _json.load(fh)
+        agent_caps = [c for c in seed.values() if c.get("kind") == "agent"]
+        self.assertTrue(agent_caps)
+        for cap in agent_caps:
+            self.assertEqual(cap["block_labels"],
+                             {k: (dict(v) if isinstance(v, dict) else v)
+                              for k, v in reg._BLOCK_LABELS.items()})
+            self.assertEqual(cap["tool_labels"],
+                             {k: dict(v) for k, v in reg._TOOL_LABELS.items()})
+
+
 class TestFactorySettingsSeedEquivalence(unittest.TestCase):
     """hub/factory_settings.json seed must equal the embedded DEFAULT_SETTINGS.
 

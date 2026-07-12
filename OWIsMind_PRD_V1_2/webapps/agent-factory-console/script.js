@@ -34,13 +34,13 @@
   var S = {
     tab: "overview",
     theme: "light",
-    // Vue d'ensemble
+    // Overview screen ("Vue d'ensemble")
     overview: { loaded: false, loading: false, error: null, data: null },
     // shared: datasets list (fed to the pickers)
     datasets: { loaded: false, loading: false, error: null, list: [] },
-    // Sonde (Phase 0)
+    // Probe screen ("Sonde", Phase 0)
     probe: { running: false, jobId: null, report: null, error: null },
-    // Nouveau domaine
+    // New-domain screen ("Nouveau domaine")
     domain: {
       form: { domain: "", sourceMode: "existing", base_dataset: "",
               connection: "SQL_owi", schema: "", table: "", catalog: "",
@@ -50,7 +50,7 @@
       wizard: { profileDataset: "", running: false, jobId: null, config: null,
                 answers: {}, error: null, regenerating: false }
     },
-    // Prompts
+    // Prompts screen (hub editor)
     prompts: {
       path: "/owismind_hub/prompts/orchestrator_persona.md",
       loading: false, loaded: false, content: "", saving: false, loadError: null,
@@ -498,6 +498,13 @@
     }
     html += '</div>';
 
+    // Status of the semantic wizard draft: tells the user whether Plan/Execute will
+    // carry a semantic-model config, or leave the model to configure by hand later.
+    var wizardReady = wizardConfigForSend() !== undefined;
+    html += '<p class="afc-field-help">' + (wizardReady
+      ? 'Config du wizard : prête (sera appliquée)'
+      : 'Config du wizard : absente (le modèle sémantique restera à configurer)') + '</p>';
+
     if (S.domain.planError) {
       html += '<div class="afc-note afc-note--error">Plan impossible : ' + esc(S.domain.planError) + '</div>';
     }
@@ -672,6 +679,15 @@
     if (w.config) { wireCopy("wzCopy", function () { return JSON.stringify(w.config, null, 2); }); }
   }
 
+  /* The wizard draft config to attach to a plan/execute call, or undefined. Only a
+   * non-null object without an .error key is a usable draft; anything else means the
+   * semantic model stays unconfigured and we send nothing. */
+  function wizardConfigForSend() {
+    var c = S.domain.wizard.config;
+    if (c && typeof c === "object" && !c.error) { return c; }
+    return undefined;
+  }
+
   function buildSpec() {
     var f = S.domain.form;
     var lookup = (f.lookup || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
@@ -695,7 +711,7 @@
     // reset any prior execution when re-planning
     S.domain.execResult = null; S.domain.execError = null; S.domain.execActions = [];
     renderDomainNow();
-    callApi("POST", "plan", { spec: buildSpec() }).then(function (r) {
+    callApi("POST", "plan", { spec: buildSpec(), wizard_config: wizardConfigForSend() }).then(function (r) {
       S.domain.planning = false;
       if (r.data && r.data.status === "ok") {
         S.domain.plan = { counts: r.data.counts || {}, actions: r.data.actions || [], dry_run: r.data.dry_run };
@@ -730,7 +746,7 @@
   function executeDomain() {
     S.domain.executing = true; S.domain.execError = null; S.domain.execResult = null; S.domain.execActions = [];
     renderDomainNow();
-    callApi("POST", "execute", { spec: buildSpec(), confirm: true }).then(function (r) {
+    callApi("POST", "execute", { spec: buildSpec(), wizard_config: wizardConfigForSend(), confirm: true }).then(function (r) {
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
         S.domain.executing = false;
         S.domain.execError = errorText(r.data);
@@ -761,7 +777,9 @@
     if (withAnswers) { w.regenerating = true; } else { w.running = true; w.config = null; w.answers = {}; }
     w.error = null;
     renderDomainNow();
-    var payload = { confirm: true, profile_dataset: w.profileDataset, base_dataset: S.domain.form.base_dataset || "" };
+    var payload = { confirm: true, profile_dataset: w.profileDataset,
+                    base_dataset: S.domain.form.base_dataset || "",
+                    domain: (S.domain.form.domain || "").trim() };
     if (withAnswers) { payload.answers = w.answers; }
     callApi("POST", "wizard/draft", payload).then(function (r) {
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
@@ -774,6 +792,10 @@
       pollJob(w.jobId, null, function (result) {
         w.running = false; w.regenerating = false;
         w.config = result || {};
+        // A usable new draft changes what Execute would apply, so any plan computed
+        // before it is now stale: drop it (the Execute button hides until re-planned).
+        // An error draft sends nothing, so it leaves an existing plan valid.
+        if (wizardConfigForSend() !== undefined) { invalidateDomainPlan(); }
         renderDomainNow();
         toast("Brouillon généré.");
       }, function (err) {

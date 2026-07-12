@@ -172,9 +172,14 @@ def validate_capabilities(obj):
             if req not in cap:
                 problems.append("%s: missing key %r" % (key, req))
         if cap.get("kind") == "agent":
-            agent_id = cap.get("agent_id") or ""
-            if not str(agent_id).startswith("agent:"):
+            agent_id = str(cap.get("agent_id") or "")
+            if not agent_id.startswith("agent:"):
                 problems.append("%s: agent_id must start with 'agent:', got %r" % (key, agent_id))
+            elif not agent_id.split(":", 1)[1].isalnum():
+                # Rejects placeholders (FILL_ME and friends) and empty suffixes:
+                # real DSS agent ids are alphanumeric.
+                problems.append("%s: agent_id %r is not a real DSS id "
+                                "(expected agent:<alphanumeric>)" % (key, agent_id))
             if cap.get("enabled"):
                 domain = cap.get("domain")
                 if domain in enabled_domains:

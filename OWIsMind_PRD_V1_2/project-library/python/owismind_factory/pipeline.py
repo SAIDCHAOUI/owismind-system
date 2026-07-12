@@ -109,9 +109,33 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
 
     if _enabled(steps, "semantic_config"):
         if wizard_config and not wizard_config.get("error"):
+            working = dict(wizard_config)
+            # Offline gate: never push a golden query that is not read-only or that
+            # references an invented column into the model. Known columns come from
+            # the wizard attributes; without them the check is skipped (manual note).
+            known_columns = [a.get("column") for a in (working.get("attributes") or [])
+                             if isinstance(a, dict) and a.get("column")]
+            if known_columns:
+                verdict = wizard.validate_golden_queries(working, known_columns)
+                if verdict["problems"]:
+                    working["golden_queries"] = verdict["ok"]
+                    stripped = ["[%d] %s -> %s"
+                                % (p["index"], (p["question"] or "?")[:80],
+                                   "; ".join(p["issues"]))
+                                for p in verdict["problems"]]
+                    ctx.manual("semantic_config_validation",
+                               "%d golden query(ies) stripped before apply by the offline "
+                               "validator (read-only + known-column check): fix and re-add "
+                               "them by hand in the model Playground: %s"
+                               % (len(verdict["problems"]), " | ".join(stripped)))
+            else:
+                ctx.manual("semantic_config_validation",
+                           "golden query validator SKIPPED: no attribute columns in the "
+                           "wizard config to check identifiers against, review the golden "
+                           "query SQL by hand in the Playground")
             physical = wizard.get_physical_table(ctx.project, spec.base_dataset) if not ctx.dry_run else None
-            ready, todo = wizard.substitute_golden_tables(wizard_config, physical)
-            config = dict(wizard_config)
+            ready, todo = wizard.substitute_golden_tables(working, physical)
+            config = dict(working)
             config["golden_queries"] = ready
             semantic_builder.apply_config(ctx, model_id, config)
             if todo:

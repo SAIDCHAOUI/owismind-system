@@ -21,6 +21,7 @@
 
 import functools
 import logging
+import re
 import threading
 import traceback
 
@@ -39,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 # Hub prompt writes are constrained to this subtree (defense in depth: the path is never trusted).
 _PROMPTS_PREFIX = "/owismind_hub/prompts/"
+
+# A domain key is snake_case (same shape DomainSpec enforces). Used to build the hub path
+# where a wizard draft is persisted, so we validate it before touching the library.
+_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 
 
 # ----------------------------------------------------------------- error / safety helpers
@@ -234,6 +239,28 @@ def _gates_from_hub(project, body):
     return discovery, schema_hints
 
 
+def _wizard_config_path(domain):
+    """Hub path where a domain's wizard draft is persisted (same convention as the notebook)."""
+    return "%s/wizard/%s-config.json" % (hub.HUB_ROOT, domain)
+
+
+def _wizard_config_fallback(project, body, spec):
+    """Resolve the wizard config for plan/execute: the request body wins, else the hub.
+
+    When the body carries an explicit ``wizard_config`` dict we use it verbatim (the console
+    sends the freshly drafted config this way). Otherwise we fall back to the config the wizard
+    persisted to the hub for this domain, but only when it is a dict without an ``error`` key.
+    Returns the config dict or None (None keeps the semantic model unconfigured, as before).
+    """
+    from_body = (body or {}).get("wizard_config")
+    if isinstance(from_body, dict):
+        return from_body
+    stored = hub.read_json(project, _wizard_config_path(spec.domain))
+    if isinstance(stored, dict) and "error" not in stored:
+        return stored
+    return None
+
+
 @app.route("/api/plan", methods=["POST"])
 @_safe
 def api_plan():
@@ -245,8 +272,9 @@ def api_plan():
         return err
     project = _project()
     discovery, schema_hints = _gates_from_hub(project, body)
+    wizard_config = _wizard_config_fallback(project, body, spec)
     ctx = fctx.FactoryContext(project=project, dry_run=True, abort_on_failure=False)
-    pipeline.create_domain(ctx, spec, wizard_config=body.get("wizard_config"),
+    pipeline.create_domain(ctx, spec, wizard_config=wizard_config,
                            discovery=discovery, schema_hints=schema_hints,
                            steps=body.get("steps"))
     return jsonify({"status": "ok", **ctx.summary()})
@@ -269,9 +297,9 @@ def api_execute():
     if err:
         return err
     steps = body.get("steps")
-    wizard_config = body.get("wizard_config")
     project = _project()
     discovery, schema_hints = _gates_from_hub(project, body)
+    wizard_config = _wizard_config_fallback(project, body, spec)
     ctx = fctx.FactoryContext(project=project, dry_run=False, abort_on_failure=False)
     _, rec = _new_job("execute", ctx=ctx)
 
@@ -321,12 +349,20 @@ def api_wizard_draft():
         return _err("profile_dataset_required", 400)
     base_dataset = str(body.get("base_dataset") or "").strip() or None
     answers = body.get("answers")
+    # Optional: when a valid snake_case domain is given we persist the draft to the hub so
+    # plan/execute can pick it up later even without the body carrying it. Ignore junk.
+    domain = str(body.get("domain") or "").strip()
+    if not _DOMAIN_RE.match(domain):
+        domain = None
     project = _project()
     _, rec = _new_job("wizard")
 
     def work():
-        return wizard.draft_model_config(project, profile_dataset,
-                                         answers=answers, base_dataset=base_dataset)
+        config = wizard.draft_model_config(project, profile_dataset,
+                                           answers=answers, base_dataset=base_dataset)
+        if domain and isinstance(config, dict) and "error" not in config:
+            hub.write_json(project, _wizard_config_path(domain), config)
+        return config
 
     _run_job(rec, work)
     return jsonify({"status": "ok", "job_id": rec["id"]})

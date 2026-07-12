@@ -24,6 +24,7 @@ Bounded cost: ONE completion per draft call, aggregated metadata only.
 """
 
 import json
+import re
 
 MAX_DIGEST_CHARS = 12000
 MAX_PROFILE_ROWS = 400
@@ -213,11 +214,35 @@ def build_draft_prompt(digest, base_dataset, domain, answers=None, extra_context
         "(field in: metrics, default_metric, time, display_column, synonyms; value "
         "is the JSON or plain value as a string). Emit only what you are confident "
         "about; everything else becomes a question.\n"
-        "- questions: 3 to 8 clarifying questions IN FRENCH for the human curator "
-        "(id snake_case, why in French). ALWAYS cover: the default metric and its "
-        "aggregation key (distinct or not), the default time column, units of "
-        "numeric columns, and any suspected hierarchy between columns.\n"
+        "- questions (the clarifying_questions the human MUST see): 3 to 8 clarifying "
+        "questions IN FRENCH for the human curator (id snake_case, why in French). Aim "
+        "for 3 to 5 whenever the signals are ambiguous, and ALWAYS return at least one. "
+        "ALWAYS cover: the default metric and its aggregation key (distinct or not), the "
+        "default time column, units of numeric columns, and any suspected hierarchy "
+        "between columns.\n"
+        "- profile_overrides: ALWAYS emit a row whenever the profile lets you decide, "
+        "for default_metric, the time dimension (field=time), a display_column for any "
+        "opaque id, and synonyms. When you are not confident, do NOT guess the value: "
+        "raise it as a clarifying_question instead.\n"
         "- NEVER use em dashes or en dashes anywhere in any text you produce.\n")
+    parts.append(
+        "COMMON TRAP SHAPES observed on prior domains. These are SHAPES to CHECK "
+        "against THIS profile, never values to copy: do not import another domain's "
+        "columns, metrics or answers.\n"
+        "- The default metric may need COUNT(DISTINCT <id column>) rather than "
+        "COUNT(*), when a business entity spans several rows. Check the id cardinality "
+        "in the profile before picking COUNT(*).\n"
+        "- A duration-like column may be stored in minutes (or another unit) and is "
+        "usually summarized with AVG, not SUM. State the unit you see and ask if the "
+        "profile does not prove it.\n"
+        "- The time dimension must be chosen EXPLICITLY (for instance a creation date "
+        "column). Never assume a default date column is the business time axis without "
+        "the profile backing it, and surface it in profile_overrides field=time.\n"
+        "- Opaque id columns (a numeric customer id, an account id) should be DISPLAYED "
+        "through a human-readable label column when the profile exposes one; propose "
+        "that mapping as a display_column override.\n"
+        "- One physical table only: NEVER invent a JOIN, a second table, an entity or a "
+        "column name that is absent from the profile digest below.\n")
     parts.append("BUSINESS DOMAIN: %s" % domain)
     parts.append("PROFILE DIGEST:\n%s" % digest)
     if extra_context:
@@ -345,6 +370,135 @@ def substitute_golden_tables(config, physical_table):
         else:
             todo.append(gq)
     return ready, todo
+
+
+# ------------------------------------------------------- offline golden validator
+
+# Statement-level keywords that make a golden query a write / DDL, not a read.
+_FORBIDDEN_STATEMENTS = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
+                         "CREATE", "GRANT", "TRUNCATE")
+
+# SQL keywords and common functions that are NOT column names. Lowercased.
+_SQL_VOCAB = frozenset([
+    "select", "from", "where", "group", "by", "order", "having", "limit",
+    "offset", "as", "on", "and", "or", "not", "in", "is", "null", "like",
+    "ilike", "between", "distinct", "case", "when", "then", "else", "end",
+    "asc", "desc", "join", "inner", "left", "right", "outer", "full", "cross",
+    "union", "all", "with", "over", "partition", "using", "true", "false",
+    "exists", "any", "some", "interval", "cast", "current_date",
+    "current_timestamp", "now",
+    # aggregate / scalar functions
+    "count", "sum", "avg", "min", "max", "coalesce", "nullif", "greatest",
+    "least", "abs", "round", "floor", "ceil", "ceiling", "length", "lower",
+    "upper", "trim", "btrim", "ltrim", "rtrim", "substring", "substr",
+    "concat", "replace", "position", "to_char", "to_date", "to_number",
+    "to_timestamp", "date", "date_trunc", "date_part", "extract", "age",
+    "year", "month", "day", "quarter", "week", "hour", "minute", "second",
+    "rank", "dense_rank", "row_number", "lag", "lead", "percentile_cont",
+])
+
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
+
+
+def _strip_literals(sql):
+    """Blank out string literals and double-quoted identifiers.
+
+    Keeps token positions roughly intact so keyword and identifier scans do not
+    match inside a quoted value (e.g. WHERE status = 'DELETED').
+    """
+    sql = re.sub(r"'(?:[^']|'')*'", " ", sql)
+    sql = re.sub(r'"[^"]*"', " ", sql)
+    return sql
+
+
+def _read_only_issues(sql):
+    """Return the read-only violations of a single SQL string (empty = clean)."""
+    issues = []
+    cleaned = _strip_literals(sql).strip().rstrip(";").strip()
+    if ";" in cleaned:
+        issues.append("multiple statements (semicolon chaining) are not allowed")
+    match = re.match(r"\s*([A-Za-z_]+)", cleaned)
+    first = match.group(1).upper() if match else ""
+    # WITH allows a read-only CTE that still resolves to a SELECT.
+    if first not in ("SELECT", "WITH"):
+        issues.append("not a single read-only SELECT (starts with %s)" % (first or "?"))
+    upper = cleaned.upper()
+    for kw in _FORBIDDEN_STATEMENTS:
+        if re.search(r"\b%s\b" % kw, upper):
+            issues.append("forbidden statement keyword %s" % kw)
+    return issues
+
+
+def _collect_aliases(sql):
+    """Best-effort set of query-local alias names (lowercased) to not flag."""
+    aliases = set()
+    for name in re.findall(r"\bAS\s+([A-Za-z_][A-Za-z0-9_]*)", sql, re.IGNORECASE):
+        aliases.add(name.lower())
+    # Table alias right after the placeholder table: FROM __TABLE__ t
+    for name in re.findall(r"__TABLE__\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*)",
+                           sql, re.IGNORECASE):
+        aliases.add(name.lower())
+    return aliases
+
+
+def _unknown_identifiers(sql, known_lower):
+    """Column-looking tokens that match no known column, keyword or alias.
+
+    Pragmatic: qualified names (alias.column) are checked on their LAST segment
+    only, the qualifier is treated as an alias. The __TABLE__ placeholder and
+    quoted physical tables are removed before scanning.
+    """
+    aliases = _collect_aliases(sql)
+    scan = _strip_literals(sql).replace("__TABLE__", " ")
+    unknown = []
+    seen = set()
+    for token in _IDENTIFIER.findall(scan):
+        parts = token.split(".")
+        column = parts[-1]
+        low = column.lower()
+        if low in seen:
+            continue
+        if low in _SQL_VOCAB or low in known_lower or low in aliases:
+            continue
+        # A single-segment token that is itself an alias declaration.
+        if len(parts) == 1 and low in aliases:
+            continue
+        seen.add(low)
+        unknown.append(column)
+    return unknown
+
+
+def validate_golden_queries(config, known_columns):
+    """PURE offline validation of a config's golden queries (no DSS, no LLM).
+
+    For each golden query, check that its SQL is a single read-only SELECT, that
+    every column-looking identifier matches a known column (invented names are
+    flagged), and that the question is non-empty. Queries WITHOUT SQL are kept as
+    valid here (they surface later as curation TODOs); only actual problems are
+    reported.
+
+    :param dict config: a wizard config (DRAFT_SCHEMA shape).
+    :param known_columns: iterable of the model's real column names.
+    :returns: {"ok": [gq, ...], "problems": [{"index", "question", "issues"}]}.
+    """
+    known_lower = {str(c).lower() for c in (known_columns or [])}
+    ok, problems = [], []
+    for index, gq in enumerate((config or {}).get("golden_queries") or []):
+        question = (gq.get("question") or "").strip()
+        sql = (gq.get("sql") or gq.get("generatedSql") or "").strip()
+        issues = []
+        if not question:
+            issues.append("empty question")
+        if sql:
+            issues.extend(_read_only_issues(sql))
+            if known_lower:
+                for name in _unknown_identifiers(sql, known_lower):
+                    issues.append("unknown column %r (absent from the profile)" % name)
+        if issues:
+            problems.append({"index": index, "question": question, "issues": issues})
+        else:
+            ok.append(gq)
+    return {"ok": ok, "problems": problems}
 
 
 def get_physical_table(project, dataset_name):
