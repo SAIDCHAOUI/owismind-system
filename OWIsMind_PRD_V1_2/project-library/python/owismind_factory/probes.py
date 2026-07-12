@@ -27,6 +27,21 @@ from . import tool_builder
 _PROBE_AGENT_NAME = "zz_factory_probe"
 _PROBE_TOOL_NAME = "zz_factory_probe_tool"
 
+def _delete_probe_object(handle, expected_name, getter):
+    """Delete a probe object ONLY after re-reading its name and matching it
+    against the probe constant (defense in depth around the factory's single
+    deletion site: a wrong handle must never delete a real object)."""
+    live_name = None
+    try:
+        live_name = getter()
+    except Exception:
+        pass
+    if live_name is not None and live_name != expected_name:
+        raise RuntimeError("refusing to delete %r: expected probe object %r"
+                           % (live_name, expected_name))
+    handle.delete()
+
+
 _PROBE_AGENT_CODE = (
     "# Throwaway factory probe agent: never deployed, deleted by the probe itself.\n"
     "from dataiku.llm.python import BaseLLM\n\n\n"
@@ -256,7 +271,9 @@ def run_write_probes(project, results, allow=False):
         finally:
             try:
                 if agent is not None:
-                    agent.delete()
+                    _delete_probe_object(
+                        agent, _PROBE_AGENT_NAME,
+                        lambda: (agent.get_settings().get_raw() or {}).get("name"))
                     log.append("probe agent deleted")
             except Exception as exc:
                 log.append("PROBE CLEANUP FAILED: delete agent %s by hand (%s)"
@@ -290,7 +307,9 @@ def run_write_probes(project, results, allow=False):
         finally:
             try:
                 if tool is not None:
-                    tool.delete()
+                    _delete_probe_object(
+                        tool, _PROBE_TOOL_NAME,
+                        lambda: (tool.get_settings().get_raw() or {}).get("name"))
                     log.append("probe tool deleted")
             except Exception as exc:
                 log.append("PROBE CLEANUP FAILED: delete tool %s by hand (%s)"

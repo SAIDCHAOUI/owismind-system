@@ -72,6 +72,23 @@ def _project():
     return dataiku.api_client().get_default_project()
 
 
+def _safe_prompt_path(path):
+    """Validate a hub prompt path, returning it unchanged when safe, else None.
+
+    These are VIRTUAL DSS library paths, so we never run os.path on them (which
+    could resolve '..'). We reject any traversal or separator trick ('..', '//',
+    a backslash) and enforce the /owismind_hub/prompts/ prefix, so a crafted path
+    can never escape the prompts subtree even if the library API resolves '..'.
+    """
+    if not isinstance(path, str):
+        return None
+    if ".." in path or "//" in path or "\\" in path:
+        return None
+    if not path.startswith(_PROMPTS_PREFIX):
+        return None
+    return path
+
+
 # ----------------------------------------------------------------- background jobs
 
 # Module-level, lock-guarded, bounded registry. Job records hold either a shared FactoryContext
@@ -93,8 +110,19 @@ def _new_job(kind, ctx=None):
         _JOBS[job_id] = rec
         _JOBS_ORDER.append(job_id)
         while len(_JOBS_ORDER) > _JOBS_MAX:
-            old = _JOBS_ORDER.pop(0)
-            _JOBS.pop(old, None)
+            # Evict the OLDEST job that is not currently running. A running execute
+            # job may still be mutating DSS and must stay pollable, so we skip
+            # running records; if every tracked job is running we exceed the cap
+            # rather than drop a live one.
+            victim = None
+            for jid in _JOBS_ORDER:
+                if _JOBS.get(jid, {}).get("status") != "running":
+                    victim = jid
+                    break
+            if victim is None:
+                break
+            _JOBS_ORDER.remove(victim)
+            _JOBS.pop(victim, None)
     return job_id, rec
 
 
@@ -190,23 +218,19 @@ def _spec_from_body(body):
 
 
 def _gates_from_hub(project, body):
-    """Resolve the pipeline gates (tool discovery + agent schema hints).
+    """Resolve the pipeline gates (tool discovery + agent schema hints) from the hub.
 
-    Explicit values in the request body win; otherwise fall back to the probe
-    results stored in the hub by 00_probe_capabilities.py. schema_hints are only
-    used when the write probe CONFIRMED the round-trip (the notebook path lets a
-    human override that; the console stays strict).
+    This console ALWAYS reads both gates from the probe results stored in the hub by
+    00_probe_capabilities.py. Client-supplied discovery / schema_hints in the request
+    body are IGNORED, so a direct API caller cannot bypass the probe-confirmation gate.
+    schema_hints are only used when the write probe CONFIRMED the round-trip; the
+    notebook path remains the only channel to override that.
     """
-    discovery = body.get("discovery")
-    schema_hints = body.get("schema_hints")
-    if discovery is None or schema_hints is None:
-        probe = hub.read_json(project, hub.HUB_ROOT + "/probe_results.json") or {}
-        if discovery is None:
-            discovery = probe.get("suggested_discovery")
-        if schema_hints is None:
-            schema_hints = probe.get("suggested_schema_hints")
-            if schema_hints and not schema_hints.get("confirmed"):
-                schema_hints = None
+    probe = hub.read_json(project, hub.HUB_ROOT + "/probe_results.json") or {}
+    discovery = probe.get("suggested_discovery")
+    schema_hints = probe.get("suggested_schema_hints")
+    if schema_hints and not schema_hints.get("confirmed"):
+        schema_hints = None
     return discovery, schema_hints
 
 
@@ -314,8 +338,8 @@ def api_wizard_draft():
 @_safe
 def api_hub_prompt_get():
     """Read a hub prompt file. The path MUST live under /owismind_hub/prompts/ (rejected otherwise)."""
-    path = request.args.get("path") or ""
-    if not path.startswith(_PROMPTS_PREFIX):
+    path = _safe_prompt_path(request.args.get("path") or "")
+    if path is None:
         return _err("invalid_path", 400)
     content = hub.read_text(_project(), path)
     return jsonify({"status": "ok", "path": path, "content": content or ""})
@@ -328,8 +352,8 @@ def api_hub_prompt_post():
     body = request.get_json(silent=True) or {}
     if not _confirmed(body):
         return _err("confirmation_required", 400)
-    path = str(body.get("path") or "")
-    if not path.startswith(_PROMPTS_PREFIX):
+    path = _safe_prompt_path(str(body.get("path") or ""))
+    if path is None:
         return _err("invalid_path", 400)
     content = body.get("content")
     if not isinstance(content, str):

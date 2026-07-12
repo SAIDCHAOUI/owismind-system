@@ -108,11 +108,20 @@ def collect_interactions(project, dataset_name, limit=30):
         except Exception:
             names = []
         roles = classify_columns(names)
-        out = []
+        # Storage order is not guaranteed to be chronological: read a bounded
+        # window (never the whole dataset), then keep the LATEST ``limit`` rows
+        # by the detected timestamp column so "recent" means recent.
+        ts_col = roles.get("ts")
+        window = limit * 10 if ts_col else limit
+        rows = []
         for row in ds.iter_rows():
-            if len(out) >= limit:
+            if len(rows) >= window:
                 break
-            raw = {k: _cap(v) for k, v in dict(row).items()}
+            rows.append({k: _cap(v) for k, v in dict(row).items()})
+        if ts_col:
+            rows.sort(key=lambda r: r.get(ts_col) or "", reverse=True)
+        out = []
+        for raw in rows[:limit]:
             item = {"raw": raw}
             for role, col in roles.items():
                 if col in raw:

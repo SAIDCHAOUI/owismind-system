@@ -248,12 +248,17 @@ def align(project, ctx, reindex=False):
             settings.save()
             return True
 
-        ctx.act(step + ".save", detail, _save)
+        saved = ctx.act(step + ".save", detail, _save)
 
-        if reindex:
+        # Reindex only after a CONFIRMED save (act returns None on failure):
+        # rebuilding the distinct-value index against a half-remapped model
+        # would burn embedding calls for nothing. Dry-run still PLANS it.
+        if reindex and (ctx.dry_run or saved):
             def _reindex(model=model, version_id=version_id):
                 return model.get_version(version_id).start_update_distinct_values().wait_for_result()
 
             ctx.act(step + ".reindex",
                     "re-index distinct values on the %s table" % current_key, _reindex)
+        elif reindex:
+            ctx.block(step + ".reindex", "settings save failed: reindex not attempted")
     return ctx

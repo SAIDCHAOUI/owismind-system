@@ -202,6 +202,7 @@
 .afc-chip--planned, .afc-chip--skipped { color: var(--text-2); border-color: var(--border-strong); }
 .afc-chip--done { color: var(--success); border-color: var(--success); }
 .afc-chip--failed { color: var(--danger); border-color: var(--danger); }
+.afc-chip--blocked { color: var(--danger); border-color: var(--border-strong); }
 .afc-chip--manual { color: var(--orange-text); border-color: var(--orange); }
 .afc-chip--on { color: var(--success); border-color: var(--success); }
 .afc-chip--off { color: var(--text-3); border-color: var(--border-strong); }

@@ -17,6 +17,7 @@ DONE = "DONE"         # executed successfully
 SKIPPED = "SKIPPED"   # nothing to do (object already exists / disabled step)
 FAILED = "FAILED"     # executed and raised (the exception is captured, not re-raised)
 MANUAL = "MANUAL"     # cannot or must not be automated: do this by hand (detail says how)
+BLOCKED = "BLOCKED"   # not attempted: a prerequisite step failed earlier in the run
 
 
 class FactoryContext(object):
@@ -61,6 +62,9 @@ class FactoryContext(object):
 
     def manual(self, step, detail=""):
         return self.record(step, MANUAL, detail)
+
+    def block(self, step, detail=""):
+        return self.record(step, BLOCKED, detail)
 
     # ------------------------------------------------------------------ execute
 

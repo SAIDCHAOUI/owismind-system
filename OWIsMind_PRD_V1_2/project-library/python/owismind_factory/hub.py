@@ -24,8 +24,17 @@ console webapp); agents only READ.
 """
 
 import json
+import threading
 
 HUB_ROOT = "/owismind_hub"
+
+# Serializes capabilities read-modify-write cycles within one Python process
+# (the console webapp runs all jobs in one process, so this closes its lost
+# update window). Cross-process writers (a notebook racing the console) remain
+# unsynchronized: the automatic backup is the recovery path for that rare case.
+# RLock: append_capability holds it across its read-modify-write and then calls
+# write_capabilities, which re-acquires it.
+_CAPABILITIES_WRITE_LOCK = threading.RLock()
 SETTINGS_PATH = HUB_ROOT + "/factory_settings.json"
 CAPABILITIES_PATH = HUB_ROOT + "/capabilities.json"
 PERSONA_PATH = HUB_ROOT + "/prompts/orchestrator_persona.md"
@@ -201,21 +210,27 @@ def write_capabilities(project, capabilities, backup=True):
     problems = validate_capabilities(capabilities)
     if problems:
         raise ValueError("invalid capabilities: " + "; ".join(problems))
-    if backup:
-        current = read_text(project, CAPABILITIES_PATH)
-        if current is not None:
-            index = 1
-            while read_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index)) is not None:
-                index += 1
-                if index > 200:  # bounded: never loop forever on a weird tree
-                    break
-            write_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index), current)
-    return write_json(project, CAPABILITIES_PATH, capabilities)
+    with _CAPABILITIES_WRITE_LOCK:
+        if backup:
+            current = read_text(project, CAPABILITIES_PATH)
+            if current is not None:
+                index = 1
+                while read_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index)) is not None:
+                    index += 1
+                    if index > 200:  # bounded: never loop forever on a weird tree
+                        break
+                write_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index), current)
+        return write_json(project, CAPABILITIES_PATH, capabilities)
 
 
 def append_capability(project, key, entry):
-    """Add or replace one capability entry (validated as a whole)."""
-    capabilities = read_capabilities(project) or {}
-    capabilities[key] = entry
-    write_capabilities(project, capabilities)
+    """Add or replace one capability entry (validated as a whole).
+
+    The read-modify-write cycle holds the same lock as write_capabilities so two
+    concurrent in-process appends (console jobs) cannot drop each other's entry.
+    """
+    with _CAPABILITIES_WRITE_LOCK:
+        capabilities = read_capabilities(project) or {}
+        capabilities[key] = entry
+        write_capabilities(project, capabilities)
     return capabilities

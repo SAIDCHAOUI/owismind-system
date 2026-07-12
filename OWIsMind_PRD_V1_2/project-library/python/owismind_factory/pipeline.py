@@ -59,9 +59,15 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
     model_id = None
     tool_id = None
     agent_id = None
+    # Prerequisite tracking: when the base dataset could not be secured in a real
+    # run, the steps that read it (recipes wiring, model schema) are BLOCKED
+    # instead of attempted, so the report never looks better than reality.
+    base_ready = True
 
     if _enabled(steps, "source_dataset"):
-        flow_builder.ensure_source_dataset(ctx, spec)
+        base = flow_builder.ensure_source_dataset(ctx, spec)
+        if not ctx.dry_run and base is None:
+            base_ready = False
 
     if _enabled(steps, "zone"):
         zone = flow_builder.ensure_zone(ctx, spec)
@@ -76,8 +82,12 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
         flow_builder.ensure_knowledge_datasets(ctx, spec, connection, zone=zone)
 
     if _enabled(steps, "recipes"):
-        flow_builder.ensure_recipes(ctx, spec, settings.get("template_zone_recipes") or {},
-                                    code_env=code_env, zone=zone)
+        if base_ready:
+            flow_builder.ensure_recipes(ctx, spec, settings.get("template_zone_recipes") or {},
+                                        code_env=code_env, zone=zone)
+        else:
+            ctx.block("recipes", "base dataset %s was not secured: recipes would "
+                                 "wire a missing input" % spec.base_dataset)
 
     if _enabled(steps, "scenario"):
         flow_builder.ensure_refresh_scenario(ctx, spec)
@@ -89,9 +99,13 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
                    "wizard step" % (spec.scenario_name, ", ".join(spec.knowledge_datasets)))
 
     if _enabled(steps, "semantic_model"):
-        entity_description = (wizard_config or {}).get("entity_description") or ""
-        model_id = semantic_builder.seed_model(ctx, spec, settings,
-                                               entity_description=entity_description)
+        if base_ready:
+            entity_description = (wizard_config or {}).get("entity_description") or ""
+            model_id = semantic_builder.seed_model(ctx, spec, settings,
+                                                   entity_description=entity_description)
+        else:
+            ctx.block("semantic_model", "base dataset %s was not secured: the entity "
+                                        "is built from its schema" % spec.base_dataset)
 
     if _enabled(steps, "semantic_config"):
         if wizard_config and not wizard_config.get("error"):
@@ -139,14 +153,27 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
                 ctx.fail("code_agent", str(exc))
 
     if _enabled(steps, "capability"):
-        entry = registry.capability_entry(spec, agent_id or "agent:FILL_ME")
-        if wizard_config and wizard_config.get("planner_description"):
-            entry["planner_description"] = wizard_config["planner_description"]
-        ctx.act("capability",
-                "append capability %s to the hub capabilities.json (enabled=False until "
-                "the smoke tests pass; agent_id %s)" % (spec.capability_key,
-                                                        agent_id or "FILL_ME"),
-                lambda: hub.append_capability(ctx.project, spec.capability_key, entry))
+        if ctx.dry_run:
+            ctx.plan("capability",
+                     "append capability %s to the hub capabilities.json (enabled=False "
+                     "until the smoke tests pass; agent_id from the code_agent step)"
+                     % spec.capability_key)
+        elif agent_id:
+            entry = registry.capability_entry(spec, agent_id)
+            if wizard_config and wizard_config.get("planner_description"):
+                entry["planner_description"] = wizard_config["planner_description"]
+            ctx.act("capability",
+                    "append capability %s to the hub capabilities.json (enabled=False until "
+                    "the smoke tests pass; agent_id %s)" % (spec.capability_key, agent_id),
+                    lambda: hub.append_capability(ctx.project, spec.capability_key, entry))
+        else:
+            # Never write a placeholder agent id into the runtime registry: the
+            # orchestrator-side validator would reject the whole file at load time.
+            ctx.manual("capability",
+                       "no verified agent id in this run: once the Code Agent exists, "
+                       "append capability %s with registry.capability_entry(spec, "
+                       "'agent:<ID>') and hub.append_capability (or re-run the "
+                       "capability step)" % spec.capability_key)
 
     if _enabled(steps, "smoke"):
         smoke(ctx, spec, tool_id=tool_id, agent_id=agent_id)

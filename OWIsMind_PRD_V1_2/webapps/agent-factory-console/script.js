@@ -92,21 +92,42 @@
    * onTick(actions) is called on every running poll; onDone(result, actions) once. */
   function pollJob(jobId, onTick, onDone, onError) {
     var stopped = false;
+    var transientFails = 0;
+    var MAX_TRANSIENT = 5;
     function tick() {
       if (stopped) { return; }
       callApi("GET", "job/" + encodeURIComponent(jobId)).then(function (r) {
+        if (stopped) { return; }
         var d = r.data || {};
-        var st = d.status;
-        if (st === "running") {
-          if (onTick) { onTick(d.actions || []); }
-          setTimeout(tick, 1500);
-        } else if (st === "done") {
-          stopped = true;
-          if (onDone) { onDone(d.result, d.actions || []); }
-        } else {
-          stopped = true;
-          if (onError) { onError(d.error || "job_error", d.actions || []); }
+        // A real job response is an HTTP 200 carrying an explicit status. Anything
+        // else (network error http:0, 5xx, 404, empty/invalid body) is a transport
+        // hiccup, NOT a job failure.
+        var st = (r.http === 200) ? d.status : null;
+        if (st === "running" || st === "done" || st === "error") {
+          transientFails = 0; // a real answer clears the transient streak
+          if (st === "running") {
+            if (onTick) { onTick(d.actions || []); }
+            setTimeout(tick, 1500);
+          } else if (st === "done") {
+            stopped = true;
+            if (onDone) { onDone(d.result, d.actions || []); }
+          } else {
+            stopped = true;
+            if (onError) { onError(d.error || "job_error", d.actions || []); }
+          }
+          return;
         }
+        // Transient transport failure: retry a few times with growing backoff
+        // (2s, 4s, 8s, capped) before declaring the job lost, so one flaky poll
+        // does not abort a job that is still running for real.
+        transientFails += 1;
+        if (transientFails > MAX_TRANSIENT) {
+          stopped = true;
+          if (onError) { onError("poll_failed", []); }
+          return;
+        }
+        var delay = Math.min(1000 * Math.pow(2, transientFails), 8000);
+        setTimeout(tick, delay);
       });
     }
     tick();
@@ -159,7 +180,8 @@
       DONE: { cls: "done", txt: "FAIT" },
       SKIPPED: { cls: "skipped", txt: "IGNORÉ" },
       FAILED: { cls: "failed", txt: "ÉCHEC" },
-      MANUAL: { cls: "manual", txt: "MANUEL" }
+      MANUAL: { cls: "manual", txt: "MANUEL" },
+      BLOCKED: { cls: "blocked", txt: "BLOQUÉ" }
     };
     var m = map[status] || { cls: "planned", txt: String(status || "") };
     return '<span class="afc-chip afc-chip--' + m.cls + '">' + m.txt + '</span>';
@@ -573,25 +595,63 @@
     return html;
   }
 
+  /* Any domain-form edit makes a previously computed plan (and its execution
+   * result) stale, because Execute rebuilds the spec from the LIVE form. Drop the
+   * plan so the Execute button disappears and the user must re-plan. Returns true
+   * when something was actually cleared (so the caller knows a re-render is due). */
+  function invalidateDomainPlan() {
+    var d = S.domain;
+    if (!d.plan && !d.planError && !d.execResult && !d.execError &&
+        !(d.execActions && d.execActions.length)) {
+      return false;
+    }
+    d.plan = null; d.planError = null;
+    d.execResult = null; d.execError = null; d.execActions = [];
+    return true;
+  }
+
+  /* bindInput for a domain-form field: update the form, then invalidate any stale
+   * plan. Re-render only when the plan was actually cleared, restoring focus to the
+   * field being edited so typing is never interrupted. */
+  function domainField(id, cb, isChange) {
+    bindInput(id, function (v) {
+      cb(v);
+      if (invalidateDomainPlan()) {
+        renderDomainNow();
+        var e = byId(id);
+        if (e) {
+          e.focus();
+          if (e.setSelectionRange && typeof e.value === "string") {
+            try { e.setSelectionRange(e.value.length, e.value.length); } catch (err) { /* ignore */ }
+          }
+        }
+      }
+    }, isChange);
+  }
+
   function wireDomain() {
     var f = S.domain.form;
 
-    var dmDomain = byId("dmDomain"); if (dmDomain) { dmDomain.oninput = function () { f.domain = this.value; }; }
     var seg = byId("dmSeg");
     if (seg) {
       seg.querySelectorAll("button").forEach(function (b) {
-        b.onclick = function () { f.sourceMode = this.getAttribute("data-mode"); renderDomainNow(); };
+        b.onclick = function () {
+          f.sourceMode = this.getAttribute("data-mode");
+          invalidateDomainPlan(); // changing the source shape invalidates the plan too
+          renderDomainNow();
+        };
       });
     }
-    bindInput("dmBaseSelect", function (v) { f.base_dataset = v; }, true);
-    bindInput("dmBaseName", function (v) { f.base_dataset = v; });
-    bindInput("dmConn", function (v) { f.connection = v; });
-    bindInput("dmSchema", function (v) { f.schema = v; });
-    bindInput("dmTable", function (v) { f.table = v; });
-    bindInput("dmCatalog", function (v) { f.catalog = v; });
-    bindInput("dmLabelFr", function (v) { f.label_fr = v; });
-    bindInput("dmLabelEn", function (v) { f.label_en = v; });
-    bindInput("dmLookup", function (v) { f.lookup = v; });
+    domainField("dmDomain", function (v) { f.domain = v; });
+    domainField("dmBaseSelect", function (v) { f.base_dataset = v; }, true);
+    domainField("dmBaseName", function (v) { f.base_dataset = v; });
+    domainField("dmConn", function (v) { f.connection = v; });
+    domainField("dmSchema", function (v) { f.schema = v; });
+    domainField("dmTable", function (v) { f.table = v; });
+    domainField("dmCatalog", function (v) { f.catalog = v; });
+    domainField("dmLabelFr", function (v) { f.label_fr = v; });
+    domainField("dmLabelEn", function (v) { f.label_en = v; });
+    domainField("dmLookup", function (v) { f.lookup = v; });
 
     if (byId("dmPlan")) { byId("dmPlan").onclick = planDomain; }
     if (byId("dmExec")) { byId("dmExec").onclick = confirmExecute; }

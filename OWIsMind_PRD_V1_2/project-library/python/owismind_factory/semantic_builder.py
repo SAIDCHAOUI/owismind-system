@@ -217,27 +217,29 @@ def apply_config(ctx, model_id, config, version_id=None):
                 live["resolveInUserRequests"] = resolvable
                 live["distinctValuesHandlingMode"] = "AUTO_INDEX" if resolvable else "NONE"
 
-        if config.get("metrics"):
-            entity["metrics"] = [_wizard_metric(m) for m in config["metrics"]]
-        if config.get("filters"):
-            entity["filters"] = [_wizard_filter(f) for f in config["filters"]]
-        if config.get("instructions"):
+        # "key present in config" (even empty) means APPLY, so a later config can
+        # legitimately clear stale content; an absent key leaves the model as is.
+        if "metrics" in config:
+            entity["metrics"] = [_wizard_metric(m) for m in config.get("metrics") or []]
+        if "filters" in config:
+            entity["filters"] = [_wizard_filter(f) for f in config.get("filters") or []]
+        if "instructions" in config:
             raw.setdefault("sqlGenerationConfig", {})
-            raw["sqlGenerationConfig"]["instructions"] = config["instructions"]
-        if config.get("glossary"):
-            raw["glossaryTerms"] = [_wizard_glossary_term(t) for t in config["glossary"]]
+            raw["sqlGenerationConfig"]["instructions"] = config.get("instructions") or ""
+        if "glossary" in config:
+            raw["glossaryTerms"] = [_wizard_glossary_term(t) for t in config.get("glossary") or []]
 
-        golden = []
-        for gq in config.get("golden_queries") or []:
-            # A golden query without its SQL is not usable by the model: keep
-            # only complete ones, the rest surface in the report as curation TODOs.
-            if gq.get("generatedSql") or gq.get("sql"):
-                golden.append({
-                    "name": gq.get("name") or (gq.get("question") or "")[:60],
-                    "question": gq.get("question") or "",
-                    "generatedSql": gq.get("generatedSql") or gq.get("sql"),
-                })
-        if golden:
+        if "golden_queries" in config:
+            golden = []
+            for gq in config.get("golden_queries") or []:
+                # A golden query without its SQL is not usable by the model: keep
+                # only complete ones, the rest surface in the report as curation TODOs.
+                if gq.get("generatedSql") or gq.get("sql"):
+                    golden.append({
+                        "name": gq.get("name") or (gq.get("question") or "")[:60],
+                        "question": gq.get("question") or "",
+                        "generatedSql": gq.get("generatedSql") or gq.get("sql"),
+                    })
             raw["goldenQueries"] = golden
 
         version_settings.save()
