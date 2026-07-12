@@ -7,18 +7,18 @@
 
 ## Focus courant
 
-**DURCISSEMENT ADVERSARIAL AGENT FACTORY v1.3 (2026-07-12 Run 1, session de nuit, branche
+**DURCISSEMENT ADVERSARIAL AGENT FACTORY v1.3 - TERMINE (2026-07-12 Run 1, session de nuit, branche
 `OWIsMind_PRD_V1_3-dev-night-20260712`).** Cycle multi-agents (Codex Terra/Sol/Luna + subagents
-Opus/Sonnet) en 4 vagues : audit -> fixes failure-modes factory (ExistenceCheckError, post-import
-verify, scenario_trigger separe, BLOCKED, capability sans placeholder, apply_config explicit-empty,
-hub RLock, doctor tri timestamp, garde delete probes) + console (invalidation plan, poll retry, path
-traversal, gates hub-only, eviction jobs) ; wizard trap-shapes + validate_golden_queries branchee +
-wizard_config persiste `/owismind_hub/wizard/<domain>-config.json` ; validateurs anti `agent:FILL_ME` ;
-labels FR registry.py re-accentues ; re-audit Opus PASS + couverture builders + docs synchro + Charte
-Orange PASS. **Suite factory 379 -> 464 tests verts** (plugin 830, LAB 343 inchanges). 6 commits sur la
-branche de nuit (1f06b90, 6cb9a61, 241696a, fcab4d6, ec13f76). NON commite au checkpoint (commit de
-cloture a venir). Reprise Codex 8h21 (cron) pour le regenerateur de seeds hub (en attente, rate-limit
-GPT 3h35 reset 8h14). Lecons L152-L154. Voir `sessions/2026-07-12.md`.
+Opus/Sonnet) en 6 vagues : audit -> fixes failure-modes factory + console -> wizard/validateurs ->
+re-audit + couverture builders + docs + Charte Orange PASS -> vague 5 : regenerateur de seeds hub
+(`OWIsMind_PRD_V1_2/hub/regenerate_seeds.py` + test, mode `--check` drift, extraction AST de
+l'orchestrateur, gates verifies : --check exit 0, run = zero diff) ; le top 3 des idees produit de la
+nuit est 100 % livre -> vague 6 : cross-review Codex du diff complet (4 P1 + 1 P2 tous reels et
+corriges : golden queries read-only toujours executees ; gate confirmed impose dans create_code_agent ;
+reponses de plan perimees jetees par fingerprint de spec + reset spinner ; drafts wizard lies a reqId +
+fingerprint d'identite ; executions FAILED/BLOCKED signalees honnetement) ; verif adversariale Opus 5/5
+PASS. **Suite factory 379 -> 468 tests verts** (plugin 830, LAB 343 inchanges). **10 commits** sur la
+branche de nuit. RIEN pousse, RIEN execute contre DSS. Lecons L152-L155. Voir `sessions/2026-07-12.md`.
 
 **ORCHESTRATION CLAUDE + CODEX/GPT-5.6 EN PLACE (2026-07-10 Run 3).** Doctrine complete :
 `.claude/rules/model-routing.md` (Claude orchestre ; subagents Opus ; Codex Terra par defaut via
@@ -34,7 +34,7 @@ par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separe
 `sessions/2026-07-10.md` Run 2, L149-L150. La nuit 07-12 durcit cette base sur la branche de nuit.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 (4 vagues multi-agents, failure-modes + wizard + console + docs), 379 -> 464 tests, 6 commits, reprise Codex 8h21. L152-L154. Voir `sessions/2026-07-12.md`.
+- 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
 - 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 1 (branche prod) : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_2/`, plugin 1.2.0, zip versionne, branches par version). L147-L148 (sur la branche `OWIsMind_PRD_V1_2`).
@@ -69,8 +69,7 @@ par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separe
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **BRANCHE DE NUIT** `OWIsMind_PRD_V1_3-dev-night-20260712` : merger dans `OWIsMind_PRD_V1_3-dev` apres review user (6 commits, 464 tests). Voir `sessions/2026-07-12.md`.
-- **SEEDS HUB** : lancer le regenerateur de seeds hub via Codex (idee retenue, en attente cote Codex apres rate-limit, reprise cron 8h21 ; prompt sauvegarde dans le scratchpad de session).
+- **BRANCHE DE NUIT** `OWIsMind_PRD_V1_3-dev-night-20260712` (10 commits, 468 tests, rien pousse) : review user puis merge dans `OWIsMind_PRD_V1_3-dev`. Voir `sessions/2026-07-12.md`.
 - Backlog v1.3 (propositions Sol, a discuter avec l'user) : machine d'etat persistante par domaine ; environnement de validation pre-live ; manifeste canonique versionne du registre ; controle operationnel.
 - CODEX : valider le flux end-to-end sur un vrai 2e chantier (`/codex:rescue`) + une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`. Voir `sessions/2026-07-10.md` Run 3.
 - **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.

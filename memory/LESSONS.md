@@ -3381,5 +3381,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-12 Run 1 (nuit).
 - **Date** : 2026-07-12.
 
+## L155 - Le rapport final d'un codex-rescue survit dans son rollout jsonl meme sans SendMessage (2026-07-12)
+- **Contexte** : suite de L152 (un agent delegue passe parfois idle sans remonter son rapport). Cette nuit, plusieurs taches `/codex:rescue` terminees dont le wrapper est passe idle sans emettre de message.
+- **Ce qui a echoue** : attendre le message final de l'agent wrapper = blocage ; `/codex:status`/`/codex:result` ne suffisent pas toujours a recuperer le contenu complet.
+- **Solution qui marche** : le dernier message de l'agent (payload type `agent_message`) est ecrit dans `~/.codex/sessions/<date>/rollout-*.jsonl` ; aller l'extraire directement (grep/parse du jsonl le plus recent) est fiable pour recuperer le rapport meme sans SendMessage.
+- **Preuve** : nuit 2026-07-12, rapports des vagues 5-6 recuperes depuis les rollout jsonl.
+- **Source** : session 2026-07-12 Run 1 (nuit) ; complete [[codex-routing-and-trust-gotcha]] et L152.
+- **Date** : 2026-07-12.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
