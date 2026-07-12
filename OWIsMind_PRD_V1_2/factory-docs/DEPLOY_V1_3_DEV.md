@@ -72,13 +72,25 @@ the console does is also doable through notebooks 00 to 06.
 ## Phase F - first new domain, end to end
 
 1. [notebook 03] Fill SPEC (domain, base_dataset or source table, labels),
-   `DRY_RUN = True`: READ THE PLAN.
-2. `DRY_RUN = False`: creates zone + datasets + recipes + INACTIVE scenario +
-   semantic model shell (+ tool + agent if Phase D confirmed the gates).
+   `DRY_RUN = True`: READ THE PLAN. In the console the plan also surfaces
+   non-blocking preflight warnings (key/domain collisions, empty
+   lookup_search_columns, tight dataset-name headroom, identical FR/EN labels, a
+   generic planner_description) and a copy-pastable operator runbook.
+2. `DRY_RUN = False`: creates zone + datasets + recipes + INACTIVE scenario (with
+   its daily trigger defined as a separate `scenario_trigger` action) + semantic
+   model shell (+ tool + agent if Phase D confirmed the gates). If a prerequisite
+   fails (e.g. the base dataset cannot be secured or its post-import verification
+   fails), that step is FAILED and the steps that read it are reported BLOCKED,
+   not silently run; read the runbook the report prints for the ordered to-do.
 3. [DSS] Run the `Refresh_<Domain>` scenario ONCE by hand, off-peak. Review the
    profile dataset (the business brain) like the playbook says.
 4. [notebook 04] Wizard round 1 (ANSWERS = {}): read its French clarifying
-   questions. Fill ANSWERS, re-run: config saved to the hub.
+   questions (the draft always returns them). Fill ANSWERS, re-run: config saved
+   to the hub at `/owismind_hub/wizard/<domain>-config.json` (the console uses the
+   same path and auto-attaches this config to plan/execute when the request body
+   has none). The `semantic_config` step runs an offline gate first: any golden
+   query that is not read-only or references an unknown column is stripped into a
+   MANUAL curation action instead of being pushed to the model.
 5. [notebook 03] Re-run with `WIZARD_CONFIG_PATH` set and
    `STEPS = ["semantic_config", "semantic_index", "semantic_tool", "code_agent",
    "capability"]`.

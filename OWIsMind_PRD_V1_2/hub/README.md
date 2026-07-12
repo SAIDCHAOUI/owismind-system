@@ -26,10 +26,17 @@ then re-run the suite.
 
 ## Editing rules
 
-- capabilities.json: validated on load (required keys, `agent:` ids, ONE enabled
-  capability per domain, frozen block/tool label keys). An invalid file is
-  IGNORED by the orchestrator (fallback to embedded defaults + a warning in the
-  agent log): check the log after every edit.
+- capabilities.json: validated on load (required keys, `agent:` ids with an
+  alphanumeric suffix so a placeholder like `agent:FILL_ME` or an empty id is
+  rejected, ONE enabled capability per domain, frozen block/tool label keys). The
+  same validator runs factory-side (`hub.validate_capabilities`) and
+  orchestrator-side (the section 7b loader), kept equivalent by the anti-drift
+  test. An invalid file is IGNORED by the orchestrator (fallback to embedded
+  defaults + a warning in the agent log): check the log after every edit.
+- Capability writes are serialized in-process (`write_capabilities` /
+  `append_capability` share a lock), so two concurrent console jobs cannot drop
+  each other's entry. The automatic backup under `/owismind_hub/backups/` is
+  unchanged and remains the recovery path for a cross-process race.
 - Prompts: plain markdown/text. The persona override must stay between 500 and
   20000 chars (size sanity window); understand_extra files are capped at 4000
   chars and are ADDITIVE only.

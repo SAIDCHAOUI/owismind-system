@@ -57,12 +57,21 @@ automatically inside the webapp iframe).
   capabilities as square cards (domain, agent id, enabled state). Read-only.
 - **Sonde (Phase 0)**: one button runs the read-only probes in a background job, then shows the
   markdown report (copy button). The probes inspect the instance (Code Agent API shape, Semantic
-  Model Query tool schema, `create_agent` availability) and create / modify / delete nothing.
+  Model Query tool schema, `create_agent` availability) and create / modify / delete nothing. The
+  gate flags that unlock the tool/agent steps are always read from the hub probe results (never
+  taken from the request body).
 - **Nouveau domaine**: a form (domain key, base dataset or SQL source table, FR/EN labels, lookup
   search columns) -> "Planifier (dry-run)" renders the action plan as a table -> "Exécuter"
-  (confirm modal) runs the pipeline in a background job with a live journal; MANUAL steps are listed
-  as a checklist at the end. A "Wizard sémantique" section drafts the semantic model config from a
-  profile dataset (LLM call), asks clarifying questions, and re-drafts with the answers.
+  (confirm modal) runs the pipeline in a background job with a live journal. Each action shows its
+  status as a chip, including BLOQUÉ (a step not attempted because a prerequisite failed) next to
+  PLANIFIÉ / FAIT / IGNORÉ / ÉCHEC / MANUEL. The plan response also carries non-blocking preflight
+  warnings and an ordered operator runbook (`runbook_markdown`), rendered after both plan and
+  execute; MANUAL steps are listed as a checklist at the end. Any form edit, or drafting a new
+  wizard config, invalidates a stale plan (you must re-plan before executing). A "Wizard sémantique"
+  section drafts the semantic model config from a profile dataset (LLM call), asks clarifying
+  questions, and re-drafts with the answers; the draft is persisted to
+  `/owismind_hub/wizard/<domain>-config.json` (same path as notebook 04) and auto-attached to
+  plan/execute when the request body carries none.
 - **Prompts**: edit a hub prompt file (path constrained to `/owismind_hub/prompts/`) and the
   `capabilities.json` registry (server-side validated, previous version backed up).
 
@@ -76,10 +85,12 @@ automatically inside the webapp iframe).
   to carry `"confirm": true`, else it returns `{"status":"error","error":"confirmation_required"}`
   and does nothing. The UI gates each of these behind a confirm modal.
 - **Path allowlist**: hub prompt reads/writes are rejected unless the path starts with
-  `/owismind_hub/prompts/` (the path from the client is never trusted).
+  `/owismind_hub/prompts/`, and the path is additionally guarded against traversal (`..`) so it can
+  never escape that prefix (the path from the client is never trusted).
 - **Background jobs**: long actions return a `job_id`; the frontend polls `GET /api/job/<id>`. The
-  job registry is bounded (last 20) and lock-guarded. The execute job shares its `FactoryContext`
-  with the poller so the journal streams live.
+  job registry is bounded (last 20) and lock-guarded; a still-running job is never evicted by the
+  bound. The poller retries transient failures with backoff instead of failing the job on the first
+  hiccup. The execute job shares its `FactoryContext` with the poller so the journal streams live.
 - **Capabilities validation**: `POST /api/hub/capabilities` validates with
   `hub.validate_capabilities` (required keys, label dicts, one enabled capability per domain) and
   returns the problems on 400 without writing anything.

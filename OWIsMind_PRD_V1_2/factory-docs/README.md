@@ -32,11 +32,11 @@
 | `registry` | DomainSpec -> orchestrator CAPABILITIES entry (frozen dialect labels) | none |
 | `flow_builder` | zone, managed datasets, recipes CLONED from the validated templates, INACTIVE custom-python refresh scenario | none (confirmed APIs) |
 | `semantic_builder` | create model + server-seeded v1 + schema-derived entity + wizard config + one-pass indexing | none (PROVEN on this instance) |
-| `wizard` | LLM-assisted authoring: profile digest -> draft config + clarifying questions (ONE Mesh completion, `with_json_output`) | none |
+| `wizard` | LLM-assisted authoring: profile digest -> draft config + clarifying questions (ONE Mesh completion, `with_json_output`); the draft prompt bakes trap-shape guidance (COUNT DISTINCT, units, explicit time axis, display columns, one-table rule) and requires `clarifying_questions` + `profile_overrides`; offline `validate_golden_queries` gate | none |
 | `tool_builder` | Semantic Model Query tool cloned from the live template | **GATED** (params schema undocumented: needs probe discovery) |
 | `agent_builder` | sub-agent code generation (pure) + Code Agent creation & code injection | **GATED** (raw layout undocumented: needs probe hints) |
 | `probes` | Phase 0: read-only capability probe + flag-gated write round-trip | write probe deletes ONLY its own zz objects |
-| `pipeline` | the 13 ordered steps, each idempotent, gated steps degrade to MANUAL | none |
+| `pipeline` | the 13 ordered steps, each idempotent, gated steps degrade to MANUAL, downstream steps BLOCKED after a failed prerequisite | none |
 | `align` | generic clone aligner: repoint ALL semantic models to the current project key | none (generalizes the validated repoint scripts) |
 | `doctor` | prompt doctor: interaction logs + current prompt -> diagnosis + revised prompt PROPOSAL | none (never writes prompts) |
 
@@ -59,6 +59,22 @@ registration) is documented API and runs either way.
 - **Dry-run by default** everywhere; the console and notebooks show the full
   PLAN before anything executes.
 - **Idempotent**: re-running skips existing objects; no step ever recreates.
+- **Never guesses "absent" on an API error**: an existence check whose `list_*`
+  call itself fails raises `ExistenceCheckError`; the step FAILS without creating
+  anything (a permission error or timeout is never read as "the object does not
+  exist"). Dry-run planning tolerates an unverifiable existence.
+- **Failure never flatters the report**: a step that raises is recorded FAILED
+  (captured, not re-raised) and the steps that depend on it are marked BLOCKED
+  rather than attempted (e.g. if the base dataset cannot be secured, the recipes
+  and semantic-model steps are BLOCKED, not run against a missing input). The base
+  import is also VERIFIED afterwards: if the imported dataset did not land under
+  the expected name, the step fails loudly instead of leaving a dangling
+  reference. The scenario trigger is its own action (`scenario_trigger`).
+- **Never writes a placeholder agent id**: the capability step only appends an
+  entry once a real Code Agent id exists; with no verified id it degrades to a
+  MANUAL note (both the factory and orchestrator validators reject a non
+  alphanumeric `agent:` suffix, so `agent:FILL_ME` can never reach the runtime
+  registry).
 - **No deletions**: the factory cannot delete anything (except the write probe
   removing the two zz objects it just created, behind an explicit flag).
 - **Builds are human-triggered**: the refresh scenario is created INACTIVE with
@@ -69,7 +85,14 @@ registration) is documented API and runs either way.
   completion per draft.
 - **New capabilities ship `enabled: false`** and only a human flips them after
   the smoke checklist.
-- **Hub writes are validated + backed up** (`/owismind_hub/backups/`).
+- **Hub writes are validated + backed up** (`/owismind_hub/backups/`) and
+  serialized in-process (a write lock shared by `write_capabilities` and
+  `append_capability`) so two concurrent console jobs cannot lose an entry.
+- **The wizard config is validated offline before it touches the model**: golden
+  queries that are not read-only or that reference an invented column are stripped
+  into a MANUAL curation action (never pushed to the semantic model). Applying a
+  config uses explicit-empty semantics: a key present but empty CLEARS that
+  section, an absent key leaves the model as is.
 
 ## Iterating prompts (the fast loop the hub unlocks)
 
