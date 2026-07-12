@@ -5,3 +5,4 @@
 - [Security invariants](security-invariants.md) - read-only pre-queries, agent whitelist, hooks; how to prove a diff didn't weaken them
 - [Mirror layout at repo root + version-derived artifacts](mirror-layout-and-versioned-artifacts.md) - OWIsMind_PRD_V1_2/ at root (not dataiku-agents/); zips derive name from plugin.json major_minor
 - [Factory + hub-loader review](factory-hub-loader-review.md) - the two capability validators diverge (orchestrator loader crashes on non-dict labels, not swallowed); factory dry-run/act safety verified clean; AST-exec method for the standalone agent
+- [Factory existence-check split](factory-existence-checks-split.md) - FIVE exist helpers across 3 modules; tool_exists/agent_exists still swallow API errors and create-on-error (flow_builder three were hardened 2026-07-12)

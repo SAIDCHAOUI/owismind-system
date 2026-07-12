@@ -516,8 +516,15 @@
       var counts = pl.counts || {};
       html += '<div class="afc-sec"><p class="afc-mlabel">Plan (dry-run) - ' +
         (pl.actions ? pl.actions.length : 0) + ' étapes</p>' +
-        '<p class="afc-count">' + countsLine(counts) + '</p>' +
-        actionsTable(pl.actions) + '</div>';
+        '<p class="afc-count">' + countsLine(counts) + '</p>';
+      // Non-blocking preflight warnings returned by the backend (collisions,
+      // weak routing signal, name headroom): shown BEFORE the actions table.
+      if (pl.warnings && pl.warnings.length) {
+        html += '<div class="afc-note afc-note--info"><b>Avertissements (non bloquants) :</b><ul>' +
+          pl.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join("") +
+          '</ul></div>';
+      }
+      html += actionsTable(pl.actions) + '</div>';
     }
 
     // --- execution journal ---
@@ -532,6 +539,11 @@
       var execActions = (S.domain.execResult && S.domain.execResult.actions) || S.domain.execActions || [];
       html += actionsTable(execActions);
       html += manualChecklist(execActions);
+      // Copy-pastable ordered runbook rendered by the backend after a real run.
+      if (S.domain.execResult && S.domain.execResult.runbook) {
+        html += '<p class="afc-mlabel">Runbook opérateur (copiable)</p>' +
+          '<pre class="afc-pre">' + esc(S.domain.execResult.runbook) + '</pre>';
+      }
       html += '</div>';
     }
 
@@ -714,7 +726,8 @@
     callApi("POST", "plan", { spec: buildSpec(), wizard_config: wizardConfigForSend() }).then(function (r) {
       S.domain.planning = false;
       if (r.data && r.data.status === "ok") {
-        S.domain.plan = { counts: r.data.counts || {}, actions: r.data.actions || [], dry_run: r.data.dry_run };
+        S.domain.plan = { counts: r.data.counts || {}, actions: r.data.actions || [],
+                          dry_run: r.data.dry_run, warnings: r.data.warnings || [] };
       } else {
         S.domain.planError = errorText(r.data);
       }

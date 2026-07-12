@@ -98,14 +98,21 @@ def _resolve_version(raw):
 
 
 def agent_exists(project, name):
+    """Return the agent id, or None when confirmed absent.
+
+    A listing failure raises ExistenceCheckError (same contract as
+    flow_builder): 'absent' must never be concluded from an API error, or a
+    rerun during a DSS hiccup would attempt a duplicate agent creation.
+    """
+    from .flow_builder import ExistenceCheckError
     try:
         for item in project.list_agents():
             item_name = item.name if hasattr(item, "name") else item.get("name")
             if item_name == name:
                 return item.id if hasattr(item, "id") else item.get("id")
-    except Exception:
-        pass
-    return None
+        return None
+    except Exception as exc:
+        raise ExistenceCheckError("could not list agents: %s" % exc)
 
 
 def paste_checklist(spec, generated_path):
@@ -128,7 +135,16 @@ def create_code_agent(ctx, spec, code, schema_hints, code_env=""):
           select the 3.11 code env (copied from a live agent by the probe).
     Returns "agent:<id>" or None.
     """
-    existing_id = agent_exists(ctx.project, spec.agent_name)
+    from .flow_builder import ExistenceCheckError
+    try:
+        existing_id = agent_exists(ctx.project, spec.agent_name)
+    except ExistenceCheckError as exc:
+        if ctx.dry_run:
+            # Planning creates nothing: an unverifiable existence is fine here.
+            existing_id = None
+        else:
+            ctx.fail("code_agent", "existence check failed, NOT creating: %s" % exc)
+            return None
     if existing_id:
         ctx.skip("code_agent", "agent %s already exists (id %s)" % (spec.agent_name, existing_id))
         return "agent:%s" % existing_id

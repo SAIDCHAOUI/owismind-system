@@ -17,7 +17,8 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..",
                                 "project-library", "python"))
 
-from owismind_factory import align, doctor, flow_builder, hub, pipeline, probes, semantic_builder  # noqa: E402
+from owismind_factory import (agent_builder, align, doctor, flow_builder, hub,  # noqa: E402
+                              pipeline, probes, semantic_builder, tool_builder)
 from owismind_factory.fctx import FactoryContext, BLOCKED, FAILED, MANUAL, PLANNED  # noqa: E402
 from owismind_factory.spec import DomainSpec  # noqa: E402
 
@@ -93,6 +94,40 @@ class TestExistenceChecks(unittest.TestCase):
         flow_builder.ensure_refresh_scenario(ctx, make_spec())
         self.assertEqual(statuses(ctx)["scenario"], FAILED)
         self.assertEqual(project.created, [])
+
+    def test_tool_and_agent_exists_follow_the_same_contract(self):
+        class _Broken(object):
+            def list_agent_tools(self):
+                raise RuntimeError("HTTP 502")
+
+            def list_agents(self):
+                raise RuntimeError("HTTP 502")
+
+            def new_agent_tool(self, *a, **k):
+                raise AssertionError("tool creation attempted after failed check")
+
+            def create_agent(self, *a, **k):
+                raise AssertionError("agent creation attempted after failed check")
+
+        project = _Broken()
+        with self.assertRaises(flow_builder.ExistenceCheckError):
+            tool_builder.tool_exists(project, "X")
+        with self.assertRaises(flow_builder.ExistenceCheckError):
+            agent_builder.agent_exists(project, "X")
+
+        ctx = FactoryContext(project=project, dry_run=False)
+        result = tool_builder.create_semantic_query_tool_like(
+            ctx, make_spec(), "model1",
+            {"type": "T", "params_template": {}})
+        self.assertIsNone(result)
+        self.assertEqual(statuses(ctx)["semantic_tool"], FAILED)
+
+        ctx2 = FactoryContext(project=project, dry_run=False)
+        result2 = agent_builder.create_code_agent(
+            ctx2, make_spec(), "# code",
+            {"internal_key": "pythonAgentSettings", "code_key": "code"})
+        self.assertIsNone(result2)
+        self.assertEqual(statuses(ctx2)["code_agent"], FAILED)
 
 
 class _FakePrepared(object):

@@ -273,11 +273,18 @@ def api_plan():
     project = _project()
     discovery, schema_hints = _gates_from_hub(project, body)
     wizard_config = _wizard_config_fallback(project, body, spec)
+    # Non-blocking preflight warnings (collisions, weak routing, name headroom)
+    # against what is already registered in the hub.
+    caps = hub.read_capabilities(project) or {}
+    warnings = spec.preflight(
+        existing_capability_keys=list(caps.keys()),
+        existing_domains=[c.get("domain") for c in caps.values() if isinstance(c, dict)])
     ctx = fctx.FactoryContext(project=project, dry_run=True, abort_on_failure=False)
     pipeline.create_domain(ctx, spec, wizard_config=wizard_config,
                            discovery=discovery, schema_hints=schema_hints,
                            steps=body.get("steps"))
-    return jsonify({"status": "ok", **ctx.summary()})
+    return jsonify({"status": "ok", "warnings": warnings,
+                    "runbook": ctx.runbook_markdown(), **ctx.summary()})
 
 
 # ----------------------------------------------------------------- execute (background, confirm)
@@ -307,7 +314,10 @@ def api_execute():
         pipeline.create_domain(ctx, spec, wizard_config=wizard_config,
                                discovery=discovery, schema_hints=schema_hints,
                                steps=steps)
-        return ctx.summary()
+        summary = ctx.summary()
+        # The runbook is the operator's ordered to-do after a real run.
+        summary["runbook"] = ctx.runbook_markdown()
+        return summary
 
     _run_job(rec, work)
     return jsonify({"status": "ok", "job_id": rec["id"]})

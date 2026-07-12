@@ -134,6 +134,62 @@ class DomainSpec(object):
                     raise SpecError("source needs at least 'connection' and 'table', missing %r" % key)
         return True
 
+    # ------------------------------------------------------------------ preflight
+
+    def preflight(self, existing_capability_keys=None, existing_domains=None):
+        """Return non-blocking WARNING strings about likely-suboptimal choices.
+
+        Unlike :meth:`validate`, this NEVER raises: the spec is legal but some
+        options will make the resulting agent slower, harder to route, or risk a
+        name collision. The caller supplies the already-registered
+        capability keys / domains (the factory knows them, the spec does not).
+
+        :param existing_capability_keys: iterable of capability keys already
+            registered (used to detect a collision on this spec's key).
+        :param existing_domains: iterable of domain keys already registered.
+        :returns: list of human-readable warning strings (empty = all clear).
+        """
+        warnings = []
+        caps = set(existing_capability_keys or [])
+        domains = set(existing_domains or [])
+
+        if self.capability_key in caps:
+            warnings.append(
+                "capability_key %r already exists: creating this domain would "
+                "collide with a registered capability (only one enabled capability "
+                "per business domain is allowed)." % self.capability_key)
+        if self.domain in domains:
+            warnings.append(
+                "domain %r already exists: pick a distinct domain key to avoid "
+                "overwriting the existing specialist." % self.domain)
+
+        if not self.lookup_search_columns:
+            warnings.append(
+                "lookup_search_columns is empty: attribute_lookup will scan EVERY "
+                "text column of %r on each read, which is slower. List the few "
+                "columns users actually search to speed it up." % self.base_dataset)
+
+        for name in self.knowledge_datasets:
+            headroom = MAX_DATASET_NAME - len(name)
+            if 0 <= headroom <= 5:
+                warnings.append(
+                    "derived dataset name %r is %d char(s) from the %d cap: little "
+                    "headroom before the PostgreSQL 63-byte identifier risk (L110). "
+                    "Consider a shorter base_dataset." % (name, headroom, MAX_DATASET_NAME))
+
+        if self.label_fr and self.label_fr == self.label_en:
+            warnings.append(
+                "label_fr and label_en are identical (%r): probable copy-paste, "
+                "give each language its own label." % self.label_fr)
+
+        if self.planner_description == self._default_planner_description():
+            warnings.append(
+                "planner_description is the generic derived fallback: it is a weak "
+                "routing signal and the orchestrator model will route poorly. Use "
+                "the wizard's planner_description instead.")
+
+        return warnings
+
     # ------------------------------------------------------------------ (de)ser
 
     def to_dict(self):

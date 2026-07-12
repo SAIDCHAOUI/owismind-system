@@ -115,3 +115,36 @@ class FactoryContext(object):
             for a in manuals:
                 lines.append("- `%s` : %s" % (a["step"], a["detail"]))
         return "\n".join(lines)
+
+    def runbook_markdown(self, title="Run book"):
+        """Render a copy-pastable, ordered human runbook of what is left to do.
+
+        Where :meth:`report_markdown` logs every action for the record, this
+        renders the MANUAL actions as an ordered checklist the operator can tick
+        off, preceded by a one-line count summary and, when any FAILED or BLOCKED
+        action exists, a warning section that must be read first.
+        """
+        counts = {}
+        for a in self.actions:
+            counts[a["status"]] = counts.get(a["status"], 0) + 1
+        summary = ", ".join("%d %s" % (counts[s], s) for s in sorted(counts))
+
+        lines = ["# %s" % title, ""]
+        lines.append("Summary: %s" % (summary or "no actions recorded"))
+
+        blockers = [a for a in self.actions if a["status"] in (FAILED, BLOCKED)]
+        if blockers:
+            lines.append("")
+            lines.append("## WARNING: unresolved before you start")
+            for a in blockers:
+                lines.append("- **%s** `%s` : %s" % (a["status"], a["step"], a["detail"]))
+
+        lines.append("")
+        lines.append("## Manual steps (do these in order)")
+        manuals = self.manual_steps()
+        if manuals:
+            for index, a in enumerate(manuals, start=1):
+                lines.append("%d. [ ] `%s` : %s" % (index, a["step"], a["detail"]))
+        else:
+            lines.append("- [x] none: no manual step required.")
+        return "\n".join(lines)

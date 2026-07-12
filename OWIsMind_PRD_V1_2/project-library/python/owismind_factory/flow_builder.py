@@ -66,8 +66,10 @@ def ensure_source_dataset(ctx, spec):
             ctx.skip("source_dataset", "dataset %s already exists" % spec.base_dataset)
             return spec.base_dataset
     except ExistenceCheckError as exc:
-        ctx.fail("source_dataset", "existence check failed, NOT creating anything: %s" % exc)
-        return None
+        # Planning creates nothing: an unverifiable existence only blocks real runs.
+        if not ctx.dry_run:
+            ctx.fail("source_dataset", "existence check failed, NOT creating anything: %s" % exc)
+            return None
     if not spec.source:
         ctx.manual("source_dataset",
                    "dataset %s does not exist and no source table was given: create or "
@@ -168,8 +170,9 @@ def ensure_knowledge_datasets(ctx, spec, connection, zone=None):
                 ctx.skip("dataset:%s" % name, "already exists")
                 continue
         except ExistenceCheckError as exc:
-            ctx.fail("dataset:%s" % name, "existence check failed, NOT creating: %s" % exc)
-            continue
+            if not ctx.dry_run:
+                ctx.fail("dataset:%s" % name, "existence check failed, NOT creating: %s" % exc)
+                continue
 
         def _create(dataset_name=name):
             builder = ctx.project.new_managed_dataset(dataset_name)
@@ -219,8 +222,9 @@ def ensure_recipes(ctx, spec, template_recipes, code_env="", zone=None):
                 ctx.skip("recipe:%s" % recipe_name, "already exists")
                 continue
         except ExistenceCheckError as exc:
-            ctx.fail("recipe:%s" % recipe_name, "existence check failed, NOT creating: %s" % exc)
-            continue
+            if not ctx.dry_run:
+                ctx.fail("recipe:%s" % recipe_name, "existence check failed, NOT creating: %s" % exc)
+                continue
         template_name = (template_recipes or {}).get(kind)
         if not template_name:
             ctx.manual("recipe:%s" % recipe_name,
@@ -300,8 +304,9 @@ def ensure_refresh_scenario(ctx, spec, hour=3):
             ctx.skip("scenario", "scenario %s already exists" % spec.scenario_name)
             return None
     except ExistenceCheckError as exc:
-        ctx.fail("scenario", "existence check failed, NOT creating: %s" % exc)
-        return None
+        if not ctx.dry_run:
+            ctx.fail("scenario", "existence check failed, NOT creating: %s" % exc)
+            return None
 
     def _create():
         definition = {"params": {"code": build_scenario_code(spec)}}

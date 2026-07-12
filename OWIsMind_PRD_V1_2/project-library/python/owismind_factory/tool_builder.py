@@ -69,14 +69,21 @@ def _swap_model_id(obj, old_id, new_id):
 
 
 def tool_exists(project, name):
+    """Return the tool id, or None when confirmed absent.
+
+    A listing failure raises ExistenceCheckError (same contract as
+    flow_builder): 'absent' must never be concluded from an API error, or a
+    rerun during a DSS hiccup would create a duplicate tool.
+    """
+    from .flow_builder import ExistenceCheckError
     try:
         for item in project.list_agent_tools():
             item_name = item.name if hasattr(item, "name") else item.get("name")
             if item_name == name:
                 return item.id if hasattr(item, "id") else item.get("id")
-    except Exception:
-        pass
-    return None
+        return None
+    except Exception as exc:
+        raise ExistenceCheckError("could not list agent tools: %s" % exc)
 
 
 def ui_checklist(spec, model_id):
@@ -97,7 +104,16 @@ def create_semantic_query_tool_like(ctx, spec, model_id, discovery, description=
 
     Returns the new tool id, or None (dry-run / gated / failed).
     """
-    existing_id = tool_exists(ctx.project, spec.semantic_tool_name)
+    from .flow_builder import ExistenceCheckError
+    try:
+        existing_id = tool_exists(ctx.project, spec.semantic_tool_name)
+    except ExistenceCheckError as exc:
+        if ctx.dry_run:
+            # Planning creates nothing: an unverifiable existence is fine here.
+            existing_id = None
+        else:
+            ctx.fail("semantic_tool", "existence check failed, NOT creating: %s" % exc)
+            return None
     if existing_id:
         ctx.skip("semantic_tool", "tool %s already exists (id %s)"
                  % (spec.semantic_tool_name, existing_id))
