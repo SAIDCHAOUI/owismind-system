@@ -629,11 +629,14 @@
    * when something was actually cleared (so the caller knows a re-render is due). */
   function invalidateDomainPlan() {
     var d = S.domain;
-    if (!d.plan && !d.planError && !d.execResult && !d.execError &&
+    if (!d.plan && !d.planError && !d.planning && !d.execResult && !d.execError &&
         !(d.execActions && d.execActions.length)) {
       return false;
     }
     d.plan = null; d.planError = null;
+    // An edit also cancels interest in any in-flight plan request: its response
+    // will be dropped by the fingerprint guard, so stop the spinner here.
+    d.planning = false;
     d.execResult = null; d.execError = null; d.execActions = [];
     return true;
   }
