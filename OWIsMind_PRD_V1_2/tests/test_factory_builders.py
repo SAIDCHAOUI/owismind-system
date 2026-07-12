@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..",
 from owismind_factory import agent_builder, probes, semantic_builder, tool_builder  # noqa: E402
 from owismind_factory import hub as hub_module  # noqa: E402
 from owismind_factory.flow_builder import ExistenceCheckError  # noqa: E402
-from owismind_factory.fctx import FactoryContext, DONE, MANUAL, PLANNED, SKIPPED  # noqa: E402
+from owismind_factory.fctx import FactoryContext, DONE, FAILED, MANUAL, PLANNED, SKIPPED  # noqa: E402
 from owismind_factory.spec import DomainSpec  # noqa: E402
 
 
@@ -444,7 +444,32 @@ class _ToolDescribeProject(object):
         return _ToolHandle(settings)
 
 
+class _RaisingToolProject(object):
+    def list_agent_tools(self):
+        raise RuntimeError("HTTP 500")
+
+
 class TestToolBuilder(unittest.TestCase):
+    def test_tool_exists_raises_on_listing_error(self):
+        # 'absent' must never be concluded from an API error (anti-duplicate).
+        with self.assertRaises(ExistenceCheckError):
+            tool_builder.tool_exists(_RaisingToolProject(), "revenue_semantic_query")
+
+    def test_listing_error_fails_caller_without_creating(self):
+        ctx = FactoryContext(project=_RaisingToolProject(), dry_run=False)
+        result = tool_builder.create_semantic_query_tool_like(
+            ctx, make_spec(), "m1", {"type": "x", "params_template": {}})
+        self.assertIsNone(result)
+        self.assertEqual(statuses(ctx)["semantic_tool"], FAILED)
+        self.assertIn("existence check failed", details(ctx))
+
+    def test_dry_run_swallows_listing_error_and_plans(self):
+        # In dry-run nothing is created, so an unverifiable existence is tolerated
+        # and the run proceeds to the gate (here MANUAL: no discovery given).
+        ctx = FactoryContext(project=_RaisingToolProject(), dry_run=True)
+        tool_builder.create_semantic_query_tool_like(ctx, make_spec(), "m1", None)
+        self.assertEqual(statuses(ctx)["semantic_tool"], MANUAL)
+
     def test_describe_existing_tool_reads_type_and_params(self):
         info = tool_builder.describe_existing_tool(_ToolDescribeProject(), "v4oqA6R")
         self.assertEqual(info["type"], "semantic_model_query")
@@ -602,6 +627,19 @@ class TestAgentBuilder(unittest.TestCase):
         self.assertEqual(statuses(ctx)["code_agent"], DONE)
         version = project.created.get_settings().get_raw()["versions"][0]
         self.assertEqual(version["pythonAgentSettings"]["code"], "CODE")
+
+    def test_listing_error_fails_create_without_creating(self):
+        # create_code_agent turns an existence-check error into a FAILED action
+        # and never attempts creation (unlike the tool builder, it does so even
+        # in dry-run: it has no dry-run swallow).
+        project = _RaisingAgentProject()
+        ctx = FactoryContext(project=project, dry_run=False)
+        result = agent_builder.create_code_agent(
+            ctx, make_spec(), "CODE",
+            schema_hints={"internal_key": "pythonAgentSettings", "code_key": "code"})
+        self.assertIsNone(result)
+        self.assertEqual(statuses(ctx)["code_agent"], FAILED)
+        self.assertIn("existence check failed", details(ctx))
 
     def test_existing_agent_is_skipped(self):
         project = _CreateAgentProject(existing="live999")
