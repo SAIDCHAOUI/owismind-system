@@ -536,6 +536,15 @@
       if (S.domain.execError) {
         html += '<div class="afc-note afc-note--error">Échec de l\'exécution : ' + esc(S.domain.execError) + '</div>';
       }
+      // Honest completion: FAILED/BLOCKED steps mean the creation is incomplete.
+      if (S.domain.execResult) {
+        var xc = S.domain.execResult.counts || {};
+        var xbad = (xc.FAILED || 0) + (xc.BLOCKED || 0);
+        if (xbad) {
+          html += '<div class="afc-note afc-note--error">' + xbad +
+            ' étape(s) en échec ou bloquée(s) : la création n\'est pas complète, lisez le runbook ci-dessous.</div>';
+        }
+      }
       var execActions = (S.domain.execResult && S.domain.execResult.actions) || S.domain.execActions || [];
       html += actionsTable(execActions);
       html += manualChecklist(execActions);
@@ -629,13 +638,45 @@
     return true;
   }
 
+  /* Identity of the spec a plan or wizard draft was computed FOR. A response
+   * coming back for a different fingerprint than the current form is stale and
+   * must be dropped (in-flight race: plan for A, edit to B, response A arrives). */
+  function specFingerprint() {
+    var f = S.domain.form;
+    return [f.domain || "", f.base_dataset || "", f.sourceMode || "",
+            f.connection || "", f.schema || "", f.table || "", f.catalog || "",
+            f.label_fr || "", f.label_en || "", f.lookup || ""].join("");
+  }
+
+  /* Identity fields a wizard draft is bound to (narrower than the full form:
+   * label edits do not orphan a draft, but domain/dataset changes do). */
+  function wizardFingerprint() {
+    var f = S.domain.form;
+    return [(f.domain || "").trim(), (f.base_dataset || "").trim(),
+            S.domain.wizard.profileDataset || ""].join("");
+  }
+
+  /* Drop the wizard draft when the domain identity changes: a draft for Sales
+   * must never be applied to Tickets. Bumping reqId also makes any in-flight
+   * draft job completion stale (it is ignored on arrival). */
+  function invalidateWizardDraft() {
+    var w = S.domain.wizard;
+    w.reqId = (w.reqId || 0) + 1;
+    if (w.config === null && !w.running && !w.regenerating) { return false; }
+    w.config = null; w.answers = {}; w.running = false; w.regenerating = false;
+    return true;
+  }
+
   /* bindInput for a domain-form field: update the form, then invalidate any stale
    * plan. Re-render only when the plan was actually cleared, restoring focus to the
    * field being edited so typing is never interrupted. */
-  function domainField(id, cb, isChange) {
+  function domainField(id, cb, isChange, isIdentity) {
     bindInput(id, function (v) {
       cb(v);
-      if (invalidateDomainPlan()) {
+      var cleared = invalidateDomainPlan();
+      // Identity fields (domain / base dataset) also orphan the wizard draft.
+      if (isIdentity) { cleared = invalidateWizardDraft() || cleared; }
+      if (cleared) {
         renderDomainNow();
         var e = byId(id);
         if (e) {
@@ -661,9 +702,9 @@
         };
       });
     }
-    domainField("dmDomain", function (v) { f.domain = v; });
-    domainField("dmBaseSelect", function (v) { f.base_dataset = v; }, true);
-    domainField("dmBaseName", function (v) { f.base_dataset = v; });
+    domainField("dmDomain", function (v) { f.domain = v; }, false, true);
+    domainField("dmBaseSelect", function (v) { f.base_dataset = v; }, true, true);
+    domainField("dmBaseName", function (v) { f.base_dataset = v; }, false, true);
     domainField("dmConn", function (v) { f.connection = v; });
     domainField("dmSchema", function (v) { f.schema = v; });
     domainField("dmTable", function (v) { f.table = v; });
@@ -677,7 +718,13 @@
 
     // wizard
     var w = S.domain.wizard;
-    bindInput("wzProfile", function (v) { w.profileDataset = v; }, true);
+    bindInput("wzProfile", function (v) {
+      if (v !== w.profileDataset) {
+        w.profileDataset = v;
+        // A draft is bound to its profile dataset: switching it orphans the draft.
+        if (invalidateWizardDraft()) { invalidateDomainPlan(); renderDomainNow(); }
+      }
+    }, true);
     if (byId("wzDraft")) { byId("wzDraft").onclick = function () { startWizard(false); }; }
     if (byId("wzRegen")) {
       byId("wzRegen").onclick = function () {
@@ -723,7 +770,12 @@
     // reset any prior execution when re-planning
     S.domain.execResult = null; S.domain.execError = null; S.domain.execActions = [];
     renderDomainNow();
+    // Capture what this plan is FOR: if the form changed while the request was in
+    // flight, the response is stale and must not resurrect an Execute button for
+    // a spec the user never planned.
+    var sentFor = specFingerprint();
     callApi("POST", "plan", { spec: buildSpec(), wizard_config: wizardConfigForSend() }).then(function (r) {
+      if (sentFor !== specFingerprint()) { return; } // stale response: drop it
       S.domain.planning = false;
       if (r.data && r.data.status === "ok") {
         S.domain.plan = { counts: r.data.counts || {}, actions: r.data.actions || [],
@@ -774,7 +826,15 @@
         S.domain.executing = false;
         S.domain.execResult = result || { actions: actions };
         renderDomainNow();
-        toast("Exécution terminée.");
+        // A job that finished is not a job that succeeded: FAILED/BLOCKED steps
+        // mean the creation is incomplete and the journal must be read.
+        var c = (S.domain.execResult && S.domain.execResult.counts) || {};
+        var bad = (c.FAILED || 0) + (c.BLOCKED || 0);
+        if (bad) {
+          toast("Exécution terminée avec " + bad + " étape(s) en échec ou bloquée(s) : lisez le journal.");
+        } else {
+          toast("Exécution terminée.");
+        }
       }, function (err, actions) {
         S.domain.executing = false;
         S.domain.execError = err;
@@ -790,11 +850,18 @@
     if (withAnswers) { w.regenerating = true; } else { w.running = true; w.config = null; w.answers = {}; }
     w.error = null;
     renderDomainNow();
+    // Bind this draft to the current identity + request id: if the user changes
+    // domain/dataset (or launches another draft) while the job runs, the late
+    // completion is stale and must be ignored, never re-applied.
+    w.reqId = (w.reqId || 0) + 1;
+    var myReq = w.reqId;
+    var draftFor = wizardFingerprint();
     var payload = { confirm: true, profile_dataset: w.profileDataset,
                     base_dataset: S.domain.form.base_dataset || "",
                     domain: (S.domain.form.domain || "").trim() };
     if (withAnswers) { payload.answers = w.answers; }
     callApi("POST", "wizard/draft", payload).then(function (r) {
+      if (myReq !== w.reqId) { return; } // superseded while the POST was in flight
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
         w.running = false; w.regenerating = false;
         w.error = errorText(r.data);
@@ -803,6 +870,7 @@
       }
       w.jobId = r.data.job_id;
       pollJob(w.jobId, null, function (result) {
+        if (myReq !== w.reqId || draftFor !== wizardFingerprint()) { return; } // stale draft
         w.running = false; w.regenerating = false;
         w.config = result || {};
         // A usable new draft changes what Execute would apply, so any plan computed
@@ -812,6 +880,7 @@
         renderDomainNow();
         toast("Brouillon généré.");
       }, function (err) {
+        if (myReq !== w.reqId) { return; }
         w.running = false; w.regenerating = false;
         w.error = err;
         renderDomainNow();

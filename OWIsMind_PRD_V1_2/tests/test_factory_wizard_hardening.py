@@ -202,15 +202,24 @@ class TestPipelineStripping(unittest.TestCase):
         self.assertIn("made_up_col", detail)
         self.assertIn("DELETE", detail)
 
-    def test_no_attributes_skips_with_manual_note(self):
-        config = {"entity_description": "d", "golden_queries": [
-            {"question": "q", "sql": "SELECT whatever FROM __TABLE__"}]}
+    def test_no_attributes_still_runs_read_only_check(self):
+        # Without attribute columns only the COLUMN check degrades (manual note);
+        # the read-only check ALWAYS runs, so a destructive query is stripped even
+        # with an empty schema, and a clean SELECT passes through.
+        config = {"entity_description": "d", "attributes": [], "golden_queries": [
+            {"question": "q", "sql": "SELECT whatever FROM __TABLE__"},
+            {"question": "evil", "sql": "DELETE FROM __TABLE__"}]}
         ctx = FactoryContext(project=_StripProject(), dry_run=False)
         pipeline.create_domain(ctx, make_spec(), wizard_config=config,
                                settings=self._settings(), steps=["semantic_config"])
-        detail = next(a["detail"] for a in ctx.actions
-                      if a["step"] == "semantic_config_validation")
-        self.assertIn("SKIPPED", detail)
+        st = statuses(ctx)
+        detail_cols = next(a["detail"] for a in ctx.actions
+                           if a["step"] == "semantic_config_validation_columns")
+        self.assertIn("COLUMN check skipped", detail_cols)
+        self.assertEqual(st.get("semantic_config_validation"), MANUAL)
+        detail_strip = next(a["detail"] for a in ctx.actions
+                            if a["step"] == "semantic_config_validation")
+        self.assertIn("DELETE", detail_strip)
 
     def test_dry_run_still_validates_without_touching_dss(self):
         ctx = FactoryContext(project=_StripProject(), dry_run=True)

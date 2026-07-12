@@ -111,28 +111,28 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
         if wizard_config and not wizard_config.get("error"):
             working = dict(wizard_config)
             # Offline gate: never push a golden query that is not read-only or that
-            # references an invented column into the model. Known columns come from
-            # the wizard attributes; without them the check is skipped (manual note).
+            # references an invented column into the model. The read-only check
+            # ALWAYS runs; only the known-column check degrades when the wizard
+            # config carries no attribute columns (manual note).
             known_columns = [a.get("column") for a in (working.get("attributes") or [])
                              if isinstance(a, dict) and a.get("column")]
-            if known_columns:
-                verdict = wizard.validate_golden_queries(working, known_columns)
-                if verdict["problems"]:
-                    working["golden_queries"] = verdict["ok"]
-                    stripped = ["[%d] %s -> %s"
-                                % (p["index"], (p["question"] or "?")[:80],
-                                   "; ".join(p["issues"]))
-                                for p in verdict["problems"]]
-                    ctx.manual("semantic_config_validation",
-                               "%d golden query(ies) stripped before apply by the offline "
-                               "validator (read-only + known-column check): fix and re-add "
-                               "them by hand in the model Playground: %s"
-                               % (len(verdict["problems"]), " | ".join(stripped)))
-            else:
+            verdict = wizard.validate_golden_queries(working, known_columns)
+            if verdict["problems"]:
+                working["golden_queries"] = verdict["ok"]
+                stripped = ["[%d] %s -> %s"
+                            % (p["index"], (p["question"] or "?")[:80],
+                               "; ".join(p["issues"]))
+                            for p in verdict["problems"]]
                 ctx.manual("semantic_config_validation",
-                           "golden query validator SKIPPED: no attribute columns in the "
-                           "wizard config to check identifiers against, review the golden "
-                           "query SQL by hand in the Playground")
+                           "%d golden query(ies) stripped before apply by the offline "
+                           "validator (read-only + known-column check): fix and re-add "
+                           "them by hand in the model Playground: %s"
+                           % (len(verdict["problems"]), " | ".join(stripped)))
+            if not known_columns:
+                ctx.manual("semantic_config_validation_columns",
+                           "golden query COLUMN check skipped (no attribute columns in "
+                           "the wizard config); the read-only check still ran. Review "
+                           "the identifiers by hand in the Playground")
             physical = wizard.get_physical_table(ctx.project, spec.base_dataset) if not ctx.dry_run else None
             ready, todo = wizard.substitute_golden_tables(working, physical)
             config = dict(working)

@@ -616,12 +616,23 @@ class TestAgentBuilder(unittest.TestCase):
         self.assertEqual(st["code_agent"], MANUAL)
         self.assertIn("GATED", details(ctx))
 
-    def test_valid_hints_create_agent_ignoring_confirmed(self):
-        # Current code gates ONLY on internal_key + code_key; "confirmed" is not
-        # consulted, so unconfirmed-but-shaped hints still create the agent.
+    def test_unconfirmed_hints_are_gated(self):
+        # The engine enforces the probe gate itself: hints without confirmed=True
+        # fall back to the manual paste path (a notebook overrides consciously by
+        # setting confirmed=True on hints it trusts).
         project = _CreateAgentProject()
         ctx = FactoryContext(project=project, dry_run=False)
         hints = {"internal_key": "pythonAgentSettings", "code_key": "code"}
+        result = agent_builder.create_code_agent(ctx, make_spec(), "CODE", schema_hints=hints)
+        self.assertIsNone(result)
+        self.assertEqual(statuses(ctx)["code_agent"], MANUAL)
+        self.assertIsNone(project.created)
+
+    def test_confirmed_hints_create_agent(self):
+        project = _CreateAgentProject()
+        ctx = FactoryContext(project=project, dry_run=False)
+        hints = {"internal_key": "pythonAgentSettings", "code_key": "code",
+                 "confirmed": True}
         result = agent_builder.create_code_agent(ctx, make_spec(), "CODE", schema_hints=hints)
         self.assertEqual(result, "agent:new_agent_9")
         self.assertEqual(statuses(ctx)["code_agent"], DONE)

@@ -151,8 +151,13 @@ def create_code_agent(ctx, spec, code, schema_hints, code_env=""):
 
     generated_path = "%s/generated/%s.py" % (hub_module.HUB_ROOT, spec.agent_name)
 
+    # The gate is enforced HERE, engine-side, not only by the console: hints must
+    # carry the probe keys AND confirmed=True (write-probe round-trip verified).
+    # A human can consciously override from a notebook by setting confirmed=True
+    # on hints they trust; anything less falls back to the manual paste path.
     gated = (not schema_hints or not schema_hints.get("internal_key")
-             or not schema_hints.get("code_key"))
+             or not schema_hints.get("code_key")
+             or not schema_hints.get("confirmed"))
     if gated:
         # Fallback: persist the generated code where a human can copy it in one click.
         ctx.act("code_agent_file",
