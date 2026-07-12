@@ -3357,5 +3357,29 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : sessions/2026-07-10.md (Run 3) ; doctrine dans `.claude/rules/model-routing.md`.
 - **Date** : 2026-07-10.
 
+## L152 - Un agent delegue (subagent plugin Codex, background) ne remonte pas toujours son rapport (2026-07-12)
+- **Contexte** : cycle multi-agents de nuit (Codex Terra/Sol/Luna + subagents Opus/Sonnet en fan-out et en background). L'user avait explicitement prevenu que les agents finissent parfois sans rendre compte.
+- **Ce qui a echoue** : plusieurs agents du plugin Codex et des jobs background terminent leur travail sans emettre de SendMessage vers l'orchestrateur ; attendre passivement leur rapport = blocage silencieux (le travail est fait mais invisible).
+- **Solution qui marche** : (1) EXIGER dans le prompt de delegation un `SendMessage to: "main"` en fin de tache ; (2) garde-fou = un cron/poll one-shot qui reveille l'orchestrateur au moment attendu ; (3) ne jamais faire confiance a l'absence de message : aller LIRE directement les fichiers de sortie / l'etat du processus (`/codex:status`, `/codex:result`, fichiers scratchpad).
+- **Preuve** : nuit 2026-07-12, le regenerateur de seeds hub (Codex) reste en attente apres rate-limit sans notifier ; reprise recuperee par cron one-shot 8h21.
+- **Source** : session 2026-07-12 Run 1 (nuit).
+- **Date** : 2026-07-12.
+
+## L153 - Sous-agent en sandbox harness : Write hors repo (scratchpad) peut etre bloque (2026-07-12)
+- **Contexte** : fan-out de sous-agents en sandbox pour l'audit adversarial de nuit ; certains tentaient d'ecrire leur rapport dans le scratchpad de session hors du repo.
+- **Ce qui a echoue** : le Write hors du working tree (repertoire scratchpad `/private/tmp/...`) est refuse par le harness du sous-agent ; le rapport n'atterrit nulle part et l'orchestrateur croit la tache muette.
+- **Solution qui marche** : instruire les sous-agents de faire remonter leur contenu PAR MESSAGE (texte final via SendMessage / retour d'agent), jamais via un fichier hors repo ; ne compter sur un fichier que s'il est dans le repo.
+- **Preuve** : nuit 2026-07-12, rapports de sous-agents perdus jusqu'a bascule sur remontee par message.
+- **Source** : session 2026-07-12 Run 1 (nuit).
+- **Date** : 2026-07-12.
+
+## L154 - Rate limit GPT partage entre sessions Claude paralleles + tolerance dry-run d'un exists() partage (2026-07-12)
+- **Contexte** : deux sessions Claude tournaient en parallele (owismind + une session SaiGet) partageant le meme quota ChatGPT Plus ; en parallele, durcissement d'un helper `exists()` partage (factory) contre les faux positifs.
+- **Ce qui a echoue** : (1) la limite d'usage GPT/Codex a saute ~3h35 alors qu'une autre session consommait le meme quota (limite partagee entre sessions, pas par projet) ; (2) rendre `exists()` strict a casse la PLANIFICATION dry-run (un check d'existence qui leve/echoue en dry-run bloque le plan qui doit pouvoir simuler sur objets absents).
+- **Solution qui marche** : (1) considerer le quota ChatGPT comme une ressource globale partagee entre toutes les sessions ; ne pas lancer deux flux Codex lourds concurrents ; (2) tout helper d'existence partage doit rester tolerant en dry-run (ne pas lever quand l'objet n'existe pas encore), regression attrapee par `test_factory_core`.
+- **Preuve** : reset quota GPT 8h14 ; `test_factory_core` a capte la regression dry-run avant merge.
+- **Source** : session 2026-07-12 Run 1 (nuit).
+- **Date** : 2026-07-12.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
