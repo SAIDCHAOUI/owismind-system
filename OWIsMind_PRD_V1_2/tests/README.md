@@ -10,7 +10,7 @@ Depuis la racine du repo :
 python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests
 ```
 
-468 tests, tous verts attendus.
+468 tests : tous verts attendus (dont 2 skips pandas normaux en local, couverts en DSS).
 
 ## Ce qui est couvert
 

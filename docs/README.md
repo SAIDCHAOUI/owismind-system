@@ -46,7 +46,7 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
   revenus/tickets, tool `attribute_lookup`, recettes Flow, modèles sémantiques). C'est la **source de
   vérité** du code agentique, recollée dans les Code Agents DSS. La prod étant un **clone du projet DEV**
   (ids conservés), ce dossier est un miroir verbatim de `OWISMIND_PRD_V1_2`. Lire son `README.md` (guide
-  maître : ids, workflow), `registry.json` et `PLAYBOOK_ADD_AGENT.md`. Voir aussi le skill
+  maître : ids, workflow), `registry.json` et `docs/PLAYBOOK_ADD_AGENT.md`. Voir aussi le skill
   `agentique-python-dataiku` pour les bonnes pratiques LangGraph / Dataiku DSS. (L'ancien dossier
   `dataiku-agents/` et la promotion `tools/promote_agents_to_prod.py` n'existent plus.)
 - **`docs/cadrage/`** - points de départ : `GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` (référence d'ingénierie

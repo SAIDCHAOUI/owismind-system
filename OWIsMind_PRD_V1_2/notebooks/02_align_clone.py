@@ -8,7 +8,7 @@
 # physical "<OLDKEY>_<table>" SQL literals). The UI cannot fix that; this notebook
 # does, by remapping every foreign project-key prefix to THIS project's key.
 #
-# It generalizes the two validated one-off scripts (semantic-models/scripts/
+# It generalizes the two validated one-off scripts (genai/semantic-models/scripts/
 # repoint_tickets_prod_clone.py and add_solution_and_repoint_prod_clone.py) to
 # ALL models of the current project, discovering the old key automatically.
 #

@@ -49,7 +49,7 @@ Ces fichiers étant un clone de DEV, **les ids sont déjà bons** : quand le cod
 **re-coller** dans le Code Agent / tool DSS correspondant (env 3.11). Aucun id à réécrire. Dans la webapp
 (espace admin), la whitelist est dynamique et cross-projet : choisir le projet `OWISMIND_PRD_V1_2` puis
 l'agent `OWIsMind_orchestrator` (aucun id saisi à la main). Détail des ids et du workflow d'ajout d'agent :
-`OWIsMind_PRD_V1_2/README.md` + `registry.json` + `PLAYBOOK_ADD_AGENT.md`.
+`OWIsMind_PRD_V1_2/README.md` + `registry.json` + `docs/PLAYBOOK_ADD_AGENT.md`.
 
 ## 3. Modèles sémantiques
 

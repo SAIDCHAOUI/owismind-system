@@ -125,7 +125,8 @@ def _extract_orchestrator_validator():
     Executing the actual source (not a re-implementation) is what makes the
     validator-equivalence test meaningful.
     """
-    source = open(_ORCH).read()
+    with open(_ORCH) as f:
+        source = f.read()
     tree = ast.parse(source)
     namespace = {}
     for node in tree.body:
@@ -149,7 +150,8 @@ class TestValidatorsAgree(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.orch_validate = staticmethod(_extract_orchestrator_validator())
-        cls.seed = json.load(open(os.path.join(_HUB_DIR, "capabilities.json")))
+        with open(os.path.join(_HUB_DIR, "capabilities.json")) as f:
+            cls.seed = json.load(f)
 
     def _entry(self, **overrides):
         entry = json.loads(json.dumps(self.seed["revenue_expert"]))
@@ -196,7 +198,8 @@ class TestSubAgentHubBlocks(unittest.TestCase):
     """The two specialists carry the additive hub loader with the right domain."""
 
     def _source(self, filename):
-        return open(os.path.join(_MIRROR, "genai", "agents", filename)).read()
+        with open(os.path.join(_MIRROR, "genai", "agents", filename)) as f:
+            return f.read()
 
     def test_revenue_hub_domain(self):
         src = self._source("SalesDrive_revenue_expert.py")

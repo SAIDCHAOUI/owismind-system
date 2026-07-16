@@ -199,7 +199,7 @@ CHART_TYPES = ("line", "bar", "pie")
 ARTIFACT_KINDS = ("chart", "table", "kpi")
 
 # --- Fast value-lookup tool (built-in, NOT a sub-agent capability) ------------
-# attribute_lookup (tools/attribute_lookup_tool.py) is a standalone Custom Python
+# attribute_lookup (genai/agent-tools/attribute_lookup_tool.py) is a standalone Custom Python
 # agent tool: a sub-second case/accent-insensitive search of the revenue dataset
 # for a NAMED value (does X exist, in which column, exact spelling, a named
 # record's plain attribute). It short-circuits the slow semantic path for simple

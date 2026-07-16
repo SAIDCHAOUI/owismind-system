@@ -12,7 +12,7 @@ une branche par version, nommée comme le projet DSS prod (`OWIsMind_PRD_V1_2` =
 ## Comment le système marche
 
 La webapp Vue envoie le message et une clé logique d'agent (jamais un id brut) au backend
-Flask (`python-lib`, à la racine du repo). Le backend résout la clé via une whitelist côté
+Flask du plugin (`Plugin/owismind/python-lib/`, à la racine du repo). Le backend résout la clé via une whitelist côté
 serveur et invoque l'orchestrateur par LLM Mesh. L'orchestrateur raisonne et route vers les
 sous-agents experts (revenus, tickets) ; chaque sous-agent délègue le SQL à son modèle
 sémantique, exécuté en lecture seule sur PostgreSQL. Tout chiffre affiché vient d'un

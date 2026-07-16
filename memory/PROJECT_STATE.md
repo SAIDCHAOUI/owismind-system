@@ -394,16 +394,16 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
   modele semantique assiste LLM -> tool -> Code Agent -> capability) + sortir les prompts du code.
 - **Pieces** : package `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/` (13 modules,
   stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, zero delete) ; notebooks 00-06 ; **Config &
-  Prompt Hub** `/owismind_hub/` (project library ; seeds repo `hub/`, equivalence byte-a-byte testee ;
+  Prompt Hub** `/owismind_hub/` (project library ; seeds repo `project-library/owismind_hub/`, equivalence byte-a-byte testee ;
   les 3 agents chargent PERSONA/CAPABILITIES/regles additives au demarrage, fallback silencieux) ;
   console webapp Standard `webapps/agent-factory-console/` (charte Orange PASS) ; docs
-  `factory-docs/{README,DEPLOY_V1_3_DEV,CAPABILITY_MATRIX}.md`.
+  `docs/` (AGENT_FACTORY.md, DEPLOY_V1_3_DEV.md, CAPABILITY_MATRIX.md).
 - **Verite API** (L149) : `create_agent(name,"PYTHON_AGENT")`, `create_semantic_model`,
   `new_agent_tool(type)`, `create_llm_interaction_logging_dataset` = presents dans le client officiel
   (source GitHub grep) ; schemas `pythonAgentSettings` (code/env) et params du tool semantic query =
   NON documentes -> gates, a confirmer par `notebooks/00_probe_capabilities.py` sur l'instance.
 - **Statut** : 379 tests verts, revue adversariale corrigee (L150), 8 commits pousses. RIEN execute
-  contre DSS. Deploiement = `factory-docs/DEPLOY_V1_3_DEV.md` (phases A-G).
+  contre DSS. Deploiement = `docs/DEPLOY_V1_3_DEV.md` (phases A-G).
 
 ## 8. Agents & streaming
 
@@ -474,14 +474,14 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
   = copie du moteur revenus, **corps byte-identique** (contrats gelés), seuls l'en-tête CONFIG + les textes
   hiérarchie-d'offre (neutralisés) diffèrent. Orchestrateur : **1 entrée `CAPABILITIES["tickets_expert"]`**
   (domaine `tickets`, déjà dans `BUSINESS_DOMAINS`) + champ `lookup_search_columns` (allowlist de recherche par
-  domaine, passée serveur). `tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
+  domaine, passée serveur). `genai/agent-tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
   **Modèle sémantique DÉDIÉ par domaine** (jamais une source ajoutée au modèle revenus) ; scripts
-  `tools/semantic_model/update_tickets_semantic_model.py` + `dump_tickets_semantic_model.py` ; tool DSS attendu
+  `genai/semantic-models/scripts/update_tickets_semantic_model.py` + `dump_semantic_model.py` ; tool DSS attendu
   `tickets_semantic_query` (Agent OFF, Sonnet). **3 recipes rendues génériques (auto-IO) + NA-safe** (fix
   `infer_with_pandas=False` -> fallback `True` sur int nullable) ; `build_value_catalog_recipe` dataset-adaptatif
   (revenus curé inchangé ; non-revenus = catalogue générique). **Factory repo (source de vérité scaling ;
   désormais sous `OWIsMind_PRD_V1_2/`)** : `registry.json` (spec par domaine, dev-owned, jamais runtime) +
-  `flow/DATASETS.md` (inventaire colonnes) + `PLAYBOOK_ADD_AGENT.md` (runbook). Test anti-dérive
+  `flow/DATASETS.md` (inventaire colonnes) + `docs/PLAYBOOK_ADD_AGENT.md` (runbook). Test anti-dérive
   **généralisé** à tous les caps. **À finaliser
   DSS** (PLAYBOOK) : override métrique COUNT, modèle sémantique, tool, Code Agent + `agent_id` réel, re-coll
   orchestrateur (pas de zip). Datasets : `TroubleTickets_year` + `_profile` + `_value_index` (sur `SQL_owi`) +

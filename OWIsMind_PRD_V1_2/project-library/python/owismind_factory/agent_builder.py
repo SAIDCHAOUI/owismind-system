@@ -3,7 +3,7 @@
 Two independent halves:
 
 1. generate_subagent_code(): PURE text transformation. The dataset-expert engine
-   (agents/SalesDrive_revenue_expert.py, uploaded to the hub as
+   (genai/agents/SalesDrive_revenue_expert.py, uploaded to the hub as
    templates/dataset_expert.py) is dataset-agnostic by design: its whole domain
    binding is the CONFIG header. The generator rewrites exactly those constants
    and refuses to proceed if any expected constant is not found exactly once

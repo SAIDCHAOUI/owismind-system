@@ -31,7 +31,7 @@ twin with different ids" anymore; prod IS the clone. Versions advance by git bra
 Vue web app
    │  user message + a logical agent key (never a raw agent id)
    ▼
-python-lib Flask backend  (repo root, not this folder)
+python-lib Flask backend  (Plugin/owismind/python-lib/, not this folder)
    │  resolves the key against a server-side whitelist -> the orchestrator Code Agent
    │  invokes it over LLM Mesh, streams timeline events back (polling-via-thread)
    ▼
@@ -201,7 +201,7 @@ backend change does (upload the versioned zip + restart the backend).
 hand-port between two DSS projects. New domains and changes are built on the next
 `-dev` branch (`OWIsMind_PRD_V1_3-dev`), validated in the DSS clone, then promoted
 to prod by dropping the `-dev` suffix (the dev branch becomes the new prod branch).
-`main` is deprecated. See `README.md` section 9.
+`main` is deprecated. See `README.md`, section "Regle de version git".
 
 **Still pending in DSS:** (1) drop the stale `resolve_filter_value` precondition
 from each `revenue_semantic_query` "Description for LLM" (corrected text in

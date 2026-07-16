@@ -1,6 +1,6 @@
 """Capability entry builder: DomainSpec + created ids -> orchestrator CAPABILITIES entry.
 
-The entry shape mirrors agents/OWIsMind_orchestrator.py CAPABILITIES and
+The entry shape mirrors genai/agents/OWIsMind_orchestrator.py CAPABILITIES and
 registry.json. block_labels / tool_labels carry the FROZEN keys of the sub-agent
 collaboration dialect (KNOWN_BLOCK_IDS / KNOWN_TOOL_NAMES): the engine template
 guarantees every generated sub-agent speaks the same dialect, so the labels are

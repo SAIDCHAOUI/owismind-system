@@ -245,17 +245,20 @@ owismind/
 ├── CLAUDE.md                       # instructions projet (règles NON NÉGOCIABLES)
 ├── OWIsMind_PRD_V1_2/              # SYSTÈME D'AGENTS du projet de prod (source de vérité, recollé dans DSS)
 │   │                               #   prod = CLONE du projet DEV (ids DEV conservés) → miroir verbatim
-│   ├── README.md                   #   guide maître : carte des IDs (agents/tools/modèles) + workflow
+│   ├── README.md                   #   carte du sous-projet : arborescence + IDs (agents/tools/modèles)
 │   ├── CLAUDE.md                   #   orientation Claude (contrats, règles, pointeurs)
-│   ├── PLAYBOOK_ADD_AGENT.md       #   procédure d'ajout d'un sous-agent
 │   ├── registry.json               #   registre des ids DSS (agents, tools, modèles, datasets)
-│   ├── agents/                     #   OWIsMind_orchestrator.py · SalesDrive_revenue_expert.py ·
-│   │                               #     CSSO_Trouble_Tickets_Expert.py (verbatim des Code Agents DSS)
-│   ├── tools/                      #   attribute_lookup_tool.py (Custom Python tool)
 │   ├── flow/                       #   recettes Flow par zone (SalesDrive_Revenue_Expert, CSC_ticket_AI_Agent,
 │   │                               #     Webapp_Zone) + DATASETS.md
-│   ├── semantic-models/            #   Drive_Revenues_Semantic_Model + TroubleTickets_Semantic_Model
-│   │                               #     (.v1.json) + scripts/ (repoint, remap, dump, re-index)
+│   ├── genai/                      #   miroir de l'écran GenAI DSS : agents/ (3 Code Agents),
+│   │                               #     agent-tools/ (attribute_lookup_tool.py), semantic-models/
+│   │                               #     (.v1.json + scripts repoint/remap/dump/re-index)
+│   ├── project-library/            #   python/owismind_factory/ (moteur Agent Factory v1.3) +
+│   │                               #     owismind_hub/ (seeds du Config & Prompt Hub /owismind_hub/)
+│   ├── notebooks/                  #   runners factory 00-06 (probe, push hub, align, domaine, wizard...)
+│   ├── webapps/                    #   agent-factory-console/ (webapp Standard, console de la factory)
+│   ├── docs/                       #   DEPLOY_V1_3_DEV.md, AGENT_FACTORY.md, CAPABILITY_MATRIX.md,
+│   │                               #     PLAYBOOK_ADD_AGENT.md (procédure manuelle d'ajout d'agent)
 │   └── tests/                      #   tests unitaires DSS-free
 ├── tools/                          # OUTILLAGE repo : build_dev_plugin.py (plugin dev coexistant owismind_dev)
 ├── OWIsMind_LAB/                   # PROJET DSS SÉPARÉ (benchmark / éval des agents), miroir repo

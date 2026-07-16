@@ -5,13 +5,13 @@
 > DEV ids preserved. The **tickets** domain is therefore already INCLUDED in prod by
 > the duplication (Code Agent, semantic model, and tool all present); the only
 > remaining tickets work is to **launch the repoint script + finish curation** (see
-> section A and the "Still pending" note in `CLAUDE.md`).
+> section A and the "Still pending" note in `../CLAUDE.md`).
 >
 > **How a NEW domain lands in prod.** There is no "develop in a second DSS project
 > then promote" step anymore. Build the new specialist on the **next dev branch**
 > (`OWIsMind_PRD_V1_3-dev`), validate it in the DSS clone, then promote by **dropping
 > the `-dev` suffix**: the validated dev branch becomes the new prod branch and the
-> next version starts (git model in `README.md` section 9).
+> next version starts (git model: `../README.md`, section "Regle de version git").
 >
 > The concrete, ordered runbook below takes a new domain from a base dataset to a
 > live specialist routed by the orchestrator. The architecture is built for this:
@@ -32,25 +32,25 @@ These are committed; you do NOT need to write code. Because prod is a clone of D
 the tickets objects already EXIST in the DSS clone too: the steps below are the
 remaining **repoint + curation**, not a from-scratch build.
 
-- `agents/CSSO_Trouble_Tickets_Expert.py` - the tickets sub-agent (same engine as
+- `../genai/agents/CSSO_Trouble_Tickets_Expert.py` - the tickets sub-agent (same engine as
   revenue, CONFIG header pointed at the tickets datasets; `SEMANTIC_TOOL_ID` already
   set to `nEirlso`; `FALLBACK_TO_DIRECT=True` so it works from the profile even
   before the model is fully wired).
-- `agents/OWIsMind_orchestrator.py` - the `tickets_expert` CAPABILITIES entry
+- `../genai/agents/OWIsMind_orchestrator.py` - the `tickets_expert` CAPABILITIES entry
   (routing, timeline labels, lookup dataset + search allowlist), with `agent_id`
   already set to `agent:NcE9LD2i`.
-- `tools/attribute_lookup_tool.py` - accepts a per-domain `searchable_columns`
+- `../genai/agent-tools/attribute_lookup_tool.py` - accepts a per-domain `searchable_columns`
   allowlist (the orchestrator passes the tickets one server-side), and surfaces the
   generic catalog's `value`-domain rows as "did you mean" suggestions.
-- `flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_catalogue.py` (and the
+- `../flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_catalogue.py` (and the
   profile + value_index recipes) - auto-IO + NA-safe + dataset-adaptive (revenue
   keeps its curated catalog; any other dataset gets a generic per-value catalog).
-- `semantic-models/scripts/update_tickets_semantic_model.py` (brain) +
-  `semantic-models/scripts/dump_semantic_model.py` (generic snapshot, TICKETS
-  CONFIG) + `semantic-models/scripts/repoint_tickets_prod_clone.py` (repoints the
+- `../genai/semantic-models/scripts/update_tickets_semantic_model.py` (brain) +
+  `../genai/semantic-models/scripts/dump_semantic_model.py` (generic snapshot, TICKETS
+  CONFIG) + `../genai/semantic-models/scripts/repoint_tickets_prod_clone.py` (repoints the
   tickets model `dM4jA4G` to the clone dataset; READY, simulated 4/4, NOT YET
   LAUNCHED on the clone).
-- `registry.json` + `flow/DATASETS.md` - the spec + column inventory.
+- `registry.json` + `../flow/DATASETS.md` - the spec + column inventory.
 - Tests are green: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`.
 
 ---
@@ -61,10 +61,10 @@ remaining **repoint + curation**, not a from-scratch build.
 
 Wire the SAME recipes (no code edit; they read INPUT/OUTPUT from the recipe API):
 
-- `recipes/profile_dataset_recipe.py`: INPUT `TroubleTickets_year` (+ optional
+- `../flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_profile.py`: INPUT `TroubleTickets_year` (+ optional
   INPUT 2 `TroubleTickets_year_profile_overrides`, an editable `{key,field,value}`
   dataset) -> OUTPUT `TroubleTickets_year_profile`.
-- `recipes/build_value_index_recipe.py`: INPUT `TroubleTickets_year` -> OUTPUT
+- `../flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_index.py`: INPUT `TroubleTickets_year` -> OUTPUT
   `TroubleTickets_year_value_index` **on the `SQL_owi` connection** (the sub-agent
   queries it in live SQL). Optionally set, at the top of the recipe run:
   ```
@@ -76,7 +76,7 @@ Wire the SAME recipes (no code edit; they read INPUT/OUTPUT from the recipe API)
   ```
   (The auto-selector would mostly do this anyway; the explicit lists are
   deterministic.)
-- `TroubleTickets_year_value_catalogue`: `build_value_catalog_recipe.py` (now
+- `TroubleTickets_year_value_catalogue`: `../flow/CSC_ticket_AI_Agent/compute_TroubleTickets_year_value_catalogue.py` (now
   auto-IO + NA-safe + dataset-adaptive). On a non-revenue dataset it builds a
   GENERIC catalog of each categorical text column's distinct values
   (search_domain "value"), which feeds the orchestrator lookup's "did you mean"
@@ -144,14 +144,14 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 - In DSS, create a semantic model on `TroubleTickets_year` (the UI auto-discovers
   entities/attributes from the schema, with valid shapes). Name it
   `TroubleTickets_Semantic_Model`. Let it index distinct values once.
-- [curate] Run `semantic-models/scripts/update_tickets_semantic_model.py` in a notebook
+- [curate] Run `../genai/semantic-models/scripts/update_tickets_semantic_model.py` in a notebook
   (set `NEW_MODEL_ID`) to inject the tickets instructions + golden queries + the
   entity / attribute descriptions + the metrics (`COUNT(DISTINCT id)`). The
   duration unit (minutes) is already baked in; only the exact `CurrentStatus`
   open/closed values are data-dependent (read them from the value index, the
   instructions already tell the model to use the exact catalog values). Optionally
   add named filters / glossary synonyms in the model UI.
-- Snapshot it: run `semantic-models/scripts/dump_semantic_model.py` with the TICKETS config
+- Snapshot it: run `../genai/semantic-models/scripts/dump_semantic_model.py` with the TICKETS config
   (see its CONFIG comment) and commit `TroubleTickets_Semantic_Model.v1.json`.
 
 ### 5. [DSS] Create the tickets Semantic Model Query tool
@@ -160,21 +160,21 @@ Create a NEW agent tool of type **Semantic Model Query** bound to
 `TroubleTickets_Semantic_Model`: **Agent mode OFF** (linear pipeline), LLM
 `vertex_ai/claude-sonnet-4-6`, access datasets as the calling user. Note its id.
 Paste the **Description for LLM** from
-`semantic-models/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
+`../genai/semantic-models/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
 tool's "Description for LLM" field - do NOT leave it empty.
 
 - Confirm that id matches `SEMANTIC_TOOL_ID` (already set to `nEirlso`) in
-  `agents/CSSO_Trouble_Tickets_Expert.py`; update
+  `../genai/agents/CSSO_Trouble_Tickets_Expert.py`; update
   it if the DSS tool id differs.
 - Keep `registry.json` -> `tickets_expert.semantic_model.tool_id` in sync.
 
 ### 6. [DSS] Create the tickets Code Agent + wire the orchestrator
 
 - Create a new **Code Agent** on the **Python 3.11** code env; paste
-  `agents/CSSO_Trouble_Tickets_Expert.py`. Confirm
+  `../genai/agents/CSSO_Trouble_Tickets_Expert.py`. Confirm
   its `agent:` id matches `CAPABILITIES["tickets_expert"]["agent_id"]` (already set
   to `agent:NcE9LD2i`) in
-  `agents/OWIsMind_orchestrator.py` and in
+  `../genai/agents/OWIsMind_orchestrator.py` and in
   `registry.json`; update all three if the DSS id differs.
 - **ORDER MATTERS**: the real `agent_id` must be live (Code Agent created) BEFORE
   re-pasting the orchestrator. `tickets_expert` ships `enabled:True` with the id
@@ -217,7 +217,7 @@ code touched):
 3. [DSS] Create the semantic model (UI) + inject the brain via an `update_*`
    script + snapshot via a `dump_*` script.
 4. [DSS] Create its Semantic Model Query tool (Agent OFF, Sonnet).
-5. [repo] Copy `SalesDrive_revenue_expert.py` -> `agents/<Domain>_expert.py`, swap
+5. [repo] Copy `SalesDrive_revenue_expert.py` -> `../genai/agents/<Domain>_expert.py`, swap
    the CONFIG header (datasets + semantic tool id/name), neutralize any
    revenue-specific prompt wording (`build_semantic_question`), keep the engine
    body and all frozen contracts byte-identical.

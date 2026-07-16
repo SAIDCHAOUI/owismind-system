@@ -8,7 +8,7 @@ references. Every copied model keeps pointing at the SOURCE project:
   SQL-generation instructions) keep the form ``"<OLDKEY>_<table>"``.
 
 The UI gives no way to change that. Two validated one-off scripts already fixed
-ONE model each with a hardcoded old key (``semantic-models/scripts/
+ONE model each with a hardcoded old key (``genai/semantic-models/scripts/
 repoint_tickets_prod_clone.py`` and ``add_solution_and_repoint_prod_clone.py``).
 This module GENERALIZES that pure string remap to ALL models of the CURRENT
 project, discovering the foreign key(s) automatically.

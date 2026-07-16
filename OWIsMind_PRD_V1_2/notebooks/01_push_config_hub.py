@@ -13,7 +13,7 @@
 #   the LIVE revenue Code Agent when the probe confirmed the code key; manual
 #   paste instructions otherwise.
 #
-# The seeds below were GENERATED from agents/OWIsMind_orchestrator.py by
+# The seeds below were GENERATED from genai/agents/OWIsMind_orchestrator.py by
 # scratchpad/gen_notebook01.py: hub content == embedded defaults, so pushing
 # the hub changes NOTHING in behavior until a human edits a hub file.
 # =============================================================================

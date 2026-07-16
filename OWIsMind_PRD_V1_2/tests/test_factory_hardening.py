@@ -500,7 +500,7 @@ class TestRegistryLabelsMatchLiveCapabilities(unittest.TestCase):
 
 
 class TestFactorySettingsSeedEquivalence(unittest.TestCase):
-    """hub/factory_settings.json seed must equal the embedded DEFAULT_SETTINGS.
+    """project-library/owismind_hub/factory_settings.json seed must equal DEFAULT_SETTINGS.
 
     Same anti-drift rule as the capabilities/persona seeds: a silent divergence
     on sql_connection or the template ids would change factory behavior

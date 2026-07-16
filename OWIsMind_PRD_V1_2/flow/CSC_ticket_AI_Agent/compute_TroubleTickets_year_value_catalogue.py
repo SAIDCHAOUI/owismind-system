@@ -14,9 +14,9 @@ has NULLs, e.g. a duration empty for open tickets).
 
 STATUS (2026-06-18): this recipe builds the RICH value catalog (aliases,
 variants, business concepts, short account names). It IS used at runtime: the
-`attribute_lookup` tool (../../tools/, CATALOG_DATASET) reads it as its alias /
+`attribute_lookup` tool (../../genai/agent-tools/, CATALOG_DATASET) reads it as its alias /
 suggestions fallback when the fast fact search finds no exact match. It is NOT
-the primary grounding path: the revenue sub-agent (../../agents/) grounds user
+the primary grounding path: the revenue sub-agent (../../genai/agents/) grounds user
 terms with INLINE SQL on DRIVE_Revenues_value_index (built by the sibling
 value_index recipe), and the sub-agent calls only ONE DSS tool at
 runtime (revenue_semantic_query). The old Custom Python tool
