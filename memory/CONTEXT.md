@@ -7,18 +7,21 @@
 
 ## Focus courant
 
-**DURCISSEMENT ADVERSARIAL AGENT FACTORY v1.3 - TERMINE (2026-07-12 Run 1, session de nuit, branche
-`OWIsMind_PRD_V1_3-dev-night-20260712`).** Cycle multi-agents (Codex Terra/Sol/Luna + subagents
-Opus/Sonnet) en 6 vagues : audit -> fixes failure-modes factory + console -> wizard/validateurs ->
-re-audit + couverture builders + docs + Charte Orange PASS -> vague 5 : regenerateur de seeds hub
-(`OWIsMind_PRD_V1_2/project-library/owismind_hub/regenerate_seeds.py` + test, mode `--check` drift, extraction AST de
-l'orchestrateur, gates verifies : --check exit 0, run = zero diff) ; le top 3 des idees produit de la
-nuit est 100 % livre -> vague 6 : cross-review Codex du diff complet (4 P1 + 1 P2 tous reels et
-corriges : golden queries read-only toujours executees ; gate confirmed impose dans create_code_agent ;
-reponses de plan perimees jetees par fingerprint de spec + reset spinner ; drafts wizard lies a reqId +
-fingerprint d'identite ; executions FAILED/BLOCKED signalees honnetement) ; verif adversariale Opus 5/5
-PASS. **Suite factory 379 -> 468 tests verts** (plugin 830, LAB 343 inchanges). **10 commits** sur la
-branche de nuit. RIEN pousse, RIEN execute contre DSS. Lecons L152-L155. Voir `sessions/2026-07-12.md`.
+**MISE EN ORDRE + MIROIR UI DATAIKU + DOUBLE AUDIT SECURITE - FAIT (2026-07-16 Run 1, branche
+`OWIsMind_PRD_V1_3-dev`, 5 commits locaux non pousses).** (1) Git a plat : branche de nuit mergee
+(fast-forward) puis supprimee, refactor/deep-clean-v1.2 supprimee, TOUT pousse le matin ; restent
+OWIsMind_PRD_V1_2 (prod) / OWIsMind_PRD_V1_3-dev (travail) / main (depreciee). Le clone DSS
+v1.3-dev EXISTE (confirme user). (2) Miroir restructure comme l'UI DSS : `genai/{agents,agent-tools,
+semantic-models}/`, `project-library/owismind_hub/` (ex hub/), `docs/` (ex factory-docs + playbook) ;
+toutes references migrees, verif adversariale 4 angles. (3) 11 README reecrits en francais simple
+(workflow 11 agents). (4) DOUBLE AUDIT securite factory (interne + GPT-5.6 Sol, read-only) ->
+2 vagues de durcissement : scenario force inactif, denylist SQL +8, garde apply_config (marqueur
+owismindFactory + backup de version pre-apply), align allowlist EXPECTED_SOURCE_KEYS, sonde
+fail-closed + redaction secrets, console bornee (4 jobs / 1 execute / uuid4 / caps taille),
+get_settings strict, doctor sans PII persistee. Synthese : `OWIsMind_PRD_V1_2/docs/
+SECURITY_AUDIT_2026-07-16.md` ; gates DSS = phase 0 de DEPLOY_V1_3_DEV.md. **Suite factory
+468 -> 516 tests verts** (plugin 830, LAB 343 OK). L156 (job codex fantome). Voir
+`sessions/2026-07-16.md`.
 
 **ORCHESTRATION CLAUDE + CODEX/GPT-5.6 EN PLACE (2026-07-10 Run 3).** Doctrine complete :
 `.claude/rules/model-routing.md` (Claude orchestre ; subagents Opus ; Codex Terra par defaut via
@@ -34,6 +37,7 @@ par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separe
 `sessions/2026-07-10.md` Run 2, L149-L150. La nuit 07-12 durcit cette base sur la branche de nuit.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
 - 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
 - 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
@@ -69,10 +73,10 @@ par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separe
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **FAIT 2026-07-16** : branche de nuit mergee (fast-forward) dans `OWIsMind_PRD_V1_3-dev` puis supprimee (local + remote) ; tout est pousse sur origin. `OWIsMind_PRD_V1_3-dev` = SEULE branche de travail (468 tests). Le clone DSS v1.3-dev EXISTE deja (confirme user) : demarche = DEPLOY_V1_3_DEV.md phases A2 puis B-D.
-- Backlog v1.3 (propositions Sol, a discuter avec l'user) : machine d'etat persistante par domaine ; environnement de validation pre-live ; manifeste canonique versionne du registre ; controle operationnel.
-- CODEX : valider le flux end-to-end sur un vrai 2e chantier (`/codex:rescue`) + une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`. Voir `sessions/2026-07-10.md` Run 3.
-- **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.
+- **POUSSER les 5 commits du 2026-07-16** (restructuration + README + durcissement) : demander a l'user ou qu'il pousse lui-meme.
+- **FACTORY v1.3 - DEPLOIEMENT** (le clone DSS existe deja) : `OWIsMind_PRD_V1_2/docs/DEPLOY_V1_3_DEV.md` : phase 0 = 3 GATES securite cote DSS (console admins-only + run-as dedie ; SQL_owi SELECT-only + statement timeout au niveau base ; acces/retention du dataset de logs), puis A2 (notebook 02 en 3 passes : decouverte -> EXPECTED_SOURCE_KEYS -> run reel) puis B-D (lib + sonde 00 + push hub 01 + re-paste 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates. Puis F (1er domaine + wizard) et G. Synthese audit : `docs/SECURITY_AUDIT_2026-07-16.md`.
+- Backlog v1.3 (durcissement non bloquant, voir SECURITY_AUDIT section backlog) : authz par viewer dans la console (WebappImpersonationContext) ; manifeste de reprise par domaine (rejoint le manifeste canonique deja au backlog) ; machine d'etat persistante par domaine ; environnement de validation pre-live ; controle operationnel.
+- CODEX : flux end-to-end VALIDE en reel le 2026-07-16 (audit securite livre par Sol via codex-companion, piege L156 : verifier la vivacite du PID, pas le seul statut). Reste : une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`.
 - CLONE prod : lancer `OWIsMind_PRD_V1_2/genai/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
   (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146

@@ -3391,3 +3391,10 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
+
+## L156 - Job codex-companion fantome apres mise en veille : croiser le statut avec la vivacite du PID (2026-07-16)
+- **Contexte** : audit de securite delegue a GPT-5.6 Sol via le runtime codex-companion (job task-mrnpa8fu). La machine a probablement dormi pendant le run.
+- **Ce qui a echoue** : le process du job est mort silencieusement (log fige, `ps -p <pid>` vide) mais `codex-companion.mjs status` affichait toujours `running` (entree fantome). L'agent de surveillance a d'abord cru le job vivant, puis termine (bug de parsing) ; plus d'une heure perdue, aucun rapport produit.
+- **Solution qui marche** : (1) ne JAMAIS se fier au seul statut declare : verifier la vivacite du process (`ps -p <pid>` sur le `pid` du JSON de statut) ; (2) annuler l'entree fantome et relancer un job frais RESSERRE (pas de re-run de suite de tests, recherches web bornees) pour reduire la fenetre de risque ; (3) cote session principale, poser sa PROPRE sonde background (boucle status+PID toutes les 30 s, `run_in_background`) qui reveille a l'etat terminal, sans dependre de l'agent de surveillance ; (4) recuperer le resultat directement via `codex-companion.mjs result <job-id>` sans attendre la remontee de l'agent.
+- **Preuve** : job 1 `cancelled` apres detection PID mort ; job 2 (`task-mrnsb8uh`, prompt resserre) termine en ~10 min ; rapport recupere par `result` et la sonde background a detecte la fin au premier tick.
+- **Source** : session 2026-07-16 (audit securite factory).
