@@ -36,14 +36,14 @@ est `OWIsMind_PRD_V1_2/` (le vieux dossier `dataiku-agents/` n'existe plus).
 
 ## 2. Agents (Code Agents DSS)
 
-Source de vérité = **`OWIsMind_PRD_V1_2/agents/*.py`** (miroir verbatim de ce qui est collé dans DSS) :
+Source de vérité = **`OWIsMind_PRD_V1_2/genai/agents/*.py`** (miroir verbatim de ce qui est collé dans DSS) :
 
 | Fichier repo | Objet DSS | id |
 |---|---|---|
-| `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py` | Code Agent orchestrateur | `038G7mlF` |
-| `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py` | Code Agent sous-agent revenus | `bHrWLyOL` (ref `agent:bHrWLyOL`) |
-| `OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent sous-agent tickets | `NcE9LD2i` (ref `agent:NcE9LD2i`) |
-| `OWIsMind_PRD_V1_2/tools/attribute_lookup_tool.py` | Custom Python tool `attribute_lookup_tool` | `UUoynaL` |
+| `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` | Code Agent orchestrateur | `038G7mlF` |
+| `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py` | Code Agent sous-agent revenus | `bHrWLyOL` (ref `agent:bHrWLyOL`) |
+| `OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent sous-agent tickets | `NcE9LD2i` (ref `agent:NcE9LD2i`) |
+| `OWIsMind_PRD_V1_2/genai/agent-tools/attribute_lookup_tool.py` | Custom Python tool `attribute_lookup_tool` | `UUoynaL` |
 
 Ces fichiers étant un clone de DEV, **les ids sont déjà bons** : quand le code change, il suffit de le
 **re-coller** dans le Code Agent / tool DSS correspondant (env 3.11). Aucun id à réécrire. Dans la webapp
@@ -55,7 +55,7 @@ l'agent `OWIsMind_orchestrator` (aucun id saisi à la main). Détail des ids et 
 
 Dupliquer un projet DSS **ne repointe pas** les modèles sémantiques (`datasetRef` + table des golden
 queries restent sur DEV) ; l'UI ne le corrige pas. Il faut des scripts de repoint lancés **depuis un
-notebook du clone** (`OWIsMind_PRD_V1_2/semantic-models/scripts/`).
+notebook du clone** (`OWIsMind_PRD_V1_2/genai/semantic-models/scripts/`).
 
 - **Revenus** (`Drive_Revenues_Semantic_Model` = `AHUh9hb`) : **FAIT et VALIDÉ en DSS (2026-07-08)**.
   Repointé sur le dataset du clone (`datasetRef OWISMIND_PRD_V1_2.DRIVE_Revenues`, table physique
@@ -64,7 +64,7 @@ notebook du clone** (`OWIsMind_PRD_V1_2/semantic-models/scripts/`).
   `SolutionLine > Solution > Product` ; ordre de préférence de grounding : 1.Product 2.Solution
   3.SolutionLine 4.sirano_product. **Rien à refaire.**
 - **Tickets** (`TroubleTickets_Semantic_Model` = `dM4jA4G`) : **repoint EN ATTENTE**. Script prêt et
-  simulé (4/4) : `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py`. À lancer
+  simulé (4/4) : `OWIsMind_PRD_V1_2/genai/semantic-models/scripts/repoint_tickets_prod_clone.py`. À lancer
   **depuis un notebook du clone** : d'abord `DRY_RUN` (vérifier le remap `<KEY>.` + `<KEY>_`), puis
   exécution réelle, puis **re-index** du modèle et **re-dump** (mettre à jour le `.v1.json` du repo).
 

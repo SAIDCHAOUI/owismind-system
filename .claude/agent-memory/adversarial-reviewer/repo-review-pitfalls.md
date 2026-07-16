@@ -22,7 +22,7 @@ there is no longer a DEV->PROD id substitution / tickets-block removal pass to v
 ids: `OWIsMind_PRD_V1_2/README.md` + `OWIsMind_PRD_V1_2/registry.json`.
 
 **Agent Code Agent files.** Module docstrings and `#` comments are NOT sent to the LLM (the prompt is a
-separate string variable). Comment/docstring edits in `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py` /
+separate string variable). Comment/docstring edits in `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` /
 `SalesDrive_revenue_expert.py` / `CSSO_Trouble_Tickets_Expert.py` / `tools/` / `flow/` recipe files are
 behavior-neutral. `OWIsMind_PRD_V1_2/registry.json` has a `not_runtime` field: it is NOT imported at
 runtime (CAPABILITIES is inlined in the orchestrator), so `last_reviewed` date bumps are harmless.

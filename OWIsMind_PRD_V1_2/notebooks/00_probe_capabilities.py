@@ -16,7 +16,7 @@
 #   two probe objects it just created.
 #
 # OUTPUT: a markdown report. Paste it back to Claude (or commit it as
-# OWIsMind_PRD_V1_2/factory-docs/CAPABILITY_MATRIX.md) so the gated factory
+# OWIsMind_PRD_V1_2/docs/CAPABILITY_MATRIX.md) so the gated factory
 # steps (code agent creation, tool creation) can be unlocked.
 # =============================================================================
 

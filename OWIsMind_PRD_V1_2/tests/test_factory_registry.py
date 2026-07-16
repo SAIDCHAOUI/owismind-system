@@ -3,7 +3,7 @@
 Three sources must stay identical or the hub override would silently change
 behavior:
 - the orchestrator's embedded CAPABILITIES_DEFAULT / PERSONA_DEFAULT,
-- the hub seed files (OWIsMind_PRD_V1_2/hub/), pushed by 01_push_config_hub.py,
+- the hub seed files (OWIsMind_PRD_V1_2/project-library/owismind_hub/), pushed by 01_push_config_hub.py,
 - the validators (owismind_factory.hub.REQUIRED_CAPABILITY_KEYS vs the
   orchestrator's _HUB_REQUIRED_CAPABILITY_KEYS) and the frozen dialect tuples.
 
@@ -19,8 +19,8 @@ import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _MIRROR = os.path.dirname(_HERE)
-_ORCH = os.path.join(_MIRROR, "agents", "OWIsMind_orchestrator.py")
-_HUB_DIR = os.path.join(_MIRROR, "hub")
+_ORCH = os.path.join(_MIRROR, "genai", "agents", "OWIsMind_orchestrator.py")
+_HUB_DIR = os.path.join(_MIRROR, "project-library", "owismind_hub")
 _LIB = os.path.join(_MIRROR, "project-library", "python")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
@@ -196,7 +196,7 @@ class TestSubAgentHubBlocks(unittest.TestCase):
     """The two specialists carry the additive hub loader with the right domain."""
 
     def _source(self, filename):
-        return open(os.path.join(_MIRROR, "agents", filename)).read()
+        return open(os.path.join(_MIRROR, "genai", "agents", filename)).read()
 
     def test_revenue_hub_domain(self):
         src = self._source("SalesDrive_revenue_expert.py")

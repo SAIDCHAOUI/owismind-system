@@ -73,9 +73,9 @@ SQL surfaces in the Evidence panel (every SQL emits a `semantic-model-query` spa
 
 | Code Agent | File | Id |
 |---|---|---|
-| OWIsMind_orchestrator | `agents/OWIsMind_orchestrator.py` | `038G7mlF` (`agent:038G7mlF`) |
-| SalesDrive_revenue_expert | `agents/SalesDrive_revenue_expert.py` | `bHrWLyOL` (`agent:bHrWLyOL`) |
-| CSSO_Trouble_Tickets_Expert | `agents/CSSO_Trouble_Tickets_Expert.py` | `NcE9LD2i` (`agent:NcE9LD2i`) |
+| OWIsMind_orchestrator | `genai/agents/OWIsMind_orchestrator.py` | `038G7mlF` (`agent:038G7mlF`) |
+| SalesDrive_revenue_expert | `genai/agents/SalesDrive_revenue_expert.py` | `bHrWLyOL` (`agent:bHrWLyOL`) |
+| CSSO_Trouble_Tickets_Expert | `genai/agents/CSSO_Trouble_Tickets_Expert.py` | `NcE9LD2i` (`agent:NcE9LD2i`) |
 
 `SalesDrive_AI_Agent` (`rNTZ781a`) is a LEGACY early agent, still listed in DSS but
 NOT in the runtime chain and NOT mirrored in this repo. Ignore it.
@@ -86,7 +86,7 @@ NOT in the runtime chain and NOT mirrored in this repo. Ignore it.
 |---|---|---|---|
 | `revenue_semantic_query` | Semantic Model Query (Custom_agent_tool) | `v4oqA6R` | the **revenue sub-agent** (QUERY) |
 | `tickets_semantic_query` | Semantic Model Query (Custom_agent_tool) | `nEirlso` | the **tickets sub-agent** (QUERY) |
-| `attribute_lookup_tool` | Custom Python (`tools/attribute_lookup_tool.py`) | `UUoynaL` | the **orchestrator** (built-in, both domains) |
+| `attribute_lookup_tool` | Custom Python (`genai/agent-tools/attribute_lookup_tool.py`) | `UUoynaL` | the **orchestrator** (built-in, both domains) |
 
 `Drive_Revenues_resolve_filter_value` (old Custom Python, `aNxeOc4`, called by
 nobody) is **legacy, pending DSS deletion** (superseded by `attribute_lookup_tool`).
@@ -98,7 +98,7 @@ them with the dead `Drive_Revenues_resolve_filter_value` tool.
 Each Semantic Model Query tool runs **Agent mode OFF (linear SQL pipeline)**, LLM
 `vertex_ai/claude-sonnet-4-6`, embedding `vertex_ai/text-embedding-005`, access
 datasets as the calling user. The "Description for LLM" to paste is in
-`semantic-models/TOOL_DESCRIPTIONS.md`.
+`genai/semantic-models/TOOL_DESCRIPTIONS.md`.
 
 ### Datasets (Flow, design time -> read at runtime)
 
@@ -125,10 +125,10 @@ analytics) and `beta-owismind_webapp_traces_v2` (agent traces).
   carrier_code). **Repointed to the clone dataset** (`datasetRef
   OWISMIND_PRD_V1_2.DRIVE_Revenues`, table `"OWISMIND_PRD_V1_2_drive_revenues"`) and
   the **`Solution` offer column re-added 2026-07-08**, VALIDATED in DSS. Readable
-  snapshot: `semantic-models/MODEL.md`.
+  snapshot: `genai/semantic-models/MODEL.md`.
 - **tickets** (`TroubleTickets_Semantic_Model`, `dM4jA4G`): default metric
   `COUNT(DISTINCT id)`, `Duration_ticket_total` in minutes (AVG). Repoint script
-  `semantic-models/scripts/repoint_tickets_prod_clone.py` READY, simulated 4/4, not
+  `genai/semantic-models/scripts/repoint_tickets_prod_clone.py` READY, simulated 4/4, not
   yet launched on the clone.
 
 ### Modes (model per turn)
@@ -144,13 +144,17 @@ stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
 | Path | What |
 |---|---|
 | `README.md` | Master guide: the repo <-> DSS map, architecture, Flow, models, tools, git model, contracts. |
-| `agents/` | The three Code Agent files (orchestrator + revenue + tickets sub-agents). Paste each into its DSS Code Agent (env 3.11). Ids baked into each CONFIG. |
-| `tools/attribute_lookup_tool.py` | The `attribute_lookup` Custom Python tool (`UUoynaL`). |
+| `genai/agents/` | The three Code Agent files (orchestrator + revenue + tickets sub-agents). Paste each into its DSS Code Agent (env 3.11). Ids baked into each CONFIG. |
+| `genai/agent-tools/attribute_lookup_tool.py` | The `attribute_lookup` Custom Python tool (`UUoynaL`). |
 | `flow/` | The Flow recipes per zone (`SalesDrive_Revenue_Expert/`, `CSC_ticket_AI_Agent/`, `Webapp_Zone/`) + `README.md` + `DATASETS.md`. Dataset IO comes from the DSS Flow wiring, not code constants. |
-| `semantic-models/` | Per-model `.v1.json` snapshots + `scripts/` (build / update / dump / drop / migrate / remap / repoint) + `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. |
+| `genai/semantic-models/` | Per-model `.v1.json` snapshots + `scripts/` (build / update / dump / drop / migrate / remap / repoint) + `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. |
 | `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
-| `PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the v1.3 **agent factory**: `factory-docs/README.md` (deploy: `factory-docs/DEPLOY_V1_3_DEV.md`). |
-| `project-library/`, `notebooks/`, `hub/`, `webapps/`, `factory-docs/` | The v1.3 agent factory: engine package, runner notebooks 00-06, Config & Prompt Hub seeds (agents load `/owismind_hub/` overrides at start, embedded fallback), the console Standard webapp, the docs. |
+| `docs/PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the v1.3 **agent factory**: `docs/AGENT_FACTORY.md` (deploy: `docs/DEPLOY_V1_3_DEV.md`). |
+| `project-library/python/owismind_factory/` | The v1.3 agent factory engine package (pasted into the DSS project library). |
+| `project-library/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/owismind_hub/` at the DSS library root): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
+| `notebooks/` | Factory runner notebooks 00-06 (probe, push hub, align clone, create domain, wizard, logging, doctor). |
+| `webapps/agent-factory-console/` | The factory console (Standard webapp, optional; everything is also doable via notebooks). |
+| `docs/` | Sub-project docs: `DEPLOY_V1_3_DEV.md` (deployment guide), `AGENT_FACTORY.md` (factory architecture), `CAPABILITY_MATRIX.md` (probe report), `PLAYBOOK_ADD_AGENT.md` (manual playbook). |
 | `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. |
 
 ## Rules you must not break
@@ -201,10 +205,10 @@ to prod by dropping the `-dev` suffix (the dev branch becomes the new prod branc
 
 **Still pending in DSS:** (1) drop the stale `resolve_filter_value` precondition
 from each `revenue_semantic_query` "Description for LLM" (corrected text in
-`semantic-models/TOOL_DESCRIPTIONS.md`); (2) delete the dead
+`genai/semantic-models/TOOL_DESCRIPTIONS.md`); (2) delete the dead
 `Drive_Revenues_resolve_filter_value` tool object (`aNxeOc4`); (3) finish the
-**tickets** curation - launch `semantic-models/scripts/repoint_tickets_prod_clone.py`
+**tickets** curation - launch `genai/semantic-models/scripts/repoint_tickets_prod_clone.py`
 on the clone (repoints `TroubleTickets_Semantic_Model` `dM4jA4G` to the clone
 dataset; simulated 4/4), apply the profile overrides (COUNT_DISTINCT id,
 time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the
-`.v1.json`, then smoke-test tickets end-to-end (see `PLAYBOOK_ADD_AGENT.md`).
+`.v1.json`, then smoke-test tickets end-to-end (see `docs/PLAYBOOK_ADD_AGENT.md`).

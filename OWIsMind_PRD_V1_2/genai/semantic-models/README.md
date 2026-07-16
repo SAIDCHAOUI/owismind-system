@@ -1,7 +1,7 @@
 # semantic-models/ - the SQL brains the semantic-query tools run
 
 > Part of the OWIsMind agent system (production project **OWISMIND_PRD_V1_2**): see
-> [`../README.md`](../README.md) (master guide) and [`../tools/README.md`](../tools/README.md)
+> [`../README.md`](../README.md) (master guide) and [`../agent-tools/README.md`](../agent-tools/README.md)
 > (the two Semantic Model Query tools). The tools `revenue_semantic_query` (`v4oqA6R`)
 > and `tickets_semantic_query` (`nEirlso`), called by the two sub-agents, point at
 > the two models documented here.

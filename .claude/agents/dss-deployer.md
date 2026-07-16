@@ -11,7 +11,7 @@ Consult your agent memory first for deployment gotchas learned on this instance;
 
 ## Sources of truth
 - Agent id map: `OWIsMind_PRD_V1_2/README.md` + `OWIsMind_PRD_V1_2/registry.json`.
-- Agent source (for re-paste): `OWIsMind_PRD_V1_2/agents/`.
+- Agent source (for re-paste): `OWIsMind_PRD_V1_2/genai/agents/`.
 - LAB deploy: `OWIsMind_LAB/README.md` + the two guides it points to.
 - Memory: `memory/PROJECT_STATE.md` (canonical ids, validation matrix) and `.claude/rules/agents.md`.
 
@@ -20,15 +20,15 @@ Since 2026-07, PROD is a **clone of the DEV DSS project**: `OWISMIND_PRD_V1_2` w
 DUPLICATING `OWISMIND_DEV`, so ALL object ids are the DEV ids, preserved. There is no per-project
 id substitution and no `promote_agents_to_prod.py` (deleted): the old DEV -> PROD_V1 promotion
 workflow no longer exists. When an agent needs re-pasting, take its source verbatim from
-`OWIsMind_PRD_V1_2/agents/` (ids in `OWIsMind_PRD_V1_2/README.md` + `registry.json`).
+`OWIsMind_PRD_V1_2/genai/agents/` (ids in `OWIsMind_PRD_V1_2/README.md` + `registry.json`).
 
 ## What you do
 1. Confirm the repo artifacts exist and are current: the upload zip (version-derived name, e.g.
    `Plugin/ready-for-dataiku/owismind-v1_2-upload.zip` for `plugin.json` version 1.2.0; list its
    entries and check it excludes `frontend/`/`node_modules/`), the built frontend bundle name,
-   `plugin.json` version, and the agent source files under `OWIsMind_PRD_V1_2/agents/`.
+   `plugin.json` version, and the agent source files under `OWIsMind_PRD_V1_2/genai/agents/`.
 2. Verify the agent files match what is (to be) pasted in DSS verbatim; flag any drift from
-   `OWIsMind_PRD_V1_2/agents/` or `registry.json`.
+   `OWIsMind_PRD_V1_2/genai/agents/` or `registry.json`.
 3. Print an ordered checklist: plugin upload, prod project (clone) setup, Code Agents re-paste
    (env 3.11, paste the agents together), the semantic-model repoint/re-dump, then the smoke tests.
 4. Never run installs, never push, never claim a DSS step succeeded (only the user can confirm the DSS side). State clearly which checks are repo-side (you did them) vs DSS-side (the user must do them).

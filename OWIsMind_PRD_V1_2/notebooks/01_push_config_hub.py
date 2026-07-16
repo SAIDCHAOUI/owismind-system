@@ -202,7 +202,7 @@ else:
               % (hub.TEMPLATE_AGENT_PATH, REVENUE_AGENT_ID, len(code)))
     else:
         print("MANUAL: create the library file %s and paste the content of the repo "
-              "file OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py into it "
+              "file OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py into it "
               "(run 00_probe_capabilities.py first to enable the automatic pull)."
               % hub.TEMPLATE_AGENT_PATH)
 

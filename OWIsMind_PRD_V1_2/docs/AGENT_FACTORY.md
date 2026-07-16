@@ -14,7 +14,7 @@
    Official Dataiku public API only, stdlib + `dataiku`, Python 3.9 compatible,
    dry-run by default, idempotent, ZERO deletion helpers.
 2. **The Config & Prompt Hub** (`/owismind_hub/` in the DSS project library,
-   repo seeds in [`../hub/`](../hub/)): prompts and the runtime CAPABILITIES
+   repo seeds in [`../project-library/owismind_hub/`](../project-library/owismind_hub/)): prompts and the runtime CAPABILITIES
    registry live OUTSIDE the pasted agent code. The agents load them once at
    start with strict validation and silent fallback to their embedded defaults.
    Adding a validated domain = one JSON entry, zero orchestrator re-paste.

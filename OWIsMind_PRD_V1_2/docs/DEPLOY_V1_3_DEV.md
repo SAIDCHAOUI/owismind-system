@@ -33,7 +33,7 @@
    stays False). It prints the Phase 0 report and stores
    `/owismind_hub/probe_report.md` + `probe_results.json` in the library.
 4. **Paste the probe report back to Claude** (or commit it as
-   `factory-docs/CAPABILITY_MATRIX.md`). It answers the two open questions:
+   `docs/CAPABILITY_MATRIX.md`). It answers the two open questions:
    the Code Agent code key and the Semantic Model Query tool type/params.
 5. [notebook] Run `01_push_config_hub.py` (seeds the hub: settings,
    capabilities.json, persona, engine template if the probe found the code key).

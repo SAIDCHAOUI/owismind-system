@@ -1,5 +1,5 @@
 """DSS-free unit tests for the revenue Dataset Expert (now the LangGraph agent
-``OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py``).
+``OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py``).
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent file is loaded via
 importlib. Only PURE functions are tested (profile parsing, understanding
@@ -81,7 +81,7 @@ def _install_stubs():
 _install_stubs()
 
 _AGENT_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "agents",
+    os.path.dirname(__file__), "..", "genai", "agents",
     "SalesDrive_revenue_expert.py"))
 _SPEC = importlib.util.spec_from_file_location("dataset_expert_under_test",
                                                _AGENT_PATH)

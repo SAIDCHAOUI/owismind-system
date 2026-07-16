@@ -11,7 +11,7 @@
 `OWIsMind_PRD_V1_3-dev-night-20260712`).** Cycle multi-agents (Codex Terra/Sol/Luna + subagents
 Opus/Sonnet) en 6 vagues : audit -> fixes failure-modes factory + console -> wizard/validateurs ->
 re-audit + couverture builders + docs + Charte Orange PASS -> vague 5 : regenerateur de seeds hub
-(`OWIsMind_PRD_V1_2/hub/regenerate_seeds.py` + test, mode `--check` drift, extraction AST de
+(`OWIsMind_PRD_V1_2/project-library/owismind_hub/regenerate_seeds.py` + test, mode `--check` drift, extraction AST de
 l'orchestrateur, gates verifies : --check exit 0, run = zero diff) ; le top 3 des idees produit de la
 nuit est 100 % livre -> vague 6 : cross-review Codex du diff complet (4 P1 + 1 P2 tous reels et
 corriges : golden queries read-only toujours executees ; gate confirmed impose dans create_code_agent ;
@@ -30,7 +30,7 @@ une premiere vraie delegation de code end-to-end.
 **Base v1.3 (2026-07-10 Run 2) = AGENT FACTORY v1.3 IMPLEMENTEE** (branche `OWIsMind_PRD_V1_3-dev`,
 379 tests, 8 commits pousses) : package `owismind_factory/` (13 modules, dry-run, ZERO delete, gates
 par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separee, docs de deploiement
-`OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md` (phases A-G). RIEN execute contre DSS. Detail :
+`OWIsMind_PRD_V1_2/docs/DEPLOY_V1_3_DEV.md` (phases A-G). RIEN execute contre DSS. Detail :
 `sessions/2026-07-10.md` Run 2, L149-L150. La nuit 07-12 durcit cette base sur la branche de nuit.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
@@ -69,16 +69,16 @@ par sonde), Config & Prompt Hub `/owismind_hub/`, console webapp Standard separe
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **BRANCHE DE NUIT** `OWIsMind_PRD_V1_3-dev-night-20260712` (10 commits, 468 tests, rien pousse) : review user puis merge dans `OWIsMind_PRD_V1_3-dev`. Voir `sessions/2026-07-12.md`.
+- **FAIT 2026-07-16** : branche de nuit mergee (fast-forward) dans `OWIsMind_PRD_V1_3-dev` puis supprimee (local + remote) ; tout est pousse sur origin. `OWIsMind_PRD_V1_3-dev` = SEULE branche de travail (468 tests). Le clone DSS v1.3-dev EXISTE deja (confirme user) : demarche = DEPLOY_V1_3_DEV.md phases A2 puis B-D.
 - Backlog v1.3 (propositions Sol, a discuter avec l'user) : machine d'etat persistante par domaine ; environnement de validation pre-live ; manifeste canonique versionne du registre ; controle operationnel.
 - CODEX : valider le flux end-to-end sur un vrai 2e chantier (`/codex:rescue`) + une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`. Voir `sessions/2026-07-10.md` Run 3.
-- **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/factory-docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.
-- CLONE prod : lancer `OWIsMind_PRD_V1_2/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
+- **FACTORY v1.3** : cloner le projet DSS v1.2 -> v1.3-dev puis suivre `OWIsMind_PRD_V1_2/docs/DEPLOY_V1_3_DEV.md` phases A-D (lib + sonde 00 lecture seule + push hub 01 + re-paste des 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates (tool + code agent). Puis phase F (1er domaine + wizard) et G (logging + doctor). Voir `sessions/2026-07-10.md` Run 2.
+- CLONE prod : lancer `OWIsMind_PRD_V1_2/genai/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
   (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146
   (revenus + repoint = FAITS, valides DSS).
 - Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur prod (clone) `038G7mlF` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
 - LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
 - Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `update_aligned_semantic_model.py` + re-dump) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).
-- 2e agent TICKETS : finaliser + pofiner (`OWIsMind_PRD_V1_2/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
+- 2e agent TICKETS : finaliser + pofiner (`OWIsMind_PRD_V1_2/docs/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
 - Backlog differe : recueillir les ajustements user sur le trust layer ; consolidation SalesDrive v2 (cas d'ambiguite reelle) ; re-tester en DSS L040/L041 ; Evidence v3 (restriction admin datasets, keyset pagination) ; 2e task mentionnee par l'user le 2026-06-09 (a clarifier).

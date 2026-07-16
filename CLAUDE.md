@@ -33,7 +33,8 @@ convertie, a été supprimée du repo le 2026-06-11).
 - SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key **PROD `OWISMIND_PRD_V1_2`**, **DEV `OWISMIND_DEV`** (résolu au runtime via `dataiku.default_project_key()`)
 - Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) : le projet DSS
   PROD **`OWISMIND_PRD_V1_2` = CLONE du projet DEV `OWISMIND_DEV`** (ids DEV conservés), miroité dans le repo
-  sous **`OWIsMind_PRD_V1_2/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`, `tests/`). Carte des IDs :
+  sous **`OWIsMind_PRD_V1_2/`**, organisé en miroir de l'UI DSS (`flow/`, `genai/` = agents + agent-tools +
+  semantic-models, `project-library/`, `notebooks/`, `webapps/`, `docs/`, `tests/`). Carte des IDs :
   **`OWIsMind_PRD_V1_2/README.md`** + `OWIsMind_PRD_V1_2/registry.json`. Orchestrateur **OWIsMind_orchestrator**
   (`038G7mlF`) → sous-agents **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) et **CSSO_Trouble_Tickets_Expert**
   (`agent:NcE9LD2i`) - mêmes ids en DEV et dans le clone.

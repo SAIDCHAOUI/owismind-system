@@ -34,6 +34,6 @@ frontend/node_modules/CLAUDE.md/README.md/__pycache__.
 **Known doc drift (mineur, not blocking):** the `/package-plugin` skill + on-disk
 staging dir are versioned (`owismind-v1_2-upload/`), but `memory/PROJECT_STATE.md`
 prose still names the staging DIR `owismind-upload/` (zip name is correct everywhere).
-`OWIsMind_PRD_V1_2/tools/README.md` labels `tickets_semantic_query` status "LIVE"
+`OWIsMind_PRD_V1_2/genai/agent-tools/README.md` labels `tickets_semantic_query` status "LIVE"
 while registry/CLAUDE/README/DEPLOY_V1_2 say its model repoint is still pending.
 See [[repo-review-pitfalls]] and [[verifying-zero-behavior-cleanup]].

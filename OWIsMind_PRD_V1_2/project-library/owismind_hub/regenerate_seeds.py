@@ -8,7 +8,7 @@ import os
 import sys
 
 
-_MIRROR_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MIRROR_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _REPO_ROOT = os.path.dirname(_MIRROR_DIR)
 
 
@@ -80,7 +80,7 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
     repo_root = os.path.abspath(repo_root)
     mirror_dir = os.path.join(repo_root, "OWIsMind_PRD_V1_2")
     orchestrator_path = os.path.join(
-        mirror_dir, "agents", "OWIsMind_orchestrator.py"
+        mirror_dir, "genai", "agents", "OWIsMind_orchestrator.py"
     )
     hub_module_path = os.path.join(
         mirror_dir, "project-library", "python", "owismind_factory", "hub.py"
@@ -88,7 +88,7 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
     constants = _extract_constants(
         orchestrator_path, {"CAPABILITIES_DEFAULT", "PERSONA_DEFAULT"}
     )
-    hub_dir = os.path.join(mirror_dir, "hub")
+    hub_dir = os.path.join(mirror_dir, "project-library", "owismind_hub")
     return {
         os.path.join(hub_dir, "capabilities.json"): _json_bytes(
             constants["CAPABILITIES_DEFAULT"]

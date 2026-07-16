@@ -12,7 +12,7 @@ For OWIsMind "deep clean" branches whose contract is ZERO runtime behavior chang
   docstrings from each, compare `ast.dump`. If equal, only comments/docstrings changed. Used this
   on the 5 Code Agent files + tools/recipes + stream_manager/chat_v5; all AST-identical.
 - Code Agent docstrings are NOT load-bearing here: grep confirms no `__doc__` usage in
-  `OWIsMind_PRD_V1_2/agents/`, and agent prompts live in string-literal variables (caught by AST diff),
+  `OWIsMind_PRD_V1_2/genai/agents/`, and agent prompts live in string-literal variables (caught by AST diff),
   so condensing module headers is safe.
 - Consolidations (e.g. `sql_config.readonly_pre_queries()`): git grep the literal on `main` vs `HEAD`
   to prove every removed inline copy was byte-identical to the new single source. 6 read sites were

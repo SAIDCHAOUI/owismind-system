@@ -1,7 +1,7 @@
 """DSS-free unit tests for the LangGraph agents (DEV copies):
-  - OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py  (agentic tool-calling orchestrator)
-  - OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py  (revenue sub-agent)
-  - OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py  (tickets sub-agent)
+  - OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py  (agentic tool-calling orchestrator)
+  - OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py  (revenue sub-agent)
+  - OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py  (tickets sub-agent)
 
 ``dataiku`` AND ``langgraph`` are stubbed BEFORE the agent files load (importlib),
 so only PURE logic is exercised - registry/tool specs, the honesty sources block,
@@ -85,7 +85,7 @@ _install_stubs()
 def _load(mod_name, filename):
     # Tests run against the DEV copies (the development source of truth).
     path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", "agents", filename))
+        os.path.dirname(__file__), "..", "genai", "agents", filename))
     spec = importlib.util.spec_from_file_location(mod_name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

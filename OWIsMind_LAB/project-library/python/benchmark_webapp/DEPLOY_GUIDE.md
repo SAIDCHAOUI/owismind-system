@@ -59,9 +59,9 @@ Tableau "quel fichier du repo va ou dans DSS" :
 
 | Fichier du repo | Va dans DSS |
 | --- | --- |
-| `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (env 3.11) |
-| `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (env 3.11) |
-| `OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (env 3.11) |
+| `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (env 3.11) |
+| `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (env 3.11) |
+| `OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (env 3.11) |
 | `Plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` | Plugin DSS `owismind_dev` |
 | `OWIsMind_LAB/project-library/python/benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
@@ -98,17 +98,17 @@ maintenant `smart/pro/claude`. Les MODELES sont identiques.
 
 ### A1. Re-coller l'orchestrateur (DEV)
 1. Ouvre le fichier repo
-   `OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py`.
+   `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py`.
 2. Dans DSS, projet `OWISMIND_DEV` -> le Code Agent **OWIsMind_orchestrator** (id `038G7mlF`,
    code env **3.11**) -> remplace tout son code par le contenu du fichier repo -> Save.
 
 ### A2. Re-coller le sous-agent revenus (DEV)
-Pareil avec `OWIsMind_PRD_V1_2/agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
+Pareil avec `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
 (id `bHrWLyOL`, env 3.11).
 
 ### A3. Re-coller le sous-agent tickets (DEV), s'il est deploye
 Si le Code Agent **CSSO_Trouble_Tickets_Expert** (id `NcE9LD2i`) existe deja dans `OWISMIND_DEV`,
-recolle aussi `OWIsMind_PRD_V1_2/agents/CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
+recolle aussi `OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
 cette etape.)
 
 Pas de zip ni de redemarrage backend pour les agents : un Code Agent prend effet des qu'il est

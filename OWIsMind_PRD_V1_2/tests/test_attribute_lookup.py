@@ -1,5 +1,5 @@
 """DSS-free unit tests for the attribute_lookup Custom Python agent tool
-(``OWIsMind_PRD_V1_2/tools/attribute_lookup_tool.py``).
+(``OWIsMind_PRD_V1_2/genai/agent-tools/attribute_lookup_tool.py``).
 
 ``dataiku`` and ``dataiku.llm.agent_tools`` are stubbed BEFORE the tool file is
 loaded via importlib. Pure helpers (norm, search needle, attribute mapping, SQL
@@ -51,7 +51,7 @@ def _install_stubs():
 _install_stubs()
 
 _TOOL_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "tools",
+    os.path.dirname(__file__), "..", "genai", "agent-tools",
     "attribute_lookup_tool.py"))
 _SPEC = importlib.util.spec_from_file_location("attribute_lookup_under_test",
                                                _TOOL_PATH)

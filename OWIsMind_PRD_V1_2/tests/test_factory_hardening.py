@@ -458,7 +458,7 @@ class TestPlaceholderAgentIdRejected(unittest.TestCase):
     def _valid_caps(self):
         import json as _json
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "hub", "capabilities.json")
+                                 "project-library", "owismind_hub", "capabilities.json")
         with open(seed_path) as fh:
             return _json.load(fh)
 
@@ -486,7 +486,7 @@ class TestRegistryLabelsMatchLiveCapabilities(unittest.TestCase):
         import json as _json
         from owismind_factory import registry as reg
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "hub", "capabilities.json")
+                                 "project-library", "owismind_hub", "capabilities.json")
         with open(seed_path) as fh:
             seed = _json.load(fh)
         agent_caps = [c for c in seed.values() if c.get("kind") == "agent"]
@@ -510,7 +510,7 @@ class TestFactorySettingsSeedEquivalence(unittest.TestCase):
     def test_seed_equals_embedded_defaults(self):
         import json as _json
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "hub", "factory_settings.json")
+                                 "project-library", "owismind_hub", "factory_settings.json")
         with open(seed_path) as fh:
             seed = _json.load(fh)
         self.assertEqual(seed, hub.DEFAULT_SETTINGS)
@@ -532,7 +532,7 @@ class TestHubAppendSerialization(unittest.TestCase):
         try:
             import json as _json
             seed = _json.load(open(os.path.join(os.path.dirname(__file__), "..",
-                                                "hub", "capabilities.json")))
+                                                "project-library", "owismind_hub", "capabilities.json")))
             first_key = sorted(seed.keys())[0]
             entry = seed[first_key]
             barrier = threading.Barrier(2)

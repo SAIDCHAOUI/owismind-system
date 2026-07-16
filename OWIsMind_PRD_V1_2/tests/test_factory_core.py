@@ -83,7 +83,7 @@ class TestAgentCodeGeneration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.template = open(os.path.join(_MIRROR, "agents",
+        cls.template = open(os.path.join(_MIRROR, "genai", "agents",
                                          "SalesDrive_revenue_expert.py")).read()
         cls.spec = DomainSpec(domain="satisfaction", base_dataset="CX_Surveys",
                               label_fr="Expert satisfaction", label_en="Satisfaction expert")

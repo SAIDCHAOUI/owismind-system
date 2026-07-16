@@ -39,5 +39,5 @@ Before a build the script clears stale `owismind-v*-dev-*upload*` artifacts and 
 
 > Prod promotion is no longer a script. Since 2026-07, PROD is a **clone of the DEV DSS project**
 > (`OWISMIND_PRD_V1_2` duplicates `OWISMIND_DEV`, all object ids preserved), so there is no per-project
-> id substitution to run. When an agent needs re-pasting, its source lives at `OWIsMind_PRD_V1_2/agents/`
+> id substitution to run. When an agent needs re-pasting, its source lives at `OWIsMind_PRD_V1_2/genai/agents/`
 > (id map in `OWIsMind_PRD_V1_2/README.md` + `OWIsMind_PRD_V1_2/registry.json`).

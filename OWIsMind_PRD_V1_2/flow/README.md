@@ -31,7 +31,7 @@ IC_DATA.TroubleTickets_year ──sync──► TroubleTickets_year ──► co
 Who reads what: `*_profile` + `*_value_index` are read by the domain **sub-agent**
 (`SalesDrive_revenue_expert` / `CSSO_Trouble_Tickets_Expert`); the `*_Value_Catalog`
 / `*_value_catalogue` is read by the **`attribute_lookup`** tool (an orchestrator
-built-in, [`../tools/`](../tools/README.md)) as its alias / suggestions fallback.
+built-in, [`../genai/agent-tools/`](../genai/agent-tools/README.md)) as its alias / suggestions fallback.
 Each source base (`DRIVE_Revenues`, `TroubleTickets_year`) is also read directly by
 its semantic model (SQL) and by `attribute_lookup` (fact search).
 
@@ -112,7 +112,7 @@ frequency, canonical_account_name, canonical_carrier_code, parent_group, is_alia
    profile + index stay fresh.
 
 To onboard a NEW domain you wire the same three recipes on the new base dataset
-with no code edit. Worked example: [`../PLAYBOOK_ADD_AGENT.md`](../PLAYBOOK_ADD_AGENT.md).
+with no code edit. Worked example: [`../docs/PLAYBOOK_ADD_AGENT.md`](../docs/PLAYBOOK_ADD_AGENT.md).
 
 ## Tests
 

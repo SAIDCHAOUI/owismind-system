@@ -5,7 +5,7 @@ mode / language control tokens are mirrored EXACTLY from the production code, no
 guessed:
   - the literal: Plugin/owismind/python-lib/owismind/agents/context.py
     build_user_suffix -> ``"⟦owi:mode={0}⟧".format(mode)``
-  - the parser:  OWIsMind_PRD_V1_2/agents/
+  - the parser:  OWIsMind_PRD_V1_2/genai/agents/
     OWIsMind_orchestrator.py line 137 ->
     ``_MODE_TOKEN_RE = re.compile(r"⟦owi:mode=([a-z]+)⟧")``
 The brackets are U+27E6 (left white square bracket) and U+27E7 (right). The
@@ -44,7 +44,7 @@ _RB = "⟧"  # MATHEMATICAL RIGHT WHITE SQUARE BRACKET
 
 # --- LLM ids -----------------------------------------------------------------
 # The judge runs on a strong, constant model: the Sonnet id the orchestrator uses
-# as its "high" tier (SONNET_ID in OWIsMind_PRD_V1_2/agents/OWIsMind_orchestrator.py line 104).
+# as its "high" tier (SONNET_ID in OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py line 104).
 # verify on instance
 JUDGE_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"
 
