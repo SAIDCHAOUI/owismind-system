@@ -228,6 +228,26 @@ def write_capabilities(project, capabilities, backup=True):
         return write_json(project, CAPABILITIES_PATH, capabilities)
 
 
+def write_prompt(project, path, content, backup=True):
+    """Write a hub prompt file, backing up the previous version first.
+
+    Same recovery contract as write_capabilities: the last versions of an
+    overwritten prompt survive under /owismind_hub/backups/.
+    """
+    if backup:
+        current = read_text(project, path)
+        if current is not None:
+            rel = path[len(HUB_ROOT) + 1:] if path.startswith(HUB_ROOT + "/") else path.lstrip("/")
+            name = rel.replace("/", "-")
+            index = 1
+            while read_text(project, "%s/backups/%s-%d" % (HUB_ROOT, name, index)) is not None:
+                index += 1
+                if index > 200:  # bounded: never loop forever on a weird tree
+                    break
+            write_text(project, "%s/backups/%s-%d" % (HUB_ROOT, name, index), current)
+    return write_text(project, path, content)
+
+
 def append_capability(project, key, entry):
     """Add or replace one capability entry (validated as a whole).
 

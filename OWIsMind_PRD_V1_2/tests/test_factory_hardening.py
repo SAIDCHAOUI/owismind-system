@@ -226,6 +226,129 @@ class TestScenarioTrigger(unittest.TestCase):
         self.assertEqual(st["scenario"], PLANNED)
         self.assertEqual(st["scenario_trigger"], PLANNED)
 
+    def test_trigger_step_forces_scenario_inactive_before_save(self):
+        # The INACTIVE promise must be explicit: active=False has to be set on
+        # the same settings object that defines the trigger, before save().
+        class _Settings(object):
+            def __init__(self):
+                self.active = None
+                self.triggers = []
+                self.saved_state = "NOT SAVED"
+
+            def add_daily_trigger(self, hour, minute):
+                self.triggers.append((hour, minute))
+
+            def save(self):
+                self.saved_state = self.active
+
+        class _Scenario(object):
+            def __init__(self):
+                self.settings = _Settings()
+
+            def get_settings(self):
+                return self.settings
+
+        class _Project(object):
+            def __init__(self):
+                self.scenario = _Scenario()
+
+            @staticmethod
+            def list_scenarios():
+                return []
+
+            def create_scenario(self, *a, **k):
+                return self.scenario
+
+        project = _Project()
+        ctx = FactoryContext(project=project, dry_run=False)
+        flow_builder.ensure_refresh_scenario(ctx, make_spec(), hour=3)
+        st = statuses(ctx)
+        self.assertEqual(st["scenario"], "DONE")
+        self.assertEqual(st["scenario_trigger"], "DONE")
+        self.assertIs(project.scenario.settings.saved_state, False)
+        self.assertEqual(project.scenario.settings.triggers, [(3, 0)])
+
+
+class _MemHubLibrary(object):
+    """Dict-backed fake of the DSS project library (read + write + folders)."""
+
+    def __init__(self, files=None):
+        self.files = dict(files or {})
+
+    class _File(object):
+        def __init__(self, lib, path):
+            self.lib, self.path = lib, path
+
+        def read(self):
+            return self.lib.files[self.path]
+
+        def write(self, content):
+            self.lib.files[self.path] = content
+
+    class _Folder(object):
+        def __init__(self, lib, path):
+            self.lib, self.path = lib, path
+
+        def add_folder(self, name):
+            return _MemHubLibrary._Folder(self.lib, self.path.rstrip("/") + "/" + name)
+
+        def add_file(self, name):
+            path = self.path.rstrip("/") + "/" + name
+            self.lib.files[path] = ""
+            return _MemHubLibrary._File(self.lib, path)
+
+    @property
+    def root(self):
+        return self._Folder(self, "")
+
+    def get_file(self, path):
+        return self._File(self, path) if path in self.files else None
+
+    def get_folder(self, path):
+        prefix = path.rstrip("/") + "/"
+        if any(p.startswith(prefix) for p in self.files):
+            return self._Folder(self, path)
+        return None
+
+
+class _MemHubProject(object):
+    def __init__(self, files=None):
+        self.library = _MemHubLibrary(files)
+
+    def get_library(self):
+        return self.library
+
+
+class TestPromptBackup(unittest.TestCase):
+    PERSONA = "/owismind_hub/prompts/orchestrator_persona.md"
+
+    def test_write_prompt_backs_up_previous_version(self):
+        project = _MemHubProject({self.PERSONA: "OLD PERSONA"})
+        hub.write_prompt(project, self.PERSONA, "NEW PERSONA")
+        files = project.library.files
+        self.assertEqual(files[self.PERSONA], "NEW PERSONA")
+        self.assertEqual(
+            files["/owismind_hub/backups/prompts-orchestrator_persona.md-1"],
+            "OLD PERSONA")
+
+    def test_write_prompt_backups_do_not_overwrite_each_other(self):
+        project = _MemHubProject({self.PERSONA: "V1"})
+        hub.write_prompt(project, self.PERSONA, "V2")
+        hub.write_prompt(project, self.PERSONA, "V3")
+        files = project.library.files
+        self.assertEqual(files[self.PERSONA], "V3")
+        self.assertEqual(
+            files["/owismind_hub/backups/prompts-orchestrator_persona.md-1"], "V1")
+        self.assertEqual(
+            files["/owismind_hub/backups/prompts-orchestrator_persona.md-2"], "V2")
+
+    def test_write_prompt_without_previous_version_makes_no_backup(self):
+        project = _MemHubProject()
+        hub.write_prompt(project, self.PERSONA, "NEW")
+        files = project.library.files
+        self.assertEqual(files[self.PERSONA], "NEW")
+        self.assertFalse(any("/backups/" in p for p in files))
+
 
 class TestPipelineBlocking(unittest.TestCase):
     def _settings(self):

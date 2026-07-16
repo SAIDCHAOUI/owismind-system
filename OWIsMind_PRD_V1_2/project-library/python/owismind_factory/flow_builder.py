@@ -320,6 +320,11 @@ def ensure_refresh_scenario(ctx, spec, hour=3):
 
     def _trigger():
         settings = scenario.get_settings()
+        # The INACTIVE promise must not rest on an undocumented creation
+        # default: force it in the same save that defines the trigger. Without
+        # a defined trigger an active scenario never fires, so forcing it here
+        # (not at creation) still closes every auto-run path.
+        settings.active = False
         settings.add_daily_trigger(hour=hour, minute=0)
         settings.save()
         return True

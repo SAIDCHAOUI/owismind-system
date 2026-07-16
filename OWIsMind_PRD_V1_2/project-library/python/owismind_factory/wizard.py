@@ -375,8 +375,12 @@ def substitute_golden_tables(config, physical_table):
 # ------------------------------------------------------- offline golden validator
 
 # Statement-level keywords that make a golden query a write / DDL, not a read.
+# INTO catches PostgreSQL "SELECT ... INTO new_table" (a write that starts with
+# SELECT); COPY/CALL/DO/LOCK/SET/VACUUM/MERGE are session or write commands that
+# must never appear in a curated read query.
 _FORBIDDEN_STATEMENTS = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
-                         "CREATE", "GRANT", "TRUNCATE")
+                         "CREATE", "GRANT", "TRUNCATE", "INTO", "MERGE",
+                         "COPY", "CALL", "DO", "LOCK", "SET", "VACUUM")
 
 # SQL keywords and common functions that are NOT column names. Lowercased.
 _SQL_VOCAB = frozenset([

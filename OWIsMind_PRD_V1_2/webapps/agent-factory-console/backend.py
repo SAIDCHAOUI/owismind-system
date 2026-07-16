@@ -394,7 +394,8 @@ def api_hub_prompt_get():
 @app.route("/api/hub/prompt", methods=["POST"])
 @_safe
 def api_hub_prompt_post():
-    """Write a hub prompt file. Requires confirm; path MUST live under /owismind_hub/prompts/."""
+    """Write a hub prompt file (a backup of the previous version is made). Requires
+    confirm; path MUST live under /owismind_hub/prompts/."""
     body = request.get_json(silent=True) or {}
     if not _confirmed(body):
         return _err("confirmation_required", 400)
@@ -404,7 +405,7 @@ def api_hub_prompt_post():
     content = body.get("content")
     if not isinstance(content, str):
         return _err("content_required", 400)
-    hub.write_text(_project(), path, content)
+    hub.write_prompt(_project(), path, content)
     return jsonify({"status": "ok", "path": path})
 
 

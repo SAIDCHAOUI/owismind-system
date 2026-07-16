@@ -106,6 +106,22 @@ class TestValidateGoldenQueries(unittest.TestCase):
             out = wizard.validate_golden_queries(config, self.KNOWN)
             self.assertEqual(len(out["problems"]), 1, sql)
 
+    def test_select_into_and_session_commands_rejected(self):
+        # PostgreSQL SELECT ... INTO creates a table while starting with SELECT:
+        # it must NOT pass as read-only. Same for session / write commands that
+        # do not start with a classic write keyword.
+        for sql in ("SELECT amount INTO staging_x FROM __TABLE__",
+                    "MERGE INTO __TABLE__ USING x ON true",
+                    "COPY __TABLE__ TO '/tmp/out.csv'",
+                    "CALL some_procedure()",
+                    "DO $$ BEGIN NULL; END $$",
+                    "LOCK TABLE __TABLE__",
+                    "SET search_path TO public",
+                    "VACUUM __TABLE__"):
+            config = {"golden_queries": [{"question": "q", "sql": sql}]}
+            out = wizard.validate_golden_queries(config, self.KNOWN)
+            self.assertEqual(len(out["problems"]), 1, sql)
+
     def test_multi_statement_rejected(self):
         config = {"golden_queries": [
             {"question": "q", "sql": "SELECT amount FROM __TABLE__; DROP TABLE x"},
