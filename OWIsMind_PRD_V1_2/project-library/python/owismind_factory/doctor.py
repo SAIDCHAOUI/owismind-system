@@ -260,8 +260,15 @@ def run_doctor(project, llm_id, persona_text, interactions, complaint=None):
 
 # --------------------------------------------------------------------------- render
 
-def format_proposal_markdown(result, agent_label):
-    """Render a proposal dict (or an ``{"error": ...}``) as readable markdown."""
+def format_proposal_markdown(result, agent_label, include_evidence=False):
+    """Render a proposal dict (or an ``{"error": ...}``) as readable markdown.
+
+    ``include_evidence`` defaults to False because this markdown is PERSISTED
+    to the project library (readable by every project reader) while the issue
+    evidence is VERBATIM excerpts of real conversations (client names,
+    amounts). Withheld by default; pass True only for ephemeral display
+    (the notebook's own output), never for anything written to the hub.
+    """
     header = "# Prompt doctor proposal - %s" % agent_label
     if not isinstance(result, dict):
         return "%s\n\n(no result)\n" % header
@@ -279,10 +286,15 @@ def format_proposal_markdown(result, agent_label):
     if issues:
         for issue in issues:
             if isinstance(issue, dict):
+                evidence = issue.get("evidence") or ""
+                if evidence and not include_evidence:
+                    # Verbatim conversation excerpts must not land in the hub.
+                    evidence = ("[evidence withheld: 1 interaction excerpt(s), "
+                                "review them in the notebook output only]")
                 lines.append("- **%s** (%s): %s" % (
                     issue.get("title") or "(untitled)",
                     issue.get("severity") or "?",
-                    issue.get("evidence") or ""))
+                    evidence))
             else:
                 lines.append("- %s" % issue)
     else:

@@ -154,7 +154,7 @@ stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
 | `project-library/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/owismind_hub/` at the DSS library root): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
 | `notebooks/` | Factory runner notebooks 00-06 (probe, push hub, align clone, create domain, wizard, logging, doctor). |
 | `webapps/agent-factory-console/` | The factory console (Standard webapp, optional; everything is also doable via notebooks). |
-| `docs/` | Sub-project docs: `DEPLOY_V1_3_DEV.md` (deployment guide), `AGENT_FACTORY.md` (factory architecture), `CAPABILITY_MATRIX.md` (probe report), `PLAYBOOK_ADD_AGENT.md` (manual playbook). |
+| `docs/` | Sub-project docs: `DEPLOY_V1_3_DEV.md` (deployment guide, phase 0 = security gates), `AGENT_FACTORY.md` (factory architecture), `CAPABILITY_MATRIX.md` (probe report), `PLAYBOOK_ADD_AGENT.md` (manual playbook), `SECURITY_AUDIT_2026-07-16.md` (dual-audit synthesis). |
 | `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. |
 
 ## Rules you must not break

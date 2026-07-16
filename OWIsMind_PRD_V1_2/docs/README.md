@@ -11,6 +11,7 @@ Index des docs du miroir repo `OWIsMind_PRD_V1_2/`. Elles couvrent surtout l'Age
 | [`AGENT_FACTORY.md`](AGENT_FACTORY.md) | L'architecture de la factory : les 3 piliers (`owismind_factory`, Config & Prompt Hub, console webapp) et la carte des modules | Pour comprendre comment ca marche |
 | [`CAPABILITY_MATRIX.md`](CAPABILITY_MATRIX.md) | Le rapport de la sonde 00 (capacites API DSS, gates a deverrouiller) : c'est un template a remplir apres `notebooks/00_probe_capabilities.py` | Apres avoir lance la sonde sur l'instance |
 | [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md) | L'ancienne methode manuelle pour ajouter un sous-agent specialiste (validee pour tickets) | Reference : largement automatisee par la factory |
+| [`SECURITY_AUDIT_2026-07-16.md`](SECURITY_AUDIT_2026-07-16.md) | Synthese du double audit de securite (interne + GPT-5.6 Sol) : ce qui est corrige en code, les 3 gates cote DSS, le backlog | AVANT le premier deploiement (les gates de la phase 0 en viennent) |
 
 ## Deploiement
 

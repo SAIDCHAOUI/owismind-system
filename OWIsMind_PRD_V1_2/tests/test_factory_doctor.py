@@ -104,7 +104,10 @@ class TestFormatProposal(unittest.TestCase):
     }
 
     def test_all_sections_rendered(self):
-        markdown = doctor.format_proposal_markdown(self.RESULT, "Orchestrator")
+        # include_evidence=True is the ephemeral notebook-display path; the
+        # persisted default withholds evidence (test_security_hub_doctor.py).
+        markdown = doctor.format_proposal_markdown(self.RESULT, "Orchestrator",
+                                                   include_evidence=True)
         for token in ("DIAG-TEXT", "ISSUE-T", "ISSUE-E", "REVISED-PROMPT-BODY",
                       "CHANGE-1", "RISK-1", "QUESTION-1", "Orchestrator"):
             self.assertIn(token, markdown)

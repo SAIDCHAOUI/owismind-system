@@ -433,11 +433,14 @@ class TestApplyConfigExplicitEmpty(unittest.TestCase):
             "sqlGenerationConfig": {"instructions": "OLD"}}
 
     def test_explicit_empty_clears(self):
+        # created_this_run=True: this test covers the explicit-empty semantics
+        # on a just-created model, not the pre-existing-model guard (which has
+        # its own suite in test_security_semantic_guard.py).
         raw = self._raw()
         ctx = FactoryContext(project=_FakeModelProject(raw), dry_run=False)
         semantic_builder.apply_config(ctx, "m1", {
             "metrics": [], "filters": [], "instructions": "",
-            "glossary": [], "golden_queries": []})
+            "glossary": [], "golden_queries": []}, created_this_run=True)
         entity = raw["entities"][0]
         self.assertEqual(entity["metrics"], [])
         self.assertEqual(entity["filters"], [])
@@ -446,9 +449,12 @@ class TestApplyConfigExplicitEmpty(unittest.TestCase):
         self.assertEqual(raw["sqlGenerationConfig"]["instructions"], "")
 
     def test_absent_keys_leave_model_untouched(self):
+        # created_this_run=True so the absent-key semantics are what is tested,
+        # not the pre-existing-model guard (which would also leave it untouched).
         raw = self._raw()
         ctx = FactoryContext(project=_FakeModelProject(raw), dry_run=False)
-        semantic_builder.apply_config(ctx, "m1", {"entity_description": "new"})
+        semantic_builder.apply_config(ctx, "m1", {"entity_description": "new"},
+                                      created_this_run=True)
         entity = raw["entities"][0]
         self.assertEqual(entity["metrics"], [{"name": "old_metric"}])
         self.assertEqual(raw["sqlGenerationConfig"]["instructions"], "OLD")
@@ -498,7 +504,11 @@ class TestAlignReindexGating(unittest.TestCase):
         align._iter_models = lambda project: [_Model()]
         try:
             ctx = FactoryContext(project=_Project(), dry_run=False)
-            align.align(_Project(), ctx, reindex=True)
+            # OLDKEY is explicitly allowlisted: this test covers the reindex
+            # gating on a failed save, not the discovery mode (which remaps
+            # nothing and is covered by test_security_align.py).
+            align.align(_Project(), ctx, reindex=True,
+                        expected_source_keys=["OLDKEY"])
         finally:
             align._iter_models = original
         by_suffix = {a["step"].rsplit(".", 1)[-1]: a["status"] for a in ctx.actions}

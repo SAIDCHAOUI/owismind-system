@@ -18,12 +18,16 @@
 #     real but is idempotent (ensure_* steps) and has NO deletion path anywhere.
 #   - Long actions (probe / execute / wizard draft) run as background JOBS: the POST returns a
 #     job_id, the frontend polls GET /api/job/<job_id>. A bounded registry keeps the last 20 jobs.
+#     Admission is bounded too (at most 4 running jobs, a single mutating execute at a time,
+#     429 beyond), job ids are unguessable (uuid4), and hub writes are size-capped.
 
 import functools
+import json
 import logging
 import re
 import threading
 import traceback
+import uuid
 
 from flask import request, jsonify
 
@@ -44,6 +48,13 @@ _PROMPTS_PREFIX = "/owismind_hub/prompts/"
 # A domain key is snake_case (same shape DomainSpec enforces). Used to build the hub path
 # where a wizard draft is persisted, so we validate it before touching the library.
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
+
+# Hub write size caps: a prompt stays within the documented persona sanity window, and the
+# capabilities registry is bounded in entry count and serialized weight (defense in depth:
+# an oversized POST is refused before anything reaches the library).
+_PROMPT_MAX_CHARS = 20000
+_CAPABILITIES_MAX_ENTRIES = 50
+_CAPABILITIES_MAX_BYTES = 200 * 1024
 
 
 # ----------------------------------------------------------------- error / safety helpers
@@ -101,15 +112,34 @@ def _safe_prompt_path(path):
 _JOBS = {}
 _JOBS_ORDER = []
 _JOBS_LOCK = threading.Lock()
-_JOB_SEQ = [0]
 _JOBS_MAX = 20
+
+# Admission bounds: every background job costs a daemon thread plus DSS / LLM calls, so the
+# number of running jobs is capped globally and mutating runs (execute) are serialized to one.
+_ACTIVE_MAX = 4
+_ACTIVE_MUTATING_MAX = 1
+_MUTATING_KINDS = ("execute",)
+_ACTIVE = {"total": 0, "mutating": 0}
 
 
 def _new_job(kind, ctx=None):
-    """Register a running job (optionally sharing a FactoryContext) and return (job_id, record)."""
+    """Register a running job (optionally sharing a FactoryContext) and return (job_id, record).
+
+    Admission is bounded: at most _ACTIVE_MAX running jobs overall and _ACTIVE_MUTATING_MAX
+    running mutating job. When a bound is hit nothing is registered and (None, None) is
+    returned (the route answers 429). Ids are uuid4 hex so another console user cannot
+    enumerate or guess them.
+    """
+    mutating = kind in _MUTATING_KINDS
     with _JOBS_LOCK:
-        _JOB_SEQ[0] += 1
-        job_id = "job-%d" % _JOB_SEQ[0]
+        if _ACTIVE["total"] >= _ACTIVE_MAX:
+            return None, None
+        if mutating and _ACTIVE["mutating"] >= _ACTIVE_MUTATING_MAX:
+            return None, None
+        _ACTIVE["total"] += 1
+        if mutating:
+            _ACTIVE["mutating"] += 1
+        job_id = uuid.uuid4().hex
         rec = {"id": job_id, "kind": kind, "status": "running",
                "ctx": ctx, "result": None, "error": None}
         _JOBS[job_id] = rec
@@ -131,6 +161,14 @@ def _new_job(kind, ctx=None):
     return job_id, rec
 
 
+def _release_job_slot(kind):
+    """Free the admission slot taken by _new_job (called from the worker's finally)."""
+    with _JOBS_LOCK:
+        _ACTIVE["total"] = max(0, _ACTIVE["total"] - 1)
+        if kind in _MUTATING_KINDS:
+            _ACTIVE["mutating"] = max(0, _ACTIVE["mutating"] - 1)
+
+
 def _run_job(rec, work):
     """Run ``work()`` in a daemon thread; store its return as the job result (or the error)."""
     def worker():
@@ -144,6 +182,10 @@ def _run_job(rec, work):
             with _JOBS_LOCK:
                 rec["error"] = str(exc)
                 rec["status"] = "error"
+        finally:
+            # The admission slot is freed whatever happened above, so a crashed
+            # job can never leak a slot and starve the console.
+            _release_job_slot(rec["kind"])
     th = threading.Thread(target=worker)
     th.daemon = True
     th.start()
@@ -309,6 +351,8 @@ def api_execute():
     wizard_config = _wizard_config_fallback(project, body, spec)
     ctx = fctx.FactoryContext(project=project, dry_run=False, abort_on_failure=False)
     _, rec = _new_job("execute", ctx=ctx)
+    if rec is None:
+        return _err("too_many_jobs", 429)
 
     def work():
         pipeline.create_domain(ctx, spec, wizard_config=wizard_config,
@@ -335,6 +379,8 @@ def api_probe():
         return _err("confirmation_required", 400)
     project = _project()
     _, rec = _new_job("probe")
+    if rec is None:
+        return _err("too_many_jobs", 429)
 
     def work():
         results = probes.run_read_probes(project)
@@ -366,6 +412,8 @@ def api_wizard_draft():
         domain = None
     project = _project()
     _, rec = _new_job("wizard")
+    if rec is None:
+        return _err("too_many_jobs", 429)
 
     def work():
         config = wizard.draft_model_config(project, profile_dataset,
@@ -405,6 +453,9 @@ def api_hub_prompt_post():
     content = body.get("content")
     if not isinstance(content, str):
         return _err("content_required", 400)
+    if len(content) > _PROMPT_MAX_CHARS:
+        return _err("content_too_large", 400,
+                    {"limit": _PROMPT_MAX_CHARS, "got": len(content)})
     hub.write_prompt(_project(), path, content)
     return jsonify({"status": "ok", "path": path})
 
@@ -430,6 +481,12 @@ def api_hub_capabilities_post():
     caps = body.get("capabilities")
     if not isinstance(caps, dict):
         return _err("capabilities_required", 400)
+    if len(caps) > _CAPABILITIES_MAX_ENTRIES:
+        return _err("too_many_capabilities", 400,
+                    {"limit": _CAPABILITIES_MAX_ENTRIES, "got": len(caps)})
+    if len(json.dumps(caps).encode("utf-8")) > _CAPABILITIES_MAX_BYTES:
+        return _err("capabilities_too_large", 400,
+                    {"limit_bytes": _CAPABILITIES_MAX_BYTES})
     problems = hub.validate_capabilities(caps)
     if problems:
         return _err("invalid_capabilities", 400, {"problems": problems})

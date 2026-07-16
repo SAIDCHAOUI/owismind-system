@@ -22,6 +22,11 @@ Design rules (same as the rest of ``owismind_factory``):
 - read-only by default: every mutating call routes through a
   :class:`owismind_factory.fctx.FactoryContext`, so dry-run produces a PLAN and
   nothing touches DSS.
+- remapping is ALLOWLIST-gated: a foreign key may be a clone residue OR a
+  deliberate reference to another project's shared dataset, and the aligner
+  cannot tell them apart. Without ``expected_source_keys`` it only DISCOVERS
+  and reports the foreign keys; it never remaps a key the operator did not
+  explicitly allowlist.
 - a model with no foreign prefix is SKIPPED, never touched.
 - NO deletion anywhere.
 """
@@ -216,15 +221,24 @@ def scan(project):
     return reports
 
 
-def align(project, ctx, reindex=False):
-    """Remap every foreign project-key prefix in every model to ``project``'s key.
+def align(project, ctx, reindex=False, expected_source_keys=None):
+    """Remap the ALLOWLISTED foreign project-key prefixes in every model.
 
     Each model is handled through ``ctx.act`` so dry-run only PLANS. A model with
-    no foreign prefix is skipped (never touched). When ``reindex`` is True, the
+    no foreign prefix is skipped (never touched).
+
+    ``expected_source_keys`` is the explicit allowlist of project keys to remap
+    (typically the clone's old project key). When None or empty, the aligner runs
+    in DISCOVERY mode: nothing is remapped, and each model's foreign keys are
+    reported as a MANUAL action telling the operator to re-run with
+    ``expected_source_keys=[...]``. When non-empty, ONLY those keys are remapped;
+    any other foreign key (e.g. a deliberate reference to another project's
+    shared dataset) is reported but left UNTOUCHED. When ``reindex`` is True, the
     distinct-value index is rebuilt on the new table after a successful save.
     Returns ``ctx``.
     """
     current_key = project.project_key
+    allowed = set(k for k in (expected_source_keys or []) if k)
     for model in _iter_models(project):
         model_id = getattr(model, "id", None)
         try:
@@ -239,8 +253,26 @@ def align(project, ctx, reindex=False):
         if not foreign:
             ctx.skip(step, "no foreign project-key prefix (already aligned to %s)" % current_key)
             continue
-        fixed = remap_raw(raw, foreign, current_key)
-        detail = "remap %s -> %s" % (", ".join(foreign), current_key)
+        if not allowed:
+            # Discovery mode: a foreign key may be a clone residue OR a deliberate
+            # shared-dataset reference. Never guess: report the keys and let the
+            # operator allowlist the ones that must be remapped.
+            ctx.manual(step + ".discover",
+                       "foreign project key(s) found: %s; nothing remapped; "
+                       "re-run with expected_source_keys=%r to remap"
+                       % (", ".join(foreign), foreign))
+            continue
+        to_remap = [k for k in foreign if k in allowed]
+        untouched = [k for k in foreign if k not in allowed]
+        if untouched:
+            ctx.manual(step + ".unexpected",
+                       "foreign project key(s) NOT in expected_source_keys, left "
+                       "untouched: %s; add them to expected_source_keys to remap"
+                       % ", ".join(untouched))
+        if not to_remap:
+            continue
+        fixed = remap_raw(raw, to_remap, current_key)
+        detail = "remap %s -> %s" % (", ".join(to_remap), current_key)
 
         def _save(settings=settings, raw=raw, fixed=fixed):
             raw.clear()

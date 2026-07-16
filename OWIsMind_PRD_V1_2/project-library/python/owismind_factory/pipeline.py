@@ -17,6 +17,7 @@ Typical use (notebook 03_create_domain.py or the console webapp):
 """
 
 from . import agent_builder, flow_builder, hub, registry, semantic_builder, tool_builder, wizard
+from .fctx import DONE
 
 # Ordered step names (the console renders and filters on these).
 STEP_NAMES = [
@@ -137,7 +138,13 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
             ready, todo = wizard.substitute_golden_tables(working, physical)
             config = dict(working)
             config["golden_queries"] = ready
-            semantic_builder.apply_config(ctx, model_id, config)
+            # A model seeded DONE by THIS run is empty (nothing to protect); a
+            # SKIPPED or absent semantic_model action means the model pre-exists
+            # and apply_config must run its ownership + backup guard.
+            created_this_run = any(a["step"] == "semantic_model" and a["status"] == DONE
+                                   for a in ctx.actions)
+            semantic_builder.apply_config(ctx, model_id, config,
+                                          created_this_run=created_this_run)
             if todo:
                 ctx.manual("semantic_config_todo",
                            "%d golden queries need their SQL validated by hand in the "

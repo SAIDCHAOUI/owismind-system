@@ -15,6 +15,10 @@
 #   This is the only deletion anywhere in the factory and it only targets the
 #   two probe objects it just created.
 #
+# With RUN_WRITE_PROBES off (the default) this notebook is read-only against
+# DSS objects; the only writes are its own report files under /owismind_hub/
+# (previous versions are backed up under /owismind_hub/backups/).
+#
 # OUTPUT: a markdown report. Paste it back to Claude (or commit it as
 # OWIsMind_PRD_V1_2/docs/CAPABILITY_MATRIX.md) so the gated factory
 # steps (code agent creation, tool creation) can be unlocked.
@@ -41,7 +45,9 @@ report = probes.format_probe_report(results)
 print(report)
 
 if WRITE_REPORT_TO_HUB:
-    hub.write_text(project, hub.HUB_ROOT + "/probe_report.md", report)
+    # write_prompt (not write_text): the previous report survives under
+    # /owismind_hub/backups/ instead of being silently overwritten.
+    hub.write_prompt(project, hub.HUB_ROOT + "/probe_report.md", report)
     print("\n[saved to project library %s/probe_report.md]" % hub.HUB_ROOT)
 
 # The two payloads the factory gates need (paste into 03_create_domain.py CONFIG
@@ -52,8 +58,10 @@ print("\nDISCOVERY type = %r, confirmed = %s (params template in the report abov
       % (discovery.get("type"), discovery.get("confirmed", False)))
 
 if WRITE_REPORT_TO_HUB:
-    hub.write_json(project, hub.HUB_ROOT + "/probe_results.json", {
+    # Same backup contract as the report: the previous probe_results.json is
+    # kept under /owismind_hub/backups/ before the overwrite.
+    hub.write_prompt(project, hub.HUB_ROOT + "/probe_results.json", json.dumps({
         "suggested_schema_hints": results.get("suggested_schema_hints"),
         "suggested_discovery": results.get("suggested_discovery"),
-    })
+    }, indent=2, ensure_ascii=False))
     print("[saved machine-readable results to %s/probe_results.json]" % hub.HUB_ROOT)

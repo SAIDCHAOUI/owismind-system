@@ -125,12 +125,19 @@ def write_json(project, path, obj):
 # ---------------------------------------------------------------------- settings
 
 def get_settings(project):
-    """DEFAULT_SETTINGS overlaid with /owismind_hub/factory_settings.json."""
+    """DEFAULT_SETTINGS overlaid with /owismind_hub/factory_settings.json.
+
+    The overlay is STRICT: only keys declared in DEFAULT_SETTINGS may be
+    overridden. An unknown key in the hub file is ignored, so a stray or
+    injected entry can never ride through here and get republished (the
+    console's /api/state exposes this dict verbatim).
+    """
     merged = json.loads(json.dumps(DEFAULT_SETTINGS))
     override = read_json(project, SETTINGS_PATH)
     if isinstance(override, dict):
         for key, value in override.items():
-            merged[key] = value
+            if key in DEFAULT_SETTINGS:
+                merged[key] = value
     return merged
 
 

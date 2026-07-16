@@ -10,7 +10,16 @@
 #
 # It generalizes the two validated one-off scripts (genai/semantic-models/scripts/
 # repoint_tickets_prod_clone.py and add_solution_and_repoint_prod_clone.py) to
-# ALL models of the current project, discovering the old key automatically.
+# ALL models of the current project.
+#
+# TWO-RUN FLOW (remapping is allowlist-gated: a foreign key may be a clone
+# residue OR a deliberate reference to another project's shared dataset, and
+# the aligner never guesses):
+#   Run 1: leave EXPECTED_SOURCE_KEYS = [] -> DISCOVERY mode: nothing is
+#          remapped, the report lists the exact foreign key(s) found per model.
+#   Run 2: put the clone's source key(s) in EXPECTED_SOURCE_KEYS (typically the
+#          old project key) and re-run: ONLY those keys are remapped; any other
+#          foreign key is reported but left untouched.
 #
 # Read-only by default: DRY_RUN=True prints the PLAN and the SCAN, nothing is
 # saved. Review the plan, then flip DRY_RUN=False (and REINDEX=True to rebuild the
@@ -27,6 +36,13 @@ from owismind_factory.fctx import FactoryContext
 # --------------------------------------------------------------------------- CONFIG
 DRY_RUN = True      # True = preview only; flip to False to apply the remap
 REINDEX = False     # True = rebuild distinct-value index on the new table after saving
+
+# Allowlist of project keys to remap. Run 1: leave [] (DISCOVERY mode, nothing is
+# remapped, the report lists the foreign keys found per model). Run 2: put the
+# clone's source key(s) here (typically the old project key, e.g.
+# ["OWISMIND_DEV"]); ONLY those keys are remapped, any other foreign key is
+# reported but left untouched (it may be a deliberate shared-dataset reference).
+EXPECTED_SOURCE_KEYS = []
 
 # --------------------------------------------------------------------------- resolve project
 client = dataiku.api_client()
@@ -55,9 +71,13 @@ print("\n" + "=" * 72)
 print("ALIGN - remap foreign project-key prefixes to %s" % project.project_key)
 print("=" * 72)
 ctx = FactoryContext(project, dry_run=DRY_RUN)
-align.align(project, ctx, reindex=REINDEX)
+align.align(project, ctx, reindex=REINDEX, expected_source_keys=EXPECTED_SOURCE_KEYS)
 print(ctx.report_markdown("Align clone semantic models"))
 
+if not EXPECTED_SOURCE_KEYS:
+    print("\nDISCOVERY mode (EXPECTED_SOURCE_KEYS is empty) -> nothing was remapped. "
+          "Read the MANUAL entries above, put the clone's source key(s) in "
+          "EXPECTED_SOURCE_KEYS and re-run.")
 if DRY_RUN:
     print("\nDRY_RUN=True -> nothing was saved. Review the SCAN (foreign keys) and the "
           "plan above, then set DRY_RUN=False (and REINDEX=True to re-index value "

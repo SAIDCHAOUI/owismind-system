@@ -115,6 +115,11 @@ def seed_model(ctx, spec, settings, entity_description=""):
         raw["sqlGenerationConfig"].setdefault("instructions", "")
         raw["sqlGenerationConfig"].setdefault("vocabularyTermIds", [])
 
+        # Ownership marker (next to the embeddingLlmId): apply_config refuses to
+        # mutate a pre-existing model that does not carry it, so a name collision
+        # with a foreign model can never be silently overwritten.
+        raw.setdefault("privateEditorData", {})["owismindFactory"] = {"domain": spec.domain}
+
         # Copy the proven indexing setup from the template model (read-only).
         if template_id:
             try:
@@ -174,18 +179,84 @@ def _wizard_glossary_term(t):
     }
 
 
-def apply_config(ctx, model_id, config, version_id=None):
+def _next_backup_version_id(model):
+    """First free pre-apply-backup-<n> version id (bounded like hub backups)."""
+    existing = set()
+    try:
+        for item in model.list_versions() or []:
+            vid = item.get("versionId") if isinstance(item, dict) else \
+                getattr(item, "version_id", None) or getattr(item, "id", None)
+            if vid:
+                existing.add(vid)
+    except Exception:
+        # Unknown version listing API: fall back to index 1; a collision makes
+        # new_version raise and the caller degrades to MANUAL (no mutation).
+        pass
+    index = 1
+    while ("pre-apply-backup-%d" % index) in existing:
+        index += 1
+        if index > 200:  # bounded: never loop forever on a weird version tree
+            break
+    return "pre-apply-backup-%d" % index
+
+
+def apply_config(ctx, model_id, config, created_this_run=False, version_id=None):
     """Merge a wizard config (see wizard.DRAFT_SCHEMA) into the live model.
 
     In-place update of the active version, exactly like the validated
     update_*_semantic_model.py scripts: no re-create, no re-index here
     (indexing is its own explicit step).
+
+    :param bool created_this_run: True when THIS run just seeded the model (it is
+        empty, nothing to protect). Otherwise the model pre-exists: it is only
+        mutated when it carries the factory ownership marker, and only after a
+        version backup of the active raw succeeded.
     """
     if not model_id:
         ctx.manual("semantic_config",
                    "no semantic model id available: apply the wizard config by hand "
                    "(update_*_semantic_model.py pattern) once the model exists")
         return None
+
+    # Anti-overwrite guard. Dry-run keeps planning as before without reading DSS
+    # (ctx.act below records the plan and executes nothing).
+    if not ctx.dry_run and not created_this_run:
+        try:
+            model = ctx.project.get_semantic_model(model_id)
+            guard_vid = version_id or model.get_active_version_id()
+            active_raw = model.get_version(guard_vid).get_settings().get_raw()
+        except Exception as exc:
+            ctx.manual("semantic_config",
+                       "cannot read model %s to verify factory ownership (%s): "
+                       "refusing to modify it, apply the wizard config by hand"
+                       % (model_id, exc))
+            return None
+        marker = (active_raw.get("privateEditorData") or {}).get("owismindFactory")
+        if not marker:
+            ctx.manual("semantic_config",
+                       "model %s exists but was NOT created by the factory (no "
+                       "owismindFactory marker): refusing to modify it, apply the "
+                       "wizard config by hand or check the model name" % model_id)
+            return None
+        try:
+            # Version backup of the active raw BEFORE any mutation, so a re-run
+            # with a stale wizard config never erases human curation for good.
+            backup_settings = model.new_version(_next_backup_version_id(model))
+            backup_raw = backup_settings.get_raw()
+            backup_raw.clear()
+            backup_raw.update(copy.deepcopy(active_raw))
+            backup_settings.save()
+            # new_version MAY activate the new version on some DSS builds:
+            # re-pin the original active version before mutating it.
+            model.set_active_version_id(guard_vid)
+        except Exception as exc:
+            ctx.manual("semantic_config",
+                       "backup version of model %s could not be created (%s): "
+                       "refusing to modify the active version without a safety "
+                       "net, apply the wizard config by hand" % (model_id, exc))
+            return None
+        # Target the guarded version explicitly (never whatever is active now).
+        version_id = guard_vid
 
     def _apply():
         model = ctx.project.get_semantic_model(model_id)

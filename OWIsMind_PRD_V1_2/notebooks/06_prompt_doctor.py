@@ -15,6 +15,12 @@
 # orchestrator_persona.md / prompts/<domain>/understand_extra.md) BY HAND, and
 # re-runs the LAB benchmark before keeping the change. The doctor's output is a
 # suggestion, not a deployment.
+#
+# DATA SENSITIVITY: the interaction logs contain REAL business data (client
+# names, amounts). Restrict access to the logging dataset and to this
+# notebook's outputs. Evidence excerpts are shown ONLY in the notebook output
+# below; the proposal file saved to the hub withholds them (the project
+# library is readable by every project reader).
 # =============================================================================
 
 import dataiku
@@ -56,8 +62,11 @@ else:
 
     result = doctor.run_doctor(project, settings.get("llm_sonnet"), persona,
                                interactions, complaint=(COMPLAINT or None))
+    # Notebook output only: evidence excerpts are real conversation data.
+    print("\n" + doctor.format_proposal_markdown(result, agent_label,
+                                                 include_evidence=True))
+    # Persisted copy: evidence withheld (default), the hub is project-readable.
     markdown = doctor.format_proposal_markdown(result, agent_label)
-    print("\n" + markdown)
 
     # ----------------------------------------------------------------------- save the proposal
     # The ONLY DSS write here, and a harmless one: a markdown suggestion a human

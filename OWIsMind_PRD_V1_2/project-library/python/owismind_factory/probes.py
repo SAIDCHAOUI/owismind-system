@@ -36,7 +36,14 @@ def _delete_probe_object(handle, expected_name, getter):
         live_name = getter()
     except Exception:
         pass
-    if live_name is not None and live_name != expected_name:
+    if live_name is None:
+        # FAIL-CLOSED: no proof the handle still points at the probe object,
+        # so the deletion must not happen (an orphan probe is recoverable, a
+        # deleted real object is not).
+        raise RuntimeError("could not re-read the live name of the probe object "
+                           "(expected %r): refusing to delete, clean zz_* by hand"
+                           % expected_name)
+    if live_name != expected_name:
         raise RuntimeError("refusing to delete %r: expected probe object %r"
                            % (live_name, expected_name))
     handle.delete()
@@ -51,6 +58,30 @@ _PROBE_AGENT_CODE = (
 
 
 # ------------------------------------------------------------------ inspection
+
+# Key-name markers (case-insensitive substring match) whose values must never
+# reach a persisted or printed probe artefact: the probe copies raw tool/agent
+# params verbatim, and those can carry live credentials.
+_SENSITIVE_KEY_MARKERS = ("token", "password", "secret", "credential",
+                          "apikey", "api_key", "private_key", "authorization")
+
+
+def _redact_sensitive(obj):
+    """Deep copy of a JSON-safe structure with the value of every
+    sensitive-looking key replaced by "[REDACTED]", at every nesting level."""
+    if isinstance(obj, dict):
+        redacted = {}
+        for key, value in obj.items():
+            lowered = str(key).lower()
+            if any(marker in lowered for marker in _SENSITIVE_KEY_MARKERS):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = _redact_sensitive(value)
+        return redacted
+    if isinstance(obj, list):
+        return [_redact_sensitive(item) for item in obj]
+    return obj
+
 
 def _walk_strings(obj, path=""):
     """Yield (path, value) for every string leaf of a nested dict/list."""
@@ -97,8 +128,12 @@ def _find_env_candidates(version_dict):
             for key, value in obj.items():
                 sub_path = "%s.%s" % (path, key) if path else str(key)
                 if "env" in key.lower():
+                    # Redact under the ORIGINAL key name: the candidate dict
+                    # stores the value under "value", which would defeat the
+                    # key-based redaction of a sensitive env key.
+                    safe = value if isinstance(value, (str, dict)) else str(value)
                     candidates.append({"path": sub_path,
-                                       "value": value if isinstance(value, (str, dict)) else str(value)})
+                                       "value": _redact_sensitive({key: safe})[key]})
                 walk(value, sub_path)
         elif isinstance(obj, list):
             for index, value in enumerate(obj):
@@ -181,13 +216,19 @@ def run_read_probes(project):
                      "code_key": best["path"],
                      "env_template": env_template or None,
                      "confirmed": False}
-    results["suggested_schema_hints"] = hints
+    # Hints get persisted (probe_results.json) and printed: the env_template
+    # copies raw agent settings values, so redact before they enter results.
+    results["suggested_schema_hints"] = _redact_sensitive(hints)
 
     # 4. Semantic Model Query tool discovery (type string + params).
     template_tool_id = settings.get("template_semantic_tool_id")
     try:
         discovery = tool_builder.build_discovery(project, template_tool_id,
                                                  settings.get("template_semantic_model_id"))
+        # The discovery copies the template tool's raw params verbatim and gets
+        # persisted (probe_results.json) and printed: redact before it enters
+        # results so no credential ever reaches a probe artefact.
+        discovery = _redact_sensitive(discovery)
         results["suggested_discovery"] = discovery
         if discovery is None:
             results["warnings"].append("template tool %s not found in list_agent_tools"
@@ -323,6 +364,9 @@ def run_write_probes(project, results, allow=False):
 
 def format_probe_report(results):
     """Markdown report to paste back into the repo (CAPABILITY_MATRIX.md)."""
+    # The report is printed and persisted to the hub: redact the whole results
+    # copy so no raw tool/agent param value can leak through any section.
+    results = _redact_sensitive(results)
     lines = ["# Phase 0 probe report", ""]
     lines.append("Project: `%s`" % results.get("project_key"))
     lines.append("")

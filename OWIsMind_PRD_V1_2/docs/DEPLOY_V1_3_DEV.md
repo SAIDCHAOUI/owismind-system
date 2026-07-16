@@ -4,6 +4,23 @@
 > to expect, and what to paste back to Claude so the gated steps get unlocked
 > or re-worked. Order matters. NOTHING here touches the v1.2 prod project.
 
+## Phase 0 - security gates (from the 2026-07-16 dual audit, see `SECURITY_AUDIT_2026-07-16.md`)
+
+Three conditions must hold BEFORE anything below runs on a real instance:
+
+1. **Console exposure (G1)**: the `agent-factory-console` webapp reconfigures the
+   orchestrator's persona and capabilities under its WRITE_CONF run-as identity,
+   with no per-viewer authorization. NEVER put it on a shared dashboard: restrict
+   who can open it to the admin group, and give it a dedicated run-as user scoped
+   to this project only.
+2. **Read-only SQL (G3)**: confirm at the DATABASE level that the connection the
+   agents use (`SQL_owi`) runs with a SELECT-only role and a statement timeout.
+   The factory's offline golden-query validator is defense in depth, not the
+   boundary.
+3. **Logging data (phase G)**: the interaction-logging dataset stores real
+   conversations (client names, figures). Before enabling it, decide who can
+   read that dataset and how long rows are kept.
+
 ## Phase A - create the v1.3-dev DSS project (clone)
 
 1. [DSS] Duplicate the prod project `OWISMIND_PRD_V1_2` (Actions > Duplicate),
@@ -11,10 +28,14 @@
    object ids (agents, tools, semantic models), like the v1.2 clone did.
 2. [DSS notebook, in the CLONE] The clone's semantic models still reference the
    SOURCE project's datasets/tables (lesson L146). Install the factory package
-   first (Phase B step 1), then run `notebooks/02_align_clone.py` with
-   `DRY_RUN = True`, read the scan report, then `DRY_RUN = False` and
-   `REINDEX = True`. This generalizes the validated repoint scripts to ALL
-   models at once.
+   first (Phase B step 1), then run `notebooks/02_align_clone.py` in THREE passes:
+   (a) as-is (`EXPECTED_SOURCE_KEYS = []`) = DISCOVERY: it lists the foreign
+   project keys per model and remaps NOTHING; (b) put the reported clone-source
+   key(s) in `EXPECTED_SOURCE_KEYS` (e.g. `["OWISMIND_PRD_V1_2"]`), keep
+   `DRY_RUN = True`, read the plan; (c) `DRY_RUN = False` + `REINDEX = True`.
+   Only allowlisted keys are ever remapped: a deliberate reference to another
+   project's shared dataset is reported and left untouched. This generalizes
+   the validated repoint scripts to ALL models at once.
 3. Sanity: open each semantic model, check `datasetRef` now says
    `<CLONE_KEY>.<Dataset>`, and test one question in the Playground.
 
