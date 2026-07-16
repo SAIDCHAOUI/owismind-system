@@ -18,7 +18,7 @@
 > the sub-agent engine is dataset-agnostic (its expertise lives in the Flow recipes
 > + the semantic model, not the code), and the orchestrator is registry-driven
 > (adding a domain is one CAPABILITIES entry). The repo source of truth for the spec
-> is [`registry.json`](registry.json); columns are in [`flow/DATASETS.md`](flow/DATASETS.md).
+> is [`../registry.json`](../registry.json); columns are in [`../flow/DATASETS.md`](../flow/DATASETS.md).
 >
 > Legend: **[repo]** = done in this repo (already done for tickets, see below).
 > **[DSS]** = you do it on the instance. **[curate]** = the irreducible human

@@ -1,46 +1,64 @@
-# hub/ - repo seeds of the DSS Config & Prompt Hub (/owismind_hub/)
+# owismind_hub/ - graines du Config & Prompt Hub
 
-> These files SEED the `/owismind_hub/` tree in the DSS **project library**
-> (pushed by `notebooks/01_push_config_hub.py`, which embeds them; this folder
-> is the readable mirror). The hub is what the agents load at startup so the
-> team can iterate prompts and register capabilities WITHOUT re-pasting agent
-> code. Agents fall back to their embedded defaults on ANY hub problem.
+Le hub est le panneau de reglages des agents : un dossier `/owismind_hub/` dans la
+project library DSS, que chaque agent lit a son demarrage. Il permet de changer les
+prompts et de declarer des agents SANS recoller le code des agents. Si un fichier du
+hub est absent ou invalide, l'agent retombe sur ses defauts embarques : le hub ne
+peut pas casser la prod.
 
-| File | Pushed to | Read by |
+## Dans Dataiku
+
+Le hub vit a la racine de la project library du projet DSS, sous `/owismind_hub/`.
+Il est pousse par le notebook [`../../notebooks/01_push_config_hub.py`](../../notebooks/01_push_config_hub.py),
+qui embarque le contenu de ce dossier. Ce dossier repo est le miroir lisible des graines (seeds).
+
+## Dans ce dossier
+
+| Fichier | Pousse vers | Lu par |
 |---|---|---|
 | `capabilities.json` | `/owismind_hub/capabilities.json` | orchestrator (section 7b loader) |
 | `prompts/orchestrator_persona.md` | `/owismind_hub/prompts/orchestrator_persona.md` | orchestrator (PERSONA override) |
-| `factory_settings.json` | `/owismind_hub/factory_settings.json` | owismind_factory (instance knobs) |
-| (created in DSS) | `/owismind_hub/prompts/<domain>/understand_extra.md` | the domain's specialist (ADDITIVE UNDERSTAND rules) |
-| (created in DSS) | `/owismind_hub/templates/dataset_expert.py` | agent_builder (engine template) |
-| (created in DSS) | `/owismind_hub/generated/`, `/wizard/`, `/doctor/`, `/backups/` | factory outputs |
+| `factory_settings.json` | `/owismind_hub/factory_settings.json` | owismind_factory (reglages d'instance) |
+| (cree en DSS) | `/owismind_hub/prompts/<domain>/understand_extra.md` | le specialiste du domaine (regles UNDERSTAND additives) |
+| (cree en DSS) | `/owismind_hub/templates/dataset_expert.py` | agent_builder (template moteur) |
+| (cree en DSS) | `/owismind_hub/generated/`, `/wizard/`, `/doctor/`, `/backups/` | sorties de la factory |
 
-## Equivalence guarantee (do not break)
+S'y ajoute [`regenerate_seeds.py`](regenerate_seeds.py), un script repo-only (jamais pousse en DSS).
 
-`capabilities.json` and `orchestrator_persona.md` are GENERATED from
-`agents/OWIsMind_orchestrator.py` (CAPABILITIES_DEFAULT / PERSONA_DEFAULT) so
-pushing the hub changes NOTHING until a human edits a hub file.
-`tests/test_factory_registry.py` enforces the equivalence: if you edit the
-embedded defaults in the orchestrator, regenerate these seeds (and vice versa),
-then re-run the suite.
+## Garantie d'equivalence (ne pas casser)
 
-## Editing rules
+Les graines sont GENEREES depuis le code : `capabilities.json` et
+`orchestrator_persona.md` depuis les defauts embarques de
+[`../../genai/agents/OWIsMind_orchestrator.py`](../../genai/agents/OWIsMind_orchestrator.py)
+(CAPABILITIES_DEFAULT / PERSONA_DEFAULT), `factory_settings.json` depuis
+DEFAULT_SETTINGS de [`../python/owismind_factory/hub.py`](../python/owismind_factory/hub.py).
+Pousser le hub ne change donc RIEN au comportement, tant qu'un humain n'edite pas un fichier.
 
-- capabilities.json: validated on load (required keys, `agent:` ids with an
-  alphanumeric suffix so a placeholder like `agent:FILL_ME` or an empty id is
-  rejected, ONE enabled capability per domain, frozen block/tool label keys). The
-  same validator runs factory-side (`hub.validate_capabilities`) and
-  orchestrator-side (the section 7b loader), kept equivalent by the anti-drift
-  test. An invalid file is IGNORED by the orchestrator (fallback to embedded
-  defaults + a warning in the agent log): check the log after every edit.
-- Capability writes are serialized in-process (`write_capabilities` /
-  `append_capability` share a lock), so two concurrent console jobs cannot drop
-  each other's entry. The automatic backup under `/owismind_hub/backups/` is
-  unchanged and remains the recovery path for a cross-process race.
-- Prompts: plain markdown/text. The persona override must stay between 500 and
-  20000 chars (size sanity window); understand_extra files are capped at 4000
-  chars and are ADDITIVE only.
-- Any edit takes effect at the next agent process start (re-save the agent or
-  shutdown/wake it in DSS).
-- Never store secrets here: the library is readable by every project reader.
-- No em dash / en dash anywhere (project rule #9).
+- Regenerer apres une edition des defauts embarques : `python3 regenerate_seeds.py` (et inversement : si on edite une graine geree, aligner le code).
+- Detecter la derive sans rien ecrire : `python3 regenerate_seeds.py --check` (exit 1 + liste des fichiers en ecart).
+- Le test [`../../tests/test_factory_registry.py`](../../tests/test_factory_registry.py) impose l'equivalence : le relancer apres toute edition.
+
+## Regles d'edition
+
+- `capabilities.json` est valide au chargement : ids `agent:` avec un suffixe
+  alphanumerique (un placeholder comme `agent:FILL_ME` ou un id vide est rejete),
+  UNE seule capability `enabled` par domaine, cles de labels (blocks / tools) gelees.
+  Le meme validateur tourne cote factory (`hub.validate_capabilities`) et cote
+  orchestrateur (section 7b loader).
+- Un fichier invalide est IGNORE par l'orchestrateur (retour aux defauts embarques,
+  warning dans le log de l'agent) : verifier le log apres chaque edition.
+- Les ecritures de capabilities sont serialisees en process (verrou partage par
+  `write_capabilities` / `append_capability`) et un backup automatique est pose sous
+  `/owismind_hub/backups/` (chemin de recuperation).
+- Prompts : markdown / texte brut. Le persona doit rester entre 500 et 20000
+  caracteres ; les fichiers `understand_extra` sont ADDITIFS et limites a 4000 caracteres.
+- Toute edition prend effet au prochain demarrage du process de l'agent
+  (re-sauver l'agent ou shutdown / wake en DSS).
+- JAMAIS de secrets ici : la library est lisible par tous les lecteurs du projet.
+- Zero tiret cadratin / demi-cadratin (regle projet #9).
+
+## Deploiement
+
+1. Editer ici (ou regenerer via `regenerate_seeds.py`), puis relancer la suite de tests.
+2. Pousser en DSS en executant le notebook [`../../notebooks/01_push_config_hub.py`](../../notebooks/01_push_config_hub.py).
+3. Guide complet (phases, gates) : [`../../docs/DEPLOY_V1_3_DEV.md`](../../docs/DEPLOY_V1_3_DEV.md).
