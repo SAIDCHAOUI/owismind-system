@@ -85,6 +85,33 @@ FEEDBACK_V1_LOGICAL = "webapp_feedback_v1"
 # "my requests" read.
 AGENT_REQUESTS_V1_LOGICAL = "webapp_agent_requests_v1"
 
+# Durable agentic runtime ledger (Durable Step Shell, design spec 2026-07-17 section 10):
+# one row per DURABLE agent run. The run's truth lives here (never only in RAM), so a
+# backend kill/restart can resume it: ``lease_owner``/``lease_until`` implement SQL lease
+# claiming (a run is worked on by at most one worker; an expired lease is reclaimable),
+# ``worker_heartbeat_at``/``last_progress_at`` distinguish a dead process from a slow
+# upstream, ``next_event_seq`` allocates the monotonic per-run event sequence, and
+# ``usage_accounted`` guards the idempotent finalization (usage is accounted exactly
+# once). ``exchange_id`` is UNIQUE: one durable run per chat exchange. By design this
+# table carries NO agent_id, NO physical table name and NO SQL text (whitelist rule:
+# only the opaque ``agent_key``). Brand new _v1 table per the no-ALTER rule.
+AGENT_RUNS_V1_LOGICAL = "webapp_agent_runs_v1"
+# One row per plan step of a durable run, PK (run_id, step_id). ``attempt_id`` is the
+# FENCING token: every (re)start stamps a fresh attempt_id, and completion/failure is a
+# compare-and-set on it - a zombie worker's late result can never overwrite a newer
+# attempt. ``ordinal`` orders the plan; a replan replaces the non-completed rows and
+# bumps ``plan_revision`` (completed steps are never replayed). The *_json payload
+# columns are capped at the storage layer (task 8000c, result_summary 2000c,
+# model_view 24000c, artifacts 8 specs) - never raw data rows.
+AGENT_RUN_STEPS_V1_LOGICAL = "webapp_agent_run_steps_v1"
+# Append-only public event feed of a durable run, PK (run_id, seq) with ``seq``
+# allocated from ``runs.next_event_seq`` (monotonic, gap-free per run). Writes are
+# BATCHED (single multi-row INSERT per flush, the events.py:282 pattern). ``payload``
+# is capped at 8000 chars with a truncation marker; raw result rows and the internal
+# OWI_WORKFLOW_CONTROL channel are NEVER persisted here. Retention: purged (bounded)
+# 14 days after run termination, never on the hot path.
+AGENT_RUN_EVENTS_V1_LOGICAL = "webapp_agent_run_events_v1"
+
 # One chat exchange per row, written in two phases (user message, then reply).
 # Versioned _v5: over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's
 # per-message feedback columns, over _v2's ``generated_sql``), it adds the per-exchange
@@ -328,6 +355,104 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
+# Durable run ledger (spec section 10). Column notes:
+#   - status: queued/planning/executing/replanning/synthesizing then a terminal state
+#     (completed/stopped/partial/failed/deadline_reached/quota_blocked); ``phase`` is a
+#     finer display hint. The backend only advances status after COMMIT.
+#   - lease_until/worker_heartbeat_at: the lease is renewed while the worker lives;
+#     ONLY an expired lease (process death) makes the run reclaimable - idle upstream
+#     is never treated as death.
+#   - next_event_seq: the per-run event sequence allocator (bumped by the batched
+#     event append, in the same transaction as the INSERT).
+#   - usage_accounted: false until finalization; the finalize guard flips it in the
+#     SAME transaction as the users/usage_monthly increments (zero double counting).
+#   - answer_text/usage_json: the final synthesized answer + summed usage, so the
+#     legacy chat_v5 phase-two write can be replayed idempotently after a crash.
+_AGENT_RUNS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    run_id              TEXT         PRIMARY KEY,
+    exchange_id         TEXT         UNIQUE,
+    session_id          TEXT,
+    user_id             TEXT,
+    agent_key           TEXT,
+    mode                VARCHAR(16),
+    status              TEXT         NOT NULL DEFAULT 'queued',
+    phase               TEXT,
+    plan_revision       INTEGER      NOT NULL DEFAULT 0,
+    replan_count        INTEGER      NOT NULL DEFAULT 0,
+    step_cursor         INTEGER      NOT NULL DEFAULT 0,
+    next_event_seq      BIGINT       NOT NULL DEFAULT 0,
+    prompt_lang         VARCHAR(8),
+    stop_requested      BOOLEAN      NOT NULL DEFAULT false,
+    lease_owner         TEXT,
+    lease_until         TIMESTAMPTZ,
+    worker_heartbeat_at TIMESTAMPTZ,
+    last_progress_at    TIMESTAMPTZ,
+    deadline_at         TIMESTAMPTZ,
+    retry_at            TIMESTAMPTZ,
+    error_code          TEXT,
+    answer_text         TEXT,
+    usage_json          TEXT,
+    usage_accounted     BOOLEAN      NOT NULL DEFAULT false,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    finished_at         TIMESTAMPTZ
+)
+"""
+
+# Plan steps of a durable run (spec section 10). ``attempt_id`` + ``attempt_no`` are
+# the fencing pair: start_step stamps a fresh attempt_id and increments attempt_no
+# (capped by ``max_attempts``); complete/fail are compare-and-set on attempt_id, so a
+# late zombie write from a superseded attempt matches zero rows. ``next_retry_at``
+# schedules the step-level backoff retry (run-level retries do not exist by design).
+_AGENT_RUN_STEPS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    run_id             TEXT         NOT NULL,
+    step_id            TEXT         NOT NULL,
+    ordinal            INTEGER      NOT NULL DEFAULT 0,
+    plan_revision      INTEGER      NOT NULL DEFAULT 0,
+    kind               TEXT,
+    title              TEXT,
+    task_json          TEXT,
+    depends_on_json    TEXT,
+    output_ref         TEXT,
+    checks_json        TEXT,
+    status             TEXT         NOT NULL DEFAULT 'pending',
+    attempt_no         INTEGER      NOT NULL DEFAULT 0,
+    attempt_id         TEXT,
+    max_attempts       INTEGER      NOT NULL DEFAULT 3,
+    next_retry_at      TIMESTAMPTZ,
+    result_status      TEXT,
+    result_summary     TEXT,
+    result_schema_json TEXT,
+    model_view_json    TEXT,
+    generated_sql_json TEXT,
+    artifacts_json     TEXT,
+    usage_json         TEXT,
+    error_code         TEXT,
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ,
+    updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, step_id)
+)
+"""
+
+# Public event feed of a durable run (spec section 10). ``seq`` comes from
+# ``runs.next_event_seq`` (allocated in the same transaction as the batched INSERT),
+# so PK (run_id, seq) makes the feed strictly ordered and the poll cursor trivial.
+# ``payload`` is capped (8000 chars + truncation marker) at the storage layer.
+_AGENT_RUN_EVENTS_V1_DDL = """
+CREATE TABLE IF NOT EXISTS {full_table} (
+    run_id      TEXT         NOT NULL,
+    seq         BIGINT       NOT NULL,
+    attempt_id  TEXT,
+    event_type  VARCHAR(64)  NOT NULL,
+    payload     TEXT,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, seq)
+)
+"""
+
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -341,6 +466,9 @@ _DDL_BY_LOGICAL = {
     EVENTS_V1_LOGICAL: _EVENTS_V1_DDL,
     FEEDBACK_V1_LOGICAL: _FEEDBACK_V1_DDL,
     AGENT_REQUESTS_V1_LOGICAL: _AGENT_REQUESTS_V1_DDL,
+    AGENT_RUNS_V1_LOGICAL: _AGENT_RUNS_V1_DDL,
+    AGENT_RUN_STEPS_V1_LOGICAL: _AGENT_RUN_STEPS_V1_DDL,
+    AGENT_RUN_EVENTS_V1_LOGICAL: _AGENT_RUN_EVENTS_V1_DDL,
 }
 
 # Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
@@ -406,6 +534,25 @@ _INDEXES_BY_LOGICAL = {
         # "My requests" read = WHERE user_id ORDER BY created_at DESC.
         ("uc_idx", "(user_id, created_at DESC)"),
     ],
+    AGENT_RUNS_V1_LOGICAL: [
+        # "My active/recent runs" read (per-user run list, freshest first).
+        ("usu_idx", "(user_id, status, updated_at DESC)"),
+        # Supervisor recovery scan = WHERE status active AND lease_until expired.
+        ("slu_idx", "(status, lease_until)"),
+        # Per-conversation run lookup (session view, freshest first).
+        ("su_idx", "(session_id, updated_at DESC)"),
+        # The spec's (exchange_id) index is provided by the UNIQUE constraint on
+        # exchange_id in the DDL (PostgreSQL backs it with an index) - a second
+        # explicit index here would be a pure duplicate.
+    ],
+    AGENT_RUN_STEPS_V1_LOGICAL: [
+        # Ledger read = WHERE run_id ORDER BY ordinal (resume at first unfinished).
+        ("ro_idx", "(run_id, ordinal)"),
+        # Retry scheduling = WHERE status = 'failed' AND next_retry_at <= now().
+        ("sr_idx", "(status, next_retry_at)"),
+    ],
+    # AGENT_RUN_EVENTS_V1: the composite PRIMARY KEY (run_id, seq) already serves the
+    # only read pattern (poll cursor: WHERE run_id AND seq >= ? ORDER BY seq).
 }
 
 # Per-process idempotency guard: run each table's DDL at most once per backend
@@ -506,3 +653,18 @@ def ensure_feedback_table():
 def ensure_agent_requests_table():
     """Ensure the agent-request table (Help & Support hub) exists, once per process."""
     _ensure_table(AGENT_REQUESTS_V1_LOGICAL)
+
+
+def ensure_agent_runs_table():
+    """Ensure the durable agent-run ledger exists (create-if-missing), once per process."""
+    _ensure_table(AGENT_RUNS_V1_LOGICAL)
+
+
+def ensure_agent_run_steps_table():
+    """Ensure the durable run-steps table exists (create-if-missing), once per process."""
+    _ensure_table(AGENT_RUN_STEPS_V1_LOGICAL)
+
+
+def ensure_agent_run_events_table():
+    """Ensure the durable run-events table exists (create-if-missing), once per process."""
+    _ensure_table(AGENT_RUN_EVENTS_V1_LOGICAL)
