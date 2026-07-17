@@ -991,6 +991,13 @@ MAX_AGENT_CAP_ITEMS = 8
 MAX_AGENT_CAP_CHARS = 120
 MAX_AGENT_TOOL_ITEMS = 16
 MAX_AGENT_TOOL_CHARS = 48
+# Durable workflow gate (v1.3 Durable Step Shell): the deterministic complexity
+# gate matches the question against a bounded map of {domain -> keyword list}.
+# Bounded hard so a malformed/oversized admin profile can never bloat the prompt
+# or slow the gate (which runs on every /chat/start of a durable agent).
+MAX_DOMAIN_KEYWORD_DOMAINS = 12
+MAX_DOMAIN_KEYWORD_ITEMS = 20
+MAX_DOMAIN_KEYWORD_CHARS = 40
 
 # Curated subset of the frontend icon registry an admin may assign to an agent.
 ALLOWED_AGENT_ICONS = frozenset(
@@ -1030,6 +1037,29 @@ def _clean_str_list(value, max_items, max_chars):
         if line:
             out.append(line)
         if len(out) >= max_items:
+            break
+    return out
+
+
+def _clean_domain_keywords(value):
+    """A bounded {domain -> [keyword,...]} map for the durable complexity gate.
+
+    Non-dict input, or any malformed entry, degrades to {} / a dropped entry
+    (never raises, like the rest of this profile validator). Keys and keywords
+    are bounded in count and length so the gate stays cheap and the profile can
+    never bloat. Keywords are lowercased (the gate matches case-insensitively)."""
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for domain, keywords in value.items():
+        if not isinstance(domain, str) or not domain.strip():
+            continue
+        clean = _clean_str_list(keywords, MAX_DOMAIN_KEYWORD_ITEMS,
+                                MAX_DOMAIN_KEYWORD_CHARS)
+        if clean:
+            out[domain.strip()[:MAX_DOMAIN_KEYWORD_CHARS]] = [
+                k.lower() for k in clean]
+        if len(out) >= MAX_DOMAIN_KEYWORD_DOMAINS:
             break
     return out
 
@@ -1240,8 +1270,9 @@ def validate_agent_meta(raw):
 
     Never raises: every field is clamped/dropped to its bound so an over-long or
     malformed field degrades gracefully instead of failing the whole whitelist save.
-    Returns ``{tagline, description, capabilities, tools, icon, badge, modes}``; absent
-    input yields the empty profile (all fields blank, default icon, modes off).
+    Returns ``{tagline, description, capabilities, tools, icon, badge, modes,
+    durable_workflow, domain_keywords, benchmark, sources}``; absent input yields
+    the empty profile (all fields blank, default icon, modes + durable_workflow off).
     """
     if not isinstance(raw, dict):
         raw = {}
@@ -1262,6 +1293,14 @@ def validate_agent_meta(raw):
     # server-side, so a meaningless control string never leaks into its prompt. Coerced
     # to a strict bool so a malformed value defaults to off (dial hidden).
     modes = bool(raw.get("modes"))
+    # Durable workflow (v1.3): whether this agent runs the durable planned path on
+    # complex questions. ONLY the OWIsMind code orchestrator understands the
+    # ⟦owi:workflow=…⟧ protocol, so this is admin opt-in per agent, coerced to a
+    # strict bool (a malformed value defaults to OFF - the validated legacy path).
+    # domain_keywords feeds the deterministic complexity gate (>= 2 domains matched
+    # => plan); bounded so it can never bloat the prompt or slow the gate.
+    durable_workflow = bool(raw.get("durable_workflow"))
+    domain_keywords = _clean_domain_keywords(raw.get("domain_keywords"))
     # The benchmark block tells the plugin WHERE this agent's benchmark lives (a SQL table the admin
     # selected). Validated/bounded by benchmark_view.agent_profile (an invalid table is blanked, which
     # just disables consultation for that agent - never fails the whole profile save).
@@ -1278,6 +1317,8 @@ def validate_agent_meta(raw):
         "icon": icon,
         "badge": badge,
         "modes": modes,
+        "durable_workflow": durable_workflow,
+        "domain_keywords": domain_keywords,
         "benchmark": benchmark,
         # The RAW project datasets this agent is configured with (Source Data Explorer).
         "sources": validate_sources_block(raw.get("sources")),
