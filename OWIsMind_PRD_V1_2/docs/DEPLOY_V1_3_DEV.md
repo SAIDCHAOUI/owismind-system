@@ -131,6 +131,42 @@ the console does is also doable through notebooks 00 to 06.
    apply what you like to the persona hub file, restart the orchestrator,
    re-run the LAB benchmark.
 
+## Phase H - Durable Step Shell (v1.3 long-run workflow layer, built 2026-07-17)
+
+The durable workflow runtime (spec `docs/superpowers/specs/2026-07-17-agentic-runtime-design.md`)
+ships OFF by default: nothing changes for any agent until its admin profile
+carries `durable_workflow: true`. Deployment order:
+
+1. **Plugin zip**: the backend changes (durable_runner, run_state, 3 new `_v1`
+   tables auto-created on first use, routes `/chat/active` + `/chat/activity`)
+   ride the normal plugin upload + backend restart. The webapp MUST have
+   **Auto-start enabled** (recovery after a DSS restart depends on it).
+2. **Orchestrator re-paste** (env 3.11): the workflow command protocol +
+   correlate step are in `genai/agents/OWIsMind_orchestrator.py`. Legacy path is
+   byte-identical without the machine token (golden-tested) - re-pasting is safe
+   before the flag is ever enabled.
+3. **Hub seeds**: push `owismind_hub/run_settings.json` +
+   `owismind_hub/prompts/orchestrator_workflow.md` (notebook 01 path). Embedded
+   fallbacks exist; a missing hub never breaks a run.
+4. **Enable on DEV ONLY**: set `durable_workflow: true` (+ optional
+   `domain_keywords: {revenue: [...], tickets: [...]}`) on the orchestrator's
+   profile in the webapp admin settings. `correlate` additionally needs the
+   Phase F catalog publication (`catalog_generation` on >= 2 capabilities).
+5. **Validation campaign (16 scenarios, spec section 14)**: long smart run
+   (> 5 min), long claude run (> 10 min), `stop_backend` between two steps,
+   browser refresh mid-run (reconnect via `/chat/active`), closed tab (run must
+   FINISH anyway), prolonged Mesh silence, rate limit, blocking quota, disabled
+   specialist mid-run, rejected SQL, revenue x tickets correlation, 5-dataset
+   plan, Stop during a blocked call, double poll, double `/chat/start` retry
+   (idempotent), and the frontend-forge check (no SQL/agent id/physical table
+   accepted from the client).
+6. **One claim/complete smoke on the REAL executor**: the runs tables use one
+   NEW SQL pattern (data-modifying CTE + `SELECT count(*)`, run_state.py) - run
+   one full durable exchange and verify `webapp_agent_runs_v1` reached
+   `completed` with `usage_accounted = true`.
+
+Only after 5-6 pass on DEV: enable the flag on the prod clone.
+
 ## What to report back to Claude
 
 - The Phase 0 probe report (step B4) - unlocks/locks the gates for good.
@@ -138,3 +174,5 @@ the console does is also doable through notebooks 00 to 06.
   (every notebook prints `ctx.report_markdown()`).
 - After Phase F: the wizard's questions and whether the drafted model needed
   heavy corrections (that calibrates the wizard prompt).
+- After Phase H: which of the 16 scenarios failed (exact behavior + webapp log
+  excerpt), and the durable runs table state after the smoke.
