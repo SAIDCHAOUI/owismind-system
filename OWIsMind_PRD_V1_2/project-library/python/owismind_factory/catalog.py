@@ -70,7 +70,14 @@ def _normalise_search_text(parts):
 
 
 def _stable_sequence(spec, wizard_config, columns, physical_table):
-    """Derive a repeatable three-digit suffix without looking at catalog rows."""
+    """Derive a repeatable three-digit suffix without looking at catalog rows.
+
+    The suffix is sha256(payload) % 1000, so it always fits the NNN contract
+    (000..999). Tradeoff: two DIFFERENT same-day generations of one domain can
+    collide with probability ~1/1000 and would share a generation_id in the
+    append-only catalog. Accepted on purpose: the id stays fully deterministic
+    without reading existing catalog rows to allocate a sequence.
+    """
     payload = {
         "domain": spec.domain,
         "base_dataset": spec.base_dataset,
@@ -80,7 +87,7 @@ def _stable_sequence(spec, wizard_config, columns, physical_table):
     }
     encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True,
                          separators=(",", ":"), default=str).encode("utf-8")
-    return (int(hashlib.sha256(encoded).hexdigest()[:8], 16) % 1000) + 1
+    return int(hashlib.sha256(encoded).hexdigest()[:8], 16) % 1000
 
 
 def _attributes_by_column(wizard_config):
@@ -126,10 +133,17 @@ def ensure_catalog_dataset(ctx, connection, zone=None):
             return None
 
     def _create():
+        # Lazy import: only the DSS runtime has dataiku (never the test env).
+        import dataiku
+
         builder = ctx.project.new_managed_dataset(CATALOG_DATASET_NAME)
         builder.with_store_into(connection)
         dataset = builder.create()
-        dataset.write_schema(CATALOG_SCHEMA)
+        # The dataikuapi handle owns creation/settings only; schema and data
+        # writes go through the in-process dataiku.Dataset API (a dataikuapi
+        # DSSDataset has no write_schema). ignore_flow: this runs outside a
+        # recipe (notebook or webapp backend).
+        dataiku.Dataset(CATALOG_DATASET_NAME, ignore_flow=True).write_schema(CATALOG_SCHEMA)
         return dataset
 
     dataset = ctx.act("catalog_dataset",
@@ -202,13 +216,21 @@ def publish_catalog_generation(ctx, capability_key, generation):
         return None
 
     def _append():
-        dataset = ctx.project.get_dataset(CATALOG_DATASET_NAME)
-        writer = dataset.get_writer()
-        try:
-            for row in rows:
-                writer.write_row_dict(_storage_row(row, capability_key))
-        finally:
-            writer.close()
+        # Lazy imports (lesson L089): the DSS-free test env may lack pandas at
+        # import time and substitutes a fake dataiku module via sys.modules.
+        import dataiku
+        import pandas as pd
+
+        # Proven append pattern (plugin chat_traces.save_trace): a fresh writer
+        # session on a dataiku.Dataset OVERWRITES the table, so appendMode MUST
+        # be set on the spec BEFORE write_with_schema. Columns follow the exact
+        # CATALOG_SCHEMA order so the positional SQL write always lines up.
+        frame = pd.DataFrame(
+            [_storage_row(row, capability_key) for row in rows],
+            columns=[field["name"] for field in CATALOG_SCHEMA])
+        dataset = dataiku.Dataset(CATALOG_DATASET_NAME, ignore_flow=True)
+        dataset.spec_item["appendMode"] = True
+        dataset.write_with_schema(frame)
         return generation.get("generation_id")
 
     return ctx.act("catalog_publish",
@@ -223,7 +245,7 @@ def searchable_catalog_rows(generation):
     for row in (generation or {}).get("rows") or []:
         if not isinstance(row, dict):
             continue
+        # search_text is already normalized at build time, it passes through.
         public = {key: row.get(key) for key in _PUBLIC_FIELDS}
-        public["search_text"] = _normalise_search_text([public.get("search_text")])
         out.append(public)
     return out

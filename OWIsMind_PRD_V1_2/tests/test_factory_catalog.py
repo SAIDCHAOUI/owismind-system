@@ -1,8 +1,18 @@
-"""DSS-free contract tests for the append-only factory catalog."""
+"""DSS-free contract tests for the append-only factory catalog.
+
+The write path is exercised against a stubbed in-process ``dataiku.Dataset``
+(same sys.modules technique as test_factory_doctor.py) plus a minimal ``pandas``
+stand-in, because the real publish path follows the proven plugin append
+pattern: dataiku.Dataset(..., ignore_flow=True) + spec_item["appendMode"] +
+write_with_schema(DataFrame). The fake reproduces the real writer semantics
+(a fresh session TRUNCATES unless appendMode is True), so these tests fail if
+append mode is ever dropped.
+"""
 
 import json
 import os
 import sys
+import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,29 +58,16 @@ def wizard_config(description="Customer satisfaction score"):
     }
 
 
-class _Writer(object):
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.closed = False
+class _ApiDataset(object):
+    """Design-time dataikuapi DSSDataset stand-in.
 
-    def write_row_dict(self, row):
-        self.dataset.rows.append(dict(row))
+    Deliberately WITHOUT write_schema / get_writer: the real dataikuapi handle
+    has no in-process write method, so any code that tries to write through it
+    fails here exactly like it would in DSS.
+    """
 
-    def close(self):
-        self.closed = True
-
-
-class _Dataset(object):
     def __init__(self, name):
         self.name = name
-        self.rows = []
-        self.schema = None
-
-    def write_schema(self, schema_value):
-        self.schema = schema_value
-
-    def get_writer(self):
-        return _Writer(self)
 
 
 class _CatalogProject(object):
@@ -91,7 +88,7 @@ class _CatalogProject(object):
                 return self
 
             def create(self):
-                dataset = _Dataset(name)
+                dataset = _ApiDataset(name)
                 project.datasets[name] = dataset
                 return dataset
 
@@ -101,7 +98,84 @@ class _CatalogProject(object):
         return self.datasets[name]
 
 
+class _CatalogTableStore(object):
+    """The physical catalog table shared by every fake dataiku.Dataset handle."""
+
+    def __init__(self):
+        self.rows = []
+        self.schema = None
+        self.write_calls = []
+
+
+class _FakeWritableDataset(object):
+    """In-process dataiku.Dataset stand-in with REAL writer semantics.
+
+    Each handle starts with an empty spec_item, and write_with_schema on a
+    handle whose spec_item lacks appendMode=True TRUNCATES the table first,
+    exactly like a fresh DSS writer session. Dropping the append-mode line in
+    the production code therefore loses the first generation here too.
+    """
+
+    def __init__(self, store):
+        self._store = store
+        self.spec_item = {}
+
+    def write_schema(self, columns):
+        self._store.schema = [dict(column) for column in columns]
+
+    def write_with_schema(self, frame):
+        append = self.spec_item.get("appendMode") is True
+        self._store.write_calls.append({
+            "append_mode": append,
+            "columns": list(frame.columns),
+            "row_count": len(frame.records),
+        })
+        if not append:
+            self._store.rows = []
+        self._store.rows.extend(dict(record) for record in frame.records)
+
+
+class _FakeDataFrame(object):
+    """Minimal pandas.DataFrame(records, columns=...) stand-in."""
+
+    def __init__(self, data, columns=None):
+        self.columns = list(columns or [])
+        self.records = [{column: record.get(column, "") for column in self.columns}
+                        for record in data]
+
+
+def _make_fake_dataiku(store):
+    module = types.ModuleType("dataiku")
+    module.dataset_calls = []
+
+    def _dataset(name, ignore_flow=False):
+        module.dataset_calls.append({"name": name, "ignore_flow": ignore_flow})
+        return _FakeWritableDataset(store)
+
+    module.Dataset = _dataset
+    return module
+
+
+def _make_fake_pandas():
+    module = types.ModuleType("pandas")
+    module.DataFrame = _FakeDataFrame
+    return module
+
+
 class TestCatalogDataset(unittest.TestCase):
+    def setUp(self):
+        self.store = _CatalogTableStore()
+        self._saved = {name: sys.modules.get(name) for name in ("dataiku", "pandas")}
+        sys.modules["dataiku"] = _make_fake_dataiku(self.store)
+        sys.modules["pandas"] = _make_fake_pandas()
+
+    def tearDown(self):
+        for name, saved in self._saved.items():
+            if saved is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = saved
+
     def test_dry_run_plans_without_any_write(self):
         project = _CatalogProject()
         ctx = FactoryContext(project=project, dry_run=True)
@@ -110,9 +184,10 @@ class TestCatalogDataset(unittest.TestCase):
 
         self.assertEqual(project.create_calls, [])
         self.assertNotIn(catalog.CATALOG_DATASET_NAME, project.datasets)
+        self.assertEqual(sys.modules["dataiku"].dataset_calls, [])
         self.assertEqual(ctx.actions[0]["status"], PLANNED)
 
-    def test_publication_is_append_only_for_two_generations(self):
+    def test_publication_appends_in_append_mode_and_keeps_both_generations(self):
         project = _CatalogProject()
         ctx = FactoryContext(project=project, dry_run=False)
         catalog.ensure_catalog_dataset(ctx, "SQL_owi")
@@ -125,7 +200,23 @@ class TestCatalogDataset(unittest.TestCase):
         catalog.publish_catalog_generation(ctx, "satisfaction_expert", first)
         catalog.publish_catalog_generation(ctx, "satisfaction_expert", second)
 
-        stored = project.datasets[catalog.CATALOG_DATASET_NAME].rows
+        self.assertFalse(ctx.has_failures(),
+                         "write path failed: %s" % json.dumps(ctx.actions))
+        # Schema creation went through the in-process handle.
+        self.assertEqual(self.store.schema, catalog.CATALOG_SCHEMA)
+        # Every in-process handle is opened outside any recipe context.
+        self.assertTrue(all(call["ignore_flow"] is True
+                            for call in sys.modules["dataiku"].dataset_calls))
+
+        calls = self.store.write_calls
+        self.assertEqual(len(calls), 2)
+        # appendMode must be set on spec_item BEFORE write_with_schema on EVERY
+        # publication: the fake truncates otherwise, like a real writer session.
+        self.assertTrue(all(call["append_mode"] for call in calls))
+        expected_columns = [field["name"] for field in catalog.CATALOG_SCHEMA]
+        self.assertTrue(all(call["columns"] == expected_columns for call in calls))
+
+        stored = self.store.rows
         generation_ids = {row["generation_id"] for row in stored}
         self.assertEqual(generation_ids, {first["generation_id"], second["generation_id"]})
         self.assertEqual(len(stored), len(first["rows"]) + len(second["rows"]))
@@ -152,6 +243,21 @@ class TestCatalogGeneration(unittest.TestCase):
         self.assertNotIn("SECRET_BUSINESS_VALUE", serialized)
         self.assertNotIn("sample_values", serialized)
 
+    def test_generation_sequence_stays_three_digits_on_hash_edge(self):
+        # This physical_table makes sha256(payload)[:8] % 1000 == 999, the highest
+        # possible sequence: the id must stay exactly three digits (the old
+        # "% 1000 + 1" formula emitted 1000 here and broke the NNN contract).
+        original_today = catalog._generation_date
+        catalog._generation_date = lambda: "20260717"
+        try:
+            generation = catalog.build_catalog_generation(
+                make_spec(), wizard_config(), schema(),
+                '"OWISMIND_DEV_cx_surveys_1200"')
+        finally:
+            catalog._generation_date = original_today
+
+        self.assertEqual(generation["generation_id"], "satisfaction-20260717-999")
+
     def test_prompt_rows_keep_search_text_but_strip_server_only_references(self):
         generation = catalog.build_catalog_generation(
             make_spec(), wizard_config(), schema(), '"OWISMIND_DEV_cx_surveys"')
@@ -162,6 +268,8 @@ class TestCatalogGeneration(unittest.TestCase):
         self.assertIn("physical_table", base_row)
         self.assertIn("connection_name", base_row)
         self.assertTrue(prompt_rows[0]["search_text"])
+        # search_text is normalized once at build time and passes through as-is.
+        self.assertEqual(prompt_rows[0]["search_text"], base_row["search_text"])
         self.assertNotIn("physical_table", prompt_rows[0])
         self.assertNotIn("connection_name", prompt_rows[0])
         self.assertNotIn("OWISMIND_DEV", json.dumps(prompt_rows))
