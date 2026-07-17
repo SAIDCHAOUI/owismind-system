@@ -1,0 +1,38 @@
+{
+  "settings_version": 1,
+  "deadlines": {
+    "legacy_run_seconds": {
+      "smart": 300,
+      "pro": 600,
+      "claude": 1200
+    },
+    "durable_run_seconds": {
+      "smart": 900,
+      "pro": 1200,
+      "claude": 1800
+    },
+    "step_budget_seconds": {
+      "smart": 180,
+      "pro": 300,
+      "claude": 600
+    },
+    "idle_warning_seconds": {
+      "smart": 60,
+      "pro": 90,
+      "claude": 180
+    }
+  },
+  "caps": {
+    "max_plan_steps": 12,
+    "max_replans": 2,
+    "max_specialist_steps": 10,
+    "max_dependencies_per_step": 5,
+    "max_step_attempts": 3,
+    "max_total_step_attempts": 18,
+    "control_event_max_chars": 16000
+  },
+  "flags": {
+    "allow_correlate": true,
+    "allow_render": true
+  }
+}

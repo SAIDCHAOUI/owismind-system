@@ -1468,6 +1468,823 @@ if _hub_capabilities is not None:
     logger.info("CAPABILITIES loaded from the config hub (%d entries)", len(CAPABILITIES))
 
 
+# =============================================================================
+# 7c. WORKFLOW COMMAND PROTOCOL (v1.3, durable runs)
+# -----------------------------------------------------------------------------
+# The backend drives a durable run by invoking this agent once per BOUNDED
+# command (plan / execute / replan / review / synthesize), through a machine
+# token appended to the user message (same channel + anti-forge contract as
+# ⟦owi:mode=⟧). The machine result comes back as ONE OWI_WORKFLOW_CONTROL event
+# at the end of the command (cap 16000 chars, never relayed to the frontend).
+# WITHOUT a valid token, process_stream is the LEGACY path, strictly unchanged.
+# The model NEVER sees run/step/attempt ids, agent ids or physical tables; the
+# plan is validated DETERMINISTICALLY (closed kind enum, caps, acyclic DAG, ids
+# reimposed S1.. by the code, zero SQL/table/agent_id).
+# =============================================================================
+
+WORKFLOW_PROTOCOL_VERSION = "v1"
+WORKFLOW_COMMANDS = ("plan", "execute", "replan", "review", "synthesize")
+WORKFLOW_CONTROL_EVENT_KIND = "OWI_WORKFLOW_CONTROL"
+WORKFLOW_STEP_KINDS = ("specialist_query", "attribute_lookup", "correlate",
+                       "render", "clarify")
+WORKFLOW_STEP_CHECKS = ("non_empty", "metric_present", "join_key_present")
+# Hard caps (spec 5.2, security invariants: the hub may only LOWER them).
+MAX_PLAN_STEPS = 12
+MAX_REPLANS = 2
+MAX_SPECIALIST_STEPS = 10
+MAX_DEPENDENCIES_PER_STEP = 5
+WORKFLOW_CONTROL_MAX_CHARS = 16000
+WORKFLOW_STEP_TITLE_MAX_CHARS = 160
+WORKFLOW_TASK_MAX_CHARS = 800      # keeps a 12-step plan under the control cap
+WORKFLOW_GOAL_MAX_CHARS = 400
+WORKFLOW_INPUT_MAX_CHARS = 60000   # defensive cap on the command input text
+
+# Machine tokens of the protocol (all matched by the generic _CTRL_TOKEN_RE
+# strip, so none of them can ever reach the model as visible text):
+#   ⟦owi:workflow=v1;command=<cmd>;run=<id>;step=<id>;attempt=<id>⟧  descending
+#   ⟦owi:wfstep=<json step spec>⟧    step handed to an `execute` command
+#   ⟦owi:wfdone=<json id list>⟧      completed step ids handed to a `replan`
+_WORKFLOW_TOKEN_RE = re.compile(r"⟦owi:workflow=([^⟧]*)⟧")
+_WF_STEP_TOKEN_RE = re.compile(r"⟦owi:wfstep=([^⟧]*)⟧")
+_WF_DONE_TOKEN_RE = re.compile(r"⟦owi:wfdone=([^⟧]*)⟧")
+_WORKFLOW_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}$")
+_PLAN_STEP_ID_RE = re.compile(r"^S\d{1,3}$")
+
+# Content the plan may NEVER carry (rule #3/#4: the model talks capabilities,
+# the server owns tables/SQL/agent ids). Deliberately shaped to catch real
+# leaks (quoted physical tables, project-key prefixes, SQL statements, raw
+# agent ids, control-token injection) without flagging natural language.
+_PLAN_FORBIDDEN_RE = re.compile(
+    r"(?i)("
+    r"agent:[a-z0-9]"
+    r"|\bpublic\s*\.\s*\""
+    r"|\"[a-z0-9_]+\"\s*\.\s*\"[a-z0-9_]+\""
+    r"|\bowismind_[a-z0-9_]+"
+    r"|\bselect\s+[^;⟧]{0,160}?\bfrom\s+(?:\"|[a-z0-9_]+\.[a-z0-9_]|[a-z0-9]+_[a-z0-9_])"
+    r"|\binsert\s+into\b|\bdelete\s+from\b|\bdrop\s+table\b"
+    r"|\btruncate\s+table\b|\bupdate\s+[a-z0-9_\".]+\s+set\b"
+    r"|[⟦⟧]"
+    r")")
+
+# --- run settings (deadlines / caps / flags), hub-overridable ----------------
+# Embedded defaults = the audited values of spec 4.3 / 4.4 / 5.2. The hub seed
+# /owismind_hub/run_settings.json starts byte-equivalent to this literal
+# (regenerate_seeds.py keeps it that way); after DSS calibration the team may
+# tune deadlines in a sane window and LOWER caps, never raise them.
+RUN_SETTINGS_DEFAULT = {
+    "settings_version": 1,
+    "deadlines": {
+        "legacy_run_seconds": {"smart": 300, "pro": 600, "claude": 1200},
+        "durable_run_seconds": {"smart": 900, "pro": 1200, "claude": 1800},
+        "step_budget_seconds": {"smart": 180, "pro": 300, "claude": 600},
+        "idle_warning_seconds": {"smart": 60, "pro": 90, "claude": 180},
+    },
+    "caps": {
+        "max_plan_steps": 12,
+        "max_replans": 2,
+        "max_specialist_steps": 10,
+        "max_dependencies_per_step": 5,
+        "max_step_attempts": 3,
+        "max_total_step_attempts": 18,
+        "control_event_max_chars": 16000,
+    },
+    "flags": {
+        "allow_correlate": True,
+        "allow_render": True,
+    },
+}
+_HUB_RUN_SETTINGS_PATH = "/owismind_hub/run_settings.json"
+
+_RUN_SETTINGS_DEADLINE_KEYS = ("legacy_run_seconds", "durable_run_seconds",
+                               "step_budget_seconds", "idle_warning_seconds")
+
+
+def _run_settings_problems(obj):
+    """Strict validation of a hub run_settings override. Empty list = valid.
+    Caps may only be LOWERED (the embedded values are the audited maxima);
+    deadlines must stay in a sane window; unknown/missing keys reject the file."""
+    if not isinstance(obj, dict):
+        return ["run_settings must be a JSON object"]
+    problems = []
+    if obj.get("settings_version") != 1:
+        problems.append("settings_version must be 1")
+    deadlines = obj.get("deadlines")
+    if not isinstance(deadlines, dict) \
+            or set(deadlines) != set(_RUN_SETTINGS_DEADLINE_KEYS):
+        problems.append("deadlines must define exactly %s"
+                        % list(_RUN_SETTINGS_DEADLINE_KEYS))
+    else:
+        for key in _RUN_SETTINGS_DEADLINE_KEYS:
+            grid = deadlines[key]
+            if not isinstance(grid, dict) or set(grid) != set(ORCH_MODES):
+                problems.append("deadlines.%s must define exactly smart/pro/claude" % key)
+                continue
+            for mode_key, value in grid.items():
+                if isinstance(value, bool) or not isinstance(value, int) \
+                        or not 10 <= value <= 7200:
+                    problems.append("deadlines.%s.%s must be an int in [10, 7200]"
+                                    % (key, mode_key))
+    caps = obj.get("caps")
+    default_caps = RUN_SETTINGS_DEFAULT["caps"]
+    if not isinstance(caps, dict) or set(caps) != set(default_caps):
+        problems.append("caps must define exactly %s" % sorted(default_caps))
+    else:
+        for key, ceiling in default_caps.items():
+            floor = 1000 if key == "control_event_max_chars" else 1
+            value = caps[key]
+            if isinstance(value, bool) or not isinstance(value, int) \
+                    or not floor <= value <= ceiling:
+                problems.append("caps.%s must be an int in [%d, %d]"
+                                % (key, floor, ceiling))
+    flags = obj.get("flags")
+    if not isinstance(flags, dict) or set(flags) != set(RUN_SETTINGS_DEFAULT["flags"]):
+        problems.append("flags must define exactly %s"
+                        % sorted(RUN_SETTINGS_DEFAULT["flags"]))
+    else:
+        for key, value in flags.items():
+            if not isinstance(value, bool):
+                problems.append("flags.%s must be a boolean" % key)
+    return problems
+
+
+def _load_hub_run_settings():
+    """Hub override of the run settings. None (-> embedded defaults) on ANY
+    failure: unreadable file, bad JSON, any validation problem."""
+    raw = _hub_read_text(_HUB_RUN_SETTINGS_PATH)
+    if not raw:
+        return None
+    try:
+        obj = json.loads(raw)
+        problems = _run_settings_problems(obj)
+    except Exception:
+        logger.warning("hub run_settings.json unreadable: using defaults")
+        return None
+    if problems:
+        logger.warning("hub run_settings.json rejected: %s", "; ".join(problems[:5]))
+        return None
+    return obj
+
+
+def workflow_caps():
+    """The resolved workflow caps, double-clamped: whatever the hub said, a cap
+    can never exceed its embedded (audited) maximum."""
+    resolved = (RUN_SETTINGS or {}).get("caps") or {}
+    out = dict(RUN_SETTINGS_DEFAULT["caps"])
+    for key, ceiling in out.items():
+        value = resolved.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) \
+                and 1 <= value <= ceiling:
+            out[key] = value
+    return out
+
+
+# --- workflow prompts (PLANNER / REPLANNER / REVIEWER / SYNTHESIZER) ---------
+# Embedded defaults; the hub seed /owismind_hub/prompts/orchestrator_workflow.md
+# starts byte-equivalent (regenerate_seeds.py) and can be iterated without
+# re-pasting this file. Strict parse + silent fallback, like the persona.
+WORKFLOW_PROMPTS_DEFAULT = {
+    "planner": (
+        "You are the OWIsMind workflow PLANNER. Decompose the user's question "
+        "into the smallest bounded execution plan and answer with ONE JSON "
+        "object only (no prose, no code fences) matching the given schema: "
+        "{plan_version, goal, complexity, steps[], final_checks[]}.\n"
+        "Each step: {id, kind, title, capability_keys, task, depends_on, "
+        "produces, checks} with kind one of: specialist_query (delegate a "
+        "computed figure to ONE listed capability), attribute_lookup (a fast "
+        "read of a single named value; fill args.term, args.attributes and "
+        "args.domain), correlate (join the results of two or more source "
+        "steps; list every source capability), render (turn a previous step's "
+        "result, referenced through depends_on, into a chart, table or KPI), "
+        "clarify (ask the user ONE precise question in task; use it when the "
+        "question is too ambiguous to plan).\n"
+        "Rules:\n"
+        "- Prefer the FEWEST steps: a single-source question is ONE "
+        "specialist_query step. Plan several steps only when the question "
+        "really needs several sources or a rendering of combined results.\n"
+        "- Every task must be SELF-CONTAINED (exact entity, scenario or "
+        "phase, exact period): the specialist never sees the conversation.\n"
+        "- capability_keys may ONLY contain keys from the capability list "
+        "below. NEVER invent a capability. NEVER write SQL, table names, "
+        "connection names or internal ids anywhere in the plan.\n"
+        "- Reference an earlier step's result as #S<n> in task and "
+        "depends_on.\n"
+        "- checks are the deterministic gates the runtime verifies: pick "
+        "from non_empty, metric_present, join_key_present."),
+    "replanner": (
+        "You are the OWIsMind workflow REPLANNER. The [WORKFLOW PROGRESS] "
+        "ledger in the message lists the completed steps (kept, immutable) "
+        "and why the run needs a new plan (a failed step, an empty result, a "
+        "missing source). Answer with ONE JSON object only (same schema as "
+        "the planner) that plans ONLY the REMAINING work.\n"
+        "Rules:\n"
+        "- NEVER re-plan, re-run or reinterpret a completed step; reuse its "
+        "result by referencing #S<n> in depends_on and task.\n"
+        "- Keep the new plan minimal: fix exactly what failed (a better "
+        "phrased task, an alternative listed capability, or a clarify step "
+        "when only the user can resolve the blocker).\n"
+        "- If the goal is impossible with the remaining capabilities, emit a "
+        "single clarify step that says honestly what is missing.\n"
+        "- The same hard limits and bans apply: no SQL, no table names, no "
+        "internal ids, only listed capability_keys."),
+    "reviewer": (
+        "You are the OWIsMind workflow REVIEWER. Judge whether the evidence "
+        "gathered by the completed steps (summarized in the [WORKFLOW "
+        "PROGRESS] ledger) is SUFFICIENT to answer the user's goal. Answer "
+        "with ONE JSON object only: {sufficient, missing, confidence, "
+        "reason}.\n"
+        "- sufficient: true only when EVERY source and metric the goal asks "
+        "for is present in the ledger with real values.\n"
+        "- missing: a short list of what is absent (source, metric, period "
+        "or entity), empty when sufficient.\n"
+        "- confidence: 0.0 to 1.0, your honest certainty in this verdict.\n"
+        "- reason: ONE short sentence explaining the verdict.\n"
+        "Judge ONLY from the ledger: never assume a figure exists, never "
+        "invent one, and never mark sufficient because an answer merely "
+        "looks plausible."),
+    "synthesizer": (
+        "You are OWIsMind, writing the FINAL ANSWER of a multi-step "
+        "analysis. The [WORKFLOW PROGRESS] ledger in the message holds the "
+        "verified results of every completed step; the charts and tables are "
+        "already rendered in the Evidence side panel.\n"
+        "- Use ONLY figures present in the ledger, VERBATIM. Never invent, "
+        "extrapolate or recompute a number.\n"
+        "- Restate the scope of every figure (scenario, period, entity, "
+        "currency) in natural language; format money with thousands "
+        "separators and the currency symbol (e.g. 123 807 EUR).\n"
+        "- Reference the artifacts ('the chart shows...') and give the "
+        "INSIGHT: the trend, the outlier, the so-what. Never reprint a "
+        "markdown table; the data lives in the panel.\n"
+        "- If the ledger is partial, say honestly what is covered and what "
+        "is not. Answer in the user's language, concise and factual."),
+}
+_HUB_WORKFLOW_PROMPTS_PATH = "/owismind_hub/prompts/orchestrator_workflow.md"
+_WORKFLOW_SECTION_RE = re.compile(
+    r"(?m)^## (PLANNER|REPLANNER|REVIEWER|SYNTHESIZER)\s*$")
+
+
+def _parse_workflow_prompts(text):
+    """{planner, replanner, reviewer, synthesizer} parsed from the hub markdown
+    (one '## NAME' heading per section), or None when any section is missing,
+    duplicated or of abnormal size (the caller falls back to the defaults)."""
+    if not text:
+        return None
+    matches = list(_WORKFLOW_SECTION_RE.finditer(text))
+    if len(matches) != 4:
+        return None
+    sections = {}
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        sections[m.group(1).lower()] = text[m.end():end].strip()
+    if set(sections) != {"planner", "replanner", "reviewer", "synthesizer"}:
+        return None
+    for body in sections.values():
+        if len(body) < 200 or len(body) > 12000:
+            return None
+    return sections
+
+
+def _load_hub_workflow_prompts():
+    """Hub override of the workflow prompt sections. None on ANY failure."""
+    text = _hub_read_text(_HUB_WORKFLOW_PROMPTS_PATH)
+    if not text:
+        return None
+    try:
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", "replace")
+        sections = _parse_workflow_prompts(text)
+    except Exception:
+        logger.warning("hub orchestrator_workflow.md unreadable: using defaults")
+        return None
+    if sections is None:
+        logger.warning("hub orchestrator_workflow.md rejected: using defaults")
+        return None
+    return sections
+
+
+# Module-level resolution, hardened exactly like PERSONA / CAPABILITIES above.
+try:
+    RUN_SETTINGS = _load_hub_run_settings() or RUN_SETTINGS_DEFAULT
+except Exception:
+    RUN_SETTINGS = RUN_SETTINGS_DEFAULT
+try:
+    WORKFLOW_PROMPTS = _load_hub_workflow_prompts() or WORKFLOW_PROMPTS_DEFAULT
+except Exception:
+    WORKFLOW_PROMPTS = WORKFLOW_PROMPTS_DEFAULT
+
+
+# --- token parsing (descending channel) --------------------------------------
+
+def _parse_workflow_token_payload(raw):
+    """Strict parse of one token payload 'v1;command=..;run=..;step=..;attempt=..'.
+    None on ANY anomaly (unknown version/command, missing run, bad id charset)."""
+    parts = [p.strip() for p in str(raw or "").split(";") if p.strip()]
+    if not parts or parts[0] != WORKFLOW_PROTOCOL_VERSION:
+        return None
+    fields = {}
+    for part in parts[1:]:
+        if "=" not in part:
+            return None
+        key, value = part.split("=", 1)
+        fields[key.strip()] = value.strip()
+    command = fields.get("command")
+    if command not in WORKFLOW_COMMANDS:
+        return None
+    run_id = fields.get("run") or ""
+    if not _WORKFLOW_ID_RE.match(run_id):
+        return None
+    step_id = fields.get("step") or ""
+    attempt_id = fields.get("attempt") or ""
+    if step_id and not _WORKFLOW_ID_RE.match(step_id):
+        return None
+    if attempt_id and not _WORKFLOW_ID_RE.match(attempt_id):
+        return None
+    return {"command": command, "run_id": run_id,
+            "step_id": step_id, "attempt_id": attempt_id}
+
+
+def parse_workflow_control(text):
+    """None, or {"command","run_id","step_id","attempt_id"} from the backend's
+    ⟦owi:workflow=...⟧ token. SECURITY (anti-forge, stricter than parse_mode):
+    the winning token must sit in the TAIL of the message - only whitespace and
+    other ⟦owi:...⟧ control tokens may follow it. A token typed in the MIDDLE
+    of the user text (real prose after it) is ignored entirely, so a user can
+    never flip a legacy exchange into the workflow path; among tail tokens the
+    LAST valid one wins (the backend appends its authoritative token last)."""
+    if not text:
+        return None
+    matches = list(_WORKFLOW_TOKEN_RE.finditer(text))
+    if not matches:
+        return None
+    for m in reversed(matches):
+        if _CTRL_TOKEN_RE.sub("", text[m.end():]).strip():
+            return None                      # forged mid-text token: prose follows
+        parsed = _parse_workflow_token_payload(m.group(1))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _sanitize_step_args(raw):
+    """Whitelisted, size-capped step args ({term, attributes, domain}) or None."""
+    if not isinstance(raw, dict):
+        return None
+    clean = {}
+    term = raw.get("term")
+    if isinstance(term, str) and term.strip():
+        clean["term"] = term.strip()[:200]
+    attributes = raw.get("attributes")
+    if isinstance(attributes, list):
+        clean["attributes"] = [str(a)[:80] for a in attributes
+                               if isinstance(a, str)][:8]
+    domain = raw.get("domain")
+    if isinstance(domain, str) and domain.strip():
+        clean["domain"] = domain.strip()[:40]
+    return clean or None
+
+
+def parse_workflow_step(text):
+    """The sanitized step spec handed to an `execute` command through the
+    backend's ⟦owi:wfstep=<json>⟧ token, or None. Last valid token wins; every
+    field is re-validated here (id shape, closed kind enum, capped strings)."""
+    for raw in reversed(_WF_STEP_TOKEN_RE.findall(text or "")):
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        step_id = str(obj.get("id") or "")
+        if not _PLAN_STEP_ID_RE.match(step_id):
+            continue
+        kind = obj.get("kind")
+        if kind not in WORKFLOW_STEP_KINDS:
+            continue
+        keys = obj.get("capability_keys")
+        keys = [str(k)[:64] for k in keys if isinstance(k, str)][:8] \
+            if isinstance(keys, list) else []
+        checks = obj.get("checks")
+        checks = [c for c in checks if c in WORKFLOW_STEP_CHECKS][:6] \
+            if isinstance(checks, list) else []
+        step = {
+            "id": step_id,
+            "kind": kind,
+            "title": str(obj.get("title") or "").strip()[:WORKFLOW_STEP_TITLE_MAX_CHARS],
+            "task": str(obj.get("task") or "").strip()[:WORKFLOW_TASK_MAX_CHARS],
+            "capability_keys": keys,
+            "produces": "#" + step_id,
+            "checks": checks,
+        }
+        args = _sanitize_step_args(obj.get("args"))
+        if args:
+            step["args"] = args
+        return step
+    return None
+
+
+def parse_workflow_done(text):
+    """Completed step ids handed to a `replan` command through the backend's
+    ⟦owi:wfdone=["S1",...]⟧ token. [] on absence or ANY anomaly."""
+    for raw in reversed(_WF_DONE_TOKEN_RE.findall(text or "")):
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(data, list):
+            continue
+        out, valid = [], True
+        for item in data[:MAX_PLAN_STEPS * 3]:
+            step_id = str(item)
+            if not _PLAN_STEP_ID_RE.match(step_id):
+                valid = False
+                break
+            out.append(step_id)
+        if valid:
+            return out
+    return []
+
+
+# --- deterministic plan validation (zero LLM) ---------------------------------
+
+def validate_workflow_plan(obj, caps=None, start_index=1, external_ids=(),
+                           max_steps=None):
+    """(normalized_plan, []) or (None, problems). Everything is checked in
+    code, never by a model: closed kind enum, caps (steps / specialists /
+    dependencies), acyclic DAG, ids REIMPOSED S<start_index>.. in listed order
+    (with #refs rewritten in goal/title/task), capability_keys restricted to
+    the enabled registry, and zero SQL / table / agent id anywhere. For a
+    replan, external_ids are the completed step ids the new steps may still
+    depend on (they are never renumbered, never reinterpreted)."""
+    caps = caps if caps is not None else get_capabilities()
+    settings = workflow_caps()
+    limit = int(max_steps or settings["max_plan_steps"])
+    if not isinstance(obj, dict):
+        return None, ["plan must be a JSON object"]
+    problems = []
+    goal = str(obj.get("goal") or "").strip()[:WORKFLOW_GOAL_MAX_CHARS]
+    if not goal:
+        problems.append("goal is required")
+    elif _PLAN_FORBIDDEN_RE.search(goal):
+        problems.append("goal: forbidden content (SQL / table / agent id)")
+    complexity = str(obj.get("complexity") or "multi_source").strip()[:40]
+    raw_steps = obj.get("steps")
+    if not isinstance(raw_steps, list) or not raw_steps:
+        problems.append("steps must be a non-empty array")
+        return None, problems
+    if len(raw_steps) > limit:
+        problems.append("too many steps (%d > %d)" % (len(raw_steps), limit))
+        return None, problems
+
+    agent_keys = {k for k, c in caps.items() if c.get("kind") == "agent"}
+    lk_domains = lookup_domains(caps)
+    external = {str(x) for x in (external_ids or ())}
+    drafts, seen_ids, specialist_count = [], set(), 0
+
+    for pos, raw in enumerate(raw_steps):
+        ref = "step %d" % (pos + 1)
+        if not isinstance(raw, dict):
+            problems.append("%s: must be an object" % ref)
+            continue
+        model_id = str(raw.get("id") or "").strip()[:24]
+        if model_id:
+            if model_id in seen_ids:
+                problems.append("%s: duplicate step id %r" % (ref, model_id))
+            seen_ids.add(model_id)
+        kind = raw.get("kind")
+        if kind not in WORKFLOW_STEP_KINDS:
+            problems.append("%s: unknown step kind %r" % (ref, kind))
+            continue
+        title = str(raw.get("title") or "").strip()[:WORKFLOW_STEP_TITLE_MAX_CHARS]
+        task = str(raw.get("task") or "").strip()[:WORKFLOW_TASK_MAX_CHARS]
+        keys_raw = raw.get("capability_keys") or []
+        if not isinstance(keys_raw, list):
+            problems.append("%s: capability_keys must be an array" % ref)
+            keys_raw = []
+        keys = []
+        for key in keys_raw[:8]:
+            key = str(key)[:64]
+            if key not in agent_keys:
+                problems.append("%s: unknown or disabled capability %r" % (ref, key))
+            elif key not in keys:
+                keys.append(key)
+        deps_raw = raw.get("depends_on") or []
+        if not isinstance(deps_raw, list):
+            problems.append("%s: depends_on must be an array" % ref)
+            deps_raw = []
+        if len(deps_raw) > settings["max_dependencies_per_step"]:
+            problems.append("%s: too many dependencies (%d > %d)"
+                            % (ref, len(deps_raw),
+                               settings["max_dependencies_per_step"]))
+        deps = [str(d).strip()[:24] for d in deps_raw
+                [:settings["max_dependencies_per_step"] + 1]]
+        checks = raw.get("checks") or []
+        checks = [c for c in checks if c in WORKFLOW_STEP_CHECKS][:6] \
+            if isinstance(checks, list) else []
+        args = _sanitize_step_args(raw.get("args"))
+        if kind == "specialist_query":
+            specialist_count += 1
+            if not task:
+                problems.append("%s: specialist_query requires a task" % ref)
+            if not keys:
+                problems.append("%s: specialist_query requires a capability" % ref)
+        elif kind == "attribute_lookup":
+            if not (args or {}).get("term"):
+                problems.append("%s: attribute_lookup requires args.term" % ref)
+            domain = (args or {}).get("domain")
+            if domain and domain not in lk_domains:
+                problems.append("%s: unknown lookup domain %r" % (ref, domain))
+            if not domain and len(lk_domains) > 1:
+                problems.append("%s: args.domain is required (several lookup "
+                                "domains exist)" % ref)
+        elif kind == "correlate":
+            if len(keys) < 2:
+                problems.append("%s: correlate requires at least 2 capabilities"
+                                % ref)
+        elif kind == "clarify":
+            if not task:
+                problems.append("%s: clarify requires the question in task" % ref)
+        for field_name, value in (("title", title), ("task", task)):
+            if value and _PLAN_FORBIDDEN_RE.search(value):
+                problems.append("%s: forbidden content in %s (SQL / table / "
+                                "agent id)" % (ref, field_name))
+        drafts.append({"model_id": model_id or ("__anon%d" % pos), "kind": kind,
+                       "title": title, "task": task, "capability_keys": keys,
+                       "depends_on": deps, "checks": checks, "args": args})
+
+    if specialist_count > settings["max_specialist_steps"]:
+        problems.append("too many specialist steps (%d > %d)"
+                        % (specialist_count, settings["max_specialist_steps"]))
+
+    # Dependency resolution (internal step ids or completed external ids only)
+    # + acyclicity (Kahn) on the internal edges.
+    ids = {d["model_id"] for d in drafts}
+    for d in drafts:
+        resolved = []
+        for dep in d["depends_on"]:
+            if dep == d["model_id"]:
+                problems.append("step %r: dependency cycle (depends on itself)"
+                                % d["model_id"])
+            elif dep in ids or dep in external:
+                resolved.append(dep)
+            else:
+                problems.append("step %r: unknown dependency %r"
+                                % (d["model_id"], dep))
+        d["depends_on"] = resolved
+    indegree, dependents = {}, {d["model_id"]: [] for d in drafts}
+    for d in drafts:
+        internal = [x for x in d["depends_on"] if x in ids]
+        indegree[d["model_id"]] = len(internal)
+        for dep in internal:
+            dependents[dep].append(d["model_id"])
+    queue = [k for k, v in indegree.items() if v == 0]
+    processed = 0
+    while queue:
+        node = queue.pop()
+        processed += 1
+        for nxt in dependents.get(node, ()):
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    if processed < len(drafts):
+        problems.append("dependency cycle detected")
+    if problems:
+        return None, problems
+
+    # Reimpose ids S<start_index>.. in listed order; rewrite #refs everywhere.
+    remap = {d["model_id"]: "S%d" % (start_index + i)
+             for i, d in enumerate(drafts)}
+    ref_pairs = sorted(((old, new) for old, new in remap.items()
+                        if not old.startswith("__anon")),
+                       key=lambda kv: len(kv[0]), reverse=True)
+
+    def rewrite_refs(value):
+        for old, new in ref_pairs:
+            value = value.replace("#" + old, "#" + new)
+        return value
+
+    steps = []
+    for d in drafts:
+        new_id = remap[d["model_id"]]
+        step = {"id": new_id, "kind": d["kind"],
+                "title": rewrite_refs(d["title"]),
+                "task": rewrite_refs(d["task"]),
+                "capability_keys": d["capability_keys"],
+                "depends_on": [remap.get(x, x) for x in d["depends_on"]],
+                "produces": "#" + new_id,
+                "checks": d["checks"]}
+        if d["args"]:
+            step["args"] = d["args"]
+        steps.append(step)
+    final_checks = obj.get("final_checks") or []
+    final_checks = [c for c in final_checks if c in WORKFLOW_STEP_CHECKS][:6] \
+        if isinstance(final_checks, list) else []
+    plan = {"plan_version": 1, "goal": rewrite_refs(goal),
+            "complexity": complexity, "steps": steps,
+            "final_checks": final_checks}
+    return plan, []
+
+
+# --- schemas + prompts of the strict-JSON commands ----------------------------
+
+def build_plan_schema(caps):
+    """with_json_output schema of the planner / replanner (lesson L056): closed
+    enums anchored on the live registry, so the model cannot even emit an
+    unknown kind / capability / check. The code re-validates everything anyway."""
+    keys = sorted(k for k, c in caps.items() if c.get("kind") == "agent")
+    step = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "kind": {"type": "string", "enum": list(WORKFLOW_STEP_KINDS)},
+            "title": {"type": "string"},
+            "capability_keys": {"type": "array",
+                                "items": {"type": "string", "enum": keys}},
+            "task": {"type": "string"},
+            "depends_on": {"type": "array", "items": {"type": "string"}},
+            "produces": {"type": "string"},
+            "checks": {"type": "array",
+                       "items": {"type": "string",
+                                 "enum": list(WORKFLOW_STEP_CHECKS)}},
+            "args": {"type": "object", "properties": {
+                "term": {"type": "string"},
+                "attributes": {"type": "array", "items": {"type": "string"}},
+                "domain": {"type": "string"}}},
+        },
+        "required": ["id", "kind", "title"],
+    }
+    return {"type": "object", "properties": {
+        "plan_version": {"type": "integer"},
+        "goal": {"type": "string"},
+        "complexity": {"type": "string", "enum": ["simple", "multi_source"]},
+        "steps": {"type": "array", "items": step},
+        "final_checks": {"type": "array",
+                         "items": {"type": "string",
+                                   "enum": list(WORKFLOW_STEP_CHECKS)}},
+    }, "required": ["goal", "steps"]}
+
+
+REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "sufficient": {"type": "boolean"},
+        "missing": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number"},
+        "reason": {"type": "string"},
+    },
+    "required": ["sufficient", "reason"],
+}
+
+RENDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tool": {"type": "string",
+                 "enum": ["show_chart", "show_table", "show_kpi"]},
+        "args": {"type": "object"},
+    },
+    "required": ["tool"],
+}
+
+# Render is a bounded strict-JSON extraction too (not hub-managed: it is a
+# mechanical column-picking call, not a voice/policy prompt).
+WORKFLOW_RENDER_INSTRUCTIONS = (
+    "You pick HOW to render one verified data result in the Evidence panel. "
+    "Answer with ONE JSON object only: {\"tool\": show_chart | show_table | "
+    "show_kpi, \"args\": {...}}. For show_chart: chart_type (line/bar/pie), x, "
+    "y (array), title, x_label, y_label, unit, description; x and y MUST be "
+    "EXACT column names of the data. For show_kpi: label, value (exact column), "
+    "optional delta/delta_pct/unit. For show_table: title, description. Pick "
+    "what reads best for the step's intent; when in doubt, a table is always "
+    "correct.")
+
+
+def _sanitize_review(obj):
+    """Structural sanitation of the reviewer output (never trusted as-is)."""
+    missing = obj.get("missing")
+    missing = [str(m)[:200] for m in missing[:8]] if isinstance(missing, list) else []
+    try:
+        confidence = float(obj.get("confidence"))
+    except (TypeError, ValueError):
+        confidence = 0.5
+    confidence = min(1.0, max(0.0, confidence))
+    return {"sufficient": bool(obj.get("sufficient")), "missing": missing,
+            "confidence": confidence,
+            "reason": str(obj.get("reason") or "")[:400]}
+
+
+def build_workflow_prompt(section, caps, lang):
+    """System prompt of one strict-JSON / synthesize command: the hub-managed
+    section + (for the planners) the capability catalog and the hard limits.
+    Capability KEYS and descriptions only - never agent ids, tables or run ids."""
+    parts = [WORKFLOW_PROMPTS.get(section) or WORKFLOW_PROMPTS_DEFAULT[section]]
+    lang_label = {"fr": "French", "en": "English"}.get(lang, "the user's language")
+    if section in ("planner", "replanner"):
+        cap_lines = []
+        for key, cap in caps.items():
+            if cap.get("kind") != "agent":
+                continue
+            cap_lines.append("- capability_key `%s` (domain: %s): %s"
+                             % (key, cap.get("domain") or "?",
+                                cap.get("planner_description") or ""))
+        parts.append("# AVAILABLE CAPABILITIES (the ONLY allowed "
+                     "capability_key values)\n" + ("\n".join(cap_lines) or "(none)"))
+        lk = sorted(lookup_domains(caps))
+        if lk:
+            parts.append("# LOOKUP DOMAINS (allowed args.domain values of "
+                         "attribute_lookup)\n" + "\n".join("- %s" % d for d in lk))
+        settings = workflow_caps()
+        parts.append("# HARD LIMITS (the plan is REJECTED beyond these)\n"
+                     "- at most %d steps, %d specialist_query steps, %d "
+                     "dependencies per step\n"
+                     "- step ids are reassigned by the runtime; keep yours "
+                     "short (S1, S2, ...)\n"
+                     "- any SQL, table name, connection name or internal id "
+                     "in the plan rejects it entirely"
+                     % (settings["max_plan_steps"],
+                        settings["max_specialist_steps"],
+                        settings["max_dependencies_per_step"]))
+        parts.append("# OUTPUT LANGUAGE\nWrite `goal` and step `title` values "
+                     "in %s (they are shown to the user)." % lang_label)
+    elif section == "synthesizer":
+        parts.append("# REPLY LANGUAGE (re-stated last on purpose)\n"
+                     "Write your ENTIRE answer in %s." % lang_label)
+    return "\n\n".join(parts)
+
+
+# --- ascending channel (machine result event) ---------------------------------
+
+def _parse_json_object(text):
+    """Defensive JSON-object parse of a model answer (code fences tolerated).
+    None when no object can be recovered."""
+    if not text:
+        return None
+    t = str(text).strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+    try:
+        value = json.loads(t)
+        return value if isinstance(value, dict) else None
+    except Exception:
+        pass
+    start, end = t.find("{"), t.rfind("}")
+    if 0 <= start < end:
+        try:
+            value = json.loads(t[start:end + 1])
+            return value if isinstance(value, dict) else None
+        except Exception:
+            return None
+    return None
+
+
+def _workflow_control_chunk(command, payload):
+    """The SINGLE machine-result event of a workflow command, emitted at the
+    end of the command (right before the final DONE). eventData is capped:
+    an oversized payload degrades to a deterministic error, never a truncated
+    (invalid) JSON. This event is consumed by the backend runner and NEVER
+    relayed to the frontend."""
+    cap = workflow_caps().get("control_event_max_chars", WORKFLOW_CONTROL_MAX_CHARS)
+    data = {"command": command, "payload": payload}
+    try:
+        serialized = json.dumps(data, ensure_ascii=False, default=str)
+    except Exception:
+        serialized = None
+    if serialized is None or len(serialized) > cap:
+        data = {"command": command,
+                "payload": {"status": "error", "error": "payload_too_large"}}
+    return _ev(WORKFLOW_CONTROL_EVENT_KIND, data)
+
+
+def build_execute_subcalls(step, caps):
+    """(sub_calls, problems) for a specialist_query step. TOOL MASKING: the
+    synthetic tool call is built from build_tool_specs() restricted to the
+    step's declared capability_keys, so a step can never reach a capability it
+    did not declare, and ANY declared-but-unavailable capability blocks the
+    step (a capability disabled mid-run blocks its steps, spec 11.2)."""
+    declared = [k for k in (step.get("capability_keys") or [])]
+    filtered = {k: caps[k] for k in declared
+                if k in caps and caps[k].get("kind") == "agent"}
+    problems = []
+    missing = [k for k in declared if k not in filtered]
+    if missing:
+        problems.append("unknown or disabled capabilities: %s"
+                        % ", ".join(sorted(missing)))
+    if not filtered:
+        problems.append("no enabled capability for this step")
+        return [], problems
+    if problems:
+        return [], problems
+    task = str(step.get("task") or "").strip()
+    if not task:
+        return [], ["missing task"]
+    _specs, tool_to_cap = build_tool_specs(filtered)
+    primary = declared[0]
+    tool_name = next((name for name, cap_key in tool_to_cap.items()
+                      if cap_key == primary), None)
+    if tool_name is None:
+        return [], ["no tool for capability %r" % primary]
+    return [({"id": "wf-%s" % str(step.get("id") or "S")}, tool_name,
+             {"task": task})], []
+
+
 def build_system_prompt(caps, lang_hint, narrate=True):
     cap_lines = []
     for key, cap in caps.items():
@@ -2397,8 +3214,345 @@ class MyLLM(BaseLLM):
             "label": _L["agent_done"][lang] % (cap.get("label_%s" % lang)
                                                or cap.get("label_en"))}))
 
+    # ---- workflow command protocol (v1.3, section 7c) ----------------------
+    def _workflow_json_call(self, project, trace, llm_id, system_prompt,
+                            user_msg, schema, span_name):
+        """ONE bounded strict-JSON Mesh call (lesson L056: with_json_output on
+        every deterministic machine extraction). Returns (parsed|None, usage).
+        A Mesh failure PROPAGATES to the command wrapper (-> internal_error
+        payload, retriable backend-side); only an unparseable answer returns
+        None (a structural rejection, never retried as-is)."""
+        completion = project.get_llm(llm_id).new_completion()
+        try:
+            completion.with_json_output(schema=schema)
+        except Exception as e:
+            logger.warning("with_json_output unavailable (%s): prompt-only "
+                           "JSON parse", e)
+        completion.with_message(system_prompt, role="system")
+        completion.with_message((user_msg or "")[:WORKFLOW_INPUT_MAX_CHARS],
+                                role="user")
+        with trace.subspan(span_name) as span:
+            resp = completion.execute()
+            try:
+                if getattr(resp, "trace", None):
+                    span.append_trace(resp.trace)
+            except Exception:
+                pass
+        return _parse_json_object(getattr(resp, "text", None)), _usage_from_resp(resp)
+
+    def _workflow_plan_or_replan(self, project, trace, mode, lang, text,
+                                 writer, replan, done_ids):
+        if not (text or "").strip():
+            return {"status": "error", "error": "empty_input"}, {}
+        writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
+        caps = self._caps or get_capabilities()
+        section = "replanner" if replan else "planner"
+        parsed, usage = self._workflow_json_call(
+            project, trace, pick_loop_llm(mode),
+            build_workflow_prompt(section, caps, lang), text,
+            build_plan_schema(caps), "workflow:%s" % section)
+        if parsed is None:
+            return {"status": "error", "error": "invalid_json"}, usage
+        start_index, external, max_steps = 1, (), None
+        if replan:
+            done_numbers = [int(x[1:]) for x in done_ids
+                            if _PLAN_STEP_ID_RE.match(x)]
+            start_index = (max(done_numbers) + 1) if done_numbers else 1
+            external = tuple(done_ids)
+            max_steps = max(1, workflow_caps()["max_plan_steps"] - len(done_ids))
+        plan, problems = validate_workflow_plan(
+            parsed, caps=caps, start_index=start_index,
+            external_ids=external, max_steps=max_steps)
+        if plan is None:
+            return {"status": "error", "error": "invalid_plan",
+                    "problems": problems[:12]}, usage
+        return {"status": "ok", "plan": plan}, usage
+
+    def _workflow_review(self, project, trace, mode, lang, text, writer):
+        if not (text or "").strip():
+            return {"status": "error", "error": "empty_input"}, {}
+        writer(_ev("PLANNING", {"label": _L["planning"][lang]}))
+        caps = self._caps or get_capabilities()
+        parsed, usage = self._workflow_json_call(
+            project, trace, pick_loop_llm(mode),
+            build_workflow_prompt("reviewer", caps, lang), text,
+            REVIEW_SCHEMA, "workflow:review")
+        if parsed is None:
+            return {"status": "error", "error": "invalid_json"}, usage
+        return {"status": "ok", "review": _sanitize_review(parsed)}, usage
+
+    def _workflow_synthesize(self, project, trace, mode, lang, text, writer):
+        if not (text or "").strip():
+            return {"status": "error", "error": "empty_input"}, {}
+        writer(_ev("WRITING_ANSWER", {"label": _L["writing"][lang]}))
+        caps = self._caps or get_capabilities()
+        completion = project.get_llm(pick_loop_llm(mode)).new_completion()
+        completion.with_message(build_workflow_prompt("synthesizer", caps, lang),
+                                role="system")
+        completion.with_message((text or "")[:WORKFLOW_INPUT_MAX_CHARS],
+                                role="user")
+        with trace.subspan("workflow:synthesize") as span:
+            resp = completion.execute()
+            try:
+                if getattr(resp, "trace", None):
+                    span.append_trace(resp.trace)
+            except Exception:
+                pass
+        usage = _usage_from_resp(resp)
+        answer = _strip_markdown_tables((getattr(resp, "text", None) or "").strip())
+        if not answer:
+            return {"status": "error", "error": "empty_answer"}, usage
+        answer = answer[:ANSWER_RELAY_MAX_CHARS]
+        # The answer flows through the PROVEN text channel (the backend already
+        # captures streamed text as the exchange answer); the payload stays meta.
+        writer(_txt(answer))
+        return {"status": "ok", "chars": len(answer)}, usage
+
+    def _workflow_specialist(self, project, trace, mode, lang, step_spec,
+                             base_step, writer):
+        sid = step_spec["id"]
+        caps = self._caps or get_capabilities()
+        sub_calls, problems = build_execute_subcalls(step_spec, caps)
+        if not sub_calls:
+            return {"status": "error", "error": "capability_unavailable",
+                    "step": sid, "problems": problems[:6]}, {}
+        # Same context contract as the legacy path (pass_context sub-agents):
+        # mode tier + authoritative user language. Steps are self-contained, so
+        # no conversational continuity is handed over.
+        context_msg = (
+            "MODE: %s\n"
+            "USER LANGUAGE: %s - write any message addressed to the user "
+            "(clarification, no-data, out-of-scope) in THIS language.\n"
+            % (mode, lang))
+        results = self._run_subagents(project, trace, sub_calls, context_msg,
+                                      lang, base_step, writer,
+                                      model_narrated=True)
+        res = results[0] if results else None
+        usage = (res or {}).get("usage") or {}
+        if not res or not res.get("ok") or res.get("status") == "error":
+            return {"status": "error", "error": "specialist_error", "step": sid,
+                    "detail": str((res or {}).get("error") or "")[:200]}, usage
+        status = res.get("status") or "ready"
+        answer = _strip_markdown_tables(res.get("answer") or "")
+        if status in ("need_clarification", "clarify", "clarification"):
+            return {"status": "clarify", "step": sid,
+                    "question": answer[:WORKFLOW_TASK_MAX_CHARS]}, usage
+        if status == "out_of_scope":
+            return {"status": "out_of_scope", "step": sid,
+                    "message": answer[:WORKFLOW_TASK_MAX_CHARS]}, usage
+        result = res.get("result") or {}
+        # Meta only: the full rows already reached the backend through the
+        # frozen AGENT_DONE generatedSql channel + the appended trace spans.
+        return {"status": "ok", "step": sid, "specialist_status": status,
+                "summary": answer[:600],
+                "columns": list(result.get("columns") or []),
+                "row_count": len(result.get("rows") or []),
+                "truncated": bool(result.get("truncated")),
+                "sql_count": len(res.get("sql_items") or [])}, usage
+
+    def _workflow_lookup(self, project, trace, step_spec, base_step, lang,
+                         writer):
+        sid = step_spec["id"]
+        args = step_spec.get("args") or {}
+        term = args.get("term") or ""
+        if not term:
+            return {"status": "error", "error": "missing_term", "step": sid}, {}
+        writer(_ev("RUNNING_TOOL", {"toolKey": LOOKUP_TOOL_NAME,
+                                    "stepIndex": base_step,
+                                    "label": _L["tool_lookup"][lang]}))
+        run_args = {"term": term, "attributes": args.get("attributes") or []}
+        if args.get("domain"):
+            run_args["domain"] = args["domain"]
+        text_out, item = self._run_lookup(project, run_args, base_step)
+        if item:
+            # Same frozen Evidence span as the legacy lookup branch.
+            try:
+                with trace.subspan("semantic-model-query") as lsp:
+                    lsp.outputs["sql"] = item["sql"]
+                    lsp.outputs["success"] = True
+                    lsp.outputs["row_count"] = item.get("row_count")
+                    lsp.outputs["columns"] = item["result"]["columns"]
+                    lsp.outputs["rows"] = item["result"]["rows"]
+                    if item.get("source_url"):
+                        lsp.outputs["source_url"] = item["source_url"]
+            except Exception:
+                logger.exception("lookup evidence span failed (non-fatal)")
+        writer(_ev("TOOL_DONE", {"toolKey": LOOKUP_TOOL_NAME,
+                                 "stepIndex": base_step, "status": "ok",
+                                 "label": _L["tool_done"][lang]}))
+        return {"status": "ok", "step": sid,
+                "lookup": {"found": bool(item),
+                           "message": str(text_out)[:600]}}, {}
+
+    def _workflow_render(self, project, trace, mode, lang, step_spec,
+                         prior_results, base_step, writer):
+        sid = step_spec["id"]
+        entry = (prior_results or [None])[0]
+        if not entry or not entry.get("columns") or not entry.get("rows"):
+            return {"status": "error", "error": "missing_render_data",
+                    "step": sid}, {}
+        latest = {"columns": entry["columns"], "rows": entry["rows"],
+                  "truncated": bool(entry.get("truncated"))}
+        prompt = (WORKFLOW_RENDER_INSTRUCTIONS
+                  + "\nColumns of the data: %s\nRows available: %d"
+                  % (", ".join(str(c) for c in latest["columns"]),
+                     len(latest["rows"])))
+        parsed, usage = self._workflow_json_call(
+            project, trace, pick_loop_llm(mode), prompt,
+            "Step: %s\nTask: %s" % (step_spec.get("title") or "",
+                                    step_spec.get("task") or ""),
+            RENDER_SCHEMA, "workflow:render")
+        artifact, tool_name = None, "show_table"
+        if isinstance(parsed, dict) and parsed.get("tool") in (
+                "show_chart", "show_table", "show_kpi"):
+            tool_name = parsed["tool"]
+            tool_args = parsed.get("args") \
+                if isinstance(parsed.get("args"), dict) else {}
+            artifact, _msg = self._record_artifact(tool_name, tool_args,
+                                                   {"latest": latest})
+        if artifact is None:
+            # Deterministic fallback: a table of the data is ALWAYS a valid
+            # rendering, so a render step never fails on a styling whim.
+            tool_name = "show_table"
+            artifact, _msg = self._record_artifact(
+                "show_table", {"title": step_spec.get("title") or ""},
+                {"latest": latest})
+        label_key = {"show_chart": "tool_chart", "show_table": "tool_table",
+                     "show_kpi": "tool_kpi"}[tool_name]
+        writer(_ev("RUNNING_TOOL", {"toolKey": tool_name,
+                                    "stepIndex": base_step,
+                                    "label": _L[label_key][lang]}))
+        # Re-emit the rendered data as THIS exchange's Evidence span (same
+        # frozen channel as the legacy recall path).
+        try:
+            with trace.subspan("semantic-model-query") as rsp:
+                rsp.outputs["sql"] = entry.get("sql") or "(workflow step result)"
+                rsp.outputs["success"] = True
+                rsp.outputs["row_count"] = entry.get("row_count")
+                rsp.outputs["columns"] = entry["columns"]
+                rsp.outputs["rows"] = entry["rows"]
+        except Exception:
+            logger.exception("render evidence span failed (non-fatal)")
+        akind = artifact["kind"]
+        writer(_ev("ARTIFACT", {"kind": akind,
+                                "title": artifact.get("title", ""),
+                                "chart": artifact.get("chart"),
+                                "kpi": artifact.get("kpi"),
+                                "description": artifact.get("description", ""),
+                                "sql_id": artifact.get("sql_id"),
+                                "label": _L["artifact_%s" % akind][lang]}))
+        writer(_ev("TOOL_DONE", {"toolKey": tool_name, "stepIndex": base_step,
+                                 "status": "ok",
+                                 "label": _L["tool_done"][lang]}))
+        return {"status": "ok", "step": sid, "artifact": artifact}, usage
+
+    def _workflow_execute(self, project, trace, mode, lang, step_spec,
+                          prior_results, writer):
+        if step_spec is None:
+            return {"status": "error", "error": "missing_step"}, {}
+        sid = step_spec["id"]
+        kind = step_spec["kind"]
+        base_step = max(1, int(sid[1:]))    # sql_id 's<n>q..' aligns on the plan
+        if kind == "clarify":
+            question = (step_spec.get("task") or step_spec.get("title") or "").strip()
+            return {"status": "clarify", "step": sid,
+                    "question": question[:WORKFLOW_TASK_MAX_CHARS]}, {}
+        if kind == "correlate":
+            # Correlation executes SERVER-SIDE in the backend engine (task T7:
+            # catalog aliases + guarded real SQL JOIN). The plan accepts the
+            # step; this runner only reports it does not execute it.
+            return {"status": "not_implemented", "step": sid,
+                    "kind": "correlate"}, {}
+        if kind == "render":
+            if not RUN_SETTINGS.get("flags", {}).get("allow_render", True):
+                return {"status": "error", "error": "kind_disabled",
+                        "step": sid}, {}
+            return self._workflow_render(project, trace, mode, lang, step_spec,
+                                         prior_results, base_step, writer)
+        if kind == "attribute_lookup":
+            return self._workflow_lookup(project, trace, step_spec, base_step,
+                                         lang, writer)
+        return self._workflow_specialist(project, trace, mode, lang, step_spec,
+                                         base_step, writer)
+
+    def _run_workflow_command(self, command, project, trace, mode, lang, text,
+                              step_spec, done_ids, prior_results, writer):
+        """Dispatch ONE bounded command. Returns (payload, usage)."""
+        if command == "plan":
+            return self._workflow_plan_or_replan(project, trace, mode, lang,
+                                                 text, writer, False, ())
+        if command == "replan":
+            return self._workflow_plan_or_replan(project, trace, mode, lang,
+                                                 text, writer, True, done_ids)
+        if command == "review":
+            return self._workflow_review(project, trace, mode, lang, text, writer)
+        if command == "synthesize":
+            return self._workflow_synthesize(project, trace, mode, lang, text,
+                                             writer)
+        return self._workflow_execute(project, trace, mode, lang, step_spec,
+                                      prior_results, writer)
+
+    def _process_workflow(self, control, query, settings, trace):
+        """One workflow command per invocation, as a single-node mini graph
+        (get_stream_writer keeps the proven live event channel). ZERO
+        checkpointer, ZERO SQL from here: the backend's PostgreSQL is the
+        checkpoint. Whatever happens, EXACTLY ONE OWI_WORKFLOW_CONTROL event
+        is emitted at the end (right before the final DONE)."""
+        command = control["command"]
+        holder = {"payload": None, "usage": {}}
+        try:
+            self._ensure_specs()
+            project = dataiku.api_client().get_default_project()
+            _history, last_user, _prev = self._conversation(query)
+            token_lang = parse_lang(last_user)
+            step_spec = parse_workflow_step(last_user)
+            done_ids = parse_workflow_done(last_user)
+            prior_results, cleaned = parse_prior(last_user)
+            mode, text = parse_mode(cleaned)
+            lang = token_lang or _detect_lang(text)
+            agent = self
+
+            def node_workflow(state):
+                writer = get_stream_writer()
+                payload, usage = agent._run_workflow_command(
+                    command, project, trace, mode, lang, text, step_spec,
+                    done_ids, prior_results, writer)
+                holder["payload"] = payload
+                holder["usage"] = usage or {}
+                return {}
+
+            g = StateGraph(OrchState)
+            g.add_node("workflow", node_workflow)
+            g.add_edge(START, "workflow")
+            g.add_edge("workflow", END)
+            for chunk in g.compile().stream({}, stream_mode="custom"):
+                yield chunk
+        except Exception:
+            # Message deliberately opaque (no prompt / rows / internal detail
+            # in the control payload); the full traceback stays server-side.
+            logger.exception("workflow command failed (command=%s)", command)
+            holder["payload"] = {"status": "error", "error": "internal_error"}
+        if holder["payload"] is None:
+            holder["payload"] = {"status": "error", "error": "no_result"}
+        yield _workflow_control_chunk(command, holder["payload"])
+        yield _ev("DONE", {"totalUsage": holder.get("usage") or {}})
+
     # ---- main entrypoints --------------------------------------------------
     def process_stream(self, query, settings, trace):
+        # WORKFLOW COMMAND PATH (v1.3): the backend appends a ⟦owi:workflow=...⟧
+        # machine token when it drives a durable run; the invocation then
+        # executes ONE bounded command and returns. WITHOUT a valid token this
+        # method IS the legacy path, strictly unchanged (golden test).
+        try:
+            _wf_history, wf_last_user, _wf_prev = self._conversation(query)
+            wf_control = parse_workflow_control(wf_last_user)
+        except Exception:
+            wf_control = None
+        if wf_control is not None:
+            for chunk in self._process_workflow(wf_control, query, settings,
+                                                trace):
+                yield chunk
+            return
         loop_llm = None    # in scope for the except (which model failed, if any)
         try:
             self._ensure_specs()

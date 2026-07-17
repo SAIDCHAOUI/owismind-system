@@ -75,6 +75,29 @@ def _json_bytes(value):
     return (content + "\n").encode("utf-8")
 
 
+_WORKFLOW_SECTION_ORDER = ("PLANNER", "REPLANNER", "REVIEWER", "SYNTHESIZER")
+
+
+def _workflow_prompts_markdown(prompts):
+    """Canonical markdown of the workflow prompt seed. MUST round-trip through
+    the orchestrator's _parse_workflow_prompts back to the embedded defaults
+    (byte-equivalence is what makes the hub seed a safe starting point)."""
+    lines = [
+        "# OWIsMind orchestrator workflow prompts",
+        "",
+        "> Hub-managed prompt sections of the workflow command protocol (plan /",
+        "> replan / review / synthesize). The orchestrator loads this file at",
+        "> agent start with strict validation and falls back to its embedded",
+        "> defaults on any problem. Keep the four section headings unchanged.",
+    ]
+    for name in _WORKFLOW_SECTION_ORDER:
+        lines.append("")
+        lines.append("## %s" % name)
+        lines.append("")
+        lines.append(prompts[name.lower()])
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def build_canonical_files(repo_root) -> dict[str, bytes]:
     """Build canonical hub seed bytes keyed by absolute seed file path."""
     repo_root = os.path.abspath(repo_root)
@@ -86,7 +109,9 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
         mirror_dir, "project-library", "python", "owismind_factory", "hub.py"
     )
     constants = _extract_constants(
-        orchestrator_path, {"CAPABILITIES_DEFAULT", "PERSONA_DEFAULT"}
+        orchestrator_path,
+        {"CAPABILITIES_DEFAULT", "PERSONA_DEFAULT",
+         "RUN_SETTINGS_DEFAULT", "WORKFLOW_PROMPTS_DEFAULT"},
     )
     hub_dir = os.path.join(mirror_dir, "project-library", "owismind_hub")
     return {
@@ -98,6 +123,11 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
         os.path.join(hub_dir, "factory_settings.json"): _json_bytes(
             _load_default_settings(hub_module_path)
         ),
+        os.path.join(hub_dir, "run_settings.json"): _json_bytes(
+            constants["RUN_SETTINGS_DEFAULT"]
+        ),
+        os.path.join(hub_dir, "prompts", "orchestrator_workflow.md"):
+            _workflow_prompts_markdown(constants["WORKFLOW_PROMPTS_DEFAULT"]),
     }
 
 
@@ -152,7 +182,8 @@ def main(argv=None):
                 print("DIFF: %s differs from its canonical seed." % path,
                       file=sys.stderr)
             return 1
-        print("OK: all 3 hub seed files are up to date.")
+        print("OK: all %d hub seed files are up to date."
+              % len(build_canonical_files(_REPO_ROOT)))
         return 0
 
     changed = write_canonical_files(_REPO_ROOT)
@@ -164,7 +195,7 @@ def main(argv=None):
             os.path.relpath(path, _REPO_ROOT) for path in canonical_paths
             if os.path.relpath(path, _REPO_ROOT) not in changed_set):
         print("UP TO DATE: %s" % path)
-    print("OK: processed 3 hub seed files.")
+    print("OK: processed %d hub seed files." % len(canonical_paths))
     return 0
 
 
