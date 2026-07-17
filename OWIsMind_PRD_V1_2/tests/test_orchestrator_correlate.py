@@ -164,6 +164,16 @@ class GuardTests(unittest.TestCase):
         self._ko("", "empty_sql")
         self._ko("EXPLAIN SELECT 1", "not_a_select")
 
+    def test_sql_comments_rejected(self):
+        # PostgreSQL treats /**/ as whitespace: a comment between FROM and a
+        # table name would smuggle a physical table past the allowlist scan.
+        self._ko("SELECT * FROM/**/webapp_users", "comment_in_sql")
+        self._ko("SELECT * FROM d1 JOIN/**/webapp_users ON true", "comment_in_sql")
+        self._ko("SELECT * FROM d1 -- then a hidden line\nUNION SELECT 1",
+                 "comment_in_sql")
+        # a literal that merely contains a comment marker stays fine (blanked)
+        self._ok("SELECT d1.k FROM d1 WHERE d1.label = 'a /* b */ c'")
+
 
 class CteBuilderTests(unittest.TestCase):
     def test_ctes_quote_identifiers_and_prefix_model_sql(self):

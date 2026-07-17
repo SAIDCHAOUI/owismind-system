@@ -549,6 +549,29 @@ class StartWorkflowTests(RunnerHarness):
         with self.assertRaises(durable_runner.BusyError):
             durable_runner.start_workflow("ex-9", "s", "u1", "k", "smart", "q")
 
+    def test_reservation_survives_the_reaper(self):
+        # A concurrent same-user start must NOT purge a sibling's reservation
+        # (thread=None) before counting - else the per-user cap is defeated.
+        durable_runner._WORKERS["resv-ex-a"] = {
+            "user_id": "u1", "thread": None, "reservation": True}
+        durable_runner._reap_dead_workers_locked()
+        self.assertIn("resv-ex-a", durable_runner._WORKERS)
+        # a genuinely dead worker (thread not alive, not a reservation) IS reaped
+        durable_runner._WORKERS["r-dead"] = {
+            "user_id": "u2",
+            "thread": types.SimpleNamespace(is_alive=lambda: False)}
+        durable_runner._reap_dead_workers_locked()
+        self.assertNotIn("r-dead", durable_runner._WORKERS)
+        self.assertIn("resv-ex-a", durable_runner._WORKERS)
+
+    def test_second_same_user_start_blocked_while_reservation_held(self):
+        # Simulate the TOCTOU window: a live reservation for u1 is present when a
+        # second start for u1 arrives - it must be refused, not slip through.
+        durable_runner._WORKERS["resv-ex-a"] = {
+            "user_id": "u1", "thread": None, "reservation": True}
+        with self.assertRaises(durable_runner.BusyError):
+            durable_runner.start_workflow("ex-b", "s", "u1", "k", "smart", "q")
+
 
 class AdapterTests(RunnerHarness):
     def test_poll_durable_projects_without_lease_fields(self):

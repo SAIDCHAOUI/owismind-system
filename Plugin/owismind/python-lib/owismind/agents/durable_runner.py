@@ -244,8 +244,12 @@ def project_run_public(run):
 
 # --- Internals ------------------------------------------------------------------------
 def _reap_dead_workers_locked():
+    # Reservations (thread=None placeholders held across create_run/claim/spawn)
+    # are NOT dead workers: reaping them would let a concurrent same-user start
+    # under-count and defeat the per-user cap the reservation exists to enforce.
     dead = [rid for rid, w in _WORKERS.items()
-            if not w.get("thread") or not w["thread"].is_alive()]
+            if not w.get("reservation")
+            and (not w.get("thread") or not w["thread"].is_alive())]
     for rid in dead:
         _WORKERS.pop(rid, None)
 

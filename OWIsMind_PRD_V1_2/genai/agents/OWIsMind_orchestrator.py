@@ -1600,6 +1600,12 @@ def _corr_guard_model_sql(sql, aliases):
     if not re.match(r"^select\b", sql, re.IGNORECASE):
         return None, "not_a_select"
     blanked = _CORR_STRING_LITERAL_RE.sub("''", sql)
+    # SQL comments are banned outright: PostgreSQL treats `/**/` as whitespace, so
+    # a comment between FROM and a table name (`FROM/**/webapp_users`) would slip a
+    # physical table past the FROM/JOIN allowlist scan below. The prompt already
+    # forbids comments; rejecting them here is the defense-in-depth backstop.
+    if "/*" in blanked or "--" in blanked:
+        return None, "comment_in_sql"
     if _CORR_FORBIDDEN_RE.search(blanked):
         return None, "forbidden_keyword"
     if _CORR_SYSTEM_TABLE_RE.search(blanked):
