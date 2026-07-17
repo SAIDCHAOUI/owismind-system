@@ -657,6 +657,8 @@ _L = {
     "tool_recall": {"fr": "Relecture d'un résultat précédent",
                     "en": "Recalling a previous result"},
     "tool_done": {"fr": "Outil terminé", "en": "Tool done"},
+    "tool_correlate": {"fr": "Corrélation SQL entre sources",
+                       "en": "Cross-source SQL correlation"},
     "artifact_chart": {"fr": "Graphique prêt", "en": "Chart ready"},
     "artifact_table": {"fr": "Tableau prêt", "en": "Table ready"},
     "artifact_kpi": {"fr": "Indicateur prêt", "en": "KPI ready"},
@@ -1508,6 +1510,110 @@ _WORKFLOW_TOKEN_RE = re.compile(r"⟦owi:workflow=([^⟧]*)⟧")
 _WF_STEP_TOKEN_RE = re.compile(r"⟦owi:wfstep=([^⟧]*)⟧")
 _WF_DONE_TOKEN_RE = re.compile(r"⟦owi:wfdone=([^⟧]*)⟧")
 _WORKFLOW_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}$")
+
+# --- correlate step (T7): guarded real SQL JOIN against logical aliases ------------
+# The model ONLY ever sees aliases d1..dN and their column schemas; the code builds
+# the CTEs from the catalog's server-only physical tables, then guards, EXPLAINs,
+# previews and executes read-only. Guard family mirrors the sub-agent's proven
+# guard_custom_sql (denylist + literal blanking + system catalogs + allowlist).
+CORRELATE_MAX_SOURCES = 5
+CORRELATE_MAX_ROWS = 500
+CORRELATE_PREVIEW_ROWS = 10
+CORRELATE_MODEL_ROWS = 15
+CORRELATE_MAX_FIXES = 2
+CORRELATE_MAX_CATALOG_COLS = 12
+# SQL generation NEVER degrades with the response mode (same principle as the
+# semantic-query tools, pinned to the Sonnet tier in every mode).
+CORRELATE_LLM_MODE = "claude"
+_CORRELATE_PRE_QUERIES = ("SET LOCAL statement_timeout TO '30000'",
+                          "SET LOCAL transaction_read_only TO on")
+_CORR_FORBIDDEN_RE = re.compile(
+    r"\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|"
+    r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into|with)\b",
+    re.IGNORECASE)
+_CORR_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+_CORR_SYSTEM_TABLE_RE = re.compile(
+    r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b", re.IGNORECASE)
+_CORR_TABLE_REF_RE = re.compile(r"\b(?:from|join)\s+([a-zA-Z0-9_\".]+)",
+                                re.IGNORECASE)
+_CORR_LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
+_CORR_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
+
+CORRELATE_SQL_SCHEMA = {
+    "type": "object",
+    "properties": {"sql": {"type": "string"}},
+    "required": ["sql"],
+    "additionalProperties": False,
+}
+
+CORRELATE_PROMPT_DEFAULT = (
+    "You write ONE PostgreSQL SELECT statement that answers the task by "
+    "correlating the provided logical sources.\n"
+    "HARD RULES:\n"
+    "- Reference ONLY the aliases listed below (d1, d2, ...). Never invent a "
+    "table name, never reference a physical or system table.\n"
+    "- ONE single SELECT statement: no WITH, no semicolon, no DDL/DML, no "
+    "comments.\n"
+    "- Use ONLY the listed columns; quote identifiers exactly as given.\n"
+    "- Aggregate BEFORE joining when it avoids fan-out double counting.\n"
+    "- End with LIMIT %d or less.\n"
+    "Return JSON: {\"sql\": \"...\"}." % CORRELATE_MAX_ROWS)
+
+
+def _merge_usage(total, usage):
+    """Accumulate two usage dicts (promptTokens/completionTokens/estimatedCost)."""
+    total = dict(total or {})
+    for key in ("promptTokens", "completionTokens", "totalTokens"):
+        add = usage.get(key) if isinstance(usage, dict) else None
+        if isinstance(add, (int, float)):
+            total[key] = int(total.get(key) or 0) + int(add)
+    cost = usage.get("estimatedCost") if isinstance(usage, dict) else None
+    if isinstance(cost, (int, float)):
+        total["estimatedCost"] = float(total.get("estimatedCost") or 0.0) + float(cost)
+    return total
+
+
+def _corr_quote_ident(name):
+    """Double-quote a SQL identifier (embedded quotes doubled)."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _corr_guard_model_sql(sql, aliases):
+    """The model's alias-only SELECT, validated; returns (clean_sql, problem).
+
+    Literal-blanked scans (a value like 'drop shipment' never false-positives),
+    closed keyword denylist (including WITH: the CODE owns the CTEs), no system
+    catalogs, every FROM/JOIN target inside the alias allowlist, single
+    statement, bounded LIMIT enforced."""
+    sql = (sql or "").strip().rstrip(";").strip()
+    if not sql:
+        return None, "empty_sql"
+    if ";" in sql:
+        return None, "multi_statement"
+    if "⟦" in sql or "⟧" in sql:
+        return None, "control_token_in_sql"
+    if not re.match(r"^select\b", sql, re.IGNORECASE):
+        return None, "not_a_select"
+    blanked = _CORR_STRING_LITERAL_RE.sub("''", sql)
+    if _CORR_FORBIDDEN_RE.search(blanked):
+        return None, "forbidden_keyword"
+    if _CORR_SYSTEM_TABLE_RE.search(blanked):
+        return None, "system_table"
+    allowed = {a.lower() for a in aliases}
+    for ref in _CORR_TABLE_REF_RE.findall(blanked):
+        # strip a trailing alias-dot access and surrounding quotes
+        base = ref.split(".")[0].strip('"').lower()
+        if base == "select":            # `from (select ...` derived table
+            continue
+        if base not in allowed:
+            return None, "table_not_allowed:%s" % base[:40]
+    m = _CORR_LIMIT_RE.search(blanked)
+    if m:
+        if int(m.group(1)) > CORRELATE_MAX_ROWS:
+            sql = _CORR_LIMIT_RE.sub("LIMIT %d" % CORRELATE_MAX_ROWS, sql)
+    else:
+        sql = sql + " LIMIT %d" % CORRELATE_MAX_ROWS
+    return sql, None
 _PLAN_STEP_ID_RE = re.compile(r"^S\d{1,3}$")
 
 # Content the plan may NEVER carry (rule #3/#4: the model talks capabilities,
@@ -3446,6 +3552,195 @@ class MyLLM(BaseLLM):
                                  "label": _L["tool_done"][lang]}))
         return {"status": "ok", "step": sid, "artifact": artifact}, usage
 
+    # ------------------------------------------------------------- correlate (T7)
+    def _correlate_catalog_schemas(self, caps_entries):
+        """(alias_map, dataset_name, problem) - the logical alias schemas from the
+        published catalog generations. alias_map: alias -> {"physical", "columns"}.
+        Everything here is SERVER-SIDE config (hub capabilities + factory catalog
+        publications); the model never sees a physical name."""
+        dataset_name = None
+        alias_map = {}
+        for i, cap in enumerate(caps_entries, start=1):
+            generation = cap.get("catalog_generation")
+            cat_dataset = cap.get("catalog_dataset")
+            if not generation or not cat_dataset:
+                return None, None, "correlate_unavailable:%s" % cap.get("key")
+            if not (_CORR_SAFE_ID_RE.match(str(generation))
+                    and _CORR_SAFE_ID_RE.match(str(cap.get("key") or ""))):
+                return None, None, "bad_catalog_ref"
+            if dataset_name is None:
+                dataset_name = cat_dataset
+            elif dataset_name != cat_dataset:
+                return None, None, "catalog_dataset_mismatch"
+            cat_table = dataiku.Dataset(cat_dataset).get_location_info() \
+                .get("info", {}).get("quotedResolvedTableName")
+            if not cat_table:
+                return None, None, "catalog_not_sql"
+            sql = (
+                "SELECT column_name, data_type, description, physical_table "
+                "FROM %s WHERE capability_key = '%s' AND generation_id = '%s' "
+                "AND item_level = 'column' ORDER BY column_name LIMIT %d"
+                % (cat_table, str(cap["key"]).replace("'", "''"),
+                   str(generation).replace("'", "''"),
+                   CORRELATE_MAX_CATALOG_COLS))
+            executor = dataiku.SQLExecutor2(dataset=dataiku.Dataset(cat_dataset))
+            df = executor.query_to_df(sql,
+                                      pre_queries=list(_CORRELATE_PRE_QUERIES))
+            columns, physical = [], None
+            for _, row in df.iterrows():
+                physical = physical or row.get("physical_table")
+                columns.append({"name": row.get("column_name"),
+                                "type": row.get("data_type") or "",
+                                "description": (row.get("description")
+                                                or "")[:160]})
+            if not columns or not physical:
+                return None, None, "catalog_empty:%s" % cap.get("key")
+            alias_map["d%d" % i] = {"physical": str(physical),
+                                    "columns": columns}
+        return alias_map, dataset_name, None
+
+    def _correlate_build_final_sql(self, alias_map, model_sql):
+        """Server-side CTE substitution: WITH d1 AS (SELECT cols FROM physical)..."""
+        ctes = []
+        for alias in sorted(alias_map):
+            entry = alias_map[alias]
+            physical = entry["physical"]
+            if not physical.startswith('"'):
+                physical = _corr_quote_ident(physical)
+            cols = ", ".join(_corr_quote_ident(c["name"])
+                             for c in entry["columns"])
+            ctes.append("%s AS (SELECT %s FROM %s)" % (alias, cols, physical))
+        return "WITH " + ", ".join(ctes) + " " + model_sql
+
+    def _correlate_run(self, dataset_name, final_sql):
+        """EXPLAIN -> preview -> full run, all read-only + statement timeout."""
+        executor = dataiku.SQLExecutor2(dataset=dataiku.Dataset(dataset_name))
+        executor.query_to_df("EXPLAIN " + final_sql,
+                             pre_queries=list(_CORRELATE_PRE_QUERIES))
+        preview = executor.query_to_df(
+            "SELECT * FROM (%s) AS owi_preview LIMIT %d"
+            % (final_sql, CORRELATE_PREVIEW_ROWS),
+            pre_queries=list(_CORRELATE_PRE_QUERIES))
+        df = executor.query_to_df(final_sql,
+                                  pre_queries=list(_CORRELATE_PRE_QUERIES))
+        columns = [str(c) for c in df.columns]
+        rows = [list(r) for r in df.head(CORRELATE_MAX_ROWS).itertuples(
+            index=False, name=None)]
+        return columns, rows, len(preview)
+
+    def _workflow_correlate(self, project, trace, mode, lang, step_spec,
+                            base_step, writer):
+        """Real read-only SQL JOIN against logical aliases (spec section 7.2).
+
+        Pipeline order is STRICT: catalog schemas -> model SQL against aliases
+        (strict JSON, Sonnet tier in every mode) -> guard -> server-side CTE
+        substitution -> EXPLAIN -> preview -> sanity -> bounded execution, with
+        at most CORRELATE_MAX_FIXES corrections fed the CLEANED db error."""
+        sid = step_spec["id"]
+        caps_reg = self._caps or get_capabilities()
+        keys = [k for k in (step_spec.get("capability_keys") or [])
+                if isinstance(k, str)]
+        if not 2 <= len(keys) <= CORRELATE_MAX_SOURCES:
+            return {"status": "error", "error": "correlate_needs_2_sources",
+                    "step": sid}, {}
+        entries = []
+        for key in keys:
+            cap = caps_reg.get(key)
+            if not isinstance(cap, dict) or not cap.get("enabled"):
+                return {"status": "error", "error": "capability_unavailable",
+                        "step": sid, "detail": key[:40]}, {}
+            entry = dict(cap)
+            entry["key"] = key
+            entries.append(entry)
+        writer(_ev("RUNNING_TOOL", {"toolKey": "correlate",
+                                    "stepIndex": base_step,
+                                    "label": _L["tool_correlate"][lang]}))
+        try:
+            alias_map, cat_dataset, problem = \
+                self._correlate_catalog_schemas(entries)
+        except Exception:
+            logger.exception("correlate catalog read failed")
+            return {"status": "error", "error": "catalog_read_failed",
+                    "step": sid}, {}
+        if problem:
+            return {"status": "error", "error": problem, "step": sid}, {}
+
+        schema_lines = []
+        for alias in sorted(alias_map):
+            cols = ", ".join("%s (%s)%s" % (
+                c["name"], c["type"],
+                " - " + c["description"] if c["description"] else "")
+                for c in alias_map[alias]["columns"])
+            schema_lines.append("%s: %s" % (alias, cols))
+        task = (step_spec.get("task") or step_spec.get("title") or "")
+        user_msg = ("TASK: %s\n\nSOURCES:\n%s"
+                    % (task[:WORKFLOW_TASK_MAX_CHARS],
+                       "\n".join(schema_lines)))
+        llm_id = pick_loop_llm(CORRELATE_LLM_MODE)
+        usage_total = {}
+        last_error = None
+        for attempt in range(1 + CORRELATE_MAX_FIXES):
+            prompt = user_msg if not last_error else (
+                user_msg + "\n\nYOUR PREVIOUS SQL FAILED: %s\n"
+                "Return a corrected statement." % str(last_error)[:400])
+            parsed, usage = self._workflow_json_call(
+                project, trace, llm_id, CORRELATE_PROMPT_DEFAULT, prompt,
+                CORRELATE_SQL_SCHEMA, "workflow-correlate-sql")
+            usage_total = _merge_usage(usage_total, usage)
+            model_sql = (parsed or {}).get("sql") if isinstance(parsed, dict) \
+                else None
+            clean_sql, guard_problem = _corr_guard_model_sql(
+                model_sql, alias_map.keys())
+            if guard_problem:
+                last_error = "guard rejected the statement (%s)" % guard_problem
+                continue
+            final_sql = self._correlate_build_final_sql(alias_map, clean_sql)
+            try:
+                columns, rows, _preview_n = self._correlate_run(cat_dataset,
+                                                                final_sql)
+            except Exception as db_err:
+                # execution-guided self-correction: the CLEANED error goes back
+                last_error = re.sub(r"\s+", " ", str(db_err))[:400]
+                continue
+            if not columns:
+                last_error = "the statement returned no columns"
+                continue
+            sql_id = "s%dqc%d" % (base_step, attempt + 1)
+            try:
+                with trace.subspan("semantic-model-query") as span:
+                    span.outputs["sql"] = final_sql
+                    span.outputs["success"] = True
+                    span.outputs["row_count"] = len(rows)
+                    span.outputs["columns"] = columns
+                    span.outputs["rows"] = rows[:CORRELATE_MAX_ROWS]
+            except Exception:
+                logger.exception("correlate evidence span failed (non-fatal)")
+            writer(_ev("TOOL_DONE", {"toolKey": "correlate",
+                                     "stepIndex": base_step, "status": "ok",
+                                     "label": _L["tool_done"][lang]}))
+            used = {a for a in alias_map
+                    if re.search(r"\b%s\b" % a, clean_sql, re.IGNORECASE)}
+            summary = "%d rows correlating %d sources (%s)" % (
+                len(rows), len(alias_map), ", ".join(sorted(used)))
+            return {"status": "ok" if rows else "no_data", "step": sid,
+                    "summary": summary,
+                    "row_count": len(rows),
+                    "columns": columns,
+                    "schema": ["%s" % c for c in columns],
+                    "model_view": {"columns": columns,
+                                   "rows": rows[:CORRELATE_MODEL_ROWS],
+                                   "row_count": len(rows)},
+                    "generated_sql": [{"sql": final_sql, "success": True,
+                                       "rowCount": len(rows),
+                                       "sqlId": sql_id}],
+                    "all_sources_used": used == set(alias_map),
+                    "output_ref": "#" + sid}, usage_total
+        writer(_ev("TOOL_DONE", {"toolKey": "correlate",
+                                 "stepIndex": base_step, "status": "error",
+                                 "label": _L["tool_done"][lang]}))
+        return {"status": "error", "error": "correlate_failed", "step": sid,
+                "detail": (last_error or "")[:200]}, usage_total
+
     def _workflow_execute(self, project, trace, mode, lang, step_spec,
                           prior_results, writer):
         if step_spec is None:
@@ -3458,11 +3753,11 @@ class MyLLM(BaseLLM):
             return {"status": "clarify", "step": sid,
                     "question": question[:WORKFLOW_TASK_MAX_CHARS]}, {}
         if kind == "correlate":
-            # Correlation executes SERVER-SIDE in the backend engine (task T7:
-            # catalog aliases + guarded real SQL JOIN). The plan accepts the
-            # step; this runner only reports it does not execute it.
-            return {"status": "not_implemented", "step": sid,
-                    "kind": "correlate"}, {}
+            if not RUN_SETTINGS.get("flags", {}).get("allow_correlate", True):
+                return {"status": "error", "error": "kind_disabled",
+                        "step": sid}, {}
+            return self._workflow_correlate(project, trace, mode, lang,
+                                            step_spec, base_step, writer)
         if kind == "render":
             if not RUN_SETTINGS.get("flags", {}).get("allow_render", True):
                 return {"status": "error", "error": "kind_disabled",

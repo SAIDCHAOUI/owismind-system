@@ -807,15 +807,22 @@ class TestExecuteCommand(WorkflowTestCase):
                                    "question": "Which year do you mean?"})
         self.assertEqual(project.llm_ids, [])
 
-    def test_correlate_step_not_implemented(self):
+    def test_correlate_step_without_catalog_is_a_structured_error(self):
+        # T7 implemented correlate: in this harness no capability carries a
+        # catalog publication, so the step must REFUSE with a structured error
+        # (never a crash, never an unguarded SQL attempt). The full correlate
+        # pipeline is covered by test_orchestrator_correlate.py.
         step = {"id": "S3", "kind": "correlate", "title": "Join",
                 "task": "Join revenue and tickets.",
                 "capability_keys": ["revenue_expert", "tickets_expert"]}
         content = "ledger " + _step_token(step) + _wf_token("execute")
         chunks, _project, _agent = self.run_command(content)
         payload = _control_events(chunks)[0]["chunk"]["eventData"]["payload"]
-        self.assertEqual(payload["status"], "not_implemented")
+        self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["step"], "S3")
+        self.assertIn(payload["error"].split(":")[0],
+                      ("correlate_unavailable", "capability_unavailable",
+                       "catalog_read_failed"))
 
     def test_missing_step_token_is_an_error(self):
         chunks, _project, _agent = self.run_command(
