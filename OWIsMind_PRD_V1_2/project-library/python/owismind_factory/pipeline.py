@@ -16,7 +16,8 @@ Typical use (notebook 03_create_domain.py or the console webapp):
                            schema_hints=probe["suggested_schema_hints"])
 """
 
-from . import agent_builder, flow_builder, hub, registry, semantic_builder, tool_builder, wizard
+from . import (agent_builder, catalog, flow_builder, hub, registry, semantic_builder,
+               tool_builder, wizard)
 from .fctx import DONE
 
 # Ordered step names (the console renders and filters on these).
@@ -33,6 +34,7 @@ STEP_NAMES = [
     "semantic_tool",
     "code_agent",
     "capability",
+    "catalog",
     "smoke",
 ]
 
@@ -205,6 +207,63 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
                        "append capability %s with registry.capability_entry(spec, "
                        "'agent:<ID>') and hub.append_capability (or re-run the "
                        "capability step)" % spec.capability_key)
+
+    if _enabled(steps, "catalog"):
+        catalog_dataset = catalog.ensure_catalog_dataset(ctx, connection, zone=zone)
+        if ctx.dry_run:
+            ctx.plan("catalog_generation",
+                     "build metadata-only catalog generation for %s from its schema and "
+                     "wizard descriptions (no business rows or samples)" % spec.capability_key)
+            ctx.plan("catalog_publish",
+                     "append the catalog generation for %s to %s"
+                     % (spec.capability_key, catalog.CATALOG_DATASET_NAME))
+        elif not wizard_config or wizard_config.get("error"):
+            ctx.manual("catalog",
+                       "no valid wizard config: review descriptions, synonyms and join hints, "
+                       "then re-run the catalog step (the factory never infers join hints)")
+        elif catalog_dataset is None:
+            ctx.block("catalog", "catalog dataset could not be secured")
+        else:
+            try:
+                dataset_schema = ctx.project.get_dataset(spec.base_dataset).get_schema()
+            except Exception as exc:
+                ctx.manual("catalog",
+                           "cannot read schema of %s (%s): refusing to publish a partial "
+                           "catalog generation" % (spec.base_dataset, exc))
+            else:
+                physical_table = wizard.get_physical_table(ctx.project, spec.base_dataset)
+                if not physical_table:
+                    ctx.manual("catalog",
+                               "cannot resolve the physical table for %s: catalog references "
+                               "stay server-only, so publish only after it is available"
+                               % spec.base_dataset)
+                else:
+                    config = dict(wizard_config)
+                    config["connection_key"] = connection
+                    generation = catalog.build_catalog_generation(
+                        spec, config, dataset_schema, physical_table)
+                    published = catalog.publish_catalog_generation(
+                        ctx, spec.capability_key, generation)
+                    if published:
+                        capabilities = hub.read_capabilities(ctx.project) or {}
+                        existing = capabilities.get(spec.capability_key)
+                        if not isinstance(existing, dict):
+                            ctx.manual("catalog_registry",
+                                       "catalog generation %s was published, but capability %s "
+                                       "is absent from the hub: add its active catalog fields by hand"
+                                       % (published, spec.capability_key))
+                        else:
+                            entry = dict(existing)
+                            entry.update({
+                                "catalog_generation": published,
+                                "catalog_dataset": catalog.CATALOG_DATASET_NAME,
+                                "connection_key": connection,
+                            })
+                            ctx.act("catalog_registry",
+                                    "set active catalog generation %s for capability %s"
+                                    % (published, spec.capability_key),
+                                    lambda: hub.append_capability(
+                                        ctx.project, spec.capability_key, entry))
 
     if _enabled(steps, "smoke"):
         smoke(ctx, spec, tool_id=tool_id, agent_id=agent_id)

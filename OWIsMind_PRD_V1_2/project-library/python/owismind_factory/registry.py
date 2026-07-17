@@ -31,7 +31,8 @@ _TOOL_LABELS = {
 }
 
 
-def capability_entry(spec, agent_id, source_url=""):
+def capability_entry(spec, agent_id, source_url="", catalog_generation=None,
+                     catalog_dataset=None, connection_key=None):
     """Build the CAPABILITIES entry for a new specialist.
 
     :param spec: :class:`owismind_factory.spec.DomainSpec`
@@ -41,7 +42,7 @@ def capability_entry(spec, agent_id, source_url=""):
     agent_id = str(agent_id or "")
     if agent_id and not agent_id.startswith("agent:"):
         agent_id = "agent:" + agent_id
-    return {
+    entry = {
         "kind": "agent",
         "agent_id": agent_id,
         "domain": spec.domain,
@@ -61,3 +62,14 @@ def capability_entry(spec, agent_id, source_url=""):
         # New domains ship DISABLED: flip to True after the smoke tests pass.
         "enabled": False,
     }
+    # Catalog metadata is additive. Legacy v1.2 entries intentionally omit it
+    # and remain valid for the existing orchestrator capability validator.
+    optional_catalog = {
+        "catalog_generation": catalog_generation,
+        "catalog_dataset": catalog_dataset,
+        "connection_key": connection_key,
+    }
+    for key, value in optional_catalog.items():
+        if value:
+            entry[key] = str(value)
+    return entry
