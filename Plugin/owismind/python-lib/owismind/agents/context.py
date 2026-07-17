@@ -738,3 +738,175 @@ def build_completion_messages(history_messages, current_message, user_suffix):
     out = list(history_messages or [])
     out.append({"role": "user", "content": current_message + (user_suffix or "")})
     return out
+
+
+# =====================================================================================
+# Durable workflow (v1.3 "Durable Step Shell") - deterministic gate + protocol builders
+# =====================================================================================
+# All PURE helpers (no DSS, no LLM): the backend decides WHEN to plan and builds the
+# machine-token envelope the orchestrator's workflow path parses. The token grammar is
+# FROZEN by the agent side (OWIsMind_orchestrator.parse_workflow_control and friends):
+#   ⟦owi:workflow=v1;command=<cmd>;run=<id>;step=<id>;attempt=<id>⟧
+#   ⟦owi:wfstep=<json step spec>⟧      (execute commands only)
+#   ⟦owi:wfdone=<json id list>⟧        (replan commands only)
+# and the LAYOUT CONTRACT is load-bearing: every ⟦owi:*⟧ token sits in the message
+# TAIL, prose strictly before - any prose after a token silently degrades the call
+# to the legacy path (parse_workflow_control returns None by design).
+
+ANALYSIS_MODES = ("auto", "deep", "direct")
+
+WORKFLOW_PROTOCOL_VERSION = "v1"
+WORKFLOW_COMMANDS = ("plan", "execute", "replan", "review", "synthesize")
+
+# High-precision multi-source phrasing (fr + en): correlation-family verbs only.
+# "comparer" alone is NOT enough (comparing two periods of ONE source is common);
+# precision beats recall here - a false negative still gets a correct legacy answer.
+_MULTI_SOURCE_RE = re.compile(
+    r"corr[eé]l|croiser|croisement|crois[eé]s?\b|rapproch(?:er|ement)|"
+    r"cross[- ]?referenc|joindre\s+les\s+donn|join\s+(?:the\s+)?data",
+    re.IGNORECASE,
+)
+
+# Ledger block budgets per response mode (chars), spec section 6. Restorable
+# compression only: the FULL step outputs stay in SQL, this block is a recitation.
+PROGRESS_BLOCK_MAX_CHARS = {"smart": 6000, "pro": 8000, "claude": 10000}
+_PROGRESS_SUMMARY_TRIM = 90          # per-step summary width under pressure
+_PROGRESS_DEFAULT_BUDGET = 6000
+
+
+def resolve_analysis_mode(requested):
+    """Normalise the frontend's analysis-mode request; anything unknown -> "auto".
+
+    The value is a UI toggle ("deep" = force the durable planned path, "direct" =
+    force the legacy path); it is NOT trusted for anything else server-side."""
+    if isinstance(requested, str) and requested.strip().lower() in ANALYSIS_MODES:
+        return requested.strip().lower()
+    return "auto"
+
+
+def should_plan(question, domain_keywords, analysis_mode):
+    """Deterministic complexity gate - True when the durable planned path engages.
+
+    NEVER calls an LLM. "deep" forces True, "direct" forces False; "auto" fires
+    only on HIGH-PRECISION signals: at least two distinct configured domains
+    matched in the question, or explicit correlation-family phrasing. Simple
+    traffic must never pay the planner cost (a false negative still gets the
+    validated legacy ReAct answer)."""
+    mode = resolve_analysis_mode(analysis_mode)
+    if mode == "deep":
+        return True
+    if mode == "direct":
+        return False
+    text = (question or "").casefold()
+    if not text.strip():
+        return False
+    hits = 0
+    for domain, keywords in (domain_keywords or {}).items():
+        if not domain:
+            continue
+        for kw in (keywords or []):
+            if isinstance(kw, str) and len(kw) >= 3 and kw.casefold() in text:
+                hits += 1
+                break                      # one hit per domain
+    if hits >= 2:
+        return True
+    return bool(_MULTI_SOURCE_RE.search(question or ""))
+
+
+def _workflow_id_ok(value):
+    """Mirror of the agent's _WORKFLOW_ID_RE (frozen charset, 64 chars max)."""
+    return bool(re.match(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}$", value or ""))
+
+
+def build_workflow_token(command, run_id, step_id=None, attempt_id=None):
+    """The authoritative ⟦owi:workflow=...⟧ control token (frozen grammar).
+
+    Raises ValueError on any field the agent-side strict parser would reject:
+    failing LOUD here beats a silent legacy fallback in production."""
+    if command not in WORKFLOW_COMMANDS:
+        raise ValueError("unknown workflow command: {0!r}".format(command))
+    if not _workflow_id_ok(run_id):
+        raise ValueError("bad run_id for workflow token")
+    payload = "{0};command={1};run={2}".format(
+        WORKFLOW_PROTOCOL_VERSION, command, run_id)
+    if step_id:
+        if not _workflow_id_ok(step_id):
+            raise ValueError("bad step_id for workflow token")
+        payload += ";step={0}".format(step_id)
+    if attempt_id:
+        if not _workflow_id_ok(attempt_id):
+            raise ValueError("bad attempt_id for workflow token")
+        payload += ";attempt={0}".format(attempt_id)
+    return "⟦owi:workflow={0}⟧".format(payload)
+
+
+def build_wfstep_token(step):
+    """The ⟦owi:wfstep=...⟧ token carrying the CURRENT step spec to an execute."""
+    body = json.dumps(step or {}, ensure_ascii=True, separators=(",", ":"))
+    return "⟦owi:wfstep={0}⟧".format(body)
+
+
+def build_wfdone_token(step_ids):
+    """The ⟦owi:wfdone=...⟧ token carrying completed step ids to a replan."""
+    clean = [s for s in (step_ids or []) if isinstance(s, str) and s]
+    body = json.dumps(clean, ensure_ascii=True, separators=(",", ":"))
+    return "⟦owi:wfdone={0}⟧".format(body)
+
+
+def build_progress_block(ledger, mode=None):
+    """The [WORKFLOW PROGRESS] recitation block (bounded, restorable compression).
+
+    ``ledger`` is run_state.load_ledger's {"run": .., "steps": [..]}. Contains only
+    summaries, statuses, refs and schemas - NEVER raw data rows (they stay in SQL,
+    reloadable by ref). Degradation order under budget pressure: drop schema lines
+    first, then trim summaries; statuses and #refs are never dropped."""
+    if not isinstance(ledger, dict):
+        return ""
+    run = ledger.get("run") or {}
+    steps = ledger.get("steps") or []
+    budget = PROGRESS_BLOCK_MAX_CHARS.get(mode, _PROGRESS_DEFAULT_BUDGET)
+
+    def _lines(with_schema, trim):
+        out = ["[WORKFLOW PROGRESS]"]
+        goal = (run.get("final_intent") or run.get("goal") or "").strip()
+        if goal:
+            out.append("Goal: {0}".format(goal[:300]))
+        done = sum(1 for s in steps if s.get("status") == "completed")
+        out.append("Plan: {0} completed / {1} total".format(done, len(steps)))
+        for s in steps:
+            status = s.get("status") or "pending"
+            title = (s.get("title") or "")[:160]
+            line = "{0} {1} [{2}]".format(s.get("step_id") or "?", title, status)
+            summary = (s.get("result_summary") or "").strip()
+            if summary and status == "completed":
+                line += " -> {0}{1}".format(
+                    (s.get("output_ref") or "#" + str(s.get("step_id") or "")), "")
+                line += " {0}".format(summary[:trim])
+            out.append(line)
+            if with_schema and status == "completed" and s.get("result_schema_json"):
+                out.append("  schema: {0}".format(
+                    str(s.get("result_schema_json"))[:200]))
+        out.append("[/WORKFLOW PROGRESS]")
+        return "\n".join(out)
+
+    block = _lines(with_schema=True, trim=240)
+    if len(block) <= budget:
+        return block
+    block = _lines(with_schema=False, trim=240)          # drop schemas first
+    if len(block) <= budget:
+        return block
+    block = _lines(with_schema=False, trim=_PROGRESS_SUMMARY_TRIM)
+    return block[:budget]                                 # last resort, hard cap
+
+
+def build_workflow_message(prose, tokens):
+    """Assemble the exact message the agent's workflow parser expects.
+
+    LAYOUT CONTRACT (frozen by the agent's anti-forge rule): all control tokens
+    grouped STRICTLY at the tail, prose strictly before them, NOTHING after -
+    any prose after a token silently degrades the exchange to the legacy path."""
+    body = (prose or "").rstrip()
+    tail = "".join(t for t in (tokens or []) if t)
+    if not tail:
+        return body
+    return body + "\n\n" + tail

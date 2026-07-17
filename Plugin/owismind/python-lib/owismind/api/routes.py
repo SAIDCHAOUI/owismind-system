@@ -40,7 +40,7 @@ from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
 
-from owismind.agents import context, discovery, stream_manager
+from owismind.agents import context, discovery, durable_runner, stream_manager
 from owismind.agents import user_catalog
 from owismind.evidence import chart_payload
 from owismind.evidence import service as evidence_service
@@ -48,6 +48,7 @@ from owismind.evidence import source_service
 from owismind.evidence import throttle as evidence_throttle
 from owismind.storage import artifacts as artifacts_storage
 from owismind.storage import events as events_storage
+from owismind.storage import run_state
 from owismind.security.identity import IdentityError, derive_full_name, resolve_identity
 from owismind.security.validation import (
     MAX_PROJECT_KEY_CHARS,
@@ -524,6 +525,32 @@ def chat_start():
     # ``screen_context`` (the sanitized viewport + consented shared view) was already
     # computed above, before the phase-one write, and handed to the worker unchanged here.
 
+    # Durable workflow gate (v1.3 Durable Step Shell). Only an agent whose admin
+    # profile opted into ``durable_workflow`` may take the planned path, and only
+    # when the DETERMINISTIC high-precision gate fires (two configured domains
+    # matched, explicit correlation phrasing, or the user's "deep" toggle) - simple
+    # traffic never pays the planner cost, and "direct" always forces the validated
+    # legacy path. On ANY durable-start failure we fall through to the legacy run:
+    # the phase-one exchange row already exists, nothing is lost.
+    analysis_mode = context.resolve_analysis_mode(body.get("analysis_mode"))
+    if bool(agent_profile.get("durable_workflow")) and context.should_plan(
+            message, agent_profile.get("domain_keywords") or {}, analysis_mode):
+        try:
+            started = durable_runner.start_workflow(
+                exchange_id, session_id, identity["user_id"], agent_key, mode,
+                message,
+                bootstrap={"project_key": project_key, "agent_id": agent_id},
+            )
+            logger.info("/chat/start - durable workflow engaged run_id=%s",
+                        started.get("run_id"))
+            return jsonify({"status": "ok", "durable": True, **started})
+        except durable_runner.BusyError:
+            logger.warning("/chat/start - durable capacity reached, rejected")
+            return jsonify({"status": "error", "error": "busy"}), 503
+        except Exception:
+            logger.exception(
+                "/chat/start - durable start failed, falling back to legacy")
+
     # Spawn the bounded background worker. The agent_id stays server-side; the front
     # only ever receives the opaque run_id. The effective mode (resolved above, never
     # raw frontend input) also sizes the run's wall-clock deadline per mode.
@@ -575,6 +602,10 @@ def chat_poll():
 
     result = stream_manager.poll(run_id, identity["user_id"], cursor)
     if result is None:
+        # Durable runs live in SQL, not in the legacy RAM registry: same contract
+        # ({events, cursor, done, error}), owner-scoped, lease fields never exposed.
+        result = durable_runner.poll_durable(run_id, identity["user_id"], cursor)
+    if result is None:
         return jsonify({"status": "error", "error": "run_not_found"}), 404
 
     return jsonify({"status": "ok", **result})
@@ -612,10 +643,61 @@ def chat_stop():
         return jsonify({"status": "error", "error": "invalid_run_id"}), 400
 
     if not stream_manager.request_stop(run_id, identity["user_id"]):
-        return jsonify({"status": "error", "error": "run_not_found"}), 404
+        # Durable stop: persist stop_requested; the worker honors it between two
+        # commands (no Mesh cancel exists - honest cooperative semantics).
+        if not durable_runner.stop_durable(run_id, identity["user_id"]):
+            return jsonify({"status": "error", "error": "run_not_found"}), 404
 
     logger.info("/chat/stop - run_id=%s user_id=%s", run_id, identity["user_id"])
     return jsonify({"status": "ok"})
+
+
+@api.route("/chat/active", methods=["GET"])
+def chat_active():
+    """The caller's still-active durable run for a session, or none (reconnect flow).
+
+    Query params: ``session_id``. After a page refresh or navigation the frontend
+    asks whether its session has a durable analysis in flight and, if so,
+    re-attaches its polling loop from cursor 0. Owner-scoped; the projection NEVER
+    contains lease internals (lease_owner / lease_until / worker_heartbeat_at)."""
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/chat/active - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+    session_id = request.args.get("session_id", "")
+    if not session_id or len(session_id) > 128:
+        return jsonify({"status": "ok", "run": None})
+    try:
+        run = durable_runner.active_run_for_session(session_id, identity["user_id"])
+    except Exception:
+        logger.exception("/chat/active - lookup failed")
+        run = None
+    return jsonify({"status": "ok", "run": run})
+
+
+@api.route("/chat/activity", methods=["GET"])
+def chat_activity():
+    """The persisted activity feed of a finished exchange ("Show activity").
+
+    Query params: ``exchange_id``. Returns the durable run's persisted public
+    events so the plan and step timeline can be reloaded after a refresh or later
+    consultation. Owner-scoped through the runs table JOIN; empty list when the
+    exchange has no durable run (legacy exchanges keep their live-only timeline)."""
+    try:
+        identity = resolve_identity(request.headers)
+    except IdentityError as exc:
+        logger.warning("/chat/activity - identity resolution failed: %s", exc)
+        return jsonify({"status": "error", "error": "unauthenticated"}), 401
+    exchange_id = request.args.get("exchange_id", "")
+    if not exchange_id or len(exchange_id) > 128:
+        return jsonify({"status": "error", "error": "invalid_exchange_id"}), 400
+    try:
+        events = run_state.read_activity(exchange_id, identity["user_id"]) or []
+    except Exception:
+        logger.exception("/chat/activity - read failed")
+        events = []
+    return jsonify({"status": "ok", "events": events})
 
 
 @api.route("/chat/feedback", methods=["POST"])
@@ -2111,6 +2193,13 @@ def register_routes(app):
         logger.info("OWIsMind storage status: %s", sql_config.storage_status())
     except Exception:
         logger.exception("startup storage/log configuration failed")
+    # Durable workflow recovery supervisor (v1.3): ONE daemon thread, at most one
+    # recovered run per 10s scan. Best-effort: a supervisor failure must never
+    # prevent the API from serving (legacy chat keeps working without it).
+    try:
+        durable_runner.start_supervisor()
+    except Exception:
+        logger.exception("durable workflow supervisor failed to start")
     rules = sorted(
         rule.rule
         for rule in app.url_map.iter_rules()

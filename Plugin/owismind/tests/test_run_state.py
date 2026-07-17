@@ -723,3 +723,63 @@ class ParameterizationTests(RunStateTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LoadRunByExchangeTests(unittest.TestCase):
+    """Additive helpers (T3): by-exchange lookup + active-run-for-session."""
+
+    def _patch_read(self, rows, captured):
+        original_read = run_state._read
+        original_safe = run_state.rows_to_json_safe
+        original_ensure = run_state.ensure_agent_runs_table
+        run_state._read = lambda sql: (captured.append(sql) or rows)
+        run_state.rows_to_json_safe = lambda df: df
+        run_state.ensure_agent_runs_table = lambda: None
+        return original_read, original_safe, original_ensure
+
+    def _unpatch(self, originals):
+        run_state._read, run_state.rows_to_json_safe, \
+            run_state.ensure_agent_runs_table = originals
+
+    def test_by_exchange_owner_scoped_and_parameterized(self):
+        captured = []
+        originals = self._patch_read([{"run_id": "r1", "user_id": "u1"}], captured)
+        try:
+            row = run_state.load_run_by_exchange("ex'--1", user_id="u1")
+        finally:
+            self._unpatch(originals)
+        self.assertEqual(row["run_id"], "r1")
+        sql = captured[0]
+        # escaped through sql_value: rendered either as the stub's repr form or
+        # as SQL-standard quote doubling - NEVER as the bare-quoted raw value
+        self.assertTrue(repr("ex'--1") in sql or "ex''--1" in sql, sql)
+        self.assertNotIn("= 'ex'--1'", sql)
+        self.assertIn("user_id = ", sql)
+
+    def test_by_exchange_unknown_returns_none(self):
+        captured = []
+        originals = self._patch_read([], captured)
+        try:
+            self.assertIsNone(run_state.load_run_by_exchange("nope"))
+        finally:
+            self._unpatch(originals)
+        self.assertIsNone(run_state.load_run_by_exchange(""))
+        self.assertIsNone(run_state.load_run_by_exchange(None))
+
+    def test_find_active_run_for_session_filters_active_statuses(self):
+        captured = []
+        originals = self._patch_read([{"run_id": "r2"}], captured)
+        try:
+            row = run_state.find_active_run_for_session("sess-1", user_id="u1")
+        finally:
+            self._unpatch(originals)
+        self.assertEqual(row["run_id"], "r2")
+        sql = captured[0]
+        self.assertIn("status IN (", sql)
+        self.assertIn("ORDER BY updated_at DESC LIMIT 1", sql)
+        for terminal in ("'completed'", "'failed'"):
+            self.assertNotIn(terminal, sql)
+
+    def test_find_active_requires_session(self):
+        self.assertIsNone(run_state.find_active_run_for_session(""))
+        self.assertIsNone(run_state.find_active_run_for_session(None))

@@ -1042,3 +1042,46 @@ def purge_finished_runs(older_than_days=14, max_runs=1000):
     logger.info("purge_finished_runs - purged=%d (days=%d cap=%d)", purged, days,
                 cap)
     return purged
+
+
+# --- Additive helper (T3, controller resolution from the T2 review) -----------------
+def load_run_by_exchange(exchange_id, user_id=None):
+    """The run row bound to a chat exchange, or None - same projection as load_run.
+
+    ``exchange_id`` is UNIQUE on the runs table (one durable run per exchange), so
+    this is the idempotent-start lookup: after a crashed-then-retried /chat/start
+    the caller recovers the existing run instead of raising on the UNIQUE INSERT.
+    Owner-scoped exactly like load_run whenever a user identity is supplied."""
+    if not exchange_id or not isinstance(exchange_id, str):
+        return None
+    ensure_agent_runs_table()
+    where = "exchange_id = {0}".format(sql_value(exchange_id.strip()[:_KEY_MAX]))
+    if user_id is not None:
+        where += " AND user_id = {0}".format(sql_value(str(user_id)[:_KEY_MAX]))
+    sql = "SELECT * FROM {table} WHERE {where}".format(
+        table=full_table(AGENT_RUNS_V1_LOGICAL), where=where
+    )
+    rows = rows_to_json_safe(_read(sql))
+    return rows[0] if rows else None
+
+
+def find_active_run_for_session(session_id, user_id=None):
+    """The most recent still-ACTIVE durable run of a session, or None.
+
+    Powers the reconnect-after-refresh flow (GET /chat/active): the frontend asks
+    whether its session has a run in flight and re-attaches its polling loop.
+    Owner-scoped like load_run; uses the (session_id, updated_at DESC) index."""
+    if not session_id or not isinstance(session_id, str):
+        return None
+    ensure_agent_runs_table()
+    where = "session_id = {0} AND status IN ({1})".format(
+        sql_value(session_id.strip()[:_KEY_MAX]),
+        ", ".join(sql_value(s) for s in RUN_ACTIVE_STATUSES),
+    )
+    if user_id is not None:
+        where += " AND user_id = {0}".format(sql_value(str(user_id)[:_KEY_MAX]))
+    sql = (
+        "SELECT * FROM {table} WHERE {where} ORDER BY updated_at DESC LIMIT 1"
+    ).format(table=full_table(AGENT_RUNS_V1_LOGICAL), where=where)
+    rows = rows_to_json_safe(_read(sql))
+    return rows[0] if rows else None
