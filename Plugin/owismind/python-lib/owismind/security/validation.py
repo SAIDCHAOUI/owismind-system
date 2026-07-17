@@ -1041,6 +1041,19 @@ def _clean_str_list(value, max_items, max_chars):
     return out
 
 
+def _coerce_flag(value):
+    """Coerce an admin opt-in flag to bool, but never let a falsy STRING enable it.
+
+    ``bool("false")`` / ``bool("0")`` are truthy in Python, so a malformed admin
+    profile carrying the string ``"false"`` would silently ENABLE a protocol (e.g.
+    the durable workflow). Real bools and truthy numbers pass through (1 -> True,
+    0 -> False); the classic falsy strings coerce to False. Everything else falls
+    back to ``bool`` so an unexpected truthy object still reads as on."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "0", "no", "off", "none")
+    return bool(value)
+
+
 def _clean_domain_keywords(value):
     """A bounded {domain -> [keyword,...]} map for the durable complexity gate.
 
@@ -1292,14 +1305,14 @@ def validate_agent_meta(raw):
     # (e.g. a plain DSS visual agent) the dial is hidden and the token is never appended
     # server-side, so a meaningless control string never leaks into its prompt. Coerced
     # to a strict bool so a malformed value defaults to off (dial hidden).
-    modes = bool(raw.get("modes"))
+    modes = _coerce_flag(raw.get("modes"))
     # Durable workflow (v1.3): whether this agent runs the durable planned path on
     # complex questions. ONLY the OWIsMind code orchestrator understands the
     # ⟦owi:workflow=…⟧ protocol, so this is admin opt-in per agent, coerced to a
     # strict bool (a malformed value defaults to OFF - the validated legacy path).
     # domain_keywords feeds the deterministic complexity gate (>= 2 domains matched
     # => plan); bounded so it can never bloat the prompt or slow the gate.
-    durable_workflow = bool(raw.get("durable_workflow"))
+    durable_workflow = _coerce_flag(raw.get("durable_workflow"))
     domain_keywords = _clean_domain_keywords(raw.get("domain_keywords"))
     # The benchmark block tells the plugin WHERE this agent's benchmark lives (a SQL table the admin
     # selected). Validated/bounded by benchmark_view.agent_profile (an invalid table is blanked, which

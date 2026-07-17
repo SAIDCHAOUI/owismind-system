@@ -7,35 +7,33 @@
 
 ## Focus courant
 
-**COUCHE AGENTIQUE "DURABLE STEP SHELL" (CoBuild-like) v1.3 - IMPLEMENTEE + AUDITEE + POUSSEE
-(2026-07-17, branche `OWIsMind_PRD_V1_3-dev`, 17 commits jusqu'a `b909156`, tout pousse).**
-Brainstorm impose a 3 (Fable 5 lead + agent Fable 5 + GPT-5.6 Sol, propositions independantes +
-confrontation D1-D7). Pepite : le **backend Flask 3.9 devient une machine de workflow durable**
-(etat PostgreSQL : 3 tables `webapp_agent_runs/steps/events_v1`, lease CAS + fencing attempt_id EN SQL,
-superviseur amorti, finalize idempotent) qui **re-invoque l'orchestrateur (Code Agent 3.11) une
-commande bornee a la fois** (plan/execute/replan/review/synthesize) via token machine `owi:workflow`
-+ ledger `[WORKFLOW PROGRESS]` dans le prompt. Dual-path : legacy byte-identique sans token (golden
-test), durable seulement si agent flague `durable_workflow` + gate deterministe (0 LLM). Fix du bug
-timeout claude (deadlines par mode, `deadline_reached` convivial). Correlation multi-datasets = VRAI
-JOIN SQL read-only sur alias d1..dN (CTE server-side depuis le catalogue factory, garde durcie). UI :
-`RunPlan.vue` (carte plan qui coche, charte Orange) + "Afficher l'activite" + reconnexion. Nouveaux
-fichiers : `agents/durable_runner.py`, `storage/run_state.py`, `owismind_factory/catalog.py`,
-`RunPlan.vue`, seeds hub. **Audit securite** : Codex Sol bloque (filtre cyber ChatGPT) -> Claude Opus
-+ fuzzing lead : 0 Critical, 3 findings defense-en-profondeur CORRIGES (comma-join, commentaire SQL,
-reaper de reservation TOCTOU). Suites LOCALES vertes : backend 962, agents+factory 616, LAB 343, front
-365. RIEN execute contre DSS (feature flag OFF). Spec/plan dans `docs/superpowers/`, rapport audit
-`OWIsMind_PRD_V1_2/docs/SECURITY_AUDIT_2026-07-17_DURABLE.md`, deploiement = phase H de
-DEPLOY_V1_3_DEV.md. **Run 2 (suite)** : guide complet `OWIsMind_PRD_V1_2/docs/DURABLE_STEP_SHELL.md`
-(comprendre l'archi + installation pas a pas) + FIX de cablage (le validateur de profil supprimait
-le flag `durable_workflow` -> mode durable inactivable ; corrige, L160). 3 commits locaux non pousses
-(`6b0c9d6`/`cbb4bc7`/`9289af5`) en plus des 17 pousses. L157-L160. Voir `sessions/2026-07-17.md`.
+**DURABLE STEP SHELL v1.3 - VERIFICATION PRE-TEST TRIPLE + DURCISSEMENT + ZIP v1.3-dev
+(2026-07-17 Run 3, branche `OWIsMind_PRD_V1_3-dev`, fixes en working tree, commit de session a faire).**
+L'user veut la CERTITUDE (securite + correction + optim) AVANT de tester en DSS. Revue TRIPLE
+independante : Fable 5 lead + workflow Opus 6 dimensions (verif adversariale par finding) + GPT-5.6 Sol
+(codex read-only) + revue adversariale Opus du diff. Elles ont CONVERGE et debusque ce que les suites
+VERTES cachaient (test-doubles infideles au contrat reel, L161). **Zip DEV** :
+`Plugin/ready-for-dataiku/owismind-v1_3-dev-upload.zip` (id `owismind_dev`, git-ignore, prod v1.2 intacte).
+**7 fix + tests** : C1 CRITICAL `save_plan` ne persistait pas capability_keys/args (feature durable
+inoperante en DSS reel) ; C2 HIGH lecture catalogue correlate (data_type/item_level vs column_type) ;
+C3 HIGH garde SQL correlate (`TABLE <rel>`, `from"secret"`, meta-fns query_to_xml/dblink/pg_read_file) ;
+C4 poll_durable bouclait sur not_found ; C5 `bool("false")` activait le durable ; C6 HIGH double-run
+legacy sur echec spawn ; C7 purge des tables durables jamais appelee (cablee au superviseur). C1/C4-C7
+= plugin (dans le zip) ; C2/C3 = orchestrateur (a RECOLLER en DSS 3.11, HORS zip). **DOCUMENTES (patch
+propose, valider au smoke DSS)** : H3 fencing complet writes terminaux, H4 watchdog stream Mesh muet
+(= "run long qui hang"), H5 replay reponse post-crash, M2/M3, deadlines-depuis-hub, goal non persiste.
+Non corriges a l'aveugle (justesse dependante de faits DSS). 4 suites vertes apres fix : backend 965,
+agents+factory 619, LAB 343, front 365. RIEN execute contre DSS. Rapport
+`OWIsMind_PRD_V1_2/docs/SECURITY_AUDIT_2026-07-17_DURABLE_V2.md`. L161. Voir `sessions/2026-07-17.md`.
 
-**Base anterieure (2026-07-16) : mise en ordre git + miroir UI DSS + double audit securite factory**
-(5 commits pousses ; miroir `genai/{agents,agent-tools,semantic-models}/`, `project-library/
-owismind_hub/`, `docs/` ; factory 468->516 tests). L156 (job codex fantome). Voir `sessions/2026-07-16.md`.
+**Base anterieure (2026-07-17 Runs 1-2) : implementation + audit initial + guide + fix cablage flag**
+(couche durable complete, 0 Critical/3 findings corriges au 1er audit, guide `DURABLE_STEP_SHELL.md`,
+fix `durable_workflow` inactivable). L157-L160. 17 commits pousses `..b909156` + 3 locaux + Run 3 (working
+tree). Voir `sessions/2026-07-17.md`.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-17 (nuit) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; fix timeout claude ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; audit securite (0 Critical, 3 findings corriges) ; puis Run 2 : guide complet + fix cablage flag (L160). 17 commits pousses `..b909156` + 3 locaux ; backend 963 / agents 616 / LAB 343 / front 365. L157-L160. Voir `sessions/2026-07-17.md`.
+- 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
+- 2026-07-17 (nuit, Runs 1-2) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; 1er audit securite (0 Critical, 3 findings corriges) ; guide complet + fix cablage flag. 17 commits pousses `..b909156` + 3 locaux. L157-L160. Voir `sessions/2026-07-17.md`.
 - 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
 - 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
 - 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.

@@ -446,6 +446,26 @@ class SavePlanTests(RunStateTestCase):
         self.assertIn("_truncated", insert)
         self.assertNotIn("T" * 8001, insert)
 
+    def test_task_json_carries_execution_payload_not_just_the_task_string(self):
+        # Regression (v1.3 durable): task_json MUST persist capability_keys / args
+        # (the whole execution payload), because _step_spec (durable_runner) rebuilds
+        # the wfstep token from this column. Persisting only the bare task string
+        # dropped them, so every execute step (specialist_query / correlate /
+        # attribute_lookup) reached the agent with no capabilities and failed.
+        run_state.save_plan(
+            "r1",
+            {"steps": [{"step_id": "S1", "kind": "specialist_query",
+                        "title": "Revenue", "task": "get revenue for ACME",
+                        "capability_keys": ["revenue_expert"],
+                        "args": {"term": "ACME"}, "produces": "#S1"}]},
+            1,
+        )
+        insert = self.calls[0]["pre"][2]
+        self.assertIn("capability_keys", insert)
+        self.assertIn("revenue_expert", insert)
+        self.assertIn("args", insert)
+        self.assertIn("get revenue for ACME", insert)
+
 
 # --- append_events / read_events / read_activity --------------------------------
 class EventTests(RunStateTestCase):

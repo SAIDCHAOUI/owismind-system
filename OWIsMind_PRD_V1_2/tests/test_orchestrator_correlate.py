@@ -174,6 +174,33 @@ class GuardTests(unittest.TestCase):
         # a literal that merely contains a comment marker stays fine (blanked)
         self._ok("SELECT d1.k FROM d1 WHERE d1.label = 'a /* b */ c'")
 
+    def test_bare_table_relation_form_rejected(self):
+        # PostgreSQL `TABLE foo` == `SELECT * FROM foo` reaches a relation with NO
+        # FROM/JOIN, so it escaped the alias allowlist scan. The `table` keyword is
+        # never legitimate in a model statement (the CODE owns every relation).
+        self._ko("SELECT * FROM (TABLE secret_table) q", "forbidden_keyword")
+        self._ko("SELECT id FROM d1 WHERE false UNION ALL TABLE secret_table",
+                 "forbidden_keyword")
+
+    def test_no_whitespace_quoted_identifier_rejected(self):
+        # `FROM"secret"` (no space) is valid PostgreSQL; the allowlist scan now
+        # anchors on the keyword boundary and catches the glued quoted relation.
+        self._ko('SELECT * FROM"secret_table"', "table_not_allowed")
+        self._ko('SELECT * FROM d1 JOIN"secret_table" ON true', "table_not_allowed")
+        # a glued ALLOWED alias still passes
+        self._ok('SELECT * FROM"d1"')
+
+    def test_query_executing_functions_rejected(self):
+        # Functions that run a query passed as text (or read server files) reach
+        # arbitrary relations without a FROM/JOIN: read-only allows the inner read.
+        self._ko("SELECT query_to_xml('SELECT * FROM secret_table', true, "
+                 "false, '') FROM d1", "forbidden_function")
+        self._ko("SELECT table_to_xml('secret_table', true, false, '') FROM d1",
+                 "forbidden_function")
+        self._ko("SELECT dblink('conn', 'SELECT * FROM secret') AS t FROM d1",
+                 "forbidden_function")
+        self._ko("SELECT pg_read_file('/etc/passwd') FROM d1", "forbidden_function")
+
 
 class CteBuilderTests(unittest.TestCase):
     def test_ctes_quote_identifiers_and_prefix_model_sql(self):
@@ -225,10 +252,21 @@ class _FakeExecutor(object):
         assert post_queries in (None, []), "no write/commit allowed"
         lowered = sql.strip().lower()
         assert lowered.startswith(("select", "explain", "with")), sql
-        if "from" in lowered and "item_level" in lowered:      # catalog read
+        # Catalog read: mirror the REAL published schema
+        # (owismind_factory.catalog.CATALOG_SCHEMA) - the type column is
+        # column_type and there is NO item_level column. A prior fake here
+        # selected data_type / filtered item_level, which hid a hard mismatch
+        # (the real query used columns the catalog never publishes).
+        if "physical_table" in lowered and "capability_key" in lowered:  # catalog
+            assert "column_type" in lowered, \
+                "catalog read must select column_type, got: %s" % sql
+            assert "item_level" not in lowered, \
+                "catalog schema has no item_level column: %s" % sql
+            assert "data_type" not in lowered, \
+                "catalog type column is column_type, not data_type: %s" % sql
             key = "d2" if "cap_b" in sql else "d1"
             return _FakeDF(
-                ["column_name", "data_type", "description", "physical_table"],
+                ["column_name", "column_type", "description", "physical_table"],
                 self.h.catalog_rows[key])
         if lowered.startswith("explain"):
             if self.h.explain_error:

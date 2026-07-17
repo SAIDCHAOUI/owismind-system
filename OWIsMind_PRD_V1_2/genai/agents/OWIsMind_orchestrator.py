@@ -1529,17 +1529,36 @@ _CORRELATE_PRE_QUERIES = ("SET LOCAL statement_timeout TO '30000'",
                           "SET LOCAL transaction_read_only TO on")
 _CORR_FORBIDDEN_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|"
-    r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into|with)\b",
+    r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into|with|"
+    # `table` is the PostgreSQL bare-relation form (`TABLE foo` == `SELECT * FROM
+    # foo`): it reaches a relation WITHOUT a FROM/JOIN, so it escapes the alias
+    # allowlist scan below. The CODE owns every relation (the model only ever needs
+    # FROM d1 / JOIN d2), so the keyword is never legitimate in a model statement.
+    r"table)\b",
     re.IGNORECASE)
 _CORR_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
 _CORR_SYSTEM_TABLE_RE = re.compile(
     r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b", re.IGNORECASE)
+# Functions that EXECUTE a query passed as a text argument (or read server files):
+# they reach arbitrary relations without any FROM/JOIN, so the alias allowlist scan
+# never sees the smuggled table. read-only blocks writes but NOT these cross-table
+# reads. The model never needs them; reject outright (defense-in-depth backstop).
+_CORR_FORBIDDEN_FUNC_RE = re.compile(
+    r"\b(query_to_xml|query_to_xmlschema|cursor_to_xml|cursor_to_xmlschema|"
+    r"table_to_xml|table_to_xmlschema|schema_to_xml|schema_to_xmlschema|"
+    r"database_to_xml|database_to_xmlschema|dblink|dblink_exec|"
+    r"dblink_send_query|lo_import|lo_export|pg_read_file|pg_read_binary_file|"
+    r"pg_ls_dir)\s*\(", re.IGNORECASE)
 # After FROM or JOIN, capture the WHOLE comma-separated table list (a comma-join
 # `FROM d1, secret` is a real table reference, not just the first item): each base
 # identifier is then validated against the alias allowlist. Stops at the first
 # keyword / paren / ON so it never swallows a WHERE or a join predicate.
+# The `\b` after (from|join) plus `\s*` (was `\s+`) catches a quoted identifier
+# glued to the keyword with NO whitespace (`FROM"secret"` is valid PostgreSQL): the
+# keyword boundary still anchors on a real FROM/JOIN (never inside `fromtable`), but
+# a following `"` no longer lets the relation slip past the allowlist scan.
 _CORR_TABLE_LIST_RE = re.compile(
-    r"\b(?:from|join)\s+([a-zA-Z0-9_\".]+(?:\s*,\s*[a-zA-Z0-9_\".]+)*)",
+    r"\b(?:from|join)\b\s*([a-zA-Z0-9_\".]+(?:\s*,\s*[a-zA-Z0-9_\".]+)*)",
     re.IGNORECASE)
 _CORR_LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
 _CORR_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
@@ -1608,6 +1627,8 @@ def _corr_guard_model_sql(sql, aliases):
         return None, "comment_in_sql"
     if _CORR_FORBIDDEN_RE.search(blanked):
         return None, "forbidden_keyword"
+    if _CORR_FORBIDDEN_FUNC_RE.search(blanked):
+        return None, "forbidden_function"
     if _CORR_SYSTEM_TABLE_RE.search(blanked):
         return None, "system_table"
     allowed = {a.lower() for a in aliases}
@@ -3589,10 +3610,16 @@ class MyLLM(BaseLLM):
                 .get("info", {}).get("quotedResolvedTableName")
             if not cat_table:
                 return None, None, "catalog_not_sql"
+            # Column names MUST match the published catalog schema
+            # (owismind_factory.catalog.CATALOG_SCHEMA): the type column is
+            # ``column_type`` and there is no ``item_level`` column (every catalog
+            # row IS a column-level entry). Selecting ``data_type`` / filtering on
+            # ``item_level`` made every real correlate catalog read fail with an
+            # "undefined column" error before the JOIN was ever built.
             sql = (
-                "SELECT column_name, data_type, description, physical_table "
+                "SELECT column_name, column_type, description, physical_table "
                 "FROM %s WHERE capability_key = '%s' AND generation_id = '%s' "
-                "AND item_level = 'column' ORDER BY column_name LIMIT %d"
+                "ORDER BY column_name LIMIT %d"
                 % (cat_table, str(cap["key"]).replace("'", "''"),
                    str(generation).replace("'", "''"),
                    CORRELATE_MAX_CATALOG_COLS))
@@ -3603,7 +3630,7 @@ class MyLLM(BaseLLM):
             for _, row in df.iterrows():
                 physical = physical or row.get("physical_table")
                 columns.append({"name": row.get("column_name"),
-                                "type": row.get("data_type") or "",
+                                "type": row.get("column_type") or "",
                                 "description": (row.get("description")
                                                 or "")[:160]})
             if not columns or not physical:

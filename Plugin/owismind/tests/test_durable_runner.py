@@ -534,6 +534,23 @@ class StartWorkflowTests(RunnerHarness):
         again = durable_runner.start_workflow("ex-9", "s", "u1", "k", "smart", "q")
         self.assertEqual(first["run_id"], again["run_id"])
 
+    def test_spawn_failure_does_not_raise_so_no_legacy_double_run(self):
+        # Regression: once the durable run EXISTS, a claim/spawn failure must NOT
+        # propagate - the route falls back to a LEGACY run on any exception, which
+        # would execute the SAME exchange twice. start_workflow must still return
+        # the run_id (the supervisor recovers the run) instead of raising.
+        def _boom(*a, **k):
+            raise RuntimeError("thread.start failed (resource pressure)")
+
+        durable_runner._spawn_worker = _boom
+        out = durable_runner.start_workflow("ex-9", "s", "u1", "k", "smart", "q")
+        self.assertEqual(out["exchange_id"], "ex-9")
+        self.assertIn("run_id", out)
+        # the run was created and is recoverable, not lost
+        self.assertIsNotNone(self.store.load_run(out["run_id"]))
+        # the reservation placeholder was cleaned up (finally block)
+        self.assertNotIn("resv-ex-9", durable_runner._WORKERS)
+
     def test_global_capacity_cap_raises_busy(self):
         for i in range(durable_runner.MAX_ACTIVE_WORKFLOWS):
             durable_runner._WORKERS["r%d" % i] = {

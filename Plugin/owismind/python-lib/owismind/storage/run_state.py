@@ -462,6 +462,20 @@ def save_plan(run_id, plan_dict, plan_revision):
                 )
             except ValueError:
                 max_attempts = 3
+        # task_json carries the WHOLE execution payload, not just the task string:
+        # _step_spec (durable_runner) rebuilds the ⟦owi:wfstep⟧ token from this
+        # column and expects a JSON object with the execution-critical sibling
+        # fields (capability_keys/args/produces/checks). Storing only the bare
+        # string silently dropped them, so every execute step (specialist_query /
+        # correlate / attribute_lookup) reached the agent with no capabilities and
+        # failed. Serialize the full object so the reader/writer contracts match.
+        task_payload = {}
+        if raw.get("task") not in (None, ""):
+            task_payload["task"] = raw.get("task")
+        for _field in ("capability_keys", "args", "produces", "checks", "depends_on"):
+            _val = raw.get(_field)
+            if _val not in (None, "", [], {}):
+                task_payload[_field] = _val
         rows.append(
             "({run_id}, {step_id}, {ordinal}, {revision}, {kind}, {title}, "
             "{task}, {depends}, {checks}, {output_ref}, {max_attempts}, {status})".format(
@@ -471,7 +485,7 @@ def save_plan(run_id, plan_dict, plan_revision):
                 revision=revision,
                 kind=nullable_value(_opt_str(raw.get("kind"), 32)),
                 title=nullable_value(_opt_str(raw.get("title"), _TITLE_MAX)),
-                task=nullable_value(_json_capped(raw.get("task"), MAX_TASK_JSON_CHARS)),
+                task=nullable_value(_json_capped(task_payload, MAX_TASK_JSON_CHARS)),
                 depends=nullable_value(
                     _json_capped(raw.get("depends_on"), MAX_DEPENDS_JSON_CHARS)
                 ),

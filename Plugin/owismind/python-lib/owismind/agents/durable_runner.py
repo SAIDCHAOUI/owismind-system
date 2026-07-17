@@ -37,6 +37,9 @@ logger = logging.getLogger("owismind.durable_runner")
 LEASE_SECONDS = 45
 HEARTBEAT_SECONDS = 10
 RECOVERY_SCAN_SECONDS = 10
+# Retention sweep cadence: run the bounded purge every N supervisor scans (~1h at a
+# 10s scan) so the 3 durable tables never grow without limit, at negligible DB load.
+PURGE_EVERY_N_SCANS = 360
 MAX_ACTIVE_WORKFLOWS = 8
 MAX_ACTIVE_WORKFLOWS_PER_USER = 1
 MAX_MESH_CALLS = 3
@@ -160,10 +163,22 @@ def start_workflow(exchange_id, session_id, user_id, agent_key, mode, question,
             logger.info("start_workflow - recovered existing run %s for "
                         "exchange %s", run_id, exchange_id)
 
-        lease_owner = uuid.uuid4().hex
-        if run_state.claim_run(run_id, lease_owner, LEASE_SECONDS):
-            _spawn_worker(run_id, lease_owner, user_id, question, bootstrap)
-        # else: another worker already holds it (recovery race) - polling works.
+        # Once the durable run EXISTS (created above, or recovered on the UNIQUE
+        # retry), claim + spawn must never raise out of start_workflow: the route's
+        # caller falls back to a LEGACY run on any exception, which would run the
+        # SAME exchange twice (the durable run is recoverable and the supervisor
+        # would pick it up). So swallow a claim/spawn failure here and return the
+        # run_id: an unclaimed run is recovered immediately, a claimed-but-unspawned
+        # one when its lease expires. Single execution either way.
+        try:
+            lease_owner = uuid.uuid4().hex
+            if run_state.claim_run(run_id, lease_owner, LEASE_SECONDS):
+                _spawn_worker(run_id, lease_owner, user_id, question, bootstrap)
+            # else: another worker already holds it (recovery race) - polling works.
+        except Exception:
+            logger.exception(
+                "start_workflow - claim/spawn failed after run creation; leaving "
+                "run %s for supervisor recovery (no legacy fallback)", run_id)
         return {"run_id": run_id, "exchange_id": exchange_id}
     finally:
         with _LOCK:
@@ -194,6 +209,14 @@ def poll_durable(run_id, user_id, cursor):
     feed = run_state.read_events(run_id, user_id, cursor)
     if feed is None:
         return None
+    # A missing / purged / non-owned run is terminal from the client's point of
+    # view: read_events flags it (done=True, error='not_found', status=None). Honor
+    # it so the client stops polling instead of looping forever on a run that will
+    # never produce events. Unknown and foreign runs return the identical shape, so
+    # this is not an existence oracle (owner-scoping happens in load_run).
+    if feed.get("error") == "not_found":
+        return {"events": [], "cursor": feed.get("cursor"), "done": True,
+                "error": "not_found", "status": None}
     status = feed.get("status")
     terminal = status in ("completed", "partial", "failed", "stopped",
                           "deadline_reached", "quota_blocked")
@@ -256,9 +279,19 @@ def _reap_dead_workers_locked():
 
 def _supervisor_loop():
     logger.info("workflow supervisor started")
+    scans = 0
     while not _SUPERVISOR.get("stop"):
         try:
             time.sleep(RECOVERY_SCAN_SECONDS)
+            scans += 1
+            # Bounded, infrequent retention sweep (spec: <= MAX_PURGE_RUNS per pass,
+            # only runs finished > 14 days ago) so the durable tables never grow
+            # without limit. Off the hot path, best-effort, never blocks recovery.
+            if scans % PURGE_EVERY_N_SCANS == 0:
+                try:
+                    run_state.purge_finished_runs()
+                except Exception:
+                    logger.exception("retention purge failed (continuing)")
             with _LOCK:
                 _reap_dead_workers_locked()
                 if len(_WORKERS) >= MAX_ACTIVE_WORKFLOWS:
