@@ -372,6 +372,11 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 )
                 break
             etype = event.get("type")
+            if etype == "workflow_control":
+                # Machine channel of the durable workflow protocol: NEVER shown on
+                # the legacy public timeline (a legacy run should not receive one,
+                # but defense in depth costs a line).
+                continue
             if etype == "answer_delta":
                 # Accumulate for persistence, but cap total size so a runaway agent
                 # cannot grow this string (and the stored column) without bound.

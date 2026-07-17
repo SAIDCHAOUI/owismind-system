@@ -378,6 +378,23 @@ def run_agent_streamed(project_key, agent_id, messages):
                 if isinstance(text, str) and text.strip():
                     yield {"type": "narration", "text": text[:_NARRATION_MAX_CHARS]}
                 continue
+            # OWI_WORKFLOW_CONTROL (v1.3 Durable Step Shell): the orchestrator's
+            # MACHINE result for one workflow command. Normalized to a dedicated
+            # internal type consumed by the durable runner and NEVER forwarded to
+            # the public feed (run_state.append_events also denylists it, and the
+            # legacy worker drops the type). Payload bounded upstream (16000 chars
+            # agent-side); a malformed payload surfaces as an explicit error dict
+            # so the runner classifies it fatal instead of hanging.
+            if data.get("eventKind") == "OWI_WORKFLOW_CONTROL":
+                payload = event_data.get("payload")
+                if not isinstance(payload, dict):
+                    payload = event_data if isinstance(event_data, dict) else {}
+                yield {
+                    "type": "workflow_control",
+                    "command": event_data.get("command"),
+                    "payload": payload,
+                }
+                continue
             agent_event = {
                 "type": "agent_event",
                 "eventKind": data.get("eventKind"),
