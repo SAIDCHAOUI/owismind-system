@@ -140,6 +140,20 @@ class GuardTests(unittest.TestCase):
         self._ko("SELECT * FROM d1 JOIN secret_table ON true",
                  "table_not_allowed")
 
+    def test_comma_join_to_a_hidden_table_is_rejected(self):
+        # Regression: the FROM/JOIN scan must catch EVERY comma-separated table,
+        # not just the first - else `FROM d1, secret` reaches a real physical
+        # table (secret is not a defined CTE) = cross-table read exfiltration.
+        self._ko("SELECT * FROM d1, secret_table WHERE d1.k = secret_table.k",
+                 "table_not_allowed")
+        # a comma-joined system catalog trips the system-table guard first
+        # (defense in depth) - either way it never executes
+        self._ko("SELECT * FROM d1 , pg_user", "system_table")
+        # legitimate comma-join of two ALLOWED aliases still passes
+        self._ok("SELECT * FROM d1, d2 WHERE d1.k = d2.k")
+        # SELECT-list and GROUP BY commas are not table refs
+        self._ok("SELECT d1.a, d1.b FROM d1 GROUP BY d1.a, d1.b")
+
     def test_literal_blanking_prevents_false_positives(self):
         clean = self._ok("SELECT d1.k FROM d1 WHERE d1.label = "
                          "'drop the update into merge'")

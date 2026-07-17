@@ -1534,8 +1534,13 @@ _CORR_FORBIDDEN_RE = re.compile(
 _CORR_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
 _CORR_SYSTEM_TABLE_RE = re.compile(
     r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b", re.IGNORECASE)
-_CORR_TABLE_REF_RE = re.compile(r"\b(?:from|join)\s+([a-zA-Z0-9_\".]+)",
-                                re.IGNORECASE)
+# After FROM or JOIN, capture the WHOLE comma-separated table list (a comma-join
+# `FROM d1, secret` is a real table reference, not just the first item): each base
+# identifier is then validated against the alias allowlist. Stops at the first
+# keyword / paren / ON so it never swallows a WHERE or a join predicate.
+_CORR_TABLE_LIST_RE = re.compile(
+    r"\b(?:from|join)\s+([a-zA-Z0-9_\".]+(?:\s*,\s*[a-zA-Z0-9_\".]+)*)",
+    re.IGNORECASE)
 _CORR_LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
 _CORR_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
 
@@ -1600,13 +1605,15 @@ def _corr_guard_model_sql(sql, aliases):
     if _CORR_SYSTEM_TABLE_RE.search(blanked):
         return None, "system_table"
     allowed = {a.lower() for a in aliases}
-    for ref in _CORR_TABLE_REF_RE.findall(blanked):
-        # strip a trailing alias-dot access and surrounding quotes
-        base = ref.split(".")[0].strip('"').lower()
-        if base == "select":            # `from (select ...` derived table
-            continue
-        if base not in allowed:
-            return None, "table_not_allowed:%s" % base[:40]
+    for ref_list in _CORR_TABLE_LIST_RE.findall(blanked):
+        # each comma-separated entry is a distinct table reference: a comma-join
+        # (`FROM d1, secret`) must not let the 2nd table slip past the allowlist.
+        for ref in ref_list.split(","):
+            base = ref.strip().split(".")[0].strip('"').lower()
+            if not base or base == "select":   # `from (select ...` derived table
+                continue
+            if base not in allowed:
+                return None, "table_not_allowed:%s" % base[:40]
     m = _CORR_LIMIT_RE.search(blanked)
     if m:
         if int(m.group(1)) > CORRELATE_MAX_ROWS:
