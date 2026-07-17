@@ -64,6 +64,21 @@ export const extraMessages = {
     'chat.stopping': 'Arrêt en cours…',
     'chat.interrupted_empty': 'Réponse interrompue',
 
+    // Chat - friendly run-error messages: the backend's terminal error event carries
+    // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
+    // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
+    // of deadline_reached (runs started before the rename).
+    'runError.deadline_reached':
+      "Le temps maximal d'analyse a été atteint. Les résultats déjà obtenus restent affichés.",
+    'runError.run_timeout':
+      "Le temps maximal d'analyse a été atteint. Les résultats déjà obtenus restent affichés.",
+    'runError.run_abandoned':
+      "L'analyse a été interrompue car la page ne suivait plus sa progression. Reposez votre question si besoin.",
+    'runError.agent_unavailable':
+      "L'agent est momentanément indisponible. Réessayez dans quelques instants.",
+    'runError.generic':
+      "Une erreur est survenue pendant l'analyse. Réessayez dans quelques instants.",
+
     // Chat - monthly budget banner (sends paused once the credit is reached)
     'chat.quota_banner':
       'Budget mensuel épuisé : {0} utilisés sur {1}. De nouvelles requêtes seront possibles le {2}.',
@@ -931,6 +946,21 @@ export const extraMessages = {
     'chat.stopped': 'Generation stopped',
     'chat.stopping': 'Stopping…',
     'chat.interrupted_empty': 'Response interrupted',
+
+    // Chat - friendly run-error messages: the backend's terminal error event carries
+    // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
+    // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
+    // of deadline_reached (runs started before the rename).
+    'runError.deadline_reached':
+      'The maximum analysis time was reached. The results already produced remain displayed.',
+    'runError.run_timeout':
+      'The maximum analysis time was reached. The results already produced remain displayed.',
+    'runError.run_abandoned':
+      'The analysis was interrupted because this page stopped following its progress. Ask your question again if needed.',
+    'runError.agent_unavailable':
+      'The agent is temporarily unavailable. Please try again in a moment.',
+    'runError.generic':
+      'An error occurred during the analysis. Please try again in a moment.',
 
     // Chat - monthly budget banner (sends paused once the credit is reached)
     'chat.quota_banner':

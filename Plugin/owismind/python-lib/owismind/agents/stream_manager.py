@@ -45,9 +45,11 @@ MAX_CONCURRENT_RUNS = 8
 FINISHED_TTL_SECONDS = 60.0
 
 # Absolute lifetime cap for any run (even one whose browser tab was closed mid-run
-# and never polled to completion). Agent runs take ~tens of seconds, so 10 min is
-# far above normal and guarantees orphaned runs cannot accumulate in memory.
-HARD_TTL_SECONDS = 600.0
+# and never polled to completion). It guarantees orphaned runs cannot accumulate in
+# memory. MUST stay above the longest per-mode deadline (claude 1200s, see
+# LEGACY_MAX_RUN_SECONDS_BY_MODE below) plus slack: a live run evicted here becomes
+# unpollable (404) before its own deadline, which would silently re-kill long runs.
+HARD_TTL_SECONDS = 1500.0
 
 # Per-run memory bounds (defense in depth). The run lifetime is already bounded by
 # MAX_CONCURRENT_RUNS x HARD_TTL, and the large raw trace is excluded from the live
@@ -63,17 +65,37 @@ MAX_ANSWER_CHARS = 1_000_000
 MAX_ARTIFACTS_ACCUM = 8
 
 # Cooperative run-time bounds (checked between streamed chunks):
-#   - MAX_RUN_SECONDS: a hard wall-clock deadline so one run cannot occupy a worker
-#     thread + LLM Mesh connection + concurrency slot indefinitely.
+#   - the wall-clock deadline: a hard cap so one run cannot occupy a worker thread +
+#     LLM Mesh connection + concurrency slot indefinitely. Resolved PER MODE at
+#     registration (resolve_run_deadline): the single historical 300s wall killed
+#     legitimate long "claude" runs, so heavier modes get a longer deadline while the
+#     modeless / unknown-mode path keeps the exact legacy 300s behavior.
 #   - ABANDON_AFTER_SECONDS: if the browser stopped polling (tab closed / navigated
 #     away) for this long AFTER it had started polling, the run is treated as abandoned
 #     and cut short so its slot is freed instead of running (and billing tokens) for no
-#     consumer. A run never yet polled is bounded only by MAX_RUN_SECONDS.
+#     consumer. A run never yet polled is bounded only by its wall-clock deadline.
 # Limitation: both are evaluated between chunks, so a fully-hung upstream call that never
 # yields is still bounded only by the memory TTL - a watchdog thread would be needed for
 # that and is intentionally not added here (higher risk to a validated path).
 MAX_RUN_SECONDS = 300.0
+# Frozen interface (T3 builds on it): the legacy per-mode wall-clock deadlines. The
+# mode is the route-resolved EFFECTIVE mode (never raw frontend input); None covers
+# both "agent without the mode dial" and pre-mode callers.
+LEGACY_MAX_RUN_SECONDS_BY_MODE = {None: 300.0, "smart": 300.0, "pro": 600.0, "claude": 1200.0}
 ABANDON_AFTER_SECONDS = 30.0
+
+
+def resolve_run_deadline(mode):
+    """Wall-clock deadline (seconds, float) for a run in the given response mode.
+
+    Any unknown / absent / malformed mode falls back to the historical 300.0s wall
+    (MAX_RUN_SECONDS), so the modeless legacy path is strictly unchanged.
+    """
+    try:
+        return LEGACY_MAX_RUN_SECONDS_BY_MODE.get(mode, MAX_RUN_SECONDS)
+    except TypeError:
+        # Unhashable garbage (never produced by the route): legacy wall.
+        return MAX_RUN_SECONDS
 
 # Minimum spacing between two run starts FROM THE SAME USER (anti-spam pre-gate). The
 # hard concurrency cap remains the real gate; this only avoids wasted DB writes/auth
@@ -118,13 +140,15 @@ def can_accept(user_id):
     return True, None
 
 
-def _stop_reason(run_id, started_at):
+def _stop_reason(run_id, started_at, deadline_s):
     """Return why the worker should cut the run short, else None.
 
-    Priority: an explicit user stop (``"stopped"``) wins over the wall-clock deadline
-    (``"timeout"``) and the abandoned-by-browser cut (``"abandoned"``). Evaluated between
-    streamed chunks - the official LLM Mesh stream exposes no cancel API, so a cooperative
-    stop (simply ceasing to iterate the generator) is the supported way to end it early.
+    ``deadline_s`` is the run's per-mode wall-clock deadline, resolved once at
+    registration (resolve_run_deadline). Priority: an explicit user stop
+    (``"stopped"``) wins over the deadline (``"deadline_reached"``) and the
+    abandoned-by-browser cut (``"abandoned"``). Evaluated between streamed chunks -
+    the official LLM Mesh stream exposes no cancel API, so a cooperative stop
+    (simply ceasing to iterate the generator) is the supported way to end it early.
     """
     now = time.monotonic()
     with _LOCK:
@@ -133,8 +157,8 @@ def _stop_reason(run_id, started_at):
         last_poll = state.get("last_poll_at") if state else None
     if stop_requested:
         return "stopped"
-    if (now - started_at) > MAX_RUN_SECONDS:
-        return "timeout"
+    if (now - started_at) > deadline_s:
+        return "deadline_reached"
     if last_poll is not None and (now - last_poll) > ABANDON_AFTER_SECONDS:
         return "abandoned"
     return None
@@ -170,7 +194,7 @@ def _append_event_locked_free(run_id, event):
             state["events"].append(event)
 
 
-def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False):
+def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False, mode=None):
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
@@ -178,10 +202,14 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     run so only its owner can poll it. ``parent_exchange_id``/``history_limit``/
     ``user_suffix`` let the worker assemble the multi-turn agent context (the ANCESTOR
     CHAIN of this branch + the current turn with its end-of-prompt context block).
+    ``mode`` is the route-resolved effective response mode (never raw frontend
+    input): it is recorded on the run state and sets the run's wall-clock deadline
+    (resolve_run_deadline); absent, the exact legacy 300s wall applies.
     Raises ``CapacityError`` if the global concurrency cap is already reached.
     """
     now = time.monotonic()
     run_id = uuid4().hex
+    deadline_s = resolve_run_deadline(mode)
     with _LOCK:
         _evict_stale_locked(now)
         active = sum(1 for s in _RUNS.values() if not s.get("done"))
@@ -200,16 +228,20 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
             # Set True by request_stop (explicit user stop); the worker sees it between
             # two chunks and cuts the run short cleanly (see _stop_reason -> "stopped").
             "stop_requested": False,
+            # The effective response mode of this run (informational on the state;
+            # the deadline below is what actually enforces it).
+            "mode": mode,
         }
         _LAST_START_BY_USER[user_id] = now
 
     thread = threading.Thread(
         target=_worker,
-        # Pass started_at explicitly so the wall-clock deadline is anchored at
-        # registration and never reset by re-reading possibly-evicted run state.
+        # Pass started_at + deadline_s explicitly so the wall-clock deadline is
+        # anchored (and sized) at registration and never reset by re-reading
+        # possibly-evicted run state.
         args=(run_id, project_key, agent_id, message, exchange_id, now,
               user_id, parent_exchange_id, history_limit, user_suffix, screen_context,
-              prior_recall_enabled),
+              prior_recall_enabled, deadline_s),
         name="owi-agent-run-{}".format(run_id[:8]),
         daemon=True,
     )
@@ -264,7 +296,7 @@ def _build_screen_block(user_id, history, screen_context):
 
 def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None,
-            prior_recall_enabled=False):
+            prior_recall_enabled=False, deadline_s=MAX_RUN_SECONDS):
     """Run one agent completion, stream its events into the run, then persist.
 
     Mirrors the old SSE generator's body but writes into the shared run state
@@ -330,9 +362,10 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
         history, message, screen_block + prior_block + (user_suffix or ""))
     try:
         for event in streaming.run_agent_streamed(project_key, agent_id, agent_messages):
-            # Cooperative stop between chunks: hard deadline reached, or the browser
-            # abandoned the run (stopped polling). Frees the slot/thread/LLM connection.
-            stop_reason = _stop_reason(run_id, started_at)
+            # Cooperative stop between chunks: the run's per-mode deadline reached, or
+            # the browser abandoned the run (stopped polling). Frees the
+            # slot/thread/LLM connection.
+            stop_reason = _stop_reason(run_id, started_at, deadline_s)
             if stop_reason:
                 logger.warning(
                     "stream_manager - cutting run_id=%s short (%s)", run_id, stop_reason
@@ -497,15 +530,23 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 len(sql_list),
             )
         elif stop_reason:
-            # Cut short by a safety bound (timeout/abandoned): surface a terminal error so
-            # a still-watching client stops cleanly, and record it on the run state.
+            # Cut short by a safety bound (deadline/abandoned): surface a terminal error
+            # so a still-watching client stops cleanly, and record it on the run state.
+            # The deadline code is emitted AS-IS ("deadline_reached", replacing the
+            # legacy "run_timeout"); the abandoned cut keeps its historical
+            # "run_abandoned" code. Both are machine codes the UI maps to friendly
+            # i18n text - never displayed verbatim.
+            error_code = (
+                stop_reason if stop_reason == "deadline_reached"
+                else "run_" + stop_reason
+            )
             _append_event_locked_free(
-                run_id, {"type": "error", "message": "run_" + stop_reason}
+                run_id, {"type": "error", "message": error_code}
             )
             with _LOCK:
                 state = _RUNS.get(run_id)
                 if state is not None:
-                    state["error"] = "run_" + stop_reason
+                    state["error"] = error_code
             logger.info(
                 "stream_manager - ended run_id=%s exchange_id=%s early (%s) answer_len=%d sql_count=%d",
                 run_id,

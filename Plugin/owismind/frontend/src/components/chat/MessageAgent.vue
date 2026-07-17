@@ -235,6 +235,21 @@ function fmtCost(c) {
   )
 }
 
+// Friendly run-error text: the backend's terminal error event carries a short
+// MACHINE code (deadline_reached / run_abandoned / agent_unavailable...), never
+// meant for the screen. Known codes map to i18n keys ("run_timeout" is kept as a
+// legacy alias for pre-rename runs still in flight); anything unknown falls back
+// to the generic message - no raw technical code ever reaches the user.
+const RUN_ERROR_KEYS = {
+  deadline_reached: 'runError.deadline_reached',
+  run_timeout: 'runError.run_timeout',
+  run_abandoned: 'runError.run_abandoned',
+  agent_unavailable: 'runError.agent_unavailable',
+}
+function runErrorText(item) {
+  return t(RUN_ERROR_KEYS[item.message] || 'runError.generic')
+}
+
 function stepLabel(item) {
   // Prefer the backend-provided human label (orchestrator pass-through) when present.
   const r = resolveTimelineStep(item.eventKind, item.label)
@@ -382,7 +397,7 @@ function nextVersion() {
                The model's own lead-in streams as 'text' and renders as a real message
                BETWEEN phases; the redundant deterministic narration is no longer shown. -->
           <div v-else-if="seg.kind === 'text'" class="body" v-html="renderItem(seg.item)" />
-          <div v-else-if="seg.kind === 'error'" class="body error">- {{ seg.item.message }} -</div>
+          <div v-else-if="seg.kind === 'error'" class="body error">- {{ runErrorText(seg.item) }} -</div>
         </template>
       </template>
       <template v-else>
@@ -418,8 +433,8 @@ function nextVersion() {
       <template v-for="item in bodyItems" :key="item.id">
         <!-- Agent text block (sanitized markdown) -->
         <div v-if="item.kind === 'text'" class="body" v-html="renderItem(item)" />
-        <!-- Error surfaced in place -->
-        <div v-else-if="item.kind === 'error'" class="body error">- {{ item.message }} -</div>
+        <!-- Error surfaced in place (i18n-mapped, never the raw machine code) -->
+        <div v-else-if="item.kind === 'error'" class="body error">- {{ runErrorText(item) }} -</div>
       </template>
       </template>
     </div>

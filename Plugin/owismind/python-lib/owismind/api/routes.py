@@ -525,13 +525,15 @@ def chat_start():
     # computed above, before the phase-one write, and handed to the worker unchanged here.
 
     # Spawn the bounded background worker. The agent_id stays server-side; the front
-    # only ever receives the opaque run_id.
+    # only ever receives the opaque run_id. The effective mode (resolved above, never
+    # raw frontend input) also sizes the run's wall-clock deadline per mode.
     try:
         run_id = stream_manager.start_run(
             project_key, agent_id, message, exchange_id,
             identity["user_id"], parent_exchange_id, history_limit, user_suffix,
             screen_context=screen_context,
             prior_recall_enabled=prior_recall_enabled,
+            mode=mode,
         )
     except stream_manager.CapacityError:
         logger.warning("/chat/start - concurrency cap reached, rejected")
