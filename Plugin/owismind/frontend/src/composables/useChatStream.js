@@ -8,7 +8,7 @@
 // REACTIVE answer-version object the store created with reactive() - the reducer mutates
 // it in place, so nested mutations (timeline.push, text +=) re-render live (L020).
 import { startChat, pollChat } from '../services/backend.js'
-import { applyEvent } from './timelineModel.js'
+import { applyEvent, durableEventToUi, durableTerminalEvent } from './timelineModel.js'
 
 const POLL_INTERVAL_MS = 500
 // The DSS proxy can blip a single poll while the worker keeps producing the answer, so a
@@ -68,11 +68,76 @@ export async function runChatStream({ sessionId, message, agentKey, historyLimit
       continue
     }
     if (token && token.cancelled) return
-    for (const evt of res.events || []) applyEvent(target, evt)
+    applyPolledEvents(target, res)
     cursor = res.cursor
-    if (res.done) break
+    if (res.done) {
+      applyDurableTerminal(target, res)
+      break
+    }
     await sleep(POLL_INTERVAL_MS)
   }
   // Defensive: if the run ended without a terminal event, stop the spinner.
+  if (target.status === 'running') applyEvent(target, { type: 'run_done' })
+}
+
+// Apply one poll page: legacy live events carry `.type`; durable persisted events
+// carry `.event_type` and are translated by the PURE adapter (one reducer for both).
+function applyPolledEvents(target, res) {
+  for (const evt of res.events || []) {
+    if (evt && typeof evt.event_type === 'string') {
+      for (const mapped of durableEventToUi(evt)) applyEvent(target, mapped)
+    } else {
+      applyEvent(target, evt)
+    }
+  }
+}
+
+// Durable runs signal their outcome on the poll ENVELOPE (status/error persisted in
+// SQL), not through a terminal live event: translate it once when done flips.
+function applyDurableTerminal(target, res) {
+  if (!res || typeof res.status !== 'string') return
+  const terminal = durableTerminalEvent(res.status, res.error)
+  if (terminal && target.status === 'running') applyEvent(target, terminal)
+}
+
+// Re-attach to an ALREADY RUNNING durable run (reconnect after refresh/navigation):
+// same poll loop as runChatStream, from cursor 0, without starting a new exchange.
+// The durable feed is persisted server-side, so replaying from 0 rebuilds the plan,
+// the activity and any partial answer exactly once (the target starts fresh).
+export async function resumeChatStream({ runId, target, token }) {
+  let cursor = 0
+  let failures = 0
+  for (;;) {
+    if (token && token.cancelled) return
+    let res
+    try {
+      res = await pollChat(runId, cursor)
+      failures = 0
+    } catch (e) {
+      if (token && token.cancelled) return
+      const code = (e && e.message) || ''
+      if (TERMINAL_CODES.has(code)) {
+        if (target.status === 'running') {
+          applyEvent(target, {
+            type: 'error',
+            message: code === 'run_not_found' ? 'run_lost' : code,
+          })
+        }
+        return
+      }
+      failures += 1
+      if (failures > MAX_POLL_FAILURES) throw e
+      await sleep(Math.min(POLL_INTERVAL_MS * 2 ** failures, MAX_BACKOFF_MS))
+      continue
+    }
+    if (token && token.cancelled) return
+    applyPolledEvents(target, res)
+    cursor = res.cursor
+    if (res.done) {
+      applyDurableTerminal(target, res)
+      break
+    }
+    await sleep(POLL_INTERVAL_MS)
+  }
   if (target.status === 'running') applyEvent(target, { type: 'run_done' })
 }

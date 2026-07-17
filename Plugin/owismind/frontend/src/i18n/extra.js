@@ -68,6 +68,22 @@ export const extraMessages = {
     // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
     // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
     // of deadline_reached (runs started before the rename).
+    'runplan.title': "Plan d'analyse",
+    'runplan.pending': 'En attente',
+    'runplan.running': 'En cours',
+    'runplan.retrying': 'Nouvel essai',
+    'runplan.completed': 'Terminé',
+    'runplan.failed': 'Échec',
+    'runplan.superseded': 'Remplacé',
+    'msg.show_activity': "Afficher l'activité",
+    'runError.quota_blocked':
+      "Le quota LLM empêche de poursuivre cette analyse.",
+    'runError.rate_limited':
+      "L'analyse attend une capacité LLM disponible.",
+    'runError.agent_disabled':
+      "Une source nécessaire n'est plus disponible.",
+    'runError.partial_result':
+      "L'analyse est incomplète, mais les étapes terminées ont été conservées.",
     'runError.deadline_reached':
       "Le temps maximal d'analyse a été atteint. Les résultats déjà obtenus restent affichés.",
     'runError.run_timeout':
@@ -951,6 +967,22 @@ export const extraMessages = {
     // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
     // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
     // of deadline_reached (runs started before the rename).
+    'runplan.title': 'Analysis plan',
+    'runplan.pending': 'Pending',
+    'runplan.running': 'Running',
+    'runplan.retrying': 'Retrying',
+    'runplan.completed': 'Done',
+    'runplan.failed': 'Failed',
+    'runplan.superseded': 'Superseded',
+    'msg.show_activity': 'Show activity',
+    'runError.quota_blocked':
+      'The LLM quota prevents this analysis from continuing.',
+    'runError.rate_limited':
+      'The analysis is waiting for available LLM capacity.',
+    'runError.agent_disabled':
+      'A required source is no longer available.',
+    'runError.partial_result':
+      'The analysis is incomplete, but the completed steps were preserved.',
     'runError.deadline_reached':
       'The maximum analysis time was reached. The results already produced remain displayed.',
     'runError.run_timeout':

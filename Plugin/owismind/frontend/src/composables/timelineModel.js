@@ -56,6 +56,10 @@ export function createAnswerState(over) {
     feedbackRating: null, // 1 (up) | 0 (down) | null (none)
     feedbackReasons: [], // reason codes (down)
     feedbackComment: '', // free-text (down)
+    // Durable workflow plan (v1.3 Durable Step Shell): { goal, steps:[{id,title,
+    // status,durationS}] } or null for a legacy answer. Fed by the 'plan' /
+    // 'step_status' events (live) or rebuilt from /chat/activity (reload).
+    plan: null,
     _seq: 0,
     ...(over || {}),
   }
@@ -241,11 +245,102 @@ export function applyEvent(state, evt) {
       state.error = evt.message || 'inconnue'
       pushError(state, state.error)
       break
+    case 'plan': {
+      // Durable workflow plan (replaces wholesale on PLAN_READY, including after
+      // a replan: the backend re-emits the complete revised plan).
+      const steps = Array.isArray(evt.steps) ? evt.steps : []
+      state.plan = {
+        goal: typeof evt.goal === 'string' ? evt.goal.slice(0, 300) : '',
+        steps: steps
+          .filter((s) => s && s.id)
+          .slice(0, 12)
+          .map((s) => ({
+            id: String(s.id),
+            title: typeof s.title === 'string' ? s.title.slice(0, 160) : '',
+            status: typeof s.status === 'string' ? s.status : 'pending',
+            durationS: null,
+          })),
+      }
+      break
+    }
+    case 'step_status': {
+      // One plan step changed state (running / retrying / completed / failed).
+      if (!state.plan || !evt.id) break
+      const step = state.plan.steps.find((s) => s.id === String(evt.id))
+      if (!step) break
+      if (typeof evt.status === 'string') step.status = evt.status
+      if (evt.durationS != null) step.durationS = evt.durationS
+      break
+    }
     default:
       // Unknown / unhandled event type - ignore, never throw.
       break
   }
   return state
+}
+
+// --- Durable feed adapter (v1.3) -------------------------------------------------------
+// The durable poll route serves PERSISTED events ({event_type, payload}) instead of the
+// legacy live shapes. This PURE mapper translates each into zero-or-more normalized
+// events for applyEvent, so ONE reducer drives both transports. Unknown types map to
+// nothing (never throw).
+const _DURABLE_STEP_STATUS = {
+  STEP_STARTED: 'running',
+  STEP_RETRYING: 'retrying',
+  STEP_COMPLETED: 'completed',
+}
+
+export function durableEventToUi(evt) {
+  if (!evt || typeof evt.event_type !== 'string') return []
+  const type = evt.event_type
+  const p = evt.payload && typeof evt.payload === 'object' ? evt.payload : {}
+  if (type === 'PLAN_READY') {
+    return [{ type: 'plan', goal: p.goal, steps: p.steps }]
+  }
+  if (type in _DURABLE_STEP_STATUS) {
+    const out = [{ type: 'step_status', id: p.id, status: _DURABLE_STEP_STATUS[type] }]
+    // The step transition also reads as an activity tick in the timeline.
+    out.push({ type: 'agent_event', eventKind: type, label: p.title || null })
+    return out
+  }
+  if (type === 'VERIFYING' || type === 'REPLANNING' || type === 'WAITING_UPSTREAM' || type === 'PARTIAL_RESULT') {
+    return [{ type: 'agent_event', eventKind: type }]
+  }
+  if (type === 'FINAL_ANSWER') {
+    // The finalized answer, chunked under the event payload cap: replayed as
+    // ordinary deltas so the reducer merges them into one text block.
+    return [{ type: 'answer_delta', text: typeof p.text === 'string' ? p.text : '' }]
+  }
+  if (type === 'DONE') return [{ type: 'run_done' }]
+  if (type === 'ERROR') return [{ type: 'error', message: p.code || 'inconnue' }]
+  if (type.indexOf('AGENT_') === 0) {
+    // Persisted pass-through of the live agent activity (bounded payload; the
+    // SQL text itself never rides the durable feed - Evidence owns it).
+    return [
+      {
+        type: 'agent_event',
+        eventKind: p.eventKind || type.slice(6),
+        toolName: p.toolName || null,
+        blockId: p.blockId || null,
+        label: typeof p.label === 'string' ? p.label : null,
+      },
+    ]
+  }
+  return []
+}
+
+/**
+ * Terminal envelope of a durable poll ({status, error}) -> the closing normalized
+ * event, or null while still running. partial maps to 'stopped' semantics (the
+ * partial answer is real, the run just could not finish everything).
+ */
+export function durableTerminalEvent(status, error) {
+  if (status === 'completed') return { type: 'run_done' }
+  if (status === 'stopped' || status === 'partial') return { type: 'stopped' }
+  if (status === 'failed' || status === 'deadline_reached' || status === 'quota_blocked') {
+    return { type: 'error', message: error || status }
+  }
+  return null
 }
 
 /**

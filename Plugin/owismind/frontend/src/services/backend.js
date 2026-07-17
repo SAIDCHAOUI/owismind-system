@@ -134,6 +134,20 @@ export function stopChat(runId) {
   });
 }
 
+// Durable workflow reconnect (v1.3): the caller's still-active durable run for a
+// session, or { run: null }. Lease internals never leave the backend projection.
+export function fetchActiveRun(sessionId) {
+  const q = '?session_id=' + encodeURIComponent(sessionId);
+  return request('/owismind-api/chat/active' + q, { method: 'GET' });
+}
+
+// Persisted activity feed of a finished durable exchange ("Afficher l'activite").
+// Returns { status, events: [{event_type, payload}] }; [] for a legacy exchange.
+export function fetchRunActivity(exchangeId) {
+  const q = '?exchange_id=' + encodeURIComponent(exchangeId);
+  return request('/owismind-api/chat/activity' + q, { method: 'GET' });
+}
+
 // Names-only, keyset-paginated conversation list (sidebar). Never returns bodies.
 // Returns { status, conversations: [{ session_id, title, last_at }], next_cursor,
 // has_more }. `cursor`/`limit` are optional; the backend clamps the page size.

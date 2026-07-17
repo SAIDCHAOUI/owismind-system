@@ -23,13 +23,16 @@ import {
   timelineSegments,
   activitySummary,
   stepStampDiff,
+  applyEvent,
+  durableEventToUi,
 } from '../../composables/timelineModel.js'
 import { resolveTimelineStep } from '../../registries/timelineSteps.js'
-import { submitFeedback } from '../../services/backend.js'
+import { submitFeedback, fetchRunActivity } from '../../services/backend.js'
 import { track } from '../../services/track.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon, Menu } from '../ui'
 import FeedbackModal from './FeedbackModal.vue'
+import RunPlan from './RunPlan.vue'
 
 const props = defineProps({
   turn: { type: Object, required: true },
@@ -41,6 +44,36 @@ const chat = useChatStore()
 const benchmark = useBenchmarkStore()
 const { push } = useToasts()
 const evidence = useEvidenceStore()
+
+// Durable-run activity reload ("Show activity", Cobuild-style): a terminal
+// exchange with no in-memory plan MAY have a persisted durable feed. Fetched on
+// demand; only the PLAN reconstruction events are replayed (replaying the text or
+// timeline events would duplicate the already-rendered answer). One shot per
+// message mount; a legacy exchange simply yields nothing and the button hides.
+const activityLoading = ref(false)
+const activityChecked = ref(false)
+async function loadActivity() {
+  if (activityLoading.value || !v.value.exchangeId) return
+  activityLoading.value = true
+  try {
+    const res = await fetchRunActivity(v.value.exchangeId)
+    for (const evt of res.events || []) {
+      for (const mapped of durableEventToUi(evt)) {
+        if (mapped.type === 'plan' || mapped.type === 'step_status') {
+          applyEvent(v.value, mapped)
+        }
+      }
+    }
+  } catch (e) {
+    // Best-effort: no toast, the button simply stays inert on a transient error.
+  } finally {
+    activityLoading.value = false
+    activityChecked.value = true
+  }
+}
+const activityAvailable = computed(
+  () => v.value.status !== 'running' && !v.value.plan && !!v.value.exchangeId && !activityChecked.value,
+)
 
 const showFeedback = ref(false)
 // Which rating the detailed-feedback modal is editing (0 = negative, 1 = positive). Drives
@@ -365,6 +398,10 @@ function nextVersion() {
       <span class="author">{{ t('msg.author') }}</span>
     </div>
 
+    <!-- Durable analysis plan (v1.3): visible as soon as PLAN_READY arrives, steps
+         tick live; rebuilt on demand from /chat/activity for reloaded exchanges. -->
+    <RunPlan v-if="v.plan" :plan="v.plan" />
+
     <!-- ONE persistent .stream wrapper for both phases (swapping two sibling divs
          would replay its slide-up on the FULL answer at end of run).
          LIVE: chronological segments - each event phase is a bounded ticker (last
@@ -500,6 +537,11 @@ function nextVersion() {
     <!-- Actions + version nav -->
     <div v-if="v.status !== 'running'" class="msg-foot">
       <button @click="copy"><Icon name="copy" />{{ t('msg.copy') }}</button>
+      <button
+        v-if="activityAvailable"
+        :disabled="activityLoading"
+        @click="loadActivity"
+      ><Icon name="route" />{{ t('msg.show_activity') }}</button>
       <button
         v-if="v.sql.length && v.exchangeId"
         :class="{ primary: isEvidenceOpen }"

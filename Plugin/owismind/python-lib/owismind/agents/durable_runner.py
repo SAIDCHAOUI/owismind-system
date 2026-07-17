@@ -1040,6 +1040,15 @@ def _finalize(run_id, ledger, answer, status, error_code):
         run_state.finalize_exchange_guard(run_id)
     except Exception:
         logger.exception("usage finalisation failed for run %s", run_id)
+    # Surface the answer on the DURABLE FEED too (chunked under the payload cap):
+    # a live viewer, or one reconnecting after refresh, sees the text without
+    # waiting for a conversation reload - chat_v5 stays the persistent truth.
+    if answer:
+        chunks = [answer[i:i + 7000] for i in range(0, min(len(answer),
+                                                           70000), 7000)]
+        _emit(run_id, [("FINAL_ANSWER",
+                        {"text": part, "part": i + 1, "parts": len(chunks)})
+                       for i, part in enumerate(chunks)])
     run_state.set_run_status(run_id, status, error_code=error_code)
     if status != "completed":
         _emit(run_id, [(EV_PARTIAL, {"code": error_code or CODE_PARTIAL})])
