@@ -25,14 +25,17 @@ fichiers : `agents/durable_runner.py`, `storage/run_state.py`, `owismind_factory
 reaper de reservation TOCTOU). Suites LOCALES vertes : backend 962, agents+factory 616, LAB 343, front
 365. RIEN execute contre DSS (feature flag OFF). Spec/plan dans `docs/superpowers/`, rapport audit
 `OWIsMind_PRD_V1_2/docs/SECURITY_AUDIT_2026-07-17_DURABLE.md`, deploiement = phase H de
-DEPLOY_V1_3_DEV.md. L157-L159. Voir `sessions/2026-07-17.md`.
+DEPLOY_V1_3_DEV.md. **Run 2 (suite)** : guide complet `OWIsMind_PRD_V1_2/docs/DURABLE_STEP_SHELL.md`
+(comprendre l'archi + installation pas a pas) + FIX de cablage (le validateur de profil supprimait
+le flag `durable_workflow` -> mode durable inactivable ; corrige, L160). 3 commits locaux non pousses
+(`6b0c9d6`/`cbb4bc7`/`9289af5`) en plus des 17 pousses. L157-L160. Voir `sessions/2026-07-17.md`.
 
 **Base anterieure (2026-07-16) : mise en ordre git + miroir UI DSS + double audit securite factory**
 (5 commits pousses ; miroir `genai/{agents,agent-tools,semantic-models}/`, `project-library/
 owismind_hub/`, `docs/` ; factory 468->516 tests). L156 (job codex fantome). Voir `sessions/2026-07-16.md`.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-17 (nuit) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; fix timeout claude ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; audit securite (0 Critical, 3 findings corriges) ; 17 commits pousses `..b909156` ; backend 962 / agents 616 / LAB 343 / front 365. L157-L159. Voir `sessions/2026-07-17.md`.
+- 2026-07-17 (nuit) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; fix timeout claude ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; audit securite (0 Critical, 3 findings corriges) ; puis Run 2 : guide complet + fix cablage flag (L160). 17 commits pousses `..b909156` + 3 locaux ; backend 963 / agents 616 / LAB 343 / front 365. L157-L160. Voir `sessions/2026-07-17.md`.
 - 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
 - 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
 - 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.

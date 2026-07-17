@@ -3413,6 +3413,14 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-17 (nuit). Complete [[subagents-use-opus-not-fable]] et L156.
 - **Date** : 2026-07-17.
 
+## L160 - Un flag lu au runtime doit etre ajoute au VALIDATEUR de profil (whitelist), sinon la feature est inactivable (2026-07-17)
+- **Contexte** : le mode durable (Durable Step Shell) s'active via un champ de profil agent `durable_workflow`, lu dans `/chat/start` (`routes.py:536`, `agent_profile.get("durable_workflow")`).
+- **Ce qui a echoue** : le profil admin passe par `validate_agent_meta` (`security/validation.py`) qui est une WHITELIST : elle reconstruit un dict a champs fixes et DROP tout champ non liste. `durable_workflow` (et `domain_keywords`) n'y etaient pas -> silencieusement supprimes a l'enregistrement -> le flag lu par la route etait TOUJOURS absent/false -> le mode durable etait inactivable depuis l'UI, sans aucune erreur. Bug invisible aux tests unitaires de chaque cote (la route lit un champ, le validateur en produit un autre) ; trouve seulement en tracant "ou va le flag" pour ecrire le guide d'installation.
+- **Solution qui marche** : ajouter le champ au validateur (`durable_workflow = bool(raw.get(...))` comme le champ `modes` existant ; `domain_keywords` via un `_clean_domain_keywords` borne : 12 domaines / 20 mots / 40 chars, mots-cles minuscules pour la gate insensible a la casse) + tests qui prouvent que le flag SURVIT a la validation. Regle generale : tout champ de profil/config lu au runtime DOIT etre explicitement autorise par le validateur qui l'ecrit ; ecrire un test qui fait l'aller-retour save->read.
+- **Preuve-verification** : `test_durable_workflow_flag_and_keyword_map` (flag survit, map bornee, malforme -> {}) ; backend 963 tests OK. Commit `cbb4bc7`.
+- **Source** : session 2026-07-17 Run 2 (redaction du guide `DURABLE_STEP_SHELL.md`). Complete L157.
+- **Date** : 2026-07-17.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 
