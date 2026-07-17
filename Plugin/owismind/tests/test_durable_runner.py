@@ -421,18 +421,23 @@ class RetryTests(RunnerHarness):
         s1 = self.store.steps[(run_id, "S1")]
         self.assertEqual(s1["attempt_no"], 2)
 
-    def test_failed_check_schedules_retry(self):
+    def test_failed_check_goes_to_replan_not_blind_retry(self):
+        # A deterministic check failure is a VALIDATION error: no backoff retry
+        # of the identical call - the repair mechanism is the replan.
         run_id = self._mk_run()
         empty = dict(_OK_EXEC, row_count=0)
         self._drive(run_id, {
             "plan": [{"control": {"plan": _PLAN}}],
-            "execute": [{"control": empty}, {"control": _OK_EXEC},
+            "execute": [{"control": empty},           # S1 fails its non_empty check
+                        {"control": _OK_EXEC},         # S1 after replan
                         {"control": dict(_OK_EXEC, output_ref="#S2")}],
+            "replan": [{"control": {"plan": _PLAN}}],  # fresh revision, same shape
             "synthesize": [{"control": {"answer": "ok"}}],
         })
-        self.assertEqual(self.store.load_run(run_id)["status"], "completed")
-        # the failed check surfaced as a retry, then succeeded
-        self.assertIn("STEP_RETRYING", self._event_types())
+        run = self.store.load_run(run_id)
+        self.assertEqual(run["status"], "completed")
+        self.assertIn("REPLANNING", self._event_types())
+        self.assertEqual(run["plan_revision"], 2)      # replan persisted in SQL
 
     def test_quota_terminates_the_run_without_retry(self):
         run_id = self._mk_run()
@@ -568,6 +573,87 @@ class AdapterTests(RunnerHarness):
         for banned in ("lease_owner", "lease_until", "worker_heartbeat_at",
                        "agent_key"):
             self.assertNotIn(banned, out)
+
+
+class ReviewFixTests(RunnerHarness):
+    """Locks for the Codex cross-review findings on T3."""
+
+    def test_recovery_rearms_steps_left_running_by_a_dead_worker(self):
+        run_id = self._mk_run()
+        self.store.save_plan(run_id, _PLAN, 1)
+        self.store.runs[run_id]["status"] = "executing"
+        # simulate a worker that died mid-Mesh-call: S1 stuck in 'running'
+        s1 = self.store.steps[(run_id, "S1")]
+        s1.update(status="running", attempt_id="dead-attempt", attempt_no=1)
+        self._drive(run_id, {
+            "execute": [{"control": _OK_EXEC},
+                        {"control": dict(_OK_EXEC, output_ref="#S2")}],
+            "synthesize": [{"control": {"answer": "recovered fine"}}],
+        })
+        run = self.store.load_run(run_id)
+        self.assertEqual(run["status"], "completed")   # S1 was re-run, not skipped
+        self.assertEqual(self.store.steps[(run_id, "S1")]["status"], "completed")
+        self.assertNotEqual(self.store.steps[(run_id, "S1")]["attempt_id"],
+                            "dead-attempt")            # fresh fenced attempt
+
+    def test_raw_control_chunk_never_leaks_to_public_feed(self):
+        run_id = self._mk_run()
+
+        def leaky_stream(project_key, agent_id, messages):
+            m = _CMD_RE.search(messages[-1]["content"])
+            cmd = m.group(1) if m else "?"
+            if cmd == "plan":
+                # pre-T5 shape: the control arrives as a RAW agent_event
+                yield {"type": "agent_event",
+                       "eventKind": "OWI_WORKFLOW_CONTROL",
+                       "eventData": {"payload": {"plan": _PLAN}}}
+            elif cmd == "execute":
+                yield {"type": "workflow_control", "command": "execute",
+                       "payload": _OK_EXEC}
+            else:
+                yield {"type": "workflow_control", "command": cmd,
+                       "payload": {"answer": "done"}}
+
+        durable_runner.streaming = types.SimpleNamespace(
+            run_agent_streamed=leaky_stream)
+        durable_runner._run_workflow(run_id, "o", "q", None, threading.Event())
+        self.assertEqual(self.store.load_run(run_id)["status"], "completed")
+        for _, event_type, _payload in self.store.events:
+            self.assertNotIn("OWI_WORKFLOW_CONTROL", event_type or "")
+
+    def test_side_channel_sql_and_usage_attach_to_the_step(self):
+        run_id = self._mk_run()
+        bare = {k: v for k, v in _OK_EXEC.items()
+                if k not in ("generated_sql", "usage")}
+
+        def side_channel_stream(project_key, agent_id, messages):
+            m = _CMD_RE.search(messages[-1]["content"])
+            cmd = m.group(1) if m else "?"
+            if cmd == "plan":
+                yield {"type": "workflow_control", "command": "plan",
+                       "payload": {"plan": _PLAN}}
+            elif cmd == "execute":
+                # real orchestrator shape: SQL + usage arrive as stream events
+                yield {"type": "generated_sql", "sql": "SELECT 42",
+                       "success": True, "rowCount": 1}
+                yield {"type": "usage_summary",
+                       "usage": {"promptTokens": 7, "completionTokens": 3,
+                                 "estimatedCost": 0.0005}}
+                yield {"type": "workflow_control", "command": "execute",
+                       "payload": bare}
+            else:
+                yield {"type": "workflow_control", "command": cmd,
+                       "payload": {"answer": "done"}}
+
+        durable_runner.streaming = types.SimpleNamespace(
+            run_agent_streamed=side_channel_stream)
+        durable_runner._run_workflow(run_id, "o", "q", None, threading.Event())
+        self.assertEqual(self.store.load_run(run_id)["status"], "completed")
+        s1 = self.store.steps[(run_id, "S1")]
+        self.assertIn("SELECT 42", s1["generated_sql_json"] or "")
+        self.assertIn("promptTokens", s1["usage_json"] or "")
+        # merged into the exchange too
+        self.assertTrue(self.chat.saved[0]["generated_sql"])
 
 
 class UnitTests(unittest.TestCase):

@@ -128,6 +128,10 @@ def start_workflow(exchange_id, session_id, user_id, agent_key, mode, question,
     route (fresh-start fast path); recovery workers re-resolve from the whitelist.
     Raises BusyError when a capacity cap refuses the run (the route maps it to a
     friendly 503)."""
+    # Reserve the slot UNDER the lock (no TOCTOU: concurrent /chat/start bursts
+    # see the reservation immediately); the reservation is replaced by the real
+    # worker entry on spawn, and dropped on any failure.
+    reservation = "resv-" + str(exchange_id)
     with _LOCK:
         _reap_dead_workers_locked()
         if len(_WORKERS) >= MAX_ACTIVE_WORKFLOWS:
@@ -136,27 +140,34 @@ def start_workflow(exchange_id, session_id, user_id, agent_key, mode, question,
             1 for w in _WORKERS.values() if w.get("user_id") == user_id)
         if actives_for_user >= MAX_ACTIVE_WORKFLOWS_PER_USER:
             raise BusyError("one active analysis per user")
+        _WORKERS[reservation] = {"user_id": user_id, "thread": None,
+                                 "reservation": True}
 
-    deadlines = resolve_durable_deadlines(mode)
-    deadline_at = datetime.now(timezone.utc) + timedelta(seconds=deadlines["run"])
     try:
-        run_id = run_state.create_run(
-            exchange_id, session_id, user_id, agent_key, mode,
-            deadline_at.isoformat())
-    except Exception:
-        # UNIQUE(exchange_id) violation -> a crashed-then-retried start: recover.
-        existing = run_state.load_run_by_exchange(exchange_id, user_id)
-        if existing is None:
-            raise
-        run_id = existing["run_id"]
-        logger.info("start_workflow - recovered existing run %s for exchange %s",
-                    run_id, exchange_id)
+        deadlines = resolve_durable_deadlines(mode)
+        deadline_at = (datetime.now(timezone.utc)
+                       + timedelta(seconds=deadlines["run"]))
+        try:
+            run_id = run_state.create_run(
+                exchange_id, session_id, user_id, agent_key, mode,
+                deadline_at.isoformat())
+        except Exception:
+            # UNIQUE(exchange_id) violation -> crashed-then-retried start: recover.
+            existing = run_state.load_run_by_exchange(exchange_id, user_id)
+            if existing is None:
+                raise
+            run_id = existing["run_id"]
+            logger.info("start_workflow - recovered existing run %s for "
+                        "exchange %s", run_id, exchange_id)
 
-    lease_owner = uuid.uuid4().hex
-    if run_state.claim_run(run_id, lease_owner, LEASE_SECONDS):
-        _spawn_worker(run_id, lease_owner, user_id, question, bootstrap)
-    # else: another worker already holds it (recovery race) - polling still works.
-    return {"run_id": run_id, "exchange_id": exchange_id}
+        lease_owner = uuid.uuid4().hex
+        if run_state.claim_run(run_id, lease_owner, LEASE_SECONDS):
+            _spawn_worker(run_id, lease_owner, user_id, question, bootstrap)
+        # else: another worker already holds it (recovery race) - polling works.
+        return {"run_id": run_id, "exchange_id": exchange_id}
+    finally:
+        with _LOCK:
+            _WORKERS.pop(reservation, None)
 
 
 def start_supervisor():
@@ -184,13 +195,17 @@ def poll_durable(run_id, user_id, cursor):
     if feed is None:
         return None
     status = feed.get("status")
-    done = status in ("completed", "partial", "failed", "stopped",
-                      "deadline_reached", "quota_blocked")
+    terminal = status in ("completed", "partial", "failed", "stopped",
+                          "deadline_reached", "quota_blocked")
+    events = feed.get("events") or []
+    # done ONLY once the feed is drained: a terminal run with a full page of
+    # pending events keeps the client polling until it caught up (pagination).
+    done = terminal and len(events) < 500
     error = None
     if status in ("failed", "deadline_reached", "quota_blocked"):
         run = run_state.load_run(run_id, user_id)
         error = (run or {}).get("error_code") or status
-    return {"events": feed.get("events") or [], "cursor": feed.get("cursor"),
+    return {"events": events, "cursor": feed.get("cursor"),
             "done": done, "error": error, "status": status}
 
 
@@ -290,7 +305,7 @@ def _worker_main(run_id, lease_owner, question, bootstrap):
     except Exception:
         logger.exception("workflow worker crashed for run %s", run_id)
         try:
-            run_state.set_run_status(run_id, "failed", error_code=CODE_INTERNAL)
+            _finalize_failure(run_id, "failed", CODE_INTERNAL)
             _emit(run_id, [(EV_ERROR, {"code": CODE_INTERNAL})])
         except Exception:
             pass
@@ -301,19 +316,22 @@ def _worker_main(run_id, lease_owner, question, bootstrap):
 
 
 class _EventBuffer(object):
-    """Small batching buffer over run_state.append_events (flush on size/step)."""
+    """Batching buffer over run_state.append_events (size + 1s time flush)."""
 
     def __init__(self, run_id):
         self.run_id = run_id
         self.pending = []
+        self._last_flush = time.monotonic()
 
     def add(self, event_type, payload=None):
         self.pending.append({"event_type": event_type,
                              "payload": payload or {}})
-        if len(self.pending) >= EVENT_FLUSH_MAX:
+        if (len(self.pending) >= EVENT_FLUSH_MAX
+                or (time.monotonic() - self._last_flush) >= 1.0):
             self.flush()
 
     def flush(self):
+        self._last_flush = time.monotonic()
         if not self.pending:
             return
         batch, self.pending = self.pending, []
@@ -439,15 +457,13 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
 
     project_key, agent_id = _resolve_target(run, bootstrap)
     if not agent_id:
-        run_state.set_run_status(run_id, "failed", error_code=CODE_AGENT_DISABLED)
+        _finalize_failure(run_id, "failed", CODE_AGENT_DISABLED)
         _emit(run_id, [(EV_ERROR, {"code": CODE_AGENT_DISABLED})])
         return
     question = _recover_question(run, question)
     mode = run.get("mode") or _DEFAULT_MODE
     deadlines = resolve_durable_deadlines(mode)
     events = _EventBuffer(run_id)
-    total_attempts = 0
-    replans = int(run.get("replan_count") or 0)
 
     def _partial(status, code):
         events.flush()
@@ -455,9 +471,27 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
         answer = build_partial_answer(ledger.get("run") or run, ledger)
         _finalize(run_id, ledger, answer, status, code)
 
+    # -- Recovery: re-arm steps left 'running' by a dead worker ----------------------
+    # We hold the lease now, so the previous attempt is superseded: fail it with an
+    # immediate retry so the loop re-executes it under a FRESH attempt_id (fencing
+    # keeps any late zombie write from clobbering the new attempt).
+    ledger = run_state.load_ledger(run_id)
+    for stale in (ledger or {}).get("steps") or []:
+        if stale.get("status") == "running" and stale.get("attempt_id"):
+            run_state.fail_step(
+                run_id, stale["step_id"], stale["attempt_id"], "worker_lost",
+                retry_at=datetime.now(timezone.utc).isoformat())
+
     # -- PLAN phase (skipped on recovery when steps already exist) ------------------
     ledger = run_state.load_ledger(run_id)
     if not (ledger and ledger.get("steps")):
+        run = run_state.load_run(run_id) or {}
+        if run.get("stop_requested"):
+            _partial("stopped", CODE_PARTIAL)
+            return
+        if _deadline_passed(run):
+            _partial("deadline_reached", CODE_DEADLINE)
+            return
         run_state.set_run_status(run_id, "planning")
         outcome = _execute_command(
             project_key, agent_id, run_id, "plan", question, mode, deadlines,
@@ -468,9 +502,9 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
         plan = (outcome["payload"] or {}).get("plan")
         problem = _plan_problems(plan)
         if problem:
-            run_state.set_run_status(run_id, "failed", error_code=CODE_INTERNAL)
             events.add(EV_ERROR, {"code": CODE_INTERNAL, "detail": problem})
             events.flush()
+            _finalize_failure(run_id, "failed", CODE_INTERNAL)
             return
         run_state.save_plan(run_id, plan, 1)
         ledger = run_state.load_ledger(run_id)
@@ -495,12 +529,15 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
                 return
             ledger = run_state.load_ledger(run_id)
             steps = (ledger or {}).get("steps") or []
+            # Crash-proof budgets: BOTH counters derive from the persisted ledger
+            # (a recovered worker inherits them; RAM-only counters would reset).
+            total_attempts = sum(int(s.get("attempt_no") or 0) for s in steps)
+            replans_used = max(int(run.get("plan_revision") or 1) - 1, 0)
             step, wait_s = _next_pending_step(steps)
             if step is None:
                 exhausted = [s for s in steps if s.get("status") == "failed"]
                 if exhausted:
-                    if replans < MAX_REPLANS:
-                        replans += 1
+                    if replans_used < MAX_REPLANS:
                         if not _replan(project_key, agent_id, run_id, question,
                                        mode, deadlines, ledger, exhausted[0],
                                        events):
@@ -520,7 +557,6 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
             attempt_id = uuid.uuid4().hex
             if not run_state.start_step(run_id, step["step_id"], attempt_id):
                 continue                      # raced/zombie: reload the ledger
-            total_attempts += 1
             retrying = int(step.get("attempt_no") or 0) > 0
             events.add(EV_STEP_RETRYING if retrying else EV_STEP_STARTED,
                        _step_public(step))
@@ -546,11 +582,15 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
             project_key, agent_id, run_id, "review", question, mode, deadlines,
             ledger=ledger, events=events)
         payload = outcome.get("payload") or {}
-        if (outcome["kind"] == "control" and payload.get("sufficient") is False
-                and replans < MAX_REPLANS):
-            replans += 1
+        # The agent wraps the verdict: {"status": "ok", "review": {...}}.
+        review = payload.get("review") if isinstance(payload.get("review"),
+                                                     dict) else payload
+        run = run_state.load_run(run_id) or {}
+        replans_used = max(int(run.get("plan_revision") or 1) - 1, 0)
+        if (outcome["kind"] == "control" and review.get("sufficient") is False
+                and replans_used < MAX_REPLANS):
             if _replan(project_key, agent_id, run_id, question, mode, deadlines,
-                       ledger, None, events, reason=payload.get("missing")):
+                       ledger, None, events, reason=review.get("missing")):
                 continue                      # execute the appended steps
         reviewed_ok = True
         break
@@ -574,9 +614,9 @@ def _run_workflow(run_id, lease_owner, question, bootstrap, lost):
 def _fail_run(run_id, events, outcome):
     code = outcome.get("code") or CODE_INTERNAL
     status = "quota_blocked" if code == CODE_QUOTA else "failed"
-    run_state.set_run_status(run_id, status, error_code=code)
     events.add(EV_ERROR, {"code": code})
     events.flush()
+    _finalize_failure(run_id, status, code)   # honest phase-2 on EVERY failure
 
 
 def _needs_review(ledger):
@@ -644,8 +684,12 @@ def _handle_step_outcome(run_id, step, attempt_id, outcome, events):
             if status in ("ok", "ready"):
                 failed_check = evaluate_checks(checks, payload)
             if failed_check:
+                # A deterministic check failure is a VALIDATION error, never
+                # transient: an identical retry cannot heal it - the replan
+                # path (with the error in context) is the repair mechanism.
                 _schedule_retry(run_id, step, attempt_id,
-                                "check_failed:" + failed_check, events)
+                                "check_failed:" + failed_check, events,
+                                transient=False)
                 return "retry"
             result = {
                 "result_status": status,
@@ -745,46 +789,96 @@ def _execute_command(project_key, agent_id, run_id, command, question, mode,
     control = None
     answer_parts = []
     answer_len = 0
+    collected_sql = []
+    collected_artifacts = []
+    collected_usage = None
     mode_token = "⟦owi:mode={0}⟧".format(mode) if mode in context.MODEL_MODES else ""
     if mode_token:
         message = message + mode_token        # mode rides the same tail block
     started = time.monotonic()
     step_budget = deadlines["step"]
+    idle_budget = deadlines.get("idle") or 60
+    # Bounded wait for a Mesh slot: a stuck upstream call must not queue new
+    # commands forever behind it (its own thread cannot be killed - no Mesh
+    # cancel - but fresh work fails fast as transient instead of piling up).
+    if not _MESH_SLOTS.acquire(timeout=min(step_budget, 60)):
+        return {"kind": "error", "failure": "transient", "code": CODE_RATE}
     try:
-        with _MESH_SLOTS:
-            for event in streaming.run_agent_streamed(
-                    project_key, agent_id,
-                    [{"role": "user", "content": message}]):
-                etype = event.get("type")
-                if etype == "workflow_control":
-                    control = event
-                elif etype == "answer_delta":
-                    text = event.get("text") or ""
-                    if answer_len < COMMAND_ANSWER_MAX_CHARS:
-                        answer_parts.append(text)
-                        answer_len += len(text)
-                elif etype in ("agent_event", "generated_sql") and events:
-                    events.add("AGENT_" + str(event.get("eventKind")
-                                              or etype).upper()[:40],
+        last_chunk = time.monotonic()
+        idle_warned = False
+        for event in streaming.run_agent_streamed(
+                project_key, agent_id,
+                [{"role": "user", "content": message}]):
+            now = time.monotonic()
+            if (not idle_warned and events is not None
+                    and (now - last_chunk) > idle_budget):
+                # Best-effort (observed between chunks): the UI learns the
+                # upstream stayed silent for a long stretch.
+                events.add(EV_WAITING, {"seconds": int(now - last_chunk)})
+                idle_warned = True
+            last_chunk = now
+            etype = event.get("type")
+            kind_raw = str(event.get("eventKind") or "")
+            if kind_raw == "OWI_WORKFLOW_CONTROL" and etype != "workflow_control":
+                # Pre-T5 leak guard: the raw control chunk may still surface as a
+                # generic agent_event; NEVER forward it to the public feed under
+                # any (renamed) type - consume it as the machine result instead.
+                payload = event.get("eventData") or event.get("payload") or {}
+                if isinstance(payload, dict):
+                    control = {"payload": payload.get("payload") or payload}
+                continue
+            if etype == "workflow_control":
+                control = event
+            elif etype == "answer_delta":
+                text = event.get("text") or ""
+                if answer_len < COMMAND_ANSWER_MAX_CHARS:
+                    answer_parts.append(text)
+                    answer_len += len(text)
+            elif etype == "generated_sql":
+                collected_sql.append({k: event.get(k) for k in
+                                      ("sql", "success", "rowCount", "sqlId")
+                                      if k in event})
+                if events is not None:
+                    events.add("AGENT_GENERATED_SQL",
                                _public_event_payload(event))
-                if (time.monotonic() - started) > step_budget:
-                    # Cooperative per-command budget: stop consuming; the fenced
-                    # attempt_id makes any late server-side result harmless.
-                    logger.warning("command %s on run %s exceeded step budget",
-                                   command, run_id)
-                    return {"kind": "error", "failure": "transient",
-                            "code": CODE_DEADLINE}
+            elif etype == "usage_summary":
+                collected_usage = event.get("usage") or event.get("payload")
+            elif etype == "artifact":
+                collected_artifacts.append(event.get("artifact")
+                                           or event.get("payload") or {})
+            elif etype == "agent_event" and events is not None:
+                events.add("AGENT_" + kind_raw.upper()[:40] if kind_raw
+                           else "AGENT_EVENT", _public_event_payload(event))
+            if (time.monotonic() - started) > step_budget:
+                # Cooperative per-command budget: stop consuming; the fenced
+                # attempt_id makes any late server-side result harmless.
+                logger.warning("command %s on run %s exceeded step budget",
+                               command, run_id)
+                return {"kind": "error", "failure": "transient",
+                        "code": CODE_DEADLINE}
     except Exception as exc:                  # Mesh/network failure
         failure = classify_failure(exc)
         code = {"quota": CODE_QUOTA, "transient": CODE_RATE}.get(
             failure, CODE_INTERNAL)
         logger.warning("command %s failed on run %s: %s", command, run_id, exc)
         return {"kind": "error", "failure": failure, "code": code}
+    finally:
+        _MESH_SLOTS.release()
 
     if control is not None:
-        return {"kind": "control", "payload": control.get("payload") or {},
+        payload = dict(control.get("payload") or {})
+        # The agent's REAL side-channels (SQL spans, usage footer, artifacts)
+        # arrive as stream events, not inside the control payload: attach them
+        # so the step result and the finalisation never lose them.
+        if collected_sql and not payload.get("generated_sql"):
+            payload["generated_sql"] = collected_sql
+        if collected_usage and not payload.get("usage"):
+            payload["usage"] = collected_usage
+        if collected_artifacts and not payload.get("artifacts"):
+            payload["artifacts"] = collected_artifacts
+        return {"kind": "control", "payload": payload,
                 "answer_text": "".join(answer_parts)}
-    if answer_parts:                          # T5 not wired yet / prose-only reply
+    if answer_parts:                          # prose-only reply (defensive)
         return {"kind": "control", "payload": {},
                 "answer_text": "".join(answer_parts)}
     return {"kind": "error", "failure": "fatal", "code": CODE_INTERNAL}
@@ -903,6 +997,23 @@ def _merge_step_results(ledger):
         usage = {"promptTokens": tokens_in, "completionTokens": tokens_out,
                  "totalTokens": tokens_in + tokens_out, "estimatedCost": cost}
     return sql_all[:24], artifacts_all[:8], usage
+
+
+def _finalize_failure(run_id, status, code):
+    """Honest phase-2 for failure paths outside the normal flow (best-effort).
+
+    EVERY failure path must leave the exchange with a truthful partial answer,
+    not just a status flip (spec 4.4): planner failures, disabled agents,
+    invalid plans and worker crashes all land here."""
+    try:
+        ledger = run_state.load_ledger(run_id)
+    except Exception:
+        ledger = None
+    if ledger is None:
+        run_state.set_run_status(run_id, status, error_code=code)
+        return
+    answer = build_partial_answer(ledger.get("run") or {}, ledger)
+    _finalize(run_id, ledger, answer, status, code)
 
 
 def _finalize(run_id, ledger, answer, status, error_code):
