@@ -1073,8 +1073,8 @@ class TestWorkflowPrompts(unittest.TestCase):
                          {"planner", "replanner", "reviewer", "synthesizer"})
         for name, body in wf.WORKFLOW_PROMPTS_DEFAULT.items():
             self.assertGreaterEqual(len(body), 200, name)
-            self.assertNotIn("\\u2014", body, name)   # em dash banned (rule #9)
-            self.assertNotIn("\\u2013", body, name)   # en dash banned (rule #9)
+            self.assertNotIn("\u2014", body, name)   # em dash banned (rule #9)
+            self.assertNotIn("\u2013", body, name)   # en dash banned (rule #9)
 
     def test_seed_round_trip_byte_equivalent(self):
         rendered = regen._workflow_prompts_markdown(wf.WORKFLOW_PROMPTS_DEFAULT)
