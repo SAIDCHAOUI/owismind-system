@@ -20,13 +20,13 @@
 `npm add` / `npm update`, aucun `yarn`/`pnpm add`, aucun `pip install` / `pip3 install` / `poetry` /
 `pipenv` / `conda install` / `brew install`, aucun `npx` d'install. **Seul l'utilisateur installe**
 (safety first). Si une dépendance manque, l'agent **s'arrête et demande à l'utilisateur** de l'installer
-lui-même (p. ex. `! cd Plugin/owismind/frontend && npm install`).
+lui-même (p. ex. `! cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm install`).
 
 Ce garde-fou n'est pas qu'une convention : il est **appliqué par la configuration du harness** -
 
 - [`.claude/settings.json`](../.claude/settings.json) → `permissions.deny` liste explicitement toutes
   les commandes d'installation (et bloque aussi l'écriture directe dans
-  `Plugin/owismind/resource/owismind-app/**` via `Edit`/`Write`).
+  `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/**` via `Edit`/`Write`).
 - le hook **PreToolUse** [`.claude/hooks/guardrail.sh`](../.claude/hooks/guardrail.sh) intercepte
   `Bash|Edit|Write|MultiEdit|NotebookEdit` avant exécution.
 
@@ -42,17 +42,17 @@ Référence figée → [`memory/PROJECT_STATE.md` §3](../memory/PROJECT_STATE.m
 
 | Élément | Valeur réelle | Source |
 |---|---|---|
-| Plugin id | `owismind` | `Plugin/owismind/plugin.json` |
-| WebApp component | `webapp-owismind-ai-agents` | `Plugin/owismind/webapps/` |
+| Plugin id | `owismind` | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` |
+| WebApp component | `webapp-owismind-ai-agents` | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/` |
 | Package python-lib | `owismind` (`python-lib/owismind/`) | repo |
 | Dossier resource (assets buildés) | `owismind-app` | `vite.config.js`, `body.html` |
 | Vite `base` | `/plugins/owismind/resource/owismind-app/` | `vite.config.js` |
 | Vite `outDir` | `../resource/owismind-app` (+ `emptyOutDir: true`) | `vite.config.js` |
 | Préfixe API | `/owismind-api` (santé `/owismind-api/ping`) | backend |
-| Racine plugin (disque) | `Plugin/owismind/` (P majuscule) | repo |
-| Frontend source | `Plugin/owismind/frontend/` | repo |
-| Staging packaging | `Plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/` + `owismind-v<MAJ_MIN>-upload.zip` (nom dérivé de `plugin.json`, ex. v1.2.0 → `owismind-v1_2-upload.zip`) | repo |
-| Version courante | `1.2.0` (plugin id `owismind`) | `Plugin/owismind/plugin.json` |
+| Racine plugin (disque) | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` (P majuscule) | repo |
+| Frontend source | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/` | repo |
+| Staging packaging | `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/` + `owismind-v<MAJ_MIN>-upload.zip` (nom dérivé de `plugin.json`, ex. v1.2.0 → `owismind-v1_2-upload.zip`) | repo |
+| Version courante | `1.2.0` (plugin id `owismind`) | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) - sélectionnée dans les Settings de la webapp | guide SQL |
 | Project key DSS | `OWISMIND_DEV` (résolu serveur via `dataiku.default_project_key()`) | guide SQL |
 | Plateforme / Python | Dataiku DSS 14.4.x · backend **Python 3.9.23** (3.11/FastAPI NON validés) | `/ping` |
@@ -66,13 +66,13 @@ Référence figée → [`memory/PROJECT_STATE.md` §3](../memory/PROJECT_STATE.m
 
 ## 2. Développement local
 
-Travail dans `Plugin/owismind/frontend/`. Scripts disponibles (cf.
-[`package.json`](../Plugin/owismind/frontend/package.json)) : `dev`, `build`, `preview`, `test`.
+Travail dans `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/`. Scripts disponibles (cf.
+[`package.json`](../OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/package.json)) : `dev`, `build`, `preview`, `test`.
 
 ### 2.1 Voir le rendu (`npm run dev`)
 
 ```bash
-npm --prefix Plugin/owismind/frontend run dev
+npm --prefix OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend run dev
 ```
 
 Le serveur Vite écoute sur le **port 5173**, sous la **même base d'assets** que la prod :
@@ -109,11 +109,11 @@ invariants testables hors instance.
 ### 3.1 Backend - `unittest` (790 tests, vérifié)
 
 ```bash
-python3 -m unittest discover -s Plugin/owismind/tests -v
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests -v
 ```
 
 Hors `python-lib/`, donc **jamais packagé**. Les tests mettent `python-lib/` sur `sys.path` pour résoudre
-`owismind.*`. Détail des modules couverts → [`Plugin/owismind/tests/README.md`](../Plugin/owismind/tests/README.md).
+`owismind.*`. Détail des modules couverts → [`OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/README.md`](../OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/README.md).
 
 Couvert aujourd'hui (DSS-free) : `validation` (`/chat/start` shape+bornes, requêtes Evidence/Source,
 budget, suggestions benchmark, fiche d'agent), `validate_history_limit`/`validate_optional_exchange_id`,
@@ -128,7 +128,7 @@ les cœurs purs des sous-systèmes récents : `evidence/` (`sql_parse`, `query_b
 ### 3.2 Frontend - `node:test` (352 tests, vérifié)
 
 ```bash
-npm --prefix Plugin/owismind/frontend test          # = node --test test/*.test.js
+npm --prefix OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend test          # = node --test test/*.test.js
 ```
 
 Tests **purs** sous `frontend/test/` (hors `src/`, jamais buildé/zippé) : `timeline` (reducer
@@ -148,7 +148,7 @@ Certains modules importent `dataiku`/`pandas` au chargement → besoin du Python
 pour ces invariants **déjà durcis mais non couverts** (rejet d'injection sur `pg_identifier`, NaN→None,
 clé d'agent forgée → `None`, cap/TTL/poll-owner/`_stop_reason` du `stream_manager`, no-op/troncature de
 `save_trace`), et brancher `py_compile`/`compileall` sur `python-lib/owismind/**` comme CI minimale. Il
-n'y a **pas de CI** aujourd'hui. Détail → [`tests/README.md`](../Plugin/owismind/tests/README.md) (§ « To add » + « CI »)
+n'y a **pas de CI** aujourd'hui. Détail → [`tests/README.md`](../OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/README.md) (§ « To add » + « CI »)
 et `PROJECT_STATE.md` §12.4.
 
 ---
@@ -170,27 +170,27 @@ n'uploade pas, et **rien n'est jamais uploadé par l'agent** (§7).
 
 Skill : [`.claude/skills/build-plugin/SKILL.md`](../.claude/skills/build-plugin/SKILL.md). Pipeline exact :
 
-1. **Préflight - jamais d'install.** Vérifier `Plugin/owismind/frontend/node_modules`. Absent → **STOP** et
+1. **Préflight - jamais d'install.** Vérifier `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/node_modules`. Absent → **STOP** et
    demander à l'utilisateur d'installer (la commande d'install est de toute façon refusée par policy, §0).
 
 2. **Build** depuis la racine du repo :
    ```bash
-   npm --prefix Plugin/owismind/frontend run build
+   npm --prefix OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend run build
    ```
-   Sortie attendue dans `Plugin/owismind/resource/owismind-app/` (assets **hashés** `assets/index-*.js` /
+   Sortie attendue dans `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/` (assets **hashés** `assets/index-*.js` /
    `*.css`, `emptyOutDir: true` purge les anciens hashs).
 
 3. **Câbler `body.html`** - recopier l'entrée buildée (ce `cp` Bash est autorisé ; `Edit`/`Write` sur la
    sortie est **bloqué** par le hook) :
    ```bash
-   cp Plugin/owismind/resource/owismind-app/index.html \
-      Plugin/owismind/webapps/webapp-owismind-ai-agents/body.html
+   cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html \
+      OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html
    ```
 
 4. **Vérifier** que la base d'assets est présente dans `body.html` :
    ```bash
    grep -q '/plugins/owismind/resource/owismind-app/' \
-      Plugin/owismind/webapps/webapp-owismind-ai-agents/body.html \
+      OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html \
       && echo "body.html OK" || echo "ERROR: asset base missing in body.html"
    ```
 
@@ -219,22 +219,22 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 
 1. **Reset staging** (`rm -rf` → peut demander une approbation, attendu) :
    ```bash
-   rm -rf Plugin/ready-for-dataiku/owismind-v1_2-upload Plugin/ready-for-dataiku/owismind-v1_2-upload.zip
-   mkdir -p Plugin/ready-for-dataiku/owismind-v1_2-upload
+   rm -rf OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload.zip
+   mkdir -p OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload
    ```
 
 2. **Stager le runtime uniquement** (`plugin.json` à la **racine** du staging - pas de `_/plugin.json`
    dans ce repo, cf. [LESSONS L002](../memory/LESSONS.md)) :
    ```bash
-   cp Plugin/owismind/plugin.json Plugin/ready-for-dataiku/owismind-v1_2-upload/
-   cp -R Plugin/owismind/python-lib Plugin/owismind/resource Plugin/owismind/webapps \
-         Plugin/ready-for-dataiku/owismind-v1_2-upload/
+   cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/
+   cp -R OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps \
+         OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/
    ```
 
 3. **Zipper depuis le staging** (pour que `plugin.json` soit à la racine de l'archive), en excluant les
    docs dev et les caches Python - **par nom, jamais par glob large** :
    ```bash
-   ( cd Plugin/ready-for-dataiku/owismind-v1_2-upload && \
+   ( cd OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload && \
      zip -r ../owismind-v1_2-upload.zip . \
        -x "*.DS_Store" "__MACOSX/*" \
           "*/CLAUDE.md" "CLAUDE.md" "*/README.md" "README.md" \
@@ -252,7 +252,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
 
 4. **Vérifier que l'archive est propre** (doit afficher « ZIP clean ») :
    ```bash
-   unzip -Z1 Plugin/ready-for-dataiku/owismind-v1_2-upload.zip \
+   unzip -Z1 OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload.zip \
      | grep -Eq '(^|/)(frontend|node_modules)(/|$)|(^|/)_/|(^|/)CLAUDE\.md$|(^|/)README\.md$|__pycache__|\.pyc$' \
      && echo "ERROR: zip polluted" || echo "ZIP clean"
    ```
@@ -265,7 +265,7 @@ Skill : [`.claude/skills/package-plugin/SKILL.md`](../.claude/skills/package-plu
             webapps/webapp-owismind-ai-agents/body.html \
             webapps/webapp-owismind-ai-agents/backend.py \
             python-lib/owismind/__init__.py; do
-     unzip -Z1 Plugin/ready-for-dataiku/owismind-v1_2-upload.zip | grep -qx "$f" \
+     unzip -Z1 OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload.zip | grep -qx "$f" \
        && echo "OK  $f" || echo "MISSING  $f"
    done
    ```
@@ -294,7 +294,7 @@ Référence : [`docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md`](cadrage/GUI
 - Après upload : **Start/Restart backend** de la webapp + **refresh forcé** du navigateur (cache d'assets).
 - Sélectionner la **connexion SQL** (`SQL_owi`) dans les *Settings* de la webapp (et, optionnel, le préfixe
   de table, le dataset de trace, le niveau de log) - tant qu'aucune connexion n'est choisie, l'app reporte
-  « storage not configured » (cf. [`webapp.json`](../Plugin/owismind/webapps/webapp-owismind-ai-agents/webapp.json)).
+  « storage not configured » (cf. [`webapp.json`](../OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/webapp.json)).
 
 > Rappel d'identité runtime : la webapp s'exécute sous **Run backend as** (≠ utilisateur final) ;
 > l'identité réelle de l'appelant vient des en-têtes navigateur. Détail → [security.md](security.md).
@@ -328,11 +328,11 @@ réinstallables et les **outputs** régénérables ne le sont pas - **avec une e
 
 | Chemin | Statut Git | Pourquoi |
 |---|---|---|
-| `Plugin/owismind/frontend/src/**`, `webapps/**`, `python-lib/**`, `plugin.json` | **tracké** | source du plugin |
-| `Plugin/owismind/resource/owismind-app/**` (frontend buildé) | **tracké** (exception) | c'est le payload du plugin ; NO-INSTALL ⇒ un clone frais ne peut pas le rebuilder ⇒ il doit rester dans le repo pour rester packageable. **Ne jamais éditer à la main** (rebuild via `/build-plugin`). |
+| `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/**`, `webapps/**`, `python-lib/**`, `plugin.json` | **tracké** | source du plugin |
+| `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/**` (frontend buildé) | **tracké** (exception) | c'est le payload du plugin ; NO-INSTALL ⇒ un clone frais ne peut pas le rebuilder ⇒ il doit rester dans le repo pour rester packageable. **Ne jamais éditer à la main** (rebuild via `/build-plugin`). |
 | `node_modules/`, `dist/`, `dist-ssr/`, `.vite/`, `*.local` | **ignoré** | toolchain réinstallable / scratch |
 | `__pycache__/`, `*.py[cod]` | **ignoré** | bytecode Python |
-| `Plugin/ready-for-dataiku/**` (le zip livrable) | **ignoré** | régénéré par `/package-plugin` |
+| `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/**` (le zip livrable) | **ignoré** | régénéré par `/package-plugin` |
 | `*-screens/`, `/tmp_build/`, `.DS_Store`, logs | **ignoré** | scratch / bruit OS |
 | `.claude/settings.local.json` | **ignoré** | override local (le `settings.json` + les skills restent trackés) |
 

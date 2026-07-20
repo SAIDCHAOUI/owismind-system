@@ -109,7 +109,7 @@ completion.execute_streamed()
 - Mono-process toujours supposé (inchangé).
 
 ## Tests (NO INSTALL)
-- **`unittest`** (`Plugin/owismind/tests/`, hors `python-lib`, non packagé) : `build_session_history_query`, `build_conversation_list_query`, `build_session_messages_query`, cursor encode/parse, `validate_history_limit`, `validate_conversations_query`, `derive_full_name`, `build_user_prefix`, `flatten_exchanges_to_messages` (aplatissement + trim + null-assistant), `build_completion_messages`.
+- **`unittest`** (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/`, hors `python-lib`, non packagé) : `build_session_history_query`, `build_conversation_list_query`, `build_session_messages_query`, cursor encode/parse, `validate_history_limit`, `validate_conversations_query`, `derive_full_name`, `build_user_prefix`, `flatten_exchanges_to_messages` (aplatissement + trim + null-assistant), `build_completion_messages`.
 - **`node:test`** (`frontend/test/`) : pagination/dedup/bump conversations (helpers purs extraits), `clampContextMessages`.
 - `py_compile` complet + `vite build` (temp) + revue adversariale multi-agents avant build officiel.
 

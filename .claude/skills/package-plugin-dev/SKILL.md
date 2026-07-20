@@ -1,17 +1,17 @@
 ---
 name: package-plugin-dev
-description: Build and package the coexisting DEV copy of the OWIsMind DSS plugin (id owismind_dev) from the single source via tools/build_dev_plugin.py. Use when the user asks to build/package the DEV plugin, the dev zip, or a test plugin that installs alongside prod. Never uploads, never installs.
+description: Build and package the coexisting DEV copy of the OWIsMind DSS plugin (id owismind_dev) from the single source via OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py. Use when the user asks to build/package the DEV plugin, the dev zip, or a test plugin that installs alongside prod. Never uploads, never installs.
 ---
 
 # /package-plugin-dev - Build the coexisting DEV plugin (id `owismind_dev`)
 
-There is ONE source of truth: `Plugin/owismind/`. The PROD build/package (`/build-plugin`
+There is ONE source of truth: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/`. The PROD build/package (`/build-plugin`
 + `/package-plugin`) is unchanged. This skill emits a SECOND, independent plugin
 (id `owismind_dev`) that installs ALONGSIDE the prod one on the same DSS instance, for testing.
 
-Everything is done by one deterministic, reviewed script: **`tools/build_dev_plugin.py`**.
+Everything is done by one deterministic, reviewed script: **`OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py`**.
 **It never installs anything and never edits the canonical source** (it builds into a scratch
-dir and stages under `Plugin/ready-for-dataiku/`).
+dir and stages under `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/`).
 
 ## Why a DEV plugin needs renaming
 Two installed plugins on one instance collide unless three things differ:
@@ -27,12 +27,12 @@ What MUST NOT change (so DEV behaves like PROD, just isolated):
   segment of the asset base carries the plugin id).
 
 ## Canonical paths
-- Source plugin:  `Plugin/owismind` (untouched)
-- Script:         `tools/build_dev_plugin.py`
-- Staging dir:    `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload`
-- Zip output:     `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`
+- Source plugin:  `OWIsMind_PRD_V1_3_DEV/plugin/owismind` (untouched)
+- Script:         `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py`
+- Staging dir:    `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-dev-upload`
+- Zip output:     `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`
 
-The `${VER}` tag is **derived from the plugin version** in `Plugin/owismind/plugin.json`
+The `${VER}` tag is **derived from the plugin version** in `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json`
 (`major_minor`, dots -> underscores). While `plugin.json` is `1.2.0` the zip is
 `owismind-v1_2-dev-upload.zip` (and `--v2` -> `owismind-v1_2-dev-v2-upload.zip`). The
 script computes `VER`, names the artifacts, and clears stale older-version / legacy
@@ -43,21 +43,21 @@ script computes `VER`, names the artifacts, and clears stale older-version / leg
 1. **Validate the rewrite first (no build, no zip).** This copies `python-lib` to `/tmp`,
    runs the package + logger rewrite, asserts the invariants, and discards the copy:
    ```bash
-   python3 tools/build_dev_plugin.py --check
+   python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --check
    ```
    Expect: `--check PASSED`, 0 `from owismind` / `import owismind` (word-boundary), the
    `APP_NAMESPACE`/`/owismind-api`/blueprint literals intact, `getLogger("owismind_dev")`.
 
 2. **Preflight - never install.** The full build runs `vite build` and requires existing deps:
    ```bash
-   test -d Plugin/owismind/frontend/node_modules && echo "node_modules OK" || echo "MISSING"
+   test -d OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/node_modules && echo "node_modules OK" || echo "MISSING"
    ```
-   If `MISSING`: STOP. Ask the user to install (`! cd Plugin/owismind/frontend && npm install`).
+   If `MISSING`: STOP. Ask the user to install (`! cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm install`).
    The script itself errors out if `node_modules` is absent; it never installs.
 
 3. **Build + stage + zip the DEV plugin:**
    ```bash
-   python3 tools/build_dev_plugin.py
+   python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py
    ```
    The script:
    - builds the frontend with `OWI_PLUGIN_ID=owismind_dev` into a scratch outDir (the canonical
@@ -67,7 +67,7 @@ script computes `VER`, names the artifacts, and clears stale older-version / leg
      (`from owismind` / `import owismind` word-boundary, `getLogger("owismind")`);
    - stages `resource/` (DEV-base app + `compute_available_connections.py`) and `webapps/`
      (`backend.py` import rewritten, `body.html` = DEV-base `index.html`);
-   - zips to `Plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`, excluding the SAME dev-only
+   - zips to `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-dev-upload.zip`, excluding the SAME dev-only
      files as `/package-plugin` (frontend, node_modules, CLAUDE.md, README.md, `__pycache__`,
      `*.pyc`, `.DS_Store`);
    - prints and ASSERTS the invariants (fails loudly if any is violated).
@@ -106,7 +106,7 @@ script computes `VER`, names the artifacts, and clears stale older-version / leg
 
 ## Notes
 - Do not edit anything under `ready-for-dataiku/` by hand - it is regenerated by the script.
-- The script writes only under `Plugin/ready-for-dataiku/` and a scratch `/tmp` dir; it never
-  modifies `Plugin/owismind/` or `resource/owismind-app/`.
+- The script writes only under `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/` and a scratch `/tmp` dir; it never
+  modifies `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` or `resource/owismind-app/`.
 - The whole DEV target is additive: it does not change the PROD `/build-plugin` or `/package-plugin`
   flow (the default `OWI_PLUGIN_ID` is `owismind`).

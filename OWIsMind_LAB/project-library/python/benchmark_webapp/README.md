@@ -60,11 +60,11 @@ not library files).
 | --- | --- |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` (+ `__init__.py`) | LAB **project library** `python/benchmark_webapp/` (PURE, unit-tested). |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/dss.py` | LAB **project library** `python/benchmark_webapp/` (the single dataiku/SQL I/O module). |
-| `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js}` | the RESULTS Standard webapp's HTML / CSS / JS panes |
-| `OWIsMind_LAB/webapps/benchmark_results/backend.py` | the RESULTS Standard webapp's Python backend pane |
-| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,script.js}` | the LAUNCHER Standard webapp's HTML / CSS / JS panes |
-| `OWIsMind_LAB/webapps/benchmark_launcher/backend.py` | the LAUNCHER Standard webapp's Python backend pane |
-| `OWIsMind_LAB/webapps/*/preview.html` | DEV ONLY - offline visual QA (mock data). Do NOT paste into DSS. |
+| `OWIsMind_LAB/Standard-webapps/benchmark_results/{body.html,style.css,script.js}` | the RESULTS Standard webapp's HTML / CSS / JS panes |
+| `OWIsMind_LAB/Standard-webapps/benchmark_results/backend.py` | the RESULTS Standard webapp's Python backend pane |
+| `OWIsMind_LAB/Standard-webapps/benchmark_launcher/{body.html,style.css,script.js}` | the LAUNCHER Standard webapp's HTML / CSS / JS panes |
+| `OWIsMind_LAB/Standard-webapps/benchmark_launcher/backend.py` | the LAUNCHER Standard webapp's Python backend pane |
+| `OWIsMind_LAB/Standard-webapps/*/preview.html` | DEV ONLY - offline visual QA (mock data). Do NOT paste into DSS. |
 
 The repo is the source of truth (same model as `benchmark/`). Re-collect changed files when they
 evolve. Run the pure tests first (from the repo root):

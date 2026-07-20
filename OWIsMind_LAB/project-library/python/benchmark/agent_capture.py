@@ -14,10 +14,10 @@ path, and the NO INSTALL test environment has the stdlib only.
 
 Faithful reimplementation (parity verified by tests on synthetic fixtures shaped
 like the real DSS footer) of:
-  - Plugin/owismind/python-lib/owismind/agents/streaming.py
+  - OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/streaming.py
     (_find_generated_sql, _find_usage_metadata, _sum_usage_metadata, the
     _SQL_TOOL_NAME / _MAX_TRACE_DEPTH constants, the ARTIFACT event shape)
-  - Plugin/owismind/python-lib/owismind/evidence/capture.py
+  - OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/evidence/capture.py
     (extract_result, cap_result, the MAX_RESULT_* caps)
 We copy that logic instead of importing it because the benchmark package must be
 standalone (a future webapp refactor could delegate to this module - not required

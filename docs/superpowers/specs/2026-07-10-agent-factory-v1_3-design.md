@@ -67,7 +67,7 @@ UNKNOWN SCHEMA (exists but undocumented; needs the Phase 0 probe on the instance
 ## 4. Repo layout (all inside the DSS project mirror folder)
 
 ```
-OWIsMind_PRD_V1_2/
+OWIsMind_PRD_V1_3_DEV/
   project-library/python/owismind_factory/   # the engine (pasted into DSS project library)
     __init__.py  fctx.py  spec.py  hub.py  registry.py
     flow_builder.py  semantic_builder.py  wizard.py

@@ -13,7 +13,7 @@
 
 ## 0. Ce que contient cette release
 
-- **Plugin `owismind` v1.1.0** (`Plugin/ready-for-dataiku/owismind-upload.zip`, bundle
+- **Plugin `owismind` v1.1.0** (`OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload.zip`, bundle
   `index-DDxpe_gw.js`) : tout le travail validé en DSS sur dev_v2 jusqu'au 2026-07-06
   inclus : Source Data v1-v3 (agrégats DB, zone Calculer, plages de dates, cascade,
   persistance des vues, menu de colonne, tri 3 états, colonnes filtrées orange),
@@ -29,7 +29,7 @@
 
 1. Administration > Plugins : **supprimer les plugins dev** `owismind_dev` et
    `owismind_dev_v2` (ils dégagent : la prod les remplace).
-2. Uploader `Plugin/ready-for-dataiku/owismind-upload.zip` (plugin id `owismind`,
+2. Uploader `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload.zip` (plugin id `owismind`,
    version 1.1.0). Si une ancienne copie « Development » du même id existe, la
    supprimer d'abord (un plugin Development ne s'update pas par zip).
 3. Le plugin est instance-wide : l'update suffit, la webapp se crée par projet (§2).
@@ -120,4 +120,4 @@ les fichiers en DSS et re-dater `registry.json`.
 
 - Étiqueter la release côté repo si souhaité (`git tag v1.1.0`, poussé par l'user).
 - Les améliorations futures se développent depuis cette base : re-création d'un plugin
-  dev coexistant possible à la demande via `tools/build_dev_plugin.py` (conservé).
+  dev coexistant possible à la demande via `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (conservé).

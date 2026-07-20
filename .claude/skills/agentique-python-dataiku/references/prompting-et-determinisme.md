@@ -1,6 +1,6 @@
 # Prompting, context engineering & déterminisme (templates vs LLM)
 
-> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`dataset_expert_agent.py`, `orchestrator_agent.py`, `salesdrive_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16 puis réorg par projet 2026-06-22). Les agents vivent désormais sous `OWIsMind_PRD_V1_2/genai/agents/` (`OWIsMind_orchestrator.py`, `SalesDrive_revenue_expert.py`, `CSSO_Trouble_Tickets_Expert.py`) et les tests sous `OWIsMind_PRD_V1_2/tests/` (restructuration en miroir du projet DSS prod 2026-07-10). Les extraits et numéros de ligne restent valables comme matériel pédagogique.
+> ⚠️ Chemins historiques : les fichiers OWIsMind cités ici (`dataset_expert_agent.py`, `orchestrator_agent.py`, `salesdrive_agent.py`, `test_manifest_antidrift.py`) ont depuis été supprimés ou renommés (refonte LangGraph 2026-06-16 puis réorg par projet 2026-06-22). Les agents vivent désormais sous `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/` (`OWIsMind_orchestrator.py`, `SalesDrive_revenue_expert.py`, `CSSO_Trouble_Tickets_Expert.py`) et les tests sous `OWIsMind_PRD_V1_3_DEV/tests/` (restructuration en miroir du projet DSS prod 2026-07-10). Les extraits et numéros de ligne restent valables comme matériel pédagogique.
 
 > À jour : juin 2026 (LangChain 1.x, LangGraph 1.x, Dataiku DSS 14.x). Référence du skill `agentique-python-dataiku` - voir `SKILL.md` (parent). Réfs croisées : `references/langchain-v1.md`, `references/langgraph-v1.md`, `references/dataiku-code-agents.md`, `references/orchestration-multi-agents.md`, `references/eval-tracing-securite-production.md`.
 
@@ -302,7 +302,7 @@ Apports propres de ChatGPT retenus : taxonomie Dataiku (Simple/Structured Visual
 - Reducing Tool Hallucination (arXiv 2412.04141) : https://arxiv.org/pdf/2412.04141
 - 7 Guardrails that reduce LLM hallucinations : https://medium.com/@Nexumo_/7-guardrails-that-reduce-llm-hallucinations-78facbb0d560 · LLM Agent Guardrails playbook : https://dev.to/monuminu/llm-agent-guardrails-the-engineering-playbook-for-taking-an-8b-local-model-from-53-to-99-on-18c
 - Dataiku - Code Agent / tools LLM Mesh : https://developer.dataiku.com/latest/tutorials/genai/agents-and-tools/code-agent/index.html
-- Repo OWIsMind (vérité terrain DSS-validée) : `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py`, `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` (fichiers historiques renommes, cf. note en tete), `memory/LESSONS.md` (L047, L048, L050, L051, L052)
+- Repo OWIsMind (vérité terrain DSS-validée) : `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/SalesDrive_revenue_expert.py`, `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` (fichiers historiques renommes, cf. note en tete), `memory/LESSONS.md` (L047, L048, L050, L051, L052)
 - Recency/versions : `docs/agentic-research/gap-version-recency-recheck-2026.md` (autoritatif)
 
 > **Note de fiabilité.** Ids Anthropic `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5` = réels/courants. `gpt-5.5` / `gemini-3.5-flash` = **NON VÉRIFIÉS** (non-Anthropic). `astream_events` défaut = **`v2`** (`v3` opt-in, ≥ LangChain 1.3). `docs.anthropic.com` redirige (301) vers `platform.claude.com/docs`.

@@ -12,7 +12,7 @@ For OWIsMind "deep clean" branches whose contract is ZERO runtime behavior chang
   docstrings from each, compare `ast.dump`. If equal, only comments/docstrings changed. Used this
   on the 5 Code Agent files + tools/recipes + stream_manager/chat_v5; all AST-identical.
 - Code Agent docstrings are NOT load-bearing here: grep confirms no `__doc__` usage in
-  `OWIsMind_PRD_V1_2/genai/agents/`, and agent prompts live in string-literal variables (caught by AST diff),
+  `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/`, and agent prompts live in string-literal variables (caught by AST diff),
   so condensing module headers is safe.
 - Consolidations (e.g. `sql_config.readonly_pre_queries()`): git grep the literal on `main` vs `HEAD`
   to prove every removed inline copy was byte-identical to the new single source. 6 read sites were
@@ -22,8 +22,8 @@ For OWIsMind "deep clean" branches whose contract is ZERO runtime behavior chang
   15-dash exception). BSD `grep -P` gives false negatives (see L093), never trust it for this check.
   Also note: a hook `dash-guard.sh` blocks Write if the file contains either glyph, so describe them
   by codepoint, never paste the raw glyph.
-- Agent id tables: prod = a CLONE of DEV (ids preserved), so `OWIsMind_PRD_V1_2/README.md` +
-  `OWIsMind_PRD_V1_2/registry.json` list a single id set (038G7mlF, agent:bHrWLyOL, agent:NcE9LD2i).
+- Agent id tables: prod = a CLONE of DEV (ids preserved), so `OWIsMind_PRD_V1_3_DEV/README.md` +
+  `OWIsMind_PRD_V1_3_DEV/registry.json` list a single id set (038G7mlF, agent:bHrWLyOL, agent:NcE9LD2i).
   The old two-README DEV/PROD split and the separate PROD twin ids (Xrv7GvfG, agent:uO5hEzAs) are LEGACY,
   removed 2026-07-10 (the promote-to-prod workflow is gone).
 - body.html asset refs must match the rebuilt `resource/owismind-app/index.html` entrypoint assets

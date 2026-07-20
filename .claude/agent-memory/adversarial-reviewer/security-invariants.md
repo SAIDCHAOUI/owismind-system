@@ -14,7 +14,7 @@ Since branch refactor/deep-clean-v1.2 these are centralized in
 `storage/sql_config.readonly_pre_queries()` (returns a FRESH list per call). Consumers:
 evidence/service, evidence/source_service, storage/{artifacts,budget,settings,suggestions},
 benchmark_view/lab_io. Writes use only the timeout string (persist, cannot be read-only).
-Test: `Plugin/owismind/tests/test_sql_config.py::ReadonlyPreQueriesTest`.
+Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_sql_config.py::ReadonlyPreQueriesTest`.
 
 **Agent whitelist**: front sends a logical key; `agent_id` is resolved server-side BEFORE
 `stream_manager.start_run` is ever called. Invariant documented in stream_manager.py docstring.

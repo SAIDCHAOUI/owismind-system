@@ -2,7 +2,7 @@
 
 - Date: 2026-07-08
 - Statut: valide (design approuve par l'user le 2026-07-08)
-- Branche cible: `refactor/deep-clean-v1.2` (source unique `Plugin/owismind/`)
+- Branche cible: `refactor/deep-clean-v1.2` (source unique `OWIsMind_PRD_V1_3_DEV/plugin/owismind/`)
 - Livrable de test: plugin coexistant `owismind_v1_3` (la prod `owismind` reste intacte, non rebuild)
 
 ## Intention
@@ -46,7 +46,7 @@ d'entree sur la page Agents.
 - Front form + "mes soumissions": `frontend/src/views/BenchmarkSuggestView.vue`.
 - Front feedback inerte a rendre vivant: `frontend/src/views/FeedbackView.vue`.
 - Service API + header impersonation: `frontend/src/services/backend.js`.
-- Build plugin coexistant: `tools/build_dev_plugin.py` (id/nom/base d'assets/package renommes).
+- Build plugin coexistant: `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (id/nom/base d'assets/package renommes).
 
 ## Backend
 
@@ -165,7 +165,7 @@ Toutes suivent le patron existant (resolve identity, bloc impersonation fence po
 
 ## Versioning / build (v1.3 coexistant)
 
-Generaliser `tools/build_dev_plugin.py` en schema versionne reutilisable:
+Generaliser `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` en schema versionne reutilisable:
 - `--version 1.3` (ou equivalent) -> plugin id `owismind_v1_3`, label "OWIsMind v1.3",
   webapp `meta.label` "OWIsMind AI Agents v1.3", zip `owismind-v1_3-upload.zip`, base d'assets
   `/plugins/owismind_v1_3/resource/owismind-app/`, package python `owismind_v1_3`.
@@ -179,7 +179,7 @@ Generaliser `tools/build_dev_plugin.py` en schema versionne reutilisable:
   save/list, bounds, enum; validation). Calques des tests suggestions existants.
 - Frontend: node:test sur la machine a etats du repli catalogue; compile-check vite (F1)
   `./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir` puis `rm -rf`.
-- Build v1.3: `tools/build_dev_plugin.py` version 1.3 -> zip stage sans frontend/node_modules.
+- Build v1.3: `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` version 1.3 -> zip stage sans frontend/node_modules.
 - Revue Charte Orange (charte-orange-reviewer) + revue adversariale (adversarial-reviewer) du
   diff vs ces exigences.
 - Preuve lue (sortie tests/build), jamais d'affirmation de succes sans preuve.

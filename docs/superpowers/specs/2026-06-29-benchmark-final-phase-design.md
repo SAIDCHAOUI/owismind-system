@@ -60,7 +60,7 @@ launcher plugin pour admin, + les 2 webapps LAB du projet).
   du dataset `scored`, verrou dedie).
 - `webapps/benchmark_launcher/*` : onglet/section "Revue & override".
 
-### 3.2 Cote plugin (`Plugin/owismind/`, packe dans le zip)
+### 3.2 Cote plugin (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/`, packe dans le zip)
 - `python-lib/owismind/benchmark_view/` : NOUVEAU package PUR, copie des modules stdlib du LAB
   (`scoring.py`, le shaping de `views.py`, les listes de colonnes de `schemas.py`, les
   normalizers de `judge.py` necessaires a la lecture) + un module `read.py` (lecture SQL

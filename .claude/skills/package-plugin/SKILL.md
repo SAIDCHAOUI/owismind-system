@@ -7,14 +7,14 @@ description: Package the OWIsMind DSS plugin runtime into a version-derived zip 
 
 Stages the **runtime only** and zips it for a DSS plugin upload. **Never uploads anything.**
 
-The zip name is **derived from the plugin version** in `Plugin/owismind/plugin.json`
+The zip name is **derived from the plugin version** in `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json`
 (`major_minor`, dots -> underscores): version `1.2.0` -> `owismind-v1_2-upload.zip`. One
 branch per version ships one zip, so the old version's zip is removed before staging.
 
 ## Canonical paths (see memory/PROJECT_STATE.md)
-- Plugin root: `Plugin/owismind`
-- Staging dir: `Plugin/ready-for-dataiku/owismind-v${VER}-upload`
-- Zip output:  `Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip`
+- Plugin root: `OWIsMind_PRD_V1_3_DEV/plugin/owismind`
+- Staging dir: `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload`
+- Zip output:  `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload.zip`
 - Runtime to include: `plugin.json` (at zip root), `python-lib/`, `resource/`, `webapps/`
 - Must be EXCLUDED: `frontend/`, `node_modules/`, any `_/`, `.DS_Store`, `__MACOSX/`,
   dev docs (`CLAUDE.md`, `README.md`) and Python caches (`__pycache__/`, `*.pyc`).
@@ -23,15 +23,15 @@ branch per version ships one zip, so the old version's zip is removed before sta
 
 ## Preconditions
 - The frontend must already be built and `body.html` wired - run `/build-plugin` first if in doubt.
-- Note: `plugin.json` lives at `Plugin/owismind/plugin.json` (there is **no** `_/plugin.json` here - see LESSONS L002).
+- Note: `plugin.json` lives at `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` (there is **no** `_/plugin.json` here - see LESSONS L002).
 
 ## Steps
 
 0. **Preflight - derive `VER` from the plugin version.** Read `"version"` from
-   `Plugin/owismind/plugin.json` and reduce it to `major_minor` with underscores
+   `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` and reduce it to `major_minor` with underscores
    (e.g. `1.2.0` -> `1_2`). Every later step reuses `$VER`, so never hardcode `1_2`:
    ```bash
-   VER=$(grep -Eo '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+' Plugin/owismind/plugin.json \
+   VER=$(grep -Eo '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+' OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json \
          | grep -Eo '[0-9]+\.[0-9]+' | head -1 | tr '.' '_')
    echo "VER=$VER"   # sanity: must print e.g. VER=1_2
    test -n "$VER" || { echo "ERROR: could not derive VER from plugin.json"; }
@@ -41,22 +41,22 @@ branch per version ships one zip, so the old version's zip is removed before sta
    staging dir + zip, and the legacy fixed `owismind-upload` names), then make the fresh
    staging dir. `rm -rf` will prompt for approval (safety first) - that is expected:
    ```bash
-   rm -rf Plugin/ready-for-dataiku/owismind-v*-upload Plugin/ready-for-dataiku/owismind-v*-upload.zip \
-          Plugin/ready-for-dataiku/owismind-upload Plugin/ready-for-dataiku/owismind-upload.zip
-   mkdir -p "Plugin/ready-for-dataiku/owismind-v${VER}-upload"
+   rm -rf OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v*-upload OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v*-upload.zip \
+          OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload.zip
+   mkdir -p "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload"
    ```
 
 2. **Stage runtime only** (`plugin.json` goes to the staging ROOT):
    ```bash
-   cp Plugin/owismind/plugin.json "Plugin/ready-for-dataiku/owismind-v${VER}-upload/"
-   cp -R Plugin/owismind/python-lib Plugin/owismind/resource Plugin/owismind/webapps \
-         "Plugin/ready-for-dataiku/owismind-v${VER}-upload/"
+   cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload/"
+   cp -R OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps \
+         "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload/"
    ```
 
 3. **Zip from the staging dir** (so `plugin.json` is at the archive root). Exclude
    dev-only docs and Python caches so the runtime upload stays clean:
    ```bash
-   ( cd "Plugin/ready-for-dataiku/owismind-v${VER}-upload" && \
+   ( cd "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload" && \
      zip -r "../owismind-v${VER}-upload.zip" . \
        -x "*.DS_Store" "__MACOSX/*" \
           "*/CLAUDE.md" "CLAUDE.md" "*/README.md" "README.md" \
@@ -65,7 +65,7 @@ branch per version ships one zip, so the old version's zip is removed before sta
 
 4. **Verify the archive is clean** (must print "ZIP clean"):
    ```bash
-   unzip -Z1 "Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" \
+   unzip -Z1 "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" \
      | grep -Eq '(^|/)(frontend|node_modules)(/|$)|(^|/)_/|(^|/)CLAUDE\.md$|(^|/)README\.md$|__pycache__|\.pyc$' \
      && echo "ERROR: zip polluted" || echo "ZIP clean"
    ```
@@ -77,7 +77,7 @@ branch per version ships one zip, so the old version's zip is removed before sta
             webapps/webapp-owismind-ai-agents/body.html \
             webapps/webapp-owismind-ai-agents/backend.py \
             python-lib/owismind/__init__.py; do
-     unzip -Z1 "Plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" | grep -qx "$f" \
+     unzip -Z1 "OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v${VER}-upload.zip" | grep -qx "$f" \
        && echo "OK  $f" || echo "MISSING  $f"
    done
    ```

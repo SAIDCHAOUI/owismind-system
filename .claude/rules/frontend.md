@@ -1,5 +1,5 @@
 ---
-paths: ["Plugin/owismind/frontend/**"]
+paths: ["OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/**"]
 description: Gotchas frontend Vue 3 (F1-F22). Chargees quand on touche au frontend du plugin.
 ---
 

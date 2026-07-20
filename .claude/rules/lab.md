@@ -10,7 +10,7 @@ description: Specificites du projet benchmark OWIsMind_LAB (contrat MOCK, tests,
 - **Le MOCK est le contrat (L115, 3 instances)** : le front launcher est developpe/QA contre son propre MOCK JS. Toute divergence entre le MOCK et le vrai backend Python se regle en ALIGNANT LE BACKEND SUR LE MOCK (jamais l'inverse). Les bugs de contrat viennent presque toujours de cette derive.
 - **Layout repo <-> DSS** :
   - `project-library/python/{benchmark, benchmark_webapp}` : recolles en project-library, importes `from benchmark ...` / `from benchmark_webapp ...`.
-  - `webapps/{benchmark_launcher, benchmark_results}` : 2 webapps Standard (4 panes chacune : body.html / script.js / style.css / backend.py).
+  - `Standard-webapps/{benchmark_launcher, benchmark_results}` : 2 webapps Standard (4 panes chacune : body.html / script.js / style.css / backend.py).
   - `local-variables.example.json` : la variable projet `benchmark` (config UNIQUE, zero hardcode).
   - scenario `Run_Benchmark` : 3 steps = `benchmark/dss_steps/step_*.py`.
 - **Config** = la variable projet `benchmark` seulement (registre + appartenance + redo + suggestions + agents). Zero dataset neuf pour la config.

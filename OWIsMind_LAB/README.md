@@ -3,9 +3,9 @@
 **This whole folder mirrors ONE separate Dataiku project: `OWIsMind_LAB`.**
 
 It is NOT the plugin. The plugin (the Vue webapp + Flask backend the users actually chat with)
-lives in `Plugin/owismind/` and runs in the projects `OWISMIND_DEV` / `OWISMIND_PRD_V1_2`
+lives in `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` and runs in the projects `OWISMIND_DEV` / `OWISMIND_PRD_V1_2`
 (prod = a clone of DEV, so all object ids are preserved). The Code Agents live in
-`OWIsMind_PRD_V1_2/genai/agents/` (mirror of the prod project). `OWIsMind_LAB`
+`OWIsMind_PRD_V1_3_DEV/GenAI/Agents/` (mirror of the prod project). `OWIsMind_LAB`
 is a **third, dedicated project** whose only job is to **benchmark / evaluate the agents** of the
 plugin projects (accuracy, latency, cost, per agent AND per mode) and to collect + promote the
 golden questions users suggest from the chat.
@@ -36,7 +36,7 @@ OWIsMind_LAB/                              = the DSS project "OWIsMind_LAB"
       tests/
       DEPLOY_GUIDE.md  README.md
 
-  webapps/                                = DSS  > Code (</>) > Webapps  (two STANDARD webapps)
+  Standard-webapps/                                = DSS  > Code (</>) > Webapps  (two STANDARD webapps)
     benchmark_launcher/                   = webapp "benchmark_launcher" : config + launch + golden CRUD + suggestions review
       body.html  style.css  script.js  backend.py   (preview.html = local QA only, never pasted into DSS)
     benchmark_results/                    = webapp "Benchmark_results" : PUBLIC, read-only, plain-language results
@@ -52,8 +52,8 @@ OWIsMind_LAB/                              = the DSS project "OWIsMind_LAB"
 | `project-library/python/benchmark/dss_steps/step_run_matrix.py` | Scenario `Run_Benchmark`, step 1 "Run matrix" (Custom Python) |
 | `project-library/python/benchmark/dss_steps/step_judge.py` | Scenario `Run_Benchmark`, step 2 "Judge" |
 | `project-library/python/benchmark/dss_steps/step_aggregate.py` | Scenario `Run_Benchmark`, step 3 "Aggregate" |
-| `webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp "benchmark_launcher" (Standard) |
-| `webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp "Benchmark_results" (Standard) |
+| `Standard-webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp "benchmark_launcher" (Standard) |
+| `Standard-webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp "Benchmark_results" (Standard) |
 | `local-variables.example.json` | Project menu > Variables > Local variables (the `benchmark` object) |
 
 Managed datasets the scenario reads/writes (created during setup, NOT in the repo):

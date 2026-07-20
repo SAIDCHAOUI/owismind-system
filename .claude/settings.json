@@ -45,8 +45,8 @@
       "Bash(conda install:*)",
       "Bash(brew install:*)",
       "Bash(npx:*)",
-      "Edit(Plugin/owismind/resource/owismind-app/**)",
-      "Write(Plugin/owismind/resource/owismind-app/**)"
+      "Edit(OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/**)",
+      "Write(OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/**)"
     ]
   },
   "hooks": {

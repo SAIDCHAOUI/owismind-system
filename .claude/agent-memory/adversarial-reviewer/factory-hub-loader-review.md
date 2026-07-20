@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Durable checks for the v1.3 agent factory (`OWIsMind_PRD_V1_2/project-library/python/owismind_factory/`,
+Durable checks for the v1.3 agent factory (`OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/`,
 `webapps/agent-factory-console/`, hub loaders in `agents/`).
 
 **Two capability validators that must agree but DON'T (found 2026-07-10).** There are TWO validators

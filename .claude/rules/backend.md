@@ -1,5 +1,5 @@
 ---
-paths: ["Plugin/owismind/python-lib/**", "Plugin/owismind/webapps/**", "Plugin/owismind/tests/**"]
+paths: ["OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/**", "OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/**", "OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/**"]
 description: Gotchas backend Flask DSS (SQL direct, streaming, evidence, artefacts). Chargees quand on touche au backend du plugin.
 ---
 

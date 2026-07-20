@@ -243,7 +243,7 @@ toutes nommées selon la convention `{PROJECT_KEY}_{prefix-}owismind_{logical}` 
 ```
 owismind/
 ├── CLAUDE.md                       # instructions projet (règles NON NÉGOCIABLES)
-├── OWIsMind_PRD_V1_2/              # SYSTÈME D'AGENTS du projet de prod (source de vérité, recollé dans DSS)
+├── OWIsMind_PRD_V1_3_DEV/              # SYSTÈME D'AGENTS du projet de prod (source de vérité, recollé dans DSS)
 │   │                               #   prod = CLONE du projet DEV (ids DEV conservés) → miroir verbatim
 │   ├── README.md                   #   carte du sous-projet : arborescence + IDs (agents/tools/modèles)
 │   ├── CLAUDE.md                   #   orientation Claude (contrats, règles, pointeurs)
@@ -306,7 +306,7 @@ owismind/
             ├── app.js / style.css  #   slots STANDARD vidés (jamais supprimés)
 ```
 
-Staging d'upload (généré par `/package-plugin`) : `Plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/`
+Staging d'upload (généré par `/package-plugin`) : `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v<MAJ_MIN>-upload/`
 (+ `owismind-v<MAJ_MIN>-upload.zip`, nom dérivé de `plugin.json` : v1.2.0 → `owismind-v1_2-upload.zip`) -
 runtime uniquement (`plugin.json` + `python-lib/` + `resource/` + `webapps/`), **sans** `frontend/` ni
 `node_modules/`. Voir [`build-test-deploy.md`](./build-test-deploy.md).

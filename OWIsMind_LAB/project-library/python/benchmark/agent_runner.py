@@ -19,7 +19,7 @@ env, per the NO INSTALL rule):
     dataiku installed.
 
 Chunk shape mirrored from the validated production consumer
-``Plugin/owismind/python-lib/owismind/agents/streaming.py`` (run_agent_streamed):
+``OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/streaming.py`` (run_agent_streamed):
   - ``data = getattr(chunk, "data", {}) or {}``;
   - the final footer chunk is recognised by ``data.get("type") == "footer"`` or,
     on SDKs that do not stamp that, by isinstance against the footer chunk class

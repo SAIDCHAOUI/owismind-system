@@ -16,18 +16,18 @@ order, fresh list per call). Sites: evidence/service, evidence/source_service (v
 converted site previously held EXACTLY those two strings in order.
 
 **Prod = clone of DEV (no promotion script).** As of 2026-07-10 the DSS prod project `OWISMIND_PRD_V1_2`
-is a CLONE of DEV (ids preserved, tickets expert INCLUDED), mirrored under `OWIsMind_PRD_V1_2/`. The old
+is a CLONE of DEV (ids preserved, tickets expert INCLUDED), mirrored under `OWIsMind_PRD_V1_3_DEV/`. The old
 `tools/promote_agents_to_prod.py` script and the separate `OWISMIND_PROD_V1` twin are LEGACY, DELETED:
 there is no longer a DEV->PROD id substitution / tickets-block removal pass to verify. Map of real DSS
-ids: `OWIsMind_PRD_V1_2/README.md` + `OWIsMind_PRD_V1_2/registry.json`.
+ids: `OWIsMind_PRD_V1_3_DEV/README.md` + `OWIsMind_PRD_V1_3_DEV/registry.json`.
 
 **Agent Code Agent files.** Module docstrings and `#` comments are NOT sent to the LLM (the prompt is a
-separate string variable). Comment/docstring edits in `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` /
+separate string variable). Comment/docstring edits in `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` /
 `SalesDrive_revenue_expert.py` / `CSSO_Trouble_Tickets_Expert.py` / `tools/` / `flow/` recipe files are
-behavior-neutral. `OWIsMind_PRD_V1_2/registry.json` has a `not_runtime` field: it is NOT imported at
+behavior-neutral. `OWIsMind_PRD_V1_3_DEV/registry.json` has a `not_runtime` field: it is NOT imported at
 runtime (CAPABILITIES is inlined in the orchestrator), so `last_reviewed` date bumps are harmless.
 
-**Generated frontend assets.** `Plugin/owismind/resource/owismind-app/` is build output (skip line-level
+**Generated frontend assets.** `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/` is build output (skip line-level
 review). Sanity-check: body.html and index.html are byte-identical and reference exactly the hashed
 asset files present in `resource/owismind-app/assets/`. Comment-only source changes still change the
 bundle hashes (Vite strips comments) but not behavior.
@@ -39,6 +39,6 @@ is allowed.
 
 **Baseline test counts (2026-07-06, snapshot):** backend 790, node 352, agents
 316 (2 skipped), LAB 343. Commands: backend `python3 -m unittest discover -s tests` from
-`Plugin/owismind`; agents `... -s OWIsMind_PRD_V1_2/tests`; LAB `... -s OWIsMind_LAB/project-library/python
--t OWIsMind_LAB/project-library/python`; node `node --test test/*.test.js` from `Plugin/owismind/frontend`.
+`OWIsMind_PRD_V1_3_DEV/plugin/owismind`; agents `... -s OWIsMind_PRD_V1_3_DEV/tests`; LAB `... -s OWIsMind_LAB/project-library/python
+-t OWIsMind_LAB/project-library/python`; node `node --test test/*.test.js` from `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend`.
 Current prod branch: `OWIsMind_PRD_V1_2` (one branch per DSS prod version; `main` deprecated).

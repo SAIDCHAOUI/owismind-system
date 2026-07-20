@@ -59,15 +59,15 @@ Tableau "quel fichier du repo va ou dans DSS" :
 
 | Fichier du repo | Va dans DSS |
 | --- | --- |
-| `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (env 3.11) |
-| `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (env 3.11) |
-| `OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (env 3.11) |
-| `Plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` | Plugin DSS `owismind_dev` |
+| `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` | Code Agent "OWIsMind_orchestrator" (env 3.11) |
+| `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/SalesDrive_revenue_expert.py` | Code Agent "SalesDrive_revenue_expert" (env 3.11) |
+| `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/CSSO_Trouble_Tickets_Expert.py` | Code Agent "CSSO_Trouble_Tickets_Expert" (env 3.11) |
+| `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` | Plugin DSS `owismind_dev` |
 | `OWIsMind_LAB/project-library/python/benchmark/` (dont `config.py`, `run_params.py`) | Librairie du projet `OWIsMind_LAB` (`python/benchmark/`) |
 | `OWIsMind_LAB/project-library/python/benchmark_webapp/views.py` + `dss.py` + `__init__.py` | Librairie du projet `OWIsMind_LAB` (`python/benchmark_webapp/`) |
-| `OWIsMind_LAB/webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
-| `OWIsMind_LAB/webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
-| `OWIsMind_LAB/webapps/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
+| `OWIsMind_LAB/Standard-webapps/benchmark_results/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Results" |
+| `OWIsMind_LAB/Standard-webapps/benchmark_launcher/{body.html,style.css,script.js,backend.py}` | Webapp standard "Benchmark - Launcher" |
+| `OWIsMind_LAB/Standard-webapps/*/preview.html` | NE PAS coller dans DSS (previsualisation locale seulement) |
 
 ---
 
@@ -98,17 +98,17 @@ maintenant `smart/pro/claude`. Les MODELES sont identiques.
 
 ### A1. Re-coller l'orchestrateur (DEV)
 1. Ouvre le fichier repo
-   `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py`.
+   `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py`.
 2. Dans DSS, projet `OWISMIND_DEV` -> le Code Agent **OWIsMind_orchestrator** (id `038G7mlF`,
    code env **3.11**) -> remplace tout son code par le contenu du fichier repo -> Save.
 
 ### A2. Re-coller le sous-agent revenus (DEV)
-Pareil avec `OWIsMind_PRD_V1_2/genai/agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
+Pareil avec `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/SalesDrive_revenue_expert.py` -> Code Agent **SalesDrive_revenue_expert**
 (id `bHrWLyOL`, env 3.11).
 
 ### A3. Re-coller le sous-agent tickets (DEV), s'il est deploye
 Si le Code Agent **CSSO_Trouble_Tickets_Expert** (id `NcE9LD2i`) existe deja dans `OWISMIND_DEV`,
-recolle aussi `OWIsMind_PRD_V1_2/genai/agents/CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
+recolle aussi `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/CSSO_Trouble_Tickets_Expert.py`. (S'il n'est pas encore deploye, ignore
 cette etape.)
 
 Pas de zip ni de redemarrage backend pour les agents : un Code Agent prend effet des qu'il est
@@ -124,7 +124,7 @@ mode, choisis Claude sur une vraie question complexe ; la reponse doit etre trai
 ## 3. PARTIE B - Le plugin (capture des suggestions + selecteur de mode)
 
 ### B1. Recuperer le zip DEV
-`Plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` (deja construit dans le repo). C'est le plugin
+`OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-dev-upload.zip` (deja construit dans le repo). C'est le plugin
 **DEV** (id `owismind_dev`), qui s'installe a cote de la prod sans l'ecraser.
 
 ### B2. Uploader le plugin
@@ -177,7 +177,7 @@ doit passer.
 1. `OWIsMind_LAB` -> **"</> "** (Code) -> **Webapps** -> **+ New webapp** -> **Code webapp** ->
    **Standard**.
 2. Nomme-la **"Benchmark - Results"** ; active le backend Python (Settings de la webapp).
-3. Colle, depuis `OWIsMind_LAB/webapps/benchmark_results/` : `body.html` -> onglet **HTML**,
+3. Colle, depuis `OWIsMind_LAB/Standard-webapps/benchmark_results/` : `body.html` -> onglet **HTML**,
    `style.css` -> **CSS**, `script.js` -> **JS**, `backend.py` -> **Python**. Save, puis ouvre (View).
 
 Ce que tu vois : "How well do the OWIsMind agents answer?", un score de confiance (donut), des
@@ -186,7 +186,7 @@ chiffres cles, par configuration / par sujet / par question. En haut a droite : 
 
 ### C3. Creer la webapp "Benchmark - Launcher"
 Recommence C2 mais nomme-la **"Benchmark - Launcher"** et colle les 4 panes depuis
-`OWIsMind_LAB/webapps/benchmark_launcher/` : `body.html` -> **HTML**, `style.css` -> **CSS**,
+`OWIsMind_LAB/Standard-webapps/benchmark_launcher/` : `body.html` -> **HTML**, `style.css` -> **CSS**,
 `script.js` -> **JS**, `backend.py` -> **Python**. Tu vois un formulaire de Configuration, un bouton
 Lancer, une carte **Questions** (gerer le golden : ajouter / modifier / activer-desactiver / supprimer
 une question avec sa reponse attendue) et une section Suggestions.
@@ -332,4 +332,4 @@ montre PLUSIEURS runs dans le selecteur (l'historique s'accumule, cf. C8).
 
 Reference technique courte (mapping fichiers, permissions, caveats) : `benchmark_webapp/README.md`.
 Reference du moteur benchmark : `benchmark/SETUP_GUIDE.md`. Carte des ids d'agents :
-`OWIsMind_PRD_V1_2/README.md`.
+`OWIsMind_PRD_V1_3_DEV/README.md`.

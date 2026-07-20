@@ -199,7 +199,7 @@ leur SQL est re-dérivé serveur depuis le `generated_sql` stocké, le client ne
 liste de mots interdits - la sûreté large repose sur le fait que le fragment est **écrit par l'agent**,
 déjà exécuté, re-validé à chaque requête, et seulement appliqué à un SELECT borné lecture-seule sur une table
 whitelistée par l'admin (`sql_parse.py:130-137`). Les parties pures (`sql_parse`, `query_builders`,
-`whitelist`, validateurs) sont couvertes par la suite `unittest` DSS-free (`Plugin/owismind/tests/`).
+`whitelist`, validateurs) sont couvertes par la suite `unittest` DSS-free (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/`).
 
 ### Source Data Explorer (même modèle lecture seule, datasets bruts configurés par agent)
 

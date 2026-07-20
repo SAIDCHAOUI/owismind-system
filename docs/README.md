@@ -33,7 +33,7 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 | Document | Contenu |
 |---|---|
 | [evidence-trust-layer.md](evidence-trust-layer.md) | Référence technique du **trust layer** d'Evidence Studio v2 (niveaux de vérification, explication, drill-down, mode dégradé). Rédigée en **anglais** ; contrats gelés dans `superpowers/specs/2026-06-10-evidence-trust-layer-design.md`. |
-| [DEPLOY_PROD_V1_2.md](DEPLOY_PROD_V1_2.md) | **Runbook de mise en production COURANT** (v1.2.0) : prod = clone du projet DEV (`OWISMIND_PRD_V1_2`, ids conservés), plugin `owismind` v1.2.0, agents re-collés depuis `OWIsMind_PRD_V1_2/`, repoint des modèles sémantiques, smoke tests, versioning par branche. **À suivre pour tout déploiement PROD.** |
+| [DEPLOY_PROD_V1_2.md](DEPLOY_PROD_V1_2.md) | **Runbook de mise en production COURANT** (v1.2.0) : prod = clone du projet DEV (`OWISMIND_PRD_V1_2`, ids conservés), plugin `owismind` v1.2.0, agents re-collés depuis `OWIsMind_PRD_V1_3_DEV/`, repoint des modèles sémantiques, smoke tests, versioning par branche. **À suivre pour tout déploiement PROD.** |
 | [DEPLOY_PROD_V1_1.md](DEPLOY_PROD_V1_1.md) | Runbook **historique** v1.1.0 (2026-07-06), **supersédé** : ancien modèle de promotion fichier par fichier (`OWISMIND_PROD_V1` + `promote_agents_to_prod.py`). Conservé pour l'historique. |
 | [questions_asked.md](questions_asked.md) | Liste brute de questions utilisateurs collectées (scratch), utile comme jeu d'exemples pour smoke-tests / golden-set. Non maintenue. |
 
@@ -42,7 +42,7 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 - **`memory/`** - mémoire vivante (chargée à chaque session de dev) : `CONTEXT.md` (focus courant),
   `PROJECT_STATE.md` (état/archi/ids canoniques/schéma), `LESSONS.md` (décisions et ce qui a divergé des
   guides), `sessions/` (journal par session). **Source de vérité.**
-- **`OWIsMind_PRD_V1_2/`** - le **système d'agents** du projet de prod (orchestrateur + sous-agents
+- **`OWIsMind_PRD_V1_3_DEV/`** - le **système d'agents** du projet de prod (orchestrateur + sous-agents
   revenus/tickets, tool `attribute_lookup`, recettes Flow, modèles sémantiques). C'est la **source de
   vérité** du code agentique, recollée dans les Code Agents DSS. La prod étant un **clone du projet DEV**
   (ids conservés), ce dossier est un miroir verbatim de `OWISMIND_PRD_V1_2`. Lire son `README.md` (guide
@@ -63,6 +63,6 @@ direct** (`SQLExecutor2`, PostgreSQL), **sans Flow** au runtime.
 
 - **Code & commentaires en anglais** ; **documentation en français** (les identifiants, noms de routes,
   tables et termes techniques restent sous leur forme d'origine anglaise).
-- Le frontend buildé (`Plugin/owismind/resource/owismind-app/`) est **versionné** (politique NO-INSTALL →
+- Le frontend buildé (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/`) est **versionné** (politique NO-INSTALL →
   le dépôt doit rester packageable depuis un clone) ; ne **jamais** l'éditer à la main - rebuilder via le
   skill `/build-plugin`. Voir [build-test-deploy.md](build-test-deploy.md).

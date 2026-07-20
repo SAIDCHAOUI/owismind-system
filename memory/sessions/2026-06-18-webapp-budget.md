@@ -1,7 +1,7 @@
 # Session 2026-06-18 (soir) - WEBAPP : suivi coûts/tokens + budget mensuel par utilisateur
 
-> Session **webapp** (Plugin/owismind/). En parallele : une session **agents** (dataiku-agents/) et une
-> session **doc** (project-documentation/, lecture seule). Aucun fichier hors `Plugin/owismind/` + ce
+> Session **webapp** (OWIsMind_PRD_V1_3_DEV/plugin/owismind/). En parallele : une session **agents** (dataiku-agents/) et une
+> session **doc** (docs/project-documentation/, lecture seule). Aucun fichier hors `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` + ce
 > fichier de notes n'a ete touche par cette session. **AUCUN commit / push** (interdit cette session,
 > l'user committera demain matin).
 
@@ -13,11 +13,11 @@ d'un, plusieurs ou tous les utilisateurs**, de maniere **permanente ou temporair
 d'ALTER**, nouvelle table versionnee si besoin (l'user gere la migration des anciennes donnees).
 
 ## Etat : CODE + TESTS + BUILD + ZIP PRETS. NON deploye en DSS (a faire au reveil).
-- **422 tests backend** verts (`python3 -m unittest discover -s Plugin/owismind/tests`), dont **37 nouveaux**
+- **422 tests backend** verts (`python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests`), dont **37 nouveaux**
   (`tests/test_budget.py`).
-- **124 tests frontend** verts (`cd Plugin/owismind/frontend && node --test test/*.test.js`), dont **8 nouveaux**
+- **124 tests frontend** verts (`cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && node --test test/*.test.js`), dont **8 nouveaux**
   (`test/budgetModel.test.js`).
-- Build Vite OK, zip **`Plugin/ready-for-dataiku/owismind-upload.zip`** = **79 entrees, `index-DeS8HQfW.js`**,
+- Build Vite OK, zip **`OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload.zip`** = **79 entrees, `index-DeS8HQfW.js`**,
   propre (verifie), body.html recable.
 - Revue adversariale (workflow 12 agents, 5 dimensions, chaque finding verifie) : **0 critical / 0 high**.
   2 defauts confirmes -> **corriges** (voir plus bas). Verdict final : production-ready.
@@ -38,7 +38,7 @@ d'ALTER**, nouvelle table versionnee si besoin (l'user gere la migration des anc
      les **reinitialiser au defaut**.
 
 ## Architecture livree
-### Backend (`Plugin/owismind/python-lib/owismind/`)
+### Backend (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/`)
 - **NOUVELLE table `webapp_user_quota_v1`** (`migrations.py`, `USER_QUOTA_V1_LOGICAL`, `ensure_user_quota_table`) :
   override par utilisateur `{user_id PK, limit_usd, expires_at (NULL=permanent), note, updated_at, updated_by}`.
   Creee lazy au 1er usage (CREATE IF NOT EXISTS). **Aucun ALTER** : le defaut global vit dans
@@ -65,7 +65,7 @@ d'ALTER**, nouvelle table versionnee si besoin (l'user gere la migration des anc
     **`POST /admin/budget/users`** (set/clear override pour un/plusieurs/tous). Tout derriere `_admin_guard`.
 - `sql_config.storage_status` liste la nouvelle table (visible cote admin Storage).
 
-### Frontend (`Plugin/owismind/frontend/src/`)
+### Frontend (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/`)
 - **`composables/budgetModel.js` (NOUVEAU, pur, teste)** : format $ / tokens / date, `usagePct`, `gaugePct`,
   `usageLevel` (off/over/warn/ok).
 - **`stores/session.js`** : `usage` ref + `loadUsage()` (best-effort, dans init) + `budgetBlocked` computed.
@@ -142,8 +142,8 @@ quota ; les ecritures admin ne prennent que des `RowExclusiveLock` sur les ligne
 Items restants = info/cosmetique (sort borne ~50 lignes en work_mem ; logs DSS du bulk-save admin rare). 430 tests OK.
 
 ## Verifs reproductibles
-- Backend : `cd Plugin/owismind && python3 -m unittest discover -s tests` (**430 OK** apres durcissements secu + instance).
-- Frontend : `cd Plugin/owismind/frontend && node --test test/*.test.js` (124 OK).
+- Backend : `cd OWIsMind_PRD_V1_3_DEV/plugin/owismind && python3 -m unittest discover -s tests` (**430 OK** apres durcissements secu + instance).
+- Frontend : `cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && node --test test/*.test.js` (124 OK).
 - Build local sans toucher resource/ : `./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir` puis `rm -rf /tmp/owi_bc`.
 - Tirets bannis : `LC_ALL=C grep -rlP '\xe2\x80\x9[34]' <fichiers>` -> doit etre vide.
-- Zip : `Plugin/ready-for-dataiku/owismind-upload.zip` (79 entrees, `index-DeS8HQfW.js`), reconstruit apres les correctifs secu.
+- Zip : `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-upload.zip` (79 entrees, `index-DeS8HQfW.js`), reconstruit apres les correctifs secu.

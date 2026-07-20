@@ -2,7 +2,7 @@
 
 > Guide d'onboarding pour le front du plugin **OWIsMind**. Toute la prose est en français ; les
 > identifiants (composants, stores, composables, routes, fichiers) restent en anglais, tels qu'écrits
-> dans le code. Chemins toujours relatifs à `Plugin/owismind/frontend/`.
+> dans le code. Chemins toujours relatifs à `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/`.
 >
 > Doc map : [architecture.md](architecture.md) · [backend-api.md](backend-api.md) · **frontend.md** (ce doc) ·
 > [data-model.md](data-model.md) · [security.md](security.md) · [build-test-deploy.md](build-test-deploy.md).

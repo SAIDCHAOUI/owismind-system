@@ -26,14 +26,14 @@
 
 ## L002 - Pas de piège `_/plugin.json` dans ce repo
 - **Contexte** : le guide build insiste sur `_/plugin.json` (export DSS) → `plugin.json` à la racine du zip.
-- **Réalité** : ici `plugin.json` est déjà à `Plugin/owismind/plugin.json` (pas de dossier `_/`).
-- **Solution qui marche** : le packaging copie `Plugin/owismind/plugin.json` → racine du zip.
-- **Preuve** : `Plugin/owismind/plugin.json` existe ; le zip `owismind-upload.zip` a `plugin.json` à la racine.
+- **Réalité** : ici `plugin.json` est déjà à `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` (pas de dossier `_/`).
+- **Solution qui marche** : le packaging copie `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` → racine du zip.
+- **Preuve** : `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` existe ; le zip `owismind-upload.zip` a `plugin.json` à la racine.
 - **Source** : exploration disque. **Date** : 2026-06-01.
 
 ## L003 - Racine plugin imbriquée sous `Plugin/`
 - **Contexte** : les guides supposent que la racine du plugin = cwd.
-- **Réalité** : racine plugin = `Plugin/owismind/` (P majuscule) ; staging = `Plugin/ready-for-dataiku/`.
+- **Réalité** : racine plugin = `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` (P majuscule) ; staging = `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/`.
 - **Solution qui marche** : les skills `/build-plugin` et `/package-plugin` ciblent ces chemins explicitement.
 - **Source** : exploration disque. **Date** : 2026-06-01.
 
@@ -536,7 +536,7 @@
      **POST** → un prefetch/scanner **GET** ne peut plus élire l'admin. ⚠️ **re-valider le bootstrap 1er admin en DSS**.
   8. **Polling front** (`useChatStream.js` + `stores/chat.js`) : **token d'annulation** (stoppe le poll au changement de
      conversation/nouveau run) + **retry/backoff** sur erreur transitoire + `run_not_found` traité **récupérable** (run perdu au restart).
-  9. **Tests** : `Plugin/owismind/tests/` (unittest `validation.py`, hors `python-lib` → **non packagé**) + README listant les
+  9. **Tests** : `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/` (unittest `validation.py`, hors `python-lib` → **non packagé**) + README listant les
      tests DSS-dépendants à ajouter.
 - **À RE-VALIDER EN DSS (bloquant GO, cf. §14 du rapport)** : (a) **logs CRU propres** pour la trace dataset + que l'append
   **accumule** (pas d'overwrite/schema-thrash) ; (b) réponse ~256 Ko ne déclenche plus `INPUT_DATA_VERY_LONG` ; (c) **bootstrap
@@ -742,10 +742,10 @@
 ## L033 - Session de nettoyage repo (zéro orphelin + condensation + docs) + gotcha permission `cp body.html` [✅ local]
 **Contexte** : grosse session de mise au propre avant `git init` - supprimer l'inutile, optimiser le code (anglais, prod, zéro orphelin), condenser le cadrage, tout documenter. Orchestration **hybride** : edits risqués en séquentiel **test-gated** par moi ; analyse/écriture parallélisées sur **6 sous-agents à scopes disjoints** (backend / frontend / cadrage / audits, puis 6 docs).
 **Ce qui a divergé des guides / ce qui a échoué** :
-1. **`/build-plugin` étape « cp index.html → body.html » REFUSÉE par le moteur de permissions** (alors que `Bash(cp:*)` est `allow` et que le skill la dit « acceptée »). Cause : toute commande Bash dont un opérande matche `Plugin/owismind/resource/owismind-app/**` est traitée comme une écriture → tombe sous la règle `deny: Write(...resource/owismind-app/**)`, **même en lecture (source du cp)**. Le hook `guardrail.sh` n'est PAS en cause (sa règle teste `"file_path"`, absent d'un payload Bash). Un `cp` bénin (sans ce chemin) passe ; `cp` vers `body.html` non.
+1. **`/build-plugin` étape « cp index.html → body.html » REFUSÉE par le moteur de permissions** (alors que `Bash(cp:*)` est `allow` et que le skill la dit « acceptée »). Cause : toute commande Bash dont un opérande matche `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/**` est traitée comme une écriture → tombe sous la règle `deny: Write(...resource/owismind-app/**)`, **même en lecture (source du cp)**. Le hook `guardrail.sh` n'est PAS en cause (sa règle teste `"file_path"`, absent d'un payload Bash). Un `cp` bénin (sans ce chemin) passe ; `cp` vers `body.html` non.
 2. Mémoire périmée vs code après le nettoyage : `/history` listé « legacy conservé » (en fait **supprimé**), « **76** unittest » (→ **65** après retrait de `test_history.py`), §13.2 listait `Badge`/`UiShowcase` (**supprimés**), « 2 tests front » (→ **5**). `python-lib/CLAUDE.md` montrait un nommage sans namespace `_owismind_` + une whitelist hardcodée `ALLOWED_AGENTS` (réel = dynamique `resolve_enabled_agent`).
 **Solution qui marche** :
-1. **Écrire `body.html` via l'outil `Write`** (son `file_path` `webapps/.../body.html` ne matche aucune règle deny) avec le contenu exact de l'`index.html` buildé (lire d'abord `index.html` ; le contenu peut mentionner `resource/owismind-app` sans déclencher la règle, qui ne teste que la **valeur** de `file_path`). Le **packaging** (`cp -R Plugin/owismind/resource ...`) passe lui sans souci car l'opérande est `Plugin/owismind/resource` (≠ littéral `resource/owismind-app`).
+1. **Écrire `body.html` via l'outil `Write`** (son `file_path` `webapps/.../body.html` ne matche aucune règle deny) avec le contenu exact de l'`index.html` buildé (lire d'abord `index.html` ; le contenu peut mentionner `resource/owismind-app` sans déclencher la règle, qui ne teste que la **valeur** de `file_path`). Le **packaging** (`cp -R OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource ...`) passe lui sans souci car l'opérande est `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource` (≠ littéral `resource/owismind-app`).
 2. `messages.json` laissé **pristine** = ce n'est **pas** du code orphelin (invariant F6/L023, port 1:1 maquette ; clés `ev.*` réservées Evidence Studio). Ne pas le purger.
 3. Filet sans git : **snapshot tar hors-repo** (`/tmp/owismind-safety-snapshot-*.tar.gz`) avant tout edit, + suite de tests comme garde à chaque étape.
 **Preuve / vérification** : `py_compile` OK ; **65 unittest** + **27 node:test** verts ; `vite build` exit 0 ; zip régénéré **propre, 64 entrées** (zéro `chat_v1/v2/v3`, `UiShowcase`, `test_history`). Legacy : `grep` des symboles retirés → vide (hors mémoire). cadrage **−80 %** (125 → 25 Ko). 7 docs sous `docs/` ancrés sur le code réel.
@@ -2065,11 +2065,11 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 
 ## L088 - Documentation complète du projet en multi-workflow (read-only) + traduction EN ; GOTCHA : accents FR strippés par sur-prudence anti-tiret (2026-06-18, session doc parallèle)
 
-- **Contexte** : produire TOUTE la doc projet (`project-documentation/`), la traduire en anglais, et créer un pitch Customer Day, EN PARALLÈLE d'une autre session éditant `dataiku-agents/`. Contrainte : read-only partout sauf le nouveau dossier ; règle #9 (zéro tiret cadratin) ; ultracode (Workflow sur chaque étape).
+- **Contexte** : produire TOUTE la doc projet (`docs/project-documentation/`), la traduire en anglais, et créer un pitch Customer Day, EN PARALLÈLE d'une autre session éditant `dataiku-agents/`. Contrainte : read-only partout sauf le nouveau dossier ; règle #9 (zéro tiret cadratin) ; ultracode (Workflow sur chaque étape).
 - **Archi qui marche (3 workflows séquentiels)** : (1) recherche read-only, 14 agents -> 14 knowledge packs code-sourcés dans `.workdir/research/` ; (2) rédaction, 1 architecte (conventions + glossaire canonique + arborescence + inventaire des diagrammes Mermaid pour éviter les doublons) + 53 rédacteurs (1 par livrable, lisant le CODE réel, pas seulement les packs) ; (3) vérif adversariale doc-vs-code + correction conditionnelle. Puis traduction = 1 agent/fichier + glossaire FR->EN partagé, EN PLACE (mêmes chemins -> 761 liens préservés). Garde-fous codés dans CHAQUE prompt : read-only sauf le fichier assigné, no em dash, prose FR + code VO.
 - **Échecs puis fixes** : (a) la passe de vérif a été coupée par une LIMITE DE SESSION (reset 5h30) ; rien de corrompu (les fix non lancés n'écrivent pas) ; reprise possible via `resumeFromRunId` (cache des agents finis). (b) GOTCHA principal : à force d'insister sur la vérif BYTE-LEVEL anti-tiret (`LC_ALL=C grep -P '\xe2\x80\x9[34]'`), les agents traducteurs FR sont devenus sur-prudents sur l'UTF-8 et ont écrit du français SANS ACCENTS ("systeme", "credible", "energie"). Viole la correction orthographique FR. Fix = un agent correcteur dédié, passe orthographique SEULE (ajout des diacritiques, rien d'autre).
 - **Règle réutilisable** : quand un agent doit produire du français ET respecter l'anti-tiret, lui dire explicitement « les lettres accentuées sont REQUISES, ce ne sont PAS des dashes ; seuls U+2014/U+2013 sont interdits » - sinon il strippe l'UTF-8 par excès de prudence. Pour la doc : grounder les rédacteurs sur les packs ET le code réel ; traduire en place pour préserver les liens ; un architecte amont (conventions + inventaire diagrammes) supprime les doublons.
-- **Preuve / vérification** : 53 docs (~136k mots) ; `LC_ALL=C grep -rlP '\xe2\x80\x9[34]'` = 0 partout ; 761 liens relatifs, 0 cassé (check Python) ; script FR = UTF-8 valide + accents présents + 0 dash. `project-documentation/` déjà committé par l'autre session (71 fichiers trackés). Pitch dans `project-documentation/presentation-customer-day/` (structure 7 frames + prompt claude.ai + scripts FR/EN).
+- **Preuve / vérification** : 53 docs (~136k mots) ; `LC_ALL=C grep -rlP '\xe2\x80\x9[34]'` = 0 partout ; 761 liens relatifs, 0 cassé (check Python) ; script FR = UTF-8 valide + accents présents + 0 dash. `docs/project-documentation/` déjà committé par l'autre session (71 fichiers trackés). Pitch dans `docs/project-documentation/presentation-customer-day/` (structure 7 frames + prompt claude.ai + scripts FR/EN).
 - **Source** : demande user (2026-06-18) ; ultracode / Workflow ; coexistence avec la session `dataiku-agents/`. **Date** : 2026-06-18.
 
 ## L089 - Les recettes/tools testés gardent pandas/numpy en imports LAZY (env de test NO INSTALL, sans pandas) (✅ corrigé, 267 tests)
@@ -2209,9 +2209,9 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   l'autorité. Pour corriger en masse, **Python** aussi (`t.replace('—','-').replace('–','-')`) - byte-correct,
   contrairement à `perl -CSD` interdit sur fichiers à glyphes multioctets (L084). Si `grep -P` est voulu,
   installer GNU grep (`ggrep`) - mais NO INSTALL, donc demander à l'user.
-- **Preuve-vérification** : le scan Python a (a) confirmé le livrable `project-documentation/` (61 .md) + le
-  site (`project-documentation/site/`, HTML/CSS/JS) **propres** (seul `0012` cite les glyphes entre backticks =
-  exception assumée) ; (b) révélé 12 em-dash **préexistants** dans `Plugin/owismind/resource/`
+- **Preuve-vérification** : le scan Python a (a) confirmé le livrable `docs/project-documentation/` (61 .md) + le
+  site (`docs/project-documentation/site/`, HTML/CSS/JS) **propres** (seul `0012` cite les glyphes entre backticks =
+  exception assumée) ; (b) révélé 12 em-dash **préexistants** dans `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/`
   `compute_available_connections.py` (corrigés) + des dizaines hors livrable (frontend tests, docs/, memory,
   .claude skills, agentic-research, mockup) que `grep -rlP` n'avait jamais signalés.
 - **Source** : session 2026-06-19 Run 2 (doc ultra-complète + plateforme web). **Date** : 2026-06-19.
@@ -2219,7 +2219,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 ## L094 - Plugin DEV/PROD : SOURCE UNIQUE + cible de build (jamais 2 copies à maintenir) ; renommer AUSSI le label du webapp [✅ validé DSS 2026-06-19]
 - **Contexte** : besoin d'un plugin DEV coexistant avec la prod sur la MÊME instance DSS, sans toucher la prod.
 - **Ce qui ne marche pas / pièges** : (a) dupliquer le dossier plugin -> 2 copies qui divergent. (b) ne renommer que `plugin.json` -> les 2 webapps s'affichent avec le MÊME label (`webapp.json meta.label`) dans la liste DSS, impossible de les distinguer (retour user + capture). (c) collision `import owismind` si le package python n'est pas renommé (le code env est partagé entre plugins).
-- **Solution qui marche** : garder UNE source `Plugin/owismind/` ; `tools/build_dev_plugin.py` (Python stdlib, NO install) émet un 2e plugin `owismind_dev` : renomme l'**id plugin** + le **package python** (`from/import owismind` en word-boundary + `getLogger("owismind")` racine ; **laisse intacts** `APP_NAMESPACE="owismind"`, l'URL `/owismind-api`, `Blueprint("owismind_api")`) + la **base Vite** via env `OWI_PLUGIN_ID` (défaut prod inchangé) + le **label de `plugin.json` ET de `webapp.json`** ("OWIsMind (DEV)" / "OWIsMind - AI Agents (DEV)"). Invariantes auto-assertées + zip propre. "Passer en prod" = rebuild prod depuis la source validée + upload.
+- **Solution qui marche** : garder UNE source `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` ; `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (Python stdlib, NO install) émet un 2e plugin `owismind_dev` : renomme l'**id plugin** + le **package python** (`from/import owismind` en word-boundary + `getLogger("owismind")` racine ; **laisse intacts** `APP_NAMESPACE="owismind"`, l'URL `/owismind-api`, `Blueprint("owismind_api")`) + la **base Vite** via env `OWI_PLUGIN_ID` (défaut prod inchangé) + le **label de `plugin.json` ET de `webapp.json`** ("OWIsMind (DEV)" / "OWIsMind - AI Agents (DEV)"). Invariantes auto-assertées + zip propre. "Passer en prod" = rebuild prod depuis la source validée + upload.
 - **Données** : `CREATE TABLE IF NOT EXISTS` déjà partout (`ensure_*`), prod/dev même code ; isolation = `table_prefix` optionnel au DÉPLOIEMENT (sans prefix = mêmes tables que prod). RIEN à changer côté tables.
 - **Preuve-vérification** : `owismind_dev-upload.zip` uploadé + testé DSS (« tout fonctionne à merveille ») ; parité python 34=34 ; prod (artefacts + source) jamais touchée.
 - **Source** : session 2026-06-19 Run 3. **Date** : 2026-06-19.
@@ -2265,7 +2265,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Workflow gravé (règle #9 du `dataiku-agents/CLAUDE.md`)** : **développer + valider en DEV, puis promouvoir** en copiant le changement dans le jumeau `OWISMIND_PROD_V1_*` (IDs prod déjà en place) et en collant dans PROD. Jamais coller un changement non testé en PROD. Mêmes IDs qu'avant côté DEV (rien à recoller juste pour la réorg) ; **PROD = nouveaux IDs à utiliser à la promotion**.
 - **Méthode** : script de migration Python jetable, **un `assert` par remplacement d'ID** (zéro contamination croisée : la copie PROD ne contient ni `bHrWLyOL`, ni `v4oqA6R`, ni `tickets_expert`, ni `OWISMIND_DEV` ; vérifié). Retrait de la capability tickets en PROD par slice entre 2 ancres de commentaire (pas un fragile string-replace). Tests repointés sur les copies **DEV** (`importlib` par chemin).
 - **Carte des IDs** : DEV orch `038G7mlF` / rev `agent:bHrWLyOL` / tickets `agent:NcE9LD2i` / lookup `UUoynaL` / rev-tool `v4oqA6R` / tickets-tool `nEirlso` / modèle rev `AHUh9hb` (`Drive_Revenues_Semantic_Model`) / modèle tickets `dM4jA4G`. PROD orch `Xrv7GvfG` / rev `agent:uO5hEzAs` / lookup `szOZCoU` / rev-tool `sgk5pfln` / modèle rev `a7K9jYk` (**`Drive_Revenues_Model`**).
-- **Preuve / vérification** : 283 tests verts contre les copies DEV ; compile OK des 31 fichiers ; greps de non-contamination OK ; 0 tiret cadratin. **Reste (suivi)** : `project-documentation/05-agents/*` + `docs/scaling/PLAN_AGENTS.md` + skill `agentique-python-dataiku` référencent encore les anciens chemins `dataiku-agents/agents|tools|recipes/` (livrable doc séparé, à balayer séparément).
+- **Preuve / vérification** : 283 tests verts contre les copies DEV ; compile OK des 31 fichiers ; greps de non-contamination OK ; 0 tiret cadratin. **Reste (suivi)** : `docs/project-documentation/05-agents/*` + `docs/scaling/PLAN_AGENTS.md` + skill `agentique-python-dataiku` référencent encore les anciens chemins `dataiku-agents/agents|tools|recipes/` (livrable doc séparé, à balayer séparément).
 - **Source** : session 2026-06-22 ; `dataiku-agents/OWISMIND/README.md` + `dataiku-agents/CLAUDE.md`. **Date** : 2026-06-22.
 
 ## L100 - L'agent INVENTE une valeur (nom/0 ligne) quand le profil ne flague AUCUNE colonne `indexed` ; parité profileur <-> value_index ; axe temps doit préférer creationDate ; le `.v1.json` est un DUMP (je le lis, je ne l'écris jamais) [repo only, NON validé DSS, 2026-06-22]
@@ -2291,7 +2291,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   - Pouces : `icons.js` `thumbsUp`/`thumbsDown` -> glyphes **pleins** (`fill="currentColor"`, silhouette Material, lisibles partout) ; `MessageAgent.vue` boutons à `:size="15"` + `aria-label`/`aria-pressed`.
   - Modes par agent : flag booléen **`modes`** dans le profil (`validate_agent_meta`, défaut OFF, `bool()`, ne lève jamais) ; `/agents` le projette ; **`/chat/start` ne passe `mode` à `build_user_suffix` que si `agent.profile.modes`** (sinon `mode=None` -> aucun token). Front : `session.selectedAgent`/`selectedAgentSupportsModes`, `PromptBar` masque le picker via `v-if`, `AdminView` ajoute la case dans la fiche d'agent (`.ed-check` carré). C'est l'enforcement serveur qui est la vraie garde ; le masquage UI est cosmétique.
   - Renommage : **garder les clés internes eco/medium/high** (l'orchestrateur les parse), ne changer que les libellés/descriptions i18n -> Smart/Pro/Claude. Couleurs : vert = recommandé (Smart), rouge = avertissement coût (Claude « bien plus cher, épuise le quota 50 $ »), via tokens `--success(-soft)`/`--danger(-soft)` (theme-safe).
-  - Process : packager **uniquement le DEV** (`tools/build_dev_plugin.py` / `/package-plugin-dev` -> `owismind_dev-upload.zip`) ; restaurer la prod par `git checkout` si build prod accidentel ; le zip prod est gitignored + régénérable (prod = git). Voir mémoire `dev-first-never-touch-prod-artifacts`.
+  - Process : packager **uniquement le DEV** (`OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` / `/package-plugin-dev` -> `owismind_dev-upload.zip`) ; restaurer la prod par `git checkout` si build prod accidentel ; le zip prod est gitignored + régénérable (prod = git). Voir mémoire `dev-first-never-touch-prod-artifacts`.
 - **Preuve / vérification** : 456 tests backend + 124 frontend verts (+3 sur le flag `modes`) ; build Vite OK ; 0 tiret (scan Python) ; parité i18n FR/EN ; rendu pouces + picker vérifié au **navigateur réel** (clair + sombre, contrastes AA) ; contenu du zip DEV vérifié (glyphe plein + Smart/Pro/Claude + flag `modes`, base `/plugins/owismind_dev/`). **NON validé DSS au log** (user a dit « ok all good » après ré-upload DEV).
 - **Source** : session 2026-06-24 ; `sessions/2026-06-24.md`. Affine **L091/L092** (discipline UI) + **L094** (DEV/PROD source unique). **Date** : 2026-06-24.
 
@@ -2466,7 +2466,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   **on ne supprime JAMAIS la doc** ; elle se met a jour, elle ne se jette pas. Le vrai probleme n'etait pas
   qu'elle existe mais qu'elle **entre automatiquement dans le contexte des agents** (via le graphe de connaissances,
   interroge par defaut pour naviguer) tout en etant perimee.
-- **Solution qui marche** : (1) ne rien supprimer cote doc ; (2) ajouter `project-documentation/` au
+- **Solution qui marche** : (1) ne rien supprimer cote doc ; (2) ajouter `docs/project-documentation/` au
   **`.graphifyignore`** -> elle sort du graphe, donc du contexte auto, mais reste sur disque, lisible **a la
   demande explicite** ; (3) note durable dans `CLAUDE.md` (section Reference) : « a lire a la demande, exclue du
   graphe, potentiellement perimee, source de verite = memory/ + docs/cadrage/ ». Au passage, nettoyer les entrees
@@ -2582,12 +2582,12 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   1 question ≈ `100/n` points, **<30 = bruit**, **cible ~100-150 stratifiées** (mix calqué sur
   `docs/questions_asked.md`, ~10-15 par bucket), robuste 250-300+ ; la stat est **PAR CONFIG** (n par mode,
   Claude cher -> sous-ensemble noyau) ; surveiller `needs_review` (bruit du juge) ; qualité golden > quantité.
-- **Preuve-vérification** : compile-check Vite OK + `tools/build_dev_plugin.py` (invariants `--check` + build)
+- **Preuve-vérification** : compile-check Vite OK + `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (invariants `--check` + build)
   -> zip DEV **`index-CzZWTpbS.js` (78 entrées)** ; **prod intacte** (`git status` = seuls les 2 fichiers source
   modifiés, resource/body.html prod non touchés -> règle dev-first) ; 0 tiret (scan Python). **NON validé DSS**
   (la vue a besoin du backend pour `/agents` + `/benchmark/results`). Frontend only -> upload DEV suffit, PAS
   de redémarrage backend.
-- **Source** : `Plugin/owismind/frontend/src/components/pages/PageShell.vue` + `views/BenchmarkSuggestView.vue` ;
+- **Source** : `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/components/pages/PageShell.vue` + `views/BenchmarkSuggestView.vue` ;
   `sessions/2026-06-29.md` Run 2. Date : 2026-06-29.
 
 ## L113 - Benchmark « append mode » : faire vivre le registre + l'appartenance + le redo dans la VARIABLE projet (zéro dataset neuf) ; score = dernière tentative par question ; le redo se consomme APRÈS les gardes [repo, TDD, NON validé DSS, 2026-06-30]
@@ -2630,7 +2630,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : spec `docs/superpowers/specs/2026-06-29-benchmark-v2-append-mode-design.md` ;
   `OWIsMind_LAB/project-library/python/benchmark/{registry,scoring,judge,run_params,schemas,agent_runner}.py`,
   `dss_steps/*`, `benchmark_webapp/{views,dss}.py`, webapps backends ;
-  `Plugin/owismind/python-lib/owismind/benchmark_view/*` + `api/routes.py` ; frontends launcher/results/Vue ;
+  `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/benchmark_view/*` + `api/routes.py` ; frontends launcher/results/Vue ;
   `sessions/2026-06-30.md`. Date : 2026-06-30.
 
 ## L114 - Mail HTML de marque (charte Orange appliquee a un email) : esprit charte + contraintes email
@@ -2665,7 +2665,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
   `sessions/2026-06-30.md` (Run 2). Date : 2026-06-30.
 
 ## L115 - Launcher LAB : dérive de contrat MOCK vs vrai backend (le front est QA contre son MOCK)
-- **Contexte** : la webapp Launcher du benchmark (`OWIsMind_LAB/webapps/benchmark_launcher/script.js`)
+- **Contexte** : la webapp Launcher du benchmark (`OWIsMind_LAB/Standard-webapps/benchmark_launcher/script.js`)
   embarque un MOCK complet (mode preview offline, quand `getWebAppBackendUrl` est absent). Le frontend
   a été développé ET validé visuellement contre ce MOCK. En vrai DSS, deux bugs distincts, même cause.
 - **Ce qui a échoué (2 fois en une session)** :
@@ -3401,7 +3401,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Contexte** : garde `guard_custom_sql`-like du step correlate (SELECT-only sur alias d1..dN, denylist, allowlist de tables FROM/JOIN). Audit securite.
 - **Ce qui a echoue** : deux bypass trouves par execution de la VRAIE fonction sur des variantes syntaxiques (pas par relecture) : (1) `SELECT * FROM d1, secret_table` : la regex `\b(?:from|join)\s+(table)` ne capturait QUE la premiere table de la liste comma-separee -> `secret_table` (non defini comme CTE) se resolvait vers une vraie table physique de `SQL_owi` (fuite read cross-table). (2) `SELECT * FROM/**/webapp_users` : PostgreSQL traite `/**/` comme un espace mais `\s+` ne matche pas `/` -> la table apres le commentaire n'etait jamais confrontee a l'allowlist.
 - **Solution qui marche** : (1) capturer la LISTE comma-separee entiere apres FROM/JOIN et valider CHAQUE entree (`_CORR_TABLE_LIST_RE`) ; (2) rejeter tout marqueur de commentaire (`/*`, `--`) apres le blanchiment des litteraux, AVANT les scans denylist/FROM (le prompt les bannit deja, la garde est la couche defense-en-profondeur). + tests de non-regression avec un fuzzer local. Reste borne de toute facon en aval (transaction_read_only + statement_timeout 30s + LIMIT), donc lecture seule, mais fuite de confidentialite reelle.
-- **Preuve-verification** : fuzzer de 9 vecteurs d'attaque + 2 cas legitimes -> "ALL SECURE" apres fix ; tests `test_comma_join_to_a_hidden_table_is_rejected` + `test_sql_comments_rejected`. Rapport `OWIsMind_PRD_V1_2/docs/SECURITY_AUDIT_2026-07-17_DURABLE.md`.
+- **Preuve-verification** : fuzzer de 9 vecteurs d'attaque + 2 cas legitimes -> "ALL SECURE" apres fix ; tests `test_comma_join_to_a_hidden_table_is_rejected` + `test_sql_comments_rejected`. Rapport `OWIsMind_PRD_V1_3_DEV/docs/SECURITY_AUDIT_2026-07-17_DURABLE.md`.
 - **Source** : session 2026-07-17, audit securite Durable Step Shell (fuzzing lead + adversarial-reviewer Opus). Complete L077/L058 (audit a l'aveugle).
 - **Date** : 2026-07-17.
 
@@ -3425,7 +3425,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Contexte** : verification pre-test de la couche Durable Step Shell v1.3 (l'user n'a pas encore teste en DSS, veut la certitude avant). Toutes les suites etaient VERTES (backend 963, agents 616, LAB 343, front 365).
 - **Ce qui a echoue** : deux cassures FONCTIONNELLES DURES etaient invisibles aux tests parce que les faux ne refletaient pas le contrat reel. (1) `run_state.save_plan` ne persistait que la STRING `task` dans `task_json`, alors que `durable_runner._step_spec` attend un DICT `{task, capability_keys, args, ...}` -> chaque step d'execution echouait en DSS reel (feature durable inoperante) ; masque parce que le test-double `save_plan` de `test_durable_runner.py`, lui, serialisait le dict complet (contrat que le vrai code ne respectait pas). (2) la lecture catalogue du correlate lisait `data_type` + `item_level='column'` alors que `owismind_factory.catalog.CATALOG_SCHEMA` publie `column_type` sans `item_level` -> echec "undefined column" a chaque lecture ; masque par un `_FakeExecutor` renvoyant le schema attendu par l'orchestrateur, pas le vrai. Plus 3 contournements SQL restants de la garde correlate (`TABLE <rel>`, `from"secret"` sans espace, `query_to_xml('SELECT...')`) de la meme classe que 2 deja fermes.
 - **Solution qui marche** : (1) revue TRIPLE independante = Fable 5 lead + workflow Opus 6 dimensions (verif adversariale par finding) + GPT-5.6 Sol + revue adversariale Opus du diff ; les modeles ont CONVERGE sur les memes racines en se completant (Opus a trouve le CRITICAL fonctionnel, Sol le mismatch catalogue). (2) fix + RENDRE LE FAUX FIDELE : le `_FakeExecutor` asserte maintenant `column_type` present et `item_level`/`data_type` absents (attraperait un revert) ; nouveau test qui prouve que `save_plan` serialise `capability_keys`/`args`. Regle generale : un test-double doit ASSERTER le contrat reel de ce qu'il simule (colonnes, forme du payload), sinon il transforme un vert en faux positif. Quand une feature n'est pas encore testable en reel, une revue multi-modele du CODE (pas des tests) est le seul filet.
-- **Preuve-verification** : 7 fix (1 CRITICAL + 3 HIGH + 3 M/L) corriges + testes ; garde SQL sondee sur 18+25 cas d'attaque (0 faux-positif, 0 contournement) ; 4 suites vertes apres fix (backend 965, agents 619, LAB 343, front 365) ; rapport `OWIsMind_PRD_V1_2/docs/SECURITY_AUDIT_2026-07-17_DURABLE_V2.md`. Residuels etat-machine (H3 fencing, H4 watchdog stream Mesh, H5 replay) DOCUMENTES avec patch, a valider au smoke DSS.
+- **Preuve-verification** : 7 fix (1 CRITICAL + 3 HIGH + 3 M/L) corriges + testes ; garde SQL sondee sur 18+25 cas d'attaque (0 faux-positif, 0 contournement) ; 4 suites vertes apres fix (backend 965, agents 619, LAB 343, front 365) ; rapport `OWIsMind_PRD_V1_3_DEV/docs/SECURITY_AUDIT_2026-07-17_DURABLE_V2.md`. Residuels etat-machine (H3 fencing, H4 watchdog stream Mesh, H5 replay) DOCUMENTES avec patch, a valider au smoke DSS.
 - **Source** : session 2026-07-17 Run 3 (verification pre-test + durcissement). Complete L157-L160.
 - **Date** : 2026-07-17.
 

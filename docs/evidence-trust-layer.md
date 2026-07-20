@@ -105,12 +105,12 @@ never claimed re-verifiable. Refusal reasons: `no_group_keys`, `multi_source`,
 
 ```bash
 # Backend (pure modules, no DSS needed) - from the repo root
-python3 -m unittest discover -s Plugin/owismind/tests -v
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests -v
 # Orchestrator (dataiku stubbed)
 python3 -m unittest discover -s orchestrator/tests -v
 # Frontend pure logic
-cd Plugin/owismind/frontend && npm test
+cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm test
 # Compile checks
-python3 -m compileall -q Plugin/owismind/python-lib
-cd Plugin/owismind/frontend && ./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir && rm -rf /tmp/owi_bc
+python3 -m compileall -q OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib
+cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && ./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir && rm -rf /tmp/owi_bc
 ```

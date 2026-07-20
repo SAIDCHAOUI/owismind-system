@@ -4,17 +4,17 @@
 > En cas de conflit avec les guides de `docs/cadrage/` : **ce fichier + `LESSONS.md` font foi** (les guides
 > sont des points de départ ; les noms réels et les solutions qui marchent vivent ici).
 > Dernière mise à jour : **2026-07-10 - REPO RESTRUCTURÉ EN MIROIR EXACT DU PROJET DSS PROD
-> `OWIsMind_PRD_V1_2`** (clone de DEV, ids préservés) : nouvelle arborescence racine `OWIsMind_PRD_V1_2/`
+> `OWIsMind_PRD_V1_2`** (clone de DEV, ids préservés) : nouvelle arborescence racine `OWIsMind_PRD_V1_3_DEV/`
 > (`flow/`, `agents/`, `tools/`, `semantic-models/`, `tests/`) ; l'ancien `dataiku-agents/` SUPPRIMÉ ;
 > `OWISMIND_PROD_V1` + `tools/promote_agents_to_prod.py` (jumeau prod à la main) = LEGACY SUPPRIMÉS (prod =
 > clone de DEV, plus de promotion manuelle). Plugin `plugin.json` **1.2.0** ; zip prod **versionné**
-> `Plugin/ready-for-dataiku/owismind-v1_2-upload.zip`. Modèle git = **une branche par version** nommée
+> `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload.zip`. Modèle git = **une branche par version** nommée
 > comme le projet DSS prod (`OWIsMind_PRD_V1_2` = prod courante, source de vérité ; `OWIsMind_PRD_V1_3-dev`
 > = prochaine version, feedback hub WIP parqué ; suffixe `-dev` retiré à la validation ; `main` dépréciée).
 > Voir `sessions/2026-07-10.md`.
 > Avant : **2026-07-08 - Modèle sémantique REVENUS du clone : colonne `Solution` RE-AJOUTÉE
 > + règle de priorité d'offre restaurée, et les 2 modèles (revenus + tickets) REPOINTÉS vers le dataset du
-> clone** (L146 ; scripts `OWIsMind_PRD_V1_2/genai/semantic-models/scripts/add_solution_and_repoint_prod_clone.py`
+> clone** (L146 ; scripts `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/scripts/add_solution_and_repoint_prod_clone.py`
 > + `repoint_tickets_prod_clone.py`). Revenus VALIDÉ DSS par l'user (`datasetRef =
 > OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) ; tickets à lancer.
 > Clé du clone **CONFIRMÉE = `OWISMIND_PRD_V1_2`** (ids DEV conservés, modèle revenus `AHUh9hb`).
@@ -41,10 +41,10 @@
 > contexte écran -> agent). Détail : `sessions/2026-07-06.md` + `CONTEXT.md`.
 > Antérieur : **2026-06-26 - NETTOYAGE REPO** (L108) : grand ménage (0 code touché). Supprimés :
 > junk (16 `.DS_Store` + 31 `__pycache__`) + 56 fichiers suivis docs/scratch/maquettes (`docs/scaling/.workdir`
-> + `project-documentation/.workdir`, `style-reference/`, `benchmark_webapp/mockup/`, plan orphelin
+> + `docs/project-documentation/.workdir`, `style-reference/`, `benchmark_webapp/mockup/`, plan orphelin
 > `docs/superpowers/plans/`, `docs/screenshots/`, `docs/scaling/PLAN_*` -> dossiers `docs/scaling/` et
-> `docs/superpowers/plans/` retirés). **Doc jamais supprimée** : `project-documentation/` + `docs/` gardés ;
-> `project-documentation/` exclue du graphe (`.graphifyignore`) + note `CLAUDE.md` = hors contexte auto des
+> `docs/superpowers/plans/` retirés). **Doc jamais supprimée** : `docs/project-documentation/` + `docs/` gardés ;
+> `docs/project-documentation/` exclue du graphe (`.graphifyignore`) + note `CLAUDE.md` = hors contexte auto des
 > agents, lisible à la demande (périmée, à MAJ future). 1132 tests verts. `docs/agentic-research/` gardée.
 > Antérieur : **2026-06-14 - SKILL AGENTIQUE** : skill projet `.claude/skills/agentique-python-dataiku/`
 > (`SKILL.md` + **15 références**, ~70k mots) créé/réconcilié (corpus recherche multi-agents + source ChatGPT) /
@@ -155,22 +155,22 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 
 | Élément | Valeur réelle | Source |
 |---|---|---|
-| Plugin id | `owismind` | `Plugin/owismind/plugin.json` |
-| WebApp component | `webapp-owismind-ai-agents` | `Plugin/owismind/webapps/` |
-| Package python-lib | `owismind` | `Plugin/owismind/python-lib/owismind/` |
+| Plugin id | `owismind` | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json` |
+| WebApp component | `webapp-owismind-ai-agents` | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/` |
+| Package python-lib | `owismind` | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/` |
 | Dossier resource (assets buildés) | `owismind-app` | `vite.config.js`, `body.html` |
 | Vite `base` | `/plugins/owismind/resource/owismind-app/` | `vite.config.js` |
 | Vite `outDir` | `../resource/owismind-app` (+ `emptyOutDir: true`) | `vite.config.js` |
-| Racine plugin (sur disque) | `Plugin/owismind/` (P majuscule) | repo |
-| Frontend source | `Plugin/owismind/frontend/` | repo |
-| Staging packaging | `Plugin/ready-for-dataiku/owismind-v1_2-upload/` + zip **versionné** `owismind-v1_2-upload.zip` (nom dérivé de `plugin.json` 1.2.0, `.` -> `_`, major_minor) | repo |
-| Plugin DEV (coexistant, L094 ✅ DSS) | id `owismind_dev`, zip `Plugin/ready-for-dataiku/owismind_dev-upload.zip` (label "OWIsMind (DEV)", webapp "OWIsMind - AI Agents (DEV)") - généré par `tools/build_dev_plugin.py` / skill `/package-plugin-dev` | repo |
-| Plugin DEV v2 (3e coexistant, 2026-07-06) | id `owismind_dev_v2`, zip `owismind_dev_v2-upload.zip` (label "OWIsMind (DEV v2)", webapp "... (DEV v2)") - `tools/build_dev_plugin.py --v2` ; même pipeline, identité/staging/zip dédiés ; créé pour livrer les data tools sans toucher le dev stable pré-démo | repo |
-| Source de build DEV | UNE source `Plugin/owismind/` ; base Vite via env `OWI_PLUGIN_ID` (défaut `owismind`) ; package python renommé `owismind`->`owismind_dev` au packaging (L094) ; tables = create-if-not-exist, isolation = `table_prefix` optionnel au déploiement | repo |
+| Racine plugin (sur disque) | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` (P majuscule) | repo |
+| Frontend source | `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/` | repo |
+| Staging packaging | `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/` + zip **versionné** `owismind-v1_2-upload.zip` (nom dérivé de `plugin.json` 1.2.0, `.` -> `_`, major_minor) | repo |
+| Plugin DEV (coexistant, L094 ✅ DSS) | id `owismind_dev`, zip `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind_dev-upload.zip` (label "OWIsMind (DEV)", webapp "OWIsMind - AI Agents (DEV)") - généré par `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` / skill `/package-plugin-dev` | repo |
+| Plugin DEV v2 (3e coexistant, 2026-07-06) | id `owismind_dev_v2`, zip `owismind_dev_v2-upload.zip` (label "OWIsMind (DEV v2)", webapp "... (DEV v2)") - `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --v2` ; même pipeline, identité/staging/zip dédiés ; créé pour livrer les data tools sans toucher le dev stable pré-démo | repo |
+| Source de build DEV | UNE source `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` ; base Vite via env `OWI_PLUGIN_ID` (défaut `owismind`) ; package python renommé `owismind`->`owismind_dev` au packaging (L094) ; tables = create-if-not-exist, isolation = `table_prefix` optionnel au déploiement | repo |
 | Connexion SQL | `SQL_owi` (PostgreSQL, schéma `public`) | guide SQL |
 | Project key DSS | **PROD `OWISMIND_PRD_V1_2`** (clone de DEV, table physique `OWISMIND_PRD_V1_2_drive_revenues`) et **DEV `OWISMIND_DEV`** (résolus au runtime via `dataiku.default_project_key()`) ; variante test `OWISMIND_LAB`. LEGACY (supprimé 2026-07-10) : ancien projet PROD parallèle `OWISMIND_PROD_V1` (table `OWISMIND_PROD_V1_drive_revenues`, migration `migrate_semantic_model_to_project.py`, L090) - remplacé par le clone | guide SQL ; 2026-07-10 |
-| **Agents = MIROIR DU PROJET DSS PROD (2026-07-10)** | Le projet DSS PROD `OWISMIND_PRD_V1_2` est un **CLONE du projet DEV `OWISMIND_DEV`** (ids DEV conservés, tickets INCLUS), miroité dans le repo sous **`OWIsMind_PRD_V1_2/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`, `tests/`). Plus de jumeau prod ni de promotion à la main. Carte des IDs = **`OWIsMind_PRD_V1_2/README.md`** + `OWIsMind_PRD_V1_2/registry.json`. Tests = `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests`. LEGACY supprimé : `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/` + `tools/promote_agents_to_prod.py` (L099) | repo ; `OWIsMind_PRD_V1_2/README.md` |
-| IDs agents/tools/modèles (DEV = clone PROD, mêmes ids) | orchestrateur `038G7mlF` · revenue `agent:bHrWLyOL` · tickets `agent:NcE9LD2i` · attribute_lookup `UUoynaL` · revenue_semantic_query `v4oqA6R` · tickets_semantic_query `nEirlso` · modèle revenus `AHUh9hb` (`Drive_Revenues_Semantic_Model`) · modèle tickets `dM4jA4G` (`TroubleTickets_Semantic_Model`) · agent legacy `agent:rNTZ781a` (SalesDrive_AI_Agent, hors chaîne runtime) | `OWIsMind_PRD_V1_2/registry.json` |
+| **Agents = MIROIR DU PROJET DSS PROD (2026-07-10)** | Le projet DSS PROD `OWISMIND_PRD_V1_2` est un **CLONE du projet DEV `OWISMIND_DEV`** (ids DEV conservés, tickets INCLUS), miroité dans le repo sous **`OWIsMind_PRD_V1_3_DEV/`** (`flow/`, `agents/`, `tools/`, `semantic-models/`, `tests/`). Plus de jumeau prod ni de promotion à la main. Carte des IDs = **`OWIsMind_PRD_V1_3_DEV/README.md`** + `OWIsMind_PRD_V1_3_DEV/registry.json`. Tests = `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests`. LEGACY supprimé : `dataiku-agents/OWISMIND/{OWISMIND_DEV, OWISMIND_PROD_V1}/` + `tools/promote_agents_to_prod.py` (L099) | repo ; `OWIsMind_PRD_V1_3_DEV/README.md` |
+| IDs agents/tools/modèles (DEV = clone PROD, mêmes ids) | orchestrateur `038G7mlF` · revenue `agent:bHrWLyOL` · tickets `agent:NcE9LD2i` · attribute_lookup `UUoynaL` · revenue_semantic_query `v4oqA6R` · tickets_semantic_query `nEirlso` · modèle revenus `AHUh9hb` (`Drive_Revenues_Semantic_Model`) · modèle tickets `dM4jA4G` (`TroubleTickets_Semantic_Model`) · agent legacy `agent:rNTZ781a` (SalesDrive_AI_Agent, hors chaîne runtime) | `OWIsMind_PRD_V1_3_DEV/registry.json` |
 | ~~IDs agents/tools/modèles **PROD_V1** (ancien jumeau prod)~~ LEGACY SUPPRIMÉ 2026-07-10 | orchestrateur `Xrv7GvfG` · revenue `agent:uO5hEzAs` · attribute_lookup `szOZCoU` · revenue_semantic_query `sgk5pfln` · modèle revenus `a7K9jYk` (`Drive_Revenues_Model`) - mécanisme de promotion manuelle abandonné (prod = clone de DEV) | historique (L139) |
 | Agent « revenue » v1 (visual) | `agent:rNTZ781a` (Structured Visual Agent - revenus) - conservé en filet, **désactivé du registre depuis v2.4 (v2 actif)** | guide SQL / code_samples |
 | Agent « revenue » v2 (Code Agent, L047/L048 ✅ DSS 2026-06-11) | `agent:MODpGFcC` ← `salesdrive/salesdrive_agent.py` (repo = source de vérité, + README + 55 tests stub) ; tools : resolver `aNxeOc4` (`Drive_Revenues_resolve_filter_value`), semantic `v4oqA6R` (`revenue_semantic_query`) ; catalogue `DRIVE_Revenues_Value_Catalog` | repo / `sessions/2026-06-11.md` Run 3 |
@@ -192,10 +192,10 @@ stop-génération, **Evidence Studio** = preuves SQL en table interactive). **St
 
 ---
 
-## 4. Structure réelle du plugin (`Plugin/owismind/`) - (snapshot, ré-établi 2026-07-03)
+## 4. Structure réelle du plugin (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/`) - (snapshot, ré-établi 2026-07-03)
 
 ```
-Plugin/owismind/
+OWIsMind_PRD_V1_3_DEV/plugin/owismind/
 ├── plugin.json                 # id="owismind" (racine du zip - PAS de _/plugin.json)
 ├── frontend/                   # source Vue 3 + Vite (JAMAIS dans le zip ; build -> resource/)
 │   └── src/                    # dirs : assets components composables features i18n
@@ -220,8 +220,8 @@ Plugin/owismind/
 
 Staging d'upload (généré par `/package-plugin`) :
 ```
-Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2-upload.zip)
-├── plugin.json                 # à la RACINE du zip (copie de Plugin/owismind/plugin.json)
+OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2-upload.zip)
+├── plugin.json                 # à la RACINE du zip (copie de OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json)
 ├── python-lib/  resource/  webapps/   # runtime uniquement - pas de frontend/ ni node_modules/
 ```
 
@@ -392,16 +392,16 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
 
 - **But** : industrialiser l'ajout d'un specialiste par dataset (table -> zone + recettes ->
   modele semantique assiste LLM -> tool -> Code Agent -> capability) + sortir les prompts du code.
-- **Pieces** : package `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/` (13 modules,
+- **Pieces** : package `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/` (13 modules,
   stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, zero delete) ; notebooks 00-06 ; **Config &
   Prompt Hub** `/owismind_hub/` (project library ; seeds repo `project-library/owismind_hub/`, equivalence byte-a-byte testee ;
   les 3 agents chargent PERSONA/CAPABILITIES/regles additives au demarrage, fallback silencieux) ;
-  console webapp Standard `webapps/agent-factory-console/` (charte Orange PASS) ; docs
+  console webapp Standard `Standard-webapps/agent-factory-console/` (charte Orange PASS) ; docs
   `docs/` (AGENT_FACTORY.md, DEPLOY_V1_3_DEV.md, CAPABILITY_MATRIX.md).
 - **Verite API** (L149) : `create_agent(name,"PYTHON_AGENT")`, `create_semantic_model`,
   `new_agent_tool(type)`, `create_llm_interaction_logging_dataset` = presents dans le client officiel
   (source GitHub grep) ; schemas `pythonAgentSettings` (code/env) et params du tool semantic query =
-  NON documentes -> gates, a confirmer par `notebooks/00_probe_capabilities.py` sur l'instance.
+  NON documentes -> gates, a confirmer par `Notebooks/00_probe_capabilities.py` sur l'instance.
 - **Statut** : 379 tests verts, revue adversariale corrigee (L150), 8 commits pousses. RIEN execute
   contre DSS. Deploiement = `docs/DEPLOY_V1_3_DEV.md` (phases A-G).
 
@@ -458,7 +458,7 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
   EXPLAIN + réparations, success véridique dans les spans `semantic-model-query`) →
   `agents/orchestrator_agent.py` v3.0 (= v2.4 + fan-out parallèle + entrée registre
   `revenue_expert`, placeholder id). Guide d'implémentation (historique, déplacé depuis vers
-  `OWIsMind_PRD_V1_2/README.md`). Contrats gelés webapp/Evidence respectés. Détail → L051 + `sessions/2026-06-12.md`.
+  `OWIsMind_PRD_V1_3_DEV/README.md`). Contrats gelés webapp/Evidence respectés. Détail → L051 + `sessions/2026-06-12.md`.
 - **Refonte LangGraph + artefacts webapp (2026-06-15, ✅ VALIDÉ DSS - L055-L057)** : orchestrateur et
   sous-agent portés en **LangGraph** (Code Agents, env **3.11**) - fichiers NOUVEAUX
   `agents/orchestrator_langgraph.py` (boucle agentique sous-agents-comme-outils + tools
@@ -474,13 +474,13 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
   = copie du moteur revenus, **corps byte-identique** (contrats gelés), seuls l'en-tête CONFIG + les textes
   hiérarchie-d'offre (neutralisés) diffèrent. Orchestrateur : **1 entrée `CAPABILITIES["tickets_expert"]`**
   (domaine `tickets`, déjà dans `BUSINESS_DOMAINS`) + champ `lookup_search_columns` (allowlist de recherche par
-  domaine, passée serveur). `genai/agent-tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
+  domaine, passée serveur). `GenAI/agents-tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
   **Modèle sémantique DÉDIÉ par domaine** (jamais une source ajoutée au modèle revenus) ; scripts
-  `genai/semantic-models/scripts/update_tickets_semantic_model.py` + `dump_semantic_model.py` ; tool DSS attendu
+  `GenAI/semantic-models/scripts/update_tickets_semantic_model.py` + `dump_semantic_model.py` ; tool DSS attendu
   `tickets_semantic_query` (Agent OFF, Sonnet). **3 recipes rendues génériques (auto-IO) + NA-safe** (fix
   `infer_with_pandas=False` -> fallback `True` sur int nullable) ; `build_value_catalog_recipe` dataset-adaptatif
   (revenus curé inchangé ; non-revenus = catalogue générique). **Factory repo (source de vérité scaling ;
-  désormais sous `OWIsMind_PRD_V1_2/`)** : `registry.json` (spec par domaine, dev-owned, jamais runtime) +
+  désormais sous `OWIsMind_PRD_V1_3_DEV/`)** : `registry.json` (spec par domaine, dev-owned, jamais runtime) +
   `flow/DATASETS.md` (inventaire colonnes) + `docs/PLAYBOOK_ADD_AGENT.md` (runbook). Test anti-dérive
   **généralisé** à tous les caps. **À finaliser
   DSS** (PLAYBOOK) : override métrique COUNT, modèle sémantique, tool, Code Agent + `agent_id` réel, re-coll
@@ -492,7 +492,7 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
 - **~~Promotion DEV -> PROD_V1 scriptée (2026-07-06 Run 5, L139)~~ LEGACY (mécanisme supprimé 2026-07-10)** :
   l'ancien `tools/promote_agents_to_prod.py` (idempotent : copie DEV + substitution des ids PROD `Xrv7GvfG`/
   `agent:uO5hEzAs` + retrait chirurgical du bloc `tickets_expert`) régénérait un jumeau prod à la main.
-  ABANDONNÉ : prod = **CLONE de DEV** (ids DEV conservés, tickets inclus), miroité sous `OWIsMind_PRD_V1_2/`.
+  ABANDONNÉ : prod = **CLONE de DEV** (ids DEV conservés, tickets inclus), miroité sous `OWIsMind_PRD_V1_3_DEV/`.
   Détail historique → `sessions/2026-07-06.md` (Run 5).
 
 ---
@@ -502,7 +502,7 @@ Plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip versionné owismind-v1_2
 > 📁 **Emplacement repo (réorg 2026-06-26)** : tout le benchmark vit désormais sous **`OWIsMind_LAB/`** (miroir
 > du projet DSS séparé). `benchmark/` -> `OWIsMind_LAB/project-library/python/benchmark/` ; `benchmark_webapp/`
 > -> `OWIsMind_LAB/project-library/python/benchmark_webapp/` (lib `views.py`+`dss.py`) ; les panes web ->
-> `OWIsMind_LAB/webapps/{benchmark_launcher, benchmark_results}/` ; variable -> `OWIsMind_LAB/local-variables.example.json`.
+> `OWIsMind_LAB/Standard-webapps/{benchmark_launcher, benchmark_results}/` ; variable -> `OWIsMind_LAB/local-variables.example.json`.
 > **Packages inchangés** (`from benchmark ...` / `from benchmark_webapp ...`), zéro recoll DSS. Carte : `OWIsMind_LAB/README.md`.
 > Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`. Voir **L109**.
 > (Les chemins `benchmark/...` / `benchmark_webapp/...` cités plus bas dans 8c/8d = anciens, lire sous `OWIsMind_LAB/...`.)
@@ -709,11 +709,11 @@ Historique par session : memory/sessions/*.md.
 | Benchmark - consultation plugin (+ détail attempt) | ⏳ Codé ; fix nom de table validé DSS ; page refondue 2026-07-03 (modes conditionnels, détail par onglets) | 2026-06-26 (fix L110) | L109-L111/L117/L129 |
 | Impersonation admin (read-only, « act as user ») | ✅ Validé DSS | 2026-06-19 (Run 3) | L095/L096 |
 | Auth gate (écran « non identifié » sur `/me` 401) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094-L096 |
-| Plugin DEV coexistant (`owismind_dev` / `owismind_dev_v2`) | 🗑 Zips + staging SUPPRIMÉS du disque (2026-07-06 Run 5, passage prod) ; outillage `tools/build_dev_plugin.py` + skill conservés, re-créable à la demande | 2026-06-19 (Run 3, historique) | L094 (`sessions/2026-07-06.md` Run 5) |
+| Plugin DEV coexistant (`owismind_dev` / `owismind_dev_v2`) | 🗑 Zips + staging SUPPRIMÉS du disque (2026-07-06 Run 5, passage prod) ; outillage `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` + skill conservés, re-créable à la demande | 2026-06-19 (Run 3, historique) | L094 (`sessions/2026-07-06.md` Run 5) |
 | **Plugin PROD v1.2.0** (zip versionné `owismind-v1_2-upload.zip`) | ⏳ Packagé (repo), À UPLOADER + déployer dans le projet DSS prod `OWISMIND_PRD_V1_2` (runbook `docs/DEPLOY_PROD_V1_1.md`). Historique : build 1.1.0 = 95 entrées, `index-DDxpe_gw.js` | - | `sessions/2026-07-06.md` Run 5 |
 | Agents DEV - orchestrateur + expert revenus | ✅ Validés DSS ; audit L118 en attente de re-validation | 2026-07-02 (Run 2) | L055-L058/L118-L120 |
 | Agents DEV - expert tickets d'incidents | 🟡 Testé DSS (« marche plutôt bien »), à finaliser | 2026-06-19 (Run 4) | L097/L098 |
-| Agents PROD (`OWISMIND_PRD_V1_2`, clone de DEV) - revenus + tickets INCLUS | 🟡 Prod = CLONE de DEV (ids DEV conservés), miroité sous `OWIsMind_PRD_V1_2/genai/agents/` ; plus de promotion à la main. LEGACY : ancien jumeau `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimés 2026-07-10 | 2026-07-08 (repoint modèles, revenus validé) | L090/L099/L139/**L146** |
+| Agents PROD (`OWISMIND_PRD_V1_2`, clone de DEV) - revenus + tickets INCLUS | 🟡 Prod = CLONE de DEV (ids DEV conservés), miroité sous `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/` ; plus de promotion à la main. LEGACY : ancien jumeau `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimés 2026-07-10 | 2026-07-08 (repoint modèles, revenus validé) | L090/L099/L139/**L146** |
 | Modèle sémantique REVENUS du CLONE (`OWISMIND_PRD_V1_2`, id `AHUh9hb`) - `Solution` re-ajoutée + règle priorité restaurée + repointé | ✅ Validé DSS par l'user (`datasetRef = OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) | 2026-07-08 | **L146** (`add_solution_and_repoint_prod_clone.py`) |
 | Modèle sémantique TICKETS du CLONE - repoint pur vers le dataset du clone | ⏳ Script prêt + simulé (4/4), non lancé DSS | - | **L146** (`repoint_tickets_prod_clone.py`) |
 | Suivi tokens/coûts (ligne usage sous chaque réponse) | ✅ Validé DSS (ligne usage affichée, confirmée Run 6) | 2026-07-02 | L049/L126 |
@@ -727,7 +727,7 @@ Voir CONTEXT.md « 🔜 Prochaines étapes » (tenu à jour à chaque session) ;
 
 > On **habille** le socle backend validé (réutilisé) avec l'UI de la maquette (supprimée du repo après
 > conversion - §9), sur une **archi modulaire à registres**
-> (ajouter une brique = enregistrer un module isolé). Travail dans `Plugin/owismind/frontend/`. **✅ Phases 0-5 validées EN
+> (ajouter une brique = enregistrer un module isolé). Travail dans `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/`. **✅ Phases 0-5 validées EN
 > DSS** (confirmation user « ça fonctionne à merveille » : chat live, identité avec prénom, agents, history, pages + Admin) ;
 > **Evidence Studio différé** (décision user). Audit sécurité pré-DSS passé GO + 4 correctifs backend (→ L026).
 >

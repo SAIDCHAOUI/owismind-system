@@ -98,7 +98,7 @@ reelle).
 ## 3. Module de capture (cle de voute) : `benchmark/agent_capture.py`
 
 Reprend la logique deja eprouvee de la webapp (references :
-`Plugin/owismind/python-lib/owismind/agents/streaming.py` fonctions `_find_generated_sql`,
+`OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/streaming.py` fonctions `_find_generated_sql`,
 `_find_usage_metadata`, `_sum_usage_metadata` ; `evidence/capture.py` `extract_result`,
 `cap_sql_list`). Fonctions :
 

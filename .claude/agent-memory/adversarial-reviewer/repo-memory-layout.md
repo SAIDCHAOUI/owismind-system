@@ -30,4 +30,4 @@ citations). em-dash operational gotcha (BSD grep) survives in LESSONS L084/L093 
 `["SET LOCAL statement_timeout TO '30000'", "SET LOCAL transaction_read_only TO on"]`, replacing inline literals
 at 6 call sites (evidence/service, benchmark_view/lab_io, storage/{settings,suggestions,budget,artifacts}).
 Verify byte-identity via the diff before trusting "behavior unchanged". Backend suite = 790 tests
-(`python3 -m unittest discover -s tests` from `Plugin/owismind/`).
+(`python3 -m unittest discover -s tests` from `OWIsMind_PRD_V1_3_DEV/plugin/owismind/`).

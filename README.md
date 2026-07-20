@@ -12,31 +12,33 @@ versioned in this repo as the source of truth and pasted into DSS. Agent evaluat
 
 ## Repository layout
 
+One folder per DSS project, each with the same internal structure (mirroring the DSS UI):
+`flow/<zone>_zone/python-recipes/`, `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`,
+`project-library/`, `Standard-webapps/`, `docs/`, `tests/`. The plugin lives INSIDE the main
+project folder and follows its version.
+
 | Path | Purpose |
 | --- | --- |
-| `Plugin/` | The DSS plugin: Vue 3 frontend (`owismind/frontend/`), Flask backend (`owismind/python-lib/`), webapps, and the packaged upload zip. |
-| `OWIsMind_PRD_V1_2/` | Exact repo mirror of the DSS production project `OWISMIND_PRD_V1_2` (a clone of DEV, ids preserved): `flow/`, LangGraph Code Agents (`agents/`), `tools/`, `semantic-models/`, and `tests/`. Map: `OWIsMind_PRD_V1_2/README.md`. |
-| `OWIsMind_LAB/` | The separate benchmark/evaluation DSS project (repo mirror). Map: `OWIsMind_LAB/README.md`. |
-| `tools/` | Repo-level Python helper scripts (DEV plugin build). See `tools/README.md`. |
-| `docs/` | Engineering reference (architecture, API, data model, security, build/deploy) and framing guides in `docs/cadrage/`. See `docs/README.md`. |
+| `OWIsMind_PRD_V1_3_DEV/` | Repo mirror of the DSS project `OWIsMind_PRD_V1_3_DEV` (v1.3 dev clone of prod, ids preserved). Map: `OWIsMind_PRD_V1_3_DEV/README.md`. |
+| `OWIsMind_PRD_V1_3_DEV/plugin/` | The DSS plugin: source (`owismind/`), upload zips (`ready-for-dataiku/`, git-ignored), local build tooling (`tools/`). See `plugin/read.md`. |
+| `OWIsMind_LAB/` | The separate benchmark/evaluation DSS project (repo mirror, same structure). Map: `OWIsMind_LAB/README.md`. |
+| `docs/` | Engineering reference (architecture, API, data model, security, build/deploy), framing guides (`docs/cadrage/`), full documentation site (`docs/project-documentation/`, read on demand). See `docs/README.md`. |
 | `memory/` | Persistent project memory: current context, lessons, durable state, session logs. |
-| `project-documentation/` | Full engineering documentation site (read on demand; may lag behind `memory/` + `docs/`). |
-| `owismind-relaunch-email.html` | Standalone HTML communication asset (beta relaunch announcement). |
 
 ## Running the tests
 
 ```sh
 # Backend (Flask, python-lib)
-python3 -m unittest discover -s Plugin/owismind/tests
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests
 
 # Agents (LangGraph orchestrator + experts)
-python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests
 
 # Benchmark LAB project
 python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python
 
 # Frontend (pure Node tests, no browser)
-cd Plugin/owismind/frontend && node --test test/*.test.js
+cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && node --test test/*.test.js
 ```
 
 ## AI-assisted workflow

@@ -316,12 +316,12 @@ que via superviseur amorti ; refactor des plafonds de contexte legacy (SUBAGENT_
 ## 13. Fichiers (compacite)
 
 NOUVEAUX (4 code + 2 seeds) :
-- `Plugin/owismind/python-lib/owismind/agents/durable_runner.py` (superviseur, machine d'etat,
+- `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/durable_runner.py` (superviseur, machine d'etat,
   semaphore Mesh, deadlines, backoff, buffer events, finalisation idempotente ; zero langchain)
-- `Plugin/owismind/python-lib/owismind/storage/run_state.py` (CRUD owner-scoped, lease atomique,
+- `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/storage/run_state.py` (CRUD owner-scoped, lease atomique,
   fencing, events cursorises, stop durable, finalize)
-- `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/catalog.py`
-- `Plugin/owismind/frontend/src/components/chat/RunPlan.vue`
+- `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/catalog.py`
+- `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/components/chat/RunPlan.vue`
 - Seeds hub : `owismind_hub/run_settings.json` + `owismind_hub/prompts/orchestrator_workflow.md`
   (sections PLANNER/REPLANNER/REVIEWER/SYNTHESIZER, fallbacks embarques).
 EDITS : stream_manager.py (routage durable + deadlines legacy par mode), streaming.py

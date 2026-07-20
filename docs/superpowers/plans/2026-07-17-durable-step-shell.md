@@ -37,11 +37,11 @@ PostgreSQL via SQLExecutor2 (parametrage dataiku.sql Constant/toSQL), Vue 3 + Vi
 
 **Commandes de verification (baseline du 2026-07-17 : TOUT VERT)**
 ```bash
-python3 -m unittest discover -s Plugin/owismind/tests            # 830 tests OK (baseline)
-python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests          # 516 tests OK, 2 skips
-cd Plugin/owismind/frontend && npm test                          # node --test, OK
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests            # 830 tests OK (baseline)
+python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests          # 516 tests OK, 2 skips
+cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm test                          # node --test, OK
 # compile-check Vite SANS toucher resource/ (T8/T9 seulement) :
-cd Plugin/owismind/frontend && npm run build -- --outDir /private/tmp/owismind-vite-check --emptyOutDir
+cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm run build -- --outDir /private/tmp/owismind-vite-check --emptyOutDir
 ```
 
 ---
@@ -51,12 +51,12 @@ cd Plugin/owismind/frontend && npm run build -- --outDir /private/tmp/owismind-v
 Spec : sections 1, 4.3. Corrige LE bug user immediatement, livrable seul.
 
 **Files:**
-- Modify: `Plugin/owismind/python-lib/owismind/agents/stream_manager.py` (constantes :36-81,
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/stream_manager.py` (constantes :36-81,
   `_stop_reason` :121-140, `start_run` :173-224, `_worker` :265-538)
-- Modify: `Plugin/owismind/python-lib/owismind/api/routes.py` (`chat_start` :357, passe mode)
-- Modify: `Plugin/owismind/frontend/src/components/chat/MessageAgent.vue` (:385, :422)
-- Modify: `Plugin/owismind/frontend/src/i18n/extra.js`
-- Test: `Plugin/owismind/tests/test_stream_manager_deadlines.py` (NOUVEAU)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/api/routes.py` (`chat_start` :357, passe mode)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/components/chat/MessageAgent.vue` (:385, :422)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/i18n/extra.js`
+- Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_stream_manager_deadlines.py` (NOUVEAU)
 
 **Interfaces (produites, gelees pour T3):**
 ```python
@@ -95,10 +95,10 @@ batch), `storage/migrations.py` (idiome `_vN`, `_DDL_BY_LOGICAL`, `_INDEXES_BY_L
 `ensure_*`).
 
 **Files:**
-- Modify: `Plugin/owismind/python-lib/owismind/storage/migrations.py` (+3 DDL du spec section 10 :
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/storage/migrations.py` (+3 DDL du spec section 10 :
   `webapp_agent_runs_v1`, `webapp_agent_run_steps_v1`, `webapp_agent_run_events_v1` + indexes)
-- Create: `Plugin/owismind/python-lib/owismind/storage/run_state.py`
-- Test: `Plugin/owismind/tests/test_run_state.py` (NOUVEAU)
+- Create: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/storage/run_state.py`
+- Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_run_state.py` (NOUVEAU)
 
 **Interfaces (produites, gelees pour T3/T5):**
 ```python
@@ -144,12 +144,12 @@ def purge_finished_runs(older_than_days=14, max_runs=1000)  # borne, jamais au c
 Spec : sections 4, 5.1, 9 (routes). Depend de T1+T2.
 
 **Files:**
-- Create: `Plugin/owismind/python-lib/owismind/agents/durable_runner.py`
-- Modify: `Plugin/owismind/python-lib/owismind/agents/stream_manager.py` (routage durable)
-- Modify: `Plugin/owismind/python-lib/owismind/agents/context.py` (pre-gate + token + PROGRESS)
-- Modify: `Plugin/owismind/python-lib/owismind/api/routes.py` (gate, /chat/active, /chat/activity,
+- Create: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/durable_runner.py`
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/stream_manager.py` (routage durable)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/context.py` (pre-gate + token + PROGRESS)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/api/routes.py` (gate, /chat/active, /chat/activity,
   poll routeur, stop durable, start_supervisor dans register_routes)
-- Test: `Plugin/owismind/tests/test_durable_runner.py`, `Plugin/owismind/tests/test_workflow_gate.py` (NOUVEAUX)
+- Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_durable_runner.py`, `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_workflow_gate.py` (NOUVEAUX)
 
 **Interfaces (produites, gelees pour T4/T5/T8):**
 ```python
@@ -201,13 +201,13 @@ Routes nouvelles : `GET /chat/active?session_id=`, `GET /chat/activity?exchange_
 Spec : sections 5.2, 5.3, 8. Depend de T3 (contrats token/events). Fichiers DISJOINTS de T3.
 
 **Files:**
-- Modify: `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py`
-- Create: `OWIsMind_PRD_V1_2/project-library/owismind_hub/prompts/orchestrator_workflow.md`
+- Modify: `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py`
+- Create: `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/prompts/orchestrator_workflow.md`
   (sections PLANNER / REPLANNER / REVIEWER / SYNTHESIZER ; fallbacks embarques dans l'agent,
   pattern `_load_hub_capabilities` :1374-1469)
-- Create: `OWIsMind_PRD_V1_2/project-library/owismind_hub/run_settings.json` (deadlines, caps,
+- Create: `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/run_settings.json` (deadlines, caps,
   flags ; valeurs = spec 4.3/5.2 ; loader avec validation stricte + repli embarque)
-- Test: `OWIsMind_PRD_V1_2/tests/test_orchestrator_workflow.py` (NOUVEAU)
+- Test: `OWIsMind_PRD_V1_3_DEV/tests/test_orchestrator_workflow.py` (NOUVEAU)
 
 **Interfaces (produites, gelees pour T5/T7):**
 ```python
@@ -233,7 +233,7 @@ def parse_workflow_control(text)  # -> None | {"command","run_id","step_id","att
   defauts embarques, pattern existant).
 - [ ] **S2 implementer** + seeds hub (`regenerate_seeds.py` doit rester byte-equivalent :
   l'etendre si necessaire).
-- [ ] **S3 gates** : `python3 -m unittest discover -s OWIsMind_PRD_V1_2/tests` complet.
+- [ ] **S3 gates** : `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests` complet.
 - [ ] **S4 commit** : `feat(orchestrator): workflow command protocol (plan/execute/replan/
   review/synthesize) behind machine token, legacy path untouched`
 
@@ -244,9 +244,9 @@ def parse_workflow_control(text)  # -> None | {"command","run_id","step_id","att
 Spec : sections 8, 10 (finalize). Depend de T2+T3+T4.
 
 **Files:**
-- Modify: `Plugin/owismind/python-lib/owismind/agents/streaming.py`
-- Modify: `Plugin/owismind/python-lib/owismind/agents/durable_runner.py` (consommation)
-- Test: `Plugin/owismind/tests/test_streaming_workflow_control.py` (NOUVEAU)
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/streaming.py`
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/owismind/agents/durable_runner.py` (consommation)
+- Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_streaming_workflow_control.py` (NOUVEAU)
 
 **Interfaces:**
 ```python
@@ -274,12 +274,12 @@ Spec : section 7.1. Fichiers DISJOINTS de T2-T5. Patterns : `owismind_factory/fc
 dry-run, ZERO delete), `flow_builder.py` (ensure_* idempotents), `semantic_builder.py`.
 
 **Files:**
-- Create: `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/catalog.py`
-- Modify: `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/pipeline.py` (step `catalog`
+- Create: `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/catalog.py`
+- Modify: `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/pipeline.py` (step `catalog`
   apres `capability`, avant `smoke`)
-- Modify: `OWIsMind_PRD_V1_2/project-library/python/owismind_factory/registry.py` (champs
+- Modify: `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/registry.py` (champs
   OPTIONNELS `catalog_generation`, `catalog_dataset`, `connection_key` ; retro-compat v1.2 testee)
-- Test: `OWIsMind_PRD_V1_2/tests/test_factory_catalog.py` (NOUVEAU)
+- Test: `OWIsMind_PRD_V1_3_DEV/tests/test_factory_catalog.py` (NOUVEAU)
 
 **Interfaces (spec 7.1, gelees pour T7):**
 ```python
@@ -296,7 +296,7 @@ def searchable_catalog_rows(generation)                          # -> rows avec 
   generations, zero delete) ; physical_table/connection presents en base mais ABSENTS de toute
   sortie destinee au prompt ; retro-compat registry (capability sans champs catalog = valide) ;
   generation_id deterministe ; aucune valeur metier dans les rows.
-- [ ] **S2 implementer.** **S3 gates** : suite OWIsMind_PRD_V1_2/tests complete.
+- [ ] **S2 implementer.** **S3 gates** : suite OWIsMind_PRD_V1_3_DEV/tests complete.
 - [ ] **S4 review Claude du diff Codex** (regle model-routing #2) puis commit :
   `feat(factory): agent catalog dataset (append-only generations, server-only physical refs)`
 
@@ -307,8 +307,8 @@ def searchable_catalog_rows(generation)                          # -> rows avec 
 Spec : section 7.2. Depend de T4 (chemin workflow) et T6 (forme du catalogue).
 
 **Files:**
-- Modify: `OWIsMind_PRD_V1_2/genai/agents/OWIsMind_orchestrator.py` (execute_correlation_step)
-- Test: `OWIsMind_PRD_V1_2/tests/test_orchestrator_correlate.py` (NOUVEAU)
+- Modify: `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` (execute_correlation_step)
+- Test: `OWIsMind_PRD_V1_3_DEV/tests/test_orchestrator_correlate.py` (NOUVEAU)
 
 **Contrats:**
 ```python
@@ -340,13 +340,13 @@ Spec : section 7.2. Depend de T4 (chemin workflow) et T6 (forme du catalogue).
 Spec : section 9. Depend de T3 (routes) + T5 (shapes d'events).
 
 **Files:**
-- Create: `Plugin/owismind/frontend/src/components/chat/RunPlan.vue`
-- Modify: `Plugin/owismind/frontend/src/composables/timelineModel.js` (8 nouveaux events geles),
+- Create: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/components/chat/RunPlan.vue`
+- Modify: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/src/composables/timelineModel.js` (8 nouveaux events geles),
   `useChatStream.js` (`resumeChatStream({runId, target, cursor})`), `services/backend.js`
   (`fetchActiveRun(sessionId)`, `fetchRunActivity(exchangeId)`), `stores/chat.js` (rattachement
   du run actif au chargement), `MessageAgent.vue` (insertion RunPlan + "Afficher l'activite"),
   `i18n/extra.js` (libelles + erreurs spec 9)
-- Test: `Plugin/owismind/frontend/test/runplan.test.js`, extension des tests reducer existants
+- Test: `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/test/runplan.test.js`, extension des tests reducer existants
 
 **Contrats:**
 - Events consommes : `plan` (payload {goal, steps[{id,title,status}]}) emis par le runner a
@@ -374,7 +374,7 @@ Spec : section 9. Depend de T3 (routes) + T5 (shapes d'events).
   invariants spec section 11 UN PAR UN (SELECT-only, whitelists 3 niveaux, caps, fencing,
   aucune fuite physical_table/agent_id vers prompt/events/routes, degradation quota/rate-limit,
   logs sans PII). Chaque finding verifie puis corrige, re-run des suites.
-- [ ] Mise a jour `OWIsMind_PRD_V1_2/docs/DEPLOY_V1_3_DEV.md` : ajouter la phase de validation
+- [ ] Mise a jour `OWIsMind_PRD_V1_3_DEV/docs/DEPLOY_V1_3_DEV.md` : ajouter la phase de validation
   DSS du Durable Step Shell (16 scenarios + gates du spec section 14) SANS toucher aux phases
   existantes.
 - [ ] Commit final + /log-session (memoire, graphe, session log). JAMAIS de push.

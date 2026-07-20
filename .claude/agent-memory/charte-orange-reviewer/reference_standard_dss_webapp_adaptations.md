@@ -6,8 +6,8 @@ metadata:
 ---
 
 The repo has "Standard" DSS webapps (plain body.html + script.js + style.css, no Vue build)
-under `OWIsMind_LAB/webapps/benchmark_launcher/` and
-`OWIsMind_PRD_V1_2/webapps/agent-factory-console/`. They follow the Orange charter but
+under `OWIsMind_LAB/Standard-webapps/benchmark_launcher/` and
+`OWIsMind_PRD_V1_3_DEV/Standard-webapps/agent-factory-console/`. They follow the Orange charter but
 adapt it three ways that are ACCEPTED (both files reviewed clean) - do not report these as
 violations:
 

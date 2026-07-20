@@ -112,7 +112,7 @@ Backend signatures (verified):
 - `python-lib/owismind/admin_inspect.py` (new)
 - `python-lib/owismind/security/validation.py` (add `validate_target_user_id` only)
 - `python-lib/owismind/api/routes.py` (ONE register line + import)
-- `tests/test_admin_inspect.py` (new; mirror existing test style in `Plugin/owismind/tests/`,
+- `tests/test_admin_inspect.py` (new; mirror existing test style in `OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/`,
   run with `python3 -m unittest`). Cover: admin gate (non-admin -> 403), invalid target -> 400,
   happy path delegates to the storage fns with the target id (monkeypatch/stub the storage layer
   like existing tests do).
@@ -150,7 +150,7 @@ Backend signatures (verified):
 
 ## Feature 3 - DEV/PROD plugin (single source, two build targets)
 
-Keep `Plugin/owismind/` as the ONE source. PROD build/package unchanged. Add a DEV target that
+Keep `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` as the ONE source. PROD build/package unchanged. Add a DEV target that
 emits a coexisting `owismind_dev` plugin zip. Coexistence needs a distinct plugin id + distinct
 Vite base + a renamed python package (`owismind` -> `owismind_dev`) to avoid `import owismind`
 collisions across two installed plugins. Data isolation for DEV is a DEPLOY-TIME setting
@@ -168,7 +168,7 @@ renamed; APP_NAMESPACE, `/owismind-api`, blueprint name MUST stay.
   `const PLUGIN_ID = process.env.OWI_PLUGIN_ID || 'owismind'`
   `base: '/plugins/' + PLUGIN_ID + '/resource/owismind-app/'`
   (default unchanged -> prod build byte-compatible).
-- `tools/build_dev_plugin.py` (new): a deterministic, reviewed transform that stages the DEV
+- `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (new): a deterministic, reviewed transform that stages the DEV
   plugin and produces the zip. Steps:
   1. Build the frontend with `OWI_PLUGIN_ID=owismind_dev` into a SCRATCH outDir (do NOT touch
      the canonical `resource/owismind-app/`); read the produced index.html for body.html.
@@ -183,15 +183,15 @@ renamed; APP_NAMESPACE, `/owismind-api`, blueprint name MUST stay.
      Leave `APP_NAMESPACE = "owismind"`, `/owismind-api`, `Blueprint("owismind_api"` untouched.
   4. Stage `resource/` (the DEV-base build output for owismind-app + compute_available_connections.py)
      and `webapps/` (backend.py with rewritten import; body.html = DEV-base index.html; other files as-is).
-  5. Zip -> `Plugin/ready-for-dataiku/owismind_dev-upload.zip` (exclude the same dev-only files as
+  5. Zip -> `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind_dev-upload.zip` (exclude the same dev-only files as
      `/package-plugin`: frontend, node_modules, CLAUDE.md, README.md, __pycache__, *.pyc, .DS_Store).
   6. Verify invariants and print them: staged tree has 0 matches for `from owismind\b` /
      `import owismind\b` (regex `\b` does not match `owismind_dev`), `APP_NAMESPACE = "owismind"`
      present, `/owismind-api` present, `python-lib/owismind_dev/__init__.py` present, body.html
      base = `/plugins/owismind_dev/resource/owismind-app/`.
   The script must be SAFE to run in this repo (no install, no edits to the canonical source,
-  scratch dirs under /tmp or `Plugin/ready-for-dataiku/`).
-- `.claude/skills/package-plugin-dev/SKILL.md` (new): documents running `tools/build_dev_plugin.py`,
+  scratch dirs under /tmp or `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/`).
+- `.claude/skills/package-plugin-dev/SKILL.md` (new): documents running `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py`,
   the invariants, and that the upload is a separate *Uploaded* plugin (id `owismind_dev`, distinct
   from prod `owismind`); DEV data isolation = create the DEV webapp in a dedicated project or with
   `table_prefix="dev"`.
@@ -340,8 +340,8 @@ NO source selector, NO discovery.
 ## Verification (orchestrator, after agents)
 - Merge `frontend/src/i18n/extra.js` with the `authgate.*` (A) and `inspect.*` (C) keys (fr+en).
 - Frontend compile check (no install): `./node_modules/.bin/vite build --outDir /tmp/owi_bc --emptyOutDir` then `rm -rf /tmp/owi_bc`.
-- Backend tests: `python3 -m unittest discover -s Plugin/owismind/tests`.
-- Frontend pure tests: `node --test test/*.test.js` from `Plugin/owismind/frontend/`.
+- Backend tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests`.
+- Frontend pure tests: `node --test test/*.test.js` from `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/`.
 - No em dash anywhere (Python scan, not BSD grep -P; L093).
-- Then `/build-plugin` (prod) + `/package-plugin` (prod) AND run `tools/build_dev_plugin.py` (DEV zip).
+- Then `/build-plugin` (prod) + `/package-plugin` (prod) AND run `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` (DEV zip).
 - NON validated DSS (the user uploads + smoke-tests).
