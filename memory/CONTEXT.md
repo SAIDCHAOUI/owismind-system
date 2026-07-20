@@ -81,6 +81,12 @@ tree). Voir `sessions/2026-07-17.md`.
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- **Repo, petit ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
+  capabilities + persona ; il ne pousse PAS `run_settings.json` ni `prompts/orchestrator_workflow.md`
+  (le guide phase H dit le contraire). Etendre 01 (via le regenerateur de seeds) ou corriger le guide.
+  En attendant : verifier a la main que ces 2 fichiers existent dans `lib/python/owismind_hub` du clone.
+- **DSS clone v1.3 : re-pointer les 2 tools Semantic Model Query** (L162 : leurs params portent encore
+  `project_key OWISMIND_PRD_V1_2` apres duplication ; le notebook 02 ne corrige que les modeles).
 - **DURABLE STEP SHELL v1.3 - DEPLOIEMENT DSS DEV** : `DEPLOY_V1_3_DEV.md` phase H (zip + re-paste
   orchestrateur env 3.11 + seeds hub 01 + webapp Auto-start + flag `durable_workflow` sur l'orchestrateur
   DEV + `domain_keywords`), puis les 16 scenarios de validation + le smoke 1 cycle claim/complete sur le

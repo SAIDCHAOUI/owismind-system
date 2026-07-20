@@ -3429,6 +3429,14 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-17 Run 3 (verification pre-test + durcissement). Complete L157-L160.
 - **Date** : 2026-07-17.
 
+## L162 - Dupliquer un projet DSS laisse AUSSI les tools "Semantic Model Query" pointes sur le projet SOURCE (2026-07-20)
+- **Contexte** : deploiement v1.3 sur le clone `OWISMIND_PRD_V1_3_DEV` (duplique de la prod v1.2). L146 couvrait deja le non-repoint des MODELES semantiques (datasetRef + tables des golden queries) ; on croyait la surface fermee via le notebook `02_align_clone.py`.
+- **Ce qui a echoue** : la sonde `00_probe_capabilities.py` lancee par l'user dans le clone a revele que les params du tool `revenue_semantic_query` portent encore `"project_key": "OWISMIND_PRD_V1_2"` (+ `semantic_model_id` AHUh9hb). Le notebook 02 remappe les MODELES du projet courant, pas les params des TOOLS : apres alignement, les sous-agents du clone interrogeraient silencieusement le modele (donc les tables) du projet v1.2 = la prod, et l'Evidence panel mapperait des tables `OWISMIND_PRD_V1_2_*`.
+- **Solution qui marche** : apres tout clone, ouvrir chaque tool Semantic Model Query (GenAI > Agent tools) et re-selectionner le projet courant + le modele dans ses settings (l'id de modele reste le meme, seule la cle projet change), puis un test Playground par modele. A verifier au meme titre que le repoint des modeles.
+- **Preuve** : rapport de sonde du 2026-07-20 sur `OWISMIND_PRD_V1_3_DEV` (params template du tool : `project_key OWISMIND_PRD_V1_2`).
+- **Source** : session 2026-07-20 (deploiement v1.3, run des notebooks 00-02 par l'user). Complete L146.
+- **Date** : 2026-07-20.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 
