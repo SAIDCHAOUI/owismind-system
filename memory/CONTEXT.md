@@ -7,6 +7,16 @@
 
 ## Focus courant
 
+**RESTRUCTURE REPO (2026-07-20, commit de restructure sur la branche) : un dossier racine par projet
+DSS.** `OWIsMind_PRD_V1_2/` -> **`OWIsMind_PRD_V1_3_DEV/`** (= le projet DSS DEV v1.3, structure
+miroir UI DSS voulue par l'user : `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`,
+`Standard-webapps/`, `flow/<zone>_zone/python-recipes/`) ; **le plugin vit dans le projet** :
+`OWIsMind_PRD_V1_3_DEV/plugin/{owismind, ready-for-dataiku, tools}` ; LAB idem (`Standard-webapps/`) ;
+`project-documentation/` + email -> `docs/`. Toutes references a jour (rules, skills, tests, registry,
+build_dev_plugin). 4 suites vertes + --check PASS apres restructure. DECOUVERTE DSS : l'user a colle
+`owismind_hub` sous `lib/python/` alors que le code lit `HUB_ROOT="/owismind_hub"` a la RACINE de la
+library -> a supprimer cote DSS, le notebook 01 le recree au bon endroit.
+
 **DURABLE STEP SHELL v1.3 - VERIFICATION PRE-TEST TRIPLE + DURCISSEMENT + ZIP v1.3-dev
 (2026-07-17 Run 3, branche `OWIsMind_PRD_V1_3-dev`, fixes en working tree, commit de session a faire).**
 L'user veut la CERTITUDE (securite + correction + optim) AVANT de tester en DSS. Revue TRIPLE
