@@ -13,7 +13,7 @@ une branche par version, nommée comme le projet DSS prod (`OWIsMind_PRD_V1_2` =
 ## Comment le système marche
 
 La webapp Vue envoie le message et une clé logique d'agent (jamais un id brut) au backend
-Flask du plugin (`OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/`, à la racine du repo). Le backend résout la clé via une whitelist côté
+Flask du plugin (`plugin/owismind/python-lib/` dans ce dossier projet). Le backend résout la clé via une whitelist côté
 serveur et invoque l'orchestrateur par LLM Mesh. L'orchestrateur raisonne et route vers les
 sous-agents experts (revenus, tickets) ; chaque sous-agent délègue le SQL à son modèle
 sémantique, exécuté en lecture seule sur PostgreSQL. Tout chiffre affiché vient d'un
@@ -28,11 +28,11 @@ L'arborescence reflète l'UI Dataiku (Flow, GenAI, Project Library, Notebooks, W
 | `flow/` | Recettes Flow par zone : elles fabriquent les datasets de connaissance (profile, value_index, value_catalog) lus par les agents. | [flow/README.md](flow/README.md) |
 | `GenAI/Agents/` | Les 3 Code Agents (orchestrateur + 2 sous-agents), fichiers autonomes à coller dans DSS (env Python 3.11). | [GenAI/Agents/README.md](GenAI/Agents/README.md) |
 | `GenAI/agents-tools/` | Le tool Custom Python `attribute_lookup_tool` (lecture rapide de valeurs, appelé par l'orchestrateur). | [GenAI/agents-tools/README.md](GenAI/agents-tools/README.md) |
-| `GenAI/semantic-models/` | Les 2 modèles sémantiques (snapshots `.v1.json`) + scripts (build, dump, repoint) : le cerveau SQL. | [GenAI/semantic-models/README.md](GenAI/semantic-models/README.md) |
+| `GenAI/semantic-models/` | Les 2 modèles sémantiques : UN fichier Python de maintenance par modèle (ACTION = dump / update / repoint) + son snapshot `.v1.json`. Le cerveau SQL. | [GenAI/semantic-models/README.md](GenAI/semantic-models/README.md) |
 | `project-library/python/owismind_factory/` | Agent Factory v1.3 : package Python qui industrialise la création de nouveaux agents (probe, builders, wizard, pipeline). Collé dans la project library DSS. | [docs/AGENT_FACTORY.md](docs/AGENT_FACTORY.md) |
-| `project-library/owismind_hub/` | Seeds du Config & Prompt Hub (`/owismind_hub/` à la racine de la project library DSS) : prompts et CAPABILITIES lus par les agents au démarrage, avec fallback embarqué dans le code. | [project-library/owismind_hub/README.md](project-library/owismind_hub/README.md) |
-| `notebooks/` | Les 7 notebooks runners de la factory, 00 à 06 (probe, push hub, align clone, create domain, wizard, logging, doctor). | [Notebooks/README.md](Notebooks/README.md) |
-| `webapps/` | Console de la factory (webapp Standard, optionnelle : tout est aussi faisable via les notebooks). | [Standard-webapps/agent-factory-console/README.md](Standard-webapps/agent-factory-console/README.md) |
+| `project-library/python/owismind_hub/` | Seeds du Config & Prompt Hub (`/python/owismind_hub/` : tout vit sous `python/` dans la project library DSS, décision user 2026-07-20) : prompts et CAPABILITIES lus par les agents au démarrage, avec fallback embarqué dans le code. | [project-library/python/owismind_hub/README.md](project-library/python/owismind_hub/README.md) |
+| `Notebooks/` | Les 7 notebooks runners de la factory, 00 à 06 (probe, push hub, align clone, create domain, wizard, logging, doctor). | [Notebooks/README.md](Notebooks/README.md) |
+| `Standard-webapps/` | Console de la factory (webapp Standard, optionnelle : tout est aussi faisable via les notebooks). | [Standard-webapps/agent-factory-console/README.md](Standard-webapps/agent-factory-console/README.md) |
 | `docs/` | Docs du sous-projet : déploiement v1.3, architecture factory, matrice de capacités, playbook manuel. | [docs/](docs/) |
 | `tests/` | Tests unitaires sans DSS. Lancer : `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests` (depuis la racine du repo). | - |
 | `registry.json` | Manifeste unique : ids, chemins de fichiers, noms de datasets, bindings modèle + tool, guardrails. Non importé au runtime, tenu en phase avec CAPABILITIES de l'orchestrateur. | [registry.json](registry.json) |
@@ -80,7 +80,7 @@ le Flow (scénario de refresh). Un changement du backend `python-lib` demande un
   whitelistées) ; aucune ligne brute envoyée au LLM.
 - **Honnêteté** : tout chiffre vient d'un résultat SQL ; aucune valeur métier en dur dans le
   code des agents (tout vient du profile / value_index / catalog / overrides).
-- **Hub avec fallback** : les agents lisent `/owismind_hub/` au démarrage mais embarquent un
+- **Hub avec fallback** : les agents lisent `/python/owismind_hub/` (project library) au démarrage mais embarquent un
   fallback ; `regenerate_seeds.py` maintient les seeds du repo équivalents aux défauts de
   l'orchestrateur. Jamais de secrets dans le hub ni dans le repo.
 - **Contrats gelés** (event kinds, `AGENT_RESULT`, span `semantic-model-query`, `sql_id`,

@@ -254,7 +254,7 @@ owismind/
 │   │                               #     agent-tools/ (attribute_lookup_tool.py), semantic-models/
 │   │                               #     (.v1.json + scripts repoint/remap/dump/re-index)
 │   ├── project-library/            #   python/owismind_factory/ (moteur Agent Factory v1.3) +
-│   │                               #     owismind_hub/ (seeds du Config & Prompt Hub /owismind_hub/)
+│   │                               #     owismind_hub/ (seeds du Config & Prompt Hub /python/owismind_hub/)
 │   ├── notebooks/                  #   runners factory 00-06 (probe, push hub, align, domaine, wizard...)
 │   ├── webapps/                    #   agent-factory-console/ (webapp Standard, console de la factory)
 │   ├── docs/                       #   DEPLOY_V1_3_DEV.md, AGENT_FACTORY.md, CAPABILITY_MATRIX.md,

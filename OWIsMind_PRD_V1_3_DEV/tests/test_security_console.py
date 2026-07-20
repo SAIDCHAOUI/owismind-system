@@ -237,7 +237,7 @@ class TestJobIds(_ConsoleTestCase):
 # ----------------------------------------------------------------- hub write size caps
 
 class TestHubPromptSizeCap(_ConsoleTestCase):
-    _PATH = "/owismind_hub/prompts/orchestrator_persona.md"
+    _PATH = "/python/owismind_hub/prompts/orchestrator_persona.md"
 
     def test_prompt_too_long_refused_nothing_written(self):
         writes = []

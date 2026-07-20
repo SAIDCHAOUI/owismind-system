@@ -8,7 +8,10 @@ import os
 import sys
 
 
-_MIRROR_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# This file lives at <mirror>/project-library/python/owismind_hub/: four levels up
+# from the file is the mirror folder, five is the repository root.
+_MIRROR_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
 _REPO_ROOT = os.path.dirname(_MIRROR_DIR)
 
 
@@ -113,7 +116,7 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
         {"CAPABILITIES_DEFAULT", "PERSONA_DEFAULT",
          "RUN_SETTINGS_DEFAULT", "WORKFLOW_PROMPTS_DEFAULT"},
     )
-    hub_dir = os.path.join(mirror_dir, "project-library", "owismind_hub")
+    hub_dir = os.path.join(mirror_dir, "project-library", "python", "owismind_hub")
     return {
         os.path.join(hub_dir, "capabilities.json"): _json_bytes(
             constants["CAPABILITIES_DEFAULT"]

@@ -14,7 +14,7 @@
 > Voir `sessions/2026-07-10.md`.
 > Avant : **2026-07-08 - Modèle sémantique REVENUS du clone : colonne `Solution` RE-AJOUTÉE
 > + règle de priorité d'offre restaurée, et les 2 modèles (revenus + tickets) REPOINTÉS vers le dataset du
-> clone** (L146 ; scripts `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/scripts/add_solution_and_repoint_prod_clone.py`
+> clone** (L146 ; fichiers par modele `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/<Model>/<Model>.py`, ACTION="repoint" (ex `add_solution_and_repoint_prod_clone.py`
 > + `repoint_tickets_prod_clone.py`). Revenus VALIDÉ DSS par l'user (`datasetRef =
 > OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) ; tickets à lancer.
 > Clé du clone **CONFIRMÉE = `OWISMIND_PRD_V1_2`** (ids DEV conservés, modèle revenus `AHUh9hb`).
@@ -394,7 +394,7 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
   modele semantique assiste LLM -> tool -> Code Agent -> capability) + sortir les prompts du code.
 - **Pieces** : package `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/` (13 modules,
   stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, zero delete) ; notebooks 00-06 ; **Config &
-  Prompt Hub** `/owismind_hub/` (project library ; seeds repo `project-library/owismind_hub/`, equivalence byte-a-byte testee ;
+  Prompt Hub** `/python/owismind_hub/` (project library ; seeds repo `project-library/python/owismind_hub/`, equivalence byte-a-byte testee ;
   les 3 agents chargent PERSONA/CAPABILITIES/regles additives au demarrage, fallback silencieux) ;
   console webapp Standard `Standard-webapps/agent-factory-console/` (charte Orange PASS) ; docs
   `docs/` (AGENT_FACTORY.md, DEPLOY_V1_3_DEV.md, CAPABILITY_MATRIX.md).
@@ -476,7 +476,7 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
   (domaine `tickets`, déjà dans `BUSINESS_DOMAINS`) + champ `lookup_search_columns` (allowlist de recherche par
   domaine, passée serveur). `GenAI/agents-tools/attribute_lookup_tool.py` : `searchable_columns` + domaine générique `value`.
   **Modèle sémantique DÉDIÉ par domaine** (jamais une source ajoutée au modèle revenus) ; scripts
-  `GenAI/semantic-models/scripts/update_tickets_semantic_model.py` + `dump_semantic_model.py` ; tool DSS attendu
+  `GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` (ACTION="update" puis "dump" ; ex update_tickets + dump, consolides 2026-07-20) ; tool DSS attendu
   `tickets_semantic_query` (Agent OFF, Sonnet). **3 recipes rendues génériques (auto-IO) + NA-safe** (fix
   `infer_with_pandas=False` -> fallback `True` sur int nullable) ; `build_value_catalog_recipe` dataset-adaptatif
   (revenus curé inchangé ; non-revenus = catalogue générique). **Factory repo (source de vérité scaling ;
@@ -488,7 +488,7 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
   `_value_catalogue`. Débloque la fiche client 360 (pont `Account_name`/`Customer_id`). Détail → `sessions/2026-06-19.md` Run 4.
 - **Audit + durcissement des agents (2026-07-02 Run 1, L118, repo DEV)** : 20 findings confirmés
   implémentés (orchestrateur, expert revenus, cerveau sémantique, tool lookup) ; contrat `AMBIGUOUS TERM`
-  porté agent + modèle sémantique ENSEMBLE (`update_aligned_semantic_model.py`). Détail → `sessions/2026-07-02.md` (Run 1).
+  porté agent + modèle sémantique ENSEMBLE (`Drive_Revenues_Semantic_Model.py` ACTION="update", ex update_aligned). Détail → `sessions/2026-07-02.md` (Run 1).
 - **~~Promotion DEV -> PROD_V1 scriptée (2026-07-06 Run 5, L139)~~ LEGACY (mécanisme supprimé 2026-07-10)** :
   l'ancien `tools/promote_agents_to_prod.py` (idempotent : copie DEV + substitution des ids PROD `Xrv7GvfG`/
   `agent:uO5hEzAs` + retrait chirurgical du bloc `tickets_expert`) régénérait un jumeau prod à la main.
@@ -715,7 +715,7 @@ Historique par session : memory/sessions/*.md.
 | Agents DEV - expert tickets d'incidents | 🟡 Testé DSS (« marche plutôt bien »), à finaliser | 2026-06-19 (Run 4) | L097/L098 |
 | Agents PROD (`OWISMIND_PRD_V1_2`, clone de DEV) - revenus + tickets INCLUS | 🟡 Prod = CLONE de DEV (ids DEV conservés), miroité sous `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/` ; plus de promotion à la main. LEGACY : ancien jumeau `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimés 2026-07-10 | 2026-07-08 (repoint modèles, revenus validé) | L090/L099/L139/**L146** |
 | Modèle sémantique REVENUS du CLONE (`OWISMIND_PRD_V1_2`, id `AHUh9hb`) - `Solution` re-ajoutée + règle priorité restaurée + repointé | ✅ Validé DSS par l'user (`datasetRef = OWISMIND_PRD_V1_2.DRIVE_Revenues`, SQL `FROM "OWISMIND_PRD_V1_2_drive_revenues"`) | 2026-07-08 | **L146** (`add_solution_and_repoint_prod_clone.py`) |
-| Modèle sémantique TICKETS du CLONE - repoint pur vers le dataset du clone | ⏳ Script prêt + simulé (4/4), non lancé DSS | - | **L146** (`repoint_tickets_prod_clone.py`) |
+| Modèle sémantique TICKETS du CLONE - repoint pur vers le dataset du clone | ⏳ Script prêt + simulé (4/4), non lancé DSS | - | **L146** (`TroubleTickets_Semantic_Model.py` ACTION="repoint", ex repoint_tickets_prod_clone.py`) |
 | Suivi tokens/coûts (ligne usage sous chaque réponse) | ✅ Validé DSS (ligne usage affichée, confirmée Run 6) | 2026-07-02 | L049/L126 |
 
 ## 12. Prochaines étapes

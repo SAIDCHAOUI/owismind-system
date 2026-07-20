@@ -13,8 +13,8 @@
 1. **`owismind_factory`** (`project-library/python/owismind_factory/`): the engine.
    Official Dataiku public API only, stdlib + `dataiku`, Python 3.9 compatible,
    dry-run by default, idempotent, ZERO deletion helpers.
-2. **The Config & Prompt Hub** (`/owismind_hub/` in the DSS project library,
-   repo seeds in [`../project-library/owismind_hub/`](../project-library/owismind_hub/)): prompts and the runtime CAPABILITIES
+2. **The Config & Prompt Hub** (`/python/owismind_hub/` in the DSS project library,
+   repo seeds in [`../project-library/python/owismind_hub/`](../project-library/python/owismind_hub/)): prompts and the runtime CAPABILITIES
    registry live OUTSIDE the pasted agent code. The agents load them once at
    start with strict validation and silent fallback to their embedded defaults.
    Adding a validated domain = one JSON entry, zero orchestrator re-paste.
@@ -28,7 +28,7 @@
 |---|---|---|
 | `fctx` | FactoryContext: dry-run plumbing, action journal, markdown report | none |
 | `spec` | DomainSpec: validated domain description + ALL derived names (L110-safe) | none |
-| `hub` | read/write of `/owismind_hub/` + capabilities validation + backups | none |
+| `hub` | read/write of `/python/owismind_hub/` + capabilities validation + backups | none |
 | `registry` | DomainSpec -> orchestrator CAPABILITIES entry (frozen dialect labels) | none |
 | `flow_builder` | zone, managed datasets, recipes CLONED from the validated templates, INACTIVE custom-python refresh scenario | none (confirmed APIs) |
 | `semantic_builder` | create model + server-seeded v1 + schema-derived entity + wizard config + one-pass indexing | none (PROVEN on this instance) |
@@ -50,7 +50,7 @@ both schemas from the LIVE validated objects (orchestrator `038G7mlF`, tool
 `v4oqA6R`) and, optionally (write probe), confirms the round-trip on throwaway
 objects. Confirmed -> the pipeline creates tool + agent fully automatically.
 Not confirmed -> those two steps print an exact 2-minute UI checklist and the
-generated agent code lands in `/owismind_hub/generated/` ready to paste.
+generated agent code lands in `/python/owismind_hub/generated/` ready to paste.
 Everything else (zone, datasets, recipes, scenario, semantic model, capability
 registration) is documented API and runs either way.
 
@@ -85,7 +85,7 @@ registration) is documented API and runs either way.
   completion per draft.
 - **New capabilities ship `enabled: false`** and only a human flips them after
   the smoke checklist.
-- **Hub writes are validated + backed up** (`/owismind_hub/backups/`) and
+- **Hub writes are validated + backed up** (`/python/owismind_hub/backups/`) and
   serialized in-process (a write lock shared by `write_capabilities` and
   `append_capability`) so two concurrent console jobs cannot lose an entry.
 - **The wizard config is validated offline before it touches the model**: golden
@@ -96,14 +96,14 @@ registration) is documented API and runs either way.
 
 ## Iterating prompts (the fast loop the hub unlocks)
 
-1. Edit `/owismind_hub/prompts/orchestrator_persona.md` (DSS library editor or
+1. Edit `/python/owismind_hub/prompts/orchestrator_persona.md` (DSS library editor or
    the console's Prompts screen).
 2. Restart the orchestrator agent (re-save or shutdown/wake in DSS): the loader
    reads the hub once at process start.
 3. Re-run the LAB benchmark before keeping the change.
 The `06_prompt_doctor.py` notebook automates the diagnosis: interaction logs +
 current prompt + your complaint -> structured proposal in
-`/owismind_hub/doctor/`. It NEVER applies anything itself.
+`/python/owismind_hub/doctor/`. It NEVER applies anything itself.
 
 ## Tests
 

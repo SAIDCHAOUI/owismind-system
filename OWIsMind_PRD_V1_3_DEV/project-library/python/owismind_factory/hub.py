@@ -1,4 +1,4 @@
-"""Config & Prompt Hub: the /owismind_hub/ tree in the DSS project library.
+"""Config & Prompt Hub: the /python/owismind_hub/ tree in the DSS project library.
 
 The hub is the single editable home of everything the agents load at startup
 (prompt overrides, the runtime CAPABILITIES registry) and everything the factory
@@ -9,7 +9,7 @@ from every runtime (Code Agents on 3.11, webapp backend on 3.9) WITHOUT any
 import, which preserves the standalone-agent-file rule.
 
 Layout:
-    /owismind_hub/
+    /python/owismind_hub/
         factory_settings.json     instance knobs (sql connection, 3.11 code env,
                                   LLM ids, template object ids)
         capabilities.json         runtime CAPABILITIES override (orchestrator)
@@ -26,7 +26,7 @@ console webapp); agents only READ.
 import json
 import threading
 
-HUB_ROOT = "/owismind_hub"
+HUB_ROOT = "/python/owismind_hub"
 
 # Serializes capabilities read-modify-write cycles within one Python process
 # (the console webapp runs all jobs in one process, so this closes its lost
@@ -72,7 +72,7 @@ def _library(project):
 
 
 def _ensure_folder(library, path):
-    """Walk/create the folder chain for ``path`` (e.g. '/owismind_hub/prompts')."""
+    """Walk/create the folder chain for ``path`` (e.g. '/python/owismind_hub/prompts')."""
     parts = [p for p in path.split("/") if p]
     folder = library.root if hasattr(library, "root") else library.get_folder("/")
     walked = ""
@@ -125,7 +125,7 @@ def write_json(project, path, obj):
 # ---------------------------------------------------------------------- settings
 
 def get_settings(project):
-    """DEFAULT_SETTINGS overlaid with /owismind_hub/factory_settings.json.
+    """DEFAULT_SETTINGS overlaid with /python/owismind_hub/factory_settings.json.
 
     The overlay is STRICT: only keys declared in DEFAULT_SETTINGS may be
     overridden. An unknown key in the hub file is ignored, so a stray or
@@ -239,7 +239,7 @@ def write_prompt(project, path, content, backup=True):
     """Write a hub prompt file, backing up the previous version first.
 
     Same recovery contract as write_capabilities: the last versions of an
-    overwritten prompt survive under /owismind_hub/backups/.
+    overwritten prompt survive under /python/owismind_hub/backups/.
     """
     if backup:
         current = read_text(project, path)

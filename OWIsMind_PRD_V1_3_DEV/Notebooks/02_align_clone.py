@@ -8,8 +8,8 @@
 # physical "<OLDKEY>_<table>" SQL literals). The UI cannot fix that; this notebook
 # does, by remapping every foreign project-key prefix to THIS project's key.
 #
-# It generalizes the two validated one-off scripts (GenAI/semantic-models/scripts/
-# repoint_tickets_prod_clone.py and add_solution_and_repoint_prod_clone.py) to
+# It generalizes the validated per-model repoint (now ACTION="repoint" in
+# GenAI/semantic-models/<Model>/<Model>.py, formerly scripts/*_prod_clone.py) to
 # ALL models of the current project.
 #
 # TWO-RUN FLOW (remapping is allowlist-gated: a foreign key may be a clone

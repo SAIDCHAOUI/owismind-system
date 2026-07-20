@@ -2,7 +2,7 @@
 
 > Run `Notebooks/00_probe_capabilities.py` on the target instance and replace
 > this template with the printed report (also saved to
-> `/owismind_hub/probe_report.md`). Statuses below reflect the research +
+> `/python/owismind_hub/probe_report.md`). Statuses below reflect the research +
 > client-source verification of 2026-07-10, BEFORE any run on the instance.
 
 | Capability | API | Doc status | Instance status |

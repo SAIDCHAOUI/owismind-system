@@ -204,7 +204,7 @@ def apply_config(ctx, model_id, config, created_this_run=False, version_id=None)
     """Merge a wizard config (see wizard.DRAFT_SCHEMA) into the live model.
 
     In-place update of the active version, exactly like the validated
-    update_*_semantic_model.py scripts: no re-create, no re-index here
+    per-model maintenance files (ACTION="update"): no re-create, no re-index here
     (indexing is its own explicit step).
 
     :param bool created_this_run: True when THIS run just seeded the model (it is
@@ -215,7 +215,7 @@ def apply_config(ctx, model_id, config, created_this_run=False, version_id=None)
     if not model_id:
         ctx.manual("semantic_config",
                    "no semantic model id available: apply the wizard config by hand "
-                   "(update_*_semantic_model.py pattern) once the model exists")
+                   "(the per-model ACTION='update' pattern) once the model exists")
         return None
 
     # Anti-overwrite guard. Dry-run keeps planning as before without reading DSS

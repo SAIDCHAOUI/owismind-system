@@ -663,7 +663,7 @@ def build_understand_schema(profile):
 
 
 # --- Config hub (optional ADDITIVE team rules, loaded once at agent start) ----
-# /owismind_hub/prompts/<HUB_DOMAIN>/understand_extra.md appends team rules to
+# /python/owismind_hub/prompts/<HUB_DOMAIN>/understand_extra.md appends team rules to
 # the UNDERSTAND system prompt (never replaces it, frozen contracts untouched).
 # Public-API read, no import: the standalone-file rule holds. Any failure -> "".
 # Editing the hub file takes effect on the next agent process start.
@@ -673,7 +673,7 @@ HUB_DOMAIN = "revenue"
 def _hub_understand_extra():
     try:
         library = dataiku.api_client().get_default_project().get_library()
-        f = library.get_file("/owismind_hub/prompts/%s/understand_extra.md" % HUB_DOMAIN)
+        f = library.get_file("/python/owismind_hub/prompts/%s/understand_extra.md" % HUB_DOMAIN)
         text = f.read() if f is not None else None
     except Exception:
         return ""

@@ -12,7 +12,7 @@ import unittest
 _TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 _MIRROR_DIR = os.path.dirname(_TESTS_DIR)
 _REPO_ROOT = os.path.dirname(_MIRROR_DIR)
-_REGENERATOR = os.path.join(_MIRROR_DIR, "project-library", "owismind_hub", "regenerate_seeds.py")
+_REGENERATOR = os.path.join(_MIRROR_DIR, "project-library", "python", "owismind_hub", "regenerate_seeds.py")
 
 
 def _load_regenerator():
@@ -35,11 +35,11 @@ def _copy_fixture_repo(destination_root):
     relative_paths = (
         os.path.join("GenAI", "Agents", "OWIsMind_orchestrator.py"),
         os.path.join("project-library", "python", "owismind_factory", "hub.py"),
-        os.path.join("project-library", "owismind_hub", "capabilities.json"),
-        os.path.join("project-library", "owismind_hub", "factory_settings.json"),
-        os.path.join("project-library", "owismind_hub", "run_settings.json"),
-        os.path.join("project-library", "owismind_hub", "prompts", "orchestrator_persona.md"),
-        os.path.join("project-library", "owismind_hub", "prompts", "orchestrator_workflow.md"),
+        os.path.join("project-library", "python", "owismind_hub", "capabilities.json"),
+        os.path.join("project-library", "python", "owismind_hub", "factory_settings.json"),
+        os.path.join("project-library", "python", "owismind_hub", "run_settings.json"),
+        os.path.join("project-library", "python", "owismind_hub", "prompts", "orchestrator_persona.md"),
+        os.path.join("project-library", "python", "owismind_hub", "prompts", "orchestrator_workflow.md"),
     )
     for relative_path in relative_paths:
         _copy_file(
@@ -75,7 +75,7 @@ class TestHubSeedsRegenerator(unittest.TestCase):
                 temporary_root,
                 "OWIsMind_PRD_V1_3_DEV",
                 "project-library",
-                "owismind_hub",
+                "python", "owismind_hub",
                 "capabilities.json",
             )
             with open(seed_path, "wb") as seed_file:
@@ -84,14 +84,14 @@ class TestHubSeedsRegenerator(unittest.TestCase):
             differences = _regenerator.diff_report(temporary_root)
             self.assertEqual(
                 differences,
-                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "owismind_hub", "capabilities.json")],
+                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "python", "owismind_hub", "capabilities.json")],
             )
 
             canonical = _regenerator.build_canonical_files(temporary_root)
             changed = _regenerator.write_canonical_files(temporary_root)
             self.assertEqual(
                 changed,
-                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "owismind_hub", "capabilities.json")],
+                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "python", "owismind_hub", "capabilities.json")],
             )
             with open(seed_path, "rb") as seed_file:
                 self.assertEqual(seed_file.read(), canonical[seed_path])

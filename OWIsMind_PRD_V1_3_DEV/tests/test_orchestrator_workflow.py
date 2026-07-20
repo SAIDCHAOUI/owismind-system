@@ -104,7 +104,7 @@ def _load(mod_name, path):
 wf = _load("orchestrator_workflow_under_test",
            os.path.join(_MIRROR_DIR, "GenAI", "Agents", "OWIsMind_orchestrator.py"))
 regen = _load("hub_seeds_regenerator_wf",
-              os.path.join(_MIRROR_DIR, "project-library", "owismind_hub",
+              os.path.join(_MIRROR_DIR, "project-library", "python", "owismind_hub",
                            "regenerate_seeds.py"))
 
 
@@ -1068,7 +1068,7 @@ class TestRunSettings(unittest.TestCase):
             wf.RUN_SETTINGS = saved
 
     def test_seed_file_matches_defaults(self):
-        path = os.path.join(_MIRROR_DIR, "project-library", "owismind_hub",
+        path = os.path.join(_MIRROR_DIR, "project-library", "python", "owismind_hub",
                             "run_settings.json")
         with open(path, encoding="utf-8") as fh:
             self.assertEqual(json.load(fh), wf.RUN_SETTINGS_DEFAULT)
@@ -1087,7 +1087,7 @@ class TestWorkflowPrompts(unittest.TestCase):
         rendered = regen._workflow_prompts_markdown(wf.WORKFLOW_PROMPTS_DEFAULT)
         parsed = wf._parse_workflow_prompts(rendered.decode("utf-8"))
         self.assertEqual(parsed, wf.WORKFLOW_PROMPTS_DEFAULT)
-        path = os.path.join(_MIRROR_DIR, "project-library", "owismind_hub",
+        path = os.path.join(_MIRROR_DIR, "project-library", "python", "owismind_hub",
                             "prompts", "orchestrator_workflow.md")
         with open(path, "rb") as fh:
             self.assertEqual(fh.read(), rendered)

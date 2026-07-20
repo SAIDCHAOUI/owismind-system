@@ -20,7 +20,7 @@ Design rules (do not break):
   to a precise manual checklist instead of guessing.
 
 Deployment: this folder is pasted into the DSS project library (python/) of the
-OWIsMind project, next to the ``/owismind_hub/`` config tree (see ``hub.py``).
+OWIsMind project, next to the ``/python/owismind_hub/`` config tree (see ``hub.py``).
 """
 
 __version__ = "0.1.0"

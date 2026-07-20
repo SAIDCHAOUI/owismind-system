@@ -52,7 +52,7 @@
     },
     // Prompts screen (hub editor)
     prompts: {
-      path: "/owismind_hub/prompts/orchestrator_persona.md",
+      path: "/python/owismind_hub/prompts/orchestrator_persona.md",
       loading: false, loaded: false, content: "", saving: false, loadError: null,
       caps: { loading: false, loaded: false, text: "", saving: false, problems: [], loadError: null }
     }
@@ -310,7 +310,7 @@
     html += '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Projet</p>' +
       '<h2 class="afc-sec-title">Vue d\'ensemble</h2>' +
-      '<p class="afc-sec-note">État du projet DSS et du Config &amp; Prompt Hub (/owismind_hub). ' +
+      '<p class="afc-sec-note">État du projet DSS et du Config &amp; Prompt Hub (/python/owismind_hub). ' +
       'C\'est le tableau de bord de l\'usine à agents : rien n\'est modifié ici.</p>' +
       '<div class="afc-card"><dl class="afc-kv">' +
       '<dt>Clé de projet</dt><dd>' + esc(d.project_key || "-") + '</dd>' +
@@ -902,9 +902,9 @@
     html += '<div class="afc-sec">' +
       '<p class="afc-sec-eyebrow">Hub</p>' +
       '<h2 class="afc-sec-title">Prompts de persona</h2>' +
-      '<p class="afc-sec-note">Éditez un fichier de prompt du hub (/owismind_hub/prompts/...). ' +
+      '<p class="afc-sec-note">Éditez un fichier de prompt du hub (/python/owismind_hub/prompts/...). ' +
       'L\'orchestrateur charge sa persona depuis orchestrator_persona.md ; les sous-agents peuvent charger ' +
-      'un ajout prompts/&lt;domaine&gt;/understand_extra.md. Le chemin doit commencer par /owismind_hub/prompts/.</p>' +
+      'un ajout prompts/&lt;domaine&gt;/understand_extra.md. Le chemin doit commencer par /python/owismind_hub/prompts/.</p>' +
       '<div class="afc-card">';
 
     html += '<div class="afc-field"><span class="afc-field-label">Chemin du fichier</span>' +
@@ -975,8 +975,8 @@
 
   function loadPrompt() {
     var pr = S.prompts;
-    if (!/^\/owismind_hub\/prompts\//.test(pr.path)) {
-      pr.loadError = "Le chemin doit commencer par /owismind_hub/prompts/";
+    if (!/^\/python/owismind_hub\/prompts\//.test(pr.path)) {
+      pr.loadError = "Le chemin doit commencer par /python/owismind_hub/prompts/";
       renderPrompts(); return;
     }
     pr.loading = true; pr.loadError = null;

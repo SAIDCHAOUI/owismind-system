@@ -1,5 +1,5 @@
 # =============================================================================
-# 01_push_config_hub.py - seed the /owismind_hub/ tree in the project library.
+# 01_push_config_hub.py - seed the /python/owismind_hub/ tree in the project library.
 # -----------------------------------------------------------------------------
 # RUN THIS IN A DSS NOTEBOOK inside the target project, after pasting the
 # owismind_factory package into the project library (python/ folder).

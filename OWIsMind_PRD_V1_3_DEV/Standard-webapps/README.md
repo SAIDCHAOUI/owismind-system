@@ -10,11 +10,11 @@ Chaque sous-dossier correspond a une webapp **Standard** du projet (panes HTML /
 
 | Dossier | Role |
 |---|---|
-| [`agent-factory-console/`](agent-factory-console/) | Console de l'Agent Factory (webapp Standard, admin, design-time, **optionnelle**) : plan et execution de la creation d'un nouveau sous-agent de domaine, wizard, edition du Config & Prompt Hub (`/owismind_hub/`). |
+| [`agent-factory-console/`](agent-factory-console/) | Console de l'Agent Factory (webapp Standard, admin, design-time, **optionnelle**) : plan et execution de la creation d'un nouveau sous-agent de domaine, wizard, edition du Config & Prompt Hub (`/python/owismind_hub/`). |
 
-Tout ce que fait la console est aussi faisable via les notebooks runners 00 a 06 ([`../notebooks/`](../notebooks/)) : la console n'est pas un prerequis.
+Tout ce que fait la console est aussi faisable via les notebooks runners 00 a 06 ([`../Notebooks/`](../Notebooks/)) : la console n'est pas un prerequis.
 
-**Important** : la webapp de chat OWIsMind (Vue 3, celle des utilisateurs) ne vit PAS ici. Elle fait partie du plugin, sous `Plugin/` a la racine du repo.
+**Important** : la webapp de chat OWIsMind (Vue 3, celle des utilisateurs) ne vit PAS ici. Elle fait partie du plugin, sous `../plugin/owismind/` dans ce dossier projet.
 
 ## Deploiement
 

@@ -34,7 +34,7 @@ UNKNOWN SCHEMA (exists but undocumented; needs the Phase 0 probe on the instance
 
 ## 3. Decisions taken on the user's behalf (he was asleep)
 
-1. **Hub storage = DSS project library** under `/owismind_hub/` (editable in the DSS UI,
+1. **Hub storage = DSS project library** under `/python/owismind_hub/` (editable in the DSS UI,
    git-friendly, readable via the public API from agents AND the 3.9 backend without any
    import). Variables/wiki rejected: all-or-nothing writes / weaker fit.
 2. **Console = Standard webapp, SEPARATE from the plugin** (user's final word: keep agent
@@ -73,7 +73,7 @@ OWIsMind_PRD_V1_3_DEV/
     flow_builder.py  semantic_builder.py  wizard.py
     tool_builder.py  agent_builder.py  probes.py  pipeline.py
   notebooks/            # thin runners: 00_probe .. 06_prompt_doctor
-  hub/                  # files pushed to the project library /owismind_hub/
+  hub/                  # files pushed to the project library /python/owismind_hub/
     capabilities.json   prompts/orchestrator_persona.md  README.md
   webapps/agent-factory-console/   # Standard webapp (body.html/script.js/style.css/backend.py)
   factory-docs/         # README + DEPLOY guide + CAPABILITY_MATRIX template
@@ -85,7 +85,7 @@ OWIsMind_PRD_V1_3_DEV/
   log + `report_markdown()`.
 - `spec.DomainSpec` - validated domain spec + derived names (`<base>_profile`, ...).
 - `hub` - `read_text/write_text/read_json/write_json/append_capability/validate_capabilities`
-  against `/owismind_hub/...` (backup file before every capabilities write).
+  against `/python/owismind_hub/...` (backup file before every capabilities write).
 - `flow_builder` - `ensure_source_dataset`, `ensure_zone`, `ensure_knowledge_datasets`,
   `ensure_recipes(template_from_existing=...)`, `ensure_refresh_scenario`,
   `run_scenario_now` (explicit only).

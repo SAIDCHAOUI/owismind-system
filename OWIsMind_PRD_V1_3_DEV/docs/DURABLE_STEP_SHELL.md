@@ -202,7 +202,7 @@ plus recente, grace a un jeton de "fencing" (`attempt_id`) verifie directement d
 |---|---|
 | `OWIsMind_orchestrator.py` | Un second chemin dans `process_stream` : si le message porte le token `owi:workflow`, il execute UNE commande (plan/execute/replan/review/synthesize) via un mini-graphe LangGraph sans checkpointer, puis emet UN event `OWI_WORKFLOW_CONTROL`. Sans token, le chemin classique est **strictement identique** (verifie par un golden test). Inclut la nouvelle etape `correlate` (JOIN SQL read-only garde). |
 
-**Hub de configuration (dans `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/`)**
+**Hub de configuration (dans `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/`)**
 
 | Fichier | Ce qu'il porte |
 |---|---|
@@ -427,7 +427,7 @@ Dans la project library du projet DSS, sous `owismind_hub/`, deposer :
 - `run_settings.json` (les deadlines par mode, les caps, les flags) ;
 - `prompts/orchestrator_workflow.md` (les 4 prompts planner/replanner/reviewer/synthesizer).
 
-Sources dans le repo : `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/`. Un repli embarque existe
+Sources dans le repo : `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/`. Un repli embarque existe
 dans l'orchestrateur, donc un hub absent ne casse pas un run ; mais pour pouvoir editer les deadlines
 et les prompts sans toucher au code, poussez ces seeds.
 

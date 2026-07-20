@@ -30,7 +30,7 @@ l'essentiel est ici.
 |---|---|
 | Scenario refresh : `active` reposait sur un defaut API non documente (G2) | `settings.active = False` force dans le meme save que le trigger + test |
 | Denylist read-only incomplete (P2-B / P1-5) | + `INTO, MERGE, COPY, CALL, DO, LOCK, SET, VACUUM` + tests |
-| Persona ecrasable sans backup (P3-1) | `hub.write_prompt` = backup sous `/owismind_hub/backups/` avant ecriture |
+| Persona ecrasable sans backup (P3-1) | `hub.write_prompt` = backup sous `/python/owismind_hub/backups/` avant ecriture |
 | `apply_config` ecrasait un modele preexistant, y compris cure ou etranger (P2-A / P1-1) | Marqueur `owismindFactory` pose au seed ; sans marqueur = refus (MANUAL) ; avec marqueur = backup de version `pre-apply-backup-<n>` + re-pin de la version active AVANT toute mutation ; echec du backup = refus |
 | Aligneur remappait TOUTE cle etrangere (P1-2) | `expected_source_keys` : liste vide = decouverte (zero remap), sinon seules les cles listees sont remappees |
 | Console : jobs illimites, ids previsibles, tailles non bornees (P1-3 / P2) | Max 4 jobs actifs, 1 seul `execute` a la fois, 429 au-dela, slot libere en finally ; ids `uuid4` ; persona max 20000 chars, capabilities max 50 entrees / 200 KB |

@@ -10,7 +10,7 @@
 # THIS NOTEBOOK NEVER CHANGES AN AGENT PROMPT. It only:
 #   1. reads logs (read-only),
 #   2. calls ONE bounded LLM completion,
-#   3. saves a markdown proposal to /owismind_hub/doctor/proposal-<k>.md.
+#   3. saves a markdown proposal to /python/owismind_hub/doctor/proposal-<k>.md.
 # A human reviews the proposal, updates the hub prompt (capabilities.json /
 # orchestrator_persona.md / prompts/<domain>/understand_extra.md) BY HAND, and
 # re-runs the LAB benchmark before keeping the change. The doctor's output is a

@@ -1,7 +1,7 @@
 # project-library/ - miroir de la project library DSS
 
 Ce dossier reflète le menu **Libraries** du projet DSS : le code partagé
-(`python/`) et l'arbre de configuration `/owismind_hub/` que les agents lisent
+(`python/`) et l'arbre de configuration `/python/owismind_hub/` que les agents lisent
 à leur démarrage. On édite ici, puis on pousse dans DSS (jamais l'inverse).
 
 ## Dans Dataiku
@@ -9,9 +9,10 @@ Ce dossier reflète le menu **Libraries** du projet DSS : le code partagé
 - `python/owismind_factory/` correspond au dossier `python/` de la project
   library du clone v1.3-dev : le code y est importable par les notebooks et le
   backend de la console.
-- `owismind_hub/` correspond à l'arbre `/owismind_hub/` à la racine de la
-  library : prompts, registre de capabilities, réglages d'instance. Les agents
-  le LISENT au démarrage ; seule la factory (notebook ou console) y écrit.
+- `python/owismind_hub/` correspond à l'arbre `/python/owismind_hub/` de la
+  library (tout vit sous `python/`, décision user 2026-07-20) : prompts, registre
+  de capabilities, réglages d'instance. Les agents le LISENT au démarrage ; seule
+  la factory (notebook ou console) y écrit.
 - La library est lisible par tous les lecteurs du projet : **jamais de secret
   ici**.
 
@@ -20,7 +21,7 @@ Ce dossier reflète le menu **Libraries** du projet DSS : le code partagé
 | Dossier | Rôle |
 |---|---|
 | `python/owismind_factory/` | Le moteur de l'Agent Factory v1.3 (13 modules : `fctx`, `spec`, `hub`, `probes`, `flow_builder`, `semantic_builder`, `tool_builder`, `agent_builder`, `registry`, `align`, `pipeline`, `wizard`, `doctor`). Dry-run par défaut, étapes `ensure_*` idempotentes, aucune suppression, API Dataiku publique uniquement, stdlib + `dataiku`, compatible Python 3.9. À coller dans le dossier `python/` de la library du clone v1.3-dev. |
-| `owismind_hub/` | Les graines (seeds) du Config & Prompt Hub `/owismind_hub/` : `capabilities.json`, `prompts/orchestrator_persona.md`, `factory_settings.json`. Poussées par le notebook `01_push_config_hub.py`. Détail : [owismind_hub/README.md](owismind_hub/README.md). |
+| `owismind_hub/` | Les graines (seeds) du Config & Prompt Hub `/python/owismind_hub/` : `capabilities.json`, `prompts/orchestrator_persona.md`, `factory_settings.json`. Poussées par le notebook `01_push_config_hub.py`. Détail : [owismind_hub/README.md](owismind_hub/README.md). |
 
 Garde-fous à ne pas casser :
 

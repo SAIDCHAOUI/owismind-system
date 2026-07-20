@@ -52,13 +52,13 @@ Three conditions must hold BEFORE anything below runs on a real instance:
    `06_prompt_doctor.py` (paste each file as a notebook).
 3. [notebook] Run `00_probe_capabilities.py` as-is (READ-ONLY: RUN_WRITE_PROBES
    stays False). It prints the Phase 0 report and stores
-   `/owismind_hub/probe_report.md` + `probe_results.json` in the library.
+   `/python/owismind_hub/probe_report.md` + `probe_results.json` in the library.
 4. **Paste the probe report back to Claude** (or commit it as
    `docs/CAPABILITY_MATRIX.md`). It answers the two open questions:
    the Code Agent code key and the Semantic Model Query tool type/params.
 5. [notebook] Run `01_push_config_hub.py` (seeds the hub: settings,
    capabilities.json, persona, engine template if the probe found the code key).
-6. [DSS] Edit `/owismind_hub/factory_settings.json`: set `code_env_311` to the
+6. [DSS] Edit `/python/owismind_hub/factory_settings.json`: set `code_env_311` to the
    EXACT name of the Python 3.11 code env of this instance. Verify
    `sql_connection`, the template ids, `orchestrator_agent_id`.
 
@@ -107,7 +107,7 @@ the console does is also doable through notebooks 00 to 06.
    profile dataset (the business brain) like the playbook says.
 4. [notebook 04] Wizard round 1 (ANSWERS = {}): read its French clarifying
    questions (the draft always returns them). Fill ANSWERS, re-run: config saved
-   to the hub at `/owismind_hub/wizard/<domain>-config.json` (the console uses the
+   to the hub at `/python/owismind_hub/wizard/<domain>-config.json` (the console uses the
    same path and auto-attaches this config to plan/execute when the request body
    has none). The `semantic_config` step runs an offline gate first: any golden
    query that is not read-only or references an unknown column is stripped into a
@@ -117,7 +117,7 @@ the console does is also doable through notebooks 00 to 06.
    "capability"]`.
 6. Curation + smoke (the factory report prints the checklist): Playground tests,
    profile overrides, tool description, THEN flip `enabled: true` on the new
-   entry in `/owismind_hub/capabilities.json` and restart the orchestrator agent.
+   entry in `/python/owismind_hub/capabilities.json` and restart the orchestrator agent.
 7. Update the repo: commit the wizard config, the generated agent file, the new
    `registry.json` entry and the model dump (mirror discipline unchanged).
 
@@ -127,7 +127,7 @@ the console does is also doable through notebooks 00 to 06.
    `owismind_agent_logs` dataset and enables interaction logging on the three
    agents. Logging writes are buffered (they lag a little).
 2. After some real usage: [notebook 06] `06_prompt_doctor.py` with your
-   complaint in COMPLAINT. Read the proposal in `/owismind_hub/doctor/`,
+   complaint in COMPLAINT. Read the proposal in `/python/owismind_hub/doctor/`,
    apply what you like to the persona hub file, restart the orchestrator,
    re-run the LAB benchmark.
 

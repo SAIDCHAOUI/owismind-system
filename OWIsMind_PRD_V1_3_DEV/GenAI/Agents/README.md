@@ -20,7 +20,7 @@ Projet `OWISMIND_PRD_V1_2` (clone de `OWISMIND_DEV`, ids DEV conserves), rubriqu
 
 Les deux sous-agents suivent le pipeline UNDERSTAND -> RESOLVE -> QUERY -> RENDER : comprendre la question (1 appel LLM, JSON strict), ancrer les termes sur le value index (SQL inline read-only), deleguer le SQL au tool Semantic Model Query, puis rendre chiffres et tableau par code. Execution toujours read-only.
 
-Garde-fous communs : fichiers autonomes (stdlib + `dataiku` + `langgraph` uniquement), aucune valeur metier en dur, contrats geles avec la webapp (event kinds, `AGENT_RESULT`, spans `semantic-model-query` : ne jamais renommer, seulement ajouter). Les agents lisent le Config & Prompt Hub `/owismind_hub/` (project library) a leur demarrage, avec repli sur leurs defauts embarques si le hub est absent.
+Garde-fous communs : fichiers autonomes (stdlib + `dataiku` + `langgraph` uniquement), aucune valeur metier en dur, contrats geles avec la webapp (event kinds, `AGENT_RESULT`, spans `semantic-model-query` : ne jamais renommer, seulement ajouter). Les agents lisent le Config & Prompt Hub `/python/owismind_hub/` (project library) a leur demarrage, avec repli sur leurs defauts embarques si le hub est absent.
 
 ## Deploiement
 

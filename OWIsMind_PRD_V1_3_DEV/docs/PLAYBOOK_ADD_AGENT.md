@@ -45,9 +45,8 @@ remaining **repoint + curation**, not a from-scratch build.
 - `../flow/CSC_ticket_AI_Agent_zone/python-recipes/compute_TroubleTickets_year_value_catalogue.py` (and the
   profile + value_index recipes) - auto-IO + NA-safe + dataset-adaptive (revenue
   keeps its curated catalog; any other dataset gets a generic per-value catalog).
-- `../GenAI/semantic-models/scripts/update_tickets_semantic_model.py` (brain) +
-  `../GenAI/semantic-models/scripts/dump_semantic_model.py` (generic snapshot, TICKETS
-  CONFIG) + `../GenAI/semantic-models/scripts/repoint_tickets_prod_clone.py` (repoints the
+- `../GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` (ACTION="update" = the brain ; ACTION="dump" = snapshot ; ACTION="repoint" = clone remap) +
+  (one maintenance file per model since 2026-07-20; the old scripts/ folder lives in git history)
   tickets model `dM4jA4G` to the clone dataset; READY, simulated 4/4, NOT YET
   LAUNCHED on the clone).
 - `registry.json` + `../flow/DATASETS.md` - the spec + column inventory.
@@ -144,14 +143,14 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 - In DSS, create a semantic model on `TroubleTickets_year` (the UI auto-discovers
   entities/attributes from the schema, with valid shapes). Name it
   `TroubleTickets_Semantic_Model`. Let it index distinct values once.
-- [curate] Run `../GenAI/semantic-models/scripts/update_tickets_semantic_model.py` in a notebook
+- [curate] Run `../GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` ACTION="update" in a notebook
   (set `NEW_MODEL_ID`) to inject the tickets instructions + golden queries + the
   entity / attribute descriptions + the metrics (`COUNT(DISTINCT id)`). The
   duration unit (minutes) is already baked in; only the exact `CurrentStatus`
   open/closed values are data-dependent (read them from the value index, the
   instructions already tell the model to use the exact catalog values). Optionally
   add named filters / glossary synonyms in the model UI.
-- Snapshot it: run `../GenAI/semantic-models/scripts/dump_semantic_model.py` with the TICKETS config
+- Snapshot it: run the same file with ACTION="dump"
   (see its CONFIG comment) and commit `TroubleTickets_Semantic_Model.v1.json`.
 
 ### 5. [DSS] Create the tickets Semantic Model Query tool

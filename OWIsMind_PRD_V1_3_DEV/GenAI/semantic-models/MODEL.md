@@ -3,9 +3,9 @@
 > Human-readable snapshot of the **live** semantic model that the
 > `revenue_semantic_query` tool queries. This file is the readable truth; the
 > canonical SQL-generation rules live verbatim in
-> [`scripts/build_aligned_semantic_model.py`](scripts/build_aligned_semantic_model.py)
-> (`NEW_INSTRUCTIONS`); the full machine config can be exported with
-> [`scripts/dump_semantic_model.py`](scripts/dump_semantic_model.py). This snapshot
+> [`Drive_Revenues_Semantic_Model/Drive_Revenues_Semantic_Model.py`](Drive_Revenues_Semantic_Model/Drive_Revenues_Semantic_Model.py)
+> (`INSTRUCTIONS`, one maintenance file per model since 2026-07-20); the full
+> machine config can be exported with the same file, `ACTION = "dump"`. This snapshot
 > was last reviewed 2026-06-22 and predates the 2026-07-08 `Solution` re-add +
 > repoint to the clone dataset (see [`README.md`](README.md); re-dump pending).
 
@@ -115,8 +115,8 @@ to `sirano_product`** (BUDGET rows can lack it, so doing so can drop the budget 
 ## The SQL-generation instructions (the brain)
 
 `sqlGenerationConfig.instructions` is a long rules block; the canonical text is
-in `build_aligned_semantic_model.py` (`NEW_INSTRUCTIONS`, byte-identical to
-`update_aligned_semantic_model.py`). The themes:
+the `INSTRUCTIONS` constant of `Drive_Revenues_Semantic_Model.py` (the last
+update_aligned iteration composed with the 2026-07-08 `Solution` restore). The themes:
 
 1. **One physical table, never JOIN** (no self-join).
 2. **Revenue semantics**: `amount_eur` bucketed by `Phase` + `booking_type`;
@@ -171,14 +171,13 @@ hand-edited (`userModified`), e.g. IPL synonyms (IP Leased Line), LTE Signalling
 ## Lineage and how to iterate
 
 - The aligned model was built from a **read-only copy** of the old model
-  (`2O2KcHw` / `Drive_Revenues_Model`, kept intact as rollback) by
-  `build_aligned_semantic_model.py`, then bound to the `revenue_semantic_query`
-  tool. The live active model is named `Drive_Revenues_Semantic_Model`.
+  (`2O2KcHw` / `Drive_Revenues_Model`, kept intact as rollback) by the historical
+  `build_aligned_semantic_model.py` (git history), then bound to the
+  `revenue_semantic_query` tool. The live active model is named `Drive_Revenues_Semantic_Model`.
 - To **iterate the rules** (instructions / golden queries) on the live model:
-  set `NEW_MODEL_ID` and run `update_aligned_semantic_model.py` (in place, no
-  re-index).
-- To **refresh this snapshot**: run `dump_semantic_model.py` (exports the live
+  run `Drive_Revenues_Semantic_Model.py` with `ACTION = "update"` (in place, no
+  re-index; DRY_RUN previews first).
+- To **refresh this snapshot**: same file, `ACTION = "dump"` (exports the live
   `get_raw()` to `Drive_Revenues_Semantic_Model.v1.json`).
-- The model's technical id is configured in the DSS tool, not stored here; fill
-  it into `dump_semantic_model.py` / `update_aligned_semantic_model.py` when you
-  run them.
+- The model resolves by NAME by default (`MODEL_NAME` in the CONFIG), which
+  survives clone id reassignments; set `MODEL_ID` only to pin an exact id.

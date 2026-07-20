@@ -202,10 +202,10 @@ Spec : sections 5.2, 5.3, 8. Depend de T3 (contrats token/events). Fichiers DISJ
 
 **Files:**
 - Modify: `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py`
-- Create: `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/prompts/orchestrator_workflow.md`
+- Create: `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/prompts/orchestrator_workflow.md`
   (sections PLANNER / REPLANNER / REVIEWER / SYNTHESIZER ; fallbacks embarques dans l'agent,
   pattern `_load_hub_capabilities` :1374-1469)
-- Create: `OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/run_settings.json` (deadlines, caps,
+- Create: `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/run_settings.json` (deadlines, caps,
   flags ; valeurs = spec 4.3/5.2 ; loader avec validation stricte + repli embarque)
 - Test: `OWIsMind_PRD_V1_3_DEV/tests/test_orchestrator_workflow.py` (NOUVEAU)
 

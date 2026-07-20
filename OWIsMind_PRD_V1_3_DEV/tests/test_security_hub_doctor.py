@@ -2,7 +2,7 @@
 
 Locks two audit findings (GPT-5.6 Sol + internal, 2026-07-16):
 - hub.get_settings must only overlay keys declared in DEFAULT_SETTINGS, so an
-  unknown key planted in /owismind_hub/factory_settings.json can never ride
+  unknown key planted in /python/owismind_hub/factory_settings.json can never ride
   through (and get republished by the console's /api/state).
 - doctor.format_proposal_markdown must withhold the issues' verbatim
   conversation evidence by default, because the proposal markdown is persisted

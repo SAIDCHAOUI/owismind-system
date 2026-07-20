@@ -2,7 +2,7 @@
 #
 # Admin, DESIGN-TIME webapp that drives the "agent factory": it plans and runs the creation of a
 # new dataset-specialist sub-agent chain in this DSS project, and edits the Config & Prompt Hub
-# (/owismind_hub/). It is SEPARATE from the OWIsMind Vue plugin webapp.
+# (/python/owismind_hub/). It is SEPARATE from the OWIsMind Vue plugin webapp.
 #
 # DSS provides the Flask ``app``. The frontend (script.js) calls these routes via
 # getWebAppBackendUrl('api/...'). Everything runs against the OFFICIAL public API through the
@@ -43,7 +43,7 @@ from owismind_factory.spec import DomainSpec, SpecError
 logger = logging.getLogger(__name__)
 
 # Hub prompt writes are constrained to this subtree (defense in depth: the path is never trusted).
-_PROMPTS_PREFIX = "/owismind_hub/prompts/"
+_PROMPTS_PREFIX = "/python/owismind_hub/prompts/"
 
 # A domain key is snake_case (same shape DomainSpec enforces). Used to build the hub path
 # where a wizard draft is persisted, so we validate it before touching the library.
@@ -93,7 +93,7 @@ def _safe_prompt_path(path):
 
     These are VIRTUAL DSS library paths, so we never run os.path on them (which
     could resolve '..'). We reject any traversal or separator trick ('..', '//',
-    a backslash) and enforce the /owismind_hub/prompts/ prefix, so a crafted path
+    a backslash) and enforce the /python/owismind_hub/prompts/ prefix, so a crafted path
     can never escape the prompts subtree even if the library API resolves '..'.
     """
     if not isinstance(path, str):
@@ -431,7 +431,7 @@ def api_wizard_draft():
 @app.route("/api/hub/prompt", methods=["GET"])
 @_safe
 def api_hub_prompt_get():
-    """Read a hub prompt file. The path MUST live under /owismind_hub/prompts/ (rejected otherwise)."""
+    """Read a hub prompt file. The path MUST live under /python/owismind_hub/prompts/ (rejected otherwise)."""
     path = _safe_prompt_path(request.args.get("path") or "")
     if path is None:
         return _err("invalid_path", 400)
@@ -443,7 +443,7 @@ def api_hub_prompt_get():
 @_safe
 def api_hub_prompt_post():
     """Write a hub prompt file (a backup of the previous version is made). Requires
-    confirm; path MUST live under /owismind_hub/prompts/."""
+    confirm; path MUST live under /python/owismind_hub/prompts/."""
     body = request.get_json(silent=True) or {}
     if not _confirmed(body):
         return _err("confirmation_required", 400)

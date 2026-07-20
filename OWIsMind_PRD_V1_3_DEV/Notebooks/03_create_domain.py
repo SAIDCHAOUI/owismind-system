@@ -32,7 +32,7 @@ SPEC = {
 }
 
 # Wizard config produced by 04_semantic_wizard.py (hub path), or None.
-WIZARD_CONFIG_PATH = None      # e.g. "/owismind_hub/wizard/satisfaction-config.json"
+WIZARD_CONFIG_PATH = None      # e.g. "/python/owismind_hub/wizard/satisfaction-config.json"
 
 # Steps subset (None = all). See pipeline.STEP_NAMES.
 STEPS = None

@@ -2,7 +2,7 @@
   "_meta": {
     "what": "Single source-of-truth manifest for the OWIsMind PRODUCTION agent system: project key, real DSS ids, dataset names, semantic model + tool bindings, fast-lookup config, guardrails. Mirrors CAPABILITIES in GenAI/Agents/OWIsMind_orchestrator.py.",
     "project_is": "the DSS production project OWIsMind_PRD_V1_2 (key OWISMIND_PRD_V1_2). It was created by DUPLICATING the DEV project OWISMIND_DEV, so every id below is the DEV id preserved by the clone. Prod IS the clone: there is no separate PROD twin with different ids anymore. Versions advance by git branch (one branch per version, named after the prod project); the next dev branch is OWIsMind_PRD_V1_3-dev.",
-    "divergence_note": "DEV and this clone may DIVERGE on the revenue Solution offer column: the Solution column was re-added on the CLONE side on 2026-07-08 (script GenAI/semantic-models/scripts/add_solution_and_repoint_prod_clone.py, validated in DSS). Treat this file as authoritative for the clone.",
+    "divergence_note": "DEV and this clone may DIVERGE on the revenue Solution offer column: the Solution column was re-added on the CLONE side on 2026-07-08 (historical script add_solution_and_repoint_prod_clone.py, validated in DSS; since 2026-07-20 the canonical text lives in GenAI/semantic-models/Drive_Revenues_Semantic_Model/Drive_Revenues_Semantic_Model.py). Treat this file as authoritative for the clone.",
     "not_runtime": "NOT imported at runtime. The Code Agent files stay standalone-pasteable; CAPABILITIES is inlined in the orchestrator. Keep this file in sync by hand.",
     "last_reviewed": "2026-07-10"
   },
@@ -49,7 +49,7 @@
         "max_rows": 500,
         "allowed_tables": ["DRIVE_Revenues"]
       },
-      "status": "LIVE - validated in the DSS clone. Semantic model AHUh9hb repointed to the clone dataset (datasetRef OWISMIND_PRD_V1_2.DRIVE_Revenues, table 'OWISMIND_PRD_V1_2_drive_revenues') and the Solution offer column RE-ADDED 2026-07-08 (add_solution_and_repoint_prod_clone.py). Offer hierarchy SolutionLine > Solution > Product; grounding preference 1.Product 2.Solution 3.SolutionLine 4.sirano_product."
+      "status": "LIVE - validated in the DSS clone. Semantic model AHUh9hb repointed to the clone dataset (datasetRef OWISMIND_PRD_V1_2.DRIVE_Revenues, table 'OWISMIND_PRD_V1_2_drive_revenues') and the Solution offer column RE-ADDED 2026-07-08 (historical add_solution script, now consolidated in the per-model file). Offer hierarchy SolutionLine > Solution > Product; grounding preference 1.Product 2.Solution 3.SolutionLine 4.sirano_product."
     },
     "tickets_expert": {
       "kind": "agent",
@@ -100,7 +100,7 @@
         "max_rows": 500,
         "allowed_tables": ["TroubleTickets_year"]
       },
-      "status": "INCLUDED in the clone by duplication (Code Agent NcE9LD2i, semantic model dM4jA4G, tool nEirlso all present). Remaining work: launch GenAI/semantic-models/scripts/repoint_tickets_prod_clone.py on the clone (repoints dM4jA4G to the clone dataset; READY, simulated 4/4, NOT YET LAUNCHED), then finish curation per PLAYBOOK - apply the profile overrides (COUNT_DISTINCT id, time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the v1.json, and smoke-test tickets end-to-end."
+      "status": "INCLUDED in the clone by duplication (Code Agent NcE9LD2i, semantic model dM4jA4G, tool nEirlso all present). Remaining work: run GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py with ACTION='repoint' on the clone (repoints dM4jA4G to the clone dataset; the former repoint_tickets_prod_clone.py, simulated 4/4, NOT YET LAUNCHED), then finish curation per PLAYBOOK - apply the profile overrides (COUNT_DISTINCT id, time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the v1.json, and smoke-test tickets end-to-end."
     }
   },
   "business_domains": {

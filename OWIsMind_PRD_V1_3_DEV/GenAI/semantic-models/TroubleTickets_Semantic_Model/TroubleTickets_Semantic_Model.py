@@ -1,53 +1,61 @@
 # =============================================================================
-# update_tickets_semantic_model.py
+# TroubleTickets_Semantic_Model.py - THE single maintenance file for the TICKETS
+# semantic model (one Python file per semantic model, user decision 2026-07-20).
 # -----------------------------------------------------------------------------
-# Run this IN A DATAIKU NOTEBOOK (project OWISMIND_DEV) to make the TICKETS
-# semantic model a true expert of the TroubleTickets_year dataset. It refreshes,
-# IN PLACE on the model's active version:
-#   - the SQL-generation INSTRUCTIONS (the brain - the single most important
-#     field: what the data is and how to query it correctly),
-#   - the GOLDEN QUERIES (few-shot examples that teach the hard rules),
-#   - the ENTITY description and every ATTRIBUTE (column) description,
-#   - the METRICS (ticket count as COUNT(DISTINCT id), resolution time, ...).
-# It does NOT create a model and it does NOT change which attributes are indexed,
-# so NO re-indexing is needed (the distinct-values index is untouched).
+# Run in a DSS notebook of the project that OWNS the model (the current clone).
+# Pick ONE action in CONFIG below; every write action previews first (DRY_RUN).
 #
-# Recommended flow (see README.md, "Add a tickets model"):
-#   1. In DSS, create a semantic model on the TroubleTickets_year dataset (the UI
-#      auto-discovers entities/attributes from the schema, with valid shapes).
-#      Name it "TroubleTickets_Semantic_Model".
-#   2. Run THIS script (set NEW_MODEL_ID) to inject the tickets brain below.
-#   3. Create a Semantic Model Query tool bound to that model (Agent mode OFF,
-#      Sonnet, access datasets as the calling user); put its id in the tickets
-#      Code Agent (SEMANTIC_TOOL_ID) and in registry.json.
-#   4. Index distinct values once from the model UI (done at creation; re-index
-#      only if you later add named filters / change which attributes are indexed).
+#   ACTION = "dump"     READ-ONLY: export the LIVE model config to
+#                       TroubleTickets_Semantic_Model.v1.json, then commit that
+#                       file to the repo (byte-faithful snapshot of the SQL brain).
+#   ACTION = "update"   Push the canonical brain below IN PLACE on the active
+#                       version: SQL-generation INSTRUCTIONS + GOLDEN QUERIES +
+#                       entity/attribute DESCRIPTIONS + METRICS. No re-indexing
+#                       needed (none of these touch the distinct-values index).
+#   ACTION = "repoint"  After a project clone: remap dataset refs + physical
+#                       tables from SOURCE_PROJECT_KEY to THIS project's key,
+#                       then re-index distinct values. The factory notebook
+#                       02_align_clone.py does this for ALL models at once;
+#                       this action is the per-model equivalent.
 #
-# Documented API only (no class created directly):
-#   project.get_semantic_model(id) -> get_active_version_id() -> get_version()
-#   -> get_settings() -> get_raw() / save()
+# This file replaces the old scripts/ folder (update_tickets_semantic_model.py +
+# repoint_tickets_prod_clone.py + dump_semantic_model.py) - git history keeps
+# them. The canonical brain below is update_tickets_semantic_model.py's content,
+# carried over verbatim.
+#
+# Documented API only: project.get_semantic_model(id) -> get_active_version_id()
+# -> get_version() -> get_settings() -> get_raw()/save();
+# get_version(id).start_update_distinct_values() for the repoint re-index.
 # =============================================================================
+
+import json
 
 import dataiku
 
-# ----------------------------------------------------------------------------
-# PARAMETERS
-# ----------------------------------------------------------------------------
-NEW_MODEL_ID = "dM4jA4G"                        # <-- REQUIRED: id of YOUR tickets model
-TICKETS_DATASET = "TroubleTickets_year"   # used to resolve the physical table
+# CONFIG ----------------------------------------------------------------------
+ACTION = "dump"                     # "dump" | "update" | "repoint"
+DRY_RUN = True                      # update/repoint: True = preview only
+MODEL_ID = ""                       # "" -> resolve by MODEL_NAME (clone-safe:
+                                    # ids are usually preserved, names always)
+MODEL_NAME = "TroubleTickets_Semantic_Model"
+TICKETS_DATASET = "TroubleTickets_year"  # resolves the physical table
 # Physical table literal used inside the golden-query SQL. Leave empty to derive
 # it from the dataset at runtime (recommended - avoids guessing the resolved name).
 PHYSICAL_TABLE = ""
+SNAPSHOT_PATH = "TroubleTickets_Semantic_Model.v1.json"
+# repoint only: the project key the cloned refs still (wrongly) point at.
+SOURCE_PROJECT_KEY = "OWISMIND_PRD_V1_2"
+REBUILD_DISTINCT_VALUES = True      # repoint only: re-index on the new table
 
 
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # SQL-GENERATION INSTRUCTIONS (the brain) - tickets specific, NOT revenue.
 # This is the single most important field. It encodes, for the SQL writer itself,
 # what the data is and how to query it: one table, no scenario, the duplicate-row
 # trap (count DISTINCT ids, read the latest snapshot), the LD as the dominant
 # lookup key, exact values instead of ILIKE, customer identity, date choice, and
-# the transparency / honesty rules.
-# ----------------------------------------------------------------------------
+# the transparency / honesty rules. Pushed by ACTION="update".
+# ------------------------------------------------------------------------------
 TICKETS_INSTRUCTIONS = """\
 ## Physical model - ONE table, NEVER join
 
@@ -237,11 +245,11 @@ period]". Do NOT relax filters or extrapolate.
 """
 
 
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # ENTITY + ATTRIBUTE (column) descriptions - so the model is self-describing.
 # Keyed by physical column name; only matching attributes are updated, every other
 # attribute field (shape, indexing flags, primary key) is left untouched.
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 ENTITY_DESCRIPTION = (
     "One incident / trouble ticket, identified by its ticket id. The dataset "
     "covers the current year and the three preceding years and is refreshed on the "
@@ -314,10 +322,10 @@ ATTRIBUTE_DESCRIPTIONS = {
 }
 
 
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # METRICS - ticket count is COUNT(DISTINCT id) (dedup of historical snapshots).
 # pseudoSQLExpression uses plain identifiers, matching the DSS metric editor.
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 METRICS = [
     {"name": "Ticket count",
      "description": "Number of distinct tickets (COUNT DISTINCT id, dedup of historical snapshots).",
@@ -337,12 +345,12 @@ METRICS = [
 ]
 
 
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # GOLDEN QUERIES (tickets) - each teaches one rule: COUNT(DISTINCT id) for volume,
 # the DISTINCT ON latest-snapshot dedup for current state, LD lookups, exact-value
 # equality (never ILIKE), GROUP BY Customer_id with MAX(Account_name) display.
 # The example literals (years, an LD, an account name) are illustrative few-shots.
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 def _gq(name, question, sql):
     return {"name": name, "question": question, "generatedSql": sql}
 
@@ -460,10 +468,31 @@ def build_golden_queries(table):
     ]
 
 
-# ----------------------------------------------------------------------------
-# Resolve the physical table from the dataset (robust, no name guessing).
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# HELPERS (shared by all actions)
+# ------------------------------------------------------------------------------
+def resolve_model(project):
+    """The model for MODEL_ID, else the one named MODEL_NAME. Raises if neither."""
+    if MODEL_ID:
+        return project.get_semantic_model(MODEL_ID)
+    for h in project.list_semantic_models():
+        name = h.get("name") if isinstance(h, dict) else getattr(h, "name", None)
+        mid = h.get("id") if isinstance(h, dict) else getattr(h, "id", None)
+        if name == MODEL_NAME and mid:
+            return project.get_semantic_model(mid)
+    raise RuntimeError(
+        "Model not found: set MODEL_ID or check MODEL_NAME=%r" % MODEL_NAME)
+
+
+def active_version_settings(model):
+    """(version_id, settings) of the model's active version."""
+    version_id = model.get_active_version_id()
+    assert version_id, "The semantic model has no active version."
+    return version_id, model.get_version(version_id).get_settings()
+
+
 def resolve_physical_table(dataset_name, fallback):
+    """The quoted physical table behind the dataset (no name guessing)."""
     if fallback:
         return fallback
     try:
@@ -499,39 +528,120 @@ def apply_descriptions_and_metrics(raw):
     return entities_touched, attributes_touched
 
 
-# ----------------------------------------------------------------------------
-# UPDATE IN PLACE - refresh instructions + golden queries + descriptions + metrics
-# ----------------------------------------------------------------------------
-assert NEW_MODEL_ID, "Set NEW_MODEL_ID to the id of your tickets semantic model."
+def remap_strings(value, replacements):
+    """Recursively rewrite every string through the replacement map. Pure."""
+    if isinstance(value, dict):
+        return {k: remap_strings(v, replacements) for k, v in value.items()}
+    if isinstance(value, list):
+        return [remap_strings(v, replacements) for v in value]
+    if isinstance(value, str):
+        for old, new in replacements.items():
+            value = value.replace(old, new)
+        return value
+    return value
 
-client = dataiku.api_client()
-try:
-    project = client.get_default_project()
-except Exception:
-    project = client.get_project("OWISMIND_DEV")
 
-physical_table = resolve_physical_table(TICKETS_DATASET, PHYSICAL_TABLE)
-golden_queries = build_golden_queries(physical_table)
-print("Using physical table:", physical_table)
+def strings_mentioning(config, needle):
+    """Every string in the config that mentions the needle (for previews)."""
+    hits = []
 
-sm = project.get_semantic_model(NEW_MODEL_ID)
-version_id = sm.get_active_version_id()
-settings = sm.get_version(version_id).get_settings()
-raw = settings.get_raw()
+    def walk(v):
+        if isinstance(v, dict):
+            for c in v.values():
+                walk(c)
+        elif isinstance(v, list):
+            for c in v:
+                walk(c)
+        elif isinstance(v, str) and needle in v:
+            hits.append(v[:160])
 
-old_instr = (raw.get("sqlGenerationConfig") or {}).get("instructions") or ""
-old_gq = raw.get("goldenQueries") or []
+    walk(config)
+    return hits
 
-raw.setdefault("sqlGenerationConfig", {})["instructions"] = TICKETS_INSTRUCTIONS
-raw["goldenQueries"] = [dict(g) for g in golden_queries]
-entities_touched, attributes_touched = apply_descriptions_and_metrics(raw)
-settings.save()
 
-print("Updated tickets model %s (active version %s) in place:" % (NEW_MODEL_ID, version_id))
-print("  instructions : %d -> %d chars" % (len(old_instr), len(TICKETS_INSTRUCTIONS)))
-print("  goldenQueries: %d -> %d" % (len(old_gq), len(golden_queries)))
-print("  entities described: %d, attributes described: %d" % (entities_touched, attributes_touched))
-print("No re-indexing needed (instructions, golden queries, descriptions and "
-      "metrics do not touch the distinct-values index).")
-print("Next: test in the Playground, then point the tickets Semantic Model Query "
-      "tool at this model and set SEMANTIC_TOOL_ID in the tickets Code Agent.")
+# ------------------------------------------------------------------------------
+# ACTIONS
+# ------------------------------------------------------------------------------
+def act_dump(project, model):
+    """READ-ONLY export of the active version raw config to SNAPSHOT_PATH."""
+    version_id, settings = active_version_settings(model)
+    raw = settings.get_raw()
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8") as fh:
+        json.dump(raw, fh, ensure_ascii=False, indent=2, sort_keys=False)
+    print("Wrote %s (version %s)." % (SNAPSHOT_PATH, version_id))
+    print("Copy the file content into the repo at "
+          "GenAI/semantic-models/TroubleTickets_Semantic_Model/ and commit.")
+
+
+def act_update(project, model):
+    """Push instructions + golden queries + descriptions + metrics in place."""
+    version_id, settings = active_version_settings(model)
+    raw = settings.get_raw()
+    table = resolve_physical_table(TICKETS_DATASET, PHYSICAL_TABLE)
+    golden = build_golden_queries(table)
+    old_instr = (raw.get("sqlGenerationConfig") or {}).get("instructions") or ""
+    old_gq = raw.get("goldenQueries") or []
+    print("Model %s | active version %s | table %s" % (model.id, version_id, table))
+    print("  instructions : %d -> %d chars" % (len(old_instr), len(TICKETS_INSTRUCTIONS)))
+    print("  goldenQueries: %d -> %d" % (len(old_gq), len(golden)))
+    if DRY_RUN:
+        print("DRY_RUN=True -> nothing saved. Review the counts, then set "
+              "DRY_RUN=False and re-run.")
+        return
+    raw.setdefault("sqlGenerationConfig", {})["instructions"] = TICKETS_INSTRUCTIONS
+    raw["goldenQueries"] = [dict(g) for g in golden]
+    entities_touched, attributes_touched = apply_descriptions_and_metrics(raw)
+    settings.save()
+    print("Saved. Entities described: %d, attributes described: %d."
+          % (entities_touched, attributes_touched))
+    print("No re-indexing needed (instructions, golden queries, descriptions and "
+          "metrics do not touch the distinct-values index). Test in the "
+          "Playground, then in the webapp.")
+
+
+def act_repoint(project, model):
+    """Remap SOURCE_PROJECT_KEY refs to this project's key, in place."""
+    target_key = project.project_key
+    assert target_key != SOURCE_PROJECT_KEY, (
+        "Target key == source key (%s): run this notebook in the CLONE project, "
+        "not in the source project." % target_key)
+    replacements = {
+        SOURCE_PROJECT_KEY + ".": target_key + ".",   # entity datasetRef
+        SOURCE_PROJECT_KEY + "_": target_key + "_",   # physical tables in SQL
+    }
+    version_id, settings = active_version_settings(model)
+    raw = settings.get_raw()
+    before = strings_mentioning(raw, SOURCE_PROJECT_KEY)
+    fixed = remap_strings(raw, replacements)
+    after = strings_mentioning(fixed, SOURCE_PROJECT_KEY)
+    print("Model %s | active version %s" % (model.id, version_id))
+    print("Remap: %s.* -> %s.*  and  %s_* -> %s_*"
+          % (SOURCE_PROJECT_KEY, target_key, SOURCE_PROJECT_KEY, target_key))
+    print("Refs to %s before / after: %d / %d %s"
+          % (SOURCE_PROJECT_KEY, len(before), len(after),
+             "(after should be 0)" if not after else "<-- CHECK"))
+    for s in after[:20]:
+        print("   !!", s)
+    if DRY_RUN:
+        print("DRY_RUN=True -> nothing saved. Review (AFTER = 0), then set "
+              "DRY_RUN=False and re-run.")
+        return
+    raw.clear()
+    raw.update(fixed)
+    settings.save()
+    print("Saved. Model repointed to the %s datasets/tables." % target_key)
+    if REBUILD_DISTINCT_VALUES:
+        print("Re-indexing distinct values on the new table...")
+        print(model.get_version(version_id)
+              .start_update_distinct_values().wait_for_result())
+
+
+# ------------------------------------------------------------------------------
+# DISPATCH
+# ------------------------------------------------------------------------------
+_project = dataiku.api_client().get_default_project()
+_model = resolve_model(_project)
+_actions = {"dump": act_dump, "update": act_update, "repoint": act_repoint}
+assert ACTION in _actions, "ACTION must be one of %s" % sorted(_actions)
+print("Project:", _project.project_key, "| ACTION:", ACTION)
+_actions[ACTION](_project, _model)

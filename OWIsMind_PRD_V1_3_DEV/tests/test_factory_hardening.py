@@ -320,7 +320,7 @@ class _MemHubProject(object):
 
 
 class TestPromptBackup(unittest.TestCase):
-    PERSONA = "/owismind_hub/prompts/orchestrator_persona.md"
+    PERSONA = "/python/owismind_hub/prompts/orchestrator_persona.md"
 
     def test_write_prompt_backs_up_previous_version(self):
         project = _MemHubProject({self.PERSONA: "OLD PERSONA"})
@@ -328,7 +328,7 @@ class TestPromptBackup(unittest.TestCase):
         files = project.library.files
         self.assertEqual(files[self.PERSONA], "NEW PERSONA")
         self.assertEqual(
-            files["/owismind_hub/backups/prompts-orchestrator_persona.md-1"],
+            files["/python/owismind_hub/backups/prompts-orchestrator_persona.md-1"],
             "OLD PERSONA")
 
     def test_write_prompt_backups_do_not_overwrite_each_other(self):
@@ -338,9 +338,9 @@ class TestPromptBackup(unittest.TestCase):
         files = project.library.files
         self.assertEqual(files[self.PERSONA], "V3")
         self.assertEqual(
-            files["/owismind_hub/backups/prompts-orchestrator_persona.md-1"], "V1")
+            files["/python/owismind_hub/backups/prompts-orchestrator_persona.md-1"], "V1")
         self.assertEqual(
-            files["/owismind_hub/backups/prompts-orchestrator_persona.md-2"], "V2")
+            files["/python/owismind_hub/backups/prompts-orchestrator_persona.md-2"], "V2")
 
     def test_write_prompt_without_previous_version_makes_no_backup(self):
         project = _MemHubProject()
@@ -591,7 +591,7 @@ class TestPlaceholderAgentIdRejected(unittest.TestCase):
     def _valid_caps(self):
         import json as _json
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "project-library", "owismind_hub", "capabilities.json")
+                                 "project-library", "python", "owismind_hub", "capabilities.json")
         with open(seed_path) as fh:
             return _json.load(fh)
 
@@ -619,7 +619,7 @@ class TestRegistryLabelsMatchLiveCapabilities(unittest.TestCase):
         import json as _json
         from owismind_factory import registry as reg
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "project-library", "owismind_hub", "capabilities.json")
+                                 "project-library", "python", "owismind_hub", "capabilities.json")
         with open(seed_path) as fh:
             seed = _json.load(fh)
         agent_caps = [c for c in seed.values() if c.get("kind") == "agent"]
@@ -633,7 +633,7 @@ class TestRegistryLabelsMatchLiveCapabilities(unittest.TestCase):
 
 
 class TestFactorySettingsSeedEquivalence(unittest.TestCase):
-    """project-library/owismind_hub/factory_settings.json seed must equal DEFAULT_SETTINGS.
+    """project-library/python/owismind_hub/factory_settings.json seed must equal DEFAULT_SETTINGS.
 
     Same anti-drift rule as the capabilities/persona seeds: a silent divergence
     on sql_connection or the template ids would change factory behavior
@@ -643,7 +643,7 @@ class TestFactorySettingsSeedEquivalence(unittest.TestCase):
     def test_seed_equals_embedded_defaults(self):
         import json as _json
         seed_path = os.path.join(os.path.dirname(__file__), "..",
-                                 "project-library", "owismind_hub", "factory_settings.json")
+                                 "project-library", "python", "owismind_hub", "factory_settings.json")
         with open(seed_path) as fh:
             seed = _json.load(fh)
         self.assertEqual(seed, hub.DEFAULT_SETTINGS)
@@ -665,7 +665,7 @@ class TestHubAppendSerialization(unittest.TestCase):
         try:
             import json as _json
             seed = _json.load(open(os.path.join(os.path.dirname(__file__), "..",
-                                                "project-library", "owismind_hub", "capabilities.json")))
+                                                "project-library", "python", "owismind_hub", "capabilities.json")))
             first_key = sorted(seed.keys())[0]
             entry = seed[first_key]
             barrier = threading.Barrier(2)

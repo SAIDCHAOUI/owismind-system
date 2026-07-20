@@ -16,8 +16,8 @@
 #   two probe objects it just created.
 #
 # With RUN_WRITE_PROBES off (the default) this notebook is read-only against
-# DSS objects; the only writes are its own report files under /owismind_hub/
-# (previous versions are backed up under /owismind_hub/backups/).
+# DSS objects; the only writes are its own report files under /python/owismind_hub/
+# (previous versions are backed up under /python/owismind_hub/backups/).
 #
 # OUTPUT: a markdown report. Paste it back to Claude (or commit it as
 # OWIsMind_PRD_V1_3_DEV/docs/CAPABILITY_MATRIX.md) so the gated factory
@@ -32,7 +32,7 @@ from owismind_factory import hub, probes
 
 # ----------------------------------------------------------------- CONFIG ----
 RUN_WRITE_PROBES = False        # True = create+verify+DELETE zz_factory_probe objects
-WRITE_REPORT_TO_HUB = True      # store the report at /owismind_hub/probe_report.md
+WRITE_REPORT_TO_HUB = True      # store the report at /python/owismind_hub/probe_report.md
 # ------------------------------------------------------------------------------
 
 project = dataiku.api_client().get_default_project()
@@ -46,7 +46,7 @@ print(report)
 
 if WRITE_REPORT_TO_HUB:
     # write_prompt (not write_text): the previous report survives under
-    # /owismind_hub/backups/ instead of being silently overwritten.
+    # /python/owismind_hub/backups/ instead of being silently overwritten.
     hub.write_prompt(project, hub.HUB_ROOT + "/probe_report.md", report)
     print("\n[saved to project library %s/probe_report.md]" % hub.HUB_ROOT)
 
@@ -59,7 +59,7 @@ print("\nDISCOVERY type = %r, confirmed = %s (params template in the report abov
 
 if WRITE_REPORT_TO_HUB:
     # Same backup contract as the report: the previous probe_results.json is
-    # kept under /owismind_hub/backups/ before the overwrite.
+    # kept under /python/owismind_hub/backups/ before the overwrite.
     hub.write_prompt(project, hub.HUB_ROOT + "/probe_results.json", json.dumps({
         "suggested_schema_hints": results.get("suggested_schema_hints"),
         "suggested_discovery": results.get("suggested_discovery"),

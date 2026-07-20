@@ -1345,7 +1345,7 @@ PERSONA_DEFAULT = (
 
 
 # =============================================================================
-# 7b. CONFIG HUB - optional overrides from the project library (/owismind_hub/)
+# 7b. CONFIG HUB - optional overrides from the project library (/python/owismind_hub/)
 # -----------------------------------------------------------------------------
 # The hub (see project-library/python/owismind_factory/hub.py and the notebook
 # 01_push_config_hub.py) lets the team iterate the PERSONA and register new
@@ -1356,8 +1356,8 @@ PERSONA_DEFAULT = (
 # (re-save the agent or shutdown/wake it in DSS).
 # =============================================================================
 
-_HUB_PERSONA_PATH = "/owismind_hub/prompts/orchestrator_persona.md"
-_HUB_CAPABILITIES_PATH = "/owismind_hub/capabilities.json"
+_HUB_PERSONA_PATH = "/python/owismind_hub/prompts/orchestrator_persona.md"
+_HUB_CAPABILITIES_PATH = "/python/owismind_hub/capabilities.json"
 # Mirror of owismind_factory.hub.REQUIRED_CAPABILITY_KEYS (anti-drift test
 # tests/test_factory_registry.py keeps the two tuples identical).
 _HUB_REQUIRED_CAPABILITY_KEYS = (
@@ -1668,7 +1668,7 @@ _PLAN_FORBIDDEN_RE = re.compile(
 
 # --- run settings (deadlines / caps / flags), hub-overridable ----------------
 # Embedded defaults = the audited values of spec 4.3 / 4.4 / 5.2. The hub seed
-# /owismind_hub/run_settings.json starts byte-equivalent to this literal
+# /python/owismind_hub/run_settings.json starts byte-equivalent to this literal
 # (regenerate_seeds.py keeps it that way); after DSS calibration the team may
 # tune deadlines in a sane window and LOWER caps, never raise them.
 RUN_SETTINGS_DEFAULT = {
@@ -1693,7 +1693,7 @@ RUN_SETTINGS_DEFAULT = {
         "allow_render": True,
     },
 }
-_HUB_RUN_SETTINGS_PATH = "/owismind_hub/run_settings.json"
+_HUB_RUN_SETTINGS_PATH = "/python/owismind_hub/run_settings.json"
 
 _RUN_SETTINGS_DEADLINE_KEYS = ("legacy_run_seconds", "durable_run_seconds",
                                "step_budget_seconds", "idle_warning_seconds")
@@ -1779,7 +1779,7 @@ def workflow_caps():
 
 
 # --- workflow prompts (PLANNER / REPLANNER / REVIEWER / SYNTHESIZER) ---------
-# Embedded defaults; the hub seed /owismind_hub/prompts/orchestrator_workflow.md
+# Embedded defaults; the hub seed /python/owismind_hub/prompts/orchestrator_workflow.md
 # starts byte-equivalent (regenerate_seeds.py) and can be iterated without
 # re-pasting this file. Strict parse + silent fallback, like the persona.
 WORKFLOW_PROMPTS_DEFAULT = {
@@ -1857,7 +1857,7 @@ WORKFLOW_PROMPTS_DEFAULT = {
         "- If the ledger is partial, say honestly what is covered and what "
         "is not. Answer in the user's language, concise and factual."),
 }
-_HUB_WORKFLOW_PROMPTS_PATH = "/owismind_hub/prompts/orchestrator_workflow.md"
+_HUB_WORKFLOW_PROMPTS_PATH = "/python/owismind_hub/prompts/orchestrator_workflow.md"
 _WORKFLOW_SECTION_RE = re.compile(
     r"(?m)^## (PLANNER|REPLANNER|REVIEWER|SYNTHESIZER)\s*$")
 

@@ -3,7 +3,7 @@
 Three sources must stay identical or the hub override would silently change
 behavior:
 - the orchestrator's embedded CAPABILITIES_DEFAULT / PERSONA_DEFAULT,
-- the hub seed files (OWIsMind_PRD_V1_3_DEV/project-library/owismind_hub/), pushed by 01_push_config_hub.py,
+- the hub seed files (OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/), pushed by 01_push_config_hub.py,
 - the validators (owismind_factory.hub.REQUIRED_CAPABILITY_KEYS vs the
   orchestrator's _HUB_REQUIRED_CAPABILITY_KEYS) and the frozen dialect tuples.
 
@@ -20,7 +20,7 @@ import unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _MIRROR = os.path.dirname(_HERE)
 _ORCH = os.path.join(_MIRROR, "GenAI", "Agents", "OWIsMind_orchestrator.py")
-_HUB_DIR = os.path.join(_MIRROR, "project-library", "owismind_hub")
+_HUB_DIR = os.path.join(_MIRROR, "project-library", "python", "owismind_hub")
 _LIB = os.path.join(_MIRROR, "project-library", "python")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)

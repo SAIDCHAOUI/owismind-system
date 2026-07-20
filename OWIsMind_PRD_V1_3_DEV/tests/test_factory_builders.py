@@ -603,9 +603,9 @@ class TestAgentBuilder(unittest.TestCase):
             agent_builder.agent_exists(_RaisingAgentProject(), "X")
 
     def test_paste_checklist_mentions_agent_and_path(self):
-        text = agent_builder.paste_checklist(make_spec(), "/owismind_hub/generated/Satisfaction_expert.py")
+        text = agent_builder.paste_checklist(make_spec(), "/python/owismind_hub/generated/Satisfaction_expert.py")
         self.assertIn("Satisfaction_expert", text)
-        self.assertIn("/owismind_hub/generated/Satisfaction_expert.py", text)
+        self.assertIn("/python/owismind_hub/generated/Satisfaction_expert.py", text)
 
     def test_gated_without_hints_writes_file_and_manual(self):
         ctx = FactoryContext(project=_CreateAgentProject(), dry_run=True)

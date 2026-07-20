@@ -11,8 +11,9 @@
 
 OWIsMind is the internal data assistant of Orange Wholesale International, running
 as agents inside Dataiku DSS and used through a Vue web app. This folder is the
-**repo mirror and source of truth** for the DSS **production** project
-`OWIsMind_PRD_V1_2` (project key `OWISMIND_PRD_V1_2`): an **orchestrator** that
+**repo mirror and source of truth** for the DSS project of the current version
+(`OWIsMind_PRD_V1_3_DEV` on this branch, the v1.3 dev clone of the production
+project `OWIsMind_PRD_V1_2`): an **orchestrator** that
 chats and routes, a **revenue sub-agent** expert of `DRIVE_Revenues`, a **tickets
 sub-agent** expert of `TroubleTickets_year`, the **Flow recipes** that fabricate the
 sub-agents' knowledge, and the **semantic models** that write the SQL. You edit
@@ -127,9 +128,8 @@ analytics) and `beta-owismind_webapp_traces_v2` (agent traces).
   the **`Solution` offer column re-added 2026-07-08**, VALIDATED in DSS. Readable
   snapshot: `GenAI/semantic-models/MODEL.md`.
 - **tickets** (`TroubleTickets_Semantic_Model`, `dM4jA4G`): default metric
-  `COUNT(DISTINCT id)`, `Duration_ticket_total` in minutes (AVG). Repoint script
-  `GenAI/semantic-models/scripts/repoint_tickets_prod_clone.py` READY, simulated 4/4, not
-  yet launched on the clone.
+  `COUNT(DISTINCT id)`, `Duration_ticket_total` in minutes (AVG). Repoint = `GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py`
+  ACTION="repoint" (simulated 4/4, not yet launched on the clone; notebook 02 covers it too).
 
 ### Modes (model per turn)
 
@@ -147,11 +147,11 @@ stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
 | `GenAI/Agents/` | The three Code Agent files (orchestrator + revenue + tickets sub-agents). Paste each into its DSS Code Agent (env 3.11). Ids baked into each CONFIG. |
 | `GenAI/agents-tools/attribute_lookup_tool.py` | The `attribute_lookup` Custom Python tool (`UUoynaL`). |
 | `flow/` | The Flow recipes per zone (`SalesDrive_Revenue_Expert_zone/python-recipes/`, `CSC_ticket_AI_Agent_zone/python-recipes/`, `Webapp_Zone/`) + `README.md` + `DATASETS.md`. Dataset IO comes from the DSS Flow wiring, not code constants. |
-| `GenAI/semantic-models/` | Per-model `.v1.json` snapshots + `scripts/` (build / update / dump / drop / migrate / remap / repoint) + `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. |
+| `GenAI/semantic-models/` | ONE folder per model holding ONE maintenance file `<Model>.py` (ACTION = dump / update / repoint) + the `.v1.json` snapshot; plus `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. The old scripts/ folder is consolidated into the per-model files (2026-07-20). |
 | `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
 | `docs/PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the v1.3 **agent factory**: `docs/AGENT_FACTORY.md` (deploy: `docs/DEPLOY_V1_3_DEV.md`). |
 | `project-library/python/owismind_factory/` | The v1.3 agent factory engine package (pasted into the DSS project library). |
-| `project-library/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/owismind_hub/` at the DSS library root): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
+| `project-library/python/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/python/owismind_hub/` in the DSS project library, everything lives under `python/` by user decision 2026-07-20): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
 | `Notebooks/` | Factory runner notebooks 00-06 (probe, push hub, align clone, create domain, wizard, logging, doctor). |
 | `Standard-webapps/agent-factory-console/` | The factory console (Standard webapp, optional; everything is also doable via notebooks). |
 | `docs/` | Sub-project docs: `DEPLOY_V1_3_DEV.md` (deployment guide, phase 0 = security gates), `AGENT_FACTORY.md` (factory architecture), `CAPABILITY_MATRIX.md` (probe report), `PLAYBOOK_ADD_AGENT.md` (manual playbook), `SECURITY_AUDIT_2026-07-16.md` (dual-audit synthesis). |
@@ -207,8 +207,8 @@ to prod by dropping the `-dev` suffix (the dev branch becomes the new prod branc
 from each `revenue_semantic_query` "Description for LLM" (corrected text in
 `GenAI/semantic-models/TOOL_DESCRIPTIONS.md`); (2) delete the dead
 `Drive_Revenues_resolve_filter_value` tool object (`aNxeOc4`); (3) finish the
-**tickets** curation - launch `GenAI/semantic-models/scripts/repoint_tickets_prod_clone.py`
-on the clone (repoints `TroubleTickets_Semantic_Model` `dM4jA4G` to the clone
+**tickets** curation - run `GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py`
+ACTION="repoint" on the clone (repoints `TroubleTickets_Semantic_Model` `dM4jA4G` to the clone
 dataset; simulated 4/4), apply the profile overrides (COUNT_DISTINCT id,
 time=creationDate, Customer_id display Account_name, LD synonyms), re-dump the
 `.v1.json`, then smoke-test tickets end-to-end (see `docs/PLAYBOOK_ADD_AGENT.md`).

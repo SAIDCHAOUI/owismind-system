@@ -13,9 +13,10 @@ miroir UI DSS voulue par l'user : `GenAI/{Agents, agents-tools, semantic-models}
 `Standard-webapps/`, `flow/<zone>_zone/python-recipes/`) ; **le plugin vit dans le projet** :
 `OWIsMind_PRD_V1_3_DEV/plugin/{owismind, ready-for-dataiku, tools}` ; LAB idem (`Standard-webapps/`) ;
 `project-documentation/` + email -> `docs/`. Toutes references a jour (rules, skills, tests, registry,
-build_dev_plugin). 4 suites vertes + --check PASS apres restructure. DECOUVERTE DSS : l'user a colle
-`owismind_hub` sous `lib/python/` alors que le code lit `HUB_ROOT="/owismind_hub"` a la RACINE de la
-library -> a supprimer cote DSS, le notebook 01 le recree au bon endroit.
+build_dev_plugin). 4 suites vertes + --check PASS apres restructure. DECISION USER (Run 2) : le hub
+vit SOUS `python/` dans la library DSS -> `HUB_ROOT = "/python/owismind_hub"` partout (factory,
+3 agents, console, tests, seeds repo sous `project-library/python/owismind_hub/`) ; le placement
+DSS de l'user (lib/python/owismind_hub) est donc CORRECT, notebook 01 pousse au meme endroit.
 
 **DURABLE STEP SHELL v1.3 - VERIFICATION PRE-TEST TRIPLE + DURCISSEMENT + ZIP v1.3-dev
 (2026-07-17 Run 3, branche `OWIsMind_PRD_V1_3-dev`, fixes en working tree, commit de session a faire).**
@@ -44,7 +45,7 @@ tree). Voir `sessions/2026-07-17.md`.
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
 - 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
 - 2026-07-17 (nuit, Runs 1-2) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; 1er audit securite (0 Critical, 3 findings corriges) ; guide complet + fix cablage flag. 17 commits pousses `..b909156` + 3 locaux. L157-L160. Voir `sessions/2026-07-17.md`.
-- 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
+- 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/python/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
 - 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
 - 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.
 - 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
@@ -91,12 +92,12 @@ tree). Voir `sessions/2026-07-17.md`.
 - **FACTORY v1.3 - DEPLOIEMENT** (le clone DSS existe deja) : `OWIsMind_PRD_V1_3_DEV/docs/DEPLOY_V1_3_DEV.md` : phase 0 = 3 GATES securite cote DSS (console admins-only + run-as dedie ; SQL_owi SELECT-only + statement timeout au niveau base ; acces/retention du dataset de logs), puis A2 (notebook 02 en 3 passes : decouverte -> EXPECTED_SOURCE_KEYS -> run reel) puis B-D (lib + sonde 00 + push hub 01 + re-paste 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates. Puis F (1er domaine + wizard) et G. Synthese audit : `docs/SECURITY_AUDIT_2026-07-16.md`.
 - Backlog v1.3 (durcissement non bloquant, voir SECURITY_AUDIT section backlog) : authz par viewer dans la console (WebappImpersonationContext) ; manifeste de reprise par domaine (rejoint le manifeste canonique deja au backlog) ; machine d'etat persistante par domaine ; environnement de validation pre-live ; controle operationnel.
 - CODEX : flux end-to-end VALIDE en reel le 2026-07-16 (audit securite livre par Sol via codex-companion, piege L156 : verifier la vivacite du PID, pas le seul statut). Reste : une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`.
-- CLONE prod : lancer `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/scripts/repoint_tickets_prod_clone.py` sur le clone
+- CLONE prod : lancer `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` (ACTION="repoint") sur le clone
   + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
   (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146
   (revenus + repoint = FAITS, valides DSS).
 - Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur prod (clone) `038G7mlF` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
 - LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
-- Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `update_aligned_semantic_model.py` + re-dump) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).
+- Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `Drive_Revenues_Semantic_Model.py` ACTION="update" + re-dump ACTION="dump" (ex update_aligned, consolide 2026-07-20)) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).
 - 2e agent TICKETS : finaliser + pofiner (`OWIsMind_PRD_V1_3_DEV/docs/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
 - Backlog differe : recueillir les ajustements user sur le trust layer ; consolidation SalesDrive v2 (cas d'ambiguite reelle) ; re-tester en DSS L040/L041 ; Evidence v3 (restriction admin datasets, keyset pagination) ; 2e task mentionnee par l'user le 2026-06-09 (a clarifier).

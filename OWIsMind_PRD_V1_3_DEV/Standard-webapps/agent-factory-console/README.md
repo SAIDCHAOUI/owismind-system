@@ -3,7 +3,7 @@
 Admin, design-time webapp that drives the OWIsMind "agent factory": it plans and runs the creation
 of a new dataset-specialist sub-agent chain (source table -> Flow zone + knowledge recipes/datasets
 -> semantic model -> Semantic Model Query tool -> Code Agent -> orchestrator registration) and edits
-the Config & Prompt Hub (`/owismind_hub/`). It is SEPARATE from the OWIsMind Vue plugin webapp: agent
+the Config & Prompt Hub (`/python/owismind_hub/`). It is SEPARATE from the OWIsMind Vue plugin webapp: agent
 management is kept apart for now (it may merge into the plugin in a later version).
 
 Four panes, same deploy model as the LAB webapps (`OWIsMind_LAB/Standard-webapps/*`):
@@ -31,7 +31,7 @@ tree pushed:
    `registry.py`, `pipeline.py`, `probes.py`, `wizard.py`, ...). In DSS, the project library
    `python/` folder is on the import path of webapp backends, so `from owismind_factory import ...`
    resolves without any extra wiring.
-2. The hub tree under the project library at `/owismind_hub/` (at least `capabilities.json` and
+2. The hub tree under the project library at `/python/owismind_hub/` (at least `capabilities.json` and
    `prompts/orchestrator_persona.md`). It is optional for the console to start (the Overview screen
    simply shows "HUB ABSENT" until it is pushed), but the Prompts screen needs it to read/write.
 
@@ -70,9 +70,9 @@ automatically inside the webapp iframe).
   wizard config, invalidates a stale plan (you must re-plan before executing). A "Wizard sémantique"
   section drafts the semantic model config from a profile dataset (LLM call), asks clarifying
   questions, and re-drafts with the answers; the draft is persisted to
-  `/owismind_hub/wizard/<domain>-config.json` (same path as notebook 04) and auto-attached to
+  `/python/owismind_hub/wizard/<domain>-config.json` (same path as notebook 04) and auto-attached to
   plan/execute when the request body carries none.
-- **Prompts**: edit a hub prompt file (path constrained to `/owismind_hub/prompts/`) and the
+- **Prompts**: edit a hub prompt file (path constrained to `/python/owismind_hub/prompts/`) and the
   `capabilities.json` registry (server-side validated, previous version backed up).
 
 ## Safety model
@@ -85,7 +85,7 @@ automatically inside the webapp iframe).
   to carry `"confirm": true`, else it returns `{"status":"error","error":"confirmation_required"}`
   and does nothing. The UI gates each of these behind a confirm modal.
 - **Path allowlist**: hub prompt reads/writes are rejected unless the path starts with
-  `/owismind_hub/prompts/`, and the path is additionally guarded against traversal (`..`) so it can
+  `/python/owismind_hub/prompts/`, and the path is additionally guarded against traversal (`..`) so it can
   never escape that prefix (the path from the client is never trusted).
 - **Background jobs**: long actions return a `job_id`; the frontend polls `GET /api/job/<id>`. The
   job registry is bounded (last 20) and lock-guarded; a still-running job is never evicted by the

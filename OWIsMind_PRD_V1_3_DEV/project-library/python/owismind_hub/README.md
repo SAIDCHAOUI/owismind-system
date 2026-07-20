@@ -1,6 +1,6 @@
 # owismind_hub/ - graines du Config & Prompt Hub
 
-Le hub est le panneau de reglages des agents : un dossier `/owismind_hub/` dans la
+Le hub est le panneau de reglages des agents : un dossier `/python/owismind_hub/` dans la
 project library DSS, que chaque agent lit a son demarrage. Il permet de changer les
 prompts et de declarer des agents SANS recoller le code des agents. Si un fichier du
 hub est absent ou invalide, l'agent retombe sur ses defauts embarques : le hub ne
@@ -8,7 +8,7 @@ peut pas casser la prod.
 
 ## Dans Dataiku
 
-Le hub vit a la racine de la project library du projet DSS, sous `/owismind_hub/`.
+Le hub vit dans la project library du projet DSS, sous `/python/owismind_hub/` (tout se met sous `python/`, decision user 2026-07-20).
 Il est pousse par le notebook [`../../Notebooks/01_push_config_hub.py`](../../Notebooks/01_push_config_hub.py),
 qui embarque le contenu de ce dossier. Ce dossier repo est le miroir lisible des graines (seeds).
 
@@ -16,12 +16,12 @@ qui embarque le contenu de ce dossier. Ce dossier repo est le miroir lisible des
 
 | Fichier | Pousse vers | Lu par |
 |---|---|---|
-| `capabilities.json` | `/owismind_hub/capabilities.json` | orchestrator (section 7b loader) |
-| `prompts/orchestrator_persona.md` | `/owismind_hub/prompts/orchestrator_persona.md` | orchestrator (PERSONA override) |
-| `factory_settings.json` | `/owismind_hub/factory_settings.json` | owismind_factory (reglages d'instance) |
-| (cree en DSS) | `/owismind_hub/prompts/<domain>/understand_extra.md` | le specialiste du domaine (regles UNDERSTAND additives) |
-| (cree en DSS) | `/owismind_hub/templates/dataset_expert.py` | agent_builder (template moteur) |
-| (cree en DSS) | `/owismind_hub/generated/`, `/wizard/`, `/doctor/`, `/backups/` | sorties de la factory |
+| `capabilities.json` | `/python/owismind_hub/capabilities.json` | orchestrator (section 7b loader) |
+| `prompts/orchestrator_persona.md` | `/python/owismind_hub/prompts/orchestrator_persona.md` | orchestrator (PERSONA override) |
+| `factory_settings.json` | `/python/owismind_hub/factory_settings.json` | owismind_factory (reglages d'instance) |
+| (cree en DSS) | `/python/owismind_hub/prompts/<domain>/understand_extra.md` | le specialiste du domaine (regles UNDERSTAND additives) |
+| (cree en DSS) | `/python/owismind_hub/templates/dataset_expert.py` | agent_builder (template moteur) |
+| (cree en DSS) | `/python/owismind_hub/generated/`, `/wizard/`, `/doctor/`, `/backups/` | sorties de la factory |
 
 S'y ajoute [`regenerate_seeds.py`](regenerate_seeds.py), un script repo-only (jamais pousse en DSS).
 
@@ -49,7 +49,7 @@ Pousser le hub ne change donc RIEN au comportement, tant qu'un humain n'edite pa
   warning dans le log de l'agent) : verifier le log apres chaque edition.
 - Les ecritures de capabilities sont serialisees en process (verrou partage par
   `write_capabilities` / `append_capability`) et un backup automatique est pose sous
-  `/owismind_hub/backups/` (chemin de recuperation).
+  `/python/owismind_hub/backups/` (chemin de recuperation).
 - Prompts : markdown / texte brut. Le persona doit rester entre 500 et 20000
   caracteres ; les fichiers `understand_extra` sont ADDITIFS et limites a 4000 caracteres.
 - Toute edition prend effet au prochain demarrage du process de l'agent
