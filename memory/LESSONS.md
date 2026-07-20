@@ -3437,6 +3437,14 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-20 (deploiement v1.3, run des notebooks 00-02 par l'user). Complete L146.
 - **Date** : 2026-07-20.
 
+## L163 - Un remplacement global de chaine peut casser une REGEX LITTERALE JS ; gate = node --check sur chaque .js touche (2026-07-20)
+- **Contexte** : bascule du chemin du hub (`/owismind_hub` -> `/python/owismind_hub`) par remplacement de chaine sur 37 fichiers, dont `agent-factory-console/script.js`.
+- **Ce qui a echoue** : dans la regex litterale `/^\/owismind_hub\/prompts\//`, l'insertion de `/python` a introduit un slash NON echappe -> la regex se termine trop tot -> `SyntaxError: Invalid regular expression flags` -> TOUT le fichier JS refuse de parser -> la console reste sur son placeholder "Chargement...", sans aucune erreur visible cote backend (Flask sain, ping 200, zero appel /api). Les gates du moment (tests python, compileall, suite front du plugin) ne couvraient PAS les script.js des webapps Standard.
+- **Solution qui marche** : (1) echapper le slash (`/^\/python\/owismind_hub\/prompts\//`) ; (2) apres tout sed multi-fichiers, verifier la syntaxe de CHAQUE langage touche : `node --check` pour tout `.js` de webapp Standard (mirror + LAB), `ast.parse`/compileall pour le python, json.load pour le json (le meme sed avait deja casse registry.json et semantic_builder.py via des guillemets bruts dans des chaines). Symptome type cote DSS : webapp Standard figee sur son placeholder + backend sain + zero requete api = JS qui ne parse pas.
+- **Preuve** : `node --check` reproduisait l'erreur exacte (ligne 978) ; apres fix, check OK sur les 3 script.js du repo ; l'user avait constate "ca marchait avant tes changements" (le meme code marchait la premiere fois).
+- **Source** : session 2026-07-20 (deploiement v1.3, debug console factory).
+- **Date** : 2026-07-20.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

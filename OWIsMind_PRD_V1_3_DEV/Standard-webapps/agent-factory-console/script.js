@@ -975,7 +975,7 @@
 
   function loadPrompt() {
     var pr = S.prompts;
-    if (!/^\/python/owismind_hub\/prompts\//.test(pr.path)) {
+    if (!/^\/python\/owismind_hub\/prompts\//.test(pr.path)) {
       pr.loadError = "Le chemin doit commencer par /python/owismind_hub/prompts/";
       renderPrompts(); return;
     }
