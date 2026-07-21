@@ -281,7 +281,10 @@ def draft_model_config(project, profile_dataset, answers=None, llm_id=None,
     """
     from . import hub
     if llm_id is None:
-        llm_id = hub.get_settings(project).get("llm_sonnet")
+        settings = hub.get_settings(project)
+        # llm_wizard (hub factory_settings.json) lets the operator pick the
+        # wizard's model explicitly; empty = the shared llm_sonnet id.
+        llm_id = settings.get("llm_wizard") or settings.get("llm_sonnet")
     base_dataset = base_dataset or (profile_dataset or "").replace("_profile", "")
     domain = domain or base_dataset
 
@@ -296,10 +299,10 @@ def draft_model_config(project, profile_dataset, answers=None, llm_id=None,
 
     completion = project.get_llm(llm_id).new_completion()
     completion.with_message(prompt)
-    try:
-        completion.settings["temperature"] = 0
-    except Exception:
-        pass
+    # NEVER override temperature (or any sampling knob) here: the Mesh
+    # connection is admin-tuned, and a thinking-enabled Claude connection
+    # rejects any temperature but 1 (field failure 2026-07-21: BadRequestError
+    # "temperature may only be set to 1 when thinking is enabled").
     try:
         completion.with_json_output(schema=DRAFT_SCHEMA)
     except Exception:

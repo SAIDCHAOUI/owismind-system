@@ -52,6 +52,10 @@ DEFAULT_SETTINGS = {
     "code_env_311": "",
     # LLM Mesh ids (mirror the agents' CONFIG). Used by the wizard and doctor.
     "llm_sonnet": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6",
+    # Optional dedicated model for the semantic wizard drafting; empty string =
+    # fall back to llm_sonnet. Set it here (Library editor) to pick the model
+    # yourself; sampling/thinking knobs stay on the admin-tuned connection.
+    "llm_wizard": "",
     # Existing objects used as living templates (duplicate-and-modify strategy).
     "template_semantic_model_id": "AHUh9hb",
     "template_semantic_tool_id": "v4oqA6R",

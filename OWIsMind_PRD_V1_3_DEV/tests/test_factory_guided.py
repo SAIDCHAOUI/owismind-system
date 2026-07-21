@@ -530,6 +530,78 @@ class TestCapabilityAndEnable(_GuidedBase):
         self.assertTrue(any("per domain" in p for p in stage["problems"]))
 
 
+class TestWizardLlmCall(unittest.TestCase):
+    """draft_model_config: model picked by the operator, connection knobs untouched."""
+
+    def _fake_llm_project(self, captured):
+        class _Completion(object):
+            def __init__(self):
+                self.settings = {}
+
+            def with_message(self, prompt):
+                captured["prompt"] = prompt
+
+            def with_json_output(self, schema=None):
+                captured["json_output"] = True
+
+            def execute(self):
+                return types.SimpleNamespace(
+                    success=True,
+                    text=json.dumps({"planner_description": "d",
+                                     "attributes": [{"column": "c"}]}))
+
+        class _Llm(object):
+            def new_completion(self):
+                completion = _Completion()
+                captured["completion"] = completion
+                return completion
+
+        class _Project(object):
+            project_key = "OWISMIND_TEST"
+
+            def get_llm(self, llm_id):
+                captured["llm_id"] = llm_id
+                return _Llm()
+
+        return _Project()
+
+    def test_llm_wizard_override_wins_and_no_sampling_override(self):
+        captured = {}
+        project = self._fake_llm_project(captured)
+        saved_settings = hub.get_settings
+        saved_profile = wizard.read_profile
+        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": "mesh:custom"}
+        wizard.read_profile = lambda dataset, project_key=None: {"__dataset__": {"row_count": 1}}
+        try:
+            config = wizard.draft_model_config(project, "Delivery_Snapshot_profile",
+                                               base_dataset="Delivery_Snapshot",
+                                               domain="delivery")
+        finally:
+            hub.get_settings = saved_settings
+            wizard.read_profile = saved_profile
+        self.assertEqual(captured["llm_id"], "mesh:custom")
+        self.assertNotIn("temperature", captured["completion"].settings,
+                         "sampling knobs belong to the admin-tuned connection "
+                         "(thinking-enabled Claude rejects temperature != 1)")
+        self.assertEqual(config["base_dataset"], "Delivery_Snapshot")
+        self.assertEqual(config["domain"], "delivery")
+
+    def test_llm_wizard_empty_falls_back_to_llm_sonnet(self):
+        captured = {}
+        project = self._fake_llm_project(captured)
+        saved_settings = hub.get_settings
+        saved_profile = wizard.read_profile
+        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": ""}
+        wizard.read_profile = lambda dataset, project_key=None: {"__dataset__": {"row_count": 1}}
+        try:
+            wizard.draft_model_config(project, "Delivery_Snapshot_profile",
+                                      base_dataset="Delivery_Snapshot", domain="delivery")
+        finally:
+            hub.get_settings = saved_settings
+            wizard.read_profile = saved_profile
+        self.assertEqual(captured["llm_id"], "mesh:sonnet")
+
+
 class TestHealAndGuards(_GuidedBase):
     def test_heal_interrupted_running_stage(self):
         run = self.start()

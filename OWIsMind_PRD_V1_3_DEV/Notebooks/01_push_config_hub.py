@@ -146,6 +146,7 @@ _SEEDS = json.loads(r'''
   "sql_connection": "SQL_owi",
   "code_env_311": "",
   "llm_sonnet": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6",
+  "llm_wizard": "",
   "template_semantic_model_id": "AHUh9hb",
   "template_semantic_tool_id": "v4oqA6R",
   "template_zone_recipes": {
