@@ -7,7 +7,14 @@
 
 ## Focus courant
 
-**ASSISTANT GUIDE CONSOLE (2026-07-21, working tree, a recoller en DSS).** Suite au test
+**ASSISTANT GUIDE CONSOLE : VALIDE EN DSS (2026-07-21).** Premier expert cree DE BOUT EN BOUT
+par le parcours guide : domaine `delivery_snapshot` (dataset Delivery_Snapshot, 20 colonnes,
+2237 lignes) -> profil -> wizard IA -> modele semantique -> tool `DM4Yx4A` -> Code Agent
+`DeliverySnapshot_expert` (`agent:PFf8xkij`, AUTO-CREE : sonde confirmee sur l'instance) ->
+capability activee -> routage orchestrateur OK apres re-collage des 3 agents v1.3 (l'oubli
+du re-collage etait le dernier bloqueur ; le preflight le detecte desormais). 4 fixes terrain
+dans la foulee : temperature/thinking (llm_wizard), lecture profil iter_tuples, provenance
+brouillon, detection orchestrateur v1.2. Suite au test
 opportunities avorte par l'user (scenario en echec partition, rapport perdu au reload, template
 hub absent -> code agent jamais genere), la console factory gagne un ecran **Assistant** (1er
 onglet, defaut) : machine 13 etapes de la selection du dataset a la capability activee,
@@ -96,10 +103,10 @@ tree). Voir `sessions/2026-07-17.md`.
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **ASSISTANT GUIDE : recoller en DSS** : project library `python/owismind_factory/` (ajouter
-  `guided.py` + `guided_store.py`) puis les 4 panes de la console (backend.py, script.js,
-  body.html, style.css). Puis tester le parcours complet avec un dataset simple (1 table,
-  non partitionne). L'user supprime d'abord les objets opportunities du 2026-07-21.
+- **ASSISTANT GUIDE : FAIT et VALIDE DSS (2026-07-21, expert delivery_snapshot live).**
+  Reste : smoke metier du nouvel expert (questions delivery reelles + Evidence sur la bonne
+  table + non-regression revenus/tickets), curation du profil delivery si reponses moyennes
+  (overrides puis re-build), et suppression par l'user des objets opportunities avortes.
 - **Repo, ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
   capabilities + persona ; il ne pousse PAS `run_settings.json`, `prompts/orchestrator_workflow.md`
   NI `templates/dataset_expert.py` quand la sonde n'a pas confirme les cles (fallback = simple
