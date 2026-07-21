@@ -602,6 +602,99 @@ class TestWizardLlmCall(unittest.TestCase):
         self.assertEqual(captured["llm_id"], "mesh:sonnet")
 
 
+class TestReadProfile(unittest.TestCase):
+    """read_profile: the PROVEN iter_tuples pattern, both paths, loud guard."""
+
+    def _install_dataset(self, dataset_cls):
+        mod = sys.modules["dataiku"]
+        saved = getattr(mod, "Dataset", None)
+        mod.Dataset = dataset_cls
+        return saved
+
+    def _restore_dataset(self, saved):
+        mod = sys.modules["dataiku"]
+        if saved is None:
+            if hasattr(mod, "Dataset"):
+                del mod.Dataset
+        else:
+            mod.Dataset = saved
+
+    def test_iter_tuples_path_parses_business_columns(self):
+        payloads = {"__dataset__": {"row_count": 2237},
+                    "Family": {"dss_type": "string", "distinct_count": 7},
+                    "Customer": {"dss_type": "string", "distinct_count": 130}}
+
+        class _DS(object):
+            def __init__(self, name, project_key=None):
+                pass
+
+            def read_schema(self):
+                return [{"name": "key"}, {"name": "payload"}]
+
+            def iter_tuples(self):
+                for key, value in payloads.items():
+                    yield (key, json.dumps(value))
+
+        saved = self._install_dataset(_DS)
+        try:
+            profile = wizard.read_profile("Delivery_Snapshot_profile")
+        finally:
+            self._restore_dataset(saved)
+        self.assertEqual(set(profile), {"__dataset__", "Family", "Customer"})
+        self.assertEqual(profile["Family"]["distinct_count"], 7)
+
+    def test_dataframe_fallback_path(self):
+        class _DF(object):
+            def head(self, n):
+                return self
+
+            def to_dict(self, orient):
+                return [{"key": "Order_id", "payload": json.dumps({"dss_type": "string"})}]
+
+        class _DS(object):
+            def __init__(self, name, project_key=None):
+                pass
+
+            def read_schema(self):
+                raise RuntimeError("no schema API here")
+
+            def get_dataframe(self):
+                return _DF()
+
+        saved = self._install_dataset(_DS)
+        try:
+            profile = wizard.read_profile("Delivery_Snapshot_profile")
+        finally:
+            self._restore_dataset(saved)
+        self.assertEqual(set(profile), {"Order_id"})
+
+    def test_degenerate_profile_fails_loudly_in_draft(self):
+        captured = {}
+
+        class _Project(object):
+            project_key = "OWISMIND_TEST"
+
+            def get_llm(self, llm_id):
+                captured["llm_called"] = True
+                raise AssertionError("the LLM must not be called on a degenerate profile")
+
+        saved_settings = hub.get_settings
+        saved_profile = wizard.read_profile
+        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": ""}
+        # The exact degenerate shape the iter_rows bug produced on the field.
+        wizard.read_profile = lambda dataset, project_key=None: {"key": {"raw": "payload"}}
+        try:
+            config = wizard.draft_model_config(_Project(), "Delivery_Snapshot_profile",
+                                               base_dataset="Delivery_Snapshot",
+                                               domain="delivery")
+        finally:
+            hub.get_settings = saved_settings
+            wizard.read_profile = saved_profile
+        self.assertIn("error", config)
+        self.assertIn("degenerate", config["error"])
+        self.assertNotIn("llm_called", captured)
+
+
 class TestHealAndGuards(_GuidedBase):
     def test_heal_interrupted_running_stage(self):
         run = self.start()

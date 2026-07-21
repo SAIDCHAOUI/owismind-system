@@ -136,6 +136,13 @@ DRAFT_SCHEMA = {
 def read_profile(profile_dataset, project_key=None):
     """Read the {key, payload} profile rows through the in-DSS Dataset API.
 
+    Row iteration mirrors the PROVEN pattern of the validated revenue agent
+    (`_read_dataset_rows`): iter_tuples() zipped with the schema names, with a
+    get_dataframe() fallback. NEVER iter_rows(): its rows are dict-like, so
+    list(row) yields the COLUMN NAMES and the whole profile silently collapses
+    to one opaque "payload" entry (field failure 2026-07-21: the wizard asked
+    about a payload column that does not exist).
+
     Returns {key: payload_dict}. Never raises: an empty dict means the profile
     is missing or unreadable (the caller reports it).
     """
@@ -143,11 +150,19 @@ def read_profile(profile_dataset, project_key=None):
         import dataiku
         ds = dataiku.Dataset(profile_dataset, project_key=project_key) if project_key \
             else dataiku.Dataset(profile_dataset)
+        rows = []
+        try:
+            schema = ds.read_schema()
+            names = [c["name"] if isinstance(c, dict) else c.name for c in schema]
+            for t in ds.iter_tuples():
+                rows.append(dict(zip(names, t)))
+                if len(rows) >= MAX_PROFILE_ROWS:
+                    break
+        except Exception:
+            df = ds.get_dataframe()
+            rows = df.head(MAX_PROFILE_ROWS).to_dict("records")
         out = {}
-        count = 0
-        schema_names = [c.get("name") for c in (ds.read_schema() or [])]
-        for row in ds.iter_rows():
-            values = dict(zip(schema_names, list(row))) if schema_names else {}
+        for values in rows:
             key = values.get("key")
             payload = values.get("payload")
             if key is None:
@@ -156,9 +171,6 @@ def read_profile(profile_dataset, project_key=None):
                 out[str(key)] = json.loads(payload) if isinstance(payload, str) else (payload or {})
             except Exception:
                 out[str(key)] = {"raw": str(payload)[:500]}
-            count += 1
-            if count >= MAX_PROFILE_ROWS:
-                break
         return out
     except Exception:
         return {}
@@ -292,6 +304,13 @@ def draft_model_config(project, profile_dataset, answers=None, llm_id=None,
     if not profile:
         return {"error": "profile dataset %r is empty or unreadable: run the profile "
                          "recipe first (the wizard needs the business brain)" % profile_dataset}
+    if not set(profile) - {"key", "payload", "__dataset__"} and "__dataset__" not in profile:
+        # Degenerate read: entries named after the STORAGE columns instead of the
+        # profiled business columns. Fail loudly rather than let the LLM ask
+        # absurd questions about a "payload" column that does not exist.
+        return {"error": "profile read of %r looks degenerate (storage columns instead "
+                         "of business columns): the profile reader and the dataset shape "
+                         "disagree, re-check the profile dataset content" % profile_dataset}
 
     digest = build_profile_digest(profile, base_dataset)
     prompt = build_draft_prompt(digest, base_dataset, domain,
