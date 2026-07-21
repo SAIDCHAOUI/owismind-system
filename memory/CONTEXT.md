@@ -7,64 +7,29 @@
 
 ## Focus courant
 
-**ASSISTANT GUIDE CONSOLE : VALIDE EN DSS (2026-07-21).** Premier expert cree DE BOUT EN BOUT
-par le parcours guide : domaine `delivery_snapshot` (dataset Delivery_Snapshot, 20 colonnes,
-2237 lignes) -> profil -> wizard IA -> modele semantique -> tool `DM4Yx4A` -> Code Agent
-`DeliverySnapshot_expert` (`agent:PFf8xkij`, AUTO-CREE : sonde confirmee sur l'instance) ->
-capability activee -> routage orchestrateur OK apres re-collage des 3 agents v1.3 (l'oubli
-du re-collage etait le dernier bloqueur ; le preflight le detecte desormais). 4 fixes terrain
-dans la foulee : temperature/thinking (llm_wizard), lecture profil iter_tuples, provenance
-brouillon, detection orchestrateur v1.2. Suite au test
-opportunities avorte par l'user (scenario en echec partition, rapport perdu au reload, template
-hub absent -> code agent jamais genere), la console factory gagne un ecran **Assistant** (1er
-onglet, defaut) : machine 13 etapes de la selection du dataset a la capability activee,
-etat persiste en SQL (`{PK}_owismind_factory_guided_v1`, pattern plugin, reprise apres
-reload/restart), etapes manuelles = instructions FR + bouton "C'est fait" qui **verifie dans
-DSS** avant d'avancer (prechecks positifs uniquement : "je ne sais pas" ne vaut jamais "fait") ;
-preflight bloque un dataset PARTITIONNE (le bug user). Moteur `owismind_factory/{guided,
-guided_store}.py` + 5 routes `/api/guided/*` (Fable) ; front stepper ES5 (GPT-5.6 Sol, brief
-`.codex/briefs/guided-ui.md`, contrat fige, re-verifie cote Claude). 667 tests agents+factory
-(48 nouveaux) + 3 autres suites vertes. L164 (codex `--write`). Deploiement : re-coller lib
-`owismind_factory/` (2 nouveaux fichiers) + les 4 panes de la console. Opportunities :
-ABANDONNE par l'user (2 datasets), objets DSS a supprimer par lui.
-
-**RESTRUCTURE REPO (2026-07-20, commit de restructure sur la branche) : un dossier racine par projet
-DSS.** `OWIsMind_PRD_V1_2/` -> **`OWIsMind_PRD_V1_3_DEV/`** (= le projet DSS DEV v1.3, structure
-miroir UI DSS voulue par l'user : `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`,
-`Standard-webapps/`, `flow/<zone>_zone/python-recipes/`) ; **le plugin vit dans le projet** :
-`OWIsMind_PRD_V1_3_DEV/plugin/{owismind, ready-for-dataiku, tools}` ; LAB idem (`Standard-webapps/`) ;
-`project-documentation/` + email -> `docs/`. Toutes references a jour (rules, skills, tests, registry,
-build_dev_plugin). 4 suites vertes + --check PASS apres restructure. DECISION USER (Run 2) : le hub
-vit SOUS `python/` dans la library DSS -> `HUB_ROOT = "/python/owismind_hub"` partout (factory,
-3 agents, console, tests, seeds repo sous `project-library/python/owismind_hub/`) ; le placement
-DSS de l'user (lib/python/owismind_hub) est donc CORRECT, notebook 01 pousse au meme endroit.
-
-**DURABLE STEP SHELL v1.3 - VERIFICATION PRE-TEST TRIPLE + DURCISSEMENT + ZIP v1.3-dev
-(2026-07-17 Run 3, branche `OWIsMind_PRD_V1_3-dev`, fixes en working tree, commit de session a faire).**
-L'user veut la CERTITUDE (securite + correction + optim) AVANT de tester en DSS. Revue TRIPLE
-independante : Fable 5 lead + workflow Opus 6 dimensions (verif adversariale par finding) + GPT-5.6 Sol
-(codex read-only) + revue adversariale Opus du diff. Elles ont CONVERGE et debusque ce que les suites
-VERTES cachaient (test-doubles infideles au contrat reel, L161). **Zip DEV** :
-`OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_3-dev-upload.zip` (id `owismind_dev`, git-ignore, prod v1.2 intacte).
-**7 fix + tests** : C1 CRITICAL `save_plan` ne persistait pas capability_keys/args (feature durable
-inoperante en DSS reel) ; C2 HIGH lecture catalogue correlate (data_type/item_level vs column_type) ;
-C3 HIGH garde SQL correlate (`TABLE <rel>`, `from"secret"`, meta-fns query_to_xml/dblink/pg_read_file) ;
-C4 poll_durable bouclait sur not_found ; C5 `bool("false")` activait le durable ; C6 HIGH double-run
-legacy sur echec spawn ; C7 purge des tables durables jamais appelee (cablee au superviseur). C1/C4-C7
-= plugin (dans le zip) ; C2/C3 = orchestrateur (a RECOLLER en DSS 3.11, HORS zip). **DOCUMENTES (patch
-propose, valider au smoke DSS)** : H3 fencing complet writes terminaux, H4 watchdog stream Mesh muet
-(= "run long qui hang"), H5 replay reponse post-crash, M2/M3, deadlines-depuis-hub, goal non persiste.
-Non corriges a l'aveugle (justesse dependante de faits DSS). 4 suites vertes apres fix : backend 965,
-agents+factory 619, LAB 343, front 365. RIEN execute contre DSS. Rapport
-`OWIsMind_PRD_V1_3_DEV/docs/SECURITY_AUDIT_2026-07-17_DURABLE_V2.md`. L161. Voir `sessions/2026-07-17.md`.
-
-**Base anterieure (2026-07-17 Runs 1-2) : implementation + audit initial + guide + fix cablage flag**
-(couche durable complete, 0 Critical/3 findings corriges au 1er audit, guide `DURABLE_STEP_SHELL.md`,
-fix `durable_workflow` inactivable). L157-L160. 17 commits pousses `..b909156` + 3 locaux + Run 3 (working
-tree). Voir `sessions/2026-07-17.md`.
+**ASSISTANT GUIDE CONSOLE : VALIDE EN DSS DE BOUT EN BOUT (2026-07-21).** La console factory a
+gagne un ecran **Assistant** (1er onglet, defaut) : machine 13 etapes de la selection du dataset
+a la capability activee dans l'orchestrateur. Etat persiste en SQL
+(`{PK}_owismind_factory_guided_v1`, pattern plugin : parametrage Constant/toSQL, COMMIT, garde
+63 octets) -> reprise apres reload/restart, self-heal d'une etape interrompue. Etapes manuelles =
+instructions FR exactes + "C'est fait" qui VERIFIE dans DSS avant d'avancer ; prechecks POSITIFS
+uniquement ("je ne sais pas" ne vaut jamais "fait") ; preflight bloque dataset PARTITIONNE et
+detecte un orchestrateur non hub-aware. Moteur `owismind_factory/{guided,guided_store}.py` +
+5 routes `/api/guided/*` (Fable) ; front stepper ES5 (GPT-5.6 Sol, contrat fige, re-verifie +
+charte OK). **PREUVE TERRAIN** : 1er expert cree de bout en bout par l'user = domaine
+`delivery_snapshot` (Delivery_Snapshot, 20 col / 2237 lignes) -> profil -> wizard IA -> modele ->
+tool `DM4Yx4A` -> Code Agent `DeliverySnapshot_expert` (`agent:PFf8xkij`, AUTO-CREE, sonde
+confirmee) -> capability -> l'orchestrateur repond aux questions delivery. 4 fixes terrain en
+cours de route : temperature/thinking (cle `llm_wizard`, la connexion admin fait foi), lecture
+profil via iter_tuples (L165), provenance du brouillon wizard, detection orchestrateur v1.2
+(le re-collage v1.3 des 3 agents etait le dernier bloqueur). 676 tests agents+factory
+(57 nouveaux) + backend 965 / LAB 343 / front 365. L164-L166. PUSH actifs cette session
+(demande user explicite : il pull depuis le remote pour DSS). Opportunities : ABANDONNE
+(2 datasets = stack prealable requis), objets DSS a supprimer par l'user.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-21 : deploiement v1.3 guide par l'user (clone aligne VALIDE, console reparee) ; test opportunities avorte -> assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) ; L164. Voir `sessions/2026-07-21.md`.
+- 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
+- 2026-07-20 : deploiement v1.3 guide par l'user (notebooks 00-06, clone aligne VALIDE) ; restructure repo = un dossier racine par projet DSS + hub sous /python/ + UN fichier py par modele semantique ; fix regex console. L162-L163 (pas de fichier session, detail dans les lecons + commits 6e33a75..f39b00d).
 - 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
 - 2026-07-17 (nuit, Runs 1-2) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; 1er audit securite (0 Critical, 3 findings corriges) ; guide complet + fix cablage flag. 17 commits pousses `..b909156` + 3 locaux. L157-L160. Voir `sessions/2026-07-17.md`.
 - 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/python/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
@@ -123,7 +88,7 @@ tree). Voir `sessions/2026-07-17.md`.
 - Backlog Durable Step Shell (differe, spec section 12) : cabler l'auto-reattach front (`fetchActiveRun`
   -> `resumeChatStream`, primitives livrees) + toggle UI "Analyse approfondie" (analysis_mode deep/direct,
   le mode auto marche sans) ; DAG parallele ; pgvector ; skills write (mail/PDF, requiert human approval).
-- **FACTORY v1.3 - DEPLOIEMENT** (le clone DSS existe deja) : `OWIsMind_PRD_V1_3_DEV/docs/DEPLOY_V1_3_DEV.md` : phase 0 = 3 GATES securite cote DSS (console admins-only + run-as dedie ; SQL_owi SELECT-only + statement timeout au niveau base ; acces/retention du dataset de logs), puis A2 (notebook 02 en 3 passes : decouverte -> EXPECTED_SOURCE_KEYS -> run reel) puis B-D (lib + sonde 00 + push hub 01 + re-paste 3 agents + neutralite). Rapporter le rapport de sonde -> deverrouillage des gates. Puis F (1er domaine + wizard) et G. Synthese audit : `docs/SECURITY_AUDIT_2026-07-16.md`.
+- **FACTORY v1.3 : DEPLOYEE ET VALIDEE (2026-07-21, 1er domaine live).** Reste de `DEPLOY_V1_3_DEV.md` : confirmer les 3 GATES securite de la phase 0 cote DSS (console admins-only + run-as dedie ; SQL_owi timeout/droits au niveau base ; acces/retention du dataset de logs). Synthese audit : `docs/SECURITY_AUDIT_2026-07-16.md`.
 - Backlog v1.3 (durcissement non bloquant, voir SECURITY_AUDIT section backlog) : authz par viewer dans la console (WebappImpersonationContext) ; manifeste de reprise par domaine (rejoint le manifeste canonique deja au backlog) ; machine d'etat persistante par domaine ; environnement de validation pre-live ; controle operationnel.
 - CODEX : flux end-to-end VALIDE en reel le 2026-07-16 (audit securite livre par Sol via codex-companion, piege L156 : verifier la vivacite du PID, pas le seul statut). Reste : une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`.
 - CLONE prod : lancer `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` (ACTION="repoint") sur le clone

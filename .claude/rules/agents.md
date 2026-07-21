@@ -14,6 +14,7 @@ Le repo `OWIsMind_PRD_V1_3_DEV/` est le MIROIR EXACT du projet DSS prod (clone d
 
 ## Process de recoll DSS (a chaque modif repo des agents)
 - Recoller LES DEUX Code Agents ENSEMBLE (env 3.11) : `OWIsMind_orchestrator` + `SalesDrive_revenue_expert`. Le fix de desambiguisation vit des deux cotes (`pass_context` orchestrateur + UNDERSTAND agent).
+- **Piege v1.3 (terrain 2026-07-21)** : tant que l'orchestrateur DSS fait tourner un code ANTERIEUR au hub (v1.2 = CAPABILITIES embarquees), il IGNORE `capabilities.json` : un nouvel expert cree par l'usine reste invisible meme capability activee. Symptome : "je n'ai pas d'expert pour X" alors que la console dit "actif". Fix = recoller les 3 agents v1.3 UNE fois ; le preflight de l'assistant guide le detecte desormais (lecture du code live via les hints de sonde).
 - Agent + modele semantique ENSEMBLE (marqueur `AMBIGUOUS TERM` = contrat sous-agent <-> instructions du modele) : executer `Drive_Revenues_Semantic_Model.py` ACTION="update" en notebook puis ACTION="dump".
 - Carte des ids : `OWIsMind_PRD_V1_3_DEV/README.md` + `OWIsMind_PRD_V1_3_DEV/registry.json`.
 - **Modele prod = CLONE de DEV (2026-07-10, remplace la promotion L139)** : le projet DSS prod `OWISMIND_PRD_V1_2` est une DUPLICATION du projet DEV (ids DEV conserves, tickets inclus), miroite sous `OWIsMind_PRD_V1_3_DEV/`. Plus de jumeau prod ni de script de promotion (l'ancien `tools/promote_agents_to_prod.py` + `OWISMIND_PROD_V1/` sont SUPPRIMES). Une branche git par version (`OWIsMind_PRD_V1_2` = prod, `OWIsMind_PRD_V1_3-dev` = dev en cours).

@@ -3453,6 +3453,22 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-21 (assistant guide console). Complete L156 (croiser statut et realite du process).
 - **Date** : 2026-07-21.
 
+## L165 - Lire un dataset DSS en Python : iter_tuples + schema (pattern valide), JAMAIS iter_rows devine (2026-07-21)
+- **Contexte** : le wizard semantique (owismind_factory/wizard.py, nouveau code) lisait le dataset profil `{key, payload}` pour construire son digest LLM. Le dataset et le profil etaient sains (Delivery_Snapshot, 20 colonnes).
+- **Ce qui a echoue** : `read_profile` utilisait `iter_rows()` avec `dict(zip(schema_names, list(row)))`. Les lignes d'iter_rows sont dict-like : `list(row)` renvoie les NOMS de colonnes, pas les valeurs -> tout le profil s'effondrait en une entree opaque `{"key": {"raw": "payload"}}`. Le LLM, honnete, posait des questions absurdes ("la colonne payload contient-elle du JSON ?") sur une colonne inexistante. Aucun crash, aucun log : juste un brouillon degenere.
+- **Solution qui marche** : copier le pattern DEJA VALIDE en DSS du sous-agent revenus (`_read_dataset_rows`) : `iter_tuples()` zippe avec `read_schema()`, repli `get_dataframe().to_dict("records")`. Plus un garde : si le profil lu ne contient que des cles de stockage (`key`/`payload` sans `__dataset__`), erreur BRUYANTE avant tout appel LLM. Regle generale : ne jamais deviner une API Dataiku ; chercher d'abord le pattern eprouve dans le repo (regle #8 etendue aux APIs de lecture).
+- **Preuve-verification** : questions absurdes reproduites sur le terrain (Delivery_Snapshot) ; apres fix, 3 tests unitaires (chemin iter_tuples, chemin fallback, garde degenere avec LLM jamais appele) + brouillon reel correct en DSS.
+- **Source** : session 2026-07-21 Run 2 (commit 7dd5fff).
+- **Date** : 2026-07-21.
+
+## L166 - Ne JAMAIS forcer un knob de sampling sur une completion Mesh : une connexion Claude avec thinking n'accepte que temperature=1 (2026-07-21)
+- **Contexte** : le wizard forcait `completion.settings["temperature"] = 0` (reflexe "extraction deterministe") avant d'appeler la connexion `vertex_ai/claude-sonnet-4-6`.
+- **Ce qui a echoue** : la connexion est parametree par l'admin avec le thinking ACTIF ; l'API Claude rejette alors toute temperature differente de 1 -> HTTP 400 `temperature may only be set to 1 when thinking is enabled` -> brouillon impossible, quel que soit le modele choisi (l'user a change de modele pour rien : le forcage etait dans le code).
+- **Solution qui marche** : ne toucher AUCUN reglage de sampling dans le code appelant : la connexion Mesh admin fait foi (temperature, thinking, top_p). Le determinisme de l'extraction vient de `with_json_output` (schema force), pas de la temperature. Pour choisir le MODELE, exposer une cle de config (hub `factory_settings.json` -> `llm_wizard`, vide = `llm_sonnet`), jamais un override de parametres.
+- **Preuve-verification** : 400 reproduit sur le terrain ; apres fix (aucun set de temperature + cle llm_wizard), draft reel OK ; test unitaire qui asserte qu'aucune cle temperature n'est posee sur la completion et que llm_wizard prime.
+- **Source** : session 2026-07-21 Run 2 (commit 5c3b26a). Complete la discipline Mesh de la rule agents (with_json_output).
+- **Date** : 2026-07-21.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 
