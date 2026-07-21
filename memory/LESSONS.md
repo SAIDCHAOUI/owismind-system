@@ -3445,6 +3445,14 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-20 (deploiement v1.3, debug console factory).
 - **Date** : 2026-07-20.
 
+## L164 - Un job codex-companion `task` tourne en sandbox LECTURE SEULE par defaut : passer `--write` pour un chantier d'edition (2026-07-21)
+- **Contexte** : delegation a GPT-5.6 Sol du front "assistant guide" de la console factory (edition de script.js/body.html/style.css), lancee via `codex-companion.mjs task --background`.
+- **Ce qui a echoue** : le job a tourne 5 minutes, s'est termine `completed`... sans avoir rien ecrit : "le workspace est monte en lecture seule". Le champ `write: false` du JSON de statut le disait depuis le debut. Piege double : un statut `completed` ne veut PAS dire "diff applique", et `--help` n'existe pas sur ce CLI (il est avale comme prompt et lance un thread).
+- **Solution qui marche** : (1) pour toute tache qui doit MODIFIER des fichiers, passer `--write` (sandbox `workspace-write` ; defaut = `read-only`, visible ligne 491 du companion) ; (2) verifier `write: true` dans le JSON de `status` avant de croire a un diff ; (3) relancer en `--resume-last --write` recupere le contexte du thread (le plan deja prepare s'applique sans re-analyse) ; (4) les flags reels se lisent dans le source du companion (`grep -n '"--write"' codex-companion.mjs`), pas via --help.
+- **Preuve** : job 1 `task-mrule4ro` completed avec `write:false` et zero diff ; relance `--resume-last --write` = job 2 qui applique.
+- **Source** : session 2026-07-21 (assistant guide console). Complete L156 (croiser statut et realite du process).
+- **Date** : 2026-07-21.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

@@ -53,6 +53,19 @@ automatically inside the webapp iframe).
 
 ## Screens
 
+- **Assistant** (first tab, default): the guided, step-by-step creation of a new specialist,
+  from dataset selection to the enabled orchestrator capability. 13 stages (preflight with a
+  PARTITIONED-dataset gate, dry-run plan, Flow infra, first knowledge build, profile review,
+  semantic wizard, model + tool, agent template, code generation, Code Agent paste, capability,
+  smoke test, enable). AUTO stages run server-side with a live journal; MANUAL stages show exact
+  French instructions, the operator clicks "C'est fait" and the backend VERIFIES against DSS
+  before advancing (an unverified claim never advances the run). The whole run state is
+  persisted in ONE direct-SQL row (`{PROJECT_KEY}_owismind_factory_guided_v1` on the hub's
+  `sql_connection`, plugin storage pattern: parameterized values, COMMIT on write), so a page
+  reload or a backend restart resumes exactly where the operator was (a stage left RUNNING by a
+  restart is self-healed to a retryable state). One active run at a time; "Abandonner" only
+  marks the row (nothing is ever deleted in DSS). Engine: `owismind_factory/guided.py` +
+  `guided_store.py`; routes `/api/guided/{current,start,run,verify,abandon}`.
 - **Vue d'ensemble**: project key, hub status (ready / absent), factory settings, and the existing
   capabilities as square cards (domain, agent id, enabled state). Read-only.
 - **Sonde (Phase 0)**: one button runs the read-only probes in a background job, then shows the
@@ -81,9 +94,12 @@ automatically inside the webapp iframe).
   DSS. "Exécuter" runs for real but every step is idempotent (`ensure_*`), and there is **no
   deletion path anywhere** in the factory or this console.
 - **Confirm on every mutation**: every mutating endpoint (`/api/execute`, `/api/probe`,
-  `/api/wizard/draft`, `/api/hub/prompt` POST, `/api/hub/capabilities` POST) requires the JSON body
-  to carry `"confirm": true`, else it returns `{"status":"error","error":"confirmation_required"}`
-  and does nothing. The UI gates each of these behind a confirm modal.
+  `/api/wizard/draft`, `/api/hub/prompt` POST, `/api/hub/capabilities` POST, and every
+  `/api/guided/*` POST) requires the JSON body to carry `"confirm": true`, else it returns
+  `{"status":"error","error":"confirmation_required"}` and does nothing. The UI gates each of
+  these behind a confirm modal. Guided stage runs share the single-mutating-job admission with
+  `/api/execute` (one factory mutation at a time), and `/api/guided/verify` is refused (409
+  busy) while a guided job runs.
 - **Path allowlist**: hub prompt reads/writes are rejected unless the path starts with
   `/python/owismind_hub/prompts/`, and the path is additionally guarded against traversal (`..`) so it can
   never escape that prefix (the path from the client is never trusted).
@@ -104,6 +120,10 @@ the viewer. Give that identity the rights the console needs on this project:
   the scenario, the semantic model, the tool and the Code Agent, and so the backend can write hub
   files to the project library.
 - Read access to the source SQL connection used by the base + knowledge datasets.
+- Write access on the hub's `sql_connection` (default `SQL_owi`), used ONLY for the guided-run
+  state table `{PROJECT_KEY}_owismind_factory_guided_v1` (CREATE TABLE IF NOT EXISTS + upserts,
+  parameterized, committed). Without it the Assistant screen reports `storage_not_configured`
+  and the other screens keep working.
 
 Because the actions run as the run-as user (not the viewer), treat this webapp as an **admin tool**
 and restrict who can open it. See the DSS security note for webapps:

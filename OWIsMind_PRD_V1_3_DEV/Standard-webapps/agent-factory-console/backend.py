@@ -37,7 +37,7 @@ import dataiku
 # modules below (pipeline / probes / wizard) are authored against FROZEN signatures; this backend
 # codes against them exactly. If a module is missing at import time the whole webapp fails loudly,
 # which is the desired signal that the library was not pushed.
-from owismind_factory import fctx, hub, pipeline, probes, wizard
+from owismind_factory import fctx, guided, guided_store, hub, pipeline, probes, wizard
 from owismind_factory.spec import DomainSpec, SpecError
 
 logger = logging.getLogger(__name__)
@@ -115,10 +115,11 @@ _JOBS_LOCK = threading.Lock()
 _JOBS_MAX = 20
 
 # Admission bounds: every background job costs a daemon thread plus DSS / LLM calls, so the
-# number of running jobs is capped globally and mutating runs (execute) are serialized to one.
+# number of running jobs is capped globally and mutating runs (execute + guided stage runs)
+# are serialized to one.
 _ACTIVE_MAX = 4
 _ACTIVE_MUTATING_MAX = 1
-_MUTATING_KINDS = ("execute",)
+_MUTATING_KINDS = ("execute", "guided")
 _ACTIVE = {"total": 0, "mutating": 0}
 
 
@@ -491,4 +492,177 @@ def api_hub_capabilities_post():
     if problems:
         return _err("invalid_capabilities", 400, {"problems": problems})
     hub.write_capabilities(_project(), caps)
+    return jsonify({"status": "ok"})
+
+
+# ----------------------------------------------------------------- guided assistant
+# The step-by-step "Assistant" screen. The run STATE lives in one direct-SQL row
+# (owismind_factory.guided_store, plugin storage pattern: parameterized values,
+# COMMIT on write, PROJECT_KEY-prefixed table), so a reload or a backend restart
+# resumes exactly where the operator was. The machine itself is
+# owismind_factory.guided; this layer only loads, delegates and saves.
+
+def _guided_store_for(project, settings):
+    return guided_store.GuidedStore(
+        settings.get("sql_connection") or "SQL_owi",
+        project.project_key)
+
+
+def _guided_job_running():
+    with _JOBS_LOCK:
+        return any(rec.get("kind") == "guided" and rec.get("status") == "running"
+                   for rec in _JOBS.values())
+
+
+@app.route("/api/guided/current", methods=["GET"])
+@_safe
+def api_guided_current():
+    """The active guided run (full state), or null. Self-heals a stage left
+    RUNNING by a backend restart (no guided job can be running in a fresh
+    process, so the demotion is safe)."""
+    project = _project()
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        run = store.load_active()
+        if run is not None and not _guided_job_running() and guided.heal_interrupted(run):
+            store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
+@app.route("/api/guided/start", methods=["POST"])
+@_safe
+def api_guided_start():
+    """Create a guided run and execute its (read-only) preflight synchronously.
+    Requires confirm. One active run at a time: abandon the current one first."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    spec, err = _spec_from_body(body)
+    if err:
+        return err
+    project = _project()
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        active = store.load_active()
+        if active is not None:
+            return _err("active_run_exists", 409, {"run_id": active.get("run_id")})
+        run = guided.start_run(project, spec, settings=settings)
+        store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
+@app.route("/api/guided/run", methods=["POST"])
+@_safe
+def api_guided_run():
+    """Execute the CURRENT auto stage in a background job (live journal via the
+    shared FactoryContext). Requires confirm. Serialized with execute jobs."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    run_id = str(body.get("run_id") or "").strip()
+    if not run_id:
+        return _err("run_id_required", 400)
+    project = _project()
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        run = store.load(run_id)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    if run is None:
+        return _err("unknown_run", 404)
+    if run.get("status") != guided.RUN_ACTIVE:
+        return _err("run_not_active", 409)
+    if not guided.can_run(run):
+        return _err("stage_not_runnable", 400)
+    ctx = fctx.FactoryContext(project=project, dry_run=False, abort_on_failure=False)
+    _, rec = _new_job("guided", ctx=ctx)
+    if rec is None:
+        return _err("too_many_jobs", 429)
+
+    # Persist a RUNNING marker on a copy, so a reload during the job shows the
+    # stage as running (the in-memory ``run`` stays runnable for the worker).
+    try:
+        marker = json.loads(json.dumps(run))
+        marker["state"]["stages"][marker["current_stage"]]["status"] = "running"
+        store.save(marker)
+    except Exception:
+        logger.warning("could not persist the running marker", exc_info=True)
+
+    def work():
+        try:
+            updated = guided.run_current_stage(project, run, settings=settings, ctx=ctx)
+        except Exception:
+            # Surface the failure ON the run (never leave a stage stuck RUNNING).
+            stage = run["state"]["stages"].get(run.get("current_stage")) or {}
+            stage["status"] = "failed"
+            stage["problems"] = ["Erreur inattendue pendant l'exécution : voir les logs backend."]
+            store.save(run)
+            raise
+        store.save(updated)
+        return {"run": updated}
+
+    _run_job(rec, work)
+    return jsonify({"status": "ok", "job_id": rec["id"]})
+
+
+@app.route("/api/guided/verify", methods=["POST"])
+@_safe
+def api_guided_verify():
+    """'C'est fait' on a manual stage: verify against DSS, advance only on
+    success. Requires confirm. Refused while a guided/execute job is running."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    run_id = str(body.get("run_id") or "").strip()
+    if not run_id:
+        return _err("run_id_required", 400)
+    if _guided_job_running():
+        return _err("busy", 409)
+    project = _project()
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        run = store.load(run_id)
+        if run is None:
+            return _err("unknown_run", 404)
+        if run.get("status") != guided.RUN_ACTIVE:
+            return _err("run_not_active", 409)
+        if not guided.can_verify(run):
+            return _err("stage_not_verifiable", 400)
+        run = guided.verify_current_stage(project, run, settings=settings)
+        store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
+@app.route("/api/guided/abandon", methods=["POST"])
+@_safe
+def api_guided_abandon():
+    """Mark the run abandoned (idempotent). NOTHING is deleted in DSS."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    run_id = str(body.get("run_id") or "").strip()
+    if not run_id:
+        return _err("run_id_required", 400)
+    project = _project()
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        run = store.load(run_id)
+        if run is None:
+            return _err("unknown_run", 404)
+        if run.get("status") == guided.RUN_ACTIVE:
+            guided.abandon_run(run)
+            store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
     return jsonify({"status": "ok"})

@@ -34,3 +34,13 @@ launcher: it defines a proper `--orange-text` AA token (#a85800 light / #ff9838 
 orange text and uses the charter's `--orange-deep` #cc6100 for the primary hover, whereas the
 launcher lacks `--orange-text` and uses #f16e00 for deep. When a newer file diverges from the
 launcher toward the charter's exact tokens, the file is right and the launcher is the laggard.
+
+**Status-token accent bars / chip borders are NOT a "single-orange" violation.** The "single
+rare orange" rule bans inventing DECORATIVE hues, not the sanctioned status tokens. Accepted
+uses seen clean in the guided-assistant screen (2026-07-21, `gd-*` classes): a 3px `--success`
+top-rule on a completion card (same net-bar pattern as the KPI 3px orange top-rule, just a
+status color on a semantically-matching card); status chips whose text/border are `--info`
+(running), `--success` (done), `--danger` (failed), `--orange`+`--orange-text` (waiting); a 3px
+`--orange` LEFT bar on the current stepper step only (rare, single accent). All flat net bars,
+token-driven, no radius/shadow/gradient. Do not flag these. Icon references like `I.refresh`,
+`I.play`, `I.check` in script.js markup are inline-SVG glyphs from a local icon set, NOT emoji.

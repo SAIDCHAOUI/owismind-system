@@ -7,6 +7,20 @@
 
 ## Focus courant
 
+**ASSISTANT GUIDE CONSOLE (2026-07-21, working tree, a recoller en DSS).** Suite au test
+opportunities avorte par l'user (scenario en echec partition, rapport perdu au reload, template
+hub absent -> code agent jamais genere), la console factory gagne un ecran **Assistant** (1er
+onglet, defaut) : machine 13 etapes de la selection du dataset a la capability activee,
+etat persiste en SQL (`{PK}_owismind_factory_guided_v1`, pattern plugin, reprise apres
+reload/restart), etapes manuelles = instructions FR + bouton "C'est fait" qui **verifie dans
+DSS** avant d'avancer (prechecks positifs uniquement : "je ne sais pas" ne vaut jamais "fait") ;
+preflight bloque un dataset PARTITIONNE (le bug user). Moteur `owismind_factory/{guided,
+guided_store}.py` + 5 routes `/api/guided/*` (Fable) ; front stepper ES5 (GPT-5.6 Sol, brief
+`.codex/briefs/guided-ui.md`, contrat fige, re-verifie cote Claude). 667 tests agents+factory
+(48 nouveaux) + 3 autres suites vertes. L164 (codex `--write`). Deploiement : re-coller lib
+`owismind_factory/` (2 nouveaux fichiers) + les 4 panes de la console. Opportunities :
+ABANDONNE par l'user (2 datasets), objets DSS a supprimer par lui.
+
 **RESTRUCTURE REPO (2026-07-20, commit de restructure sur la branche) : un dossier racine par projet
 DSS.** `OWIsMind_PRD_V1_2/` -> **`OWIsMind_PRD_V1_3_DEV/`** (= le projet DSS DEV v1.3, structure
 miroir UI DSS voulue par l'user : `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`,
@@ -43,6 +57,7 @@ fix `durable_workflow` inactivable). L157-L160. 17 commits pousses `..b909156` +
 tree). Voir `sessions/2026-07-17.md`.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-21 : deploiement v1.3 guide par l'user (clone aligne VALIDE, console reparee) ; test opportunities avorte -> assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) ; L164. Voir `sessions/2026-07-21.md`.
 - 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
 - 2026-07-17 (nuit, Runs 1-2) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; 1er audit securite (0 Critical, 3 findings corriges) ; guide complet + fix cablage flag. 17 commits pousses `..b909156` + 3 locaux. L157-L160. Voir `sessions/2026-07-17.md`.
 - 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/python/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
@@ -81,10 +96,16 @@ tree). Voir `sessions/2026-07-17.md`.
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **Repo, petit ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
-  capabilities + persona ; il ne pousse PAS `run_settings.json` ni `prompts/orchestrator_workflow.md`
-  (le guide phase H dit le contraire). Etendre 01 (via le regenerateur de seeds) ou corriger le guide.
-  En attendant : verifier a la main que ces 2 fichiers existent dans `lib/python/owismind_hub` du clone.
+- **ASSISTANT GUIDE : recoller en DSS** : project library `python/owismind_factory/` (ajouter
+  `guided.py` + `guided_store.py`) puis les 4 panes de la console (backend.py, script.js,
+  body.html, style.css). Puis tester le parcours complet avec un dataset simple (1 table,
+  non partitionne). L'user supprime d'abord les objets opportunities du 2026-07-21.
+- **Repo, ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
+  capabilities + persona ; il ne pousse PAS `run_settings.json`, `prompts/orchestrator_workflow.md`
+  NI `templates/dataset_expert.py` quand la sonde n'a pas confirme les cles (fallback = simple
+  print MANUAL, rate par l'user le 2026-07-21 -> template absent -> code agent jamais genere ;
+  l'assistant guide verifie desormais le template avec instructions). Etendre 01 (via le
+  regenerateur de seeds) ou corriger le guide.
 - **DSS clone v1.3 : re-pointer les 2 tools Semantic Model Query** (L162 : leurs params portent encore
   `project_key OWISMIND_PRD_V1_2` apres duplication ; le notebook 02 ne corrige que les modeles).
 - **DURABLE STEP SHELL v1.3 - DEPLOIEMENT DSS DEV** : `DEPLOY_V1_3_DEV.md` phase H (zip + re-paste

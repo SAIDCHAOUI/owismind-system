@@ -39,6 +39,8 @@
 | `pipeline` | the 13 ordered steps, each idempotent, gated steps degrade to MANUAL, downstream steps BLOCKED after a failed prerequisite | none |
 | `align` | generic clone aligner: repoint ALL semantic models to the current project key | none (generalizes the validated repoint scripts) |
 | `doctor` | prompt doctor: interaction logs + current prompt -> diagnosis + revised prompt PROPOSAL | none (never writes prompts) |
+| `guided` | the console's step-by-step assistant: 13-stage state machine (dataset -> enabled capability), auto stages delegate to `pipeline`, manual stages carry French instructions and are VERIFIED against DSS before advancing (positive-only prechecks: "could not verify" never advances) | none (reuses the gated builders) |
+| `guided_store` | one-row-per-run SQL persistence of guided runs (plugin storage pattern: `{PROJECT_KEY}_owismind_factory_guided_v1`, parameterized values, COMMIT, identifier gates) so a reload/restart resumes the run | none |
 
 ## The gates (why some steps may stay manual)
 

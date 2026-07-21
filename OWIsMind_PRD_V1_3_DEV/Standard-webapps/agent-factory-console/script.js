@@ -32,8 +32,16 @@
   /* ============================ state ============================ */
 
   var S = {
-    tab: "overview",
+    tab: "guided",
     theme: "light",
+    // Guided assistant screen (server-persisted run)
+    guided: {
+      loaded: false, loading: false, error: null, run: null,
+      starting: false, startError: null, startErrorCode: null, running: false, verifying: false,
+      abandoning: false, actionError: null, liveActions: [],
+      form: { domain: "", base_dataset: "", label_fr: "", label_en: "", lookup: "" },
+      wizard: { running: false, jobId: null, config: null, answers: {}, error: null, reqId: 0 }
+    },
     // Overview screen ("Vue d'ensemble")
     overview: { loaded: false, loading: false, error: null, data: null },
     // shared: datasets list (fed to the pickers)
@@ -184,7 +192,7 @@
       BLOCKED: { cls: "blocked", txt: "BLOQUÉ" }
     };
     var m = map[status] || { cls: "planned", txt: String(status || "") };
-    return '<span class="afc-chip afc-chip--' + m.cls + '">' + m.txt + '</span>';
+    return '<span class="afc-chip afc-chip--' + m.cls + '">' + esc(m.txt) + '</span>';
   }
 
   function actionsTable(actions) {
@@ -240,7 +248,11 @@
 
   /* ============================ datasets (shared picker source) ============================ */
 
-  function loadDatasets(cb) {
+  function loadDatasets(cb, force) {
+    if (force && !S.datasets.loading) {
+      S.datasets.loaded = false;
+      S.datasets.error = null;
+    }
     if (S.datasets.loaded || S.datasets.loading) { if (cb) { cb(); } return; }
     S.datasets.loading = true;
     callApi("GET", "datasets").then(function (r) {
@@ -248,6 +260,7 @@
       if (r.data && r.data.status === "ok") {
         S.datasets.loaded = true;
         S.datasets.list = r.data.datasets || [];
+        S.datasets.error = null;
       } else {
         S.datasets.error = (r.data && r.data.error) || "load_error";
       }
@@ -262,6 +275,561 @@
       opts.push('<option value="' + esc(d.name) + '"' + sel + '>' + esc(d.name) + '</option>');
     });
     return opts.join("");
+  }
+
+  /* ============================ screen: Assistant ============================ */
+
+  function guidedErrorText(data) {
+    var map = {
+      confirmation_required: "La confirmation est requise.",
+      invalid_spec: "Les informations du domaine sont invalides.",
+      active_run_exists: "Un assistant est déjà en cours.",
+      busy: "Une opération de l'usine est déjà en cours. Réessayez dans un instant.",
+      server_error: "Le serveur n'a pas pu terminer l'opération.",
+      unknown_run: "Ce run est introuvable.",
+      run_not_active: "Ce run n'est plus actif.",
+      stage_not_runnable: "Cette étape ne peut pas être lancée dans son état actuel.",
+      stage_not_verifiable: "Cette étape ne peut pas être vérifiée dans son état actuel.",
+      too_many_jobs: "Trop de tâches sont enregistrées côté serveur. Réessayez plus tard.",
+      storage_not_configured: "Le stockage SQL de l'assistant n'est pas configuré.",
+      network_error: "La connexion au backend a échoué.",
+      no_backend: "Le backend DSS est indisponible.",
+      poll_failed: "Le suivi de la tâche a échoué après plusieurs tentatives.",
+      job_error: "La tâche serveur a échoué."
+    };
+    if (data && data.messages && data.messages.length) { return data.messages.join(" ; "); }
+    return map[data && data.error] || (data && data.error) || "erreur inconnue";
+  }
+
+  function resetGuidedWizard() {
+    S.guided.wizard = { running: false, jobId: null, config: null,
+                        answers: {}, error: null, reqId: 0 };
+  }
+
+  function applyGuidedRun(run) {
+    var previousId = S.guided.run && S.guided.run.run_id;
+    S.guided.run = run || null;
+    S.guided.liveActions = [];
+    S.guided.actionError = null;
+    if (!run || run.run_id !== previousId) { resetGuidedWizard(); }
+  }
+
+  function loadGuidedCurrent() {
+    var g = S.guided;
+    if (g.loading) { return; }
+    g.loading = true;
+    g.error = null;
+    renderGuided();
+    callApi("GET", "guided/current").then(function (r) {
+      g.loading = false;
+      if (r.data && r.data.status === "ok") {
+        g.loaded = true;
+        g.startError = null;
+        g.startErrorCode = null;
+        applyGuidedRun(r.data.run && r.data.run.status !== "abandoned" ? r.data.run : null);
+      } else {
+        g.error = guidedErrorText(r.data);
+      }
+      renderGuided();
+    });
+  }
+
+  function refreshGuidedCurrent() {
+    S.guided.loaded = false;
+    loadGuidedCurrent();
+  }
+
+  function guidedStageChip(status) {
+    var map = {
+      pending: { cls: "pending", txt: "A venir" },
+      ready: { cls: "ready", txt: "Prête" },
+      running: { cls: "running", txt: "En cours" },
+      waiting_user: { cls: "waiting", txt: "Action requise" },
+      done: { cls: "done", txt: "Faite" },
+      failed: { cls: "failed", txt: "Échec" }
+    };
+    var m = map[status] || map.pending;
+    return '<span class="afc-chip gd-status gd-status--' + m.cls + '">' + esc(m.txt) + '</span>';
+  }
+
+  function renderGuided() {
+    if (S.tab !== "guided") { return; }
+    var g = S.guided;
+    var html = '<div class="afc-panel gd-panel">' + backendBanner() +
+      '<div class="afc-sec">' +
+      '<p class="afc-sec-eyebrow">Création guidée</p>' +
+      '<h2 class="afc-sec-title">Assistant de nouveau domaine</h2>' +
+      '<p class="afc-sec-note">Suivez chaque étape jusqu\'à l\'activation du nouvel expert dans l\'orchestrateur. ' +
+      'L\'avancement est conservé côté serveur et reprend après un rechargement de la page.</p></div>';
+
+    if (g.loading && !g.loaded) {
+      html += '<p class="afc-loading">Recherche d\'un run en cours...</p></div>';
+      setMain(html);
+      return;
+    }
+    if (g.error && !g.loaded) {
+      html += '<div class="afc-note afc-note--error">Impossible de charger l\'assistant : ' + esc(g.error) + '</div>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRetry">' +
+        I.refresh + 'Réessayer</button></div></div>';
+      setMain(html);
+      if (byId("gdRetry")) { byId("gdRetry").onclick = refreshGuidedCurrent; }
+      return;
+    }
+
+    if (!g.run) {
+      if (!S.datasets.loaded && !S.datasets.loading) {
+        loadDatasets(function () { if (S.tab === "guided") { renderGuided(); } });
+      }
+      html += renderGuidedStartForm();
+      html += '</div>';
+      setMain(html);
+      wireGuidedStartForm();
+      return;
+    }
+
+    if (g.run.status === "done") {
+      html += renderGuidedSuccess(g.run) + '</div>';
+      setMain(html);
+      if (byId("gdNew")) { byId("gdNew").onclick = newGuidedDomain; }
+      return;
+    }
+
+    html += renderGuidedStepper(g.run);
+    html += renderGuidedStage(g.run);
+    var currentStage = g.run.state && g.run.state.stages && g.run.state.stages[g.run.current_stage];
+    var abandonDisabled = g.abandoning || g.running || g.verifying || g.wizard.running ||
+      (currentStage && currentStage.status === "running");
+    html += '<div class="gd-abandon"><button class="afc-btn afc-btn--danger afc-btn--sm" id="gdAbandon"' +
+      (abandonDisabled ? " disabled" : "") + '>Abandonner ce run</button></div>';
+    html += '</div>';
+    setMain(html);
+    wireGuidedRun();
+  }
+
+  function renderGuidedStartForm() {
+    var g = S.guided;
+    var f = g.form;
+    var picker = S.datasets.loading
+      ? '<p class="afc-loading gd-dataset-loading">Chargement des datasets...</p>'
+      : '<select class="afc-select" id="gdBaseDataset">' + datasetOptions(f.base_dataset) + '</select>';
+    var html = '<div class="afc-card gd-start">' +
+      field("Clé de domaine (snake_case)", inputEl("gdDomain", f.domain, "ex. opportunities"),
+        "Minuscules, chiffres et underscores.") +
+      '<div class="gd-dataset-row"><div class="gd-dataset-field">' +
+      field("Dataset de base", picker, "Le dataset dont le nouvel expert sera spécialiste.") +
+      '</div><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshDatasets"' +
+      (S.datasets.loading ? " disabled" : "") + '>' + I.refresh + 'Rafraîchir la liste</button></div>' +
+      '<div class="afc-grid-2">' +
+      fieldRaw("Libellé FR", inputEl("gdLabelFr", f.label_fr, "ex. Opportunités commerciales")) +
+      fieldRaw("Libellé EN", inputEl("gdLabelEn", f.label_en, "ex. Sales opportunities")) +
+      '</div>' +
+      field("Colonnes lookup (séparées par des virgules)",
+        inputEl("gdLookup", f.lookup, "ex. Account_name, Opportunity_name"),
+        "Laissez vide pour utiliser toutes les colonnes texte autorisées.") +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdStart"' +
+      (g.starting ? " disabled" : "") + '>' + I.play +
+      (g.starting ? "Démarrage..." : "Démarrer l'assistant") + '</button></div>';
+
+    if (S.datasets.error) {
+      html += '<div class="afc-note afc-note--error">Liste des datasets indisponible : ' + esc(S.datasets.error) + '</div>';
+    }
+    if (g.startError) {
+      html += '<div class="afc-note afc-note--error">Démarrage impossible : ' + esc(g.startError) + '</div>';
+      if (g.startErrorCode === "active_run_exists") {
+        html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdResume">' +
+          I.refresh + 'Reprendre le run en cours</button></div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function guidedStartSpec() {
+    var f = S.guided.form;
+    return {
+      domain: (f.domain || "").trim(),
+      base_dataset: (f.base_dataset || "").trim(),
+      label_fr: (f.label_fr || "").trim(),
+      label_en: (f.label_en || "").trim(),
+      lookup_search_columns: (f.lookup || "").split(",").map(function (v) {
+        return v.trim();
+      }).filter(Boolean)
+    };
+  }
+
+  function wireGuidedStartForm() {
+    var f = S.guided.form;
+    bindInput("gdDomain", function (v) { f.domain = v; });
+    bindInput("gdBaseDataset", function (v) { f.base_dataset = v; }, true);
+    bindInput("gdLabelFr", function (v) { f.label_fr = v; });
+    bindInput("gdLabelEn", function (v) { f.label_en = v; });
+    bindInput("gdLookup", function (v) { f.lookup = v; });
+    if (byId("gdRefreshDatasets")) {
+      byId("gdRefreshDatasets").onclick = function () {
+        loadDatasets(function () { renderGuided(); }, true);
+        renderGuided();
+      };
+    }
+    if (byId("gdStart")) { byId("gdStart").onclick = confirmGuidedStart; }
+    if (byId("gdResume")) { byId("gdResume").onclick = refreshGuidedCurrent; }
+  }
+
+  function confirmGuidedStart() {
+    var spec = guidedStartSpec();
+    openConfirm({
+      title: "Démarrer l'assistant ?",
+      bodyHtml: "Un run guidé persistant sera créé pour le domaine <b class=\"mono\">" +
+        esc(spec.domain || "(sans nom)") + "</b> et le dataset <b class=\"mono\">" +
+        esc(spec.base_dataset || "(non choisi)") + "</b>.",
+      confirmLabel: "Démarrer",
+      onConfirm: startGuided
+    });
+  }
+
+  function startGuided() {
+    var g = S.guided;
+    g.starting = true;
+    g.startError = null;
+    g.startErrorCode = null;
+    renderGuided();
+    callApi("POST", "guided/start", { confirm: true, spec: guidedStartSpec() }).then(function (r) {
+      g.starting = false;
+      if (r.data && r.data.status === "ok" && r.data.run) {
+        applyGuidedRun(r.data.run);
+        toast("Assistant démarré.");
+      } else {
+        g.startErrorCode = r.data && r.data.error;
+        g.startError = guidedErrorText(r.data);
+      }
+      renderGuided();
+    });
+  }
+
+  function renderGuidedStepper(run) {
+    var state = run.state || {};
+    var stages = state.stages || {};
+    var order = state.stage_order || [];
+    var rows = order.map(function (key, index) {
+      var stage = stages[key] || {};
+      var status = key === run.current_stage && S.guided.running ? "running" : stage.status;
+      var current = key === run.current_stage ? " gd-step--current" : "";
+      return '<li class="gd-step' + current + '">' +
+        '<span class="gd-step-number">' + esc(index + 1) + '</span>' +
+        '<span class="gd-step-title">' + esc(stage.title_fr || key) + '</span>' +
+        guidedStageChip(status) + '</li>';
+    }).join("");
+    return '<div class="afc-sec gd-run-head"><div>' +
+      '<p class="afc-mlabel">Run actif</p><p class="gd-run-domain mono">' + esc(run.domain || "-") + '</p>' +
+      '</div><span class="gd-run-id mono">' + esc(run.run_id || "") + '</span></div>' +
+      '<ol class="gd-stepper">' + rows + '</ol>';
+  }
+
+  function renderGuidedProblems(problems) {
+    if (!problems || !problems.length) { return ""; }
+    return '<div class="afc-note afc-note--error gd-problems"><b>Points à corriger :</b><ul>' +
+      problems.map(function (problem) { return '<li>' + esc(problem) + '</li>'; }).join("") + '</ul></div>';
+  }
+
+  function renderGuidedStage(run) {
+    var g = S.guided;
+    var state = run.state || {};
+    var stages = state.stages || {};
+    var stage = stages[run.current_stage] || null;
+    if (!stage) {
+      return '<div class="afc-note afc-note--error">L\'étape courante est absente du run.</div>';
+    }
+    var status = g.running ? "running" : stage.status;
+    var html = '<section class="afc-card gd-current"><p class="afc-sec-eyebrow">Étape courante</p>' +
+      '<div class="gd-current-title"><h3>' + esc(stage.title_fr || run.current_stage) + '</h3>' +
+      guidedStageChip(status) + '</div>';
+    if (stage.detail_fr) { html += '<p class="gd-detail">' + esc(stage.detail_fr) + '</p>'; }
+    if (g.actionError) {
+      html += '<div class="afc-note afc-note--error">Opération impossible : ' + esc(g.actionError) + '</div>';
+    }
+
+    if (status === "ready" || status === "failed") {
+      html += renderGuidedProblems(stage.problems) + '<div class="afc-actions">' +
+        '<button class="afc-btn afc-btn--primary" id="gdRunStage"' + (g.running ? " disabled" : "") + '>' +
+        I.play + (status === "failed" ? "Relancer" : "Lancer cette étape") + '</button></div>';
+    } else if (status === "waiting_user") {
+      if (stage.instructions_fr) {
+        html += '<div class="gd-instructions">' + esc(stage.instructions_fr).replace(/\n/g, "<br>") + '</div>';
+      }
+      html += renderGuidedProblems(stage.problems);
+      if (run.current_stage === "wizard") { html += renderGuidedWizard(run); }
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdVerify"' +
+        (g.verifying || g.wizard.running ? " disabled" : "") + '>' + I.check +
+        (g.verifying ? "Vérification..." : "C'est fait, vérifier") + '</button></div>';
+    } else if (status === "running") {
+      html += '<div class="afc-note afc-note--info">Étape en cours d\'exécution côté serveur...</div>';
+      if (!g.running) {
+        html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshRun">' +
+          I.refresh + 'Rafraîchir</button></div>';
+      }
+    } else if (status === "pending") {
+      html += '<div class="afc-note afc-note--info">Cette étape attend la fin de l\'étape courante.</div>';
+    }
+
+    var journal = (g.running && g.liveActions.length) ? g.liveActions : (stage.journal || []);
+    if (journal.length) {
+      html += '<div class="gd-journal"><p class="afc-mlabel">Journal de l\'étape</p>' + actionsTable(journal) + '</div>';
+    }
+    html += '</section>';
+    return html;
+  }
+
+  function renderGuidedWizard(run) {
+    var w = S.guided.wizard;
+    var spec = (run.state && run.state.spec) || {};
+    var profile = (spec.base_dataset || "") + "_profile";
+    var html = '<div class="gd-wizard"><p class="afc-mlabel">Wizard sémantique</p>' +
+      '<p class="gd-detail">Le brouillon utilise le profil <span class="mono">' + esc(profile) + '</span>. ' +
+      'Il est enregistré automatiquement dans le hub.</p>';
+    if (w.running) {
+      html += '<div class="afc-note afc-note--info">Rédaction du brouillon en cours...</div>';
+    } else if (!w.config) {
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdWizardDraft">' +
+        'Rédiger le brouillon (IA)</button></div>';
+    }
+    if (w.error) {
+      html += '<div class="afc-note afc-note--error">Brouillon impossible : ' + esc(w.error) + '</div>';
+    }
+    if (w.config) {
+      var questions = w.config.questions || [];
+      if (questions.length) {
+        html += '<div class="gd-questions"><p class="afc-mlabel">Questions de clarification</p>';
+        questions.forEach(function (q) {
+          var qid = String(q.id || "");
+          var answer = w.answers[qid] != null ? w.answers[qid] : (q.default != null ? q.default : "");
+          html += '<div class="afc-q gd-question"><p class="afc-q-title">' + esc(q.question_fr || qid) + '</p>' +
+            (q.why ? '<p class="afc-q-why">' + esc(q.why) + '</p>' : "") +
+            (q.options && q.options.length ? '<p class="gd-options">Options suggérées : ' + esc(q.options.join(", ")) + '</p>' : "") +
+            '<input class="afc-input gd-wizard-answer" data-qid="' + esc(qid) + '" value="' + esc(answer) + '"></div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div class="afc-note afc-note--info">Le brouillon ne demande aucune précision supplémentaire.</div>';
+      }
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdWizardRedraft">' +
+        'Re-rédiger avec mes réponses</button></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderGuidedSuccess(run) {
+    var captured = (run.state && run.state.captured) || {};
+    return '<div class="afc-card gd-success"><p class="afc-sec-eyebrow">Assistant terminé</p>' +
+      '<h3>Le nouvel expert est actif</h3><dl class="afc-kv">' +
+      '<dt>Domaine</dt><dd>' + esc(run.domain || "-") + '</dd>' +
+      '<dt>Agent</dt><dd>' + esc(captured.agent_id || "-") + '</dd>' +
+      '<dt>Outil</dt><dd>' + esc(captured.tool_id || "-") + '</dd></dl>' +
+      '<div class="afc-note afc-note--info">Ouvrez une NOUVELLE conversation dans la webapp principale pour voir le nouvel expert.</div>' +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdNew">Nouveau domaine guidé</button></div></div>';
+  }
+
+  function wireGuidedRun() {
+    if (byId("gdRunStage")) { byId("gdRunStage").onclick = confirmGuidedStageRun; }
+    if (byId("gdVerify")) { byId("gdVerify").onclick = confirmGuidedVerify; }
+    if (byId("gdRefreshRun")) { byId("gdRefreshRun").onclick = refreshGuidedCurrent; }
+    if (byId("gdAbandon")) { byId("gdAbandon").onclick = confirmGuidedAbandon; }
+    if (byId("gdWizardDraft")) {
+      byId("gdWizardDraft").onclick = function () { confirmGuidedWizardDraft(false); };
+    }
+    if (byId("gdWizardRedraft")) {
+      byId("gdWizardRedraft").onclick = function () {
+        gatherGuidedWizardAnswers();
+        confirmGuidedWizardDraft(true);
+      };
+    }
+    document.querySelectorAll(".gd-wizard-answer").forEach(function (elm) {
+      elm.oninput = function () {
+        S.guided.wizard.answers[elm.getAttribute("data-qid")] = elm.value;
+      };
+    });
+  }
+
+  function confirmGuidedStageRun() {
+    var run = S.guided.run || {};
+    var stage = run.state && run.state.stages && run.state.stages[run.current_stage];
+    openConfirm({
+      title: stage && stage.status === "failed" ? "Relancer cette étape ?" : "Lancer cette étape ?",
+      bodyHtml: "L'étape <b>" + esc((stage && stage.title_fr) || run.current_stage || "") +
+        "</b> sera exécutée côté serveur. Son journal sera affiché en direct.",
+      confirmLabel: stage && stage.status === "failed" ? "Relancer" : "Lancer",
+      onConfirm: runGuidedStage
+    });
+  }
+
+  function runGuidedStage() {
+    var g = S.guided;
+    var run = g.run || {};
+    var stageKey = run.current_stage;
+    g.running = true;
+    g.actionError = null;
+    g.liveActions = [];
+    renderGuided();
+    callApi("POST", "guided/run", { confirm: true, run_id: run.run_id }).then(function (r) {
+      if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
+        g.running = false;
+        g.actionError = guidedErrorText(r.data);
+        renderGuided();
+        return;
+      }
+      pollJob(r.data.job_id, function (actions) {
+        g.liveActions = actions || [];
+        renderGuided();
+      }, function (result, actions) {
+        g.running = false;
+        g.liveActions = actions || [];
+        if (result && result.run) {
+          applyGuidedRun(result.run);
+          refreshDatasetsAfterInfra(stageKey, result.run);
+        } else {
+          g.actionError = "Le résultat serveur ne contient pas le run mis à jour.";
+        }
+        renderGuided();
+      }, function (err, actions) {
+        g.running = false;
+        g.liveActions = actions || [];
+        toast("L'étape a échoué. Rechargement de son état...");
+        g.loaded = false;
+        loadGuidedCurrent();
+      });
+    });
+  }
+
+  function refreshDatasetsAfterInfra(stageKey, run) {
+    var infra = run && run.state && run.state.stages && run.state.stages.infra;
+    if (stageKey === "infra" && infra && infra.status === "done") {
+      loadDatasets(null, true);
+    }
+  }
+
+  function confirmGuidedVerify() {
+    var run = S.guided.run || {};
+    var stage = run.state && run.state.stages && run.state.stages[run.current_stage];
+    openConfirm({
+      title: "Vérifier cette étape ?",
+      bodyHtml: "Le serveur va contrôler dans DSS que l'étape <b>" +
+        esc((stage && stage.title_fr) || run.current_stage || "") + "</b> est réellement terminée.",
+      confirmLabel: "Vérifier",
+      onConfirm: verifyGuidedStage
+    });
+  }
+
+  function verifyGuidedStage() {
+    var g = S.guided;
+    var run = g.run || {};
+    g.verifying = true;
+    g.actionError = null;
+    renderGuided();
+    callApi("POST", "guided/verify", { confirm: true, run_id: run.run_id }).then(function (r) {
+      g.verifying = false;
+      if (r.data && r.data.status === "ok" && r.data.run) {
+        applyGuidedRun(r.data.run);
+      } else {
+        g.actionError = guidedErrorText(r.data);
+      }
+      renderGuided();
+    });
+  }
+
+  function gatherGuidedWizardAnswers() {
+    document.querySelectorAll(".gd-wizard-answer").forEach(function (elm) {
+      S.guided.wizard.answers[elm.getAttribute("data-qid")] = elm.value;
+    });
+  }
+
+  function confirmGuidedWizardDraft(withAnswers) {
+    openConfirm({
+      title: withAnswers ? "Re-rédiger le brouillon ?" : "Rédiger le brouillon ?",
+      bodyHtml: "Le wizard IA va analyser les métadonnées agrégées du profil. Aucune ligne brute ne sera envoyée au modèle.",
+      confirmLabel: withAnswers ? "Re-rédiger" : "Rédiger",
+      onConfirm: function () { startGuidedWizard(withAnswers); }
+    });
+  }
+
+  function startGuidedWizard(withAnswers) {
+    var g = S.guided;
+    var w = g.wizard;
+    var run = g.run || {};
+    var spec = (run.state && run.state.spec) || {};
+    w.running = true;
+    w.error = null;
+    if (!withAnswers) { w.config = null; w.answers = {}; }
+    w.reqId += 1;
+    var reqId = w.reqId;
+    renderGuided();
+    callApi("POST", "wizard/draft", {
+      confirm: true,
+      profile_dataset: (spec.base_dataset || "") + "_profile",
+      base_dataset: spec.base_dataset || "",
+      domain: run.domain || spec.domain || "",
+      answers: withAnswers ? w.answers : null
+    }).then(function (r) {
+      if (reqId !== w.reqId) { return; }
+      if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
+        w.running = false;
+        w.error = guidedErrorText(r.data);
+        renderGuided();
+        return;
+      }
+      w.jobId = r.data.job_id;
+      pollJob(w.jobId, null, function (result) {
+        if (reqId !== w.reqId) { return; }
+        w.running = false;
+        if (result && result.error) {
+          w.config = null;
+          w.error = String(result.error);
+        } else {
+          w.config = result || {};
+        }
+        renderGuided();
+        if (w.config) { toast("Brouillon sémantique enregistré."); }
+      }, function (err) {
+        if (reqId !== w.reqId) { return; }
+        w.running = false;
+        w.error = guidedErrorText({ error: err });
+        renderGuided();
+      });
+    });
+  }
+
+  function confirmGuidedAbandon() {
+    openConfirm({
+      title: "Abandonner ce run ?",
+      bodyHtml: "Le run sera marqué comme abandonné. Rien ne sera supprimé dans DSS et les éléments déjà créés resteront en place.",
+      confirmLabel: "Abandonner",
+      danger: true,
+      onConfirm: abandonGuidedRun
+    });
+  }
+
+  function abandonGuidedRun() {
+    var g = S.guided;
+    var runId = g.run && g.run.run_id;
+    g.abandoning = true;
+    g.actionError = null;
+    renderGuided();
+    callApi("POST", "guided/abandon", { confirm: true, run_id: runId }).then(function (r) {
+      g.abandoning = false;
+      if (r.data && r.data.status === "ok") {
+        applyGuidedRun(null);
+        toast("Run abandonné. Rien n'a été supprimé dans DSS.");
+      } else {
+        g.actionError = guidedErrorText(r.data);
+      }
+      renderGuided();
+    });
+  }
+
+  function newGuidedDomain() {
+    S.guided.form = { domain: "", base_dataset: "", label_fr: "", label_en: "", lookup: "" };
+    S.guided.startError = null;
+    S.guided.startErrorCode = null;
+    applyGuidedRun(null);
+    renderGuided();
   }
 
   /* ============================ screen: Vue d'ensemble ============================ */
@@ -1106,7 +1674,8 @@
   /* ============================ tabs + theme + boot ============================ */
 
   function renderActive() {
-    if (S.tab === "overview") { if (!S.overview.loaded) { loadOverview(); } else { renderOverview(); } }
+    if (S.tab === "guided") { if (!S.guided.loaded) { loadGuidedCurrent(); } else { renderGuided(); } }
+    else if (S.tab === "overview") { if (!S.overview.loaded) { loadOverview(); } else { renderOverview(); } }
     else if (S.tab === "probe") { renderProbe(); }
     else if (S.tab === "domain") { renderDomain(); }
     else if (S.tab === "prompts") { renderPrompts(); }
@@ -1157,7 +1726,7 @@
       if (ev.key === "Escape") { closeModal(); }
     });
 
-    selectTab("overview");
+    selectTab("guided");
   }
 
   if (document.readyState === "loading") {

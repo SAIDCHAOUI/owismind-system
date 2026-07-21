@@ -1,7 +1,7 @@
 <!-- OWIsMind - Agent Factory Console: BODY content only (no html/head).
      Paste into the DSS Standard webapp HTML pane. script.js clones the
      <template id="afc-shell"> below into #afc once, then renders each screen
-     (Vue d'ensemble / Sonde / Nouveau domaine / Prompts) into #afcMain.
+     (Assistant / Vue d'ensemble / Sonde / Nouveau domaine / Prompts) into #afcMain.
      French-only UI (internal admin tool). Orange charter styling lives in style.css. -->
 <div id="afc" data-theme="light">
   <p class="afc-boot">Chargement de la console...</p>
@@ -26,7 +26,8 @@
   </header>
 
   <nav class="afc-tabs" id="afcTabs">
-    <button class="afc-tab afc-tab--on" data-tab="overview">Vue d'ensemble</button>
+    <button class="afc-tab afc-tab--on" data-tab="guided">Assistant</button>
+    <button class="afc-tab" data-tab="overview">Vue d'ensemble</button>
     <button class="afc-tab" data-tab="probe">Sonde</button>
     <button class="afc-tab" data-tab="domain">Nouveau domaine</button>
     <button class="afc-tab" data-tab="prompts">Prompts</button>
