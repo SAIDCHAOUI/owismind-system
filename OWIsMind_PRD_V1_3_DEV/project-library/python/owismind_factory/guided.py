@@ -641,6 +641,12 @@ def _check_wizard(env, state):
         return False, ["Aucun brouillon valide dans le hub : clique d'abord sur Rédiger le "
                        "brouillon (IA), puis re-vérifie."]
     problems = []
+    spec = _spec(state)
+    drafted_for = (config.get("base_dataset") or "").strip()
+    if drafted_for and drafted_for != spec.base_dataset:
+        problems.append("Le brouillon du hub a été rédigé pour le dataset %s, pas pour %s "
+                        "(reste d'un ancien run) : clique sur Rédiger le brouillon (IA) "
+                        "pour le refaire sur le bon dataset." % (drafted_for, spec.base_dataset))
     if not (config.get("planner_description") or "").strip():
         problems.append("Le brouillon n'a pas de planner_description : re-rédige avec tes "
                         "réponses (c'est le texte de routage de l'orchestrateur).")
@@ -648,6 +654,16 @@ def _check_wizard(env, state):
         problems.append("Le brouillon n'a aucun attribut de colonne : le profil est-il "
                         "buildé et relu ? Re-rédige le brouillon.")
     return (len(problems) == 0), problems
+
+
+def _precheck_wizard(env, state):
+    """Advance-walk precheck: skip the wizard ONLY when a valid draft is PROVEN
+    to target this run's dataset (missing provenance stamp = no skip)."""
+    ok, problems = _check_wizard(env, state)
+    if not ok:
+        return False, problems
+    config = _wizard_config(env, state) or {}
+    return (config.get("base_dataset") or "").strip() == _spec(state).base_dataset, []
 
 
 # ------------------------------------------------------------- stage registry
@@ -687,7 +703,7 @@ _INSTRUCTIONS = {
 # when its outcome is PROVEN, never when it merely could not be verified).
 _PRECHECKS = {
     "first_build": _precheck_first_build,
-    "wizard": _check_wizard,
+    "wizard": _precheck_wizard,
     "template": _check_template,
     "code_agent": _check_code_agent,
 }

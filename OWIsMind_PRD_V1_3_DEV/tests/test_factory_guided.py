@@ -382,6 +382,42 @@ class TestWizardGate(_GuidedBase):
         run = self.verify(run)
         self.assertEqual(run["current_stage"], "brain")
 
+    def test_wizard_refuses_a_draft_stamped_for_another_dataset(self):
+        run = self._to_wizard()
+        stale = dict(_GOOD_WIZARD_CONFIG)
+        stale["base_dataset"] = "OLD_Dataset"
+        self.hub_json[guided.wizard_config_path("opportunities")] = stale
+        run = self.verify(run)
+        stage = run["state"]["stages"]["wizard"]
+        self.assertEqual(stage["status"], guided.WAITING)
+        self.assertTrue(any("OLD_Dataset" in p for p in stage["problems"]))
+
+    def test_wizard_precheck_skips_only_on_proven_dataset_match(self):
+        self.p.set(guided._Env, "store", lambda env: self._store_stub())
+        self.rows = {"OWISMIND_TEST_DRIVE_Opportunities_profile": True,
+                     "OWISMIND_TEST_DRIVE_Opportunities_value_index": True}
+        # With provably built datasets, first_build precheck-skips: after infra
+        # the current stage is profile_review, and ONE verify lands on wizard.
+        # Unstamped (legacy) draft: valid for a human verify, NOT enough to skip.
+        self.hub_json[guided.wizard_config_path("opportunities")] = dict(_GOOD_WIZARD_CONFIG)
+        run = self.start()
+        run = self.run_stage(run)   # plan
+        run = self.run_stage(run)   # infra (first_build auto-skipped: rows proven)
+        self.assertEqual(run["current_stage"], "profile_review")
+        run = self.verify(run)      # profile_review
+        self.assertEqual(run["current_stage"], "wizard",
+                         "an unstamped draft must not auto-skip the wizard stage")
+        # Stamped for THIS dataset: the walk may skip the wizard stage.
+        stamped = dict(_GOOD_WIZARD_CONFIG)
+        stamped["base_dataset"] = "DRIVE_Opportunities"
+        self.hub_json[guided.wizard_config_path("opportunities")] = stamped
+        run2 = self.start()
+        run2 = self.run_stage(run2)
+        run2 = self.run_stage(run2)
+        run2 = self.verify(run2)    # profile_review -> wizard skipped -> brain
+        self.assertEqual(run2["current_stage"], "brain")
+        self.assertEqual(run2["state"]["stages"]["wizard"]["status"], guided.DONE)
+
 
 class TestBrainAndTool(_GuidedBase):
     def _to_brain(self):

@@ -310,6 +310,11 @@ def draft_model_config(project, profile_dataset, answers=None, llm_id=None,
     if not isinstance(config, dict):
         return {"error": "the LLM did not return parseable JSON (llm_id %s)" % llm_id}
     config.setdefault("questions", [])
+    # Provenance stamp: which dataset/domain this draft was written FOR. The
+    # guided assistant refuses to reuse a draft stamped for another dataset
+    # (a stale hub draft from an abandoned run must never drive a new model).
+    config["base_dataset"] = base_dataset
+    config["domain"] = domain
     if answers:
         config = merge_answers(config, answers)
     return config
