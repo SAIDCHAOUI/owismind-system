@@ -299,6 +299,43 @@ class TestPreflight(_GuidedBase):
         self.assertTrue(any("opportunities_expert" in p for p in problems))
 
 
+class TestPreflightOrchestratorHubAwareness(_GuidedBase):
+    def _with_confirmed_hints(self, orchestrator_code):
+        self.hub_json[hub.HUB_ROOT + "/probe_results.json"] = {
+            "suggested_discovery": {"type": "T"},
+            "suggested_schema_hints": {"internal_key": "pythonAgentSettings",
+                                       "code_key": "code", "confirmed": True},
+        }
+        self.settings["orchestrator_agent_id"] = "038G7mlF"
+        self.p.set(agent_builder, "read_agent_raw",
+                   lambda project, agent_id: {
+                       "activeVersion": "v1",
+                       "versions": [{"versionId": "v1",
+                                     "pythonAgentSettings": {"code": orchestrator_code}}],
+                   })
+
+    def _preflight_journal(self, run):
+        return [a for a in run["state"]["stages"]["preflight"]["journal"]
+                if a["step"] == "preflight_orchestrator"]
+
+    def test_v12_orchestrator_without_hub_loading_warns(self):
+        self._with_confirmed_hints("CAPABILITIES = { 'revenue_expert': {...} }  # embedded only")
+        run = self.start()
+        notes = self._preflight_journal(run)
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["status"], "SKIPPED")
+        self.assertIn("invisible", notes[0]["detail"])
+        # A warning, never a blocker: the run still advances.
+        self.assertEqual(run["current_stage"], "plan")
+
+    def test_hub_aware_orchestrator_passes_silently(self):
+        self._with_confirmed_hints("caps = load_from('/python/owismind_hub/capabilities.json')")
+        run = self.start()
+        notes = self._preflight_journal(run)
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["status"], "DONE")
+
+
 class TestAutoStages(_GuidedBase):
     def test_plan_is_dry_run_and_advances(self):
         run = self.start()

@@ -351,6 +351,34 @@ def _run_preflight(env, state, ctx):
     else:
         ctx.done("preflight_probe", "probe results present")
 
+    # Hub-awareness of the LIVE orchestrator (best-effort, needs confirmed probe
+    # hints to read its code). A v1.2 orchestrator has its CAPABILITIES embedded
+    # and ignores capabilities.json entirely: the whole run would end with an
+    # enabled expert that stays INVISIBLE (field failure 2026-07-21).
+    _discovery, schema_hints = _gates(env)
+    orchestrator_id = str(env.settings.get("orchestrator_agent_id") or "").strip()
+    if orchestrator_id and schema_hints \
+            and schema_hints.get("internal_key") and schema_hints.get("code_key"):
+        try:
+            raw = agent_builder.read_agent_raw(env.project, orchestrator_id)
+            versions = raw.get("versions") or []
+            version = versions[-1] if versions else {}
+            for candidate in versions:
+                if candidate.get("versionId") == raw.get("activeVersion"):
+                    version = candidate
+            code = (version.get(schema_hints["internal_key"]) or {}).get(
+                schema_hints["code_key"]) or ""
+            if code and "owismind_hub" not in code:
+                ctx.skip("preflight_orchestrator",
+                         "l'orchestrateur live (id %s) ne charge PAS le hub (code v1.2 ?) : "
+                         "re-colle GenAI/Agents/OWIsMind_orchestrator.py (env 3.11) AVANT "
+                         "l'activation finale, sinon le nouvel expert restera invisible"
+                         % orchestrator_id)
+            elif code:
+                ctx.done("preflight_orchestrator", "live orchestrator is hub-aware")
+        except Exception:
+            pass  # best-effort: never block preflight on this read
+
     template = hub.read_text(env.project, hub.TEMPLATE_AGENT_PATH)
     if not template:
         ctx.skip("preflight_template",
