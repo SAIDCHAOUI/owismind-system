@@ -3485,6 +3485,30 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-22.
 - **Date** : 2026-07-22.
 
+## L169 - Project library DSS : un fichier re-colle a la carte casse le package ; re-coller TOUS les fichiers modifies ENSEMBLE puis restart backend (2026-07-22)
+- **Contexte** : 1er run de suppression reel (opportunities_won). `guided.py` et `removal.py` etaient a jour dans la library du projet, mais `hub.py` etait reste sur l'ancienne version.
+- **Ce qui a echoue** : l'etape disable a leve `AttributeError: module 'owismind_factory.hub' has no attribute 'set_capability_enabled'`. Le webapp backend snapshotte `project-python-libs` au DEMARRAGE de son process : meme apres correction de la library, le process chaud garde le vieux code.
+- **Solution qui marche** : livrer un changement multi-fichiers du package factory comme un TOUT : re-coller (ou git-puller) TOUS les fichiers modifies de `owismind_factory/`, PUIS redemarrer le backend de la webapp console, PUIS reprendre le run (la machine reprend exactement sur l'etape en echec, bouton Relancer). Le commit de la feature liste les fichiers a coller (ici hub.py, guided.py, removal.py, probes.py).
+- **Preuve-verification** : echec propre AVANT toute suppression (fail-closed par conception), puis run complet vert apres re-collage + restart, chaque objet verifie absent.
+- **Source** : session 2026-07-22 run 2.
+- **Date** : 2026-07-22.
+
+## L170 - Contrat get_physical_table : renvoie un litteral DEJA quote ('"TABLE"') que quote_table rejette ; les mocks de test doivent reproduire le contrat REEL (2026-07-22)
+- **Contexte** : etape catalog_cleanup du run de suppression : DELETE parametre sur la table physique du catalogue, resolue par `wizard.get_physical_table` puis citee par `guided_store.quote_table`.
+- **Ce qui a echoue** : `get_physical_table` renvoie `'"%s"' % table` (deja double-quote) alors que `quote_table` gate sur un identifiant NU (`^[A-Za-z_][A-Za-z0-9_]*$`) et re-quote : GuidedStoreError deterministe, run bloque a l'etape 10/12 sur instance reelle. La suite de tests etait VERTE car le mock renvoyait un nom nu (contrat imaginaire). Attrape uniquement par la revue adversariale Opus (repro DSS-free des deux fonctions ensemble).
+- **Solution qui marche** : strip des guillemets englobants avant `quote_table` dans `removal.delete_catalog_rows` (ne PAS changer `get_physical_table` : `substitute_golden_tables` consomme sa sortie quotee) + mock du test aligne sur le litteral quote realiste. Regle generale : un mock d'une fonction du repo doit reproduire la FORME EXACTE de sa sortie reelle (la relire avant de mocker) ; latence connexe : `table_has_rows` avale le meme mismatch en renvoyant None (tolere par ses appelants, donc invisible).
+- **Preuve-verification** : repro du reviewer (quote_table RAISED sur la sortie reelle), fix commit 18e3853, suite verte avec le mock realiste, et catalog_cleanup passe en DSS (skip legitime : dataset catalogue absent).
+- **Source** : session 2026-07-22 run 2 (revue adversariale).
+- **Date** : 2026-07-22.
+
+## L171 - codex-companion task : sandbox READ-ONLY par defaut, --write obligatoire pour appliquer des diffs ; orchestration multi-taches fiable = resume-last + monitor statut/PID (2026-07-22)
+- **Contexte** : implementation du plan capability-removal deleguee a GPT-5.6 Sol xhigh, tache par tache, via `codex-companion.mjs task`.
+- **Ce qui a echoue** : premier job lance SANS `--write` : le runtime partage demarre en sandbox read-only (`sandbox: "read-only"` dans le companion ; le champ `write:false` du status --json le trahit), Sol ne peut que proposer, le run xhigh aurait ete brule pour un diff inapplicable. Annule a temps (`cancel <job-id>`). Piege bonus : `task --help` est interprete comme un PROMPT (nouveau thread parasite), lire l'usage dans le source du script.
+- **Solution qui marche** : `task --write --resume-last --model gpt-5.6-sol --effort xhigh "<tache bornee du plan>"` (resume-last garde le contexte plan/repo entre les taches, effort xhigh supporte) ; un job par tache, jamais deux agents sur les memes fichiers ; cote session : monitor persistant qui poll `status --json` toutes les 30 s, croise avec la vivacite du PID (kill -0, prolonge L156), emet demarrage/fin/zombie ; resultat via `result <job-id>`. Verifier chaque deviation annoncee par Sol : contournement de garde-fou (aliasing pour echapper au scan lexical `.delete(`) a remplacer par le VRAI changement de politique (whitelist du test), durcissement legitime (fallback params tool) a garder.
+- **Preuve-verification** : 7 taches livrees et commitees, chaque rapport TDD de Sol re-verifie (suite relancee cote Claude a chaque tache), monitor reveille la session a chaque fin de job.
+- **Source** : session 2026-07-22 run 2.
+- **Date** : 2026-07-22.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

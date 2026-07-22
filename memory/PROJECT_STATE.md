@@ -398,10 +398,24 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
 > orchestrateur OK apres re-collage v1.3 des 3 agents. Moteur `guided.py`/`guided_store.py`,
 > routes `/api/guided/*`. Lecons associees : L164-L166. Detail : `sessions/2026-07-21.md`.
 
+> **Capability removal + disable (✅ VALIDE TERRAIN 2026-07-22)** : la console sait aussi ENLEVER
+> une capability. Desactivation 1 clic (vue d'ensemble, flag `enabled`, backup auto) ou run guide
+> de SUPPRESSION 12 etapes confirmees une par une (inventaire sonde, disable, tool, agent, modele,
+> scenario, recettes, datasets derives avec drop, zone si vide, catalogue, hub + entree, re-sonde
+> finale). Moteur `removal.py` (safe_delete = identite relue avant chaque delete ; verification
+> d'ABSENCE avant d'avancer ; fallback manuel si refus API ; source JAMAIS supprimable ; derniere
+> capability conservee desactivee) ; routes `/api/capability/enable` + `/api/guided/start-removal`
+> (nom du domaine tape, verifie serveur). La regle "zero delete" du package devient une LISTE
+> BLANCHE (probes/removal/hub, test de confinement). 8/8 APIs delete conformes doc Dataiku.
+> Valide de bout en bout sur `opportunities_won` (12/12 vert, objets verifies absents). Spec :
+> `docs/superpowers/specs/2026-07-22-capability-removal-design.md`. Lecons L169-L171. Detail :
+> `sessions/2026-07-22.md` run 2.
+
 - **But** : industrialiser l'ajout d'un specialiste par dataset (table -> zone + recettes ->
   modele semantique assiste LLM -> tool -> Code Agent -> capability) + sortir les prompts du code.
-- **Pieces** : package `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/` (13 modules,
-  stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, zero delete) ; notebooks 00-06 ; **Config &
+- **Pieces** : package `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_factory/` (14 modules,
+  stdlib+dataiku 3.9, dry-run, gates par sonde Phase 0, deletions CONFINEES a probes/removal/hub
+  par test de confinement depuis 2026-07-22, zero delete ailleurs) ; notebooks 00-06 ; **Config &
   Prompt Hub** `/python/owismind_hub/` (project library ; seeds repo `project-library/python/owismind_hub/`, equivalence byte-a-byte testee ;
   les 3 agents chargent PERSONA/CAPABILITIES/regles additives au demarrage, fallback silencieux) ;
   console webapp Standard `Standard-webapps/agent-factory-console/` (charte Orange PASS) ; docs
@@ -720,6 +734,7 @@ Historique par session : memory/sessions/*.md.
 | Plugin DEV coexistant (`owismind_dev` / `owismind_dev_v2`) | 🗑 Zips + staging SUPPRIMÉS du disque (2026-07-06 Run 5, passage prod) ; outillage `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` + skill conservés, re-créable à la demande | 2026-06-19 (Run 3, historique) | L094 (`sessions/2026-07-06.md` Run 5) |
 | **Plugin PROD v1.2.0** (zip versionné `owismind-v1_2-upload.zip`) | ⏳ Packagé (repo), À UPLOADER + déployer dans le projet DSS prod `OWISMIND_PRD_V1_2` (runbook `docs/DEPLOY_PROD_V1_1.md`). Historique : build 1.1.0 = 95 entrées, `index-DDxpe_gw.js` | - | `sessions/2026-07-06.md` Run 5 |
 | **Agent Factory v1.3 + Assistant guidé console** (13 étapes, état SQL `factory_guided_v1`, vérifs DSS par étape, wizard IA, agent auto-créé) | ✅ Validé DSS de bout en bout : 1er expert `delivery_snapshot` créé par l'user via le parcours guidé, routé par l'orchestrateur | 2026-07-21 (Run 2) | L164-L166 (`sessions/2026-07-21.md`, section 7b) |
+| **Capability removal + disable** (run guidé 12 étapes confirmées, `removal.py` + safe_delete + vérif d'absence ; désactivation 1 clic vue d'ensemble) | ✅ Validé TERRAIN : suppression complète de `opportunities_won` 12/12 vert, objets vérifiés absents ; restes : bouton Désactiver/Activer, fallback manuel et garde template non exercés en réel | 2026-07-22 (Run 2) | L169-L171 (`sessions/2026-07-22.md` run 2, section 7b) |
 | Agents DEV - orchestrateur + expert revenus | ✅ Validés DSS ; audit L118 en attente de re-validation | 2026-07-02 (Run 2) | L055-L058/L118-L120 |
 | Agents DEV - expert tickets d'incidents | 🟡 Testé DSS (« marche plutôt bien »), à finaliser | 2026-06-19 (Run 4) | L097/L098 |
 | Agents PROD (`OWISMIND_PRD_V1_2`, clone de DEV) - revenus + tickets INCLUS | 🟡 Prod = CLONE de DEV (ids DEV conservés), miroité sous `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/` ; plus de promotion à la main. LEGACY : ancien jumeau `OWISMIND_PROD_V1` + `promote_agents_to_prod.py` supprimés 2026-07-10 | 2026-07-08 (repoint modèles, revenus validé) | L090/L099/L139/**L146** |

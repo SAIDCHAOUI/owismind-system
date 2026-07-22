@@ -7,26 +7,27 @@
 
 ## Focus courant
 
-**PREMIER BUILD AUTO + SCENARIO STEP-BASED (2026-07-22, commit 1c88695 pousse).** L'etape guidee
-`first_build` est passee de MANUELLE a AUTO : la console lance le scenario, attend (borne 30 min,
-poll 10 s, progression au journal / 5 min), verifie les lignes, remonte l'erreur DSS
-(`first_error_details` + fix partition + Last runs) si echec, se RATTACHE a un run deja en cours
-(jamais de double run). Le scenario de refresh est desormais STEP-BASED (un step `build_flowitem`
-par dataset de connaissance, `RECURSIVE_BUILD`, read-back `raw_steps` bruyant), toujours INACTIF +
-trigger quotidien ; trigger "dataset modified" NON automatise (forme brute absente de la doc,
-2 clics UI). `heal_interrupted` migre un run persiste sur l'ancienne etape manuelle. Zero
-changement backend console / front (contrat gele). 692 tests (+16), revue adversariale Opus SAINE.
-Restent a l'user : relecture profil, wizard, collage Code Agent (si sonde non confirmee), smoke.
-**TERRAIN** : 2e domaine cree de bout en bout par l'user = `opportunities_won` (`agent:4Ghpi5hm`,
-tool `iUR8wLX`). Ecart constate puis DIAGNOSTIQUE (L168) : le hub est charge au DEMARRAGE DU
-PROCESS de l'orchestrateur -> Playground (process frais) voit le nouvel expert, webapp (process
-Mesh chaud) non ; deblocage = re-save de l'orchestrateur ; correctif durable (reload TTL ~60 s
-par conversation + textes enable/succes) PROPOSE, decision user en attente. Brief design complet
-remis dans le chat pour la refonte UX de la console par Claude Design (portage ES5 a suivre).
-PUSH actifs cette session (demande user explicite : "commit et push", il pull pour DSS).
+**CAPABILITY REMOVAL + DISABLE : VALIDES TERRAIN (2026-07-22 run 2, commits 8851faa..0d933ad
+pousses).** La console sait desormais ENLEVER une capability : desactivation reversible (flag
+`enabled`, 1 clic depuis la vue d'ensemble, rappel L168) ou run guide de SUPPRESSION en 12 etapes
+confirmees UNE PAR UNE (inventaire sonde -> disable -> tool -> agent -> modele -> scenario ->
+recettes -> datasets derives (drop) -> zone si vide -> catalogue -> hub + entree -> re-sonde
+finale). Garde-fous prouves : dataset SOURCE jamais supprimable, `safe_delete` (identite relue
+avant chaque delete), verification d'ABSENCE avant d'avancer, fallback manuel si refus API,
+derniere capability conservee desactivee, nom du domaine TAPE verifie serveur. Moteur
+`owismind_factory/removal.py` + stages dans `guided.py` + helpers `hub.py` ; 741 tests (+49) ;
+8/8 APIs delete verifiees conformes doc Dataiku ; revue adversariale Opus = 1 bug HIGH reel
+corrige (L170). Fondateurs supprimables aussi (decision user : l'orchestrateur est le coeur
+durable, ses capabilities se gerent par la console). Implementation deleguee a GPT-5.6 Sol
+xhigh via codex-companion, verifs + commits cote Claude (L171).
+**TERRAIN** : 1er run de suppression reel = `opportunities_won` (l'expert cree le matin) : echec
+propre au depart (hub.py perime dans la library DSS, L169), reprise apres re-collage + restart,
+puis 12/12 vert, chaque objet VERIFIE ABSENT. Les objets opportunities avortes du 2026-07-21
+sont de fait nettoyes. PUSH actifs (demande user).
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-22 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
+- 2026-07-22 Run 2 : capability removal + disable (spec + plan 8 taches TDD + moteur removal.py + machine 12 etapes + routes + UI + modale danger), implementation Sol xhigh orchestree, revue adversariale (fix HIGH quoting L170), doc Dataiku 8/8, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
+- 2026-07-22 Run 1 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
 - 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
 - 2026-07-20 : deploiement v1.3 guide par l'user (notebooks 00-06, clone aligne VALIDE) ; restructure repo = un dossier racine par projet DSS + hub sous /python/ + UN fichier py par modele semantique ; fix regex console. L162-L163 (pas de fichier session, detail dans les lecons + commits 6e33a75..f39b00d).
 - 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
@@ -68,16 +69,21 @@ PUSH actifs cette session (demande user explicite : "commit et push", il pull po
 
 ## Prochaines etapes (items encore actifs seulement)
 - **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
-  nouvelle conversation -> verifier que l'expert opportunites repond dans la webapp. Decision
+  nouvelle conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud
+  (il l'enumere encore dans ses refus tant que le process n'a pas redemarre). Decision toujours
   attendue : reload du hub par conversation (TTL ~60 s) + textes enable/succes de l'assistant
   (option recommandee, non implementee). Voir `sessions/2026-07-22.md`.
-- **REFONTE UX CONSOLE** : maquette Claude Design attendue (brief remis 2026-07-22) ; au retour,
-  portage ES5/DSS (contrat gele) + passage charte-orange-reviewer. Voir `sessions/2026-07-22.md`.
-- **ASSISTANT GUIDE (2 experts live : delivery_snapshot + opportunities_won)** : confirmer en DSS
-  le premier build AUTO au prochain domaine (library owismind_factory a re-coller si le pull ne
-  l'a pas fait) ; smoke metier des 2 nouveaux experts (questions reelles + Evidence + non-regression
-  revenus/tickets) ; curation des profils si reponses moyennes ; suppression par l'user des objets
-  opportunities avortes du 2026-07-21.
+- **CAPABILITY REMOVAL, restes de validation** : tester Desactiver/Activer depuis la vue
+  d'ensemble (1 clic, reversible) ; le fallback manuel (refus API) et le garde template n'ont
+  jamais ete exerces en reel (couverts par tests seulement). Voir `sessions/2026-07-22.md` run 2.
+- **REFONTE UX CONSOLE** : maquette Claude Design attendue (brief remis 2026-07-22, a completer
+  avec les ecrans de suppression) ; au retour, portage ES5/DSS (contrat gele) + passage
+  charte-orange-reviewer. Voir `sessions/2026-07-22.md`.
+- **ASSISTANT GUIDE (1 expert usine live : delivery_snapshot ; opportunities_won supprime par le
+  test removal)** : confirmer en DSS le premier build AUTO au prochain domaine (re-coller TOUS
+  les fichiers factory ENSEMBLE + restart backend, L169) ; smoke metier delivery_snapshot
+  (questions reelles + Evidence + non-regression revenus/tickets) ; curation du profil si
+  reponses moyennes.
 - **Repo, ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
   capabilities + persona ; il ne pousse PAS `run_settings.json`, `prompts/orchestrator_workflow.md`
   NI `templates/dataset_expert.py` quand la sonde n'a pas confirme les cles (fallback = simple
