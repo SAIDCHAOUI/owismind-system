@@ -3469,6 +3469,22 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-21 Run 2 (commit 5c3b26a). Complete la discipline Mesh de la rule agents (with_json_output).
 - **Date** : 2026-07-21.
 
+## L167 - Scenario step-based par l'API publique : ancrer la forme des steps sur le helper documente + read-back, jamais deviner (2026-07-22)
+- **Contexte** : automatisation du premier build du parcours guide. La session du 2026-07-12 avait choisi un scenario CUSTOM PYTHON precisement parce que "la forme brute des steps visuels n'est pas documentee" ; l'user veut du step-based (plus lisible dans l'UI DSS) en suivant strictement la doc developpeur.
+- **Ce qui a echoue** : rien en soi, mais le blocage initial etait reel : ni `create_scenario` step_based ni le dict d'un step `build_flowitem` ne sont montres en exemple dans la doc publique, et l'API reference ne documente que les triggers temporels (pas de trigger "dataset modified" en brut).
+- **Solution qui marche** : croiser TROIS sources officielles au lieu de deviner : (1) le type `build_flowitem` est documente dans la docstring `get_raw_steps` ; (2) les params (`builds` + `jobType` et ses 4 modes) sont exactement ce que produit le helper documente in-scenario `dataiku.scenario.BuildFlowItemsStepDefHelper` ; (3) `StepBasedScenarioSettings.raw_steps` documente l'emplacement `params.steps` -> `definition={"params": {"steps": [...]}}`. Filets : read-back `raw_steps` apres creation (echec bruyant si vide) + preuve e2e immediate puisque le run auto suit. Le trigger dataset-modified reste MANUEL (2 clics UI) : sa forme brute n'est nulle part, on ne devine pas. Run+attente : `run()` / `wait_for_scenario_run(no_fail=True)` / poll `refresh()`+`running` borne / `outcome` / `get_details().first_error_details`, tous documentes ; rattachement a un run en cours via `get_current_run()` (redemarrage backend, double clic).
+- **Preuve-verification** : 692 tests (16 nouveaux dont read-back, timeout borne, rattachement sans double run, extraction d'erreur) + revue adversariale Opus sans finding. Validation DSS terrain a confirmer au prochain domaine guide.
+- **Source** : session 2026-07-22 (commit 1c88695).
+- **Date** : 2026-07-22.
+
+## L168 - Le hub (capabilities.json) est charge UNE FOIS au demarrage du PROCESS du Code Agent : une capability activee reste invisible de la webapp tant que l'orchestrateur n'est pas re-sauve (2026-07-22)
+- **Contexte** : 2e domaine cree de bout en bout via l'assistant guide (`opportunities_won`). L'user teste : le Playground Design de l'orchestrateur repond "j'ai acces aux opportunites gagnees", la webapp repond "je n'ai pas d'agent pour ca" en enumerant revenus/tickets/livraisons. Meme agent, meme id.
+- **Ce qui a echoue** : l'hypothese "le tool devient actif a la prochaine conversation" (texte de l'etape enable et de l'ecran de succes). En realite l'orchestrateur charge `capabilities.json` a l'IMPORT du module (L1348-1470, commentaire explicite "Loaded ONCE at agent start... re-save the agent"). Le Playground Design execute le code dans un process FRAIS (relit le hub) ; la webapp passe par Mesh sur le process CHAUD demarre avant l'activation (registre fige : il connaissait delivery d'hier car le re-collage v1.3 avait redemarre le process, pas opportunities d'aujourd'hui). Une nouvelle conversation ne recharge RIEN.
+- **Solution qui marche** : deblocage immediat = re-sauver le Code Agent `OWIsMind_orchestrator` dans DSS (un save redemarre le process servi par Mesh), puis nouvelle conversation. Diagnostic type : la liste des domaines que l'agent enumere dans son refus EST le snapshot de son registre au dernier demarrage (excellent traceur de staleness). Correctif durable propose (non implemente, decision user en attente) : reload du hub en debut de conversation avec cache TTL ~60 s + textes enable/succes corriges.
+- **Preuve-verification** : captures user (Playground OK vs webapp KO le meme jour) + lecture du code (chargement module-level) ; l'enumeration webapp correspondait exactement au registre d'avant activation.
+- **Source** : session 2026-07-22.
+- **Date** : 2026-07-22.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

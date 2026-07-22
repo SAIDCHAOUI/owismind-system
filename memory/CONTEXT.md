@@ -7,27 +7,26 @@
 
 ## Focus courant
 
-**ASSISTANT GUIDE CONSOLE : VALIDE EN DSS DE BOUT EN BOUT (2026-07-21).** La console factory a
-gagne un ecran **Assistant** (1er onglet, defaut) : machine 13 etapes de la selection du dataset
-a la capability activee dans l'orchestrateur. Etat persiste en SQL
-(`{PK}_owismind_factory_guided_v1`, pattern plugin : parametrage Constant/toSQL, COMMIT, garde
-63 octets) -> reprise apres reload/restart, self-heal d'une etape interrompue. Etapes manuelles =
-instructions FR exactes + "C'est fait" qui VERIFIE dans DSS avant d'avancer ; prechecks POSITIFS
-uniquement ("je ne sais pas" ne vaut jamais "fait") ; preflight bloque dataset PARTITIONNE et
-detecte un orchestrateur non hub-aware. Moteur `owismind_factory/{guided,guided_store}.py` +
-5 routes `/api/guided/*` (Fable) ; front stepper ES5 (GPT-5.6 Sol, contrat fige, re-verifie +
-charte OK). **PREUVE TERRAIN** : 1er expert cree de bout en bout par l'user = domaine
-`delivery_snapshot` (Delivery_Snapshot, 20 col / 2237 lignes) -> profil -> wizard IA -> modele ->
-tool `DM4Yx4A` -> Code Agent `DeliverySnapshot_expert` (`agent:PFf8xkij`, AUTO-CREE, sonde
-confirmee) -> capability -> l'orchestrateur repond aux questions delivery. 4 fixes terrain en
-cours de route : temperature/thinking (cle `llm_wizard`, la connexion admin fait foi), lecture
-profil via iter_tuples (L165), provenance du brouillon wizard, detection orchestrateur v1.2
-(le re-collage v1.3 des 3 agents etait le dernier bloqueur). 676 tests agents+factory
-(57 nouveaux) + backend 965 / LAB 343 / front 365. L164-L166. PUSH actifs cette session
-(demande user explicite : il pull depuis le remote pour DSS). Opportunities : ABANDONNE
-(2 datasets = stack prealable requis), objets DSS a supprimer par l'user.
+**PREMIER BUILD AUTO + SCENARIO STEP-BASED (2026-07-22, commit 1c88695 pousse).** L'etape guidee
+`first_build` est passee de MANUELLE a AUTO : la console lance le scenario, attend (borne 30 min,
+poll 10 s, progression au journal / 5 min), verifie les lignes, remonte l'erreur DSS
+(`first_error_details` + fix partition + Last runs) si echec, se RATTACHE a un run deja en cours
+(jamais de double run). Le scenario de refresh est desormais STEP-BASED (un step `build_flowitem`
+par dataset de connaissance, `RECURSIVE_BUILD`, read-back `raw_steps` bruyant), toujours INACTIF +
+trigger quotidien ; trigger "dataset modified" NON automatise (forme brute absente de la doc,
+2 clics UI). `heal_interrupted` migre un run persiste sur l'ancienne etape manuelle. Zero
+changement backend console / front (contrat gele). 692 tests (+16), revue adversariale Opus SAINE.
+Restent a l'user : relecture profil, wizard, collage Code Agent (si sonde non confirmee), smoke.
+**TERRAIN** : 2e domaine cree de bout en bout par l'user = `opportunities_won` (`agent:4Ghpi5hm`,
+tool `iUR8wLX`). Ecart constate puis DIAGNOSTIQUE (L168) : le hub est charge au DEMARRAGE DU
+PROCESS de l'orchestrateur -> Playground (process frais) voit le nouvel expert, webapp (process
+Mesh chaud) non ; deblocage = re-save de l'orchestrateur ; correctif durable (reload TTL ~60 s
+par conversation + textes enable/succes) PROPOSE, decision user en attente. Brief design complet
+remis dans le chat pour la refonte UX de la console par Claude Design (portage ES5 a suivre).
+PUSH actifs cette session (demande user explicite : "commit et push", il pull pour DSS).
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-07-22 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
 - 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
 - 2026-07-20 : deploiement v1.3 guide par l'user (notebooks 00-06, clone aligne VALIDE) ; restructure repo = un dossier racine par projet DSS + hub sous /python/ + UN fichier py par modele semantique ; fix regex console. L162-L163 (pas de fichier session, detail dans les lecons + commits 6e33a75..f39b00d).
 - 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
@@ -68,10 +67,17 @@ profil via iter_tuples (L165), provenance du brouillon wizard, detection orchest
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **ASSISTANT GUIDE : FAIT et VALIDE DSS (2026-07-21, expert delivery_snapshot live).**
-  Reste : smoke metier du nouvel expert (questions delivery reelles + Evidence sur la bonne
-  table + non-regression revenus/tickets), curation du profil delivery si reponses moyennes
-  (overrides puis re-build), et suppression par l'user des objets opportunities avortes.
+- **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
+  nouvelle conversation -> verifier que l'expert opportunites repond dans la webapp. Decision
+  attendue : reload du hub par conversation (TTL ~60 s) + textes enable/succes de l'assistant
+  (option recommandee, non implementee). Voir `sessions/2026-07-22.md`.
+- **REFONTE UX CONSOLE** : maquette Claude Design attendue (brief remis 2026-07-22) ; au retour,
+  portage ES5/DSS (contrat gele) + passage charte-orange-reviewer. Voir `sessions/2026-07-22.md`.
+- **ASSISTANT GUIDE (2 experts live : delivery_snapshot + opportunities_won)** : confirmer en DSS
+  le premier build AUTO au prochain domaine (library owismind_factory a re-coller si le pull ne
+  l'a pas fait) ; smoke metier des 2 nouveaux experts (questions reelles + Evidence + non-regression
+  revenus/tickets) ; curation des profils si reponses moyennes ; suppression par l'user des objets
+  opportunities avortes du 2026-07-21.
 - **Repo, ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
   capabilities + persona ; il ne pousse PAS `run_settings.json`, `prompts/orchestrator_workflow.md`
   NI `templates/dataset_expert.py` quand la sonde n'a pas confirme les cles (fallback = simple
