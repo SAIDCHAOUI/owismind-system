@@ -649,14 +649,35 @@
     });
   }
 
+  /* Removal stages whose launch actually deletes DSS objects: their confirm
+     modal repeats the exact deletion list and uses the danger style, so the
+     operator validates WHAT will be deleted, not just "run the stage". */
+  var REMOVAL_DANGER_STAGES = {
+    delete_tool: 1, delete_agent: 1, delete_model: 1, delete_scenario: 1,
+    delete_recipes: 1, delete_datasets: 1, delete_zone: 1,
+    catalog_cleanup: 1, hub_cleanup: 1
+  };
+
   function confirmGuidedStageRun() {
     var run = S.guided.run || {};
     var stage = run.state && run.state.stages && run.state.stages[run.current_stage];
+    var isRemoval = !!(run.state && run.state.removal);
+    var dangerous = isRemoval && REMOVAL_DANGER_STAGES[run.current_stage] === 1;
+    var body = "L'étape <b>" + esc((stage && stage.title_fr) || run.current_stage || "") +
+      "</b> sera exécutée côté serveur. Son journal sera affiché en direct.";
+    if (dangerous) {
+      body = "Cette étape va <b>SUPPRIMER dans DSS</b> les éléments listés ci-dessous. " +
+        "Cette action est irréversible (le dataset source n'est jamais touché)." +
+        '<div class="gd-detail mono">' +
+        esc((stage && stage.detail_fr) || "").replace(/\n/g, "<br>") + '</div>';
+    }
     openConfirm({
-      title: stage && stage.status === "failed" ? "Relancer cette étape ?" : "Lancer cette étape ?",
-      bodyHtml: "L'étape <b>" + esc((stage && stage.title_fr) || run.current_stage || "") +
-        "</b> sera exécutée côté serveur. Son journal sera affiché en direct.",
-      confirmLabel: stage && stage.status === "failed" ? "Relancer" : "Lancer",
+      title: stage && stage.status === "failed" ? "Relancer cette étape ?"
+        : (dangerous ? "Confirmer cette suppression ?" : "Lancer cette étape ?"),
+      bodyHtml: body,
+      danger: dangerous,
+      confirmLabel: stage && stage.status === "failed" ? "Relancer"
+        : (dangerous ? "Supprimer" : "Lancer"),
       onConfirm: runGuidedStage
     });
   }
