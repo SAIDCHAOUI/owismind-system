@@ -31,22 +31,9 @@ def _delete_probe_object(handle, expected_name, getter):
     """Delete a probe object ONLY after re-reading its name and matching it
     against the probe constant (defense in depth around the factory's single
     deletion site: a wrong handle must never delete a real object)."""
-    live_name = None
-    try:
-        live_name = getter()
-    except Exception:
-        pass
-    if live_name is None:
-        # FAIL-CLOSED: no proof the handle still points at the probe object,
-        # so the deletion must not happen (an orphan probe is recoverable, a
-        # deleted real object is not).
-        raise RuntimeError("could not re-read the live name of the probe object "
-                           "(expected %r): refusing to delete, clean zz_* by hand"
-                           % expected_name)
-    if live_name != expected_name:
-        raise RuntimeError("refusing to delete %r: expected probe object %r"
-                           % (live_name, expected_name))
-    handle.delete()
+    from .removal import safe_delete
+    safe_delete(handle, expected_name, getter,
+                noun="probe object", hint=", clean zz_* by hand")
 
 
 _PROBE_AGENT_CODE = (

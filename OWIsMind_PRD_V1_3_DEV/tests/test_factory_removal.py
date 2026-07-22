@@ -369,3 +369,52 @@ class TestHubRemovalHelpers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSafeDelete(unittest.TestCase):
+    class _Handle(object):
+        def __init__(self):
+            self.deleted = False
+
+        def delete(self):
+            self.deleted = True
+
+    def test_deletes_when_name_matches(self):
+        handle = self._Handle()
+        removal.safe_delete(handle, "obj", lambda: "obj")
+        self.assertTrue(handle.deleted)
+
+    def test_refuses_on_name_mismatch(self):
+        handle = self._Handle()
+        with self.assertRaises(removal.RemovalRefused):
+            removal.safe_delete(handle, "obj", lambda: "OTHER")
+        self.assertFalse(handle.deleted)
+
+    def test_fails_closed_when_name_unreadable(self):
+        handle = self._Handle()
+
+        def _boom():
+            raise RuntimeError("api down")
+
+        with self.assertRaises(removal.RemovalRefused):
+            removal.safe_delete(handle, "obj", _boom)
+        self.assertFalse(handle.deleted)
+
+    def test_custom_deleter_is_used(self):
+        handle = self._Handle()
+        called = {}
+        removal.safe_delete(handle, "obj", lambda: "obj",
+                            deleter=lambda: called.setdefault("yes", True))
+        self.assertFalse(handle.deleted)
+        self.assertTrue(called.get("yes"))
+
+    def test_probe_wording_preserved(self):
+        """probes.py delegates here; its historical messages must not change."""
+        handle = self._Handle()
+        try:
+            removal.safe_delete(handle, "zz_probe", lambda: None,
+                                noun="probe object", hint=", clean zz_* by hand")
+            self.fail("expected RemovalRefused")
+        except removal.RemovalRefused as exc:
+            self.assertIn("probe object", str(exc))
+            self.assertIn("clean zz_* by hand", str(exc))
