@@ -524,3 +524,147 @@ class TestInventory(unittest.TestCase):
             "/python/owismind_hub/prompts/opportunities",
             "/python/owismind_hub/generated/Opportunities_expert.py",
         ])
+
+
+class TestExecutors(unittest.TestCase):
+    def setUp(self):
+        self.project = _FakeProject()
+        _seed_full_domain(self.project)
+        self.entry = _entry()
+        self.settings = dict(hub.DEFAULT_SETTINGS)
+        self.inventory, problems = removal.build_inventory(
+            self.project, "opportunities_expert", self.entry, self.settings)
+        self.assertEqual(problems, [])
+
+    def _run(self, stage_key):
+        items = self.inventory["stages"][stage_key]
+        return removal.execute_delete_stage(self.project, stage_key, items,
+                                            _ctx(self.project))
+
+    def test_delete_tool_deletes_and_verifies(self):
+        manual, problems = self._run("delete_tool")
+        self.assertEqual((manual, problems), ([], []))
+        self.assertNotIn("iUR8wLX", self.project.tools)
+
+    def test_delete_agent_only_the_domain_agent(self):
+        manual, problems = self._run("delete_agent")
+        self.assertEqual((manual, problems), ([], []))
+        self.assertNotIn("4Ghpi5hm", self.project.agents)
+        self.assertIn("038G7mlF", self.project.agents)
+
+    def test_delete_datasets_drops_data_and_spares_source(self):
+        manual, problems = self._run("delete_datasets")
+        self.assertEqual((manual, problems), ([], []))
+        self.assertIn("DRIVE_Opportunities", self.project.datasets)
+        self.assertNotIn("DRIVE_Opportunities_profile", self.project.datasets)
+        drops = [kw for kind, _n, kw in self.project.deleted if kind == "dataset"]
+        self.assertTrue(all(kw.get("drop_data") is True for kw in drops))
+
+    def test_api_refusal_flips_to_manual_not_failure(self):
+        self.project.fail_delete.add("agent")
+        manual, problems = self._run("delete_agent")
+        self.assertEqual(problems, [])
+        self.assertEqual(len(manual), 1)
+        self.assertIn("reason_fr", manual[0])
+        self.assertIn("4Ghpi5hm", self.project.agents)
+
+    def test_already_absent_is_idempotent(self):
+        self.project.tools.clear()
+        manual, problems = self._run("delete_tool")
+        self.assertEqual((manual, problems), ([], []))
+
+    def test_running_scenario_is_refused_to_manual(self):
+        self.project.scenario_running["sc1"] = {"running": True}
+        manual, problems = self._run("delete_scenario")
+        self.assertEqual(problems, [])
+        self.assertEqual(len(manual), 1)
+        self.assertIn("sc1", self.project.scenarios)
+
+    def test_zone_kept_when_not_empty_deleted_when_empty(self):
+        manual, problems = self._run("delete_zone")
+        self.assertEqual((manual, problems), ([], []))
+        self.assertTrue(any(z.name == "Opportunities_Expert" for z in self.project.zones))
+        self.project.zones[0].items = []
+        manual, problems = self._run("delete_zone")
+        self.assertEqual((manual, problems), ([], []))
+        self.assertFalse(any(z.name == "Opportunities_Expert" for z in self.project.zones))
+
+    def test_verify_stage_absent_reports_leftovers(self):
+        items = self.inventory["stages"]["delete_tool"]
+        leftovers, problems = removal.verify_stage_absent(
+            self.project, "delete_tool", items)
+        self.assertEqual(problems, [])
+        self.assertEqual([i["name"] for i in leftovers],
+                         ["opportunities_semantic_query"])
+        self.project.tools.clear()
+        leftovers, problems = removal.verify_stage_absent(
+            self.project, "delete_tool", items)
+        self.assertEqual((leftovers, problems), ([], []))
+
+    def test_verify_zone_nonempty_is_not_a_leftover(self):
+        items = self.inventory["stages"]["delete_zone"]
+        leftovers, _problems = removal.verify_stage_absent(
+            self.project, "delete_zone", items)
+        self.assertEqual(leftovers, [])
+
+
+class TestCatalogAndHubCleanup(unittest.TestCase):
+    def setUp(self):
+        self.project = _FakeProject()
+        _seed_full_domain(self.project)
+
+    def test_delete_catalog_rows_parametrized_delete_plus_commit(self):
+        recorded = {}
+
+        class _Executor(object):
+            def query_to_df(self, query, pre_queries=None, post_queries=None):
+                recorded["pre"] = list(pre_queries or [])
+                recorded["post"] = list(post_queries or [])
+
+        import owismind_factory.wizard as wizard_module
+        original = wizard_module.get_physical_table
+        wizard_module.get_physical_table = lambda p, d: "TESTKEY_owismind_agent_catalog_v1"
+        try:
+            status = removal.delete_catalog_rows(
+                self.project, "SQL_owi", "opportunities_expert",
+                executor_factory=lambda: _Executor())
+        finally:
+            wizard_module.get_physical_table = original
+        self.assertEqual(status, "deleted")
+        self.assertEqual(len(recorded["pre"]), 1)
+        self.assertIn('DELETE FROM public."TESTKEY_owismind_agent_catalog_v1"',
+                      recorded["pre"][0])
+        self.assertIn("'opportunities_expert'", recorded["pre"][0])
+        self.assertEqual(recorded["post"], ["COMMIT"])
+
+    def test_delete_catalog_rows_no_dataset(self):
+        self.project.datasets.discard("OWIsMind_agent_catalog_v1")
+        status = removal.delete_catalog_rows(
+            self.project, "SQL_owi", "opportunities_expert",
+            executor_factory=lambda: None)
+        self.assertEqual(status, "no_dataset")
+
+    def test_cleanup_hub_deletes_paths_and_entry(self):
+        _seed_capabilities(self.project, {
+            "opportunities_expert": _entry(),
+            "revenue_expert": _entry(domain="revenue", agent_id="agent:bHrWLyOL",
+                                     lookup_dataset="DRIVE_Revenues",
+                                     lookup_catalog="DRIVE_Revenues_Value_Catalog"),
+        })
+        paths = ["/python/owismind_hub/wizard/opportunities-config.json",
+                 "/python/owismind_hub/prompts/opportunities",
+                 "/python/owismind_hub/generated/Opportunities_expert.py"]
+        manual, status = removal.cleanup_hub(
+            self.project, "opportunities_expert", paths, _ctx(self.project))
+        self.assertEqual(manual, [])
+        self.assertEqual(status, "removed")
+        for path in paths:
+            self.assertIsNot(hub.path_exists(self.project, path), True)
+        stored = json.loads(self.project.library.files[hub.CAPABILITIES_PATH])
+        self.assertNotIn("opportunities_expert", stored)
+
+    def test_cleanup_hub_last_entry_kept_disabled(self):
+        _seed_capabilities(self.project, {"opportunities_expert": _entry(enabled=True)})
+        _manual, status = removal.cleanup_hub(
+            self.project, "opportunities_expert", [], _ctx(self.project))
+        self.assertEqual(status, "kept_disabled")

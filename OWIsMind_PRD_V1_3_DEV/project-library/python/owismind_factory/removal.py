@@ -313,3 +313,276 @@ def build_inventory(project, capability_key, entry, settings):
         "catalog": {"dataset": CATALOG_DATASET_NAME, "capability_key": capability_key},
     }
     return inventory, problems
+
+
+# ------------------------------------------------------------------ executors
+
+def scenario_is_running(project, scenario_id):
+    """True/False when provable, None when unknown (never a verdict)."""
+    try:
+        return project.get_scenario(scenario_id).get_current_run() is not None
+    except Exception:
+        return None
+
+
+def _delete_tool_item(project, item):
+    from . import tool_builder
+    if not tool_builder.tool_exists(project, item["name"]):
+        return "absent"
+    handle = project.get_agent_tool(item["id"])
+    safe_delete(handle, item["name"],
+                lambda: tool_name_by_id(project, item["id"]), noun="tool")
+    return "deleted" if not tool_builder.tool_exists(project, item["name"]) \
+        else "still_there"
+
+
+def _delete_agent_item(project, item):
+    if agent_name_by_id(project, item["id"]) is None:
+        return "absent"
+    handle = project.get_agent(item["id"])
+    safe_delete(handle, item["name"],
+                lambda: agent_name_by_id(project, item["id"]), noun="agent")
+    return "deleted" if agent_name_by_id(project, item["id"]) is None \
+        else "still_there"
+
+
+def _delete_model_item(project, item):
+    if model_name_by_id(project, item["id"]) is None:
+        return "absent"
+    handle = project.get_semantic_model(item["id"])
+    safe_delete(handle, item["name"],
+                lambda: model_name_by_id(project, item["id"]),
+                noun="semantic model")
+    return "deleted" if model_name_by_id(project, item["id"]) is None \
+        else "still_there"
+
+
+def _delete_scenario_item(project, item):
+    from . import flow_builder
+    if flow_builder.scenario_id_by_name(project, item["name"]) is None:
+        return "absent"
+    if scenario_is_running(project, item["id"]) is True:
+        raise RemovalRefused("le scénario tourne en ce moment : attends la fin "
+                             "de son run avant de le supprimer")
+    handle = project.get_scenario(item["id"])
+
+    def _live_name():
+        listed = flow_builder.scenario_id_by_name(project, item["name"])
+        return item["name"] if listed == item["id"] else None
+
+    safe_delete(handle, item["name"], _live_name, noun="scenario")
+    return "deleted" \
+        if flow_builder.scenario_id_by_name(project, item["name"]) is None \
+        else "still_there"
+
+
+def _delete_recipe_item(project, item):
+    from . import flow_builder
+    if not flow_builder.recipe_exists(project, item["name"]):
+        return "absent"
+    handle = project.get_recipe(item["name"])
+    safe_delete(handle, item["name"],
+                lambda: item["name"]
+                if flow_builder.recipe_exists(project, item["name"]) else None,
+                noun="recipe")
+    return "deleted" if not flow_builder.recipe_exists(project, item["name"]) \
+        else "still_there"
+
+
+def _delete_dataset_item(project, item):
+    from . import flow_builder
+    if not flow_builder.dataset_exists(project, item["name"]):
+        return "absent"
+    handle = project.get_dataset(item["name"])
+    safe_delete(handle, item["name"],
+                lambda: item["name"]
+                if flow_builder.dataset_exists(project, item["name"]) else None,
+                noun="dataset",
+                deleter=lambda: handle.delete(drop_data=True))
+    return "deleted" if not flow_builder.dataset_exists(project, item["name"]) \
+        else "still_there"
+
+
+def _delete_zone_item(project, item):
+    from . import flow_builder
+    zone = flow_builder._zone_by_name(project.get_flow(), item["name"])
+    if zone is None:
+        return "absent"
+    contents = getattr(zone, "items", None)
+    if contents is None:
+        raise RemovalRefused("impossible de lire le contenu de la zone : "
+                             "vide-la et supprime-la à la main si tu la veux partie")
+    if len(contents) > 0:
+        return "kept"
+    zone.delete()
+    return "deleted" \
+        if flow_builder._zone_by_name(project.get_flow(), item["name"]) is None \
+        else "still_there"
+
+
+_STAGE_EXECUTORS = {
+    "delete_tool": _delete_tool_item,
+    "delete_agent": _delete_agent_item,
+    "delete_model": _delete_model_item,
+    "delete_scenario": _delete_scenario_item,
+    "delete_recipes": _delete_recipe_item,
+    "delete_datasets": _delete_dataset_item,
+    "delete_zone": _delete_zone_item,
+}
+
+
+def execute_delete_stage(project, stage_key, items, ctx):
+    """Delete one stage's confirmed items. Returns (manual_items, problems).
+
+    - already-absent items are journaled and skipped (idempotent relaunch);
+    - a deletion the API (or the identity gate) refuses lands in manual_items:
+      the guided stage flips to manual instructions;
+    - a deletion that seems to succeed but whose object is STILL listed after
+      is a problem: never advance on an unverified deletion.
+    """
+    executor = _STAGE_EXECUTORS[stage_key]
+    manual, problems = [], []
+    for item in items:
+        try:
+            status = executor(project, item)
+        except Exception as exc:  # noqa: BLE001 refusal -> manual fallback
+            manual.append(dict(item, reason_fr=str(exc)[:200]))
+            ctx.skip(stage_key, "%s %s: refused (%s), manual fallback"
+                     % (item["kind_fr"], item["name"], exc))
+            continue
+        if status == "absent":
+            ctx.skip(stage_key, "%s %s already absent"
+                     % (item["kind_fr"], item["name"]))
+        elif status == "deleted":
+            ctx.done(stage_key, "deleted %s %s (verified absent)"
+                     % (item["kind_fr"], item["name"]))
+        elif status == "kept":
+            ctx.skip(stage_key, "%s %s kept (not empty)"
+                     % (item["kind_fr"], item["name"]))
+        else:
+            problems.append("%s %s toujours présent après la suppression : "
+                            "réessaie." % (item["kind_fr"], item["name"]))
+    return manual, problems
+
+
+# --------------------------------------------------------------- verification
+
+def _tool_leftover(project, item):
+    from . import tool_builder
+    return bool(tool_builder.tool_exists(project, item["name"]))
+
+
+def _agent_leftover(project, item):
+    return agent_name_by_id(project, item["id"]) is not None
+
+
+def _model_leftover(project, item):
+    return model_name_by_id(project, item["id"]) is not None
+
+
+def _scenario_leftover(project, item):
+    from . import flow_builder
+    return flow_builder.scenario_id_by_name(project, item["name"]) is not None
+
+
+def _recipe_leftover(project, item):
+    from . import flow_builder
+    return flow_builder.recipe_exists(project, item["name"])
+
+
+def _dataset_leftover(project, item):
+    from . import flow_builder
+    return flow_builder.dataset_exists(project, item["name"])
+
+
+def _zone_leftover(project, item):
+    """A zone kept because it is NOT empty is a decision, not a leftover."""
+    from . import flow_builder
+    zone = flow_builder._zone_by_name(project.get_flow(), item["name"])
+    if zone is None:
+        return False
+    contents = getattr(zone, "items", None) or []
+    return len(contents) == 0
+
+
+_STAGE_LEFTOVER_CHECKS = {
+    "delete_tool": _tool_leftover,
+    "delete_agent": _agent_leftover,
+    "delete_model": _model_leftover,
+    "delete_scenario": _scenario_leftover,
+    "delete_recipes": _recipe_leftover,
+    "delete_datasets": _dataset_leftover,
+    "delete_zone": _zone_leftover,
+}
+
+
+def verify_stage_absent(project, stage_key, items):
+    """Re-probe one stage's items. Returns (leftovers, problems)."""
+    check = _STAGE_LEFTOVER_CHECKS[stage_key]
+    leftovers, problems = [], []
+    for item in items:
+        try:
+            if check(project, item):
+                leftovers.append(item)
+        except Exception as exc:  # noqa: BLE001 listing error -> retryable
+            problems.append("Vérification impossible pour %s %s (%s) : réessaie."
+                            % (item["kind_fr"], item["name"], exc))
+    return leftovers, problems
+
+
+# ------------------------------------------------------- catalog + hub cleanup
+
+def delete_catalog_rows(project, connection, capability_key, executor_factory=None):
+    """Parametrized DELETE of the capability's shared-catalog rows + COMMIT.
+
+    Returns "deleted", "no_dataset" (nothing to clean) or "unknown_table"
+    (physical table unreadable: surfaced as a note, cleanup by hand).
+    """
+    from . import flow_builder, guided_store, wizard
+    from .catalog import CATALOG_DATASET_NAME
+    try:
+        if not flow_builder.dataset_exists(project, CATALOG_DATASET_NAME):
+            return "no_dataset"
+    except flow_builder.ExistenceCheckError:
+        return "unknown_table"
+    table = None
+    try:
+        table = wizard.get_physical_table(project, CATALOG_DATASET_NAME)
+    except Exception:
+        table = None
+    if not table:
+        return "unknown_table"
+    statement = "DELETE FROM %s WHERE capability_key = %s" % (
+        guided_store.quote_table(table), guided_store._sql_value(capability_key))
+    if executor_factory is not None:
+        executor = executor_factory()
+    else:
+        import dataiku
+        executor = dataiku.SQLExecutor2(connection=connection)
+    executor.query_to_df("SELECT 1 AS ok",
+                         pre_queries=[statement], post_queries=["COMMIT"])
+    return "deleted"
+
+
+def cleanup_hub(project, capability_key, paths, ctx):
+    """Delete the domain's hub files then its capabilities.json entry.
+
+    Returns (manual_paths, capability_status): manual_paths lists files the
+    API refused (guided flips to manual); capability_status comes from
+    hub.remove_capability ("removed" / "kept_disabled" / "absent").
+    """
+    manual = []
+    for path in paths:
+        try:
+            existed = hub.delete_path(project, path)
+        except Exception as exc:  # noqa: BLE001 refusal -> manual fallback
+            manual.append({"path": path, "reason_fr": str(exc)[:200]})
+            ctx.skip("hub_cleanup", "%s: refused (%s), manual fallback" % (path, exc))
+            continue
+        if existed:
+            ctx.done("hub_cleanup", "deleted %s" % path)
+        else:
+            ctx.skip("hub_cleanup", "%s already absent" % path)
+    status, _caps = hub.remove_capability(project, capability_key)
+    ctx.done("hub_cleanup", "capability entry %s: %s" % (capability_key, status))
+    return manual, status
