@@ -668,3 +668,182 @@ class TestCatalogAndHubCleanup(unittest.TestCase):
         _manual, status = removal.cleanup_hub(
             self.project, "opportunities_expert", [], _ctx(self.project))
         self.assertEqual(status, "kept_disabled")
+
+
+class _StubSettings(dict):
+    pass
+
+
+def _machine_settings():
+    s = dict(hub.DEFAULT_SETTINGS)
+    s["sql_connection"] = "SQL_owi"
+    return s
+
+
+def _start_removal(project, key="opportunities_expert"):
+    return guided.start_removal_run(project, key, settings=_machine_settings())
+
+
+def _run_stage(project, run):
+    return guided.run_current_stage(project, run, settings=_machine_settings())
+
+
+def _verify_stage(project, run):
+    return guided.verify_current_stage(project, run, settings=_machine_settings())
+
+
+class TestRemovalMachine(unittest.TestCase):
+    def setUp(self):
+        self.project = _FakeProject()
+        _seed_full_domain(self.project)
+        _seed_capabilities(self.project, {
+            "opportunities_expert": _entry(enabled=True),
+            "revenue_expert": _entry(domain="revenue", agent_id="agent:bHrWLyOL",
+                                     lookup_dataset="DRIVE_Revenues",
+                                     lookup_catalog="DRIVE_Revenues_Value_Catalog"),
+        })
+
+    def test_start_builds_a_removal_run_and_runs_inventory(self):
+        run = _start_removal(self.project)
+        self.assertTrue(guided.is_removal(run))
+        self.assertEqual(run["state"]["stage_order"], list(guided.REMOVAL_STAGE_ORDER))
+        self.assertEqual(run["domain"], "opportunities")
+        self.assertEqual(run["state"]["stages"]["inventory"]["status"], "done")
+        self.assertEqual(run["current_stage"], "disable")
+        inventory = run["state"]["removal"]["inventory"]
+        self.assertTrue(inventory["stages"]["delete_tool"])
+
+    def test_start_unknown_capability_raises(self):
+        with self.assertRaises(ValueError):
+            guided.start_removal_run(self.project, "nope",
+                                     settings=_machine_settings())
+
+    def test_orchestrator_capability_is_refused(self):
+        caps = json.loads(self.project.library.files[hub.CAPABILITIES_PATH])
+        caps["opportunities_expert"]["agent_id"] = "agent:038G7mlF"
+        _seed_capabilities(self.project, caps)
+        run = _start_removal(self.project)
+        self.assertEqual(run["state"]["stages"]["inventory"]["status"], "failed")
+
+    def test_start_refused_while_the_domain_scenario_runs(self):
+        """Spec safety rail: never start a removal over a live refresh run."""
+        self.project.scenario_running["sc1"] = {"running": True}
+        run = _start_removal(self.project)
+        stage = run["state"]["stages"]["inventory"]
+        self.assertEqual(stage["status"], "failed")
+        self.assertTrue(any("scénario" in p.lower() for p in stage["problems"]))
+
+    def test_heal_interrupted_covers_removal_stages(self):
+        run = _start_removal(self.project)
+        run["state"]["stages"]["disable"]["status"] = "running"
+        self.assertTrue(guided.heal_interrupted(run))
+        self.assertEqual(run["state"]["stages"]["disable"]["status"], "failed")
+
+    def test_inventory_waits_on_template_conflict_then_acknowledges(self):
+        settings = _machine_settings()
+        settings["template_semantic_tool_id"] = "iUR8wLX"
+        run = guided.start_removal_run(self.project, "opportunities_expert",
+                                       settings=settings)
+        stage = run["state"]["stages"]["inventory"]
+        self.assertEqual(stage["status"], "waiting_user")
+        self.assertIn("TEMPLATE", stage["instructions_fr"])
+        run = _verify_stage(self.project, run)
+        self.assertEqual(run["state"]["stages"]["inventory"]["status"], "done")
+        self.assertEqual(run["current_stage"], "disable")
+
+    def test_inventory_writes_the_stage_cards(self):
+        run = _start_removal(self.project)
+        detail = run["state"]["stages"]["delete_tool"]["detail_fr"]
+        self.assertIn("opportunities_semantic_query", detail)
+        self.assertIn("iUR8wLX", detail)
+        detail_ds = run["state"]["stages"]["delete_datasets"]["detail_fr"]
+        self.assertIn("PROTÉGÉ", detail_ds)
+        self.assertIn("DRIVE_Opportunities", detail_ds)
+
+    def _advance_to(self, run, stage_key):
+        while run["current_stage"] != stage_key:
+            self.assertEqual(run["status"], "active")
+            run = _run_stage(self.project, run)
+            self.assertNotEqual(
+                run["state"]["stages"][run["current_stage"]]["status"], "failed",
+                "unexpected failure on %s: %s" % (
+                    run["current_stage"],
+                    run["state"]["stages"][run["current_stage"]]["problems"]))
+        return run
+
+    def test_disable_flips_the_flag_before_any_deletion(self):
+        run = _start_removal(self.project)
+        self.assertEqual(run["current_stage"], "disable")
+        run = _run_stage(self.project, run)
+        caps = json.loads(self.project.library.files[hub.CAPABILITIES_PATH])
+        self.assertFalse(caps["opportunities_expert"]["enabled"])
+        self.assertEqual(run["current_stage"], "delete_tool")
+        self.assertEqual(self.project.deleted, [])
+
+    def test_full_removal_walk_deletes_everything_and_completes(self):
+        self.project.zones[0].items = []  # empty zone: deletable
+        run = _start_removal(self.project)
+        guard = 0
+        while run["status"] == "active" and guard < 20:
+            guard += 1
+            stage = run["state"]["stages"][run["current_stage"]]
+            self.assertIn(stage["status"], ("ready", "waiting_user"))
+            if stage["status"] == "ready":
+                run = _run_stage(self.project, run)
+            else:
+                run = _verify_stage(self.project, run)
+        self.assertEqual(run["status"], "done")
+        self.assertNotIn("iUR8wLX", self.project.tools)
+        self.assertNotIn("4Ghpi5hm", self.project.agents)
+        self.assertNotIn("mOdEl42", self.project.models)
+        self.assertEqual(self.project.scenarios, {})
+        self.assertNotIn("DRIVE_Opportunities_profile", self.project.datasets)
+        self.assertIn("DRIVE_Opportunities", self.project.datasets)
+        caps = json.loads(self.project.library.files[hub.CAPABILITIES_PATH])
+        self.assertNotIn("opportunities_expert", caps)
+        self.assertIn("revenue_expert", caps)
+
+    def test_api_refusal_flips_stage_to_manual_then_verify_gates(self):
+        self.project.fail_delete.add("agent")
+        run = _start_removal(self.project)
+        run = self._advance_to(run, "delete_agent")
+        run = _run_stage(self.project, run)
+        stage = run["state"]["stages"]["delete_agent"]
+        self.assertEqual(stage["status"], "waiting_user")
+        self.assertIn("à la main", stage["instructions_fr"])
+        # "C'est fait" without the manual deletion: must NOT advance.
+        run = _verify_stage(self.project, run)
+        self.assertEqual(run["state"]["stages"]["delete_agent"]["status"],
+                         "waiting_user")
+        self.assertTrue(run["state"]["stages"]["delete_agent"]["problems"])
+        # The operator deletes in DSS, then verifies: advances.
+        self.project.agents.pop("4Ghpi5hm")
+        run = _verify_stage(self.project, run)
+        self.assertEqual(run["state"]["stages"]["delete_agent"]["status"], "done")
+
+    def test_relaunch_after_partial_failure_is_idempotent(self):
+        self.project.fail_delete.add("dataset")
+        run = _start_removal(self.project)
+        run = self._advance_to(run, "delete_datasets")
+        run = _run_stage(self.project, run)
+        self.assertEqual(run["state"]["stages"]["delete_datasets"]["status"],
+                         "waiting_user")
+        self.project.fail_delete.discard("dataset")
+        # heal path: the operator deletes one by hand, the rest verify absent
+        # after a relaunch of the stage through verify (manual gate).
+        for name in ("DRIVE_Opportunities_profile",
+                     "DRIVE_Opportunities_value_index",
+                     "DRIVE_Opportunities_value_catalog"):
+            self.project.datasets.discard(name)
+        run = _verify_stage(self.project, run)
+        self.assertEqual(run["state"]["stages"]["delete_datasets"]["status"], "done")
+
+    def test_creation_run_still_works_untouched(self):
+        """Anti-regression: the creation machine keeps its frozen contract."""
+        self.assertEqual(guided.STAGE_ORDER[0], "preflight")
+        state = guided.new_state(__import__(
+            "owismind_factory.spec", fromlist=["DomainSpec"]).DomainSpec(
+                domain="x_domain", base_dataset="X_Base",
+                label_fr="X", label_en="X"))
+        self.assertNotIn("removal", state)
+        self.assertEqual(state["stage_order"], list(guided.STAGE_ORDER))

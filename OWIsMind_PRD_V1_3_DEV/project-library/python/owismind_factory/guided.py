@@ -26,7 +26,7 @@ done / failed (kind is only a display hint).
 
 import uuid
 
-from . import agent_builder, flow_builder, hub, pipeline, registry, semantic_builder
+from . import agent_builder, flow_builder, hub, pipeline, registry, removal, semantic_builder
 from . import tool_builder, wizard as wizard_module
 from . import guided_store
 from .fctx import BLOCKED, FAILED, FactoryContext
@@ -91,6 +91,55 @@ _STAGE_META = {
     "enable": ("auto", "Activation dans l'orchestrateur",
                "Active la capability : l'orchestrateur gagne le nouvel outil."),
 }
+
+# ----------------------------------------------------------- REMOVAL run type
+# A removal run walks the operator through deleting everything one capability
+# owns, one CONFIRMED stage at a time (spec 2026-07-22). Safety order: detach
+# first (disable), then leaves before trunks. The marker lives in
+# state["removal"] because guided_store only persists the state_json.
+
+REMOVAL_STAGE_ORDER = [
+    "inventory", "disable", "delete_tool", "delete_agent", "delete_model",
+    "delete_scenario", "delete_recipes", "delete_datasets", "delete_zone",
+    "catalog_cleanup", "hub_cleanup", "final_check",
+]
+
+_REMOVAL_STAGE_META = {
+    "inventory": ("auto", "Inventaire de la capacité",
+                  "Sonde ce qui existe réellement (datasets, recettes, scénario, "
+                  "modèle, tool, agent, hub). Rien n'est supprimé à cette étape."),
+    "disable": ("auto", "Désactivation de la capability",
+                "Coupe le routage de l'orchestrateur vers cet expert avant toute "
+                "suppression."),
+    "delete_tool": ("auto", "Suppression du tool",
+                    "Supprime le tool Semantic Model Query du domaine."),
+    "delete_agent": ("auto", "Suppression du Code Agent",
+                     "Supprime le Code Agent du domaine."),
+    "delete_model": ("auto", "Suppression du modèle sémantique",
+                     "Supprime le modèle sémantique du domaine."),
+    "delete_scenario": ("auto", "Suppression du scénario",
+                        "Supprime le scénario de refresh du domaine."),
+    "delete_recipes": ("auto", "Suppression des recettes",
+                       "Supprime les recettes de connaissance du domaine."),
+    "delete_datasets": ("auto", "Suppression des datasets de connaissance",
+                        "Supprime les datasets dérivés et leurs tables SQL "
+                        "(reconstructibles). Le dataset SOURCE n'est JAMAIS touché."),
+    "delete_zone": ("auto", "Suppression de la zone Flow",
+                    "Supprime la zone du domaine si elle est vide, sinon la "
+                    "laisse en place."),
+    "catalog_cleanup": ("auto", "Nettoyage du catalogue partagé",
+                        "Supprime les lignes de cette capability dans le dataset "
+                        "catalogue commun (SQL paramétré + COMMIT)."),
+    "hub_cleanup": ("auto", "Nettoyage du hub",
+                    "Supprime la config wizard, les prompts, le code généré, puis "
+                    "l'entrée de capabilities.json (backup automatique)."),
+    "final_check": ("auto", "Vérification finale",
+                    "Re-sonde l'absence de tout et rappelle le re-save de "
+                    "l'orchestrateur."),
+}
+
+_ALL_STAGE_META = dict(_STAGE_META)
+_ALL_STAGE_META.update(_REMOVAL_STAGE_META)
 
 # Stages the advance walk may auto-complete, ONLY on a POSITIVE precheck (see
 # _PRECHECKS below): "could not verify" must never be read as "already done".
@@ -709,6 +758,265 @@ def _precheck_wizard(env, state):
     return (config.get("base_dataset") or "").strip() == _spec(state).base_dataset, []
 
 
+# ------------------------------------------------------------ removal stages
+
+def _removal_info(state):
+    return state.get("removal") or {}
+
+
+def _removal_items(state, stage_key):
+    inventory = _removal_info(state).get("inventory") or {}
+    return (inventory.get("stages") or {}).get(stage_key) or []
+
+
+def _apply_removal_inventory_cards(state):
+    """Rewrite each deletion stage's card so the operator sees EXACTLY what a
+    confirmed click will delete (kind, name, id, location) BEFORE launching."""
+    inventory = _removal_info(state).get("inventory") or {}
+    for stage_key in removal.DELETE_STAGE_KEYS:
+        entry = state["stages"].get(stage_key)
+        if not entry:
+            continue
+        _kind, _title, base_detail = _REMOVAL_STAGE_META[stage_key]
+        items = (inventory.get("stages") or {}).get(stage_key) or []
+        if not items:
+            entry["detail_fr"] = base_detail + "\nRien à supprimer : déjà absent."
+            continue
+        lines = [base_detail]
+        for item in items:
+            line = "SUPPRIMER : %s %s" % (item["kind_fr"], item["name"])
+            if item.get("id"):
+                line += " [id %s]" % item["id"]
+            line += " (%s)" % item["where_fr"]
+            lines.append(line)
+            if item.get("note_fr"):
+                lines.append("  " + item["note_fr"])
+        entry["detail_fr"] = "\n".join(lines)
+    protected = inventory.get("protected") or []
+    if protected and state["stages"].get("delete_datasets"):
+        for item in protected:
+            state["stages"]["delete_datasets"]["detail_fr"] += (
+                "\nPROTÉGÉ (jamais supprimé) : %s" % item["name"])
+
+
+def _run_removal_inventory(env, state, ctx):
+    info = state["removal"]
+    key = info.get("capability_key")
+    caps = hub.read_capabilities(env.project) or {}
+    entry = caps.get(key) or info.get("entry") or {}
+    info["entry"] = entry
+    orchestrator_id = str(env.settings.get("orchestrator_agent_id") or "").strip()
+    if orchestrator_id and str(entry.get("agent_id") or "") == "agent:%s" % orchestrator_id:
+        return _OUT_FAILED, ["Cette capability pointe l'orchestrateur lui-même : "
+                             "suppression refusée."]
+    inventory, problems = removal.build_inventory(env.project, key, entry,
+                                                  env.settings)
+    info["inventory"] = inventory
+    _apply_removal_inventory_cards(state)
+    for note in inventory.get("notes") or []:
+        ctx.skip("inventory", note)
+    for stage_key in removal.DELETE_STAGE_KEYS:
+        for item in (inventory.get("stages") or {}).get(stage_key) or []:
+            ctx.done("inventory", "à supprimer (%s) : %s %s"
+                     % (stage_key, item["kind_fr"], item["name"]))
+    # Spec safety rail: never start a removal over a live refresh run.
+    for item in (inventory.get("stages") or {}).get("delete_scenario") or []:
+        if removal.scenario_is_running(env.project, item["id"]) is True:
+            problems.append("Le scénario %s est en cours d'exécution : attends "
+                            "la fin de son run puis relance cette étape."
+                            % item["name"])
+    if problems:
+        return _OUT_FAILED, problems
+    if inventory.get("template_conflicts"):
+        return _OUT_WAITING, []
+    return _OUT_DONE, []
+
+
+def _check_removal_inventory(env, state):
+    # The "C'est fait" click IS the acknowledgment of the template conflicts.
+    return True, []
+
+
+def _instr_removal_inventory(env, state):
+    conflicts = (_removal_info(state).get("inventory") or {}) \
+        .get("template_conflicts") or []
+    lines = ["ATTENTION : des objets de ce domaine servent de TEMPLATES à l'usine :"]
+    lines += ["- %s" % c for c in conflicts]
+    lines.append(
+        "Tant que ces templates ne seront pas repointés dans factory_settings.json "
+        "(project library), l'usine ne pourra PLUS créer de nouveau domaine. La "
+        "suppression reste possible : clique sur C'est fait pour acquitter et "
+        "continuer.")
+    return "\n".join(lines)
+
+
+def _run_removal_disable(env, state, ctx):
+    key = _removal_info(state).get("capability_key")
+    caps = hub.read_capabilities(env.project) or {}
+    entry = caps.get(key)
+    if entry is None:
+        ctx.skip("disable", "capability %s already gone from the hub" % key)
+        return _OUT_DONE, []
+    if not entry.get("enabled"):
+        ctx.skip("disable", "capability %s already disabled" % key)
+        return _OUT_DONE, []
+
+    def _write():
+        hub.set_capability_enabled(env.project, key, False)
+        return True
+
+    try:
+        result = ctx.act("disable",
+                         "disable capability %s (the orchestrator stops routing "
+                         "to this expert)" % key, _write)
+    except (KeyError, ValueError) as exc:
+        return _OUT_FAILED, [str(exc)]
+    if not result:
+        failures = [a for a in ctx.actions
+                    if a["status"] == FAILED and a["step"] == "disable"]
+        return _OUT_FAILED, [a["detail"][:300] for a in failures] or \
+            ["Désactivation impossible (voir le journal)."]
+    return _OUT_DONE, []
+
+
+def _make_removal_delete_runner(stage_key):
+    def _run(env, state, ctx):
+        items = _removal_items(state, stage_key)
+        if not items:
+            ctx.skip(stage_key, "rien à supprimer pour cette étape")
+            return _OUT_DONE, []
+        manual, problems = removal.execute_delete_stage(
+            env.project, stage_key, items, ctx)
+        _removal_info(state).setdefault("manual", {})[stage_key] = manual
+        if problems:
+            return _OUT_FAILED, problems
+        if manual:
+            return _OUT_WAITING, []
+        return _OUT_DONE, []
+    return _run
+
+
+def _make_removal_absent_checker(stage_key):
+    def _check(env, state):
+        items = _removal_items(state, stage_key)
+        leftovers, problems = removal.verify_stage_absent(
+            env.project, stage_key, items)
+        if problems:
+            return False, problems
+        if leftovers:
+            return False, ["Toujours présent dans DSS : %s. Supprime puis "
+                           "re-vérifie." % ", ".join(i["name"] for i in leftovers)]
+        return True, []
+    return _check
+
+
+def _make_instr_removal_manual(stage_key):
+    def _instr(env, state):
+        manual = (_removal_info(state).get("manual") or {}).get(stage_key) or []
+        lines = ["La suppression automatique a été refusée pour :"]
+        for item in manual:
+            line = "- %s %s (%s)" % (item.get("kind_fr", "objet"),
+                                     item.get("name", "?"),
+                                     item.get("where_fr", "DSS"))
+            if item.get("reason_fr"):
+                line += " : " + item["reason_fr"]
+            lines.append(line)
+        lines.append("Supprime ces objets à la main dans DSS, puis clique sur "
+                     "C'est fait : je vérifie leur absence avant de continuer.")
+        return "\n".join(lines)
+    return _instr
+
+
+def _run_removal_catalog(env, state, ctx):
+    key = _removal_info(state).get("capability_key")
+    connection = env.settings.get("sql_connection") or "SQL_owi"
+
+    def _clean():
+        return removal.delete_catalog_rows(
+            env.project, connection, key, executor_factory=env.executor_factory)
+
+    status = ctx.act("catalog_cleanup",
+                     "delete shared-catalog rows of capability %s "
+                     "(parametrized SQL + COMMIT)" % key, _clean)
+    if status is None:
+        failures = [a for a in ctx.actions
+                    if a["status"] == FAILED and a["step"] == "catalog_cleanup"]
+        return _OUT_FAILED, [a["detail"][:300] for a in failures] or \
+            ["Nettoyage du catalogue impossible (voir le journal)."]
+    if status == "no_dataset":
+        ctx.skip("catalog_cleanup", "no shared catalog dataset: nothing to clean")
+    elif status == "unknown_table":
+        ctx.skip("catalog_cleanup",
+                 "table physique du catalogue illisible : supprime les lignes "
+                 "capability_key=%s à la main si besoin" % key)
+    return _OUT_DONE, []
+
+
+def _run_removal_hub(env, state, ctx):
+    info = _removal_info(state)
+    key = info.get("capability_key")
+    paths = (info.get("inventory") or {}).get("hub_paths") or []
+    try:
+        manual, status = removal.cleanup_hub(env.project, key, paths, ctx)
+    except ValueError as exc:
+        return _OUT_FAILED, [str(exc)]
+    info.setdefault("manual", {})["hub_cleanup"] = [
+        {"kind_fr": "Fichier du hub", "name": m["path"],
+         "where_fr": "project library", "reason_fr": m.get("reason_fr", ""),
+         "id": "", "note_fr": ""}
+        for m in manual]
+    info["capability_entry_status"] = status
+    if status == "kept_disabled":
+        ctx.skip("hub_cleanup",
+                 "dernière capability du registre : l'entrée est conservée "
+                 "DÉSACTIVÉE (un capabilities.json vide ferait retomber "
+                 "l'orchestrateur sur ses valeurs embarquées)")
+    if manual:
+        return _OUT_WAITING, []
+    return _OUT_DONE, []
+
+
+def _check_removal_hub(env, state):
+    info = _removal_info(state)
+    paths = (info.get("inventory") or {}).get("hub_paths") or []
+    leftovers = [p for p in paths if hub.path_exists(env.project, p) is True]
+    if leftovers:
+        return False, ["Toujours présent dans la project library : %s"
+                       % ", ".join(leftovers)]
+    return True, []
+
+
+def _run_removal_final(env, state, ctx):
+    info = _removal_info(state)
+    problems = []
+    for stage_key in removal.DELETE_STAGE_KEYS:
+        items = _removal_items(state, stage_key)
+        if not items:
+            continue
+        leftovers, check_problems = removal.verify_stage_absent(
+            env.project, stage_key, items)
+        problems.extend(check_problems)
+        for item in leftovers:
+            problems.append("%s %s existe toujours (étape %s) : supprime-le "
+                            "puis relance cette vérification."
+                            % (item["kind_fr"], item["name"], stage_key))
+    key = info.get("capability_key")
+    caps = hub.read_capabilities(env.project) or {}
+    if key in caps and info.get("capability_entry_status") != "kept_disabled":
+        problems.append("L'entrée %s existe encore dans capabilities.json." % key)
+    if problems:
+        return _OUT_FAILED, problems
+    ctx.done("final_check", "tout est supprimé côté DSS (inventaire re-sondé)")
+    ctx.done("final_check",
+             "RAPPEL : re-sauvegarde l'orchestrateur dans DSS puis ouvre une "
+             "NOUVELLE conversation (le registre des capabilities est chargé au "
+             "démarrage du process, piège L168)")
+    ctx.done("final_check",
+             "l'historique de ce run de suppression reste consultable dans le "
+             "store SQL de l'assistant")
+    return _OUT_DONE, []
+
+
 # ------------------------------------------------------------- stage registry
 
 _RUNNERS = {
@@ -750,6 +1058,43 @@ _PRECHECKS = {
     "code_agent": _check_code_agent,
 }
 
+_RUNNERS.update({
+    "inventory": _run_removal_inventory,
+    "disable": _run_removal_disable,
+    "delete_tool": _make_removal_delete_runner("delete_tool"),
+    "delete_agent": _make_removal_delete_runner("delete_agent"),
+    "delete_model": _make_removal_delete_runner("delete_model"),
+    "delete_scenario": _make_removal_delete_runner("delete_scenario"),
+    "delete_recipes": _make_removal_delete_runner("delete_recipes"),
+    "delete_datasets": _make_removal_delete_runner("delete_datasets"),
+    "delete_zone": _make_removal_delete_runner("delete_zone"),
+    "catalog_cleanup": _run_removal_catalog,
+    "hub_cleanup": _run_removal_hub,
+    "final_check": _run_removal_final,
+})
+_CHECKERS.update({
+    "inventory": _check_removal_inventory,
+    "delete_tool": _make_removal_absent_checker("delete_tool"),
+    "delete_agent": _make_removal_absent_checker("delete_agent"),
+    "delete_model": _make_removal_absent_checker("delete_model"),
+    "delete_scenario": _make_removal_absent_checker("delete_scenario"),
+    "delete_recipes": _make_removal_absent_checker("delete_recipes"),
+    "delete_datasets": _make_removal_absent_checker("delete_datasets"),
+    "delete_zone": _make_removal_absent_checker("delete_zone"),
+    "hub_cleanup": _check_removal_hub,
+})
+_INSTRUCTIONS.update({
+    "inventory": _instr_removal_inventory,
+    "delete_tool": _make_instr_removal_manual("delete_tool"),
+    "delete_agent": _make_instr_removal_manual("delete_agent"),
+    "delete_model": _make_instr_removal_manual("delete_model"),
+    "delete_scenario": _make_instr_removal_manual("delete_scenario"),
+    "delete_recipes": _make_instr_removal_manual("delete_recipes"),
+    "delete_datasets": _make_instr_removal_manual("delete_datasets"),
+    "delete_zone": _make_instr_removal_manual("delete_zone"),
+    "hub_cleanup": _make_instr_removal_manual("hub_cleanup"),
+})
+
 
 # ------------------------------------------------------------------ the machine
 
@@ -775,6 +1120,52 @@ def new_state(spec):
         "captured": {"model_id": None, "tool_id": None,
                      "agent_id": None, "generated_path": None},
     }
+
+
+def new_removal_state(capability_key, entry):
+    stages = {}
+    for key in REMOVAL_STAGE_ORDER:
+        kind, title_fr, detail_fr = _REMOVAL_STAGE_META[key]
+        stages[key] = {"kind": kind, "title_fr": title_fr, "detail_fr": detail_fr,
+                       "status": PENDING, "journal": [], "problems": [],
+                       "instructions_fr": ""}
+    stages[REMOVAL_STAGE_ORDER[0]]["status"] = READY
+    return {
+        "version": STATE_VERSION,
+        "removal": {"capability_key": capability_key, "entry": entry,
+                    "inventory": None},
+        "stage_order": list(REMOVAL_STAGE_ORDER),
+        "stages": stages,
+        "captured": {},
+    }
+
+
+def is_removal(run):
+    """True for a REMOVAL run. The marker lives in the persisted state (the
+    store only persists run_id/domain/status/current_stage/state_json)."""
+    return bool((run.get("state") or {}).get("removal"))
+
+
+def start_removal_run(project, capability_key, settings=None,
+                      executor_factory=None, run_id=None, ctx=None):
+    """Create a removal run and execute its inventory synchronously.
+    Caller persists. Raises ValueError on an unknown capability."""
+    settings = settings if settings is not None else hub.get_settings(project)
+    caps = hub.read_capabilities(project) or {}
+    entry = caps.get(capability_key)
+    if not isinstance(entry, dict):
+        raise ValueError("unknown capability: %s" % capability_key)
+    env = _Env(project, settings, executor_factory)
+    run = {
+        "run_id": run_id or uuid.uuid4().hex,
+        "domain": str(entry.get("domain") or capability_key),
+        "status": RUN_ACTIVE,
+        "current_stage": REMOVAL_STAGE_ORDER[0],
+        "state": new_removal_state(capability_key, entry),
+    }
+    ctx = ctx or FactoryContext(project=project, dry_run=False,
+                                abort_on_failure=False)
+    return _execute_current(env, run, ctx)
 
 
 def can_run(run):
@@ -930,7 +1321,7 @@ def heal_interrupted(run):
     if not entry:
         return False
     if entry.get("status") == WAITING and key in _RUNNERS and key not in _CHECKERS:
-        kind, title_fr, detail_fr = _STAGE_META[key]
+        kind, title_fr, detail_fr = _ALL_STAGE_META[key]
         entry["kind"] = kind
         entry["title_fr"] = title_fr
         entry["detail_fr"] = detail_fr
