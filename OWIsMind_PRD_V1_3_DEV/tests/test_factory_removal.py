@@ -623,7 +623,10 @@ class TestCatalogAndHubCleanup(unittest.TestCase):
 
         import owismind_factory.wizard as wizard_module
         original = wizard_module.get_physical_table
-        wizard_module.get_physical_table = lambda p, d: "TESTKEY_owismind_agent_catalog_v1"
+        # Realistic contract: get_physical_table returns an ALREADY-quoted
+        # literal (the adversarial review caught a stuck-stage bug when the
+        # test mocked a bare name instead).
+        wizard_module.get_physical_table = lambda p, d: '"TESTKEY_owismind_agent_catalog_v1"'
         try:
             status = removal.delete_catalog_rows(
                 self.project, "SQL_owi", "opportunities_expert",

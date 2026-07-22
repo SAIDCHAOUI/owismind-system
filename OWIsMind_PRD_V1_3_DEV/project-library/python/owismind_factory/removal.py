@@ -552,6 +552,12 @@ def delete_catalog_rows(project, connection, capability_key, executor_factory=No
         table = None
     if not table:
         return "unknown_table"
+    # wizard.get_physical_table returns an ALREADY double-quoted literal
+    # ('"TABLE"'); guided_store.quote_table gates on a bare identifier and
+    # re-quotes it, so strip the quoting first (field bug 2026-07-22: without
+    # this the stage failed deterministically on a real instance).
+    if table[:1] == '"' and table[-1:] == '"':
+        table = table[1:-1]
     statement = "DELETE FROM %s WHERE capability_key = %s" % (
         guided_store.quote_table(table), guided_store._sql_value(capability_key))
     if executor_factory is not None:

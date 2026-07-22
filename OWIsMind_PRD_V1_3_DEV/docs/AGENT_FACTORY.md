@@ -41,6 +41,7 @@
 | `doctor` | prompt doctor: interaction logs + current prompt -> diagnosis + revised prompt PROPOSAL | none (never writes prompts) |
 | `guided` | the console's step-by-step assistant: 13-stage state machine (dataset -> enabled capability), auto stages delegate to `pipeline`, manual stages carry French instructions and are VERIFIED against DSS before advancing (positive-only prechecks: "could not verify" never advances) | none (reuses the gated builders) |
 | `guided_store` | one-row-per-run SQL persistence of guided runs (plugin storage pattern: `{PROJECT_KEY}_owismind_factory_guided_v1`, parameterized values, COMMIT, identifier gates) so a reload/restart resumes the run | none |
+| `removal` | capability removal engine: probe-based inventory (only CONFIRMED objects enter it; the SOURCE dataset is protected) + `safe_delete` identity gate (re-read the live name, match it, only then delete) + per-family deletion executors with read-back verification | deletion module (sanctioned by the deletion-confinement guard) |
 
 ## The gates (why some steps may stay manual)
 
@@ -110,6 +111,53 @@ registration) is documented API and runs either way.
 The `06_prompt_doctor.py` notebook automates the diagnosis: interaction logs +
 current prompt + your complaint -> structured proposal in
 `/python/owismind_hub/doctor/`. It NEVER applies anything itself.
+
+## Removing a capability (guided removal run)
+
+The reverse of "create a domain", added 2026-07-22 (spec:
+`docs/superpowers/specs/2026-07-22-capability-removal-design.md`). From the
+console overview, every capability card carries two actions:
+
+- **Desactiver / Activer** (immediate): flips the `enabled` flag in
+  `capabilities.json` (validated, backed-up write). The architecture stays
+  intact; re-enable is one click. The UI reminds the operator to RE-SAVE the
+  orchestrator then open a NEW conversation (the registry loads at process
+  start, lesson L168).
+- **Supprimer...** (guided run): the operator must TYPE the domain name
+  (checked server-side), then a `removal` run starts in the same guided state
+  machine, 12 stages: `inventory` -> `disable` -> `delete_tool` ->
+  `delete_agent` -> `delete_model` -> `delete_scenario` -> `delete_recipes` ->
+  `delete_datasets` -> `delete_zone` -> `catalog_cleanup` -> `hub_cleanup` ->
+  `final_check`.
+
+Safety model:
+
+- **Probe-based inventory**: only objects whose existence is CONFIRMED enter
+  the inventory (capability entry + naming conventions + live listings; the
+  founders' off-convention model resolves through the tool params). Absent
+  candidates are journaled as "deja absent". A listing failure FAILS the stage:
+  nothing is ever deleted on a partial inventory.
+- **The SOURCE dataset (`lookup_dataset`) is never deletable** (user decision
+  2026-07-22): it is listed as PROTECTED on the datasets card.
+- **One confirmed stage at a time**: each deletion stage's card lists exactly
+  what the click will delete (kind, name, id, location) BEFORE launching; a
+  deletion is verified ABSENT by read-back before the run advances.
+- **Identity gate**: every `delete()` goes through `removal.safe_delete`
+  (re-read the live name, refuse on mismatch or unreadable name). Datasets are
+  deleted with `drop_data=True` (derived tables, rebuildable).
+- **Manual fallback**: an API refusal flips the stage to `waiting_user` with
+  exact instructions; "C'est fait" verifies the ABSENCE against DSS before
+  advancing.
+- **Template guard**: if the domain's objects serve as factory templates
+  (`factory_settings.json`), the inventory stops on an explicit acknowledgment:
+  the factory cannot create new domains until the templates are repointed.
+- **Last-entry rule**: the last capability entry is never removed, only
+  disabled (an empty `capabilities.json` would make the orchestrator fall back
+  to its embedded defaults and the removed expert could silently reappear).
+- **Refusals**: removal never starts while the domain's refresh scenario runs
+  or while another guided run is active; a capability pointing at the
+  orchestrator itself is refused.
+- The removal run stays in the guided store history (who removed what, when).
 
 ## Tests
 

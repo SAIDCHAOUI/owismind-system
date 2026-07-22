@@ -72,7 +72,19 @@ automatically inside the webapp iframe).
   marks the row (nothing is ever deleted in DSS). Engine: `owismind_factory/guided.py` +
   `guided_store.py`; routes `/api/guided/{current,start,run,verify,abandon}`.
 - **Vue d'ensemble**: project key, hub status (ready / absent), factory settings, and the existing
-  capabilities as square cards (domain, agent id, enabled state). Read-only.
+  capabilities as square cards (domain, agent id, enabled state). Each card carries two actions
+  (2026-07-22): **Desactiver / Activer** flips the capability's `enabled` flag immediately
+  (validated, backed-up hub write; the confirm modal reminds the operator to re-save the
+  orchestrator then open a new conversation, lesson L168), and **Supprimer...** starts a guided
+  REMOVAL run after the operator TYPES the domain name (server-side check). The removal run
+  reuses the Assistant screen: 12 stages (inventory, disable, then one CONFIRMED deletion stage
+  per object family: tool, Code Agent, semantic model, scenario, recipes, knowledge datasets,
+  zone if empty, shared-catalog rows, hub files + capability entry, final re-probe). Each
+  deletion card lists exactly what the click will delete (kind, name, id, location) BEFORE
+  launching, every deletion is verified ABSENT by read-back, an API refusal flips the stage to
+  manual instructions, and the SOURCE dataset is NEVER deletable. Engine:
+  `owismind_factory/removal.py` + the removal stages of `guided.py`; routes
+  `/api/capability/enable` and `/api/guided/start-removal`.
 - **Sonde (Phase 0)**: one button runs the read-only probes in a background job, then shows the
   markdown report (copy button). The probes inspect the instance (Code Agent API shape, Semantic
   Model Query tool schema, `create_agent` availability) and create / modify / delete nothing. The
