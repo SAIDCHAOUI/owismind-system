@@ -542,7 +542,7 @@
     var html = '<section class="afc-card gd-current"><p class="afc-sec-eyebrow">Étape courante</p>' +
       '<div class="gd-current-title"><h3>' + esc(stage.title_fr || run.current_stage) + '</h3>' +
       guidedStageChip(status) + '</div>';
-    if (stage.detail_fr) { html += '<p class="gd-detail">' + esc(stage.detail_fr) + '</p>'; }
+    if (stage.detail_fr) { html += '<p class="gd-detail">' + esc(stage.detail_fr).replace(/\n/g, "<br>") + '</p>'; }
     if (g.actionError) {
       html += '<div class="afc-note afc-note--error">Opération impossible : ' + esc(g.actionError) + '</div>';
     }
@@ -899,6 +899,10 @@
     // Capabilities cards
     var capKeys = Object.keys(caps);
     html += '<div class="afc-sec"><p class="afc-mlabel">Capacités enregistrées (' + capKeys.length + ')</p>';
+    if (S.overview.flash) {
+      html += '<div class="afc-note afc-note--error">' + esc(S.overview.flash) + '</div>';
+      S.overview.flash = null;
+    }
     if (!capKeys.length) {
       html += '<div class="afc-note afc-note--info">Aucune capacité dans le hub. ' +
         'Soit le hub n\'est pas encore poussé dans la project library, soit l\'orchestrateur utilise ses CAPABILITIES embarquées par défaut.</div>';
@@ -915,7 +919,12 @@
           '<span class="afc-cap-id">' + esc(c.agent_id || "-") + '</span>' +
           '<div class="afc-cap-foot">' + enChip +
           '<span class="afc-cap-label mono">' + esc(c.tool_name || "") + '</span></div>' +
-          '</div>';
+          '<div class="afc-cap-actions">' +
+          '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-toggle="' + esc(k) + '">' +
+          (c.enabled ? "Désactiver" : "Activer") + '</button>' +
+          '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-remove="' + esc(k) + '">' +
+          'Supprimer...</button>' +
+          '</div></div>';
       });
       html += '</div>';
     }
@@ -924,9 +933,83 @@
     html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRefresh">' + I.refresh + 'Actualiser</button></div>';
     html += '</div>';
     setMain(html);
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-toggle]"), function (btn) {
+      btn.onclick = function () { confirmCapabilityToggle(btn.getAttribute("data-cap-toggle")); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-remove]"), function (btn) {
+      btn.onclick = function () { openCapabilityRemoval(btn.getAttribute("data-cap-remove")); };
+    });
     if (byId("ovRefresh")) {
       byId("ovRefresh").onclick = function () { S.overview.loaded = false; loadOverview(); };
     }
+  }
+
+  function confirmCapabilityToggle(key) {
+    var caps = (S.overview.data || {}).capabilities || {};
+    var c = caps[key] || {};
+    var next = !c.enabled;
+    openConfirm({
+      title: next ? "Activer cette capacité ?" : "Désactiver cette capacité ?",
+      bodyHtml: "La capacité <b class=\"mono\">" + esc(key) + "</b> passera à <b>" +
+        (next ? "ACTIF" : "INACTIF") + "</b> dans capabilities.json (sauvegarde " +
+        "automatique du fichier précédent). L'architecture du domaine n'est pas modifiée." +
+        "<br><br>RAPPEL : re-sauvegarde l'orchestrateur dans DSS puis ouvre une " +
+        "NOUVELLE conversation pour que le registre soit rechargé (il est lu au " +
+        "démarrage du process).",
+      confirmLabel: next ? "Activer" : "Désactiver",
+      onConfirm: function () {
+        callApi("POST", "capability/enable", {
+          confirm: true, capability_key: key, enabled: next
+        }).then(function (r) {
+          if (!r.data || r.data.status !== "ok") {
+            S.overview.flash = "Bascule impossible (" +
+              ((r.data && r.data.error) || "erreur") + ").";
+            renderOverview();
+            return;
+          }
+          S.overview.loaded = false;
+          loadOverview();
+        });
+      }
+    });
+  }
+
+  function openCapabilityRemoval(key) {
+    var caps = (S.overview.data || {}).capabilities || {};
+    var c = caps[key] || {};
+    var domain = c.domain || key;
+    openConfirm({
+      title: "Supprimer le domaine " + domain + " ?",
+      danger: true,
+      bodyHtml: "Un run guidé de SUPPRESSION sera créé pour <b class=\"mono\">" +
+        esc(key) + "</b>. Rien n'est supprimé maintenant : l'assistant fait " +
+        "d'abord l'inventaire, puis chaque suppression est affichée et confirmée " +
+        "UNE PAR UNE. Le dataset source n'est JAMAIS touché." +
+        "<br><br>Pour confirmer, tape le nom exact du domaine " +
+        "(<b class=\"mono\">" + esc(domain) + "</b>) :" +
+        "<br><input class=\"afc-input\" type=\"text\" id=\"capRemoveTyped\" autocomplete=\"off\">",
+      confirmLabel: "Créer le run de suppression",
+      onConfirm: function () {
+        var field = byId("capRemoveTyped");
+        var typed = (field ? field.value : "").trim();
+        callApi("POST", "guided/start-removal", {
+          confirm: true, capability_key: key, domain_typed: typed
+        }).then(function (r) {
+          if (!r.data || r.data.status !== "ok") {
+            var code = (r.data && r.data.error) || "erreur";
+            S.overview.flash = code === "domain_mismatch"
+              ? "Le nom tapé ne correspond pas au domaine : run NON créé."
+              : (code === "active_run_exists"
+                ? "Un run guidé est déjà actif : termine-le ou abandonne-le d'abord."
+                : "Création impossible (" + code + ").");
+            renderOverview();
+            return;
+          }
+          S.guided.loaded = false;
+          selectTab("guided");
+        });
+      }
+    });
   }
 
   /* ============================ screen: Sonde (Phase 0) ============================ */
