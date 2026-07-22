@@ -69,8 +69,9 @@ _STAGE_META = {
              "Simulation complète : liste tout ce qui sera créé, sans rien toucher."),
     "infra": ("auto", "Création de l'infrastructure Flow",
               "Zone, 3 datasets de connaissance, 3 recettes et scénario de refresh."),
-    "first_build": ("manual", "Premier build des connaissances",
-                    "Toi : lancer le scénario une fois (hors heures de pointe)."),
+    "first_build": ("auto", "Premier build des connaissances",
+                    "Lance le scénario de build et attend son résultat "
+                    "(plusieurs minutes : profil, index de valeurs, catalogue)."),
     "profile_review": ("manual", "Relecture du profil",
                        "Toi : relire le dataset profil généré (descriptions, énumérations)."),
     "wizard": ("wizard", "Cerveau sémantique (wizard IA)",
@@ -93,6 +94,8 @@ _STAGE_META = {
 
 # Stages the advance walk may auto-complete, ONLY on a POSITIVE precheck (see
 # _PRECHECKS below): "could not verify" must never be read as "already done".
+# first_build is an AUTO stage but stays precheck-skippable: when the knowledge
+# datasets provably have rows already, re-running the build scenario is waste.
 _PRECHECK_STAGES = ("first_build", "wizard", "template", "code_agent")
 
 
@@ -178,21 +181,6 @@ def _subset_failed(journal):
 
 # --------------------------------------------------------- instruction builders
 # French operator texts. NEVER use U+2014 / U+2013 here (project rule #9).
-
-def _instr_first_build(env, state):
-    spec = _spec(state)
-    return (
-        "1. Dans DSS, ouvre Scenarios et lance UNE fois le scénario %s "
-        "(hors heures de pointe : il construit %s).\n"
-        "2. Alternative : builde à la main les 3 datasets dans le Flow (zone %s).\n"
-        "3. Si le build échoue en parlant de partition : ouvre le dataset %s "
-        "(et ses sources), Settings puis Partitioning, mets Not partitioned, "
-        "rebuilde, puis relance le scénario.\n"
-        "4. Reviens ici et clique sur C'est fait : je vérifie que le profil et "
-        "l'index de valeurs contiennent des données."
-        % (spec.scenario_name, ", ".join(spec.knowledge_datasets),
-           spec.zone_name, spec.base_dataset))
-
 
 def _instr_profile_review(env, state):
     spec = _spec(state)
@@ -418,6 +406,52 @@ def _run_infra(env, state, ctx):
     return _OUT_DONE, []
 
 
+def _run_first_build(env, state, ctx):
+    """AUTO first build: run the refresh scenario, wait for its outcome, then
+    prove the knowledge datasets landed. A failed run surfaces the DSS error
+    with the exact fix path; the operator fixes in DSS and re-runs the stage
+    (a still-running DSS run is re-attached, never doubled)."""
+    spec = _spec(state)
+    result = flow_builder.run_scenario_and_wait(ctx, spec)
+    outcome = (result or {}).get("outcome") or "UNKNOWN"
+    error = (result or {}).get("error")
+
+    if outcome == "TIMEOUT":
+        return _OUT_FAILED, [
+            "Le build tourne toujours côté DSS après le délai d'attente : ce n'est pas "
+            "forcément une erreur. Ouvre le scénario %s (onglet Last runs) pour suivre "
+            "le run, puis relance cette étape : elle se rattachera au run en cours."
+            % spec.scenario_name]
+    if outcome not in ("SUCCESS", "WARNING"):
+        problems = ["Le scénario %s a terminé en %s%s."
+                    % (spec.scenario_name, outcome, (" : %s" % error) if error else "")]
+        problems.append(
+            "Ouvre le scénario %s dans DSS (onglet Last runs) pour lire le log complet, "
+            "corrige la cause, puis relance cette étape." % spec.scenario_name)
+        problems.append(
+            "Si l'erreur parle de partition : ouvre le dataset %s (et ses sources), "
+            "Settings puis Partitioning, mets Not partitioned, puis relance cette étape."
+            % spec.base_dataset)
+        return _OUT_FAILED, problems
+
+    # The run finished green: now PROVE the knowledge landed. Row counts that
+    # cannot be verified are tolerated (the scenario outcome is the positive
+    # signal); a provably absent or EMPTY dataset still fails loudly.
+    problems = []
+    for dataset, verdict in _first_build_status(env, state):
+        if verdict == "absent":
+            problems.append("Dataset %s introuvable après le build : relance l'étape de "
+                            "création de l'infrastructure." % dataset)
+        elif isinstance(verdict, str) and verdict.startswith("list_error:"):
+            problems.append("Impossible de lister les datasets (%s) : réessaie."
+                            % verdict.split(":", 1)[1])
+        elif verdict is False:
+            problems.append("Le scénario a réussi mais le dataset %s est VIDE : ouvre la "
+                            "recette %s dans DSS et regarde son log de job."
+                            % (dataset, spec.recipe_name(dataset)))
+    return (_OUT_DONE, []) if not problems else (_OUT_FAILED, problems)
+
+
 _BRAIN_STEPS = ["semantic_model", "semantic_config", "semantic_index", "semantic_tool"]
 
 
@@ -626,25 +660,6 @@ def _first_build_status(env, state):
     return verdicts
 
 
-def _check_first_build(env, state):
-    """Operator-confirmed check: block on proven problems (absent / empty),
-    tolerate 'cannot verify' (existence is proven, the human just confirmed)."""
-    spec = _spec(state)
-    problems = []
-    for dataset, verdict in _first_build_status(env, state):
-        if verdict == "absent":
-            problems.append("Dataset %s introuvable : relance l'étape de création de "
-                            "l'infrastructure." % dataset)
-        elif isinstance(verdict, str) and verdict.startswith("list_error:"):
-            problems.append("Impossible de lister les datasets (%s) : réessaie."
-                            % verdict.split(":", 1)[1])
-        elif verdict is False:
-            problems.append("Le dataset %s existe mais est VIDE : le build n'a pas tourné "
-                            "(ou a échoué). Lance le scénario %s et regarde son log."
-                            % (dataset, spec.scenario_name))
-    return (len(problems) == 0), problems
-
-
 def _precheck_first_build(env, state):
     """Advance-walk precheck: skip the stage ONLY when every dataset PROVABLY
     has rows. Unknown is never good enough to skip a human step."""
@@ -700,6 +715,7 @@ _RUNNERS = {
     "preflight": _run_preflight,
     "plan": _run_plan,
     "infra": _run_infra,
+    "first_build": _run_first_build,
     "brain": _run_brain,
     "template": _run_template,
     "agent_code": _run_agent_code,
@@ -708,7 +724,6 @@ _RUNNERS = {
 }
 
 _CHECKERS = {
-    "first_build": _check_first_build,
     "profile_review": _check_profile_review,
     "wizard": _check_wizard,
     "brain": _check_brain,
@@ -718,7 +733,6 @@ _CHECKERS = {
 }
 
 _INSTRUCTIONS = {
-    "first_build": _instr_first_build,
     "profile_review": _instr_profile_review,
     "wizard": _instr_wizard,
     "brain": _instr_tool_manual,
@@ -898,13 +912,37 @@ def abandon_run(run):
 
 
 def heal_interrupted(run):
-    """Self-heal a run whose stage was left RUNNING by a backend restart: demote
-    it to a re-runnable state with an explicit note. Returns True when changed."""
+    """Self-heal a run stuck in a state the machine can no longer act on:
+
+    - a stage left RUNNING by a backend restart is demoted to a re-runnable
+      state with an explicit note;
+    - a stage persisted WAITING under an OLDER contract that is now auto-only
+      (e.g. first_build was MANUAL before 2026-07-22) is realigned on the
+      current stage meta and made runnable, otherwise the run would be stuck
+      (neither runnable nor verifiable).
+
+    Returns True when the run was changed (caller persists).
+    """
     if run.get("status") != RUN_ACTIVE:
         return False
     key = run.get("current_stage")
     entry = (run.get("state") or {}).get("stages", {}).get(key)
-    if not entry or entry.get("status") != RUNNING:
+    if not entry:
+        return False
+    if entry.get("status") == WAITING and key in _RUNNERS and key not in _CHECKERS:
+        kind, title_fr, detail_fr = _STAGE_META[key]
+        entry["kind"] = kind
+        entry["title_fr"] = title_fr
+        entry["detail_fr"] = detail_fr
+        entry["instructions_fr"] = ""
+        entry["status"] = READY
+        entry["problems"] = []
+        entry.setdefault("journal", []).append(
+            {"step": key, "status": "SKIPPED",
+             "detail": "étape migrée : elle s'exécute désormais automatiquement "
+                       "(clique sur Lancer cette étape)"})
+        return True
+    if entry.get("status") != RUNNING:
         return False
     entry["status"] = STAGE_FAILED if key in _RUNNERS else WAITING
     entry.setdefault("problems", [])

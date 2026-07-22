@@ -11,7 +11,7 @@
 | External SQL table import | `init_tables_import().add_sql_table()` | CONFIRMED | TO PROBE |
 | Flow zones | `flow.create_zone()/add_item()` | CONFIRMED | TO PROBE |
 | Python recipes with code + env | `new_recipe("python")` + `with_script/set_code_env` | CONFIRMED | TO PROBE |
-| Custom python scenario + daily trigger | `create_scenario(..., "custom_python")` | CONFIRMED | TO PROBE |
+| Step-based scenario (build steps) + daily trigger + run/wait | `create_scenario(..., "step_based")` + `raw_steps` read-back + `run()`/`get_current_run()`/`wait_for_scenario_run()` | CONFIRMED (step type `build_flowitem` documented; params mirror the documented in-scenario `BuildFlowItemsStepDefHelper`) | TO PROBE |
 | Semantic model create/edit/index | `create_semantic_model` + versions + `start_update_distinct_values` | PROVEN (build_aligned 2026-06) | OK (v1.2) |
 | Code Agent creation | `create_agent(name, "PYTHON_AGENT")` | CONFIRMED (client source) | TO PROBE |
 | Code Agent code injection | raw `versions[*].pythonAgentSettings` | UNDOCUMENTED schema | TO PROBE (gate) |

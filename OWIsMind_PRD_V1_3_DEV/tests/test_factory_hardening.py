@@ -192,23 +192,88 @@ class TestSourceImport(unittest.TestCase):
         self.assertEqual(statuses(ctx)["source_dataset"], FAILED)
 
 
+class _ScenarioSettings(object):
+    """Settings fake: raw_steps echoes the creation definition (read-back) and
+    the trigger API can be broken independently of the creation."""
+
+    def __init__(self, steps, trigger_raises=False):
+        self.active = None
+        self.triggers = []
+        self.saved_state = "NOT SAVED"
+        self.raw_steps = steps
+        self._trigger_raises = trigger_raises
+
+    def add_daily_trigger(self, hour, minute):
+        if self._trigger_raises:
+            raise RuntimeError("trigger API broke")
+        self.triggers.append((hour, minute))
+
+    def save(self):
+        self.saved_state = self.active
+
+
+class _ScenarioProject(object):
+    """Captures create_scenario args; get_settings echoes the definition."""
+
+    def __init__(self, trigger_raises=False, steps_vanish=False):
+        self.created = None
+        self.settings = None
+        self._trigger_raises = trigger_raises
+        self._steps_vanish = steps_vanish
+
+    @staticmethod
+    def list_scenarios():
+        return []
+
+    def create_scenario(self, name, scenario_type, definition=None):
+        self.created = {"name": name, "type": scenario_type,
+                        "definition": definition or {}}
+        steps = list(((definition or {}).get("params") or {}).get("steps") or [])
+        if self._steps_vanish:
+            steps = []
+        self.settings = _ScenarioSettings(steps, trigger_raises=self._trigger_raises)
+        outer = self
+
+        class _Scenario(object):
+            def get_settings(self_inner):
+                return outer.settings
+
+        return _Scenario()
+
+
+class TestScenarioCreation(unittest.TestCase):
+    """The refresh scenario is STEP-BASED: one build_flowitem step per
+    knowledge dataset, verified by raw_steps read-back after creation."""
+
+    def test_step_based_scenario_one_build_step_per_dataset(self):
+        project = _ScenarioProject()
+        ctx = FactoryContext(project=project, dry_run=False)
+        flow_builder.ensure_refresh_scenario(ctx, make_spec())
+        self.assertEqual(statuses(ctx)["scenario"], "DONE")
+        self.assertEqual(project.created["type"], "step_based")
+        spec = make_spec()
+        steps = project.created["definition"]["params"]["steps"]
+        self.assertEqual([s["params"]["builds"][0]["itemId"] for s in steps],
+                         spec.knowledge_datasets)
+        for step in steps:
+            self.assertEqual(step["type"], "build_flowitem")
+            self.assertEqual(step["params"]["jobType"], "RECURSIVE_BUILD")
+            self.assertEqual(step["params"]["builds"][0]["type"], "DATASET")
+            self.assertEqual(step["params"]["builds"][0]["partitionsSpec"], "")
+            self.assertTrue(step["id"])
+            self.assertTrue(step["name"])
+
+    def test_steps_missing_after_creation_fail_loudly(self):
+        project = _ScenarioProject(steps_vanish=True)
+        ctx = FactoryContext(project=project, dry_run=False)
+        flow_builder.ensure_refresh_scenario(ctx, make_spec())
+        self.assertEqual(statuses(ctx)["scenario"], FAILED)
+
+
 class TestScenarioTrigger(unittest.TestCase):
     def test_trigger_failure_is_its_own_failed_action(self):
-        class _Scenario(object):
-            @staticmethod
-            def get_settings():
-                raise RuntimeError("trigger API broke")
-
-        class _Project(object):
-            @staticmethod
-            def list_scenarios():
-                return []
-
-            @staticmethod
-            def create_scenario(*a, **k):
-                return _Scenario()
-
-        ctx = FactoryContext(project=_Project(), dry_run=False)
+        project = _ScenarioProject(trigger_raises=True)
+        ctx = FactoryContext(project=project, dry_run=False)
         flow_builder.ensure_refresh_scenario(ctx, make_spec())
         st = statuses(ctx)
         self.assertEqual(st["scenario"], "DONE")
@@ -229,44 +294,173 @@ class TestScenarioTrigger(unittest.TestCase):
     def test_trigger_step_forces_scenario_inactive_before_save(self):
         # The INACTIVE promise must be explicit: active=False has to be set on
         # the same settings object that defines the trigger, before save().
-        class _Settings(object):
-            def __init__(self):
-                self.active = None
-                self.triggers = []
-                self.saved_state = "NOT SAVED"
-
-            def add_daily_trigger(self, hour, minute):
-                self.triggers.append((hour, minute))
-
-            def save(self):
-                self.saved_state = self.active
-
-        class _Scenario(object):
-            def __init__(self):
-                self.settings = _Settings()
-
-            def get_settings(self):
-                return self.settings
-
-        class _Project(object):
-            def __init__(self):
-                self.scenario = _Scenario()
-
-            @staticmethod
-            def list_scenarios():
-                return []
-
-            def create_scenario(self, *a, **k):
-                return self.scenario
-
-        project = _Project()
+        project = _ScenarioProject()
         ctx = FactoryContext(project=project, dry_run=False)
         flow_builder.ensure_refresh_scenario(ctx, make_spec(), hour=3)
         st = statuses(ctx)
         self.assertEqual(st["scenario"], "DONE")
         self.assertEqual(st["scenario_trigger"], "DONE")
-        self.assertIs(project.scenario.settings.saved_state, False)
-        self.assertEqual(project.scenario.settings.triggers, [(3, 0)])
+        self.assertIs(project.settings.saved_state, False)
+        self.assertEqual(project.settings.triggers, [(3, 0)])
+
+
+# ------------------------------------------------------- scenario run and wait
+
+class _FakeRunDetails(object):
+    def __init__(self, first_error=None, steps=None):
+        self._first_error = first_error
+        self.steps = steps or []
+
+    @property
+    def first_error_details(self):
+        # The real property raises when the run carries no serialized error.
+        if self._first_error is None:
+            raise ValueError("No error found")
+        return self._first_error
+
+
+class _FakeScenarioRun(object):
+    def __init__(self, outcome="SUCCESS", running_polls=0, details=None):
+        self._outcome = outcome
+        self._remaining = running_polls
+        self._details = details
+
+    @property
+    def running(self):
+        return self._remaining > 0
+
+    def refresh(self):
+        if self._remaining > 0:
+            self._remaining -= 1
+
+    @property
+    def outcome(self):
+        return self._outcome
+
+    def get_details(self):
+        if self._details is None:
+            raise RuntimeError("no details available")
+        return self._details
+
+
+class _RunWaitScenario(object):
+    def __init__(self, run=None, current_run=None, fire_cancelled=False):
+        self._run = run
+        self._current = current_run
+        self._fire_cancelled = fire_cancelled
+        self.run_calls = 0
+
+    def get_current_run(self):
+        return self._current
+
+    def run(self):
+        self.run_calls += 1
+        outer = self
+
+        class _Fire(object):
+            def wait_for_scenario_run(self_inner, no_fail=False):
+                return None if outer._fire_cancelled else outer._run
+
+        return _Fire()
+
+
+class _RunWaitProject(object):
+    def __init__(self, scenario, name):
+        self._scenario = scenario
+        self._name = name
+
+    def list_scenarios(self):
+        return [{"id": "SC_1", "name": self._name}]
+
+    def get_scenario(self, scenario_id):
+        assert scenario_id == "SC_1", "must resolve the id from the listing"
+        return self._scenario
+
+
+class TestRunScenarioAndWait(unittest.TestCase):
+    """run_scenario_and_wait: bounded wait, outcome + error surfacing,
+    re-attach to an in-progress run, loud synthetic outcomes."""
+
+    def _spec(self):
+        return make_spec()
+
+    def _go(self, scenario, **kwargs):
+        project = _RunWaitProject(scenario, self._spec().scenario_name)
+        ctx = FactoryContext(project=project, dry_run=False)
+        result = flow_builder.run_scenario_and_wait(
+            ctx, self._spec(), poll_seconds=0, **kwargs)
+        return result, ctx
+
+    def test_success_after_polling(self):
+        run = _FakeScenarioRun(outcome="SUCCESS", running_polls=3)
+        result, ctx = self._go(_RunWaitScenario(run=run))
+        self.assertEqual(result, {"outcome": "SUCCESS", "error": None})
+        st = statuses(ctx)
+        self.assertEqual(st["scenario_run_start"], "DONE")
+        self.assertEqual(st["scenario_run"], "DONE")
+
+    def test_warning_outcome_counts_as_green(self):
+        run = _FakeScenarioRun(outcome="WARNING")
+        result, _ctx = self._go(_RunWaitScenario(run=run))
+        self.assertEqual(result["outcome"], "WARNING")
+        self.assertIsNone(result["error"])
+
+    def test_failed_outcome_surfaces_first_error_details(self):
+        details = _FakeRunDetails(first_error={"message": "Dataset is partitioned"})
+        run = _FakeScenarioRun(outcome="FAILED", details=details)
+        result, ctx = self._go(_RunWaitScenario(run=run))
+        self.assertEqual(result["outcome"], "FAILED")
+        self.assertEqual(result["error"], "Dataset is partitioned")
+        self.assertEqual(statuses(ctx)["scenario_run"], FAILED)
+
+    def test_failed_outcome_falls_back_to_step_error(self):
+        step = _FakeRunDetails(first_error={"title": "Job failed on recipe"})
+        details = _FakeRunDetails(first_error=None, steps=[step])
+        run = _FakeScenarioRun(outcome="FAILED", details=details)
+        result, _ctx = self._go(_RunWaitScenario(run=run))
+        self.assertEqual(result["error"], "Job failed on recipe")
+
+    def test_failed_outcome_without_details_keeps_the_outcome(self):
+        run = _FakeScenarioRun(outcome="ABORTED", details=None)
+        result, _ctx = self._go(_RunWaitScenario(run=run))
+        self.assertEqual(result["outcome"], "ABORTED")
+        self.assertIsNone(result["error"])
+
+    def test_timeout_is_bounded_and_explicit(self):
+        run = _FakeScenarioRun(outcome="SUCCESS", running_polls=10 ** 6)
+        result, ctx = self._go(_RunWaitScenario(run=run), timeout_seconds=3)
+        self.assertEqual(result["outcome"], "TIMEOUT")
+        self.assertIn("re-attach", result["error"])
+        self.assertEqual(statuses(ctx)["scenario_run"], FAILED)
+
+    def test_attaches_to_an_in_progress_run_without_firing(self):
+        current = _FakeScenarioRun(outcome="SUCCESS", running_polls=1)
+        scenario = _RunWaitScenario(current_run=current)
+        result, ctx = self._go(scenario)
+        self.assertEqual(result["outcome"], "SUCCESS")
+        self.assertEqual(scenario.run_calls, 0, "must NOT fire a second run")
+        self.assertIn("attaching", statuses_detail(ctx, "scenario_run_start"))
+
+    def test_missing_scenario_is_not_found(self):
+        class _EmptyProject(object):
+            @staticmethod
+            def list_scenarios():
+                return []
+
+        ctx = FactoryContext(project=_EmptyProject(), dry_run=False)
+        result = flow_builder.run_scenario_and_wait(ctx, self._spec(), poll_seconds=0)
+        self.assertEqual(result["outcome"], "NOT_FOUND")
+        self.assertEqual(statuses(ctx)["scenario_run"], FAILED)
+
+    def test_cancelled_fire_is_not_started(self):
+        result, ctx = self._go(_RunWaitScenario(run=None, fire_cancelled=True))
+        self.assertEqual(result["outcome"], "NOT_STARTED")
+        self.assertEqual(statuses(ctx)["scenario_run_start"], FAILED)
+
+
+def statuses_detail(ctx, step):
+    """Concatenated details of a step's actions (assert helper)."""
+    return " | ".join(a["detail"] for a in ctx.actions if a["step"] == step)
 
 
 class _MemHubLibrary(object):

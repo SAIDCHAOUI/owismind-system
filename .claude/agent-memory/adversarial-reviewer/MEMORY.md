@@ -6,4 +6,5 @@
 - [Mirror layout at repo root + version-derived artifacts](mirror-layout-and-versioned-artifacts.md) - OWIsMind_PRD_V1_3_DEV/ at root (not dataiku-agents/); zips derive name from plugin.json major_minor
 - [Factory + hub-loader review](factory-hub-loader-review.md) - the two capability validators diverge (orchestrator loader crashes on non-dict labels, not swallowed); factory dry-run/act safety verified clean; AST-exec method for the standalone agent
 - [Factory existence-check split](factory-existence-checks-split.md) - FIVE exist helpers across 3 modules; tool_exists/agent_exists still swallow API errors and create-on-error (flow_builder three were hardened 2026-07-12)
+- [Guided first_build AUTO review](guided-first-build-auto-review.md) - first_build MANUAL->AUTO (step_based scenario + run_scenario_and_wait + heal migration): verified sound, no defects
 - [Durable Step Shell review](durable-step-shell-review.md) - correlate guard misses SQL comments (FROM/**/x bypass); reservation reap defeats per-user cap; token-forgery/parameterization/control-channel verified clean

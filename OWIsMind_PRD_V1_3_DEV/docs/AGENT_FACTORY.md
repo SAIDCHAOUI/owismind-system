@@ -30,7 +30,7 @@
 | `spec` | DomainSpec: validated domain description + ALL derived names (L110-safe) | none |
 | `hub` | read/write of `/python/owismind_hub/` + capabilities validation + backups | none |
 | `registry` | DomainSpec -> orchestrator CAPABILITIES entry (frozen dialect labels) | none |
-| `flow_builder` | zone, managed datasets, recipes CLONED from the validated templates, INACTIVE custom-python refresh scenario | none (confirmed APIs) |
+| `flow_builder` | zone, managed datasets, recipes CLONED from the validated templates, INACTIVE step-based refresh scenario (one build step per knowledge dataset) + `run_scenario_and_wait` (bounded wait, outcome + `first_error_details`, re-attach to a live run) | none (confirmed APIs) |
 | `semantic_builder` | create model + server-seeded v1 + schema-derived entity + wizard config + one-pass indexing | none (PROVEN on this instance) |
 | `wizard` | LLM-assisted authoring: profile digest -> draft config + clarifying questions (ONE Mesh completion, `with_json_output`); the draft prompt bakes trap-shape guidance (COUNT DISTINCT, units, explicit time axis, display columns, one-table rule) and requires `clarifying_questions` + `profile_overrides`; offline `validate_golden_queries` gate | none |
 | `tool_builder` | Semantic Model Query tool cloned from the live template | **GATED** (params schema undocumented: needs probe discovery) |
@@ -79,8 +79,12 @@ registration) is documented API and runs either way.
   registry).
 - **No deletions**: the factory cannot delete anything (except the write probe
   removing the two zz objects it just created, behind an explicit flag).
-- **Builds are human-triggered**: the refresh scenario is created INACTIVE with
-  its nightly trigger defined; the first build is an explicit action, off-peak.
+- **Builds are operator-triggered**: the refresh scenario is created INACTIVE
+  with its nightly trigger defined. The guided assistant's first-build stage
+  runs it AFTER an explicit operator click (confirm modal), waits with a
+  bounded poll, and re-attaches to an in-progress run instead of firing a
+  second one; recurring refreshes stay opt-in (a human activates the scenario
+  in DSS, and can add a "dataset modified" trigger there).
 - **Indexing runs once** per model creation (embedding LLM cost), via
   `DSSFuture.wait_for_result()` (no tight polling).
 - **The wizard sends aggregated profile metadata only**, never raw rows; ONE

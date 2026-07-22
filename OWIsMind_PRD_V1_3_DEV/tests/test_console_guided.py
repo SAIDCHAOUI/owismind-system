@@ -258,8 +258,9 @@ class TestRunStage(_GuidedRoutesBase):
         self.assertEqual(payload["error"], "run_not_active")
 
     def test_stage_not_runnable(self):
-        _STORE.runs["run1"] = _make_run(current="first_build",
-                                        status_map={"first_build": guided.WAITING})
+        # profile_review is a MANUAL stage: waiting_user, never server-runnable.
+        _STORE.runs["run1"] = _make_run(current="profile_review",
+                                        status_map={"profile_review": guided.WAITING})
         payload, status = _call(_BACKEND.api_guided_run,
                                 body={"confirm": True, "run_id": "run1"})
         self.assertEqual(status, 400)
@@ -322,18 +323,18 @@ class TestVerify(_GuidedRoutesBase):
         self.assertEqual(payload["error"], "stage_not_verifiable")
 
     def test_verify_delegates_and_persists(self):
-        _STORE.runs["run1"] = _make_run(current="first_build",
-                                        status_map={"first_build": guided.WAITING})
+        _STORE.runs["run1"] = _make_run(current="profile_review",
+                                        status_map={"profile_review": guided.WAITING})
 
         def fake_verify(project, run, settings=None, **kwargs):
-            run["state"]["stages"]["first_build"]["status"] = guided.DONE
-            run["current_stage"] = "profile_review"
+            run["state"]["stages"]["profile_review"]["status"] = guided.DONE
+            run["current_stage"] = "wizard"
             return run
         self.p.set(guided, "verify_current_stage", fake_verify)
         payload, status = _call(_BACKEND.api_guided_verify,
                                 body={"confirm": True, "run_id": "run1"})
         self.assertEqual(status, 200)
-        self.assertEqual(payload["run"]["current_stage"], "profile_review")
+        self.assertEqual(payload["run"]["current_stage"], "wizard")
         self.assertEqual(len(_STORE.saves), 1)
 
 

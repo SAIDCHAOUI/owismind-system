@@ -156,9 +156,12 @@ class _GuidedBase(unittest.TestCase):
         self.p.set(agent_builder, "create_code_agent", self._fake_create_agent)
         self.p.set(wizard, "get_physical_table",
                    lambda project, dataset: "%s_%s" % (self.project.project_key, dataset))
+        self.p.set(flow_builder, "run_scenario_and_wait", self._fake_scenario_run)
         self.pipeline_calls = []
         self.created_agent = None  # None = gated (manual paste), else "agent:<id>"
         self.rows = {}             # physical table -> has rows bool
+        self.scenario_result = {"outcome": "SUCCESS", "error": None}
+        self.scenario_runs = []    # scenario names run_scenario_and_wait was asked to run
 
         self.executor_factory = lambda: self._fail_executor()
 
@@ -176,6 +179,15 @@ class _GuidedBase(unittest.TestCase):
                                     "dry_run": ctx.dry_run})
         ctx.record("pipeline", "DONE" if not ctx.dry_run else "PLANNED",
                    "steps=%s" % (steps or "all"))
+
+    def _fake_scenario_run(self, ctx, spec, **kwargs):
+        self.scenario_runs.append(spec.scenario_name)
+        result = dict(self.scenario_result)
+        if result.get("outcome") in ("SUCCESS", "WARNING"):
+            ctx.done("scenario_run", "scenario finished: %s" % result["outcome"])
+        else:
+            ctx.fail("scenario_run", "scenario finished: %s" % result["outcome"])
+        return result
 
     def _fake_create_agent(self, ctx, spec, code, schema_hints, code_env=""):
         if self.created_agent:
@@ -353,9 +365,9 @@ class TestAutoStages(_GuidedBase):
         self.assertEqual(len(infra_calls), 1)
         self.assertEqual(run["current_stage"], "first_build")
         stage = run["state"]["stages"]["first_build"]
-        self.assertEqual(stage["status"], guided.WAITING)
-        self.assertIn("Refresh_Opportunities", stage["instructions_fr"])
-        self.assertIn("partition", stage["instructions_fr"].lower())
+        self.assertEqual(stage["kind"], "auto",
+                         "first_build is an AUTO stage (scenario run by the server)")
+        self.assertEqual(stage["status"], guided.READY)
 
     def test_infra_failure_surfaces_and_is_retryable(self):
         def failing_pipeline(ctx, spec, **kwargs):
@@ -370,31 +382,88 @@ class TestAutoStages(_GuidedBase):
         self.assertTrue(guided.can_run(run))
 
 
-class TestFirstBuildGate(_GuidedBase):
-    def test_empty_profile_blocks_then_rows_advance(self):
+class TestFirstBuildAuto(_GuidedBase):
+    """first_build is AUTO: the server runs the scenario, waits for the outcome,
+    then proves the knowledge datasets landed. Failures surface the DSS error
+    and the stage stays re-runnable (a live DSS run is re-attached)."""
+
+    def _to_first_build(self):
         self.p.set(guided._Env, "store", lambda env: self._store_stub())
-        self.rows = {"OWISMIND_TEST_DRIVE_Opportunities_profile": False,
-                     "OWISMIND_TEST_DRIVE_Opportunities_value_index": False}
         run = self.start()
         run = self.run_stage(run)   # plan
         run = self.run_stage(run)   # infra
-        run = self.verify(run)      # first_build : empty -> refused
-        stage = run["state"]["stages"]["first_build"]
-        self.assertEqual(stage["status"], guided.WAITING)
-        self.assertTrue(any("VIDE" in p for p in stage["problems"]))
-        self.rows = {"OWISMIND_TEST_DRIVE_Opportunities_profile": True,
-                     "OWISMIND_TEST_DRIVE_Opportunities_value_index": True}
-        run = self.verify(run)
+        self.assertEqual(run["current_stage"], "first_build")
+        return run
+
+    def test_success_with_unverifiable_rows_advances(self):
+        self.rows = {}  # table_has_rows -> None: tolerated when the run is green
+        run = self._to_first_build()
+        run = self.run_stage(run)
+        self.assertEqual(self.scenario_runs, ["Refresh_Opportunities"])
+        self.assertEqual(run["state"]["stages"]["first_build"]["status"], guided.DONE)
         self.assertEqual(run["current_stage"], "profile_review")
 
-    def test_unverifiable_rows_do_not_block(self):
-        self.p.set(guided._Env, "store", lambda env: self._store_stub())
-        self.rows = {}  # table_has_rows -> None (unknown)
-        run = self.start()
+    def test_scenario_failure_surfaces_error_and_is_retryable(self):
+        self.scenario_result = {"outcome": "FAILED",
+                                "error": "Dataset is partitioned somewhere"}
+        run = self._to_first_build()
         run = self.run_stage(run)
+        stage = run["state"]["stages"]["first_build"]
+        self.assertEqual(stage["status"], guided.STAGE_FAILED)
+        self.assertTrue(any("Dataset is partitioned somewhere" in p
+                            for p in stage["problems"]),
+                        "the DSS error must reach the operator")
+        self.assertTrue(any("Last runs" in p for p in stage["problems"]),
+                        "the problems must point at the scenario log in DSS")
+        self.assertTrue(any("Partitioning" in p for p in stage["problems"]),
+                        "the partition fix path must be spelled out")
+        self.assertTrue(guided.can_run(run), "a failed first build must be re-runnable")
+        # The operator fixed the cause in DSS: the re-run succeeds and advances.
+        self.scenario_result = {"outcome": "SUCCESS", "error": None}
         run = self.run_stage(run)
-        run = self.verify(run)
         self.assertEqual(run["current_stage"], "profile_review")
+
+    def test_success_but_provably_empty_dataset_fails(self):
+        self.rows = {"OWISMIND_TEST_DRIVE_Opportunities_profile": False,
+                     "OWISMIND_TEST_DRIVE_Opportunities_value_index": True}
+        run = self._to_first_build()
+        run = self.run_stage(run)
+        stage = run["state"]["stages"]["first_build"]
+        self.assertEqual(stage["status"], guided.STAGE_FAILED)
+        self.assertTrue(any("VIDE" in p for p in stage["problems"]))
+        self.assertTrue(any("compute_DRIVE_Opportunities_profile" in p
+                            for p in stage["problems"]),
+                        "the empty dataset's recipe must be named")
+
+    def test_timeout_explains_the_reattach_path(self):
+        self.scenario_result = {"outcome": "TIMEOUT", "error": "still running"}
+        run = self._to_first_build()
+        run = self.run_stage(run)
+        stage = run["state"]["stages"]["first_build"]
+        self.assertEqual(stage["status"], guided.STAGE_FAILED)
+        self.assertTrue(any("rattachera" in p for p in stage["problems"]),
+                        "a timeout must explain that re-running re-attaches")
+        self.assertTrue(guided.can_run(run))
+
+    def test_proven_rows_precheck_skips_the_scenario_run(self):
+        self.p.set(guided._Env, "store", lambda env: self._store_stub())
+        self.rows = {"OWISMIND_TEST_DRIVE_Opportunities_profile": True,
+                     "OWISMIND_TEST_DRIVE_Opportunities_value_index": True}
+        run = self.start()
+        run = self.run_stage(run)   # plan
+        run = self.run_stage(run)   # infra (first_build precheck-skipped)
+        self.assertEqual(run["current_stage"], "profile_review")
+        self.assertEqual(run["state"]["stages"]["first_build"]["status"], guided.DONE)
+        self.assertEqual(self.scenario_runs, [],
+                         "no scenario run when the rows are already proven")
+
+    def test_no_banned_dashes_in_failure_problems(self):
+        self.scenario_result = {"outcome": "FAILED", "error": "boom"}
+        run = self._to_first_build()
+        run = self.run_stage(run)
+        blob = "\n".join(run["state"]["stages"]["first_build"]["problems"])
+        self.assertNotIn("\u2014", blob)
+        self.assertNotIn("\u2013", blob)
 
 
 class TestWizardGate(_GuidedBase):
@@ -404,8 +473,7 @@ class TestWizardGate(_GuidedBase):
                      "OWISMIND_TEST_DRIVE_Opportunities_value_index": True}
         run = self.start()
         run = self.run_stage(run)   # plan
-        run = self.run_stage(run)   # infra
-        run = self.verify(run)      # first_build
+        run = self.run_stage(run)   # infra (first_build precheck-skipped: rows proven)
         run = self.verify(run)      # profile_review
         self.assertEqual(run["current_stage"], "wizard")
         return run
@@ -739,6 +807,24 @@ class TestHealAndGuards(_GuidedBase):
         self.assertTrue(guided.heal_interrupted(run))
         self.assertEqual(run["state"]["stages"]["plan"]["status"], guided.STAGE_FAILED)
         self.assertFalse(guided.heal_interrupted(run))
+
+    def test_heal_migrates_a_legacy_waiting_first_build(self):
+        # A run persisted BEFORE first_build became an auto stage sits WAITING
+        # on it: without migration it would be neither runnable nor verifiable.
+        run = self.start()
+        run["current_stage"] = "first_build"
+        stage = run["state"]["stages"]["first_build"]
+        stage["kind"] = "manual"
+        stage["status"] = guided.WAITING
+        stage["instructions_fr"] = "1. Dans DSS, lance le scénario..."
+        self.assertFalse(guided.can_run(run))
+        self.assertFalse(guided.can_verify(run))
+        self.assertTrue(guided.heal_interrupted(run))
+        self.assertEqual(stage["status"], guided.READY)
+        self.assertEqual(stage["kind"], "auto")
+        self.assertEqual(stage["instructions_fr"], "")
+        self.assertTrue(guided.can_run(run), "the migrated stage must be runnable")
+        self.assertFalse(guided.heal_interrupted(run), "healing is idempotent")
 
     def test_entry_points_refuse_inactive_or_wrong_state(self):
         run = self.start()

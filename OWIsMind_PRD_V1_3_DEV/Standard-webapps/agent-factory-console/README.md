@@ -59,7 +59,12 @@ automatically inside the webapp iframe).
   semantic wizard, model + tool, agent template, code generation, Code Agent paste, capability,
   smoke test, enable). AUTO stages run server-side with a live journal; MANUAL stages show exact
   French instructions, the operator clicks "C'est fait" and the backend VERIFIES against DSS
-  before advancing (an unverified claim never advances the run). The whole run state is
+  before advancing (an unverified claim never advances the run). The first knowledge build is
+  an AUTO stage: the backend runs the STEP-BASED refresh scenario (one visual build step per
+  knowledge dataset), waits for the outcome (bounded, journalled, re-attaches to a run already
+  in progress), surfaces the DSS error with the fix path on failure, and proves the datasets
+  hold rows before advancing. The remaining manual actions are the human-judgment ones
+  (profile review, wizard answers, Code Agent paste when the probe is unconfirmed, smoke test). The whole run state is
   persisted in ONE direct-SQL row (`{PROJECT_KEY}_owismind_factory_guided_v1` on the hub's
   `sql_connection`, plugin storage pattern: parameterized values, COMMIT on write), so a page
   reload or a backend restart resumes exactly where the operator was (a stage left RUNNING by a

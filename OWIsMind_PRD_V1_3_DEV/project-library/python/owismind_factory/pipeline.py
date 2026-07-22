@@ -3,7 +3,8 @@
 Ordered, idempotent, dry-run-able. Steps whose API is probe-gated degrade to
 MANUAL actions with exact instructions; nothing is guessed, nothing is deleted,
 nothing heavy runs without an explicit human action (the first knowledge build
-is a scenario the human triggers).
+is a scenario run the operator triggers: automatically by the guided
+assistant's first-build stage, or by hand from this pipeline's runbook).
 
 Typical use (notebook 03_create_domain.py or the console webapp):
 
@@ -97,9 +98,10 @@ def create_domain(ctx, spec, wizard_config=None, discovery=None, schema_hints=No
 
     if _enabled(steps, "first_build"):
         ctx.manual("first_build",
-                   "run the scenario %s ONCE by hand (or flow_builder.run_scenario_now) "
-                   "off-peak to build %s, then REVIEW the profile dataset before the "
-                   "wizard step" % (spec.scenario_name, ", ".join(spec.knowledge_datasets)))
+                   "run the scenario %s ONCE (guided assistant: automatic; notebook: "
+                   "flow_builder.run_scenario_and_wait) to build %s, then REVIEW the "
+                   "profile dataset before the wizard step"
+                   % (spec.scenario_name, ", ".join(spec.knowledge_datasets)))
 
     if _enabled(steps, "semantic_model"):
         if base_ready:
