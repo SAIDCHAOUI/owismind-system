@@ -418,3 +418,109 @@ class TestSafeDelete(unittest.TestCase):
         except removal.RemovalRefused as exc:
             self.assertIn("probe object", str(exc))
             self.assertIn("clean zz_* by hand", str(exc))
+
+
+def _seed_full_domain(project):
+    """A complete factory-created opportunities domain, plus foreign objects."""
+    project.datasets |= {"DRIVE_Opportunities", "DRIVE_Opportunities_profile",
+                         "DRIVE_Opportunities_value_index",
+                         "DRIVE_Opportunities_value_catalog",
+                         "OWIsMind_agent_catalog_v1", "DRIVE_Revenues"}
+    project.recipes |= {"compute_DRIVE_Opportunities_profile",
+                        "compute_DRIVE_Opportunities_value_index",
+                        "compute_DRIVE_Opportunities_value_catalog",
+                        "compute_DRIVE_Revenues_profile"}
+    project.scenarios["sc1"] = "Refresh_Opportunities"
+    project.agents["4Ghpi5hm"] = "Opportunities_expert"
+    project.agents["038G7mlF"] = "OWIsMind_orchestrator"
+    project.tools["iUR8wLX"] = {"name": "opportunities_semantic_query",
+                                "params": {"semanticModelId": "mOdEl42"}}
+    project.models["mOdEl42"] = "DRIVE_Opportunities_Semantic_Model"
+    project.zones.append(_FakeZone(project, "Opportunities_Expert",
+                                   items=["a", "b", "c", "d"]))
+    project.library.files["/python/owismind_hub/wizard/opportunities-config.json"] = "{}"
+    project.library.files["/python/owismind_hub/prompts/opportunities/understand_extra.md"] = "x"
+    project.library.files["/python/owismind_hub/generated/Opportunities_expert.py"] = "# code"
+
+
+class TestInventory(unittest.TestCase):
+    def setUp(self):
+        self.project = _FakeProject()
+        _seed_full_domain(self.project)
+        self.entry = _entry()
+        self.settings = dict(hub.DEFAULT_SETTINGS)
+
+    def _build(self):
+        return removal.build_inventory(
+            self.project, "opportunities_expert", self.entry, self.settings)
+
+    def test_finds_every_existing_artifact(self):
+        inventory, problems = self._build()
+        self.assertEqual(problems, [])
+        stages = inventory["stages"]
+        self.assertEqual([i["name"] for i in stages["delete_tool"]],
+                         ["opportunities_semantic_query"])
+        self.assertEqual(stages["delete_tool"][0]["id"], "iUR8wLX")
+        self.assertEqual([i["name"] for i in stages["delete_agent"]],
+                         ["Opportunities_expert"])
+        self.assertEqual(stages["delete_agent"][0]["id"], "4Ghpi5hm")
+        self.assertEqual(stages["delete_model"][0]["id"], "mOdEl42")
+        self.assertEqual([i["name"] for i in stages["delete_scenario"]],
+                         ["Refresh_Opportunities"])
+        self.assertEqual(sorted(i["name"] for i in stages["delete_datasets"]),
+                         ["DRIVE_Opportunities_profile",
+                          "DRIVE_Opportunities_value_catalog",
+                          "DRIVE_Opportunities_value_index"])
+        self.assertEqual(sorted(i["name"] for i in stages["delete_recipes"]),
+                         ["compute_DRIVE_Opportunities_profile",
+                          "compute_DRIVE_Opportunities_value_catalog",
+                          "compute_DRIVE_Opportunities_value_index"])
+        self.assertEqual([i["name"] for i in stages["delete_zone"]],
+                         ["Opportunities_Expert"])
+
+    def test_source_dataset_is_protected_never_deletable(self):
+        inventory, _problems = self._build()
+        deletable = [i["name"] for items in inventory["stages"].values() for i in items]
+        self.assertNotIn("DRIVE_Opportunities", deletable)
+        self.assertEqual([i["name"] for i in inventory["protected"]],
+                         ["DRIVE_Opportunities"])
+
+    def test_absent_objects_land_in_notes_not_stages(self):
+        self.project.tools.clear()
+        self.project.scenarios.clear()
+        inventory, problems = self._build()
+        self.assertEqual(problems, [])
+        self.assertEqual(inventory["stages"]["delete_tool"], [])
+        self.assertEqual(inventory["stages"]["delete_scenario"], [])
+        self.assertTrue(any("opportunities_semantic_query" in n
+                            for n in inventory["notes"]))
+
+    def test_founder_model_resolved_through_tool_params(self):
+        """Founder names ignore conventions: the model resolves via the tool."""
+        self.project.models.pop("mOdEl42")
+        self.project.models["AHUh9hb"] = "Drive_Revenues_Semantic_Model"
+        self.project.tools["iUR8wLX"]["params"] = {"semanticModelId": "AHUh9hb"}
+        inventory, _problems = self._build()
+        self.assertEqual(inventory["stages"]["delete_model"][0]["id"], "AHUh9hb")
+
+    def test_listing_failure_is_a_problem_not_a_hole(self):
+        self.project.fail_list.add("tools")
+        _inventory, problems = self._build()
+        self.assertTrue(any("tools" in p or "réessaie" in p for p in problems))
+
+    def test_template_conflicts_detected(self):
+        self.settings["template_semantic_tool_id"] = "iUR8wLX"
+        self.settings["template_zone_recipes"] = {
+            "profile": "compute_DRIVE_Opportunities_profile"}
+        inventory, _problems = self._build()
+        conflicts = inventory["template_conflicts"]
+        self.assertEqual(len(conflicts), 2)
+        self.assertTrue(any("iUR8wLX" in c for c in conflicts))
+
+    def test_hub_paths_cover_wizard_prompts_generated(self):
+        inventory, _problems = self._build()
+        self.assertEqual(inventory["hub_paths"], [
+            "/python/owismind_hub/wizard/opportunities-config.json",
+            "/python/owismind_hub/prompts/opportunities",
+            "/python/owismind_hub/generated/Opportunities_expert.py",
+        ])
