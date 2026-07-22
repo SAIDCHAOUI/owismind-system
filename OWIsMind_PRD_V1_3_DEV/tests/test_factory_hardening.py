@@ -742,16 +742,23 @@ class TestDeletionConfinement(unittest.TestCase):
     _PACKAGE = os.path.join(os.path.dirname(__file__), "..",
                             "project-library", "python", "owismind_factory")
 
-    def test_delete_calls_only_in_probes(self):
+    # Sanctioned deletion sites (spec 2026-07-22, capability removal): probes.py
+    # cleans its own throwaway objects; removal.py is THE deletion engine (every
+    # object delete goes through its safe_delete identity gate); hub.py deletes
+    # library files/folders in delete_path only. Everything else stays zero-delete.
+    _DELETE_WHITELIST = ("probes.py", "removal.py", "hub.py")
+
+    def test_delete_calls_only_in_sanctioned_modules(self):
         offenders = []
         for name in sorted(os.listdir(self._PACKAGE)):
-            if not name.endswith(".py") or name == "probes.py":
+            if not name.endswith(".py") or name in self._DELETE_WHITELIST:
                 continue
             with open(os.path.join(self._PACKAGE, name)) as fh:
                 if ".delete(" in fh.read():
                     offenders.append(name)
         self.assertEqual(offenders, [],
-                         "deletion outside probes.py violates the zero-delete rule")
+                         "deletion outside the sanctioned modules (%s) violates "
+                         "the deletion-confinement rule" % ", ".join(self._DELETE_WHITELIST))
 
     def test_probe_delete_guard_refuses_wrong_name(self):
         class _Handle(object):

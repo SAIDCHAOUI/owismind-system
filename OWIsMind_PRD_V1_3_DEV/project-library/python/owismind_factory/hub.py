@@ -270,3 +270,68 @@ def append_capability(project, key, entry):
         capabilities[key] = entry
         write_capabilities(project, capabilities)
     return capabilities
+
+
+def set_capability_enabled(project, key, enabled):
+    """Flip one capability's ``enabled`` flag (validated, backed-up write).
+
+    Raises ``KeyError`` when the key is unknown and ``ValueError`` when the
+    resulting registry would be invalid (e.g. two enabled capabilities on the
+    same domain): the caller surfaces both as-is.
+    """
+    with _CAPABILITIES_WRITE_LOCK:
+        capabilities = read_capabilities(project)
+        if not isinstance(capabilities, dict) or key not in capabilities:
+            raise KeyError(key)
+        capabilities[key]["enabled"] = bool(enabled)
+        write_capabilities(project, capabilities)
+        return capabilities
+
+
+def remove_capability(project, key):
+    """Remove one capability entry. Returns ``(status, capabilities)``.
+
+    status is ``"removed"``, ``"absent"``, or ``"kept_disabled"``: the LAST
+    entry is never removed, only disabled, because an empty capabilities.json
+    is invalid and would make the orchestrator fall back to its embedded
+    defaults (the removed expert could then silently REAPPEAR).
+    """
+    with _CAPABILITIES_WRITE_LOCK:
+        capabilities = read_capabilities(project) or {}
+        if key not in capabilities:
+            return "absent", capabilities
+        if len(capabilities) == 1:
+            capabilities[key]["enabled"] = False
+            write_capabilities(project, capabilities)
+            return "kept_disabled", capabilities
+        del capabilities[key]
+        write_capabilities(project, capabilities)
+        return "removed", capabilities
+
+
+def path_exists(project, path):
+    """True/False when the library file or folder provably exists/does not,
+    None when the library itself cannot be read (callers treat None as
+    "unknown", never as a verdict)."""
+    try:
+        library = _library(project)
+        if library.get_file(path) is not None:
+            return True
+        return library.get_folder(path) is not None
+    except Exception:
+        return None
+
+
+def delete_path(project, path):
+    """Delete a library file or folder. True when something was deleted,
+    False when already absent. API refusals raise (caller flips to manual)."""
+    library = _library(project)
+    f = library.get_file(path)
+    if f is not None:
+        f.delete()
+        return True
+    folder = library.get_folder(path)
+    if folder is not None:
+        folder.delete()
+        return True
+    return False
