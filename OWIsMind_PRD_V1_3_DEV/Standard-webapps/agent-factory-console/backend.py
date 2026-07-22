@@ -495,6 +495,28 @@ def api_hub_capabilities_post():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/capability/enable", methods=["POST"])
+@_safe
+def api_capability_enable():
+    """Flip one capability's enabled flag (validated, backed-up hub write).
+    Requires confirm. The UI reminds the operator to re-save the orchestrator
+    (the registry is loaded at process start, lesson L168)."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    key = str(body.get("capability_key") or "").strip()
+    if not key:
+        return _err("capability_key_required", 400)
+    project = _project()
+    try:
+        caps = hub.set_capability_enabled(project, key, bool(body.get("enabled")))
+    except KeyError:
+        return _err("unknown_capability", 404)
+    except ValueError as exc:
+        return _err("invalid_capabilities", 400, {"problems": [str(exc)]})
+    return jsonify({"status": "ok", "capabilities": caps})
+
+
 # ----------------------------------------------------------------- guided assistant
 # The step-by-step "Assistant" screen. The run STATE lives in one direct-SQL row
 # (owismind_factory.guided_store, plugin storage pattern: parameterized values,
@@ -551,6 +573,40 @@ def api_guided_start():
         if active is not None:
             return _err("active_run_exists", 409, {"run_id": active.get("run_id")})
         run = guided.start_run(project, spec, settings=settings)
+        store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
+@app.route("/api/guided/start-removal", methods=["POST"])
+@_safe
+def api_guided_start_removal():
+    """Create a guided REMOVAL run (its inventory runs synchronously; nothing
+    is deleted before the operator confirms each stage). Requires confirm AND
+    the domain name TYPED by the operator (server-side check: a spoofed client
+    cannot skip it). One active run at a time."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    key = str(body.get("capability_key") or "").strip()
+    if not key:
+        return _err("capability_key_required", 400)
+    project = _project()
+    caps = hub.read_capabilities(project) or {}
+    entry = caps.get(key)
+    if not isinstance(entry, dict):
+        return _err("unknown_capability", 404)
+    typed = str(body.get("domain_typed") or "").strip()
+    if not typed or typed != str(entry.get("domain") or ""):
+        return _err("domain_mismatch", 400)
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        active = store.load_active()
+        if active is not None:
+            return _err("active_run_exists", 409, {"run_id": active.get("run_id")})
+        run = guided.start_removal_run(project, key, settings=settings)
         store.save(run)
     except guided_store.GuidedStoreError as exc:
         return _err("storage_not_configured", 500, {"messages": [str(exc)]})

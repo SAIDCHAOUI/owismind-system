@@ -39,8 +39,56 @@ class _FakeRequest(object):
         return self.json_body
 
 
+class _FakeLibFile(object):
+    def __init__(self, tree, path):
+        self._tree, self._path = tree, path
+
+    def read(self):
+        return self._tree[self._path]
+
+    def write(self, content):
+        self._tree[self._path] = content
+
+
+class _FakeFolder(object):
+    def __init__(self, library, path):
+        self._library, self._path = library, path
+
+    def add_folder(self, name):
+        base = self._path.rstrip("/")
+        return _FakeFolder(self._library, base + "/" + name)
+
+    def add_file(self, name):
+        full = self._path.rstrip("/") + "/" + name
+        self._library.files[full] = ""
+        return _FakeLibFile(self._library.files, full)
+
+
+class _FakeLibrary(object):
+    def __init__(self):
+        self.files = {}
+        self.root = _FakeFolder(self, "")
+
+    def get_file(self, path):
+        return _FakeLibFile(self.files, path) if path in self.files else None
+
+    def get_folder(self, path):
+        if path in ("", "/"):
+            return self.root
+        prefix = path.rstrip("/") + "/"
+        if any(item.startswith(prefix) for item in self.files):
+            return _FakeFolder(self, path)
+        return None
+
+
 class _FakeProject(object):
     project_key = "OWISMIND_TEST"
+
+    def __init__(self):
+        self.library = _FakeLibrary()
+
+    def get_library(self):
+        return self.library
 
 
 def _install_dataiku_stub():
@@ -91,6 +139,22 @@ from owismind_factory.spec import DomainSpec  # noqa: E402
 
 _SPEC_BODY = {"domain": "opportunities", "base_dataset": "DRIVE_Opportunities",
               "label_fr": "Expert opportunités", "label_en": "Opportunities expert"}
+
+
+def _entry():
+    """Return a minimal valid opportunities capability entry."""
+    from owismind_factory.registry import KNOWN_BLOCK_IDS, KNOWN_TOOL_NAMES
+    return {
+        "kind": "agent", "agent_id": "agent:4Ghpi5hm", "domain": "opportunities",
+        "label_fr": "Expert opportunités", "label_en": "Opportunities expert",
+        "tool_name": "ask_opportunities_expert", "planner_description": "routing text",
+        "block_labels": {key: {"fr": "x", "en": "x"} for key in KNOWN_BLOCK_IDS},
+        "tool_labels": {key: {"fr": "x", "en": "x"} for key in KNOWN_TOOL_NAMES},
+        "dataset_label_fr": "Base", "dataset_label_en": "Base", "source_url": "",
+        "lookup_dataset": "DRIVE_Opportunities",
+        "lookup_catalog": "DRIVE_Opportunities_value_catalog",
+        "lookup_search_columns": [], "pass_context": True, "enabled": True,
+    }
 
 
 def _call(route_fn, body=None, args=None):
@@ -171,6 +235,10 @@ class _GuidedRoutesBase(unittest.TestCase):
         self.p.set(guided_store, "GuidedStore", _FakeStore)
         self.p.set(hub, "get_settings",
                    lambda project: {"sql_connection": "SQL_test", "code_env_311": ""})
+        self.project = _FakeProject()
+        self.project.library.files[hub.CAPABILITIES_PATH] = json.dumps(
+            {"opportunities_expert": _entry()})
+        self.p.set(_BACKEND, "_project", lambda: self.project)
         # Drain the job registry between tests (fresh namespace, shared module state).
         with _BACKEND._JOBS_LOCK:
             _BACKEND._JOBS.clear()
@@ -352,6 +420,60 @@ class TestAbandon(_GuidedRoutesBase):
                                 body={"confirm": True, "run_id": "run1"})
         self.assertEqual(status, 200)
         self.assertEqual(_STORE.saves, [])
+
+
+class TestCapabilityEnable(_GuidedRoutesBase):
+    def test_requires_confirm(self):
+        body, status = _call(
+            _BACKEND.api_capability_enable,
+            body={"capability_key": "opportunities_expert", "enabled": False})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"], "confirmation_required")
+
+    def test_unknown_capability_404(self):
+        body, status = _call(
+            _BACKEND.api_capability_enable,
+            body={"confirm": True, "capability_key": "nope", "enabled": False})
+        self.assertEqual(status, 404)
+        self.assertEqual(body["error"], "unknown_capability")
+
+    def test_flips_and_returns_capabilities(self):
+        body, status = _call(
+            _BACKEND.api_capability_enable,
+            body={"confirm": True, "capability_key": "opportunities_expert",
+                  "enabled": False})
+        self.assertEqual(status, 200)
+        self.assertFalse(body["capabilities"]["opportunities_expert"]["enabled"])
+
+
+class TestStartRemoval(_GuidedRoutesBase):
+    def test_typed_name_mismatch_rejected(self):
+        body, status = _call(
+            _BACKEND.api_guided_start_removal,
+            body={"confirm": True, "capability_key": "opportunities_expert",
+                  "domain_typed": "WRONG"})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"], "domain_mismatch")
+
+    def test_active_run_blocks(self):
+        _STORE.active = {"run_id": "r1", "status": "active"}
+        body, status = _call(
+            _BACKEND.api_guided_start_removal,
+            body={"confirm": True, "capability_key": "opportunities_expert",
+                  "domain_typed": "opportunities"})
+        self.assertEqual(status, 409)
+        self.assertEqual(body["error"], "active_run_exists")
+
+    def test_creates_and_persists_a_removal_run(self):
+        body, status = _call(
+            _BACKEND.api_guided_start_removal,
+            body={"confirm": True, "capability_key": "opportunities_expert",
+                  "domain_typed": "opportunities"})
+        self.assertEqual(status, 200)
+        run = body["run"]
+        self.assertTrue(run["state"].get("removal"))
+        self.assertEqual(run["state"]["stage_order"][0], "inventory")
+        self.assertTrue(_STORE.saves, "the run must be persisted")
 
 
 if __name__ == "__main__":
