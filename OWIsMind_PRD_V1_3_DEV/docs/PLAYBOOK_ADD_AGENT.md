@@ -157,7 +157,7 @@ The exact `CurrentStatus` open/closed values surface here and in the value index
 
 Create a NEW agent tool of type **Semantic Model Query** bound to
 `TroubleTickets_Semantic_Model`: **Agent mode OFF** (linear pipeline), LLM
-`vertex_ai/claude-sonnet-4-6`, access datasets as the calling user. Note its id.
+`vertex_ai/claude-sonnet-5`, access datasets as the calling user. Note its id.
 Paste the **Description for LLM** from
 `../GenAI/semantic-models/TOOL_DESCRIPTIONS.md` (the `tickets_semantic_query` block) into the
 tool's "Description for LLM" field - do NOT leave it empty.

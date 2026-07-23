@@ -18,7 +18,7 @@ miroite). Deux modeles, un par domaine :
 | `TroubleTickets_Semantic_Model` | `dM4jA4G` | `tickets_semantic_query` (`nEirlso`) | `CSSO_Trouble_Tickets_Expert` (`agent:NcE9LD2i`) | Repoint vers le clone PRET (`ACTION = "repoint"`, simule 4/4), PAS ENCORE lance. |
 
 Chaque tool tourne en Agent mode OFF (pipeline SQL lineaire), LLM
-`vertex_ai/claude-sonnet-4-6`, embedding `vertex_ai/text-embedding-005`, acces
+`vertex_ai/claude-sonnet-5`, embedding `vertex_ai/text-embedding-005`, acces
 aux datasets en tant qu'utilisateur appelant. Le SQL genere est en lecture seule.
 
 Garde-fous : un modele = UNE table physique (jamais de JOIN) ; un modele par

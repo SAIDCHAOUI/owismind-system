@@ -69,7 +69,7 @@ except Exception:                               # pragma: no cover
 # "<connection-prefix>:<provider>/<model>".
 GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # claude
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"                  # claude
 
 # Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
 # token on the current turn; default "smart" when absent). Each mode picks ONE

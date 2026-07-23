@@ -92,7 +92,7 @@ def ui_checklist(spec, model_id):
         "Create the Semantic Model Query tool BY HAND in DSS (2 minutes): "
         "Agents & GenAI Models > Tools > New tool > Semantic Model Query; "
         "name it %s; bind it to the semantic model %s (id %s); Agent mode OFF "
-        "(simple linear pipeline); LLM vertex_ai/claude-sonnet-4-6; access "
+        "(simple linear pipeline); LLM vertex_ai/claude-sonnet-5; access "
         "datasets as the calling user; paste the generated 'Description for "
         "LLM'. Then note the tool id and put it into the capability entry "
         "(semantic tool id) and the generated sub-agent CONFIG."

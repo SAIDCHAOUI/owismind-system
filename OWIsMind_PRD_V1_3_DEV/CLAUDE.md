@@ -97,7 +97,7 @@ labels** in the sub-agent (`KNOWN_TOOL_NAMES`), not as tool calls - do not confl
 them with the dead `Drive_Revenues_resolve_filter_value` tool.
 
 Each Semantic Model Query tool runs **Agent mode OFF (linear SQL pipeline)**, LLM
-`vertex_ai/claude-sonnet-4-6`, embedding `vertex_ai/text-embedding-005`, access
+`vertex_ai/claude-sonnet-5`, embedding `vertex_ai/text-embedding-005`, access
 datasets as the calling user. The "Description for LLM" to paste is in
 `GenAI/semantic-models/TOOL_DESCRIPTIONS.md`.
 
@@ -134,7 +134,7 @@ analytics) and `beta-owismind_webapp_traces_v2` (agent traces).
 ### Modes (model per turn)
 
 `smart` (default) = `vertex_ai/gemini-3.1-flash-lite`; `pro` =
-`vertex_ai/gemini-3.5-flash`; `claude` = `vertex_ai/claude-sonnet-4-6` (all with the
+`vertex_ai/gemini-3.5-flash`; `claude` = `vertex_ai/claude-sonnet-5` (all with the
 connection prefix `openai:LLM-7064-revforecast:`). One model drives the whole
 turn (no escalation); the mode is propagated to the sub-agent; each semantic tool
 stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).

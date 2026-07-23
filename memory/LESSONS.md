@@ -3509,6 +3509,22 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-22 run 2.
 - **Date** : 2026-07-22.
 
+## L172 - Famille Claude 5 via LiteLLM : la case "Reasoning Model" DSS injecte l'ancien dialecte thinking sur le chemin JSON force -> 400 ; decocher (adaptatif par defaut) (2026-07-23)
+- **Contexte** : bascule du tier "claude" de `vertex_ai/claude-sonnet-4-6` vers `vertex_ai/claude-sonnet-5` (connexion Mesh `LLM-7064-revforecast`, proxy LiteLLM, Vertex AI).
+- **Ce qui a echoue** : sous-agents KO uniquement en mode claude : UNDERSTAND (`with_json_output`) recevait `HTTP 400 : "thinking.type.enabled" is not supported for this model. Use "thinking.type.adaptive" and "output_config.effort"`. L'orchestrateur (jamais de JSON force en boucle, L056) passait avec le meme modele. Cause : la case "Reasoning Model" + effort de l'entree modele fait envoyer `reasoning_effort` par DSS ; LiteLLM le traduit correctement (adaptive + output_config.effort) sur le chemin simple mais retombe sur l'ancien dialecte `thinking: {type: "enabled"}` sur le chemin `response_format` ; la famille Claude 5 le rejette. Valeurs d'effort acceptees par le proxy : minimal/low/medium/high/xhigh/max/none ("adaptive" n'est PAS un effort).
+- **Solution qui marche** : DECOCHER "Reasoning Model" sur l'entree sonnet-5 : DSS n'envoie plus rien, et la famille Claude 5 tourne en thinking ADAPTATIF par defaut (effort defaut high) sans aucun parametre. Rien d'autre a changer (ni agents ni backend). Reglage fin d'effort = plus tard via ticket plateforme (bump LiteLLM sur le chemin structured output).
+- **Preuve-verification** : matrice notebook (decoche : plain + json OK ; Standard/low : plain OK + json 400) ; bench 24/24 reponses justes, mesh decoche == LiteLLM direct sans parametre, modulation adaptative des tokens selon la difficulte (~200 -> ~1384), thinking silencieux visible sur le prompt piege (reponse ~10 tokens, completion ~84) ; webapp mode claude validee par l'user.
+- **Source** : session 2026-07-23.
+- **Date** : 2026-07-23.
+
+## L173 - Tester le chemin claude d'un sous-agent : le stand-alone tourne en smart (mode injecte par contexte) ; le mapping mode->modele est COPIE dans chaque fichier agent (2026-07-23)
+- **Contexte** : apres bascule Sonnet 5, l'user avait "teste le sous-agent seul" et conclu a tort qu'il marchait en claude ; l'echec ne se voyait qu'via la webapp.
+- **Ce qui a echoue** : (1) sans message systeme injecte par l'orchestrateur, `forced_mode()` renvoie None -> `DEFAULT_MODE="smart"` (Gemini) : un Quick test stand-alone n'exerce JAMAIS le chemin claude (SONNET_ID local). (2) Chaque Code Agent porte SA copie de `SONNET_ID`/`LLM_BY_MODE` (orchestrateur + 2 sous-agents) : changer l'orchestrateur ne change rien aux sous-agents. (3) Quand un sous-agent meurt a son 1er appel LLM, `_consume_subagent` avale l'exception SANS sub_trace : RIEN dans l'Evidence, erreur tronquee a 300c dans les logs orchestrateur seulement -> "je ne trouve pas l'erreur dans la trace" est un symptome attendu.
+- **Solution qui marche** : reproduire le chemin claude en isole = `DEFAULT_MODE="claude"` temporaire dans le code DSS + Quick test (l'erreur brute apparait), puis remettre "smart" ; ou injecter un message systeme `MODE: claude` (regex `\bMODE:\s*(smart|pro|claude)\b`). Changer le modele d'un tier = 3 fichiers agents + seeds hub (`llm_sonnet`) + config DSS des tools Semantic Model Query (hors code) + verifier l'entree de la connexion Mesh (L172).
+- **Preuve-verification** : Quick test DEFAULT_MODE=claude a reproduit le 400 exact la ou le stand-alone "marchait" ; log `Received Model Group=vertex_ai/claude-sonnet-5` prouvant que l'id DSS etait bon et que le probleme etait la config connexion.
+- **Source** : session 2026-07-23.
+- **Date** : 2026-07-23.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

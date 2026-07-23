@@ -7,26 +7,22 @@
 
 ## Focus courant
 
-**CAPABILITY REMOVAL + DISABLE : VALIDES TERRAIN (2026-07-22 run 2, commits 8851faa..0d933ad
-pousses).** La console sait desormais ENLEVER une capability : desactivation reversible (flag
-`enabled`, 1 clic depuis la vue d'ensemble, rappel L168) ou run guide de SUPPRESSION en 12 etapes
-confirmees UNE PAR UNE (inventaire sonde -> disable -> tool -> agent -> modele -> scenario ->
-recettes -> datasets derives (drop) -> zone si vide -> catalogue -> hub + entree -> re-sonde
-finale). Garde-fous prouves : dataset SOURCE jamais supprimable, `safe_delete` (identite relue
-avant chaque delete), verification d'ABSENCE avant d'avancer, fallback manuel si refus API,
-derniere capability conservee desactivee, nom du domaine TAPE verifie serveur. Moteur
-`owismind_factory/removal.py` + stages dans `guided.py` + helpers `hub.py` ; 741 tests (+49) ;
-8/8 APIs delete verifiees conformes doc Dataiku ; revue adversariale Opus = 1 bug HIGH reel
-corrige (L170). Fondateurs supprimables aussi (decision user : l'orchestrateur est le coeur
-durable, ses capabilities se gerent par la console). Implementation deleguee a GPT-5.6 Sol
-xhigh via codex-companion, verifs + commits cote Claude (L171).
-**TERRAIN** : 1er run de suppression reel = `opportunities_won` (l'expert cree le matin) : echec
-propre au depart (hub.py perime dans la library DSS, L169), reprise apres re-collage + restart,
-puis 12/12 vert, chaque objet VERIFIE ABSENT. Les objets opportunities avortes du 2026-07-21
-sont de fait nettoyes. PUSH actifs (demande user).
+**MODE CLAUDE = SONNET 5, VALIDE WEBAPP (2026-07-23).** Le tier "claude" est passe de
+`vertex_ai/claude-sonnet-4-6` a `vertex_ai/claude-sonnet-5`. Incident "sous-agents KO en
+mode claude" resolu : la case Reasoning Model de l'entree sonnet-5 (connexion
+`LLM-7064-revforecast`) faisait traduire `reasoning_effort` par LiteLLM en ancien dialecte
+`thinking.type=enabled` sur le chemin JSON force (UNDERSTAND) -> 400 famille Claude 5 ;
+l'orchestrateur (pas de JSON force) passait, d'ou le symptome asymetrique. Fix = case
+DECOCHEE : Sonnet 5 raisonne en ADAPTATIF par defaut (bench 24/24, modulation des tokens
+selon la difficulte, mesh == direct sans parametre). Piege de test compris : un sous-agent
+stand-alone tourne en smart (mode injecte par contexte) -> tester un tier =
+`DEFAULT_MODE` temporaire. Repo aligne sonnet-5 (12 fichiers, 741 tests, 0 occurrence 4-6
+hors tests) ; DSS edite a la main par l'user (id identique), prochain recollage = resync.
+Restes : 2 tools Semantic Model Query + juge LAB encore sur 4.6 ; ticket LiteLLM optionnel.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-22 Run 2 : capability removal + disable (spec + plan 8 taches TDD + moteur removal.py + machine 12 etapes + routes + UI + modale danger), implementation Sol xhigh orchestree, revue adversariale (fix HIGH quoting L170), doc Dataiku 8/8, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
+- 2026-07-23 : mode claude bascule sur Sonnet 5 (diagnostic chemin mode->modele, cause = case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
+- 2026-07-22 Run 2 : capability removal + disable (moteur removal.py + machine 12 etapes + UI + revue adversariale fix HIGH L170), implementation Sol xhigh, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
 - 2026-07-22 Run 1 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
 - 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
 - 2026-07-20 : deploiement v1.3 guide par l'user (notebooks 00-06, clone aligne VALIDE) ; restructure repo = un dossier racine par projet DSS + hub sous /python/ + UN fichier py par modele semantique ; fix regex console. L162-L163 (pas de fichier session, detail dans les lecons + commits 6e33a75..f39b00d).
@@ -68,6 +64,7 @@ sont de fait nettoyes. PUSH actifs (demande user).
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 (config DSS ; obligatoire si retrait de la 4.6 de la connexion) ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 (decision comparabilite) ; ticket plateforme LiteLLM (reasoning_effort x response_format) pour recuperer le reglage d'effort. Voir `sessions/2026-07-23.md`.
 - **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
   nouvelle conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud
   (il l'enumere encore dans ses refus tant que le process n'a pas redemarre). Decision toujours

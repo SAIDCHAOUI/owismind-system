@@ -38,7 +38,7 @@ technical fallback (`FALLBACK_TO_DIRECT=True`).
 | Project | `OWISMIND_PRD_V1_2` |
 | Semantic Model | `Drive_Revenues_Semantic_Model` |
 | Version | Active (default) = `v1` |
-| LLM (SQL generation) | `vertex_ai/claude-sonnet-4-6` |
+| LLM (SQL generation) | `vertex_ai/claude-sonnet-5` |
 | Embedding LLM (value matching) | `vertex_ai/text-embedding-005` |
 | **Agent mode** | **OFF (unchecked)** = the faster **linear** SQL pipeline, NOT a multi-step agent |
 | Access datasets as | User calling the tool |

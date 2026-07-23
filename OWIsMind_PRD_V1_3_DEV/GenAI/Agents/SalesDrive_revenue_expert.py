@@ -67,7 +67,7 @@ TARGET_DATASET = ""
 # exposed by the LLM Mesh connection.
 GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-4-6"                  # claude
+SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"                  # claude
 # Model tier per mode, propagated by the orchestrator through the injected context.
 # In claude mode the whole stack is Sonnet. The Semantic Model Query tool that writes
 # the SQL runs on its own DSS-configured model (Sonnet) in every mode, so offer and
