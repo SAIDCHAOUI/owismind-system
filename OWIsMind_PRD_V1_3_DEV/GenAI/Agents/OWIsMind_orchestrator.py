@@ -1367,6 +1367,11 @@ _HUB_REQUIRED_CAPABILITY_KEYS = (
     "lookup_dataset", "lookup_catalog", "lookup_search_columns",
     "pass_context", "enabled",
 )
+# Form gates mirrored from owismind_factory.hub (spec._DOMAIN_RE /
+# spec._DATASET_RE shapes): domain feeds hub paths, the lookup fields feed the
+# removal inventory and end up as SQL identifiers.
+_HUB_DOMAIN_FORM_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
+_HUB_DATASET_FORM_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # Frozen sub-agent dialect: hub entries must label exactly these ids.
 _HUB_KNOWN_BLOCK_IDS = ("resolve", "run_sql", "format_output",
                         "clarify_user", "out_of_scope_msg", "about_data")
@@ -1407,6 +1412,17 @@ def _hub_capabilities_problems(obj):
                 # Same placeholder rejection as the factory validator (FILL_ME,
                 # empty suffix): real DSS agent ids are alphanumeric.
                 problems.append("%s: agent_id %r is not a real DSS id" % (key, agent_id))
+            # Same form gates as the factory validator (lockstep, see
+            # TestValidatorsAgree): exotic domain / dataset shapes are refused.
+            domain_name = str(cap.get("domain") or "")
+            if not _HUB_DOMAIN_FORM_RE.match(domain_name):
+                problems.append("%s: domain %r is not snake_case "
+                                "([a-z][a-z0-9_]{1,30})" % (key, domain_name))
+            for field in ("lookup_dataset", "lookup_catalog"):
+                value = str(cap.get(field) or "")
+                if value and not _HUB_DATASET_FORM_RE.match(value):
+                    problems.append("%s: %s %r is not a legal dataset name"
+                                    % (key, field, value))
             if cap.get("enabled"):
                 domain = cap.get("domain")
                 if domain in enabled_domains:

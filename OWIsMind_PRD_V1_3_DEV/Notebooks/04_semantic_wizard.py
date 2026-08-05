@@ -60,7 +60,7 @@ else:
     print(json.dumps(config, indent=1, ensure_ascii=False)[:8000])
 
     if SAVE_TO_HUB:
-        path = "%s/wizard/%s-config.json" % (hub.HUB_ROOT, DOMAIN)
+        path = hub.wizard_config_path(DOMAIN)
         hub.write_json(project, path, config)
         print("\n[saved to project library %s : use it as WIZARD_CONFIG_PATH in "
               "03_create_domain.py]" % path)

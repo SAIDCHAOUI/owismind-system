@@ -14,87 +14,21 @@ plain dict, so a route's return value is either that dict (200) or a
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    if not hasattr(dk, "api_client"):
-        dk.api_client = lambda: None
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: "'" + str(constant) + "'"
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
+# The shared request stub: mutating it drives what the routes see (it is the object
+# ``flask.request`` - and therefore ``routes.request`` - is bound to).
+_REQUEST = _dss_stub.REQUEST
 
-
-class _FakeRequest(object):
-    """Minimal stand-in for flask.request driven per-test via a module global."""
-
-    def __init__(self):
-        self.headers = {}
-        self.args = {}
-        self.method = "GET"
-        self._json = None
-
-    def get_json(self, silent=False):
-        return self._json
-
-
-_REQUEST = _FakeRequest()
-
-
-def _ensure_flask_stub():
-    flask = sys.modules.get("flask")
-    if flask is not None and hasattr(flask, "_OWI_STUB"):
-        return
-    flask = types.ModuleType("flask")
-    flask._OWI_STUB = True
-
-    class Blueprint(object):
-        def __init__(self, name, import_name, url_prefix=None):
-            self.name = name
-            self.url_prefix = url_prefix
-
-        def route(self, *_a, **_k):
-            def _decorator(fn):
-                return fn
-            return _decorator
-
-        def before_request(self, fn):
-            return fn
-
-        def after_request(self, fn):
-            return fn
-
-    flask.Blueprint = Blueprint
-    flask.jsonify = lambda payload: payload
-    flask.request = _REQUEST
-    flask.g = types.SimpleNamespace()
-    sys.modules["flask"] = flask
-
-
-_ensure_dataiku_stub()
-_ensure_flask_stub()
+_dss_stub.install()
+_dss_stub.install_flask()
 
 from owismind.api import routes                            # noqa: E402
 from owismind.security import identity as identity_mod      # noqa: E402

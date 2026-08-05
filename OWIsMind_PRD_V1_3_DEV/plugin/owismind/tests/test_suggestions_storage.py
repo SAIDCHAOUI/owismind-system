@@ -7,41 +7,16 @@ the nullable boolean verdict is inlined as a bare SQL keyword (true/false/NULL),
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        # Quote strings like a real escaper would; keep it simple for assertions.
-        sql_mod.toSQL = lambda constant, dialect=None: (
-            "'" + str(constant).replace("'", "''") + "'" if isinstance(constant, str) else repr(constant)
-        )
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.storage import suggestions  # noqa: E402
 from owismind.storage import sql_config  # noqa: E402

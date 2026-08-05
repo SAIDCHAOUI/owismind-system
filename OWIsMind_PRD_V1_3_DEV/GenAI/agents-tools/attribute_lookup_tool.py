@@ -24,6 +24,7 @@ CATALOG_DATASET (or the `dataset` / `catalog` call args); `searchable_columns`
 restricts the broad search to named-entity / id columns. No column name is hardcoded.
 """
 
+import json
 import re
 import time
 import unicodedata
@@ -38,6 +39,20 @@ from dataiku.llm.agent_tools import BaseAgentTool
 # ============================================================
 FACT_DATASET = "DRIVE_Revenues"
 CATALOG_DATASET = "DRIVE_Revenues_Value_Catalog"   # value catalog (alias fallback)
+
+# Server-side dataset allowlist (SEC hardening 2026-08). The inputSchema exposes
+# `dataset` / `catalog` so a caller can point the lookup at a capability's
+# datasets, but invoke() only accepts names REGISTERED for lookup: the union of
+# the hub registry's lookup_dataset / lookup_catalog values (read with a short
+# TTL, never frozen at import: piege L168) and this embedded fallback covering
+# the live domains, so a hub outage can never break the product's lookups
+# (fail-open to the fallback, which still only names known datasets).
+EMBEDDED_ALLOWED_DATASETS = (
+    "DRIVE_Revenues", "DRIVE_Revenues_Value_Catalog",
+    "TroubleTickets_year", "TroubleTickets_year_value_catalogue",
+)
+HUB_CAPABILITIES_PATH = "/python/owismind_hub/capabilities.json"
+ALLOWLIST_TTL_SECONDS = 120
 
 # Catalog search domains for the alias fallback, in preference order. A catalog
 # convention (build_value_catalog_recipe), not a dataset column. "value" is the
@@ -308,6 +323,42 @@ class MyAgentTool(BaseAgentTool):
     def __init__(self):
         self._tables = {}
         self._cache = {}          # key -> (expires_at, payload)
+        self._allowlist = None    # (expires_at, frozenset of allowed dataset names)
+
+    def _allowed_datasets(self):
+        """Union of the embedded fallback and the hub-registered lookup datasets.
+
+        Re-read per call behind a short TTL (never frozen at import, piege
+        L168: a domain enabled after process start must become searchable
+        without a restart). Fail-open to the embedded fallback on any read
+        error: the fallback still only names known datasets, so the gate can
+        only ever narrow, never widen.
+        """
+        now = time.time()
+        cached = self._allowlist
+        if cached and cached[0] > now:
+            return cached[1]
+        allowed = set(EMBEDDED_ALLOWED_DATASETS)
+        try:
+            handle = (dataiku.api_client().get_default_project()
+                      .get_library().get_file(HUB_CAPABILITIES_PATH))
+            text = handle.read() if handle is not None else None
+            if isinstance(text, bytes):
+                text = text.decode("utf-8")
+            entries = json.loads(text) if text else {}
+            if isinstance(entries, dict):
+                for cap in entries.values():
+                    if not isinstance(cap, dict):
+                        continue
+                    for field in ("lookup_dataset", "lookup_catalog"):
+                        value = str(cap.get(field) or "").strip()
+                        if value:
+                            allowed.add(value)
+        except Exception:
+            pass  # fail-open to the embedded fallback (documented above)
+        allowed = frozenset(allowed)
+        self._allowlist = (now + ALLOWLIST_TTL_SECONDS, allowed)
+        return allowed
 
     # --- DSS access (overridden in tests) -------------------------------------
     def _get_table(self, dataset_name):
@@ -463,14 +514,18 @@ class MyAgentTool(BaseAgentTool):
                         "type": "string",
                         "description": (
                             "OPTIONAL, set by the caller: the Dataiku dataset to "
-                            "search. Defaults to the configured fact dataset."
+                            "search. CONSTRAINED to hub-registered lookup datasets "
+                            "(anything else is refused). Defaults to the configured "
+                            "fact dataset."
                         ),
                     },
                     "catalog": {
                         "type": "string",
                         "description": (
                             "OPTIONAL, set by the caller: the value-catalog dataset "
-                            "for the alias fallback. Defaults to the configured one."
+                            "for the alias fallback. CONSTRAINED to hub-registered "
+                            "lookup datasets (anything else is refused). Defaults "
+                            "to the configured one."
                         ),
                     },
                     "searchable_columns": {
@@ -512,6 +567,17 @@ class MyAgentTool(BaseAgentTool):
         if not term:
             return out({"status": "bad_input",
                         "message": "Provide a term to search."})
+
+        # Server-side allowlist gate: only hub-registered lookup datasets are
+        # searchable, whatever the caller (or a model given raw access to this
+        # tool) puts in `dataset` / `catalog`.
+        allowed = self._allowed_datasets()
+        blocked = sorted({n for n in (dataset, catalog) if n not in allowed})
+        if blocked:
+            return out({"status": "bad_input",
+                        "message": "Dataset(s) not registered for lookup: %s. "
+                                   "Only hub-registered lookup datasets are "
+                                   "searchable." % ", ".join(blocked)})
 
         typed = self._live_columns_typed(dataset)
         all_columns = [n for (n, _) in typed]

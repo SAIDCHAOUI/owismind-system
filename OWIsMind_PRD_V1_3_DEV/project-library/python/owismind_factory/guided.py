@@ -141,13 +141,6 @@ _REMOVAL_STAGE_META = {
 _ALL_STAGE_META = dict(_STAGE_META)
 _ALL_STAGE_META.update(_REMOVAL_STAGE_META)
 
-# Stages the advance walk may auto-complete, ONLY on a POSITIVE precheck (see
-# _PRECHECKS below): "could not verify" must never be read as "already done".
-# first_build is an AUTO stage but stays precheck-skippable: when the knowledge
-# datasets provably have rows already, re-running the build scenario is waste.
-_PRECHECK_STAGES = ("first_build", "wizard", "template", "code_agent")
-
-
 class _Env(object):
     """Bundles what stage handlers need (no persistence, no HTTP)."""
 
@@ -165,9 +158,10 @@ class _Env(object):
 
 # --------------------------------------------------------------------- helpers
 
-def wizard_config_path(domain):
-    """Hub path of a domain's wizard draft (same convention as notebook 04)."""
-    return "%s/wizard/%s-config.json" % (hub.HUB_ROOT, domain)
+# Single convention shared with the console, the removal inventory and
+# notebook 04; the implementation lives in hub.py (importable by all of them
+# without cycles), this name stays for the existing importers.
+wizard_config_path = hub.wizard_config_path
 
 
 def _spec(state):
@@ -185,15 +179,24 @@ def _wizard_config(env, state):
     return None
 
 
-def _gates(env):
-    """Probe gates from the hub (same policy as the console: hub only, and
-    schema hints count only when the write probe confirmed them)."""
-    probe = hub.read_json(env.project, hub.HUB_ROOT + "/probe_results.json") or {}
+def probe_gates(project):
+    """THE probe-gates security policy, in one place (audit 2026-08-05, BE-07).
+
+    Gates come ONLY from the hub's probe_results.json (written by notebook 00),
+    and schema hints count only when the WRITE probe confirmed the round-trip.
+    The console delegates here so a direct API caller can never inject
+    discovery / schema_hints through a request body.
+    """
+    probe = hub.read_json(project, hub.HUB_ROOT + "/probe_results.json") or {}
     discovery = probe.get("suggested_discovery")
     schema_hints = probe.get("suggested_schema_hints")
     if schema_hints and not schema_hints.get("confirmed"):
         schema_hints = None
     return discovery, schema_hints
+
+
+def _gates(env):
+    return probe_gates(env.project)
 
 
 def _dataset_is_partitioned(project, name):
@@ -398,11 +401,7 @@ def _run_preflight(env, state, ctx):
             and schema_hints.get("internal_key") and schema_hints.get("code_key"):
         try:
             raw = agent_builder.read_agent_raw(env.project, orchestrator_id)
-            versions = raw.get("versions") or []
-            version = versions[-1] if versions else {}
-            for candidate in versions:
-                if candidate.get("versionId") == raw.get("activeVersion"):
-                    version = candidate
+            version = agent_builder.resolve_active_version(raw) or {}
             code = (version.get(schema_hints["internal_key"]) or {}).get(
                 schema_hints["code_key"]) or ""
             if code and "owismind_hub" not in code:
@@ -699,7 +698,10 @@ def _first_build_status(env, state):
             continue
         table = None
         try:
-            table = wizard_module.get_physical_table(env.project, dataset)
+            # BARE name on purpose: table_has_rows gates then quotes it itself
+            # (a quoted literal here fails the identifier gate and turns every
+            # verdict into None, disabling the emptiness check entirely).
+            table = wizard_module.physical_table_name(env.project, dataset)
         except Exception:
             table = None
         if not table or store is None:
@@ -1051,6 +1053,10 @@ _INSTRUCTIONS = {
 
 # Advance-walk prechecks: POSITIVE-ONLY variants (a stage is auto-skipped only
 # when its outcome is PROVEN, never when it merely could not be verified).
+# Membership in this dict IS the "precheck-skippable" property - keep it the single
+# source of truth (a separate stage tuple once shadowed it and could silently
+# disable a new precheck). first_build is an AUTO stage but stays skippable: when
+# the knowledge datasets provably have rows, re-running the build scenario is waste.
 _PRECHECKS = {
     "first_build": _precheck_first_build,
     "wizard": _precheck_wizard,
@@ -1058,84 +1064,64 @@ _PRECHECKS = {
     "code_agent": _check_code_agent,
 }
 
+# The 7 delete_* stages share their factory-made runner/checker/instructions,
+# driven by removal.DELETE_STAGE_KEYS (single source of the stage list). The
+# non-delete stages stay explicit: note that hub_cleanup uses the MANUAL
+# instructions factory too while keeping its dedicated runner and checker.
 _RUNNERS.update({
     "inventory": _run_removal_inventory,
     "disable": _run_removal_disable,
-    "delete_tool": _make_removal_delete_runner("delete_tool"),
-    "delete_agent": _make_removal_delete_runner("delete_agent"),
-    "delete_model": _make_removal_delete_runner("delete_model"),
-    "delete_scenario": _make_removal_delete_runner("delete_scenario"),
-    "delete_recipes": _make_removal_delete_runner("delete_recipes"),
-    "delete_datasets": _make_removal_delete_runner("delete_datasets"),
-    "delete_zone": _make_removal_delete_runner("delete_zone"),
     "catalog_cleanup": _run_removal_catalog,
     "hub_cleanup": _run_removal_hub,
     "final_check": _run_removal_final,
 })
 _CHECKERS.update({
     "inventory": _check_removal_inventory,
-    "delete_tool": _make_removal_absent_checker("delete_tool"),
-    "delete_agent": _make_removal_absent_checker("delete_agent"),
-    "delete_model": _make_removal_absent_checker("delete_model"),
-    "delete_scenario": _make_removal_absent_checker("delete_scenario"),
-    "delete_recipes": _make_removal_absent_checker("delete_recipes"),
-    "delete_datasets": _make_removal_absent_checker("delete_datasets"),
-    "delete_zone": _make_removal_absent_checker("delete_zone"),
     "hub_cleanup": _check_removal_hub,
 })
 _INSTRUCTIONS.update({
     "inventory": _instr_removal_inventory,
-    "delete_tool": _make_instr_removal_manual("delete_tool"),
-    "delete_agent": _make_instr_removal_manual("delete_agent"),
-    "delete_model": _make_instr_removal_manual("delete_model"),
-    "delete_scenario": _make_instr_removal_manual("delete_scenario"),
-    "delete_recipes": _make_instr_removal_manual("delete_recipes"),
-    "delete_datasets": _make_instr_removal_manual("delete_datasets"),
-    "delete_zone": _make_instr_removal_manual("delete_zone"),
     "hub_cleanup": _make_instr_removal_manual("hub_cleanup"),
 })
+for _delete_key in removal.DELETE_STAGE_KEYS:
+    _RUNNERS[_delete_key] = _make_removal_delete_runner(_delete_key)
+    _CHECKERS[_delete_key] = _make_removal_absent_checker(_delete_key)
+    _INSTRUCTIONS[_delete_key] = _make_instr_removal_manual(_delete_key)
+del _delete_key
 
 
 # ------------------------------------------------------------------ the machine
 
-def new_state(spec):
+def _new_stage_table(order, meta):
+    """Fresh per-stage state dicts for ``order``, first stage READY."""
     stages = {}
-    for key in STAGE_ORDER:
-        kind, title_fr, detail_fr = _STAGE_META[key]
-        stages[key] = {
-            "kind": kind,
-            "title_fr": title_fr,
-            "detail_fr": detail_fr,
-            "status": PENDING,
-            "journal": [],
-            "problems": [],
-            "instructions_fr": "",
-        }
-    stages[STAGE_ORDER[0]]["status"] = READY
+    for key in order:
+        kind, title_fr, detail_fr = meta[key]
+        stages[key] = {"kind": kind, "title_fr": title_fr, "detail_fr": detail_fr,
+                       "status": PENDING, "journal": [], "problems": [],
+                       "instructions_fr": ""}
+    stages[order[0]]["status"] = READY
+    return stages
+
+
+def new_state(spec):
     return {
         "version": STATE_VERSION,
         "spec": spec.to_dict(),
         "stage_order": list(STAGE_ORDER),
-        "stages": stages,
+        "stages": _new_stage_table(STAGE_ORDER, _STAGE_META),
         "captured": {"model_id": None, "tool_id": None,
                      "agent_id": None, "generated_path": None},
     }
 
 
 def new_removal_state(capability_key, entry):
-    stages = {}
-    for key in REMOVAL_STAGE_ORDER:
-        kind, title_fr, detail_fr = _REMOVAL_STAGE_META[key]
-        stages[key] = {"kind": kind, "title_fr": title_fr, "detail_fr": detail_fr,
-                       "status": PENDING, "journal": [], "problems": [],
-                       "instructions_fr": ""}
-    stages[REMOVAL_STAGE_ORDER[0]]["status"] = READY
     return {
         "version": STATE_VERSION,
         "removal": {"capability_key": capability_key, "entry": entry,
                     "inventory": None},
         "stage_order": list(REMOVAL_STAGE_ORDER),
-        "stages": stages,
+        "stages": _new_stage_table(REMOVAL_STAGE_ORDER, _REMOVAL_STAGE_META),
         "captured": {},
     }
 
@@ -1190,7 +1176,7 @@ def _advance(env, run):
     index = order.index(run["current_stage"])
     for key in order[index + 1:]:
         entry = _stage(state, key)
-        if key in _PRECHECK_STAGES and key in _PRECHECKS:
+        if key in _PRECHECKS:
             try:
                 ok, _problems = _PRECHECKS[key](env, state)
             except Exception:

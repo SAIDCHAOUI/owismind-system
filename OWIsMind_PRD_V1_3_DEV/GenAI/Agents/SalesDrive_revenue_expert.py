@@ -38,7 +38,6 @@ import math
 import re
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import dataiku
@@ -124,11 +123,6 @@ MAX_CUSTOM_SQL_ATTEMPTS = 3        # 1 generation + up to 2 repairs
 FUZZY_CANDIDATES_LIMIT = 40
 FUZZY_MIN_RATIO = 0.62             # below -> unresolved (no best candidate)
 LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo terms
-# Max concurrent INDEPENDENT operations the sub-agent runs at once (bounded for
-# Dataiku instance safety). Used by run_parallel() - today for the per-term value
-# lookups, and the drop-in mechanism for future parallel tool calls.
-SUBAGENT_MAX_PARALLEL = 4
-
 # Read-only execution: per-statement timeout + a read-only transaction.
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
@@ -266,35 +260,6 @@ ABOUT_ROWS = {"fr": "**Volume**", "en": "**Volume**"}
 # =============================================================================
 # 3. PROFILE - loading + typed accessors (the agent's knowledge)
 # =============================================================================
-
-def run_parallel(tasks, max_workers=SUBAGENT_MAX_PARALLEL):
-    """Run independent thunks CONCURRENTLY (bounded) and return their results in
-    INPUT order. A thunk that raises -> its slot is None (the caller filters/handles).
-    Bounded by max_workers for Dataiku instance safety. This is the sub-agent's
-    drop-in mechanism for calling several INDEPENDENT tools/queries in parallel -
-    use it whenever the work items don't depend on each other (today: per-term value
-    lookups; tomorrow: multiple data tools whose calls are mutually independent).
-    Sequential, no thread, for 0/1 task (cheaper + keeps simple cases simple)."""
-    if not tasks:
-        return []
-    if len(tasks) == 1:
-        try:
-            return [tasks[0]()]
-        except Exception:
-            logger.exception("parallel task failed")
-            return [None]
-    results = [None] * len(tasks)
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(tasks))) as ex:
-        fut_to_i = {ex.submit(t): i for i, t in enumerate(tasks)}
-        for fut in as_completed(fut_to_i):
-            i = fut_to_i[fut]
-            try:
-                results[i] = fut.result()
-            except Exception:
-                logger.exception("parallel task %d failed", i)
-                results[i] = None
-    return results
-
 
 class Profile(object):
     """In-memory view of the profile dataset (contract v1, see profiler)."""
@@ -1469,6 +1434,7 @@ def _pretty_col(name):
     return s.replace("_", " ")
 
 
+# [DOMAIN-WORDING:disclose_note]
 DISCLOSE_NOTE = {
     "fr": ("ℹ️ « {value} » existe à plusieurs niveaux de l'offre ({cols}) ; le "
            "niveau le plus précis est privilégié par défaut - précisez si vous "
@@ -1477,6 +1443,7 @@ DISCLOSE_NOTE = {
            "granular level is used by default - tell me if you meant another "
            "level."),
 }
+# [/DOMAIN-WORDING:disclose_note]
 
 
 def build_disclosure_notes(filters, lang, offer_terms=None):
@@ -1629,6 +1596,7 @@ def build_semantic_question(u, profile, filters):
                 "data; you keep the final say. Suggested: %s." % "; ".join(lines))
         for f in ambiguous:
             cols = [f["column"]] + [c for c in (f.get("alt_columns") or [])]
+            # [DOMAIN-WORDING:ambiguous_resolved]
             parts.append(
                 "AMBIGUOUS TERM - \"%s\" is a real data value present in "
                 "SEVERAL columns (%s). Do NOT take a pinned column from the "
@@ -1637,12 +1605,15 @@ def build_semantic_question(u, profile, filters):
                 "roles when they are account / partner / group columns) and the "
                 "user's intent, then disclose the interpretation you picked."
                 % (f["value"], ", ".join(cols)))
+            # [/DOMAIN-WORDING:ambiguous_resolved]
         if len(confident) > 1:
+            # [DOMAIN-WORDING:enumerate_guidance]
             parts.append(
                 "If the question ENUMERATES several of these as items to report, "
                 "treat them independently (OR) and return ONE ROW PER ITEM with a "
                 "clear label; only combine constraints of DIFFERENT kinds (e.g. a "
                 "sales channel + an offer) with AND. (Guidance - your judgment.)")
+            # [/DOMAIN-WORDING:enumerate_guidance]
 
     # Terms the resolver could NOT confidently ground and DEFERRED to you
     # (multi-column ambiguity, no single confident match). You have the full
@@ -1651,6 +1622,7 @@ def build_semantic_question(u, profile, filters):
         samples = "; ".join("%s: '%s'" % (s.get("column", ""),
                                           str(s.get("value", "")).replace("'", "''"))
                             for s in (ot.get("samples") or []))
+        # [DOMAIN-WORDING:ambiguous_deferred]
         parts.append(
             "AMBIGUOUS TERM (no confident match) - the user named \"%s\". "
             "The grounding helper found only PARTIAL, cross-column matches (%s) and "
@@ -1660,6 +1632,7 @@ def build_semantic_question(u, profile, filters):
             "columns) and the user's intent, then DISCLOSE the interpretation you "
             "used so the user can ask for another."
             % (ot.get("raw", ""), samples or "none", ot.get("raw", "")))
+        # [/DOMAIN-WORDING:ambiguous_deferred]
 
     # The named values were capped for grounding: tell the tool to ground the
     # remaining ones itself from the user question (still passed as source of truth).
@@ -2376,8 +2349,7 @@ class MyLLM(BaseLLM):
         # Pass 2 (substring/fuzzy) for the terms pass 1 missed. Kept sequential:
         # concurrent SQLExecutor2 access is not guaranteed thread-safe and the win is
         # marginal (usually 0-2 unmatched terms after the batched exact pass), so
-        # instance safety wins. run_parallel is reserved for independent tool calls,
-        # where the calls are isolated and the gain is real.
+        # instance safety wins.
         unmatched = [t for t in base_terms if not exact_rows.get(norms[t])]
 
         def _fuzzy_fetch(term):

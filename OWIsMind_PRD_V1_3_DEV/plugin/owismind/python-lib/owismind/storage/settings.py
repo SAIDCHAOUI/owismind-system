@@ -13,6 +13,7 @@ constants via ``full_table``; every write COMMITs explicitly.
 
 import json
 import logging
+import time
 
 from owismind.storage.migrations import SETTINGS_V1_LOGICAL, ensure_settings_table
 from owismind.storage.serialization import rows_to_json_safe
@@ -37,13 +38,25 @@ SETTING_ENABLED_AGENTS = "enabled_agents"
 _READ_PRE_QUERIES = readonly_pre_queries()
 _WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
 
+# The whitelist read sits on the hottest request paths (/chat/start and every
+# /source/* call), so its RAW JSON payload is cached for a short TTL (same pattern
+# as budget.py's config cache). The raw STRING is cached - never the decoded list -
+# so every caller still gets private dicts from its own json.loads and a mutable
+# entry can never be shared across requests/threads. The write path invalidates the
+# cache explicitly, which keeps it exact on this mono-process backend; the short TTL
+# only bounds staleness for a hypothetical multi-process deployment (the whitelist
+# is a security boundary, hence 5s and not the budget cache's 30s).
+_ENABLED_TTL_SECONDS = 5.0
+_enabled_cache = None  # (raw_json_string_or_None, monotonic_timestamp)
 
-def get_setting(key, default=None):
-    """Return the JSON-decoded value for ``key``, or ``default`` if absent/invalid.
 
-    A malformed stored value never breaks a request: it is logged and ``default``
-    is returned instead.
-    """
+def _invalidate_enabled_cache():
+    global _enabled_cache
+    _enabled_cache = None
+
+
+def _read_setting_raw(key):
+    """Return the stored raw JSON string for ``key``, or None if the row is absent."""
     ensure_settings_table()
     table = full_table(SETTINGS_V1_LOGICAL)
     sql = "SELECT setting_value FROM {table} WHERE setting_key = {key}".format(
@@ -51,8 +64,17 @@ def get_setting(key, default=None):
     )
     rows = rows_to_json_safe(new_executor().query_to_df(sql, pre_queries=_READ_PRE_QUERIES))
     if not rows:
-        return default
-    raw = rows[0].get("setting_value")
+        return None
+    return rows[0].get("setting_value")
+
+
+def get_setting(key, default=None):
+    """Return the JSON-decoded value for ``key``, or ``default`` if absent/invalid.
+
+    A malformed stored value never breaks a request: it is logged and ``default``
+    is returned instead.
+    """
+    raw = _read_setting_raw(key)
     if raw is None:
         return default
     try:
@@ -102,13 +124,32 @@ def get_enabled_agents():
     icon / badge). This is the server-side whitelist; the chat front references an
     agent only by logical_key.
     """
-    value = get_setting(SETTING_ENABLED_AGENTS, default=[])
+    global _enabled_cache
+    now = time.monotonic()
+    cached = _enabled_cache
+    if cached is not None and (now - cached[1]) < _ENABLED_TTL_SECONDS:
+        raw = cached[0]
+    else:
+        raw = _read_setting_raw(SETTING_ENABLED_AGENTS)
+        _enabled_cache = (raw, now)
+    if raw is None:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "get_enabled_agents - malformed JSON for key=%s; returning []",
+            SETTING_ENABLED_AGENTS,
+        )
+        return []
     return value if isinstance(value, list) else []
 
 
 def set_enabled_agents(agents, updated_by=None):
     """Persist the enabled-agents whitelist (already validated by the caller)."""
     set_setting(SETTING_ENABLED_AGENTS, agents, updated_by=updated_by)
+    # The save must be visible to the very next request on this process.
+    _invalidate_enabled_cache()
 
 
 def resolve_enabled_agent(logical_key):

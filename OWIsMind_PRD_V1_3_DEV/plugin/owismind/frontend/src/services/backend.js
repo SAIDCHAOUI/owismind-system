@@ -67,6 +67,34 @@ async function request(path, options) {
   return res.json();
 }
 
+// POST a JSON body - the triplet every write route repeats. `body` reaches
+// JSON.stringify AS IS, so a key whose value is `undefined` simply disappears from the
+// payload (callers rely on that to omit optional fields, e.g. `mode || undefined`).
+function postJson(path, body) {
+  return request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// GET with an optional query string. A param whose value is null / undefined / '' is
+// OMITTED (0 and false are kept, they are meaningful values); an empty param set leaves
+// the bare path, with no '?'. Routes that must send an EMPTY parameter on purpose build
+// their query string by hand instead (see fetchBenchmarkAttempt / adminListBenchmarkTables
+// / getCatalogDatasets below).
+function get(path, params) {
+  // encodeURIComponent, NOT URLSearchParams: the latter form-encodes a space as '+',
+  // which would silently change the bytes these routes used to send (%20).
+  const parts = [];
+  Object.keys(params || {}).forEach((key) => {
+    const value = params[key];
+    if (value == null || value === '') return;
+    parts.push(key + '=' + encodeURIComponent(value));
+  });
+  return request(parts.length ? path + '?' + parts.join('&') : path, { method: 'GET' });
+}
+
 // Identity of the caller, resolved server-side from the browser auth headers.
 // Returns { status, user_id, display_name, groups, needs_config, is_admin }.
 // POST (not GET): /me's side effect (record the user + first-admin bootstrap) lives on
@@ -89,24 +117,20 @@ export function fetchMe() {
 // the conversation tree: it becomes the new exchange's parent and bounds the agent's
 // context to that branch's ancestor chain (null = a new branch at the conversation root).
 export function startChat(sessionId, message, agentKey, historyLimit, parentExchangeId, mode, webappLang, screenContext) {
-  return request('/owismind-api/chat/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      session_id: sessionId,
-      message,
-      agent_key: agentKey,
-      history_limit: historyLimit,
-      parent_exchange_id: parentExchangeId || null,
-      // Model mode (eco / medium / high). Unknown/absent -> medium server-side.
-      mode: mode || undefined,
-      // Web-app configured language (fr / en) - helps the agent pick the reply
-      // language (the language of the message itself still wins server-side).
-      webapp_lang: webappLang || undefined,
-      // Screen-awareness pointer: which exchange + tab the user is viewing in the
-      // Evidence panel (so the agent knows what's on screen). Owner-scoped server-side.
-      screen_context: screenContext || undefined,
-    }),
+  return postJson('/owismind-api/chat/start', {
+    session_id: sessionId,
+    message,
+    agent_key: agentKey,
+    history_limit: historyLimit,
+    parent_exchange_id: parentExchangeId || null,
+    // Model mode (eco / medium / high). Unknown/absent -> medium server-side.
+    mode: mode || undefined,
+    // Web-app configured language (fr / en) - helps the agent pick the reply
+    // language (the language of the message itself still wins server-side).
+    webapp_lang: webappLang || undefined,
+    // Screen-awareness pointer: which exchange + tab the user is viewing in the
+    // Evidence panel (so the agent knows what's on screen). Owner-scoped server-side.
+    screen_context: screenContext || undefined,
   });
 }
 
@@ -117,8 +141,7 @@ export function startChat(sessionId, message, agentKey, historyLimit, parentExch
 // send back; `done` signals the run finished. Throws (e.g. run_not_found) on a
 // non-2xx response.
 export function pollChat(runId, cursor) {
-  const q = '?run_id=' + encodeURIComponent(runId) + '&cursor=' + encodeURIComponent(cursor);
-  return request('/owismind-api/chat/poll' + q, { method: 'GET' });
+  return get('/owismind-api/chat/poll', { run_id: runId, cursor });
 }
 
 // Request a cooperative early stop of one of the caller's own in-flight runs (the ■
@@ -127,53 +150,41 @@ export function pollChat(runId, cursor) {
 // run is owner-scoped. Returns { status:'ok' }; throws 'run_not_found' (404) when the run
 // is already finished/unknown - callers treat that as a benign no-op ("already done").
 export function stopChat(runId) {
-  return request('/owismind-api/chat/stop', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ run_id: runId }),
-  });
+  return postJson('/owismind-api/chat/stop', { run_id: runId });
 }
 
 // Durable workflow reconnect (v1.3): the caller's still-active durable run for a
 // session, or { run: null }. Lease internals never leave the backend projection.
 export function fetchActiveRun(sessionId) {
-  const q = '?session_id=' + encodeURIComponent(sessionId);
-  return request('/owismind-api/chat/active' + q, { method: 'GET' });
+  return get('/owismind-api/chat/active', { session_id: sessionId });
 }
 
 // Persisted activity feed of a finished durable exchange ("Afficher l'activite").
 // Returns { status, events: [{event_type, payload}] }; [] for a legacy exchange.
 export function fetchRunActivity(exchangeId) {
-  const q = '?exchange_id=' + encodeURIComponent(exchangeId);
-  return request('/owismind-api/chat/activity' + q, { method: 'GET' });
+  return get('/owismind-api/chat/activity', { exchange_id: exchangeId });
 }
 
 // Names-only, keyset-paginated conversation list (sidebar). Never returns bodies.
 // Returns { status, conversations: [{ session_id, title, last_at }], next_cursor,
 // has_more }. `cursor`/`limit` are optional; the backend clamps the page size.
 export function fetchConversations(cursor, limit) {
-  const qs = new URLSearchParams()
-  if (cursor) qs.set('cursor', cursor)
-  if (limit) qs.set('limit', String(limit))
-  const suffix = qs.toString() ? `?${qs.toString()}` : ''
-  return request(`/owismind-api/conversations${suffix}`)
+  return get('/owismind-api/conversations', { cursor, limit });
 }
 
 // Full messages of ONE session - lazy, fetched only when a conversation is opened.
 // Returns { status, session_id, count, rows: [...] } - one row per stored exchange
 // (user_text, assistant_text, generated_sql, feedback, parent_exchange_id, …).
 export function fetchConversation(sessionId) {
-  return request(`/owismind-api/conversation?session_id=${encodeURIComponent(sessionId)}`)
+  return get('/owismind-api/conversation', { session_id: sessionId });
 }
 
 // Persist 👍/👎 feedback for ONE message (the caller's own). rating: 1 (up) | 0 (down)
 // | null (clear). reasons: array of reason codes (down). comment: free text (down).
 // Returns { status:'ok' }; throws the backend error code on a non-2xx.
 export function submitFeedback(exchangeId, rating, reasons, comment) {
-  return request('/owismind-api/chat/feedback', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ exchange_id: exchangeId, rating, reasons: reasons || [], comment: comment || '' }),
+  return postJson('/owismind-api/chat/feedback', {
+    exchange_id: exchangeId, rating, reasons: reasons || [], comment: comment || '',
   });
 }
 
@@ -183,11 +194,7 @@ export function submitFeedback(exchangeId, rating, reasons, comment) {
 // { question, reference_answer, expected_value?, expected_value_type?, category?, language? }.
 // Returns { status:'ok', suggestion_id }; throws the backend error code on a non-2xx.
 export function suggestBenchmarkManual(fields) {
-  return request('/owismind-api/benchmark/suggest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fields),
-  });
+  return postJson('/owismind-api/benchmark/suggest', fields);
 }
 
 // Suggest a benchmark Q/A built from one of the caller's own chat answers. The backend
@@ -195,18 +202,14 @@ export function suggestBenchmarkManual(fields) {
 // the client only sends the verdict + the correction. `payload` =
 // { exchange_id, answer_is_correct, reference_answer?, missing_explanation?, category? }.
 export function suggestBenchmarkFromChat(payload) {
-  return request('/owismind-api/benchmark/suggest-from-chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/benchmark/suggest-from-chat', payload);
 }
 
 // The caller's own benchmark suggestions (newest first). Returns
 // { status, count, suggestions: [{ suggestion_id, source, question, reference_answer,
 // answer_is_correct, category, language, status, created_at }] }. Owner-scoped server-side.
 export function fetchMySuggestions() {
-  return request('/owismind-api/benchmark/suggestions', { method: 'GET' });
+  return get('/owismind-api/benchmark/suggestions');
 }
 
 // --- Benchmark results (consultation, ALL users) ------------------------------
@@ -221,16 +224,15 @@ export function fetchMySuggestions() {
 // expected_tool and actual_tools (latest attempt per question x config). `configured:false`
 // means no benchmark is wired for that agent; `read_error` is a soft degraded read.
 export function fetchBenchmarkResults(agentKey, benchmarkId) {
-  const qs = new URLSearchParams();
-  qs.set('agent', agentKey);
-  if (benchmarkId) qs.set('benchmark_id', benchmarkId);
-  return request('/owismind-api/benchmark/results?' + qs.toString(), { method: 'GET' });
+  return get('/owismind-api/benchmark/results', { agent: agentKey, benchmark_id: benchmarkId });
 }
 
 // Full detail of ONE benchmark attempt (any signed-in user), loaded on demand when a user expands a
 // question: the complete agent answer + the SQL the agent actually generated + each query's captured
 // result table. `keys` = { run_id, question_id, agent_key, mode }. Returns
 // { configured, read_error?, detail:{ found, answer_text, sql_items:[...] } }.
+// Built by hand, NOT via get(): the four attempt keys are sent even when empty (the
+// backend matches an attempt on the exact tuple), so no param may be omitted here.
 export function fetchBenchmarkAttempt(agentKey, keys) {
   const k = keys || {};
   const qs = new URLSearchParams();
@@ -245,7 +247,8 @@ export function fetchBenchmarkAttempt(agentKey, keys) {
 // --- Admin: benchmark configuration + review (server-gated: 403 if not admin) ---
 
 // Tables visible on one SQL connection, for the agent-profile benchmark table picker.
-// Returns { tables: [name, ...], error? }.
+// Returns { tables: [name, ...], error? }. Built by hand, NOT via get(): `connection=`
+// is sent even when empty (the backend then falls back to its default connection).
 export function adminListBenchmarkTables(connection) {
   return request('/owismind-api/admin/benchmark/tables?connection=' + encodeURIComponent(connection || ''), {
     method: 'GET',
@@ -255,11 +258,7 @@ export function adminListBenchmarkTables(connection) {
 // Validate that a table carries the columns a benchmark needs. Returns
 // { ok:bool, missing:[name, ...], error? }.
 export function adminValidateBenchmarkTable(connection, table) {
-  return request('/owismind-api/admin/benchmark/validate-table', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connection, table }),
-  });
+  return postJson('/owismind-api/admin/benchmark/validate-table', { connection, table });
 }
 
 // Set / clear an admin override on one scored question. `payload` =
@@ -267,11 +266,7 @@ export function adminValidateBenchmarkTable(connection, table) {
 // An empty verdict clears the override. Returns { status:'ok' } (re-fetch results to
 // reflect the new effective verdict).
 export function adminBenchmarkOverride(payload) {
-  return request('/owismind-api/admin/benchmark/override', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/admin/benchmark/override', payload);
 }
 
 // --- Evidence Studio ----------------------------------------------------------
@@ -280,7 +275,7 @@ export function adminBenchmarkOverride(payload) {
 // (decomposed from the agent's stored SQL), advanced fragment and raw SQL.
 // `available: false` + `reason` = degraded (raw SQL only).
 export function fetchEvidenceMeta(exchangeId) {
-  return request('/owismind-api/evidence/meta?exchange_id=' + encodeURIComponent(exchangeId));
+  return get('/owismind-api/evidence/meta', { exchange_id: exchangeId });
 }
 
 // One bounded window of the evidence table. The payload NEVER carries SQL - see
@@ -288,11 +283,7 @@ export function fetchEvidenceMeta(exchangeId) {
 // pagination + an optional full-text q over all columns). Returns
 // { status, rows, has_more, offset }.
 export function fetchEvidenceRows(payload) {
-  return request('/owismind-api/evidence/rows', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/evidence/rows', payload);
 }
 
 // DB-computed aggregation over the FULL filtered set of ONE exchange's evidence table
@@ -305,11 +296,7 @@ export function fetchEvidenceRows(payload) {
 //   - group set:  rows = [{ key, m0, ... }] (ordered), totals = { m0, ... } over the
 //     same filter (for exact shares), truncated = true when the group cap bit.
 export function fetchEvidenceAggregate(payload) {
-  return request('/owismind-api/evidence/aggregate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/evidence/aggregate', payload);
 }
 
 // Bounded distinct values of one column (the CASCADING filter-chip picker). POST (was
@@ -331,11 +318,7 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId, search, ext
   if (e.include_advanced != null) body.include_advanced = e.include_advanced;
   if (e.drill) body.drill = e.drill;
   if (e.scope_q) body.scope_q = e.scope_q;
-  return request('/owismind-api/evidence/distinct', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  return postJson('/owismind-api/evidence/distinct', body);
 }
 
 // --- Source Data Explorer -----------------------------------------------------
@@ -345,9 +328,7 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId, search, ext
 // that agent's `sources` list; the server resolves both to a dataset (never named by
 // the client). Returns { status, label, columns: [{ name, type }] }.
 export function fetchSourceMeta(agentKey, sourceId) {
-  const q =
-    '?agent=' + encodeURIComponent(agentKey) + '&source=' + encodeURIComponent(sourceId);
-  return request('/owismind-api/source/meta' + q);
+  return get('/owismind-api/source/meta', { agent: agentKey, source: sourceId });
 }
 
 // One bounded window of a source dataset. The payload NEVER names a table/connection -
@@ -355,11 +336,7 @@ export function fetchSourceMeta(agentKey, sourceId) {
 // key + integer source id + plain-text search + structured filters + limit + offset +
 // sort). Returns { status, rows, has_more, offset }.
 export function fetchSourceRows(payload) {
-  return request('/owismind-api/source/rows', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/source/rows', payload);
 }
 
 // DB-computed aggregation over the FULL filtered set of a source dataset (the totals
@@ -371,11 +348,7 @@ export function fetchSourceRows(payload) {
 //   - group set:  rows = [{ key, m0, ... }] (ordered), totals = { m0, ... } over the
 //     same filter (for exact shares), truncated = true when the group cap bit.
 export function fetchSourceAggregate(payload) {
-  return request('/owismind-api/source/aggregate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/source/aggregate', payload);
 }
 
 // Bounded distinct values of one column of a source dataset (the CASCADING filter
@@ -390,18 +363,14 @@ export function fetchSourceDistinct(agentKey, sourceId, column, search, filters,
   if (search) body.q = search;
   if (filters && filters.length) body.filters = filters;
   if (scopeQ) body.scope_q = scopeQ;
-  return request('/owismind-api/source/distinct', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  return postJson('/owismind-api/source/distinct', body);
 }
 
 // The project's SQL dataset NAMES, for the agent-profile source picker (admin only,
 // server-gated: 403 if the caller is not an admin). A listing failure degrades to an
 // empty list + an `error` field, never a 500. Returns { datasets: [name, ...], error? }.
 export function adminListSourceDatasets() {
-  return request('/owismind-api/admin/sources/datasets', { method: 'GET' });
+  return get('/owismind-api/admin/sources/datasets');
 }
 
 // Agents the admin has enabled, for any authenticated caller (chat-side picker +
@@ -409,7 +378,7 @@ export function adminListSourceDatasets() {
 // description, capabilities, tools, icon, badge }] } - opaque logical keys plus the
 // admin-AUTHORED display profile (no raw agent_id / project_key ever leaks).
 export function fetchAgents() {
-  return request('/owismind-api/agents', { method: 'GET' });
+  return get('/owismind-api/agents');
 }
 
 // --- Help & Support hub (general feedback + agent-on-data requests) ----------
@@ -421,12 +390,14 @@ export function fetchAgents() {
 // EMPTY response means the picker must fall back to manual entry - see
 // composables/catalogFallback.js for the exact rule.
 export function getCatalogProjects() {
-  return request('/owismind-api/catalog/projects', { method: 'GET' });
+  return get('/owismind-api/catalog/projects');
 }
 
 // The SQL datasets of ONE of the caller's own DSS projects (same impersonation
 // mechanism as getCatalogProjects, called only once a project is picked). Returns
 // { ok:true, datasets:[{dataset, table, connection, type}] } or { ok:false, reason }.
+// Built by hand, NOT via get(): `project_key=` is sent even when empty (the `|| ''` is
+// deliberate - the backend answers { ok:false, reason } rather than listing everything).
 export function getCatalogDatasets(projectKey) {
   return request('/owismind-api/catalog/datasets?project_key=' + encodeURIComponent(projectKey || ''), {
     method: 'GET',
@@ -441,17 +412,13 @@ export function getCatalogDatasets(projectKey) {
 // Named `submitGeneralFeedback` (not `submitFeedback`) to avoid colliding with the
 // existing per-message thumbs-up/down `submitFeedback` above.
 export function submitGeneralFeedback(payload) {
-  return request('/owismind-api/feedback/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/feedback/submit', payload);
 }
 
 // The caller's own feedback history (newest first), including the admin status /
 // response once set. Returns { status:'ok', items:[...] }. Owner-scoped server-side.
 export function getMyFeedback() {
-  return request('/owismind-api/feedback/mine', { method: 'GET' });
+  return get('/owismind-api/feedback/mine');
 }
 
 // Submit a "request a new agent on my data" form. `payload` = { project_key,
@@ -461,17 +428,13 @@ export function getMyFeedback() {
 // { status:'ok', request_id }; throws 'impersonation_read_only' (403, same write
 // fence as submitGeneralFeedback) or the backend's stable error code.
 export function submitAgentRequest(payload) {
-  return request('/owismind-api/agent-request/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/agent-request/submit', payload);
 }
 
 // The caller's own agent requests (newest first), including the admin status /
 // response once set. Returns { status:'ok', items:[...] }. Owner-scoped server-side.
 export function getMyAgentRequests() {
-  return request('/owismind-api/agent-request/mine', { method: 'GET' });
+  return get('/owismind-api/agent-request/mine');
 }
 
 // --- Monthly budget / usage ---------------------------------------------------
@@ -481,48 +444,42 @@ export function getMyAgentRequests() {
 // per-user override), remaining, whether enforcement is on / the user is blocked, the
 // reset date and the lifetime counters. Strictly owner-scoped server-side.
 export function fetchUsage() {
-  return request('/owismind-api/usage', { method: 'GET' });
+  return get('/owismind-api/usage');
 }
 
 // --- Admin endpoints (server-gated: 403 if the caller is not an admin) --------
 
 // Resolved storage config: { connection, project_key, table_prefix, namespace, tables }.
 export function fetchAdminStorage() {
-  return request('/owismind-api/admin/storage', { method: 'GET' });
+  return get('/owismind-api/admin/storage');
 }
 
 // Every user who has opened the webapp: { users: [{ user_id, is_admin, ... }] }.
 export function fetchAdminUsers() {
-  return request('/owismind-api/admin/users', { method: 'GET' });
+  return get('/owismind-api/admin/users');
 }
 
 // Grant/revoke admin for a user; returns the refreshed users list.
 export function setUserAdmin(userId, isAdmin) {
-  return request('/owismind-api/admin/users/set-admin', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, is_admin: isAdmin }),
-  });
+  return postJson('/owismind-api/admin/users/set-admin', { user_id: userId, is_admin: isAdmin });
 }
 
 // --- Admin: agent whitelist configuration ------------------------------------
 
 // DSS project keys this webapp can see: { projects: ["KEY", ...] }.
 export function fetchAdminProjects() {
-  return request('/owismind-api/admin/projects', { method: 'GET' });
+  return get('/owismind-api/admin/projects');
 }
 
 // Agents available in one project: { project_key, agents: [{ agent_id, description }] }.
 export function fetchAdminProjectAgents(projectKey) {
-  return request('/owismind-api/admin/projects/' + encodeURIComponent(projectKey) + '/agents', {
-    method: 'GET',
-  });
+  return get('/owismind-api/admin/projects/' + encodeURIComponent(projectKey) + '/agents');
 }
 
 // Currently enabled agents (admin view): { agents: [{ logical_key, project_key,
 // agent_id, label, profile: { tagline, description, capabilities, tools, icon, badge } }] }.
 export function fetchAdminAgents() {
-  return request('/owismind-api/admin/agents', { method: 'GET' });
+  return get('/owismind-api/admin/agents');
 }
 
 // Persist the enabled-agents selection; backend re-validates each entry against the
@@ -530,11 +487,7 @@ export function fetchAdminAgents() {
 // { project_key, agent_id, profile? } where `profile` is the admin-authored display
 // copy (tagline/description/capabilities/tools/icon/badge). Returns the stored selection.
 export function saveAdminAgents(agents) {
-  return request('/owismind-api/admin/agents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agents }),
-  });
+  return postJson('/owismind-api/admin/agents', { agents });
 }
 
 // --- Admin: monthly budgets / quotas -----------------------------------------
@@ -542,18 +495,14 @@ export function saveAdminAgents(agents) {
 // Global budget config + every user's current-month usage & resolved limit.
 // Returns { status, config, period_start, next_reset, users: [...] }.
 export function fetchAdminBudget() {
-  return request('/owismind-api/admin/budget', { method: 'GET' });
+  return get('/owismind-api/admin/budget');
 }
 
 // Persist the GLOBAL budget config. `config` = { limit_usd, enabled, temp_limit_usd,
 // temp_days } (a temp boost is stored only when both temp_limit_usd and temp_days are
 // set, else cleared). Returns the refreshed overview.
 export function saveAdminBudget(config) {
-  return request('/owismind-api/admin/budget', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
+  return postJson('/owismind-api/admin/budget', config);
 }
 
 // Set or clear a PER-USER monthly limit override for one, several or all users.
@@ -561,9 +510,5 @@ export function saveAdminBudget(config) {
 // (clear:true removes the override; expires_days absent/null = permanent.)
 // Returns the refreshed overview.
 export function saveAdminUserQuota(payload) {
-  return request('/owismind-api/admin/budget/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return postJson('/owismind-api/admin/budget/users', payload);
 }

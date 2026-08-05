@@ -24,7 +24,7 @@ class ConversationListQueryTests(unittest.TestCase):
 
     def test_title_is_first_user_text_truncated(self):
         q = self._q(tlen=120)
-        self.assertIn("ARRAY_AGG(user_text ORDER BY created_at ASC", q)
+        self.assertIn("ARRAY_AGG(LEFT(user_text, 4000) ORDER BY created_at ASC", q)
         self.assertIn("120", q)  # LEFT(..., 120)
 
     def test_title_is_cleaned_to_one_line_before_truncating(self):
@@ -35,7 +35,7 @@ class ConversationListQueryTests(unittest.TestCase):
         self.assertIn("'[[:space:]]+'", q)
         self.assertIn("BTRIM(", q)
         # Cleanup must wrap the first-message extraction, inside the LEFT truncation.
-        self.assertIn("LEFT(BTRIM(regexp_replace((ARRAY_AGG(user_text", q)
+        self.assertIn("LEFT(BTRIM(regexp_replace((ARRAY_AGG(LEFT(user_text, 4000)", q)
 
     def test_no_cursor_no_keyset_clause(self):
         q = self._q()

@@ -3525,6 +3525,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-07-23.
 - **Date** : 2026-07-23.
 
+## L174 - Un fake de test qui contredit le contrat reel masque une garde morte : la verification has-rows etait inoperante depuis sa naissance (2026-08-06)
+- **Contexte** : audit v1.3 (SEC-06). `_first_build_status` passait le litteral DEJA cite de `wizard.get_physical_table` ('"TABLE"') au gate d'identifiant NU de `guided_store.quote_table` : verdict TOUJOURS None, branche "dataset VIDE" morte en prod, precheck first_build jamais skippable.
+- **Ce qui a echoue** : le test mockait `get_physical_table` avec un nom NU (contrat inverse du reel), donc la branche passait en test et jamais en prod ; un autre fichier de test documentait pourtant le contrat "ALREADY-quoted". Removal avait deja contourne le meme bug par un strip ad hoc (terrain 2026-07-22) sans corriger la source.
+- **Solution qui marche** : scinder les deux formes a la source : `wizard.physical_table_name` (NU, pour les gates d'identifiant) + `get_physical_table` = wrapper cite (golden queries) ; les consommateurs gates passent au nu ; le fake de test est aligne sur le vrai contrat et un test de contrat verifie que cite == nu entre guillemets ET que le nu passe le gate quand le cite est refuse.
+- **Preuve** : `tests/test_factory_guided.py` TestPhysicalTableNameContract + suites 765/979/365 vertes ; le strip ad hoc de removal supprime.
+- **Source** : session 2026-08-06 (audit lot B), finding hub/SEC-06 + note du contre-verificateur.
+
+## L175 - Un fork manuel d'agent perd les correctifs en silence : parametrer le generateur et prouver la regeneration BYTE-IDENTIQUE avant toute regeneration reelle (2026-08-06)
+- **Contexte** : audit v1.3 (AG-01). Le sous-agent tickets = fork manuel a 97 % du moteur revenus ; 8 correctifs vivaient cote revenus seulement (dont un vrai bug : le cap LIMIT produit `LIMIT n LIMIT m`, SQL invalide, quand la requete tickets porte un OFFSET). L'en-tete du fichier affirmait "kept IDENTICAL", faux.
+- **Ce qui a echoue** : la discipline humaine comme seul garde-fou d'un invariant "copies identiques" (idem recettes flow : 1346 lignes byte-identiques sans aucun test filecmp).
+- **Solution qui marche** : (1) filet immediat = test filecmp des paires censees etre identiques ; (2) rendre le generateur capable de TOUT rebinder (constantes CONFIG dont HUB_DOMAIN, en-tete de deploiement via agent_ref, formulations metier via regions `# [DOMAIN-WORDING:cle]` remplacables) ; (3) test de neutralite : regenerer avec les valeurs du domaine du moteur doit rendre le moteur BYTE-IDENTIQUE (banniere a part). La regeneration effective du fork (= rattrapage de bugs) reste un ticket FONCTIONNEL separe a valider.
+- **Preuve** : `tests/test_engine_regeneration.py` (7 tests) + `tests/test_flow_recipe_mirror.py` verts.
+- **Source** : session 2026-08-06 (audit lots C/E), findings agents/AG-01, AG-02.
+
+## L176 - Refactorer une couche de garde sans la casser : contraintes du contre-examen en spec dure + revue differentielle qui EXECUTE les deux versions (2026-08-06)
+- **Contexte** : de-duplication de 351 lignes de gardes recopiees dans routes.py (decorateur @guard, 32/44 routes).
+- **Ce qui a echoue** (evite en amont par l'audit) : un decorateur uniforme aurait change des codes d'erreur (chat_start valide AVANT is_configured : 400 -> 409 sur instance non configuree) et les libelles de log ; 12 routes sur 44 ne suivent pas le patron.
+- **Solution qui marche** : (1) integrer les corrections du contre-verificateur COMME CONTRAINTES du prompt d'implementation (routes hors patron listees, ordre par route, logs byte-identiques via name= explicite, pas d'errorhandlers) ; (2) faire verifier le diff par une revue adversariale qui charge les DEUX versions du module cote a cote (importlib + stubs) et compare status/corps/logs/sequence d'appels sur le produit cartesien des conditions de garde (8192 scenarios) : 0 divergence, la ou une simple relecture de diff n'aurait rien prouve.
+- **Preuve** : rapport be01-review PASS (8192 scenarios, AST des 12 routes intactes byte-identique) ; 979 tests plugin verts.
+- **Source** : session 2026-08-06 (audit lot D), finding backend/BE-01.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

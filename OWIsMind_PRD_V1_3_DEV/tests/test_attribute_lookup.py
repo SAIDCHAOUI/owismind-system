@@ -16,39 +16,14 @@ Run from the repo root:
 import importlib.util
 import os
 import sys
+import time
 import types
 import unittest
 
 
-def _install_stubs():
-    if "dataiku" not in sys.modules:
-        dataiku_mod = types.ModuleType("dataiku")
-        dataiku_mod.api_client = lambda: None
-        dataiku_mod.Dataset = lambda *a, **k: None
-        dataiku_mod.SQLExecutor2 = lambda *a, **k: None
-        sys.modules["dataiku"] = dataiku_mod
-    else:
-        dataiku_mod = sys.modules["dataiku"]
+import _agent_stubs
 
-    if "dataiku.llm" not in sys.modules:
-        llm_pkg = types.ModuleType("dataiku.llm")
-        sys.modules["dataiku.llm"] = llm_pkg
-        dataiku_mod.llm = llm_pkg
-    else:
-        llm_pkg = sys.modules["dataiku.llm"]
-
-    if "dataiku.llm.agent_tools" not in sys.modules:
-        agent_tools = types.ModuleType("dataiku.llm.agent_tools")
-
-        class BaseAgentTool(object):
-            pass
-
-        agent_tools.BaseAgentTool = BaseAgentTool
-        llm_pkg.agent_tools = agent_tools
-        sys.modules["dataiku.llm.agent_tools"] = agent_tools
-
-
-_install_stubs()
+_agent_stubs.install()
 
 _TOOL_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "GenAI", "agents-tools",
@@ -461,9 +436,12 @@ class TestInvoke(unittest.TestCase):
         self.assertEqual(out["attributes"], {"sales_zone": "Europe"})
 
     def test_routes_to_caller_supplied_dataset(self):
-        # Multi-table: the orchestrator passes a whitelisted dataset; the tool
-        # searches THAT table (not the hardcoded default) and sources it.
+        # Multi-table: the orchestrator passes a REGISTERED dataset; the tool
+        # searches THAT table (not the hardcoded default) and sources it. The
+        # allowlist is seeded as a hub read would (SEC hardening 2026-08).
         tool = FakeTool(fact_rows=self.BLANCHARD)
+        tool._allowlist = (time.time() + 60,
+                           frozenset(al.EMBEDDED_ALLOWED_DATASETS) | {"TICKETS_FACT"})
         full = tool.invoke({"input": {"entity": "blanchard",
                                       "dataset": "TICKETS_FACT"}}, trace=None)
         out = full["output"]
@@ -471,6 +449,24 @@ class TestInvoke(unittest.TestCase):
         self.assertTrue(any(d == "TICKETS_FACT" for (d, _) in tool.sql_log))
         self.assertFalse(any(d == al.FACT_DATASET for (d, _) in tool.sql_log))
         self.assertEqual(full["sources"][0]["id"], "TICKETS_FACT")
+
+    def test_unregistered_dataset_is_refused(self):
+        # SEC hardening 2026-08: a dataset outside the hub-registered allowlist
+        # (embedded fallback here, the stubbed hub read fails -> fail-open) is
+        # refused before any SQL runs, whatever the model or caller sends.
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        full = tool.invoke({"input": {"entity": "blanchard",
+                                      "dataset": "webapp_events_v1"}}, trace=None)
+        self.assertEqual(full["output"]["status"], "bad_input")
+        self.assertIn("webapp_events_v1", full["output"]["message"])
+        self.assertEqual(tool.sql_log, [])
+
+    def test_embedded_fallback_allows_the_live_domains(self):
+        # Fail-open contract: with the hub unreadable (stub api_client), both
+        # live domains' datasets remain searchable via the embedded fallback.
+        tool = FakeTool(fact_rows=self.BLANCHARD)
+        for name in al.EMBEDDED_ALLOWED_DATASETS:
+            self.assertIn(name, tool._allowed_datasets())
 
     def test_default_dataset_when_not_supplied(self):
         tool = FakeTool(fact_rows=self.BLANCHARD)

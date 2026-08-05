@@ -30,64 +30,9 @@ import types
 import unittest
 
 
-def _install_stubs():
-    # Same stub surface as test_langgraph_agents (setdefault: first wins).
-    dataiku_mod = types.ModuleType("dataiku")
-    dataiku_mod.api_client = lambda: None
-    dataiku_mod.Dataset = lambda *a, **k: None
-    dataiku_mod.SQLExecutor2 = lambda *a, **k: None
-    llm_pkg = types.ModuleType("dataiku.llm")
-    llm_python = types.ModuleType("dataiku.llm.python")
+import _agent_stubs
 
-    class BaseLLM(object):
-        pass
-
-    llm_python.BaseLLM = BaseLLM
-    llm_pkg.python = llm_python
-    dataiku_mod.llm = llm_pkg
-    sys.modules.setdefault("dataiku", dataiku_mod)
-    sys.modules.setdefault("dataiku.llm", llm_pkg)
-    sys.modules.setdefault("dataiku.llm.python", llm_python)
-
-    lg = types.ModuleType("langgraph")
-    lg_graph = types.ModuleType("langgraph.graph")
-
-    class _Sentinel(str):
-        pass
-
-    lg_graph.START = _Sentinel("__start__")
-    lg_graph.END = _Sentinel("__end__")
-
-    class _StateGraph(object):
-        def __init__(self, *a, **k):
-            pass
-
-        def add_node(self, *a, **k):
-            pass
-
-        def add_edge(self, *a, **k):
-            pass
-
-        def add_conditional_edges(self, *a, **k):
-            pass
-
-        def compile(self, *a, **k):
-            return self
-
-        def stream(self, *a, **k):
-            return iter(())
-
-    lg_graph.StateGraph = _StateGraph
-    lg_config = types.ModuleType("langgraph.config")
-    lg_config.get_stream_writer = lambda: (lambda *a, **k: None)
-    lg.graph = lg_graph
-    lg.config = lg_config
-    sys.modules.setdefault("langgraph", lg)
-    sys.modules.setdefault("langgraph.graph", lg_graph)
-    sys.modules.setdefault("langgraph.config", lg_config)
-
-
-_install_stubs()
+_agent_stubs.install()
 
 _TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 _MIRROR_DIR = os.path.dirname(_TESTS_DIR)

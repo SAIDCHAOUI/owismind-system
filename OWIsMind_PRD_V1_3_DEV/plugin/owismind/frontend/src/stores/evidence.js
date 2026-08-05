@@ -574,6 +574,16 @@ export const useEvidenceStore = defineStore('evidence', () => {
     else track('evidence_tab_viewed', { tab: key })
   }
 
+  // The aggregate surface is re-exposed WHOLESALE except for its host-orchestration
+  // hooks: those are driven from inside this store (refreshRows / setTable / setActiveTab)
+  // and must not become part of the store's public API. Destructuring them out leaves
+  // `surfacePublic` = exactly the SourceCalc / SourceAnalyze contract, under the SAME
+  // names as the Source explorer store so both components drive either host.
+  const {
+    refreshTotals, afterScopeChange, resetDerived, invalidate, markRowsStale, clearRowsStale,
+    ...surfacePublic
+  } = surface
+
   return {
     open, exchangeId, meta, chips, includeAdvanced, rows, offset, hasMore, sort, drill, q,
     loading, rowsLoading, error, rowsError, available, modified,
@@ -584,33 +594,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     removeChip, setChipValues, addFilter, removeAdvanced, resetToAgent,
     drillIntoResultRow, exitDrill,
     setSort, setTable, loadDistinct,
-    // Shared aggregate surface (DB row count + Calculate zone + Analyze mini-pivot),
-    // re-exposed under the SAME names as the Source explorer store so SourceCalc /
-    // SourceAnalyze drive either host through one `surface` prop.
-    totalCount: surface.totalCount,
-    totalLoading: surface.totalLoading,
-    calcColumn: surface.calcColumn,
-    calcFns: surface.calcFns,
-    calcValues: surface.calcValues,
-    calcLoading: surface.calcLoading,
-    calcError: surface.calcError,
-    setCalcColumn: surface.setCalcColumn,
-    setCalcFns: surface.setCalcFns,
-    reloadCalc: surface.reloadCalc,
-    analyzeOpen: surface.analyzeOpen,
-    analyzeGroup: surface.analyzeGroup,
-    analyzeBucket: surface.analyzeBucket,
-    analyzeFn: surface.analyzeFn,
-    analyzeMeasureColumn: surface.analyzeMeasureColumn,
-    analyzeRows: surface.analyzeRows,
-    analyzeTotals: surface.analyzeTotals,
-    analyzeTruncated: surface.analyzeTruncated,
-    analyzeLoading: surface.analyzeLoading,
-    analyzeError: surface.analyzeError,
-    setAnalyzeOpen: surface.setAnalyzeOpen,
-    setAnalyzeGroup: surface.setAnalyzeGroup,
-    setAnalyzeBucket: surface.setAnalyzeBucket,
-    setAnalyzeMeasure: surface.setAnalyzeMeasure,
-    runAnalyze: surface.runAnalyze,
+    // Shared aggregate surface (DB row count + Calculate zone + Analyze mini-pivot).
+    ...surfacePublic,
   }
 })

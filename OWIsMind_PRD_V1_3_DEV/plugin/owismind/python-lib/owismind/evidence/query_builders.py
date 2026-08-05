@@ -5,7 +5,20 @@ Same contract as storage/sql_builders.py: callers pass PRE-ESCAPED fragments
 integer bounds - never raw user input. ``render_predicate`` takes the two quoting
 functions as ARGUMENTS so the rendering logic itself stays import-free and
 testable with stub quoters.
+
+``EvidenceError`` lives here (the one import-free module of the package) so both
+``evidence.service`` and ``evidence.aggregate_core`` can import it without a cycle;
+``evidence.service`` re-exports it as its public home.
 """
+
+
+class EvidenceError(Exception):
+    """Service-level failure with a stable, frontend-safe code + HTTP status."""
+
+    def __init__(self, code, status=409):
+        self.code = code
+        self.status = status
+        super().__init__(code)
 
 
 def build_exchange_sql_query(table_ref, user_value_sql, exchange_value_sql):

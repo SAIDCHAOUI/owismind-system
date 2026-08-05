@@ -14,6 +14,7 @@ DSS-free: the orchestrator constants are extracted from the SOURCE with ast
 import ast
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -128,7 +129,7 @@ def _extract_orchestrator_validator():
     with open(_ORCH) as f:
         source = f.read()
     tree = ast.parse(source)
-    namespace = {}
+    namespace = {"re": re}
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 \
                 and isinstance(node.targets[0], ast.Name) \
@@ -136,6 +137,13 @@ def _extract_orchestrator_validator():
                                            "_HUB_KNOWN_BLOCK_IDS",
                                            "_HUB_KNOWN_TOOL_NAMES"):
             namespace[node.targets[0].id] = ast.literal_eval(node.value)
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id in ("_HUB_DOMAIN_FORM_RE",
+                                           "_HUB_DATASET_FORM_RE"):
+            # Regex constants: execute the REAL assignment (literal_eval cannot
+            # evaluate a re.compile call).
+            exec(ast.get_source_segment(source, node), namespace)  # noqa: S102
         if isinstance(node, ast.FunctionDef) and node.name == "_hub_capabilities_problems":
             segment = ast.get_source_segment(source, node)
             exec(segment, namespace)  # noqa: S102 - our own source, test only
@@ -168,6 +176,9 @@ class TestValidatorsAgree(unittest.TestCase):
                 block_labels=dict(self.seed["revenue_expert"]["block_labels"], extra={"fr": "x", "en": "x"}))},
             "tool_labels_subset": {"x": self._entry(tool_labels={"resolve_filter_value": {"fr": "a", "en": "b"}})},
             "bad_agent_id": {"x": self._entry(agent_id="bHrWLyOL")},
+            "bad_domain_form": {"x": self._entry(domain="../..")},
+            "bad_lookup_dataset_form": {"x": self._entry(lookup_dataset='x"; DROP TABLE y')},
+            "bad_lookup_catalog_form": {"x": self._entry(lookup_catalog="a/../b")},
             "dup_enabled_domain": {"a": self._entry(), "b": self._entry()},
             "non_dict_entry": {"x": 42},
             "empty": {},

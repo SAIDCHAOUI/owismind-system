@@ -9,79 +9,25 @@ Three pure/near-pure surfaces:
   - ``routes._sanitize_screen_context``: retro-compatible request gate (open-only,
     source_state-only, both, neither -> None).
 
-``context`` is pure (no dataiku); ``routes`` needs the same dataiku + flask stubs the
-existing route tests install (see test_impersonation.py).
+``context`` is pure (no dataiku); ``routes`` needs the shared dataiku + flask stubs of
+tests/_dss_stub.py.
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 from owismind.agents import context  # noqa: E402
 
 
-# --- dataiku + flask stubs so owismind.api.routes imports (route-gate tests) ----
-def _ensure_dataiku_stub():
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    if not hasattr(dk, "api_client"):
-        dk.api_client = lambda: None
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: "'" + str(constant) + "'"
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-def _ensure_flask_stub():
-    flask = sys.modules.get("flask")
-    if flask is not None and hasattr(flask, "_OWI_STUB"):
-        return
-    flask = types.ModuleType("flask")
-    flask._OWI_STUB = True
-
-    class Blueprint(object):
-        def __init__(self, name, import_name, url_prefix=None):
-            self.name = name
-            self.url_prefix = url_prefix
-
-        def route(self, *_a, **_k):
-            def _decorator(fn):
-                return fn
-            return _decorator
-
-        def before_request(self, fn):
-            return fn
-
-        def after_request(self, fn):
-            return fn
-
-    flask.Blueprint = Blueprint
-    flask.jsonify = lambda payload: payload
-    flask.request = types.SimpleNamespace(headers={}, args={}, method="GET")
-    flask.g = types.SimpleNamespace()
-    sys.modules["flask"] = flask
-
-
-_ensure_dataiku_stub()
-_ensure_flask_stub()
+# --- shared dataiku + flask stubs so owismind.api.routes imports (route-gate tests) ---
+_dss_stub.install()
+_dss_stub.install_flask()
 
 from owismind.api import routes  # noqa: E402
 

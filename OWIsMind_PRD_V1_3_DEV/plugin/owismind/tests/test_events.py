@@ -4,43 +4,20 @@
   - storage.events.record_events   : ONE committed multi-row INSERT ... ON CONFLICT DO
     NOTHING, server-side user_id, now() ts, best-effort never-raises (fake executor);
   - evidence.throttle track bucket : the /track flood gate (pure take_token core).
-A minimal dataiku stub lets the modules import (unittest discover shares sys.modules).
+The shared dataiku stub (tests/_dss_stub.py) lets the modules import.
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs so events / migrations / sql_config import (NO install)."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: repr(constant)
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.storage import events  # noqa: E402
 from owismind.evidence.throttle import (  # noqa: E402

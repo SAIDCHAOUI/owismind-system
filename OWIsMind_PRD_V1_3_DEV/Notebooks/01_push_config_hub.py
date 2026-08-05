@@ -190,10 +190,7 @@ else:
     if hints.get("internal_key") and hints.get("code_key"):
         try:
             raw = agent_builder.read_agent_raw(project, REVENUE_AGENT_ID)
-            version = (raw.get("versions") or [{}])[-1]
-            for candidate in raw.get("versions") or []:
-                if candidate.get("versionId") == raw.get("activeVersion"):
-                    version = candidate
+            version = agent_builder.resolve_active_version(raw) or {}
             code = (version.get(hints["internal_key"]) or {}).get(hints["code_key"])
         except Exception as exc:
             print("could not pull the live engine code: %s" % exc)

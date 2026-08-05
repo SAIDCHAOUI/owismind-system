@@ -6,44 +6,21 @@ Three pure layers are provable without a live DSS runtime (project TEST-01 idiom
   - the SQL builders (monthly UPSERT + lifetime increment) - shape & scoping;
   - chat_v5._usage_literal - coercion of trace values to safe SQL literals / NULL;
   - usage.record_usage - one-transaction increment, zero-usage no-op (fake executor).
-The builders carry no ``dataiku`` import; chat_v5/usage do, so a minimal stub is set up
-(extending any sibling test's stubs - unittest discover shares one sys.modules).
+The builders carry no ``dataiku`` import; chat_v5/usage do, so the shared stub of
+tests/_dss_stub.py is installed first.
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs so chat_v5 / usage / sql_config import (NO install)."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: repr(constant)
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.storage.sql_builders import (  # noqa: E402
     build_usage_monthly_upsert,

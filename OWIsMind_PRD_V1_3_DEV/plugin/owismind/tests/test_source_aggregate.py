@@ -13,47 +13,16 @@ test_evidence_query_builders.py. This file is the service + classifier layer.
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs (NO install - the README's "(or a stub)" idiom).
-
-    source_service imports evidence.service (and, transitively, dataiku / SQLExecutor2 /
-    dataiku.sql / pandas) at module load. The functions under test never touch them (the
-    executing seams are monkeypatched), so bare stubs suffice - and existing stubs from
-    sibling test files are EXTENDED, never replaced (unittest discover shares sys.modules).
-    ``toSQL`` mirrors the sibling proof file: a value renders as its ``repr`` so quoted
-    SQL fragments stay readable in assertions.
-    """
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "Dataset"):
-        dk.Dataset = type("Dataset", (), {})
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: repr(constant)
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.evidence import source_service  # noqa: E402
 from owismind.evidence.service import EvidenceError  # noqa: E402

@@ -532,8 +532,15 @@ def validate_golden_queries(config, known_columns):
     return {"ok": ok, "problems": problems}
 
 
-def get_physical_table(project, dataset_name):
-    """Best-effort quoted physical table literal of a dataset (None if unknown)."""
+def physical_table_name(project, dataset_name):
+    """Best-effort BARE physical table name of a dataset (None if unknown).
+
+    Callers feeding an identifier gate (guided_store.quote_table, which quotes
+    itself) use this bare form; callers that need a ready-made SQL literal
+    (golden queries) use get_physical_table, the quoted wrapper. Mixing the two
+    was a real field bug (2026-07-22: a quoted literal fed to the identifier
+    gate fails it deterministically).
+    """
     try:
         settings = project.get_dataset(dataset_name).get_settings()
         raw = settings.get_raw() if hasattr(settings, "get_raw") else {}
@@ -541,7 +548,12 @@ def get_physical_table(project, dataset_name):
         table = params.get("table") or ""
         if not table:
             return None
-        table = table.replace("${projectKey}", getattr(project, "project_key", ""))
-        return '"%s"' % table
+        return table.replace("${projectKey}", getattr(project, "project_key", ""))
     except Exception:
         return None
+
+
+def get_physical_table(project, dataset_name):
+    """Best-effort quoted physical table literal of a dataset (None if unknown)."""
+    table = physical_table_name(project, dataset_name)
+    return None if table is None else '"%s"' % table

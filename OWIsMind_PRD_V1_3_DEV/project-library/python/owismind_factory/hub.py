@@ -24,9 +24,39 @@ console webapp); agents only READ.
 """
 
 import json
+import re
 import threading
 
 HUB_ROOT = "/python/owismind_hub"
+
+# Capability registry caps, enforced at the SINGLE write point
+# (write_capabilities); the console route relays the same constants so its 400
+# stays readable. A write that SHRINKS an already-oversized registry always
+# passes, so disable / remove / cleanup can still recover it.
+CAPABILITIES_MAX_ENTRIES = 50
+CAPABILITIES_MAX_BYTES = 200 * 1024
+
+# Same shapes as spec._DOMAIN_RE / spec._DATASET_RE, duplicated here because the
+# orchestrator's standalone hub loader mirrors this validator verbatim (no
+# cross-import allowed in a Code Agent file).
+_DOMAIN_FORM_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
+_DATASET_FORM_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def safe_hub_path(path):
+    """Fail-closed gate for every hub WRITE/DELETE path; returns the path.
+
+    These are VIRTUAL DSS library paths, so never os.path (which could resolve
+    '..'): reject any traversal or separator trick ('..', '//', a backslash)
+    and require the hub prefix, so a crafted path can never escape the hub
+    subtree even if the library API resolves '..'. The console's prompt-path
+    gate delegates here and adds its narrower prompts/ prefix.
+    """
+    if not isinstance(path, str) or not path.startswith(HUB_ROOT + "/"):
+        raise ValueError("path %r is outside the hub subtree %s" % (path, HUB_ROOT))
+    if ".." in path or "//" in path or "\\" in path:
+        raise ValueError("path %r contains a forbidden segment" % (path,))
+    return path
 
 # Serializes capabilities read-modify-write cycles within one Python process
 # (the console webapp runs all jobs in one process, so this closes its lost
@@ -101,7 +131,12 @@ def read_text(project, path):
 
 
 def write_text(project, path, content):
-    """Create or update a library text file (folders created as needed)."""
+    """Create or update a library text file (folders created as needed).
+
+    Fail-closed on any path outside the hub subtree (every legitimate caller
+    writes under HUB_ROOT; symmetric with delete_path, defense in depth).
+    """
+    safe_hub_path(path)
     library = _library(project)
     f = library.get_file(path)
     if f is None:
@@ -191,6 +226,20 @@ def validate_capabilities(obj):
                 # real DSS agent ids are alphanumeric.
                 problems.append("%s: agent_id %r is not a real DSS id "
                                 "(expected agent:<alphanumeric>)" % (key, agent_id))
+            # Form gates (defense in depth, mirrored in the orchestrator loader):
+            # domain feeds hub paths and lookup_dataset / lookup_catalog feed the
+            # removal inventory and end up as SQL identifiers, so exotic shapes
+            # are refused at the door (same regexes as spec._DOMAIN_RE /
+            # spec._DATASET_RE).
+            domain_name = str(cap.get("domain") or "")
+            if not _DOMAIN_FORM_RE.match(domain_name):
+                problems.append("%s: domain %r is not snake_case "
+                                "([a-z][a-z0-9_]{1,30})" % (key, domain_name))
+            for field in ("lookup_dataset", "lookup_catalog"):
+                value = str(cap.get(field) or "")
+                if value and not _DATASET_FORM_RE.match(value):
+                    problems.append("%s: %s %r is not a legal dataset name"
+                                    % (key, field, value))
             if cap.get("enabled"):
                 domain = cap.get("domain")
                 if domain in enabled_domains:
@@ -217,26 +266,71 @@ def validate_capabilities(obj):
     return problems
 
 
+# Last backup index used per path pattern, per process. Probing restarts from
+# max(memo, 1) and STILL walks forward confirming emptiness, so the produced
+# names match the historical from-1 probe whenever the tree was not edited
+# underneath; a busy console process just stops re-reading every existing
+# backup on every write (the probe was O(number of backups) API calls).
+# Inter-process writers keep the same contract as before (hub.py header):
+# a backup may be overwritten, never the live file.
+_BACKUP_INDEX_MEMO = {}
+
+
+def _next_free_index(project, pattern, cap=200):
+    """First free index for ``pattern``, resuming from the memo when valid.
+
+    The memoized index is trusted only if its file STILL exists (stable tree);
+    otherwise the probe restarts from 1, producing exactly the historical
+    from-1 names on a fresh or hand-edited tree.
+    """
+    index = _BACKUP_INDEX_MEMO.get(pattern, 0)
+    if index < 1 or read_text(project, pattern % index) is None:
+        index = 1
+    while read_text(project, pattern % index) is not None:
+        index += 1
+        if index > cap:  # bounded: never loop forever on a weird tree
+            break
+    _BACKUP_INDEX_MEMO[pattern] = index
+    return index
+
+
+def wizard_config_path(domain):
+    """Hub path of a domain's wizard draft: the SINGLE convention shared by the
+    guided machine, the console, the removal inventory and notebook 04."""
+    return "%s/wizard/%s-config.json" % (HUB_ROOT, domain)
+
+
 def read_capabilities(project):
     return read_json(project, CAPABILITIES_PATH)
 
 
 def write_capabilities(project, capabilities, backup=True):
-    """Validate then write capabilities.json, backing up the previous version."""
+    """Validate then write capabilities.json, backing up the previous version.
+
+    Size caps live HERE (the single write point): a payload beyond
+    CAPABILITIES_MAX_ENTRIES / CAPABILITIES_MAX_BYTES is refused with ValueError
+    UNLESS it shrinks the registry vs the current file, so recovery writes
+    (disable, remove, cleanup) always pass on a registry already out of bounds.
+    """
     problems = validate_capabilities(capabilities)
     if problems:
         raise ValueError("invalid capabilities: " + "; ".join(problems))
+    payload = json.dumps(capabilities, indent=2, ensure_ascii=False, sort_keys=False)
+    payload_bytes = len(payload.encode("utf-8"))
+    oversized = (len(capabilities) > CAPABILITIES_MAX_ENTRIES
+                 or payload_bytes > CAPABILITIES_MAX_BYTES)
     with _CAPABILITIES_WRITE_LOCK:
-        if backup:
-            current = read_text(project, CAPABILITIES_PATH)
-            if current is not None:
-                index = 1
-                while read_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index)) is not None:
-                    index += 1
-                    if index > 200:  # bounded: never loop forever on a weird tree
-                        break
-                write_text(project, "%s/backups/capabilities-%d.json" % (HUB_ROOT, index), current)
-        return write_json(project, CAPABILITIES_PATH, capabilities)
+        current = read_text(project, CAPABILITIES_PATH)
+        if oversized and (current is None or len(payload) >= len(current)):
+            raise ValueError(
+                "capabilities registry beyond caps (%d entries / %d bytes; caps "
+                "%d entries / %d bytes) and the write does not shrink it"
+                % (len(capabilities), payload_bytes,
+                   CAPABILITIES_MAX_ENTRIES, CAPABILITIES_MAX_BYTES))
+        if backup and current is not None:
+            pattern = HUB_ROOT + "/backups/capabilities-%d.json"
+            write_text(project, pattern % _next_free_index(project, pattern), current)
+        return write_text(project, CAPABILITIES_PATH, payload)
 
 
 def write_prompt(project, path, content, backup=True):
@@ -249,13 +343,8 @@ def write_prompt(project, path, content, backup=True):
         current = read_text(project, path)
         if current is not None:
             rel = path[len(HUB_ROOT) + 1:] if path.startswith(HUB_ROOT + "/") else path.lstrip("/")
-            name = rel.replace("/", "-")
-            index = 1
-            while read_text(project, "%s/backups/%s-%d" % (HUB_ROOT, name, index)) is not None:
-                index += 1
-                if index > 200:  # bounded: never loop forever on a weird tree
-                    break
-            write_text(project, "%s/backups/%s-%d" % (HUB_ROOT, name, index), current)
+            pattern = "%s/backups/%s-%%d" % (HUB_ROOT, rel.replace("/", "-"))
+            write_text(project, pattern % _next_free_index(project, pattern), current)
     return write_text(project, path, content)
 
 
@@ -324,7 +413,14 @@ def path_exists(project, path):
 
 def delete_path(project, path):
     """Delete a library file or folder. True when something was deleted,
-    False when already absent. API refusals raise (caller flips to manual)."""
+    False when already absent. API refusals raise (caller flips to manual).
+
+    Fail-closed on any path outside the hub subtree: removal hub_paths are built
+    from registry-supplied strings, so the gate here guarantees a crafted domain
+    or agent name can never turn into a deletion above HUB_ROOT (the raise lands
+    in the caller's manual-fallback path, never an impasse).
+    """
+    safe_hub_path(path)
     library = _library(project)
     f = library.get_file(path)
     if f is not None:

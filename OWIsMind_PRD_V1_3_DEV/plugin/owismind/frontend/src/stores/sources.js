@@ -456,38 +456,23 @@ export const useSourcesStore = defineStore('sources', () => {
     return entry ? entry.label : ''
   })
 
+  // The aggregate surface is re-exposed WHOLESALE except for its host-orchestration
+  // hooks: those belong to this store's internals (it drives them from _resetView /
+  // _loadRows / setQuery, and never needs invalidate - its meta seq bumps on every
+  // switch) and must not become part of the public API. Destructuring them out leaves
+  // `surfacePublic` = exactly the SourceCalc / SourceAnalyze contract (DB-computed row
+  // count + the Calculate zone + the Analyze mini-pivot), shared with the Evidence store.
+  const {
+    refreshTotals, afterScopeChange, resetDerived, invalidate, markRowsStale, clearRowsStale,
+    ...surfacePublic
+  } = surface
+
   return {
     open, agentKey, sourceList, activeSourceId, columns, chips, q,
     rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
     columnFilterRequest, requestColumnFilter,
     activeSourceLabel,
-    // DB-computed row count + the Calculate zone (shared aggregate surface)
-    totalCount: surface.totalCount,
-    totalLoading: surface.totalLoading,
-    calcColumn: surface.calcColumn,
-    calcFns: surface.calcFns,
-    calcValues: surface.calcValues,
-    calcLoading: surface.calcLoading,
-    calcError: surface.calcError,
-    setCalcColumn: surface.setCalcColumn,
-    setCalcFns: surface.setCalcFns,
-    reloadCalc: surface.reloadCalc,
-    // Analyze (mini-pivot)
-    analyzeOpen: surface.analyzeOpen,
-    analyzeGroup: surface.analyzeGroup,
-    analyzeBucket: surface.analyzeBucket,
-    analyzeFn: surface.analyzeFn,
-    analyzeMeasureColumn: surface.analyzeMeasureColumn,
-    analyzeRows: surface.analyzeRows,
-    analyzeTotals: surface.analyzeTotals,
-    analyzeTruncated: surface.analyzeTruncated,
-    analyzeLoading: surface.analyzeLoading,
-    analyzeError: surface.analyzeError,
-    setAnalyzeOpen: surface.setAnalyzeOpen,
-    setAnalyzeGroup: surface.setAnalyzeGroup,
-    setAnalyzeBucket: surface.setAnalyzeBucket,
-    setAnalyzeMeasure: surface.setAnalyzeMeasure,
-    runAnalyze: surface.runAnalyze,
+    ...surfacePublic,
     ensureAgent, openPanel, closePanel, setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,

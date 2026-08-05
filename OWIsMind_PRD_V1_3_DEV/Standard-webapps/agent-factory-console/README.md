@@ -108,8 +108,10 @@ automatically inside the webapp iframe).
 ## Safety model
 
 - **Dry-run first**: "Planifier" builds a plan with `FactoryContext(dry_run=True)`; it never touches
-  DSS. "Exécuter" runs for real but every step is idempotent (`ensure_*`), and there is **no
-  deletion path anywhere** in the factory or this console.
+  DSS. "Exécuter" runs for real but every step is idempotent (`ensure_*`), and the **creation flows
+  have no deletion step**. The one deletion path is the guided **capability-removal run** (see the
+  Vue d'ensemble section above), bounded by the `safe_delete` identity gate, the protected source
+  dataset, a server-side typed-domain confirmation and a click per stage.
 - **Confirm on every mutation**: every mutating endpoint (`/api/execute`, `/api/probe`,
   `/api/wizard/draft`, `/api/hub/prompt` POST, `/api/hub/capabilities` POST, and every
   `/api/guided/*` POST) requires the JSON body to carry `"confirm": true`, else it returns

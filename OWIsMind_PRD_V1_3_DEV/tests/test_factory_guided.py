@@ -154,7 +154,9 @@ class _GuidedBase(unittest.TestCase):
                    lambda template, spec, tool_id, deploy_project=None:
                    "# generated for %s tool=%s" % (spec.domain, tool_id))
         self.p.set(agent_builder, "create_code_agent", self._fake_create_agent)
-        self.p.set(wizard, "get_physical_table",
+        # BARE name, the real physical_table_name contract (get_physical_table,
+        # unpatched, derives its quoted literal from this same patched function).
+        self.p.set(wizard, "physical_table_name",
                    lambda project, dataset: "%s_%s" % (self.project.project_key, dataset))
         self.p.set(flow_builder, "run_scenario_and_wait", self._fake_scenario_run)
         self.pipeline_calls = []
@@ -930,6 +932,110 @@ class TestGuidedStore(unittest.TestCase):
             "SQL_test", "OWISMIND_TEST",
             executor_factory=lambda: _FakeExecutor(raise_on_read=True))
         self.assertIsNone(failing.table_has_rows("OWISMIND_TEST_x_profile"))
+
+
+class TestPhysicalTableNameContract(unittest.TestCase):
+    """get_physical_table must stay exactly physical_table_name in quotes, so an
+    identifier-gate consumer (table_has_rows) and a SQL-literal consumer (golden
+    queries) can never diverge again (SEC-06: the quoted literal fed to the
+    identifier gate silently disabled the emptiness check)."""
+
+    class _FakeProject(object):
+        project_key = "KEY"
+
+        class _Settings(object):
+            def get_raw(self):
+                return {"params": {"table": "${projectKey}_owismind_x"}}
+
+        class _Dataset(object):
+            def get_settings(self):
+                return TestPhysicalTableNameContract._FakeProject._Settings()
+
+        def get_dataset(self, name):
+            return self._Dataset()
+
+    def test_bare_and_quoted_agree(self):
+        project = self._FakeProject()
+        self.assertEqual(wizard.physical_table_name(project, "x"), "KEY_owismind_x")
+        self.assertEqual(wizard.get_physical_table(project, "x"), '"KEY_owismind_x"')
+
+    def test_bare_name_passes_the_identifier_gate(self):
+        # The exact wiring the emptiness check relies on: the bare name is
+        # accepted by quote_table, the quoted literal is refused.
+        bare = wizard.physical_table_name(self._FakeProject(), "x")
+        self.assertEqual(guided_store.quote_table(bare), 'public."KEY_owismind_x"')
+        with self.assertRaises(guided_store.GuidedStoreError):
+            guided_store.quote_table('"%s"' % bare)
+
+
+class TestTemplateGuard(_GuidedBase):
+    """Template-stage guards, never executed before (audit 2026-08-05, TS-07):
+    the precheck auto-completed the stage in every test because the fixture
+    always seeds a valid template. These tests exercise the real branches by
+    calling the stage functions directly (driving the full machine there would
+    trip drive_to's non-advancing-verify guard, by design)."""
+
+    def _env(self):
+        return guided._Env(self.project, self.settings)
+
+    def _run_ctx(self):
+        return FactoryContext(project=self.project, dry_run=False,
+                              abort_on_failure=False)
+
+    def test_run_template_waits_with_manual_paste_when_absent(self):
+        del self.hub_files[hub.TEMPLATE_AGENT_PATH]
+        out, problems = guided._run_template(
+            self._env(), guided.new_state(_spec()), self._run_ctx())
+        self.assertEqual(out, guided._OUT_WAITING)
+        self.assertEqual(problems, [])
+
+    def test_check_template_refuses_until_pasted(self):
+        del self.hub_files[hub.TEMPLATE_AGENT_PATH]
+        ok, problems = guided._check_template(self._env(), guided.new_state(_spec()))
+        self.assertFalse(ok)
+        self.assertTrue(any("PROFILE_DATASET" in p for p in problems))
+
+    def test_template_ok_refuses_a_truncated_template(self):
+        # Present but without the CONFIG marker: must NOT count as a template.
+        self.hub_files[hub.TEMPLATE_AGENT_PATH] = "# engine body without config"
+        self.assertFalse(guided._template_ok(self._env()))
+        ok, _problems = guided._check_template(self._env(), guided.new_state(_spec()))
+        self.assertFalse(ok)
+
+    def test_run_agent_code_fails_without_template(self):
+        del self.hub_files[hub.TEMPLATE_AGENT_PATH]
+        state = guided.new_state(_spec())
+        state.setdefault("captured", {})["tool_id"] = "TOOL1"
+        out, problems = guided._run_agent_code(self._env(), state, self._run_ctx())
+        self.assertEqual(out, guided._OUT_FAILED)
+        self.assertTrue(any("Template" in p for p in problems))
+
+    def test_run_agent_code_fails_without_captured_tool_id(self):
+        out, problems = guided._run_agent_code(
+            self._env(), guided.new_state(_spec()), self._run_ctx())
+        self.assertEqual(out, guided._OUT_FAILED)
+        self.assertTrue(any("tool" in p.lower() for p in problems))
+
+    def test_run_agent_code_surfaces_template_drift(self):
+        state = guided.new_state(_spec())
+        state.setdefault("captured", {})["tool_id"] = "TOOL1"
+
+        def _drift(template, spec, tool_id, deploy_project=None):
+            raise agent_builder.TemplateDriftError("template drifted: marker missing")
+
+        self.p.set(agent_builder, "generate_subagent_code", _drift)
+        out, problems = guided._run_agent_code(self._env(), state, self._run_ctx())
+        self.assertEqual(out, guided._OUT_FAILED)
+        self.assertIn("template drifted: marker missing", problems)
+
+    def test_check_code_agent_listing_failure_is_a_problem(self):
+        def _boom(project, name):
+            raise flow_builder.ExistenceCheckError("api down")
+
+        self.p.set(agent_builder, "agent_exists", _boom)
+        ok, problems = guided._check_code_agent(self._env(), guided.new_state(_spec()))
+        self.assertFalse(ok)
+        self.assertTrue(any("api down" in p for p in problems))
 
 
 if __name__ == "__main__":

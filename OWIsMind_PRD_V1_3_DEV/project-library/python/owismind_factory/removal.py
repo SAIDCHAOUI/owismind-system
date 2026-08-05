@@ -78,6 +78,34 @@ def conventional_spec(entry):
         return None
 
 
+def protected_by_others(project, capability_key):
+    """Dataset names OTHER capability entries own or derive: never deletable here.
+
+    Union, over every registry entry EXCEPT the targeted one, of its
+    lookup_dataset, its lookup_catalog and its conventionally derived knowledge
+    datasets (profile / value_index / value_catalog). The realistic hazard is two
+    entries sharing a base_dataset (a rollback or v2 entry): removing the stale
+    one must never destroy the datasets the living one still reads. Raises when
+    the registry cannot be read (fail-closed: an unknown neighbourhood forbids
+    deleting anything).
+    """
+    capabilities = hub.read_capabilities(project)
+    if not isinstance(capabilities, dict):
+        raise RemovalRefused("capabilities registry unreadable: refusing to inventory")
+    names = set()
+    for key, other in capabilities.items():
+        if key == capability_key or not isinstance(other, dict):
+            continue
+        for field in ("lookup_dataset", "lookup_catalog"):
+            value = str(other.get(field) or "")
+            if value:
+                names.add(value)
+        other_spec = conventional_spec(other)
+        if other_spec is not None:
+            names.update(other_spec.knowledge_datasets)
+    return names
+
+
 def _listed_name_by_id(items, wanted_id):
     for item in items:
         item_id = item.id if hasattr(item, "id") else item.get("id")
@@ -145,7 +173,7 @@ def hub_paths(entry, spec, agent_name):
     """Hub files/folders the domain owns (existence re-checked at cleanup)."""
     domain = str(entry.get("domain") or "")
     file_agent = (spec.agent_name if spec is not None else "") or agent_name or ""
-    paths = ["%s/wizard/%s-config.json" % (hub.HUB_ROOT, domain),
+    paths = [hub.wizard_config_path(domain),
              "%s/prompts/%s" % (hub.HUB_ROOT, domain)]
     if file_agent:
         paths.append("%s/generated/%s.py" % (hub.HUB_ROOT, file_agent))
@@ -252,6 +280,18 @@ def build_inventory(project, capability_key, entry, settings):
     # Knowledge datasets: profile + value_index by convention, catalog from the
     # entry (it carries the REAL name, founders included). The SOURCE dataset
     # (lookup_dataset) is PROTECTED: never deletable (user decision 2026-07-22).
+    # Datasets owned or derived by OTHER capabilities are protected too: with a
+    # rollback / v2 entry sharing the base_dataset, removing the stale entry must
+    # never destroy the living one's knowledge datasets. Overlaps land in
+    # ``protected`` AND raise a blocking problem (explicit refusal beats a
+    # silent destruction; the operator disables instead, or resolves the overlap).
+    try:
+        foreign = protected_by_others(project, capability_key)
+    except Exception as exc:
+        problems.append("Impossible de lire le registre des capabilities (%s) : "
+                        "réessaie." % exc)
+        foreign = set()
+    foreign_overlaps = []
     candidates = []
     if spec is not None:
         candidates = [spec.profile_dataset, spec.value_index_dataset]
@@ -261,6 +301,9 @@ def build_inventory(project, capability_key, entry, settings):
     for name in candidates:
         if name == base_dataset:
             continue  # belt and braces: the source is never a candidate
+        if name in foreign:
+            foreign_overlaps.append(name)
+            continue
         try:
             found = flow_builder.dataset_exists(project, name)
         except ExistenceCheckError as exc:
@@ -301,6 +344,17 @@ def build_inventory(project, capability_key, entry, settings):
     if base_dataset:
         protected.append(_item("Dataset SOURCE (protégé)", base_dataset, "Flow",
                                note_fr="JAMAIS supprimé par ce run"))
+    for name in foreign_overlaps:
+        protected.append(_item(
+            "Dataset PROTÉGÉ (autre capability)", name, where_flow,
+            note_fr="appartient aussi à une autre capability du registre : "
+                    "JAMAIS supprimé par ce run"))
+    if foreign_overlaps:
+        problems.append(
+            "Chevauchement de domaines : %s appartien(nen)t aussi à une autre "
+            "capability du registre. Suppression refusée : désactive la capability "
+            "au lieu de la supprimer, ou résous le chevauchement d'abord."
+            % ", ".join(foreign_overlaps))
 
     inventory = {
         "stages": stages,
@@ -325,82 +379,83 @@ def scenario_is_running(project, scenario_id):
         return None
 
 
-def _delete_tool_item(project, item):
-    from . import tool_builder
-    if not tool_builder.tool_exists(project, item["name"]):
+def _stage_ops(stage_key, project, item):
+    """Declarative bindings of the SHARED delete/leftover skeleton, one entry
+    per stage. delete_zone is NOT here on purpose: it never calls safe_delete,
+    may refuse on unreadable contents and has a 4th status ("kept"), so it
+    keeps its dedicated executor below. The contractual guards (safe_delete
+    identity gate, protected source dataset) are unchanged: only the varying
+    bits (existence predicate, handle getter, live-name getter, noun, optional
+    pre-hook / drop_data) became declarative.
+    """
+    from . import flow_builder, tool_builder
+    if stage_key == "delete_tool":
+        return dict(
+            exists=lambda: bool(tool_builder.tool_exists(project, item["name"])),
+            handle=lambda: project.get_agent_tool(item["id"]),
+            live_name=lambda: tool_name_by_id(project, item["id"]),
+            noun="tool")
+    if stage_key == "delete_agent":
+        return dict(
+            exists=lambda: agent_name_by_id(project, item["id"]) is not None,
+            handle=lambda: project.get_agent(item["id"]),
+            live_name=lambda: agent_name_by_id(project, item["id"]),
+            noun="agent")
+    if stage_key == "delete_model":
+        return dict(
+            exists=lambda: model_name_by_id(project, item["id"]) is not None,
+            handle=lambda: project.get_semantic_model(item["id"]),
+            live_name=lambda: model_name_by_id(project, item["id"]),
+            noun="semantic model")
+    if stage_key == "delete_scenario":
+        def _scenario_live_name():
+            listed = flow_builder.scenario_id_by_name(project, item["name"])
+            return item["name"] if listed == item["id"] else None
+
+        def _refuse_if_running():
+            if scenario_is_running(project, item["id"]) is True:
+                raise RemovalRefused("le scénario tourne en ce moment : attends la fin "
+                                     "de son run avant de le supprimer")
+        return dict(
+            exists=lambda: flow_builder.scenario_id_by_name(project, item["name"]) is not None,
+            handle=lambda: project.get_scenario(item["id"]),
+            live_name=_scenario_live_name,
+            noun="scenario",
+            pre=_refuse_if_running)
+    if stage_key == "delete_recipes":
+        return dict(
+            exists=lambda: bool(flow_builder.recipe_exists(project, item["name"])),
+            handle=lambda: project.get_recipe(item["name"]),
+            live_name=lambda: (item["name"]
+                               if flow_builder.recipe_exists(project, item["name"])
+                               else None),
+            noun="recipe")
+    if stage_key == "delete_datasets":
+        return dict(
+            exists=lambda: bool(flow_builder.dataset_exists(project, item["name"])),
+            handle=lambda: project.get_dataset(item["name"]),
+            live_name=lambda: (item["name"]
+                               if flow_builder.dataset_exists(project, item["name"])
+                               else None),
+            noun="dataset",
+            drop_data=True)
+    raise KeyError(stage_key)
+
+
+def _delete_item(project, stage_key, item):
+    """The shared skeleton: absent-check, optional refusal pre-hook,
+    identity-gated delete (safe_delete, fail-closed), verify-absence."""
+    ops = _stage_ops(stage_key, project, item)
+    if not ops["exists"]():
         return "absent"
-    handle = project.get_agent_tool(item["id"])
-    safe_delete(handle, item["name"],
-                lambda: tool_name_by_id(project, item["id"]), noun="tool")
-    return "deleted" if not tool_builder.tool_exists(project, item["name"]) \
-        else "still_there"
-
-
-def _delete_agent_item(project, item):
-    if agent_name_by_id(project, item["id"]) is None:
-        return "absent"
-    handle = project.get_agent(item["id"])
-    safe_delete(handle, item["name"],
-                lambda: agent_name_by_id(project, item["id"]), noun="agent")
-    return "deleted" if agent_name_by_id(project, item["id"]) is None \
-        else "still_there"
-
-
-def _delete_model_item(project, item):
-    if model_name_by_id(project, item["id"]) is None:
-        return "absent"
-    handle = project.get_semantic_model(item["id"])
-    safe_delete(handle, item["name"],
-                lambda: model_name_by_id(project, item["id"]),
-                noun="semantic model")
-    return "deleted" if model_name_by_id(project, item["id"]) is None \
-        else "still_there"
-
-
-def _delete_scenario_item(project, item):
-    from . import flow_builder
-    if flow_builder.scenario_id_by_name(project, item["name"]) is None:
-        return "absent"
-    if scenario_is_running(project, item["id"]) is True:
-        raise RemovalRefused("le scénario tourne en ce moment : attends la fin "
-                             "de son run avant de le supprimer")
-    handle = project.get_scenario(item["id"])
-
-    def _live_name():
-        listed = flow_builder.scenario_id_by_name(project, item["name"])
-        return item["name"] if listed == item["id"] else None
-
-    safe_delete(handle, item["name"], _live_name, noun="scenario")
-    return "deleted" \
-        if flow_builder.scenario_id_by_name(project, item["name"]) is None \
-        else "still_there"
-
-
-def _delete_recipe_item(project, item):
-    from . import flow_builder
-    if not flow_builder.recipe_exists(project, item["name"]):
-        return "absent"
-    handle = project.get_recipe(item["name"])
-    safe_delete(handle, item["name"],
-                lambda: item["name"]
-                if flow_builder.recipe_exists(project, item["name"]) else None,
-                noun="recipe")
-    return "deleted" if not flow_builder.recipe_exists(project, item["name"]) \
-        else "still_there"
-
-
-def _delete_dataset_item(project, item):
-    from . import flow_builder
-    if not flow_builder.dataset_exists(project, item["name"]):
-        return "absent"
-    handle = project.get_dataset(item["name"])
-    safe_delete(handle, item["name"],
-                lambda: item["name"]
-                if flow_builder.dataset_exists(project, item["name"]) else None,
-                noun="dataset",
-                deleter=lambda: handle.delete(drop_data=True))
-    return "deleted" if not flow_builder.dataset_exists(project, item["name"]) \
-        else "still_there"
+    pre = ops.get("pre")
+    if pre is not None:
+        pre()
+    handle = ops["handle"]()
+    deleter = (lambda: handle.delete(drop_data=True)) if ops.get("drop_data") else None
+    safe_delete(handle, item["name"], ops["live_name"], noun=ops["noun"],
+                deleter=deleter)
+    return "deleted" if not ops["exists"]() else "still_there"
 
 
 def _delete_zone_item(project, item):
@@ -420,15 +475,17 @@ def _delete_zone_item(project, item):
         else "still_there"
 
 
-_STAGE_EXECUTORS = {
-    "delete_tool": _delete_tool_item,
-    "delete_agent": _delete_agent_item,
-    "delete_model": _delete_model_item,
-    "delete_scenario": _delete_scenario_item,
-    "delete_recipes": _delete_recipe_item,
-    "delete_datasets": _delete_dataset_item,
-    "delete_zone": _delete_zone_item,
-}
+def _make_delete_executor(stage_key):
+    def _executor(project, item):
+        return _delete_item(project, stage_key, item)
+    return _executor
+
+
+_STAGE_EXECUTORS = {key: _make_delete_executor(key)
+                    for key in ("delete_tool", "delete_agent", "delete_model",
+                                "delete_scenario", "delete_recipes",
+                                "delete_datasets")}
+_STAGE_EXECUTORS["delete_zone"] = _delete_zone_item
 
 
 def execute_delete_stage(project, stage_key, items, ctx):
@@ -467,34 +524,6 @@ def execute_delete_stage(project, stage_key, items, ctx):
 
 # --------------------------------------------------------------- verification
 
-def _tool_leftover(project, item):
-    from . import tool_builder
-    return bool(tool_builder.tool_exists(project, item["name"]))
-
-
-def _agent_leftover(project, item):
-    return agent_name_by_id(project, item["id"]) is not None
-
-
-def _model_leftover(project, item):
-    return model_name_by_id(project, item["id"]) is not None
-
-
-def _scenario_leftover(project, item):
-    from . import flow_builder
-    return flow_builder.scenario_id_by_name(project, item["name"]) is not None
-
-
-def _recipe_leftover(project, item):
-    from . import flow_builder
-    return flow_builder.recipe_exists(project, item["name"])
-
-
-def _dataset_leftover(project, item):
-    from . import flow_builder
-    return flow_builder.dataset_exists(project, item["name"])
-
-
 def _zone_leftover(project, item):
     """A zone kept because it is NOT empty is a decision, not a leftover."""
     from . import flow_builder
@@ -505,15 +534,19 @@ def _zone_leftover(project, item):
     return len(contents) == 0
 
 
-_STAGE_LEFTOVER_CHECKS = {
-    "delete_tool": _tool_leftover,
-    "delete_agent": _agent_leftover,
-    "delete_model": _model_leftover,
-    "delete_scenario": _scenario_leftover,
-    "delete_recipes": _recipe_leftover,
-    "delete_datasets": _dataset_leftover,
-    "delete_zone": _zone_leftover,
-}
+def _make_leftover_check(stage_key):
+    # A leftover is simply "the executor's existence predicate is still true"
+    # for every stage except the zone (inverted semantics, kept dedicated).
+    def _leftover(project, item):
+        return bool(_stage_ops(stage_key, project, item)["exists"]())
+    return _leftover
+
+
+_STAGE_LEFTOVER_CHECKS = {key: _make_leftover_check(key)
+                          for key in ("delete_tool", "delete_agent",
+                                      "delete_model", "delete_scenario",
+                                      "delete_recipes", "delete_datasets")}
+_STAGE_LEFTOVER_CHECKS["delete_zone"] = _zone_leftover
 
 
 def verify_stage_absent(project, stage_key, items):
@@ -547,17 +580,13 @@ def delete_catalog_rows(project, connection, capability_key, executor_factory=No
         return "unknown_table"
     table = None
     try:
-        table = wizard.get_physical_table(project, CATALOG_DATASET_NAME)
+        # BARE name (not get_physical_table's quoted literal): quote_table gates
+        # a bare identifier then quotes it itself (field bug 2026-07-22).
+        table = wizard.physical_table_name(project, CATALOG_DATASET_NAME)
     except Exception:
         table = None
     if not table:
         return "unknown_table"
-    # wizard.get_physical_table returns an ALREADY double-quoted literal
-    # ('"TABLE"'); guided_store.quote_table gates on a bare identifier and
-    # re-quotes it, so strip the quoting first (field bug 2026-07-22: without
-    # this the stage failed deterministically on a real instance).
-    if table[:1] == '"' and table[-1:] == '"':
-        table = table[1:-1]
     statement = "DELETE FROM %s WHERE capability_key = %s" % (
         guided_store.quote_table(table), guided_store._sql_value(capability_key))
     if executor_factory is not None:

@@ -44,7 +44,6 @@ import math
 import re
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import dataiku
@@ -135,11 +134,6 @@ MAX_CUSTOM_SQL_ATTEMPTS = 3        # 1 generation + up to 2 repairs
 FUZZY_CANDIDATES_LIMIT = 40
 FUZZY_MIN_RATIO = 0.62             # below -> unresolved (no best candidate)
 LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo terms
-# Max concurrent INDEPENDENT operations the sub-agent runs at once (bounded for
-# Dataiku instance safety). Used by run_parallel() - today for the per-term value
-# lookups, and the drop-in mechanism for future parallel tool calls.
-SUBAGENT_MAX_PARALLEL = 4
-
 # Read-only execution: per-statement timeout + a read-only transaction.
 SQL_PRE_QUERIES = ["SET LOCAL statement_timeout TO '30000'",
                    "SET LOCAL transaction_read_only TO on"]
@@ -259,35 +253,6 @@ ABOUT_ROWS = {"fr": "**Volume**", "en": "**Volume**"}
 # =============================================================================
 # 3. PROFILE - loading + typed accessors (the agent's knowledge)
 # =============================================================================
-
-def run_parallel(tasks, max_workers=SUBAGENT_MAX_PARALLEL):
-    """Run independent thunks CONCURRENTLY (bounded) and return their results in
-    INPUT order. A thunk that raises -> its slot is None (the caller filters/handles).
-    Bounded by max_workers for Dataiku instance safety. This is the sub-agent's
-    drop-in mechanism for calling several INDEPENDENT tools/queries in parallel -
-    use it whenever the work items don't depend on each other (today: per-term value
-    lookups; tomorrow: multiple data tools whose calls are mutually independent).
-    Sequential, no thread, for 0/1 task (cheaper + keeps simple cases simple)."""
-    if not tasks:
-        return []
-    if len(tasks) == 1:
-        try:
-            return [tasks[0]()]
-        except Exception:
-            logger.exception("parallel task failed")
-            return [None]
-    results = [None] * len(tasks)
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(tasks))) as ex:
-        fut_to_i = {ex.submit(t): i for i, t in enumerate(tasks)}
-        for fut in as_completed(fut_to_i):
-            i = fut_to_i[fut]
-            try:
-                results[i] = fut.result()
-            except Exception:
-                logger.exception("parallel task %d failed", i)
-                results[i] = None
-    return results
-
 
 class Profile(object):
     """In-memory view of the profile dataset (contract v1, see profiler)."""
@@ -2327,8 +2292,7 @@ class MyLLM(BaseLLM):
         # Pass 2 (substring/fuzzy) for the terms pass 1 missed. Kept sequential:
         # concurrent SQLExecutor2 access is not guaranteed thread-safe and the win is
         # marginal (usually 0-2 unmatched terms after the batched exact pass), so
-        # instance safety wins. run_parallel is reserved for independent tool calls,
-        # where the calls are isolated and the gain is real.
+        # instance safety wins.
         unmatched = [t for t in base_terms if not exact_rows.get(norms[t])]
 
         def _fuzzy_fetch(term):

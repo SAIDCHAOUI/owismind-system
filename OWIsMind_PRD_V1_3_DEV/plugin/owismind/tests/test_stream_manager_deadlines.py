@@ -22,8 +22,8 @@ Coverage (all mocked, no DSS runtime - mirrors the sibling route/storage tests):
   - HARD_TTL_SECONDS covers the longest per-mode deadline (a live claude run must
     never be memory-evicted before its own deadline).
 
-A minimal ``dataiku`` stub is installed so the modules import (NO install);
-unittest discover shares one sys.modules, so the stubs are additive.
+The shared ``dataiku`` stub (tests/_dss_stub.py) is installed so the modules
+import (NO install of any package).
 """
 import os
 import sys
@@ -33,36 +33,12 @@ import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs so stream_manager and its collaborators import."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    if not hasattr(dk, "api_client"):
-        dk.api_client = lambda: None
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: "'" + str(constant) + "'"
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.agents import stream_manager  # noqa: E402
 

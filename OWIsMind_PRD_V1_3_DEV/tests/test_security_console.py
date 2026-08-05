@@ -294,5 +294,47 @@ class TestHubCapabilitiesSizeCaps(_ConsoleTestCase):
         self.assertEqual(writes, [])
 
 
+class TestProbeGatesNeverFromBody(unittest.TestCase):
+    """The pipeline gates (tool discovery + agent schema hints) come ONLY from
+    the hub's probe_results.json: a direct API caller must not be able to
+    inject discovery or schema_hints through the request body, and schema
+    hints only count once the WRITE probe confirmed them (audit 2026-08-05,
+    hub/BE-07: this security policy had no test before its extraction)."""
+
+    _POISON = {"confirm": True,
+               "discovery": {"type": "EVIL"},
+               "schema_hints": {"confirmed": True, "internal_key": "EVIL"}}
+
+    def setUp(self):
+        from owismind_factory import hub as hub_module
+        self.hub = hub_module
+        self.probe = {}
+        saved = hub_module.read_json
+        hub_module.read_json = lambda project, path: (
+            dict(self.probe) if path.endswith("probe_results.json") else None)
+        self.addCleanup(lambda: setattr(hub_module, "read_json", saved))
+
+    def test_body_injection_is_ignored(self):
+        self.probe = {"suggested_discovery": {"type": "T"},
+                      "suggested_schema_hints": {"confirmed": True,
+                                                 "internal_key": "K"}}
+        discovery, hints = _BACKEND._gates_from_hub(_FakeProject(), self._POISON)
+        self.assertEqual(discovery, {"type": "T"})
+        self.assertEqual(hints["internal_key"], "K")
+
+    def test_unconfirmed_schema_hints_never_count(self):
+        self.probe = {"suggested_discovery": {"type": "T"},
+                      "suggested_schema_hints": {"confirmed": False,
+                                                 "internal_key": "K"}}
+        _discovery, hints = _BACKEND._gates_from_hub(_FakeProject(), self._POISON)
+        self.assertIsNone(hints)
+
+    def test_empty_hub_yields_no_gates_despite_poisoned_body(self):
+        self.probe = {}
+        discovery, hints = _BACKEND._gates_from_hub(_FakeProject(), self._POISON)
+        self.assertIsNone(discovery)
+        self.assertIsNone(hints)
+
+
 if __name__ == "__main__":
     unittest.main()

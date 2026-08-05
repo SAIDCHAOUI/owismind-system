@@ -18,74 +18,19 @@ Coverage (all provable without a live DSS runtime, mirrors test_chat_mode.py):
     separators=(',',':')), a panel-open-only pointer stamps None (not persisted) yet is
     still handed unchanged to the worker, and no screen_context stamps None.
 
-A minimal ``dataiku`` (+ ``flask`` for the route test) stub is installed so the modules
-import (NO install); unittest discover shares one sys.modules, so the stubs are additive.
+The shared ``dataiku`` (+ ``flask`` for the route test) stubs of tests/_dss_stub.py are
+installed so the modules import (NO install of any package).
 """
 import json
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
 
-
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs so chat_v5 / migrations / sql_config / routes import."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    if not hasattr(dk, "api_client"):
-        dk.api_client = lambda: None
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: "'" + str(constant) + "'"
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-def _ensure_flask_stub():
-    flask = sys.modules.get("flask")
-    if flask is not None and hasattr(flask, "_OWI_STUB"):
-        return
-    flask = types.ModuleType("flask")
-    flask._OWI_STUB = True
-
-    class Blueprint(object):
-        def __init__(self, name, import_name, url_prefix=None):
-            self.name = name
-            self.url_prefix = url_prefix
-
-        def route(self, *_a, **_k):
-            def _decorator(fn):
-                return fn
-            return _decorator
-
-        def before_request(self, fn):
-            return fn
-
-        def after_request(self, fn):
-            return fn
-
-    flask.Blueprint = Blueprint
-    flask.jsonify = lambda payload: payload
-    flask.request = types.SimpleNamespace(headers={}, args={}, method="GET")
-    flask.g = types.SimpleNamespace()
-    sys.modules["flask"] = flask
+import _dss_stub  # noqa: E402
 
 
 # The dataiku stub + the pure storage/migrations/context imports are safe at collection
@@ -96,7 +41,7 @@ def _ensure_flask_stub():
 # would - because this file sorts first - win that binding and break those sibling tests.
 # Deferring it means the sibling (which imports routes at its own collection) keeps the
 # binding in the full suite, while a standalone run of this file still self-bootstraps.
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.agents import context                          # noqa: E402
 from owismind.storage import chat_v5                         # noqa: E402
@@ -299,7 +244,7 @@ def _load_route_env():
     global routes, sql_config, settings_mod, budget_mod, impersonation, stream_manager
     if routes is not None:
         return
-    _ensure_flask_stub()
+    _dss_stub.install_flask()
     from owismind.api import routes as _routes
     from owismind.storage import sql_config as _sql_config
     from owismind.storage import settings as _settings_mod

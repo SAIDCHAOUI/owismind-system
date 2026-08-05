@@ -8,7 +8,9 @@
  *   - Read screens (state / datasets / capabilities / prompt) are plain GETs.
  *   - Every mutating call carries {confirm: true} and is gated behind a confirm modal.
  *   - "Planifier" is a dry-run (nothing touches DSS); "Executer" runs for real.
- *   - No deletion feature of any kind.
+ *   - Creation flows have no deletion step. The ONLY deletion path is the guided
+ *     capability-removal run: server-side typed-domain confirmation, safe_delete
+ *     identity gate, protected source dataset, one confirmed stage at a time.
  *
  * Long backend actions (probe / execute / wizard draft) run as background JOBS: the
  * POST returns a job_id, then we poll GET api/job/<id> until status is done or error.

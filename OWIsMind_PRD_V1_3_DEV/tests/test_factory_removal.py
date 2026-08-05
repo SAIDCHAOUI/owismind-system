@@ -441,6 +441,9 @@ def _seed_full_domain(project):
     project.library.files["/python/owismind_hub/wizard/opportunities-config.json"] = "{}"
     project.library.files["/python/owismind_hub/prompts/opportunities/understand_extra.md"] = "x"
     project.library.files["/python/owismind_hub/generated/Opportunities_expert.py"] = "# code"
+    # The registry the inventory cross-checks for foreign owners (fail-closed:
+    # build_inventory refuses to work without a readable registry).
+    _seed_capabilities(project, {"opportunities_expert": _entry()})
 
 
 class TestInventory(unittest.TestCase):
@@ -484,6 +487,32 @@ class TestInventory(unittest.TestCase):
         self.assertNotIn("DRIVE_Opportunities", deletable)
         self.assertEqual([i["name"] for i in inventory["protected"]],
                          ["DRIVE_Opportunities"])
+
+    def test_foreign_capability_datasets_are_protected_and_blocking(self):
+        # A second entry (rollback / v2) shares the SAME base_dataset: its
+        # derived datasets must leave the delete list, land in protected, and
+        # block the run with an explicit overlap problem (SEC hardening
+        # 2026-08: explicit refusal beats silent destruction).
+        _seed_capabilities(self.project, {
+            "opportunities_expert": self.entry,
+            "opportunities_expert_v2": _entry(agent_id="agent:zzOther99",
+                                              enabled=False),
+        })
+        inventory, problems = self._build()
+        self.assertEqual(inventory["stages"]["delete_datasets"], [])
+        self.assertEqual(inventory["stages"]["delete_recipes"], [])
+        protected = [i["name"] for i in inventory["protected"]]
+        self.assertIn("DRIVE_Opportunities_profile", protected)
+        self.assertIn("DRIVE_Opportunities_value_index", protected)
+        self.assertIn("DRIVE_Opportunities_value_catalog", protected)
+        self.assertTrue(any("Chevauchement" in p for p in problems))
+
+    def test_unreadable_registry_blocks_inventory(self):
+        # Fail-closed: no readable capabilities.json -> the inventory reports a
+        # blocking problem instead of assuming it owns everything it derives.
+        del self.project.library.files[hub.CAPABILITIES_PATH]
+        _inventory, problems = self._build()
+        self.assertTrue(any("registre des capabilities" in p for p in problems))
 
     def test_absent_objects_land_in_notes_not_stages(self):
         self.project.tools.clear()
@@ -622,17 +651,16 @@ class TestCatalogAndHubCleanup(unittest.TestCase):
                 recorded["post"] = list(post_queries or [])
 
         import owismind_factory.wizard as wizard_module
-        original = wizard_module.get_physical_table
-        # Realistic contract: get_physical_table returns an ALREADY-quoted
-        # literal (the adversarial review caught a stuck-stage bug when the
-        # test mocked a bare name instead).
-        wizard_module.get_physical_table = lambda p, d: '"TESTKEY_owismind_agent_catalog_v1"'
+        original = wizard_module.physical_table_name
+        # Realistic contract since the SEC-06 fix: delete_catalog_rows consumes
+        # physical_table_name (BARE name) and quote_table quotes it itself.
+        wizard_module.physical_table_name = lambda p, d: "TESTKEY_owismind_agent_catalog_v1"
         try:
             status = removal.delete_catalog_rows(
                 self.project, "SQL_owi", "opportunities_expert",
                 executor_factory=lambda: _Executor())
         finally:
-            wizard_module.get_physical_table = original
+            wizard_module.physical_table_name = original
         self.assertEqual(status, "deleted")
         self.assertEqual(len(recorded["pre"]), 1)
         self.assertIn('DELETE FROM public."TESTKEY_owismind_agent_catalog_v1"',
@@ -646,6 +674,62 @@ class TestCatalogAndHubCleanup(unittest.TestCase):
             self.project, "SQL_owi", "opportunities_expert",
             executor_factory=lambda: None)
         self.assertEqual(status, "no_dataset")
+
+    def _seed_two_entries(self):
+        _seed_capabilities(self.project, {
+            "opportunities_expert": _entry(),
+            "revenue_expert": _entry(domain="revenue", agent_id="agent:bHrWLyOL",
+                                     lookup_dataset="DRIVE_Revenues",
+                                     lookup_catalog="DRIVE_Revenues_Value_Catalog"),
+        })
+
+    def test_cleanup_hub_api_refusal_flips_to_manual(self):
+        # TS-08 (audit 2026-08-05): the except branch (API refusal -> manual
+        # fallback) of cleanup_hub was never executed. A raising delete must
+        # land in manual with its reason, never propagate, and the rest of the
+        # cleanup must still run.
+        self._seed_two_entries()
+        refused = "/python/owismind_hub/wizard/opportunities-config.json"
+        original_delete = _FakeLibFile.delete
+
+        def _refuse(lib_file):
+            if lib_file._path == refused:
+                raise RuntimeError("api: permission denied")
+            return original_delete(lib_file)
+
+        _FakeLibFile.delete = _refuse
+        try:
+            manual, status = removal.cleanup_hub(
+                self.project, "opportunities_expert",
+                [refused, "/python/owismind_hub/generated/Opportunities_expert.py"],
+                _ctx(self.project))
+        finally:
+            _FakeLibFile.delete = original_delete
+        self.assertEqual(status, "removed")
+        self.assertEqual([m["path"] for m in manual], [refused])
+        self.assertIn("permission denied", manual[0]["reason_fr"])
+        self.assertIsNot(hub.path_exists(
+            self.project, "/python/owismind_hub/generated/Opportunities_expert.py"),
+            True)
+
+    def test_cleanup_hub_path_gate_refusal_lands_in_manual(self):
+        # SEC-02: a traversal path is refused by safe_hub_path inside
+        # delete_path; cleanup_hub converts the raise into a manual item
+        # instead of crashing the stage.
+        self._seed_two_entries()
+        evil = "/python/owismind_hub/prompts/../../evil"
+        manual, status = removal.cleanup_hub(
+            self.project, "opportunities_expert", [evil], _ctx(self.project))
+        self.assertEqual([m["path"] for m in manual], [evil])
+        self.assertEqual(status, "removed")
+
+    def test_cleanup_hub_already_absent_path_is_a_skip(self):
+        self._seed_two_entries()
+        manual, status = removal.cleanup_hub(
+            self.project, "opportunities_expert",
+            ["/python/owismind_hub/wizard/never-existed.json"], _ctx(self.project))
+        self.assertEqual(manual, [])
+        self.assertEqual(status, "removed")
 
     def test_cleanup_hub_deletes_paths_and_entry(self):
         _seed_capabilities(self.project, {

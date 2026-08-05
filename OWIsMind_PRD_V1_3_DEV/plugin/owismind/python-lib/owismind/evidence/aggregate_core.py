@@ -11,12 +11,12 @@ resolve their table + conditions, never in how a measure or a bucket renders.
 Pure text + gates (NO dataiku import): callers pass the LIVE column list (each a
 ``{"name", "type"}`` dict) + colmap (lowercased real name -> real name) their own
 context already resolved, and get back pre-rendered, caller-escaped fragments to
-hand to ``query_builders.build_aggregate_query``. Gates raise
-``evidence.service.EvidenceError`` with the same stable codes the source explorer
-has always used.
+hand to ``query_builders.build_aggregate_query``. Gates raise ``EvidenceError``
+(defined in ``query_builders``, re-exported by ``evidence.service``) with the same
+stable codes the source explorer has always used.
 """
 
-from owismind.evidence.service import EvidenceError
+from owismind.evidence.query_builders import EvidenceError
 from owismind.storage.sql_config import is_numeric_type, is_temporal_type, pg_identifier
 
 # Frozen aggregate templates: only these whitelisted functions ever reach SQL, keyed by

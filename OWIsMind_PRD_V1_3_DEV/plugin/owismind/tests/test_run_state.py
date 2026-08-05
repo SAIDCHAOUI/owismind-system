@@ -7,46 +7,24 @@ Provable without a live DSS runtime (project TEST-01 idiom, fake executor):
     plan replacement preserving completed steps, monotonic event sequencing,
     owner scoping, payload caps + truncation markers, bounded purge;
   - EVERY user-supplied value reaches SQL only through sql_value/nullable_value
-    (with the stub, an escaped value renders as repr(value) - a raw single quote
-    can therefore never appear bare-quoted in the statement text).
+    (with the shared stub, an escaped string renders as a single-quoted literal
+    with its embedded quotes DOUBLED, and any other value as repr(value) - a raw
+    single quote can therefore never appear bare-quoted in the statement text).
 """
 import json
 import os
 import sys
-import types
 import unittest
 import uuid
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs so run_state / migrations import (NO install)."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: repr(constant)
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.storage import migrations   # noqa: E402
 from owismind.storage import run_state    # noqa: E402
@@ -717,13 +695,13 @@ class PurgeTests(RunStateTestCase):
 # --- Parameterization sweep --------------------------------------------------------
 class ParameterizationTests(RunStateTestCase):
     """A value carrying a single quote must only ever appear ESCAPED - the
-    bare-quoted concatenation is proof of raw interpolation. The shared-stub
-    toSQL varies across sibling tests (repr, or true SQL quote-doubling), so
-    both escaped renderings are accepted; the RAW form never is."""
+    bare-quoted concatenation is proof of raw interpolation. The shared stub
+    renders a string with SQL-standard quote doubling; the RAW form never
+    appears."""
 
     EVIL = "x'y"
     RAW = "'x'y'"
-    ESCAPED_FORMS = (repr("x'y"), "x''y")
+    ESCAPED = "x''y"
 
     def test_user_values_never_inlined_raw(self):
         self.results.extend([FakeDf([{"n": 1}]) for _ in range(6)])
@@ -737,8 +715,7 @@ class ParameterizationTests(RunStateTestCase):
         run_state.read_activity("ex-" + self.EVIL, self.EVIL)
         blob = self.all_sql()
         self.assertNotIn(self.RAW, blob)
-        self.assertTrue(any(form in blob for form in self.ESCAPED_FORMS),
-                        "no escaped rendering of the evil value found")
+        self.assertIn(self.ESCAPED, blob)
 
 
 if __name__ == "__main__":
@@ -770,9 +747,9 @@ class LoadRunByExchangeTests(unittest.TestCase):
             self._unpatch(originals)
         self.assertEqual(row["run_id"], "r1")
         sql = captured[0]
-        # escaped through sql_value: rendered either as the stub's repr form or
-        # as SQL-standard quote doubling - NEVER as the bare-quoted raw value
-        self.assertTrue(repr("ex'--1") in sql or "ex''--1" in sql, sql)
+        # escaped through sql_value: SQL-standard quote doubling, NEVER the
+        # bare-quoted raw value
+        self.assertIn("ex''--1", sql)
         self.assertNotIn("= 'ex'--1'", sql)
         self.assertIn("user_id = ", sql)
 

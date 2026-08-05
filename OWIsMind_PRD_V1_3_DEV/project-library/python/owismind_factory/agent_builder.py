@@ -24,31 +24,78 @@ from . import hub as hub_module
 
 # CONFIG constants rewritten in the engine template. Each regex must match
 # EXACTLY ONCE, else the template has drifted and we stop instead of guessing.
+# HUB_DOMAIN is part of the binding (audit 2026-08-05, AG-01a): without it a
+# generated expert would load the hub prompts of the REVENUE domain.
 _CONFIG_PATTERNS = {
     "PROFILE_DATASET": r'^PROFILE_DATASET = "[^"]*"',
     "VALUE_INDEX_DATASET": r'^VALUE_INDEX_DATASET = "[^"]*"',
     "SEMANTIC_TOOL_ID": r'^SEMANTIC_TOOL_ID = "[^"]*"',
     "SEMANTIC_TOOL_NAME": r'^SEMANTIC_TOOL_NAME = "[^"]*"',
+    "HUB_DOMAIN": r'^HUB_DOMAIN = "[^"]*"',
 }
+
+# Domain-wording regions of the engine (audit 2026-08-05, AG-01a). The engine
+# carries revenue-specific vocabulary (the offer hierarchy) in a handful of
+# LLM/user-facing strings, each delimited in the engine source by paired
+# markers:
+#     # [DOMAIN-WORDING:<key>]
+#     ...statement(s) carrying the wording...
+#     # [/DOMAIN-WORDING:<key>]
+# generate_subagent_code(wording={key: replacement_lines}) swaps a region's
+# CONTENT for a new domain; with no override every region is kept verbatim, so
+# the mechanism is strictly neutral for the revenue engine itself.
+WORDING_KEYS = ("disclose_note", "ambiguous_resolved", "enumerate_guidance",
+                "ambiguous_deferred")
+
+# Deploy-header identity lines, rewritten only when the caller provides
+# agent_ref (see generate_subagent_code): a regenerated file must not keep the
+# revenue agent's name/id in its header (mirror identity, registry.json).
+_HEADER_AGENT_RE = re.compile(r"^# Code Agent: .+$", re.MULTILINE)
+_HEADER_PROJECT_RE = re.compile(r"^# DEPLOY TARGET: project .+$", re.MULTILINE)
+
+
+def _replace_wording(code, key, replacement):
+    """Swap ONE delimited domain-wording region's content (markers kept)."""
+    region_re = re.compile(
+        r"([ \t]*# \[DOMAIN-WORDING:%s\]\n)(.*?)([ \t]*# \[/DOMAIN-WORDING:%s\]\n)"
+        % (re.escape(key), re.escape(key)), re.S)
+    if len(region_re.findall(code)) != 1:
+        raise TemplateDriftError(
+            "expected exactly one [DOMAIN-WORDING:%s] region in the engine "
+            "template: the template drifted, update owismind_factory/"
+            "agent_builder.py together with the engine" % key)
+    if not replacement.endswith("\n"):
+        replacement += "\n"
+    return region_re.sub(lambda m: m.group(1) + replacement + m.group(3),
+                         code, count=1)
 
 
 class TemplateDriftError(RuntimeError):
     """The engine template no longer matches the generator's expectations."""
 
 
-def generate_subagent_code(template_code, spec, tool_id, deploy_project=None):
+def generate_subagent_code(template_code, spec, tool_id, deploy_project=None,
+                           agent_ref=None, wording=None):
     """Rewrite the engine template's CONFIG header for a new domain (pure).
 
     :param str template_code: full source of the dataset-expert engine.
     :param spec: DomainSpec.
     :param str tool_id: the domain's Semantic Model Query tool id ("" = fill later).
     :param str deploy_project: project key stamped into the deploy banner.
+    :param str agent_ref: OPTIONAL "agent:<id>" (or bare id) of the target Code
+        Agent. When given, the deploy-header identity lines are rewritten to the
+        new domain's name/id; when None the header is left untouched (the
+        historical behavior, and neutral for the revenue engine).
+    :param dict wording: OPTIONAL {key: replacement_lines} over WORDING_KEYS to
+        swap the delimited domain-wording regions (revenue vocabulary) for a new
+        domain. None keeps every region verbatim.
     """
     replacements = {
         "PROFILE_DATASET": 'PROFILE_DATASET = "%s"' % spec.profile_dataset,
         "VALUE_INDEX_DATASET": 'VALUE_INDEX_DATASET = "%s"' % spec.value_index_dataset,
         "SEMANTIC_TOOL_ID": 'SEMANTIC_TOOL_ID = "%s"' % (tool_id or "FILL_ME_TOOL_ID"),
         "SEMANTIC_TOOL_NAME": 'SEMANTIC_TOOL_NAME = "%s"' % spec.semantic_tool_name,
+        "HUB_DOMAIN": 'HUB_DOMAIN = "%s"' % spec.domain,
     }
     code = template_code
     for key, pattern in _CONFIG_PATTERNS.items():
@@ -60,6 +107,29 @@ def generate_subagent_code(template_code, spec, tool_id, deploy_project=None):
                 "together with the engine" % (key, len(matches)))
         code = re.sub(pattern, replacements[key].replace("\\", "\\\\"), code,
                       count=1, flags=re.MULTILINE)
+
+    if wording:
+        for key in wording:
+            if key not in WORDING_KEYS:
+                raise ValueError("unknown domain-wording key %r (known: %s)"
+                                 % (key, list(WORDING_KEYS)))
+        for key, replacement in wording.items():
+            code = _replace_wording(code, key, replacement)
+
+    if agent_ref:
+        agent_id = agent_ref.split(":", 1)[1] if ":" in agent_ref else agent_ref
+        for header_re, line in (
+                (_HEADER_AGENT_RE,
+                 "# Code Agent: %s = %s" % (spec.agent_name, agent_id)),
+                (_HEADER_PROJECT_RE,
+                 "# DEPLOY TARGET: project %s"
+                 % (deploy_project or "<current project>"))):
+            if len(header_re.findall(code)) != 1:
+                raise TemplateDriftError(
+                    "expected exactly one deploy-header line matching %r: the "
+                    "template drifted, update owismind_factory/agent_builder.py "
+                    "together with the engine" % header_re.pattern)
+            code = header_re.sub(line.replace("\\", "\\\\"), code, count=1)
 
     banner = (
         "# ============================================================\n"
@@ -86,15 +156,26 @@ def read_agent_raw(project, agent_id):
     return settings.get_raw()
 
 
-def _resolve_version(raw):
+def resolve_active_version(raw):
+    """Version dict whose versionId matches activeVersion, else the last, else None.
+
+    Public: probes, the guided preflight and notebook 01 all need the same
+    "active or latest" resolution over an agent's raw settings; callers that
+    treat an empty version list as fatal go through ``_resolve_version``.
+    """
     versions = raw.get("versions") or []
-    if not versions:
-        raise RuntimeError("agent has no versions in its raw settings")
     active = raw.get("activeVersion")
     for version in versions:
         if version.get("versionId") == active:
             return version
-    return versions[-1]
+    return versions[-1] if versions else None
+
+
+def _resolve_version(raw):
+    version = resolve_active_version(raw)
+    if version is None:
+        raise RuntimeError("agent has no versions in its raw settings")
+    return version
 
 
 def agent_exists(project, name):

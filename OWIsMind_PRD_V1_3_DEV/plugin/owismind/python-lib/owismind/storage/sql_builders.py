@@ -18,8 +18,13 @@ def build_conversation_list_query(table_ref, user_value_sql, cursor_last_at_sql,
     newlines/tabs/repeated spaces are collapsed to single spaces and the value is
     trimmed BEFORE truncating to ``title_maxlen`` (so a multi-line prompt reads as a
     short label, not a wall of text). ``[[:space:]]`` is the POSIX class - no backslash
-    escapes to mangle through ``str.format``. Keyset pagination on (last_at,
-    session_id). All value fragments are caller-escaped; ints coerced.
+    escapes to mangle through ``str.format``. The inner ``LEFT(user_text, 4000)`` bounds
+    what the ARRAY_AGG materializes: user_text may weigh up to 256KB per message and
+    only the first ~56 chars survive, so aggregating full bodies would make Postgres
+    build megabyte arrays per caller page for nothing (the 4000 cap keeps the title
+    byte-identical: whitespace collapsing can only shorten the prefix). Keyset
+    pagination on (last_at, session_id). All value fragments are caller-escaped;
+    ints coerced.
     """
     n = int(limit)
     tlen = int(title_maxlen)
@@ -33,7 +38,7 @@ def build_conversation_list_query(table_ref, user_value_sql, cursor_last_at_sql,
     SELECT session_id, title, last_at
     FROM (
       SELECT session_id,
-             COALESCE(LEFT(BTRIM(regexp_replace((ARRAY_AGG(user_text ORDER BY created_at ASC, exchange_id ASC))[1], '[[:space:]]+', ' ', 'g')), {tlen}), '') AS title,
+             COALESCE(LEFT(BTRIM(regexp_replace((ARRAY_AGG(LEFT(user_text, 4000) ORDER BY created_at ASC, exchange_id ASC))[1], '[[:space:]]+', ' ', 'g')), {tlen}), '') AS title,
              MAX(created_at) AS last_at
       FROM {table}
       WHERE user_id = {user}

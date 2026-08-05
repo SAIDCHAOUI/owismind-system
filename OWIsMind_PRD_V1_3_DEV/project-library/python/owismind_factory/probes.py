@@ -11,8 +11,10 @@ READ probes (run_read_probes) are strictly read-only and always safe:
 WRITE probes (run_write_probes) are OFF by default and require allow=True:
 they create ONE throwaway PYTHON_AGENT ("zz_factory_probe") and ONE throwaway
 tool clone, verify the round-trip (inject trivial code, re-read it), then
-DELETE those two probe objects. That is the only deletion in the whole factory
-and it only ever targets the objects the probe itself just created.
+DELETE those two probe objects - only ever the objects the probe itself just
+created (via the shared safe_delete identity gate). The other deletion path in
+the factory is the guided capability-removal run (removal.py), separately
+guarded and confirmed stage by stage.
 
 The outputs feed the factory gates:
 - results["suggested_schema_hints"]  -> agent_builder.create_code_agent
@@ -21,6 +23,7 @@ The outputs feed the factory gates:
 
 import json
 
+from . import agent_builder
 from . import hub as hub_module
 from . import tool_builder
 
@@ -169,11 +172,7 @@ def run_read_probes(project):
         versions = raw.get("versions") or []
         results["agent_versions_count"] = len(versions)
         if versions:
-            version = versions[-1]
-            for candidate in versions:
-                if candidate.get("versionId") == raw.get("activeVersion"):
-                    version = candidate
-                    break
+            version = agent_builder.resolve_active_version(raw)
             results["agent_version_keys"] = sorted(version.keys())
             internal = version.get("pythonAgentSettings")
             results["python_agent_settings_present"] = internal is not None

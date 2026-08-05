@@ -26,11 +26,16 @@ background worker (agents/stream_manager) and the front polls short requests the
 proxy never buffers - the same pattern the project's production Dash app uses.
 
 Identity is always resolved from the authenticated browser headers, never from the
-request body. The frontend only ever sends logical data (e.g. {session_id, message,
-agent_key}); it never chooses table, connection, query, or a raw agent id - the
-agent_key is an opaque logical key resolved server-side against the whitelist.
+request body. The ``guard`` decorator below is the shared enforcement point for the
+converted routes (32 of 44) and owns their impersonation and storage/admin gates;
+the 12 off-pattern routes keep their hand-written sequence but obey the SAME
+invariant (every ``resolve_identity`` call in this file reads ``request.headers``). The frontend only
+ever sends logical data (e.g. {session_id, message, agent_key}); it never chooses
+table, connection, query, or a raw agent id - the agent_key is an opaque logical key
+resolved server-side against the whitelist.
 """
 
+import functools
 import hashlib
 import json
 import logging
@@ -60,7 +65,6 @@ from owismind.security.validation import (
     validate_chat_start_request,
     validate_conversations_limit,
     validate_evidence_aggregate_request,
-    validate_evidence_column,
     validate_evidence_distinct_request,
     validate_evidence_rows_request,
     validate_expires_days,
@@ -90,7 +94,12 @@ from owismind.benchmark_view import lab_io as bench_io
 from owismind.benchmark_view import schema_check as bench_schema
 # --- BEGIN impersonation (temporary, removable) ---
 # Admin "act as user" (read-only). The whole feature lives in security/impersonation.py
-# plus the FENCED blocks below; remove the feature = delete that module + these blocks.
+# plus the FENCED blocks below; remove the feature = delete that module + EVERY fenced
+# block (the shared one inside the ``guard`` decorator AND the 6 inline fences kept by
+# the off-pattern routes: me, track, chat_stop, catalog_projects, catalog_datasets,
+# admin_benchmark_override). Each converted route opts in with ``impersonate="swap"``
+# (READ) or ``impersonate="block"`` (WRITE); once the fenced blocks are gone those
+# arguments are inert (no swap can happen, no write can be blocked).
 from owismind.security import impersonation
 # --- END impersonation ---
 
@@ -117,6 +126,128 @@ def _logical_key(project_key, agent_id):
         "{}:{}".format(project_key, agent_id).encode("utf-8")
     ).hexdigest()
     return "ag_" + digest[:12]
+
+
+# --- request guards ----------------------------------------------------------
+
+
+def guard(name=None, impersonate=None, require_storage=False,
+          bootstrap_chat_table=False, throttle=False, require_admin=False):
+    """The ONE implementation of the guard sequence a protected route runs first.
+
+    Every step is opt-in through a flag, but their ORDER is fixed here - identity,
+    impersonation, configured storage, chat-table bootstrap, per-user throttle, admin
+    rights - so no route can check them in a different order, and the two rules that
+    must never drift (identity resolved SERVER-SIDE from the browser auth headers,
+    never the body; writes refused while an admin impersonates) have a single point of
+    enforcement instead of one hand-written copy per route.
+
+    Parameters:
+      ``name``       literal log prefix of the guarded route (e.g. ``"/usage"``). Kept
+                     explicit so each emitted log line stays exactly the one ops grep
+                     for. ``None`` denies SILENTLY - what the admin routes have always
+                     done (an admin probe is not worth a log line).
+      ``impersonate``  ``"swap"`` on a READ route (serve the impersonated target),
+                     ``"block"`` on a WRITE route (403 while impersonating), ``None``
+                     when the route needs neither or handles it itself.
+      ``require_storage``       409 ``storage_not_configured`` until an admin has
+                     configured the SQL storage.
+      ``bootstrap_chat_table``  create the chat table if missing before the view runs.
+      ``throttle``   per-user token bucket (the shared Evidence bucket) -> 429.
+      ``require_admin``         403 ``forbidden`` unless the caller is an admin.
+
+    The guarded view receives the resolved identity as its FIRST positional argument
+    (a view that has no use for it names that parameter ``_identity``); Flask URL
+    parameters are forwarded unchanged after it.
+    """
+    def decorator(view):
+        @functools.wraps(view)
+        def guarded(*args, **kwargs):
+            try:
+                identity = resolve_identity(request.headers)
+            except IdentityError as exc:
+                if name:
+                    logger.warning("%s - identity resolution failed: %s", name, exc)
+                return jsonify({"status": "error", "error": "unauthenticated"}), 401
+
+            # --- BEGIN impersonation (temporary, removable) ---
+            # A READ route serves the EFFECTIVE user (the impersonated target when an
+            # admin carries the header, the real caller otherwise). A WRITE route is
+            # BLOCKED rather than swapped - an admin consults, never acts under the
+            # inspected user's name - and blocked BEFORE any work (no whitelist
+            # resolution, no budget check, no persisted row).
+            if impersonate == "block":
+                if impersonation.effective_identity(identity).get("impersonating"):
+                    logger.info("%s - blocked while impersonating (read-only)", name)
+                    return jsonify(
+                        {"status": "error", "error": "impersonation_read_only"}
+                    ), 403
+            elif impersonate == "swap":
+                identity = impersonation.effective_identity(identity)
+            # --- END impersonation ---
+
+            if require_storage and not sql_config.is_configured():
+                if name:
+                    logger.warning("%s - storage not configured", name)
+                return jsonify(
+                    {"status": "error", "error": "storage_not_configured"}
+                ), 409
+
+            if bootstrap_chat_table:
+                # Bootstrapping here means that on a configured-but-virgin instance an
+                # unknown/forged exchange_id yields the same owner-scoped 404 as
+                # everywhere else, not a distinguishable 500.
+                try:
+                    ensure_chat_table()
+                except Exception:
+                    logger.exception("%s - chat table bootstrap failed", name)
+                    return jsonify(
+                        {"status": "error", "error": "storage_unavailable"}
+                    ), 500
+
+            # Per-user token-bucket gate: a scripted flood must not pin worker threads
+            # of the mono-process polling backend (the legitimate auto-open meta+rows
+            # pair fits well within the burst capacity). Checked after the cheap
+            # auth/config/bootstrap path.
+            if throttle and not evidence_throttle.can_accept(identity["user_id"]):
+                logger.warning("%s - rate limited user_id=%s", name, identity["user_id"])
+                return jsonify({"status": "error", "error": "rate_limited"}), 429
+
+            if require_admin:
+                try:
+                    if not admin.is_admin(identity["user_id"]):
+                        return jsonify({"status": "error", "error": "forbidden"}), 403
+                except Exception:
+                    logger.exception("admin guard - admin check failed")
+                    return jsonify(
+                        {"status": "error", "error": "storage_unavailable"}
+                    ), 500
+
+            return view(identity, *args, **kwargs)
+
+        return guarded
+
+    return decorator
+
+
+# The three shared presets: a family's guard sequence is declared ONCE and every route
+# of that family visibly runs the same one.
+
+# Evidence Studio (owner-scoped, read-only reads of the caller's own exchanges): the
+# chat table is bootstrapped on top of the identity / storage / throttle sequence
+# because those reads hit the chat storage.
+evidence_guard = guard(name="/evidence", impersonate="swap", require_storage=True,
+                       bootstrap_chat_table=True, throttle=True)
+
+# Source Data Explorer: the same sequence WITHOUT the chat-table bootstrap - the
+# explorer reads project datasets, never the chat storage.
+source_guard = guard(name="/source", impersonate="swap", require_storage=True,
+                     throttle=True)
+
+# Admin space (server-gated; visible in the UI only to admins): 401 unauthenticated,
+# 409 not configured, 403 not admin - all silent. Impersonation is not swapped here;
+# the admin routes that WRITE block it themselves.
+admin_guard = guard(require_storage=True, require_admin=True)
 
 
 @api.before_request
@@ -223,7 +354,8 @@ def me():
 
 
 @api.route("/usage", methods=["GET"])
-def usage_me():
+@guard(name="/usage", impersonate="swap", require_storage=True)
+def usage_me(identity):
     """The caller's own monthly budget status (spend, effective limit, remaining, reset).
 
     Powers the profile's consumption view and the chat budget banner. Strictly
@@ -231,21 +363,6 @@ def usage_me():
     value. Returns the resolved limit and its SOURCE (default / global temp boost /
     per-user override) so the UI can be fully transparent about why the cap is what it is.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/usage - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # Read the EFFECTIVE user's usage (the impersonated target when an admin impersonates).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/usage - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     # Per-user token bucket on this always-on read: the legitimate cadence (init + one
     # read per finished run + Settings open) fits easily; a scripted flood is denied so it
     # cannot pin the mono-process backend's threads / the shared SQL connection.
@@ -355,7 +472,8 @@ def _sanitize_screen_context(raw):
 
 
 @api.route("/chat/start", methods=["POST"])
-def chat_start():
+@guard(name="/chat/start", impersonate="block")
+def chat_start(identity):
     """Start a real agent run for one message in a background worker; return a run_id.
 
     The frontend sends only ``{session_id, message, agent_key}``; identity is
@@ -366,22 +484,12 @@ def chat_start():
     fails. The agent itself runs in a background thread (agents/stream_manager); the
     front then polls /chat/poll for the live timeline. 503 ``busy`` if the global
     concurrent-run cap is reached.
+
+    The guard deliberately stops at identity + the impersonation write-block: this
+    route validates its PAYLOAD before the storage gate (a malformed body is a 400 on
+    an unconfigured instance too), so ``is_configured`` stays inline below, in that
+    order, rather than moving up into ``guard``.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/chat/start - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # WRITE route: blocked while an admin impersonates (consultation only, no sending /
-    # no budget spend under the user's name). Checked BEFORE any work / whitelist /
-    # budget / persist. We block here rather than swap identity (we do not act as them).
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/chat/start - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
     try:
         session_id, message, agent_key = validate_chat_start_request(
             request.get_json(silent=True)
@@ -701,7 +809,8 @@ def chat_activity():
 
 
 @api.route("/chat/feedback", methods=["POST"])
-def chat_feedback():
+@guard(name="/chat/feedback", impersonate="block", require_storage=True)
+def chat_feedback(identity):
     """Persist 👍/👎 feedback (+ reasons + comment) on one of the caller's own messages.
 
     Identity comes from the auth headers (never the body); the UPDATE in
@@ -710,24 +819,6 @@ def chat_feedback():
     silent no-op. The payload is validated/bounded server-side (rating 0/1/None,
     whitelisted reasons, bounded comment).
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/chat/feedback - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
-    # rate a message under the inspected user's name; checked before any work.
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/chat/feedback - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/chat/feedback - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     try:
         exchange_id, rating, reasons, comment = validate_feedback(
             request.get_json(silent=True)
@@ -755,28 +846,14 @@ def chat_feedback():
 
 
 @api.route("/conversations", methods=["GET"])
-def conversations():
+@guard(name="/conversations", impersonate="swap", require_storage=True)
+def conversations(identity):
     """Names-only, keyset-paginated conversation list for the signed-in user.
 
     Powers the lazy sidebar: one page of conversation summaries (session_id, title,
     last_at) - never message bodies. ``cursor`` resumes a previous page; ``limit`` is
     clamped server-side to [1, 60] (default 30). Strictly owner-scoped.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/conversations - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # List the EFFECTIVE user's conversations (the impersonated target for an admin).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/conversations - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     limit = validate_conversations_limit(request.args.get("limit"))
     # Bound the opaque cursor before it reaches decode_cursor (defensive: a real
     # base64 cursor for iso(~32) + sep + uuid(36) is well under 128 chars; 512 is
@@ -802,7 +879,8 @@ def conversations():
 
 
 @api.route("/conversation", methods=["GET"])
-def conversation():
+@guard(name="/conversation", impersonate="swap", require_storage=True)
+def conversation(identity):
     """All messages of ONE session (the user's own), chronological, bounded.
 
     Fetched lazily when the user clicks a conversation in the sidebar. The session
@@ -810,21 +888,6 @@ def conversation():
     the read is bounded by an absolute row cap. Rows are shaped like the conversation
     readback (`chat_v5._COLUMNS`), so the frontend reuses one row->message mapper.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/conversation - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # Load the EFFECTIVE user's session (the impersonated target for an admin).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/conversation - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     session_id = (request.args.get("session_id") or "").strip()
     if not session_id or len(session_id) > MAX_SESSION_ID_LENGTH:
         return jsonify({"status": "error", "error": "invalid_session_id"}), 400
@@ -928,53 +991,20 @@ def agents_available():
 # --- Evidence Studio (owner-scoped, read-only, auto-discovered project datasets) ----
 
 
-def _evidence_guard():
-    """Resolve identity + require configured storage (shared by /evidence/*).
-
-    Returns ``(identity, None)`` or ``(None, (response, status))``.
-
-    Also bootstraps the chat table like the other chat-table readers do, so on a
-    configured-but-virgin instance an unknown/forged exchange_id yields the same
-    owner-scoped 404 as everywhere else (not a distinguishable 500).
-    """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/evidence - identity resolution failed: %s", exc)
-        return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
-    # --- BEGIN impersonation (temporary, removable) ---
-    # Evidence reads scope to the EFFECTIVE user (the impersonated target for an admin),
-    # so an admin sees exactly the SQL / charts / tables the inspected user sees.
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-    if not sql_config.is_configured():
-        logger.warning("/evidence - storage not configured")
-        return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
-    try:
-        ensure_chat_table()
-    except Exception:
-        logger.exception("/evidence - chat table bootstrap failed")
-        return None, (jsonify({"status": "error", "error": "storage_unavailable"}), 500)
-    # Per-user token-bucket gate: a scripted flood must not pin worker threads of the
-    # mono-process polling backend (the legitimate auto-open meta+rows pair fits well
-    # within the burst capacity). Checked after the cheap auth/config/bootstrap path.
-    if not evidence_throttle.can_accept(identity["user_id"]):
-        logger.warning("/evidence - rate limited user_id=%s", identity["user_id"])
-        return None, (jsonify({"status": "error", "error": "rate_limited"}), 429)
-    return identity, None
+# Every route below runs the shared ``evidence_guard`` preset (identity, effective
+# user, configured storage, chat-table bootstrap, per-user throttle) and receives the
+# resolved identity as its first argument.
 
 
 @api.route("/evidence/meta", methods=["GET"])
-def evidence_meta():
+@evidence_guard
+def evidence_meta(identity):
     """Interactive descriptor of one exchange's evidence (or a degraded shape).
 
     The caller sends ONLY ``exchange_id``: table, connection, SQL and dataset
     matching are all resolved server-side. Owner-scoped - someone else's
     exchange is 404.
     """
-    identity, err = _evidence_guard()
-    if err:
-        return err
     try:
         exchange_id = validate_required_exchange_id(request.args.get("exchange_id"))
     except ValidationError as exc:
@@ -1040,7 +1070,8 @@ def evidence_meta():
 
 
 @api.route("/evidence/rows", methods=["POST"])
-def evidence_rows():
+@evidence_guard
+def evidence_rows(identity):
     """One bounded page of the evidence table, rebuilt from STRUCTURED filters.
 
     The body never carries SQL: editable chips travel as {column, op, values},
@@ -1048,9 +1079,6 @@ def evidence_rows():
     the optional ``drill`` labels are matched server-side against group keys
     re-derived from the stored SQL (the client never picks a drill column set).
     """
-    identity, err = _evidence_guard()
-    if err:
-        return err
     try:
         (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
          drill, table, q) = validate_evidence_rows_request(request.get_json(silent=True))
@@ -1071,7 +1099,8 @@ def evidence_rows():
 
 
 @api.route("/evidence/distinct", methods=["POST"])
-def evidence_distinct():
+@evidence_guard
+def evidence_distinct(identity):
     """Bounded distinct values of ONE column (the CASCADING filter-chip picker).
 
     POST (was GET): the frontend is the only consumer and the picker now carries the
@@ -1089,9 +1118,6 @@ def evidence_distinct():
     like it widens the row window. The advanced fragment always applies; ``include_advanced``
     is accepted for scope-object parity but the picker never drops it (validated only).
     """
-    identity, err = _evidence_guard()
-    if err:
-        return err
     try:
         (exchange_id, column, exclude_id, q, filters, kept_ids, _include_advanced,
          drill, scope_q) = validate_evidence_distinct_request(request.get_json(silent=True))
@@ -1112,7 +1138,8 @@ def evidence_distinct():
 
 
 @api.route("/evidence/aggregate", methods=["POST"])
-def evidence_aggregate():
+@evidence_guard
+def evidence_aggregate(identity):
     """Database-EXACT totals over the exchange's PRE-FILTERED evidence scope.
 
     Mirrors /evidence/rows (same guard + STRUCTURED body: editable chips as
@@ -1124,9 +1151,6 @@ def evidence_aggregate():
     that the scope is pre-filtered by the answer's stored SQL. Returns
     ``{rows, totals, truncated}``.
     """
-    identity, err = _evidence_guard()
-    if err:
-        return err
     try:
         (exchange_id, filters, kept_ids, include_advanced, q, drill, table,
          group, measures, limit) = validate_evidence_aggregate_request(
@@ -1154,45 +1178,20 @@ def evidence_aggregate():
 # to a discovered project dataset and runs a bounded read-only page. Mirrors /evidence/*.
 
 
-def _source_guard():
-    """Resolve identity + require configured storage (shared by /source/*).
-
-    Like ``_evidence_guard`` (identity, impersonation-effective identity, configured
-    storage, per-user throttle) but WITHOUT the chat-table bootstrap: the explorer
-    reads project datasets, never the chat storage. Returns ``(identity, None)`` or
-    ``(None, (response, status))``.
-    """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/source - identity resolution failed: %s", exc)
-        return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
-    # --- BEGIN impersonation (temporary, removable) ---
-    # Source reads scope to the EFFECTIVE user (the impersonated target for an admin),
-    # so an admin sees exactly what the inspected user's agents can explore.
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-    if not sql_config.is_configured():
-        logger.warning("/source - storage not configured")
-        return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
-    # Per-user token-bucket gate: reuse the Evidence throttle - a scripted flood must
-    # not pin worker threads of the mono-process polling backend.
-    if not evidence_throttle.can_accept(identity["user_id"]):
-        logger.warning("/source - rate limited user_id=%s", identity["user_id"])
-        return None, (jsonify({"status": "error", "error": "rate_limited"}), 429)
-    return identity, None
+# Every route below runs the shared ``source_guard`` preset (the Evidence sequence
+# minus the chat-table bootstrap, reusing the same per-user throttle). None of them
+# needs the resolved identity itself: the source index resolves to a dataset the
+# ADMIN attached to the agent, so the read is not owner-scoped.
 
 
 @api.route("/source/meta", methods=["GET"])
-def source_meta():
+@source_guard
+def source_meta(_identity):
     """Descriptor of one configured source: its label + live column list.
 
     Query params: ``agent`` (opaque logical key), ``source`` (int index). Table /
     connection are resolved server-side.
     """
-    _identity, err = _source_guard()
-    if err:
-        return err
     try:
         agent_key, source_id = validate_source_meta_params(
             request.args.get("agent"), request.args.get("source"))
@@ -1210,16 +1209,14 @@ def source_meta():
 
 
 @api.route("/source/rows", methods=["POST"])
-def source_rows():
+@source_guard
+def source_rows(_identity):
     """One bounded window of a configured source dataset, filtered + optionally searched.
 
     Body: ``{agent, source, q?, filters?, limit?, offset?, sort?}``. The body never
     carries SQL: filters travel as ``{column, op, values}`` and ``q`` is a free-text
     term matched over all columns server-side; ``limit``/``offset`` are clamped.
     """
-    _identity, err = _source_guard()
-    if err:
-        return err
     try:
         agent_key, source_id, q, filters, limit, offset, sort = validate_source_rows_request(
             request.get_json(silent=True))
@@ -1237,7 +1234,8 @@ def source_rows():
 
 
 @api.route("/source/distinct", methods=["POST"])
-def source_distinct():
+@source_guard
+def source_distinct(_identity):
     """Bounded distinct values of ONE source column (the CASCADING filter-chip picker).
 
     POST (was GET): the frontend is the only consumer and the picker now carries the same
@@ -1248,9 +1246,6 @@ def source_distinct():
     previous picker. The body never carries SQL; the source index resolves to a dataset
     server-side.
     """
-    _identity, err = _source_guard()
-    if err:
-        return err
     try:
         agent_key, source_id, column, q, filters, scope_q = validate_source_distinct_request(
             request.get_json(silent=True))
@@ -1268,7 +1263,8 @@ def source_distinct():
 
 
 @api.route("/source/aggregate", methods=["POST"])
-def source_aggregate():
+@source_guard
+def source_aggregate(_identity):
     """Database-EXACT totals over the FULL filtered set of a configured source dataset.
 
     The table view is a paginated window; this computes exact aggregates (whitelisted
@@ -1277,9 +1273,6 @@ def source_aggregate():
     the body never carries SQL - the aggregation is a structured spec resolved server-side.
     Returns ``{rows, totals, truncated}``.
     """
-    _identity, err = _source_guard()
-    if err:
-        return err
     try:
         agent_key, source_id, q, filters, group, measures, limit = (
             validate_source_aggregate_request(request.get_json(silent=True)))
@@ -1298,15 +1291,13 @@ def source_aggregate():
 
 
 @api.route("/admin/sources/datasets", methods=["GET"])
-def admin_sources_datasets():
+@admin_guard
+def admin_sources_datasets(_identity):
     """The project's discovered SQL dataset NAMES, for the admin source picker.
 
     Admin-gated. A listing failure degrades to an empty list + an ``error`` field
     (never a 500 storm) so the admin form stays usable.
     """
-    _identity, err = _admin_guard()
-    if err:
-        return err
     try:
         datasets = source_service.list_source_dataset_names()
     except Exception:
@@ -1324,31 +1315,14 @@ def admin_sources_datasets():
 
 
 @api.route("/benchmark/suggest", methods=["POST"])
-def benchmark_suggest():
+@guard(name="/benchmark/suggest", impersonate="block", require_storage=True)
+def benchmark_suggest(identity):
     """Persist a standalone (manual) benchmark suggestion from the caller.
 
     Body: ``{question, reference_answer, expected_value?, expected_value_type?, category?,
     language?}``. Validated/bounded server-side; identity comes from the auth headers; the row
     is owner-stamped. Returns ``{status:'ok', suggestion_id}``.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/benchmark/suggest - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
-    # submit a suggestion under the inspected user's name; checked before any work.
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/benchmark/suggest - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/benchmark/suggest - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     try:
         fields = validate_suggestion_manual(request.get_json(silent=True))
     except ValidationError as exc:
@@ -1375,7 +1349,8 @@ def benchmark_suggest():
 
 
 @api.route("/benchmark/suggest-from-chat", methods=["POST"])
-def benchmark_suggest_from_chat():
+@guard(name="/benchmark/suggest-from-chat", impersonate="block", require_storage=True)
+def benchmark_suggest_from_chat(identity):
     """Persist a benchmark suggestion built from one of the caller's own chat answers.
 
     Body: ``{exchange_id, answer_is_correct, reference_answer?, missing_explanation?,
@@ -1384,22 +1359,6 @@ def benchmark_suggest_from_chat():
     "Yes" verdict stores the agent answer as the reference (a positive example); a "No"
     verdict requires the correct answer. Returns ``{status:'ok', suggestion_id}``.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/benchmark/suggest-from-chat - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/benchmark/suggest-from-chat - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/benchmark/suggest-from-chat - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     try:
         fields = validate_suggestion_from_chat(request.get_json(silent=True))
     except ValidationError as exc:
@@ -1456,23 +1415,9 @@ def benchmark_suggest_from_chat():
 
 
 @api.route("/benchmark/suggestions", methods=["GET"])
-def benchmark_my_suggestions():
+@guard(name="/benchmark/suggestions", impersonate="swap", require_storage=True)
+def benchmark_my_suggestions(identity):
     """List the caller's OWN benchmark suggestions (newest first, owner-scoped + bounded)."""
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/benchmark/suggestions - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # READ route: list the EFFECTIVE user's suggestions (the impersonated target for an admin).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/benchmark/suggestions - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     suggestions = suggestions_storage.list_my_suggestions(identity["user_id"])
     logger.info(
         "/benchmark/suggestions - user_id=%s returned %d",
@@ -1554,31 +1499,14 @@ def catalog_datasets():
 
 
 @api.route("/feedback/submit", methods=["POST"])
-def feedback_submit():
+@guard(name="/feedback/submit", impersonate="block", require_storage=True)
+def feedback_submit(identity):
     """Persist a general feedback submission from the caller (Help & Support hub, feature A).
 
     Body: ``{message, category?, linked_session_id?}``. Identity comes from the auth
     headers (never the body); the row is owner-stamped. Returns
     ``{status:'ok', feedback_id}``.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/feedback/submit - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
-    # submit feedback under the inspected user's name; checked before any work.
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/feedback/submit - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/feedback/submit - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     try:
         fields = validate_feedback_submission(request.get_json(silent=True))
     except ValidationError as exc:
@@ -1602,54 +1530,23 @@ def feedback_submit():
 
 
 @api.route("/feedback/mine", methods=["GET"])
-def feedback_mine():
+@guard(name="/feedback/mine", impersonate="swap", require_storage=True)
+def feedback_mine(identity):
     """List the caller's OWN feedback submissions (newest first, owner-scoped + bounded)."""
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/feedback/mine - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # READ route: list the EFFECTIVE user's feedback (the impersonated target for an admin).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/feedback/mine - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     items = feedback_storage.list_my_feedback(identity["user_id"])
     logger.info("/feedback/mine - user_id=%s returned %d", identity["user_id"], len(items))
     return jsonify({"status": "ok", "items": items})
 
 
 @api.route("/agent-request/submit", methods=["POST"])
-def agent_request_submit():
+@guard(name="/agent-request/submit", impersonate="block", require_storage=True)
+def agent_request_submit(identity):
     """Persist a new-agent request from the caller (Help & Support hub, feature B).
 
     Body: ``{project_key?, project_label?, datasets?, business_case, use_cases?,
     importance?}``. Identity comes from the auth headers (never the body); the row is
     owner-stamped. Returns ``{status:'ok', request_id}``.
     """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/agent-request/submit - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # WRITE route: blocked while impersonating (read-only consultation). An admin cannot
-    # submit an agent request under the inspected user's name; checked before any work.
-    if impersonation.effective_identity(identity).get("impersonating"):
-        logger.info("/agent-request/submit - blocked while impersonating (read-only)")
-        return jsonify({"status": "error", "error": "impersonation_read_only"}), 403
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/agent-request/submit - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     try:
         fields = validate_agent_request(request.get_json(silent=True))
     except ValidationError as exc:
@@ -1674,23 +1571,9 @@ def agent_request_submit():
 
 
 @api.route("/agent-request/mine", methods=["GET"])
-def agent_request_mine():
+@guard(name="/agent-request/mine", impersonate="swap", require_storage=True)
+def agent_request_mine(identity):
     """List the caller's OWN agent requests (newest first, owner-scoped + bounded)."""
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError as exc:
-        logger.warning("/agent-request/mine - identity resolution failed: %s", exc)
-        return jsonify({"status": "error", "error": "unauthenticated"}), 401
-
-    # --- BEGIN impersonation (temporary, removable) ---
-    # READ route: list the EFFECTIVE user's requests (the impersonated target for an admin).
-    identity = impersonation.effective_identity(identity)
-    # --- END impersonation ---
-
-    if not sql_config.is_configured():
-        logger.warning("/agent-request/mine - storage not configured")
-        return jsonify({"status": "error", "error": "storage_not_configured"}), 409
-
     items = agent_requests_storage.list_my_agent_requests(identity["user_id"])
     logger.info("/agent-request/mine - user_id=%s returned %d", identity["user_id"], len(items))
     return jsonify({"status": "ok", "items": items})
@@ -1784,11 +1667,9 @@ def benchmark_attempt():
 
 
 @api.route("/admin/benchmark/tables", methods=["GET"])
-def admin_benchmark_tables():
+@admin_guard
+def admin_benchmark_tables(_identity):
     """List the public tables on a SQL connection, for the agent-profile table picker (admin)."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     connection = request.args.get("connection") or bench_profile.DEFAULT_CONNECTION
     tables, read_err = bench_io.list_tables(connection)
     if read_err:
@@ -1797,11 +1678,9 @@ def admin_benchmark_tables():
 
 
 @api.route("/admin/benchmark/validate-table", methods=["POST"])
-def admin_benchmark_validate_table():
+@admin_guard
+def admin_benchmark_validate_table(_identity):
     """Check a candidate table has the columns the consultation needs (admin). Reports missing ones."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     body = request.get_json(silent=True) or {}
     connection = body.get("connection") or bench_profile.DEFAULT_CONNECTION
     table = bench_profile.validate_benchmark_block(
@@ -1817,15 +1696,13 @@ def admin_benchmark_validate_table():
 
 
 @api.route("/admin/benchmark/override", methods=["POST"])
-def admin_benchmark_override():
+@admin_guard
+def admin_benchmark_override(identity):
     """Override (or clear) the judge verdict on one scored row (admin, human-in-the-loop).
 
     Resolves the agent's benchmark table server-side from the opaque key, validates the override,
     and writes the human_* columns via a bounded parametrized UPDATE (lab_io.write_override).
     """
-    identity, err = _admin_guard()
-    if err:
-        return err
     # --- BEGIN impersonation (temporary, removable) ---
     # WRITE route: an admin acting as another user is read-only; block the override write.
     if impersonation.effective_identity(identity).get("impersonating"):
@@ -1851,44 +1728,22 @@ def admin_benchmark_override():
 
 
 # --- admin space (server-gated; visible in the UI only to admins) ------------
-
-
-def _admin_guard():
-    """Resolve identity and require configured storage + admin rights.
-
-    Returns ``(identity, None)`` when allowed, or ``(None, (response, status))``
-    to short-circuit: 401 unauthenticated, 409 not configured, 403 not admin.
-    """
-    try:
-        identity = resolve_identity(request.headers)
-    except IdentityError:
-        return None, (jsonify({"status": "error", "error": "unauthenticated"}), 401)
-    if not sql_config.is_configured():
-        return None, (jsonify({"status": "error", "error": "storage_not_configured"}), 409)
-    try:
-        if not admin.is_admin(identity["user_id"]):
-            return None, (jsonify({"status": "error", "error": "forbidden"}), 403)
-    except Exception:
-        logger.exception("admin guard - admin check failed")
-        return None, (jsonify({"status": "error", "error": "storage_unavailable"}), 500)
-    return identity, None
+# Every route below runs the shared ``admin_guard`` preset (401 unauthenticated /
+# 409 not configured / 403 not admin, all silent) and receives the resolved identity
+# as its first argument.
 
 
 @api.route("/admin/storage", methods=["GET"])
-def admin_storage_get():
+@admin_guard
+def admin_storage_get(_identity):
     """Resolved storage config (connection, prefix, computed table names)."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     return jsonify({"status": "ok", "storage": sql_config.storage_status()})
 
 
 @api.route("/admin/users", methods=["GET"])
-def admin_users():
+@admin_guard
+def admin_users(_identity):
     """List every user who has opened the webapp (with their admin flag)."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     try:
         users = admin.list_users()
     except Exception:
@@ -1898,11 +1753,9 @@ def admin_users():
 
 
 @api.route("/admin/users/set-admin", methods=["POST"])
-def admin_set_admin():
+@admin_guard
+def admin_set_admin(_identity):
     """Set or clear a user's admin flag (never below one remaining admin)."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     body = request.get_json(silent=True) or {}
     target = body.get("user_id")
     value = bool(body.get("is_admin"))
@@ -1925,7 +1778,8 @@ def admin_set_admin():
 
 
 @api.route("/admin/budget", methods=["GET", "POST"])
-def admin_budget():
+@admin_guard
+def admin_budget(identity):
     """Get or set the monthly budget config + per-user usage overview.
 
     GET returns ``{config, period_start, next_reset, users:[...]}`` - the global config
@@ -1936,10 +1790,6 @@ def admin_budget():
     a fresh one; neither (the plain default-limit save) PRESERVES the existing boost. POST
     returns the refreshed overview so the UI updates in one round-trip.
     """
-    identity, err = _admin_guard()
-    if err:
-        return err
-
     if request.method == "GET":
         try:
             return jsonify({"status": "ok", **budget.admin_overview()})
@@ -1985,7 +1835,8 @@ def admin_budget():
 
 
 @api.route("/admin/budget/users", methods=["POST"])
-def admin_budget_users():
+@admin_guard
+def admin_budget_users(identity):
     """Set or clear a PER-USER monthly limit override for one, several or all users.
 
     Body: ``{user_ids:[...], clear:bool, limit_usd, expires_days, note}``. ``clear:true``
@@ -1994,10 +1845,6 @@ def admin_budget_users():
     an int = a temporary boost). The user_ids list is bounded; everything is re-validated
     server-side. Returns the refreshed overview.
     """
-    identity, err = _admin_guard()
-    if err:
-        return err
-
     body = request.get_json(silent=True) or {}
     clear = bool(body.get("clear"))
     try:
@@ -2032,11 +1879,9 @@ def admin_budget_users():
 
 
 @api.route("/admin/projects", methods=["GET"])
-def admin_projects():
+@admin_guard
+def admin_projects(_identity):
     """List the DSS project keys this webapp's identity can see (read-only)."""
-    _identity, err = _admin_guard()
-    if err:
-        return err
     try:
         projects = discovery.list_project_keys()
     except Exception:
@@ -2046,15 +1891,13 @@ def admin_projects():
 
 
 @api.route("/admin/projects/<project_key>/agents", methods=["GET"])
-def admin_project_agents(project_key):
+@admin_guard
+def admin_project_agents(_identity, project_key):
     """List the agents of one project (read-only), for the admin picker.
 
     Returns each agent's id + description. The project_key is validated against the
     visible project list first, so an admin cannot probe an arbitrary/hidden key.
     """
-    _identity, err = _admin_guard()
-    if err:
-        return err
     try:
         if project_key not in set(discovery.list_project_keys()):
             return jsonify({"status": "error", "error": "project_not_found"}), 404
@@ -2073,7 +1916,8 @@ def admin_project_agents(project_key):
 
 
 @api.route("/admin/agents", methods=["GET", "POST"])
-def admin_agents():
+@admin_guard
+def admin_agents(identity):
     """Get or set the enabled-agents whitelist.
 
     GET returns the stored selection (admin view, includes project_key/agent_id).
@@ -2082,10 +1926,6 @@ def admin_agents():
     (project visible + agent actually present), so the persisted whitelist can only
     ever contain real, authorised agents - the front cannot inject an arbitrary id.
     """
-    identity, err = _admin_guard()
-    if err:
-        return err
-
     if request.method == "GET":
         try:
             enabled = settings.get_enabled_agents()

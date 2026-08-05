@@ -7,21 +7,24 @@
 
 ## Focus courant
 
-**MODE CLAUDE = SONNET 5, VALIDE WEBAPP (2026-07-23).** Le tier "claude" est passe de
-`vertex_ai/claude-sonnet-4-6` a `vertex_ai/claude-sonnet-5`. Incident "sous-agents KO en
-mode claude" resolu : la case Reasoning Model de l'entree sonnet-5 (connexion
-`LLM-7064-revforecast`) faisait traduire `reasoning_effort` par LiteLLM en ancien dialecte
-`thinking.type=enabled` sur le chemin JSON force (UNDERSTAND) -> 400 famille Claude 5 ;
-l'orchestrateur (pas de JSON force) passait, d'ou le symptome asymetrique. Fix = case
-DECOCHEE : Sonnet 5 raisonne en ADAPTATIF par defaut (bench 24/24, modulation des tokens
-selon la difficulte, mesh == direct sans parametre). Piege de test compris : un sous-agent
-stand-alone tourne en smart (mode injecte par contexte) -> tester un tier =
-`DEFAULT_MODE` temporaire. Repo aligne sonnet-5 (12 fichiers, 741 tests, 0 occurrence 4-6
-hors tests) ; DSS edite a la main par l'user (id identique), prochain recollage = resync.
-Restes : 2 tools Semantic Model Query + juge LAB encore sur 4.6 ; ticket LiteLLM optionnel.
+**AUDIT APPROFONDI v1.3 + LOTS A-E APPLIQUES (2026-08-05 -> 06).** Audit multi-agents (16 Opus :
+8 dimensions + 8 contre-verificateurs), 72 findings 0 rejete, rapport + plan + etat d'execution :
+`docs/audit/AUDIT_CODE_V1_3_2026-08-05.md`. Applique et prouve : quick wins (chart.js paresseux,
+bundle -39 % ; cache TTL whitelist ; LEFT 4000 /conversations) ; securite removal (PROTECTED_BY_OTHERS,
+safe_hub_path fail-closed, validateurs lockstep + gates de forme, caps write_capabilities, allowlist
+attribute_lookup, bug SEC-06 has-rows REPARE) ; filets anti-derive (filecmp recettes, _dss_stub unique
+-675 l., _agent_stubs, tests reels whitelist + 404 route, pg_identifier, gardes template, probe-gates) ;
+de-duplication (decorateur @guard 32/44 routes valide par revue differentielle 8192 scenarios PASS,
+postJson/get + stores, executeurs removal declaratifs, probe_gates exporte) ; AG-01a (generateur
+HUB_DOMAIN + en-tete + 4 regions DOMAIN-WORDING, regeneration revenus BYTE-IDENTIQUE). **2109 tests
+verts (765 miroir + 979 plugin + 365 front), diff +1462/-2021.** RIEN deploye DSS (recolls listes en
+section 5 du rapport). BLOQUE permission : copie body.html (voir Prochaines etapes, zip INTERDIT avant).
+EN ATTENTE user : purge i18n FE-06 (liste `docs/audit/FE-06_cles_i18n_mortes_a_valider.md`), FE-09,
+onglet "Nouveau domaine", regeneration tickets AG-01b, correctif contrats d'erreur listings (BE-03).
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-07-23 : mode claude bascule sur Sonnet 5 (diagnostic chemin mode->modele, cause = case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
+- 2026-08-06 (Run 1, demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
+- 2026-07-23 : mode claude bascule sur Sonnet 5 (case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
 - 2026-07-22 Run 2 : capability removal + disable (moteur removal.py + machine 12 etapes + UI + revue adversariale fix HIGH L170), implementation Sol xhigh, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
 - 2026-07-22 Run 1 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
 - 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
@@ -64,7 +67,13 @@ Restes : 2 tools Semantic Model Query + juge LAB encore sur 4.6 ; ticket LiteLLM
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 (config DSS ; obligatoire si retrait de la 4.6 de la connexion) ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 (decision comparabilite) ; ticket plateforme LiteLLM (reasoning_effort x response_format) pour recuperer le reglage d'effort. Voir `sessions/2026-07-23.md`.
+- **AUDIT v1.3, suites immediates (2026-08-06)** : (1) USER : copier body.html (bloque par permission) :
+  `cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
+  puis `/package-plugin-dev` (zip INTERDIT avant la copie : body.html pointe l'ancien hash) ; (2) USER :
+  trancher FE-06 (liste i18n) / FE-09 / onglet "Nouveau domaine" / regeneration tickets AG-01b / correctif
+  contrats d'erreur listings BE-03 ; (3) session dediee : refactors restants (rapport section 5) ;
+  (4) recolls DSS : 3 Code Agents + attribute_lookup + template hub (notebook 01) + owismind_factory + console.
+- **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 ; ticket LiteLLM optionnel. Voir `sessions/2026-07-23.md`.
 - **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
   nouvelle conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud
   (il l'enumere encore dans ses refus tant que le process n'a pas redemarre). Decision toujours
@@ -81,12 +90,8 @@ Restes : 2 tools Semantic Model Query + juge LAB encore sur 4.6 ; ticket LiteLLM
   les fichiers factory ENSEMBLE + restart backend, L169) ; smoke metier delivery_snapshot
   (questions reelles + Evidence + non-regression revenus/tickets) ; curation du profil si
   reponses moyennes.
-- **Repo, ecart guide/code** : le notebook `01_push_config_hub.py` ne pousse que settings +
-  capabilities + persona ; il ne pousse PAS `run_settings.json`, `prompts/orchestrator_workflow.md`
-  NI `templates/dataset_expert.py` quand la sonde n'a pas confirme les cles (fallback = simple
-  print MANUAL, rate par l'user le 2026-07-21 -> template absent -> code agent jamais genere ;
-  l'assistant guide verifie desormais le template avec instructions). Etendre 01 (via le
-  regenerateur de seeds) ou corriger le guide.
+- **Repo, ecart guide/code** : notebook 01 ne pousse pas run_settings / workflow prompt / template moteur
+  quand la sonde n'a pas confirme (print MANUAL rate le 2026-07-21) ; etendre 01 ou corriger le guide.
 - **DSS clone v1.3 : re-pointer les 2 tools Semantic Model Query** (L162 : leurs params portent encore
   `project_key OWISMIND_PRD_V1_2` apres duplication ; le notebook 02 ne corrige que les modeles).
 - **DURABLE STEP SHELL v1.3 - DEPLOIEMENT DSS DEV** : `DEPLOY_V1_3_DEV.md` phase H (zip + re-paste

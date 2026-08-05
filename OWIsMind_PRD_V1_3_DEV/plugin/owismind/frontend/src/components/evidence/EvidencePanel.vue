@@ -10,7 +10,7 @@
 // carries chart / table / kpi artifacts. Switching tabs ONLY updates
 // evidence.activeTab - it MUST NOT change evidence.open (the ChatThread scroll
 // gate checks open, F13).
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon } from '../ui'
@@ -21,7 +21,10 @@ import EvidenceCalc from './EvidenceCalc.vue'
 import EvidenceResult from './EvidenceResult.vue'
 import EvidenceSourcesTab from './EvidenceSourcesTab.vue'
 import EvidenceSql from './EvidenceSql.vue'
-import ArtifactChart from './ArtifactChart.vue'
+// Async on purpose: ArtifactChart pulls in the whole chart.js library (~40% of the
+// entry bundle), and its render is already gated behind the Chart tab v-else-if, so
+// Vite splits it into a lazy chunk fetched on the first chart instead of at boot.
+const ArtifactChart = defineAsyncComponent(() => import('./ArtifactChart.vue'))
 import ArtifactTable from './ArtifactTable.vue'
 import ArtifactKpi from './ArtifactKpi.vue'
 

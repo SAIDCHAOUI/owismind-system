@@ -20,6 +20,15 @@ import re
 # 63-byte identifier limit. Project keys observed are ~20 chars, keep headroom.
 MAX_DATASET_NAME = 40
 
+# Field size bounds (SEC hardening 2026-08): planner_description is injected in
+# the orchestrator's tool routing description on EVERY turn, and the labels /
+# search columns end up in the hub registry - none of them may grow unbounded.
+# Live entries measured well under these (descriptions 410/640 chars, 7 columns).
+MAX_PLANNER_DESCRIPTION = 2000
+MAX_LABEL_CHARS = 120
+MAX_LOOKUP_COLUMNS = 32
+MAX_LOOKUP_COLUMN_CHARS = 63
+
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 _DATASET_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
@@ -122,6 +131,21 @@ class DomainSpec(object):
             raise SpecError("base_dataset must be a valid dataset name, got %r" % self.base_dataset)
         if not self.label_fr or not self.label_en:
             raise SpecError("label_fr and label_en are required")
+        if len(self.planner_description) > MAX_PLANNER_DESCRIPTION:
+            raise SpecError("planner_description is %d chars (max %d): it is injected "
+                            "in the orchestrator's routing prompt on every turn"
+                            % (len(self.planner_description), MAX_PLANNER_DESCRIPTION))
+        for label_name, label in (("label_fr", self.label_fr), ("label_en", self.label_en)):
+            if len(label) > MAX_LABEL_CHARS:
+                raise SpecError("%s is %d chars (max %d)"
+                                % (label_name, len(label), MAX_LABEL_CHARS))
+        if len(self.lookup_search_columns) > MAX_LOOKUP_COLUMNS:
+            raise SpecError("lookup_search_columns has %d entries (max %d)"
+                            % (len(self.lookup_search_columns), MAX_LOOKUP_COLUMNS))
+        for column in self.lookup_search_columns:
+            if len(str(column)) > MAX_LOOKUP_COLUMN_CHARS:
+                raise SpecError("lookup_search_columns entry %r is longer than %d chars"
+                                % (column, MAX_LOOKUP_COLUMN_CHARS))
         for name in self.knowledge_datasets:
             if len(name) > MAX_DATASET_NAME:
                 raise SpecError(

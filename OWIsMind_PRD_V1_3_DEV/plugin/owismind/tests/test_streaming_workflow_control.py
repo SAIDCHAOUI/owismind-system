@@ -14,32 +14,12 @@ import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    if not hasattr(dk, "api_client"):
-        dk.api_client = lambda: None
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    for name, value in (("Constant", lambda v: v),
-                        ("toSQL", lambda c, dialect=None: repr(c)),
-                        ("Dialects", type("Dialects", (), {"POSTGRES": "p"}))):
-        if not hasattr(sql_mod, name):
-            setattr(sql_mod, name, value)
-    dk.sql = sql_mod
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.agents import streaming  # noqa: E402
 

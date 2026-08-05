@@ -36,7 +36,9 @@ import dataiku
 from dataiku import SQLExecutor2
 
 from owismind.evidence import sql_parse
+from owismind.evidence.aggregate_core import build_aggregate_plan
 from owismind.evidence.query_builders import (
+    EvidenceError,
     build_aggregate_query,
     build_distinct_query,
     build_exchange_sql_query,
@@ -148,13 +150,9 @@ def _quote_literal(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-class EvidenceError(Exception):
-    """Service-level failure with a stable, frontend-safe code + HTTP status."""
-
-    def __init__(self, code, status=409):
-        self.code = code
-        self.status = status
-        super().__init__(code)
+# EvidenceError is defined in query_builders (the import-free module) so that
+# aggregate_core can raise it without importing this module; it is re-exported
+# above and this module remains its public home for every existing importer.
 
 
 # ============================================================================
@@ -1299,11 +1297,8 @@ def evidence_aggregate(user_id, exchange_id, filters, kept_ids, include_advanced
     """
     ctx = _context(user_id, exchange_id, preferred_table=table)
     conditions = _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill)
-    # Imported lazily: aggregate_core imports EvidenceError from THIS module, so a
-    # top-level import here would be circular (service is imported before EvidenceError
-    # is defined). The engine renders the same measure/group/bucket SQL fragments the
-    # Source Data explorer uses (one implementation, identical type gates).
-    from owismind.evidence.aggregate_core import build_aggregate_plan
+    # The engine renders the same measure/group/bucket SQL fragments the Source Data
+    # explorer uses (one implementation, identical type gates).
     plan = build_aggregate_plan(ctx["columns"], ctx["colmap"], group, measures)
 
     if group is None:

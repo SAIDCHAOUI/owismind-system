@@ -12,39 +12,16 @@ helper under test never touches the DB.
 """
 import os
 import sys
-import types
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "python-lib"))
+sys.path.insert(0, _HERE)
+
+import _dss_stub  # noqa: E402
 
 
-def _ensure_dataiku_stub():
-    """Minimal import-time stubs (NO install). Extends any sibling stub, never replaces."""
-    dk = sys.modules.get("dataiku")
-    if dk is None:
-        dk = types.ModuleType("dataiku")
-        sys.modules["dataiku"] = dk
-    if not hasattr(dk, "SQLExecutor2"):
-        dk.SQLExecutor2 = type("SQLExecutor2", (), {})
-    if not hasattr(dk, "default_project_key"):
-        dk.default_project_key = lambda: "OWISMIND_DEV"
-    sql_mod = sys.modules.get("dataiku.sql")
-    if sql_mod is None:
-        sql_mod = types.ModuleType("dataiku.sql")
-        sys.modules["dataiku.sql"] = sql_mod
-    if not hasattr(sql_mod, "Constant"):
-        sql_mod.Constant = lambda value: value
-    if not hasattr(sql_mod, "toSQL"):
-        sql_mod.toSQL = lambda constant, dialect=None: repr(constant)
-    if not hasattr(sql_mod, "Dialects"):
-        sql_mod.Dialects = type("Dialects", (), {"POSTGRES": "postgres"})
-    dk.sql = sql_mod
-    if "pandas" not in sys.modules:
-        sys.modules["pandas"] = types.ModuleType("pandas")
-
-
-_ensure_dataiku_stub()
+_dss_stub.install()
 
 from owismind.storage import sql_config  # noqa: E402
 
@@ -67,6 +44,29 @@ class ReadonlyPreQueriesTest(unittest.TestCase):
         self.assertIsNot(a, b)
         a.append("SET LOCAL statement_timeout TO '1'")
         self.assertEqual(sql_config.readonly_pre_queries(), _EXPECTED)
+
+
+class TestPgIdentifier(unittest.TestCase):
+    """The identifier gate's two raise paths were never executed by the suite
+    (audit 2026-08-05, TS-08): every caller passed valid names. These lock the
+    refusal contract of a SECURITY primitive (rule #3: identifiers only ever
+    come from controlled constants, and a bad one must fail loudly)."""
+
+    def test_valid_identifier_is_double_quoted(self):
+        self.assertEqual(sql_config.pg_identifier("Account_name"),
+                         '"Account_name"')
+
+    def test_invalid_characters_are_refused(self):
+        for bad in ('a"b', "a;b", "a b", "a'b", "", "1leading", "a\\b"):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                sql_config.pg_identifier(bad)
+
+    def test_identifier_longer_than_63_bytes_is_refused(self):
+        with self.assertRaises(ValueError):
+            sql_config.pg_identifier("a" * 64)
+        # 63 bytes exactly still passes (the cap is the PostgreSQL limit).
+        self.assertEqual(sql_config.pg_identifier("a" * 63),
+                         '"' + "a" * 63 + '"')
 
 
 if __name__ == "__main__":

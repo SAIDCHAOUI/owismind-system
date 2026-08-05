@@ -50,11 +50,12 @@ _PROMPTS_PREFIX = "/python/owismind_hub/prompts/"
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 
 # Hub write size caps: a prompt stays within the documented persona sanity window, and the
-# capabilities registry is bounded in entry count and serialized weight (defense in depth:
-# an oversized POST is refused before anything reaches the library).
+# capabilities registry is bounded in entry count and serialized weight. The registry caps
+# are the HUB's constants (enforced fail-closed in hub.write_capabilities, the single write
+# point); this route only relays them for a readable 400 before the library is touched.
 _PROMPT_MAX_CHARS = 20000
-_CAPABILITIES_MAX_ENTRIES = 50
-_CAPABILITIES_MAX_BYTES = 200 * 1024
+_CAPABILITIES_MAX_ENTRIES = hub.CAPABILITIES_MAX_ENTRIES
+_CAPABILITIES_MAX_BYTES = hub.CAPABILITIES_MAX_BYTES
 
 
 # ----------------------------------------------------------------- error / safety helpers
@@ -91,14 +92,13 @@ def _project():
 def _safe_prompt_path(path):
     """Validate a hub prompt path, returning it unchanged when safe, else None.
 
-    These are VIRTUAL DSS library paths, so we never run os.path on them (which
-    could resolve '..'). We reject any traversal or separator trick ('..', '//',
-    a backslash) and enforce the /python/owismind_hub/prompts/ prefix, so a crafted path
-    can never escape the prompts subtree even if the library API resolves '..'.
+    Delegates the traversal/subtree rules to ``hub.safe_hub_path`` (the shared
+    fail-closed gate also applied inside hub.write_text / hub.delete_path) and
+    adds this route's narrower constraint: the /python/owismind_hub/prompts/ prefix.
     """
-    if not isinstance(path, str):
-        return None
-    if ".." in path or "//" in path or "\\" in path:
+    try:
+        hub.safe_hub_path(path)
+    except (TypeError, ValueError):
         return None
     if not path.startswith(_PROMPTS_PREFIX):
         return None
@@ -268,23 +268,17 @@ def _spec_from_body(body):
 def _gates_from_hub(project, body):
     """Resolve the pipeline gates (tool discovery + agent schema hints) from the hub.
 
-    This console ALWAYS reads both gates from the probe results stored in the hub by
-    00_probe_capabilities.py. Client-supplied discovery / schema_hints in the request
-    body are IGNORED, so a direct API caller cannot bypass the probe-confirmation gate.
-    schema_hints are only used when the write probe CONFIRMED the round-trip; the
-    notebook path remains the only channel to override that.
+    Client-supplied discovery / schema_hints in the request body are IGNORED, so a
+    direct API caller cannot bypass the probe-confirmation gate. The policy itself
+    (hub-only + write-probe confirmation) lives in guided.probe_gates, the single
+    implementation shared with the guided machine (test:
+    tests/test_security_console.py TestProbeGatesNeverFromBody).
     """
-    probe = hub.read_json(project, hub.HUB_ROOT + "/probe_results.json") or {}
-    discovery = probe.get("suggested_discovery")
-    schema_hints = probe.get("suggested_schema_hints")
-    if schema_hints and not schema_hints.get("confirmed"):
-        schema_hints = None
-    return discovery, schema_hints
+    return guided.probe_gates(project)
 
 
-def _wizard_config_path(domain):
-    """Hub path where a domain's wizard draft is persisted (same convention as the notebook)."""
-    return "%s/wizard/%s-config.json" % (hub.HUB_ROOT, domain)
+# Same convention as the guided machine / removal inventory / notebook 04.
+_wizard_config_path = hub.wizard_config_path
 
 
 def _wizard_config_fallback(project, body, spec):
@@ -613,28 +607,48 @@ def api_guided_start_removal():
     return jsonify({"status": "ok", "run": run})
 
 
-@app.route("/api/guided/run", methods=["POST"])
-@_safe
-def api_guided_run():
-    """Execute the CURRENT auto stage in a background job (live journal via the
-    shared FactoryContext). Requires confirm. Serialized with execute jobs."""
-    body = request.get_json(silent=True) or {}
+def _guided_run_id(body):
+    """Shared confirm + run_id prefix of the /api/guided/* run routes.
+    Returns (run_id, err) where err is a ready error response."""
     if not _confirmed(body):
-        return _err("confirmation_required", 400)
+        return None, _err("confirmation_required", 400)
     run_id = str(body.get("run_id") or "").strip()
     if not run_id:
-        return _err("run_id_required", 400)
+        return None, _err("run_id_required", 400)
+    return run_id, None
+
+
+def _guided_load(run_id, require_active):
+    """Shared project/settings/store/load sequence of the guided run routes.
+    Returns (project, settings, store, run, err). require_active=False for the
+    idempotent abandon route (a non-active run is a no-op there, never a 409)."""
     project = _project()
     settings = hub.get_settings(project)
     try:
         store = _guided_store_for(project, settings)
         run = store.load(run_id)
     except guided_store.GuidedStoreError as exc:
-        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+        return None, None, None, None, _err(
+            "storage_not_configured", 500, {"messages": [str(exc)]})
     if run is None:
-        return _err("unknown_run", 404)
-    if run.get("status") != guided.RUN_ACTIVE:
-        return _err("run_not_active", 409)
+        return None, None, None, None, _err("unknown_run", 404)
+    if require_active and run.get("status") != guided.RUN_ACTIVE:
+        return None, None, None, None, _err("run_not_active", 409)
+    return project, settings, store, run, None
+
+
+@app.route("/api/guided/run", methods=["POST"])
+@_safe
+def api_guided_run():
+    """Execute the CURRENT auto stage in a background job (live journal via the
+    shared FactoryContext). Requires confirm. Serialized with execute jobs."""
+    body = request.get_json(silent=True) or {}
+    run_id, err = _guided_run_id(body)
+    if err is not None:
+        return err
+    project, settings, store, run, err = _guided_load(run_id, require_active=True)
+    if err is not None:
+        return err
     if not guided.can_run(run):
         return _err("stage_not_runnable", 400)
     ctx = fctx.FactoryContext(project=project, dry_run=False, abort_on_failure=False)
@@ -674,24 +688,19 @@ def api_guided_verify():
     """'C'est fait' on a manual stage: verify against DSS, advance only on
     success. Requires confirm. Refused while a guided/execute job is running."""
     body = request.get_json(silent=True) or {}
-    if not _confirmed(body):
-        return _err("confirmation_required", 400)
-    run_id = str(body.get("run_id") or "").strip()
-    if not run_id:
-        return _err("run_id_required", 400)
+    run_id, err = _guided_run_id(body)
+    if err is not None:
+        return err
+    # Busy gate BEFORE loading (contract: a busy console answers 409 busy even
+    # for an unknown run_id, exactly as before the helper extraction).
     if _guided_job_running():
         return _err("busy", 409)
-    project = _project()
-    settings = hub.get_settings(project)
+    project, settings, store, run, err = _guided_load(run_id, require_active=True)
+    if err is not None:
+        return err
+    if not guided.can_verify(run):
+        return _err("stage_not_verifiable", 400)
     try:
-        store = _guided_store_for(project, settings)
-        run = store.load(run_id)
-        if run is None:
-            return _err("unknown_run", 404)
-        if run.get("status") != guided.RUN_ACTIVE:
-            return _err("run_not_active", 409)
-        if not guided.can_verify(run):
-            return _err("stage_not_verifiable", 400)
         run = guided.verify_current_stage(project, run, settings=settings)
         store.save(run)
     except guided_store.GuidedStoreError as exc:
@@ -704,18 +713,13 @@ def api_guided_verify():
 def api_guided_abandon():
     """Mark the run abandoned (idempotent). NOTHING is deleted in DSS."""
     body = request.get_json(silent=True) or {}
-    if not _confirmed(body):
-        return _err("confirmation_required", 400)
-    run_id = str(body.get("run_id") or "").strip()
-    if not run_id:
-        return _err("run_id_required", 400)
-    project = _project()
-    settings = hub.get_settings(project)
+    run_id, err = _guided_run_id(body)
+    if err is not None:
+        return err
+    _project_, _settings, store, run, err = _guided_load(run_id, require_active=False)
+    if err is not None:
+        return err
     try:
-        store = _guided_store_for(project, settings)
-        run = store.load(run_id)
-        if run is None:
-            return _err("unknown_run", 404)
         if run.get("status") == guided.RUN_ACTIVE:
             guided.abandon_run(run)
             store.save(run)
