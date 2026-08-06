@@ -194,7 +194,7 @@ def _append_event_locked_free(run_id, event):
             state["events"].append(event)
 
 
-def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False, mode=None):
+def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False, mode=None, engine=None):
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
@@ -205,6 +205,9 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     ``mode`` is the route-resolved effective response mode (never raw frontend
     input): it is recorded on the run state and sets the run's wall-clock deadline
     (resolve_run_deadline); absent, the exact legacy 300s wall applies.
+    ``engine`` selects the run engine, resolved by the route from the ADMIN
+    profile (never raw frontend input): 'native' = the in-backend orchestrator
+    (agents/native_orchestrator); anything else = the legacy Code Agent path.
     Raises ``CapacityError`` if the global concurrency cap is already reached.
     """
     now = time.monotonic()
@@ -241,7 +244,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
         # possibly-evicted run state.
         args=(run_id, project_key, agent_id, message, exchange_id, now,
               user_id, parent_exchange_id, history_limit, user_suffix, screen_context,
-              prior_recall_enabled, deadline_s),
+              prior_recall_enabled, deadline_s, mode, engine),
         name="owi-agent-run-{}".format(run_id[:8]),
         daemon=True,
     )
@@ -296,7 +299,8 @@ def _build_screen_block(user_id, history, screen_context):
 
 def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None,
-            prior_recall_enabled=False, deadline_s=MAX_RUN_SECONDS):
+            prior_recall_enabled=False, deadline_s=MAX_RUN_SECONDS, mode=None,
+            engine=None):
     """Run one agent completion, stream its events into the run, then persist.
 
     Mirrors the old SSE generator's body but writes into the shared run state
@@ -361,7 +365,23 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     agent_messages = context.build_completion_messages(
         history, message, screen_block + prior_block + (user_suffix or ""))
     try:
-        for event in streaming.run_agent_streamed(project_key, agent_id, agent_messages):
+        # Engine selection (route-resolved from the ADMIN profile, never the
+        # front): 'native' runs the in-backend orchestrator loop; anything else
+        # keeps the exact legacy Code Agent invocation. Both yield the SAME
+        # normalized event contract, so everything below is engine-agnostic.
+        # INSIDE the try on purpose: a selection failure (e.g. a partial paste
+        # shipping stream_manager without native_orchestrator) must surface as
+        # a clean run error that frees the slot, never a silently dead thread.
+        # The import stays lazy for the same partial-paste resilience: the
+        # legacy path must keep working when the native module is absent.
+        if engine == "native":
+            from owismind.agents import native_orchestrator
+            event_stream = native_orchestrator.run_native_streamed(
+                project_key, agent_id, agent_messages, mode=mode)
+        else:
+            event_stream = streaming.run_agent_streamed(
+                project_key, agent_id, agent_messages)
+        for event in event_stream:
             # Cooperative stop between chunks: the run's per-mode deadline reached, or
             # the browser abandoned the run (stopped polling). Frees the
             # slot/thread/LLM connection.

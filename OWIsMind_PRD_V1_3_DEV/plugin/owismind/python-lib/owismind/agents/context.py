@@ -359,8 +359,9 @@ def _screen_columns(artifacts):
 # --- SOURCE-DATA VIEW state (filters/search/computed figures the user shaped) --
 # The user can also SHAPE a raw source dataset in the app (the Source data explorer
 # and the Evidence "Source data" tab): active filters, a search term, a DB row count
-# and DB-computed figures (calc cards + a breakdown). On consent, the front sends a
-# compact ``source_state`` on /chat/start; it is sanitized here (pure, never raises),
+# and DB-computed figures (calc cards + a breakdown). The front attaches a compact
+# ``source_state`` on /chat/start BY DEFAULT (opt-out chip since 2026-08-06); it is
+# sanitized here (pure, never raises),
 # rendered into the same [ON SCREEN NOW] block, and framed as GROUNDED (DB-computed)
 # so the honesty firewall stays intact (any OTHER figure still needs a specialist).
 SOURCE_STATE_SURFACES = ("explorer", "evidence")
@@ -698,8 +699,8 @@ def build_screen_state(artifacts, last_answer_excerpt=None, active_tab=None, sou
 
     The rendered artifacts (chart/table/KPI in the Evidence panel) + the data
     columns they expose + the gist of the previous answer + an optional SOURCE-DATA
-    VIEW section (the filters/search/DB-computed figures the user shaped, when they
-    consented to share them). Appended to the current turn so the agent can answer
+    VIEW section (the filters/search/DB-computed figures the user shaped, attached
+    by default with a per-view opt-out). Appended to the current turn so the agent can answer
     "explain this chart" / "why is this median X" instead of replying off-topic.
     Returns "" when nothing is on screen. The block is framed as GROUNDED prior data
     so it never trips the honesty firewall (new figures still require a specialist).

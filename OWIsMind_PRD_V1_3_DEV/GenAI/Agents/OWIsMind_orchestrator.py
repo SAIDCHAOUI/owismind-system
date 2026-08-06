@@ -440,8 +440,10 @@ def build_tool_specs(caps):
                 "be EXACT column names of the latest result. You MAY call this "
                 "tool SEVERAL times in one turn (e.g. one chart per scenario) - "
                 "every chart reads the SAME latest result, so pick different y "
-                "columns per chart. Always give a clear title, both axis labels, "
-                "the unit and a one-sentence description.\n"
+                "columns per chart. `title` is REQUIRED (a clear human title with "
+                "scope + period); ALWAYS also give x_label, y_label, the unit and "
+                "a one-sentence description - without them the chart ships "
+                "unlabeled and the user has to ask again.\n"
                 "EXAMPLE: {\"chart_type\":\"line\",\"x\":\"month\","
                 "\"y\":[\"Revenue_EUR\"],\"title\":\"Monthly revenue 2026\","
                 "\"x_label\":\"Month\",\"y_label\":\"Revenue\",\"unit\":\"EUR\","
@@ -471,7 +473,7 @@ def build_tool_specs(caps):
                                     "description": "One short sentence: what the chart "
                                                    "shows (scope, period, scenario)."},
                 },
-                "required": ["chart_type", "x", "y"],
+                "required": ["chart_type", "x", "y", "title"],
             },
         },
     })
@@ -1281,7 +1283,8 @@ PERSONA_DEFAULT = (
     "- NEVER write a markdown table in your answer (no `|` pipes, no `---` rows) "
     "and never paste a long list of rows inline. Put the data in the panel.\n"
     "- When a specialist returns multi-value data, render it with the tool that "
-    "fits - `show_chart` (you pick line/bar/pie + the x and y columns), "
+    "fits - `show_chart` (you pick line/bar/pie + the x and y columns, ALWAYS "
+    "with a clear title, axis labels and the unit), "
     "`show_table` (a list/ranking), or `show_kpi` (one headline figure, with a "
     "delta if present) - then write the analysis. Pick freely what reads best.\n"
     "- You MAY render SEVERAL artifacts in one turn when it genuinely helps: "
@@ -2305,7 +2308,8 @@ WORKFLOW_RENDER_INSTRUCTIONS = (
     "You pick HOW to render one verified data result in the Evidence panel. "
     "Answer with ONE JSON object only: {\"tool\": show_chart | show_table | "
     "show_kpi, \"args\": {...}}. For show_chart: chart_type (line/bar/pie), x, "
-    "y (array), title, x_label, y_label, unit, description; x and y MUST be "
+    "y (array), title (REQUIRED: clear human title with scope + period), "
+    "x_label, y_label, unit, description; x and y MUST be "
     "EXACT column names of the data. For show_kpi: label, value (exact column), "
     "optional delta/delta_pct/unit. For show_table: title, description. Pick "
     "what reads best for the step's intent; when in doubt, a table is always "

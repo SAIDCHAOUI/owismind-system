@@ -292,6 +292,9 @@ export function formatStatNumber(value, locale) {
     if (s.trim() === '' || !Number.isFinite(parsed)) return s
     n = parsed
   }
+  // Normalize negative zero (a SUM of doubles can land on -0.0): '-0' would read
+  // as a formatting bug, and 0 is the honest value.
+  if (n === 0) n = 0
   // Tiny non-zero magnitudes must never render as "0" (a MIN of 0.0004 read as zero is
   // a wrong number, not a truncation): below 0.01 switch to significant digits.
   if (n !== 0 && Math.abs(n) < 0.01) {

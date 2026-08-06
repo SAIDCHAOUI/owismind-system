@@ -3546,6 +3546,27 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : rapport be01-review PASS (8192 scenarios, AST des 12 routes intactes byte-identique) ; 979 tests plugin verts.
 - **Source** : session 2026-08-06 (audit lot D), finding backend/BE-01.
 
+## L177 - Deux formes distinctes s'appellent "result" : la capture brute = {columns, rows, truncated}, JAMAIS de cle 'captured' (2026-08-06)
+- **Contexte** : moteur orchestrateur in-backend (chantier B) ; detection du "dernier resultat capture" pour valider show_chart/show_table/show_kpi.
+- **Ce qui a echoue** : le moteur testait `result.get("captured")` sur le result des events generated_sql. Cette cle n'existe QUE sur le bloc reponse de /evidence/meta (`service._result_block`) ; la capture brute (`evidence/capture.extract_result`) est EXACTEMENT {columns, rows, truncated}. Consequence : AUCUN artefact ne pouvait jamais etre rendu - et la suite restait verte car la fixture de test portait la forme imaginaire {"captured": True, "row_count": 1}.
+- **Solution qui marche** : predicat canonique = miroir de `service.has_captured_result` (dict + columns liste + rows liste), et fixtures de test alignees sur la forme de PRODUCTION (commentaire dans la fixture qui documente l'absence de 'captured'/'row_count'). Verification par sonde bout-en-bout sur un footer trace identique a ce qu'ecrit le sous-agent reel, pas seulement par la suite.
+- **Preuve** : sonde adversarial-reviewer avant/apres (artefact refuse -> artefact rendu) ; 1010 tests plugin verts avec la fixture corrigee.
+- **Source** : session 2026-08-06 run 2, revue adversariale chantier B (CRITICAL 1).
+
+## L178 - Le persona orchestrateur vit en TROIS copies synchronisees, et seule deux sont testees : notebook 01 inclus dans tout edit (2026-08-06)
+- **Contexte** : renforcement A3 du persona (titres de graphiques obligatoires) edite dans l'orchestrateur (PERSONA_DEFAULT) et le seed hub (orchestrator_persona.md).
+- **Ce qui a echoue** : la TROISIEME copie (le litteral _SEEDS du notebook `Notebooks/01_push_config_hub.py`, qui POUSSE le hub en DSS) restait en arriere ; comme `PERSONA = _load_hub_persona() or PERSONA_DEFAULT`, le prochain push du hub aurait ecrase le correctif en silence. Ni test_factory_registry (copies 1<->2 seulement) ni regenerate_seeds --check (5 fichiers seed) ne couvrent le notebook.
+- **Solution qui marche** : tout edit persona/capabilities = 3 fichiers (orchestrateur + seed hub + notebook 01), avec preuve d'egalite byte-a-byte par extraction AST du json.loads du notebook comparee aux fichiers seed.
+- **Preuve** : script de comparaison AST -> "notebook persona == hub seed file: True" + "capabilities: True" apres correction ; 765 tests miroir verts.
+- **Source** : session 2026-08-06 run 2, revue adversariale chantier A (HIGH 1).
+
+## L179 - Toute logique ajoutee AVANT le try du worker de stream est une zone morte : une exception y tue le thread sans liberer le slot (2026-08-06)
+- **Contexte** : selection du moteur (legacy vs natif) ajoutee dans `stream_manager._worker` avant la boucle d'events.
+- **Ce qui a echoue** : placee AVANT le `try:`, une exception de selection (ex. collage partiel livrant stream_manager sans native_orchestrator) echappait au except ET au finally : run jamais done, aucun event terminal, slot compte actif ~25 min (HARD_TTL) ; 8 runs = chat indisponible sans message d'erreur.
+- **Solution qui marche** : la selection (import paresseux compris) DANS le try - l'echec devient une erreur de run propre (`agent_unavailable`, slot libere) ; import paresseux CONSERVE pour que le chemin legacy survive a l'absence du module natif. Test worker synchrone qui prouve done=True + error sur echec de selection.
+- **Preuve** : sonde avant/apres (done False/slot 1 -> done True/error/slot 0) + tests test_native_engine_selection_failure_ends_the_run_cleanly / _happy_path.
+- **Source** : session 2026-08-06 run 2, revue adversariale chantier B (HIGH 2).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

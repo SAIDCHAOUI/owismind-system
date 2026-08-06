@@ -10,3 +10,5 @@
 - [get_physical_table vs quote_table mismatch](get-physical-table-quote-mismatch.md) - get_physical_table returns a double-quoted literal that quote_table REJECTS; removal catalog_cleanup fails in prod, unit tests mask it by mocking
 - [Durable Step Shell review](durable-step-shell-review.md) - correlate guard misses SQL comments (FROM/**/x bypass); reservation reap defeats per-user cap; token-forgery/parameterization/control-channel verified clean
 - [routes.py guard decorator review](routes-guard-decorator-review.md) - guard() order contract, the 6 routes keeping an INLINE impersonation fence, and the two-module differential harness that proves neutrality
+- [Captured result shape contract](captured-result-shape-contract.md) - streamed/stored result = columns/rows/truncated ONLY; `captured` lives on the /evidence/meta block; gating on it is always-False dead code
+- [Native engine review map](native-engine-review.md) - contracts the in-backend orchestrator (profile.native_engine) must mirror: last-token rule, prior-recall block, pass_context, SUB_AGENT_ prefix, durable precedence, worker try/finally

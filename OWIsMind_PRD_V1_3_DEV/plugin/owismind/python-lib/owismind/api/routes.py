@@ -576,10 +576,17 @@ def chat_start(identity):
     agent_profile = agent.get("profile") if isinstance(agent.get("profile"), dict) else {}
     supports_modes = bool(agent_profile.get("modes"))
     mode = context.resolve_effective_mode(body.get("mode"), supports_modes)
+    # Run engine, resolved from the ADMIN profile (never the frontend): 'native'
+    # = the in-backend orchestrator loop (agents/native_orchestrator); None = the
+    # exact legacy Code Agent path. Resolved HERE because it also gates features
+    # only one engine understands (prior recall below).
+    engine = "native" if bool(agent_profile.get("native_engine")) else None
     # Same opt-in gates the prior-results recall block: the `modes` flag marks an
     # agent that speaks the owi control-token protocol (the orchestrator). For any
     # other agent the ⟦owi:prior⟧ payload would leak into its prompt as raw text.
-    prior_recall_enabled = supports_modes
+    # The NATIVE engine has no recall_prior_result tool yet: never advertise one
+    # (the visible [PRIOR DATA] note would push the model toward an unknown tool).
+    prior_recall_enabled = supports_modes and engine != "native"
 
     # Screen-awareness pointer + consented shared view. Sanitized to a tiny bounded dict
     # (pure, never raises): the Evidence panel the user is viewing AND/OR the source_state
@@ -661,7 +668,8 @@ def chat_start(identity):
 
     # Spawn the bounded background worker. The agent_id stays server-side; the front
     # only ever receives the opaque run_id. The effective mode (resolved above, never
-    # raw frontend input) also sizes the run's wall-clock deadline per mode.
+    # raw frontend input) also sizes the run's wall-clock deadline per mode; the
+    # ``engine`` selector was resolved above with the other profile gates.
     try:
         run_id = stream_manager.start_run(
             project_key, agent_id, message, exchange_id,
@@ -669,6 +677,7 @@ def chat_start(identity):
             screen_context=screen_context,
             prior_recall_enabled=prior_recall_enabled,
             mode=mode,
+            engine=engine,
         )
     except stream_manager.CapacityError:
         logger.warning("/chat/start - concurrency cap reached, rejected")

@@ -9,9 +9,11 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { resultPreview } from '../../composables/evidenceProof.js'
+import { inferNumericColumns, formatCell } from '../../composables/cellFormat.js'
+import { formatStatNumber } from '../../composables/sourceModel.js'
 import { Icon } from '../ui'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const evidence = useEvidenceStore()
 
 const meta = computed(() => evidence.meta)
@@ -73,8 +75,18 @@ const missingRowCount = computed(() => {
   return null
 })
 
-function cell(v) {
-  return v == null ? '-' : String(v)
+// Per-column numeric-ness (inferred from the previewed values; preview columns map
+// 1:1 onto result.columns): numeric columns right-align and locale-format.
+const numericCols = computed(() => inferNumericColumns(preview.value.columns, preview.value.rows))
+
+function cell(v, j) {
+  return formatCell(v, numericCols.value[j], locale.value)
+}
+
+// Trust layer: the EXACT DB value stays reachable on hover of a formatted cell
+// (this is a proof surface - the display rounds to 2 decimals, the title never).
+function rawTitle(v, j) {
+  return numericCols.value[j] && v != null ? String(v) : null
 }
 
 // The drill action lands with IMPL-5 (stores/evidence.js): guard so this
@@ -96,14 +108,14 @@ function drillRow(i) {
           <table>
             <thead>
               <tr>
-                <th v-for="(c, j) in preview.columns" :key="j">{{ c }}</th>
+                <th v-for="(c, j) in preview.columns" :key="j" :class="{ num: numericCols[j] }">{{ c }}</th>
                 <th v-if="drillable" class="th-drill" aria-hidden="true" />
               </tr>
             </thead>
             <tbody>
               <!-- Cells indexed by COLUMN so a short row cannot shift the grid. -->
               <tr v-for="(row, i) in preview.rows" :key="i">
-                <td v-for="(c, j) in preview.columns" :key="j">{{ cell(row[j]) }}</td>
+                <td v-for="(c, j) in preview.columns" :key="j" :class="{ num: numericCols[j] }" :title="rawTitle(row[j], j)">{{ cell(row[j], j) }}</td>
                 <td v-if="drillable" class="td-drill">
                   <button type="button" class="drill-btn" :title="t('ev.proof.result.drill')"
                           @click="drillRow(i)">
@@ -116,7 +128,7 @@ function drillRow(i) {
         </div>
       </div>
       <div class="ev-result-info">
-        <span>{{ t('ev.proof.result.rows', [totalRows]) }}</span>
+        <span>{{ t('ev.proof.result.rows', [formatStatNumber(totalRows, locale)]) }}</span>
         <span v-if="result.truncated" class="trunc">{{ t('ev.proof.result.truncated') }}</span>
       </div>
     </template>
@@ -124,7 +136,7 @@ function drillRow(i) {
     <!-- Honest one-liner: nothing was captured, we do not pretend otherwise. -->
     <div v-else class="ev-result-missing">
       <span>{{ t('ev.proof.result.missing') }}</span>
-      <span v-if="missingRowCount != null">{{ t('ev.proof.result.rows', [missingRowCount]) }}</span>
+      <span v-if="missingRowCount != null">{{ t('ev.proof.result.rows', [formatStatNumber(missingRowCount, locale)]) }}</span>
     </div>
   </section>
 </template>
@@ -155,6 +167,9 @@ tbody td {
   text-overflow: ellipsis; max-width: 260px;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
+th.num { text-align: right; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .th-drill, .td-drill { width: 28px; padding: 0 4px; }
 .drill-btn {
   display: inline-flex; align-items: center; justify-content: center;

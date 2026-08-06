@@ -1,8 +1,8 @@
 // Pure model for the SCREEN CONTEXT -> AGENT feature (NO Vue import - node:test
 // testable, F11). It projects the live Source Data explorer / Evidence "Source data"
 // state the user shaped (filters, search, DB row count, computed figures, breakdown)
-// into a compact `source_state` snapshot the front sends on /chat/start when the user
-// consents. The backend (agents/context.sanitize_source_state) re-validates and bounds
+// into a compact `source_state` snapshot the front attaches to /chat/start BY DEFAULT
+// (opt-out chip). The backend (agents/context.sanitize_source_state) re-validates and bounds
 // EVERYTHING; these caps are the exact client mirror so a best-effort payload never
 // carries junk. Raw String(v) values only (never formatStatNumber): the block is
 // locale-neutral, the agent formats.

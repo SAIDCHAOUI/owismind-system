@@ -1313,6 +1313,12 @@ def validate_agent_meta(raw):
     # domain_keywords feeds the deterministic complexity gate (>= 2 domains matched
     # => plan); bounded so it can never bloat the prompt or slow the gate.
     durable_workflow = _coerce_flag(raw.get("durable_workflow"))
+    # Native in-backend orchestrator engine (chantier B, 2026-08-06): when ON,
+    # the worker runs this agent's turns through agents/native_orchestrator
+    # (LLM Mesh loop in the plugin backend; the Code Agents stay the
+    # sub-agents) instead of invoking the entry's Code Agent. Admin opt-in per
+    # agent, strict bool (malformed defaults to OFF = the legacy path).
+    native_engine = _coerce_flag(raw.get("native_engine"))
     domain_keywords = _clean_domain_keywords(raw.get("domain_keywords"))
     # The benchmark block tells the plugin WHERE this agent's benchmark lives (a SQL table the admin
     # selected). Validated/bounded by benchmark_view.agent_profile (an invalid table is blanked, which
@@ -1331,6 +1337,7 @@ def validate_agent_meta(raw):
         "badge": badge,
         "modes": modes,
         "durable_workflow": durable_workflow,
+        "native_engine": native_engine,
         "domain_keywords": domain_keywords,
         "benchmark": benchmark,
         # The RAW project datasets this agent is configured with (Source Data Explorer).

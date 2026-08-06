@@ -5,8 +5,10 @@
 // Cell styling deliberately mirrors EvidenceResult.vue's conventions.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { inferNumericColumns, formatCell } from '../../composables/cellFormat.js'
+import { formatStatNumber } from '../../composables/sourceModel.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps({
   // meta.result: { captured, columns, rows, row_count, truncated }
@@ -25,9 +27,20 @@ const rowCount = computed(() => {
 })
 const truncated = computed(() => !!(props.result && props.result.truncated))
 
+// Per-column numeric-ness (inferred from the captured values): numeric columns are
+// right-aligned with tabular digits and locale-formatted for human reading.
+const numericCols = computed(() => inferNumericColumns(columns.value, rows.value))
+
 function cell(row, j) {
   const v = Array.isArray(row) ? row[j] : undefined
-  return v == null ? '-' : String(v)
+  return formatCell(v, numericCols.value[j], locale.value)
+}
+
+// Trust layer: the EXACT DB value stays reachable on hover of a formatted cell
+// (this is a proof surface - the display rounds to 2 decimals, the title never).
+function rawTitle(row, j) {
+  const v = Array.isArray(row) ? row[j] : undefined
+  return numericCols.value[j] && v != null ? String(v) : null
 }
 </script>
 
@@ -45,13 +58,13 @@ function cell(row, j) {
           <table>
             <thead>
               <tr>
-                <th v-for="(col, j) in columns" :key="j">{{ col }}</th>
+                <th v-for="(col, j) in columns" :key="j" :class="{ num: numericCols[j] }">{{ col }}</th>
               </tr>
             </thead>
             <tbody>
               <!-- Cells indexed by column so a short row never shifts the grid -->
               <tr v-for="(row, i) in rows" :key="i">
-                <td v-for="(col, j) in columns" :key="j">{{ cell(row, j) }}</td>
+                <td v-for="(col, j) in columns" :key="j" :class="{ num: numericCols[j] }" :title="rawTitle(row, j)">{{ cell(row, j) }}</td>
               </tr>
               <!-- Empty rows guard -->
               <tr v-if="rows.length === 0">
@@ -63,7 +76,7 @@ function cell(row, j) {
       </div>
 
       <div class="art-table-info">
-        <span>{{ t('ev.proof.result.rows', [rowCount]) }}</span>
+        <span>{{ t('ev.proof.result.rows', [formatStatNumber(rowCount, locale)]) }}</span>
         <span v-if="truncated" class="art-trunc">{{ t('art.table.truncated') }}</span>
       </div>
     </template>
@@ -129,6 +142,10 @@ tbody td {
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface-hover); }
+/* Numeric columns: right-aligned, tabular digits - magnitudes line up and read
+   at a glance (the values themselves are locale-formatted by formatCell). */
+th.num { text-align: right; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .art-table-none {
   color: var(--text-3);

@@ -6,8 +6,9 @@
 // delta / delta% with an up/down arrow (green up, red down).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatStatNumber } from '../../composables/sourceModel.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps({
   // Server-built payload: { ok, label, value, value_raw, delta?, delta_pct?, reason }
@@ -21,19 +22,32 @@ const props = defineProps({
 
 const ok = computed(() => !!(props.data && props.data.ok))
 
-// Group-aware number formatting (locale-independent thousands separators).
+// Locale-aware number formatting: compact for large magnitudes (1.2M / 1,2 M -
+// the card must stay readable at a glance), exact grouping below.
 function fmt(n) {
   if (n == null || !Number.isFinite(Number(n))) return '-'
   const v = Number(n)
-  const abs = Math.abs(v)
-  // Compact large numbers for readability (1.2M, 340k); keep small ones exact.
-  if (abs >= 1e9) return (v / 1e9).toFixed(2).replace(/\.?0+$/, '') + ' Md'
-  if (abs >= 1e6) return (v / 1e6).toFixed(2).replace(/\.?0+$/, '') + ' M'
-  if (abs >= 1e4) return (v / 1e3).toFixed(1).replace(/\.?0+$/, '') + ' k'
-  return v.toLocaleString()
+  if (Math.abs(v) >= 1e4) {
+    try {
+      return new Intl.NumberFormat(locale.value, {
+        notation: 'compact',
+        maximumFractionDigits: 2,
+      }).format(v)
+    } catch (e) {
+      /* older runtime without compact notation: fall through to exact */
+    }
+  }
+  return formatStatNumber(v, locale.value)
 }
 
 const valueText = computed(() => (ok.value ? fmt(props.data.value) : '-'))
+// Trust layer: the compact display rounds - the EXACT figure stays reachable on
+// hover of the big value (locale-grouped, full precision).
+const valueTitle = computed(() =>
+  (ok.value && props.data.value != null
+    ? formatStatNumber(props.data.value, locale.value)
+    : ''),
+)
 const label = computed(() => (props.data && props.data.label) || props.title || '')
 
 const hasDelta = computed(
@@ -63,7 +77,7 @@ const deltaText = computed(() => {
     </div>
     <div v-else class="kpi-card">
       <span class="kpi-label">{{ label }}</span>
-      <span class="kpi-value">
+      <span class="kpi-value" :title="valueTitle || null">
         {{ valueText }}<span v-if="unit" class="kpi-unit">{{ ' ' + unit }}</span>
       </span>
       <span v-if="hasDelta" class="kpi-delta" :class="deltaSign">

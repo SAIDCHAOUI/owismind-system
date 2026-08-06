@@ -1,14 +1,17 @@
-// Screen-context consent store - the sticky-per-signature decision on whether to attach
-// the SOURCE-DATA VIEW the user shaped (filters / search / DB figures) to the next
-// /chat/start. It owns ONLY the decision; the live snapshot itself is derived on demand
-// from the sources + evidence stores through the pure screenContextModel.
+// Screen-context store - the SOURCE-DATA VIEW the user shaped (filters / search /
+// DB figures) is attached to the next /chat/start BY DEFAULT: the agent must see
+// what the user is doing on screen without an extra consent step. The store owns
+// ONLY the opt-out decision; the live snapshot itself is derived on demand from
+// the sources + evidence stores through the pure screenContextModel.
 //
-// State machine (see design-screen-context.md ux_flow):
+// State machine (auto-include, 2026-08-06 - replaces the consent banner):
 //   liveSig   = signature of the current snapshot (null when none is eligible)
-//   effective = (liveSig != null && decidedSig === liveSig) ? decision : null
-//               -> the decision DIES when the signature changes (any filter/calc edit)
-//   bannerEligible = liveSig != null && effective == null      (PromptBar adds `&& draft`)
-//   chipVisible    = liveSig != null && effective === 'accepted'
+//   effective = liveSig == null ? null
+//             : (decidedSig === liveSig && decision) ? decision : 'accepted'
+//               -> INCLUDED by default; an explicit opt-out (decline) sticks to
+//                  THIS signature only and dies on any filter/calc edit
+//   chipVisible     = liveSig != null && effective === 'accepted'
+//   excludedVisible = liveSig != null && effective === 'declined'  (re-include cue)
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useChatStore } from './chat.js'
@@ -24,9 +27,8 @@ export const useScreenContextStore = defineStore('screenContext', () => {
   const sources = useSourcesStore()
   const evidence = useEvidenceStore()
 
-  const decision = ref(null) // 'accepted' | 'declined' | null
+  const decision = ref(null) // 'accepted' | 'declined' | null (null = default include)
   const decidedSig = ref(null) // the signature the decision was made against
-  const lastOfferedSig = ref(null) // guards the one-per-signature `offered` analytics
 
   // Agent label map { key -> label } from the session store (labels are purely
   // descriptive: the block never carries an agent_id, never resolved server-side).
@@ -106,21 +108,27 @@ export const useScreenContextStore = defineStore('screenContext', () => {
     }),
   )
   const liveSig = computed(() => (offer.value ? snapshotSignature(offer.value) : null))
-  const effective = computed(() =>
-    liveSig.value != null && decidedSig.value === liveSig.value ? decision.value : null,
-  )
-  // WITHOUT the draft condition on purpose: PromptBar ANDs `&& chat.draft.trim()` so the
-  // banner only appears once the user starts typing (a decision on an empty box is noise).
-  const bannerEligible = computed(() => liveSig.value != null && effective.value == null)
+  // Default-include: with no sticky decision on the CURRENT signature, a live
+  // snapshot is 'accepted'. An opt-out (or explicit re-accept) wins while the view
+  // is unchanged; any filter/calc edit mints a new signature and re-includes.
+  const effective = computed(() => {
+    if (liveSig.value == null) return null
+    if (decidedSig.value === liveSig.value && decision.value) return decision.value
+    return 'accepted'
+  })
   const chipVisible = computed(() => liveSig.value != null && effective.value === 'accepted')
+  // Opted-out view still on screen: PromptBar shows a quiet re-include cue so the
+  // user stays in control both ways (exclude AND bring back).
+  const excludedVisible = computed(() => liveSig.value != null && effective.value === 'declined')
 
+  // Re-include after an opt-out (the quiet cue), pinned to the current signature.
   function accept() {
     if (liveSig.value == null) return
     decision.value = 'accepted'
     decidedSig.value = liveSig.value
   }
-  // Declining (or removing the accepted chip) parks the decision on THIS signature so the
-  // banner never nags again for the same view; a view change re-offers.
+  // Removing the chip parks an opt-out on THIS signature: the same view never
+  // re-attaches on its own; a view change (new signature) re-includes by default.
   function decline() {
     if (liveSig.value == null) return
     decision.value = 'declined'
@@ -130,26 +138,16 @@ export const useScreenContextStore = defineStore('screenContext', () => {
   function reset() {
     decision.value = null
     decidedSig.value = null
-    lastOfferedSig.value = null
   }
-  // Fire the `offered` analytics ONCE per signature (guarded by lastOfferedSig). Called by
-  // PromptBar at banner display time (it owns the draft condition). Defaults to the live
-  // signature so callers can pass nothing.
-  function markOffered(sig) {
-    const s = sig != null ? sig : liveSig.value
-    if (s == null || s === lastOfferedSig.value) return
-    lastOfferedSig.value = s
-    track('screen_context_offered', { surface: offer.value ? offer.value.surface : null })
-  }
-  // The LIVE snapshot to attach at send time (fresh figures), or null. Read by chat.js in
-  // _runExchange: only an accepted decision on the CURRENT signature attaches anything.
+  // The LIVE snapshot to attach at send time (fresh figures), or null. Read by chat.js
+  // in _runExchange: any live snapshot not opted out on the CURRENT signature attaches.
   function snapshotForSend() {
     return effective.value === 'accepted' ? offer.value : null
   }
 
-  // Reset the consent on a conversation switch and on a PRE-conversation agent switch
+  // Reset the opt-out on a conversation switch and on a PRE-conversation agent switch
   // (mirror of PromptBar's existing promptContext watchers). A panel close / store reset
-  // just makes liveSig null, so the banner and chip disappear on their own.
+  // just makes liveSig null, so the chip disappears on its own.
   watch(() => chat.activeSessionId, () => reset())
   watch(() => session.selectedAgentKey, () => {
     if (!chat.exchanges.length) reset()
@@ -158,16 +156,14 @@ export const useScreenContextStore = defineStore('screenContext', () => {
   return {
     decision,
     decidedSig,
-    lastOfferedSig,
     offer,
     liveSig,
     effective,
-    bannerEligible,
     chipVisible,
+    excludedVisible,
     accept,
     decline,
     reset,
-    markOffered,
     snapshotForSend,
   }
 })

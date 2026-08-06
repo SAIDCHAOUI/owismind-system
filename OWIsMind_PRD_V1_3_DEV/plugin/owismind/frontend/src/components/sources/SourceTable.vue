@@ -11,6 +11,7 @@ import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
 import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
+import { isIdentifierColumn, formatCell } from '../../composables/cellFormat.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from './CellActionPopover.vue'
 import ColumnMenu from './ColumnMenu.vue'
@@ -53,9 +54,18 @@ function sortDir(name) {
   const s = sources.sort
   return s && s.column === name ? s.dir : ''
 }
+// Numeric QUANTITY columns by name (DSS storage type says numeric, name does not
+// mark an identifier): their cells are locale-formatted and right-aligned. The
+// popover / filter flows keep reading the RAW row value - display only.
+const numericByName = computed(() => {
+  const map = {}
+  for (const c of allColumns.value) {
+    if (c && c.name) map[c.name] = isNumericColType(c.type) && !isIdentifierColumn(c.name)
+  }
+  return map
+})
 function cell(row, name) {
-  const v = row[name]
-  return v == null ? '-' : String(v)
+  return formatCell(row[name], numericByName.value[name], locale.value)
 }
 
 // Cell selection: click a non-null cell to open a popover offering to queue its value
@@ -261,7 +271,7 @@ onBeforeUnmount(() => {
       <table>
         <thead>
           <tr>
-            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name) }">
+            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name] }">
               <div class="th-inner">
                 <button type="button" class="th-btn" @click="sources.setSort(c.name)">
                   <span class="th-label">{{ c.name }}</span>
@@ -314,7 +324,7 @@ onBeforeUnmount(() => {
             <td
               v-for="c in columns"
               :key="c.name"
-              :class="{ 'cell-click': pickable(row, c.name) }"
+              :class="{ 'cell-click': pickable(row, c.name), num: numericByName[c.name] }"
               @click="onCellClick($event, row, c.name)"
             >{{ cell(row, c.name) }}</td>
           </tr>
@@ -414,10 +424,15 @@ thead th {
   color: var(--text-2); font-weight: 500; white-space: nowrap; user-select: none;
 }
 thead th:hover { color: var(--text); }
-thead th.sorted { color: var(--orange); }
+/* Sorted column: same AA-safe orange-text token as .filtered (small text). */
+thead th.sorted { color: var(--orange-text); }
 /* Filtered column: orange text cue (charte: orange text only, no background fill). */
 thead th.filtered { color: var(--orange-text); }
 .th-inner { display: flex; align-items: center; }
+/* Numeric columns: header hugs the right edge, matching its right-aligned cells
+   (the th content is a flex row, so text-align alone would not move it). */
+thead th.num .th-inner { justify-content: flex-end; }
+thead th.num .th-btn { flex: 0 1 auto; text-align: right; }
 .th-btn {
   display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
   padding: 8px 12px; color: inherit; text-align: left; cursor: pointer;
@@ -453,6 +468,8 @@ tbody tr:last-child td { border-bottom: none; }
 /* Non-null cells are pickable: subtle hover cue, no layout shift. */
 tbody td.cell-click { cursor: pointer; }
 tbody td.cell-click:hover { background: var(--surface-hover); }
+/* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
+tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* First-load skeleton rows - flat surface with an opacity pulse (no gradient). */
 .sk-cell {
   display: block; height: 12px; width: 70%; border-radius: 0;

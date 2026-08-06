@@ -1,0 +1,3 @@
+- [Persona lives in 3 copies](persona-three-copies-notebook-drift.md) - Notebooks/01_push_config_hub.py holds an UNGUARDED third copy; a persona edit reverts at deploy
+- [Parallel workstreams, red tests](parallel-workstream-red-tests.md) - one dirty tree, several agents; re-check git status + attribute failures by path
+- Older notes (12 entries) live in `/Users/saidchaoui/projects/owismind/.claude/agent-memory/adversarial-reviewer/` - read that dir too at the start of a run

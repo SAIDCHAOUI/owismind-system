@@ -4,11 +4,12 @@
 // arrives ready as { labels, datasets } in `data`; this component only chooses the
 // visual style/options and draws. Chart.js gives real interactivity: hover
 // tooltips, clickable legend (toggle series), animated draw-in, responsive resize.
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Chart from 'chart.js/auto'
+import { formatStatNumber } from '../../composables/sourceModel.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps({
   // Artifact chart spec: { type: 'line'|'bar'|'pie', x, y[], style?, x_label?, y_label?, unit? }
@@ -56,18 +57,66 @@ function isOk() {
   return !!(props.data && props.data.ok && Array.isArray(props.data.datasets))
 }
 
-// Group-aware tick formatting on the VALUE axis (thousands separators).
-function fmtTick(value) {
-  const n = Number(value)
-  return Number.isFinite(n) ? n.toLocaleString() : value
+// Column name -> readable label ('Revenue_EUR' -> 'Revenue EUR'). Used everywhere
+// the agent did not provide a human label, so a chart NEVER ships raw snake_case.
+function prettyLabel(name) {
+  return String(name == null ? '' : name).replace(/_/g, ' ').trim()
 }
 
-// Cartesian axes with optional agent-provided titles: x_label names the
-// category axis, y_label (+ unit) the value axis - swapped for horizontal bars.
+// Effective, always-present labels: the agent's explicit labels win; otherwise
+// they are derived from the column names, so title / axes / legend never miss.
+const effXLabel = computed(() => {
+  const spec = props.chart || {}
+  return String(spec.x_label || '') || prettyLabel(spec.x)
+})
+const effYLabel = computed(() => {
+  const spec = props.chart || {}
+  if (spec.y_label) return String(spec.y_label)
+  const ys = Array.isArray(spec.y) ? spec.y : []
+  // A single series names the axis after its column; several series leave the
+  // axis to the unit alone (the legend already names each series).
+  return ys.length === 1 ? prettyLabel(ys[0]) : ''
+})
+const effTitle = computed(() => {
+  if (props.title) return String(props.title)
+  const spec = props.chart || {}
+  const ys = (Array.isArray(spec.y) ? spec.y : []).map(prettyLabel).filter(Boolean)
+  const yPart = ys.join(', ')
+  const xPart = effXLabel.value
+  if (!yPart || !xPart) return ''
+  return t('art.chart.auto_title', [yPart, xPart])
+})
+
+// Human tick formatting on the VALUE axis: compact notation for large magnitudes
+// (1.2M, 340k - axis room is scarce), exact locale grouping below.
+function fmtTick(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return value
+  if (Math.abs(n) >= 10000) {
+    try {
+      return new Intl.NumberFormat(locale.value, {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(n)
+    } catch (e) {
+      /* older runtime without compact notation: fall through to exact */
+    }
+  }
+  return formatStatNumber(n, locale.value)
+}
+
+// Tooltip value: exact locale-formatted figure + the agent-provided unit.
+function fmtTooltipValue(v) {
+  const unit = String((props.chart && props.chart.unit) || '')
+  return formatStatNumber(v, locale.value) + (unit ? ' ' + unit : '')
+}
+
+// Cartesian axes, always titled: the agent's labels when provided, otherwise
+// derived from the column names - swapped for horizontal bars.
 function buildScales(spec, horizontal, stacked, text3, grid) {
-  const xLabel = String(spec.x_label || '')
+  const xLabel = effXLabel.value
   const unit = String(spec.unit || '')
-  let yLabel = String(spec.y_label || '')
+  let yLabel = effYLabel.value
   if (unit) yLabel = yLabel ? yLabel + ' (' + unit + ')' : unit
   const catAxis = {
     stacked,
@@ -105,7 +154,7 @@ function buildConfig() {
   const datasets = props.data.datasets.map((ds, i) => {
     if (isPie) {
       return {
-        label: ds.label,
+        label: prettyLabel(ds.label),
         data: ds.data,
         backgroundColor: ds.data.map((_, j) => pal[j % pal.length]),
         borderColor: surface,
@@ -115,7 +164,7 @@ function buildConfig() {
     }
     const c = pal[i % pal.length]
     const base = {
-      label: ds.label,
+      label: prettyLabel(ds.label),
       data: ds.data,
       borderColor: c,
       backgroundColor: chartType === 'bar' ? c : withAlpha(c, 0.18),
@@ -146,7 +195,7 @@ function buildConfig() {
         position: isPie ? 'right' : 'top',
         labels: { color: text2, usePointStyle: true, boxWidth: 8 },
       },
-      title: { display: !!props.title, text: props.title, color: text2 },
+      title: { display: !!effTitle.value, text: effTitle.value, color: text2 },
       tooltip: isPie
         ? {
             callbacks: {
@@ -154,11 +203,21 @@ function buildConfig() {
                 const arr = ctx.dataset.data || []
                 const total = arr.reduce((s, v) => s + (Number(v) || 0), 0) || 1
                 const v = Number(ctx.parsed) || 0
-                return ` ${ctx.label}: ${v.toLocaleString()} (${((100 * v) / total).toFixed(1)}%)`
+                return ` ${ctx.label}: ${fmtTooltipValue(v)} (${((100 * v) / total).toFixed(1)}%)`
               },
             },
           }
-        : {},
+        : {
+            callbacks: {
+              // Exact locale-formatted figure + unit (the axis shows compact ticks;
+              // the tooltip is where the precise number lives).
+              label(ctx) {
+                const v = horizontal ? ctx.parsed.x : ctx.parsed.y
+                const name = ctx.dataset.label ? ctx.dataset.label + ': ' : ''
+                return ` ${name}${fmtTooltipValue(v)}`
+              },
+            },
+          },
     },
     scales: isPie ? {} : buildScales(spec, horizontal, stacked, text3, grid),
   }
@@ -187,6 +246,8 @@ onMounted(() => {
 })
 
 watch(() => [props.data, props.chart], () => nextTick(render), { deep: true })
+// Tick/tooltip formats and the derived title are locale-baked at draw time.
+watch(locale, () => nextTick(render))
 
 onBeforeUnmount(() => {
   if (instance) {
@@ -210,7 +271,7 @@ onBeforeUnmount(() => {
     </div>
     <template v-else>
       <div class="art-canvas-wrap">
-        <canvas ref="canvasEl" role="img" :aria-label="title || t('art.chart.title_fallback')" />
+        <canvas ref="canvasEl" role="img" :aria-label="effTitle || t('art.chart.title_fallback')" />
       </div>
       <p v-if="description" class="art-desc">{{ description }}</p>
       <div v-if="data.truncated" class="art-trunc">{{ t('art.chart.truncated') }}</div>

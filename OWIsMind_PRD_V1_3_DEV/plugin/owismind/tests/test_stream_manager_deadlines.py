@@ -188,11 +188,13 @@ class StartRunModeTests(unittest.TestCase):
         def _fake_worker(run_id, project_key, agent_id, message, exchange_id,
                          started_at, user_id, parent_exchange_id, history_limit,
                          user_suffix, screen_context=None, prior_recall_enabled=False,
-                         deadline_s=None):
+                         deadline_s=None, mode=None, engine=None):
             # Mirrors the real signature so the test pins HOW start_run passes the
             # deadline, not just that some float exists somewhere in the args.
             self.captured["run_id"] = run_id
             self.captured["deadline_s"] = deadline_s
+            self.captured["mode"] = mode
+            self.captured["engine"] = engine
             self.ran.set()
 
         stream_manager._worker = _fake_worker
@@ -229,6 +231,17 @@ class StartRunModeTests(unittest.TestCase):
         self.assertEqual(self.captured["deadline_s"], 300.0)
         with stream_manager._LOCK:
             self.assertEqual(stream_manager._RUNS[run_id]["mode"], "turbo")
+
+    def test_engine_and_mode_forwarded_to_worker(self):
+        # The native-engine selector (chantier B) must reach the worker verbatim,
+        # alongside the mode the engine needs for its LLM tier.
+        self._start(mode="claude", engine="native")
+        self.assertEqual(self.captured["engine"], "native")
+        self.assertEqual(self.captured["mode"], "claude")
+
+    def test_engine_defaults_to_none_legacy_path(self):
+        self._start(mode="smart")
+        self.assertIsNone(self.captured["engine"])
 
     def test_modeless_call_keeps_exactly_300(self):
         # Retro-compat: a caller that never passes mode (the pre-change signature)
@@ -333,6 +346,50 @@ class WorkerDeadlineTests(unittest.TestCase):
         self.assertEqual(state["error"], "run_abandoned")
         errors = [e for e in state["events"] if e.get("type") == "error"]
         self.assertEqual(errors[0]["message"], "run_abandoned")
+
+    def test_native_engine_selection_failure_ends_the_run_cleanly(self):
+        # HIGH (revue B): an exception AT ENGINE SELECTION TIME (e.g. a partial
+        # paste shipping stream_manager without a working native_orchestrator)
+        # must surface as a normal run error that frees the slot - never a
+        # silently dead thread leaving the run undone for HARD_TTL seconds.
+        from owismind.agents import native_orchestrator as native_mod
+        orig = native_mod.run_native_streamed
+
+        def _broken(*_a, **_k):
+            raise RuntimeError("native engine unavailable")
+
+        native_mod.run_native_streamed = _broken
+        try:
+            state = self._run_worker(
+                "r-native-fail", deadline_s=1200.0, mode="claude", engine="native")
+        finally:
+            native_mod.run_native_streamed = orig
+        self.assertTrue(state["done"])
+        self.assertEqual(state["error"], "agent_unavailable")
+        errors = [e for e in state["events"] if e.get("type") == "error"]
+        self.assertTrue(errors)
+
+    def test_native_engine_happy_path_streams_and_completes(self):
+        from owismind.agents import native_orchestrator as native_mod
+        orig = native_mod.run_native_streamed
+        seen = {}
+
+        def _fake_native(project_key, agent_id, messages, mode=None):
+            seen["mode"] = mode
+            yield {"type": "answer_delta", "text": "native "}
+            yield {"type": "answer_delta", "text": "answer"}
+
+        native_mod.run_native_streamed = _fake_native
+        try:
+            state = self._run_worker(
+                "r-native-ok", deadline_s=1200.0, mode="pro", engine="native")
+        finally:
+            native_mod.run_native_streamed = orig
+        self.assertTrue(state["done"])
+        self.assertIsNone(state["error"])
+        self.assertEqual(seen["mode"], "pro")
+        finals = [e for e in state["events"] if e.get("type") == "final_answer"]
+        self.assertEqual(finals[0]["text"], "native answer")
 
 
 if __name__ == "__main__":

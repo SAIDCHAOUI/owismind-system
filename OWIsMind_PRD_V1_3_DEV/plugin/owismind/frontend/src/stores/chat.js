@@ -309,8 +309,9 @@ export const useChatStore = defineStore('chat', () => {
     // viewing in the Evidence panel, so the agent knows what's on screen ("explain
     // this chart", "add the forecast"). Only when the panel is actually open.
     //
-    // On CONSENT, also attach the SOURCE-DATA VIEW the user shaped (filters / search /
-    // DB-computed figures), read LIVE from the screen-context store (fresh numbers). It
+    // Also attach the SOURCE-DATA VIEW the user shaped (filters / search / DB-computed
+    // figures) - included BY DEFAULT (opt-out chip in the prompt bar, 2026-08-06) - read
+    // LIVE from the screen-context store (fresh numbers). It
     // rides ALONGSIDE the open-panel pointer, or as { open: false, source_state } when the
     // Evidence panel is closed (the standalone Source explorer case). Never concatenated to
     // the visible message text (the cell-to-agent flow stays separate).

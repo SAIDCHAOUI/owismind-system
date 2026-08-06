@@ -7,23 +7,21 @@
 
 ## Focus courant
 
-**AUDIT APPROFONDI v1.3 + LOTS A-E APPLIQUES (2026-08-05 -> 06).** Audit multi-agents (16 Opus :
-8 dimensions + 8 contre-verificateurs), 72 findings 0 rejete, rapport + plan + etat d'execution :
-`docs/audit/AUDIT_CODE_V1_3_2026-08-05.md`. Applique et prouve : quick wins (chart.js paresseux,
-bundle -39 % ; cache TTL whitelist ; LEFT 4000 /conversations) ; securite removal (PROTECTED_BY_OTHERS,
-safe_hub_path fail-closed, validateurs lockstep + gates de forme, caps write_capabilities, allowlist
-attribute_lookup, bug SEC-06 has-rows REPARE) ; filets anti-derive (filecmp recettes, _dss_stub unique
--675 l., _agent_stubs, tests reels whitelist + 404 route, pg_identifier, gardes template, probe-gates) ;
-de-duplication (decorateur @guard 32/44 routes valide par revue differentielle 8192 scenarios PASS,
-postJson/get + stores, executeurs removal declaratifs, probe_gates exporte) ; AG-01a (generateur
-HUB_DOMAIN + en-tete + 4 regions DOMAIN-WORDING, regeneration revenus BYTE-IDENTIQUE). **2109 tests
-verts (765 miroir + 979 plugin + 365 front), diff +1462/-2021.** RIEN deploye DSS (recolls listes en
-section 5 du rapport). BLOQUE permission : copie body.html (voir Prochaines etapes, zip INTERDIT avant).
-EN ATTENTE user : purge i18n FE-06 (liste `docs/audit/FE-06_cles_i18n_mortes_a_valider.md`), FE-09,
-onglet "Nouveau domaine", regeneration tickets AG-01b, correctif contrats d'erreur listings (BE-03).
+**UX WEBAPP + MOTEUR NATIF (nuit 2026-08-06, run 2).** Chantier A webapp : A1 nombres lisibles dans
+les 4 tableaux SQL (`cellFormat.js` : inference par colonne, garde identifiants nom+forme, valeur DB
+exacte au survol, KPI compact locale) ; A2 contexte ecran inclus D'OFFICE (opt-out par signature,
+banniere supprimee) ; A3 graphiques quasi natifs (titres/axes derives, ticks compacts, tooltips
+formatés ; `title` REQUIS dans show_chart + persona renforcee sur les 3 COPIES, L178). Chantier B :
+orchestrateur code DANS le backend (`agents/native_orchestrator.py`, LLM Mesh tools, sous-agents =
+Code Agents via streaming, artefacts natifs, flag admin `profile.native_engine` OFF par defaut,
+doc `docs/NATIVE_ENGINE.md`). Boucle : 3 revues Opus (adversarial A+B, charte) -> TOUT corrige
+(1 CRITICAL forme de capture L177, 1 HIGH try worker L179, 1 HIGH persona notebook L178) -> re-verif
+adversariale B : "AUCUNE REGRESSION, feu vert DSS". **765 miroir + 1010 plugin + 378 front verts,
+build Vite OK. RIEN deploye DSS** (rebuild + body.html + recoll orchestrateur requis).
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-08-06 (Run 1, demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
+- 2026-08-06 Run 2 (nuit autonome) : UX webapp (tableaux lisibles + contexte ecran d'office + graphiques auto-titres) + moteur orchestrateur in-backend (flag native_engine, dual-path) ; 3 revues Opus, tout corrige + re-verifie ; 765+1010+378 verts. L177-L179. Voir `sessions/2026-08-06.md` run 2.
+- 2026-08-06 Run 1 (demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
 - 2026-07-23 : mode claude bascule sur Sonnet 5 (case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
 - 2026-07-22 Run 2 : capability removal + disable (moteur removal.py + machine 12 etapes + UI + revue adversariale fix HIGH L170), implementation Sol xhigh, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
 - 2026-07-22 Run 1 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
@@ -67,12 +65,17 @@ onglet "Nouveau domaine", regeneration tickets AG-01b, correctif contrats d'erre
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **AUDIT v1.3, suites immediates (2026-08-06)** : (1) USER : copier body.html (bloque par permission) :
-  `cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
-  puis `/package-plugin-dev` (zip INTERDIT avant la copie : body.html pointe l'ancien hash) ; (2) USER :
-  trancher FE-06 (liste i18n) / FE-09 / onglet "Nouveau domaine" / regeneration tickets AG-01b / correctif
-  contrats d'erreur listings BE-03 ; (3) session dediee : refactors restants (rapport section 5) ;
-  (4) recolls DSS : 3 Code Agents + attribute_lookup + template hub (notebook 01) + owismind_factory + console.
+- **RUN 2 NUIT, deploiement + validation DSS (2026-08-06)** : (1) `/build-plugin` (le front a change :
+  cellFormat, PromptBar, charts) puis USER : copie body.html (bloquee par permission) puis
+  `/package-plugin-dev` (zip INTERDIT avant) ; (2) recoll orchestrateur (show_chart title requis +
+  persona) + re-save ; (3) valider chantier A en DSS (tableaux, chip contexte d'office, graphiques) ;
+  (4) moteur natif : entree de TEST avec flag `native_engine` + checklist `docs/NATIVE_ENGINE.md`
+  (jamais execute contre un vrai Mesh) ; backlog natif = recall natif, sql_id par artefact.
+  Voir `sessions/2026-08-06.md` run 2.
+- **AUDIT v1.3, restes (2026-08-06 run 1)** : USER : trancher FE-06 (liste i18n) / FE-09 / onglet
+  "Nouveau domaine" / regeneration tickets AG-01b / contrats d'erreur listings BE-03 ; session dediee :
+  refactors restants (rapport section 5) ; recolls DSS : 3 Code Agents + attribute_lookup + template
+  hub (notebook 01) + owismind_factory + console.
 - **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 ; ticket LiteLLM optionnel. Voir `sessions/2026-07-23.md`.
 - **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
   nouvelle conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud

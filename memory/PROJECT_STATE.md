@@ -429,6 +429,20 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
 
 ## 8. Agents & streaming
 
+- **⏳ REPO ONLY (2026-08-06 run 2, NON valide DSS) - moteur orchestrateur IN-BACKEND ("native engine")** :
+  `python-lib/owismind/agents/native_orchestrator.py` = boucle d'orchestration DANS le backend Flask
+  (LLM Mesh completion + tools : `settings["tools"]`, `response.tool_calls`, `with_tool_calls`,
+  `with_tool_output`) ; sous-agents = les Code Agents existants via `streaming.run_agent_streamed`
+  (Evidence/SQL/timeline identiques, events prefixes `SUB_AGENT_`, sqlIndex global) ; show_chart/
+  show_table/show_kpi executes nativement (forme d'event artifact gelee, un seul proprietaire =
+  `streaming._normalized_artifact_event`) ; capabilities lues du hub project-library (TTL 300 s +
+  fallback embarque). Selection par flag admin `profile.native_engine` (OFF = chemin legacy
+  byte-identique), cable routes -> `start_run(engine=...)` -> `_worker` (selection DANS le try,
+  L179) ; `prior_recall_enabled` coupe pour le natif (pas de recall tool). Bornes : 8 tours LLM /
+  4 appels specialistes / 6 artefacts / dernier tour sans tools. Doc + checklist DSS + limitations :
+  `OWIsMind_PRD_V1_3_DEV/docs/NATIVE_ENGINE.md`. Revue adversariale Opus 2 passes (CRITICAL forme
+  de capture L177 + HIGH L179 corriges, re-verif "AUCUNE REGRESSION"). Tests : 29 dedies + 2 worker.
+
 - **✅ VALIDÉ DSS 2026-07-02 Run 2 - artefacts natifs + narration + recall** (commits user
   `0368dd7`/`0275ae9`) : (a) **artefacts** : le panneau empile TOUS les charts/KPIs ; spec chart
   étendue (`x_label`/`y_label`/`unit` dans le bloc chart ; `description` + `sql_id` top-level,

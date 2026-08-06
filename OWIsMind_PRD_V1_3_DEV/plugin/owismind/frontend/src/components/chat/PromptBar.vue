@@ -36,18 +36,6 @@ watch(() => screenCtx.chipVisible, (visible) => {
   if (!visible) ctxPopoverOpen.value = false
 })
 
-// Fire the `offered` analytics ONCE per signature, at banner DISPLAY time (the store
-// guards duplicates via lastOfferedSig). The banner shows when it is eligible AND the
-// draft is non-empty; re-fire on a signature change while it stays displayed.
-watch(
-  [() => screenCtx.bannerEligible, () => chat.draft.trim() !== '', () => screenCtx.liveSig],
-  () => {
-    if (screenCtx.bannerEligible && chat.draft.trim() && screenCtx.liveSig != null) {
-      screenCtx.markOffered(screenCtx.liveSig)
-    }
-  },
-)
-
 // Chip identity + hover title for the picked data-context values.
 function ctxKey(it) {
   return contextKey(it)
@@ -111,23 +99,11 @@ const placeholder = () =>
 
 <template>
   <div class="prompt">
-    <!-- Consent banner: offers to attach the filtered SOURCE-DATA VIEW the user shaped
-         (filters / search / DB-computed figures) as context for the agent. Shows only once
-         the user starts typing; a decision is sticky per view signature (no nagging). -->
-    <div v-if="screenCtx.bannerEligible && chat.draft.trim()" class="prompt-screen-banner" role="status" aria-live="polite">
-      <span class="prompt-screen-msg">{{ t('prompt.screen.detected') }}</span>
-      <span class="prompt-screen-actions">
-        <button type="button" class="prompt-screen-btn" @click="screenCtx.accept()">
-          {{ t('prompt.screen.include') }}
-        </button>
-        <button type="button" class="prompt-screen-btn prompt-screen-btn--quiet" @click="screenCtx.decline()">
-          {{ t('prompt.screen.dismiss') }}
-        </button>
-      </span>
-    </div>
-    <!-- Accepted-context chip: the view is attached to every send while its signature is
-         unchanged. Removable (x -> decline) so the user is always in control. -->
-    <div v-if="screenCtx.chipVisible" class="prompt-screen">
+    <!-- On-screen context chip: the SOURCE-DATA VIEW the user shaped (filters / search /
+         DB-computed figures) is attached to every send BY DEFAULT - the agent sees what
+         the user sees. Removable (x -> opt-out, sticky for this exact view) so the user
+         stays in control; any view change re-includes automatically. -->
+    <div v-if="screenCtx.chipVisible" class="prompt-screen" role="status" aria-live="polite">
       <span ref="ctxChipRef" class="prompt-ctx-chip prompt-ctx-chip--live" @keydown.escape="ctxPopoverOpen = false">
         <button
           type="button"
@@ -151,6 +127,14 @@ const placeholder = () =>
           <ScreenContextDetail :snap="screenCtx.offer" />
         </div>
       </span>
+    </div>
+    <!-- Opted-out view still on screen: one quiet line + a re-include action, so
+         excluding the context is reversible without re-shaping the view. -->
+    <div v-if="screenCtx.excludedVisible" class="prompt-screen prompt-screen--off">
+      <span class="prompt-screen-off-text">{{ t('prompt.screen.off') }}</span>
+      <button type="button" class="prompt-screen-btn" @click="screenCtx.accept()">
+        {{ t('prompt.screen.include') }}
+      </button>
     </div>
     <!-- Picked data-context values (from Source Data cells): shown above the input,
          appended to the message as a readable block at send time. -->
@@ -241,38 +225,17 @@ const placeholder = () =>
   transition: border-color var(--dur) var(--ease);
 }
 .prompt:focus-within { border-color: var(--border-strong); }
-/* Screen-context consent banner: flat, square, sober. A single 4px orange left rail is
-   the only accent (charte); no fill, no glow. Sits at the very top of the prompt card. */
-.prompt-screen-banner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  margin-bottom: var(--s-2);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-left: 4px solid var(--orange);
-  border-radius: 0;
-}
-.prompt-screen-msg {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--fs-xs);
-  color: var(--text);
-}
-.prompt-screen-actions { display: flex; align-items: center; gap: var(--s-3); flex: 0 0 auto; }
+/* Re-include action (opted-out row): plain orange-text button, flat and square.
+   Hover keeps the AA-safe --orange-text in BOTH themes (--orange-deep fails AA on
+   light and darkens the dark theme) and signals with an underline instead. */
 .prompt-screen-btn {
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
   color: var(--orange-text);
   border-radius: 0;
-  transition: color var(--dur) var(--ease);
 }
-.prompt-screen-btn:hover { color: var(--orange-deep); }
-.prompt-screen-btn--quiet { color: var(--text-2); font-weight: var(--fw-regular); }
-.prompt-screen-btn--quiet:hover { color: var(--text); }
-/* Accepted-context chip row: same recipe as .prompt-ctx (below). */
+.prompt-screen-btn:hover { text-decoration: underline; }
+/* On-screen context chip row (auto-included): same recipe as .prompt-ctx (below). */
 .prompt-screen {
   display: flex;
   align-items: center;
@@ -282,6 +245,11 @@ const placeholder = () =>
   margin-bottom: var(--s-1);
   border-bottom: 1px solid var(--border);
 }
+/* Opted-out row: one quiet line + the re-include action, no border theatrics
+   (the modifier drops the chip row's bottom rule). --text-2 keeps the state
+   line AA-readable in both themes (it carries functional information). */
+.prompt-screen--off { border-bottom: none; }
+.prompt-screen-off-text { font-size: var(--fs-xs); color: var(--text-2); }
 /* Data-context chip row: compact, square, sober. Sits above the textarea inside the
    prompt card. Orange stays rare - chips are ink-on-surface with a 1px border. */
 .prompt-ctx {
