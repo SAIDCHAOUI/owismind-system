@@ -65,9 +65,10 @@ build Vite OK. RIEN deploye DSS** (rebuild + body.html + recoll orchestrateur re
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **RUN 2 NUIT, deploiement + validation DSS (2026-08-06)** : (1) `/build-plugin` (le front a change :
-  cellFormat, PromptBar, charts) puis USER : copie body.html (bloquee par permission) puis
-  `/package-plugin-dev` (zip INTERDIT avant) ; (2) recoll orchestrateur (show_chart title requis +
+- **RUN 2 NUIT, deploiement + validation DSS (2026-08-06)** : (1) build FAIT (assets regeneres,
+  `index-Bcba5IAN.js`) ; USER : copie body.html (cp refuse par permission) :
+  `cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
+  puis `/package-plugin-dev` (zip INTERDIT avant) ; (2) recoll orchestrateur (show_chart title requis +
   persona) + re-save ; (3) valider chantier A en DSS (tableaux, chip contexte d'office, graphiques) ;
   (4) moteur natif : entree de TEST avec flag `native_engine` + checklist `docs/NATIVE_ENGINE.md`
   (jamais execute contre un vrai Mesh) ; backlog natif = recall natif, sql_id par artefact.
