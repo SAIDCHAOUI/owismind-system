@@ -121,7 +121,7 @@ watch(
 
     <div v-else class="empty-stage">
       <ChatEmpty />
-      <div class="prompt-wrap in-empty">
+      <div class="prompt-wrap in-empty u-rise" style="animation-delay: 100ms">
         <!-- BEGIN impersonation (temporary) - read-only note (admin viewing as user). -->
         <div v-if="impersonateNote" class="imp-note">
           <Icon name="users" />
@@ -171,8 +171,15 @@ watch(
 }
 /* On the empty / new-chat screen the prompt bar is the only element, so the full
    90% measure looks oversized - keep it comfortably narrow and centered (the title
-   and tip above it sit in the same ~760px band). */
+   above it sits in the same ~760px band). */
 .prompt-wrap.in-empty { padding-bottom: var(--s-7); max-width: 760px; }
+/* Arrival hero: the prompt is THE element of the page - one size up (roomier card,
+   larger input). In-thread it returns to its compact working size. */
+.prompt-wrap.in-empty :deep(.prompt) { padding: var(--s-4) var(--s-5) var(--s-3); }
+.prompt-wrap.in-empty :deep(.prompt-input) {
+  font-size: var(--fs-lg);
+  min-height: 48px;
+}
 
 .chat-error {
   text-align: center;
@@ -188,7 +195,7 @@ watch(
   margin: 0 0 var(--s-3);
   padding: 10px 14px;
   border: 1px solid var(--danger);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   background: var(--danger-soft);
   color: var(--danger);
   font-size: var(--fs-sm);
@@ -242,7 +249,7 @@ watch(
 .chat-config__card {
   max-width: 460px;
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--surface);
   padding: var(--s-6);
   text-align: center;

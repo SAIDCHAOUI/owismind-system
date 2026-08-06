@@ -1,6 +1,8 @@
 <script setup>
-// Empty conversation state - centered title + subtitle (with a link to the agent
-// library). Suggestion cards are deferred.
+// Empty conversation state - a QUIET arrival: one compact heading + one line.
+// The Source Data view no longer needs a CTA here (it is docked on the right by
+// default - AppLayout auto-opens it); a small re-open chip appears only when the
+// user dismissed the dock. Attention belongs to the prompt bar below.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -18,29 +20,30 @@ const hasSources = computed(() => {
   const a = session.selectedAgent
   return !!(a && Array.isArray(a.sources) && a.sources.length)
 })
+// Discreet re-open: only when the dock is closed (the user dismissed it).
+const showReopen = computed(() => hasSources.value && !sources.open)
 function openSources() { sources.openPanel(session.selectedAgentKey) }
 </script>
 
 <template>
   <div class="empty">
-    <div class="empty-title-row">
+    <div class="u-rise">
       <h1 class="empty-title">{{ t('empty.title') }}</h1>
+      <span class="empty-bar" aria-hidden="true" />
     </div>
-    <p class="empty-sub">
+    <p class="empty-sub u-rise" style="animation-delay: 60ms">
       {{ t('empty.sub_a') }}<a class="lnk" @click="router.push('/agents')">{{ t('empty.sub_link') }}</a>{{ t('empty.sub_b') }}
     </p>
-    <button v-if="hasSources" type="button" class="empty-sources" @click="openSources">
-      <span class="empty-sources__ico"><Icon name="database" :size="18" /></span>
-      <span class="empty-sources__text">
-        <span class="empty-sources__title">{{ t('src.cta.title') }}</span>
-        <span class="empty-sources__hint">{{ t('src.cta.hint') }}</span>
-      </span>
-      <Icon name="chevronRight" :size="16" class="empty-sources__go" />
+    <button
+      v-if="showReopen"
+      type="button"
+      class="empty-reopen u-rise"
+      style="animation-delay: 120ms"
+      @click="openSources"
+    >
+      <Icon name="database" :size="14" />
+      <span>{{ t('src.panel.title') }}</span>
     </button>
-    <p class="empty-tip">
-      <Icon name="info" :size="16" class="empty-tip__ico" />
-      <span>{{ t('empty.tip') }}</span>
-    </p>
   </div>
 </template>
 
@@ -57,15 +60,24 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   margin: 0 auto;
   gap: var(--s-5);
 }
-.empty-title-row { display: flex; align-items: center; gap: var(--s-3); justify-content: center; }
+/* Heading = ink, heavy, tight (charte display recipe) with the 52x4 orange
+   title-bar centered under it. The orange stays a bar, not the whole line -
+   the eye lands here once, then drops to the prompt. */
 .empty-title {
   font-family: var(--font-sans);
   font-size: var(--fs-2xl);
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: -0.01em; /* charte H1 tracking */
   margin: 0;
-  color: var(--orange);
-  line-height: 1.15;
+  color: var(--text);
+  line-height: 1.1;
+}
+.empty-bar {
+  display: block;
+  width: 52px;
+  height: 4px;
+  background: var(--orange);
+  margin: var(--s-4) auto 0;
 }
 .empty-sub {
   font-size: var(--fs-md);
@@ -81,57 +93,20 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   text-underline-offset: 3px;
   cursor: pointer;
 }
-/* Source Data Explorer CTA - a square bordered block (charte geometry): a database
-   icon chip (the only orange accent), a title and a one-line hint. Left-aligned so
-   the two lines read naturally; hover lifts the border to the strong tone. */
-.empty-sources {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  width: 100%;
-  max-width: 460px;
-  text-align: left;
-  padding: 14px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
-}
-.empty-sources:hover { border-color: var(--orange); background: var(--surface-hover); }
-.empty-sources__ico {
-  flex: none;
+/* Re-open chip (dock dismissed): a small square ghost chip, quiet by design. */
+.empty-reopen {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--orange);
-  color: var(--orange-text);
-  background: var(--orange-soft);
-}
-.empty-sources__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.empty-sources__title { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
-.empty-sources__hint { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.4; }
-.empty-sources__go { flex: none; color: var(--text-3); }
-:global(body[data-theme="dark"] .empty-sources__ico) { background: var(--orange-soft-dark); }
-
-/* "Be precise" tip - a quiet, left-aligned hint so the multi-line text stays
-   readable (the rest of the empty stage is centered). */
-.empty-tip {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  text-align: left;
-  max-width: 560px;
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: var(--r);
-  background: var(--surface-2);
-  font-size: var(--fs-sm);
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--bg);
   color: var(--text-2);
-  line-height: 1.5;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.empty-tip__ico { flex-shrink: 0; margin-top: 1px; color: var(--orange-text); }
+.empty-reopen:hover { border-color: var(--text); color: var(--text); }
+.empty-reopen :deep(.ui-icon) { color: var(--orange-text); }
 </style>

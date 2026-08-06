@@ -9,6 +9,8 @@ import { useUiStore } from '../../stores/ui.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { useSourcesStore } from '../../stores/sources.js'
 import { useSessionStore } from '../../stores/session.js'
+import { useChatStore } from '../../stores/chat.js'
+import { shouldAutoDock } from '../../composables/sourceModel.js'
 import Sidebar from './Sidebar.vue'
 import MainTop from './MainTop.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
@@ -23,14 +25,56 @@ const ui = useUiStore()
 const evidence = useEvidenceStore()
 const sources = useSourcesStore()
 const session = useSessionStore()
+const chat = useChatStore()
 const route = useRoute()
 const dragging = ref(false)
 const draggingEv = ref(false)
 
 // Either the Evidence proof panel OR the standalone Source Data Explorer occupies the
-// right column - they are mutually exclusive (see the watches below), so this single
-// flag drives the grid track, the resize handle and the width re-clamp for both.
-const rightOpen = computed(() => evidence.open || sources.open)
+// right column - they are mutually exclusive (see the watches below). The two panels
+// size differently: Evidence keeps its pixel width + drag handle, Source Data uses
+// the fraction-based docked layout (compact third / expanded two-thirds) with no drag.
+
+// Arrival-screen auto-dock: the Source Data view is ON SCREEN by default - the user
+// never has to discover a CTA and click it. Docked whenever the chat route shows an
+// EMPTY conversation and the selected agent exposes sources, unless the user
+// explicitly dismissed it (sticky per app session) or Evidence owns the column.
+// Once a conversation starts the panel simply stays until Evidence takes over; it
+// re-docks on the next new conversation.
+//
+// The bare-route guard (no :sessionId param) closes a boot race: deep-linking into
+// an EXISTING conversation fetches /agents and /conversation concurrently, and if
+// the agent list wins, `exchanges` is still empty - without the guard the dock
+// would flash open (and fire meta+rows fetches) over a conversation being loaded.
+// A conversation STARTED here gets its id stamped into the URL at the first
+// exchange (ChatView), by which point exchanges > 0 blocks the dock anyway.
+const autoDockKey = computed(() => {
+  const a = session.selectedAgent
+  return a && Array.isArray(a.sources) && a.sources.length ? a.key : ''
+})
+watch(
+  [
+    () => route.name,
+    () => route.params.sessionId,
+    autoDockKey,
+    () => chat.exchanges.length,
+    () => evidence.open,
+    () => sources.dismissed,
+  ],
+  ([name, sid, key, exchanges, evOpen, dismissed]) => {
+    const dock = shouldAutoDock({
+      routeName: name,
+      sessionParam: sid,
+      agentKey: key,
+      exchangeCount: exchanges,
+      evidenceOpen: evOpen,
+      dismissed,
+      open: sources.open,
+    })
+    if (dock) sources.openPanel(key, { auto: true })
+  },
+  { immediate: true },
+)
 
 // The proof panel only makes sense NEXT TO a conversation: leaving the chat route
 // (Settings, FAQ, Agents…) closes it so the page renders in the main column -
@@ -61,20 +105,26 @@ watch(() => sources.open, (open) => {
   if (open) evidence.close()
 })
 
-// Opening a right-column panel auto-collapses the conversation sidebar to give it
-// room; the expand toggle stays visible in MainTop (it shows whenever the sidebar is
-// collapsed). The user can re-expand at any time - we never force the sidebar back
-// open on close, and the automatic collapse is NOT persisted (persistChoice=false):
-// only an explicit user toggle may decide what state the next session cold-starts with.
-watch(rightOpen, (open) => {
-  if (open) ui.setSidebarCollapsed(true, false)
-})
+// A SPACE-HUNGRY right panel auto-collapses the conversation sidebar to give it
+// room: the Evidence panel (pixel width) and the EXPANDED Source Data dock. The
+// compact Source Data dock is fraction-based and coexists with the open sidebar,
+// so the arrival screen keeps the conversation list visible. The user can
+// re-expand at any time - we never force the sidebar back open on close, and the
+// automatic collapse is NOT persisted (persistChoice=false): only an explicit
+// user toggle decides what state the next session cold-starts with.
+watch(
+  [() => evidence.open, () => sources.open && sources.wide],
+  ([evOpen, wideSrc]) => {
+    if (evOpen || wideSrc) ui.setSidebarCollapsed(true, false)
+  },
+)
 
 // The evidence width clamp samples window.innerWidth: re-clamp on resize so a
 // window shrunk WHILE the panel is open can never leave a stale wide panel
-// swallowing the chat column (and pushing the drag handle off-screen).
+// swallowing the chat column (and pushing the drag handle off-screen). The Source
+// Data dock is fraction-based and needs no re-clamp.
 function onWindowResize() {
-  if (rightOpen.value) ui.setEvidenceWidth(ui.evidenceW)
+  if (evidence.open) ui.setEvidenceWidth(ui.evidenceW)
 }
 window.addEventListener('resize', onWindowResize)
 
@@ -141,7 +191,9 @@ onBeforeUnmount(() => {
       class="app"
       :class="{
         'sidebar-collapsed': ui.sidebarCollapsed,
-        'with-evidence': rightOpen,
+        'with-evidence': evidence.open,
+        'with-sources': !evidence.open && sources.open,
+        'src-wide': sources.wide,
         resizing: dragging || draggingEv,
       }"
       :style="appStyle"
@@ -157,7 +209,7 @@ onBeforeUnmount(() => {
         <RouterView />
       </main>
       <div
-        v-if="rightOpen"
+        v-if="evidence.open"
         class="resize-handle ev"
         :class="{ active: draggingEv }"
         @pointerdown.prevent="startEvResize"
@@ -248,6 +300,24 @@ onBeforeUnmount(() => {
 }
 .app.with-evidence .main {
   border-right: 1px solid var(--border);
+}
+
+/* Source Data DOCKED (arrival screen and beyond): fraction-based two-state layout.
+   Compact = the data view is an ambient third of the canvas; expanded (src-wide) =
+   it takes two thirds and the chat keeps a comfortable third (the prompt stays
+   usable). Plain fr tracks (no minmax) so the compact <-> wide toggle animates
+   through the existing grid-template-columns transition. */
+.app.with-sources {
+  grid-template-columns: var(--sidebar-w) 2fr 1fr;
+}
+.app.with-sources.src-wide {
+  grid-template-columns: var(--sidebar-w) 1fr 2fr;
+}
+.app.sidebar-collapsed.with-sources {
+  grid-template-columns: var(--rail-w) 2fr 1fr;
+}
+.app.sidebar-collapsed.with-sources.src-wide {
+  grid-template-columns: var(--rail-w) 1fr 2fr;
 }
 .resize-handle.ev {
   left: auto;

@@ -41,12 +41,23 @@ watch(() => session.selectedAgentKey, (key) => {
     <header class="src-head">
       <div class="src-title">
         <Icon name="database" />
-        <span>{{ t('src.panel.title') }}</span>
+        <span class="src-title-label">{{ t('src.panel.title') }}</span>
         <span v-if="agentLabel" class="src-agent">{{ agentLabel }}</span>
       </div>
-      <button class="src-close" :title="t('x.close')" @click="sources.closePanel()">
-        <Icon name="x" />
-      </button>
+      <div class="src-actions">
+        <!-- Two-state dock toggle: ambient third <-> expanded two thirds. -->
+        <button
+          class="src-btn"
+          :title="sources.wide ? t('src.panel.shrink') : t('src.panel.expand')"
+          @click="sources.toggleWide()"
+        >
+          <Icon :name="sources.wide ? 'chevronsRight' : 'chevronsLeft'" />
+        </button>
+        <!-- The X is a sticky opt-out: the auto-dock stops for this app session. -->
+        <button class="src-btn" :title="t('x.close')" @click="sources.dismissPanel()">
+          <Icon name="x" />
+        </button>
+      </div>
     </header>
     <div class="src-panel-body">
       <SourceExplorer />
@@ -55,23 +66,48 @@ watch(() => session.selectedAgentKey, (key) => {
 </template>
 
 <style scoped>
+/* Ambient surface: the docked data view sits on a soft gray so the WHITE chat column
+   (and its ink-framed prompt) reads as the foreground. The data table inside is
+   forced back to white below - the content pops, the chrome recedes. */
 .src-panel {
   display: flex; flex-direction: column; min-width: 0; overflow: hidden;
-  background: var(--bg);
+  background: var(--surface);
+  border-left: 1px solid var(--border-strong);
+  /* Remap the explorer's host tokens: on this ambient --surface, chips/cards go
+     back to --bg with a VISIBLE 1px filet (charte) - content pops, chrome recedes.
+     The Evidence "Source data" tab (default --bg host) keeps its fallbacks. */
+  --src-chip-bg: var(--bg);
+  --src-chip-border: var(--border-strong);
+  /* Discreet dock-in (charte motion): a short fade + slide from the right edge. */
+  animation: src-dock-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes src-dock-in {
+  from { opacity: 0; transform: translateX(12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .src-panel { animation: none; }
 }
 .src-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--border);
+  padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--border-strong);
 }
-.src-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-md); min-width: 0; }
-.src-title :deep(.ui-icon) { width: 16px; height: 16px; color: var(--orange); flex: none; }
+.src-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Ink icon: a permanently visible dock earns NO orange (charte: orange is for
+   active states / title-bars / primary actions, never ambient chrome). */
+.src-title :deep(.ui-icon) { width: 16px; height: 16px; color: var(--text-2); flex: none; }
+/* Micro-label recipe (charte): quiet caps - the panel is ambient, not a headline. */
+.src-title-label {
+  font-size: 11px; font-weight: var(--fw-heavy); text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-2);
+}
 .src-agent {
-  font-size: 11px; color: var(--text-3); font-weight: 400;
+  font-size: 11px; color: var(--text-2); font-weight: 400;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.src-close { padding: 4px; border-radius: 0; color: var(--text-3); transition: all var(--dur) var(--ease); }
-.src-close:hover { background: var(--surface-hover); color: var(--text); }
-.src-close :deep(.ui-icon) { width: 16px; height: 16px; }
+.src-actions { display: flex; align-items: center; gap: 2px; }
+.src-btn { padding: 4px; border-radius: 0; color: var(--text-2); transition: all var(--dur) var(--ease); }
+.src-btn:hover { background: var(--surface-hover); color: var(--text); }
+.src-btn :deep(.ui-icon) { width: 16px; height: 16px; }
 /* Full-height body: a flex column that does NOT scroll itself - the rows table
    fills the remaining height and owns the only scroll (no double scrollbar). */
 .src-panel-body {
@@ -79,6 +115,10 @@ watch(() => session.selectedAgentKey, (key) => {
   display: flex; flex-direction: column;
 }
 .src-panel-body :deep(.src-explorer) { flex: 1; min-height: 0; }
-.src-panel-body :deep(.src-table) { flex: 1; min-height: 0; }
+.src-panel-body :deep(.src-table) {
+  flex: 1; min-height: 0; background: var(--bg);
+  /* A --bg block on the ambient --surface is a CARD: visible 1px filet (charte). */
+  border-color: var(--border-strong);
+}
 .src-panel-body :deep(.src-table-scroll) { flex: 1 1 auto; max-height: none; }
 </style>

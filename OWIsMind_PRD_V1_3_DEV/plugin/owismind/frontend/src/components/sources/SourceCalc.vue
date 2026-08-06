@@ -206,7 +206,9 @@ function onColumnChange(e) {
 .calc-card {
   display: flex; flex-direction: column; gap: 4px;
   min-width: 140px; flex: 1 1 140px; padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: 0; background: var(--surface);
+  /* Host-remappable card tones (docked panel = --bg on ambient --surface). */
+  border: 1px solid var(--src-chip-border, var(--border)); border-radius: 0;
+  background: var(--src-chip-bg, var(--surface));
 }
 .calc-card-label {
   font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em;

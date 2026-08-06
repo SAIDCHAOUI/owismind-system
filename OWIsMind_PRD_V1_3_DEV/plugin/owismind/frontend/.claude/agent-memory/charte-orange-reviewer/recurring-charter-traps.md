@@ -1,11 +1,11 @@
 ---
 name: recurring-charter-traps
-description: Pieges de charte qui reviennent dans ce frontend Vue (orange AA sur petit texte, hover inverse en dark, fichiers jumeaux SourceTable/EvidenceTable qui derivent)
+description: Pieges de charte qui reviennent dans ce frontend Vue (orange AA sur petit texte, hover inverse en dark, jumeaux SourceTable/EvidenceTable, th en flex, conteneur bascule en --surface)
 metadata:
   type: project
 ---
 
-Trois pieges reviennent a chaque revue de charte dans `frontend/src`.
+Quatre pieges reviennent a chaque revue de charte dans `frontend/src`.
 
 1. **Petit texte orange en `--orange` ou `--orange-deep`.** La charte n'autorise que
    `--orange-text` (AA). Recurrent sur les etats de table (`thead th.sorted`) et sur les
@@ -24,7 +24,17 @@ Trois pieges reviennent a chaque revue de charte dans `frontend/src`.
    n'a aucun effet. Le fix reel = `justify-content: flex-end` sur `.th-inner` +
    `text-align: right` sur `.th-btn`. Ne pas proposer le `text-align` seul.
 
-**Why:** ces trois points ont ete releves lors de la revue du 2026-08-06 (alignement
+4. **Basculer le fond d'un conteneur de `--bg` vers `--surface`** (effet "hierarchie par
+   nuances de gris" demande par l'user). Tous les enfants dessines pour un fond `--bg`
+   cassent d'un coup : les remplissages `background: var(--surface)` (chips de dataset,
+   chips de filtre, zone Calculer) deviennent INVISIBLES (meme tonalite que leur fond)
+   et les filets `1px var(--border)` tombent a ~1.1:1 sur `--surface` (#ececec sur
+   #fafafa). Le systeme aplat + filet s'evapore. Fix : dans le conteneur, forcer les
+   surfaces de contenu en `--bg` + filets `--border-strong` via `:deep()`, ou renoncer
+   au fond ambiant. Pareil en dark (#161616 sur #161616). Releve sur `SourcePanel.vue`
+   le 2026-08-06.
+
+**Why:** ces points ont ete releves lors des revues du 2026-08-06 (alignement
 numerique des tables + retrait de la banniere de consentement) et decoulent de la structure
 du code, pas d'une erreur ponctuelle : ils reapparaitront.
 

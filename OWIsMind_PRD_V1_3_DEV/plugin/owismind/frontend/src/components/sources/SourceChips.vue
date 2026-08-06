@@ -586,7 +586,9 @@ watch(
 .src-chip {
   position: relative; display: inline-flex; align-items: center; gap: 4px;
   max-width: 100%; border: 1px solid var(--border-strong); border-radius: 0;
-  background: var(--surface); padding: 2px 6px 2px 10px; font-size: var(--fs-xs);
+  /* Host-remappable surface: --bg inside the docked panel (ambient --surface),
+     --surface fallback on the validated Evidence tab. */
+  background: var(--src-chip-bg, var(--surface)); padding: 2px 6px 2px 10px; font-size: var(--fs-xs);
 }
 .chip-main { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; }
 .chip-main:hover .val { color: var(--orange); }

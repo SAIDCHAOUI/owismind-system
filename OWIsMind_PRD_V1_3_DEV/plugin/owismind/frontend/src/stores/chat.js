@@ -158,7 +158,10 @@ export const useChatStore = defineStore('chat', () => {
   function newConversation() {
     cancelActive()
     evidence.close()
-    sources.closePanel()
+    // The Source Data dock is NOT closed here: the arrival screen wants it open
+    // (AppLayout auto-docks it anyway), and closing would drop the fetched view
+    // just to refetch it one tick later. Agent-change follow-up (or a source-less
+    // default agent) is handled by SourcePanel's selectedAgentKey watch.
     activeSessionId.value = newSessionId()
     track('conversation_created', {}, { conversation_id: activeSessionId.value })
     exchanges.value = []

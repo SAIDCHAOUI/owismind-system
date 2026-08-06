@@ -3567,6 +3567,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : sonde avant/apres (done False/slot 1 -> done True/error/slot 0) + tests test_native_engine_selection_failure_ends_the_run_cleanly / _happy_path.
 - **Source** : session 2026-08-06 run 2, revue adversariale chantier B (HIGH 2).
 
+## L180 - Composants partages multi-hotes : re-teinter via custom properties a fallback, jamais par overrides :deep concurrents (2026-08-06)
+- **Contexte** : dock Source Data (fond ambiant --surface, session UX run 3) reutilisant SourceExplorer/SourceChips/SourceCalc, aussi montes dans l'onglet Evidence VALIDE (fond --bg).
+- **Ce qui a echoue** : le fond gris du panneau rendait quasi invisibles les chips/cartes dessinees pour --bg (filet --border sur --surface ~1,1:1, releve M1 par la revue charte) ; et des overrides `:deep(.classe)` depuis l'hote pour les re-blanchir entrent en guerre de specificite avec les etats `.active`/`:hover` orange des composants (egalites (0,3,0) : l'ordre du bundle decide, fragile).
+- **Solution qui marche** : les surfaces des composants partages lisent `var(--src-chip-bg, var(--surface))` / `var(--src-chip-border, var(--border))` ; SEUL l'hote qui change d'ambiance (SourcePanel) remappe les 2 variables (heritage DOM des custom properties, traverse les scopes Vue) ; l'hote historique ne declare rien -> fallback = rendu valide inchange. Les etats actifs/hover gardent leur victoire de specificite d'origine.
+- **Preuve-verification** : revue charte (M1/M2 corriges valides), build Vite + 380/380 ; grep : aucune reference aux variables hors sources/* + SourcePanel.
+- **Source** : session 2026-08-06 run 3 (session UX luxe).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

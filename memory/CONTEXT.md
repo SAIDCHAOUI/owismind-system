@@ -7,19 +7,19 @@
 
 ## Focus courant
 
-**UX WEBAPP + MOTEUR NATIF (nuit 2026-08-06, run 2).** Chantier A webapp : A1 nombres lisibles dans
-les 4 tableaux SQL (`cellFormat.js` : inference par colonne, garde identifiants nom+forme, valeur DB
-exacte au survol, KPI compact locale) ; A2 contexte ecran inclus D'OFFICE (opt-out par signature,
-banniere supprimee) ; A3 graphiques quasi natifs (titres/axes derives, ticks compacts, tooltips
-formatés ; `title` REQUIS dans show_chart + persona renforcee sur les 3 COPIES, L178). Chantier B :
-orchestrateur code DANS le backend (`agents/native_orchestrator.py`, LLM Mesh tools, sous-agents =
-Code Agents via streaming, artefacts natifs, flag admin `profile.native_engine` OFF par defaut,
-doc `docs/NATIVE_ENGINE.md`). Boucle : 3 revues Opus (adversarial A+B, charte) -> TOUT corrige
-(1 CRITICAL forme de capture L177, 1 HIGH try worker L179, 1 HIGH persona notebook L178) -> re-verif
-adversariale B : "AUCUNE REGRESSION, feu vert DSS". **765 miroir + 1010 plugin + 378 front verts,
-build Vite OK. RIEN deploye DSS** (rebuild + body.html + recoll orchestrateur requis).
+**SESSION UX LUXE (2026-08-06 run 3, jour).** Hierarchie visuelle (brief user apres conseils d'un UX
+designer) : (1) dock Source Data ANCRE D'OFFICE a l'arrivee (fini le CTA) : tiers droit, bouton 1/3<->2/3
+(fractions CSS, sidebar auto-repliee en large), X = opt-out sticky session, pastille de re-ouverture,
+predicat pur `shouldAutoDock` avec garde deep-link (course boot /agents vs /conversation) ; (2) nuances :
+panneau ambiant --surface, composants partages re-blanchis via variables hote `--src-chip-*` a fallback
+(onglet Evidence intact, L180) ; (3) prompt HERO : cadre encre 2px carre, barre orange 3px animee au
+focus (filet, pas de ring), caret orange, agrandi a l'arrivee, ChatEmpty allege (titre encre + title-bar).
+2 revues Opus -> 1 HIGH (course boot, converge avec mon propre fix) + 3 MEDIUM charte + 2 MEDIUM adv
+TOUS corriges/arbitres, re-verification independante : "rien de bloquant DSS". **380/380 front, build
+Vite OK, body.html RECABLE via Write (F10) : l'action user de la nuit est levee. RIEN uploade DSS.**
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-08-06 Run 3 (jour) : session UX luxe (dock Source Data d'office 1/3<->2/3 + nuances + prompt hero) ; 2 revues Opus, tout corrige + re-verifie ; 380/380, body.html recable. L180. Voir `sessions/2026-08-06.md` run 3.
 - 2026-08-06 Run 2 (nuit autonome) : UX webapp (tableaux lisibles + contexte ecran d'office + graphiques auto-titres) + moteur orchestrateur in-backend (flag native_engine, dual-path) ; 3 revues Opus, tout corrige + re-verifie ; 765+1010+378 verts. L177-L179. Voir `sessions/2026-08-06.md` run 2.
 - 2026-08-06 Run 1 (demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
 - 2026-07-23 : mode claude bascule sur Sonnet 5 (case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
@@ -65,24 +65,23 @@ build Vite OK. RIEN deploye DSS** (rebuild + body.html + recoll orchestrateur re
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **RUN 2 NUIT, deploiement + validation DSS (2026-08-06)** : (1) build FAIT (assets regeneres,
-  `index-Bcba5IAN.js`) ; USER : copie body.html (cp refuse par permission) :
-  `cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
-  puis `/package-plugin-dev` (zip INTERDIT avant) ; (2) recoll orchestrateur (show_chart title requis +
-  persona) + re-save ; (3) valider chantier A en DSS (tableaux, chip contexte d'office, graphiques) ;
-  (4) moteur natif : entree de TEST avec flag `native_engine` + checklist `docs/NATIVE_ENGINE.md`
-  (jamais execute contre un vrai Mesh) ; backlog natif = recall natif, sql_id par artefact.
-  Voir `sessions/2026-08-06.md` run 2.
+- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (2026-08-06)** : build + body.html FAITS
+  (`index-DS_pP-Tf.js`, recable via Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
+  DEV ; (2) recoll orchestrateur (show_chart title requis + persona) + re-save ; (3) valider chantier A
+  (tableaux, chip contexte d'office, graphiques) ET session UX run 3 (dock d'office 1/3<->2/3, opt-out,
+  prompt hero, dark) ; (4) moteur natif : entree de TEST avec flag `native_engine` + checklist
+  `docs/NATIVE_ENGINE.md` (jamais execute contre un vrai Mesh) ; backlog natif = recall natif, sql_id
+  par artefact. (5) Arbitrages user : contexte ecran herite a travers "Nouvelle conversation"
+  (comportement voulu A2, a confirmer) ; telemetrie d'exposition du dock si adoption a mesurer.
+  Voir `sessions/2026-08-06.md` runs 2-3.
 - **AUDIT v1.3, restes (2026-08-06 run 1)** : USER : trancher FE-06 (liste i18n) / FE-09 / onglet
   "Nouveau domaine" / regeneration tickets AG-01b / contrats d'erreur listings BE-03 ; session dediee :
   refactors restants (rapport section 5) ; recolls DSS : 3 Code Agents + attribute_lookup + template
   hub (notebook 01) + owismind_factory + console.
 - **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 ; ticket LiteLLM optionnel. Voir `sessions/2026-07-23.md`.
-- **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis
-  nouvelle conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud
-  (il l'enumere encore dans ses refus tant que le process n'a pas redemarre). Decision toujours
-  attendue : reload du hub par conversation (TTL ~60 s) + textes enable/succes de l'assistant
-  (option recommandee, non implementee). Voir `sessions/2026-07-22.md`.
+- **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis nouvelle
+  conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud. Decision attendue :
+  reload du hub par conversation (TTL ~60 s) + textes enable/succes de l'assistant. Voir `sessions/2026-07-22.md`.
 - **CAPABILITY REMOVAL, restes de validation** : tester Desactiver/Activer depuis la vue
   d'ensemble (1 clic, reversible) ; le fallback manuel (refus API) et le garde template n'ont
   jamais ete exerces en reel (couverts par tests seulement). Voir `sessions/2026-07-22.md` run 2.

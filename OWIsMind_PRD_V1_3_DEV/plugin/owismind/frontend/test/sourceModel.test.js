@@ -17,6 +17,7 @@ import {
   sampleIsoShape,
   betweenValuesToMonthRange,
   looksLikeIsoDateValues,
+  shouldAutoDock,
   SOURCE_Q_MIN,
   SOURCE_Q_MAX,
   SOURCE_DEFAULT_LIMIT,
@@ -142,7 +143,7 @@ test('buildSourceRowsPayload: does not alias the chip values array', () => {
 
 const SRC_KEYS = [
   'ev.tab.sources', 'ev.table.cols',
-  'src.cta.title', 'src.cta.hint', 'src.panel.title', 'src.dataset_label',
+  'src.panel.title', 'src.panel.expand', 'src.panel.shrink', 'src.dataset_label',
   'src.search.placeholder', 'src.search.min', 'src.search.go',
   'src.filters.title', 'src.filters.add', 'src.filters.clear', 'src.filters.remove',
   'src.picker.empty', 'src.picker.truncated', 'src.picker.max', 'src.picker.apply',
@@ -350,4 +351,37 @@ test('betweenValuesToMonthRange: round-trips EVERY smart bound style', () => {
   // A single-month range too.
   const one = monthRangeToBetweenSmart('2024-12', '2024-12', ['2024-12-01'])
   assert.deepEqual(betweenValuesToMonthRange([one.start, one.end]), { from: '2024-12', to: '2024-12' })
+})
+
+// --- Arrival-screen auto-dock predicate ----------------------------------------
+
+// The state where the dock MUST engage: bare chat route, sources-bearing agent,
+// empty conversation, Evidence closed, no dismissal, panel closed.
+const DOCK_BASE = {
+  routeName: 'chat', sessionParam: undefined, agentKey: 'owismind',
+  exchangeCount: 0, evidenceOpen: false, dismissed: false, open: false,
+}
+
+test('shouldAutoDock: docks on the bare arrival screen', () => {
+  assert.equal(shouldAutoDock(DOCK_BASE), true)
+})
+
+test('shouldAutoDock: every guard blocks the dock', () => {
+  // Deep-link into an existing conversation (the boot race: /agents can resolve
+  // BEFORE the conversation rows, leaving exchangeCount 0 - the param must block).
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, sessionParam: 's_123' }), false)
+  // Non-chat routes (Settings, Agents...).
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, routeName: 'settings' }), false)
+  // Agent without sources (or agents not loaded yet -> empty key).
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, agentKey: '' }), false)
+  // A conversation in progress.
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, exchangeCount: 3 }), false)
+  // Evidence owns the right column.
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, evidenceOpen: true }), false)
+  // Sticky user opt-out (the X on the panel).
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, dismissed: true }), false)
+  // Already open: opening again would refetch for nothing.
+  assert.equal(shouldAutoDock({ ...DOCK_BASE, open: true }), false)
+  // Defensive: no state at all.
+  assert.equal(shouldAutoDock(null), false)
 })

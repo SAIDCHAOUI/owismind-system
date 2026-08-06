@@ -215,16 +215,37 @@ const placeholder = () =>
 </template>
 
 <style scoped>
+/* The prompt is the PRIMARY control of the page: a 2px ink frame (the ghost-button
+   recipe, the strongest chrome on the canvas) on a white card, square. Focus is NOT
+   an orange ring (banned): a clean 3px orange bar sweeps in along the bottom edge -
+   a flat animated filet, charte-style. */
 .prompt {
-  border: 1px solid var(--border);
+  position: relative;
+  border: 2px solid var(--text);
   background: var(--bg);
-  border-radius: var(--r);
+  border-radius: 0;
   padding: var(--s-3) var(--s-4) var(--s-2);
   display: flex;
   flex-direction: column;
-  transition: border-color var(--dur) var(--ease);
 }
-.prompt:focus-within { border-color: var(--border-strong); }
+.prompt::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  height: 3px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left;
+  /* State change of a control: the fast token (380ms is for page entrances). */
+  transition: transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+.prompt:focus-within::after { transform: scaleX(1); }
+@media (prefers-reduced-motion: reduce) {
+  .prompt::after { transition: none; }
+}
 /* Re-include action (opted-out row): plain orange-text button, flat and square.
    Hover keeps the AA-safe --orange-text in BOTH themes (--orange-deep fails AA on
    light and darkens the dark theme) and signals with an underline instead. */
@@ -330,6 +351,7 @@ const placeholder = () =>
   font-size: var(--fs-md);
   line-height: 1.5;
   color: var(--text);
+  caret-color: var(--orange);
   padding: 6px 0 8px;
   min-height: 28px;
   max-height: 200px;
@@ -345,23 +367,24 @@ const placeholder = () =>
   display: grid;
   place-items: center;
   color: var(--text-2);
-  border-radius: 6px;
+  border-radius: 0;
   transition: all var(--dur) var(--ease);
 }
 .p-icon:hover { background: var(--surface-hover); color: var(--text); }
 .p-icon :deep(.ui-icon) { width: 17px; height: 17px; }
+/* Send = the page's primary action: solid orange, square, one size up. */
 .send-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background: var(--orange);
   color: #fff;
-  border-radius: 8px;
+  border-radius: 0;
   display: grid;
   place-items: center;
   transition: all var(--dur) var(--ease);
 }
 .send-btn:hover:not(:disabled) { background: var(--orange-deep); }
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.send-btn :deep(.ui-icon) { width: 14px; height: 14px; }
+.send-btn :deep(.ui-icon) { width: 15px; height: 15px; }
 .prompt-foot { text-align: center; font-size: var(--fs-xs); color: var(--text-3); padding-top: var(--s-3); }
 </style>

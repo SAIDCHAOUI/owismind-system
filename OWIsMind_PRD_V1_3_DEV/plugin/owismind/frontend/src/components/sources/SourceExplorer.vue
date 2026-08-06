@@ -152,13 +152,17 @@ watch(() => sources.q, (q) => {
 
 /* Dataset selector - flat square chips, orange only on the active one. */
 .src-datasets { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+/* Micro-label recipe (charte): caps, 11px, heavy, wide tracking, --text-2. */
 .src-datasets-label {
-  font-size: 11px; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.1em;
 }
+/* Surface + border ride host-provided tokens: on the default --bg host (Evidence
+   "Source data" tab) the fallbacks keep the validated look; the DOCKED panel host
+   (SourcePanel, ambient --surface) remaps them so chips stay visible aplats. */
 .src-dataset {
-  padding: 3px 10px; border: 1px solid var(--border); border-radius: 0;
-  font-size: var(--fs-xs); color: var(--text-2); background: var(--surface);
+  padding: 3px 10px; border: 1px solid var(--src-chip-border, var(--border)); border-radius: 0;
+  font-size: var(--fs-xs); color: var(--text-2); background: var(--src-chip-bg, var(--surface));
   transition: all var(--dur) var(--ease);
 }
 .src-dataset:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }

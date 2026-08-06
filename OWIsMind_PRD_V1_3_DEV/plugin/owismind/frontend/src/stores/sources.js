@@ -59,6 +59,14 @@ export const useSourcesStore = defineStore('sources', () => {
   const session = useSessionStore()
 
   const open = ref(false) // standalone panel visibility (pre-conversation)
+  // Docked-panel geometry: false = ambient third of the screen, true = expanded to
+  // two thirds (the chat keeps the remaining third). Session-only, kept across
+  // open/close so the panel comes back the way the user left it.
+  const wide = ref(false)
+  // Sticky opt-out: the user explicitly closed the docked panel (the X button).
+  // The arrival screen auto-docks the panel (AppLayout) UNLESS this is set; any
+  // explicit re-open (openPanel) clears it. Session-only, like the view memory.
+  const dismissed = ref(false)
   const agentKey = ref('') // logical key of the agent whose sources we browse
   const sourceList = ref([]) // [{ id, label, dataset }] from the session agent (no fetch)
   const activeSourceId = ref(null) // integer id of the dataset currently browsed
@@ -206,10 +214,15 @@ export const useSourcesStore = defineStore('sources', () => {
     }
   }
 
-  // Standalone panel open/close (the pre-conversation surface).
-  function openPanel(key) {
+  // Standalone panel open/close (the pre-conversation surface). An explicit open is
+  // a user intent: it lifts any sticky dismissal so the auto-dock resumes.
+  // `opts.auto` marks the ARRIVAL-SCREEN AUTO-DOCK (AppLayout): it must not emit
+  // the analytics event - `source_explorer_opened` measures a user INTENT, and an
+  // automatic dock on every arrival would silently break the metric's history.
+  function openPanel(key, opts) {
     open.value = true
-    track('source_explorer_opened', {}, { agent_key: key || null })
+    dismissed.value = false
+    if (!(opts && opts.auto)) track('source_explorer_opened', {}, { agent_key: key || null })
     ensureAgent(key)
   }
   function closePanel() {
@@ -217,6 +230,17 @@ export const useSourcesStore = defineStore('sources', () => {
     seq += 1 // invalidate any in-flight request
     open.value = false
     _resetAll()
+  }
+  // The user's X on the docked panel: close AND remember the opt-out, so the
+  // arrival screen stops re-docking it for this app session. System closes
+  // (route leave, Evidence taking the column, source-less agent) use closePanel
+  // and never mark a dismissal.
+  function dismissPanel() {
+    dismissed.value = true
+    closePanel()
+  }
+  function toggleWide() {
+    wide.value = !wide.value
   }
 
   // Load one source's descriptor (columns), then its first page. Resets the per-source
@@ -468,12 +492,12 @@ export const useSourcesStore = defineStore('sources', () => {
   } = surface
 
   return {
-    open, agentKey, sourceList, activeSourceId, columns, chips, q,
+    open, wide, dismissed, agentKey, sourceList, activeSourceId, columns, chips, q,
     rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
     columnFilterRequest, requestColumnFilter,
     activeSourceLabel,
     ...surfacePublic,
-    ensureAgent, openPanel, closePanel, setSource, reload, setQuery,
+    ensureAgent, openPanel, closePanel, dismissPanel, toggleWide, setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,
   }

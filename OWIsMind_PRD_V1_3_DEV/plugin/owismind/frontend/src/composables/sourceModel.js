@@ -551,3 +551,23 @@ export function yearOfValue(v) {
   const m = String(v == null ? '' : v).match(/^(\d{4})/)
   return m ? m[1] : null
 }
+
+// --- Arrival-screen auto-dock predicate (AppLayout) ----------------------------
+// Decides whether the Source Data panel should DOCK ITSELF on the right column.
+// Pure so the boot/deep-link races live under node:test (the shell watch just
+// feeds it reactive state). True ONLY on the bare chat route (no :sessionId -
+// closes the boot race where /agents resolves before an existing conversation's
+// rows), with an EMPTY conversation, a sources-bearing agent, Evidence closed,
+// no sticky user dismissal, and the panel not already open.
+export function shouldAutoDock(state) {
+  const s = state || {}
+  return !!(
+    s.routeName === 'chat' &&
+    !s.sessionParam &&
+    s.agentKey &&
+    !s.exchangeCount &&
+    !s.evidenceOpen &&
+    !s.dismissed &&
+    !s.open
+  )
+}

@@ -17,10 +17,8 @@ export const extraMessages = {
     'x.close': 'Fermer',
 
     // Chat - prompt guidance: better input → better answer. Overrides the maquette's
-    // neutral placeholder (messages.json) and adds an empty-screen tip.
+    // neutral placeholder (messages.json).
     'prompt.placeholder': 'Décrivez votre demande le plus précisément possible…',
-    'empty.tip':
-      'Conseil : plus votre demande est précise et bien formulée - les termes employés, la période, le périmètre - meilleure sera la réponse.',
 
     // Settings - profile groups label
     'set.profile.groups': 'Groupes',
@@ -770,9 +768,9 @@ export const extraMessages = {
 
     // === Source Data Explorer (browse an agent's configured datasets) ===
     'ev.tab.sources': 'Données sources',
-    'src.cta.title': 'Explorer les données sources',
-    'src.cta.hint': "Parcourez les jeux de données de l'agent : recherchez, filtrez et triez sans écrire de requête.",
     'src.panel.title': 'Données sources',
+    'src.panel.expand': 'Agrandir la vue des données',
+    'src.panel.shrink': 'Réduire la vue des données',
     'src.dataset_label': 'Jeu de données',
     'src.search.placeholder': 'Rechercher dans le jeu de données…',
     'src.search.min': 'Saisissez au moins 2 caractères pour lancer la recherche.',
@@ -916,10 +914,8 @@ export const extraMessages = {
     'x.close': 'Close',
 
     // Chat - prompt guidance: better input → better answer. Overrides the maquette's
-    // neutral placeholder (messages.json) and adds an empty-screen tip.
+    // neutral placeholder (messages.json).
     'prompt.placeholder': 'Describe your request as precisely as possible…',
-    'empty.tip':
-      'Tip: the more precise and well-phrased your request - the terms you use, the period, the scope - the better the answer.',
 
     // Settings - profile groups label
     'set.profile.groups': 'Groups',
@@ -1667,9 +1663,9 @@ export const extraMessages = {
 
     // === Source Data Explorer (browse an agent's configured datasets) ===
     'ev.tab.sources': 'Source data',
-    'src.cta.title': 'Explore the source data',
-    'src.cta.hint': "Browse the agent's datasets: search, filter and sort without writing a query.",
     'src.panel.title': 'Source data',
+    'src.panel.expand': 'Expand the data view',
+    'src.panel.shrink': 'Shrink the data view',
     'src.dataset_label': 'Dataset',
     'src.search.placeholder': 'Search this dataset…',
     'src.search.min': 'Type at least 2 characters to search.',
