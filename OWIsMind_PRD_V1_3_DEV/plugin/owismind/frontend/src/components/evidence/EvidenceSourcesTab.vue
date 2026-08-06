@@ -302,8 +302,8 @@ function clearEvSearch() {
   flex: none;
 }
 .ev-src-selector-label {
-  font-size: 11px; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
 }
 .ev-src-chip {
   padding: 3px 10px; border: 1px solid var(--border); border-radius: 0;
@@ -317,7 +317,7 @@ function clearEvSearch() {
 /* Drill banner - discreet dashed-orange band (moved from EvidencePanel). */
 .ev-drill-band {
   display: flex; align-items: center; gap: var(--s-2); flex: none;
-  padding: 4px 10px; border: 1px dashed var(--orange); border-radius: var(--r-sm);
+  padding: 4px 10px; border: 1px dashed var(--orange); border-radius: 0;
   background: var(--orange-soft);
 }
 .ev-drill-band :deep(.ui-icon) { flex: none; width: 12px; height: 12px; color: var(--orange-text); }
@@ -326,7 +326,7 @@ function clearEvSearch() {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ev-drill-exit {
-  flex: none; padding: 2px; border-radius: var(--r-sm); color: var(--orange-text);
+  flex: none; padding: 2px; border-radius: 0; color: var(--orange-text);
   transition: all var(--dur) var(--ease);
 }
 .ev-drill-exit:hover { background: var(--surface-hover); color: var(--text); }
@@ -336,8 +336,8 @@ function clearEvSearch() {
 /* "Explore source data" label over the table (only for the enriched contract). */
 .ev-explore {
   flex: none;
-  font-size: var(--fs-xs); color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
   margin-bottom: calc(-1 * var(--s-2));
 }
 

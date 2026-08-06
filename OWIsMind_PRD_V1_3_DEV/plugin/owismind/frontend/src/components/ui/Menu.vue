@@ -82,9 +82,11 @@ useClickOutside(wrap, close)
   position: absolute;
   min-width: 220px;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  /* Square card, VISIBLE 1px frame, minimal shadow: the strong border does the
+     lifting (charte modal/menu recipe - no soft floating shadows). */
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  box-shadow: var(--shadow);
   padding: 4px;
   z-index: var(--z-menu);
   font-family: var(--font-sans);
@@ -93,9 +95,7 @@ useClickOutside(wrap, close)
 .ui-menu.align-left { left: 4px; }
 .ui-menu.place-bottom { top: calc(100% + 4px); }
 .ui-menu.place-top { bottom: calc(100% + 4px); }
-:global(body[data-theme="dark"] .ui-menu) {
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-}
+/* No dark override needed: --shadow carries its own dark variant (tokens.css). */
 
 .ui-menu-item {
   display: grid;
@@ -104,7 +104,7 @@ useClickOutside(wrap, close)
   align-items: center;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 12.5px;
   color: var(--text);
   background: transparent;

@@ -37,8 +37,9 @@ const dropped = computed(() => droppedNote(evidence.meta && evidence.meta.verifi
    on top of every proof section. */
 .ev-trust { display: flex; flex-direction: column; gap: var(--s-1); }
 .ev-trust-line { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; }
+/* Square badge (charte: badges are square, never pills). */
 .ev-trust-pill {
-  flex: none; padding: 2px 10px; border-radius: var(--r-pill);
+  flex: none; padding: 2px 10px; border-radius: 0;
   border: 1px solid var(--orange); background: var(--orange-soft);
   color: var(--orange-text); font-size: var(--fs-xs); font-weight: 600;
   white-space: nowrap;

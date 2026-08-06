@@ -89,7 +89,7 @@ watch(
     <!-- Storage not configured: an admin must set the SQL connection -->
     <div v-if="session.needsConfig" class="chat-config">
       <div class="chat-config__card">
-        <p class="chat-config__title">⚙️ Stockage non configuré</p>
+        <p class="chat-config__title">Stockage non configuré</p>
         <p class="muted">
           Un administrateur doit définir la <b>connexion SQL</b> dans les réglages de la webapp
           (onglet Settings), puis redémarrer le backend.

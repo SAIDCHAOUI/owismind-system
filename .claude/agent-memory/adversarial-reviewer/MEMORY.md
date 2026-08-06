@@ -1,5 +1,6 @@
 - [Memory/setup layout](repo-memory-layout.md) - where OWIsMind memory + gotchas live, how to verify slimming didn't lose info
 - [Frontend review patterns](owismind-frontend-review-patterns.md) - always verify scope claims via git status yourself; this repo's frontend sessions tend to be genuinely clean/well-tested
+- [Frontend CSS review facts](frontend-css-review-facts.md) - DOMPurify keeps `style`; scoped CSS keeps foreign keyframes; cssVar reads html not body (dark blind spot); check flex anchoring before claiming a click-swallow
 - [Repo review pitfalls](repo-review-pitfalls.md) - recurring verification points (read-only SQL guard, prod=clone, agent comment-neutrality, generated assets, dash scan, baseline test counts)
 - [Verifying zero-behavior cleanup](verifying-zero-behavior-cleanup.md) - AST-diff method to prove comment/doc-only Python changes and byte-identical consolidations
 - [Security invariants](security-invariants.md) - read-only pre-queries, agent whitelist, hooks; how to prove a diff didn't weaken them

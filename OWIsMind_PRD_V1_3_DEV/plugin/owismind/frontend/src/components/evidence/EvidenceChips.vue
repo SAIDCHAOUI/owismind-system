@@ -620,9 +620,10 @@ watch(
    the popover paints above it. Transparent - it only intercepts the dismiss click. */
 .ev-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); background: transparent; }
 .ev-chips-head { display: flex; align-items: center; gap: var(--s-3); }
-.ev-chips-title { font-size: var(--fs-xs); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+/* Charte micro-label (mirrored by every .ev-sec-title). */
+.ev-chips-title { font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy); text-transform: uppercase; letter-spacing: 0.08em; }
 .ev-modified {
-  font-size: 11px; color: var(--orange); border: 1px dashed var(--orange);
+  font-size: 11px; color: var(--orange-text); border: 1px dashed var(--orange);
   border-radius: 0; padding: 1px 8px;
 }
 .ev-reset {

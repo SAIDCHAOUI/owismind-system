@@ -416,7 +416,7 @@ onBeforeUnmount(() => {
 .ev-table {
   position: relative;
   display: flex; flex-direction: column; flex: none;
-  border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden;
+  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
 }
 .ev-table-scroll, .ev-table-foot { transition: opacity var(--dur) var(--ease); }
 .ev-table.busy .ev-table-scroll, .ev-table.busy .ev-table-foot { opacity: 0.55; }
@@ -433,9 +433,11 @@ onBeforeUnmount(() => {
 /* separate + spacing 0: with `collapse`, the th border scrolls away from a
    sticky header - paint the line as an inset shadow so it sticks with it. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+/* Header keeps the REAL column names' case (sort buttons on data identifiers -
+   uppercasing would distort them) but its rule matches the strengthened frame. */
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--surface);
-  text-align: left; box-shadow: inset 0 -1px 0 var(--border);
+  text-align: left; box-shadow: inset 0 -1px 0 var(--border-strong);
   color: var(--text-2); font-weight: 500; white-space: nowrap;
   user-select: none;
 }
@@ -512,7 +514,7 @@ tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--danger); font-size: var(--fs-sm);
 }
 .ev-table-error button {
-  padding: 2px 10px; border-radius: var(--r-sm); color: var(--text-2);
+  padding: 2px 10px; border-radius: 0; color: var(--text-2);
   transition: all var(--dur) var(--ease);
 }
 .ev-table-error button:hover { background: var(--surface-hover); color: var(--text); }

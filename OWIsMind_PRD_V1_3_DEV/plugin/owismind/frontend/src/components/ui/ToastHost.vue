@@ -37,12 +37,14 @@ const { toasts } = useToasts()
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  border-radius: var(--r-pill);
+  /* Square, flat, inverted-ink chip: the contrast IS the separation (charte:
+     no soft floating shadows - 1px level maximum). */
+  border-radius: 0;
   background: var(--text);
   color: var(--bg);
   font-size: var(--fs-sm);
   font-weight: 500;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow);
 }
 .ui-toast .ico { display: inline-flex; }
 .ui-toast .ico :deep(.ui-icon) { width: 14px; height: 14px; }

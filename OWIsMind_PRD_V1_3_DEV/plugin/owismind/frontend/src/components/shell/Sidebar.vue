@@ -313,14 +313,19 @@ function onUser(key) {
   width: 100%;
   text-align: left;
 }
+/* Hover one step STRONGER than the resting active bg (--surface): the pointer
+   answer must be perceivable on a white canvas (guide: visible hover states). */
 .side-item:hover,
-.side-item.open { background: var(--surface); }
+.side-item.open { background: var(--surface-hover); }
 /* Active: left orange bar accent, bold text */
 .side-item.active {
   background: var(--surface);
   font-weight: 700;
   box-shadow: inset 3px 0 0 var(--orange);
 }
+/* The ACTIVE item answers the pointer too (same-specificity .active rule comes
+   later in source and would otherwise pin the resting background). */
+.side-item.active:hover { background: var(--surface-hover); }
 .side-item :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-3); }
 .side-item.active :deep(.ui-icon) { color: var(--text); }
 .side-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
@@ -357,12 +362,13 @@ function onUser(key) {
   text-overflow: ellipsis;
   font-family: var(--font-sans);
 }
-.conv-item:hover { background: var(--surface); color: var(--text); }
+.conv-item:hover { background: var(--surface-hover); color: var(--text); }
 .conv-item.active {
   background: var(--surface);
   color: var(--text);
   box-shadow: inset 3px 0 0 var(--orange);
 }
+.conv-item.active:hover { background: var(--surface-hover); }
 .conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .conv-state {
   padding: 8px 12px;
@@ -399,7 +405,7 @@ function onUser(key) {
   text-align: left;
 }
 .user-chip:hover,
-.user-chip.open { background: var(--surface); }
+.user-chip.open { background: var(--surface-hover); }
 .user-chip:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 /* Avatar: 32px circle, var(--surface-2) background, bold initial */
 .user-chip .avatar {

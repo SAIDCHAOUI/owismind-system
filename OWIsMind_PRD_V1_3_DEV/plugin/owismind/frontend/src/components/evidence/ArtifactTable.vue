@@ -13,6 +13,8 @@ const { t, locale } = useI18n()
 const props = defineProps({
   // meta.result: { captured, columns, rows, row_count, truncated }
   result: { type: Object, default: null },
+  // Agent-provided title (what the table IS), shown as the header line.
+  title: { type: String, default: '' },
   // Agent-provided one-sentence caption (what the table shows), above it.
   description: { type: String, default: '' },
 })
@@ -52,7 +54,11 @@ function rawTitle(row, j) {
     </div>
 
     <template v-else>
-      <p v-if="description" class="art-desc">{{ description }}</p>
+      <!-- Header: what the table is + what it shows, BEFORE the data (context first). -->
+      <div v-if="title || description" class="art-table-head">
+        <span v-if="title" class="art-table-title">{{ title }}</span>
+        <p v-if="description" class="art-desc">{{ description }}</p>
+      </div>
       <div class="art-table-box">
         <div class="art-table-scroll">
           <table>
@@ -75,8 +81,12 @@ function rawTitle(row, j) {
         </div>
       </div>
 
+      <!-- Context line: volume of the data on screen (rows AND columns), plus the
+           truncation caveat when the capture is partial - numbers with context. -->
       <div class="art-table-info">
         <span>{{ t('ev.proof.result.rows', [formatStatNumber(rowCount, locale)]) }}</span>
+        <span aria-hidden="true">·</span>
+        <span>{{ t('art.table.cols', [columns.length]) }}</span>
         <span v-if="truncated" class="art-trunc">{{ t('art.table.truncated') }}</span>
       </div>
     </template>
@@ -91,6 +101,18 @@ function rawTitle(row, j) {
   gap: var(--s-2);
   min-height: 0;
 }
+/* Header block above the data: title first (level-2 emphasis), caption under. */
+.art-table-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.art-table-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+  line-height: 1.35;
+}
 /* Agent-provided caption: what the table shows (scope, period, scenario). */
 .art-desc {
   margin: 0;
@@ -99,10 +121,10 @@ function rawTitle(row, j) {
 }
 
 /* Scrollable viewport - taller than EvidenceResult's mini-table since this IS
-   the data browser tab, not a secondary proof section. */
+   the data browser tab, not a secondary proof section. Square, visible frame. */
 .art-table-box {
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
   overflow: hidden;
 }
 .art-table-scroll {
@@ -118,16 +140,21 @@ table {
   border-spacing: 0;
   font-size: var(--fs-sm);
 }
+/* Charte table header: uppercase micro-labels over a VISIBLE rule - the header
+   reads as a scannable band, clearly distinct from the data rows. */
 thead th {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--surface);
-  padding: 6px 12px;
+  padding: 8px 12px;
   text-align: left;
-  box-shadow: inset 0 -1px 0 var(--border);
+  box-shadow: inset 0 -1px 0 var(--border-strong);
   color: var(--text-2);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   white-space: nowrap;
   user-select: none;
 }
@@ -172,7 +199,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: var(--fs-sm);
   color: var(--text-3);
   border: 1px dashed var(--border);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   text-align: center;
 }
 </style>

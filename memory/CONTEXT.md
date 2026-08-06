@@ -7,16 +7,20 @@
 
 ## Focus courant
 
-**NETTOYAGE PROFOND DU REPO (2026-08-06 run 4, soir).** 5 agents Explore par zone + contre-verification
-grep avant toute suppression. Moisson (repo deja tres sain) : 3 fichiers morts SUPPRIMES (`prompt.txt`,
-`launch-claude-in-2h30.command`, `docs/owismind-relaunch-email.html`) + 18 symboles morts (13 entrees
-`ICONS` orphelines, 5 constantes backend jamais referencees). Faux suspects GARDES avec preuves
-(`plugin/read.md`, `frontend/.claude/agent-memory/` = memoire hierarchique, seam de test TTL, etc.).
-Coherence : chemins charte-orange-reviewer, mapping LAB `history_io.py`, 4 docs indexes, skill
-build-plugin aligne F10. Rebuild : bundle `index-DBtqkrqZ.js`, body.html recable via Write et verifie.
-**Suites identiques apres nettoyage : 1010 + 765 + 343 + 380/380, build Vite OK. RIEN uploade DSS.**
+**PASSE UX "ATTENTION PREMIUM" (2026-08-07 run 1, nuit).** Guide UX/UI fourni par l'user applique au
+front, strictement dans la charte : graphiques avec en-tete HTML titre+description toujours present +
+legende mono-serie nouvelle (pastille carree orange) ; tableaux markdown du chat STYLES pour la 1re fois
+(recette charte complete, alignements preserves) ; tableaux artefacts avec titre backend + contexte
+lignes/colonnes ; KPI recette charte exacte (regle haute 3px orange) ; PromptBar micro-feedback (nudge
+Send, hint Entree, focus encre) ; micro-labels Evidence unifies 11px/800/`--text-2` ; mise au carre
+INTEGRALE (bulle user, menus, toasts, badges, chips) + 2 ombres molles interdites purgees ; hovers
+transverses (cartes agents, sidebar y compris item actif). **Fix bug preexistant L181 : couleurs canvas
+Chart.js lues sur `<html>` -> dark dessinait les axes en clair ; corrige via `document.body`.**
+2 revues Opus (charte : 1 must-fix corrige ; adversariale : PASS) ; 380/380 x2, build `index-C8WGUKAI.js`,
+body.html recable (F10). **RIEN uploade DSS ; validation clair + SOMBRE attendue.**
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-08-07 Run 1 (nuit) : passe UX attention premium (legendes artefacts + tableaux chat + KPI charte + PromptBar + mise au carre integrale + fix dark canvas L181) ; 2 revues Opus, 380/380, bundle `index-C8WGUKAI.js`. L181-L182. Voir `sessions/2026-08-07.md`.
 - 2026-08-06 Run 4 (soir) : nettoyage profond (3 fichiers morts + 13 icones + 5 constantes supprimes, faux suspects gardes avec preuves, rebuild `index-DBtqkrqZ.js`) ; suites identiques 1010+765+343+380. Voir `sessions/2026-08-06.md` run 4.
 - 2026-08-06 Run 3 (jour) : session UX luxe (dock Source Data d'office 1/3<->2/3 + nuances + prompt hero) ; 2 revues Opus, tout corrige + re-verifie ; 380/380, body.html recable. L180. Voir `sessions/2026-08-06.md` run 3.
 - 2026-08-06 Run 2 (nuit autonome) : UX webapp (tableaux lisibles + contexte ecran d'office + graphiques auto-titres) + moteur orchestrateur in-backend (flag native_engine, dual-path) ; 3 revues Opus, tout corrige + re-verifie ; 765+1010+378 verts. L177-L179. Voir `sessions/2026-08-06.md` run 2.
@@ -39,23 +43,7 @@ build-plugin aligne F10. Rebuild : bundle `index-DBtqkrqZ.js`, body.html recable
 - 2026-07-06 Runs 2-4 : Source Data v3 complet (popover, Calculer, plages string, cascade, persistance,
   contexte ecran -> agent, menu de colonne). VALIDE DSS (« tout marche super »). L134-L138.
 - 2026-07-06 Run 1 : data tools sans IA (agregats DB + Calculer + plages + unification Evidence), plugin dev_v2. L132-L133.
-- 2026-07-03 Run 3 : optimisation des espaces page benchmark plugin (pickers en-tete, hero+stats, bande ref). Local. L131.
-- 2026-07-03 Runs 2 + 2b : refonte benchmark launcher LAB + page plugin modes conditionnels + hotfix CSS. Local. L128-L130.
-- 2026-07-03 Run 1 : grand nettoyage pre-beta (memoire -72 %, docs 34/34 routes + 8/8 tables, /api/config LAB). L127.
-- 2026-07-02 Run 6 : mode ephemere (Smart par defaut) + mode par reponse (`chat_v5.mode`). VALIDE DSS. L126.
-- 2026-07-02 Run 5 : analytics d'usage (`webapp_events_v1` + `POST /track` + `track.js`). VALIDE DSS. L125.
-- 2026-07-02 Run 4 : Source Data filtres cherchables + cell-to-agent + popover/DataLoader. VALIDE DSS. L123-L124.
-- 2026-07-02 Run 3 : Source Data Explorer v1+v2. VALIDE DSS. L121-L122.
-- 2026-07-02 Run 2 : artefacts natifs + narration + recall. VALIDE DSS. L119-L120.
-- 2026-07-02 Run 1 : audit + durcissement orchestrateur / expert revenus / cerveau semantique. Repo DEV. L118.
-- 2026-07-01 Run 3 : visibilite complete des resultats benchmark (reponse + SQL genere + tableau) + override. L117.
-- 2026-07-01 Run 2 : clarte benchmark detail + galerie d'agents + flux "ajouter un agent" + nettoyage ultracode. L116.
-- 2026-07-01 Run 1 : LAB launcher, nettoyage + 4 fixes + 1 feature (contrat golden, `agent_key=id`). L115.
-- 2026-06-30 : mail de relance HTML (L114) ; benchmark v2 append mode + colonnes SQL/tool de reference (L113).
-- 2026-06-29 : consultation benchmark pleine largeur (L112) ; benchmark phase finale juge + override + plugin (L111).
-- 2026-06-26 : fix nom de table trop long (L110) + reorg benchmark sous `OWIsMind_LAB/` (L109) + nettoyage repo (L108) + re-skin webapps LAB (L107) + integration benchmark 2 poles (L103-L104).
-- 2026-06-25 : systeme de benchmark / evaluation des agents (package `benchmark/`, LAB). L102.
-- 2026-06-24 : fix UI pouces feedback + modes par agent Smart/Pro/Claude.
+- 2026-06-24 au 2026-07-03 : benchmark LAB complet (L102-L131 : package, 2 webapps Standard, juge + override, launcher, pages plugin), modes Smart/Pro/Claude + mode ephemere (L126), analytics d'usage (L125), Source Data Explorer v1-v2 + cell-to-agent (L121-L124), artefacts natifs + narration + recall (L119-L120), audit orchestrateur (L118), nettoyage pre-beta (L127). VALIDE DSS pour l'essentiel. Detail : `sessions/2026-06-*.md` + `sessions/2026-07-0{1,2,3}.md`.
 - Anterieur au 2026-06-24 : archive. Detail par date dans `sessions/*.md` ; jalons dans `PROJECT_STATE.md` (2b, 8, 11).
 
 ## Regles
@@ -64,15 +52,17 @@ build-plugin aligne F10. Rebuild : bundle `index-DBtqkrqZ.js`, body.html recable
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (2026-08-06)** : build + body.html FAITS et re-faits
-  au run 4 (`index-DBtqkrqZ.js`, recable via Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
+- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (06/08) ET de la passe UX premium (07/08)** : build +
+  body.html a jour (`index-C8WGUKAI.js`, Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
   DEV ; (2) recoll orchestrateur (show_chart title requis + persona) + re-save ; (3) valider chantier A
-  (tableaux, chip contexte d'office, graphiques) ET session UX run 3 (dock d'office 1/3<->2/3, opt-out,
-  prompt hero, dark) ; (4) moteur natif : entree de TEST avec flag `native_engine` + checklist
-  `docs/NATIVE_ENGINE.md` (jamais execute contre un vrai Mesh) ; backlog natif = recall natif, sql_id
-  par artefact. (5) Arbitrages user : contexte ecran herite a travers "Nouvelle conversation"
-  (comportement voulu A2, a confirmer) ; telemetrie d'exposition du dock si adoption a mesurer.
-  Voir `sessions/2026-08-06.md` runs 2-3.
+  (tableaux, chip contexte d'office, graphiques) + session UX run 3 (dock d'office, prompt hero) + passe
+  premium 07/08 (tableaux markdown chat, en-tetes/legendes artefacts, KPI, PromptBar, hovers) en clair
+  ET SOMBRE (fix L181 = couleurs d'axes dark enfin correctes) ; (4) moteur natif : entree de TEST avec
+  flag `native_engine` + checklist `docs/NATIVE_ENGINE.md` (jamais execute contre un vrai Mesh) ; backlog
+  natif = recall natif, sql_id par artefact. (5) Arbitrages user : contexte ecran herite a travers
+  "Nouvelle conversation" (A2, a confirmer) ; telemetrie d'exposition du dock ; enteriner tracking
+  micro-labels 0.08em dans `CHARTE_ORANGE_UI.md` (la charte ecrit .1em).
+  Voir `sessions/2026-08-06.md` runs 2-3 + `sessions/2026-08-07.md`.
 - **Contenu perime signale au nettoyage (2026-08-06 run 4, decisions user)** : `CAPABILITY_MATRIX.md` encore template (sonde 00 pourtant passee) ; `registry.json` ignore le domaine delivery cree par l'usine ; `docs/data-model.md` OUTDATED ; `MODEL.md` d'avant le re-add Solution. Voir `sessions/2026-08-06.md` run 4.
 - **AUDIT v1.3, restes (2026-08-06 run 1)** : USER : trancher FE-06 (liste i18n) / FE-09 / onglet
   "Nouveau domaine" / regeneration tickets AG-01b / contrats d'erreur listings BE-03 ; session dediee :

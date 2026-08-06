@@ -110,11 +110,13 @@ async function copy() {
   gap: 4px;
   max-width: 78%;
 }
+/* Square card (charte geometry) with a VISIBLE 1px frame: the user's words are
+   a surface like any other - no speech-bubble rounding. */
 .bubble {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   padding: 10px 14px;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 0;
   font-size: var(--fs-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -169,7 +171,7 @@ async function copy() {
   display: inline-flex;
   align-items: center;
   padding: 4px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   color: var(--text-3);
   transition: all var(--dur) var(--ease);
 }
@@ -190,7 +192,7 @@ async function copy() {
   min-height: 64px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: 0;
   background: var(--surface);
   color: var(--text);
   font-size: var(--fs-md);
@@ -201,7 +203,7 @@ async function copy() {
 .edit-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .edit-actions button {
   padding: 6px 14px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   font-size: var(--fs-sm);
   transition: all var(--dur) var(--ease);
 }

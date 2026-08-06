@@ -34,7 +34,7 @@ const desc = computed(() => (route.meta.desc ? t(route.meta.desc) : ''))
   margin-top: var(--s-7);
   padding: 28px;
   border: 1px dashed var(--border-strong);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--surface);
   color: var(--text-2);
   font-size: 14.5px;
@@ -44,7 +44,6 @@ const desc = computed(() => (route.meta.desc ? t(route.meta.desc) : ''))
   width: 36px;
   height: 3px;
   background: var(--orange);
-  border-radius: 3px;
   margin-bottom: 14px;
   opacity: 0.85;
 }

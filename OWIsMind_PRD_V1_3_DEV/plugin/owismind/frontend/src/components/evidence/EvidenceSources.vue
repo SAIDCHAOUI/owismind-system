@@ -51,10 +51,10 @@ const sourceUrl = computed(() => (source.value && source.value.url) || '')
 <style scoped>
 /* No z-index: the chips popover (z-index 5, L043) must stay above. */
 .ev-sources { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - charte micro-label (same pattern as .ev-chips-title). */
 .ev-sec-title {
-  font-size: var(--fs-xs); color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
 }
 .ev-source-line { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .ev-source-line :deep(.ui-icon) { flex: none; width: 14px; height: 14px; color: var(--text-3); }

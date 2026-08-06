@@ -58,6 +58,7 @@ export const extraMessages = {
 
     // Chat - stop generation (the ■ button + interrupted-answer markers)
     'prompt.stop': 'Arrêter la génération',
+    'prompt.enter_hint': 'Entrée pour envoyer',
     'chat.stopped': 'Génération arrêtée',
     'chat.stopping': 'Arrêt en cours…',
     'chat.interrupted_empty': 'Réponse interrompue',
@@ -420,6 +421,7 @@ export const extraMessages = {
     'art.chart.auto_title': '{0} par {1}',
     'art.table.empty': "Le résultat exact utilisé par l'agent n'a pas été conservé.",
     'art.table.truncated': 'Résultat tronqué - premières lignes seulement.',
+    'art.table.cols': '{0} colonne(s)',
     'art.kpi.empty': "Impossible d'afficher l'indicateur pour ces données.",
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
@@ -955,6 +957,7 @@ export const extraMessages = {
 
     // Chat - stop generation (the ■ button + interrupted-answer markers)
     'prompt.stop': 'Stop generating',
+    'prompt.enter_hint': 'Enter to send',
     'chat.stopped': 'Generation stopped',
     'chat.stopping': 'Stopping…',
     'chat.interrupted_empty': 'Response interrupted',
@@ -1315,6 +1318,7 @@ export const extraMessages = {
     'art.chart.auto_title': '{0} by {1}',
     'art.table.empty': 'The exact result the agent used was not kept for this answer.',
     'art.table.truncated': 'Result truncated - first rows only.',
+    'art.table.cols': '{0} column(s)',
     'art.kpi.empty': 'Cannot display the KPI for this data.',
 
     // Chat - model mode picker (cost/quality dial sent with each turn)

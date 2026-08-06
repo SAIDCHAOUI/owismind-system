@@ -27,9 +27,12 @@ let instance = null
 let themeObserver = null
 
 // Canvas cannot use CSS var() - resolve the active theme's colors at draw time.
+// Read them from <body>: the semantic tokens live under body[data-theme] (F4),
+// so <html> never sees the dark variants - reading documentElement would bake
+// light-theme axis/grid colors into a dark-mode chart.
 function cssVar(name, fallback) {
   try {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    const v = getComputedStyle(document.body).getPropertyValue(name).trim()
     return v || fallback
   } catch (e) {
     return fallback
@@ -85,6 +88,22 @@ const effTitle = computed(() => {
   const xPart = effXLabel.value
   if (!yPart || !xPart) return ''
   return t('art.chart.auto_title', [yPart, xPart])
+})
+
+// Single-series cartesian charts get NO Chart.js legend (it would be redundant
+// noise for toggling one series) - but a chart must never ship without a named
+// series (legends are non-negotiable). This HTML legend line names the series +
+// its unit under the canvas; the swatch is the brand orange (first palette slot),
+// painted in CSS so it follows theme flips for free.
+const soloSeries = computed(() => {
+  if (!isOk()) return null
+  const spec = props.chart || {}
+  if (spec.type === 'pie') return null
+  const ds = props.data.datasets
+  if (!Array.isArray(ds) || ds.length !== 1) return null
+  const label = prettyLabel(ds[0] && ds[0].label) || effYLabel.value
+  const unit = String(spec.unit || '')
+  return label || unit ? { label, unit } : null
 })
 
 // Human tick formatting on the VALUE axis: compact notation for large magnitudes
@@ -193,9 +212,12 @@ function buildConfig() {
       legend: {
         display: isPie || datasets.length > 1,
         position: isPie ? 'right' : 'top',
-        labels: { color: text2, usePointStyle: true, boxWidth: 8 },
+        // Square swatches (brand geometry) instead of point-style dots.
+        labels: { color: text2, boxWidth: 10, boxHeight: 10 },
       },
-      title: { display: !!effTitle.value, text: effTitle.value, color: text2 },
+      // The title lives in the HTML header above the canvas (selectable, theme-aware
+      // without a redraw, and styled by the charte) - never drawn on the canvas.
+      title: { display: false },
       tooltip: isPie
         ? {
             callbacks: {
@@ -269,13 +291,24 @@ onBeforeUnmount(() => {
       <span class="art-empty-icon">&#9649;</span>
       <span>{{ t('art.chart.empty') }}</span>
     </div>
-    <template v-else>
+    <!-- Semantic figure: header (what the chart shows) BEFORE the drawing, so the
+         reader gets title + scope first (guide: context before the number). -->
+    <figure v-else class="art-fig">
+      <figcaption class="art-fig-head">
+        <span class="art-fig-title">{{ effTitle || t('art.chart.title_fallback') }}</span>
+        <span v-if="description" class="art-desc">{{ description }}</span>
+      </figcaption>
       <div class="art-canvas-wrap">
         <canvas ref="canvasEl" role="img" :aria-label="effTitle || t('art.chart.title_fallback')" />
       </div>
-      <p v-if="description" class="art-desc">{{ description }}</p>
+      <!-- Series legend for single-series charts (Chart.js hides its own there). -->
+      <div v-if="soloSeries" class="art-legend">
+        <span class="art-legend-swatch" aria-hidden="true" />
+        <span class="art-legend-label">{{ soloSeries.label }}</span>
+        <span v-if="soloSeries.unit" class="art-legend-unit mono">({{ soloSeries.unit }})</span>
+      </div>
       <div v-if="data.truncated" class="art-trunc">{{ t('art.chart.truncated') }}</div>
-    </template>
+    </figure>
   </div>
 </template>
 
@@ -286,11 +319,51 @@ onBeforeUnmount(() => {
   gap: var(--s-3);
   min-height: 0;
 }
+.art-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+/* Header: an informative title (level-2 emphasis - the tab itself is level 1),
+   then the agent's one-sentence caption. Reads BEFORE the drawing. */
+.art-fig-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.art-fig-title {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+  line-height: 1.35;
+}
 /* Fixed-height canvas wrapper: Chart.js fills it (maintainAspectRatio: false). */
 .art-canvas-wrap {
   position: relative;
   width: 100%;
   height: 340px;
+}
+/* Single-series legend line: square brand-orange swatch (slot 0 of the palette)
+   + series name + unit. Square, flat, theme-aware via tokens. */
+.art-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.art-legend-swatch {
+  width: 10px;
+  height: 10px;
+  background: var(--orange);
+  flex-shrink: 0;
+}
+.art-legend-label { font-weight: var(--fw-medium); }
+.art-legend-unit {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
 }
 .art-trunc {
   font-size: var(--fs-xs);
@@ -312,7 +385,7 @@ onBeforeUnmount(() => {
   font-size: var(--fs-sm);
   color: var(--text-3);
   border: 1px dashed var(--border);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   text-align: center;
 }
 .art-empty-icon {

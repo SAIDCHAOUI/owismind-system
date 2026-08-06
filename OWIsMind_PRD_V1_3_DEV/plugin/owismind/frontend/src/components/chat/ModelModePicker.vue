@@ -139,9 +139,10 @@ function cancel() {
 .mode-wrap { display: inline-flex; }
 
 /* Trigger pill: compact inline control that opens the chooser. */
+/* Square chip (charte geometry - no pills on brand chrome). */
 .mode-trigger {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: var(--r-pill);
+  padding: 4px 10px; border-radius: 0;
   background: var(--surface-2); border: 1px solid var(--border);
   font-size: 11px; font-weight: 600; color: var(--text-2);
   transition: all var(--dur) var(--ease); white-space: nowrap;

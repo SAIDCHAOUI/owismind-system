@@ -145,21 +145,24 @@ function drillRow(i) {
 /* No z-index ≥ 5 anywhere here: the chips popover (z-index 5, L043) must stay
    above; the sticky header below uses z-index 1 inside its own scroll box. */
 .ev-result { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - charte micro-label (same pattern as .ev-chips-title). */
 .ev-sec-title {
-  font-size: var(--fs-xs); color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
 }
-.ev-result-box { border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+.ev-result-box { border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden; }
 /* Bounded viewport: ≤ 10 rows rendered, ~240px max before scrolling. */
 .ev-result-scroll { max-height: 240px; overflow-y: auto; }
 /* separate + spacing 0 (same trick as EvidenceTable): with `collapse` the th
    border scrolls away from a sticky header - paint it as an inset shadow. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+/* Charte header band: uppercase micro-labels above a VISIBLE rule. */
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--surface);
-  padding: 6px 12px; text-align: left; box-shadow: inset 0 -1px 0 var(--border);
-  color: var(--text-2); font-weight: 500; white-space: nowrap; user-select: none;
+  padding: 7px 12px; text-align: left; box-shadow: inset 0 -1px 0 var(--border-strong);
+  color: var(--text-2); font-size: 11px; font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  white-space: nowrap; user-select: none;
 }
 tbody td {
   padding: 5px 12px; border-bottom: 1px solid var(--border);
@@ -167,13 +170,16 @@ tbody td {
   text-overflow: ellipsis; max-width: 260px;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Row hover: local feedback while scanning the proof rows (guide: every
+   interactive surface answers the pointer). */
+tbody tr:hover td { background: var(--surface-hover); }
 /* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
 th.num { text-align: right; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .th-drill, .td-drill { width: 28px; padding: 0 4px; }
 .drill-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 3px; border-radius: var(--r-sm); color: var(--text-3);
+  padding: 3px; border-radius: 0; color: var(--text-3);
   transition: all var(--dur) var(--ease);
 }
 .drill-btn:hover { background: var(--surface-hover); color: var(--orange); }

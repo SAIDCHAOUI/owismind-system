@@ -1,2 +1,3 @@
 - [Devs self-audit before review](feedback_devs_self_audit_charter.md) - new views ship with explicit charter-compliance comments/markers; verify claims, don't assume violations.
 - [Standard DSS webapp adaptations](reference_standard_dss_webapp_adaptations.md) - vanilla-JS webapps scope theme to app-root not body, eyebrow-only header (no logo), ASCII-only FR strings; don't false-flag these.
+- [Dark override blind spot](reference_dark_theme_override_blind_spot.md) - styling passes fix the light rule and miss the `:global(body[data-theme="dark"] ...)` override; grep data-theme in every changed file.

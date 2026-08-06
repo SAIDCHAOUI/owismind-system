@@ -75,11 +75,12 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
   font-size: var(--fs-sm);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: 0;
   color: var(--text);
   transition: border-color var(--dur) var(--ease);
 }
-.faq-search:focus { outline: none; border-color: var(--text-3); }
+/* Focus = orange border on the focused element (charte focus recipe). */
+.faq-search:focus { outline: none; border-color: var(--orange); }
 
 .faq-no-results {
   font-size: var(--fs-sm);

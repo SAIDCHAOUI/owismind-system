@@ -640,16 +640,69 @@ function nextVersion() {
 .body :deep(ul), .body :deep(ol) { margin: var(--s-2) 0 var(--s-3); padding-left: var(--s-5); }
 .body :deep(li) { margin-bottom: 4px; }
 .body :deep(strong) { font-weight: 600; }
-.body :deep(a) { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
+.body :deep(a) { color: var(--orange-text); text-decoration: underline; text-underline-offset: 2px; }
 .body :deep(code) {
   font-family: var(--font-mono); font-size: 0.92em;
-  background: var(--surface-2); padding: 1px 5px; border-radius: 4px;
+  background: var(--surface-2); padding: 1px 5px; border-radius: 0;
 }
 .body :deep(pre) {
   background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: var(--s-3); overflow-x: auto; margin: 0 0 var(--s-3);
+  border-radius: 0; padding: var(--s-3); overflow-x: auto; margin: 0 0 var(--s-3);
 }
 .body :deep(pre code) { background: none; padding: 0; }
+/* Markdown tables (the agent's figures live here): charte table recipe - square
+   1px frame, uppercase micro-label header over a visible rule, 1px row separators,
+   row hover. display:block turns the table itself into its own horizontal scroll
+   container (markdown-it emits a bare <table>, no wrapper to overflow). */
+.body :deep(table) {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border: 1px solid var(--border-strong);
+  margin: var(--s-2) 0 var(--s-4);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.body :deep(thead th) {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.body :deep(tbody td) {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  font-variant-numeric: tabular-nums;
+}
+.body :deep(tbody tr:last-child td) { border-bottom: none; }
+.body :deep(tbody tr:hover td) { background: var(--surface-hover); }
+/* Markdown-emitted alignment (|---:|) must survive the charte restyle. Both the
+   compact (markdown-it verbatim) and spaced (any CSSOM re-serialization) forms. */
+.body :deep(th[style*="text-align:right"]), .body :deep(td[style*="text-align:right"]),
+.body :deep(th[style*="text-align: right"]), .body :deep(td[style*="text-align: right"]) { text-align: right; }
+.body :deep(th[style*="text-align:center"]), .body :deep(td[style*="text-align:center"]),
+.body :deep(th[style*="text-align: center"]), .body :deep(td[style*="text-align: center"]) { text-align: center; }
+/* Quotes and rules: quiet ink structure (no orange - accents stay rare). */
+.body :deep(blockquote) {
+  margin: 0 0 var(--s-3);
+  padding: 2px 0 2px var(--s-4);
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-2);
+}
+.body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border-strong);
+  margin: var(--s-5) 0;
+}
 
 /* Stream: the grouped activity block above, then answer text blocks in arrival order. */
 .stream { display: flex; flex-direction: column; gap: 6px; animation: slide-up var(--dur) var(--ease); }
@@ -788,8 +841,8 @@ function nextVersion() {
   .tick-enter-active, .tick-leave-active, .tick-move { transition: none; }
 }
 
-/* SQL panel */
-.sql-panel { margin-top: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
+/* SQL panel - square, per charte geometry. */
+.sql-panel { margin-top: var(--s-4); border: 1px solid var(--border); border-radius: 0; overflow: hidden; }
 .sql-toggle {
   display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 12px;
   font-size: var(--fs-sm); color: var(--text-2); background: var(--surface);
@@ -800,7 +853,7 @@ function nextVersion() {
 .sql-body { padding: var(--s-3); display: flex; flex-direction: column; gap: var(--s-3); }
 .sql-meta { display: flex; gap: var(--s-3); font-size: 11px; color: var(--text-3); }
 .sql-code {
-  margin: 6px 0 0; padding: var(--s-3); background: var(--surface-2); border-radius: var(--r-sm);
+  margin: 6px 0 0; padding: var(--s-3); background: var(--surface-2); border-radius: 0;
   font-size: 12.5px; line-height: 1.65; color: var(--text); overflow-x: auto; white-space: pre;
 }
 
@@ -815,13 +868,13 @@ function nextVersion() {
 /* Footer actions */
 .msg-foot { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); font-size: var(--fs-xs); color: var(--text-3); }
 .msg-foot button {
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 0;
   font-size: var(--fs-xs); color: var(--text-2); transition: all var(--dur) var(--ease);
 }
 .msg-foot button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 .msg-foot button:disabled { opacity: 0.4; cursor: not-allowed; }
 .msg-foot button :deep(.ui-icon) { width: 13px; height: 13px; }
-.msg-foot button.primary { color: var(--orange); font-weight: 500; }
+.msg-foot button.primary { color: var(--orange-text); font-weight: 500; }
 .msg-foot button.danger { color: var(--danger); font-weight: 500; }
 /* Quiet "check this number" link: reads as text, not a chip - muted, no hover fill,
    underline on hover only. */

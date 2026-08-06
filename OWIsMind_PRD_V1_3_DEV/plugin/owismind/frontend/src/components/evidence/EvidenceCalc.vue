@@ -37,10 +37,10 @@ const steps = computed(() => {
 <style scoped>
 /* No z-index: the chips popover (z-index 5, L043) must stay above. */
 .ev-calc { display: flex; flex-direction: column; gap: var(--s-2); }
-/* Section label - same pattern as .ev-chips-title (EvidenceChips). */
+/* Section label - charte micro-label (same pattern as .ev-chips-title). */
 .ev-sec-title {
-  font-size: var(--fs-xs); color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: 0.08em;
 }
 .ev-calc-steps {
   margin: 0; padding: 0; list-style: none;

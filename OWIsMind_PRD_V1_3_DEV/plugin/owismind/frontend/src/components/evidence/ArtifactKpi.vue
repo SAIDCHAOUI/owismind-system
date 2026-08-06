@@ -93,6 +93,9 @@ const deltaText = computed(() => {
 
 <style scoped>
 .art-kpi { display: flex; min-height: 0; }
+/* Charte KPI recipe: square card, 1px visible frame, 3px orange TOP rule, upper-
+   case micro-label, big heavy figure. The headline figure is the focal element
+   of this tab - everything else is subordinate. */
 .kpi-card {
   display: flex;
   flex-direction: column;
@@ -100,23 +103,28 @@ const deltaText = computed(() => {
   gap: var(--s-2);
   width: 100%;
   padding: var(--s-6) var(--s-5);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--orange);
+  border-radius: 0;
+  background: var(--bg);
 }
 .kpi-label {
-  font-size: var(--fs-xs);
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-3);
+  letter-spacing: 0.08em;
+  color: var(--text-2);
 }
 .kpi-value {
   font-size: 40px;
-  font-weight: 700;
+  font-weight: var(--fw-heavy);
   line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* Delta chip: square, tinted, arrow + sign + figure (color is never the only
+   signal). */
 .kpi-delta {
   display: inline-flex;
   align-items: center;
@@ -124,13 +132,13 @@ const deltaText = computed(() => {
   font-size: var(--fs-sm);
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: var(--r-pill);
+  border-radius: 0;
 }
 .kpi-arrow { font-size: 10px; }
 .kpi-unit { font-size: 20px; font-weight: 600; color: var(--text-2); }
 .kpi-desc { font-size: var(--fs-sm); color: var(--text-2); }
-.kpi-delta.up { color: var(--success, #10b981); background: rgba(16, 185, 129, 0.12); }
-.kpi-delta.down { color: var(--danger, #ef4444); background: rgba(239, 68, 68, 0.12); }
+.kpi-delta.up { color: var(--success); background: var(--success-soft); }
+.kpi-delta.down { color: var(--danger); background: var(--danger-soft); }
 .kpi-delta.flat { color: var(--text-3); background: var(--surface-2); }
 .art-empty {
   display: flex;
@@ -143,7 +151,7 @@ const deltaText = computed(() => {
   font-size: var(--fs-sm);
   color: var(--text-3);
   border: 1px dashed var(--border);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   text-align: center;
 }
 .art-empty-icon { font-size: 28px; opacity: 0.4; font-weight: 700; }

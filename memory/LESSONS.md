@@ -3574,6 +3574,20 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-verification** : revue charte (M1/M2 corriges valides), build Vite + 380/380 ; grep : aucune reference aux variables hors sources/* + SourcePanel.
 - **Source** : session 2026-08-06 run 3 (session UX luxe).
 
+## L181 - Couleurs canvas (Chart.js) : resoudre les tokens sur document.body, jamais documentElement (2026-08-07)
+- **Contexte** : `ArtifactChart.cssVar()` cuit les couleurs d'axes/ticks/grille dans le canvas au draw (le canvas ne sait pas lire `var()`).
+- **Ce qui a echoue** : `getComputedStyle(document.documentElement)` lit `<html>`, or TOUS les tokens semantiques (`--text-3`, `--border`, `--surface`...) vivent sous `body[data-theme=...]` (F4) et les custom properties heritent vers le BAS : `<html>` ne les voit jamais. Resultat : en mode sombre, le MutationObserver redessinait bien, mais avec les couleurs du theme CLAIR (fallbacks). Bug invisible en clair, passe sous les radars depuis L057.
+- **Solution qui marche** : `getComputedStyle(document.body)`. Les tokens theme-independants (`--orange`) marchent dans les deux cas, ce qui masquait le bug.
+- **Preuve-verification** : releve par la revue adversariale Opus (lecture croisee tokens.css x cssVar) ; 380/380 + build Vite apres fix. Rendu dark reel a confirmer en DSS.
+- **Source** : session 2026-08-07 run 1 (passe UX premium).
+
+## L182 - Purger un effet interdit par la charte = balayer AUSSI les overrides `:global(body[data-theme])` du meme fichier (2026-08-07)
+- **Contexte** : mise en conformite charte de `Menu.vue` (grosse ombre molle -> `var(--shadow)`).
+- **Ce qui a echoue** : la regle claire a ete corrigee, mais l'override sombre 10 lignes plus bas (`:global(body[data-theme="dark"] .ui-menu) { box-shadow: 0 8px 28px ... }`) gardait l'ombre interdite : en dark, tous les menus flottaient encore hors charte. Le diff par hunks ne montre pas l'override non touche.
+- **Solution qui marche** : pour chaque effet remplace, grep le SELECTEUR dans tout le fichier (et les `:global` du theme) ; si le token de remplacement a deja sa variante sombre (cas de `--shadow`, tokens.css), SUPPRIMER l'override au lieu de le corriger.
+- **Preuve-verification** : must-fix HIGH de la revue charte Opus ; apres suppression, `grep 'box-shadow: 0 '` = 0 occurrence sur les 25 fichiers touches.
+- **Source** : session 2026-08-07 run 1 (revue charte-orange-reviewer ; sa memoire d'agent porte le meme point de controle).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

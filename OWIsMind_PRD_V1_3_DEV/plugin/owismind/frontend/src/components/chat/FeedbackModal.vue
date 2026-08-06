@@ -97,14 +97,14 @@ function submit() {
 .fb-label { font-size: var(--fs-sm); color: var(--text-2); margin: var(--s-3) 0 var(--s-2); }
 .fb-reasons { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .fb-chip {
-  padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 0;
   font-size: var(--fs-sm); color: var(--text-2); transition: all var(--dur) var(--ease);
 }
 .fb-chip:hover { border-color: var(--orange); color: var(--text); }
 .fb-chip.on { background: var(--orange-soft-dark); border-color: var(--orange); color: var(--orange); font-weight: 500; }
 .fb-comment {
   width: 100%; margin-top: var(--s-2); padding: var(--s-3); border: 1px solid var(--border);
-  border-radius: var(--r-sm); background: var(--surface); color: var(--text);
+  border-radius: 0; background: var(--surface); color: var(--text);
   font-family: inherit; font-size: var(--fs-sm); resize: vertical;
 }
 </style>

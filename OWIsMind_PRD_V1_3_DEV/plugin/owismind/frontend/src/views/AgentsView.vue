@@ -246,6 +246,11 @@ function badgeLabel(b) {
   transition: border-color var(--dur) var(--ease);
 }
 .agent-card:hover { border-color: var(--text); }
+/* Card-level hover choreography: the icon tile's frame darkens with the card and
+   the foot chevron slides forward - the whole card reads as ONE pressable object. */
+.agent-card:hover .ico-square { border-color: var(--text); }
+.agent-card:hover .open-ico { transform: translateX(3px); color: var(--text); }
+.agent-card:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
 
 .agent-card-top {
   display: flex;
@@ -264,6 +269,7 @@ function badgeLabel(b) {
   place-items: center;
   background: var(--bg);
   color: var(--orange);
+  transition: border-color var(--dur) var(--ease);
 }
 .ico-square :deep(.ui-icon) { width: 20px; height: 20px; }
 
@@ -317,7 +323,11 @@ function badgeLabel(b) {
 }
 .foot-meta :deep(.ui-icon) { width: 15px; height: 15px; }
 .foot-meta--muted { color: var(--text-3); }
-.open-ico { display: inline-flex; color: var(--text-3); }
+.open-ico {
+  display: inline-flex;
+  color: var(--text-3);
+  transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+}
 .open-ico :deep(.ui-icon) { width: 15px; height: 15px; }
 
 /* --- Badges (shared list + detail) -------------------------------------- */
@@ -460,5 +470,7 @@ function badgeLabel(b) {
 /* Honor reduced-motion: no positional transforms at all. */
 @media (prefers-reduced-motion: reduce) {
   .agent-card { transition: border-color var(--dur) var(--ease); }
+  .open-ico { transition: color var(--dur) var(--ease); }
+  .agent-card:hover .open-ico { transform: none; }
 }
 </style>

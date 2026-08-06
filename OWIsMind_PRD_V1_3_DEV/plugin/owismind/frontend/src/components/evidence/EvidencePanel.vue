@@ -182,6 +182,7 @@ const activeTab = computed({
         <template v-else-if="activeTab === 'table'">
           <ArtifactTable
             :result="(tableArtifact && tableArtifact.data) || meta.result || null"
+            :title="(tableArtifact && tableArtifact.title) || ''"
             :description="(tableArtifact && tableArtifact.description) || ''"
           />
         </template>
@@ -252,15 +253,17 @@ const activeTab = computed({
 }
 /* Meta-loading skeleton - gradient sweep over content-shaped placeholders. */
 .ev-skeleton { display: flex; flex-direction: column; gap: var(--s-4); flex: 1; min-height: 0; }
+/* Square placeholders: the skeleton previews square chips/bands (charte geometry),
+   so the loaded content lands exactly where the placeholder stood. */
 .sk {
-  display: block; border-radius: var(--r-sm);
+  display: block; border-radius: 0;
   background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-hover) 50%, var(--surface-2) 75%);
   background-size: 200% 100%;
   animation: shimmer-sweep 1.4s linear infinite;
 }
 .sk-chips { display: flex; gap: var(--s-2); }
-.sk-band { width: 65%; height: 24px; border-radius: var(--r-pill); }
-.sk-chip { width: 110px; height: 28px; border-radius: var(--r-pill); }
+.sk-band { width: 65%; height: 24px; }
+.sk-chip { width: 110px; height: 28px; }
 .sk-table { flex: 1; min-height: 220px; }
 @media (prefers-reduced-motion: reduce) {
   .evidence, .ev-head, .ev-body > *, .sk { animation: none; }
@@ -273,7 +276,7 @@ const activeTab = computed({
 .ev-title :deep(.ui-icon) { width: 16px; height: 16px; color: var(--orange); }
 .ev-dataset { font-size: 11px; color: var(--text-3); font-weight: 400; }
 .ev-actions { display: flex; align-items: center; gap: var(--s-3); }
-.ev-close { padding: 4px; border-radius: var(--r-sm); color: var(--text-3); transition: all var(--dur) var(--ease); }
+.ev-close { padding: 4px; border-radius: 0; color: var(--text-3); transition: all var(--dur) var(--ease); }
 .ev-close:hover { background: var(--surface-hover); color: var(--text); }
 .ev-close :deep(.ui-icon) { width: 16px; height: 16px; }
 .ev-body {

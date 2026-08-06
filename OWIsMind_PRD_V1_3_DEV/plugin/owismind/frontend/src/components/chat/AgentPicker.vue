@@ -47,7 +47,7 @@ function onSelect(key) {
   gap: 7px;
   height: 32px;
   padding: 0 10px;
-  border-radius: var(--r-sm);
+  border-radius: 0;
   color: var(--text-2);
   font-size: var(--fs-sm);
   font-weight: 500;

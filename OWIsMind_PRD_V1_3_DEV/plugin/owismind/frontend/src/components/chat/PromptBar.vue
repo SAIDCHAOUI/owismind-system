@@ -56,6 +56,13 @@ watch(() => session.selectedAgentKey, () => {
 
 const ta = ref(null)
 
+// Keyboard-affordance hint ("Enter to send"): recognition over recall - shown
+// only while the input is focused AND carries text (never as ambient noise).
+const inputFocused = ref(false)
+const enterHintVisible = computed(
+  () => inputFocused.value && !!chat.draft.trim() && !chat.sending && chat.canSend,
+)
+
 function autosize() {
   const el = ta.value
   if (!el) return
@@ -172,6 +179,8 @@ const placeholder = () =>
       autocomplete="off"
       @keydown="onKey"
       @input="autosize"
+      @focus="inputFocused = true"
+      @blur="inputFocused = false"
     />
     <div class="prompt-row">
       <div class="prompt-left">
@@ -182,6 +191,11 @@ const placeholder = () =>
         <ModelModePicker v-if="session.selectedAgentSupportsModes" />
       </div>
       <div class="prompt-right">
+        <!-- Keyboard hint: appears once the draft is ready to go (focused + text),
+             so the fastest path (Enter) is learned by seeing, not by guessing. -->
+        <span v-if="enterHintVisible" class="send-hint" aria-hidden="true">
+          <kbd class="send-kbd">&#8629;</kbd>{{ t('prompt.enter_hint') }}
+        </span>
         <!-- Mic sits with the send action on the right (voice → send grouping). No STT
              backend yet - honest placeholder. -->
         <button class="p-icon" type="button" :title="t('prompt.mic')" @click="micClick">
@@ -227,7 +241,12 @@ const placeholder = () =>
   padding: var(--s-3) var(--s-4) var(--s-2);
   display: flex;
   flex-direction: column;
+  /* Pointer feedback on the frame itself: the 1px-level shadow (charte maximum)
+     appears on hover/focus - the card "answers" before the click. */
+  transition: box-shadow var(--dur) var(--ease);
 }
+.prompt:hover,
+.prompt:focus-within { box-shadow: var(--shadow); }
 .prompt::after {
   content: "";
   position: absolute;
@@ -371,8 +390,33 @@ const placeholder = () =>
   transition: all var(--dur) var(--ease);
 }
 .p-icon:hover { background: var(--surface-hover); color: var(--text); }
+.p-icon:active { background: var(--surface-2); }
+.p-icon:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .p-icon :deep(.ui-icon) { width: 17px; height: 17px; }
-/* Send = the page's primary action: solid orange, square, one size up. */
+/* Keyboard hint: quiet mono line + square kbd cap, visible only when the draft is
+   ready (focused + text). Enters with the shared rise so it never pops harshly. */
+.send-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  animation: owi-rise var(--dur) var(--ease-out) both;
+}
+.send-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--text-2);
+  background: var(--surface);
+}
+/* Send = the page's primary action: solid orange, square, one size up.
+   Micro-feedback: the glyph nudges forward on hover ("this will go"), the button
+   presses down on click - state talks back at every step. */
 .send-btn {
   width: 36px;
   height: 36px;
@@ -381,10 +425,28 @@ const placeholder = () =>
   border-radius: 0;
   display: grid;
   place-items: center;
-  transition: all var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 .send-btn:hover:not(:disabled) { background: var(--orange-deep); }
+.send-btn:active:not(:disabled) { transform: scale(0.94); }
+/* Ink ring, not orange: an orange ring around a solid-orange button would read
+   as a same-hue halo, not a focus state. */
+.send-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.send-btn :deep(.ui-icon) {
+  width: 15px;
+  height: 15px;
+  transition: transform var(--dur) var(--ease);
+}
+.send-btn:hover:not(:disabled) :deep(.ui-icon) { transform: translateX(2px); }
+/* The stop variant keeps its glyph still (stopping is not "sending forward"). */
+.send-btn.stop-btn:hover :deep(.ui-icon) { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .send-btn, .send-btn :deep(.ui-icon) { transition: background var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+  .send-btn:active:not(:disabled) { transform: none; }
+  .send-btn:hover:not(:disabled) :deep(.ui-icon) { transform: none; }
+  .send-hint { animation: none; }
+}
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.send-btn :deep(.ui-icon) { width: 15px; height: 15px; }
 .prompt-foot { text-align: center; font-size: var(--fs-xs); color: var(--text-3); padding-top: var(--s-3); }
 </style>
