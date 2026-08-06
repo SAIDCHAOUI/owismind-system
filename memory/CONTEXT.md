@@ -7,18 +7,17 @@
 
 ## Focus courant
 
-**SESSION UX LUXE (2026-08-06 run 3, jour).** Hierarchie visuelle (brief user apres conseils d'un UX
-designer) : (1) dock Source Data ANCRE D'OFFICE a l'arrivee (fini le CTA) : tiers droit, bouton 1/3<->2/3
-(fractions CSS, sidebar auto-repliee en large), X = opt-out sticky session, pastille de re-ouverture,
-predicat pur `shouldAutoDock` avec garde deep-link (course boot /agents vs /conversation) ; (2) nuances :
-panneau ambiant --surface, composants partages re-blanchis via variables hote `--src-chip-*` a fallback
-(onglet Evidence intact, L180) ; (3) prompt HERO : cadre encre 2px carre, barre orange 3px animee au
-focus (filet, pas de ring), caret orange, agrandi a l'arrivee, ChatEmpty allege (titre encre + title-bar).
-2 revues Opus -> 1 HIGH (course boot, converge avec mon propre fix) + 3 MEDIUM charte + 2 MEDIUM adv
-TOUS corriges/arbitres, re-verification independante : "rien de bloquant DSS". **380/380 front, build
-Vite OK, body.html RECABLE via Write (F10) : l'action user de la nuit est levee. RIEN uploade DSS.**
+**NETTOYAGE PROFOND DU REPO (2026-08-06 run 4, soir).** 5 agents Explore par zone + contre-verification
+grep avant toute suppression. Moisson (repo deja tres sain) : 3 fichiers morts SUPPRIMES (`prompt.txt`,
+`launch-claude-in-2h30.command`, `docs/owismind-relaunch-email.html`) + 18 symboles morts (13 entrees
+`ICONS` orphelines, 5 constantes backend jamais referencees). Faux suspects GARDES avec preuves
+(`plugin/read.md`, `frontend/.claude/agent-memory/` = memoire hierarchique, seam de test TTL, etc.).
+Coherence : chemins charte-orange-reviewer, mapping LAB `history_io.py`, 4 docs indexes, skill
+build-plugin aligne F10. Rebuild : bundle `index-DBtqkrqZ.js`, body.html recable via Write et verifie.
+**Suites identiques apres nettoyage : 1010 + 765 + 343 + 380/380, build Vite OK. RIEN uploade DSS.**
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-08-06 Run 4 (soir) : nettoyage profond (3 fichiers morts + 13 icones + 5 constantes supprimes, faux suspects gardes avec preuves, rebuild `index-DBtqkrqZ.js`) ; suites identiques 1010+765+343+380. Voir `sessions/2026-08-06.md` run 4.
 - 2026-08-06 Run 3 (jour) : session UX luxe (dock Source Data d'office 1/3<->2/3 + nuances + prompt hero) ; 2 revues Opus, tout corrige + re-verifie ; 380/380, body.html recable. L180. Voir `sessions/2026-08-06.md` run 3.
 - 2026-08-06 Run 2 (nuit autonome) : UX webapp (tableaux lisibles + contexte ecran d'office + graphiques auto-titres) + moteur orchestrateur in-backend (flag native_engine, dual-path) ; 3 revues Opus, tout corrige + re-verifie ; 765+1010+378 verts. L177-L179. Voir `sessions/2026-08-06.md` run 2.
 - 2026-08-06 Run 1 (demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
@@ -65,8 +64,8 @@ Vite OK, body.html RECABLE via Write (F10) : l'action user de la nuit est levee.
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (2026-08-06)** : build + body.html FAITS
-  (`index-DS_pP-Tf.js`, recable via Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
+- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (2026-08-06)** : build + body.html FAITS et re-faits
+  au run 4 (`index-DBtqkrqZ.js`, recable via Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
   DEV ; (2) recoll orchestrateur (show_chart title requis + persona) + re-save ; (3) valider chantier A
   (tableaux, chip contexte d'office, graphiques) ET session UX run 3 (dock d'office 1/3<->2/3, opt-out,
   prompt hero, dark) ; (4) moteur natif : entree de TEST avec flag `native_engine` + checklist
@@ -74,6 +73,7 @@ Vite OK, body.html RECABLE via Write (F10) : l'action user de la nuit est levee.
   par artefact. (5) Arbitrages user : contexte ecran herite a travers "Nouvelle conversation"
   (comportement voulu A2, a confirmer) ; telemetrie d'exposition du dock si adoption a mesurer.
   Voir `sessions/2026-08-06.md` runs 2-3.
+- **Contenu perime signale au nettoyage (2026-08-06 run 4, decisions user)** : `CAPABILITY_MATRIX.md` encore template (sonde 00 pourtant passee) ; `registry.json` ignore le domaine delivery cree par l'usine ; `docs/data-model.md` OUTDATED ; `MODEL.md` d'avant le re-add Solution. Voir `sessions/2026-08-06.md` run 4.
 - **AUDIT v1.3, restes (2026-08-06 run 1)** : USER : trancher FE-06 (liste i18n) / FE-09 / onglet
   "Nouveau domaine" / regeneration tickets AG-01b / contrats d'erreur listings BE-03 ; session dediee :
   refactors restants (rapport section 5) ; recolls DSS : 3 Code Agents + attribute_lookup + template

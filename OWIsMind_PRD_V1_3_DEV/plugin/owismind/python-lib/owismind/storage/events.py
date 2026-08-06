@@ -44,7 +44,6 @@ _APP_SESSION_MAX = 64
 _VIEW_MAX = 64
 _CONVERSATION_MAX = 64
 _AGENT_KEY_MAX = 64
-_MODE_MAX = 16
 
 # Longest sane ISO8601 timestamp we will even try to parse (guards a pathological input).
 _MAX_CLIENT_TS_CHARS = 40

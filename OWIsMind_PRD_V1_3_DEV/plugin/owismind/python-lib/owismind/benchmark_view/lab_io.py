@@ -43,7 +43,6 @@ MAX_TABLES = 2000
 # only when the table actually has them - so an older table that predates a v2 re-run still reads.
 _READ_COLUMNS = tuple(schema_check.REQUIRED_COLUMNS)
 _DESIRED_COLUMNS = tuple(schema_check.REQUIRED_COLUMNS) + tuple(schemas.OPTIONAL_V2_COLUMNS)
-_HUMAN_COLUMNS = ("human_verdict", "human_correct", "human_comment", "reviewed_by", "reviewed_at")
 
 
 def _executor(connection):

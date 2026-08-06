@@ -12,6 +12,10 @@ Index des docs du miroir repo `OWIsMind_PRD_V1_3_DEV/`. Elles couvrent surtout l
 | [`CAPABILITY_MATRIX.md`](CAPABILITY_MATRIX.md) | Le rapport de la sonde 00 (capacites API DSS, gates a deverrouiller) : c'est un template a remplir apres `Notebooks/00_probe_capabilities.py` | Apres avoir lance la sonde sur l'instance |
 | [`PLAYBOOK_ADD_AGENT.md`](PLAYBOOK_ADD_AGENT.md) | L'ancienne methode manuelle pour ajouter un sous-agent specialiste (validee pour tickets) | Reference : largement automatisee par la factory |
 | [`SECURITY_AUDIT_2026-07-16.md`](SECURITY_AUDIT_2026-07-16.md) | Synthese du double audit de securite (interne + GPT-5.6 Sol) : ce qui est corrige en code, les 3 gates cote DSS, le backlog | AVANT le premier deploiement (les gates de la phase 0 en viennent) |
+| [`DURABLE_STEP_SHELL.md`](DURABLE_STEP_SHELL.md) | La couche agentique v1.3 "Durable Step Shell" : ordonnanceur durable backend + Code Agent invoque par commande bornee (dual-path avec le legacy) | Pour tout travail sur le flag `durable_workflow` |
+| [`NATIVE_ENGINE.md`](NATIVE_ENGINE.md) | Le moteur orchestrateur in-backend (flag `native_engine`, dual-path) + sa checklist de test DSS | Avant le premier test reel du moteur natif |
+| [`SECURITY_AUDIT_2026-07-17_DURABLE.md`](SECURITY_AUDIT_2026-07-17_DURABLE.md) | Audit de securite du Durable Step Shell (photo du 2026-07-17) | Historique : les findings et leur contexte |
+| [`SECURITY_AUDIT_2026-07-17_DURABLE_V2.md`](SECURITY_AUDIT_2026-07-17_DURABLE_V2.md) | Contre-audit des fixes issus du V1 (meme date) | Historique : verification des corrections |
 
 ## Deploiement
 

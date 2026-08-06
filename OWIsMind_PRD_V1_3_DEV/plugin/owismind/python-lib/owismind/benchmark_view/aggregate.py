@@ -16,7 +16,6 @@ from owismind.benchmark_view import schemas
 
 _ANSWER_PREVIEW_CHARS = 280
 _OK = "ok"
-_OVERRIDE_KEYS = ("run_id", "question_id", "agent_key", "mode")
 
 
 # --- scalar coercion / formatting -------------------------------------------

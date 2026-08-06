@@ -2,19 +2,13 @@
 
 PORTED FROM OWIsMind_LAB/project-library/python/benchmark/schemas.py - keep in sync.
 Only the slice the plugin's READ side needs is copied (the column list, the light projection,
-the modes, and effective_correct). The plugin never runs the judge or the scoring step; it only
+and effective_correct). The plugin never runs the judge or the scoring step; it only
 reads a scored table and recomputes the consultation view-model from it.
 """
 
-# The canonical mode names the LAB benchmark stores in the 'mode' column.
-MODES = ("Smart", "Pro", "Claude")
-
-# Heavy columns the consultation never needs (kept in the table for the LAB dashboard). The plugin
-# read projects to LIGHT_COLUMNS so a cross-project SELECT never materializes ~100k-char answer/SQL
-# blobs just to drop them.
-_HEAVY_COLUMNS = ("full_answer", "generated_sql_json", "artifacts_json", "config_json")
-
-# Every scored column the consultation + review consume (no heavy blobs). This is also the schema
+# Every scored column the consultation + review consume. Deliberately excludes the LAB table's
+# heavy blobs (full_answer, generated_sql_json, artifacts_json, config_json) so a cross-project
+# SELECT never materializes ~100k-char answer/SQL blobs just to drop them. This is also the schema
 # the agent-profile table picker validates against (schema_check.REQUIRED_COLUMNS derives from it).
 LIGHT_COLUMNS = (
     "run_id", "run_timestamp", "question_id", "question", "category", "language",
