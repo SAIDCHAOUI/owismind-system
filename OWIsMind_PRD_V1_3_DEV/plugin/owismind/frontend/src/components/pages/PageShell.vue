@@ -24,7 +24,7 @@ defineProps({
   <div class="page-scroll">
     <div :class="['page-wrap', { 'page-wrap--wide': wide, 'page-wrap--fluid': fluid }]">
       <slot name="header">
-        <header v-if="eyebrow || title || desc" class="page-head">
+        <header v-if="eyebrow || title || desc" class="page-head u-rise">
           <p v-if="eyebrow" class="page-eyebrow">{{ eyebrow }}</p>
           <h1 v-if="title" class="page-title">{{ title }}</h1>
           <div v-if="title" class="page-title-bar" aria-hidden="true"></div>

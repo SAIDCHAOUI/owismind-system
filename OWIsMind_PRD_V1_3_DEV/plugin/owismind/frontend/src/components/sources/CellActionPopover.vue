@@ -106,8 +106,9 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
 </template>
 
 <style scoped>
-/* Square, flat card on a 1px border with the minimal 1px shadow (charte Orange:
-   no blur, no gradient, no glow). Fixed so it anchors to the click coordinates. */
+/* Floating card (premium 2026-08-13): rounded --r-lg + layered --elev-2, flat inside
+   (no blur, no gradient, no glow). Fixed so it anchors to the click coordinates, and
+   it rises out of the clicked cell - a short fade + lift + scale. */
 .cell-pop {
   position: fixed;
   z-index: var(--z-menu);
@@ -115,12 +116,20 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
   max-width: calc(100vw - 16px);
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 0;
-  box-shadow: var(--shadow);
-  padding: var(--s-3);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
+  padding: var(--s-4);
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
+  transform-origin: top left;
+  animation: cell-pop-in var(--dur) var(--ease-out) both;
+}
+@keyframes cell-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-pop { animation: none; }
 }
 .cell-pop-col {
   font-size: var(--fs-xs);
@@ -140,13 +149,15 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 6px 8px;
 }
-/* Default ghost button (charte): 1px ink border, inverts on hover. */
+/* Ghost action (charte): 1px ink border, inverts on hover. Rounded --r-pill: an
+   action button, the premium exception. */
 .cell-pop-use {
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--text);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text);
   font-size: var(--fs-sm);
@@ -158,12 +169,13 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
   background: var(--text);
   color: var(--bg);
 }
-/* Secondary ghost button (charte): lighter 1px border than the primary use action so
-   the two read as a small hierarchy; still square, inverts on hover. */
+.cell-pop-use:active { transform: scale(0.985); }
+/* Secondary ghost action: lighter 1px border than the primary use action so the two
+   read as a small hierarchy. */
 .cell-pop-filter {
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text-2);
   font-size: var(--fs-sm);
@@ -174,6 +186,12 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
 .cell-pop-filter:hover {
   background: var(--surface-hover);
   color: var(--text);
+  border-color: var(--text-3);
+}
+.cell-pop-filter:active { transform: scale(0.985); background: var(--surface-press); }
+@media (prefers-reduced-motion: reduce) {
+  .cell-pop-use, .cell-pop-filter { transition: none; }
+  .cell-pop-use:active, .cell-pop-filter:active { transform: none; }
 }
 .cell-pop-note {
   font-size: var(--fs-xs);

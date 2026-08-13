@@ -7,103 +7,76 @@
 
 ## Focus courant
 
-**PASSE UX "ATTENTION PREMIUM" (2026-08-07 run 1, nuit).** Guide UX/UI fourni par l'user applique au
-front, strictement dans la charte : graphiques avec en-tete HTML titre+description toujours present +
-legende mono-serie nouvelle (pastille carree orange) ; tableaux markdown du chat STYLES pour la 1re fois
-(recette charte complete, alignements preserves) ; tableaux artefacts avec titre backend + contexte
-lignes/colonnes ; KPI recette charte exacte (regle haute 3px orange) ; PromptBar micro-feedback (nudge
-Send, hint Entree, focus encre) ; micro-labels Evidence unifies 11px/800/`--text-2` ; mise au carre
-INTEGRALE (bulle user, menus, toasts, badges, chips) + 2 ombres molles interdites purgees ; hovers
-transverses (cartes agents, sidebar y compris item actif). **Fix bug preexistant L181 : couleurs canvas
-Chart.js lues sur `<html>` -> dark dessinait les axes en clair ; corrige via `document.body`.**
-2 revues Opus (charte : 1 must-fix corrige ; adversariale : PASS) ; 380/380 x2, build `index-C8WGUKAI.js`,
-body.html recable (F10). **RIEN uploade DSS ; validation clair + SOMBRE attendue.**
+**GRANDE VAGUE UX 2026-08-12/13 (nuit + journee, NON committee avant cette session, NON validee DSS).**
+Deux runs dans `sessions/2026-08-13.md` :
+- **Nuit (run 1)** : `dev-harness/` racine = "yeux" locaux (Vite root->frontend + mock backend fidele
+  aux contrats geles + Playwright zero-install, L183 ; regle d'or : on corrige LE MOCK, jamais le
+  plugin ; port 5199). Tokens premium + charte section 0 (arrondis interactifs, elevations, blur
+  sanctionne du teaser). PromptBar raffinee, dock Source Data teaser FLOUTE auto-dock + resize libre,
+  Analyze workspace v3 (phrase MEASURE 1..8 + BY/FOR, KPI/table a barres, preview 50 lignes),
+  ScrollHints, panoplie premium sur TOUTES les pages (8 subagents Opus + critique Sol), contexte
+  ecran workspace->blocs calc/analyze existants. 2 revues corrigees.
+- **Journee (run 2)** : topbar UNE ligne (dropdown DATASET partage `DatasetPick.vue` + recherche
+  nommant le dataset + toggle, hauteurs 40px), toggle Data|Analyze dans le HEADER du panneau,
+  filtres UNE ligne (Clear all pilule), chips de mesure REMPLACABLES sur place (replaceMeasureAt),
+  tableau group-by poli (vrai nom de groupe, barres inset), **FUSION Evidence Studio = meme
+  structure** (SourceWorkspace host-parametrable sur le store evidence + preview ajoutee au store ;
+  SourceCalc.vue + SourceAnalyze.vue SUPPRIMES ; onglets Evidence -> KPI -> Source data), workspace
+  = UN scrollport (analyse en haut, donnees taille normale dessous), sidebar HOVER flyout (L184),
+  Show activity honnete (toast si feed vide), wrap actions colonne etroite, PromptBar focus =
+  cadre orange + voile 4px --orange-soft (decision user "luxe"), Evidence accessible SANS SQL
+  (atterrit sur Source data, L186, scenario mock "Bonjour"), teaser = invitation permanente
+  (X sticky par ECRAN seulement, F24 mis a jour).
+Gates : 425/425 node:test, builds Vite propres, 0 erreur console sur ~20 parcours harness.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-08-07 Run 1 (nuit) : passe UX attention premium (legendes artefacts + tableaux chat + KPI charte + PromptBar + mise au carre integrale + fix dark canvas L181) ; 2 revues Opus, 380/380, bundle `index-C8WGUKAI.js`. L181-L182. Voir `sessions/2026-08-07.md`.
-- 2026-08-06 Run 4 (soir) : nettoyage profond (3 fichiers morts + 13 icones + 5 constantes supprimes, faux suspects gardes avec preuves, rebuild `index-DBtqkrqZ.js`) ; suites identiques 1010+765+343+380. Voir `sessions/2026-08-06.md` run 4.
-- 2026-08-06 Run 3 (jour) : session UX luxe (dock Source Data d'office 1/3<->2/3 + nuances + prompt hero) ; 2 revues Opus, tout corrige + re-verifie ; 380/380, body.html recable. L180. Voir `sessions/2026-08-06.md` run 3.
-- 2026-08-06 Run 2 (nuit autonome) : UX webapp (tableaux lisibles + contexte ecran d'office + graphiques auto-titres) + moteur orchestrateur in-backend (flag native_engine, dual-path) ; 3 revues Opus, tout corrige + re-verifie ; 765+1010+378 verts. L177-L179. Voir `sessions/2026-08-06.md` run 2.
-- 2026-08-06 Run 1 (demarre le 05) : audit approfondi v1.3 (16 agents, 72 findings) + lots A-E appliques (securite removal, filets, @guard routes, AG-01a) ; 2109 tests verts ; rapport `docs/audit/`. L174-L176. Voir `sessions/2026-08-06.md`.
-- 2026-07-23 : mode claude bascule sur Sonnet 5 (case Reasoning Model x LiteLLM x dialecte thinking Claude 5, fix decochage, bench 24/24, repo aligne 741 tests, VALIDE webapp). L172-L173. Voir `sessions/2026-07-23.md`.
-- 2026-07-22 Run 2 : capability removal + disable (moteur removal.py + machine 12 etapes + UI + revue adversariale fix HIGH L170), implementation Sol xhigh, VALIDE TERRAIN sur opportunities_won (incident library L169). 741 tests. L169-L171. Voir `sessions/2026-07-22.md`.
-- 2026-07-22 Run 1 : premier build AUTO (scenario step-based ancre doc + run_scenario_and_wait + migration heal), 692 tests, commit 1c88695 pousse ; 2e expert terrain `opportunities_won` ; diagnostic hub charge au demarrage du process (Playground vs webapp, L168) ; brief design UX console remis. L167-L168. Voir `sessions/2026-07-22.md`.
-- 2026-07-21 : assistant guide persistant dans la console (13 etapes, etat SQL, verifs DSS par etape ; moteur Fable + front Sol) construit apres le test opportunities avorte, puis VALIDE EN DSS par l'user (1er expert delivery_snapshot live, 4 fixes terrain). L164-L166. Voir `sessions/2026-07-21.md`.
-- 2026-07-20 : deploiement v1.3 guide par l'user (notebooks 00-06, clone aligne VALIDE) ; restructure repo = un dossier racine par projet DSS + hub sous /python/ + UN fichier py par modele semantique ; fix regex console. L162-L163 (pas de fichier session, detail dans les lecons + commits 6e33a75..f39b00d).
-- 2026-07-17 Run 3 : verification PRE-TEST triple (Fable 5 lead + workflow Opus 6 dim + GPT-5.6 Sol + revue adversariale Opus du diff) -> 7 fix (1 CRITICAL save_plan + 2 HIGH catalogue/garde-SQL + 3 M/L + 1 HIGH double-run) + zip DEV `owismind-v1_3-dev-upload.zip` + residuels etat-machine documentes (H3/H4/H5). backend 965 / agents 619 / LAB 343 / front 365. L161. Voir `sessions/2026-07-17.md`.
-- 2026-07-17 (nuit, Runs 1-2) : couche agentique "Durable Step Shell" v1.3 (backend ordonnanceur durable + Code Agent invoque par commande bornee ; dual-path legacy intact ; correlate JOIN SQL read-only ; UI carte de plan ; catalogue factory) ; brainstorm 3 voix Fable 5 + GPT-5.6 Sol ; 1er audit securite (0 Critical, 3 findings corriges) ; guide complet + fix cablage flag. 17 commits pousses `..b909156` + 3 locaux. L157-L160. Voir `sessions/2026-07-17.md`.
-- 2026-07-16 Run 1 : git a plat (merge nuit + push tout + suppression branches mergees) ; miroir restructure UI DSS (genai/, project-library/python/owismind_hub/, docs/) ; 11 README FR ; double audit securite (interne + Sol) + 2 vagues de durcissement, 468 -> 516 tests, 5 commits. L156. Voir `sessions/2026-07-16.md`.
-- 2026-07-12 Run 1 (nuit, branche night-20260712) : durcissement adversarial Agent Factory v1.3 TERMINE (6 vagues multi-agents : failure-modes + wizard + console + docs + regenerateur seeds hub + cross-review), 379 -> 468 tests, 10 commits, rien pousse. L152-L155. Voir `sessions/2026-07-12.md`.
-- 2026-07-10 Run 3 : setup orchestration Claude + Codex/GPT-5.6 (AGENTS.md, .codex/config.toml, rule model-routing, pointeur CLAUDE.md, teste en reel). L151. Voir `sessions/2026-07-10.md`.
-- 2026-07-10 Run 2 (nuit, branche v1.3-dev) : Agent Factory v1.3 complete (package + hub + console + docs + 379 tests + revues). L149-L150. Voir `sessions/2026-07-10.md`.
-- 2026-07-10 Run 1 (branche prod) : restructuration du repo en miroir exact du projet DSS prod (arbo racine `OWIsMind_PRD_V1_3_DEV/`, plugin 1.2.0, zip versionne, branches par version). L147-L148 (sur la branche `OWIsMind_PRD_V1_2`).
-- 2026-07-08 Run 1 : colonne `Solution` re-ajoutee au modele revenus du clone + les 2 modeles semantiques repointes vers le dataset du clone (revenus VALIDE DSS ; tickets a lancer). L146.
-- 2026-07-07 Run 2 : bascule strategie prod = CLONE du projet DSS DEV (memes ids, tickets inclus). L144.
-- 2026-07-07 Run 1 : deep clean pro sur branche `refactor/deep-clean-v1.2` (refactor zero-comportement, prouve ; setup Claude Code refondu ; docs v1.1). L141-L143.
-- 2026-07-06 Runs 2-4 : Source Data v3 complet (popover, Calculer, plages string, cascade, persistance,
-  contexte ecran -> agent, menu de colonne). VALIDE DSS (« tout marche super »). L134-L138.
-- 2026-07-06 Run 1 : data tools sans IA (agregats DB + Calculer + plages + unification Evidence), plugin dev_v2. L132-L133.
-- 2026-06-24 au 2026-07-03 : benchmark LAB complet (L102-L131 : package, 2 webapps Standard, juge + override, launcher, pages plugin), modes Smart/Pro/Claude + mode ephemere (L126), analytics d'usage (L125), Source Data Explorer v1-v2 + cell-to-agent (L121-L124), artefacts natifs + narration + recall (L119-L120), audit orchestrateur (L118), nettoyage pre-beta (L127). VALIDE DSS pour l'essentiel. Detail : `sessions/2026-06-*.md` + `sessions/2026-07-0{1,2,3}.md`.
-- Anterieur au 2026-06-24 : archive. Detail par date dans `sessions/*.md` ; jalons dans `PROJECT_STATE.md` (2b, 8, 11).
+- 2026-08-12/13 : vague UX complete (harness "yeux" + premium partout + Analyze v3 + fusion Evidence + finitions). L183-L186. Voir `sessions/2026-08-13.md`.
+- 2026-08-07 Run 1 (nuit) : passe UX attention premium (legendes artefacts + tableaux chat + KPI charte + PromptBar + mise au carre + fix dark canvas). 2 revues, 380/380. L181-L182. Voir `sessions/2026-08-07.md`.
+- 2026-08-06 Run 4 (soir) : nettoyage profond (3 fichiers morts + 13 icones + 5 constantes). Voir `sessions/2026-08-06.md` run 4.
+- 2026-08-06 Run 3 (jour) : UX luxe (dock Source Data d'office, nuances, prompt hero). L180. Voir `sessions/2026-08-06.md` run 3.
+- 2026-08-06 Run 2 (nuit) : UX webapp + moteur orchestrateur in-backend (flag native_engine). L177-L179. Voir `sessions/2026-08-06.md` run 2.
+- 2026-08-06 Run 1 : audit v1.3 (16 agents, 72 findings) + lots A-E. L174-L176. Voir `sessions/2026-08-06.md`.
+- 2026-07-23 : mode claude sur Sonnet 5 (case Reasoning Model x LiteLLM). L172-L173. Voir `sessions/2026-07-23.md`.
+- 2026-07-22 Run 2 : capability removal + disable, VALIDE TERRAIN. L169-L171. Voir `sessions/2026-07-22.md`.
+- 2026-07-22 Run 1 : premier build AUTO usine ; diagnostic hub charge au demarrage (L168). L167-L168.
+- 2026-07-21 : assistant guide persistant console, VALIDE DSS (1er expert delivery_snapshot). L164-L166.
+- 2026-07-20 : deploiement v1.3 guide ; restructure repo un dossier par projet DSS. L162-L163.
+- 2026-07-17 : verification pre-test triple + zip DEV ; Durable Step Shell v1.3 complet. L157-L161. Voir `sessions/2026-07-17.md`.
+- 2026-07-16 : git a plat + miroir UI DSS + double audit securite. L156.
+- 2026-07-12 : durcissement adversarial Agent Factory (6 vagues). L152-L155.
+- 2026-07-10 : orchestration Codex/GPT-5.6 (L151) ; Agent Factory v1.3 complete (L149-L150) ; miroir repo prod (L147-L148).
+- 2026-07-08 et avant : archive. Detail dans `sessions/*.md` ; jalons dans `PROJECT_STATE.md`.
 
 ## Regles
 - 10 regles non negociables + identifiants canoniques : `CLAUDE.md`. Rappel : #9 = ZERO tiret cadratin/demi-cadratin
-  PARTOUT ; #10 = CHARTE ORANGE a chaque travail de style (`docs/cadrage/CHARTE_ORANGE_UI.md`).
+  PARTOUT ; #10 = CHARTE ORANGE a chaque travail de style (`docs/cadrage/CHARTE_ORANGE_UI.md`, section 0 = evolution premium).
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **DEPLOIEMENT + VALIDATION DSS des runs 2+3 (06/08) ET de la passe UX premium (07/08)** : build +
-  body.html a jour (`index-C8WGUKAI.js`, Write F10). (1) USER : `/package-plugin-dev` puis upload du zip
-  DEV ; (2) recoll orchestrateur (show_chart title requis + persona) + re-save ; (3) valider chantier A
-  (tableaux, chip contexte d'office, graphiques) + session UX run 3 (dock d'office, prompt hero) + passe
-  premium 07/08 (tableaux markdown chat, en-tetes/legendes artefacts, KPI, PromptBar, hovers) en clair
-  ET SOMBRE (fix L181 = couleurs d'axes dark enfin correctes) ; (4) moteur natif : entree de TEST avec
-  flag `native_engine` + checklist `docs/NATIVE_ENGINE.md` (jamais execute contre un vrai Mesh) ; backlog
-  natif = recall natif, sql_id par artefact. (5) Arbitrages user : contexte ecran herite a travers
-  "Nouvelle conversation" (A2, a confirmer) ; telemetrie d'exposition du dock ; enteriner tracking
-  micro-labels 0.08em dans `CHARTE_ORANGE_UI.md` (la charte ecrit .1em).
-  Voir `sessions/2026-08-06.md` runs 2-3 + `sessions/2026-08-07.md`.
-- **Contenu perime signale au nettoyage (2026-08-06 run 4, decisions user)** : `CAPABILITY_MATRIX.md` encore template (sonde 00 pourtant passee) ; `registry.json` ignore le domaine delivery cree par l'usine ; `docs/data-model.md` OUTDATED ; `MODEL.md` d'avant le re-add Solution. Voir `sessions/2026-08-06.md` run 4.
-- **AUDIT v1.3, restes (2026-08-06 run 1)** : USER : trancher FE-06 (liste i18n) / FE-09 / onglet
-  "Nouveau domaine" / regeneration tickets AG-01b / contrats d'erreur listings BE-03 ; session dediee :
-  refactors restants (rapport section 5) ; recolls DSS : 3 Code Agents + attribute_lookup + template
-  hub (notebook 01) + owismind_factory + console.
-- **MODE CLAUDE / SONNET 5, restes (2026-07-23)** : basculer les 2 tools Semantic Model Query (`v4oqA6R`, `nEirlso`) sur sonnet-5 ; juge LAB (`benchmark/config.py` JUDGE_LLM_ID) encore sur 4.6 ; ticket LiteLLM optionnel. Voir `sessions/2026-07-23.md`.
-- **HUB CHAUD (L168, action user immediate)** : re-save `OWIsMind_orchestrator` dans DSS puis nouvelle
-  conversation -> l'expert opportunities SUPPRIME doit disparaitre du registre chaud. Decision attendue :
-  reload du hub par conversation (TTL ~60 s) + textes enable/succes de l'assistant. Voir `sessions/2026-07-22.md`.
-- **CAPABILITY REMOVAL, restes de validation** : tester Desactiver/Activer depuis la vue
-  d'ensemble (1 clic, reversible) ; le fallback manuel (refus API) et le garde template n'ont
-  jamais ete exerces en reel (couverts par tests seulement). Voir `sessions/2026-07-22.md` run 2.
-- **REFONTE UX CONSOLE** : maquette Claude Design attendue (brief remis 2026-07-22, a completer
-  avec les ecrans de suppression) ; au retour, portage ES5/DSS (contrat gele) + passage
-  charte-orange-reviewer. Voir `sessions/2026-07-22.md`.
-- **ASSISTANT GUIDE (1 expert usine live : delivery_snapshot ; opportunities_won supprime par le
-  test removal)** : confirmer en DSS le premier build AUTO au prochain domaine (re-coller TOUS
-  les fichiers factory ENSEMBLE + restart backend, L169) ; smoke metier delivery_snapshot
-  (questions reelles + Evidence + non-regression revenus/tickets) ; curation du profil si
-  reponses moyennes.
-- **Repo, ecart guide/code** : notebook 01 ne pousse pas run_settings / workflow prompt / template moteur
-  quand la sonde n'a pas confirme (print MANUAL rate le 2026-07-21) ; etendre 01 ou corriger le guide.
-- **DSS clone v1.3 : re-pointer les 2 tools Semantic Model Query** (L162 : leurs params portent encore
-  `project_key OWISMIND_PRD_V1_2` apres duplication ; le notebook 02 ne corrige que les modeles).
-- **DURABLE STEP SHELL v1.3 - DEPLOIEMENT DSS DEV** : `DEPLOY_V1_3_DEV.md` phase H (zip + re-paste
-  orchestrateur env 3.11 + seeds hub 01 + webapp Auto-start + flag `durable_workflow` sur l'orchestrateur
-  DEV + `domain_keywords`), puis les 16 scenarios de validation + le smoke 1 cycle claim/complete sur le
-  vrai executeur SQL (seul pattern SQL nouveau = CTE modifiante + SELECT). Calibrer les deadlines par
-  mode en reel (durees Mesh non documentees). Rapport a remonter. Voir `sessions/2026-07-17.md`.
-- Backlog Durable Step Shell (differe, spec section 12) : cabler l'auto-reattach front (`fetchActiveRun`
-  -> `resumeChatStream`, primitives livrees) + toggle UI "Analyse approfondie" (analysis_mode deep/direct,
-  le mode auto marche sans) ; DAG parallele ; pgvector ; skills write (mail/PDF, requiert human approval).
-- **FACTORY v1.3 : DEPLOYEE ET VALIDEE (2026-07-21, 1er domaine live).** Reste de `DEPLOY_V1_3_DEV.md` : confirmer les 3 GATES securite de la phase 0 cote DSS (console admins-only + run-as dedie ; SQL_owi timeout/droits au niveau base ; acces/retention du dataset de logs). Synthese audit : `docs/SECURITY_AUDIT_2026-07-16.md`.
-- Backlog v1.3 (durcissement non bloquant, voir SECURITY_AUDIT section backlog) : authz par viewer dans la console (WebappImpersonationContext) ; manifeste de reprise par domaine (rejoint le manifeste canonique deja au backlog) ; machine d'etat persistante par domaine ; environnement de validation pre-live ; controle operationnel.
-- CODEX : flux end-to-end VALIDE en reel le 2026-07-16 (audit securite livre par Sol via codex-companion, piege L156 : verifier la vivacite du PID, pas le seul statut). Reste : une review croisee avant commit (`/codex:review`). Sur le VPS (saiget/saive) : penser au trust projet dans `~/.codex/config.toml`.
-- CLONE prod : lancer `OWIsMind_PRD_V1_3_DEV/GenAI/semantic-models/TroubleTickets_Semantic_Model/TroubleTickets_Semantic_Model.py` (ACTION="repoint") sur le clone
-  + smoke tickets end-to-end + tester le grounding `Solution` dans le Playground revenus. Puis smoke complet
-  (resolution sous-agent dans le clone, ids des tools si recrees). Voir `sessions/2026-07-08.md` + L146
-  (revenus + repoint = FAITS, valides DSS).
-- Promotion Source Data v3 (dev_v2 -> DEV principal puis PROD) : rebuild + orchestrateur prod (clone) `038G7mlF` avec le paragraphe SOURCE-DATA VIEW. Voir `sessions/2026-07-06.md` (Runs 2-4).
-- LAB benchmark, recolls accumules (a batcher, `OWIsMind_LAB/README.md` + guides) : refonte launcher + route `/api/config` (L127-L129), visibilite complete des resultats L117, 2 fixes launcher L115, creation des 2 webapps Standard + variable `benchmark` (L103/L109), finir judge/aggregate/run complet L102.
-- Auditer/valider en DSS DEV le residuel L118 (sous-agent revenus + tool lookup + `Drive_Revenues_Semantic_Model.py` ACTION="update" + re-dump ACTION="dump" (ex update_aligned, consolide 2026-07-20)) ; l'orchestrateur DEV est deja recolle. Voir `sessions/2026-07-02.md` (Run 1).
-- 2e agent TICKETS : finaliser + pofiner (`OWIsMind_PRD_V1_3_DEV/docs/PLAYBOOK_ADD_AGENT.md`) -> debloque la fiche client 360. L097-L098.
-- Backlog differe : recueillir les ajustements user sur le trust layer ; consolidation SalesDrive v2 (cas d'ambiguite reelle) ; re-tester en DSS L040/L041 ; Evidence v3 (restriction admin datasets, keyset pagination) ; 2e task mentionnee par l'user le 2026-06-09 (a clarifier).
+- **VALIDATION DSS DE LA VAGUE 12-13/08 (+ runs 06-07/08 jamais deployes)** : USER teste le harness
+  (http://127.0.0.1:5199) puis `/build-plugin` ou `/package-plugin-dev` + upload zip DEV ; valider
+  clair ET sombre en DSS reel (fix L181 inclus). Arbitrages user : bloc contexte analyze mono-mesure
+  (toutes les mesures = evolution backend) ; micro-labels 0.08em a enteriner dans la charte.
+  Voir `sessions/2026-08-13.md` + `sessions/2026-08-06.md` runs 2-3.
+- **Nettoyage differe front** : API calc*/analyze* de aggregateSurface sans consommateur UI (la
+  memoire de vue persiste calcColumn/calcFns) ; dead CSS .pf-lab (AdminView) ; tirets em/en dans
+  test/agentPick + evidenceProof (pre-existants). Voir `sessions/2026-08-13.md`.
+- **Moteur natif (06/08 run 2)** : entree de TEST flag `native_engine` + checklist `docs/NATIVE_ENGINE.md`
+  (jamais execute contre un vrai Mesh) ; backlog = recall natif, sql_id par artefact.
+- **Contenu perime signale (06/08 run 4)** : CAPABILITY_MATRIX template ; registry.json sans domaine
+  delivery ; docs/data-model.md OUTDATED ; MODEL.md d'avant re-add Solution.
+- **AUDIT v1.3 restes** : trancher FE-06/FE-09/onglet nouveau domaine/AG-01b/BE-03 ; refactors
+  section 5 ; recolls DSS (3 Code Agents + attribute_lookup + hub + factory + console).
+- **MODE CLAUDE restes (23/07)** : 2 tools Semantic Model Query -> sonnet-5 ; juge LAB sur 4.6.
+- **HUB CHAUD (L168)** : re-save orchestrateur DSS puis nouvelle conversation ; decision reload TTL.
+- **CAPABILITY REMOVAL** : tester Desactiver/Activer 1 clic ; fallback manuel jamais exerce en reel.
+- **REFONTE UX CONSOLE** : maquette Claude Design attendue ; au retour portage ES5/DSS.
+- **ASSISTANT GUIDE** : confirmer 1er build AUTO au prochain domaine (recoller factory ENSEMBLE,
+  L169) ; smoke delivery_snapshot.
+- **Repo/DSS divers** : notebook 01 vs sonde MANUAL ; re-pointer 2 tools Semantic Model Query (L162) ;
+  Durable Step Shell phase H (`DEPLOY_V1_3_DEV.md`) + 16 scenarios + smoke claim/complete ;
+  gates securite phase 0 ; TroubleTickets repoint (ACTION="repoint") + smoke tickets ;
+  promotion Source Data v3 prod ; recolls LAB accumules (`OWIsMind_LAB/README.md`) ;
+  residuel L118 ; 2e agent TICKETS -> fiche client 360 (L097-L098).
+- Backlog differe : auto-reattach front + toggle analyse approfondie ; DAG parallele ; pgvector ;
+  skills write ; trust layer ajustements ; Evidence v3 ; 2e task user 2026-06-09 (a clarifier).

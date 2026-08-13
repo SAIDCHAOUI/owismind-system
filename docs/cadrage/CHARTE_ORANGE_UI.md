@@ -5,6 +5,35 @@
 > (validée par l'user) que l'on a ensuite supprimée. Il n'y a plus de fichier maquette : **cette charte
 > EST la maquette**. Décision user 2026-06-18 : « à chaque fois qu'on fait du style, ça doit être comme ça ».
 
+## 0. Évolution « premium épuré » (décision user 2026-08-13, PRIME sur les sections suivantes)
+L'user a fait évoluer la charte vers un rendu **plus épuré et premium** (références : interfaces Claude
+et Gemini, sans les calquer). Les points ci-dessous **remplacent** les interdits correspondants de la
+section 2 ; tout le reste de la charte (orange rare, blanc/noir, tokens, filets, typographie) reste en vigueur.
+
+- **Arrondis AUTORISÉS et attendus** sur les surfaces interactives et flottantes : carte de prompt
+  (`--r-xl` 18px), popovers/menus flottants (`--r-lg`), chips (`--r-pill`), boutons d'icône et action
+  primaire (`--r-pill`), petits caps (`--r-xs`). La géométrie carrée reste par défaut pour les surfaces
+  STRUCTURELLES (tables, panneaux, en-têtes, KPI).
+- **Élévation douce AUTORISÉE** via les tokens `--elev-1` (repos) / `--elev-2` (hover, focus, flottant) :
+  ombres diffuses en couches, jamais de halo coloré dur. `--shadow` (1px) reste pour les surfaces plates.
+- **Flou teaser AUTORISÉ, cas unique** : le dock Source Data auto-amarré floute son contenu
+  (`blur ~3px`) derrière une carte d'invite ; toute interaction lève le flou. Aucun autre usage de
+  blur/backdrop-filter n'est permis.
+- **Nuances** : jouer davantage sur les paliers de surface (`--bg` / `--surface` / `--surface-2`) et les
+  tailles de texte pour la hiérarchie, plutôt que sur des bordures fortes. En sombre, une carte flottante
+  prend un palier au-dessus du fond (ex. `--surface-2` sur `--bg`).
+- **Focus des champs (recette unique, remplace la « bordure orange » de la section 5)** : tout champ
+  (prompt, recherche, input, select, textarea) focalisé = **bordure `--text-3` + élévation** (`--elev-1`,
+  `--elev-2` pour le prompt). L'orange reste réservé au `focus-visible` CLAVIER des boutons/contrôles.
+- **Cartographie des rayons (entérinée 2026-08-13)** : contrôles compacts (chips, badges, segmenté,
+  recherche) = `--r-pill` ; champs de formulaire et cartes = `--r-lg` ; tuiles d'icône = `--r` (héros
+  56px = `--r-lg`) ; petits caps (kbd, checkbox) = `--r-xs` ; surfaces STRUCTURELLES (tables, panneaux,
+  en-têtes, jauges, tuiles de stats) = carrées.
+- **Micro-labels** : 11px / `--fw-heavy` / MAJUSCULES / `--tracking-eyebrow` (0.08em) - remplace le
+  « .1em » cité plus bas.
+- **Sorties plus vives que les entrées** : sorties = `--dur-fast` + `--ease-in` ; entrées = `--dur`
+  (+ `--dur-slow` pour les entrées de page) + `--ease-out`. État appuyé = `--surface-press`.
+
 ## 1. Esprit
 Sobre, tranché, éditorial. **Blanc / noir (presque) / une seule couleur Orange (#FF7900)**, l'orange étant
 un accent **rare** (états actifs, eyebrows, title-bars, règle haute des KPI, action primaire, liens).
@@ -12,7 +41,7 @@ Le blanc et le noir portent l'essentiel. **Aplats, filets 1px, géométrie carr�
 Pas d'effet décoratif. Typo Helvetica Neue.
 
 ## 2. Interdits durs (jamais, partout)
-- **Tiret cadratin `—` (U+2014) / demi-cadratin `–` (U+2013)** : bannis (règle #9). Utiliser `-`, `:`, `,`, parenthèses.
+- **Tiret cadratin (U+2014) / demi-cadratin (U+2013)** : bannis (règle #9, y compris en citation littérale). Utiliser `-`, `:`, `,`, parenthèses.
 - **`color-mix`** (L031) : utiliser `rgba()` + tokens.
 - **`blur` / `backdrop-filter`** : aucun flou.
 - **Dégradés** (`linear/radial-gradient`) : aucun.

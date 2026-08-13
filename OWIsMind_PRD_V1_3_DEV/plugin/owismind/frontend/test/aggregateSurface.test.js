@@ -267,3 +267,156 @@ test('inactive host: setCalcColumn / refreshTotals / runAnalyze issue no request
   await h.surface.runAnalyze()
   assert.equal(h.calls.length, 0)
 })
+
+// --- Unified Analyze workspace (measures + optional grouping) ---------------------
+// The standalone Source explorer drives this state; the Evidence hosts never activate it.
+
+test('workspace: inert until a host activates it, then it computes immediately', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 640 }], totals: null, truncated: false }) })
+  h.surface.setAnalyzeOpen(true)
+  await flush()
+  assert.equal(h.calls.length, 0, 'a host that does not display the workspace requests nothing')
+
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  assert.equal(h.calls.length, 1)
+  // The honest default: count of ALL filtered rows, no grouping.
+  assert.deepEqual(h.calls[0].measures, [{ fn: 'count', column: null }])
+  assert.equal(h.calls[0].group, null)
+  assert.deepEqual(h.surface.workspaceRows.value, [{ m0: 640 }])
+})
+
+test('workspace: adding a measure re-runs with both, a duplicate does nothing', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 1, m1: 2 }] }) })
+  h.surface.setWorkspaceActive(true)
+  h.surface.setAnalyzeOpen(true)
+  await flush()
+  const before = h.calls.length
+
+  h.surface.addWorkspaceMeasure('sum', 'amount')
+  await flush()
+  assert.equal(h.calls.length, before + 1)
+  assert.deepEqual(h.calls[h.calls.length - 1].measures, [
+    { fn: 'count', column: null },
+    { fn: 'sum', column: 'amount' },
+  ])
+
+  h.surface.addWorkspaceMeasure('sum', 'amount') // exact duplicate
+  await flush()
+  assert.equal(h.calls.length, before + 1, 'no request for a list that did not change')
+})
+
+test('workspace: the last measure cannot be removed', async () => {
+  const h = makeSurface()
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  h.surface.removeWorkspaceMeasure(0)
+  await flush()
+  assert.deepEqual(h.surface.workspaceMeasures.value, [{ fn: 'count', column: null }])
+})
+
+test('workspace: grouping sends the group, a temporal column starts on the month bucket', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ key: 'FR', m0: 3 }], totals: { m0: 9 }, truncated: true }) })
+  h.surface.setWorkspaceActive(true)
+  await flush()
+
+  h.surface.setWorkspaceGroup('country')
+  await flush()
+  let call = h.calls[h.calls.length - 1]
+  assert.deepEqual(call.group, { column: 'country', bucket: null }, 'a text column is not bucketed')
+  assert.equal(call.limit, 50)
+  assert.deepEqual(h.surface.workspaceTotals.value, { m0: 9 })
+  assert.equal(h.surface.workspaceTruncated.value, true)
+
+  h.surface.setWorkspaceGroup('sale_date')
+  await flush()
+  call = h.calls[h.calls.length - 1]
+  assert.deepEqual(call.group, { column: 'sale_date', bucket: 'month' })
+
+  h.surface.setWorkspaceBucket('quarter')
+  await flush()
+  assert.deepEqual(h.calls[h.calls.length - 1].group, { column: 'sale_date', bucket: 'quarter' })
+
+  // Back to "all filtered rows": no group at all.
+  h.surface.setWorkspaceGroup(null)
+  await flush()
+  assert.equal(h.calls[h.calls.length - 1].group, null)
+})
+
+test('workspace: a bucket change on a NON temporal group issues no request', async () => {
+  const h = makeSurface()
+  h.surface.setWorkspaceActive(true)
+  h.surface.setWorkspaceGroup('country')
+  await flush()
+  const before = h.calls.length
+  h.surface.setWorkspaceBucket('year')
+  await flush()
+  assert.equal(h.calls.length, before)
+})
+
+test('workspace: a scope change re-runs it only while the Analyze view is open', async () => {
+  const h = makeSurface()
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  const before = h.calls.length
+
+  h.surface.afterScopeChange('sig-1') // Data view: count + calc only
+  await flush()
+  const afterClosed = h.calls.length
+  assert.equal(
+    h.calls.slice(before, afterClosed).some((c) => c.limit === 50),
+    false,
+    'the workspace is not recomputed while its view is hidden',
+  )
+
+  h.surface.setAnalyzeOpen(true)
+  await flush()
+  h.surface.afterScopeChange('sig-2')
+  await flush()
+  assert.equal(h.calls[h.calls.length - 1].limit, 50)
+})
+
+test('workspace: a superseded or stale-epoch response never lands', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 1 }] }) })
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  // Superseded: a newer run wins whatever the response order.
+  h.setRespond(() => ({ rows: [{ m0: 'old' }] }))
+  h.surface.runWorkspace()
+  h.setRespond(() => ({ rows: [{ m0: 'new' }] }))
+  h.surface.runWorkspace()
+  await flush()
+  assert.deepEqual(h.surface.workspaceRows.value, [{ m0: 'new' }])
+
+  // Stale epoch: the source moved on while the request was in flight.
+  h.setRespond(() => ({ rows: [{ m0: 'ghost' }] }))
+  h.surface.runWorkspace()
+  h.setEpoch(42)
+  await flush()
+  assert.deepEqual(h.surface.workspaceRows.value, [{ m0: 'new' }])
+})
+
+test('workspace: resetDerived returns it to the honest default', async () => {
+  const h = makeSurface({ respond: () => ({ rows: [{ m0: 1, m1: 2 }] }) })
+  h.surface.setWorkspaceActive(true)
+  h.surface.addWorkspaceMeasure('sum', 'amount')
+  h.surface.setWorkspaceGroup('country')
+  await flush()
+
+  h.surface.resetDerived()
+  assert.deepEqual(h.surface.workspaceMeasures.value, [{ fn: 'count', column: null }])
+  assert.equal(h.surface.workspaceGroup.value, null)
+  assert.deepEqual(h.surface.workspaceRows.value, [])
+  assert.equal(h.surface.workspaceActive.value, true, 'the host is still mounted')
+})
+
+test('workspace: an error surfaces and clears the previous result', async () => {
+  const h = makeSurface()
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  h.setRespond(() => { throw new Error('source_unavailable') })
+  await h.surface.runWorkspace()
+  assert.equal(h.surface.workspaceError.value, 'source_unavailable')
+  assert.deepEqual(h.surface.workspaceRows.value, [])
+  assert.equal(h.surface.workspaceLoading.value, false)
+})

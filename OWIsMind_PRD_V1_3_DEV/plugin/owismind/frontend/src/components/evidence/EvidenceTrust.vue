@@ -37,9 +37,11 @@ const dropped = computed(() => droppedNote(evidence.meta && evidence.meta.verifi
    on top of every proof section. */
 .ev-trust { display: flex; flex-direction: column; gap: var(--s-1); }
 .ev-trust-line { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; }
-/* Square badge (charte: badges are square, never pills). */
+/* Badge (premium 2026-08-13): pill geometry, same family as the filter chips it sits
+   above. The visual grammar is unchanged - solid orange = certified, dashed = partial,
+   muted grey = declared. */
 .ev-trust-pill {
-  flex: none; padding: 2px 10px; border-radius: 0;
+  flex: none; padding: 3px 12px; border-radius: var(--r-pill);
   border: 1px solid var(--orange); background: var(--orange-soft);
   color: var(--orange-text); font-size: var(--fs-xs); font-weight: 600;
   white-space: nowrap;

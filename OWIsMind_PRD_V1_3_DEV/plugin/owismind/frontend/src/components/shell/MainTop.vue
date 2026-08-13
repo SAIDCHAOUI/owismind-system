@@ -111,7 +111,8 @@ const langShort = computed(() => {
   font-family: var(--font-sans);
 }
 
-/* Icon buttons: sidebar toggle + theme toggle */
+/* Icon buttons (sidebar toggle, theme, language): round targets that fill on hover.
+   Colour alone was too quiet up here - the fill states where the click lands. */
 .top-action {
   width: 34px;
   height: 34px;
@@ -119,11 +120,13 @@ const langShort = computed(() => {
   align-items: center;
   justify-content: center;
   color: var(--text-2);
-  /* sharp: no border-radius */
-  transition: color var(--dur) var(--ease);
+  border-radius: var(--r-pill);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   flex-shrink: 0;
 }
-.top-action:hover { color: var(--text); }
+.top-action:hover { color: var(--text); background: var(--surface-hover); }
+.top-action:active { transform: scale(0.94); }
 .top-action:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .top-action :deep(.ui-icon) { width: 18px; height: 18px; }
 
@@ -140,5 +143,6 @@ const langShort = computed(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .top-action { transition: none; }
+  .top-action:active { transform: none; }
 }
 </style>

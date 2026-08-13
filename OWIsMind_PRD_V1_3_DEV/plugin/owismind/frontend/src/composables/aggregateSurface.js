@@ -21,7 +21,15 @@
 //                  leaving Analyze after a scope change had skipped it)
 //   errorCode:     string            - the host's default error code (e.g. 'source_unavailable')
 import { ref } from 'vue'
-import { statsSpecFor, isTemporalColType, defaultCalcFnsFor } from './sourceModel.js'
+import {
+  statsSpecFor,
+  isTemporalColType,
+  defaultCalcFnsFor,
+  addMeasure,
+  removeMeasureAt,
+  replaceMeasureAt,
+  MAX_WORKSPACE_MEASURES,
+} from './sourceModel.js'
 
 export function createAggregateSurface(deps) {
   // --- DB-computed row count + the "Calculate" zone (persistent) -----------------
@@ -49,6 +57,27 @@ export function createAggregateSurface(deps) {
   const analyzeLoading = ref(false)
   const analyzeError = ref('') // '' = none
 
+  // --- Unified Analyze workspace (the standalone Source explorer) ---------------
+  // ONE model instead of two: a list of MEASURES (1..8) over an OPTIONAL grouping.
+  //   no group -> a single totals row, rendered as KPI cards
+  //   group    -> up to 50 group rows ranked by the FIRST measure (or the 50 most recent
+  //               calendar buckets), rendered as a bar table with one column per measure.
+  // ADDITIVE: the calc* / analyze* state above is untouched and still drives the Evidence
+  // hosts. This state stays inert until a host declares itself active, so a host that does
+  // not display the workspace never issues a request for it.
+  const workspaceActive = ref(false)
+  // There is ALWAYS at least one measure: the row count is the honest default, so the
+  // workspace can never show an empty result waiting for the user to configure something.
+  const workspaceMeasures = ref([{ fn: 'count', column: null }])
+  const workspaceGroup = ref(null) // group-by column name | null (= all filtered rows)
+  const workspaceBucket = ref('month') // calendar bucket for a temporal group
+  const workspaceRows = ref([]) // [{ key?, m0..mN }] as returned by the backend
+  const workspaceTotals = ref(null) // { m0..mN } over the same filter | null (ungrouped)
+  const workspaceTruncated = ref(false) // true when the 50-group cap bit
+  const workspaceLoading = ref(false)
+  const workspaceError = ref('') // '' = none
+
+  let workspaceSeq = 0 // per-workspace-request guard
   let countSeq = 0 // per-count-request guard (the totals bar row count)
   let calcSeq = 0 // per-calculate-zone-request guard
   let analyzeSeq = 0 // per-analyze-request guard
@@ -91,6 +120,16 @@ export function createAggregateSurface(deps) {
     analyzeTruncated.value = false
     analyzeLoading.value = false
     analyzeError.value = ''
+    // The workspace returns to its honest default (count of all filtered rows). Its
+    // ACTIVE flag is host lifecycle, not scope, so it survives the reset.
+    workspaceMeasures.value = [{ fn: 'count', column: null }]
+    workspaceGroup.value = null
+    workspaceBucket.value = 'month'
+    workspaceRows.value = []
+    workspaceTotals.value = null
+    workspaceTruncated.value = false
+    workspaceLoading.value = false
+    workspaceError.value = ''
     lastViewSig = null
     rowsStale = false
   }
@@ -103,6 +142,7 @@ export function createAggregateSurface(deps) {
     countSeq += 1
     calcSeq += 1
     analyzeSeq += 1
+    workspaceSeq += 1
   }
 
   // DB row count over the current search + filters (the totals bar). One COUNT(*) per
@@ -264,6 +304,8 @@ export function createAggregateSurface(deps) {
     analyzeOpen.value = !!value
     if (analyzeOpen.value) {
       if (_analyzeComplete()) runAnalyze()
+      // The unified workspace host (standalone explorer) always has a valid selection.
+      if (workspaceActive.value) runWorkspace()
     } else if (rowsStale) {
       rowsStale = false
       deps.refreshRows()
@@ -292,6 +334,81 @@ export function createAggregateSurface(deps) {
     else _clearAnalyzeResult()
   }
 
+  // --- Unified Analyze workspace actions ---------------------------------------
+  // Run the workspace aggregate: 1..8 measures over the optional grouping, capped at 50
+  // group rows. Guarded by workspaceSeq + the meta epoch, exactly like the pivot above.
+  async function runWorkspace() {
+    if (!workspaceActive.value || !deps.isActive()) return
+    const measures = (workspaceMeasures.value || []).slice(0, MAX_WORKSPACE_MEASURES)
+    if (!measures.length) return
+    const my = ++workspaceSeq
+    const epoch = deps.getEpoch()
+    workspaceLoading.value = true
+    workspaceError.value = ''
+    try {
+      const column = workspaceGroup.value
+      const temporal = column ? isTemporalColType(_colType(column)) : false
+      const group = column ? { column, bucket: temporal ? workspaceBucket.value : null } : null
+      const data = await deps.fetchAggregate(group, measures, 50)
+      if (my !== workspaceSeq || epoch !== deps.getEpoch()) return
+      workspaceRows.value = Array.isArray(data.rows) ? data.rows : []
+      workspaceTotals.value = data.totals || null
+      workspaceTruncated.value = !!data.truncated
+    } catch (e) {
+      if (my !== workspaceSeq || epoch !== deps.getEpoch()) return
+      workspaceError.value = _err(e)
+      workspaceRows.value = []
+      workspaceTotals.value = null
+      workspaceTruncated.value = false
+    } finally {
+      if (my === workspaceSeq && epoch === deps.getEpoch()) workspaceLoading.value = false
+    }
+  }
+
+  // A host declares that it DISPLAYS the workspace (mount) or stops (unmount). Activating
+  // it while the Analyze view is open computes the first result immediately: the workspace
+  // is never an empty shell waiting for input.
+  function setWorkspaceActive(value) {
+    workspaceActive.value = !!value
+    if (workspaceActive.value && analyzeOpen.value) runWorkspace()
+  }
+  // Add one measure. A duplicate (same fn + column) or the 8-measure ceiling is a no-op,
+  // so no request fires for a list that did not change.
+  function addWorkspaceMeasure(fn, column) {
+    const next = addMeasure(workspaceMeasures.value, { fn, column })
+    if (next === workspaceMeasures.value) return
+    workspaceMeasures.value = next
+    runWorkspace()
+  }
+  // Remove one measure. Removing the LAST one is refused (there is always a result).
+  function removeWorkspaceMeasure(index) {
+    const next = removeMeasureAt(workspaceMeasures.value, index)
+    if (next === workspaceMeasures.value) return
+    workspaceMeasures.value = next
+    runWorkspace()
+  }
+  // Change one measure in place (chip click -> pick another): the slot keeps its rank,
+  // so swapping the first measure keeps it the ranking measure. No-ops fire no request.
+  function replaceWorkspaceMeasure(index, fn, column) {
+    const next = replaceMeasureAt(workspaceMeasures.value, index, { fn, column })
+    if (next === workspaceMeasures.value) return
+    workspaceMeasures.value = next
+    runWorkspace()
+  }
+  // Pick the grouping ('' / null = all filtered rows). A temporal column starts on the
+  // month bucket so a date grouping is immediately usable.
+  function setWorkspaceGroup(column) {
+    workspaceGroup.value = column || null
+    if (workspaceGroup.value && isTemporalColType(_colType(workspaceGroup.value))) {
+      workspaceBucket.value = 'month'
+    }
+    runWorkspace()
+  }
+  function setWorkspaceBucket(bucket) {
+    workspaceBucket.value = bucket
+    if (workspaceGroup.value && isTemporalColType(_colType(workspaceGroup.value))) runWorkspace()
+  }
+
   // React to a scope change the host detected on a fresh load. `sig` is the host-computed
   // scope signature. Same scope -> nothing to recompute, EXCEPT a row count that failed
   // transiently (it would otherwise stay blank forever). New scope -> re-compute the
@@ -306,6 +423,7 @@ export function createAggregateSurface(deps) {
     if (calcColumn.value) _reloadCalc()
     refreshTotals()
     if (analyzeOpen.value && _analyzeComplete()) runAnalyze()
+    if (workspaceActive.value && analyzeOpen.value) runWorkspace()
   }
 
   // rowsStale bookkeeping the hosts drive from their rows-load spots:
@@ -322,6 +440,11 @@ export function createAggregateSurface(deps) {
     analyzeOpen, analyzeGroup, analyzeBucket, analyzeFn, analyzeMeasureColumn,
     analyzeRows, analyzeTotals, analyzeTruncated, analyzeLoading, analyzeError,
     setAnalyzeOpen, setAnalyzeGroup, setAnalyzeBucket, setAnalyzeMeasure, runAnalyze,
+    // Unified Analyze workspace (measures + optional grouping, standalone explorer)
+    workspaceActive, workspaceMeasures, workspaceGroup, workspaceBucket,
+    workspaceRows, workspaceTotals, workspaceTruncated, workspaceLoading, workspaceError,
+    setWorkspaceActive, addWorkspaceMeasure, removeWorkspaceMeasure, replaceWorkspaceMeasure,
+    setWorkspaceGroup, setWorkspaceBucket, runWorkspace,
     // host orchestration hooks
     refreshTotals, afterScopeChange, resetDerived, invalidate,
     markRowsStale, clearRowsStale,

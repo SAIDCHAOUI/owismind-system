@@ -339,18 +339,31 @@ onBeforeUnmount(() => {
   color: var(--text);
   line-height: 1.35;
 }
-/* Fixed-height canvas wrapper: Chart.js fills it (maintainAspectRatio: false). */
+/* Fixed-height canvas wrapper: Chart.js fills it (maintainAspectRatio: false). The
+   drawing fades up once the payload is in: a chart that appears is read, one that
+   blinks is skipped. Chart.js runs its own bar animation inside the canvas. */
 .art-canvas-wrap {
   position: relative;
   width: 100%;
   height: 340px;
+  animation: art-canvas-in var(--dur-slow) var(--ease-out) both;
 }
-/* Single-series legend line: square brand-orange swatch (slot 0 of the palette)
-   + series name + unit. Square, flat, theme-aware via tokens. */
+@keyframes art-canvas-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@media (prefers-reduced-motion: reduce) { .art-canvas-wrap { animation: none; } }
+/* Single-series legend: a self-contained pill (premium 2026-08-13) so the line reads as
+   a legend and not as a stray caption - square brand-orange swatch (slot 0 of the
+   palette) + series name + unit. Flat, theme-aware via tokens, sized to its content. */
 .art-legend {
-  display: flex;
+  display: inline-flex;
+  align-self: flex-start;
   align-items: center;
   gap: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   font-size: var(--fs-sm);
   color: var(--text-2);
 }

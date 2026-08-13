@@ -48,18 +48,31 @@ async function copySql() {
 .ev-sql-toggle {
   flex: 1; display: flex; align-items: center; gap: 6px; padding: 8px 12px;
   font-size: var(--fs-sm); color: var(--text-2);
-  transition: color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.ev-sql-toggle:hover { color: var(--text); }
+.ev-sql-toggle:hover { color: var(--text); background: var(--surface-2); }
 .ev-sql-toggle :deep(.ui-icon) { width: 14px; height: 14px; }
-.ev-sql-copy { padding: 8px 12px; color: var(--text-3); }
-.ev-sql-copy:hover { color: var(--text); }
+.ev-sql-copy {
+  display: inline-flex; margin: 4px 8px 4px 0; padding: 6px;
+  border-radius: var(--r-pill); color: var(--text-3);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.ev-sql-copy:hover { color: var(--text); background: var(--surface-hover); }
 .ev-sql-copy :deep(.ui-icon) { width: 14px; height: 14px; }
+/* The query unrolls (fade + rise) instead of snapping open under the bar. */
 .ev-sql-code {
   margin: 0; padding: var(--s-3) var(--s-4); max-height: 240px; overflow: auto;
   background: var(--surface-2); font-size: 12px; line-height: 1.7;
   color: var(--text-2); white-space: pre;
   tab-size: 2;
+  animation: ev-sql-open var(--dur) var(--ease-out) both;
+}
+@keyframes ev-sql-open {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ev-sql-toggle, .ev-sql-copy { transition: none; }
+  .ev-sql-code { animation: none; }
 }
 /* Light syntax highlighting - keywords in brand orange, strings/numbers tinted.
    Text-only spans (escaped), so this can never inject markup. */

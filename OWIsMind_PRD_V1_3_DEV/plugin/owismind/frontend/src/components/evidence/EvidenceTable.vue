@@ -13,9 +13,11 @@ import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
 import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
 import { isIdentifierColumn, formatCell } from '../../composables/cellFormat.js'
+import { useScrollHints } from '../../composables/useScrollHints.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from '../sources/CellActionPopover.vue'
 import ColumnMenu from '../sources/ColumnMenu.vue'
+import ScrollHints from '../sources/ScrollHints.vue'
 import { DataLoader, Icon } from '../ui'
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
@@ -272,6 +274,12 @@ onBeforeUnmount(() => {
   teardownColObserver()
   if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
 })
+
+// Scroll affordances: how much of the table is still out of sight (columns left/right,
+// rows below) and the scroll steps the pills trigger. The column sentinel is excluded
+// from the count - it is a 1px observer target, not a column.
+const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown } =
+  useScrollHints(scrollEl, { headerSelector: 'thead th:not(.col-sentinel)' })
 </script>
 
 <template>
@@ -281,6 +289,9 @@ onBeforeUnmount(() => {
        fast refreshes flicker-free). -->
   <div class="ev-table" :class="{ busy: evidence.rowsLoading && evidence.rows.length > 0 }">
     <DataLoader v-if="evidence.rowsLoading && evidence.rows.length > 0" :label="t('src.crunch')" />
+    <!-- The scroll viewport and its affordance overlay share ONE positioning context, so
+         the pills sit on the data edges and not on the footer bar below. -->
+    <div class="ev-table-view">
     <div ref="scrollEl" class="ev-table-scroll">
       <table>
         <thead>
@@ -359,6 +370,16 @@ onBeforeUnmount(() => {
         {{ t('ev.table.empty') }}
       </div>
     </div>
+      <ScrollHints
+        :can-left="canLeft"
+        :can-right="canRight"
+        :can-down="canDown"
+        :hidden-right="hiddenRight"
+        @left="stepLeft"
+        @right="stepRight"
+        @down="stepDown"
+      />
+    </div>
     <!-- Recoverable rows-level error: the chips above stay mounted and usable. -->
     <div v-if="evidence.rowsError" class="ev-table-error">
       <span>{{ t('ev.error') }}</span>
@@ -422,6 +443,9 @@ onBeforeUnmount(() => {
 .ev-table.busy .ev-table-scroll, .ev-table.busy .ev-table-foot { opacity: 0.55; }
 /* Block stale row interactions while loading; the foot buttons are :disabled-gated. */
 .ev-table.busy tbody { pointer-events: none; }
+/* Scroll viewport + its affordance overlay: ONE positioning context, hugging the data
+   only (the footer bar sits outside it, so the pills stay centered on the rows). */
+.ev-table-view { position: relative; display: flex; flex-direction: column; min-height: 0; }
 /* BOTH axes scroll: vertical for rows (bounded height ≈ ~20 rows), horizontal
    for ALL columns (no column is hidden / elided away). ~60vh, capped so a tall
    viewport does not make the panel one giant table. */
@@ -440,8 +464,11 @@ thead th {
   text-align: left; box-shadow: inset 0 -1px 0 var(--border-strong);
   color: var(--text-2); font-weight: 500; white-space: nowrap;
   user-select: none;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-thead th:hover { color: var(--text); }
+/* Sortable affordance: the whole header cell lights up under the pointer (twin of
+   the standalone SourceTable). */
+thead th:hover { color: var(--text); background: var(--surface-hover); }
 /* Sorted column: same AA-safe orange-text token as .filtered (small text). */
 thead th.sorted { color: var(--orange-text); }
 /* Filtered column: orange text cue (charte: orange text only, no background fill). */
@@ -457,21 +484,24 @@ thead th.num .th-btn { flex: 0 1 auto; text-align: right; }
 }
 .th-sort :deep(.ui-icon) { width: 12px; height: 12px; vertical-align: -2px; }
 /* Sigma affordance in NUMERIC headers only: sends the column to the Calculate zone.
-   Subtle by default, orange text when active. Square, no layout shift. */
+   Subtle by default, orange text when active. Rounded icon button (premium
+   2026-08-13), no layout shift. */
 .th-sigma {
-  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: 0;
+  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: var(--r-pill);
   font-size: 13px; line-height: 1; color: var(--text-3);
   transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.th-sigma:hover { color: var(--text); background: var(--surface-hover); }
+.th-sigma:hover { color: var(--text); background: var(--surface-2); }
 .th-sigma.active { color: var(--orange-text); }
 /* Column-menu trigger: hidden until the header is hovered/focused, pinned visible when
-   the column is sorted or filtered. Square, no layout shift. */
+   the column is sorted or filtered. Rounded icon button, no layout shift. */
 .th-menu {
-  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: 0;
+  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: var(--r-pill);
   color: var(--text-3); opacity: 0;
-  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
+.th-menu:hover { background: var(--surface-2); }
 .th-menu :deep(.ui-icon) { width: 14px; height: 14px; display: block; }
 .th-menu:hover { color: var(--text); }
 thead th:hover .th-menu, thead th:focus-within .th-menu, .th-menu.pinned { opacity: 1; }
@@ -481,11 +511,18 @@ tbody td {
   padding: 7px 12px; border-bottom: 1px solid var(--border);
   color: var(--text); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 260px;
+  transition: background var(--dur) var(--ease);
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Row-level hover, then the hovered CELL one step further (that is what a click
+   picks). Same two-level grammar as the standalone SourceTable. */
+tbody tr:hover td { background: var(--surface); }
 /* Non-null cells are pickable: subtle hover cue, no layout shift. */
 tbody td.cell-click { cursor: pointer; }
-tbody td.cell-click:hover { background: var(--surface-hover); }
+tbody tr:hover td.cell-click:hover, tbody td.cell-click:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) {
+  tbody td { transition: none; }
+}
 /* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
 tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* First-load skeleton rows - flat surface with an opacity pulse (no gradient),
@@ -514,7 +551,7 @@ tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--danger); font-size: var(--fs-sm);
 }
 .ev-table-error button {
-  padding: 2px 10px; border-radius: 0; color: var(--text-2);
+  padding: 2px 10px; border-radius: var(--r-pill); color: var(--text-2);
   transition: all var(--dur) var(--ease);
 }
 .ev-table-error button:hover { background: var(--surface-hover); color: var(--text); }

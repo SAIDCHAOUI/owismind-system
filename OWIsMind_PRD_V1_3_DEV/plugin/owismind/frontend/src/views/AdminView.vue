@@ -1191,21 +1191,27 @@ if (import.meta.env.DEV) {
 
 <style scoped>
 /* ============================================================
-   AdminView - Orange brand restyle
+   AdminView - Orange brand restyle, premium pass (2026-08-13)
    Design language: white/near-black, orange as RARE accent,
-   SHARP/SQUARE geometry (border-radius: 0), flat 1px borders,
-   Helvetica Neue heavy typography.
+   Helvetica Neue heavy typography. Geometry follows the premium
+   charter: STRUCTURAL surfaces (data tables, panel frames, KPI
+   tiles, page headers) stay square; INTERACTIVE and FLOATING
+   surfaces (rows, buttons, chips, inputs, preview card) take a
+   soft radius plus layered elevation on hover / focus.
    ============================================================ */
 
 /* --- Header --- */
-.admin-head { margin-bottom: var(--s-5); }
+.admin-head {
+  margin-bottom: var(--s-5);
+  animation: owi-rise var(--dur-slow) var(--ease-out) both;
+}
 
 .admin-eyebrow {
   /* Orange uppercase eyebrow */
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--orange);
   margin: 0 0 10px;
 }
@@ -1231,7 +1237,7 @@ if (import.meta.env.DEV) {
   margin-top: 16px;
 }
 
-/* Admin badge: solid orange, white text, square, shield icon */
+/* Admin badge: solid orange cap, white text, shield icon (status chip = pill). */
 .admin-badge {
   display: inline-flex;
   align-items: center;
@@ -1240,29 +1246,38 @@ if (import.meta.env.DEV) {
   color: #fff;
   font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  padding: 5px 10px;
-  /* Square: no border-radius */
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
 }
 .admin-badge :deep(.ui-icon) { width: 12px; height: 12px; }
 
-/* Impersonation ("view as user") entry - removable feature. Square ghost button,
-   1px border, hover inverts (charter). */
+/* Impersonation ("view as user") entry - removable feature. Secondary action:
+   rounded ghost, quiet neutral hover with a 1px lift (never an ink inversion,
+   which would compete with the page's single primary action). */
 .inspect-link {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   margin-left: auto;
-  padding: 8px 14px;
+  padding: 8px 15px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
   background: var(--bg);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.inspect-link:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.inspect-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-3);
+  box-shadow: var(--elev-1);
+  transform: translateY(-1px);
+}
+.inspect-link:active { transform: translateY(0); background: var(--surface-press); }
 .inspect-link :deep(.ui-icon) { width: 14px; height: 14px; }
 
 .admin-desc {
@@ -1273,60 +1288,99 @@ if (import.meta.env.DEV) {
   max-width: 640px;
 }
 
-/* Tabs: :deep() override so Tabs.vue is NOT edited */
-.admin-tabs { margin-top: 0; }
-.admin-tabs :deep(.tabs-bar) {
-  display: flex;
+/* Tabs: :deep() overrides on the REAL Tabs.vue class names (.ui-tabs / .ui-tab /
+   .ui-tab__ct) so the shared component is not edited. Tabs.vue draws a plain orange
+   rule under the active tab; the console thickens it to the charter's 3px, animates
+   it as a wipe, and gives the row its breathing space. */
+/* `.admin-tabs` IS the Tabs root (a class on the component): style the container
+   directly here, and only its CHILDREN through :deep. */
+.admin-tabs {
   gap: 28px;
   border-bottom: 1px solid var(--border-strong);
   margin: 34px 0 28px;
 }
-.admin-tabs :deep(.tab-btn) {
+.admin-tabs :deep(.ui-tab) {
   padding: 0 0 14px;
+  margin-right: 0;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--text-2);
-  border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
-  border-radius: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  font-weight: var(--fw-semibold);
 }
-.admin-tabs :deep(.tab-btn:hover) { color: var(--text); }
-.admin-tabs :deep(.tab-btn.active) {
-  color: var(--text);
-  font-weight: 700;
-  border-bottom-color: var(--orange);
+/* Underline: every tab owns a collapsed rule that scales out from the left, so moving
+   between tabs reads as one continuous accent instead of a hard swap. The active state
+   restates the geometry it shares with the primitive (right / height / background) so
+   the outcome never depends on stylesheet order. */
+.admin-tabs :deep(.ui-tab::after) {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  background: var(--border-strong);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur) var(--ease-out), background var(--dur) var(--ease);
 }
-/* Count chip in tab */
-.admin-tabs :deep(.tab-count) {
-  font-size: 12px;
+.admin-tabs :deep(.ui-tab.is-active::after) {
+  right: 0;
+  height: 3px;
+  background: var(--orange);
+  transform: scaleX(1);
+}
+/* Hovering an inactive tab previews the rule in ink, never in orange (orange stays the
+   mark of the ACTIVE tab). */
+.admin-tabs :deep(.ui-tab:not(.is-active):hover::after) {
+  background: var(--text-3);
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-tabs :deep(.ui-tab::after) { transition: none; }
+}
+/* Count cap in the tab: a quiet pill, orange only on the active tab. */
+.admin-tabs :deep(.ui-tab__ct) {
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-3);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.admin-tabs :deep(.tab-btn.active .tab-count) { color: var(--orange); }
+.admin-tabs :deep(.ui-tab.is-active .ui-tab__ct) {
+  background: var(--orange-soft-dark);
+  color: var(--orange-text);
+}
 
 .admin-status { padding: var(--s-6) 0; }
 .admin-error { color: var(--danger); }
 .admin-panel { padding-top: var(--s-6); display: flex; flex-direction: column; gap: 16px; }
+/* Soft staggered entrance: the panel's blocks rise in sequence instead of
+   appearing all at once (the console is dense, the eye needs an order). */
+.admin-panel > * { animation: owi-rise var(--dur-slow) var(--ease-out) both; }
+.admin-panel > *:nth-child(2) { animation-delay: 60ms; }
+.admin-panel > *:nth-child(3) { animation-delay: 120ms; }
 .card-desc { font-size: 14px; line-height: 1.6; margin: 0 0 18px; color: var(--text-2); }
 
 /* --- Overview KPIs --- */
-/* Sharp 3-column grid, orange top rule, orange icon (no tinted square bg) */
+/* KPI tiles stay SQUARE (structural, charter recipe): 3px orange top rule, orange
+   glyph, no tinted tile. The premium layer is the resting elevation, so they read
+   as part of the same stack of light panels as the cards below. */
 .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
 .kpi {
   display: flex;
   flex-direction: column;
   gap: 0;
-  /* Orange top rule, sharp borders, no border-radius */
-  border-top: 3px solid var(--orange);
   border: 1px solid var(--border);
   border-top: 3px solid var(--orange);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   padding: 22px 22px 24px;
+}
+:global(body[data-theme="dark"] .kpi) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  border-top-color: var(--orange);
 }
 .kpi-ico {
   /* Orange icon, no background square, just the icon itself */
@@ -1339,7 +1393,7 @@ if (import.meta.env.DEV) {
 .kpi-label {
   font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin-bottom: 6px;
@@ -1358,7 +1412,19 @@ if (import.meta.env.DEV) {
 .kv { display: grid; grid-template-columns: 180px 1fr; gap: 10px 24px; margin: 0 0 18px; }
 .kv dt { font-size: 13px; color: var(--text-2); }
 .kv dd { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--text); }
-.kv code, .tables code, .pick-id { font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
+.kv code, .pick-id { font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
+/* Table names read as data caps: a small rounded chip recessed into the card
+   (dark takes --bg, since the card itself is already at --surface-2). */
+.tables code {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+:global(body[data-theme="dark"] .tables code) { background: var(--bg); }
 .kv-note { font-size: 13px; color: var(--text-2); margin: 18px 0 10px; }
 .prefix-warn {
   display: inline-flex;
@@ -1380,7 +1446,7 @@ if (import.meta.env.DEV) {
   gap: 8px;
   font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin-bottom: 8px;
@@ -1388,38 +1454,50 @@ if (import.meta.env.DEV) {
 
 .agent-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; max-width: 380px; }
 .select-wrap { position: relative; display: flex; }
+/* Control surface: soft radius; focus = a BORDER STEP + resting elevation (never
+   an orange ring around the whole field, charter). */
 .admin-select {
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
   padding: 11px 34px 11px 14px;
   background: var(--bg);
-  /* Sharp: no border-radius, 1px border */
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
   font-size: 14px;
   font-family: var(--font-sans);
   color: var(--text);
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.admin-select:hover { border-color: var(--text-3); }
-.admin-select:focus { outline: none; border-color: var(--orange); }
+.admin-select:hover { border-color: var(--text-3); box-shadow: var(--elev-1); }
+.admin-select:focus { outline: none; border-color: var(--text); box-shadow: var(--elev-1); }
 .select-arr { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-3); }
 .select-arr :deep(.ui-icon) { width: 14px; height: 14px; }
 
 /* Pickable project agents */
 .pick-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Pickable row: a card-line that lifts under the pointer (it is a target). */
 .pick-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
   padding: 10px 12px;
-  /* Sharp: no border-radius */
   border: 1px solid var(--border);
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.pick-row:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  box-shadow: var(--elev-1);
+  transform: translateY(-1px);
 }
 .pick-row.on { border-color: var(--orange); background: var(--orange-soft-dark); }
+.pick-row.on:hover { background: var(--orange-soft-dark); border-color: var(--orange); }
 .pick-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .pick-label { font-size: var(--fs-sm); color: var(--text); font-weight: var(--fw-semibold); }
 .pick-id { color: var(--text-3); }
@@ -1428,94 +1506,123 @@ if (import.meta.env.DEV) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 7px 13px;
-  /* Sharp: no border-radius */
+  padding: 7px 14px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
   color: var(--text-2);
   background: var(--bg);
-  transition: all var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
-.pick-btn:hover { border-color: var(--orange); color: var(--orange-text); }
-.pick-btn.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+/* Neutral hover, orange only for the SELECTED state: an "Added" row already
+   carries an orange tint and an orange frame, so a solid orange button on top of
+   it would make three orange signals for one fact (charter: orange stays rare).
+   The page's single solid-orange action remains "Save selection". */
+.pick-btn:hover { border-color: var(--text-3); color: var(--text); background: var(--surface-hover); }
+.pick-btn.on {
+  background: var(--bg);
+  border-color: var(--orange);
+  color: var(--orange-text);
+}
+.pick-btn.on:hover { background: var(--bg); border-color: var(--orange); color: var(--orange-text); }
 .pick-btn :deep(.ui-icon) { width: 13px; height: 13px; }
 
-/* Exposed agents list - square icon tile with orange border + glyph */
+/* Exposed agents list: card-lines that lift under the pointer, softly rounded
+   icon tile with an orange glyph. */
 .exposed-list { list-style: none; padding: 0; margin: 0 0 var(--s-5); display: flex; flex-direction: column; gap: 8px; }
 .exposed-row {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 16px;
-  /* Sharp border */
   border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.exposed-row:hover { border-color: var(--border-strong); }
+.exposed-row:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  box-shadow: var(--elev-1);
+  transform: translateY(-1px);
+}
 
-/* Square icon tile with orange border + orange glyph */
 .exposed-ico {
   width: 40px;
   height: 40px;
   flex: 0 0 40px;
-  /* Square: no border-radius */
   border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--orange);
+  transition: border-color var(--dur) var(--ease);
 }
+.exposed-row:hover .exposed-ico { border-color: var(--border-strong); }
 .exposed-ico :deep(.ui-icon) { width: 20px; height: 20px; }
 .exposed-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .exposed-label { font-size: 14px; font-weight: var(--fw-heavy); color: var(--text); }
 .exposed-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; color: var(--text-2); }
 .exposed-project { font-family: var(--font-mono); }
+/* Profile state: a soft status chip (pill), tinted by the state it reports -
+   incomplete profiles read as a warning, filled ones as a success. The icon
+   carries the color; the label stays --text-2 so it keeps AA contrast on both
+   tints, in both themes. */
 .profile-state {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: var(--warn-soft);
   font-size: 12px;
   font-weight: var(--fw-semibold);
   color: var(--text-2);
 }
-/* Status icon color only (AA-safe), label stays --text-2 */
+.profile-state.ok { background: var(--success-soft); }
 .profile-state :deep(.ui-icon) { width: 13px; height: 13px; color: var(--warn); }
 .profile-state.ok :deep(.ui-icon) { color: var(--success); }
 
 .exposed-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-/* Ghost button: square, 1px border */
+/* Secondary action inside a row: rounded ghost, neutral hover patch. */
 .ghost-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 13px;
-  /* Square: no border-radius */
+  padding: 7px 14px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
   background: var(--bg);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
-.ghost-btn:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.ghost-btn:hover { background: var(--surface-hover); border-color: var(--text-3); box-shadow: var(--elev-1); }
+.ghost-btn:active { background: var(--surface-press); }
 .ghost-btn :deep(.ui-icon) { width: 14px; height: 14px; }
 
-/* X button: square, 1px border */
+/* Icon button: borderless target, the hover patch IS the affordance. */
 .x-btn {
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Square: no border-radius */
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.x-btn:hover { border-color: var(--text); color: var(--text); }
+.x-btn:hover { background: var(--surface-hover); color: var(--text); }
+.x-btn:active { background: var(--surface-press); }
 .x-btn :deep(.ui-icon) { width: 14px; height: 14px; }
 
 .agent-actions { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
@@ -1546,9 +1653,22 @@ if (import.meta.env.DEV) {
 }
 .admin-table td { padding: 16px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .admin-table tbody tr:last-child td { border-bottom: none; }
+/* Soft row hover: the line the pointer is on lights up, so a wide dense table
+   stays readable across its columns. The frame itself stays square (structural). */
+.admin-table tbody tr { transition: background var(--dur) var(--ease); }
+.admin-table tbody tr:hover { background: var(--surface-hover); }
 .user-id { font-weight: 700; color: var(--text); }
-/* (you) in orange-deep */
-.you { color: var(--orange-text); font-size: 13px; font-weight: 600; margin-left: 6px; }
+/* "(you)" cap: a soft orange chip, the only orange on the row. */
+.you {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--orange-soft-dark);
+  color: var(--orange-text);
+  font-size: 12px;
+  font-weight: 700;
+}
 .admin-yes { color: var(--success); }
 .admin-yes :deep(.ui-icon) { width: 16px; height: 16px; }
 .row-action { text-align: right; }
@@ -1562,18 +1682,20 @@ if (import.meta.env.DEV) {
 .q-input {
   padding: 11px 14px;
   background: var(--bg);
-  /* Sharp: no border-radius */
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
   font-size: 14px;
   font-family: var(--font-sans);
   color: var(--text);
   width: 180px;
   max-width: 100%;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.q-input:focus { outline: none; border-color: var(--orange); }
+.q-input:hover { border-color: var(--text-3); }
+.q-input:focus { outline: none; border-color: var(--text); box-shadow: var(--elev-1); }
 .q-field--grow .q-input { width: 100%; }
 
-/* Square checkbox: 18px, 1.5px border, checked=orange fill + white check */
+/* Checkbox: 18px cap, 1.5px border, checked = orange fill + white check */
 .q-check {
   display: inline-flex;
   align-items: center;
@@ -1590,6 +1712,7 @@ if (import.meta.env.DEV) {
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--text);
+  border-radius: var(--r-xs);
   background: var(--bg);
   flex-shrink: 0;
   cursor: pointer;
@@ -1619,7 +1742,7 @@ if (import.meta.env.DEV) {
 .q-subhead {
   font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin: var(--s-4) 0 var(--s-3);
@@ -1641,6 +1764,7 @@ if (import.meta.env.DEV) {
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--text);
+  border-radius: var(--r-xs);
   background: var(--bg);
   flex-shrink: 0;
   cursor: pointer;
@@ -1667,38 +1791,58 @@ if (import.meta.env.DEV) {
   .q-table input[type="checkbox"] { transition: none; }
 }
 
-.q-row-sel { background: var(--orange-soft-dark); }
+/* A selected quota row keeps its orange tint through the neutral row hover. */
+.q-row-sel, .admin-table tbody tr.q-row-sel:hover { background: var(--orange-soft-dark); }
 .q-user { display: flex; align-items: center; gap: 6px; }
 .q-uid { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); margin-top: 3px; }
 .q-usage { min-width: 150px; }
 
-/* Mini progress bar: sharp, no border-radius */
-.q-mini-bar { height: 6px; background: var(--surface-2); overflow: hidden; margin-bottom: 4px; max-width: 130px; }
-.q-mini-fill { display: block; height: 100%; background: var(--orange); }
+/* Mini gauge: a square bar (structural surface), the fill animates when the figure changes. */
+.q-mini-bar {
+  height: 6px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 4px;
+  max-width: 130px;
+}
+.q-mini-fill {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+  transition: width var(--dur-slow) var(--ease-out);
+}
 .q-mini-fill.over { background: var(--danger); }
 .q-usage-amt { font-size: 12px; }
 
-/* Source tag: square bordered chip */
+/* Source tag: soft status chip (pill), tinted only where the state matters. */
 .q-src {
   display: inline-block;
   border: 1px solid var(--border);
-  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  padding: 3px 10px;
   font-size: 11px;
   font-weight: 700;
   color: var(--text-2);
 }
-/* Differentiate source types with minimal color */
-.q-src.src-user { border-color: var(--orange); color: var(--orange-text); }
+.q-src.src-user { border-color: var(--orange); background: var(--orange-soft-dark); color: var(--orange-text); }
 .q-src.src-temp { color: var(--text-2); }
-.q-src.src-over { border-color: var(--danger); color: var(--danger); }
+.q-src.src-over { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .q-blocked { margin-left: 6px; font-size: 10px; font-weight: var(--fw-heavy); letter-spacing: 0.04em; text-transform: uppercase; color: var(--danger); }
 
+/* Bulk-apply panel: a floating card over the table (it appears on selection). */
 .q-apply {
   margin-top: var(--s-5);
   padding: var(--s-5);
-  /* Sharp border, surface bg */
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--surface);
+  box-shadow: var(--elev-1);
+  animation: owi-rise var(--dur-slow) var(--ease-out) both;
+}
+:global(body[data-theme="dark"] .q-apply) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .q-apply-head { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text); margin-bottom: var(--s-3); }
 .q-apply-row { display: flex; align-items: flex-end; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4); }
@@ -1714,7 +1858,7 @@ if (import.meta.env.DEV) {
 .ed-field--grow { flex: 1; }
 .ed-row { display: flex; gap: var(--s-4); }
 
-/* Read-only agent row: square, surface bg */
+/* Read-only agent row: a quiet surface block (not an input, so no focus state). */
 .ed-readonly {
   display: flex;
   align-items: center;
@@ -1722,6 +1866,7 @@ if (import.meta.env.DEV) {
   flex-wrap: wrap;
   padding: 11px 14px;
   border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--surface);
   font-size: var(--fs-sm);
   color: var(--text);
@@ -1740,17 +1885,20 @@ if (import.meta.env.DEV) {
   text-transform: none;
 }
 
-/* Input / textarea: square, 1px border */
+/* Input / textarea: soft radius, focus = border step + resting elevation. */
 .ed-input {
   padding: 11px 14px;
   background: var(--bg);
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
   font-size: 14px;
   font-family: var(--font-sans);
   color: var(--text);
   width: 100%;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.ed-input:focus { outline: none; border-color: var(--orange); }
+.ed-input:hover { border-color: var(--text-3); }
+.ed-input:focus { outline: none; border-color: var(--text); box-shadow: var(--elev-1); }
 .ed-input::placeholder { color: var(--text-3); }
 .ed-textarea { resize: vertical; line-height: 1.5; min-height: 78px; }
 .ed-hint { font-size: 13px; color: var(--text-2); margin: 0; }
@@ -1768,7 +1916,7 @@ if (import.meta.env.DEV) {
 .ed-section-title {
   font-size: 11px;
   font-weight: var(--fw-heavy);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
 }
@@ -1786,15 +1934,26 @@ if (import.meta.env.DEV) {
 }
 .ed-link:hover { opacity: 0.8; }
 .bench-validate-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.bench-vd { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+/* Schema-check verdict: a soft result chip that rises in when the answer lands. */
+.bench-vd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 600;
+  animation: owi-rise var(--dur) var(--ease-out) both;
+}
 .bench-vd :deep(.ui-icon) { width: 14px; height: 14px; flex-shrink: 0; }
-.bench-vd--ok { color: var(--success); }
-.bench-vd--bad { color: var(--danger); }
+.bench-vd--ok { color: var(--success); background: var(--success-soft); }
+.bench-vd--bad { color: var(--danger); background: var(--danger-soft); }
 
 /* Source datasets: one editable row = dataset input + label input + remove (square). */
 .src-row { display: flex; align-items: center; gap: var(--s-3); }
 .src-dataset { flex: 1 1 55%; min-width: 0; }
 .src-label { flex: 1 1 45%; min-width: 0; }
+/* Row remove: icon button, the hover patch turns danger-soft. */
 .src-remove {
   flex-shrink: 0;
   display: inline-flex;
@@ -1803,13 +1962,15 @@ if (import.meta.env.DEV) {
   width: 34px;
   height: 34px;
   padding: 0;
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--text-3);
   cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.src-remove:hover { border-color: var(--danger); color: var(--danger); }
-.src-remove:focus-visible { outline: none; border-color: var(--orange); }
+.src-remove:hover { background: var(--danger-soft); color: var(--danger); }
+.src-remove:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
 .src-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* Square checkbox toggle (response-mode support) - same flat/square treatment as the
@@ -1821,6 +1982,7 @@ if (import.meta.env.DEV) {
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--text);
+  border-radius: var(--r-xs);
   background: var(--bg);
   flex-shrink: 0;
   cursor: pointer;
@@ -1858,6 +2020,7 @@ if (import.meta.env.DEV) {
   color: var(--text-2);
   margin-bottom: 8px;
 }
+/* Icon picker: softly rounded tiles, the picked one goes solid orange. */
 .icon-picker { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
 .icon-opt {
   aspect-ratio: 1;
@@ -1865,18 +2028,22 @@ if (import.meta.env.DEV) {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
+  border-radius: var(--r);
   color: var(--text);
   background: var(--bg);
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.icon-opt:hover { border-color: var(--text); }
+.icon-opt:hover { border-color: var(--text-3); background: var(--surface-hover); transform: translateY(-1px); }
 .icon-opt.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+.icon-opt.on:hover { background: var(--orange-deep); border-color: var(--orange-deep); }
 .icon-opt :deep(.ui-icon) { width: 18px; height: 18px; }
 
-/* Badge pills: square bordered pills */
+/* Badge picker: capsules, the picked one inverts to ink. */
 .badge-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .badge-opt {
   border: 1px solid var(--border);
+  border-radius: var(--r-pill);
   padding: 9px 18px;
   font-weight: 700;
   font-size: 13px;
@@ -1884,7 +2051,7 @@ if (import.meta.env.DEV) {
   background: var(--bg);
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.badge-opt:hover { border-color: var(--text); }
+.badge-opt:hover { border-color: var(--text-3); background: var(--surface-hover); }
 .badge-opt.on { background: var(--text); border-color: var(--text); color: var(--bg); }
 
 /* Editor live preview: sticky right column */
@@ -1897,21 +2064,29 @@ if (import.meta.env.DEV) {
   color: var(--text-2);
 }
 
-/* Preview card: square border */
+/* Preview card: this is the user-facing agent card in miniature, so it carries
+   the same premium recipe as the real one (soft radius + resting elevation). */
 .preview-card {
   border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-1);
   padding: 20px;
   background: var(--bg);
   display: flex;
   flex-direction: column;
   gap: 0;
 }
+:global(body[data-theme="dark"] .preview-card) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
 
-/* Preview icon tile: square with orange border + glyph, above the name */
+/* Preview icon tile: rounded tile with an orange glyph, above the name. */
 .preview-ico {
   width: 40px;
   height: 40px;
   border: 1px solid var(--border);
+  border-radius: var(--r);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1941,29 +2116,45 @@ if (import.meta.env.DEV) {
 .preview-caps li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); line-height: 1.4; }
 .preview-caps :deep(.ui-icon) { width: 15px; height: 15px; color: var(--orange); flex-shrink: 0; margin-top: 1px; }
 
-/* Tool chips: square border */
+/* Tool chips: mono capsules on a surface step. */
 .preview-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .preview-tool {
   border: 1px solid var(--border);
-  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  padding: 5px 11px;
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font-mono);
   color: var(--text);
-  background: var(--bg);
+  background: var(--surface);
 }
 
-/* Badges in preview - square per design (no border-radius) */
+/* Badges in preview: capsule caps (same recipe as the agent library). */
 .bdg {
   font-size: 9px;
   letter-spacing: 0.06em;
-  padding: 2px 8px;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
   font-weight: var(--fw-heavy);
   text-transform: uppercase;
 }
 .bdg.default { background: var(--orange-soft-dark); color: var(--orange-text); }
 .bdg.new { background: var(--orange); color: #fff; }
 .bdg.beta { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+
+/* Motion is decoration: reduced-motion users get every state, no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-head,
+  .admin-panel > *,
+  .q-apply,
+  .bench-vd { animation: none; }
+  .q-mini-fill { transition: none; }
+  .inspect-link:hover,
+  .inspect-link:active,
+  .pick-row:hover,
+  .exposed-row:hover,
+  .icon-opt:hover { transform: none; }
+}
 
 @media (max-width: 760px) {
   .kpi-grid { grid-template-columns: 1fr; }

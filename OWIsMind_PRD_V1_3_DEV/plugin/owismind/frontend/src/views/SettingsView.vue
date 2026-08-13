@@ -98,7 +98,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   <PageShell wide>
     <!-- Custom header: eyebrow + h1 + orange title-bar on left; theme/lang controls on right -->
     <template #header>
-      <div class="header-row">
+      <div class="header-row u-rise">
         <div class="header-left">
           <p class="set-eyebrow">{{ t('set.eyebrow') }}</p>
           <h1 class="set-h1">{{ t('set.title') }}</h1>
@@ -146,7 +146,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
     </template>
 
     <!-- Top grid: profile (real) + budget (real) -->
-    <div class="set-top-grid">
+    <div class="set-top-grid u-rise">
       <!-- Profile card -->
       <SettingCard>
         <div class="card-label-row">
@@ -225,7 +225,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
     </div>
 
     <!-- Agent-context window preference (real, persisted in the ui store) -->
-    <SettingCard class="set-context-card">
+    <SettingCard class="set-context-card u-rise">
       <div class="block-title">{{ t('set.context') }}</div>
       <div class="ctx-row">
         <div class="ctx-text">
@@ -247,7 +247,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
     </SettingCard>
 
     <!-- Usage history: 4-up stat tiles separated by 1px right-borders -->
-    <SettingCard class="set-usage-card">
+    <SettingCard class="set-usage-card u-rise">
       <div class="block-title">{{ t('set.usage') }}</div>
       <div v-if="!usage" class="bud-loading muted">{{ t('set.budget.loading') }}</div>
       <div v-else class="stat-grid">
@@ -323,26 +323,31 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   flex-wrap: wrap;
 }
 
-/* Segmented control: 1px border box, active = near-black bg + inverted text */
+/* Segmented control: pill track, hairline frame, active segment = ink capsule.
+   The track holds the geometry; each segment rounds to match its own end. */
 .seg {
   display: flex;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  padding: 3px;
+  gap: 2px;
 }
 
 .seg button {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 16px;
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-2);
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
-.seg button + button {
-  border-left: 1px solid var(--border-strong);
-}
+.seg button:hover:not(.on) { background: var(--surface-hover); color: var(--text); }
+.seg button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
 
 .seg button :deep(.ui-icon) {
   width: 15px;
@@ -360,10 +365,15 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-strong);
-  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 9px 16px;
   background: var(--bg);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
+
+.lang-wrap:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.lang-wrap:focus-within { border-color: var(--text-3); box-shadow: var(--elev-1); }
 
 .lang-flag-chip {
   font-size: 13px;
@@ -399,21 +409,25 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   height: 14px;
 }
 
-/* === Layout grids === */
+/* === Layout grids ===
+   Each block rises a beat after the one above it (staggered page entrance). */
 .set-top-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--s-4);
   margin-bottom: var(--s-4);
+  animation-delay: 60ms;
 }
 
 .set-context-card {
   display: block;
   margin-bottom: var(--s-4);
+  animation-delay: 120ms;
 }
 
 .set-usage-card {
   display: block;
+  animation-delay: 180ms;
 }
 
 /* === Card internals: label rows, profile, budget === */
@@ -421,8 +435,8 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
 /* Uppercase 11px/800 card label */
 .card-lbl {
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin: 0;
@@ -476,16 +490,19 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   color: var(--text);
 }
 
-/* id-pill: 1px border, flat, lock icon + "Dataiku" label + mono uid */
+/* id-pill: hairline capsule, lock icon + "Dataiku" label + mono uid */
 .id-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--border-strong);
-  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  padding: 5px 12px;
   font-size: 12px;
   color: var(--text-2);
 }
+:global(body[data-theme="dark"] .id-pill) { border-color: var(--border-strong); }
 
 .id-pill :deep(.ui-icon) {
   width: 12px;
@@ -503,7 +520,7 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   color: var(--text);
 }
 
-/* Square chips with orange accent border + accent text */
+/* Pill chips with an orange accent border + accent text */
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -511,18 +528,19 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
 }
 
 .chip {
-  border: 1px solid var(--border-strong);
-  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  background: var(--bg);
-  /* border-radius: 0 is the default (no border-radius = square) */
+  background: var(--surface);
 }
 
 .chip.accent {
   border-color: var(--orange);
   color: var(--orange-text);
+  background: var(--bg);
 }
 
 /* Disabled "customize profile" button */
@@ -530,12 +548,13 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 13px;
-  border: 1px solid var(--border-strong);
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
   font-size: 12px;
   font-weight: 700;
   color: var(--text-2);
-  background: var(--bg);
+  background: var(--surface);
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -550,10 +569,11 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   background: var(--orange);
   color: #fff;
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  padding: 2px 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
   margin-left: 4px;
   vertical-align: middle;
 }
@@ -651,7 +671,8 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   gap: 7px;
   margin: 8px 0 0;
   font-size: var(--fs-xs);
-  padding: 7px 10px;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
 }
 
 .bud-flag :deep(.ui-icon) {
@@ -682,8 +703,8 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
 
 .ml {
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
 }
@@ -699,8 +720,8 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
 /* --- Context preferences row --- */
 .block-title {
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin: 0 0 16px;
@@ -734,9 +755,14 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
   position: relative;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
+
+.ctx-select-wrap:hover { border-color: var(--border-strong); }
+.ctx-select-wrap:focus-within { border-color: var(--text-3); box-shadow: var(--elev-1); }
 
 .ctx-select {
   appearance: none;
@@ -790,8 +816,8 @@ const currentLocale = computed(() => AVAILABLE_LOCALES.find(l => l.id === ui.lan
 /* Uppercase 11px/800 stat label */
 .sl {
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
   margin-bottom: 10px;

@@ -65,6 +65,8 @@
   --r-sm: 6px;
   --r: 10px;
   --r-lg: 12px;
+  /* Premium cards (prompt bar, floating popovers) - user decision 2026-08-13. */
+  --r-xl: 18px;
   --r-pill: 100px;
 
   /* Small square radius for icon chips (the orange logo is a square). */
@@ -80,6 +82,10 @@
   /* --- Motion --- */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Exit curve: leaves accelerate away (entrances use --ease-out). */
+  --ease-in: cubic-bezier(0.4, 0, 0.7, 0.2);
+  /* Exit duration: leaving must feel snappier than arriving. */
+  --dur-fast: 130ms;
   --dur: 200ms;
   --dur-slow: 380ms;
 
@@ -102,12 +108,18 @@ body[data-theme="light"] {
   --surface: #fafafa;
   --surface-2: #f5f5f5;
   --surface-hover: #f0f0f0;
+  /* Pressed / strong-hover step (one step past --surface-hover, still neutral). */
+  --surface-press: #e8e8e8;
   --border: #ececec;
   --border-strong: #d8d8d8;
   --text: #111111;
   --text-2: #5e5e5e;
   --text-3: #9a9a9a;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  /* Soft layered elevation (premium cards) - user decision 2026-08-13. Two levels:
+     resting card / lifted (hover, focus). Deliberately diffuse, never a hard glow. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.10);
 
   --orange-soft-dark: var(--orange-soft);
   --orange-on-dark: var(--orange-deep);
@@ -116,18 +128,23 @@ body[data-theme="light"] {
   /* Soft status tints. */
   --success-soft: rgba(34, 197, 94, 0.10);
   --danger-soft: rgba(239, 68, 68, 0.08);
+  --warn-soft: rgba(217, 119, 6, 0.10);
 }
 body[data-theme="dark"] {
   --bg: #0d0d0d;
   --surface: #161616;
   --surface-2: #1c1c1c;
   --surface-hover: #222222;
+  --surface-press: #2a2a2a;
   --border: #232323;
   --border-strong: #2e2e2e;
   --text: #f0f0f0;
   --text-2: #a0a0a0;
   --text-3: #6e6e6e;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  /* Dark elevation: deeper, wider penumbra (a dark canvas needs more contrast). */
+  --elev-1: 0 1px 3px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.45);
+  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.55), 0 16px 40px rgba(0, 0, 0, 0.5);
 
   --orange-soft-dark: rgba(255, 121, 0, 0.10);
   --orange-on-dark: #ffb066;
@@ -140,4 +157,5 @@ body[data-theme="dark"] {
 
   --success-soft: rgba(74, 222, 128, 0.14);
   --danger-soft: rgba(248, 113, 113, 0.13);
+  --warn-soft: rgba(251, 146, 60, 0.14);
 }

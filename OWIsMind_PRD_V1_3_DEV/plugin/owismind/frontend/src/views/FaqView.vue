@@ -35,14 +35,19 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
 
 <template>
   <PageShell :eyebrow="t('faq.eyebrow')" :title="t('faq.title')" :desc="t('faq.desc')">
-    <div class="faq-search-wrap">
+    <div class="faq-search-wrap u-rise">
       <span class="faq-search-ico"><Icon name="search" /></span>
       <input v-model="query" class="faq-search" type="search" :placeholder="t('faq.search')" />
     </div>
 
     <p v-if="!hasResults" class="faq-no-results">{{ t('faq.no_results', [query]) }}</p>
 
-    <div v-for="(g, gi) in filteredGroups" :key="gi" class="faq-group">
+    <div
+      v-for="(g, gi) in filteredGroups"
+      :key="gi"
+      class="faq-group u-rise"
+      :style="{ animationDelay: Math.min(gi * 60, 240) + 'ms' }"
+    >
       <div class="faq-group-title">{{ tr(g.title) }}</div>
       <details v-for="(item, ii) in g.qs" :key="ii" class="faq-item">
         <summary>
@@ -56,13 +61,16 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
 </template>
 
 <style scoped>
+/* Premium pass (user decision 2026-08-13): the pill search leads, each question is
+   its own soft card that lifts under the pointer, and the answer unfolds instead of
+   snapping open. Semantic tokens only - no gradient/blur/color-mix. */
 .faq-search-wrap {
   position: relative;
   margin-bottom: var(--s-6);
 }
 .faq-search-ico {
   position: absolute;
-  left: 14px;
+  left: 18px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-3);
@@ -71,16 +79,22 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
 .faq-search-ico :deep(.ui-icon) { width: 16px; height: 16px; }
 .faq-search {
   width: 100%;
-  padding: 12px 14px 12px 40px;
+  padding: 12px 18px 12px 44px;
   font-size: var(--fs-sm);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   color: var(--text);
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-/* Focus = orange border on the focused element (charte focus recipe). */
-.faq-search:focus { outline: none; border-color: var(--orange); }
+.faq-search:hover { border-color: var(--border-strong); }
+/* Focus lifts the field (elevation + a border step), never an orange ring. */
+.faq-search:focus {
+  outline: none;
+  border-color: var(--text-3);
+  box-shadow: var(--elev-1);
+}
+:global(body[data-theme="dark"] .faq-search) { background: var(--surface); }
 
 .faq-no-results {
   font-size: var(--fs-sm);
@@ -89,19 +103,37 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
 }
 
 .faq-group { margin-bottom: var(--s-7); }
+/* Section eyebrow: shared 11px / 800 / 0.08em micro-label recipe, in orange. */
 .faq-group-title {
   font-size: 11px;
-  color: var(--orange);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  color: var(--orange-text);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   margin-bottom: var(--s-3);
 }
-.faq-item { border-bottom: 1px solid var(--border); }
+
+/* One question = one card: hairline frame, lift on hover, held open with a
+   resting shadow so the expanded answer reads as the focused surface. */
+.faq-item {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  margin-bottom: var(--s-2);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.faq-item:hover { border-color: var(--border-strong); box-shadow: var(--elev-1); }
+.faq-item[open] { border-color: var(--border-strong); box-shadow: var(--elev-1); }
+:global(body[data-theme="dark"] .faq-item) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+:global(body[data-theme="dark"] .faq-item:hover) { border-color: var(--text-3); }
+
 .faq-item summary {
   list-style: none;
   cursor: pointer;
-  padding: var(--s-4) 0;
+  padding: var(--s-4) var(--s-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -110,20 +142,43 @@ const hasResults = computed(() => filteredGroups.value.length > 0)
   font-weight: 500;
   color: var(--text);
   user-select: none;
+  border-radius: var(--r-lg);
 }
 .faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .faq-q { min-width: 0; }
+/* The toggle glyph rotates into a minus and picks up a quiet disc on hover. */
 .faq-ico {
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
   color: var(--text-3);
-  transition: transform var(--dur) var(--ease);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
+.faq-item summary:hover .faq-ico { background: var(--surface-hover); color: var(--text); }
 .faq-ico :deep(.ui-icon) { width: 14px; height: 14px; }
 .faq-item[open] .faq-ico { transform: rotate(45deg); }
 .faq-a {
-  padding: 0 0 var(--s-4);
+  padding: 0 var(--s-5) var(--s-4);
   color: var(--text-2);
   font-size: var(--fs-sm);
   line-height: 1.65;
+}
+/* The answer unfolds on open (native <details> gives no closing hook, so the
+   collapse stays instant - the opening is what the eye follows). */
+.faq-item[open] .faq-a { animation: faq-unfold var(--dur-slow) var(--ease-out) both; }
+@keyframes faq-unfold {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-item[open] .faq-a { animation: none; }
+  /* The glyph still flips to mark the open state; it just gets there instantly. */
+  .faq-ico { transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 }
 </style>

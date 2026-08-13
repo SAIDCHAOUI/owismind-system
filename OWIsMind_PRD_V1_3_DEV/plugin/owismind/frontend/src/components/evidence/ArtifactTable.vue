@@ -3,10 +3,12 @@
 // Renders meta.result.columns / rows as a scrollable table - the complete data the
 // agent received, not the filtered EvidenceTable (which re-queries the source).
 // Cell styling deliberately mirrors EvidenceResult.vue's conventions.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { inferNumericColumns, formatCell } from '../../composables/cellFormat.js'
 import { formatStatNumber } from '../../composables/sourceModel.js'
+import { useScrollHints } from '../../composables/useScrollHints.js'
+import ScrollHints from '../sources/ScrollHints.vue'
 
 const { t, locale } = useI18n()
 
@@ -44,6 +46,12 @@ function rawTitle(row, j) {
   const v = Array.isArray(row) ? row[j] : undefined
   return numericCols.value[j] && v != null ? String(v) : null
 }
+
+// Scroll affordances: a captured result is often wider and longer than its viewport, and
+// nothing else on this proof surface says so.
+const scrollEl = ref(null)
+const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown } =
+  useScrollHints(scrollEl)
 </script>
 
 <template>
@@ -60,7 +68,7 @@ function rawTitle(row, j) {
         <p v-if="description" class="art-desc">{{ description }}</p>
       </div>
       <div class="art-table-box">
-        <div class="art-table-scroll">
+        <div ref="scrollEl" class="art-table-scroll">
           <table>
             <thead>
               <tr>
@@ -79,6 +87,15 @@ function rawTitle(row, j) {
             </tbody>
           </table>
         </div>
+        <ScrollHints
+          :can-left="canLeft"
+          :can-right="canRight"
+          :can-down="canDown"
+          :hidden-right="hiddenRight"
+          @left="stepLeft"
+          @right="stepRight"
+          @down="stepDown"
+        />
       </div>
 
       <!-- Context line: volume of the data on screen (rows AND columns), plus the
@@ -122,7 +139,9 @@ function rawTitle(row, j) {
 
 /* Scrollable viewport - taller than EvidenceResult's mini-table since this IS
    the data browser tab, not a secondary proof section. Square, visible frame. */
+/* position: relative anchors the scroll-affordance overlay on the data viewport. */
 .art-table-box {
+  position: relative;
   border: 1px solid var(--border-strong);
   border-radius: 0;
   overflow: hidden;
@@ -168,7 +187,11 @@ tbody td {
   max-width: 320px;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Row hover: scanning the captured result, the whole line lights up so the eye keeps
+   its place across a wide table. */
+tbody td { transition: background var(--dur) var(--ease); }
 tbody tr:hover td { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) { tbody td { transition: none; } }
 /* Numeric columns: right-aligned, tabular digits - magnitudes line up and read
    at a glance (the values themselves are locale-formatted by formatCell). */
 th.num { text-align: right; }

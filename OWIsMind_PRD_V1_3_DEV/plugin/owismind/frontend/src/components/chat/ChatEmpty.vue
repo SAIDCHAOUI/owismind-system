@@ -72,12 +72,19 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   color: var(--text);
   line-height: 1.1;
 }
+/* The 52x4 title-bar draws itself under the heading on arrival (a wipe from the
+   centre), which is the one deliberate flourish of the empty screen. */
 .empty-bar {
   display: block;
   width: 52px;
   height: 4px;
   background: var(--orange);
   margin: var(--s-4) auto 0;
+  animation: bar-wipe var(--dur-slow) var(--ease-out) 160ms both;
+}
+@keyframes bar-wipe {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
 }
 .empty-sub {
   font-size: var(--fs-md);
@@ -92,21 +99,37 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+  transition: color var(--dur) var(--ease);
 }
-/* Re-open chip (dock dismissed): a small square ghost chip, quiet by design. */
+.empty-sub .lnk:hover { color: var(--orange-text); }
+/* Re-open chip (dock dismissed): a quiet capsule that lifts off the page on hover. */
 .empty-reopen {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: var(--bg);
   color: var(--text-2);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.empty-reopen:hover { border-color: var(--text); color: var(--text); }
+.empty-reopen:hover {
+  border-color: var(--text);
+  color: var(--text);
+  box-shadow: var(--elev-1);
+  transform: translateY(-1px);
+}
+.empty-reopen:active { transform: translateY(0) scale(0.98); }
 .empty-reopen :deep(.ui-icon) { color: var(--orange-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-bar { animation: none; }
+  .empty-reopen { transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+  .empty-reopen:hover,
+  .empty-reopen:active { transform: none; box-shadow: none; }
+}
 </style>

@@ -418,7 +418,9 @@ const PROOF_KEYS = [
   'ev.proof.sources', 'ev.proof.sources.more', 'ev.proof.calc',
   'ev.proof.result', 'ev.proof.result.rows', 'ev.proof.result.missing',
   'ev.proof.result.truncated', 'ev.proof.result.drill',
-  'ev.proof.drill.banner', 'ev.proof.drill.exit', 'ev.proof.explore',
+  // ev.proof.explore was retired 2026-08-13 with the "Explore the source data" label
+  // (the merged Source data tab mirrors the standalone panel, which has no such label).
+  'ev.proof.drill.banner', 'ev.proof.drill.exit',
 ]
 
 test('extra.js covers every frozen ev.exp.* kind and every ev.proof.* key (fr + en)', () => {

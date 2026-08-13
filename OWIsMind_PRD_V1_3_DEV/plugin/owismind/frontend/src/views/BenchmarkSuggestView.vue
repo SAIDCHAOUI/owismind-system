@@ -1002,13 +1002,22 @@ function fmtDate(value) {
 </template>
 
 <style scoped>
-/* Orange charter: square geometry (border-radius 0), 1px borders, flat surfaces, orange
-   a RARE accent. Semantic tokens only; no gradient/blur/glow/color-mix. */
+/* Orange charter, premium pass (2026-08-13): orange stays a RARE accent, semantic
+   tokens only, no gradient / blur / glow / color-mix. Geometry follows the premium
+   rule: STRUCTURAL surfaces (data tables, the page header) stay square, while cards,
+   rows, chips, controls and code blocks take a soft radius plus layered elevation. */
 
 /* --- Section wrapper --- */
 .bench-section {
   margin-bottom: var(--s-7);
 }
+/* Soft staggered entrance for the consultation blocks (hero, sections, footnote):
+   dense analytics land in reading order instead of all at once. */
+.bench-section > * {
+  animation: owi-rise var(--dur-slow) var(--ease-out) both;
+}
+.bench-section > *:nth-child(2) { animation-delay: 60ms; }
+.bench-section > *:nth-child(3) { animation-delay: 120ms; }
 /* The page is full-width (fluid PageShell) so the consultation mirrors the LAB
    results webapp. The suggest forms below stay a readable left-aligned column. */
 .bench-section--narrow {
@@ -1034,12 +1043,14 @@ function fmtDate(value) {
   margin: 4px 0 0;
   display: block;
 }
+/* Section icon tile: softly rounded frame with an orange glyph (shared recipe
+   with the empty-state / agent tiles). */
 .ico-square {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
   display: grid;
   place-items: center;
   background: var(--bg);
@@ -1054,6 +1065,7 @@ function fmtDate(value) {
   gap: var(--s-5) var(--s-7);
   flex-wrap: wrap;
   margin-bottom: var(--s-7);
+  animation: owi-rise var(--dur-slow) var(--ease-out) both;
 }
 .bench-head-main {
   min-width: 260px;
@@ -1062,7 +1074,7 @@ function fmtDate(value) {
   font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--orange);
   margin: 0 0 10px;
 }
@@ -1106,6 +1118,8 @@ function fmtDate(value) {
   position: relative;
   display: flex;
 }
+/* Control surface: soft radius; focus = a BORDER STEP + resting elevation (never
+   an orange ring around the whole field, charter). */
 .bench-select-ctl {
   width: 100%;
   appearance: none;
@@ -1113,19 +1127,21 @@ function fmtDate(value) {
   padding: 11px 34px 11px 14px;
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   font-size: 14px;
   font-family: var(--font-sans);
   color: var(--text);
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .bench-select-ctl:hover {
   border-color: var(--text-3);
+  box-shadow: var(--elev-1);
 }
 .bench-select-ctl:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--text);
+  box-shadow: var(--elev-1);
 }
 .select-arr {
   position: absolute;
@@ -1145,22 +1161,29 @@ function fmtDate(value) {
 .cp-static {
   padding: 11px 14px;
   border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--surface);
   font-size: 14px;
   font-weight: var(--fw-bold);
   color: var(--text);
 }
-/* Empty / not-configured / error, presented as a framed charter card. */
+/* Empty / not-configured / error, presented as a quiet framed card. */
 .consult-card-state {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 16px 18px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   font-size: var(--fs-sm);
   color: var(--text-2);
   margin-bottom: var(--s-5);
+}
+:global(body[data-theme="dark"] .consult-card-state) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .consult-card-state :deep(.ui-icon) {
   width: 18px;
@@ -1184,9 +1207,11 @@ function fmtDate(value) {
   flex-direction: column;
   gap: var(--s-3);
 }
+/* The skeleton mirrors the shape it stands in for: same radius as the real cards. */
 .sk-box {
   background: var(--surface-2);
   border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   animation: sk-pulse 1.2s ease-in-out infinite;
 }
 .sk-row {
@@ -1212,7 +1237,7 @@ function fmtDate(value) {
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   font-size: var(--fs-sm);
   color: var(--text-2);
@@ -1246,16 +1271,25 @@ function fmtDate(value) {
 }
 
 /* --- Hero band: donut + verdict + compact stat column in ONE card --- */
+/* The hero is the page's headline card: KPI recipe (square, 3px orange top rule),
+   resting elevation, one surface step in dark. */
 .hero {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(230px, 300px);
   gap: var(--s-6);
   align-items: center;
   padding: var(--s-5) var(--s-6);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-top: 3px solid var(--orange);
+  border-radius: 0;
   background: var(--bg);
+  box-shadow: var(--elev-1);
   margin-bottom: var(--s-6);
+}
+:global(body[data-theme="dark"] .hero) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  border-top-color: var(--orange);
 }
 .donut-wrap {
   position: relative;
@@ -1315,12 +1349,15 @@ function fmtDate(value) {
   line-height: 1.2;
   margin: 0 0 var(--s-4);
 }
+/* Confidence verdict: a soft status capsule (tint carries the state, the square
+   swatch keeps the accent crisp). */
 .verdict {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   border: 1.5px solid;
-  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
   font-size: 12px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.06em;
@@ -1332,6 +1369,7 @@ function fmtDate(value) {
 }
 .verdict.good {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .verdict.good .sq {
@@ -1339,6 +1377,7 @@ function fmtDate(value) {
 }
 .verdict.mid {
   border-color: var(--orange);
+  background: var(--orange-soft-dark);
   color: var(--orange-text);
 }
 .verdict.mid .sq {
@@ -1346,6 +1385,7 @@ function fmtDate(value) {
 }
 .verdict.bad {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .verdict.bad .sq {
@@ -1353,6 +1393,7 @@ function fmtDate(value) {
 }
 .verdict.plaus {
   border-color: var(--text-3);
+  background: var(--surface-2);
   color: var(--text-2);
 }
 .verdict.plaus .sq {
@@ -1407,9 +1448,20 @@ function fmtDate(value) {
 
 /* --- Configuration performance cards --- */
 .cfg-card {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   padding: var(--s-5) var(--s-6);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.cfg-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--elev-2);
+}
+:global(body[data-theme="dark"] .cfg-card) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .cfg-card + .cfg-card {
   margin-top: var(--s-3);
@@ -1437,7 +1489,9 @@ function fmtDate(value) {
   align-items: center;
   gap: 7px;
   border: 1.5px solid var(--border-strong);
-  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  padding: 3px 11px;
   font-size: 11px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.05em;
@@ -1451,6 +1505,7 @@ function fmtDate(value) {
 }
 .mode-badge.mode-smart {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .mode-badge.mode-smart .dot {
@@ -1458,6 +1513,7 @@ function fmtDate(value) {
 }
 .mode-badge.mode-pro {
   border-color: var(--orange);
+  background: var(--orange-soft-dark);
   color: var(--orange-text);
 }
 .mode-badge.mode-pro .dot {
@@ -1465,6 +1521,7 @@ function fmtDate(value) {
 }
 .mode-badge.mode-claude {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .mode-badge.mode-claude .dot {
@@ -1491,6 +1548,8 @@ function fmtDate(value) {
   width: 110px;
   flex: 0 0 110px;
 }
+/* Accuracy meter: a square bar (structural surface); the fill grows into place when the
+   figure changes (switching benchmark / agent), never on every repaint. */
 .meter {
   flex: 1;
   height: 12px;
@@ -1501,6 +1560,7 @@ function fmtDate(value) {
   display: block;
   height: 100%;
   background: var(--orange);
+  transition: width var(--dur-slow) var(--ease-out);
 }
 .meter-val {
   font-family: var(--font-mono);
@@ -1521,8 +1581,15 @@ function fmtDate(value) {
 }
 .submetric {
   border: 1px solid var(--border);
+  border-radius: var(--r);
   background: var(--surface);
   padding: 12px 14px;
+}
+/* Dark: the card itself stepped up, so the sub-metrics recess one step below it
+   (same relationship as light, where a --surface tile sits inside a --bg card). */
+:global(body[data-theme="dark"] .submetric) {
+  background: var(--bg);
+  border-color: var(--border-strong);
 }
 .submetric .sl {
   font-size: 10px;
@@ -1544,8 +1611,15 @@ function fmtDate(value) {
 
 /* --- Topic (accuracy by category) --- */
 .topic {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
   background: var(--bg);
+  box-shadow: var(--elev-1);
+}
+:global(body[data-theme="dark"] .topic) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .topic-h {
   font-size: 11px;
@@ -1562,6 +1636,11 @@ function fmtDate(value) {
   gap: var(--s-4);
   padding: 13px var(--s-5);
   border-bottom: 1px solid var(--border);
+  transition: background var(--dur) var(--ease);
+}
+/* Soft row hover: which topic the eye is on stays unambiguous across the width. */
+.topic-row:hover {
+  background: var(--surface-hover);
 }
 .topic-row:last-child {
   border-bottom: none;
@@ -1603,13 +1682,22 @@ function fmtDate(value) {
   flex-shrink: 0;
   color: var(--text-3);
 }
-/* Question list: framed card-lines, left rail accent by effective verdict. */
+/* Question list: framed card-lines, left rail accent by effective verdict. The
+   frame is softly rounded and clips its rows (overflow), so the first / last row
+   hover follows the corner instead of squaring it off. */
 .qlist {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
   background: var(--bg);
+  box-shadow: var(--elev-1);
+}
+:global(body[data-theme="dark"] .qlist) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .qitem {
   border-bottom: 1px solid var(--border);
@@ -1642,6 +1730,12 @@ function fmtDate(value) {
 .qhead:hover {
   background: var(--surface-hover);
 }
+/* Expand affordance: the chevron inks in and nudges down on hover, so the row
+   reads as openable before it is clicked. */
+.qhead:hover .qchev {
+  color: var(--text);
+  transform: translateY(1px);
+}
 .qmain {
   flex: 1;
   min-width: min(240px, 100%);
@@ -1670,8 +1764,10 @@ function fmtDate(value) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
   font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.04em;
@@ -1686,14 +1782,17 @@ function fmtDate(value) {
 }
 .chip-mode.mode-smart {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .chip-mode.mode-pro {
   border-color: var(--orange);
+  background: var(--orange-soft-dark);
   color: var(--orange-text);
 }
 .chip-mode.mode-claude {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .qside {
@@ -1702,12 +1801,15 @@ function fmtDate(value) {
   gap: var(--s-4);
   flex-shrink: 0;
 }
+/* Review flag: soft status capsule, same recipe as the verdict / mode pills. */
 .flag-review {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: 3px 10px;
   border: 1.5px solid var(--warn);
+  border-radius: var(--r-pill);
+  background: var(--warn-soft);
   font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.04em;
@@ -1723,18 +1825,21 @@ function fmtDate(value) {
 .qchev {
   color: var(--text-3);
   flex-shrink: 0;
+  transition: color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .qchev :deep(svg),
 .qside :deep(.qchev) {
   width: 16px;
   height: 16px;
 }
+/* Per-question verdict: soft status capsule (shared by the attempt-history pills). */
 .result-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   border: 1.5px solid;
-  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  padding: 4px 11px;
   font-size: 11px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.04em;
@@ -1747,6 +1852,7 @@ function fmtDate(value) {
 }
 .result-ok {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .result-ok .sq {
@@ -1754,6 +1860,7 @@ function fmtDate(value) {
 }
 .result-bad {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .result-bad .sq {
@@ -1761,6 +1868,7 @@ function fmtDate(value) {
 }
 .result-plaus {
   border-color: var(--text-3);
+  background: var(--surface-2);
   color: var(--text-2);
 }
 .result-plaus .sq {
@@ -1788,6 +1896,8 @@ function fmtDate(value) {
 }
 
 /* --- Expanded detail panel (meta banner + answers + tabs + override) --- */
+/* The panel RISES open (opacity + 8px) so the expansion reads as one motion
+   instead of a jump; reduced motion gets the same panel, instantly. */
 .qdetail {
   background: var(--surface);
   padding: var(--s-5);
@@ -1795,6 +1905,10 @@ function fmtDate(value) {
   display: flex;
   flex-direction: column;
   gap: var(--s-5);
+  animation: owi-rise var(--dur) var(--ease-out) both;
+}
+:global(body[data-theme="dark"] .qdetail) {
+  background: var(--bg);
 }
 /* Compact meta banner: dt/dd pairs, always visible above the tabs. */
 .meta-banner {
@@ -1804,7 +1918,12 @@ function fmtDate(value) {
   margin: 0;
   padding: var(--s-4) var(--s-5);
   border: 1px solid var(--border);
+  border-radius: var(--r);
   background: var(--bg);
+}
+:global(body[data-theme="dark"] .meta-banner) {
+  background: var(--surface);
+  border-color: var(--border-strong);
 }
 .meta-banner .mb {
   min-width: 0;
@@ -1862,7 +1981,13 @@ function fmtDate(value) {
 /* --- Detail tabs (shared Tabs.vue styled locally; active = 3px orange rule) --- */
 .detail-tabs {
   border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
   background: var(--bg);
+}
+:global(body[data-theme="dark"] .detail-tabs) {
+  background: var(--surface);
+  border-color: var(--border-strong);
 }
 /* Charter: the active tab carries a 3px orange underline (Tabs.vue defaults to
    1.5px); restyle locally via :deep without touching the shared component. */
@@ -1905,6 +2030,7 @@ function fmtDate(value) {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--text-3);
+  border-radius: var(--r-sm);
   background: var(--surface);
   font-size: var(--fs-sm);
   color: var(--text);
@@ -1916,6 +2042,8 @@ function fmtDate(value) {
 }
 .ev-item {
   border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
   background: var(--surface);
   margin-bottom: var(--s-3);
 }
@@ -1939,16 +2067,19 @@ function fmtDate(value) {
   font-weight: var(--fw-heavy);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 2px 9px;
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
   color: var(--text-2);
 }
 .ev-badge.ev-ok {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .ev-badge.ev-bad {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .ev-rc {
@@ -1962,6 +2093,7 @@ function fmtDate(value) {
   padding: 10px 12px;
   border: none;
   border-left: 3px solid var(--orange);
+  border-radius: var(--r-sm);
   background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -1975,10 +2107,13 @@ function fmtDate(value) {
   padding: 10px 12px;
   border-top: 1px solid var(--border);
 }
+/* Captured result: the wrapper is rounded, the TABLE inside stays square
+   (structural data surface). */
 .ev-twrap {
   max-height: 320px;
   overflow: auto;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
 .ev-table {
   width: 100%;
@@ -1999,6 +2134,12 @@ function fmtDate(value) {
   background: var(--surface);
   border-bottom: 1px solid var(--border-strong);
   white-space: nowrap;
+}
+.ev-table tbody tr {
+  transition: background var(--dur) var(--ease);
+}
+.ev-table tbody tr:hover {
+  background: var(--surface-hover);
 }
 .ev-table td {
   padding: 6px 12px;
@@ -2039,10 +2180,12 @@ function fmtDate(value) {
 /* --- Evolution badge (rendered as a question chip) --- */
 .evo-badge.evo-up {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .evo-badge.evo-down {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .evo-badge.evo-flat {
@@ -2071,6 +2214,7 @@ function fmtDate(value) {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   background: var(--surface);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -2091,10 +2235,11 @@ function fmtDate(value) {
   color: var(--text-3);
 }
 
-/* attempt history mini-table (History tab) */
+/* attempt history mini-table (History tab): rounded frame, square table inside */
 .hist-wrap {
   overflow-x: auto;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
 .hist-table {
   width: 100%;
@@ -2116,6 +2261,12 @@ function fmtDate(value) {
 }
 .hist-table th.num {
   text-align: right;
+}
+.hist-table tbody tr {
+  transition: background var(--dur) var(--ease);
+}
+.hist-table tbody tr:hover {
+  background: var(--surface-hover);
 }
 .hist-table td {
   padding: 9px 12px;
@@ -2147,7 +2298,8 @@ function fmtDate(value) {
   align-items: center;
   gap: 7px;
   border: 1.5px solid;
-  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
   font-size: 10px;
   font-weight: var(--fw-heavy);
   letter-spacing: 0.04em;
@@ -2304,40 +2456,48 @@ function fmtDate(value) {
 .override-comment {
   width: 100%;
   max-width: 520px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-sm);
   margin-bottom: var(--s-3);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.override-comment:hover {
+  border-color: var(--text-3);
 }
 .override-comment:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--text);
+  box-shadow: var(--elev-1);
 }
 .override-actions {
   display: flex;
   gap: var(--s-3);
   flex-wrap: wrap;
 }
+/* Verdict actions: capsules that take a soft tint of the verdict they carry. */
 .ov-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 13px;
+  padding: 7px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: var(--bg);
   color: var(--text-2);
   font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 .ov-btn:hover:not(:disabled) {
-  border-color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--text-3);
   color: var(--text);
 }
 .ov-btn:disabled {
@@ -2350,29 +2510,49 @@ function fmtDate(value) {
 }
 .ov-ok:hover:not(:disabled) {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .ov-no:hover:not(:disabled) {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
 /* --- Suggest accordion --- */
+/* Closed it reads as a card (fully rounded); open, its bottom corners square off
+   into the body so head + body are ONE surface. */
 .accordion-head {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 .accordion-head:hover {
-  border-color: var(--text-3);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  box-shadow: var(--elev-2);
+}
+.accordion-head[aria-expanded="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+:global(body[data-theme="dark"] .accordion-head) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+:global(body[data-theme="dark"] .accordion-head:hover) {
+  background: var(--surface-hover);
 }
 .accordion-text {
   display: flex;
@@ -2384,6 +2564,14 @@ function fmtDate(value) {
 .accordion-chev {
   flex-shrink: 0;
   color: var(--text-3);
+  transition: color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.accordion-head:hover .accordion-chev {
+  color: var(--text);
+  transform: translateY(1px);
+}
+.accordion-head[aria-expanded="true"]:hover .accordion-chev {
+  transform: translateY(-1px);
 }
 .accordion-chev :deep(.ui-icon),
 .accordion-head :deep(.accordion-chev) {
@@ -2391,19 +2579,26 @@ function fmtDate(value) {
   height: 18px;
 }
 .accordion-body {
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
   padding: var(--s-6);
+}
+:global(body[data-theme="dark"] .accordion-body) {
+  border-color: var(--border-strong);
 }
 
 /* --- Suggest cards --- */
 .bench-card {
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   padding: var(--s-6);
   margin-bottom: var(--s-6);
+}
+:global(body[data-theme="dark"] .bench-card) {
+  border-color: var(--border-strong);
 }
 .bench-card-head {
   display: flex;
@@ -2447,19 +2642,23 @@ function fmtDate(value) {
 }
 .bench-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-base);
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
   resize: vertical;
+}
+.bench-input:hover {
+  border-color: var(--text-3);
 }
 .bench-input:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--text);
+  box-shadow: var(--elev-1);
 }
 .bench-input::placeholder {
   color: var(--text-3);
@@ -2472,7 +2671,7 @@ function fmtDate(value) {
 .bench-readonly {
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   font-size: var(--fs-base);
@@ -2489,23 +2688,27 @@ function fmtDate(value) {
   gap: var(--s-3);
   flex-wrap: wrap;
 }
+/* Yes / no choice: capsules; the picked one fills with its verdict tint. */
 .verdict-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: var(--bg);
   color: var(--text-2);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold, 600);
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .verdict-btn:hover {
-  border-color: var(--text);
+  border-color: var(--text-3);
+  background: var(--surface-hover);
   color: var(--text);
+  box-shadow: var(--elev-1);
 }
 .verdict-btn :deep(.ui-icon) {
   width: 15px;
@@ -2513,10 +2716,12 @@ function fmtDate(value) {
 }
 .verdict-btn.on.ok {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .verdict-btn.on.no {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 .bench-help {
@@ -2547,11 +2752,18 @@ function fmtDate(value) {
   color: var(--text-3);
   margin: 0;
 }
+/* My-suggestions table: structural, square frame; soft row hover only. */
 .bench-table {
   width: 100%;
   border-collapse: collapse;
   border: 1px solid var(--border-strong);
   font-size: var(--fs-sm);
+}
+.bench-table tbody tr {
+  transition: background var(--dur) var(--ease);
+}
+.bench-table tbody tr:hover {
+  background: var(--surface-hover);
 }
 .bench-table th,
 .bench-table td {
@@ -2581,25 +2793,45 @@ function fmtDate(value) {
 }
 .status-pill {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 0;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   font-weight: 700;
   border: 1px solid var(--border-strong);
   color: var(--text-2);
-  background: var(--surface);
+  background: var(--surface-2);
 }
 .status-pill.accepted {
   border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }
 .status-pill.rejected {
   border-color: var(--danger);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
 .mono {
   font-family: var(--font-mono);
+}
+
+/* Motion is decoration: reduced-motion users keep every state, without movement. */
+@media (prefers-reduced-motion: reduce) {
+  .bench-head,
+  .bench-section > *,
+  .qdetail {
+    animation: none;
+  }
+  .meter i,
+  .donut-fill {
+    transition: none;
+  }
+  .qhead:hover .qchev,
+  .accordion-head:hover .accordion-chev,
+  .accordion-head[aria-expanded="true"]:hover .accordion-chev {
+    transform: none;
+  }
 }
 
 @media (max-width: 760px) {

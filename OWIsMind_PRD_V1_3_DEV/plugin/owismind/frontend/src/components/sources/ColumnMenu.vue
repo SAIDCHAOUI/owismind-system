@@ -117,8 +117,10 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
 </template>
 
 <style scoped>
-/* Square, flat card on a 1px border with the minimal shadow (charte Orange: no blur,
-   no gradient, no glow). Fixed so it anchors to the trigger coordinates. */
+/* Floating menu (premium 2026-08-13): rounded --r-lg + layered --elev-2, still flat
+   inside (no blur, no gradient, no glow). Fixed so it anchors to the trigger. It
+   drops in from the trigger edge - a short fade + rise + scale that reads as
+   "this card came from the control you just clicked". */
 .col-menu {
   position: fixed;
   z-index: var(--z-menu);
@@ -126,14 +128,23 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
   max-width: calc(100vw - 16px);
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 0;
-  box-shadow: var(--shadow);
-  padding: var(--s-1) 0;
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
+  padding: var(--s-2) 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  transform-origin: top left;
+  animation: col-menu-in var(--dur) var(--ease-out) both;
+}
+@keyframes col-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .col-menu { animation: none; }
 }
 .col-menu-head {
-  padding: 6px 12px;
+  padding: 4px 14px 8px;
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -149,16 +160,17 @@ watch(() => [props.x, props.y], () => nextTick(clampToViewport))
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 7px 12px;
+  width: calc(100% - 2 * var(--s-2));
+  margin: 0 var(--s-2);
+  padding: 7px 10px;
   background: transparent;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   color: var(--text);
   font-size: var(--fs-sm);
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .col-menu-item:hover:not(:disabled) { background: var(--surface-hover); }
 .col-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }

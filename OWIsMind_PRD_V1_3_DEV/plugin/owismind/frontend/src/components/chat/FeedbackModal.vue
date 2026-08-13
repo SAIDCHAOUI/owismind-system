@@ -96,15 +96,30 @@ function submit() {
 .fb-eyebrow { font-size: var(--fs-xs); color: var(--text-3); margin: 0 0 var(--s-3); }
 .fb-label { font-size: var(--fs-sm); color: var(--text-2); margin: var(--s-3) 0 var(--s-2); }
 .fb-reasons { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+/* Selectable capsules: they firm up and lift on hover, press down on click. */
 .fb-chip {
-  padding: 6px 12px; border: 1px solid var(--border); border-radius: 0;
-  font-size: var(--fs-sm); color: var(--text-2); transition: all var(--dur) var(--ease);
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--r-pill);
+  font-size: var(--fs-sm); color: var(--text-2);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.fb-chip:hover { border-color: var(--orange); color: var(--text); }
-.fb-chip.on { background: var(--orange-soft-dark); border-color: var(--orange); color: var(--orange); font-weight: 500; }
+.fb-chip:hover { border-color: var(--orange); color: var(--text); transform: translateY(-1px); }
+.fb-chip:active { transform: translateY(0) scale(0.97); }
+/* --orange-text, NOT --orange: raw #ff7900 on the pale tint misses AA for a 13px
+   label in light theme. */
+.fb-chip.on { background: var(--orange-soft-dark); border-color: var(--orange); color: var(--orange-text); font-weight: 500; }
 .fb-comment {
   width: 100%; margin-top: var(--s-2); padding: var(--s-3); border: 1px solid var(--border);
-  border-radius: 0; background: var(--surface); color: var(--text);
+  border-radius: var(--r-sm); background: var(--surface); color: var(--text);
   font-family: inherit; font-size: var(--fs-sm); resize: vertical;
+  caret-color: var(--orange);
+  transition: border-color var(--dur) var(--ease);
+}
+/* Field focus (charter recipe): ink border plus a soft lift, never an orange ring. */
+.fb-comment:focus { outline: none; border-color: var(--text-3); box-shadow: var(--elev-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-chip { transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+  .fb-chip:hover, .fb-chip:active { transform: none; }
 }
 </style>

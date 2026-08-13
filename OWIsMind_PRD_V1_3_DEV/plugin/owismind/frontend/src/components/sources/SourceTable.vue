@@ -12,10 +12,28 @@ import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
 import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
 import { isIdentifierColumn, formatCell } from '../../composables/cellFormat.js'
+import { useScrollHints } from '../../composables/useScrollHints.js'
 import { track } from '../../services/track.js'
 import CellActionPopover from './CellActionPopover.vue'
 import ColumnMenu from './ColumnMenu.vue'
+import ScrollHints from './ScrollHints.vue'
 import { DataLoader, Icon } from '../ui'
+
+// `preview` = the compact READ-ONLY copy the Analyze workspace shows next to (or under)
+// its figures, so the user always sees the rows those figures are computed on: capped
+// height, static headers, no cell actions, no lazy append - every one of those would fire
+// a query or a filter change from a surface meant to answer one question only: "what am I
+// analyzing?". The workspace feeds it its OWN bounded window (`rows`, refetched on every
+// scope change by the store) and its own column ORDER (`columns`, analyzed columns first)
+// with `pinned` marking them; left null, everything comes from the store exactly as the
+// browsing table has always read it.
+const props = defineProps({
+  preview: { type: Boolean, default: false },
+  rows: { type: Array, default: null },
+  columns: { type: Array, default: null },
+  pinned: { type: Array, default: null },
+  loading: { type: Boolean, default: false },
+})
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
 // reveal COLS_MORE more each time the horizontal sentinel scrolls into view. The
@@ -41,10 +59,37 @@ const { push } = useToasts()
 function fmtStat(v) {
   return formatStatNumber(v, locale.value)
 }
-const allColumns = computed(() => sources.columns || [])
+// Column set + ORDER: the host's when it provides one (the workspace preview pins the
+// analyzed columns first), the store's otherwise.
+const allColumns = computed(() => props.columns || sources.columns || [])
 const colCount = ref(COLS_INITIAL)
 const columns = computed(() => allColumns.value.slice(0, colCount.value))
 const colsWindowed = computed(() => allColumns.value.length > columns.value.length)
+// Row window + busy flag: the host's bounded preview window, or the store's accumulating
+// browsing window.
+const tableRows = computed(() => (props.rows ? props.rows : sources.rows))
+const tableBusy = computed(() => (props.preview ? props.loading : sources.rowsLoading))
+// The analyzed columns, marked (display only - no reordering happens here, the host
+// already ordered them).
+const pinnedSet = computed(() => new Set(props.pinned || []))
+
+// The columns the Analyze workspace currently measures: the sigma in a numeric header
+// lights up for them, so the browsing table shows what is already being computed.
+const measuredColumns = computed(() => {
+  const set = new Set()
+  for (const m of sources.workspaceMeasures || []) {
+    if (m && m.column) set.add(m.column)
+  }
+  return set
+})
+// Sigma click: measure this column (its SUM, the most asked figure) and switch to the
+// Analyze workspace, where the result appears. A column already measured is left alone -
+// addWorkspaceMeasure refuses the duplicate - and the view still switches, so the click
+// always lands somewhere visible.
+function measureColumn(name) {
+  sources.addWorkspaceMeasure('sum', name)
+  sources.setAnalyzeOpen(true)
+}
 
 // Reset the visible window whenever the dataset's columns change (new source). A column
 // change means a new dataset, so any open header menu (anchored to a stale header) closes.
@@ -83,6 +128,7 @@ function pickable(row, name) {
   return raw != null && String(raw).trim() !== ''
 }
 function onCellClick(event, row, name) {
+  if (props.preview) return // read-only preview: a cell is data to read, not a control
   if (!pickable(row, name)) return
   const value = String(row[name])
   popover.value = {
@@ -258,6 +304,12 @@ onBeforeUnmount(() => {
   teardownColObserver()
   if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
 })
+
+// Scroll affordances: how much of the table is still out of sight (columns left/right,
+// rows below) and the scroll steps the pills trigger. The column sentinel is excluded
+// from the count - it is a 1px observer target, not a column.
+const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown } =
+  useScrollHints(scrollEl, { headerSelector: 'thead th:not(.col-sentinel)' })
 </script>
 
 <template>
@@ -265,31 +317,46 @@ onBeforeUnmount(() => {
        first-load skeleton must keep full opacity or its shimmer washes out. The
        DataLoader overlay rides the same condition (delayed fade-in inside it keeps
        fast refreshes flicker-free). -->
-  <div class="src-table" :class="{ busy: sources.rowsLoading && sources.rows.length > 0 }">
-    <DataLoader v-if="sources.rowsLoading && sources.rows.length > 0" :label="t('src.crunch')" />
+  <div class="src-table" :class="{ busy: tableBusy && tableRows.length > 0, 'is-preview': preview }">
+    <DataLoader v-if="tableBusy && tableRows.length > 0" :label="t('src.crunch')" />
+    <!-- The scroll viewport and its affordance overlay share ONE positioning context, so
+         the pills sit on the data edges and not on the footer bars below. -->
+    <div class="src-table-view">
     <div ref="scrollEl" class="src-table-scroll">
       <table>
         <thead>
           <tr>
-            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name] }">
+            <th
+              v-for="c in columns"
+              :key="c.name"
+              :class="{ sorted: !preview && sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name], pinned: pinnedSet.has(c.name) }"
+              :title="pinnedSet.has(c.name) ? t('src.ws.pinned') : null"
+            >
               <div class="th-inner">
+                <!-- Preview: a static label. Sorting would ask the server for a window
+                     the Analyze view deliberately does not re-fetch. -->
+                <span v-if="preview" class="th-btn th-static">
+                  <span class="th-label">{{ c.name }}</span>
+                </span>
+                <template v-else>
                 <button type="button" class="th-btn" @click="sources.setSort(c.name)">
                   <span class="th-label">{{ c.name }}</span>
                   <span v-if="sortDir(c.name)" class="th-sort">
                     <Icon :name="sortDir(c.name) === 'asc' ? 'chevronUp' : 'chevronDown'" />
                   </span>
                 </button>
-                <!-- Sigma: send this numeric column to the Calculate zone (its key
-                     figures over the current filter). Same toggle semantics as before. -->
+                <!-- Sigma: MEASURE this numeric column in the Analyze workspace (its
+                     sum over the current filter) and go there. Active while the column
+                     is one of the measures on screen. -->
                 <button
-                  v-if="isNumericColType(c.type)"
+                  v-if="numericByName[c.name]"
                   type="button"
                   class="th-sigma"
-                  :class="{ active: sources.calcColumn === c.name }"
-                  :title="t('src.stats.toggle')"
-                  :aria-label="t('src.stats.toggle')"
-                  :aria-pressed="sources.calcColumn === c.name"
-                  @click.stop="sources.setCalcColumn(c.name)"
+                  :class="{ active: measuredColumns.has(c.name) }"
+                  :title="t('src.ws.measure_col')"
+                  :aria-label="t('src.ws.measure_col')"
+                  :aria-pressed="measuredColumns.has(c.name)"
+                  @click.stop="measureColumn(c.name)"
                 >&#931;</button>
                 <!-- Column menu trigger: 3-state sort + "Filter values...". Revealed on
                      hover/focus, and pinned visible when the column is sorted or filtered. -->
@@ -303,6 +370,7 @@ onBeforeUnmount(() => {
                 >
                   <Icon name="chevronDown" />
                 </button>
+                </template>
               </div>
             </th>
             <!-- Horizontal column sentinel: reveals the next batch of columns when
@@ -312,7 +380,7 @@ onBeforeUnmount(() => {
         </thead>
         <!-- First load (no rows yet): pulse skeleton rows instead of a blank area.
              Refreshes with rows on screen keep the lighter `.busy` opacity dim. -->
-        <tbody v-if="sources.rowsLoading && !sources.rows.length" aria-hidden="true">
+        <tbody v-if="tableBusy && !tableRows.length" aria-hidden="true">
           <tr v-for="n in 12" :key="'sk-' + n" class="sk-row">
             <td v-for="c in columns" :key="c.name"><span class="sk-cell" /></td>
           </tr>
@@ -320,7 +388,7 @@ onBeforeUnmount(() => {
         <tbody v-else>
           <!-- Stable key on the accumulated index: rows only ever APPEND, so an
                index key never re-keys an already-rendered row. -->
-          <tr v-for="(row, i) in sources.rows" :key="i">
+          <tr v-for="(row, i) in tableRows" :key="i">
             <td
               v-for="c in columns"
               :key="c.name"
@@ -331,35 +399,50 @@ onBeforeUnmount(() => {
         </tbody>
       </table>
       <!-- Infinite-scroll sentinel: present only while there ARE rows and the server
-           still has more (and the client cap is not hit). -->
+           still has more (and the client cap is not hit). Never in the preview: it
+           shows the window already loaded, it does not go asking for more. -->
       <div
-        v-if="sources.rows.length && sources.hasMore"
+        v-if="!preview && tableRows.length && sources.hasMore"
         ref="sentinelEl"
         class="src-table-sentinel"
         aria-hidden="true"
       >
-        <span v-if="sources.rowsLoading" class="src-more-spin">{{ t('src.loadingMore') }}</span>
+        <span v-if="tableBusy" class="src-more-spin">{{ t('src.loadingMore') }}</span>
       </div>
-      <div v-if="!sources.rows.length && !sources.rowsLoading" class="src-table-empty">
+      <div v-if="!tableRows.length && !tableBusy" class="src-table-empty">
         {{ t('src.empty') }}
       </div>
     </div>
-    <!-- Recoverable rows-level error: the search + filters above stay usable. -->
-    <div v-if="sources.rowsError" class="src-table-error">
+      <ScrollHints
+        :can-left="canLeft"
+        :can-right="canRight"
+        :can-down="canDown"
+        :hidden-right="hiddenRight"
+        @left="stepLeft"
+        @right="stepRight"
+        @down="stepDown"
+      />
+    </div>
+    <!-- Recoverable rows-level error of the BROWSING window: the search + filters above
+         stay usable. The preview has its own window (and its own error state): a browsing
+         failure must not surface under rows the preview loaded fine. -->
+    <div v-if="!preview && sources.rowsError" class="src-table-error">
       <span>{{ t('src.error') }}</span>
       <button @click="sources.refreshRows()">{{ t('src.retry') }}</button>
     </div>
     <!-- Footer: how many rows are loaded, how many columns are shown, and whether
-         more rows remain (lazy). -->
-    <div class="src-table-foot">
-      <span class="mono page">{{ t('src.loaded', [sources.rows.length]) }}</span>
+         more rows remain (lazy). The preview drops it: its own header already states
+         how many rows are shown out of how many the filter selects. -->
+    <div v-if="!preview" class="src-table-foot">
+      <span class="mono page">{{ t('src.loaded', [tableRows.length]) }}</span>
       <span class="foot-spacer" />
       <span v-if="colsWindowed" class="cols-hint">{{ t('src.cols', [columns.length, allColumns.length]) }}</span>
-      <span v-if="sources.hasMore" class="more-hint">{{ t('src.more') }}</span>
+      <span v-if="!preview && sources.hasMore" class="more-hint">{{ t('src.more') }}</span>
     </div>
     <!-- Totals bar (Excel-like status strip): the DB-EXACT row count over the current
-         filter. The per-column key figures now live in the Calculate zone at the top. -->
-    <div class="src-totals">
+         filter. The per-column key figures now live in the Calculate zone at the top.
+         The preview drops it: the Analyze view already states that count above it. -->
+    <div v-if="!preview" class="src-totals">
       <span class="src-totals-rows mono">
         <template v-if="sources.totalLoading && sources.totalCount == null">
           <span class="dots" aria-hidden="true"><i /><i /><i /></span>
@@ -409,12 +492,21 @@ onBeforeUnmount(() => {
 .src-table-scroll, .src-table-foot { transition: opacity var(--dur) var(--ease); }
 .src-table.busy .src-table-scroll, .src-table.busy .src-table-foot { opacity: 0.55; }
 .src-table.busy tbody { pointer-events: none; }
+/* Scroll viewport + its affordance overlay: ONE positioning context, hugging the data
+   only (the footer bars sit outside it, so the pills stay centered on the rows). */
+.src-table-view { position: relative; display: flex; flex-direction: column; min-height: 0; }
 /* BOTH axes scroll: vertical for rows (~20 rows), horizontal for ALL columns. */
 .src-table-scroll {
   overflow: auto;
   max-height: min(60vh, 480px);
   min-height: 220px;
 }
+/* Preview (Analyze view): a compact strip of the very rows being analyzed - tall enough
+   to read a handful of lines, short enough to stay a companion to the pivot above. */
+.src-table.is-preview .src-table-scroll { max-height: 220px; min-height: 0; }
+/* A static header still reads as a header (uppercase-free real casing, F25), it just
+   makes no promise of sorting. */
+.th-static { cursor: default; }
 /* separate + spacing 0: with `collapse`, the th border scrolls away from a sticky
    header - paint the line as an inset shadow so it sticks with it. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
@@ -422,8 +514,18 @@ thead th {
   position: sticky; top: 0; z-index: 1; background: var(--surface);
   text-align: left; box-shadow: inset 0 -1px 0 var(--border);
   color: var(--text-2); font-weight: 500; white-space: nowrap; user-select: none;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-thead th:hover { color: var(--text); }
+/* Sortable affordance: the whole header cell lights up under the pointer, so the
+   click target reads before the menu / sigma controls fade in. */
+thead th:hover { color: var(--text); background: var(--surface-hover); }
+/* Preview: nothing in the header is clickable, so nothing in it lights up. */
+.src-table.is-preview thead th:hover { color: var(--text-2); background: var(--surface); }
+/* An ANALYZED column (the grouping, a measured column): ink label over a 2px orange
+   cap - the same "this is what the figures are about" cue as a KPI card's top rule,
+   discreet enough to leave the other columns readable. */
+thead th.pinned { color: var(--text); box-shadow: inset 0 2px 0 var(--orange), inset 0 -1px 0 var(--border); }
+.src-table.is-preview thead th.pinned:hover { color: var(--text); }
 /* Sorted column: same AA-safe orange-text token as .filtered (small text). */
 thead th.sorted { color: var(--orange-text); }
 /* Filtered column: orange text cue (charte: orange text only, no background fill). */
@@ -439,21 +541,24 @@ thead th.num .th-btn { flex: 0 1 auto; text-align: right; }
 }
 .th-sort :deep(.ui-icon) { width: 12px; height: 12px; vertical-align: -2px; }
 /* Sigma affordance in NUMERIC headers only: opens the column's DB stats in the totals
-   bar. Subtle by default, orange text when active. Square, no layout shift. */
+   bar. Subtle by default, orange text when active. Rounded icon button (premium
+   2026-08-13), no layout shift. */
 .th-sigma {
-  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: 0;
+  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: var(--r-pill);
   font-size: 13px; line-height: 1; color: var(--text-3);
   transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.th-sigma:hover { color: var(--text); background: var(--surface-hover); }
+.th-sigma:hover { color: var(--text); background: var(--surface-2); }
 .th-sigma.active { color: var(--orange-text); }
 /* Column-menu trigger: hidden until the header is hovered/focused, pinned visible when
-   the column is sorted or filtered. Square, no layout shift. */
+   the column is sorted or filtered. Rounded icon button, no layout shift. */
 .th-menu {
-  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: 0;
+  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: var(--r-pill);
   color: var(--text-3); opacity: 0;
-  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease),
+    background var(--dur) var(--ease);
 }
+.th-menu:hover { background: var(--surface-2); }
 .th-menu :deep(.ui-icon) { width: 14px; height: 14px; display: block; }
 .th-menu:hover { color: var(--text); }
 thead th:hover .th-menu, thead th:focus-within .th-menu, .th-menu.pinned { opacity: 1; }
@@ -463,11 +568,19 @@ tbody td {
   padding: 7px 12px; border-bottom: 1px solid var(--border);
   color: var(--text); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 260px;
+  transition: background var(--dur) var(--ease);
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Row-level hover: scanning a wide table, the whole line lights up so the eye keeps
+   its place across the horizontal scroll. Two levels - the row on --surface, the
+   hovered CELL one step further, since that is what a click actually picks. */
+tbody tr:hover td { background: var(--surface); }
 /* Non-null cells are pickable: subtle hover cue, no layout shift. */
 tbody td.cell-click { cursor: pointer; }
-tbody td.cell-click:hover { background: var(--surface-hover); }
+tbody tr:hover td.cell-click:hover, tbody td.cell-click:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) {
+  tbody td { transition: none; }
+}
 /* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
 tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* First-load skeleton rows - flat surface with an opacity pulse (no gradient). */
@@ -493,7 +606,7 @@ tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--danger); font-size: var(--fs-sm);
 }
 .src-table-error button {
-  padding: 2px 10px; border-radius: 0; color: var(--text-2);
+  padding: 2px 10px; border-radius: var(--r-pill); color: var(--text-2);
   transition: all var(--dur) var(--ease);
 }
 .src-table-error button:hover { background: var(--surface-hover); color: var(--text); }

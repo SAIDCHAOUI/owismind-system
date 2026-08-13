@@ -19,12 +19,21 @@ defineProps({
 </template>
 
 <style scoped>
-/* Square card: sharp corners, strong border, flat white surface. */
+/* Premium card: soft radius, hairline border, a resting layered shadow. The page
+   reads as a stack of light panels instead of boxed-in rectangles (premium
+   direction, user decision 2026-08-13). */
 .set-card {
   padding: var(--s-5);
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
+}
+/* Dark canvas: a card painted the page color disappears - step it one surface
+   level above the background (same recipe as the prompt card). */
+:global(body[data-theme="dark"] .set-card) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .set-card-head {
   display: flex;
@@ -33,11 +42,11 @@ defineProps({
   gap: var(--s-3);
   margin-bottom: var(--s-4);
 }
-/* Uppercase micro-label: heavier weight, tighter tracking than before. */
+/* Uppercase micro-label: shared 11px / 800 / 0.08em recipe. */
 .set-card-eyebrow {
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--text-2);
 }

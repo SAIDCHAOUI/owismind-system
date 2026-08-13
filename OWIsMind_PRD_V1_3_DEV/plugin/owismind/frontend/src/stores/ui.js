@@ -15,6 +15,7 @@ const THEME_KEY = 'owismind.theme'
 const COLLAPSE_KEY = 'owismind.sidebarCollapsed'
 const SIDEBAR_W_KEY = 'owi.sidebarW' // maquette key
 const EVIDENCE_W_KEY = 'owi.evidenceW'
+const SOURCES_W_KEY = 'owi.sourcesW'
 const CTXMSG_KEY = 'owismind.contextMessages'
 const MODELMODE_KEY = 'owismind.modelMode'
 
@@ -30,6 +31,11 @@ const SIDEBAR_MAX = 420
 const SIDEBAR_DEFAULT = 260
 const EVIDENCE_DEFAULT = 480
 const EVIDENCE_MIN = 360
+// Source Data dock: freely resizable (user ask 2026-08-13). The clamp guarantees a
+// usable chat column at every drag position; the default is the former "ambient
+// third" on a common laptop width.
+const SOURCES_DEFAULT = 430
+const SOURCES_MIN = 340
 
 function readNum(key, fallback) {
   try {
@@ -63,6 +69,8 @@ export const useUiStore = defineStore('ui', () => {
   // Clamped on read too: a stale persisted width (e.g. saved on a wider
   // screen) must not brick the evidence layout on a smaller one.
   const evidenceW = ref(clampEvidence(readNum(EVIDENCE_W_KEY, EVIDENCE_DEFAULT)))
+  // Width of the Source Data dock (rightmost column when open, freely resizable).
+  const sourcesW = ref(clampSources(readNum(SOURCES_W_KEY, SOURCES_DEFAULT)))
   // Language mirrors the active i18n locale (already detected from localStorage at
   // i18n setup). setLang below keeps the two in sync - this store never persists the
   // language itself (setLocale owns the 'owismind.lang' key) to avoid a second system.
@@ -94,6 +102,12 @@ export const useUiStore = defineStore('ui', () => {
     // always stays usable.
     const max = Math.max(EVIDENCE_MIN, (window.innerWidth || 1280) - 520)
     return Math.min(max, Math.max(EVIDENCE_MIN, px))
+  }
+  function clampSources(px) {
+    // Same guarantee for the Source Data dock: whatever the drag position, the
+    // conversation column (rail + prompt) keeps a usable minimum width.
+    const max = Math.max(SOURCES_MIN, (window.innerWidth || 1280) - 560)
+    return Math.min(max, Math.max(SOURCES_MIN, px))
   }
   function persist(key, val) {
     try {
@@ -166,6 +180,10 @@ export const useUiStore = defineStore('ui', () => {
     evidenceW.value = clampEvidence(px)
     persist(EVIDENCE_W_KEY, evidenceW.value)
   }
+  function setSourcesWidth(px) {
+    sourcesW.value = clampSources(px)
+    persist(SOURCES_W_KEY, sourcesW.value)
+  }
 
   return {
     theme,
@@ -175,6 +193,7 @@ export const useUiStore = defineStore('ui', () => {
     sidebarCollapsed,
     sidebarW,
     evidenceW,
+    sourcesW,
     setTheme,
     toggleTheme,
     setLang,
@@ -185,5 +204,6 @@ export const useUiStore = defineStore('ui', () => {
     toggleSidebar,
     setSidebarWidth,
     setEvidenceWidth,
+    setSourcesWidth,
   }
 })

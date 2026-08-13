@@ -83,8 +83,8 @@ function onYearInput(e) {
 </template>
 
 <style scoped>
-/* From / To month fields + a one-click full-year fill. Flat, square, 1px border,
-   orange border on focus (charter). */
+/* From / To month fields + a one-click full-year fill. Flat, 1px border, ink border
+   plus a soft lift on focus (charter). */
 .pop-range-fields { display: flex; flex-direction: column; gap: var(--s-3); }
 .pop-range-months { display: flex; gap: var(--s-2); }
 .pop-range-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
@@ -93,10 +93,13 @@ function onYearInput(e) {
   letter-spacing: 0.06em; font-weight: var(--fw-heavy);
 }
 .pop-range-input {
-  width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 0;
+  width: 100%; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-lg);
   background: var(--bg); color: var(--text); font-size: var(--fs-sm);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.pop-range-input:focus { outline: none; border-color: var(--orange); }
+.pop-range-input:hover { border-color: var(--text-3); }
+.pop-range-input:focus { outline: none; border-color: var(--text-3); box-shadow: var(--elev-1); }
 .pop-range-input::placeholder { color: var(--text-3); }
+@media (prefers-reduced-motion: reduce) { .pop-range-input { transition: none; } }
 .pop-range-year { flex: none; }
 </style>

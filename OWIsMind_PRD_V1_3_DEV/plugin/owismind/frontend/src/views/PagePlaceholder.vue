@@ -22,7 +22,7 @@ const desc = computed(() => (route.meta.desc ? t(route.meta.desc) : ''))
 
 <template>
   <PageShell :eyebrow="eyebrow" :title="title" :desc="desc">
-    <div class="page-placeholder">
+    <div class="page-placeholder u-rise">
       <div class="page-placeholder-bar" />
       <p>{{ t('page.placeholder') }}</p>
     </div>
@@ -30,15 +30,18 @@ const desc = computed(() => (route.meta.desc ? t(route.meta.desc) : ''))
 </template>
 
 <style scoped>
+/* Honest "not built yet" panel: dashed frame (nothing to interact with), soft
+   radius so it belongs to the same family as the real page cards. */
 .page-placeholder {
   margin-top: var(--s-7);
   padding: 28px;
   border: 1px dashed var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text-2);
   font-size: 14.5px;
   line-height: 1.6;
+  animation-delay: 60ms;
 }
 .page-placeholder-bar {
   width: 36px;

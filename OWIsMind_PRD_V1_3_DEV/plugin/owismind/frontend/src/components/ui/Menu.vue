@@ -82,20 +82,23 @@ useClickOutside(wrap, close)
   position: absolute;
   min-width: 220px;
   background: var(--bg);
-  /* Square card, VISIBLE 1px frame, minimal shadow: the strong border does the
-     lifting (charte modal/menu recipe - no soft floating shadows). */
+  /* Floating layer (premium direction): rounded card + soft layered elevation, the
+     1px frame keeps it readable on a same-tone surface. */
   border: 1px solid var(--border-strong);
-  border-radius: 0;
-  box-shadow: var(--shadow);
-  padding: 4px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
+  padding: 6px;
   z-index: var(--z-menu);
   font-family: var(--font-sans);
 }
 .ui-menu.align-right { right: 4px; }
 .ui-menu.align-left { left: 4px; }
-.ui-menu.place-bottom { top: calc(100% + 4px); }
-.ui-menu.place-top { bottom: calc(100% + 4px); }
-/* No dark override needed: --shadow carries its own dark variant (tokens.css). */
+.ui-menu.place-bottom { top: calc(100% + 6px); }
+.ui-menu.place-top { bottom: calc(100% + 6px); }
+/* Dark canvas: a floating panel takes one surface step above the page, otherwise a
+   --bg card on a --bg page reads as a hole. No shadow override: --elev-2 carries
+   its own dark variant (tokens.css). */
+:global(body[data-theme="dark"] .ui-menu) { background: var(--surface-2); }
 
 .ui-menu-item {
   display: grid;
@@ -104,12 +107,12 @@ useClickOutside(wrap, close)
   align-items: center;
   width: 100%;
   padding: 7px 10px;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   font-size: 12.5px;
   color: var(--text);
   background: transparent;
   text-align: left;
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
   font-family: inherit;
 }
 .ui-menu-item:hover:not(:disabled) { background: var(--surface-hover); }
@@ -121,7 +124,11 @@ useClickOutside(wrap, close)
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: color var(--dur) var(--ease);
 }
+/* The whole row answers the pointer, glyph included (a grey icon under a hovered
+   row reads as disabled). */
+.ui-menu-item:hover:not(:disabled) .ic { color: var(--text-2); }
 .ui-menu-item .ic :deep(.ui-icon) { width: 14px; height: 14px; }
 .ui-menu-item .lbl { line-height: 1.3; }
 .ui-menu-item .arr {
@@ -132,15 +139,40 @@ useClickOutside(wrap, close)
 }
 .ui-menu-item .arr :deep(.ui-icon) { width: 12px; height: 12px; }
 .ui-menu-item.has-sub:hover .arr { color: var(--text); }
-.ui-menu-item.danger { color: #dc2626; }
-.ui-menu-item.danger .ic { color: #dc2626; }
-.ui-menu-item.danger:hover { background: rgba(220, 38, 38, 0.08); }
-:global(body[data-theme="dark"] .ui-menu-item.danger),
-:global(body[data-theme="dark"] .ui-menu-item.danger .ic) { color: #f87171; }
+/* Destructive row: the status token already carries its own light/dark value, so a
+   theme override would only re-state it (no hardcoded hex here). The :hover rules
+   are declared at hover specificity so the neutral row-hover cannot grey them. */
+.ui-menu-item.danger,
+.ui-menu-item.danger:hover:not(:disabled) { color: var(--danger); }
+.ui-menu-item.danger .ic,
+.ui-menu-item.danger:hover:not(:disabled) .ic { color: var(--danger); }
+.ui-menu-item.danger:hover:not(:disabled) { background: var(--danger-soft); }
 .ui-menu-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 
-.ui-menu-enter-active,
-.ui-menu-leave-active { transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+/* Open/close: a short fade plus a small rise and settle from 0.98, anchored on the
+   trigger edge so the panel visibly grows OUT of the button it belongs to. */
+.ui-menu-enter-active {
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+.ui-menu-leave-active {
+  transition: opacity var(--dur-fast) var(--ease-in), transform var(--dur-fast) var(--ease-in);
+}
 .ui-menu-enter-from,
-.ui-menu-leave-to { opacity: 0; transform: translateY(-4px); }
+.ui-menu-leave-to { opacity: 0; }
+.ui-menu.place-bottom { transform-origin: top center; }
+.ui-menu.place-top { transform-origin: bottom center; }
+.ui-menu-enter-from.place-bottom,
+.ui-menu-leave-to.place-bottom { transform: translateY(-6px) scale(0.98); }
+.ui-menu-enter-from.place-top,
+.ui-menu-leave-to.place-top { transform: translateY(6px) scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-menu-item { transition: none; }
+  .ui-menu-enter-active,
+  .ui-menu-leave-active { transition: opacity 90ms linear; }
+  .ui-menu-enter-from.place-bottom,
+  .ui-menu-leave-to.place-bottom,
+  .ui-menu-enter-from.place-top,
+  .ui-menu-leave-to.place-top { transform: none; }
+}
 </style>

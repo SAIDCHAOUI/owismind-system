@@ -13,6 +13,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
+import { useSessionStore } from '../../stores/session.js'
 import { useBenchmarkStore } from '../../stores/benchmark.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { renderMarkdown } from '../../composables/useMarkdown.js'
@@ -41,6 +42,7 @@ const props = defineProps({
 const { t, locale } = useI18n()
 const router = useRouter()
 const chat = useChatStore()
+const session = useSessionStore()
 const benchmark = useBenchmarkStore()
 const { push } = useToasts()
 const evidence = useEvidenceStore()
@@ -57,18 +59,25 @@ async function loadActivity() {
   activityLoading.value = true
   try {
     const res = await fetchRunActivity(v.value.exchangeId)
+    let applied = 0
     for (const evt of res.events || []) {
       for (const mapped of durableEventToUi(evt)) {
         if (mapped.type === 'plan' || mapped.type === 'step_status') {
           applyEvent(v.value, mapped)
+          applied += 1
         }
       }
     }
+    // The answer is now KNOWN either way: the button retires. A click must never end
+    // in silence (user ask 2026-08-13) - when this exchange carries no persisted
+    // durable feed (any legacy run), SAY so instead of just vanishing.
+    activityChecked.value = true
+    if (!applied) push(t('msg.activity_none'))
   } catch (e) {
-    // Best-effort: no toast, the button simply stays inert on a transient error.
+    // Transient failure: say so and KEEP the button (unchecked = retry possible).
+    push(t('msg.activity_error'), { icon: 'alert', tone: 'warn' })
   } finally {
     activityLoading.value = false
-    activityChecked.value = true
   }
 }
 const activityAvailable = computed(
@@ -205,8 +214,21 @@ function renderItem(item) {
 const isEvidenceOpen = computed(
   () => evidence.open && evidence.exchangeId === v.value.exchangeId,
 )
+// The agent's configured source datasets for this exchange: they keep the proof-panel
+// button OFFERED on a SQL-less answer (user ask 2026-08-13) - there is still data to
+// explore even when no query was captured.
+const agentHasSources = computed(() => {
+  if (!v.value.exchangeId) return false
+  const key = chat.agentKeyForExchange(v.value.exchangeId)
+  if (!key) return false
+  const a = session.agents.find((x) => x.key === key)
+  return !!(a && Array.isArray(a.sources) && a.sources.length)
+})
 function openEvidence() {
-  if (v.value.exchangeId) evidence.openForExchange(v.value.exchangeId)
+  if (!v.value.exchangeId) return
+  // No captured SQL: the proof tab would only show the degraded notice - land the
+  // panel straight on the Source data explorer instead.
+  evidence.openForExchange(v.value.exchangeId, v.value.sql.length ? undefined : { tab: 'sources' })
 }
 // Quiet "check this number" affordance: open the proof panel for this exchange straight
 // on the Source data tab (where the underlying rows live). If the panel is already open
@@ -542,8 +564,10 @@ function nextVersion() {
         :disabled="activityLoading"
         @click="loadActivity"
       ><Icon name="route" />{{ t('msg.show_activity') }}</button>
+      <!-- Offered when the turn captured SQL (the proof) OR the agent exposes source
+           datasets (a SQL-less answer then lands straight on the Source data tab). -->
       <button
-        v-if="v.sql.length && v.exchangeId"
+        v-if="v.exchangeId && (v.sql.length || agentHasSources)"
         :class="{ primary: isEvidenceOpen }"
         :title="t('ev.open')"
         @click="openEvidence"
@@ -590,7 +614,13 @@ function nextVersion() {
 </template>
 
 <style scoped>
-.msg { animation: slide-up var(--dur) var(--ease); }
+/* Arrival: fade + rise together (the shared slide-up keyframe only translates, so the
+   answer used to appear at full opacity mid-slide). */
+.msg { animation: msg-in var(--dur-slow) var(--ease-out) both; }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .head {
   display: flex;
   align-items: center;
@@ -640,7 +670,14 @@ function nextVersion() {
 .body :deep(ul), .body :deep(ol) { margin: var(--s-2) 0 var(--s-3); padding-left: var(--s-5); }
 .body :deep(li) { margin-bottom: 4px; }
 .body :deep(strong) { font-weight: 600; }
-.body :deep(a) { color: var(--orange-text); text-decoration: underline; text-underline-offset: 2px; }
+.body :deep(a) {
+  color: var(--orange-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: text-decoration-color var(--dur) var(--ease);
+  text-decoration-color: var(--orange-line);
+}
+.body :deep(a:hover) { text-decoration-color: currentColor; }
 .body :deep(code) {
   font-family: var(--font-mono); font-size: 0.92em;
   background: var(--surface-2); padding: 1px 5px; border-radius: 0;
@@ -682,8 +719,10 @@ function nextVersion() {
   border-bottom: 1px solid var(--border);
   vertical-align: top;
   font-variant-numeric: tabular-nums;
+  transition: background var(--dur) var(--ease);
 }
 .body :deep(tbody tr:last-child td) { border-bottom: none; }
+/* The row lights up as one band - it is how you follow a figure across columns. */
 .body :deep(tbody tr:hover td) { background: var(--surface-hover); }
 /* Markdown-emitted alignment (|---:|) must survive the charte restyle. Both the
    compact (markdown-it verbatim) and spaced (any CSSOM re-serialization) forms. */
@@ -734,12 +773,16 @@ function nextVersion() {
 
 /* --- Terminal activity dropdown - one expandable header line. --- */
 .activity { margin: 0 0 2px; }
+/* The negative left margin cancels the new inner padding, so the indicator stays on
+   the same axis as the indented step rows below it. */
 .act-head {
-  display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 0;
+  display: flex; align-items: center; gap: 8px; width: calc(100% + 16px);
+  padding: 4px 8px; margin-left: -8px;
+  border-radius: var(--r-sm);
   font-size: var(--fs-sm); color: var(--text-2); text-align: left;
-  transition: color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.act-head:hover { color: var(--text); }
+.act-head:hover { color: var(--text); background: var(--surface-hover); }
 .act-head:hover .act-chev { color: var(--text); }
 .act-ind { width: 14px; height: 14px; position: relative; flex-shrink: 0; display: grid; place-items: center; }
 /* Terminal state: brand-orange dot (the run finished - matches the done steps). */
@@ -841,15 +884,17 @@ function nextVersion() {
   .tick-enter-active, .tick-leave-active, .tick-move { transition: none; }
 }
 
-/* SQL panel - square, per charte geometry. */
+/* SQL panel - a structural disclosure surface: stays square, only its header
+   answers the pointer. */
 .sql-panel { margin-top: var(--s-4); border: 1px solid var(--border); border-radius: 0; overflow: hidden; }
 .sql-toggle {
   display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 12px;
   font-size: var(--fs-sm); color: var(--text-2); background: var(--surface);
-  transition: color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.sql-toggle:hover { color: var(--text); }
-.sql-toggle :deep(.ui-icon) { width: 14px; height: 14px; }
+.sql-toggle:hover { color: var(--text); background: var(--surface-hover); }
+.sql-toggle :deep(.ui-icon) { width: 14px; height: 14px; transition: color var(--dur) var(--ease); }
+.sql-toggle:hover :deep(.ui-icon) { color: var(--orange-text); }
 .sql-body { padding: var(--s-3); display: flex; flex-direction: column; gap: var(--s-3); }
 .sql-meta { display: flex; gap: var(--s-3); font-size: 11px; color: var(--text-3); }
 .sql-code {
@@ -865,13 +910,25 @@ function nextVersion() {
 .usage-line .u-sep { opacity: 0.55; }
 .usage-line .u-unit { color: var(--text-3); }
 
-/* Footer actions */
-.msg-foot { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); font-size: var(--fs-xs); color: var(--text-3); }
+/* Footer actions: capsule targets that fill and lift 1px under the pointer, and
+   press back down on click - the row reads as a set of real buttons, not labels. */
+/* The action row WRAPS on a narrow chat column (a wide Source dock squeezes it):
+   whole buttons flow to the next line, and a label never breaks mid-word into an
+   unreadable two-line button (user ask 2026-08-13). */
+.msg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); font-size: var(--fs-xs); color: var(--text-3); }
 .msg-foot button {
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 0;
-  font-size: var(--fs-xs); color: var(--text-2); transition: all var(--dur) var(--ease);
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
+  border-radius: var(--r-pill); white-space: nowrap;
+  font-size: var(--fs-xs); color: var(--text-2);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
-.msg-foot button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+/* Rating buttons keep a tinted fill on the recorded state, so the vote stays visible
+   once the pointer leaves. Declared BEFORE :hover so the pointer fill still wins. */
+.msg-foot button.fb-btn.primary { background: var(--orange-soft-dark); }
+.msg-foot button.fb-btn.danger { background: var(--danger-soft); }
+.msg-foot button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); transform: translateY(-1px); }
+.msg-foot button:active:not(:disabled) { transform: translateY(0) scale(0.96); }
 .msg-foot button:disabled { opacity: 0.4; cursor: not-allowed; }
 .msg-foot button :deep(.ui-icon) { width: 13px; height: 13px; }
 .msg-foot button.primary { color: var(--orange-text); font-weight: 500; }
@@ -881,7 +938,12 @@ function nextVersion() {
 .msg-foot button.verify-link {
   padding: 4px 2px; color: var(--text-3); text-decoration: none;
 }
-.msg-foot button.verify-link:hover { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+.msg-foot button.verify-link:hover { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; transform: none; }
 .ver-nav { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--s-2); }
 .ver-count { font-size: 11px; color: var(--text-3); padding: 0 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-foot button:hover:not(:disabled),
+  .msg-foot button:active:not(:disabled) { transform: none; }
+}
 </style>

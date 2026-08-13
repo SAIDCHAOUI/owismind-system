@@ -218,6 +218,210 @@ test('explorer: analyze caps rows at SS_ANALYZE_ROWS', () => {
   assert.equal(snap.analyze.rows.length, SS_ANALYZE_ROWS)
 })
 
+// --- the unified Analyze workspace, projected onto the frozen blocks ----------
+// The standalone explorer shapes its figures in the workspace (measures + optional
+// grouping). The payload contract is UNCHANGED: grouped -> `analyze`, ungrouped -> `calc`.
+test('workspace: the DEFAULT state (one row count, no group) is not user-shaped -> null', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [], q: '',
+    totalCount: 640, totalLoading: false,
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'count', column: null }],
+    workspaceGroup: null, workspaceLoading: false,
+    workspaceRows: [{ m0: 640 }],
+  })
+  assert.equal(snap, null)
+})
+
+test('workspace: a GROUPING fills the analyze block (first measure, rows, total, truncated)', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [], q: '',
+    columns: [{ name: 'Solution', type: 'string' }, { name: 'Revenues', type: 'double' }],
+    totalCount: 640, totalLoading: false,
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }, { fn: 'count', column: null }],
+    workspaceGroup: 'Solution', workspaceBucket: 'month', workspaceLoading: false,
+    workspaceRows: [{ key: 'Voice', m0: 900, m1: 12 }, { key: 'Data', m0: 300, m1: 4 }],
+    workspaceTotals: { m0: 1200, m1: 16 },
+    workspaceTruncated: true,
+  })
+  assert.ok(snap)
+  assert.equal(snap.surface, 'explorer')
+  assert.deepEqual(snap.analyze, {
+    group: 'Solution', bucket: null, fn: 'sum', measure_column: 'Revenues',
+    rows: [{ key: 'Voice', value: '900' }, { key: 'Data', value: '300' }],
+    total: '1200', truncated: true,
+  })
+  assert.equal('calc' in snap, false) // grouped -> the figures live in `analyze`
+  assert.equal(snap.row_count, 640)
+})
+
+test('workspace: a TEMPORAL grouping keeps its bucket', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'order_date', type: 'date' }],
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'count', column: null }],
+    workspaceGroup: 'order_date', workspaceBucket: 'quarter', workspaceLoading: false,
+    workspaceRows: [{ key: '2025-01-01', m0: 12 }],
+  })
+  assert.equal(snap.analyze.bucket, 'quarter')
+  assert.equal(snap.analyze.fn, 'count')
+  assert.equal(snap.analyze.measure_column, null)
+})
+
+test('workspace: the analyze measure is the first one the contract accepts (count/sum/avg)', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'Solution', type: 'string' }, { name: 'Revenues', type: 'double' }],
+    workspaceActive: true,
+    // median is a legal WORKSPACE measure but not a legal `analyze` fn: the block travels
+    // with the next qualifying measure, read from ITS position (m1).
+    workspaceMeasures: [{ fn: 'median', column: 'Revenues' }, { fn: 'avg', column: 'Revenues' }],
+    workspaceGroup: 'Solution', workspaceLoading: false,
+    workspaceRows: [{ key: 'Voice', m0: 5, m1: 42 }],
+    workspaceTotals: { m0: 6, m1: 40 },
+  })
+  assert.equal(snap.analyze.fn, 'avg')
+  assert.equal(snap.analyze.measure_column, 'Revenues')
+  assert.deepEqual(snap.analyze.rows, [{ key: 'Voice', value: '42' }])
+  assert.equal(snap.analyze.total, '40')
+})
+
+test('workspace: no measure qualifies for analyze -> no analyze block (still user-shaped)', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'Solution', type: 'string' }],
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'median', column: 'Revenues' }],
+    workspaceGroup: 'Solution', workspaceLoading: false,
+    workspaceRows: [{ key: 'Voice', m0: 5 }],
+  })
+  assert.ok(snap)
+  assert.equal('analyze' in snap, false)
+})
+
+test('workspace: MEASURES ONLY (no grouping) fill the calc block with the KPI figures', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [], q: '',
+    columns: [{ name: 'Revenues', type: 'double' }],
+    totalCount: 640, totalLoading: false,
+    workspaceActive: true,
+    workspaceMeasures: [
+      { fn: 'count', column: null },
+      { fn: 'sum', column: 'Revenues' },
+      { fn: 'avg', column: 'Revenues' },
+    ],
+    workspaceGroup: null, workspaceLoading: false,
+    workspaceRows: [{ m0: 640, m1: 1234.5, m2: 12.3 }],
+  })
+  assert.ok(snap)
+  // The row count needs no column: it already travels as `row_count`.
+  assert.deepEqual(snap.calc, {
+    column: 'Revenues',
+    measures: [{ fn: 'sum', value: '1234.5' }, { fn: 'avg', value: '12.3' }],
+  })
+  assert.equal('analyze' in snap, false)
+  assert.equal(snap.row_count, 640)
+})
+
+test('workspace: the calc block carries ONE column (the first measured one)', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    workspaceActive: true,
+    workspaceMeasures: [
+      { fn: 'sum', column: 'Revenues' },
+      { fn: 'count_distinct', column: 'Account' },
+      { fn: 'max', column: 'Revenues' },
+    ],
+    workspaceGroup: null, workspaceLoading: false,
+    workspaceRows: [{ m0: 100, m1: 7, m2: 60 }],
+  })
+  assert.equal(snap.calc.column, 'Revenues')
+  assert.deepEqual(snap.calc.measures, [{ fn: 'sum', value: '100' }, { fn: 'max', value: '60' }])
+})
+
+test('workspace: figures omitted while loading / before the first result (still shaped)', () => {
+  const loading = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'Solution', type: 'string' }],
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }],
+    workspaceGroup: 'Solution', workspaceLoading: true,
+    workspaceRows: [{ key: 'Voice', m0: 900 }],
+  })
+  assert.ok(loading)
+  assert.equal('analyze' in loading, false)
+  const noResult = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    workspaceActive: true,
+    workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }],
+    workspaceGroup: null, workspaceLoading: false, workspaceRows: [],
+  })
+  assert.ok(noResult)
+  assert.equal('calc' in noResult, false)
+})
+
+test('workspace: an INACTIVE workspace leaves the legacy calc / analyze path untouched', () => {
+  const snap = snapshotFromExplorer({
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'country', type: 'string' }],
+    // The Evidence hosts never activate the workspace: their own state must still win.
+    workspaceActive: false,
+    workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }], workspaceGroup: 'Solution',
+    workspaceRows: [{ key: 'Voice', m0: 900 }], workspaceLoading: false,
+    calcColumn: 'amount', calcFns: ['sum'], calcLoading: false, calcValues: { sum: 5 },
+    analyzeGroup: 'country', analyzeFn: 'count', analyzeLoading: false,
+    analyzeRows: [{ key: 'FR', m0: 3 }],
+  })
+  assert.deepEqual(snap.calc, { column: 'amount', measures: [{ fn: 'sum', value: '5' }] })
+  assert.equal(snap.analyze.group, 'country')
+})
+
+test('workspace: a shaped workspace re-signs when the grouping or the measures change', () => {
+  const base = {
+    activeSourceLabel: 'Sales', chips: [],
+    columns: [{ name: 'Solution', type: 'string' }, { name: 'Revenues', type: 'double' }],
+    workspaceActive: true, workspaceLoading: false,
+    workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }],
+    workspaceGroup: 'Solution',
+    workspaceRows: [{ key: 'Voice', m0: 900 }],
+  }
+  const a = snapshotFromExplorer(base)
+  // Same shape, different FIGURES -> same signature (an opt-out must not churn).
+  const sameShape = snapshotFromExplorer({ ...base, workspaceRows: [{ key: 'Voice', m0: 42 }] })
+  assert.equal(snapshotSignature(a), snapshotSignature(sameShape))
+  const otherGroup = snapshotFromExplorer({ ...base, workspaceGroup: 'Account' })
+  assert.notEqual(snapshotSignature(a), snapshotSignature(otherGroup))
+  const otherMeasure = snapshotFromExplorer({ ...base, workspaceMeasures: [{ fn: 'avg', column: 'Revenues' }] })
+  assert.notEqual(snapshotSignature(a), snapshotSignature(otherMeasure))
+})
+
+test('workspace: pickSnapshot carries it through the standalone explorer', () => {
+  const snap = pickSnapshot({
+    sourcesState: {
+      open: true, agentKey: 'ag', activeSourceLabel: 'Revenues dataset',
+      chips: [], q: '',
+      columns: [{ name: 'Solution', type: 'string' }],
+      workspaceActive: true, workspaceLoading: false,
+      workspaceMeasures: [{ fn: 'sum', column: 'Revenues' }],
+      workspaceGroup: 'Solution',
+      workspaceRows: [{ key: 'Voice', m0: 900 }],
+    },
+    evidenceState: { open: false },
+    agentLabels: { ag: 'Revenue expert' },
+  })
+  assert.ok(snap)
+  assert.equal(snap.surface, 'explorer')
+  assert.equal(snap.agent, 'Revenue expert')
+  assert.equal(snap.analyze.group, 'Solution')
+  // The describe projection surfaces it as the ANALYZE row of the chip detail.
+  const line = describeSnapshot(snap).find((r) => r.labelKey === 'prompt.screen.d.analyze')
+  assert.ok(line)
+  assert.equal(line.fnKey, 'src.calc.sum')
+  assert.equal(line.group, 'Solution')
+})
+
 // --- evidence legacy: agent-locked chips gate + inclusion --------------------
 test('evidence legacy: agent-locked chips ALONE do not open the offer -> null', () => {
   const snap = snapshotFromEvidence({

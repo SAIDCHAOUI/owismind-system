@@ -219,6 +219,130 @@ export function defaultCalcFnsFor(columnType) {
   return ['count_distinct']
 }
 
+// --- Unified Analyze workspace -------------------------------------------------
+// The standalone Source explorer drives ONE model: a list of MEASURES over an OPTIONAL
+// grouping (the same /source/aggregate contract, nothing new server-side). These helpers
+// are the pure rules behind it; the state machine lives in aggregateSurface.js.
+
+// Mirror of the backend MAX_AGG_MEASURES (security/validation.py): the request would be
+// rejected past it, so the builder never lets the list grow beyond.
+export const MAX_WORKSPACE_MEASURES = 8
+
+// Stable identity of a measure = the pair (fn, column). `count` counts rows and has no
+// column, so it is its own single identity.
+export function measureKey(measure) {
+  if (!measure || !measure.fn) return ''
+  return measure.fn === 'count' ? 'count' : measure.fn + ':' + (measure.column || '')
+}
+
+// i18n key of a measure's label. `count` reads as a whole phrase ("Row count"); every
+// other function reads "<function> of <column>" with the REAL column name as {0} (F25).
+const MEASURE_LABEL_KEYS = {
+  sum: 'src.an.fn.sum',
+  avg: 'src.an.fn.avg',
+  median: 'src.an.fn.median',
+  min: 'src.ws.fn.min',
+  max: 'src.ws.fn.max',
+  count_distinct: 'src.ws.fn.distinct',
+}
+export function measureLabelKey(measure) {
+  if (!measure || !measure.fn) return ''
+  if (measure.fn === 'count') return 'src.an.fn.count'
+  return MEASURE_LABEL_KEYS[measure.fn] || ''
+}
+
+// Add a measure to the workspace list. Refuses (returns the SAME list reference) an exact
+// duplicate - the same function on the same column would render two identical columns -
+// and the 8-measure ceiling. Any other case returns a NEW list.
+export function addMeasure(list, measure) {
+  const current = Array.isArray(list) ? list : []
+  if (!measure || AGG_FNS.indexOf(measure.fn) === -1) return current
+  if (measure.fn !== 'count' && !measure.column) return current
+  const next = { fn: measure.fn, column: measure.fn === 'count' ? null : measure.column }
+  if (current.length >= MAX_WORKSPACE_MEASURES) return current
+  const key = measureKey(next)
+  if (current.some((m) => measureKey(m) === key)) return current
+  return current.concat([next])
+}
+
+// Remove the measure at `index`. Refuses to empty the list (returns the SAME reference):
+// there is ALWAYS at least one measure, so the workspace always shows a real result.
+export function removeMeasureAt(list, index) {
+  const current = Array.isArray(list) ? list : []
+  if (current.length <= 1) return current
+  if (!Number.isInteger(index) || index < 0 || index >= current.length) return current
+  return current.slice(0, index).concat(current.slice(index + 1))
+}
+
+// Swap the measure at `index` for another one, IN PLACE (the slot keeps its rank, so
+// replacing the first measure keeps it the ranking measure). Refused - returning the
+// SAME list so callers can skip the refetch: an out-of-range index, an unknown fn, a
+// column-less aggregate, the measure it already holds, and a duplicate of ANOTHER slot
+// (two identical measures would print the same figure twice).
+export function replaceMeasureAt(list, index, measure) {
+  const current = Array.isArray(list) ? list : []
+  if (!Number.isInteger(index) || index < 0 || index >= current.length) return current
+  if (!measure || AGG_FNS.indexOf(measure.fn) === -1) return current
+  if (measure.fn !== 'count' && !measure.column) return current
+  const next = { fn: measure.fn, column: measure.fn === 'count' ? null : measure.column }
+  const key = measureKey(next)
+  if (current.some((m, i) => measureKey(m) === key && i !== index)) return current
+  if (measureKey(current[index]) === key) return current
+  return current.slice(0, index).concat([next], current.slice(index + 1))
+}
+
+// The measures a column may actually be asked for, by TYPE and by NAME. It is
+// statsSpecFor, minus the quantities that make no sense on an IDENTIFIER: a column whose
+// name marks an id is numeric to the database but summing or averaging it is nonsense
+// (the same guard the cell formatter applies to keep ids unformatted, F23). Counting its
+// DISTINCT values, on the other hand, is a real question.
+export function measureSpecForColumn(name, type, isIdentifier) {
+  if (isIdentifier && isNumericColType(type)) {
+    return [{ fn: 'count_distinct', labelKey: 'src.calc.distinct' }]
+  }
+  return statsSpecFor(type)
+}
+
+// Display order of the preview columns: the columns actually being analyzed FIRST (the
+// group column, then each measure's column, in builder order, deduped), then everything
+// else in its natural order. Display only - never a filter, never a hidden column.
+// Unknown names are ignored; the returned array holds the SAME column objects.
+export function orderPreviewColumns(columns, pinnedNames) {
+  const list = Array.isArray(columns) ? columns : []
+  const wanted = Array.isArray(pinnedNames) ? pinnedNames : []
+  const byName = new Map()
+  for (const c of list) {
+    if (c && c.name != null) byName.set(String(c.name), c)
+  }
+  const head = []
+  const seen = new Set()
+  for (const name of wanted) {
+    const key = name == null ? '' : String(name)
+    if (!key || seen.has(key) || !byName.has(key)) continue
+    seen.add(key)
+    head.push(byName.get(key))
+  }
+  if (!head.length) return list.slice()
+  return head.concat(list.filter((c) => !(c && c.name != null && seen.has(String(c.name)))))
+}
+
+// Geometry of a magnitude bar inside its cell, as { left, width } percentages of the
+// cell. A series that stays on ONE side of zero anchors its bars to that side; a series
+// that SPANS zero gets a diverging bar around the zero line, so a negative value reads as
+// negative instead of being flattened into an absolute magnitude. The scale is always
+// per-measure (the caller passes that measure's own min/max), never shared across
+// measures - two different units must never be compared by bar length.
+export function barGeometry(value, minValue, maxValue) {
+  const v = Number(value)
+  const lo = Math.min(0, Number(minValue))
+  const hi = Math.max(0, Number(maxValue))
+  const span = hi - lo
+  if (!Number.isFinite(v) || !Number.isFinite(span) || span <= 0) return { left: 0, width: 0 }
+  const zero = ((0 - lo) / span) * 100
+  const width = (Math.abs(v) / span) * 100
+  return v < 0 ? { left: Math.max(0, zero - width), width } : { left: zero, width }
+}
+
 // Normalize a group spec to the frozen contract: null (no grouping) or
 // { column, bucket } where bucket is one of BUCKETS or null (non-temporal group).
 // Exported so the Evidence aggregate payload builder reuses the EXACT same shaping

@@ -363,7 +363,7 @@ watch(
     <div class="sup-tab-body">
       <!-- ============================ FEEDBACK TAB ============================ -->
       <div v-if="activeTab === 'feedback'" class="sup-grid">
-        <div class="sup-col">
+        <div class="sup-col u-rise">
           <h3 class="sup-col-title">{{ t('fb.new_request') }}</h3>
 
           <div v-if="impersonateNote" class="imp-note">
@@ -413,7 +413,7 @@ watch(
           </form>
         </div>
 
-        <div class="sup-col">
+        <div class="sup-col sup-col--second u-rise">
           <h3 class="sup-col-title">{{ t('fb.your_requests') }}</h3>
           <p v-if="loadingMyFeedback && !myFeedback.length" class="sup-mine-state">{{ t('fb.mine.loading') }}</p>
           <EmptyState v-else-if="!myFeedback.length" bordered icon="document" :title="t('fb.mine.empty')" />
@@ -436,7 +436,7 @@ watch(
 
       <!-- =========================== REQUEST AN AGENT ========================= -->
       <div v-else class="sup-grid">
-        <div class="sup-col">
+        <div class="sup-col u-rise">
           <h3 class="sup-col-title">{{ t('sup.tab.agent') }}</h3>
 
           <div v-if="impersonateNote" class="imp-note">
@@ -563,7 +563,7 @@ watch(
           </form>
         </div>
 
-        <div class="sup-col">
+        <div class="sup-col sup-col--second u-rise">
           <h3 class="sup-col-title">{{ t('ar.mine.title') }}</h3>
           <p v-if="loadingMyRequests && !myRequests.length" class="sup-mine-state">{{ t('ar.mine.loading') }}</p>
           <EmptyState v-else-if="!myRequests.length" bordered icon="database" :title="t('ar.mine.empty')" />
@@ -589,12 +589,16 @@ watch(
 </template>
 
 <style scoped>
-/* Orange charter: square geometry (border-radius 0), 1px borders, flat surfaces,
-   orange a RARE accent. Semantic tokens only - no gradient/blur/glow/color-mix. */
+/* Orange charter, premium pass (user decision 2026-08-13): soft radius on the
+   fields and the history cards, hairline borders, layered elevation on focus,
+   orange still a RARE accent. Semantic tokens only - no gradient/blur/color-mix. */
 
 .sup-tab-body {
   margin-top: var(--s-6);
 }
+
+/* The right-hand history column follows the form column on entry. */
+.sup-col--second { animation-delay: 80ms; }
 
 .sup-grid {
   display: grid;
@@ -616,10 +620,10 @@ watch(
   align-items: center;
   gap: 9px;
   margin: 0 0 var(--s-4);
-  padding: 10px 14px;
-  border: 1px solid var(--border-strong);
+  padding: 10px 16px;
+  border: 1px solid var(--border);
   border-left: 4px solid var(--orange);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   font-size: var(--fs-sm);
@@ -634,7 +638,7 @@ watch(
   font-size: 11px;
   font-weight: var(--fw-heavy);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--text-2);
 }
 .sup-field { display: flex; flex-direction: column; gap: 8px; }
@@ -646,16 +650,22 @@ watch(
 
 .sup-input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-base);
-  transition: border-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.sup-input:focus { outline: none; border-color: var(--orange); }
+.sup-input:hover:not(:disabled) { border-color: var(--border-strong); }
+.sup-input:focus {
+  outline: none;
+  border-color: var(--text-3);
+  box-shadow: var(--elev-1);
+}
+:global(body[data-theme="dark"] .sup-input) { border-color: var(--border-strong); }
 .sup-input::placeholder { color: var(--text-3); }
 .sup-input:disabled { color: var(--text-3); cursor: not-allowed; }
 .sup-textarea { resize: vertical; line-height: 1.55; }
@@ -691,10 +701,13 @@ watch(
 .sup-dataset-list {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
   max-height: 280px;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
+:global(body[data-theme="dark"] .sup-dataset-list) { border-color: var(--border-strong); }
 .sup-check-row {
   display: flex;
   align-items: flex-start;
@@ -718,7 +731,7 @@ watch(
   flex-shrink: 0;
   margin-top: 2px;
   border: 1.5px solid var(--text);
-  border-radius: 0;
+  border-radius: var(--r-xs);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -734,10 +747,15 @@ watch(
 .sup-mine-state { font-size: var(--fs-sm); color: var(--text-3); margin: 0; }
 .sup-mine-list { display: flex; flex-direction: column; gap: var(--s-4); }
 .sup-mine-item {
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--bg);
+  box-shadow: var(--elev-1);
   padding: var(--s-4) var(--s-5);
+}
+:global(body[data-theme="dark"] .sup-mine-item) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .sup-mine-top { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-bottom: 8px; }
 .sup-mine-date { margin-left: auto; font-size: var(--fs-xs); color: var(--text-3); }
@@ -746,9 +764,10 @@ watch(
 
 .sup-chip {
   display: inline-block;
-  padding: 2px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -758,11 +777,11 @@ watch(
 
 .status-pill {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 0;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   font-weight: 700;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   color: var(--text-2);
   background: var(--surface);
 }
@@ -771,8 +790,9 @@ watch(
 
 .sup-mine-response {
   margin-top: 10px;
-  padding: 9px 12px;
+  padding: 9px 14px;
   border-left: 3px solid var(--orange);
+  border-radius: var(--r-sm);
   background: var(--surface);
 }
 .sup-mine-response-label {
@@ -780,7 +800,7 @@ watch(
   font-size: 10px;
   font-weight: var(--fw-heavy);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--text-3);
   margin-bottom: 4px;
 }

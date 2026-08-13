@@ -22,6 +22,42 @@ const ui = useUiStore()
 const chat = useChatStore()
 
 const collapsed = computed(() => ui.sidebarCollapsed)
+
+// Hover flyout (user ask 2026-08-13): resting the pointer on the rail opens the FULL
+// sidebar as a temporary overlay - no click on the logo needed. It floats ABOVE the
+// content (position:fixed) so the chat/grid never reflows, and retracts when the
+// pointer leaves. Clicking the logo still PINS it open (the existing toggle). Small
+// enter/leave delays keep a pointer merely crossing the rail from flashing it.
+const hoverOpen = ref(false)
+let hoverTimer = null
+const railMode = computed(() => collapsed.value && !hoverOpen.value)
+function _clearHoverTimer() {
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = null
+  }
+}
+function onRailEnter() {
+  if (!collapsed.value) return
+  _clearHoverTimer()
+  hoverTimer = setTimeout(() => {
+    hoverOpen.value = true
+  }, 140)
+}
+function onRailLeave() {
+  _clearHoverTimer()
+  hoverTimer = setTimeout(() => {
+    hoverOpen.value = false
+  }, 220)
+}
+// Pinning (or any expand) while flown out: drop the hover state so the flyout class
+// never lingers on a genuinely expanded sidebar.
+watch(collapsed, (isCollapsed) => {
+  if (!isCollapsed) {
+    _clearHoverTimer()
+    hoverOpen.value = false
+  }
+})
 const activeSession = computed(() => route.params.sessionId || '')
 const isAgents = computed(() => route.name === 'agents')
 const isBenchmark = computed(() => route.name === 'benchmark')
@@ -93,8 +129,10 @@ onMounted(async () => {
 // until the sidebar is expanded for the first time - top it up then (the already
 // loaded first page is kept; no refetch).
 let _filledOnExpand = false
-watch(collapsed, async (isCollapsed) => {
-  if (!isCollapsed && !_filledOnExpand) {
+// railMode (not collapsed): the hover flyout shows the list too, so it must top up
+// the very first time the full layout becomes visible, however it was opened.
+watch(railMode, async (isRail) => {
+  if (!isRail && !_filledOnExpand) {
     _filledOnExpand = true
     await nextTick()
     await topUp()
@@ -135,15 +173,28 @@ function onUser(key) {
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ rail: collapsed }">
+  <aside
+    class="sidebar"
+    :class="{ rail: railMode, flyout: collapsed && hoverOpen }"
+    :style="collapsed && hoverOpen ? { width: ui.sidebarW + 'px' } : null"
+    @mouseenter="onRailEnter"
+    @mouseleave="onRailLeave"
+  >
     <!-- HEAD: brand (full) / expand control (rail) -->
     <div class="sidebar-head">
-      <RouterLink v-if="!collapsed" to="/chat" class="brand">
+      <RouterLink v-if="!railMode" to="/chat" class="brand">
         <!-- Official Orange brand logo (square) -->
         <img class="brand-mark" :src="logoUrl" alt="" width="30" height="30" />
         <span class="brand-name">{{ t('sb.brand') }}</span>
       </RouterLink>
-      <button v-if="!collapsed" class="icon-btn" :title="t('sb.collapse')" @click="ui.toggleSidebar()">
+      <!-- Flown out by hover: the button PINS the sidebar open. Genuinely expanded:
+           it collapses back to the rail. Same toggle, honest title. -->
+      <button
+        v-if="!railMode"
+        class="icon-btn"
+        :title="collapsed ? t('sb.expand') : t('sb.collapse')"
+        @click="ui.toggleSidebar()"
+      >
         <Icon name="sidebar" />
       </button>
       <!-- Rail: the Orange logo doubles as the expand button -->
@@ -166,11 +217,11 @@ function onUser(key) {
     </nav>
 
     <!-- Section title + conversation list (hidden in the rail, kept mounted) -->
-    <div class="sidebar-section" v-show="!collapsed">
+    <div class="sidebar-section" v-show="!railMode">
       <span class="sidebar-section-title">{{ t('sb.conversations') }}</span>
     </div>
 
-    <div class="conv-list" ref="listEl" v-show="!collapsed">
+    <div class="conv-list" ref="listEl" v-show="!railMode">
       <p v-if="session.convLoading && !session.conversations.length" class="conv-state">
         {{ t('sb.conv_loading') }}
       </p>
@@ -202,7 +253,7 @@ function onUser(key) {
     </div>
 
     <!-- In the rail there is no list; this filler pushes the foot to the bottom. -->
-    <div class="rail-fill" v-show="collapsed" aria-hidden="true"></div>
+    <div class="rail-fill" v-show="railMode" aria-hidden="true"></div>
 
     <!-- FOOT: Help (above) then the account avatar (bottom) -->
     <div class="sidebar-foot">
@@ -270,21 +321,23 @@ function onUser(key) {
   font-family: var(--font-sans);
 }
 
-/* Collapse toggle (icon button) inside the expanded sidebar */
+/* Collapse toggle (icon button) inside the expanded sidebar: round target that
+   fills on hover, so the click zone is visible before the click. */
 .icon-btn {
   width: 32px;
   height: 32px;
   display: grid;
   place-items: center;
   color: var(--text-2);
-  /* sharp: no border-radius */
-  transition: color var(--dur) var(--ease);
+  border-radius: var(--r-pill);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
   flex-shrink: 0;
 }
-.icon-btn:hover { color: var(--text); }
+.icon-btn:hover { color: var(--text); background: var(--surface-hover); }
 .icon-btn :deep(.ui-icon) { width: 18px; height: 18px; }
 
-/* Rail: orange logo square is the expand button */
+/* Rail: the Orange logo image is the expand button - it answers the pointer with a
+   whisper of scale (the mark itself is never restyled). */
 .rail-logo {
   display: flex;
   align-items: center;
@@ -292,8 +345,13 @@ function onUser(key) {
   width: 30px;
   height: 30px;
   margin: 0 auto;
-  /* no extra styles: the .brand-mark inside provides the orange square */
+  transition: transform var(--dur) var(--ease);
 }
+.rail-logo:hover { transform: scale(1.06); }
+.rail-logo:active { transform: scale(0.98); }
+/* The expanded brand answers too - the whole lockup, logo and word together. */
+.brand { transition: opacity var(--dur) var(--ease); }
+.brand:hover { opacity: 0.78; }
 
 /* --- Primary nav -------------------------------------------------------- */
 .sidebar-primary { padding: 0 var(--s-3); display: flex; flex-direction: column; gap: 2px; }
@@ -303,7 +361,9 @@ function onUser(key) {
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
-  /* sharp: no border-radius */
+  /* Interactive row: softly rounded (premium direction), structural surfaces around
+     it stay square. */
+  border-radius: var(--r-sm);
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text);
@@ -326,7 +386,17 @@ function onUser(key) {
 /* The ACTIVE item answers the pointer too (same-specificity .active rule comes
    later in source and would otherwise pin the resting background). */
 .side-item.active:hover { background: var(--surface-hover); }
-.side-item :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-3); }
+.side-item :deep(.ui-icon) {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: color var(--dur) var(--ease);
+}
+/* The glyph joins the hover: a row that lights up around a still-grey icon looks
+   half-awake. */
+.side-item:hover :deep(.ui-icon),
+.side-item.open :deep(.ui-icon) { color: var(--text-2); }
 .side-item.active :deep(.ui-icon) { color: var(--text); }
 .side-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 
@@ -352,23 +422,28 @@ function onUser(key) {
   width: 100%;
   text-align: left;
   padding: 7px 12px;
-  /* sharp: no border-radius */
+  border-radius: var(--r-sm);
   font-size: 13px;
   color: var(--text-2);
   cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-sans);
 }
-.conv-item:hover { background: var(--surface-hover); color: var(--text); }
+/* The hovered row nudges 2px into the reading direction - a transform, so nothing
+   re-measures and the truncated title never re-wraps mid-hover. */
+.conv-item:hover { background: var(--surface-hover); color: var(--text); transform: translateX(2px); }
 .conv-item.active {
   background: var(--surface);
   color: var(--text);
   box-shadow: inset 3px 0 0 var(--orange);
 }
-.conv-item.active:hover { background: var(--surface-hover); }
+/* The active row is already "here": it takes the hover fill but stays put (a shifting
+   selected row reads as a mis-click). */
+.conv-item.active:hover { background: var(--surface-hover); transform: none; }
 .conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .conv-state {
   padding: 8px 12px;
@@ -395,7 +470,7 @@ function onUser(key) {
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  /* sharp: no border-radius */
+  border-radius: var(--r-sm);
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text);
@@ -419,7 +494,10 @@ function onUser(key) {
   font-weight: 700;
   color: var(--text);
   flex-shrink: 0;
+  transition: background var(--dur) var(--ease);
 }
+.user-chip:hover .avatar,
+.user-chip.open .avatar { background: var(--surface-press); }
 .user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* =========================================================================
@@ -430,6 +508,23 @@ function onUser(key) {
 /* Foot menus are 220px wide and NOT teleported; overflow must be visible so
    the popover escapes the narrow rail column. */
 .sidebar.rail { overflow: visible; width: 56px; }
+
+/* HOVER FLYOUT: the full sidebar floating OVER the content while the pointer rests on
+   the rail (width bound inline to the stored sidebar width). It STAYS a grid item and
+   simply OVERFLOWS its rail track (never position:fixed - out of flow, the following
+   grid items would each shift one column left): the grid keeps its rail column, nothing
+   reflows, and the opaque --bg + elevation detach it from the page it covers.
+   Retracts on mouseleave; the logo click still pins it. */
+.sidebar.flyout {
+  position: relative; z-index: var(--z-menu);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: var(--elev-2);
+  animation: sidebar-flyout-in var(--dur) var(--ease-out) both;
+}
+@keyframes sidebar-flyout-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar.flyout { animation: none; } }
 .sidebar.rail .sidebar-head {
   padding: 14px 0 14px;
   justify-content: center;
@@ -437,7 +532,7 @@ function onUser(key) {
 .sidebar.rail .sidebar-primary { padding: 0 9px; gap: 4px; }
 .sidebar.rail .sidebar-foot { padding: 8px 9px; gap: 4px; }
 
-/* Labels hidden; items become 38px square icon targets */
+/* Labels hidden; items become 38px round icon targets (icon buttons take --r-pill). */
 .sidebar.rail .side-label { display: none; }
 .sidebar.rail .side-item {
   width: 38px;
@@ -446,14 +541,14 @@ function onUser(key) {
   justify-content: center;
   gap: 0;
   margin: 0 auto;
-  /* no radius (sharp brand) */
+  border-radius: var(--r-pill);
   box-shadow: none; /* active bar accent removed in rail (no room) */
 }
 .sidebar.rail .side-item :deep(.ui-icon) { color: var(--text-3); }
 .sidebar.rail .side-item:hover :deep(.ui-icon) { color: var(--text); }
 .sidebar.rail .side-item.active :deep(.ui-icon) { color: var(--orange); }
 
-/* User chip: square icon target, avatar fills it */
+/* User chip: round icon target, avatar fills it */
 .sidebar.rail .user-chip {
   width: 38px;
   height: 38px;
@@ -461,6 +556,7 @@ function onUser(key) {
   justify-content: center;
   gap: 0;
   margin: 0 auto;
+  border-radius: var(--r-pill);
 }
 .sidebar.rail .user-chip .avatar {
   width: 32px;
@@ -474,12 +570,17 @@ function onUser(key) {
   outline-offset: 0;
 }
 
-/* Reduced-motion: keep transitions, skip decorative position changes */
+/* Reduced-motion: keep the colour answers, drop every position/scale change. */
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
   .side-item,
   .conv-item,
   .user-chip,
+  .brand,
+  .rail-logo,
   .icon-btn { transition: none; }
+  .conv-item:hover { transform: none; }
+  .rail-logo:hover,
+  .rail-logo:active { transform: none; }
 }
 </style>

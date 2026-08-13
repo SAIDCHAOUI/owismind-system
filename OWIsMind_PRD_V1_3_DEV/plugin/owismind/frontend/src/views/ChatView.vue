@@ -220,7 +220,9 @@ watch(
 }
 .imp-note :deep(.ui-icon) { width: 16px; height: 16px; flex-shrink: 0; color: var(--orange); }
 /* END impersonation */
-/* Conversation-switch loading overlay (centered spinner over the whole .chat area). */
+/* Conversation-switch loading overlay (centered spinner over the whole .chat area).
+   It fades in rather than snapping over the thread - a fast switch then reads as a
+   soft veil instead of a flash. */
 .thread-loading {
   position: absolute;
   inset: 0;
@@ -232,6 +234,11 @@ watch(
   background: rgba(255, 255, 255, 0.55);
   z-index: 5;
   pointer-events: none;
+  animation: veil-in var(--dur) var(--ease-out) both;
+}
+@keyframes veil-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 :global(body[data-theme="dark"] .thread-loading) { background: rgba(13, 13, 13, 0.55); }
 .thread-loading__label { font-size: var(--fs-sm); color: var(--text-3); }
@@ -244,6 +251,12 @@ watch(
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .thread-loading { animation: none; }
+  /* The spinner is the only "something is happening" signal here, so it keeps
+     turning - slower, and without the fade-in that surrounds it. */
+  .thread-spinner { animation-duration: 1.8s; }
+}
 
 .chat-config { flex: 1; display: grid; place-items: center; padding: var(--s-7); }
 .chat-config__card {

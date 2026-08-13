@@ -625,7 +625,17 @@ endroits DIFFÉRENTS, ce qui tranche le choix de techno.
 
 ---
 
-## 8e. Source Data Explorer - exploration des datasets bruts des agents (2026-07-02, ✅ VALIDÉ DSS)
+## 8e. Source Data Explorer - exploration des datasets bruts des agents (2026-07-02, ✅ VALIDÉ DSS ; refonte 2026-08-12/13 ⏳ NON validée DSS)
+
+> **Refonte 2026-08-12/13 (harness seulement, voir `sessions/2026-08-13.md`)** : UNE structure
+> partagée panneau <-> Evidence Studio. Topbar une ligne (`DatasetPick.vue` dropdown partagé +
+> recherche + toggle, 40px), toggle Data|Analyze dans le header du panneau, filtres inline,
+> **Analyze workspace** (`SourceWorkspace.vue`, API `workspace*` additive dans `aggregateSurface`,
+> mesures 1..8 remplaçables sur place, preview 50 lignes double-hôte sources/evidence) ;
+> `SourceCalc.vue` + `SourceAnalyze.vue` SUPPRIMÉS (l'API calc*/analyze* du store reste, sans
+> consommateur UI - nettoyage différé). Teaser flouté auto-dock = invitation permanente (X sticky
+> par écran, F24). Outil de validation : **`dev-harness/`** racine repo (mock backend fidèle aux
+> contrats + Playwright zéro-install, L183 ; git-visible, jamais packagé).
 
 - **But** : les users voient/exploren les données que les agents manipulent (anti « outil magique »),
   pour des prompts précis. Spec : `docs/superpowers/specs/2026-07-02-source-data-explorer-design.md`.

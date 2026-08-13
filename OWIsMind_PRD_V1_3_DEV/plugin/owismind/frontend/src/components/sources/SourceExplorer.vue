@@ -1,18 +1,24 @@
 <script setup>
-// Source Data Explorer body - store-driven. Renders (top to bottom): a dataset
-// selector (one chip per configured source, hidden when there is a single one or the
-// explorer is embedded), an Enter/button global search, the user filter chips, and
-// the rows table. Used in the standalone SourcePanel (the pre-conversation empty
-// screen) and, with `embedded`, inside the Evidence "Source data" tab; it feeds the
-// sources store, so the host only has to ensureAgent() first.
+// Source Data Explorer body - store-driven. Renders (top to bottom): ONE top row
+// holding the dataset dropdown (hidden when there is a single source or the explorer
+// is embedded) and the Enter/button global search naming the dataset it searches,
+// then the user filter chips, then the surface itself. Used in the standalone SourcePanel
+// (the pre-conversation empty screen; the Data|Analyze switch lives in ITS header to
+// save a body row) and, with `embedded`, inside the Evidence "Source data" tab (which
+// has no such header, so the switch renders inline there); it feeds the sources store,
+// so the host only has to ensureAgent() first.
+//
+// Two clean surfaces, one job each: DATA browses rows (search, filters, sort, cells),
+// ANALYZE computes (measures, result, and a preview of the rows behind them).
+// Everything that computes lives in SourceWorkspace - the Data view carries no figures.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
 import { Icon } from '../ui'
+import DatasetPick from './DatasetPick.vue'
 import SourceChips from './SourceChips.vue'
 import SourceTable from './SourceTable.vue'
-import SourceAnalyze from './SourceAnalyze.vue'
-import SourceCalc from './SourceCalc.vue'
+import SourceWorkspace from './SourceWorkspace.vue'
 
 // `embedded` hides the internal dataset selector: hosted inside the Evidence
 // "Source data" tab, the unified selector there drives the dataset choice.
@@ -23,6 +29,26 @@ const sources = useSourcesStore()
 
 const activeSourceId = computed(() => sources.activeSourceId)
 const hasTabs = computed(() => sources.sourceList.length > 1)
+// The dataset choice is a DROPDOWN (shared DatasetPick), not one pill per source: an
+// agent may expose ten datasets, and a pill row would eat the panel (user ask
+// 2026-08-13). String-keyed so the select round-trips the EXACT id.
+const activeKey = computed(() => (activeSourceId.value == null ? '' : String(activeSourceId.value)))
+const datasetOptions = computed(() =>
+  sources.sourceList.map((s) => ({ key: String(s.id), label: s.label })),
+)
+function onDatasetChange(key) {
+  const s = sources.sourceList.find((x) => String(x.id) === key)
+  if (s) sources.setSource(s.id)
+}
+// The search names WHAT it searches: "Search in DRIVE Revenues..." beats a generic
+// placeholder (the user must never wonder whether this searches the chat or the data).
+const activeLabel = computed(() => {
+  const s = sources.sourceList.find((x) => x.id === activeSourceId.value)
+  return (s && s.label) || ''
+})
+const searchPlaceholder = computed(() =>
+  activeLabel.value ? t('src.search.in', [activeLabel.value]) : t('src.search.placeholder'),
+)
 
 // Search fires ONLY on Enter or the explicit search button (no debounce): the input
 // binds to a LOCAL term so typing stays instant; the store (and its refetch) is
@@ -56,79 +82,73 @@ watch(() => sources.q, (q) => {
   <div class="src-explorer">
     <!-- Dataset selector - only when the agent exposes more than one source AND the
          explorer is not embedded (the unified Evidence selector drives it there). -->
-    <div v-if="hasTabs && !embedded" class="src-datasets">
-      <span class="src-datasets-label">{{ t('src.dataset_label') }}</span>
-      <button
-        v-for="s in sources.sourceList"
-        :key="s.id"
-        type="button"
-        class="src-dataset"
-        :class="{ active: s.id === activeSourceId }"
-        :disabled="sources.loading"
-        @click="sources.setSource(s.id)"
-      >
-        {{ s.label }}
-      </button>
-    </div>
+    <!-- ONE top row (user ask 2026-08-13): the dataset dropdown, then the search taking
+         every remaining pixel. Wraps only when the dock is too narrow for both. The
+         `dataset` slot lets an EMBEDDED host (Evidence) put ITS OWN selector in the
+         exact same spot, so both hosts keep an identical layout. -->
+    <div class="src-topbar">
+      <slot name="dataset">
+        <DatasetPick
+          v-if="hasTabs && !embedded"
+          :options="datasetOptions"
+          :value="activeKey"
+          :disabled="sources.loading"
+          @change="onDatasetChange"
+        />
+      </slot>
 
-    <!-- Top area: the global search + the Data|Analyze switch sit on the LEFT, the
-         Calculate zone fills the empty RIGHT side. A flex row that wraps to a stacked
-         block on narrow widths (the explorer is also used in a 480px side panel). -->
-    <div class="src-top">
-      <div class="src-top-main">
-        <!-- Global search over the whole dataset - fires on Enter or the search button. -->
-        <div class="src-search">
-          <Icon name="search" class="src-search-ico" />
-          <input
-            v-model="term"
-            type="text"
-            class="src-search-input"
-            maxlength="200"
-            :placeholder="t('src.search.placeholder')"
-            :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
-            @keydown.enter.prevent="submitQuery"
-          />
-          <button v-if="term" type="button" class="src-search-clear" :title="t('x.close')" @click="clearQuery">
-            <Icon name="x" />
-          </button>
-          <button
-            type="button"
-            class="src-search-go"
-            :aria-label="t('src.search.go')"
-            :title="t('src.search.go')"
-            :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
-            @click="submitQuery"
-          >
-            <Icon name="search" />
-          </button>
-        </div>
-        <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
-
-        <!-- Data / Analyze view switch (segmented control). The filter chips are shared
-             context and stay visible in BOTH views; only the surface below swaps. Plain
-             toggle buttons (aria-pressed), NOT the ARIA tab pattern: tabs would promise
-             tabpanel wiring + arrow-key navigation this simple switch does not have. Shown
-             only once the dataset is loaded (same gate as the content below). -->
-        <div v-if="!sources.loading && !sources.error" class="src-viewseg">
-          <button
-            type="button"
-            class="src-viewseg-btn"
-            :class="{ active: !sources.analyzeOpen }"
-            :aria-pressed="!sources.analyzeOpen"
-            @click="sources.setAnalyzeOpen(false)"
-          >{{ t('src.view.data') }}</button>
-          <button
-            type="button"
-            class="src-viewseg-btn"
-            :class="{ active: sources.analyzeOpen }"
-            :aria-pressed="sources.analyzeOpen"
-            @click="sources.setAnalyzeOpen(true)"
-          >{{ t('src.view.analyze') }}</button>
-        </div>
+      <!-- Global search over the whole dataset - fires on Enter or the search button.
+           The placeholder NAMES the dataset it searches. -->
+      <div class="src-search">
+        <Icon name="search" class="src-search-ico" />
+        <input
+          v-model="term"
+          type="text"
+          class="src-search-input"
+          maxlength="200"
+          :placeholder="searchPlaceholder"
+          :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
+          @keydown.enter.prevent="submitQuery"
+        />
+        <button v-if="term" type="button" class="src-search-clear" :title="t('x.close')" @click="clearQuery">
+          <Icon name="x" />
+        </button>
+        <button
+          type="button"
+          class="src-search-go"
+          :aria-label="t('src.search.go')"
+          :title="t('src.search.go')"
+          :disabled="sources.loading || !!sources.error || sources.activeSourceId == null"
+          @click="submitQuery"
+        >
+          <Icon name="search" />
+        </button>
       </div>
-      <!-- Calculate zone (pick a column, see its key figures). Rendered once columns load. -->
-      <SourceCalc v-if="!sources.loading && !sources.error" class="src-top-calc" />
+
+      <!-- View switch - EMBEDDED host only, riding the SAME top row (the Evidence
+           "Source data" tab has no panel header to carry it; the docked SourcePanel
+           hoists the switch into its own header instead). Plain toggle buttons
+           (aria-pressed) whose titles carry the one-line view hints. -->
+      <div v-if="embedded && !sources.loading && !sources.error" class="src-viewseg">
+        <button
+          type="button"
+          class="src-viewseg-btn"
+          :class="{ active: !sources.analyzeOpen }"
+          :aria-pressed="!sources.analyzeOpen"
+          :title="t('src.view.hint.data')"
+          @click="sources.setAnalyzeOpen(false)"
+        ><Icon name="grid" />{{ t('src.view.data') }}</button>
+        <button
+          type="button"
+          class="src-viewseg-btn"
+          :class="{ active: sources.analyzeOpen }"
+          :aria-pressed="sources.analyzeOpen"
+          :title="t('src.view.hint.analyze')"
+          @click="sources.setAnalyzeOpen(true)"
+        ><Icon name="chart" />{{ t('src.view.analyze') }}</button>
+      </div>
     </div>
+    <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
 
     <!-- States: meta loading / meta error / content. -->
     <div v-if="sources.loading" class="src-skeleton" :aria-label="t('src.loading')">
@@ -142,7 +162,10 @@ watch(() => sources.q, (q) => {
     <template v-else>
       <SourceChips />
       <SourceTable v-if="!sources.analyzeOpen" />
-      <SourceAnalyze v-else />
+      <!-- The Analyze workspace: measures + optional grouping, its result, and the rows
+           behind it. Both explorer hosts drive the SOURCES store; the Evidence
+           "Source data" legacy surface hosts the SAME workspace on its own store. -->
+      <SourceWorkspace v-else />
     </template>
   </div>
 </template>
@@ -150,63 +173,58 @@ watch(() => sources.q, (q) => {
 <style scoped>
 .src-explorer { display: flex; flex-direction: column; gap: var(--s-4); min-height: 0; }
 
-/* Dataset selector - flat square chips, orange only on the active one. */
-.src-datasets { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
-/* Micro-label recipe (charte): caps, 11px, heavy, wide tracking, --text-2. */
-.src-datasets-label {
-  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
-  text-transform: uppercase; letter-spacing: 0.1em;
-}
-/* Surface + border ride host-provided tokens: on the default --bg host (Evidence
-   "Source data" tab) the fallbacks keep the validated look; the DOCKED panel host
-   (SourcePanel, ambient --surface) remaps them so chips stay visible aplats. */
-.src-dataset {
-  padding: 3px 10px; border: 1px solid var(--src-chip-border, var(--border)); border-radius: 0;
-  font-size: var(--fs-xs); color: var(--text-2); background: var(--src-chip-bg, var(--surface));
-  transition: all var(--dur) var(--ease);
-}
-.src-dataset:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
-.src-dataset:disabled { opacity: 0.5; cursor: not-allowed; }
-.src-dataset.active { border-color: var(--orange); color: var(--orange-text); background: var(--orange-soft); }
-:global(body[data-theme="dark"] .src-dataset.active) { background: var(--orange-soft-dark); }
+/* Top row: dataset dropdown (shared DatasetPick) + search, one line (the search takes
+   every remaining pixel), wrapping only when the dock is too narrow to hold both. */
+.src-topbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
 
-/* Top area - the search + view switch on the left, the Calculate zone on the right. A
-   flex row that wraps to a stacked block on narrow widths (a 480px side panel). */
-.src-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4) var(--s-5); }
-.src-top-main { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
-.src-top-calc { flex: 1 1 240px; min-width: 0; }
-
-/* Data / Analyze segmented control - a 1px-bordered row; the active segment fills with
-   ink (charter recipe). Square, flat, self-sized (does not stretch full width). */
+/* Data / Analyze segmented control (embedded host, rides the top row) - a 1px-bordered
+   row; the active segment fills with ink (charter recipe). Rounded, flat, and the SAME
+   40px height as the search beside it (user ask 2026-08-13). */
 .src-viewseg {
-  display: inline-flex; align-self: flex-start;
-  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
+  display: inline-flex; align-items: stretch; align-self: center; flex: none;
+  height: 40px; box-sizing: border-box;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill); overflow: hidden;
 }
 .src-viewseg-btn {
-  padding: 5px 16px; font-size: var(--fs-xs); color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 16px; font-size: var(--fs-xs); color: var(--text-2);
   background: var(--bg); transition: all var(--dur) var(--ease);
 }
+.src-viewseg-btn :deep(.ui-icon) { width: 13px; height: 13px; transition: transform var(--dur) var(--ease); }
 .src-viewseg-btn + .src-viewseg-btn { border-left: 1px solid var(--border-strong); }
 .src-viewseg-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
+.src-viewseg-btn:hover:not(.active) :deep(.ui-icon) { transform: scale(1.1); }
 .src-viewseg-btn.active { background: var(--text); color: var(--bg); font-weight: var(--fw-medium); }
 
-/* Search box - flat, square, 1px border; the icon and clear button are muted. */
+@media (prefers-reduced-motion: reduce) {
+  .src-viewseg-btn, .src-viewseg-btn :deep(.ui-icon) { transition: none; }
+  .src-viewseg-btn:hover:not(.active) :deep(.ui-icon) { transform: none; }
+}
+
+/* Search box - rounded, quiet border that wakes up on focus (premium 2026-08-13).
+   Rides the same top row as the dataset dropdown and claims the remaining width;
+   the flex-basis floor makes it wrap under the dropdown on a too-narrow dock.
+   Same fixed 40px height as every top-row control (user ask 2026-08-13). */
 .src-search {
   display: flex; align-items: center; gap: var(--s-2);
-  border: 1px solid var(--border-strong); border-radius: 0;
-  background: var(--bg); padding: 0 8px;
+  flex: 1 1 220px; min-width: 0;
+  height: 40px; box-sizing: border-box;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+  background: var(--bg); padding: 0 10px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
+.src-search:focus-within { border-color: var(--text-3); box-shadow: var(--elev-1); }
 .src-search-ico { color: var(--text-3); flex: none; width: 15px; height: 15px; }
 .src-search-input {
   flex: 1; min-width: 0; border: none; background: transparent;
-  padding: 8px 4px; color: var(--text); font-size: var(--fs-sm);
+  padding: 0 4px; color: var(--text); font-size: var(--fs-sm);
 }
 .src-search-input:focus { outline: none; }
 .src-search-clear {
-  flex: none; padding: 3px; border-radius: 0; color: var(--text-3);
+  flex: none; padding: 4px; border-radius: var(--r-pill); color: var(--text-3);
   transition: all var(--dur) var(--ease);
 }
-.src-search-clear:hover { color: var(--text); }
+.src-search-clear:hover { color: var(--text); background: var(--surface-hover); }
 .src-search-clear :deep(.ui-icon) { width: 13px; height: 13px; }
 /* Explicit search trigger (search fires only on Enter or this button). */
 .src-search-go {
@@ -230,7 +248,7 @@ watch(() => sources.q, (q) => {
 .src-state { color: var(--text-3); font-size: var(--fs-sm); display: flex; align-items: center; gap: var(--s-3); }
 .src-state.error { color: var(--danger); }
 .src-state button {
-  padding: 2px 10px; border-radius: 0; color: var(--text-2);
+  padding: 2px 10px; border-radius: var(--r-pill); color: var(--text-2);
   transition: all var(--dur) var(--ease);
 }
 .src-state button:hover { background: var(--surface-hover); color: var(--text); }

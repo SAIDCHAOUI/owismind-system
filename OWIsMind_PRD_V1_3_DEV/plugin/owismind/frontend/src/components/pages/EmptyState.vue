@@ -30,7 +30,7 @@ defineProps({
 </template>
 
 <style scoped>
-/* Square empty state: flat surface, solid border, no pill radius. */
+/* Empty state: quiet panel, soft radius, hairline border (premium direction). */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -41,19 +41,19 @@ defineProps({
   color: var(--text-2);
 }
 .empty-state--bordered {
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   background: var(--surface);
 }
-/* 46x46 square icon box. */
+/* 46x46 icon tile: softly rounded, hairline frame. */
 .empty-state__icon {
   width: 46px;
   height: 46px;
   display: grid;
   place-items: center;
-  border-radius: 0;
-  background: transparent;
-  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  border: 1px solid var(--border);
   color: var(--text-3);
   margin-bottom: var(--s-1);
 }
@@ -68,15 +68,15 @@ defineProps({
   font-weight: 700;
   color: var(--text);
 }
-/* Orange "soon" tag: square, solid orange, white text. */
+/* Orange "soon" tag: pill cap, solid orange, white text. */
 .empty-state__tag {
   display: inline-block;
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
   background: var(--orange);
   color: #fff;
 }

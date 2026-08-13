@@ -37,14 +37,14 @@ const { toasts } = useToasts()
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  /* Square, flat, inverted-ink chip: the contrast IS the separation (charte:
-     no soft floating shadows - 1px level maximum). */
-  border-radius: 0;
+  /* Floating layer: rounded + soft layered elevation, over an inverted-ink fill so
+     it reads instantly against either theme. */
+  border-radius: var(--r-lg);
   background: var(--text);
   color: var(--bg);
   font-size: var(--fs-sm);
   font-weight: 500;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-2);
 }
 .ui-toast .ico { display: inline-flex; }
 .ui-toast .ico :deep(.ui-icon) { width: 14px; height: 14px; }
@@ -53,8 +53,19 @@ const { toasts } = useToasts()
 .ui-toast--warn .ico { color: var(--warn); }
 .ui-toast--danger .ico { color: var(--danger); }
 
-.ui-toast-enter-active,
-.ui-toast-leave-active { transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+/* Rises from below and settles from 0.96; leaving drops back the same way. `move`
+   keeps the stack from jumping when an older toast is dismissed under a newer one. */
+.ui-toast-enter-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+.ui-toast-leave-active { transition: opacity var(--dur-fast) var(--ease-in), transform var(--dur-fast) var(--ease-in); }
 .ui-toast-enter-from,
-.ui-toast-leave-to { opacity: 0; transform: translateY(10px); }
+.ui-toast-leave-to { opacity: 0; transform: translateY(10px) scale(0.96); }
+.ui-toast-move { transition: transform var(--dur) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast-enter-active,
+  .ui-toast-leave-active { transition: opacity 90ms linear; }
+  .ui-toast-enter-from,
+  .ui-toast-leave-to { transform: none; }
+  .ui-toast-move { transition: none; }
+}
 </style>

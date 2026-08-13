@@ -75,6 +75,8 @@ export const extraMessages = {
     'runplan.failed': 'Échec',
     'runplan.superseded': 'Remplacé',
     'msg.show_activity': "Afficher l'activité",
+    'msg.activity_none': 'Aucune activité détaillée enregistrée pour cette réponse.',
+    'msg.activity_error': "Activité indisponible pour le moment. Réessayez.",
     'runError.quota_blocked':
       "Le quota LLM empêche de poursuivre cette analyse.",
     'runError.rate_limited':
@@ -361,7 +363,6 @@ export const extraMessages = {
     'ev.filters.remove': 'Retirer ce filtre',
     'ev.modified': 'Filtres modifiés',
     'ev.table.empty': 'Aucune ligne ne correspond aux filtres.',
-    'ev.table.source': 'Table source',
     'ev.table.loaded': '{0} ligne(s) chargée(s)',
     'ev.table.more': 'Faites défiler pour charger plus',
     'ev.table.loadingMore': 'Chargement…',
@@ -408,7 +409,6 @@ export const extraMessages = {
     'ev.proof.result.drill': 'Voir les lignes sources de ce résultat',
     'ev.proof.drill.banner': 'Lignes sources : {0}',
     'ev.proof.drill.exit': 'Revenir au résultat',
-    'ev.proof.explore': 'Explorer les données sources',
 
     // Evidence Studio - artifact tabs (KPI / chart / table)
     'art.tab.evidence': 'Preuves',
@@ -773,8 +773,11 @@ export const extraMessages = {
     'src.panel.title': 'Données sources',
     'src.panel.expand': 'Agrandir la vue des données',
     'src.panel.shrink': 'Réduire la vue des données',
+    'src.teaser.title': 'Explorer les données',
+    'src.teaser.hint': 'Cliquez pour agrandir et travailler sur les données sources de cet agent.',
     'src.dataset_label': 'Jeu de données',
     'src.search.placeholder': 'Rechercher dans le jeu de données…',
+    'src.search.in': 'Rechercher dans {0}…',
     'src.search.min': 'Saisissez au moins 2 caractères pour lancer la recherche.',
     'src.search.go': 'Rechercher',
     'src.filters.title': 'Filtres',
@@ -859,7 +862,7 @@ export const extraMessages = {
     // Source Data - Calculate zone (pick a column, see its key figures). The measures shown
     // depend on the column TYPE, never a hardcoded column name.
     'src.calc.title': 'Calculer',
-    'src.calc.choose': '- Choisir une colonne -',
+    'src.calc.choose': 'Choisir une colonne à calculer…',
     'src.calc.measures': 'Mesures',
     'src.calc.keepOne': 'Au moins une mesure reste affichée',
     'src.calc.sum': 'Somme',
@@ -872,6 +875,8 @@ export const extraMessages = {
     // Source Data - Data / Analyze view switch (segmented control).
     'src.view.data': 'Données',
     'src.view.analyze': 'Analyser',
+    'src.view.hint.data': 'Parcourez les lignes brutes du jeu de données.',
+    'src.view.hint.analyze': 'Regroupez et agrégez les données pour dégager les tendances.',
     // Source Data - Analyze mini-pivot (one group-by + one measure).
     'src.an.group_by': 'Regrouper par',
     'src.an.choose': '- Choisir une colonne -',
@@ -892,6 +897,46 @@ export const extraMessages = {
     'src.an.truncated': 'Top {0} groupes affichés',
     'src.an.prompt': 'Choisissez un regroupement et un calcul pour analyser vos données.',
     'src.an.no_rows': 'Aucun groupe à afficher.',
+    'src.an.preview': 'Les données analysées',
+    // Source Data - unified Analyze workspace: ONE builder ("Mesurer ... par ..."), a
+    // result that adapts (KPI cards without grouping, bar table with), and a preview of
+    // the rows behind the figures. Business wording, never BI jargon.
+    'src.ws.lead': 'Mesurer',
+    'src.ws.prep_all': 'pour',
+    'src.ws.prep_by': 'par',
+    'src.ws.all_rows': 'Toutes les lignes filtrées',
+    'src.ws.group_label': 'Regroupement',
+    'src.ws.add': 'Ajouter',
+    'src.ws.add_title': 'Ajouter une mesure',
+    'src.ws.full': 'Maximum {0} mesures',
+    'src.ws.remove': 'Retirer cette mesure',
+    'src.ws.change': 'Changer cette mesure',
+    'src.ws.fn.min': 'Min de {0}',
+    'src.ws.fn.max': 'Max de {0}',
+    'src.ws.fn.distinct': 'Valeurs distinctes de {0}',
+    'src.ws.bucket.month': 'Mois',
+    'src.ws.bucket.quarter': 'Trimestre civil',
+    'src.ws.bucket.year': 'Année',
+    'src.ws.bucket_label': 'Période',
+    'src.ws.picker.title': 'Mesures',
+    'src.ws.picker.used': 'Déjà mesuré',
+    'src.ws.no_rows': 'Aucune ligne dans la sélection filtrée.',
+    'src.ws.null_group': 'Valeur manquante',
+    'src.ws.col_group': 'Groupe',
+    'src.ws.ranked_by': 'Groupes classés par cette mesure',
+    'src.ws.top': 'Top 50 par {0}',
+    'src.ws.last_periods': '50 dernières périodes',
+    'src.ws.preview': 'Les données analysées',
+    'src.ws.preview_count': '{0} affichées / {1} filtrées',
+    'src.ws.preview_expand': "Déplier l'aperçu",
+    'src.ws.preview_collapse': "Replier l'aperçu",
+    'src.ws.pinned': 'Colonne analysée',
+    'src.ws.measure_col': 'Mesurer cette colonne',
+    // Tables - scroll affordances (there IS more to the right / below).
+    'tbl.more_cols': '{0} colonnes de plus à droite',
+    'tbl.more_cols_any': 'Encore des colonnes à droite',
+    'tbl.back_cols': 'Revenir aux premières colonnes',
+    'tbl.more_rows': "D'autres lignes en dessous",
     // Source Data - temporal range filter (a date period in 1-2 clicks: From / To months
     // or a full year). The chip reads as its month span.
     'src.range.from': 'De',
@@ -974,6 +1019,8 @@ export const extraMessages = {
     'runplan.failed': 'Failed',
     'runplan.superseded': 'Superseded',
     'msg.show_activity': 'Show activity',
+    'msg.activity_none': 'No detailed activity recorded for this answer.',
+    'msg.activity_error': 'Activity is unavailable right now. Try again.',
     'runError.quota_blocked':
       'The LLM quota prevents this analysis from continuing.',
     'runError.rate_limited':
@@ -1259,7 +1306,6 @@ export const extraMessages = {
     'ev.filters.remove': 'Remove this filter',
     'ev.modified': 'Filters modified',
     'ev.table.empty': 'No row matches the filters.',
-    'ev.table.source': 'Source table',
     'ev.table.loaded': '{0} row(s) loaded',
     'ev.table.more': 'Scroll to load more',
     'ev.table.loadingMore': 'Loading…',
@@ -1305,7 +1351,6 @@ export const extraMessages = {
     'ev.proof.result.drill': 'See the source rows behind this result',
     'ev.proof.drill.banner': 'Source rows: {0}',
     'ev.proof.drill.exit': 'Back to the result',
-    'ev.proof.explore': 'Explore the source data',
 
     // Evidence Studio - artifact tabs (KPI / chart / table)
     'art.tab.evidence': 'Evidence',
@@ -1670,8 +1715,11 @@ export const extraMessages = {
     'src.panel.title': 'Source data',
     'src.panel.expand': 'Expand the data view',
     'src.panel.shrink': 'Shrink the data view',
+    'src.teaser.title': 'Explore the data',
+    'src.teaser.hint': 'Click to expand and work with this agent’s source data.',
     'src.dataset_label': 'Dataset',
     'src.search.placeholder': 'Search this dataset…',
+    'src.search.in': 'Search in {0}…',
     'src.search.min': 'Type at least 2 characters to search.',
     'src.search.go': 'Search',
     'src.filters.title': 'Filters',
@@ -1756,7 +1804,7 @@ export const extraMessages = {
     // Source Data - Calculate zone (pick a column, see its key figures). The measures shown
     // depend on the column TYPE, never a hardcoded column name.
     'src.calc.title': 'Calculate',
-    'src.calc.choose': '- Choose a column -',
+    'src.calc.choose': 'Choose a column to calculate…',
     'src.calc.measures': 'Measures',
     'src.calc.keepOne': 'At least one measure stays shown',
     'src.calc.sum': 'Sum',
@@ -1768,6 +1816,8 @@ export const extraMessages = {
     'src.calc.distinct': 'Distinct values',
     // Source Data - Data / Analyze view switch (segmented control).
     'src.view.data': 'Data',
+    'src.view.hint.data': 'Browse the raw rows of the dataset.',
+    'src.view.hint.analyze': 'Group and aggregate the data to surface trends.',
     'src.view.analyze': 'Analyze',
     // Source Data - Analyze mini-pivot (one group-by + one measure).
     'src.an.group_by': 'Group by',
@@ -1789,6 +1839,44 @@ export const extraMessages = {
     'src.an.truncated': 'Top {0} groups shown',
     'src.an.prompt': 'Pick a grouping and a calculation to analyze your data.',
     'src.an.no_rows': 'No group to show.',
+    'src.an.preview': 'The data being analyzed',
+    // Source Data - unified Analyze workspace (see the fr block for the rationale).
+    'src.ws.lead': 'Measure',
+    'src.ws.prep_all': 'for',
+    'src.ws.prep_by': 'by',
+    'src.ws.all_rows': 'All filtered rows',
+    'src.ws.group_label': 'Grouping',
+    'src.ws.add': 'Add',
+    'src.ws.add_title': 'Add a measure',
+    'src.ws.full': 'At most {0} measures',
+    'src.ws.remove': 'Remove this measure',
+    'src.ws.change': 'Change this measure',
+    'src.ws.fn.min': 'Min of {0}',
+    'src.ws.fn.max': 'Max of {0}',
+    'src.ws.fn.distinct': 'Distinct values of {0}',
+    'src.ws.bucket.month': 'Month',
+    'src.ws.bucket.quarter': 'Calendar quarter',
+    'src.ws.bucket.year': 'Year',
+    'src.ws.bucket_label': 'Period',
+    'src.ws.picker.title': 'Measures',
+    'src.ws.picker.used': 'Already measured',
+    'src.ws.no_rows': 'No row in the filtered selection.',
+    'src.ws.null_group': 'Missing value',
+    'src.ws.col_group': 'Group',
+    'src.ws.ranked_by': 'Groups ranked by this measure',
+    'src.ws.top': 'Top 50 by {0}',
+    'src.ws.last_periods': 'Last 50 periods',
+    'src.ws.preview': 'The data being analyzed',
+    'src.ws.preview_count': '{0} shown / {1} filtered',
+    'src.ws.preview_expand': 'Expand the preview',
+    'src.ws.preview_collapse': 'Collapse the preview',
+    'src.ws.pinned': 'Analyzed column',
+    'src.ws.measure_col': 'Measure this column',
+    // Tables - scroll affordances (there IS more to the right / below).
+    'tbl.more_cols': '{0} more columns to the right',
+    'tbl.more_cols_any': 'More columns to the right',
+    'tbl.back_cols': 'Back to the first columns',
+    'tbl.more_rows': 'More rows below',
     // Source Data - temporal range filter (a date period in 1-2 clicks: From / To months
     // or a full year). The chip reads as its month span.
     'src.range.from': 'From',

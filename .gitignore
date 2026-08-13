@@ -51,3 +51,6 @@ docs/agentic-research/
 
 # superpowers SDD scratch (progress ledger)
 .superpowers/
+
+# Dev harness (local visual validation) - Vite cache
+dev-harness/.vite-cache/

@@ -99,14 +99,17 @@ function statusClass(s) {
   padding: var(--s-1) 0;
   font-size: 13px;
   color: var(--text);
+  transition: color var(--dur) var(--ease);
 }
-/* Square status marker: a 10x10 flat square, never a dot/halo. */
+/* Square status marker: a 10x10 flat square, never a dot/halo. The fill is
+   transitioned so a step ticking over reads as a state CHANGING, not repainting. */
 .rp-marker {
   width: 10px;
   height: 10px;
   flex-shrink: 0;
   border: 1px solid var(--border-strong);
   background: transparent;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .rp-step-title {
   flex: 1 1 auto;
@@ -119,6 +122,7 @@ function statusClass(s) {
   flex-shrink: 0;
   font-size: 12px;
   color: var(--text-3);
+  transition: color var(--dur) var(--ease);
 }
 /* Running: THE single orange accent of the card. */
 .st-running .rp-marker { background: var(--orange); border-color: var(--orange); }
@@ -129,4 +133,8 @@ function statusClass(s) {
 .st-failed .rp-marker { background: var(--danger); border-color: var(--danger); }
 .st-failed .rp-status { color: var(--danger); }
 .st-superseded .rp-step-title { text-decoration: line-through; color: var(--text-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-step, .rp-marker, .rp-status { transition: none; }
+}
 </style>

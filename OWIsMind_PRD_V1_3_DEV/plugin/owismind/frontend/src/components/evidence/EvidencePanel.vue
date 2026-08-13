@@ -10,9 +10,11 @@
 // carries chart / table / kpi artifacts. Switching tabs ONLY updates
 // evidence.activeTab - it MUST NOT change evidence.open (the ChatThread scroll
 // gate checks open, F13).
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
+import { useChatStore } from '../../stores/chat.js'
+import { useSessionStore } from '../../stores/session.js'
 import { Icon } from '../ui'
 import Tabs from '../ui/Tabs.vue'
 import EvidenceTrust from './EvidenceTrust.vue'
@@ -30,11 +32,23 @@ import ArtifactKpi from './ArtifactKpi.vue'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
+const chat = useChatStore()
+const session = useSessionStore()
 const meta = computed(() => evidence.meta)
 
 // The interactive view (rows table + chips + drill) is available: this gates both
 // the "Sources" tab entry and its body, exactly like the pre-tab explore block.
 const available = computed(() => !!(meta.value && meta.value.available))
+
+// The agent's CONFIGURED source datasets for this exchange: they open the Source
+// data tab even when the turn produced NO SQL (user ask 2026-08-13) - browsing the
+// agent's datasets never needed a captured query. Same resolution as the tab itself.
+const agentSources = computed(() => {
+  const key = chat.agentKeyForExchange(evidence.exchangeId)
+  if (!key) return []
+  const a = session.agents.find((x) => x.key === key)
+  return a && Array.isArray(a.sources) ? a.sources : []
+})
 
 // Marker of the ENRICHED trust-layer contract: a v1 meta (no verification
 // block) must render pixel-identical to today - no badge, no extra labels.
@@ -66,11 +80,9 @@ const artifacts = computed(() => {
 })
 
 const tabItems = computed(() => {
+  // Reading order (user ask 2026-08-13): the proof first, then the rendered artifacts
+  // (KPI / chart / table) when the turn produced any, and the Source data explorer LAST.
   const items = [{ key: 'evidence', label: t('art.tab.evidence') }]
-  // 'Sources' hosts the exchange-scoped rows explorer (chips + drill + table). It
-  // appears only when the interactive view is available - the same gate as the
-  // explore block itself, so a degraded exchange shows no tab bar (behavior unchanged).
-  if (available.value) items.push({ key: 'sources', label: t('ev.tab.sources') })
   const seen = new Set()
   for (const art of artifacts.value) {
     if ((art.kind === 'kpi' || art.kind === 'chart' || art.kind === 'table') && !seen.has(art.kind)) {
@@ -78,6 +90,11 @@ const tabItems = computed(() => {
       items.push({ key: art.kind, label: t('art.tab.' + art.kind) })
     }
   }
+  // 'Sources' hosts the exchange-scoped rows explorer (chips + drill + table) AND the
+  // agent-mode dataset explorer. It appears when the interactive view is available OR
+  // the agent exposes configured datasets: a SQL-less answer still lets the user open
+  // and browse the source data (user ask 2026-08-13).
+  if (available.value || agentSources.value.length) items.push({ key: 'sources', label: t('ev.tab.sources') })
   return items
 })
 
@@ -101,6 +118,13 @@ const tableArtifact = computed(() =>
 const activeTab = computed({
   get: () => evidence.activeTab || 'evidence',
   set: (key) => evidence.setActiveTab(key),
+})
+
+// Tab guard: the active tab must always EXIST in the offered list (a caller may land
+// the panel on 'sources' before meta proves the exchange degraded AND source-less).
+// Falling back to 'evidence' keeps the panel honest instead of rendering a ghost tab.
+watch([tabItems, activeTab], ([items, tab]) => {
+  if (meta.value && !items.some((i) => i.key === tab)) activeTab.value = 'evidence'
 })
 </script>
 
@@ -140,12 +164,18 @@ const activeTab = computed({
         <div class="sk sk-table" />
       </div>
       <div v-else-if="evidence.error" class="ev-state error">{{ t('ev.error') }}</div>
-      <!-- Degraded: the honest "declared" badge ABOVE the reason - the claim
-           level is exactly what a degraded panel is about. No tabs here (the
-           Sources tab is gated on meta.available), so this branch is the whole body. -->
+      <!-- Degraded (no captured SQL): the proof tab shows the honest "declared" badge
+           above the reason - but the SOURCE DATA tab stays reachable whenever the
+           agent exposes configured datasets (user ask 2026-08-13): browsing the data
+           never needed a captured query. -->
       <template v-else-if="meta && !meta.available">
-        <EvidenceTrust />
-        <div class="ev-state">{{ degradedMessage }}</div>
+        <template v-if="activeTab === 'sources' && agentSources.length">
+          <EvidenceSourcesTab />
+        </template>
+        <template v-else>
+          <EvidenceTrust />
+          <div class="ev-state">{{ degradedMessage }}</div>
+        </template>
       </template>
       <template v-else-if="meta">
         <!-- ── KPI TAB ────────────────────────────────────────────────────── -->
@@ -238,6 +268,38 @@ const activeTab = computed({
   padding: 0 var(--s-5);
   flex: none;
 }
+/* The shared Tabs.vue primitive draws a plain orange rule under the active tab; the
+   panel restyles it HERE (charte rule: never touch Tabs.vue). Every tab owns a
+   collapsed underline that SCALES OUT from the left when it becomes active - the
+   indicator draws itself in instead of blinking. */
+.ev-tabs :deep(.ui-tab)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: var(--s-4);
+  bottom: -1px;
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur) var(--ease-out), background var(--dur) var(--ease);
+}
+/* The active state restates the geometry it shares with the primitive (height,
+   background) so the outcome never depends on stylesheet order. */
+.ev-tabs :deep(.ui-tab.is-active)::after {
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(1);
+}
+/* Hovering an inactive tab previews the underline in ink, never in orange (the orange
+   rule stays the mark of the ACTIVE tab). */
+.ev-tabs :deep(.ui-tab:not(.is-active):hover)::after {
+  background: var(--text-3);
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ev-tabs :deep(.ui-tab)::after { transition: none; }
+}
 /* Vertical stack of artifacts of one kind (several charts / KPI cards). */
 .art-stack {
   display: flex;
@@ -245,38 +307,52 @@ const activeTab = computed({
   gap: var(--s-6);
 }
 .ev-head { animation: ev-rise var(--dur-slow) var(--ease) both; }
-.ev-body > * { animation: ev-rise var(--dur-slow) var(--ease) both; }
-.ev-body > * + * { animation-delay: 90ms; }
+/* True stagger: each proof section arrives a beat after the one above it, so the panel
+   reads top-down instead of landing as one block. Capped past the 5th child - a longer
+   ladder would make the last section feel late. */
+.ev-body > * { animation: ev-rise var(--dur-slow) var(--ease-out) both; }
+.ev-body > *:nth-child(2) { animation-delay: 60ms; }
+.ev-body > *:nth-child(3) { animation-delay: 120ms; }
+.ev-body > *:nth-child(4) { animation-delay: 180ms; }
+.ev-body > *:nth-child(n + 5) { animation-delay: 240ms; }
 @keyframes ev-rise {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
-/* Meta-loading skeleton - gradient sweep over content-shaped placeholders. */
+/* Meta-loading skeleton - flat surface blocks with an opacity pulse. No gradient
+   (charte), and the same idiom as every other data skeleton in the app. */
 .ev-skeleton { display: flex; flex-direction: column; gap: var(--s-4); flex: 1; min-height: 0; }
-/* Square placeholders: the skeleton previews square chips/bands (charte geometry),
-   so the loaded content lands exactly where the placeholder stood. */
+/* The placeholders preview the SHAPE the content will take, so the loaded blocks land
+   exactly where the skeleton stood: pill chips, square bands and table. */
 .sk {
   display: block; border-radius: 0;
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-hover) 50%, var(--surface-2) 75%);
-  background-size: 200% 100%;
-  animation: shimmer-sweep 1.4s linear infinite;
+  background: var(--surface-2);
+  animation: ev-sk-pulse 1.4s ease-in-out infinite;
 }
+@keyframes ev-sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 .sk-chips { display: flex; gap: var(--s-2); }
 .sk-band { width: 65%; height: 24px; }
-.sk-chip { width: 110px; height: 28px; }
+.sk-chip { width: 110px; height: 28px; border-radius: var(--r-pill); }
 .sk-table { flex: 1; min-height: 220px; }
 @media (prefers-reduced-motion: reduce) {
   .evidence, .ev-head, .ev-body > *, .sk { animation: none; }
 }
 .ev-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--border);
+  /* Same fixed height as the chat topbar (.main-top: 56px) so the two bottom
+     hairlines meet as ONE continuous line across the whole app (user ask). */
+  height: 56px; flex-shrink: 0;
+  padding: 0 var(--s-5); border-bottom: 1px solid var(--border);
 }
 .ev-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-md); }
 .ev-title :deep(.ui-icon) { width: 16px; height: 16px; color: var(--orange); }
 .ev-dataset { font-size: 11px; color: var(--text-3); font-weight: 400; }
 .ev-actions { display: flex; align-items: center; gap: var(--s-3); }
-.ev-close { padding: 4px; border-radius: 0; color: var(--text-3); transition: all var(--dur) var(--ease); }
+/* Rounded icon button (premium 2026-08-13), matching the Source Data dock header. */
+.ev-close {
+  display: inline-flex; padding: 6px; border-radius: var(--r-pill);
+  color: var(--text-3); transition: all var(--dur) var(--ease);
+}
 .ev-close:hover { background: var(--surface-hover); color: var(--text); }
 .ev-close :deep(.ui-icon) { width: 16px; height: 16px; }
 .ev-body {

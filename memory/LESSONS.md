@@ -3588,6 +3588,34 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-verification** : must-fix HIGH de la revue charte Opus ; apres suppression, `grep 'box-shadow: 0 '` = 0 occurrence sur les 25 fichiers touches.
 - **Source** : session 2026-08-07 run 1 (revue charte-orange-reviewer ; sa memoire d'agent porte le meme point de controle).
 
+## L183 - "Des yeux" locaux : dev-harness Vite + mock backend + playwright-core du cache npx, zero install, plugin intouche (2026-08-13)
+- **Contexte** : l'agent ne pouvait pas VOIR son travail UI (validation seulement via upload DSS par l'user). Demande user : boucle visuelle locale "ultra forte", sans toucher au code du plugin qui marche en DSS.
+- **Ce qui a echoue** : le MCP Playwright ("Chromium distribution 'chrome' is not found", pas de Chrome installe) ; et l'idee d'adapter le frontend au simulateur (interdite : c'est le simulateur qui s'adapte a Dataiku).
+- **Solution qui marche** : `dev-harness/` a la racine du repo : config Vite dont `root` pointe sur `plugin/owismind/frontend` + shim `window.getWebAppBackendUrl = (p) => p` injecte par transformIndexHtml + middleware `configureServer` servant un mock `/owismind-api/*` fidele aux contrats geles (polling chat, events normalises, evidence/source rows-aggregate-distinct) ; driver `tools/browse.mjs` reutilisant playwright-core du cache npx (`~/.npm/_npx/<hash>/node_modules/playwright-core`) + le Chromium bundle de `~/Library/Caches/ms-playwright` en executablePath explicite. Regle d'or : un ecart harness/DSS se corrige DANS LE MOCK, jamais dans le plugin. Les captures pleine page a petite echelle mentent sur les couleurs -> croper (sips) avant de juger le dark.
+- **Preuve-verification** : ~20 parcours JSON (clics, drags, evalLog, shots) sur toute la session, 0 erreur console, bugs reels attrapes avant l'user (colonnes de grille decalees, store non initialise) ; l'user suit en live sur http://127.0.0.1:5199.
+- **Source** : sessions 2026-08-12 nuit + 2026-08-13 (`dev-harness/README.md`).
+
+## L184 - Sidebar flyout : jamais position:fixed sur un GRID ITEM (les items suivants remontent d'une colonne) (2026-08-13)
+- **Contexte** : ouverture de la sidebar repliee au survol, en overlay au-dessus du contenu (demande user).
+- **Ce qui a echoue** : `position: fixed` sur l'aside (1er enfant de la grille `.app`) le sort du flux -> les items suivants se REASSIGNENT d'une piste vers la gauche : le chat s'ecrase dans la colonne rail (56px), le dock glisse dans la colonne 1fr, la derniere piste reste vide. Vu en capture harness (blanc a droite, dock deplace).
+- **Solution qui marche** : le flyout RESTE un grid item : `position: relative; z-index: var(--z-menu); width: <sidebarW>px` -> il DEBORDE sa piste rail par-dessus le contenu (fond --bg opaque + --elev-2), la grille ne bouge pas d'un pixel. Delais hover 140ms/220ms contre le flash, le clic logo epingle (railMode = collapsed && !hoverOpen).
+- **Preuve-verification** : capture harness avant/apres (rw-17 casse vs rw-19 correct), chat et dock immobiles sous le flyout.
+- **Source** : session 2026-08-13 (`Sidebar.vue`).
+
+## L185 - Deux regles CSS de meme specificite dans DEUX composants : l'ordre de compilation decide - qualifier le selecteur hote (2026-08-13)
+- **Contexte** : la preview du workspace Analyze devait remplir/scroller ; SourceTable porte son propre cap `.src-table.is-preview .src-table-scroll { max-height: 220px }`.
+- **Ce qui a echoue** : l'override hote `.ws-preview:not(.is-collapsed) :deep(.src-table-scroll) { max-height: none }` etait a EGALITE de specificite (0,3,1) avec le cap -> le gagnant depend de l'ordre des styles dans le bundle (fragile, et le cap gagnait : preview bloquee a 220px, percue comme "pas de scroll").
+- **Solution qui marche** : requalifier l'override avec la classe du composant cible (`:deep(.src-table.is-preview .src-table-scroll)` -> 0,4,2) pour une victoire STRUCTURELLE, pas d'ordre. Reflexe : tout override :deep d'une regle qui porte deja 2+ classes doit reprendre ces classes.
+- **Preuve-verification** : evalLog harness clientHeight/scrollHeight (156/1794 puis 480/1794 selon la passe), scroll effectif.
+- **Source** : session 2026-08-13 (`SourceWorkspace.vue` x `SourceTable.vue`).
+
+## L186 - watch() sans immediate + entree DEJA active au mount = initialisation jamais declenchee (2026-08-13)
+- **Contexte** : onglet Source data d'Evidence, mode agent (explorateur standalone) initialise par `watch(active, ...)` -> `ensureAgent + setSource`.
+- **Ce qui a echoue** : sur un echange SANS SQL, il n'y a aucune table detectee -> la PREMIERE entree active est deja le mode agent au montage ; le watch (non-immediate) ne fire jamais -> store jamais pointe, table vide "No row matches" alors que le dataset existe. Invisible tant qu'un mode legacy passait d'abord (le cas historique).
+- **Solution qui marche** : `{ immediate: true }` sur ce watch (les deux appels sont idempotents). Reflexe : tout watch qui INITIALISE un etat a partir d'une valeur qui peut etre bonne DES le mount doit etre immediate.
+- **Preuve-verification** : harness scenario "Bonjour" (no_sql) : table vide avant fix, 640 lignes chargees apres ; 425/425.
+- **Source** : session 2026-08-13 (`EvidenceSourcesTab.vue`).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

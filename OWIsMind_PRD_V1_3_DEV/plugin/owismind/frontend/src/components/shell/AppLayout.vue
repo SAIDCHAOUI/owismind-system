@@ -29,6 +29,7 @@ const chat = useChatStore()
 const route = useRoute()
 const dragging = ref(false)
 const draggingEv = ref(false)
+const draggingSrc = ref(false)
 
 // Either the Evidence proof panel OR the standalone Source Data Explorer occupies the
 // right column - they are mutually exclusive (see the watches below). The two panels
@@ -76,6 +77,14 @@ watch(
   { immediate: true },
 )
 
+// The X opt-out only holds for the CURRENT empty screen (user decision 2026-08-13,
+// "always show the teased data"): once a conversation starts or the user leaves the
+// chat, clear it - the NEXT arrival screen auto-docks (and teases) again. Clearing
+// only on these transitions is what prevents an X -> instant re-dock loop.
+watch([() => chat.exchanges.length, () => route.name], ([exchangeCount, name]) => {
+  if (exchangeCount > 0 || name !== 'chat') sources.undismissPanel()
+})
+
 // The proof panel only makes sense NEXT TO a conversation: leaving the chat route
 // (Settings, FAQ, Agents…) closes it so the page renders in the main column -
 // never squeezed beside a stale panel. Coming back to a conversation re-opens it
@@ -106,31 +115,46 @@ watch(() => sources.open, (open) => {
 })
 
 // A SPACE-HUNGRY right panel auto-collapses the conversation sidebar to give it
-// room: the Evidence panel (pixel width) and the EXPANDED Source Data dock. The
-// compact Source Data dock is fraction-based and coexists with the open sidebar,
-// so the arrival screen keeps the conversation list visible. The user can
-// re-expand at any time - we never force the sidebar back open on close, and the
-// automatic collapse is NOT persisted (persistChoice=false): only an explicit
-// user toggle decides what state the next session cold-starts with.
+// room: the Evidence panel (pixel width) and a Source Data dock holding a large
+// share of the canvas (via the expand toggle OR a manual drag). The compact dock
+// coexists with the open sidebar, so the arrival screen keeps the conversation
+// list visible. The user can re-expand at any time - we never force the sidebar
+// back open on close, and the automatic collapse is NOT persisted
+// (persistChoice=false): only an explicit user toggle decides what state the
+// next session cold-starts with.
+const srcHungry = computed(
+  () =>
+    sources.open
+    && (sources.wide || ui.sourcesW > (window.innerWidth || 1280) * 0.45),
+)
 watch(
-  [() => evidence.open, () => sources.open && sources.wide],
-  ([evOpen, wideSrc]) => {
-    if (evOpen || wideSrc) ui.setSidebarCollapsed(true, false)
+  [() => evidence.open, srcHungry],
+  ([evOpen, hungrySrc]) => {
+    if (evOpen || hungrySrc) ui.setSidebarCollapsed(true, false)
   },
 )
 
-// The evidence width clamp samples window.innerWidth: re-clamp on resize so a
-// window shrunk WHILE the panel is open can never leave a stale wide panel
-// swallowing the chat column (and pushing the drag handle off-screen). The Source
-// Data dock is fraction-based and needs no re-clamp.
+// Expand/compact toggle <-> pixel width: the toggle drives PRESETS of the freely
+// resizable width (a drag then fine-tunes from there). Applied only while open.
+watch(() => sources.wide, (wideNow) => {
+  if (!sources.open) return
+  const w = window.innerWidth || 1280
+  ui.setSourcesWidth(Math.round(w * (wideNow ? 0.58 : 0.32)))
+})
+
+// The panel width clamps sample window.innerWidth: re-clamp on resize so a
+// window shrunk WHILE a panel is open can never leave a stale wide panel
+// swallowing the chat column (and pushing the drag handle off-screen).
 function onWindowResize() {
   if (evidence.open) ui.setEvidenceWidth(ui.evidenceW)
+  if (sources.open) ui.setSourcesWidth(ui.sourcesW)
 }
 window.addEventListener('resize', onWindowResize)
 
 const appStyle = computed(() => ({
   '--sidebar-w': ui.sidebarCollapsed ? '0px' : ui.sidebarW + 'px',
   '--evidence-w': ui.evidenceW + 'px',
+  '--sources-w': ui.sourcesW + 'px',
 }))
 
 function onMove(e) {
@@ -142,12 +166,19 @@ function onEvMove(e) {
   // The evidence panel is the RIGHTMOST column: its width grows leftwards.
   ui.setEvidenceWidth(window.innerWidth - e.clientX)
 }
+function onSrcMove(e) {
+  if (!draggingSrc.value) return
+  // Same geometry as Evidence: the dock is the rightmost column.
+  ui.setSourcesWidth(window.innerWidth - e.clientX)
+}
 function endResize() {
-  if (!dragging.value && !draggingEv.value) return
+  if (!dragging.value && !draggingEv.value && !draggingSrc.value) return
   dragging.value = false
   draggingEv.value = false
+  draggingSrc.value = false
   document.removeEventListener('pointermove', onMove)
   document.removeEventListener('pointermove', onEvMove)
+  document.removeEventListener('pointermove', onSrcMove)
   document.removeEventListener('pointerup', endResize)
   document.body.style.userSelect = ''
   document.body.style.cursor = ''
@@ -174,6 +205,15 @@ function startEvResize(e) {
   document.addEventListener('pointermove', onEvMove)
   _grabCursor()
 }
+function startSrcResize(e) {
+  if (e.button !== 0) return // primary button only
+  e.currentTarget.setPointerCapture(e.pointerId)
+  draggingSrc.value = true
+  // Grabbing the splitter IS an engagement: lift the teaser blur quietly.
+  sources.clearTeaser()
+  document.addEventListener('pointermove', onSrcMove)
+  _grabCursor()
+}
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
   endResize()
@@ -193,8 +233,7 @@ onBeforeUnmount(() => {
         'sidebar-collapsed': ui.sidebarCollapsed,
         'with-evidence': evidence.open,
         'with-sources': !evidence.open && sources.open,
-        'src-wide': sources.wide,
-        resizing: dragging || draggingEv,
+        resizing: dragging || draggingEv || draggingSrc,
       }"
       :style="appStyle"
     >
@@ -213,6 +252,12 @@ onBeforeUnmount(() => {
         class="resize-handle ev"
         :class="{ active: draggingEv }"
         @pointerdown.prevent="startEvResize"
+      />
+      <div
+        v-if="!evidence.open && sources.open"
+        class="resize-handle ev src"
+        :class="{ active: draggingSrc }"
+        @pointerdown.prevent="startSrcResize"
       />
       <EvidencePanel v-if="evidence.open" />
       <SourcePanel v-else-if="sources.open" />
@@ -302,22 +347,15 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--border);
 }
 
-/* Source Data DOCKED (arrival screen and beyond): fraction-based two-state layout.
-   Compact = the data view is an ambient third of the canvas; expanded (src-wide) =
-   it takes two thirds and the chat keeps a comfortable third (the prompt stays
-   usable). Plain fr tracks (no minmax) so the compact <-> wide toggle animates
+/* Source Data DOCKED (arrival screen and beyond): a freely resizable pixel column
+   (user ask 2026-08-13), same geometry as Evidence. The expand/compact toggle now
+   drives PRESETS of this width; the splitter fine-tunes it. The pixel var animates
    through the existing grid-template-columns transition. */
 .app.with-sources {
-  grid-template-columns: var(--sidebar-w) 2fr 1fr;
-}
-.app.with-sources.src-wide {
-  grid-template-columns: var(--sidebar-w) 1fr 2fr;
+  grid-template-columns: var(--sidebar-w) 1fr var(--sources-w);
 }
 .app.sidebar-collapsed.with-sources {
-  grid-template-columns: var(--rail-w) 2fr 1fr;
-}
-.app.sidebar-collapsed.with-sources.src-wide {
-  grid-template-columns: var(--rail-w) 1fr 2fr;
+  grid-template-columns: var(--rail-w) 1fr var(--sources-w);
 }
 .resize-handle.ev {
   left: auto;
@@ -325,4 +363,5 @@ onBeforeUnmount(() => {
   margin-left: 0;
   margin-right: -5px;
 }
+.resize-handle.src { right: var(--sources-w); }
 </style>

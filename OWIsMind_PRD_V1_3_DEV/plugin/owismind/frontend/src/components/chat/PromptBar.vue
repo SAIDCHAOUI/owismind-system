@@ -229,41 +229,38 @@ const placeholder = () =>
 </template>
 
 <style scoped>
-/* The prompt is the PRIMARY control of the page: a 2px ink frame (the ghost-button
-   recipe, the strongest chrome on the canvas) on a white card, square. Focus is NOT
-   an orange ring (banned): a clean 3px orange bar sweeps in along the bottom edge -
-   a flat animated filet, charte-style. */
+/* The prompt is the PRIMARY control of the page: a soft ELEVATED card (premium
+   direction, user decision 2026-08-13) - generous radius, hairline border, layered
+   shadow that deepens on hover/focus. The chrome recedes; the typing area leads. */
 .prompt {
   position: relative;
-  border: 2px solid var(--text);
+  border: 1px solid var(--border-strong);
   background: var(--bg);
-  border-radius: 0;
-  padding: var(--s-3) var(--s-4) var(--s-2);
+  border-radius: var(--r-xl);
+  padding: var(--s-4) var(--s-5) var(--s-3);
   display: flex;
   flex-direction: column;
-  /* Pointer feedback on the frame itself: the 1px-level shadow (charte maximum)
-     appears on hover/focus - the card "answers" before the click. */
-  transition: box-shadow var(--dur) var(--ease);
+  box-shadow: var(--elev-1);
+  transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.prompt:hover,
-.prompt:focus-within { box-shadow: var(--shadow); }
-.prompt::after {
-  content: "";
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  height: 3px;
-  background: var(--orange);
-  transform: scaleX(0);
-  transform-origin: left;
-  /* State change of a control: the fast token (380ms is for page entrances). */
-  transition: transform var(--dur) var(--ease);
-  pointer-events: none;
+.prompt:hover { box-shadow: var(--elev-2); }
+/* Focused = the hero moment (user ask 2026-08-13, "effet luxe"): the frame turns
+   orange and a WHISPER of tinted air spreads around the card (a 4px --orange-soft
+   veil under the soft elevation - no glow, no gradient, just the brand breathing
+   on the sides). Sanctioned per-component accent, NOT a global focus ring. */
+.prompt:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px var(--orange-soft), var(--elev-2);
 }
-.prompt:focus-within::after { transform: scaleX(1); }
-@media (prefers-reduced-motion: reduce) {
-  .prompt::after { transition: none; }
+:global(body[data-theme="dark"] .prompt:focus-within) {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 4px var(--orange-soft-dark), var(--elev-2);
+}
+/* Dark canvas: the card sits one surface step ABOVE the page (a same-color card
+   would disappear; the border alone is too faint at this size). */
+:global(body[data-theme="dark"] .prompt) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 /* Re-include action (opted-out row): plain orange-text button, flat and square.
    Hover keeps the AA-safe --orange-text in BOTH themes (--orange-deep fails AA on
@@ -314,9 +311,9 @@ const placeholder = () =>
   align-items: center;
   gap: 4px;
   max-width: 220px;
-  padding: 2px 4px 2px 8px;
+  padding: 3px 6px 3px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   background: var(--surface);
   font-size: var(--fs-xs);
   color: var(--text);
@@ -349,7 +346,7 @@ const placeholder = () =>
   width: 16px;
   height: 16px;
   color: var(--text-3);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   transition: color var(--dur) var(--ease);
 }
 .prompt-ctx-x:hover { color: var(--text); }
@@ -367,12 +364,12 @@ const placeholder = () =>
   border: none;
   outline: none;
   resize: none;
-  font-size: var(--fs-md);
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.55;
   color: var(--text);
   caret-color: var(--orange);
-  padding: 6px 0 8px;
-  min-height: 28px;
+  padding: 8px 0 10px;
+  min-height: 30px;
   max-height: 200px;
   font-family: inherit;
 }
@@ -381,12 +378,12 @@ const placeholder = () =>
 .prompt-left { display: flex; align-items: center; gap: 2px; }
 .prompt-right { display: flex; align-items: center; gap: var(--s-2); }
 .p-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   color: var(--text-2);
-  border-radius: 0;
+  border-radius: var(--r-pill);
   transition: all var(--dur) var(--ease);
 }
 .p-icon:hover { background: var(--surface-hover); color: var(--text); }
@@ -410,25 +407,25 @@ const placeholder = () =>
   line-height: 1;
   padding: 2px 5px;
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-xs);
   color: var(--text-2);
   background: var(--surface);
 }
-/* Send = the page's primary action: solid orange, square, one size up.
-   Micro-feedback: the glyph nudges forward on hover ("this will go"), the button
-   presses down on click - state talks back at every step. */
+/* Send = the page's primary action: solid orange, PILL (premium direction), one
+   size up. Micro-feedback: the glyph nudges forward on hover ("this will go"),
+   the button presses down on click - state talks back at every step. */
 .send-btn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   background: var(--orange);
   color: #fff;
-  border-radius: 0;
+  border-radius: var(--r-pill);
   display: grid;
   place-items: center;
   transition: background var(--dur) var(--ease), opacity var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
+    transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.send-btn:hover:not(:disabled) { background: var(--orange-deep); }
+.send-btn:hover:not(:disabled) { background: var(--orange-deep); box-shadow: var(--elev-2); }
 .send-btn:active:not(:disabled) { transform: scale(0.94); }
 /* Ink ring, not orange: an orange ring around a solid-orange button would read
    as a same-hue halo, not a focus state. */

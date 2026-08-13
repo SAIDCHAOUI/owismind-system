@@ -138,16 +138,24 @@ function cancel() {
 <style scoped>
 .mode-wrap { display: inline-flex; }
 
-/* Trigger pill: compact inline control that opens the chooser. */
-/* Square chip (charte geometry - no pills on brand chrome). */
+/* Trigger chip: a capsule (premium direction) that firms up and lifts 1px under the
+   pointer, and presses back on click. */
 .mode-trigger {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 0;
+  padding: 5px 12px; border-radius: var(--r-pill);
   background: var(--surface-2); border: 1px solid var(--border);
   font-size: 11px; font-weight: 600; color: var(--text-2);
-  transition: all var(--dur) var(--ease); white-space: nowrap;
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.mode-trigger:hover { color: var(--text); border-color: var(--border-strong); }
+.mode-trigger:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+.mode-trigger:active { transform: translateY(0) scale(0.97); }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .dot.lvl-1 { background: var(--success); }
 .dot.lvl-2 { background: var(--orange); }
@@ -164,9 +172,13 @@ function cancel() {
   align-items: start;
 }
 
-/* Option list: a single bordered block; rows separated by inner bottom borders. */
+/* Option list: a single bordered block; rows separated by inner bottom borders.
+   Rounded to sit inside the rounded modal card, clipped so the first/last row fills
+   follow the corner. */
 .mode-list {
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -176,12 +188,15 @@ function cancel() {
   border-bottom: 1px solid var(--border);
   border-left: 3px solid transparent;
   background: var(--bg);
-  transition: background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-left-color var(--dur) var(--ease);
 }
 .mode-row:last-child { border-bottom: none; }
 .mode-row:hover { background: var(--surface); }
 /* Active row: orange left bar + soft fill (Orange 80/20 accent rule). */
 .mode-row.active { border-left-color: var(--orange); background: var(--surface); }
+/* Hovering an inactive row previews the bar in neutral ink - the selection is one
+   continuous accent sliding down the list, not three unrelated states. */
+.mode-row:hover:not(.active) { border-left-color: var(--border-strong); }
 
 .row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .row-name { font-size: 15px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }
@@ -191,15 +206,17 @@ function cancel() {
 .reco-badge {
   font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--success); background: var(--success-soft);
-  border: 1px solid var(--success); padding: 2px 6px; white-space: nowrap;
+  border: 1px solid var(--success); border-radius: var(--r-xs);
+  padding: 2px 6px; white-space: nowrap;
 }
 /* Check shown only when active; orange. */
 .row-check { color: var(--orange); flex-shrink: 0; }
 
-/* Detail panel: flat border, square, fixed min-height so switching rows never
-   reflowing the dialog. */
+/* Detail panel: flat border, fixed min-height so switching rows never reflows the
+   dialog. Same radius as the option list, so the pair reads as one control. */
 .mode-detail {
   border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
   padding: 20px;
   min-height: 220px;
 }
@@ -229,9 +246,13 @@ function cancel() {
   text-transform: uppercase; color: var(--text-2);
   font-family: var(--font-sans);
 }
-/* Dots: circles by nature (not affected by the square-geometry rule). */
+/* Dots: circles by nature (not affected by the square-geometry rule). They fade
+   between states, so switching mode reads as the gauge FILLING, not redrawing. */
 .meter5 { display: inline-flex; gap: 5px; }
-.meter5 i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.meter5 i {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong);
+  transition: background var(--dur) var(--ease);
+}
 .meter5 i.on { background: var(--text); }
 /* Cost gauge tinted by severity (the speed gauge stays neutral). */
 .meter5.cost-smart i.on { background: var(--success); }
@@ -239,12 +260,13 @@ function cancel() {
 .meter5.cost-claude i.on { background: var(--danger); }
 .meter-val { font-size: var(--fs-xs); color: var(--text-2); }
 
-/* Envelope note: flat surface, thin border, square, wallet icon + quiet text. */
+/* Envelope note: flat surface, thin border, wallet icon + quiet text. */
 .envelope {
   display: flex; align-items: flex-start; gap: 10px;
   font-size: 13px; color: var(--text-2); line-height: 1.5;
   margin-top: 18px; padding: 14px 16px;
   background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
 .envelope-ico { flex-shrink: 0; margin-top: 1px; color: var(--text-3); }
 
@@ -253,8 +275,9 @@ function cancel() {
   .mode-detail { min-height: 0; }
 }
 
-/* Respect user motion preference for the trigger transition. */
+/* Respect user motion preference: colours still answer, nothing moves. */
 @media (prefers-reduced-motion: reduce) {
-  .mode-trigger, .mode-row { transition: none; }
+  .mode-trigger, .mode-row, .meter5 i { transition: none; }
+  .mode-trigger:hover, .mode-trigger:active { transform: none; }
 }
 </style>

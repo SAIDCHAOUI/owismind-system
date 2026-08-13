@@ -393,14 +393,12 @@ watch(
       v-if="pop" class="src-backdrop"
       @mousedown.prevent @click="pop = null"
     ></div>
-    <div class="src-chips-head">
-      <span class="src-chips-title">{{ t('src.filters.title') }}</span>
-      <button v-if="sources.chips.length" class="src-clear" @click="onClear">
-        <Icon name="refresh" /><span>{{ t('src.filters.clear') }}</span>
-      </button>
-    </div>
-
-    <div class="src-chips-row">
+    <!-- ONE inline row (user ask 2026-08-13): the FILTERS label, then the chips, then
+         [+ Add a filter] and [Clear all] which SLIDE RIGHT together as chips land before
+         them. Chips animate in and out (fade + small rise) and every survivor slides to
+         its new slot: a filter is a user decision, it deserves to be seen landing. -->
+    <TransitionGroup tag="div" name="chip" class="src-chips-row">
+      <span key="title" class="src-chips-title">{{ t('src.filters.title') }}</span>
       <span v-for="chip in sources.chips" :key="chip.key" class="src-chip">
         <button class="chip-main" @click="openChipPicker(chip)">
           <span class="col">{{ chip.column }}</span>
@@ -477,7 +475,7 @@ watch(
       </span>
 
       <!-- Add a filter on any column (hidden at the backend filter cap) -->
-      <span v-if="canAddFilter" class="src-chip add">
+      <span v-if="canAddFilter" key="add" class="src-chip add">
         <button class="chip-main" @click="openAdd">
           <Icon name="plus" /><span>{{ t('src.filters.add') }}</span>
         </button>
@@ -560,7 +558,13 @@ watch(
           </template>
         </div>
       </span>
-    </div>
+
+      <!-- Clear all - right of the add button, moving with it. A bordered pill (not a
+           ghost link): resetting every filter deserves to be SEEN before it is clicked. -->
+      <button v-if="sources.chips.length" key="clear" type="button" class="src-clear" @click="onClear">
+        <Icon name="refresh" /><span>{{ t('src.filters.clear') }}</span>
+      </button>
+    </TransitionGroup>
   </div>
 </template>
 
@@ -572,53 +576,111 @@ watch(
    popover (this block has z-index:5); same z-index as .src-pop but EARLIER in the DOM, so
    the popover paints above it. Transparent - it only intercepts the dismiss click. */
 .src-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); background: transparent; }
-.src-chips-head { display: flex; align-items: center; gap: var(--s-3); }
-.src-chips-title { font-size: var(--fs-xs); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+/* Micro-label opening the inline row (charte recipe). */
+.src-chips-title {
+  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+  text-transform: uppercase; letter-spacing: var(--tracking-eyebrow);
+  align-self: center; flex: none;
+}
+/* Clear all - a real bordered pill riding right of [+ Add a filter]; hover states the
+   consequence (danger ink) without spending any orange. */
 .src-clear {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
-  font-size: var(--fs-xs); color: var(--text-2); border-radius: 0;
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+  font-size: var(--fs-xs); color: var(--text-2); background: transparent;
   transition: all var(--dur) var(--ease);
 }
-.src-clear:hover { background: var(--surface-hover); color: var(--text); }
-.src-clear :deep(.ui-icon) { width: 12px; height: 12px; }
+.src-clear:hover { color: var(--danger); border-color: var(--danger); background: var(--surface-hover); }
+.src-clear :deep(.ui-icon) { width: 12px; height: 12px; transition: transform var(--dur-slow) var(--ease); }
+/* The reset glyph turns a half-round on hover: "this undoes the filtering". */
+.src-clear:hover :deep(.ui-icon) { transform: rotate(-180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .src-clear, .src-clear :deep(.ui-icon) { transition: none; }
+  .src-clear:hover :deep(.ui-icon) { transform: none; }
+}
 
-.src-chips-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.src-chips-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+/* Chip (premium 2026-08-13): pill geometry, quiet at rest, lifting under the pointer
+   so "this is editable" is felt before it is read. */
 .src-chip {
   position: relative; display: inline-flex; align-items: center; gap: 4px;
-  max-width: 100%; border: 1px solid var(--border-strong); border-radius: 0;
+  max-width: 100%; border: 1px solid var(--border-strong); border-radius: var(--r-pill);
   /* Host-remappable surface: --bg inside the docked panel (ambient --surface),
      --surface fallback on the validated Evidence tab. */
-  background: var(--src-chip-bg, var(--surface)); padding: 2px 6px 2px 10px; font-size: var(--fs-xs);
+  background: var(--src-chip-bg, var(--surface)); padding: 2px 5px 2px 12px; font-size: var(--fs-xs);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+/* z-index is NOT decoration here: the hover `transform` makes the chip a stacking
+   context, which would trap its own .src-pop (z-index --z-menu) BELOW the dismiss
+   backdrop of the same value - the picker would silently stop taking clicks while the
+   pointer is on it. Lifting the whole chip to --z-menu keeps the popover clickable
+   (same value, later in the DOM than the backdrop). Verified in the dev harness. */
+.src-chip:hover {
+  border-color: var(--text-3); box-shadow: var(--elev-1); transform: translateY(-1px);
+  z-index: var(--z-menu);
 }
 .chip-main { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; }
-.chip-main:hover .val { color: var(--orange); }
-.chip-main :deep(.ui-icon) { width: 11px; height: 11px; }
+.chip-main:hover .val { color: var(--orange-text); }
+.chip-main :deep(.ui-icon) { width: 11px; height: 11px; transition: transform var(--dur) var(--ease); }
+/* The chevron tips down on hover: the chip opens a picker, not a link. */
+.src-chip:hover .chip-main :deep(.ui-icon) { transform: translateY(1px); }
 .chip-main .col { color: var(--text-2); }
 .chip-main .op { color: var(--text-3); font-size: 10px; }
 .chip-main .val {
   color: var(--text); max-width: 220px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
-.chip-x { padding: 2px; border-radius: 0; color: var(--text-3); }
-.chip-x:hover { color: var(--danger); }
+.chip-x {
+  display: inline-flex; padding: 3px; border-radius: var(--r-pill); color: var(--text-3);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.chip-x:hover { color: var(--danger); background: var(--surface-hover); }
 .chip-x :deep(.ui-icon) { width: 11px; height: 11px; }
-.src-chip.add { border-style: dashed; }
+.src-chip.add { border-style: dashed; padding-left: 8px; }
+.src-chip.add:hover { border-color: var(--orange); border-style: solid; }
 .src-chip.add .chip-main { color: var(--text-2); gap: 4px; padding: 2px 4px; }
-.src-chip.add .chip-main:hover { color: var(--orange); }
+.src-chip.add .chip-main:hover { color: var(--orange-text); }
+.src-chip.add:hover .chip-main :deep(.ui-icon) { transform: none; }
 
-/* Popover: aerated, square, token-driven. Wide enough for long values, capped so
-   it never dominates the panel; the value/column list scrolls inside. */
+/* Enter / leave of a filter chip: fade + small rise on arrival, a quick collapse on
+   removal, and a sliding re-flow of the surviving chips. */
+.chip-enter-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+/* Exit is faster than entry and ACCELERATES away (--ease-in): a removed filter should
+   leave immediately, an arriving one deserves to be watched landing. */
+.chip-leave-active { transition: opacity var(--dur-fast) var(--ease-in), transform var(--dur-fast) var(--ease-in); }
+.chip-enter-from { opacity: 0; transform: translateY(6px) scale(0.96); }
+.chip-leave-to { opacity: 0; transform: scale(0.94); }
+.chip-move { transition: transform var(--dur-slow) var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .src-chip, .chip-main :deep(.ui-icon), .chip-x { transition: none; }
+  .src-chip:hover { transform: none; }
+  .src-chip:hover .chip-main :deep(.ui-icon) { transform: none; }
+  .chip-enter-active, .chip-leave-active, .chip-move { transition: none; }
+}
+
+/* Popover (premium 2026-08-13): aerated floating card - rounded --r-lg, layered
+   --elev-2, token-driven, flat inside. Wide enough for long values, capped so it never
+   dominates the panel; the value/column list scrolls inside. It grows out of its chip. */
 .src-pop {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-menu);
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: var(--z-menu);
   min-width: 280px; max-width: 380px; padding: var(--s-3);
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 0; box-shadow: var(--shadow);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg); box-shadow: var(--elev-2);
   display: flex; flex-direction: column; gap: var(--s-3);
+  transform-origin: top left;
+  animation: pop-in var(--dur) var(--ease-out) both;
 }
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) { .src-pop { animation: none; } }
 .pop-search {
-  width: 100%; padding: 6px 10px; border: 1px solid var(--border);
-  border-radius: 0; background: var(--bg); color: var(--text); font-size: var(--fs-sm);
+  width: 100%; padding: 7px 12px; border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill); background: var(--bg); color: var(--text); font-size: var(--fs-sm);
+  transition: border-color var(--dur) var(--ease);
 }
+.pop-search:focus { outline: none; border-color: var(--text-3); }
 .pop-search::placeholder { color: var(--text-3); }
 
 /* Temporal range picker wrapper - the From / To fields + full-year control live in the
@@ -644,17 +706,23 @@ watch(
 .pop-list { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; }
 .pop-col {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-3);
-  width: 100%; padding: 6px 10px; border-radius: 0; color: var(--text);
+  width: 100%; padding: 6px 10px; border-radius: var(--r-sm); color: var(--text);
   font-size: var(--fs-sm); text-align: left;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .pop-col:hover { background: var(--surface-hover); }
+.pop-col:hover .pop-col-type { color: var(--text-2); }
 .pop-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pop-col-type { color: var(--text-3); font-size: 11px; flex: none; }
+.pop-col-type { color: var(--text-3); font-size: 11px; flex: none; transition: color var(--dur) var(--ease); }
 .pop-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-  border-radius: 0; font-size: var(--fs-sm); cursor: pointer;
+  border-radius: var(--r-sm); font-size: var(--fs-sm); cursor: pointer;
+  transition: background var(--dur) var(--ease);
 }
 .pop-item:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .pop-col, .pop-col-type, .pop-item, .pop-search { transition: none; }
+}
 .pop-item input { accent-color: var(--orange); flex: none; }
 .pop-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-state { padding: var(--s-2); color: var(--text-3); font-size: var(--fs-xs); }
@@ -665,13 +733,24 @@ watch(
 .pop-count { font-size: var(--fs-xs); color: var(--text-2); }
 .pop-actions { display: flex; align-items: center; gap: var(--s-2); margin-left: auto; }
 .pop-cancel {
-  padding: 4px 12px; border-radius: 0; background: transparent;
-  border: 1px solid var(--border); color: var(--text-2); font-size: var(--fs-xs);
+  padding: 5px 14px; border-radius: var(--r-pill); background: transparent;
+  border: 1px solid var(--border-strong); color: var(--text-2); font-size: var(--fs-xs);
+  transition: all var(--dur) var(--ease);
 }
-.pop-cancel:hover { color: var(--text); background: var(--surface-hover); }
+.pop-cancel:hover { color: var(--text); background: var(--surface-hover); border-color: var(--text-3); }
+.pop-cancel:active { background: var(--surface-press); }
+/* Primary action: the single rare orange fill, rounded (premium 2026-08-13). */
 .pop-apply {
-  padding: 4px 12px; border-radius: 0;
+  padding: 5px 14px; border-radius: var(--r-pill);
   background: var(--orange); color: #fff; font-size: var(--fs-xs); font-weight: 500;
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
+.pop-apply:hover:not(:disabled) { background: var(--orange-deep); box-shadow: var(--elev-1); }
+.pop-apply:active:not(:disabled) { transform: scale(0.97); }
 .pop-apply:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  .pop-cancel, .pop-apply { transition: none; }
+  .pop-apply:active:not(:disabled) { transform: none; }
+}
 </style>

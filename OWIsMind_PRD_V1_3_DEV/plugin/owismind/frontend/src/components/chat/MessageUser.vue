@@ -99,7 +99,13 @@ async function copy() {
 </template>
 
 <style scoped>
-.msg { animation: slide-up var(--dur) var(--ease); }
+/* Arrival: fade + rise together (the shared slide-up keyframe only translates, so a
+   message used to appear at full opacity mid-slide). */
+.msg { animation: msg-in var(--dur-slow) var(--ease-out) both; }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .msg.user { display: flex; justify-content: flex-end; }
 
 /* Bubble + hover actions, right-aligned column. */
@@ -110,17 +116,20 @@ async function copy() {
   gap: 4px;
   max-width: 78%;
 }
-/* Square card (charte geometry) with a VISIBLE 1px frame: the user's words are
-   a surface like any other - no speech-bubble rounding. */
+/* The user's turn: a soft-cornered card, one step below the prompt card's --r-xl so
+   the hierarchy reads (the prompt is where you write, this is what you wrote). */
 .bubble {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   padding: 10px 14px;
-  border-radius: 0;
+  border-radius: var(--r-lg);
   font-size: var(--fs-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  transition: border-color var(--dur) var(--ease);
 }
+/* Hovering the turn firms the frame - it signals the actions below belong to it. */
+.bubble-wrap:hover .bubble { border-color: var(--text-3); }
 
 /* On-screen context line: discreet, right-aligned under the bubble, with a 1px top
    separator. Ink-on-nothing, orange stays absent here (charte: rare). */
@@ -133,16 +142,21 @@ async function copy() {
   padding-top: 6px;
   border-top: 1px solid var(--border);
 }
+/* Negative right margin keeps the label flush with the bubble edge while the row
+   still gets a real hover surface to sit on. */
 .sc-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
+  padding: 2px 6px;
+  margin-right: -6px;
+  border-radius: var(--r-sm);
   font-size: var(--fs-xs);
   color: var(--text-3);
-  transition: color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.sc-toggle:hover { color: var(--text-2); }
+.sc-toggle:hover { color: var(--text-2); background: var(--surface-hover); }
 .sc-toggle .sc-ic :deep(.ui-icon) { width: 12px; height: 12px; }
 .sc-ds {
   font-family: var(--font-mono);
@@ -154,28 +168,33 @@ async function copy() {
 .sc-chev :deep(.ui-icon) { width: 12px; height: 12px; }
 .sc-inline { align-self: stretch; }
 
-/* Hidden by default, revealed on hover (or focus-within for keyboard users). */
+/* Hidden by default, revealed on hover (or focus-within for keyboard users): they
+   fade in AND rise the last 3px, so they read as belonging to the bubble above. */
 .u-actions {
   display: flex;
   gap: 2px;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--dur) var(--ease);
+  transform: translateY(-3px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease-out);
 }
 .bubble-wrap:hover .u-actions,
 .bubble-wrap:focus-within .u-actions {
   opacity: 1;
   visibility: visible;
+  transform: translateY(0);
 }
 .u-actions button {
   display: inline-flex;
   align-items: center;
-  padding: 4px;
-  border-radius: 0;
+  padding: 5px;
+  border-radius: var(--r-pill);
   color: var(--text-3);
-  transition: all var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
 .u-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.u-actions button:active:not(:disabled) { transform: scale(0.9); }
 .u-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .u-actions button :deep(.ui-icon) { width: 14px; height: 14px; }
 
@@ -192,24 +211,39 @@ async function copy() {
   min-height: 64px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   background: var(--surface);
   color: var(--text);
   font-size: var(--fs-md);
   font-family: inherit;
   line-height: 1.6;
+  caret-color: var(--orange);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.edit-area:focus { outline: none; border-color: var(--orange); }
+.edit-area:focus { outline: none; border-color: var(--text-3); box-shadow: var(--elev-1); }
 .edit-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .edit-actions button {
   padding: 6px 14px;
-  border-radius: 0;
+  border-radius: var(--r-pill);
   font-size: var(--fs-sm);
-  transition: all var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
 }
+.edit-actions button:active:not(:disabled) { transform: scale(0.97); }
 .edit-actions button.ghost { color: var(--text-2); }
 .edit-actions button.ghost:hover { background: var(--surface-hover); color: var(--text); }
 .edit-actions button.primary { background: var(--orange); color: #fff; font-weight: 500; }
-.edit-actions button.primary:hover:not(:disabled) { background: var(--orange-soft-dark); }
+/* --orange-deep, NOT --orange-soft-dark: that token resolves to the pale
+   #fff5ec tint in light theme, which turned the hovered Send into white-on-white. */
+.edit-actions button.primary:hover:not(:disabled) { background: var(--orange-deep); }
 .edit-actions button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg { animation: none; }
+  .u-actions { transition: opacity var(--dur) var(--ease); transform: none; }
+  .bubble-wrap:hover .u-actions,
+  .bubble-wrap:focus-within .u-actions { transform: none; }
+  .u-actions button:active:not(:disabled),
+  .edit-actions button:active:not(:disabled) { transform: none; }
+}
 </style>

@@ -52,12 +52,16 @@ function valueText(row) {
 </template>
 
 <style scoped>
-/* Flat, square, sober (charte). Ink-on-surface, 1px borders, no fill accent. */
+/* Soft floating card (premium direction 2026-08-13). A FIXED width: this detail is
+   also rendered inside an absolutely-positioned popover anchored to a ~200px chip,
+   where shrink-to-fit used to crush the value column to one character per line. */
 .sc-detail {
-  max-width: 420px;
-  background: var(--surface);
+  width: min(380px, calc(100vw - 48px));
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-2);
+  overflow: hidden;
 }
 .sc-title {
   font-size: var(--fs-xs);

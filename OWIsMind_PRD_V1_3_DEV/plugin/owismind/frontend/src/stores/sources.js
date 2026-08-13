@@ -49,6 +49,11 @@ const MORE_LIMIT = 20
 // appends window after window, so a huge dataset must never grow the in-memory
 // array without bound. Past MAX_ROWS the sentinel stops (the user filters to narrow).
 const MAX_ROWS = 500
+// The Analyze workspace shows a PREVIEW of the rows its figures are computed on. It is a
+// small, dedicated window: bounded (no lazy append), refetched on every scope change, and
+// completely separate from the browsing table's 100-row accumulating window - the two
+// surfaces answer different questions and must never fight over the same rows.
+const PREVIEW_LIMIT = 50
 
 // Per-(agent, dataset) view memory, one per app session (the store is a singleton). It
 // remembers a user's filters / search / sort / Calculate selection so they survive a panel
@@ -67,6 +72,11 @@ export const useSourcesStore = defineStore('sources', () => {
   // The arrival screen auto-docks the panel (AppLayout) UNLESS this is set; any
   // explicit re-open (openPanel) clears it. Session-only, like the view memory.
   const dismissed = ref(false)
+  // Teaser state (user ask 2026-08-13): an AUTO-docked panel first shows its data
+  // BLURRED behind an invite ("I exist - click me to work on me"). Any engagement
+  // (invite click, expand toggle, resize drag) lifts the blur and makes the
+  // explorer fully interactive. Explicit opens never tease.
+  const teaser = ref(false)
   const agentKey = ref('') // logical key of the agent whose sources we browse
   const sourceList = ref([]) // [{ id, label, dataset }] from the session agent (no fetch)
   const activeSourceId = ref(null) // integer id of the dataset currently browsed
@@ -84,9 +94,14 @@ export const useSourcesStore = defineStore('sources', () => {
   // A pulse from a header column menu asking the chips component to open the value picker
   // pre-set to a column: { column, n } (n bumped each call so the same column re-fires).
   const columnFilterRequest = ref(null)
+  // The Analyze workspace's own bounded row window (see PREVIEW_LIMIT).
+  const previewRows = ref([])
+  const previewLoading = ref(false)
+  const previewError = ref('') // '' = none
 
   let seq = 0 // stale-response guard for source/meta transitions
   let rowsSeq = 0 // per-rows-request guard: last REQUEST wins, not last response
+  let previewSeq = 0 // per-preview-request guard (same last-REQUEST-wins rule)
   let userChipSeq = 0 // keys for user-added chips
   let columnFilterSeq = 0 // monotonic counter behind columnFilterRequest.n
   // The source id whose meta is currently loaded/loading; gates ensureAgent so a
@@ -126,6 +141,15 @@ export const useSourcesStore = defineStore('sources', () => {
     return list.map((s) => ({ id: s.id, label: s.label || '#' + s.id, dataset: s.dataset || '' }))
   }
 
+  // Drop the Analyze workspace's row window. Bumping the seq makes any in-flight preview
+  // response land on a dead sequence, so a previous scope's rows can never appear.
+  function _clearPreview() {
+    previewSeq += 1
+    previewRows.value = []
+    previewLoading.value = false
+    previewError.value = ''
+  }
+
   function _resetAll() {
     agentKey.value = ''
     sourceList.value = []
@@ -142,6 +166,7 @@ export const useSourcesStore = defineStore('sources', () => {
     loading.value = false
     rowsLoading.value = false
     loadedSourceId = null
+    _clearPreview()
     surface.resetDerived()
   }
 
@@ -156,6 +181,7 @@ export const useSourcesStore = defineStore('sources', () => {
     hasMore.value = false
     sort.value = null
     rowsError.value = ''
+    _clearPreview()
     surface.resetDerived()
   }
 
@@ -220,27 +246,53 @@ export const useSourcesStore = defineStore('sources', () => {
   // the analytics event - `source_explorer_opened` measures a user INTENT, and an
   // automatic dock on every arrival would silently break the metric's history.
   function openPanel(key, opts) {
+    const auto = !!(opts && opts.auto)
+    // An auto-dock arrives as a teaser; an explicit open is already an engagement.
+    if (!open.value) teaser.value = auto
     open.value = true
     dismissed.value = false
-    if (!(opts && opts.auto)) track('source_explorer_opened', {}, { agent_key: key || null })
+    if (!auto) track('source_explorer_opened', {}, { agent_key: key || null })
     ensureAgent(key)
   }
   function closePanel() {
     _persistCurrentView() // remember the view so reopening restores it
     seq += 1 // invalidate any in-flight request
     open.value = false
+    teaser.value = false
     _resetAll()
   }
-  // The user's X on the docked panel: close AND remember the opt-out, so the
-  // arrival screen stops re-docking it for this app session. System closes
-  // (route leave, Evidence taking the column, source-less agent) use closePanel
-  // and never mark a dismissal.
+  // The user's X on the docked panel: close AND remember the opt-out - but only for
+  // the CURRENT arrival screen. The docked data is a STANDING invitation (user
+  // decision 2026-08-13, "always show it"): as soon as a conversation starts or the
+  // user navigates away, undismissPanel() clears the opt-out so the next empty
+  // screen teases again. System closes (route leave, Evidence taking the column,
+  // source-less agent) use closePanel and never mark a dismissal.
   function dismissPanel() {
     dismissed.value = true
     closePanel()
   }
+  // Clears the X opt-out (called by the layout when the empty screen is LEFT: a
+  // conversation started, or the user navigated elsewhere). Never re-opens anything
+  // by itself - the auto-dock watcher decides on the next arrival.
+  function undismissPanel() {
+    dismissed.value = false
+  }
   function toggleWide() {
     wide.value = !wide.value
+    teaser.value = false
+  }
+  // Quiet engagement (resize drag): the user is clearly interacting - lift the
+  // blur without changing geometry and without emitting an analytics event.
+  function clearTeaser() {
+    teaser.value = false
+  }
+  // Invite click: lift the blur AND expand to the working width. This is an
+  // intentional open of the explorer, so it counts as source_explorer_opened.
+  function engage() {
+    if (!teaser.value) return
+    teaser.value = false
+    wide.value = true
+    track('source_explorer_opened', {}, { agent_key: agentKey.value || null })
   }
 
   // Load one source's descriptor (columns), then its first page. Resets the per-source
@@ -339,6 +391,38 @@ export const useSourcesStore = defineStore('sources', () => {
     }
   }
 
+  // Load the Analyze workspace's bounded preview window over the CURRENT scope. Guarded by
+  // previewSeq + the meta epoch. A failure clears the rows rather than showing a window
+  // that no longer matches the figures above it.
+  function _loadPreviewRows() {
+    if (activeSourceId.value == null || !agentKey.value) return Promise.resolve(null)
+    const my = ++previewSeq
+    const epoch = seq
+    previewLoading.value = true
+    previewError.value = ''
+    return fetchSourceRows(
+      buildSourceRowsPayload(
+        agentKey.value, activeSourceId.value, q.value, chips.value, PREVIEW_LIMIT, 0, sort.value,
+      ),
+    )
+      .then((data) => {
+        if (my !== previewSeq || epoch !== seq) return
+        previewRows.value = (data.rows || []).slice(0, PREVIEW_LIMIT)
+      })
+      .catch((e) => {
+        if (my !== previewSeq || epoch !== seq) return
+        previewError.value = (e && e.message) || 'source_unavailable'
+        previewRows.value = []
+      })
+      .finally(() => {
+        if (my === previewSeq && epoch === seq) previewLoading.value = false
+      })
+  }
+  // The workspace host asks for its window (on mount, and on a retry after an error).
+  function refreshPreviewRows() {
+    return _loadPreviewRows()
+  }
+
   // Fresh reload (page 0): used by every search / filter / sort change. No-op when no
   // source is active (an agent with zero sources): a rows request with source:null is
   // rejected by the backend (invalid_source -> 400), so never issue one.
@@ -346,11 +430,14 @@ export const useSourcesStore = defineStore('sources', () => {
     if (activeSourceId.value == null) return Promise.resolve(null)
     rowsError.value = ''
     if (surface.analyzeOpen.value) {
-      // The Data table is hidden behind the Analyze view: skip the (unused) 100-row
-      // window and refresh only the DB-computed aggregates (count + pivot). The table
-      // is marked stale and re-fetched lazily when the user returns to the Data view.
+      // The BROWSING table is hidden behind the Analyze view: skip its (unused) 100-row
+      // window and refresh only the DB-computed aggregates (count + pivot + workspace).
+      // The table is marked stale and re-fetched lazily on the way back to the Data view.
       surface.markRowsStale()
       surface.afterScopeChange(_viewSignature())
+      // The workspace, however, DISPLAYS its own preview window: it must follow the new
+      // scope immediately, or the rows on screen would contradict the figures above them.
+      if (surface.workspaceActive.value) _loadPreviewRows()
       return Promise.resolve(true)
     }
     return _loadRows(seq)
@@ -492,12 +579,14 @@ export const useSourcesStore = defineStore('sources', () => {
   } = surface
 
   return {
-    open, wide, dismissed, agentKey, sourceList, activeSourceId, columns, chips, q,
+    open, wide, dismissed, teaser, agentKey, sourceList, activeSourceId, columns, chips, q,
     rows, offset, hasMore, sort, loading, rowsLoading, error, rowsError,
+    previewRows, previewLoading, previewError, refreshPreviewRows,
     columnFilterRequest, requestColumnFilter,
     activeSourceLabel,
     ...surfacePublic,
-    ensureAgent, openPanel, closePanel, dismissPanel, toggleWide, setSource, reload, setQuery,
+    ensureAgent, openPanel, closePanel, dismissPanel, undismissPanel, toggleWide, clearTeaser, engage,
+    setSource, reload, setQuery,
     addFilter, setChipValues, removeChip, clearFilters, setSort,
     refreshRows, loadMoreRows, loadDistinct,
   }

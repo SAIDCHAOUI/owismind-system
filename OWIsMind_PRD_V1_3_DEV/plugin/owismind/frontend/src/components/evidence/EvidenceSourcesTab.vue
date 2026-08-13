@@ -17,11 +17,11 @@ import { useSourcesStore } from '../../stores/sources.js'
 import { useChatStore } from '../../stores/chat.js'
 import { useSessionStore } from '../../stores/session.js'
 import { Icon } from '../ui'
+import DatasetPick from '../sources/DatasetPick.vue'
 import EvidenceChips from './EvidenceChips.vue'
 import EvidenceTable from './EvidenceTable.vue'
 import SourceExplorer from '../sources/SourceExplorer.vue'
-import SourceCalc from '../sources/SourceCalc.vue'
-import SourceAnalyze from '../sources/SourceAnalyze.vue'
+import SourceWorkspace from '../sources/SourceWorkspace.vue'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
@@ -104,15 +104,30 @@ function selectEntry(entry) {
   }
 }
 
+// Selector as the SHARED dataset dropdown (DatasetPick), exactly where the standalone
+// panel puts it: first thing on the top row, before the search.
+const datasetOptions = computed(() => entries.value.map((e) => ({ key: e.key, label: e.label })))
+function onDatasetChange(key) {
+  selectEntry(entries.value.find((e) => e.key === key))
+}
+// The search names WHAT it searches (mirror of the standalone explorer).
+const evSearchPlaceholder = computed(() =>
+  active.value && active.value.label
+    ? t('src.search.in', [active.value.label])
+    : t('src.search.placeholder'),
+)
+
 // Entering AGENT mode: lazily point the sources store at this agent + source (both
 // calls are idempotent). Never opens the standalone panel (data usage without
-// sources.open). Fires for clicks and for a programmatic default/drill change.
+// sources.open). IMMEDIATE: on a SQL-less exchange there are no detected entries, so
+// the FIRST active entry is already agent-mode - without immediate the explorer would
+// mount on a never-initialized store and show an empty table.
 watch(active, (a) => {
   if (a && a.mode === 'agent') {
     sources.ensureAgent(exchangeAgentKey.value)
     sources.setSource(a.sourceId)
   }
-})
+}, { immediate: true })
 
 // A new exchange resets the selection so `active` recomputes to the first entry.
 watch(() => evidence.exchangeId, () => {
@@ -133,7 +148,6 @@ watch(() => evidence.drill, (d) => {
 })
 
 // ── Legacy-mode extras (moved here from EvidencePanel) ──────────────────────────
-const enriched = computed(() => !!(evidence.meta && evidence.meta.verification))
 const drill = computed(() => evidence.drill || null)
 const drillLabels = computed(() => {
   const labels = drill.value && Array.isArray(drill.value.labels) ? drill.value.labels : []
@@ -147,7 +161,7 @@ function onExitDrill() {
 }
 
 // The active exchange table's typed columns ([{ name, type }]), passed to the shared
-// SourceCalc / SourceAnalyze so their type-driven measures + numeric detection match the
+// SourceWorkspace so its type-driven measures + numeric detection match the
 // legacy table. Empty until meta loads.
 // KNOWN LIMITATION (same convention as the rows-table headers): meta.columns are the
 // DEFAULT (first matched) table's live columns, captured once at open; switching to
@@ -172,27 +186,76 @@ function clearEvSearch() {
 
 <template>
   <div class="ev-src-tab">
-    <!-- Unified selector: detected tables (legacy) then the agent's extra sources. -->
-    <div v-if="showSelector" class="ev-src-selector">
-      <span class="ev-src-selector-label">{{ t('ev.table.source') }}</span>
-      <button
-        v-for="e in entries"
-        :key="e.key"
-        type="button"
-        class="ev-src-chip"
-        :class="{ active: e.key === active.key }"
-        @click="selectEntry(e)"
-      >
-        {{ e.label }}
-      </button>
-    </div>
+    <!-- AGENT mode: the standalone explorer; the unified selector rides ITS top row
+         (dataset slot), exactly where the standalone panel puts its own dropdown. -->
+    <SourceExplorer v-if="isAgentMode" embedded>
+      <template #dataset>
+        <DatasetPick
+          v-if="showSelector"
+          :options="datasetOptions"
+          :value="active.key"
+          @change="onDatasetChange"
+        />
+      </template>
+    </SourceExplorer>
 
-    <!-- AGENT mode: the standalone explorer, driven by the unified selector. -->
-    <SourceExplorer v-if="isAgentMode" embedded />
-
-    <!-- LEGACY mode: the exchange-scoped explorer (chips + drill + search + Data/Analyze
-         segmented + Calculate zone + table swap). -->
+    <!-- LEGACY mode: the exchange-scoped explorer - the SAME layout as the standalone
+         Source panel (user ask 2026-08-13, one structure to maintain): dataset dropdown
+         + search + the Data|Analyze switch on ONE top row, the filters on one line
+         below, then the surface (the raw table, or the shared Analyze workspace over
+         the evidence store). -->
     <template v-else>
+      <!-- ONE top row: dropdown, then the search taking every remaining pixel, then
+           the view switch (mirrors the standalone panel's topbar economy). -->
+      <div class="ev-src-top">
+        <DatasetPick
+          v-if="showSelector"
+          :options="datasetOptions"
+          :value="active.key"
+          @change="onDatasetChange"
+        />
+        <!-- Full-text search over the WHOLE exchange table - Enter or button only. -->
+        <div class="ev-src-search">
+          <Icon name="search" class="ev-src-search-ico" />
+          <input
+            v-model="evSearchTerm"
+            type="text"
+            class="ev-src-search-input"
+            maxlength="200"
+            :placeholder="evSearchPlaceholder"
+            @keydown.enter.prevent="submitEvSearch"
+          />
+          <button v-if="evSearchTerm" type="button" class="ev-src-search-clear" :title="t('x.close')" @click="clearEvSearch">
+            <Icon name="x" />
+          </button>
+          <button type="button" class="ev-src-search-go" :aria-label="t('src.search.go')" :title="t('src.search.go')" @click="submitEvSearch">
+            <Icon name="search" />
+          </button>
+        </div>
+        <!-- Data / Analyze view switch. The chips below are shared context in BOTH views;
+             only the surface below swaps. Plain toggle buttons (aria-pressed). -->
+        <div class="ev-viewseg">
+          <button
+            type="button"
+            class="ev-viewseg-btn"
+            :class="{ active: !evidence.analyzeOpen }"
+            :aria-pressed="!evidence.analyzeOpen"
+            :title="t('src.view.hint.data')"
+            @click="evidence.setAnalyzeOpen(false)"
+          >{{ t('src.view.data') }}</button>
+          <button
+            type="button"
+            class="ev-viewseg-btn"
+            :class="{ active: evidence.analyzeOpen }"
+            :aria-pressed="evidence.analyzeOpen"
+            :title="t('src.view.hint.analyze')"
+            @click="evidence.setAnalyzeOpen(true)"
+          >{{ t('src.view.analyze') }}</button>
+        </div>
+      </div>
+      <div v-if="evOneChar" class="ev-src-search-hint">{{ t('src.search.min') }}</div>
+
+      <!-- Filters on ONE line (mirror of the panel), locked agent chips included. -->
       <EvidenceChips />
       <div v-if="drill" class="ev-drill-band">
         <Icon name="filter" />
@@ -201,58 +264,11 @@ function clearEvSearch() {
           <Icon name="x" />
         </button>
       </div>
-      <span v-if="enriched" class="ev-explore">{{ t('ev.proof.explore') }}</span>
 
-      <!-- Top area: search + the Data|Analyze switch on the LEFT, the Calculate zone on the
-           RIGHT (wraps to a stacked block when narrow) - mirrors the standalone Source
-           explorer, driven by the SHARED SourceCalc on the evidence surface. -->
-      <div class="ev-src-top">
-        <div class="ev-src-top-main">
-          <!-- Full-text search over the WHOLE exchange table - Enter or button only. -->
-          <div class="ev-src-search">
-            <Icon name="search" class="ev-src-search-ico" />
-            <input
-              v-model="evSearchTerm"
-              type="text"
-              class="ev-src-search-input"
-              maxlength="200"
-              :placeholder="t('src.search.placeholder')"
-              @keydown.enter.prevent="submitEvSearch"
-            />
-            <button v-if="evSearchTerm" type="button" class="ev-src-search-clear" :title="t('x.close')" @click="clearEvSearch">
-              <Icon name="x" />
-            </button>
-            <button type="button" class="ev-src-search-go" :aria-label="t('src.search.go')" :title="t('src.search.go')" @click="submitEvSearch">
-              <Icon name="search" />
-            </button>
-          </div>
-          <div v-if="evOneChar" class="ev-src-search-hint">{{ t('src.search.min') }}</div>
-          <!-- Data / Analyze view switch. The chips above are shared context in BOTH views;
-               only the surface below swaps. Plain toggle buttons (aria-pressed). -->
-          <div class="ev-viewseg">
-            <button
-              type="button"
-              class="ev-viewseg-btn"
-              :class="{ active: !evidence.analyzeOpen }"
-              :aria-pressed="!evidence.analyzeOpen"
-              @click="evidence.setAnalyzeOpen(false)"
-            >{{ t('src.view.data') }}</button>
-            <button
-              type="button"
-              class="ev-viewseg-btn"
-              :class="{ active: evidence.analyzeOpen }"
-              :aria-pressed="evidence.analyzeOpen"
-              @click="evidence.setAnalyzeOpen(true)"
-            >{{ t('src.view.analyze') }}</button>
-          </div>
-        </div>
-        <!-- Calculate zone (pick a column, see its key figures over the current filter). -->
-        <SourceCalc class="ev-src-top-calc" :surface="evidence" :columns="evColumns" />
-      </div>
-
-      <!-- Data / Analyze swap of the table (chips + search stay above in both). -->
+      <!-- Data / Analyze swap of the table (topbar + chips stay above in both). The
+           Analyze view is the SHARED workspace, hosted on the evidence store. -->
       <EvidenceTable v-if="!evidence.analyzeOpen" />
-      <SourceAnalyze v-else :surface="evidence" :columns="evColumns" />
+      <SourceWorkspace v-else :surface="evidence" :columns="evColumns" />
     </template>
   </div>
 </template>
@@ -266,98 +282,91 @@ function clearEvSearch() {
 }
 /* Let the rows table fill the remaining panel height instead of a capped block:
    flex:1 on the table, an uncapped scroll container (keeps the ~220px floor). */
+/* The BROWSING tables fill the panel; the Analyze view's read-only preview
+   (`.is-preview`) keeps its own compact height instead. */
 .ev-src-tab :deep(.ev-table),
-.ev-src-tab :deep(.src-table) { flex: 1; min-height: 0; }
+.ev-src-tab :deep(.src-table:not(.is-preview)) { flex: 1; min-height: 0; }
+.ev-src-tab :deep(.ev-table-view),
+.ev-src-tab :deep(.src-table:not(.is-preview) .src-table-view) { flex: 1 1 auto; min-height: 0; }
 .ev-src-tab :deep(.ev-table-scroll),
-.ev-src-tab :deep(.src-table-scroll) { flex: 1 1 auto; max-height: none; }
+.ev-src-tab :deep(.src-table:not(.is-preview) .src-table-scroll) { flex: 1 1 auto; max-height: none; }
 /* The embedded explorer fills the column too. */
 .ev-src-tab :deep(.src-explorer) { flex: 1; min-height: 0; }
-/* The Analyze mini-pivot fills the column too (it keeps its own inner scroll cap). */
-.ev-src-tab :deep(.src-analyze) { flex: 1; min-height: 0; }
+/* The shared Analyze workspace fills the column (its result + preview split the height). */
+.ev-src-tab :deep(.src-ws) { flex: 1; min-height: 0; }
 
-/* Top area - the search + Data|Analyze switch on the left, the Calculate zone on the
-   right. A flex row that wraps to a stacked block on narrow widths (the Evidence panel
-   is often a ~480px column). Mirrors the standalone Source explorer's top area. */
-.ev-src-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-4) var(--s-5); flex: none; }
-.ev-src-top-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: var(--s-3); }
-.ev-src-top-calc { flex: 1 1 240px; min-width: 0; }
+/* ONE top row - the search takes every remaining pixel, the Data|Analyze switch rides
+   its right end; wraps only when the Evidence panel is squeezed very narrow. */
+.ev-src-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); flex: none; }
 
 /* Data / Analyze segmented control - a 1px-bordered row; the active segment fills with
-   ink (charter recipe). Square, flat, self-sized (does not stretch full width). */
+   ink (charter recipe). Rounded (premium 2026-08-13), flat, self-sized - the exact twin
+   of the standalone explorer's switch. */
 .ev-viewseg {
-  display: inline-flex; align-self: flex-start;
-  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
+  display: inline-flex; align-items: stretch; align-self: center;
+  height: 40px; box-sizing: border-box;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill); overflow: hidden;
 }
 .ev-viewseg-btn {
-  padding: 5px 16px; font-size: var(--fs-xs); color: var(--text-2);
+  display: inline-flex; align-items: center;
+  padding: 0 16px; font-size: var(--fs-xs); color: var(--text-2);
   background: var(--bg); transition: all var(--dur) var(--ease);
 }
 .ev-viewseg-btn + .ev-viewseg-btn { border-left: 1px solid var(--border-strong); }
 .ev-viewseg-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
 .ev-viewseg-btn.active { background: var(--text); color: var(--bg); font-weight: var(--fw-medium); }
 
-/* Unified selector - small square chips, orange only on the active one. */
-.ev-src-selector {
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
-  flex: none;
-}
-.ev-src-selector-label {
-  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
-  text-transform: uppercase; letter-spacing: 0.08em;
-}
-.ev-src-chip {
-  padding: 3px 10px; border: 1px solid var(--border); border-radius: 0;
-  font-size: var(--fs-xs); color: var(--text-2); background: var(--surface);
-  transition: all var(--dur) var(--ease);
-}
-.ev-src-chip:hover { background: var(--surface-hover); color: var(--text); }
-.ev-src-chip.active { border-color: var(--orange); color: var(--orange-text); background: var(--orange-soft); }
-:global(body[data-theme="dark"] .ev-src-chip.active) { background: var(--orange-soft-dark); }
+/* The unified selector is the SHARED DatasetPick dropdown on the top row (its styles
+   live in sources/DatasetPick.vue). */
 
-/* Drill banner - discreet dashed-orange band (moved from EvidencePanel). */
+/* Drill banner - discreet dashed-orange band (moved from EvidencePanel). It slides in
+   from the row that was drilled: the band explains a narrowing the user just triggered,
+   so it must be seen arriving. */
 .ev-drill-band {
   display: flex; align-items: center; gap: var(--s-2); flex: none;
-  padding: 4px 10px; border: 1px dashed var(--orange); border-radius: 0;
+  padding: 5px 12px; border: 1px dashed var(--orange); border-radius: var(--r);
   background: var(--orange-soft);
+  animation: ev-drill-in var(--dur) var(--ease-out) both;
 }
+@keyframes ev-drill-in {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+@media (prefers-reduced-motion: reduce) { .ev-drill-band { animation: none; } }
 .ev-drill-band :deep(.ui-icon) { flex: none; width: 12px; height: 12px; color: var(--orange-text); }
 .ev-drill-text {
   flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--orange-text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ev-drill-exit {
-  flex: none; padding: 2px; border-radius: 0; color: var(--orange-text);
-  transition: all var(--dur) var(--ease);
+  flex: none; display: inline-flex; padding: 3px; border-radius: var(--r-pill);
+  color: var(--orange-text); transition: all var(--dur) var(--ease);
 }
 .ev-drill-exit:hover { background: var(--surface-hover); color: var(--text); }
 .ev-drill-exit :deep(.ui-icon) { width: 12px; height: 12px; }
 :global(body[data-theme="dark"] .ev-drill-band) { background: var(--orange-soft-dark); }
 
-/* "Explore source data" label over the table (only for the enriched contract). */
-.ev-explore {
-  flex: none;
-  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
-  text-transform: uppercase; letter-spacing: 0.08em;
-  margin-bottom: calc(-1 * var(--s-2));
-}
-
-/* Exchange-table search box - flat, square, 1px border (mirrors the source search). */
+/* Exchange-table search box - rounded, quiet border that wakes up on focus, exactly
+   like the standalone explorer's search (premium 2026-08-13). */
 .ev-src-search {
-  display: flex; align-items: center; gap: var(--s-2); flex: none;
-  border: 1px solid var(--border-strong); border-radius: 0;
-  background: var(--bg); padding: 0 8px;
+  display: flex; align-items: center; gap: var(--s-2);
+  flex: 1 1 220px; min-width: 0;
+  height: 40px; box-sizing: border-box;
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+  background: var(--bg); padding: 0 10px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
+.ev-src-search:focus-within { border-color: var(--text-3); box-shadow: var(--elev-1); }
 .ev-src-search-ico { color: var(--text-3); flex: none; width: 15px; height: 15px; }
 .ev-src-search-input {
   flex: 1; min-width: 0; border: none; background: transparent;
-  padding: 8px 4px; color: var(--text); font-size: var(--fs-sm);
+  padding: 0 4px; color: var(--text); font-size: var(--fs-sm);
 }
 .ev-src-search-input:focus { outline: none; }
 .ev-src-search-clear {
-  flex: none; padding: 3px; border-radius: 0; color: var(--text-3);
+  flex: none; padding: 4px; border-radius: var(--r-pill); color: var(--text-3);
   transition: all var(--dur) var(--ease);
 }
-.ev-src-search-clear:hover { color: var(--text); }
+.ev-src-search-clear:hover { color: var(--text); background: var(--surface-hover); }
 .ev-src-search-clear :deep(.ui-icon) { width: 13px; height: 13px; }
 .ev-src-search-go {
   flex: none; display: inline-flex; align-items: center; justify-content: center;

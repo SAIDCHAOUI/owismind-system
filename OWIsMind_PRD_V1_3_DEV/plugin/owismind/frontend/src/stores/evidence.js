@@ -84,8 +84,17 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // pre-set to a column: { column, n } (n bumped each call so the same column re-fires).
   const columnFilterRequest = ref(null)
 
+  // The Analyze workspace's own bounded row window ("the data being analyzed"), the
+  // SAME contract the sources store offers (previewRows / previewLoading / previewError
+  // / refreshPreviewRows) so the shared SourceWorkspace drives either host.
+  const PREVIEW_LIMIT = 50
+  const previewRows = ref([])
+  const previewLoading = ref(false)
+  const previewError = ref('')
+
   let seq = 0 // stale-response guard for open/close transitions
   let rowsSeq = 0 // per-rows-request guard: last REQUEST wins, not last response
+  let previewSeq = 0 // per-preview-request guard (same last-REQUEST-wins rule)
   let userChipSeq = 0 // keys for user-added chips
   let columnFilterSeq = 0 // monotonic counter behind columnFilterRequest.n
 
@@ -160,9 +169,42 @@ export const useEvidenceStore = defineStore('evidence', () => {
     if (activeTab.value === 'sources') {
       surfaceStale = false
       surface.afterScopeChange(_viewSignature())
+      // The Analyze workspace DISPLAYS its own preview window: it must follow the new
+      // scope immediately, or the rows on screen would contradict the figures above
+      // them. (Unmounted workspace = workspaceActive false = no request.)
+      if (surface.workspaceActive.value) refreshPreviewRows()
     } else {
       surfaceStale = true
     }
+  }
+
+  // Load the Analyze workspace's bounded preview window over the CURRENT scope (the same
+  // /evidence/rows query as the table, capped at PREVIEW_LIMIT). Guarded by previewSeq +
+  // the open/close seq. A failure clears the rows rather than showing a window that no
+  // longer matches the figures above it. Mirror of the sources store's implementation.
+  function refreshPreviewRows() {
+    if (!exchangeId.value || !available.value) return Promise.resolve(null)
+    const my = ++previewSeq
+    const epoch = seq
+    previewLoading.value = true
+    previewError.value = ''
+    const payload = buildRowsPayload(
+      exchangeId.value, chips.value, includeAdvanced.value, PREVIEW_LIMIT, 0, null,
+      drill.value ? drill.value.labels : null, selectedTable.value, q.value,
+    )
+    return fetchEvidenceRows(payload)
+      .then((data) => {
+        if (my !== previewSeq || epoch !== seq) return
+        previewRows.value = (data.rows || []).slice(0, PREVIEW_LIMIT)
+      })
+      .catch((e) => {
+        if (my !== previewSeq || epoch !== seq) return
+        previewError.value = (e && e.message) || 'evidence_unavailable'
+        previewRows.value = []
+      })
+      .finally(() => {
+        if (my === previewSeq && epoch === seq) previewLoading.value = false
+      })
   }
 
   // Compute the default tab key for a given meta object: 'evidence' unless
@@ -181,6 +223,10 @@ export const useEvidenceStore = defineStore('evidence', () => {
     includeAdvanced.value = false
     rows.value = []
     offset.value = 0
+    previewSeq += 1 // kill any in-flight preview window from the previous exchange
+    previewRows.value = []
+    previewLoading.value = false
+    previewError.value = ''
     q.value = '' // close / new exchange = no active search
     hasMore.value = false
     sort.value = null
@@ -249,11 +295,11 @@ export const useEvidenceStore = defineStore('evidence', () => {
       chips.value = chipsFromMeta(m)
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
       // Caller-requested tab wins over the artifact-derived default (e.g. land on
-      // 'sources' for the "check this number" link) - but only when the interactive
-      // view is available: on a degraded exchange the 'sources' tab is not rendered
-      // at all (EvidencePanel gates it on meta.available), so honoring the request
-      // would strand the panel on a tab that does not exist.
-      activeTab.value = (wantTab && m.available) ? wantTab : _defaultTab(m)
+      // 'sources' for the "check this number" link, or a SQL-less answer's Evidence
+      // button landing straight on the data). A tab the panel does not offer for
+      // this exchange is corrected by EvidencePanel's tab guard (falls back to
+      // 'evidence'), so honoring the request is always safe.
+      activeTab.value = wantTab || _defaultTab(m)
       if (m.available) await _loadRows(mySeq)
     } catch (e) {
       if (mySeq !== seq) return
@@ -577,8 +623,8 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // The aggregate surface is re-exposed WHOLESALE except for its host-orchestration
   // hooks: those are driven from inside this store (refreshRows / setTable / setActiveTab)
   // and must not become part of the store's public API. Destructuring them out leaves
-  // `surfacePublic` = exactly the SourceCalc / SourceAnalyze contract, under the SAME
-  // names as the Source explorer store so both components drive either host.
+  // `surfacePublic` = exactly the shared SourceWorkspace contract, under the SAME
+  // names as the Source explorer store so the one component drives either host.
   const {
     refreshTotals, afterScopeChange, resetDerived, invalidate, markRowsStale, clearRowsStale,
     ...surfacePublic
@@ -588,6 +634,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     open, exchangeId, meta, chips, includeAdvanced, rows, offset, hasMore, sort, drill, q,
     loading, rowsLoading, error, rowsError, available, modified,
     sources, hasMultipleSources, selectedTable, sourceTabKey,
+    previewRows, previewLoading, previewError, refreshPreviewRows,
     columnFilterRequest, requestColumnFilter,
     activeTab, setActiveTab, setQuery,
     openForExchange, close, refreshRows, loadMoreRows,

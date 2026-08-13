@@ -64,6 +64,16 @@ export const useScreenContextStore = defineStore('screenContext', () => {
       analyzeTotals: sources.analyzeTotals,
       analyzeTruncated: sources.analyzeTruncated,
       analyzeLoading: sources.analyzeLoading,
+      // The unified Analyze workspace (standalone explorer): the model projects it onto
+      // the SAME frozen calc / analyze blocks, so the payload contract is unchanged.
+      workspaceActive: sources.workspaceActive,
+      workspaceMeasures: sources.workspaceMeasures,
+      workspaceGroup: sources.workspaceGroup,
+      workspaceBucket: sources.workspaceBucket,
+      workspaceRows: sources.workspaceRows,
+      workspaceTotals: sources.workspaceTotals,
+      workspaceTruncated: sources.workspaceTruncated,
+      workspaceLoading: sources.workspaceLoading,
     }
   }
 

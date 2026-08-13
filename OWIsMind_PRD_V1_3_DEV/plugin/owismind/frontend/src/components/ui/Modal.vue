@@ -114,7 +114,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 }
 :global(body[data-theme="dark"] .ui-modal-scrim) { background: rgba(0, 0, 0, 0.65); }
 
-/* Square card: 0 radius, 1px border, minimal shadow (charter: no big drops). */
+/* Floating card (premium direction): rounded corners + soft layered elevation, 1px
+   frame kept so the card still reads on a same-tone surface. */
 .ui-modal-card {
   position: relative;
   width: 100%;
@@ -122,39 +123,43 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 0;
+  border-radius: var(--r-lg);
   padding: 24px 24px 22px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-2);
   outline: none;
-  animation: ui-modalCardIn 180ms var(--ease) forwards;
+  animation: ui-modalCardIn var(--dur) var(--ease-out) forwards;
 }
 .ui-modal-card.is-static { animation: none; }
 :global(body[data-theme="dark"] .ui-modal-card) {
   background: var(--surface);
 }
+/* Settle in: fade + a small rise from 0.98 - the card arrives, it does not blink. */
 @keyframes ui-modalCardIn {
-  from { transform: translateY(6px); opacity: 0.85; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-modal-card { animation: none; }
 }
 
-/* Square close button. */
+/* Close button: round icon target, hover fills so the click zone is legible. */
 .ui-modal-close {
   position: absolute;
   top: 12px;
   right: 12px;
   width: 30px;
   height: 30px;
-  border-radius: 0;
+  border-radius: var(--r-pill);
   color: var(--text-3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--dur) var(--ease);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.ui-modal-close:hover { color: var(--text); }
+.ui-modal-close:hover { color: var(--text); background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .ui-modal-close { transition: none; }
+}
 .ui-modal-close :deep(.ui-icon) { width: 16px; height: 16px; }
 
 .ui-modal-head {
@@ -163,11 +168,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   gap: 12px;
   padding-right: 30px;
 }
-/* Square icon tile - sharp geometry. */
+/* Icon tile: a small cap, softened to sit inside the rounded card. */
 .ui-modal-icon {
   width: 38px;
   height: 38px;
-  border-radius: 0;
+  border-radius: var(--r);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -194,9 +199,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
   margin-top: 22px;
 }
 
-/* Scrim fade. */
-.ui-modal-enter-active,
-.ui-modal-leave-active { transition: opacity var(--dur) var(--ease); }
+/* Scrim fade - the card animation rides on top of it. */
+.ui-modal-enter-active { transition: opacity var(--dur) var(--ease-out); }
+.ui-modal-leave-active { transition: opacity var(--dur-fast) var(--ease-in); }
 .ui-modal-enter-from,
 .ui-modal-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-modal-enter-active,
+  .ui-modal-leave-active { transition: opacity 90ms linear; }
+}
 </style>

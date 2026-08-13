@@ -13,3 +13,4 @@
 - [routes.py guard decorator review](routes-guard-decorator-review.md) - guard() order contract, the 6 routes keeping an INLINE impersonation fence, and the two-module differential harness that proves neutrality
 - [Captured result shape contract](captured-result-shape-contract.md) - streamed/stored result = columns/rows/truncated ONLY; `captured` lives on the /evidence/meta block; gating on it is always-False dead code
 - [Native engine review map](native-engine-review.md) - contracts the in-backend orchestrator (profile.native_engine) must mirror: last-token rule, prior-recall block, pass_context, SUB_AGENT_ prefix, durable precedence, worker try/finally
+- [Analyze workspace + screen context](analyze-workspace-and-screen-context.md) - screenContextModel reads calc*/analyze* off the SOURCES store (removing SourceCalc/SourceAnalyze from a host kills the agent hand-off); useClickOutside toggle rule; dev-harness proof recipes

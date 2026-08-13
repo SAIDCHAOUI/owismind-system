@@ -172,18 +172,30 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 /* Row hover: local feedback while scanning the proof rows (guide: every
    interactive surface answers the pointer). */
+tbody td { transition: background var(--dur) var(--ease); }
 tbody tr:hover td { background: var(--surface-hover); }
+/* The drill chevron only exists on the hovered row until then: a per-row action must
+   not turn a 10-row proof table into a column of chevrons. It stays visible on focus
+   (keyboard) and while the row is hovered. */
+tbody .drill-btn { opacity: 0; }
+tbody tr:hover .drill-btn, tbody .drill-btn:focus-visible { opacity: 1; }
 /* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
 th.num { text-align: right; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .th-drill, .td-drill { width: 28px; padding: 0 4px; }
 .drill-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 3px; border-radius: 0; color: var(--text-3);
+  padding: 4px; border-radius: var(--r-pill); color: var(--text-3);
   transition: all var(--dur) var(--ease);
 }
-.drill-btn:hover { background: var(--surface-hover); color: var(--orange); }
-.drill-btn :deep(.ui-icon) { width: 13px; height: 13px; }
+.drill-btn:hover { background: var(--surface-2); color: var(--orange); }
+.drill-btn :deep(.ui-icon) { width: 13px; height: 13px; transition: transform var(--dur) var(--ease); }
+/* The chevron nudges toward the rows it will open. */
+.drill-btn:hover :deep(.ui-icon) { transform: translateX(1px); }
+@media (prefers-reduced-motion: reduce) {
+  tbody td, .drill-btn, .drill-btn :deep(.ui-icon) { transition: none; }
+  .drill-btn:hover :deep(.ui-icon) { transform: none; }
+}
 .ev-result-info { display: flex; align-items: center; gap: var(--s-3); font-size: var(--fs-xs); color: var(--text-3); }
 /* Truncation is a caveat on the proof - small orange text (AA token, F2). */
 .ev-result-info .trunc { color: var(--orange-text); }

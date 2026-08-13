@@ -10,6 +10,12 @@
 // A snapshot is meaningful only when the user SHAPED the view. Agent-locked Evidence
 // chips define the scope (so they are INCLUDED in the rendered filters) but do NOT open
 // the offer on their own; a bare row_count never opens it either.
+//
+// The standalone explorer now shapes its figures in the unified Analyze WORKSPACE (a list
+// of measures over an optional grouping) instead of the legacy Calculate zone + pivot. The
+// contract is FROZEN (the backend whitelists a fixed key set), so the workspace is
+// PROJECTED onto the existing blocks: grouped -> `analyze`, ungrouped -> `calc`. The
+// Evidence hosts still drive the legacy calc/analyze state, untouched.
 import {
   chipOp,
   effectiveSourceQuery,
@@ -129,6 +135,89 @@ function _buildAnalyze(state, columns) {
   }
 }
 
+// --- the unified Analyze workspace, projected onto the frozen blocks -----------
+// True when the user actually SHAPED the workspace: a grouping is set, or the measure list
+// differs from the honest default (a single row count over all filtered rows, which says
+// nothing more than `row_count` already does).
+function _workspaceShaped(state) {
+  if (state.workspaceGroup) return true
+  const measures = Array.isArray(state.workspaceMeasures) ? state.workspaceMeasures : []
+  if (!measures.length) return false
+  if (measures.length > 1) return true
+  const only = measures[0]
+  return !(only && only.fn === 'count' && !only.column)
+}
+
+// The UNGROUPED workspace (KPI cards) projected onto the `calc` block. That block carries
+// ONE column, so the measures of the FIRST measured column travel, in builder order; the
+// row count is skipped (it is already `row_count`, and the block requires a column).
+// Figures are read from the single result row the workspace received (m0..mN by measure
+// position). OMITTED while loading or before the first result (never a stale figure).
+function _workspaceCalc(state) {
+  if (state.workspaceLoading || state.workspaceGroup) return null
+  const measures = Array.isArray(state.workspaceMeasures) ? state.workspaceMeasures : []
+  const row = (Array.isArray(state.workspaceRows) ? state.workspaceRows : [])[0]
+  if (!measures.length || !row) return null
+  let column = ''
+  const out = []
+  measures.forEach((m, i) => {
+    if (!m || !m.column || !AGG_FNS.has(m.fn)) return
+    if (!column) column = m.column
+    if (m.column !== column || out.length >= SS_CALC_MEASURES) return
+    const v = row['m' + i]
+    if (v == null) return
+    out.push({ fn: m.fn, value: _cap(v, SS_MEASURE_VALUE_CHARS) })
+  })
+  if (!out.length) return null
+  return { column: _cap(column, SS_COLUMN_CHARS), measures: out }
+}
+
+// The GROUPED workspace projected onto the `analyze` block. That block carries ONE measure
+// restricted to count/sum/avg, so the FIRST measure that qualifies travels (the workspace
+// ranks its groups by the first measure); its position drives which m<i> the rows and the
+// totals are read from. Returns null when no measure qualifies, or while loading / with no
+// rows - exactly like the legacy pivot.
+function _workspaceAnalyze(state, columns) {
+  if (state.workspaceLoading) return null
+  const group = state.workspaceGroup
+  if (!group) return null
+  const measures = Array.isArray(state.workspaceMeasures) ? state.workspaceMeasures : []
+  let idx = -1
+  for (let i = 0; i < measures.length; i += 1) {
+    if (measures[i] && ANALYZE_FNS.has(measures[i].fn)) {
+      idx = i
+      break
+    }
+  }
+  if (idx < 0) return null
+  const measure = measures[idx]
+  const key = 'm' + idx
+  const rawRows = Array.isArray(state.workspaceRows) ? state.workspaceRows : []
+  const rows = []
+  for (const r of rawRows.slice(0, SS_ANALYZE_ROWS)) {
+    if (!r || r.key == null || r[key] == null) continue
+    rows.push({ key: _cap(r.key, SS_VALUE_CHARS), value: _cap(r[key], SS_MEASURE_VALUE_CHARS) })
+    if (rows.length >= SS_ANALYZE_ROWS) break
+  }
+  if (!rows.length) return null
+  const temporal = isTemporalColType(_colType(columns, group))
+  const bucket = temporal && ANALYZE_BUCKETS.has(state.workspaceBucket) ? state.workspaceBucket : null
+  const totals = state.workspaceTotals && state.workspaceTotals[key] != null
+    ? _cap(state.workspaceTotals[key], SS_MEASURE_VALUE_CHARS)
+    : null
+  return {
+    group: _cap(group, SS_COLUMN_CHARS),
+    bucket,
+    fn: measure.fn,
+    measure_column: measure.fn === 'count' || !measure.column
+      ? null
+      : _cap(measure.column, SS_COLUMN_CHARS),
+    rows,
+    total: totals,
+    truncated: !!state.workspaceTruncated,
+  }
+}
+
 // A DB row count kept only when it is a non-negative integer AND not currently loading
 // (a stale count paired with new filters would lie). Omitted otherwise.
 function _rowCount(state) {
@@ -158,9 +247,12 @@ function _sections(state, columns, effectiveQuery, drillLabels) {
     }
     if (drill.length) sections.drill = drill
   }
-  const calc = _buildCalc(state)
+  // A host that DISPLAYS the unified workspace owns both figure blocks (its own calc* /
+  // analyze* state stays at its defaults there); every other host keeps the legacy path.
+  const workspace = !!state.workspaceActive
+  const calc = workspace ? _workspaceCalc(state) : _buildCalc(state)
   if (calc) sections.calc = calc
-  const analyze = _buildAnalyze(state, columns)
+  const analyze = workspace ? _workspaceAnalyze(state, columns) : _buildAnalyze(state, columns)
   if (analyze) sections.analyze = analyze
   const rc = _rowCount(state)
   if (rc != null) sections.row_count = rc
@@ -197,10 +289,13 @@ export function snapshotFromExplorer(s) {
   const state = s || {}
   const sections = _sections(state, state.columns, effectiveSourceQuery(state.q), null)
   // Every explorer chip is a user filter; calcColumn chosen / analyze rows also open the
-  // offer even before the figures land (the sections themselves omit while loading).
+  // offer even before the figures land (the sections themselves omit while loading). A
+  // workspace the user shaped (a grouping, or measures beyond the default row count) opens
+  // it too - its default state says nothing the row count does not already say.
   const userShaped = (Array.isArray(state.chips) && state.chips.length > 0)
     || !!state.calcColumn
     || (!!state.analyzeGroup && Array.isArray(state.analyzeRows) && state.analyzeRows.length > 0)
+    || (!!state.workspaceActive && _workspaceShaped(state))
   return _finalize('explorer', state.activeSourceLabel, state.agentLabel, sections, userShaped)
 }
 
