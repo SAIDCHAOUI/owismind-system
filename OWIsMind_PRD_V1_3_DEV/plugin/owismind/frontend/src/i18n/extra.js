@@ -74,9 +74,6 @@ export const extraMessages = {
     'runplan.completed': 'Terminé',
     'runplan.failed': 'Échec',
     'runplan.superseded': 'Remplacé',
-    'msg.show_activity': "Afficher l'activité",
-    'msg.activity_none': 'Aucune activité détaillée enregistrée pour cette réponse.',
-    'msg.activity_error': "Activité indisponible pour le moment. Réessayez.",
     'runError.quota_blocked':
       "Le quota LLM empêche de poursuivre cette analyse.",
     'runError.rate_limited':
@@ -207,6 +204,29 @@ export const extraMessages = {
       'Préfixe « {0} » ignoré : trop long ou invalide (max 16 caractères : lettres, chiffres, _ et -).',
     'admin.storage.note':
       'Pour changer la connexion ou le préfixe : onglet Settings de la webapp (dropdown « SQL connection »), puis redémarrer le backend.',
+    'admin.tables.title': 'Tables gérées',
+    'admin.tables.desc':
+      'Toutes les tables créées et maintenues par cette webapp, avec le nom exact qu’elles portent ici. Schéma {0}, connexion {1}.',
+    'admin.tables.col_name': 'Nom de la table',
+    'admin.tables.col_role': 'Contenu',
+    'admin.tables.copy': 'Copier le nom qualifié',
+    'admin.tables.copied': 'Nom de table copié.',
+    'admin.tables.copy_failed': 'Copie impossible.',
+    'admin.tables.foot':
+      'Le nom se compose du project key, du préfixe configuré et du namespace owismind. Copier reprend le nom qualifié (schéma inclus), prêt à coller dans un client SQL.',
+    'admin.tables.role.chat': 'Conversations et messages (une ligne par échange, avec le SQL généré et la consommation).',
+    'admin.tables.role.users': 'Utilisateurs connus, drapeau administrateur et compteurs cumulés.',
+    'admin.tables.role.settings': 'Réglages de la webapp : agents exposés, profils, budget global.',
+    'admin.tables.role.usage_monthly': 'Consommation agrégée par utilisateur et par mois calendaire.',
+    'admin.tables.role.artifacts': 'Spécifications des artefacts (graphique, tableau, KPI) rendus dans le chat.',
+    'admin.tables.role.user_quota': 'Budgets individuels dérogatoires accordés par un administrateur.',
+    'admin.tables.role.golden_suggestions': 'Questions proposées par les utilisateurs pour le jeu de référence du benchmark.',
+    'admin.tables.role.events': 'Événements d’usage du produit (navigation, chat, interactions).',
+    'admin.tables.role.feedback': 'Retours généraux envoyés depuis le hub Aide et support.',
+    'admin.tables.role.agent_requests': 'Demandes de nouvel agent envoyées depuis le hub Aide et support.',
+    'admin.tables.role.agent_runs': 'Registre des exécutions durables (une ligne par run, reprise après redémarrage).',
+    'admin.tables.role.agent_run_steps': 'Étapes du plan de chaque exécution durable.',
+    'admin.tables.role.agent_run_events': 'Fil d’événements d’une exécution durable (purgé 14 jours après la fin).',
     'admin.agents.title': 'Agents exposés',
     'admin.agents.desc':
       'Choisissez un projet, cochez les agents à mettre à disposition, puis enregistrez. Les utilisateurs ne verront que les agents activés ici.',
@@ -392,7 +412,7 @@ export const extraMessages = {
     'ev.proof.level.desc.result':
       "Le calcul est décomposé étape par étape et le résultat exact utilisé par l'agent a été conservé.",
     'ev.proof.level.desc.source':
-      'La source et le périmètre exacts de la requête sont identifiés - les lignes affichées sont relues maintenant, pas au moment de la réponse.',
+      "Le jeu de données et les filtres exacts de cette requête sont connus. Les lignes ci-dessous sont relues en direct dans la base : si la donnée a changé depuis la réponse, elles montrent l'état d'aujourd'hui.",
     'ev.proof.level.desc.partial':
       'Une partie seulement du périmètre a pu être reproduite - les éléments non reproduits sont listés, jamais masqués.',
     'ev.proof.level.desc.declared':
@@ -950,9 +970,6 @@ export const extraMessages = {
     // Quiet text-link toggles between the month RANGE picker and the exact-values list.
     'src.range.pickList': 'Choisir des valeurs précises',
     'src.range.pickRange': 'Filtrer par plage',
-    // Chat - quiet "check this number" link under an agent answer (opens the proof panel
-    // directly on the Source data tab).
-    'ev.verify': 'Vérifier ce chiffre',
   },
   en: {
     // Generic reusable
@@ -1018,9 +1035,6 @@ export const extraMessages = {
     'runplan.completed': 'Done',
     'runplan.failed': 'Failed',
     'runplan.superseded': 'Superseded',
-    'msg.show_activity': 'Show activity',
-    'msg.activity_none': 'No detailed activity recorded for this answer.',
-    'msg.activity_error': 'Activity is unavailable right now. Try again.',
     'runError.quota_blocked':
       'The LLM quota prevents this analysis from continuing.',
     'runError.rate_limited':
@@ -1151,6 +1165,29 @@ export const extraMessages = {
       'Prefix “{0}” ignored: too long or invalid (max 16 chars: letters, digits, _ and -).',
     'admin.storage.note':
       'To change the connection or prefix: the webapp\'s Settings tab (the "SQL connection" dropdown), then restart the backend.',
+    'admin.tables.title': 'Managed tables',
+    'admin.tables.desc':
+      'Every table this webapp creates and maintains, with the exact name it carries here. Schema {0}, connection {1}.',
+    'admin.tables.col_name': 'Table name',
+    'admin.tables.col_role': 'Holds',
+    'admin.tables.copy': 'Copy the qualified name',
+    'admin.tables.copied': 'Table name copied.',
+    'admin.tables.copy_failed': 'Copy failed.',
+    'admin.tables.foot':
+      'A name is made of the project key, the configured prefix and the owismind namespace. Copy takes the qualified name (schema included), ready to paste into a SQL client.',
+    'admin.tables.role.chat': 'Conversations and messages (one row per exchange, with its generated SQL and usage).',
+    'admin.tables.role.users': 'Known users, admin flag and lifetime counters.',
+    'admin.tables.role.settings': 'Webapp settings: exposed agents, profiles, global budget.',
+    'admin.tables.role.usage_monthly': 'Usage aggregated per user and calendar month.',
+    'admin.tables.role.artifacts': 'Specs of the artifacts (chart, table, KPI) rendered in the chat.',
+    'admin.tables.role.user_quota': 'Per-user budget overrides granted by an admin.',
+    'admin.tables.role.golden_suggestions': 'Questions users suggested for the benchmark golden set.',
+    'admin.tables.role.events': 'Product usage events (navigation, chat, interactions).',
+    'admin.tables.role.feedback': 'General feedback sent from the Help and support hub.',
+    'admin.tables.role.agent_requests': 'New-agent requests sent from the Help and support hub.',
+    'admin.tables.role.agent_runs': 'Durable run ledger (one row per run, resumable after a restart).',
+    'admin.tables.role.agent_run_steps': 'Plan steps of each durable run.',
+    'admin.tables.role.agent_run_events': 'Event feed of a durable run (purged 14 days after it ends).',
     'admin.agents.title': 'Exposed agents',
     'admin.agents.desc':
       'Pick a project, tick the agents to expose, then save. Users only see the agents enabled here.',
@@ -1335,7 +1372,7 @@ export const extraMessages = {
     'ev.proof.level.desc.result':
       'The computation is decomposed step by step and the exact result the agent used was kept.',
     'ev.proof.level.desc.source':
-      'The exact source and scope of the query are identified - the rows shown are re-read now, not at answer time.',
+      'The exact dataset and filters behind this query are known. The rows below are read live from the database: if the data changed since the answer, they show today\'s state.',
     'ev.proof.level.desc.partial':
       'Only part of the scope could be reproduced - anything not reproduced is listed, never hidden.',
     'ev.proof.level.desc.declared':
@@ -1890,8 +1927,5 @@ export const extraMessages = {
     // Quiet text-link toggles between the month RANGE picker and the exact-values list.
     'src.range.pickList': 'Pick exact values',
     'src.range.pickRange': 'Filter by range',
-    // Chat - quiet "check this number" link under an agent answer (opens the proof panel
-    // directly on the Source data tab).
-    'ev.verify': 'Check this number',
   },
 }

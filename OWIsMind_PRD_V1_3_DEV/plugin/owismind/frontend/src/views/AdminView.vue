@@ -35,6 +35,7 @@ import {
 } from '../composables/budgetModel.js'
 import { PageShell, SettingCard, EmptyState } from '../components/pages'
 import { Tabs, Button, Icon, Modal } from '../components/ui'
+import { useToasts } from '../composables/useToasts.js'
 // BEGIN impersonation (temporary) - admin "view as user" picker. Removable:
 // delete this import + the openImpersonate handler + the <UserPicker> in the
 // template + the impersonatePickerOpen ref, and the features/admin-impersonate folder.
@@ -59,7 +60,32 @@ const activeTab = ref('overview')
 const loading = ref(true)
 const errorMsg = ref('')
 
-const storage = ref(null) // { connection, project_key, table_prefix, namespace, tables }
+const storage = ref(null) // { connection, project_key, table_prefix, namespace, tables, managed_tables }
+const { push } = useToasts()
+
+// Full table inventory (backend-derived, see storage/migrations.managed_tables):
+// every table the webapp creates, with the name it really carries here. Empty on an
+// older backend that does not send it yet - the card then simply does not render.
+const managedTables = computed(() => {
+  const rows = storage.value && storage.value.managed_tables
+  return Array.isArray(rows) ? rows : []
+})
+// A localized one-liner per table. An unknown role (a table added backend-side
+// before this page learns its label) falls back to the logical name, never a blank.
+function tableRole(row) {
+  const key = 'admin.tables.role.' + row.role
+  const label = t(key)
+  return label === key ? row.logical : label
+}
+// Copy the QUALIFIED name (schema + quoted table): what actually runs in a SQL client.
+async function copyTable(row) {
+  try {
+    await navigator.clipboard.writeText(row.qualified || row.physical)
+    push(t('admin.tables.copied'), { icon: 'check', tone: 'ok' })
+  } catch (e) {
+    push(t('admin.tables.copy_failed'), { icon: 'alert', tone: 'warn' })
+  }
+}
 const users = ref([]) // [{ user_id, display_name, user_groups, is_admin, ... }]
 const busyUser = ref('')
 
@@ -656,11 +682,36 @@ if (import.meta.env.DEV) {
             <dt>{{ t('admin.storage.namespace') }}</dt>
             <dd><code>{{ storage.namespace }}</code></dd>
           </dl>
-          <p class="kv-note muted">{{ t('admin.storage.tables') }}</p>
-          <ul class="tables">
-            <li v-for="(name, key) in storage.tables" :key="key"><code>{{ name }}</code></li>
-          </ul>
           <p class="kv-note muted">{{ t('admin.storage.note') }}</p>
+        </SettingCard>
+
+        <!-- Every table this webapp owns, resolved to the name it really carries in
+             the database (project key + the admin prefix + namespace). This is the
+             "what do I look for, and where" answer, so each row can be copied. -->
+        <SettingCard v-if="managedTables.length" :eyebrow="t('admin.tables.title')">
+          <p class="card-desc muted">{{ t('admin.tables.desc', [storage.schema || 'public', storage.connection || '-']) }}</p>
+          <table class="tbl-inv">
+            <thead>
+              <tr>
+                <th>{{ t('admin.tables.col_name') }}</th>
+                <th>{{ t('admin.tables.col_role') }}</th>
+                <!-- Actions column: each button carries its own accessible name (title). -->
+                <th class="tbl-inv__act"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in managedTables" :key="row.logical">
+                <td><code>{{ row.physical }}</code></td>
+                <td class="tbl-inv__role">{{ tableRole(row) }}</td>
+                <td class="tbl-inv__act">
+                  <button type="button" class="tbl-copy" :title="t('admin.tables.copy')" @click="copyTable(row)">
+                    <Icon name="copy" />
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="kv-note muted">{{ t('admin.tables.foot') }}</p>
         </SettingCard>
       </div>
 
@@ -1437,6 +1488,61 @@ if (import.meta.env.DEV) {
 .prefix-warn :deep(.ui-icon) { width: 13px; height: 13px; flex-shrink: 0; }
 .tables { list-style: none; padding: 0; margin: 0 0 var(--s-3); display: flex; flex-direction: column; gap: 7px; }
 .tables code { color: var(--text); }
+
+/* Table inventory: a real table (structural surface -> square), uppercase micro
+   header over a 1px rule, rows separated by hairlines. The name is the subject,
+   so it leads in mono; the role explains it in plain words. */
+.tbl-inv {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 var(--s-3);
+}
+.tbl-inv th {
+  text-align: left;
+  padding: 0 12px 8px 0;
+  font-size: 11px;
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+.tbl-inv td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.tbl-inv tr:last-child td { border-bottom: none; }
+.tbl-inv code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.tbl-inv__role { color: var(--text-2); font-size: var(--fs-sm); line-height: 1.5; }
+.tbl-inv__act { width: 1%; padding-right: 0; text-align: right; }
+.tbl-copy {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.tbl-copy:hover { background: var(--surface-hover); color: var(--text); }
+.tbl-copy:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.tbl-copy :deep(.ui-icon) { width: 14px; height: 14px; }
+@media (max-width: 720px) {
+  /* Narrow column: the role wraps under the name rather than squeezing it. */
+  .tbl-inv, .tbl-inv tbody, .tbl-inv tr, .tbl-inv td { display: block; width: 100%; }
+  .tbl-inv thead { display: none; }
+  .tbl-inv tr { border-bottom: 1px solid var(--border); padding: 10px 0; }
+  .tbl-inv td { border-bottom: none; padding: 0 0 4px; }
+  .tbl-inv__act { text-align: left; }
+}
 
 /* --- Agent whitelist + profiles --- */
 /* Field label: uppercase 11px/800, var(--text-2) */

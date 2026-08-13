@@ -120,6 +120,12 @@ body[data-theme="light"] {
      resting card / lifted (hover, focus). Deliberately diffuse, never a hard glow. */
   --elev-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
   --elev-2: 0 2px 6px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.10);
+  /* Brand AURA (the prompt card, user decision 2026-08-13): a whisper of tinted air
+     around the primary control so it lifts off a same-color canvas, on the arrival
+     screen AND once it has settled into a conversation. Diffuse, very low alpha, no
+     hard ring - it must be felt, not seen. */
+  --aura-orange: 0 0 22px rgba(255, 121, 0, 0.09), 0 12px 40px rgba(255, 121, 0, 0.10);
+  --aura-orange-strong: 0 0 26px rgba(255, 121, 0, 0.13), 0 14px 48px rgba(255, 121, 0, 0.14);
 
   --orange-soft-dark: var(--orange-soft);
   --orange-on-dark: var(--orange-deep);
@@ -145,6 +151,10 @@ body[data-theme="dark"] {
   /* Dark elevation: deeper, wider penumbra (a dark canvas needs more contrast). */
   --elev-1: 0 1px 3px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.45);
   --elev-2: 0 2px 8px rgba(0, 0, 0, 0.55), 0 16px 40px rgba(0, 0, 0, 0.5);
+  /* Warm light spreads FURTHER on a dark canvas: same whisper, slightly lower
+     alpha so it never turns into a glow around the card. */
+  --aura-orange: 0 0 24px rgba(255, 121, 0, 0.08), 0 12px 44px rgba(255, 121, 0, 0.09);
+  --aura-orange-strong: 0 0 28px rgba(255, 121, 0, 0.12), 0 16px 52px rgba(255, 121, 0, 0.13);
 
   --orange-soft-dark: rgba(255, 121, 0, 0.10);
   --orange-on-dark: #ffb066;

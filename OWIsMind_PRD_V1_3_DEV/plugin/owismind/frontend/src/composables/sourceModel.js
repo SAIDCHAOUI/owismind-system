@@ -291,6 +291,43 @@ export function replaceMeasureAt(list, index, measure) {
   return current.slice(0, index).concat([next], current.slice(index + 1))
 }
 
+// The measures an UNTOUCHED workspace starts on. Counting rows is a poor opening figure:
+// the row count is already stated under the dataset (and re-stated by every filter), so a
+// default row-count measure spends the whole result surface repeating what is on screen
+// (user ask 2026-08-13). The first real question over a dataset is "how much", so the
+// default is the SUM of the first numeric QUANTITY column - identifier-shaped numerics
+// excluded (summing an account id or a year is nonsense, the same guard the cell formatter
+// and measureSpecForColumn apply). `isIdentifier` is INJECTED (cellFormat imports this
+// module, so importing it back here would close a cycle). With no quantity column at all -
+// a purely textual dataset - the row count IS the only meaningful figure and stays.
+export function defaultWorkspaceMeasures(columns, isIdentifier) {
+  const list = Array.isArray(columns) ? columns : []
+  const isId = typeof isIdentifier === 'function' ? isIdentifier : () => false
+  for (const c of list) {
+    if (!c || c.name == null || c.name === '') continue
+    if (!isNumericColType(c.type) || isId(c.name)) continue
+    return [{ fn: 'sum', column: String(c.name) }]
+  }
+  return [{ fn: 'count', column: null }]
+}
+
+// Which existing filter chip a clicked cell value should join, or null when a fresh '='
+// chip must be added. ONE rule for both hosts of the rows tables:
+//   - a BETWEEN range chip is never merged into (a raw value is not a bound);
+//   - an agent chip that is LOCKED (evidence: `source` set, not 'user', not editable) is
+//     never touched - it is the agent's own scope, not the user's;
+//   - a user chip wins over an editable agent chip when the column carries both.
+// A host whose chips carry no provenance at all (the standalone sources store) has
+// `source` undefined on every chip, so the rule degrades to "the first non-range chip".
+export function pickCellFilterChip(chips, column) {
+  const list = Array.isArray(chips) ? chips : []
+  const candidates = list.filter(
+    (c) => c && c.column === column && chipOp(c) !== 'BETWEEN'
+      && (c.source == null || c.source === 'user' || c.editable),
+  )
+  return candidates.find((c) => c.source === 'user') || candidates[0] || null
+}
+
 // The measures a column may actually be asked for, by TYPE and by NAME. It is
 // statsSpecFor, minus the quantities that make no sense on an IDENTIFIER: a column whose
 // name marks an id is numeric to the database but summing or averaging it is nonsense

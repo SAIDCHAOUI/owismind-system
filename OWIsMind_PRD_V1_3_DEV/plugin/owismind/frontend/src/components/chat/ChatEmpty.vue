@@ -60,26 +60,28 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   margin: 0 auto;
   gap: var(--s-5);
 }
-/* Heading = ink, heavy, tight (charte display recipe) with the 52x4 orange
-   title-bar centered under it. The orange stays a bar, not the whole line -
-   the eye lands here once, then drops to the prompt. */
+/* Heading = ink, tight, DELIBERATELY UNDERSIZED (user ask 2026-08-13): it used to
+   out-shout the prompt bar, which is the actual subject of the screen. One step
+   down in size and weight, it reads as a greeting - the input below carries the
+   attention (and the brand aura). */
 .empty-title {
   font-family: var(--font-sans);
-  font-size: var(--fs-2xl);
-  font-weight: var(--fw-heavy);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
   letter-spacing: -0.01em; /* charte H1 tracking */
   margin: 0;
   color: var(--text);
-  line-height: 1.1;
+  line-height: 1.15;
 }
-/* The 52x4 title-bar draws itself under the heading on arrival (a wipe from the
-   centre), which is the one deliberate flourish of the empty screen. */
+/* Title-bar, scaled with the heading (40x3): it draws itself under the title on
+   arrival (a wipe from the centre) and stays the only orange mark up here, so the
+   prompt's aura below is not competing with a heavier accent. */
 .empty-bar {
   display: block;
-  width: 52px;
-  height: 4px;
+  width: 40px;
+  height: 3px;
   background: var(--orange);
-  margin: var(--s-4) auto 0;
+  margin: var(--s-3) auto 0;
   animation: bar-wipe var(--dur-slow) var(--ease-out) 160ms both;
 }
 @keyframes bar-wipe {

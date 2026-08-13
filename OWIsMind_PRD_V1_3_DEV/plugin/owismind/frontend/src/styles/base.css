@@ -61,6 +61,20 @@ a { color: inherit; }
 }
 .u-rise { animation: owi-rise var(--dur-slow) var(--ease-out) both; }
 
+/* First-send morph layer (composables/useFirstSendMorph.js): the flying sentence
+ * lives here, on <body>, because both `.chat` and `.main` clip their overflow. It
+ * paints nothing itself and never takes a click - the pieces inside carry their
+ * own (scoped, tokenised) styles, so light and dark follow on their own. */
+.owi-morph-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  contain: layout style;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .u-rise { animation: none; }
+  /* Safety net: a preference flipped mid-flight must not strand a ghost on screen. */
+  .owi-morph-layer { display: none; }
 }

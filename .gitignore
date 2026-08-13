@@ -52,5 +52,6 @@ docs/agentic-research/
 # superpowers SDD scratch (progress ledger)
 .superpowers/
 
-# Dev harness (local visual validation) - Vite cache
+# Dev harness (local visual validation) - Vite cache + Playwright screenshots
 dev-harness/.vite-cache/
+dev-harness/tools/out/

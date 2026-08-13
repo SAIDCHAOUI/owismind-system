@@ -10,6 +10,7 @@ import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useScreenContextStore } from '../../stores/screenContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { useClickOutside } from '../../composables/useClickOutside.js'
+import { armFirstSend } from '../../composables/useFirstSendMorph.js'
 import { contextKey } from '../../composables/promptContextModel.js'
 import { Icon } from '../ui'
 import AgentPicker from './AgentPicker.vue'
@@ -55,6 +56,11 @@ watch(() => session.selectedAgentKey, () => {
 })
 
 const ta = ref(null)
+// The prompt CARD (not the wrapper, which also holds the banners and the footnote).
+// ChatView animates it on the first send: exposed explicitly rather than reached for
+// with a selector, so the morph never depends on this component's internal markup.
+const cardEl = ref(null)
+defineExpose({ cardEl, taEl: ta })
 
 // Keyboard-affordance hint ("Enter to send"): recognition over recall - shown
 // only while the input is focused AND carries text (never as ambient noise).
@@ -74,6 +80,10 @@ watch(() => chat.draft, () => nextTick(autosize))
 function submit() {
   const text = chat.draft
   if (!text.trim() || !chat.canSend) return
+  // First message of a conversation: hand the VISIBLE line to the send morph before
+  // the textarea is cleared. The bubble may carry an extra context block, so the
+  // sent payload is not what the user was looking at - this is (ChatView plays it).
+  if (!chat.hasMessages) armFirstSend(text)
   // Append the picked data-context values as a readable block, then clear the queue.
   const block = promptContext.block(locale.value)
   chat.draft = ''
@@ -105,7 +115,7 @@ const placeholder = () =>
 </script>
 
 <template>
-  <div class="prompt">
+  <div ref="cardEl" class="prompt">
     <!-- On-screen context chip: the SOURCE-DATA VIEW the user shaped (filters / search /
          DB-computed figures) is attached to every send BY DEFAULT - the agent sees what
          the user sees. Removable (x -> opt-out, sticky for this exact view) so the user
@@ -231,7 +241,15 @@ const placeholder = () =>
 <style scoped>
 /* The prompt is the PRIMARY control of the page: a soft ELEVATED card (premium
    direction, user decision 2026-08-13) - generous radius, hairline border, layered
-   shadow that deepens on hover/focus. The chrome recedes; the typing area leads. */
+   shadow that deepens on hover/focus. The chrome recedes; the typing area leads.
+
+   Brand AURA: the host decides. `--prompt-aura` / `--prompt-aura-strong` are read
+   with a TRANSPARENT fallback; ChatView sets them on `.prompt-wrap` for BOTH stages
+   (arrival and thread), so the card keeps its tinted air after the first send (user
+   ask 2026-08-13). The fallback is what leaves any OTHER host without an aura. A
+   `none` fallback is impossible here: `none` cannot sit in a shadow list.
+   Shadow ORDER matters: the first entry paints on top, so the neutral elevation
+   leads and the aura stays behind it - felt, not seen. */
 .prompt {
   position: relative;
   border: 1px solid var(--border-strong);
@@ -240,21 +258,22 @@ const placeholder = () =>
   padding: var(--s-4) var(--s-5) var(--s-3);
   display: flex;
   flex-direction: column;
-  box-shadow: var(--elev-1);
+  box-shadow: var(--elev-1), var(--prompt-aura, 0 0 0 0 transparent);
   transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.prompt:hover { box-shadow: var(--elev-2); }
+.prompt:hover { box-shadow: var(--elev-2), var(--prompt-aura-strong, 0 0 0 0 transparent); }
 /* Focused = the hero moment (user ask 2026-08-13, "effet luxe"): the frame turns
-   orange and a WHISPER of tinted air spreads around the card (a 4px --orange-soft
-   veil under the soft elevation - no glow, no gradient, just the brand breathing
-   on the sides). Sanctioned per-component accent, NOT a global focus ring. */
+   orange and a crisp 4px --orange-soft veil rings the card. The aura stays at its
+   RESTING strength here on purpose - orange border + crisp ring + a swollen cloud
+   would read as three concentric halos, and the charter asks for one accent, felt
+   rather than seen. Sanctioned per-component accent, NOT a global focus ring. */
 .prompt:focus-within {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px var(--orange-soft), var(--elev-2);
+  box-shadow: 0 0 0 4px var(--orange-soft), var(--elev-2), var(--prompt-aura, 0 0 0 0 transparent);
 }
 :global(body[data-theme="dark"] .prompt:focus-within) {
   border-color: var(--orange);
-  box-shadow: 0 0 0 4px var(--orange-soft-dark), var(--elev-2);
+  box-shadow: 0 0 0 4px var(--orange-soft-dark), var(--elev-2), var(--prompt-aura, 0 0 0 0 transparent);
 }
 /* Dark canvas: the card sits one surface step ABOVE the page (a same-color card
    would disappear; the border alone is too faint at this size). */

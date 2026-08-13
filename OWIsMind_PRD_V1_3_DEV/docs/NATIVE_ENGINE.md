@@ -87,7 +87,7 @@ stop apply unchanged.
 
 ## Tests
 
-`tests/test_native_orchestrator.py` (29 tests, DSS-free): tool specs, mode/lang
+`tests/test_native_orchestrator.py` (27 tests, DSS-free): tool specs, mode/lang
 LAST-valid-token parsing (forgery guard), the PRODUCTION captured-result shape
 (`{columns, rows, truncated}` - no `captured` key), artifact validation against
 the frozen shape, hub fallback + duplicate tool_name guard, full-loop event

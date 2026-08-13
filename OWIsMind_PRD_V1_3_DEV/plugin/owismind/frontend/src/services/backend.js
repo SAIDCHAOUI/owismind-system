@@ -159,12 +159,6 @@ export function fetchActiveRun(sessionId) {
   return get('/owismind-api/chat/active', { session_id: sessionId });
 }
 
-// Persisted activity feed of a finished durable exchange ("Afficher l'activite").
-// Returns { status, events: [{event_type, payload}] }; [] for a legacy exchange.
-export function fetchRunActivity(exchangeId) {
-  return get('/owismind-api/chat/activity', { exchange_id: exchangeId });
-}
-
 // Names-only, keyset-paginated conversation list (sidebar). Never returns bodies.
 // Returns { status, conversations: [{ session_id, title, last_at }], next_cursor,
 // has_more }. `cursor`/`limit` are optional; the backend clamps the page size.

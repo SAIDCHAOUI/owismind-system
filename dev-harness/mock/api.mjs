@@ -112,6 +112,60 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+// --- Storage inventory (mirrors storage/migrations.py + sql_config.storage_status) ---
+// Same logical names, same declaration order, same naming rule: the project key
+// leads, the admin prefix (when set) sits before the mandatory `owismind`
+// namespace. Keep in sync with _DDL_BY_LOGICAL / _ROLE_BY_LOGICAL.
+const MOCK_PROJECT_KEY = 'OWISMIND_LOCAL'
+const MOCK_TABLE_PREFIX = 'beta'
+const MOCK_TABLES = [
+  ['chat', 'webapp_chat_v5'],
+  ['users', 'webapp_users_v1'],
+  ['settings', 'webapp_settings_v1'],
+  ['usage_monthly', 'webapp_usage_monthly_v1'],
+  ['artifacts', 'webapp_artifacts_v1'],
+  ['user_quota', 'webapp_user_quota_v1'],
+  ['golden_suggestions', 'webapp_golden_suggestions_v1'],
+  ['events', 'webapp_events_v1'],
+  ['feedback', 'webapp_feedback_v1'],
+  ['agent_requests', 'webapp_agent_requests_v1'],
+  ['agent_runs', 'webapp_agent_runs_v1'],
+  ['agent_run_steps', 'webapp_agent_run_steps_v1'],
+  ['agent_run_events', 'webapp_agent_run_events_v1'],
+]
+
+function adminStorage() {
+  const namespace = MOCK_TABLE_PREFIX ? `${MOCK_TABLE_PREFIX}-owismind` : 'owismind'
+  const physical = (logical) => `${MOCK_PROJECT_KEY}_${namespace}_${logical}`
+  const managed = MOCK_TABLES.map(([role, logical]) => ({
+    role,
+    logical,
+    physical: physical(logical),
+    qualified: `public."${physical(logical)}"`,
+  }))
+  return {
+    configured: true,
+    connection: 'SQL_owi',
+    project_key: MOCK_PROJECT_KEY,
+    project_key_source: 'dataiku_default',
+    table_prefix: MOCK_TABLE_PREFIX,
+    table_prefix_input: MOCK_TABLE_PREFIX,
+    table_prefix_ignored: false,
+    namespace,
+    traces_dataset: 'beta-owismind_webapp_traces_v2',
+    schema: 'public',
+    tables: {
+      chat: physical('webapp_chat_v5'),
+      users: physical('webapp_users_v1'),
+      settings: physical('webapp_settings_v1'),
+      usage_monthly: physical('webapp_usage_monthly_v1'),
+      user_quota: physical('webapp_user_quota_v1'),
+      golden_suggestions: physical('webapp_golden_suggestions_v1'),
+    },
+    managed_tables: managed,
+  }
+}
+
 function lightSqlItems(sqlItems) {
   // The conversation readback keeps SQL items LIGHT (no captured rows) - the
   // captures come back through /evidence/meta, mirroring the real payloads.
@@ -534,13 +588,12 @@ export function createMockApi() {
       case route === '/catalog/projects':
         return sendJson(res, 200, { ok: false, reason: 'mock_no_catalog' })
       case route === '/admin/storage':
-        return sendJson(res, 200, {
-          connection: 'SQL_owi (mock)',
-          project_key: 'OWISMIND_LOCAL',
-          table_prefix: '',
-          namespace: 'owismind',
-          tables: { chat: 'OWISMIND_LOCAL_owismind_webapp_chat_v5' },
-        })
+        // Shape of the REAL backend (api/routes.py admin_storage_get ->
+        // sql_config.storage_status): the payload is wrapped in `storage`, and
+        // `managed_tables` is the full inventory derived from the DDL registry.
+        // A prefix is configured here on purpose, so the Admin page is exercised
+        // with the "{project}_{prefix}-owismind_{logical}" naming it must show.
+        return sendJson(res, 200, { status: 'ok', storage: adminStorage() })
       case route === '/admin/users':
         // The REAL backend decodes user_groups into a LIST before responding
         // (storage/admin.py) - mirror it, never the raw stored JSON string.

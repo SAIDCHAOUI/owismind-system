@@ -3,7 +3,7 @@
 // to the maquette UI. Empty state centers title + prompt; an active conversation
 // shows the scrollable thread with the prompt pinned below. The route's optional
 // :sessionId selects a conversation (lazily fetched on open); no param = a new one.
-import { watch, computed } from 'vue'
+import { watch, computed, ref, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../stores/chat.js'
@@ -13,6 +13,7 @@ import ChatThread from '../components/chat/ChatThread.vue'
 import ChatEmpty from '../components/chat/ChatEmpty.vue'
 import PromptBar from '../components/chat/PromptBar.vue'
 import { Icon } from '../components/ui'
+import { captureFirstSend, playFirstSend, playStageExit } from '../composables/useFirstSendMorph.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,7 +38,7 @@ const budgetMsg = computed(() => {
 // BEGIN impersonation (temporary) - read-only note while an admin views as a user.
 // The label is the EFFECTIVE (impersonated) user from the session. Sending is also
 // disabled via chat.canSend; this just explains why. Removable: delete this computed
-// + the .imp-note block in both prompt-wraps + its styles.
+// + the .imp-note block in the prompt-wrap + its styles.
 const impersonateNote = computed(() => {
   if (!session.impersonating) return ''
   const u = session.user
@@ -82,6 +83,79 @@ watch(
     }
   },
 )
+
+/* --- First-send morph ("the hand-off") ------------------------------------
+ * The arrival screen becomes a working thread in one patch: the heading leaves,
+ * the sentence moves into its bubble, the prompt card settles at the foot. All of
+ * it is decoration played AFTER the send has already left (see
+ * composables/useFirstSendMorph.js). It runs on the first message of a
+ * conversation only; from turn two the existing message entry is the right answer.
+ */
+const promptBar = ref(null)
+let cancelMorph = null
+/* The heading's geometry BEFORE the patch. By the time Vue calls the leave hook the
+ * thread is already inserted and the block has been pushed down, so measuring it
+ * there freezes it in the wrong place. */
+let stageRect = null
+
+function stopMorph() {
+  if (cancelMorph) cancelMorph()
+  cancelMorph = null
+}
+/* The first user bubble of the thread. Read from the DOM on purpose: the thread is
+ * mounted in the same patch, and a registration channel through two components
+ * would buy nothing for a node that is, by definition, the first of its kind. */
+function firstBubbleEl() {
+  const inner = document.querySelector('.conv-inner')
+  return inner ? inner.querySelector('.msg.user .bubble') : null
+}
+
+// PRE-flush: the DOM is still the arrival screen, which is what we must measure.
+watch(
+  () => chat.hasMessages,
+  (now, before) => {
+    // Falling BACK to the arrival screen (the optimistic exchange is dropped when
+    // the monthly quota rejects the run) must take the flying sentence with it.
+    if (!now) {
+      stopMorph()
+      return
+    }
+    if (before) return
+    const bar = promptBar.value
+    if (!bar) return
+    const stage = document.querySelector('.empty-stage')
+    stageRect = stage ? stage.getBoundingClientRect() : null
+    const first = captureFirstSend({ card: bar.cardEl, input: bar.taEl })
+    if (!first) return
+    stopMorph()
+    nextTick(() => {
+      const b = promptBar.value
+      if (!b || !b.cardEl) return
+      cancelMorph = playFirstSend(first, { card: b.cardEl, findBubble: firstBubbleEl })
+    })
+  },
+  { flush: 'pre' },
+)
+// A conversation switch or leaving the view must never strand a flying sentence.
+watch(() => chat.activeSessionId, stopMorph)
+onBeforeUnmount(stopMorph)
+
+/* Leave hook of the arrival heading: freeze it where it sits and take it OUT of the
+ * flow, so the prompt card measures its REAL final position on the same frame. */
+function onStageLeave(el, done) {
+  const parent = el.parentElement
+  if (parent) {
+    const r = stageRect || el.getBoundingClientRect()
+    const p = parent.getBoundingClientRect()
+    el.style.position = 'absolute'
+    el.style.left = r.left - p.left + 'px'
+    el.style.top = r.top - p.top + 'px'
+    el.style.width = r.width + 'px'
+    el.style.height = r.height + 'px'
+    el.style.pointerEvents = 'none'
+  }
+  playStageExit(el, done)
+}
 </script>
 
 <template>
@@ -97,9 +171,22 @@ watch(
       </div>
     </div>
 
-    <template v-else-if="chat.hasMessages">
-      <ChatThread :turns="chat.turns" />
-      <div class="prompt-wrap">
+    <!-- ONE prompt bar for both stages. It used to be duplicated in the two branches
+         (arrival / thread), which destroyed and rebuilt the component on the first send:
+         the focus was lost and no morph was possible. Hoisted here, the SAME node
+         travels from the centre of the arrival screen to the foot of the thread, which
+         is what the send transition animates (FLIP, see morphSend below). -->
+    <template v-else>
+      <ChatThread v-if="chat.hasMessages" :turns="chat.turns" />
+      <!-- The heading does not cut: it is pulled out of the flow and animated away
+           by its leave hook, which is also what lets the card measure its landing. -->
+      <Transition :css="false" @leave="onStageLeave">
+        <div v-if="!chat.hasMessages" class="empty-stage">
+          <ChatEmpty />
+        </div>
+      </Transition>
+
+      <div class="prompt-wrap" :class="{ 'in-empty': !chat.hasMessages }">
         <!-- BEGIN impersonation (temporary) - read-only note (admin viewing as user). -->
         <div v-if="impersonateNote" class="imp-note">
           <Icon name="users" />
@@ -115,28 +202,14 @@ watch(
              visible here too (sends are blocked by canSend until a clean reload). -->
         <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
         <p v-else-if="chat.errorMsg" class="chat-error">{{ friendlyError }}</p>
-        <PromptBar />
+        <PromptBar ref="promptBar" />
       </div>
-    </template>
 
-    <div v-else class="empty-stage">
-      <ChatEmpty />
-      <div class="prompt-wrap in-empty u-rise" style="animation-delay: 100ms">
-        <!-- BEGIN impersonation (temporary) - read-only note (admin viewing as user). -->
-        <div v-if="impersonateNote" class="imp-note">
-          <Icon name="users" />
-          <span>{{ impersonateNote }}</span>
-        </div>
-        <!-- END impersonation -->
-        <div v-if="budgetBlocked" class="budget-banner">
-          <Icon name="wallet" />
-          <span>{{ budgetMsg }}</span>
-        </div>
-        <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
-        <p v-else-if="chat.errorMsg" class="chat-error">{{ friendlyError }}</p>
-        <PromptBar />
-      </div>
-    </div>
+      <!-- Arrival only: the lower half of the stage. With `.empty-stage` filling the
+           upper half (content flushed to its bottom edge), the heading + prompt group
+           lands optically centred, exactly where it sat before the hoist. -->
+      <div v-if="!chat.hasMessages" class="empty-tail" aria-hidden="true"></div>
+    </template>
 
     <!-- Centered loading overlay during a conversation switch: it sits OVER both the
          current thread and the empty stage, so the screen never flashes "new
@@ -151,16 +224,23 @@ watch(
 <style scoped>
 .chat { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; position: relative; }
 
+/* Upper half of the arrival screen: the heading sits at its BOTTOM edge, right above
+   the prompt, and `.empty-tail` balances it below - the pair reads as one centred
+   group while the prompt bar stays a sibling (single node, morphable). */
 .empty-stage {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
-  gap: var(--s-7);
+  padding-bottom: var(--s-7);
   min-height: 0;
   overflow-y: auto;
 }
+/* `margin-top: auto` on the CHILD rather than `justify-content: flex-end` on the
+   scroll container: on a short viewport the latter pushes overflow past the top
+   edge, where it can no longer be scrolled to. */
+.empty-stage > * { margin-top: auto; }
+.empty-tail { flex: 1; min-height: 0; }
 
 .prompt-wrap {
   width: var(--chat-col);
@@ -168,6 +248,12 @@ watch(
   margin: 0 auto;
   padding: 0 var(--s-7) var(--s-7);
   flex-shrink: 0;
+  /* Brand AURA on BOTH stages (user decision 2026-08-13): the prompt keeps its
+     tinted air after the first send, when it settles at the bottom of the thread.
+     PromptBar reads these with a transparent fallback, so the effect is opt-in per
+     host and the card never carries a hardcoded colored shadow. */
+  --prompt-aura: var(--aura-orange);
+  --prompt-aura-strong: var(--aura-orange-strong);
 }
 /* On the empty / new-chat screen the prompt bar is the only element, so the full
    90% measure looks oversized - keep it comfortably narrow and centered (the title
@@ -175,10 +261,10 @@ watch(
 .prompt-wrap.in-empty { padding-bottom: var(--s-7); max-width: 760px; }
 /* Arrival hero: the prompt is THE element of the page - one size up (roomier card,
    larger input). In-thread it returns to its compact working size. */
-.prompt-wrap.in-empty :deep(.prompt) { padding: var(--s-4) var(--s-5) var(--s-3); }
+.prompt-wrap.in-empty :deep(.prompt) { padding: var(--s-5) var(--s-6) var(--s-4); }
 .prompt-wrap.in-empty :deep(.prompt-input) {
   font-size: var(--fs-lg);
-  min-height: 48px;
+  min-height: 56px;
 }
 
 .chat-error {

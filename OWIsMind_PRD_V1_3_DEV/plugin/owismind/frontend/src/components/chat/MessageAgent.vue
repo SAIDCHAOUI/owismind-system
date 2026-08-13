@@ -24,11 +24,9 @@ import {
   timelineSegments,
   activitySummary,
   stepStampDiff,
-  applyEvent,
-  durableEventToUi,
 } from '../../composables/timelineModel.js'
 import { resolveTimelineStep } from '../../registries/timelineSteps.js'
-import { submitFeedback, fetchRunActivity } from '../../services/backend.js'
+import { submitFeedback } from '../../services/backend.js'
 import { track } from '../../services/track.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon, Menu } from '../ui'
@@ -47,42 +45,6 @@ const benchmark = useBenchmarkStore()
 const { push } = useToasts()
 const evidence = useEvidenceStore()
 
-// Durable-run activity reload ("Show activity", Cobuild-style): a terminal
-// exchange with no in-memory plan MAY have a persisted durable feed. Fetched on
-// demand; only the PLAN reconstruction events are replayed (replaying the text or
-// timeline events would duplicate the already-rendered answer). One shot per
-// message mount; a legacy exchange simply yields nothing and the button hides.
-const activityLoading = ref(false)
-const activityChecked = ref(false)
-async function loadActivity() {
-  if (activityLoading.value || !v.value.exchangeId) return
-  activityLoading.value = true
-  try {
-    const res = await fetchRunActivity(v.value.exchangeId)
-    let applied = 0
-    for (const evt of res.events || []) {
-      for (const mapped of durableEventToUi(evt)) {
-        if (mapped.type === 'plan' || mapped.type === 'step_status') {
-          applyEvent(v.value, mapped)
-          applied += 1
-        }
-      }
-    }
-    // The answer is now KNOWN either way: the button retires. A click must never end
-    // in silence (user ask 2026-08-13) - when this exchange carries no persisted
-    // durable feed (any legacy run), SAY so instead of just vanishing.
-    activityChecked.value = true
-    if (!applied) push(t('msg.activity_none'))
-  } catch (e) {
-    // Transient failure: say so and KEEP the button (unchecked = retry possible).
-    push(t('msg.activity_error'), { icon: 'alert', tone: 'warn' })
-  } finally {
-    activityLoading.value = false
-  }
-}
-const activityAvailable = computed(
-  () => v.value.status !== 'running' && !v.value.plan && !!v.value.exchangeId && !activityChecked.value,
-)
 
 const showFeedback = ref(false)
 // Which rating the detailed-feedback modal is editing (0 = negative, 1 = positive). Drives
@@ -230,27 +192,10 @@ function openEvidence() {
   // panel straight on the Source data explorer instead.
   evidence.openForExchange(v.value.exchangeId, v.value.sql.length ? undefined : { tab: 'sources' })
 }
-// Quiet "check this number" affordance: open the proof panel for this exchange straight
-// on the Source data tab (where the underlying rows live). If the panel is already open
-// for this exchange, just switch the tab; otherwise open it landing on 'sources'.
-// Hidden once the exchange is KNOWN degraded (panel open, meta.available false): the
-// 'sources' tab does not exist there, so the link would be a dead click. Before meta is
-// known the link stays best-effort: opening falls back to the default proof tab.
-const verifyVisible = computed(
-  () => v.value.sql.length > 0 && !!v.value.exchangeId
-    && !(isEvidenceOpen.value && evidence.meta && evidence.meta.available === false),
-)
-function verifyNumber() {
-  const id = v.value.exchangeId
-  if (!id) return
-  if (isEvidenceOpen.value) {
-    // Panel already open for this exchange: switch tabs only when the interactive
-    // view exists (a degraded exchange has no 'sources' tab to land on).
-    if (evidence.meta && evidence.meta.available) evidence.setActiveTab('sources')
-  } else {
-    evidence.openForExchange(id, { tab: 'sources' })
-  }
-}
+// There is ONE way into the proof surface under an answer: the Evidence button above.
+// The former "check this number" link opened the SAME panel on its Source data tab, which
+// read as a second, competing action for the same thing (user ask 2026-08-13): the panel's
+// own tabs are where the user chooses between the proof and the rows.
 
 // Whether this version produced any answer text at all.
 const hasAnswerText = computed(() => v.value.timeline.some((it) => it.kind === 'text' && (it.text || '').length > 0))
@@ -559,11 +504,6 @@ function nextVersion() {
     <!-- Actions + version nav -->
     <div v-if="v.status !== 'running'" class="msg-foot">
       <button @click="copy"><Icon name="copy" />{{ t('msg.copy') }}</button>
-      <button
-        v-if="activityAvailable"
-        :disabled="activityLoading"
-        @click="loadActivity"
-      ><Icon name="route" />{{ t('msg.show_activity') }}</button>
       <!-- Offered when the turn captured SQL (the proof) OR the agent exposes source
            datasets (a SQL-less answer then lands straight on the Source data tab). -->
       <button
@@ -572,13 +512,6 @@ function nextVersion() {
         :title="t('ev.open')"
         @click="openEvidence"
       ><Icon name="shield" />{{ t('ev.open') }}</button>
-      <!-- Quiet "check this number" link - opens the proof panel on the Source data tab. -->
-      <button
-        v-if="verifyVisible"
-        class="verify-link"
-        :title="t('ev.verify')"
-        @click="verifyNumber"
-      >{{ t('ev.verify') }}</button>
       <button class="fb-btn" :class="{ primary: isUp }" :title="t('msg.like')" :aria-label="t('msg.like')" :aria-pressed="isUp" @click="like"><Icon name="thumbsUp" :size="15" /></button>
       <button class="fb-btn" :class="{ danger: isDown }" :title="t('msg.dislike')" :aria-label="t('msg.dislike')" :aria-pressed="isDown" @click="dislike"><Icon name="thumbsDown" :size="15" /></button>
       <!-- ⋯ detailed feedback - works for either rating (comment a 👍 or a 👎). -->
@@ -933,12 +866,6 @@ function nextVersion() {
 .msg-foot button :deep(.ui-icon) { width: 13px; height: 13px; }
 .msg-foot button.primary { color: var(--orange-text); font-weight: 500; }
 .msg-foot button.danger { color: var(--danger); font-weight: 500; }
-/* Quiet "check this number" link: reads as text, not a chip - muted, no hover fill,
-   underline on hover only. */
-.msg-foot button.verify-link {
-  padding: 4px 2px; color: var(--text-3); text-decoration: none;
-}
-.msg-foot button.verify-link:hover { background: transparent; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; transform: none; }
 .ver-nav { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--s-2); }
 .ver-count { font-size: 11px; color: var(--text-3); padding: 0 2px; }
 

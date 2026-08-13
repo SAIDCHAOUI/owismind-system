@@ -268,7 +268,14 @@ function clearEvSearch() {
       <!-- Data / Analyze swap of the table (topbar + chips stay above in both). The
            Analyze view is the SHARED workspace, hosted on the evidence store. -->
       <EvidenceTable v-if="!evidence.analyzeOpen" />
-      <SourceWorkspace v-else :surface="evidence" :columns="evColumns" />
+      <!-- The workspace's data table picks cells against THIS exchange's scope, and names
+           its provenance with the browsed table (same label the legacy table reports). -->
+      <SourceWorkspace
+        v-else
+        :surface="evidence"
+        :columns="evColumns"
+        :source-label="activeLegacyDataset"
+      />
     </template>
   </div>
 </template>

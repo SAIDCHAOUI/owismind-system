@@ -280,8 +280,9 @@ test('workspace: inert until a host activates it, then it computes immediately',
   h.surface.setWorkspaceActive(true)
   await flush()
   assert.equal(h.calls.length, 1)
-  // The honest default: count of ALL filtered rows, no grouping.
-  assert.deepEqual(h.calls[0].measures, [{ fn: 'count', column: null }])
+  // The default figure is the SUM of the first numeric quantity column, never the row
+  // count (which the scope bar already states), and no grouping.
+  assert.deepEqual(h.calls[0].measures, [{ fn: 'sum', column: 'amount' }])
   assert.equal(h.calls[0].group, null)
   assert.deepEqual(h.surface.workspaceRows.value, [{ m0: 640 }])
 })
@@ -293,15 +294,15 @@ test('workspace: adding a measure re-runs with both, a duplicate does nothing', 
   await flush()
   const before = h.calls.length
 
-  h.surface.addWorkspaceMeasure('sum', 'amount')
+  h.surface.addWorkspaceMeasure('count', null)
   await flush()
   assert.equal(h.calls.length, before + 1)
   assert.deepEqual(h.calls[h.calls.length - 1].measures, [
-    { fn: 'count', column: null },
     { fn: 'sum', column: 'amount' },
+    { fn: 'count', column: null },
   ])
 
-  h.surface.addWorkspaceMeasure('sum', 'amount') // exact duplicate
+  h.surface.addWorkspaceMeasure('count', null) // exact duplicate
   await flush()
   assert.equal(h.calls.length, before + 1, 'no request for a list that did not change')
 })
@@ -312,7 +313,103 @@ test('workspace: the last measure cannot be removed', async () => {
   await flush()
   h.surface.removeWorkspaceMeasure(0)
   await flush()
+  assert.deepEqual(h.surface.workspaceMeasures.value, [{ fn: 'sum', column: 'amount' }])
+})
+
+// --- The default measure (user ask 2026-08-13: never open on a row count) ----------
+
+test('workspace: with no numeric quantity column the row count stays the default', async () => {
+  const h = makeSurface({ columns: [{ name: 'country', type: 'string' }, { name: 'label', type: 'string' }] })
+  h.surface.setAnalyzeOpen(true)
+  h.surface.setWorkspaceActive(true)
+  await flush()
   assert.deepEqual(h.surface.workspaceMeasures.value, [{ fn: 'count', column: null }])
+  assert.deepEqual(h.calls[0].measures, [{ fn: 'count', column: null }])
+})
+
+test('workspace: an identifier-shaped numeric column is never the default measure', async () => {
+  const h = makeSurface({
+    columns: [
+      { name: 'customer_id', type: 'bigint' }, // an id is numeric but summing it is nonsense
+      { name: 'year', type: 'int' },
+      { name: 'revenue', type: 'double' },
+    ],
+  })
+  h.surface.setWorkspaceActive(true)
+  await flush()
+  assert.deepEqual(h.surface.workspaceMeasures.value, [{ fn: 'sum', column: 'revenue' }])
+})
+
+test('workspace: the default is computed when the COLUMNS arrive, not before', async () => {
+  // A store is built before its meta loads: the surface starts on the row count and
+  // re-defaults itself on the first scope change that carries columns.
+  let cols = []
+  const calls = []
+  const surface = createAggregateSurface({
+    getColumns: () => cols,
+    isActive: () => true,
+    getEpoch: () => 0,
+    fetchAggregate: (group, measures, limit) => {
+      calls.push({ group, measures, limit })
+      return Promise.resolve({ rows: [{ m0: 1 }] })
+    },
+    refreshRows: () => {},
+    errorCode: 'source_unavailable',
+  })
+  surface.setWorkspaceActive(true)
+  surface.setAnalyzeOpen(true)
+  await flush()
+  assert.deepEqual(surface.workspaceMeasures.value, [{ fn: 'count', column: null }])
+
+  cols = [{ name: 'amount', type: 'int' }]
+  surface.afterScopeChange('sig-with-columns')
+  await flush()
+  assert.deepEqual(surface.workspaceMeasures.value, [{ fn: 'sum', column: 'amount' }])
+})
+
+test('workspace: a user choice is never overwritten by the automatic default', async () => {
+  let cols = []
+  const surface = createAggregateSurface({
+    getColumns: () => cols,
+    isActive: () => true,
+    getEpoch: () => 0,
+    fetchAggregate: () => Promise.resolve({ rows: [{ m0: 1 }] }),
+    refreshRows: () => {},
+    errorCode: 'source_unavailable',
+  })
+  surface.setWorkspaceActive(true)
+  surface.setAnalyzeOpen(true)
+  await flush()
+  // The user takes the list over BEFORE the columns are known.
+  surface.replaceWorkspaceMeasure(0, 'count_distinct', 'country')
+  await flush()
+
+  cols = [{ name: 'amount', type: 'int' }, { name: 'country', type: 'string' }]
+  surface.afterScopeChange('sig-with-columns')
+  await flush()
+  assert.deepEqual(
+    surface.workspaceMeasures.value,
+    [{ fn: 'count_distinct', column: 'country' }],
+    'their measure survives every later scope change',
+  )
+})
+
+test('workspace: resetDerived re-arms the default for the NEXT dataset', async () => {
+  const h = makeSurface()
+  h.surface.setWorkspaceActive(true)
+  h.surface.setAnalyzeOpen(true)
+  await flush()
+  h.surface.addWorkspaceMeasure('avg', 'amount') // the list is now the user's
+  await flush()
+
+  h.surface.resetDerived() // switching dataset
+  h.surface.afterScopeChange('sig-next')
+  await flush()
+  assert.deepEqual(
+    h.surface.workspaceMeasures.value,
+    [{ fn: 'sum', column: 'amount' }],
+    'a new scope opens on its own default again',
+  )
 })
 
 test('workspace: grouping sends the group, a temporal column starts on the month bucket', async () => {

@@ -14,6 +14,7 @@ import logging
 import threading
 
 from owismind.storage.sql_config import (
+    SCHEMA_NAME,
     full_table,
     new_executor,
     physical_table,
@@ -598,6 +599,50 @@ def _ensure_table(logical):
         )
         _ensured_tables.add(logical)
         logger.info("ensure_table - ensured (committed) %s", table)
+
+
+# --- Inventory (admin space) -------------------------------------------------
+# A short, STABLE role key per managed table. The frontend turns it into a
+# localized sentence; an unknown key simply falls back to the logical name, so
+# adding a table below can never break the Admin page.
+_ROLE_BY_LOGICAL = {
+    CHAT_V5_LOGICAL: "chat",
+    USERS_V1_LOGICAL: "users",
+    SETTINGS_V1_LOGICAL: "settings",
+    USAGE_MONTHLY_V1_LOGICAL: "usage_monthly",
+    ARTIFACTS_V1_LOGICAL: "artifacts",
+    USER_QUOTA_V1_LOGICAL: "user_quota",
+    GOLDEN_SUGGESTIONS_V1_LOGICAL: "golden_suggestions",
+    EVENTS_V1_LOGICAL: "events",
+    FEEDBACK_V1_LOGICAL: "feedback",
+    AGENT_REQUESTS_V1_LOGICAL: "agent_requests",
+    AGENT_RUNS_V1_LOGICAL: "agent_runs",
+    AGENT_RUN_STEPS_V1_LOGICAL: "agent_run_steps",
+    AGENT_RUN_EVENTS_V1_LOGICAL: "agent_run_events",
+}
+
+
+def managed_tables():
+    """Every SQL table this backend creates and owns, resolved to its real name.
+
+    Derived from ``_DDL_BY_LOGICAL`` itself, so the admin inventory can never drift
+    from what the code actually creates: a new table appears here the moment its DDL
+    is registered. Pure naming - no database access, nothing to time out.
+
+    Returns a list of ``{role, logical, physical, qualified}`` in declaration order,
+    where ``physical`` is the real table name (project key + optional admin prefix +
+    namespace, length-safe) and ``qualified`` is what you paste into a SQL client.
+    """
+    out = []
+    for logical in _DDL_BY_LOGICAL:
+        physical = physical_table(logical)
+        out.append({
+            "role": _ROLE_BY_LOGICAL.get(logical, logical),
+            "logical": logical,
+            "physical": physical,
+            "qualified": '{}."{}"'.format(SCHEMA_NAME, physical),
+        })
+    return out
 
 
 def ensure_chat_table():

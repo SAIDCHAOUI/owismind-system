@@ -13,7 +13,10 @@ import {
   orderPreviewColumns,
   barGeometry,
   measureSpecForColumn,
+  defaultWorkspaceMeasures,
+  pickCellFilterChip,
 } from '../src/composables/sourceModel.js'
+import { isIdentifierColumn } from '../src/composables/cellFormat.js'
 
 // ------------------------------------------------------------------ identity + labels
 test('measureKey identifies a measure by its function AND its column', () => {
@@ -193,4 +196,82 @@ test('measureSpecForColumn never offers to SUM an identifier', () => {
   assert.deepEqual(measureSpecForColumn('Snapshot_date', 'date', false).map((s) => s.fn), ['min', 'max'])
   assert.deepEqual(measureSpecForColumn('Solution', 'string', false).map((s) => s.fn), ['count_distinct'])
   assert.deepEqual(measureSpecForColumn('Country', 'string', true).map((s) => s.fn), ['count_distinct'])
+})
+
+// --------------------------------------------------------------- the default measure
+// The workspace must never open on a row count: the count is already stated under the
+// dataset (user ask 2026-08-13), so the opening figure is the sum of the first quantity.
+test('defaultWorkspaceMeasures opens on the SUM of the first numeric quantity column', () => {
+  const columns = [
+    { name: 'Account_name', type: 'string' },
+    { name: 'Revenues', type: 'double' },
+    { name: 'Margin', type: 'double' },
+  ]
+  assert.deepEqual(defaultWorkspaceMeasures(columns, isIdentifierColumn), [
+    { fn: 'sum', column: 'Revenues' },
+  ])
+})
+
+test('defaultWorkspaceMeasures skips identifier-shaped numerics', () => {
+  const columns = [
+    { name: 'diamond_id', type: 'bigint' },
+    { name: 'year', type: 'int' },
+    { name: 'postal_code', type: 'int' },
+    { name: 'Revenues', type: 'double' },
+  ]
+  assert.deepEqual(defaultWorkspaceMeasures(columns, isIdentifierColumn), [
+    { fn: 'sum', column: 'Revenues' },
+  ])
+})
+
+test('defaultWorkspaceMeasures falls back to the row count when nothing can be summed', () => {
+  const rowCount = [{ fn: 'count', column: null }]
+  assert.deepEqual(defaultWorkspaceMeasures([{ name: 'Solution', type: 'string' }], isIdentifierColumn), rowCount)
+  assert.deepEqual(defaultWorkspaceMeasures([{ name: 'customer_id', type: 'bigint' }], isIdentifierColumn), rowCount)
+  assert.deepEqual(defaultWorkspaceMeasures([], isIdentifierColumn), rowCount)
+  assert.deepEqual(defaultWorkspaceMeasures(null, isIdentifierColumn), rowCount)
+  // No guard injected: every numeric column is fair game (never a crash).
+  assert.deepEqual(defaultWorkspaceMeasures([{ name: 'year', type: 'int' }]), [{ fn: 'sum', column: 'year' }])
+})
+
+test('defaultWorkspaceMeasures ignores unusable column entries', () => {
+  const columns = [null, { name: '', type: 'int' }, { name: 'Revenues', type: 'double' }]
+  assert.deepEqual(defaultWorkspaceMeasures(columns, isIdentifierColumn), [
+    { fn: 'sum', column: 'Revenues' },
+  ])
+})
+
+// ------------------------------------------------------- which chip a cell value joins
+test('pickCellFilterChip joins an existing equality chip on the column', () => {
+  const chips = [
+    { key: 'u1', column: 'Country', values: ['FR'] },
+    { key: 'u2', column: 'Solution', values: ['VOICE'] },
+  ]
+  assert.equal(pickCellFilterChip(chips, 'Country').key, 'u1')
+  assert.equal(pickCellFilterChip(chips, 'Margin'), null, 'no chip on that column -> a fresh one')
+})
+
+test('pickCellFilterChip never merges a raw value into a range chip', () => {
+  const chips = [{ key: 'u1', column: 'Snapshot_date', op: 'BETWEEN', values: ['2026-01', '2026-06'] }]
+  assert.equal(pickCellFilterChip(chips, 'Snapshot_date'), null)
+})
+
+test('pickCellFilterChip leaves a LOCKED agent chip alone and prefers the user chip', () => {
+  const locked = { key: 'a1', column: 'Country', values: ['FR'], source: 'agent', editable: false }
+  assert.equal(pickCellFilterChip([locked], 'Country'), null, 'the agent scope is not the user to edit')
+
+  const editableAgent = { key: 'a2', column: 'Country', values: ['FR'], source: 'agent', editable: true }
+  assert.equal(pickCellFilterChip([editableAgent], 'Country').key, 'a2')
+
+  const userChip = { key: 'u9', column: 'Country', values: ['BE'], source: 'user', editable: true }
+  assert.equal(
+    pickCellFilterChip([editableAgent, userChip], 'Country').key,
+    'u9',
+    'a user chip wins when the column carries both',
+  )
+})
+
+test('pickCellFilterChip tolerates a malformed chip list', () => {
+  assert.equal(pickCellFilterChip(null, 'Country'), null)
+  assert.equal(pickCellFilterChip([null, undefined], 'Country'), null)
 })

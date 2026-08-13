@@ -28,8 +28,11 @@ import {
   addMeasure,
   removeMeasureAt,
   replaceMeasureAt,
+  defaultWorkspaceMeasures,
+  measureKey,
   MAX_WORKSPACE_MEASURES,
 } from './sourceModel.js'
+import { isIdentifierColumn } from './cellFormat.js'
 
 export function createAggregateSurface(deps) {
   // --- DB-computed row count + the "Calculate" zone (persistent) -----------------
@@ -66,9 +69,15 @@ export function createAggregateSurface(deps) {
   // hosts. This state stays inert until a host declares itself active, so a host that does
   // not display the workspace never issues a request for it.
   const workspaceActive = ref(false)
-  // There is ALWAYS at least one measure: the row count is the honest default, so the
-  // workspace can never show an empty result waiting for the user to configure something.
+  // There is ALWAYS at least one measure, so the workspace can never show an empty result
+  // waiting for the user to configure something. The list starts on the row count only
+  // because the columns are not known yet; as soon as they are, an UNTOUCHED list is
+  // re-defaulted to the sum of the first numeric quantity column (see _applyDefaultMeasures).
   const workspaceMeasures = ref([{ fn: 'count', column: null }])
+  // True while the measure list is still the automatic default: the moment the user adds,
+  // removes or swaps a measure it turns false and the defaulting never fires again for
+  // this scope (their choice must survive every refresh). A scope reset arms it back.
+  let measuresPristine = true
   const workspaceGroup = ref(null) // group-by column name | null (= all filtered rows)
   const workspaceBucket = ref('month') // calendar bucket for a temporal group
   const workspaceRows = ref([]) // [{ key?, m0..mN }] as returned by the backend
@@ -120,9 +129,12 @@ export function createAggregateSurface(deps) {
     analyzeTruncated.value = false
     analyzeLoading.value = false
     analyzeError.value = ''
-    // The workspace returns to its honest default (count of all filtered rows). Its
-    // ACTIVE flag is host lifecycle, not scope, so it survives the reset.
+    // The workspace returns to its automatic default, re-armed for the NEW scope (the
+    // columns of the dataset being switched to are not known yet, so the real default is
+    // computed by _applyDefaultMeasures once they are). Its ACTIVE flag is host lifecycle,
+    // not scope, so it survives the reset.
     workspaceMeasures.value = [{ fn: 'count', column: null }]
+    measuresPristine = true
     workspaceGroup.value = null
     workspaceBucket.value = 'month'
     workspaceRows.value = []
@@ -335,10 +347,26 @@ export function createAggregateSurface(deps) {
   }
 
   // --- Unified Analyze workspace actions ---------------------------------------
+  // Re-default the measure list from the columns, as long as the user has not touched it.
+  // The list is created before the columns are known (a store is built empty), so the
+  // real default can only be computed later: this runs at every gate that may follow a
+  // column change (host mount, scope change, and every request). Idempotent - an unchanged
+  // list is left alone, so nothing re-renders and no extra request fires.
+  function _applyDefaultMeasures() {
+    if (!measuresPristine) return
+    const next = defaultWorkspaceMeasures(deps.getColumns(), isIdentifierColumn)
+    const current = workspaceMeasures.value || []
+    const unchanged = current.length === next.length
+      && current.every((m, i) => measureKey(m) === measureKey(next[i]))
+    if (unchanged) return
+    workspaceMeasures.value = next
+  }
+
   // Run the workspace aggregate: 1..8 measures over the optional grouping, capped at 50
   // group rows. Guarded by workspaceSeq + the meta epoch, exactly like the pivot above.
   async function runWorkspace() {
     if (!workspaceActive.value || !deps.isActive()) return
+    _applyDefaultMeasures()
     const measures = (workspaceMeasures.value || []).slice(0, MAX_WORKSPACE_MEASURES)
     if (!measures.length) return
     const my = ++workspaceSeq
@@ -370,14 +398,20 @@ export function createAggregateSurface(deps) {
   // is never an empty shell waiting for input.
   function setWorkspaceActive(value) {
     workspaceActive.value = !!value
+    // Default from the columns straight away, so the builder READS right on mount even
+    // when no request can run yet (inactive host): the sentence must never show a measure
+    // the first result will not be about.
+    if (workspaceActive.value) _applyDefaultMeasures()
     if (workspaceActive.value && analyzeOpen.value) runWorkspace()
   }
   // Add one measure. A duplicate (same fn + column) or the 8-measure ceiling is a no-op,
-  // so no request fires for a list that did not change.
+  // so no request fires for a list that did not change. A real change is the user taking
+  // the list over: the automatic default never overwrites it afterwards.
   function addWorkspaceMeasure(fn, column) {
     const next = addMeasure(workspaceMeasures.value, { fn, column })
     if (next === workspaceMeasures.value) return
     workspaceMeasures.value = next
+    measuresPristine = false
     runWorkspace()
   }
   // Remove one measure. Removing the LAST one is refused (there is always a result).
@@ -385,6 +419,7 @@ export function createAggregateSurface(deps) {
     const next = removeMeasureAt(workspaceMeasures.value, index)
     if (next === workspaceMeasures.value) return
     workspaceMeasures.value = next
+    measuresPristine = false
     runWorkspace()
   }
   // Change one measure in place (chip click -> pick another): the slot keeps its rank,
@@ -393,6 +428,7 @@ export function createAggregateSurface(deps) {
     const next = replaceMeasureAt(workspaceMeasures.value, index, { fn, column })
     if (next === workspaceMeasures.value) return
     workspaceMeasures.value = next
+    measuresPristine = false
     runWorkspace()
   }
   // Pick the grouping ('' / null = all filtered rows). A temporal column starts on the
@@ -423,6 +459,10 @@ export function createAggregateSurface(deps) {
     if (calcColumn.value) _reloadCalc()
     refreshTotals()
     if (analyzeOpen.value && _analyzeComplete()) runAnalyze()
+    // A new scope may be a new DATASET: re-default the untouched measure list here, not
+    // only on the request below, so the builder already reads right when the user opens
+    // the Analyze view (no count -> sum flash on arrival).
+    if (workspaceActive.value) _applyDefaultMeasures()
     if (workspaceActive.value && analyzeOpen.value) runWorkspace()
   }
 

@@ -441,7 +441,11 @@ OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/owismind-v1_2-upload/   (+ zip ve
   L179) ; `prior_recall_enabled` coupe pour le natif (pas de recall tool). Bornes : 8 tours LLM /
   4 appels specialistes / 6 artefacts / dernier tour sans tools. Doc + checklist DSS + limitations :
   `OWIsMind_PRD_V1_3_DEV/docs/NATIVE_ENGINE.md`. Revue adversariale Opus 2 passes (CRITICAL forme
-  de capture L177 + HIGH L179 corriges, re-verif "AUCUNE REGRESSION"). Tests : 29 dedies + 2 worker.
+  de capture L177 + HIGH L179 corriges, re-verif "AUCUNE REGRESSION"). Tests : 27 dedies + 2 worker.
+  **Statut 2026-08-13 (run 3)** : le code EST desormais installe en DSS (embarque dans le zip DEV
+  `owismind_v1_3`) mais le flag reste OFF, donc le moteur n'a toujours JAMAIS tourne contre un vrai
+  Mesh. Activation : `profile.native_engine` par `POST /owismind-api/admin/agents` (aucune case dans
+  l'UI Admin ; la modale de profil EFFACE le flag, L187).
 
 - **✅ VALIDÉ DSS 2026-07-02 Run 2 - artefacts natifs + narration + recall** (commits user
   `0368dd7`/`0275ae9`) : (a) **artefacts** : le panneau empile TOUS les charts/KPIs ; spec chart
@@ -756,6 +760,8 @@ Historique par session : memory/sessions/*.md.
 | Impersonation admin (read-only, « act as user ») | ✅ Validé DSS | 2026-06-19 (Run 3) | L095/L096 |
 | Auth gate (écran « non identifié » sur `/me` 401) | ✅ Validé DSS | 2026-06-19 (Run 3) | L094-L096 |
 | Plugin DEV coexistant (`owismind_dev` / `owismind_dev_v2`) | 🗑 Zips + staging SUPPRIMÉS du disque (2026-07-06 Run 5, passage prod) ; outillage `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` + skill conservés, re-créable à la demande | 2026-06-19 (Run 3, historique) | L094 (`sessions/2026-07-06.md` Run 5) |
+| **Plugin DEV versionné `owismind_v1_3`** (zip `owismind_v1_3-upload.zip`, `build_dev_plugin.py --version 1.3`) | ✅ Installé et utilisé en DSS par l'user (webapp v1.3 servie, question posée, réponse d'agent reçue). Porte la vague UX 12-13/08 + le moteur natif embarqué mais OFF. **Zip regénéré le 13/08 18h52 avec les 4 correctifs UX : à re-uploader** | 2026-08-13 (Run 3, user) | `sessions/2026-08-13.md` run 3 |
+| **Vague UX 12-13/08** (harness dev, premium toutes pages, Analyze workspace v3, fusion Evidence Studio, cellules cliquables en Analyze, mesure par défaut = somme, "Check this number" retiré) | 🟡 Base déployée et testée en DSS par l'user ; les 4 correctifs du run 3 sont validés en harness seulement | 2026-08-13 (Run 3, partiel) | L183-L189 (`sessions/2026-08-13.md`) |
 | **Plugin PROD v1.2.0** (zip versionné `owismind-v1_2-upload.zip`) | ⏳ Packagé (repo), À UPLOADER + déployer dans le projet DSS prod `OWISMIND_PRD_V1_2` (runbook `docs/DEPLOY_PROD_V1_1.md`). Historique : build 1.1.0 = 95 entrées, `index-DDxpe_gw.js` | - | `sessions/2026-07-06.md` Run 5 |
 | **Agent Factory v1.3 + Assistant guidé console** (13 étapes, état SQL `factory_guided_v1`, vérifs DSS par étape, wizard IA, agent auto-créé) | ✅ Validé DSS de bout en bout : 1er expert `delivery_snapshot` créé par l'user via le parcours guidé, routé par l'orchestrateur | 2026-07-21 (Run 2) | L164-L166 (`sessions/2026-07-21.md`, section 7b) |
 | **Capability removal + disable** (run guidé 12 étapes confirmées, `removal.py` + safe_delete + vérif d'absence ; désactivation 1 clic vue d'ensemble) | ✅ Validé TERRAIN : suppression complète de `opportunities_won` 12/12 vert, objets vérifiés absents ; restes : bouton Désactiver/Activer, fallback manuel et garde template non exercés en réel | 2026-07-22 (Run 2) | L169-L171 (`sessions/2026-07-22.md` run 2, section 7b) |

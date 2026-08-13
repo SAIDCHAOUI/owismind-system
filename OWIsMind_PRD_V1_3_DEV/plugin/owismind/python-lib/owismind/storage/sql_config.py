@@ -416,4 +416,23 @@ def storage_status():
             # webapp's `benchmark.suggestions.table` config (it reads this table cross-project).
             "golden_suggestions": physical_table("webapp_golden_suggestions_v1"),
         },
+        # The FULL inventory: every table this backend creates, with the name to look
+        # for in the database. Derived from the DDL registry (migrations), so it cannot
+        # drift from reality. Imported lazily - migrations imports this module.
+        "managed_tables": _managed_tables(),
+        "schema": SCHEMA_NAME,
     }
+
+
+def _managed_tables():
+    """The managed-table inventory, or [] if it cannot be built (never raises).
+
+    The admin page degrades to the short `tables` map rather than erroring out.
+    """
+    try:
+        from owismind.storage.migrations import managed_tables
+
+        return managed_tables()
+    except Exception:  # pragma: no cover - defensive, keeps /admin/storage alive
+        logger.exception("storage_status - managed table inventory unavailable")
+        return []

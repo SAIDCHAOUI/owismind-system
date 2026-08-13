@@ -186,17 +186,17 @@ function cancel() {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   text-align: left; width: 100%; padding: 16px;
   border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
   background: var(--bg);
-  transition: background var(--dur) var(--ease), border-left-color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease);
 }
 .mode-row:last-child { border-bottom: none; }
-.mode-row:hover { background: var(--surface); }
-/* Active row: orange left bar + soft fill (Orange 80/20 accent rule). */
-.mode-row.active { border-left-color: var(--orange); background: var(--surface); }
-/* Hovering an inactive row previews the bar in neutral ink - the selection is one
-   continuous accent sliding down the list, not three unrelated states. */
-.mode-row:hover:not(.active) { border-left-color: var(--border-strong); }
+.mode-row:hover { background: var(--surface-hover); }
+/* Active row: the STRONGEST surface of the list plus the orange check already shown
+   on the right. The orange left rail this used to carry is banned as a state marker
+   (user decision 2026-08-13): a selected row is carried by its surface, and orange
+   only signs it. */
+.mode-row.active { background: var(--surface-press); }
+.mode-row.active:hover { background: var(--surface-press); }
 
 .row-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .row-name { font-size: 15px; font-weight: 800; color: var(--text); font-family: var(--font-sans); }

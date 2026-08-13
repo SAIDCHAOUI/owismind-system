@@ -51,6 +51,9 @@ const props = defineProps({
   // Typed columns override ([{ name, type }]) for hosts whose columns do not live on
   // the surface store itself (Evidence: the exchange meta's columns).
   columns: { type: Array, default: null },
+  // Provenance reported for a cell picked in the data table below (prompt context).
+  // Null = the host store's own active source label.
+  sourceLabel: { type: String, default: null },
 })
 
 const { t, locale } = useI18n()
@@ -419,6 +422,8 @@ onBeforeUnmount(() => {
           <span>{{ t('src.error') }}</span>
           <button type="button" @click="sources.refreshPreviewRows()">{{ t('src.retry') }}</button>
         </div>
+        <!-- Its cells act on the SAME host as the figures above (surface): filtering on a
+             value here re-computes the analysis, it does not touch another explorer. -->
         <SourceTable
           v-else
           preview
@@ -426,6 +431,8 @@ onBeforeUnmount(() => {
           :loading="sources.previewLoading"
           :columns="previewColumns"
           :pinned="pinnedColumns"
+          :surface="surface"
+          :source-label="sourceLabel"
         />
       </aside>
     </div>

@@ -240,6 +240,7 @@ function onUser(key) {
           :key="c.id"
           class="conv-item"
           :class="{ active: c.id === activeSession }"
+          :aria-current="c.id === activeSession ? 'true' : undefined"
           :title="c.title"
           @click="openConversation(c)"
         >
@@ -357,10 +358,12 @@ function onUser(key) {
 .sidebar-primary { padding: 0 var(--s-3); display: flex; flex-direction: column; gap: 2px; }
 
 .side-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
+  /* Same reserved 2px as .conv-item: the selected-state bar never changes a height. */
+  padding: 8px 12px 12px;
   /* Interactive row: softly rounded (premium direction), structural surfaces around
      it stay square. */
   border-radius: var(--r-sm);
@@ -377,15 +380,33 @@ function onUser(key) {
    answer must be perceivable on a white canvas (guide: visible hover states). */
 .side-item:hover,
 .side-item.open { background: var(--surface-hover); }
-/* Active: left orange bar accent, bold text */
+/* Active: the SAME grammar as a selected conversation (one language of selection
+   per column) - a stronger resting surface than hover, signed by the brand's
+   title-bar at 1/3 scale, drawn from the left once the fill has landed. */
 .side-item.active {
-  background: var(--surface);
+  background: var(--surface-press);
   font-weight: 700;
-  box-shadow: inset 3px 0 0 var(--orange);
 }
-/* The ACTIVE item answers the pointer too (same-specificity .active rule comes
-   later in source and would otherwise pin the resting background). */
-.side-item.active:hover { background: var(--surface-hover); }
+.side-item::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  bottom: 5px;
+  width: 18px;
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-in);
+}
+.side-item.active::after {
+  transform: scaleX(1);
+  transition: transform var(--dur) var(--ease-out) 60ms;
+}
+/* The ACTIVE item keeps its stronger resting fill on hover: --surface-hover sits
+   BELOW --surface-press in both themes, so answering the pointer with it would make
+   the selected row look weaker the moment it is pointed at. */
+.side-item.active:hover { background: var(--surface-press); }
 .side-item :deep(.ui-icon) {
   width: 16px;
   height: 16px;
@@ -417,33 +438,63 @@ function onUser(key) {
   overflow-x: hidden;
   padding: 0 var(--s-3) var(--s-3);
 }
+/* A conversation IS a title, so the selected one is signed the way every title in
+   this product is signed: with the brand's title-bar, at 1/3 scale (18x2 against
+   the 52x4 of a page H1 and the 40x3 of the arrival screen). The bar is DRAWN, not
+   dropped in - it wipes open from the left once the row has filled, which is the
+   whole flourish. Replaces the inset orange rail, which read as a generic accent
+   pasted onto a row that said nothing by itself. */
 .conv-item {
+  position: relative;
   display: block;
   width: 100%;
   text-align: left;
-  padding: 7px 12px;
+  /* The bar's 2px live in the padding of EVERY row: selecting one never changes a
+     height, so the list cannot jump under the pointer. */
+  padding: 6px 12px 10px;
   border-radius: var(--r-sm);
   font-size: 13px;
   color: var(--text-2);
   cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
+  transition: background var(--dur-fast) var(--ease-in), color var(--dur-fast) var(--ease-in),
+    transform var(--dur-fast) var(--ease-in);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-sans);
 }
-/* The hovered row nudges 2px into the reading direction - a transform, so nothing
-   re-measures and the truncated title never re-wraps mid-hover. */
-.conv-item:hover { background: var(--surface-hover); color: var(--text); transform: translateX(2px); }
-.conv-item.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: inset 3px 0 0 var(--orange);
+.conv-item::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  bottom: 4px;
+  width: 18px;
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-in);
 }
-/* The active row is already "here": it takes the hover fill but stays put (a shifting
+/* The hovered row nudges 2px into the reading direction - a transform, so nothing
+   re-measures and the truncated title never re-wraps mid-hover. No orange here:
+   exactly one bar exists in the column at any time. */
+.conv-item:hover { background: var(--surface-hover); color: var(--text); transform: translateX(2px); }
+/* --surface-press, not --surface: the resting selected row must read STRONGER than
+   a merely hovered one (--surface sits below --surface-hover in both themes, which
+   is what made the old state lean entirely on its orange rail). */
+.conv-item.active {
+  background: var(--surface-press);
+  color: var(--text);
+}
+/* The fill lands first, then the mark is drawn on top of it: those 60ms are the
+   whole difference between "selected" and "signed". */
+.conv-item.active::after {
+  transform: scaleX(1);
+  transition: transform var(--dur) var(--ease-out) 60ms;
+}
+/* The active row is already "here": it keeps its fill and stays put (a shifting
    selected row reads as a mis-click). */
-.conv-item.active:hover { background: var(--surface-hover); transform: none; }
+.conv-item.active:hover { background: var(--surface-press); transform: none; }
 .conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .conv-state {
   padding: 8px 12px;
@@ -542,8 +593,10 @@ function onUser(key) {
   gap: 0;
   margin: 0 auto;
   border-radius: var(--r-pill);
-  box-shadow: none; /* active bar accent removed in rail (no room) */
 }
+/* No room for the title-bar on a 38px round target: in the rail the ACTIVE state is
+   carried by the orange glyph below. */
+.sidebar.rail .side-item::after { display: none; }
 .sidebar.rail .side-item :deep(.ui-icon) { color: var(--text-3); }
 .sidebar.rail .side-item:hover :deep(.ui-icon) { color: var(--text); }
 .sidebar.rail .side-item.active :deep(.ui-icon) { color: var(--orange); }
@@ -579,6 +632,9 @@ function onUser(key) {
   .brand,
   .rail-logo,
   .icon-btn { transition: none; }
+  /* The title-bar still marks the row, it just stops being drawn. */
+  .conv-item::after,
+  .side-item::after { transition: none; }
   .conv-item:hover { transform: none; }
   .rail-logo:hover,
   .rail-logo:active { transform: none; }

@@ -16,6 +16,38 @@ section 2 ; tout le reste de la charte (orange rare, blanc/noir, tokens, filets,
   STRUCTURELLES (tables, panneaux, en-têtes, KPI).
 - **Élévation douce AUTORISÉE** via les tokens `--elev-1` (repos) / `--elev-2` (hover, focus, flottant) :
   ombres diffuses en couches, jamais de halo coloré dur. `--shadow` (1px) reste pour les surfaces plates.
+- **Aura de marque AUTORISÉE, cas unique = la carte de PROMPT** (décision user 2026-08-13, « effet luxe,
+  comme Gemini mais en beaucoup moins ») : la carte baigne dans un **nuage orange très diffus** (tokens
+  `--aura-orange` au repos, `--aura-orange-strong` au survol), **sur l'écran d'arrivée ET en
+  conversation** (l'effet suit la barre quand elle descend). Contraintes : alphas <= 0.14, ombres larges
+  et sans contour dur, aucune couche opaque, jamais de dégradé ni de flou, et l'aura est **peinte
+  DERRIÈRE l'élévation neutre** (en CSS, la première ombre de la liste passe au-dessus : écrire
+  `var(--elev-*)` AVANT `var(--prompt-aura*)`). Au **focus**, l'aura reste à son intensité de repos :
+  bordure orange + voile net 4px + nuage renforcé feraient trois cernes concentriques. Les tokens sont
+  lus par `PromptBar` via `--prompt-aura` / `--prompt-aura-strong` avec **repli transparent**, ce qui
+  laisse tout AUTRE hôte sans aura. Aucun autre composant n'a droit à une ombre colorée (l'interdit
+  « glow » de la section 2 reste entier ailleurs).
+- **Titre de l'écran d'arrivée** : il ne doit JAMAIS peser plus que la barre de prompt (elle est le sujet
+  de l'écran). Recette : `--fs-xl` / `--fw-bold` + title-bar orange 40x3px (et non le H1 36-28px/800 des
+  pages, qui, lui, garde la barre 52x4).
+- **Title-bar = signature d'un titre, à toutes les échelles** (décision user 2026-08-13). Le même objet
+  décline : **52x4** (H1 de page), **40x3** (titre d'arrivée), **18x2** (ligne sélectionnée de la sidebar,
+  **nav ET conversations**, tracée `scaleX 0 -> 1` depuis la gauche, 60ms APRÈS le remplissage de la
+  ligne). Un état sélectionné se porte d'abord par sa **surface** (`--surface-press`, un cran AU-DESSUS
+  du `--surface-hover` du survol : le garder aussi au survol de la ligne active, sinon pointer une ligne
+  sélectionnée l'affaiblit), l'orange ne fait que signer. Là où la barre ne tient pas (rail replié,
+  hauteur 38px), l'état actif est porté par le **glyphe orange**. **Interdit PARTOUT** : le liseré
+  vertical orange (`inset 3px 0 0`, `border-left`) comme marqueur d'état, jugé générique ; une seule
+  barre visible par colonne.
+- **Transition d'envoi du 1er message ("la passation", décision user 2026-08-13)** : quand l'écran
+  d'arrivée devient un fil de travail, l'écran ne coupe pas, il **passe la main**. Règles de goût qui
+  valent pour toute animation de ce produit : **jamais de rebond ni d'overshoot** (les courbes du projet
+  sont des décélérations pures) ; **jamais de texte mis à l'échelle** (on recompose la phrase dans sa
+  typographie d'arrivée, on ne la zoome pas) ; **un seul temps orange ANIMÉ** par séquence (ici la
+  title-bar qui se referme ; l'orange statique d'un élément qui se déplace voyage avec lui, ce n'est pas
+  un second temps) ; cascades de 30 à
+  40ms maximum ; **au premier message seulement** ; l'animation ne bloque jamais la saisie ni la requête
+  (elle est jouée APRÈS l'envoi et peut être annulée à tout moment) ; budget total sous 500ms.
 - **Flou teaser AUTORISÉ, cas unique** : le dock Source Data auto-amarré floute son contenu
   (`blur ~3px`) derrière une carte d'invite ; toute interaction lève le flou. Aucun autre usage de
   blur/backdrop-filter n'est permis.
@@ -23,12 +55,15 @@ section 2 ; tout le reste de la charte (orange rare, blanc/noir, tokens, filets,
   tailles de texte pour la hiérarchie, plutôt que sur des bordures fortes. En sombre, une carte flottante
   prend un palier au-dessus du fond (ex. `--surface-2` sur `--bg`).
 - **Focus des champs (recette unique, remplace la « bordure orange » de la section 5)** : tout champ
-  (prompt, recherche, input, select, textarea) focalisé = **bordure `--text-3` + élévation** (`--elev-1`,
-  `--elev-2` pour le prompt). L'orange reste réservé au `focus-visible` CLAVIER des boutons/contrôles.
+  (recherche, input, select, textarea) focalisé = **bordure `--text-3` + élévation** (`--elev-1`).
+  L'orange reste réservé au `focus-visible` CLAVIER des boutons/contrôles. **UNE exception, la carte de
+  prompt** (décision user 2026-08-13, elle est le sujet de l'écran) : bordure `--orange` + voile net 4px
+  `--orange-soft` (`--orange-soft-dark` en sombre) + `--elev-2`, aura à son intensité de repos. Ne pas
+  étendre cette recette à un autre champ.
 - **Cartographie des rayons (entérinée 2026-08-13)** : contrôles compacts (chips, badges, segmenté,
   recherche) = `--r-pill` ; champs de formulaire et cartes = `--r-lg` ; tuiles d'icône = `--r` (héros
-  56px = `--r-lg`) ; petits caps (kbd, checkbox) = `--r-xs` ; surfaces STRUCTURELLES (tables, panneaux,
-  en-têtes, jauges, tuiles de stats) = carrées.
+  56px = `--r-lg`) ; petits caps (kbd, checkbox) = `--r-xs` ; **lignes de liste et de nav (sidebar) =
+  `--r-sm`** ; surfaces STRUCTURELLES (tables, panneaux, en-têtes, jauges, tuiles de stats) = carrées.
 - **Micro-labels** : 11px / `--fw-heavy` / MAJUSCULES / `--tracking-eyebrow` (0.08em) - remplace le
   « .1em » cité plus bas.
 - **Sorties plus vives que les entrées** : sorties = `--dur-fast` + `--ease-in` ; entrées = `--dur`

@@ -10,7 +10,7 @@ import { useSourcesStore } from '../../stores/sources.js'
 import { usePromptContextStore } from '../../stores/promptContext.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
-import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
+import { isNumericColType, formatStatNumber, pickCellFilterChip } from '../../composables/sourceModel.js'
 import { isIdentifierColumn, formatCell } from '../../composables/cellFormat.js'
 import { useScrollHints } from '../../composables/useScrollHints.js'
 import { track } from '../../services/track.js'
@@ -19,20 +19,32 @@ import ColumnMenu from './ColumnMenu.vue'
 import ScrollHints from './ScrollHints.vue'
 import { DataLoader, Icon } from '../ui'
 
-// `preview` = the compact READ-ONLY copy the Analyze workspace shows next to (or under)
-// its figures, so the user always sees the rows those figures are computed on: capped
-// height, static headers, no cell actions, no lazy append - every one of those would fire
-// a query or a filter change from a surface meant to answer one question only: "what am I
-// analyzing?". The workspace feeds it its OWN bounded window (`rows`, refetched on every
-// scope change by the store) and its own column ORDER (`columns`, analyzed columns first)
-// with `pinned` marking them; left null, everything comes from the store exactly as the
-// browsing table has always read it.
+// `preview` = the compact copy the Analyze workspace shows under its figures, so the user
+// always sees the rows those figures are computed on: capped height, static headers, no
+// lazy append - those would fire a query from a surface meant to answer one question only
+// ("what am I analyzing?"). Its CELLS, however, are as live as the browsing table's (user
+// ask 2026-08-13): clicking a value offers the same two actions - queue it as context for
+// the next question, or filter the whole scope on it - because the analysis and the rows
+// under it share one filter state, so a cell filter re-computes the figures above too.
+// The workspace feeds it its OWN bounded window (`rows`, refetched on every scope change
+// by the store) and its own column ORDER (`columns`, analyzed columns first) with `pinned`
+// marking them; left null, everything comes from the store exactly as the browsing table
+// has always read it.
 const props = defineProps({
   preview: { type: Boolean, default: false },
   rows: { type: Array, default: null },
   columns: { type: Array, default: null },
   pinned: { type: Array, default: null },
   loading: { type: Boolean, default: false },
+  // Host store owning the FILTER state these cells act on (chips / addFilter /
+  // setChipValues). Null = the standalone sources store, which is also the only host of
+  // the browsing table; the Analyze workspace passes its own host, so a cell clicked in
+  // the Evidence "Source data" tab filters the EXCHANGE scope, never the explorer's.
+  surface: { type: Object, default: null },
+  // Provenance reported to the prompt context for a picked cell. Null = the host's own
+  // active source label (the standalone explorer knows it; the Evidence host names its
+  // exchange table instead).
+  sourceLabel: { type: String, default: null },
 })
 
 // Column windowing (client-side only): render the first COLS_INITIAL columns, then
@@ -52,6 +64,12 @@ const { t, locale } = useI18n()
 const sources = useSourcesStore()
 const promptContext = usePromptContextStore()
 const { push } = useToasts()
+
+// The store the FILTER surface of this table belongs to. Everything that reads or writes
+// filter chips goes through it; the browsing-only machinery (row window, sort, lazy
+// append, the Analyze sigma) stays on the sources store, which is the only host that has
+// it - the preview never renders those controls.
+const host = computed(() => props.surface || sources)
 
 // The DB-computed column statistics strip (sum / avg / min / max of the sigma-expanded
 // numeric column, over the FULL filtered set). Each value goes through the locale-aware
@@ -128,7 +146,6 @@ function pickable(row, name) {
   return raw != null && String(raw).trim() !== ''
 }
 function onCellClick(event, row, name) {
-  if (props.preview) return // read-only preview: a cell is data to read, not a control
   if (!pickable(row, name)) return
   const value = String(row[name])
   popover.value = {
@@ -136,7 +153,7 @@ function onCellClick(event, row, name) {
     y: event.clientY,
     column: name,
     value,
-    source: sources.activeSourceLabel,
+    source: props.sourceLabel || host.value.activeSourceLabel || '',
     canUse: value.length <= MAX_CONTEXT_VALUE_CHARS,
   }
   track('source_cell_clicked', { column: name })
@@ -151,13 +168,13 @@ function usePopoverValue() {
   closePopover()
 }
 
-// Filter the table on the clicked cell's exact value, against the ACTIVE host sources
-// store (home explorer OR the embedded agent-mode explorer in Evidence). The value is
-// used RAW (the same string the popover carries for the context action), never merged
-// into a temporal BETWEEN chip:
-//   - an existing '=' / 'IN' chip on that column absorbs the value (deduped, capped at
-//     MAX_FILTER_VALUES); if already present or at the cap, this is a silent close.
-//   - otherwise (only BETWEEN chips, or none) a fresh '=' chip is added.
+// Filter on the clicked cell's exact value, against the HOST's filter state (the home
+// explorer, the embedded agent-mode explorer in Evidence, or - from the Analyze preview -
+// whichever store hosts the workspace). The value is used RAW (the same string the popover
+// carries for the context action), never merged into a temporal BETWEEN chip; which chip
+// it may join is the shared rule pickCellFilterChip (a locked agent chip is never touched):
+//   - that chip absorbs the value (deduped, capped at MAX_FILTER_VALUES);
+//   - no eligible chip -> a fresh '=' chip is added.
 // The store's setChipValues / addFilter already refetch rows + aggregates and fire the
 // existing source_filter_added tracking, so no extra analytics event is emitted here.
 // Every outcome is acknowledged with a toast (like the "use for agent" action): a no-op
@@ -166,7 +183,7 @@ function filterPopoverValue() {
   const p = popover.value
   if (!p) return
   const raw = p.value
-  const chip = sources.chips.find((c) => c.column === p.column && chipOp(c) !== 'BETWEEN')
+  const chip = pickCellFilterChip(host.value.chips, p.column)
   if (chip) {
     const values = chip.values || []
     if (values.some((v) => String(v) === raw)) {
@@ -174,11 +191,11 @@ function filterPopoverValue() {
     } else if (values.length >= MAX_FILTER_VALUES) {
       push(t('src.cell.filterFull', [MAX_FILTER_VALUES]), { tone: 'warn', icon: 'info' })
     } else {
-      sources.setChipValues(chip.key, values.concat([raw]))
+      host.value.setChipValues(chip.key, values.concat([raw]))
       push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
     }
   } else {
-    sources.addFilter(p.column, [raw])
+    host.value.addFilter(p.column, [raw])
     push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
   }
   closePopover()
@@ -189,7 +206,7 @@ function filterPopoverValue() {
 // checkmark). The menu is a fixed-position card anchored to a header's menu trigger.
 const filteredColumns = computed(() => {
   const set = new Set()
-  for (const c of sources.chips) {
+  for (const c of host.value.chips) {
     if (c && c.column) set.add(c.column)
   }
   return set
@@ -208,7 +225,7 @@ function closeColMenu() {
 }
 const menuSortDir = computed(() => (colMenu.value ? sortDir(colMenu.value.column) || null : null))
 const menuFiltered = computed(() => (colMenu.value ? isFiltered(colMenu.value.column) : false))
-const menuCanFilter = computed(() => sources.chips.length < MAX_FILTERS)
+const menuCanFilter = computed(() => host.value.chips.length < MAX_FILTERS)
 function onMenuSort(dir) {
   if (colMenu.value) sources.setSort(colMenu.value.column, dir)
   closeColMenu()
@@ -218,8 +235,11 @@ function onMenuFilter() {
   closeColMenu()
 }
 
-// Close the popover + header menu when the active source changes (before meta reloads).
-watch(() => sources.activeSourceId, () => { closePopover(); closeColMenu() })
+// Close the popover + header menu when the host's active scope changes (before meta
+// reloads): the anchored coordinates and the picked value both belong to the old scope.
+// An exchange-scoped host carries no activeSourceId, so the watch simply never fires there
+// (its own table swap re-mounts this component).
+watch(() => host.value.activeSourceId, () => { closePopover(); closeColMenu() })
 
 // Infinite scroll: an IntersectionObserver watches a sentinel just below the last row
 // inside the table's OWN scroll container. Root is the scroll container so it never
@@ -299,9 +319,24 @@ watch(scrollEl, (el, old) => {
   if (el) el.addEventListener('scroll', onScroll, { passive: true })
 })
 
+// The cards are FIXED and teleported to body, so a scroll of ANY ancestor moves the cell
+// out from under them (the Analyze workspace is itself one scrollport, and its preview
+// table rides inside it). A capture-phase document listener sees every scroll in the page
+// wherever it happens; it is bound only while a card is actually open, so the common case
+// costs nothing.
+let docScrollBound = false
+function bindDocScroll(wanted) {
+  if (wanted === docScrollBound) return
+  docScrollBound = wanted
+  if (wanted) document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+  else document.removeEventListener('scroll', onScroll, { capture: true })
+}
+watch([popover, colMenu], ([p, m]) => bindDocScroll(!!(p || m)))
+
 onBeforeUnmount(() => {
   teardownObserver()
   teardownColObserver()
+  bindDocScroll(false)
   if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
 })
 

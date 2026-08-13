@@ -7,30 +7,29 @@
 
 ## Focus courant
 
-**GRANDE VAGUE UX 2026-08-12/13 (nuit + journee, NON committee avant cette session, NON validee DSS).**
-Deux runs dans `sessions/2026-08-13.md` :
-- **Nuit (run 1)** : `dev-harness/` racine = "yeux" locaux (Vite root->frontend + mock backend fidele
-  aux contrats geles + Playwright zero-install, L183 ; regle d'or : on corrige LE MOCK, jamais le
-  plugin ; port 5199). Tokens premium + charte section 0 (arrondis interactifs, elevations, blur
-  sanctionne du teaser). PromptBar raffinee, dock Source Data teaser FLOUTE auto-dock + resize libre,
-  Analyze workspace v3 (phrase MEASURE 1..8 + BY/FOR, KPI/table a barres, preview 50 lignes),
-  ScrollHints, panoplie premium sur TOUTES les pages (8 subagents Opus + critique Sol), contexte
-  ecran workspace->blocs calc/analyze existants. 2 revues corrigees.
-- **Journee (run 2)** : topbar UNE ligne (dropdown DATASET partage `DatasetPick.vue` + recherche
-  nommant le dataset + toggle, hauteurs 40px), toggle Data|Analyze dans le HEADER du panneau,
-  filtres UNE ligne (Clear all pilule), chips de mesure REMPLACABLES sur place (replaceMeasureAt),
-  tableau group-by poli (vrai nom de groupe, barres inset), **FUSION Evidence Studio = meme
-  structure** (SourceWorkspace host-parametrable sur le store evidence + preview ajoutee au store ;
-  SourceCalc.vue + SourceAnalyze.vue SUPPRIMES ; onglets Evidence -> KPI -> Source data), workspace
-  = UN scrollport (analyse en haut, donnees taille normale dessous), sidebar HOVER flyout (L184),
-  Show activity honnete (toast si feed vide), wrap actions colonne etroite, PromptBar focus =
-  cadre orange + voile 4px --orange-soft (decision user "luxe"), Evidence accessible SANS SQL
-  (atterrit sur Source data, L186, scenario mock "Bonjour"), teaser = invitation permanente
-  (X sticky par ECRAN seulement, F24 mis a jour).
-Gates : 425/425 node:test, builds Vite propres, 0 erreur console sur ~20 parcours harness.
+**2026-08-13 run 3 (soir) : la vague UX EST DEPLOYEE EN DSS (1er zip DEV v1.3, teste par l'user :
+la webapp tourne, l'agent repond), puis 4 correctifs UX post-terrain.** Detail `sessions/2026-08-13.md`.
+- **Zip DEV** : `build_dev_plugin.py --version 1.3` -> `ready-for-dataiku/owismind_v1_3-upload.zip`
+  (id `owismind_v1_3`, coexiste avec la prod, invariants 10/10). Regenere APRES les correctifs (18h52),
+  donc **a re-uploader**.
+- **Moteur natif (etat des lieux, aucune modif)** : present + cable (routes -> start_run -> worker),
+  27 + 23 tests verts, doc `OWIsMind_PRD_V1_3_DEV/docs/NATIVE_ENGINE.md` (corrigee : 27 tests, pas 29),
+  **jamais execute contre un vrai Mesh**, OFF par defaut. Activation = flag `profile.native_engine`
+  par API admin (GET puis re-POST de toute la whitelist) car AUCUNE case dans l'UI ; piege L187 :
+  la modale de profil efface `native_engine` ET `durable_workflow`.
+- **4 correctifs UX (demande user apres test DSS)** : (1) texte "Certified source" reecrit fr+en
+  (l'ancien ne voulait rien dire) ; (2) **actions de cellule dans la vue ANALYZE** des deux hotes
+  (dock + Evidence) - `SourceTable` prend `surface`/`sourceLabel`, regle de fusion pure
+  `pickCellFilterChip`, popover ferme au scroll de tout ancetre (L188) ; (3) **mesure par defaut =
+  SOMME de la 1re colonne numerique de quantite** au lieu du nombre de lignes
+  (`defaultWorkspaceMeasures` + drapeau pristine, L189) ; (4) lien "Check this number" SUPPRIME
+  (doublon d'Evidence).
+Gates : 450/450 node:test (12 neufs), 1016 plugin + 765 miroir, builds Vite propres, parcours
+harness Playwright verts (0 erreur console) sur les 3 points visibles.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
-- 2026-08-12/13 : vague UX complete (harness "yeux" + premium partout + Analyze v3 + fusion Evidence + finitions). L183-L186. Voir `sessions/2026-08-13.md`.
+- 2026-08-13 Run 3 (soir) : etat des lieux moteur natif + 1er zip DEV v1.3 (deploye, teste par l'user) + 4 correctifs UX. L187-L189. Voir `sessions/2026-08-13.md` run 3.
+- 2026-08-12/13 Runs 1-2 : vague UX complete (harness "yeux" + premium partout + Analyze v3 + fusion Evidence + finitions). L183-L186. Voir `sessions/2026-08-13.md`.
 - 2026-08-07 Run 1 (nuit) : passe UX attention premium (legendes artefacts + tableaux chat + KPI charte + PromptBar + mise au carre + fix dark canvas). 2 revues, 380/380. L181-L182. Voir `sessions/2026-08-07.md`.
 - 2026-08-06 Run 4 (soir) : nettoyage profond (3 fichiers morts + 13 icones + 5 constantes). Voir `sessions/2026-08-06.md` run 4.
 - 2026-08-06 Run 3 (jour) : UX luxe (dock Source Data d'office, nuances, prompt hero). L180. Voir `sessions/2026-08-06.md` run 3.
@@ -53,16 +52,18 @@ Gates : 425/425 node:test, builds Vite propres, 0 erreur console sur ~20 parcour
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
-- **VALIDATION DSS DE LA VAGUE 12-13/08 (+ runs 06-07/08 jamais deployes)** : USER teste le harness
-  (http://127.0.0.1:5199) puis `/build-plugin` ou `/package-plugin-dev` + upload zip DEV ; valider
-  clair ET sombre en DSS reel (fix L181 inclus). Arbitrages user : bloc contexte analyze mono-mesure
-  (toutes les mesures = evolution backend) ; micro-labels 0.08em a enteriner dans la charte.
-  Voir `sessions/2026-08-13.md` + `sessions/2026-08-06.md` runs 2-3.
+- **RE-UPLOAD + REVALIDATION DSS** : le zip `owismind_v1_3-upload.zip` du 13/08 18h52 porte les
+  4 correctifs UX (non revalides en DSS) ; verifier clair ET sombre. Arbitrages user encore ouverts :
+  bloc contexte analyze mono-mesure (toutes les mesures = evolution backend) ; micro-labels 0.08em
+  a enteriner dans la charte. Voir `sessions/2026-08-13.md` run 3.
+- **Case admin "moteur natif" (propose, non fait)** : exposer `native_engine` + `durable_workflow`
+  dans l'editeur de profil ET corriger `applyEditor` qui les efface (L187).
 - **Nettoyage differe front** : API calc*/analyze* de aggregateSurface sans consommateur UI (la
   memoire de vue persiste calcColumn/calcFns) ; dead CSS .pf-lab (AdminView) ; tirets em/en dans
   test/agentPick + evidenceProof (pre-existants). Voir `sessions/2026-08-13.md`.
-- **Moteur natif (06/08 run 2)** : entree de TEST flag `native_engine` + checklist `docs/NATIVE_ENGINE.md`
-  (jamais execute contre un vrai Mesh) ; backlog = recall natif, sql_id par artefact.
+- **Moteur natif (06/08 run 2)** : entree de TEST flag `native_engine` + checklist
+  `OWIsMind_PRD_V1_3_DEV/docs/NATIVE_ENGINE.md` (jamais execute contre un vrai Mesh ; ne pas ouvrir
+  la modale de profil de cette entree, L187) ; backlog = recall natif, sql_id par artefact.
 - **Contenu perime signale (06/08 run 4)** : CAPABILITY_MATRIX template ; registry.json sans domaine
   delivery ; docs/data-model.md OUTDATED ; MODEL.md d'avant re-add Solution.
 - **AUDIT v1.3 restes** : trancher FE-06/FE-09/onglet nouveau domaine/AG-01b/BE-03 ; refactors
