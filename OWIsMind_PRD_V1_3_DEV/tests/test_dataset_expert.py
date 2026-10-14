@@ -528,6 +528,22 @@ class TestBuildSql(unittest.TestCase):
 # ==========================================================================
 class TestGuardCustomSql(unittest.TestCase):
 
+    def test_string_executing_functions_rejected(self):
+        for expr in ("query_to_xml('select * from other_table', true, false, '')",
+                     "table_to_xml('other', true, false, '')",
+                     "dblink('host=x', 'select 1')",
+                     "lo_import('/etc/passwd')",
+                     "pg_read_file('/etc/passwd')",
+                     '"query_to_xml"(\'select 1\', true, false, \'\')'):
+            sql, reason = dx.guard_custom_sql("SELECT %s FROM %s" % (expr, TABLE), TABLE)
+            self.assertIsNone(sql, expr)
+            self.assertIn(reason, ("forbidden_function", "system_table"), expr)
+
+    def test_legit_column_names_not_mistaken_for_functions(self):
+        sql, reason = dx.guard_custom_sql(
+            'SELECT "lo_amount", "dblink_flag" FROM %s' % TABLE, TABLE)
+        self.assertIsNone(reason)
+
     def test_valid_select_gets_limit(self):
         sql, reason = dx.guard_custom_sql(
             'SELECT "Product", SUM("amount_eur") FROM %s GROUP BY 1' % TABLE,

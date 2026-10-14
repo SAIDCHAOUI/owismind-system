@@ -1410,6 +1410,14 @@ _SYSTEM_TABLE_RE = re.compile(r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b",
                               re.IGNORECASE)
 
 
+# Functions that execute SQL passed as text, reach other databases / the server file
+# system or change settings: never legitimate in an analytics query.
+_FORBIDDEN_FUNCTIONS_RE = re.compile(
+    r"\b(?:query_to_xml\w*|table_to_xml\w*|cursor_to_xml\w*|schema_to_xml\w*|"
+    r"database_to_xml\w*|dblink\w*|lo_\w+|pg_\w+|set_config|current_setting|"
+    r"xpath\w*|copy_\w+)\s*\(", re.IGNORECASE)
+
+
 def _strip_sql_noise(sql):
     s = re.sub(r"^```(?:sql)?\s*|\s*```$", "", str(sql or "").strip(),
                flags=re.MULTILINE).strip()
@@ -1448,6 +1456,11 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
         return (None, "forbidden_keyword")
     if _SYSTEM_TABLE_RE.search(scan):
         return (None, "system_table")
+    # Functions that run a SQL text passed as a STRING (query_to_xml...), reach other
+    # databases or the file system. They are checked on the UNBLANKED text because the
+    # payload they run sits inside a string literal that the scan above blanks out.
+    if _FORBIDDEN_FUNCTIONS_RE.search(s.replace('"', "")):
+        return (None, "forbidden_function")
 
     allowed = _allowed_table_names(table)
     cte_names = set()
