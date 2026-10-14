@@ -616,6 +616,30 @@ def validate_evidence_rows_request(payload):
             drill, table, q)
 
 
+# Optional per-artifact binding of a result table (the artifact's stored sql_id).
+# Shape only: the service matches it against the exchange's OWN stored items.
+MAX_RESULT_SQL_ID_CHARS = 300
+
+
+def validate_evidence_result_rows_request(payload):
+    """Validate an /evidence/result-rows payload.
+
+    Returns ``(exchange_id, sql_id, limit, offset)``. ``sql_id`` is optional (None =
+    the exchange's active result); ``limit``/``offset`` CLAMP like /evidence/rows
+    (never raise), so the browsable window has the same bound.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError("invalid_payload")
+    exchange_id = validate_required_exchange_id(payload.get("exchange_id"))
+    sql_id = payload.get("sql_id")
+    if sql_id is not None and (not isinstance(sql_id, str) or not sql_id
+                               or len(sql_id) > MAX_RESULT_SQL_ID_CHARS):
+        raise ValidationError("invalid_sql_id")
+    limit = _parse_rows_limit(payload.get("limit"))
+    offset = _parse_rows_offset(payload.get("offset"))
+    return exchange_id, sql_id, limit, offset
+
+
 def validate_evidence_distinct_request(payload):
     """Validate an /evidence/distinct payload (POST). Returns
     ``(exchange_id, column, exclude_id, q, filters, kept_ids, include_advanced, drill,

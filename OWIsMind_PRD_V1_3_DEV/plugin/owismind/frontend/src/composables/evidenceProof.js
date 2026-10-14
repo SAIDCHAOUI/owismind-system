@@ -90,28 +90,6 @@ export function calcStepArgs(step) {
 }
 
 /**
- * Bounded preview of the captured agent result for the mini-table:
- * {columns, rows, more}. `rows` keeps at most `maxRows` list-shaped rows
- * (cell values untouched - the display layer stringifies, keeping null as
- * '-'); `more` counts the hidden remainder. Shape-defensive: anything that
- * is not the contract's list-of-lists yields the empty preview, never throws.
- */
-export function resultPreview(result, maxRows = 10) {
-  const empty = { columns: [], rows: [], more: 0 }
-  if (!result || !Array.isArray(result.rows)) return empty
-  const cap = Number.isInteger(maxRows) && maxRows > 0 ? maxRows : 10
-  const columns = Array.isArray(result.columns) ? result.columns.map((c) => String(c)) : []
-  // Drop non-list rows: the drill action indexes meta.result.rows by the
-  // PREVIEW row index, so the preview must be a clean prefix of valid rows.
-  const valid = result.rows.filter((r) => Array.isArray(r))
-  return {
-    columns,
-    rows: valid.slice(0, cap),
-    more: Math.max(0, valid.length - cap),
-  }
-}
-
-/**
  * Number of agent conditions NOT reproduced by the interactive view (0 when
  * the verification block is absent or clean). Honesty rule §9: dropped
  * elements are COUNTED and listed, never hidden - so take the max of the

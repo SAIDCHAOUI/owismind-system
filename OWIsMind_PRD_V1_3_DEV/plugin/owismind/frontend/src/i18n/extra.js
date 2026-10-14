@@ -425,7 +425,6 @@ export const extraMessages = {
     'ev.proof.result.rows': '{0} ligne(s)',
     'ev.proof.result.missing':
       "Le résultat exact utilisé par l'agent n'a pas été conservé pour cette réponse.",
-    'ev.proof.result.truncated': 'Résultat tronqué - premières lignes seulement.',
     'ev.proof.result.drill': 'Voir les lignes sources de ce résultat',
     'ev.proof.drill.banner': 'Lignes sources : {0}',
     'ev.proof.drill.exit': 'Revenir au résultat',
@@ -440,8 +439,13 @@ export const extraMessages = {
     'art.chart.title_fallback': 'Graphique',
     'art.chart.auto_title': '{0} par {1}',
     'art.table.empty': "Le résultat exact utilisé par l'agent n'a pas été conservé.",
-    'art.table.truncated': 'Résultat tronqué - premières lignes seulement.',
     'art.table.cols': '{0} colonne(s)',
+    // Agent-result tables (Evidence result section + Table tab): the count line.
+    'res.count.full': '{0} ligne(s)',
+    'res.count.of_total': '{0} lignes affichées sur {1}',
+    'res.count.more': "{0} lignes affichées, d'autres sont disponibles",
+    'res.count.excerpt':
+      "Seules les {0} premières lignes sont affichées : le résultat complet peut en contenir davantage.",
     'art.kpi.empty': "Impossible d'afficher l'indicateur pour ces données.",
 
     // Chat - model mode picker (cost/quality dial sent with each turn)
@@ -1384,7 +1388,6 @@ export const extraMessages = {
     'ev.proof.result': 'Result used by the agent',
     'ev.proof.result.rows': '{0} row(s)',
     'ev.proof.result.missing': 'The exact result the agent used was not kept for this answer.',
-    'ev.proof.result.truncated': 'Result truncated - first rows only.',
     'ev.proof.result.drill': 'See the source rows behind this result',
     'ev.proof.drill.banner': 'Source rows: {0}',
     'ev.proof.drill.exit': 'Back to the result',
@@ -1399,8 +1402,13 @@ export const extraMessages = {
     'art.chart.title_fallback': 'Chart',
     'art.chart.auto_title': '{0} by {1}',
     'art.table.empty': 'The exact result the agent used was not kept for this answer.',
-    'art.table.truncated': 'Result truncated - first rows only.',
     'art.table.cols': '{0} column(s)',
+    // Agent-result tables (Evidence result section + Table tab): the count line.
+    'res.count.full': '{0} row(s)',
+    'res.count.of_total': 'Showing {0} of {1} rows',
+    'res.count.more': 'Showing {0} rows, more are available',
+    'res.count.excerpt':
+      'Only the first {0} rows are shown: the full result may contain more.',
     'art.kpi.empty': 'Cannot display the KPI for this data.',
 
     // Chat - model mode picker (cost/quality dial sent with each turn)

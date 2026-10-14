@@ -66,6 +66,7 @@ from owismind.security.validation import (
     validate_conversations_limit,
     validate_evidence_aggregate_request,
     validate_evidence_distinct_request,
+    validate_evidence_result_rows_request,
     validate_evidence_rows_request,
     validate_expires_days,
     validate_feedback,
@@ -1103,6 +1104,32 @@ def evidence_rows(identity):
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
         logger.exception("/evidence/rows - failed")
+        return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
+    return jsonify({"status": "ok", **result})
+
+
+@api.route("/evidence/result-rows", methods=["POST"])
+@evidence_guard
+def evidence_result_rows(identity):
+    """One bounded window of the agent's FULL result (+ its exact total on offset 0).
+
+    The body carries only ``exchange_id``, an optional artifact ``sql_id``, and the
+    row window: the SQL re-run is the agent's OWN stored statement, resolved and
+    gated server-side (owner-scoped), never anything the client sends.
+    """
+    try:
+        exchange_id, sql_id, limit, offset = validate_evidence_result_rows_request(
+            request.get_json(silent=True))
+    except ValidationError as exc:
+        logger.warning("/evidence/result-rows - invalid payload: %s", exc.code)
+        return jsonify({"status": "error", "error": exc.code}), 400
+    try:
+        result = evidence_service.evidence_result_rows(
+            identity["user_id"], exchange_id, sql_id, limit, offset)
+    except evidence_service.EvidenceError as exc:
+        return jsonify({"status": "error", "error": exc.code}), exc.status
+    except Exception:
+        logger.exception("/evidence/result-rows - failed")
         return jsonify({"status": "error", "error": "evidence_unavailable"}), 500
     return jsonify({"status": "ok", **result})
 

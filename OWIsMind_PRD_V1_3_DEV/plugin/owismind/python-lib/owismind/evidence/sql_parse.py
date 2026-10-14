@@ -651,3 +651,115 @@ def predicates_for_table(predicates, table):
             continue
         out.append(pred)
     return out
+
+
+# --- Result re-run gate (full result paging) ------------------------------------
+# The Evidence "result" tables page through the agent's OWN final SELECT, re-run
+# server-side wrapped in a bounded outer SELECT (COUNT / LIMIT-OFFSET). The statement
+# was authored by the agent and already executed once; this gate is the defensive
+# layer on top of the read-only transaction + statement timeout: one plain SELECT/WITH
+# statement, no write/DDL/execution keyword, no server-side function family that can
+# touch files, other databases or session settings, no set operation (only the first
+# arm would be table-checked), and every FROM/JOIN relation is either a CTE of the
+# statement itself or a discovered project dataset (checked by the service).
+_BANNED_RERUN_WORDS = frozenset((
+    "insert", "update", "delete", "merge", "upsert", "drop", "alter", "grant",
+    "revoke", "copy", "create", "truncate", "execute", "exec", "call", "do", "into",
+    "returning", "lock", "vacuum", "analyze", "refresh", "listen", "notify",
+    "union", "intersect", "except", "set_config", "dblink", "query_to_xml",
+))
+_BANNED_RERUN_PREFIXES = ("pg_", "lo_", "dblink")
+
+
+def cte_names(tokens):
+    """Lower-cased names of the CTEs a token list declares (any nesting level).
+
+    A CTE is ``name [ (cols) ] AS [ [NOT] MATERIALIZED ] (`` introduced by WITH,
+    RECURSIVE or a comma. Pure; tolerant of anything it does not recognise.
+    """
+    names = set()
+    n = len(tokens)
+    for i, tok in enumerate(tokens):
+        if tok.kind not in ("word", "qident") or i == 0:
+            continue
+        prev = tokens[i - 1]
+        if not (prev.text == "," or _is_word(prev, "WITH") or _is_word(prev, "RECURSIVE")):
+            continue
+        j = i + 1
+        if j < n and tokens[j].text == "(":
+            close = _match_paren(tokens, j, n)
+            if close is None:
+                continue
+            j = close + 1
+        if not (j < n and _is_word(tokens[j], "AS")):
+            continue
+        j += 1
+        if j < n and _is_word(tokens[j], "NOT"):
+            j += 1
+        if j < n and _is_word(tokens[j], "MATERIALIZED"):
+            j += 1
+        if j < n and tokens[j].text == "(":
+            name = tok.text if tok.kind == "word" else tok.text[1:-1].replace('""', '"')
+            names.add(name.lower())
+    return names
+
+
+def check_rerunnable_select(sql):
+    """Gate one stored agent SELECT before it is re-run for result paging. Never raises.
+
+    Returns ``{"ok", "reason", "sql", "tables"}``: ``sql`` is the statement without
+    its optional trailing semicolon (ready to be wrapped as a sub-query) and
+    ``tables`` lists every FROM/JOIN relation that is NOT one of the statement's own
+    CTEs (``{"schema", "table"}``) - the service requires each of them to resolve to a
+    discovered project dataset.
+    """
+    def fail(reason):
+        return {"ok": False, "reason": reason, "sql": None, "tables": []}
+
+    if not isinstance(sql, str) or not sql.strip():
+        return fail("invalid_sql")
+    if len(sql) > MAX_SQL_CHARS:
+        return fail("sql_too_long")
+    if "\\" in sql:
+        return fail("backslash_unsupported")
+    tokens, err = tokenize(sql)
+    if err:
+        return fail(err)
+    body_end = len(sql)
+    if tokens and tokens[-1].text == ";":
+        body_end = tokens[-1].start
+        tokens = tokens[:-1]
+    if not tokens or not (_is_word(tokens[0], "SELECT") or _is_word(tokens[0], "WITH")):
+        return fail("not_select")
+    depth = 0
+    for t in tokens:
+        if t.text == ";":
+            return fail("multi_statement")
+        if t.text == "(":
+            depth += 1
+        elif t.text == ")":
+            depth -= 1
+            if depth < 0:
+                return fail("unbalanced_parens")
+        if t.kind in ("word", "qident"):
+            name = t.text if t.kind == "word" else t.text[1:-1].replace('""', '"')
+            low = name.lower()
+            if low in _BANNED_RERUN_WORDS or low.startswith(_BANNED_RERUN_PREFIXES):
+                return fail("unsafe_sql")
+    if depth != 0:
+        return fail("unbalanced_parens")
+    scopes = []
+    _scan_scopes(tokens, 0, len(tokens), scopes)
+    ctes = cte_names(tokens)
+    tables, seen = [], set()
+    for scope in scopes:
+        for ref in scope["refs"]:
+            if ref["schema"] is None and ref["table"].lower() in ctes:
+                continue
+            key = ((ref["schema"] or "").lower(), ref["table"].lower())
+            if key not in seen:
+                seen.add(key)
+                tables.append({"schema": ref["schema"], "table": ref["table"]})
+    if not tables:
+        return fail("no_source_table")
+    return {"ok": True, "reason": None, "sql": sql[:body_end].strip(), "tables": tables}

@@ -31,6 +31,26 @@ def build_exchange_sql_query(table_ref, user_value_sql, exchange_value_sql):
     """.format(table=table_ref, exchange=exchange_value_sql, user=user_value_sql)
 
 
+def build_result_page_query(inner_sql, limit, offset):
+    """One bounded window of the agent's OWN stored SELECT, re-run as a sub-query.
+
+    ``inner_sql`` MUST have passed ``sql_parse.check_rerunnable_select`` (single
+    SELECT/WITH, no trailing semicolon). No outer ORDER BY: the window follows the
+    agent's own ordering (PostgreSQL keeps a sub-query's ORDER BY for a plain outer
+    LIMIT/OFFSET scan); an unordered agent query pages in an unspecified order, which
+    is the same contract the agent itself had.
+    """
+    n = int(limit)
+    o = int(offset)
+    return "SELECT * FROM (\n{inner}\n) AS owi_result LIMIT {n} OFFSET {o}".format(
+        inner=inner_sql, n=n, o=o)
+
+
+def build_result_count_query(inner_sql):
+    """Exact row count of the agent's OWN stored SELECT (same gate as the page query)."""
+    return "SELECT COUNT(*) AS n FROM (\n{inner}\n) AS owi_result".format(inner=inner_sql)
+
+
 def build_rows_query(table_ref, column_idents, conditions, order_ident, order_dir,
                      limit, offset):
     """One bounded, deterministic, read-only page of the evidence table.

@@ -33,6 +33,34 @@ def rows_to_json_safe(df):
     return df.to_dict(orient="records")
 
 
+def frame_to_json_safe_matrix(df, max_cell_chars=None):
+    """``(columns, rows)`` of a DataFrame as POSITIONAL lists (JSON-safe).
+
+    Unlike ``rows_to_json_safe`` (records keyed by name) this keeps duplicate column
+    names apart, which an arbitrary agent SELECT can produce. Same NA rule (NaN/NaT
+    -> None) and timestamps as ISO 8601 strings; ``max_cell_chars`` optionally bounds
+    every string cell.
+    """
+    if df is None:
+        return [], []
+    columns = [str(c) for c in df.columns]
+    if df.empty:
+        return columns, []
+    mask = df.notna()
+    values = df.astype(object).where(mask, None).values.tolist()
+    rows = []
+    for raw in values:
+        row = []
+        for v in raw:
+            if hasattr(v, "isoformat"):
+                v = v.isoformat()
+            if max_cell_chars and isinstance(v, str) and len(v) > max_cell_chars:
+                v = v[:max_cell_chars]
+            row.append(v)
+        rows.append(row)
+    return columns, rows
+
+
 def parse_json_list(raw):
     """Decode a JSON-encoded list cell (e.g. ``user_groups``) back to a list.
 

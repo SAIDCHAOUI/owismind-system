@@ -212,6 +212,8 @@ watch([tabItems, activeTab], ([items, tab]) => {
         <template v-else-if="activeTab === 'table'">
           <ArtifactTable
             :result="(tableArtifact && tableArtifact.data) || meta.result || null"
+            :exchange-id="evidence.exchangeId ? String(evidence.exchangeId) : ''"
+            :sql-id="(tableArtifact && tableArtifact.sql_id) || ''"
             :title="(tableArtifact && tableArtifact.title) || ''"
             :description="(tableArtifact && tableArtifact.description) || ''"
           />

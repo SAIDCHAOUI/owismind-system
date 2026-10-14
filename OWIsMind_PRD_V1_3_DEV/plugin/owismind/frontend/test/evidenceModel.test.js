@@ -417,7 +417,10 @@ const PROOF_KEYS = [
   'ev.proof.level.desc.partial', 'ev.proof.level.desc.declared',
   'ev.proof.sources', 'ev.proof.sources.more', 'ev.proof.calc',
   'ev.proof.result', 'ev.proof.result.rows', 'ev.proof.result.missing',
-  'ev.proof.result.truncated', 'ev.proof.result.drill',
+  'ev.proof.result.drill',
+  // ev.proof.result.truncated was retired 2026-10-14: the result tables now say
+  // "N of T rows" (res.count.*) instead of a bare "truncated" caveat.
+  'res.count.full', 'res.count.of_total', 'res.count.more', 'res.count.excerpt',
   // ev.proof.explore was retired 2026-08-13 with the "Explore the source data" label
   // (the merged Source data tab mirrors the standalone panel, which has no such label).
   'ev.proof.drill.banner', 'ev.proof.drill.exit',

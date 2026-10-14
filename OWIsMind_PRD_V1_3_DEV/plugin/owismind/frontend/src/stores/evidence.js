@@ -478,17 +478,24 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // row, never from the live table, so the drill proves what the agent used.
   // The pre-drill view (chips/advanced/sort) is snapshotted for exitDrill; exit
   // does a fresh reload at offset 0, so no scroll offset needs saving.
-  function drillIntoResultRow(rowIndex) {
+  // `rowOrIndex`: the clicked row itself (with `rowColumns`, the columns it is laid out
+  // on - the result table may show a full-result window, not the captured excerpt), or
+  // a legacy index into the captured meta.result.rows.
+  function drillIntoResultRow(rowOrIndex, rowColumns) {
     const m = meta.value
     if (!m || !m.result || !m.result.captured) return
     if (!m.drilldown || !m.drilldown.available) return
     const cols = m.drilldown.columns
     if (!Array.isArray(cols) || !cols.length) return
-    const row = Array.isArray(m.result.rows) ? m.result.rows[rowIndex] : null
+    const byRow = Array.isArray(rowOrIndex)
+    const row = byRow
+      ? rowOrIndex
+      : (Array.isArray(m.result.rows) ? m.result.rows[rowOrIndex] : null)
     if (!Array.isArray(row)) return
+    const layout = byRow && Array.isArray(rowColumns) ? rowColumns : m.result.columns
     // Capped at 8 labels (backend mirror); null = unmappable column/value -
     // abort silently rather than drill on a partial (lying) scope.
-    const labels = buildDrillLabels(cols, m.result.columns, row)
+    const labels = buildDrillLabels(cols, layout, row)
     if (!labels) return
     track('evidence_row_drilled', {})
     // Consecutive drill (chevron clicked while already drilling): keep the

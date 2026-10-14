@@ -280,6 +280,14 @@ export function fetchEvidenceRows(payload) {
   return postJson('/owismind-api/evidence/rows', payload);
 }
 
+// One window of the agent's FULL SQL result (the agents only keep a short excerpt).
+// Payload { exchange_id, sql_id?, limit, offset } - never SQL: the server re-runs the
+// agent's OWN stored statement. Returns { status, columns, rows (positional lists),
+// has_more, offset, total } where total (exact) is only computed for offset 0.
+export function fetchEvidenceResultRows(payload) {
+  return postJson('/owismind-api/evidence/result-rows', payload);
+}
+
 // DB-computed aggregation over the FULL filtered set of ONE exchange's evidence table
 // (the totals bar + the Analyze mini-pivot). The payload carries the SAME scope as
 // /evidence/rows (see composables/evidenceModel.js buildEvidenceAggregatePayload: chips as

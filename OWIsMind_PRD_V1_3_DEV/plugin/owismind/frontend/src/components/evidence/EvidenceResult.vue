@@ -1,16 +1,18 @@
 <script setup>
-// Result section - the EXACT rows the agent received (when captured): a sober
-// bounded mini-table (no sort, no pagination - this is evidence, not a data
-// browser) + the total row count, with a per-row drill chevron when (and only
-// when) the backend certified the drill-down reliable. When nothing was
-// captured, ONE honest line says so (a re-execution is "now", never "what the
-// agent saw" - honesty rules, spec §9).
-import { computed } from 'vue'
+// Result section - the rows the agent's SQL returned: a sober bounded table + the row
+// count, with a per-row drill chevron when (and only when) the backend certified the
+// drill-down reliable. The agents keep only a short excerpt of each result, so when
+// that excerpt may hide rows the FULL result is paged in from the backend
+// (useResultRows: 100 rows, then more on scroll) and the count says "N of T rows" -
+// a user must never take an excerpt for the whole answer. When nothing was captured,
+// ONE honest line says so (no re-execution is shown as "what the agent saw").
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
-import { resultPreview } from '../../composables/evidenceProof.js'
 import { inferNumericColumns, formatCell } from '../../composables/cellFormat.js'
 import { formatStatNumber } from '../../composables/sourceModel.js'
+import { resultCountLabel } from '../../composables/resultRows.js'
+import { useResultRows } from '../../composables/useResultRows.js'
 import { Icon } from '../ui'
 
 const { t, locale } = useI18n()
@@ -19,42 +21,43 @@ const evidence = useEvidenceStore()
 const meta = computed(() => evidence.meta)
 const result = computed(() => (meta.value && meta.value.result) || null)
 const captured = computed(() => !!(result.value && result.value.captured))
-const preview = computed(() => resultPreview(result.value))
 // Gate on the NEW contract fields only: a v1 meta (neither result nor queries)
 // renders nothing, keeping the panel identical to today.
 const show = computed(
   () => !!(result.value || (meta.value && Array.isArray(meta.value.queries))),
 )
 
-// Per-row drill is offered ONLY when the backend certified it available AND
-// the rows on screen are the captured ones (drill indexes meta.result.rows).
-// Index-integrity guard: resultPreview drops malformed (non-list) rows, which
-// would shift preview indexes off meta.result.rows - in that case the drill
-// chevrons are withheld rather than risking a drill into the WRONG row.
+const { rows, columns, total, live, hasMore, loading, partial, loadMore } = useResultRows(() => ({
+  exchangeId: evidence.exchangeId ? String(evidence.exchangeId) : '',
+  sqlId: '',
+  result: result.value,
+}))
+
+// Per-row drill is offered ONLY when the backend certified it available and every
+// drill column maps onto a column on screen (drill keys carry SOURCE column names - a
+// CTE rename makes them unmappable here, so the affordance is honestly withheld). The
+// drill reads the clicked row ITSELF (captured or full-result window), never an index.
 const drillable = computed(() => {
   const d = meta.value && meta.value.drilldown
   if (!(captured.value && d && d.available && Array.isArray(d.columns) && d.columns.length)) {
     return false
   }
-  // Every drill column must map onto a captured-result column, or the click
-  // would silently no-op (drill keys carry SOURCE column names - a CTE rename
-  // makes them unmappable here, so the affordance is honestly withheld).
-  const resultCols = Array.isArray(result.value.columns)
-    ? result.value.columns.map((c) => String(c).toLowerCase())
-    : []
-  if (!d.columns.every((c) => resultCols.includes(String(c).toLowerCase()))) {
-    return false
-  }
-  const total = Array.isArray(result.value.rows) ? result.value.rows.length : 0
-  return preview.value.rows.length + preview.value.more === total
+  const shown = columns.value.map((c) => String(c).toLowerCase())
+  return d.columns.every((c) => shown.includes(String(c).toLowerCase()))
 })
 
-// Total rows the agent received - prefer the contract's row_count, fall back
-// to what the preview can prove (visible rows + hidden remainder).
-const totalRows = computed(() => {
+// Count line: never a total we do not know (resultRows.resultCountLabel).
+const countLine = computed(() => {
   const rc = result.value && result.value.row_count
-  if (typeof rc === 'number' && Number.isFinite(rc) && rc >= 0) return rc
-  return preview.value.rows.length + preview.value.more
+  const known = live.value ? total.value : (typeof rc === 'number' ? rc : null)
+  const label = resultCountLabel({
+    shown: rows.value.length,
+    total: known,
+    live: live.value,
+    hasMore: hasMore.value,
+    partial: partial.value,
+  })
+  return t(label.key, label.args.map((n) => formatStatNumber(n, locale.value)))
 })
 
 // Not-captured case: the CONTRACT field first - result.row_count is the ACTIVE
@@ -75,9 +78,9 @@ const missingRowCount = computed(() => {
   return null
 })
 
-// Per-column numeric-ness (inferred from the previewed values; preview columns map
-// 1:1 onto result.columns): numeric columns right-align and locale-format.
-const numericCols = computed(() => inferNumericColumns(preview.value.columns, preview.value.rows))
+// Per-column numeric-ness (inferred from the shown values): numeric columns
+// right-align and locale-format.
+const numericCols = computed(() => inferNumericColumns(columns.value, rows.value))
 
 function cell(v, j) {
   return formatCell(v, numericCols.value[j], locale.value)
@@ -89,13 +92,35 @@ function rawTitle(v, j) {
   return numericCols.value[j] && v != null ? String(v) : null
 }
 
-// The drill action lands with IMPL-5 (stores/evidence.js): guard so this
-// section keeps rendering (chevrons inert) against an older store build.
-function drillRow(i) {
+function drillRow(row) {
   if (!drillable.value) return
   const fn = evidence.drillIntoResultRow
-  if (typeof fn === 'function') fn(i)
+  if (typeof fn === 'function') fn(row, columns.value)
 }
+
+// Infinite scroll (same pattern as the Source Data table): a sentinel below the last
+// row, observed inside the section's OWN scroll box, asks for the next window.
+const scrollEl = ref(null)
+const sentinelEl = ref(null)
+let observer = null
+function teardownObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+}
+watch(sentinelEl, (el) => {
+  teardownObserver()
+  if (!el || !scrollEl.value || typeof IntersectionObserver !== 'function') return
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore()
+    },
+    { root: scrollEl.value, rootMargin: '120px 0px', threshold: 0 },
+  )
+  observer.observe(el)
+})
+onBeforeUnmount(teardownObserver)
 </script>
 
 <template>
@@ -104,32 +129,37 @@ function drillRow(i) {
 
     <template v-if="captured">
       <div class="ev-result-box">
-        <div class="ev-result-scroll">
+        <div ref="scrollEl" class="ev-result-scroll">
           <table>
             <thead>
               <tr>
-                <th v-for="(c, j) in preview.columns" :key="j" :class="{ num: numericCols[j] }">{{ c }}</th>
+                <th v-for="(c, j) in columns" :key="j" :class="{ num: numericCols[j] }">{{ c }}</th>
                 <th v-if="drillable" class="th-drill" aria-hidden="true" />
               </tr>
             </thead>
             <tbody>
               <!-- Cells indexed by COLUMN so a short row cannot shift the grid. -->
-              <tr v-for="(row, i) in preview.rows" :key="i">
-                <td v-for="(c, j) in preview.columns" :key="j" :class="{ num: numericCols[j] }" :title="rawTitle(row[j], j)">{{ cell(row[j], j) }}</td>
+              <tr v-for="(row, i) in rows" :key="i">
+                <td v-for="(c, j) in columns" :key="j" :class="{ num: numericCols[j] }" :title="rawTitle(row[j], j)">{{ cell(row[j], j) }}</td>
                 <td v-if="drillable" class="td-drill">
                   <button type="button" class="drill-btn" :title="t('ev.proof.result.drill')"
-                          @click="drillRow(i)">
+                          @click="drillRow(row)">
                     <Icon name="chevronRight" />
                   </button>
                 </td>
               </tr>
             </tbody>
           </table>
+          <!-- Infinite-scroll sentinel: present only while the full result has more. -->
+          <div v-if="live && hasMore" ref="sentinelEl" class="ev-result-sentinel" aria-hidden="true">
+            <span v-if="loading">{{ t('ev.table.loadingMore') }}</span>
+          </div>
         </div>
       </div>
       <div class="ev-result-info">
-        <span>{{ t('ev.proof.result.rows', [formatStatNumber(totalRows, locale)]) }}</span>
-        <span v-if="result.truncated" class="trunc">{{ t('ev.proof.result.truncated') }}</span>
+        <span v-if="loading && !live">{{ t('ev.table.loadingMore') }}</span>
+        <span v-else :class="{ trunc: partial }">{{ countLine }}</span>
+        <span v-if="live && hasMore">{{ t('ev.table.more') }}</span>
       </div>
     </template>
 
@@ -151,7 +181,7 @@ function drillRow(i) {
   text-transform: uppercase; letter-spacing: 0.08em;
 }
 .ev-result-box { border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden; }
-/* Bounded viewport: ≤ 10 rows rendered, ~240px max before scrolling. */
+/* Bounded viewport: ~240px max, the rows scroll inside (more load on scroll). */
 .ev-result-scroll { max-height: 240px; overflow-y: auto; }
 /* separate + spacing 0 (same trick as EvidenceTable): with `collapse` the th
    border scrolls away from a sticky header - paint it as an inset shadow. */
@@ -199,6 +229,11 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ev-result-info { display: flex; align-items: center; gap: var(--s-3); font-size: var(--fs-xs); color: var(--text-3); }
 /* Truncation is a caveat on the proof - small orange text (AA token, F2). */
 .ev-result-info .trunc { color: var(--orange-text); }
+/* Infinite-scroll sentinel: a thin band below the rows (Source Data pattern). */
+.ev-result-sentinel {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 24px; padding: 4px; font-size: 11px; color: var(--text-3);
+}
 .ev-result-missing {
   display: flex; flex-direction: column; gap: var(--s-1);
   font-size: var(--fs-sm); color: var(--text-3);

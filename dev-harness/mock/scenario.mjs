@@ -342,6 +342,88 @@ WHERE "Year" = 2026`
   }
 }
 
+// --- Detail scenario (asked with "détail" / "liste" / "lignes") -------------------
+// A row-level listing much longer than what an agent keeps: the capture holds the
+// first 50 rows (the agents' MAX_RESULT_ROWS) with row_count = 50 (the real agents
+// count AFTER the cut), truncated: true. The FULL result rides on the SQL item
+// (`fullResult`, mock-only) so /evidence/result-rows can page it like the real
+// backend re-running the stored SELECT.
+const DETAIL_SQL = `SELECT "Account_name", "Country", "Solution", "Month", "Revenues"
+FROM "OWISMIND_LOCAL_drive_revenues"
+WHERE "Year" = 2026 AND "Phase" = 'ACTUALS'
+ORDER BY "Revenues" DESC`
+
+export function buildDetailScenario(exchangeId) {
+  const columns = ['Account_name', 'Country', 'Solution', 'Month', 'Revenues']
+  const full = applyFilters(REVENUES, [
+    { column: 'Year', op: '=', values: [2026] },
+    { column: 'Phase', op: '=', values: ['ACTUALS'] },
+  ])
+    .slice()
+    .sort((a, b) => b.Revenues - a.Revenues)
+    .map((r) => columns.map((c) => r[c]))
+  const excerpt = full.slice(0, 50)
+  const answer = [
+    'Voici le détail des revenus réels 2026 par client, du plus élevé au plus faible.',
+    '',
+    '[Scope] Year = 2026 · Phase = ACTUALS',
+  ].join('\n')
+  const events = []
+  const push = (at, ev) => events.push({ at, ev })
+  push(0, { type: 'run_started', exchangeId })
+  push(200, { type: 'agent_event', eventKind: 'START', blockId: null, nextBlockId: null, toolName: null, elapsedSeconds: 0.2, label: 'Analyse de la demande' })
+  push(900, { type: 'agent_event', eventKind: 'CALLING_AGENT', blockId: null, nextBlockId: null, toolName: null, elapsedSeconds: 0.9, label: "Consultation de l'expert revenus", agentKey: 'revenue_expert', stepIndex: 1 })
+  push(2000, { type: 'generated_sql', sqlIndex: 1, success: true, rowCount: 50, sql: DETAIL_SQL, sqlId: 'sq-det-001', stepIndex: 1, agentKey: 'revenue_expert' })
+  push(2300, { type: 'agent_event', eventKind: 'AGENT_DONE', blockId: null, nextBlockId: null, toolName: null, elapsedSeconds: 2.3, label: 'Expert revenus : résultat obtenu', status: 'ok' })
+  push(2500, { type: 'agent_event', eventKind: 'ARTIFACT', blockId: null, nextBlockId: null, toolName: null, elapsedSeconds: 2.5, label: 'Tableau : détail des revenus' })
+  let t = 2700
+  for (const delta of toDeltas(answer)) {
+    push(t, { type: 'answer_delta', text: delta })
+    t += 55
+  }
+  push(t + 100, { type: 'usage_summary', promptTokens: 2100, completionTokens: 180, totalTokens: 2280, estimatedCost: 0.005 })
+  const resultBlock = { captured: true, columns, rows: excerpt, row_count: 50, truncated: true }
+  return {
+    events,
+    lastAt: t + 100,
+    answer,
+    usage: { input_tokens: 2100, output_tokens: 180, total_tokens: 2280, estimated_cost: 0.005 },
+    sqlItems: [
+      {
+        sql: DETAIL_SQL, success: true, row_count: 50, sql_id: 'sq-det-001', step_index: 1,
+        agent_key: 'revenue_expert',
+        result: { columns, rows: excerpt, truncated: true },
+        fullResult: { columns, rows: full },
+      },
+    ],
+    artifacts: [
+      {
+        kind: 'table',
+        title: 'Revenus réels 2026 par client',
+        description: 'Une ligne par client, mois et solution, triée par revenu décroissant.',
+        sql_id: 'sq-det-001',
+        chart: null,
+      },
+    ],
+    evidence: {
+      dataset: 'DRIVE_Revenues',
+      chips: [
+        { id: 1, column: 'Year', op: '=', values: ['2026'], editable: true },
+        { id: 2, column: 'Phase', op: '=', values: ['ACTUALS'], editable: true },
+      ],
+      advanced: { present: false, display: '' },
+      sql: DETAIL_SQL,
+      explanationSteps: [
+        { kind: 'source', params: ['DRIVE_Revenues'] },
+        { kind: 'filter_eq', params: ['Year', '2026'] },
+        { kind: 'filter_eq', params: ['Phase', 'ACTUALS'] },
+      ],
+      drillColumns: [],
+      resultBlock,
+    },
+  }
+}
+
 // Conversational answer with NO SQL at all (small talk / capability question): the
 // real orchestrator answers such turns directly, stores no generated_sql, and
 // /evidence/meta then degrades to { available:false, reason:'no_sql' }. Exercises the
@@ -378,5 +460,6 @@ export function pickScenario(message, exchangeId) {
   const m = String(message || '').toLowerCase()
   if (/\b(bonjour|hello|salut|merci|aide|help|qui es[- ]tu)\b/.test(m)) return buildChatterScenario(exchangeId)
   if (m.includes('kpi') || m.includes('total')) return buildKpiScenario(exchangeId)
+  if (/(détail|detail|liste|lignes)/.test(m)) return buildDetailScenario(exchangeId)
   return buildRevenueScenario(exchangeId)
 }

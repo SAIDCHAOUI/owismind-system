@@ -6,7 +6,6 @@ import assert from 'node:assert/strict'
 import {
   trustLevel,
   calcStepArgs,
-  resultPreview,
   droppedNote,
   EXPLANATION_KINDS,
   MAX_CALC_STEPS,
@@ -149,54 +148,6 @@ test('calcStepArgs: an exactly-80-chars param is kept untouched', () => {
 test('calcStepArgs: non-string params are stringified, null becomes empty', () => {
   const { args } = calcStepArgs({ kind: 'topn', params: [10, 'total', null] })
   assert.deepEqual(args, ['10', 'total', ''])
-})
-
-// ---------------------------------------------------------------------------
-// resultPreview — bounded mini-table projection
-// ---------------------------------------------------------------------------
-
-test('resultPreview: caps at 10 rows by default and counts the remainder', () => {
-  const rows = Array.from({ length: 12 }, (_, i) => [i])
-  const out = resultPreview({ captured: true, columns: ['n'], rows })
-  assert.equal(out.rows.length, 10)
-  assert.equal(out.more, 2)
-  assert.deepEqual(out.columns, ['n'])
-  assert.deepEqual(out.rows[0], [0])
-})
-
-test('resultPreview: fewer rows than the cap means no remainder', () => {
-  const out = resultPreview({ columns: ['a', 'b'], rows: [[1, 2], [3, 4]] })
-  assert.equal(out.rows.length, 2)
-  assert.equal(out.more, 0)
-})
-
-test('resultPreview: honors a custom maxRows and rejects a bogus one', () => {
-  const rows = [[1], [2], [3]]
-  assert.equal(resultPreview({ columns: ['x'], rows }, 2).rows.length, 2)
-  assert.equal(resultPreview({ columns: ['x'], rows }, 2).more, 1)
-  // Bogus caps (0, negative, non-integer) fall back to the default 10.
-  assert.equal(resultPreview({ columns: ['x'], rows }, 0).rows.length, 3)
-  assert.equal(resultPreview({ columns: ['x'], rows }, -5).rows.length, 3)
-})
-
-test('resultPreview: absent/malformed result yields the empty preview', () => {
-  const empty = { columns: [], rows: [], more: 0 }
-  assert.deepEqual(resultPreview(null), empty)
-  assert.deepEqual(resultPreview({}), empty)
-  assert.deepEqual(resultPreview({ columns: ['a'], rows: 'oops' }), empty)
-})
-
-test('resultPreview: non-list rows are dropped, columns are stringified', () => {
-  const out = resultPreview({ columns: ['a', 2], rows: [[1], 'bad', null, [2]] })
-  assert.deepEqual(out.rows, [[1], [2]])
-  assert.deepEqual(out.columns, ['a', '2'])
-  assert.equal(out.more, 0)
-})
-
-test('resultPreview: cell values are kept untouched (null stays null)', () => {
-  const out = resultPreview({ columns: ['a'], rows: [[null], [1.5]] })
-  assert.equal(out.rows[0][0], null)
-  assert.equal(out.rows[1][0], 1.5)
 })
 
 // ---------------------------------------------------------------------------

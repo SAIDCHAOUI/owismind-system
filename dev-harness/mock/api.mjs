@@ -169,7 +169,7 @@ function adminStorage() {
 function lightSqlItems(sqlItems) {
   // The conversation readback keeps SQL items LIGHT (no captured rows) - the
   // captures come back through /evidence/meta, mirroring the real payloads.
-  return (sqlItems || []).map(({ result, ...rest }) => rest)
+  return (sqlItems || []).map(({ result, fullResult, ...rest }) => rest)
 }
 
 function persistExchange(sessionId, exchangeId, userText, agentKey, mode, scenario, createdAt) {
@@ -253,7 +253,7 @@ function evidenceMetaFor(exchangeId) {
         columns: item.result.columns,
         rows: item.result.rows,
         row_count: item.row_count,
-        truncated: false,
+        truncated: !!item.result.truncated,
       }
     }
   }
@@ -450,6 +450,27 @@ function handleSourceRoute(pathname, body, query) {
 function handleEvidenceRoute(pathname, body) {
   const entry = EXCHANGES.get(body.exchange_id)
   if (!entry) return { httpStatus: 404, payload: { status: 'error', error: 'exchange_not_found' } }
+  if (pathname.endsWith('/result-rows')) {
+    // Mirror of evidence_result_rows: page the FULL result of the stored item (the
+    // real backend re-runs the agent's SELECT); total only on offset 0.
+    const items = entry.sqlItems || []
+    const item = body.sql_id
+      ? items.find((it) => it.sql_id === body.sql_id)
+      : [...items].reverse().find((it) => it.success && it.result)
+    if (!item) return { httpStatus: 409, payload: { status: 'error', error: 'result_not_found' } }
+    const full = item.fullResult || item.result
+    const limit = Math.max(1, Math.min(100, Number(body.limit) || 50))
+    const offset = Math.max(0, Math.min(500, Number(body.offset) || 0))
+    const rows = full.rows.slice(offset, offset + limit)
+    return {
+      httpStatus: 200,
+      payload: {
+        status: 'ok', columns: full.columns, rows, offset,
+        has_more: offset + limit < full.rows.length,
+        total: offset === 0 ? full.rows.length : null,
+      },
+    }
+  }
   if (pathname.endsWith('/rows')) {
     let rows = evidenceBaseRows(entry, body)
     rows = sortRows(rows, body.sort)

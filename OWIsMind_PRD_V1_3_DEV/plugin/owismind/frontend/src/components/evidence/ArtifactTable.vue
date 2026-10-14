@@ -1,12 +1,16 @@
 <script setup>
-// ArtifactTable.vue - full captured result table for Evidence Studio artifact tab.
-// Renders meta.result.columns / rows as a scrollable table - the complete data the
-// agent received, not the filtered EvidenceTable (which re-queries the source).
+// ArtifactTable.vue - the agent's result table for the Evidence Studio Table tab.
+// Shows the result the agent's SQL returned. The agents only keep a short excerpt of it,
+// so when that excerpt may hide rows the FULL result is paged in from the backend
+// (useResultRows): a first window of 100 rows, then more on scroll, with an honest
+// "Showing N of T rows" count. A complete small result is shown as captured (no request).
 // Cell styling deliberately mirrors EvidenceResult.vue's conventions.
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { inferNumericColumns, formatCell } from '../../composables/cellFormat.js'
 import { formatStatNumber } from '../../composables/sourceModel.js'
+import { resultCountLabel } from '../../composables/resultRows.js'
+import { useResultRows } from '../../composables/useResultRows.js'
 import { useScrollHints } from '../../composables/useScrollHints.js'
 import ScrollHints from '../sources/ScrollHints.vue'
 
@@ -15,6 +19,9 @@ const { t, locale } = useI18n()
 const props = defineProps({
   // meta.result: { captured, columns, rows, row_count, truncated }
   result: { type: Object, default: null },
+  // Exchange + optional artifact sql_id: which stored query the full result re-reads.
+  exchangeId: { type: String, default: '' },
+  sqlId: { type: String, default: '' },
   // Agent-provided title (what the table IS), shown as the header line.
   title: { type: String, default: '' },
   // Agent-provided one-sentence caption (what the table shows), above it.
@@ -22,16 +29,27 @@ const props = defineProps({
 })
 
 const captured = computed(() => !!(props.result && props.result.captured))
-const columns = computed(() => (props.result && Array.isArray(props.result.columns) ? props.result.columns : []))
-const rows = computed(() => (props.result && Array.isArray(props.result.rows) ? props.result.rows : []))
-const rowCount = computed(() => {
-  const rc = props.result && props.result.row_count
-  if (typeof rc === 'number' && Number.isFinite(rc) && rc >= 0) return rc
-  return rows.value.length
-})
-const truncated = computed(() => !!(props.result && props.result.truncated))
+const { rows, columns, total, live, hasMore, loading, partial, loadMore } = useResultRows(() => ({
+  exchangeId: props.exchangeId,
+  sqlId: props.sqlId,
+  result: props.result,
+}))
 
-// Per-column numeric-ness (inferred from the captured values): numeric columns are
+// Count line: never a total we do not know (resultRows.resultCountLabel).
+const countLine = computed(() => {
+  const rc = props.result && props.result.row_count
+  const known = live.value ? total.value : (typeof rc === 'number' ? rc : null)
+  const label = resultCountLabel({
+    shown: rows.value.length,
+    total: known,
+    live: live.value,
+    hasMore: hasMore.value,
+    partial: partial.value,
+  })
+  return t(label.key, label.args.map((n) => formatStatNumber(n, locale.value)))
+})
+
+// Per-column numeric-ness (inferred from the shown values): numeric columns are
 // right-aligned with tabular digits and locale-formatted for human reading.
 const numericCols = computed(() => inferNumericColumns(columns.value, rows.value))
 
@@ -52,6 +70,29 @@ function rawTitle(row, j) {
 const scrollEl = ref(null)
 const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown } =
   useScrollHints(scrollEl)
+
+// Infinite scroll (same pattern as the Source Data table): a sentinel below the last row,
+// observed inside the table's OWN scroll box, asks for the next window.
+const sentinelEl = ref(null)
+let observer = null
+function teardownObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+}
+watch(sentinelEl, (el) => {
+  teardownObserver()
+  if (!el || !scrollEl.value || typeof IntersectionObserver !== 'function') return
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore()
+    },
+    { root: scrollEl.value, rootMargin: '200px 0px', threshold: 0 },
+  )
+  observer.observe(el)
+})
+onBeforeUnmount(teardownObserver)
 </script>
 
 <template>
@@ -86,6 +127,10 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
               </tr>
             </tbody>
           </table>
+          <!-- Infinite-scroll sentinel: present only while the full result has more. -->
+          <div v-if="live && hasMore" ref="sentinelEl" class="art-sentinel" aria-hidden="true">
+            <span v-if="loading">{{ t('ev.table.loadingMore') }}</span>
+          </div>
         </div>
         <ScrollHints
           :can-left="canLeft"
@@ -98,13 +143,14 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
         />
       </div>
 
-      <!-- Context line: volume of the data on screen (rows AND columns), plus the
-           truncation caveat when the capture is partial - numbers with context. -->
+      <!-- Context line: how many rows are on screen OUT OF how many the answer has
+           (rows AND columns), plus the scroll hint while more rows remain. -->
       <div class="art-table-info">
-        <span>{{ t('ev.proof.result.rows', [formatStatNumber(rowCount, locale)]) }}</span>
+        <span v-if="loading && !live">{{ t('ev.table.loadingMore') }}</span>
+        <span v-else :class="{ 'art-trunc': partial }">{{ countLine }}</span>
         <span aria-hidden="true">·</span>
         <span>{{ t('art.table.cols', [columns.length]) }}</span>
-        <span v-if="truncated" class="art-trunc">{{ t('art.table.truncated') }}</span>
+        <span v-if="live && hasMore">{{ t('ev.table.more') }}</span>
       </div>
     </template>
   </div>
@@ -201,6 +247,17 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--text-3);
   text-align: center;
   padding: var(--s-5) !important;
+}
+
+/* Infinite-scroll sentinel: a thin band below the rows (Source Data pattern). */
+.art-sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .art-table-info {

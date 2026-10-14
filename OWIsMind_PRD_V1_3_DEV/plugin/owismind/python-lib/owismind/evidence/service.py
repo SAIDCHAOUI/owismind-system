@@ -42,13 +42,19 @@ from owismind.evidence.query_builders import (
     build_aggregate_query,
     build_distinct_query,
     build_exchange_sql_query,
+    build_result_count_query,
+    build_result_page_query,
     build_rows_query,
     render_predicate,
 )
 from owismind.evidence.source_search import build_search_condition
 from owismind.evidence.whitelist import match_whitelist
 from owismind.storage.migrations import CHAT_V5_LOGICAL
-from owismind.storage.serialization import parse_json_list, rows_to_json_safe
+from owismind.storage.serialization import (
+    frame_to_json_safe_matrix,
+    parse_json_list,
+    rows_to_json_safe,
+)
 from owismind.storage.sql_config import (
     PROJECT_KEY,
     bool_literal,
@@ -1168,6 +1174,97 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
         min(len(rows), limit),
     )
     return {"rows": rows[:limit], "has_more": has_more, "offset": offset}
+
+
+# Cell bound for re-run result pages (mirror of capture.MAX_CELL_CHARS: the same
+# result surface, so the same display bound).
+_RESULT_CELL_CHARS = 256
+
+
+def pick_result_item(items, active_item, sql_id):
+    """The stored item whose result a table shows. Pure.
+
+    With a ``sql_id`` (artifact bound to one specialist query) the UNIQUE item
+    carrying it; an absent or ambiguous id yields None (never another query's rows).
+    Without one, the exchange's active item (the one /evidence/meta proves).
+    """
+    if sql_id:
+        hits = [it for it in items or []
+                if isinstance(it, dict) and it.get("sql_id") == sql_id]
+        return hits[0] if len(hits) == 1 else None
+    return active_item
+
+
+def evidence_result_rows(user_id, exchange_id, sql_id, limit, offset):
+    """One bounded window of the agent's FULL result, plus its exact total. Read-only.
+
+    The agents keep only a short excerpt of each result (the captured rows), so a
+    table showing that excerpt alone would hide how many rows the answer really has.
+    This re-runs the agent's OWN stored SELECT (owner-scoped, never client SQL) as a
+    sub-query under ``LIMIT/OFFSET`` on the matched dataset's connection, inside the
+    usual read-only transaction with a 30 s statement timeout. The statement must pass
+    ``sql_parse.check_rerunnable_select`` and EVERY relation it reads must resolve to
+    a discovered project dataset - otherwise 'result_not_rerunnable' (the frontend
+    then keeps the captured excerpt with an honest caveat).
+
+    ``total`` is computed on the FIRST window only (offset 0): free when the window
+    already holds everything, one bounded ``COUNT(*)`` over the same sub-query
+    otherwise; a failed count degrades to ``None`` (the rows are still returned).
+    """
+    item, items, _active_index = _load_sql_item(user_id, exchange_id)
+    item = pick_result_item(items, item, sql_id)
+    if item is None or not item.get("success"):
+        raise EvidenceError("result_not_found")
+    gate = sql_parse.check_rerunnable_select(item.get("sql"))
+    if not gate["ok"]:
+        logger.info("evidence_result_rows - not rerunnable (%s) exchange_id=%s",
+                    gate["reason"], exchange_id)
+        raise EvidenceError("result_not_rerunnable")
+    candidates = _dataset_candidates()
+    dataset = None
+    for ref in gate["tables"]:
+        match = match_whitelist(ref["table"], ref["schema"], candidates)
+        if match is None:
+            logger.info("evidence_result_rows - relation %s.%s is not a project dataset",
+                        ref["schema"], ref["table"])
+            raise EvidenceError("result_not_rerunnable")
+        if dataset is None:
+            dataset = match["name"]
+
+    executor = _evidence_executor(dataset)
+    try:
+        df = executor.query_to_df(
+            build_result_page_query(gate["sql"], limit + 1, offset),
+            pre_queries=list(_EVIDENCE_TIMEOUT_PRE_QUERIES),
+        )
+    except Exception:
+        logger.exception("evidence_result_rows - query failed (dataset=%s)", dataset)
+        raise EvidenceError("query_failed")
+    columns, rows = frame_to_json_safe_matrix(df, _RESULT_CELL_CHARS)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    total = None
+    if offset == 0:
+        if not has_more:
+            total = len(rows)
+        else:
+            try:
+                cdf = _evidence_executor(dataset).query_to_df(
+                    build_result_count_query(gate["sql"]),
+                    pre_queries=list(_EVIDENCE_TIMEOUT_PRE_QUERIES),
+                )
+                total = int(cdf.iloc[0, 0])
+            except Exception:
+                logger.exception("evidence_result_rows - count failed (dataset=%s)", dataset)
+                total = None
+    logger.info(
+        "evidence_result_rows - user_id=%s exchange_id=%s dataset=%s sql_id=%s "
+        "limit=%d offset=%d returned=%d total=%s",
+        user_id, exchange_id, dataset, sql_id, limit, offset, len(rows), total,
+    )
+    return {"columns": columns, "rows": rows, "has_more": has_more,
+            "offset": offset, "total": total}
 
 
 def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None,
