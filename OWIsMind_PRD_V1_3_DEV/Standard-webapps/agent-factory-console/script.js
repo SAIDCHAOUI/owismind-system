@@ -2159,7 +2159,7 @@
   }
 
   /* Keep the ticked changes (the server checks them), then save right away. */
-  function saveReview() {
+  function saveReview(ack) {
     var g = S.guided;
     var r = g.review;
     var run = g.run || {};
@@ -2172,8 +2172,16 @@
     (info.changes || []).forEach(function (c) {
       if (r.keep[c.id] && r.edits[c.id] !== undefined && r.edits[c.id] !== c.edit) { edits[c.id] = r.edits[c.id]; }
     });
-    callApi("POST", "review/keep", { confirm: true, run_id: run.run_id, keep: keep, edits: edits }).then(function (res) {
+    callApi("POST", "review/keep", { confirm: true, run_id: run.run_id, keep: keep, edits: edits,
+                                     acknowledge_risks: ack === true }).then(function (res) {
       r.saving = false;
+      if (res.data && res.data.error === "suspicious_content" && ack !== true) {
+        renderRun();
+        openConfirm({ title: "Suspicious content: save anyway?", danger: true,
+          bodyHtml: findingsBlock(res.data.findings) + "<p>A change you kept (or edited) looks like a prompt injection. Save only if you checked it.</p>",
+          confirmLabel: "I read it, save anyway", onConfirm: function () { saveReview(true); } });
+        return;
+      }
       if (!res.data || res.data.status !== "ok" || !res.data.run) {
         r.error = "Not saved: " + guidedErrorText(res.data);
         renderRun();
@@ -3017,17 +3025,27 @@
       title: "Save the routing description?",
       bodyHtml: "<p>capabilities.json is updated (the previous file is backed up). The orchestrator reads it when it starts.</p>",
       confirmLabel: "Save",
-      onConfirm: function () {
-        callApi("POST", "capability/description", { confirm: true, capability_key: a.key, description: a.draft.description }).then(function (r) {
-          if (r.data && r.data.status === "ok") {
-            a.notice = "Description saved.";
-            a.loadedKey = null;
-            S.overview.loaded = false;
-            renderAgent();
-          } else {
-            toast("Save refused: " + guidedErrorText(r.data));
-          }
-        });
+      onConfirm: function () { saveDescription(false); }
+    });
+  }
+
+  function saveDescription(ack) {
+    var a = S.agent;
+    callApi("POST", "capability/description", { confirm: true, capability_key: a.key, description: a.draft.description,
+                                                acknowledge_risks: !!ack }).then(function (r) {
+      if (r.data && r.data.error === "suspicious_content" && !ack) {
+        openConfirm({ title: "Suspicious content: save anyway?", danger: true,
+          bodyHtml: findingsBlock(r.data.findings) + "<p>The orchestrator reads this text on every question. Save it only if you wrote it on purpose.</p>",
+          confirmLabel: "I read it, save anyway", onConfirm: function () { saveDescription(true); } });
+        return;
+      }
+      if (r.data && r.data.status === "ok") {
+        a.notice = "Description saved.";
+        a.loadedKey = null;
+        S.overview.loaded = false;
+        renderAgent();
+      } else {
+        toast("Save refused: " + guidedErrorText(r.data));
       }
     });
   }

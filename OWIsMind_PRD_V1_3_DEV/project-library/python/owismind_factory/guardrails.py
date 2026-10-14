@@ -136,7 +136,7 @@ def fence(name, body):
     return '<%s name="%s">\n%s\n</%s>' % (FENCE_TAG, name, defang(body), FENCE_TAG)
 
 
-def scan(text, max_findings=20):
+def _scan(text, max_findings=20):
     """Findings for ``text``: [{severity, rule, why, line, excerpt}] (empty = clean).
 
     Two passes: the RAW text (exact line numbers) then the NORMALIZED text, which
@@ -159,9 +159,21 @@ def scan(text, max_findings=20):
                 findings.append({"severity": sev, "rule": name, "why": why, "line": line,
                                  "excerpt": match.group(0).strip()[:120]})
                 seen.add(name)
-                if len(findings) >= max_findings:
+                if len(findings) >= max_findings * 5:
                     return findings
     return findings
+
+
+def scan(text, max_findings=20):
+    """Public entry. Highs are listed first and never truncated away by volume;
+    any scanner failure is FAIL-CLOSED (reported as a high finding, never as clean)."""
+    try:
+        findings = _scan(text, max_findings)
+    except Exception:
+        return [{"severity": "high", "rule": "scanner_error", "line": 0, "excerpt": "",
+                 "why": "The safety scan failed: treat this text as suspicious"}]
+    findings.sort(key=lambda f: 0 if f["severity"] == "high" else 1)
+    return findings[:max_findings]
 
 
 def has_high(findings):
@@ -192,5 +204,11 @@ def scan_config(config):
             texts += [item.get("term")] + list(item.get("synonyms") or [])
     for item in config.get("golden_queries") or []:
         if isinstance(item, dict):
-            texts += [item.get("question")]
+            texts += [item.get("question"), item.get("sql")]
+    for item in config.get("profile_overrides") or []:
+        if isinstance(item, dict):
+            texts += [item.get("key"), item.get("field"), item.get("value")]
+    for item in config.get("questions") or config.get("clarifying_questions") or []:
+        if isinstance(item, dict):
+            texts += [item.get("question"), item.get("why"), item.get("default")]
     return scan("\n".join(str(t) for t in texts if t))

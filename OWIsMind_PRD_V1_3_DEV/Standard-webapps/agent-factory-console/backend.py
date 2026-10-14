@@ -502,6 +502,10 @@ def api_hub_capabilities_post():
     problems = hub.validate_capabilities(caps)
     if problems:
         return _err("invalid_capabilities", 400, {"problems": problems})
+    findings = guardrails.scan("\n".join(str((c or {}).get("planner_description") or "")
+                                         for c in caps.values() if isinstance(c, dict)))
+    if guardrails.has_high(findings) and body.get("acknowledge_risks") is not True:
+        return _err("suspicious_content", 400, {"findings": findings})
     hub.write_capabilities(_project(), caps)
     return jsonify({"status": "ok"})
 
@@ -635,6 +639,11 @@ def api_capability_description():
     key = str(body.get("capability_key") or "").strip()
     if not key:
         return _err("capability_key_required", 400)
+    # The routing text is injected in the orchestrator prompt on EVERY turn: same
+    # injection gate as the prompts (explicit acknowledgement after reading).
+    findings = guardrails.scan(str(body.get("description") or ""))
+    if guardrails.has_high(findings) and body.get("acknowledge_risks") is not True:
+        return _err("suspicious_content", 400, {"findings": findings})
     try:
         agent_settings.set_planner_description(_project(), key, body.get("description"))
     except KeyError:
@@ -957,7 +966,17 @@ def api_review_keep():
     edits = body.get("edits") if isinstance(body.get("edits"), dict) else {}
     edits = dict((str(k)[:300], v) for k, v in list(edits.items())[:500]
                  if isinstance(v, str) and str(k) in set(str(x) for x in keep))
+    # A kept change the scanner flagged as injection-shaped needs the same explicit
+    # acknowledgement as a flagged edit (the human may keep it, knowingly).
+    kept_ids = set(str(k) for k in keep)
+    flagged = [f for c in info.get("changes") or [] if c.get("id") in kept_ids
+               for f in (c.get("flags") or []) if f.get("severity") == "high"]
+    if flagged and body.get("acknowledge_risks") is not True:
+        return _err("suspicious_content", 400, {"findings": flagged})
     if edits:
+        edit_findings = guardrails.scan("\n".join(edits.values()))
+        if guardrails.has_high(edit_findings) and body.get("acknowledge_risks") is not True:
+            return _err("suspicious_content", 400, {"findings": edit_findings})
         try:
             info["proposal"], info["changes"] = review.apply_edits(
                 info.get("proposal"), info.get("changes"), edits)
