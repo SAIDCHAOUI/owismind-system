@@ -16,6 +16,7 @@ qui embarque le contenu de ce dossier. Ce dossier repo est le miroir lisible des
 
 | Fichier | Pousse vers | Lu par |
 |---|---|---|
+| `models.json` | `/python/owismind_hub/models.json` | les 3 Code Agents (loader au demarrage) + factory (`get_settings`) : LLM par mode smart/pro/claude, central + surcharge par agent |
 | `capabilities.json` | `/python/owismind_hub/capabilities.json` | orchestrator (section 7b loader) |
 | `prompts/orchestrator_persona.md` | `/python/owismind_hub/prompts/orchestrator_persona.md` | orchestrator (PERSONA override) |
 | `factory_settings.json` | `/python/owismind_hub/factory_settings.json` | owismind_factory (reglages d'instance) |

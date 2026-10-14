@@ -8,11 +8,13 @@
  * Three screens, one idea each:
  *   - Overview : an org chart (orchestrator -> sub-agents) with Enable / Disable /
  *     Remove on each node, the "Add a sub-agent" button and a "Resume" banner.
- *   - Run : the server-persisted guided run, creation (13 stages) or removal
+ *   - Run : the server-persisted guided run, creation (14 stages) or removal
  *     (12 stages). Left column = the stage to act on (what the click does, the
  *     objects it creates / deletes, the button); right column = the sticky tracker.
- *   - Settings : the orchestrator persona prompt (editable) and the factory
- *     settings (read-only).
+ *   - Settings : the central LLM per mode (models.json) for all agents, the hub
+ *     prompt files (editable) and the factory settings (read-only).
+ *   - Agent settings (button on every node): that agent's LLM per mode, system
+ *     prompt layers, routing description and tools.
  *
  * Manual stages (the operator acts in DSS): the steps are written here, front-side,
  * as a numbered checklist; the "Done, check it" button stays disabled until every
@@ -50,7 +52,7 @@
   /* ============================ state ============================ */
 
   var S = {
-    view: "overview",          // overview | run | settings
+    view: "overview",          // overview | run | settings | agent
     theme: "light",
     overview: { loaded: false, loading: false, error: null, data: null, flash: null, notice: null },
     guided: {
@@ -64,6 +66,9 @@
       ticks: {}                // "<run_id>:<stage>" -> {stepIndex: true}
     },
     datasets: { loaded: false, loading: false, error: null, list: [] },
+    models: { loaded: false, loading: false, error: null, data: null, draft: null },
+    agent: { key: null, loadedKey: null, loading: false, error: null, data: null, draft: {}, notice: null,
+             ai: { running: false, error: null, instr: "", drafted: false } },
     prompts: {
       path: "/python/owismind_hub/prompts/orchestrator_persona.md",
       loading: false, loaded: false, content: "", saving: false, loadError: null
@@ -638,6 +643,18 @@
       },
       primary: "Register"
     },
+    business_prompt: {
+      title: "Write the business prompt", guarantee: "create",
+      sentence: function (c) {
+        return "The factory AI writes a first business prompt for " + mono(c.names.capability) +
+          " (vocabulary, rules, worked examples) from the dataset profile and the semantic model. " +
+          "If a prompt already exists it is kept. You review and improve it later in the agent Settings.";
+      },
+      objects: function (c) {
+        return [obj("Business prompt", "business_prompt.md", "hub: prompts/" + c.domain + "/ (only if absent)")];
+      },
+      primary: "Write the prompt"
+    },
     smoke: {
       title: "Test the sub-agent", guarantee: "verify",
       sentence: function () {
@@ -1087,7 +1104,8 @@
       '<p class="node-meta">' +
       (settings.orchestrator_agent_id ? 'Code Agent ' + mono(settings.orchestrator_agent_id) + ' · ' : "") +
       esc(keys.length) + ' sub-agent' + (keys.length > 1 ? "s" : "") + ', ' +
-      esc(active) + ' enabled</p></div></div>';
+      esc(active) + ' enabled</p></div>' +
+      '<div class="node-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-settings="' + ORCH_KEY + '">Settings</button></div></div>';
 
     if (!d.hub_ready) {
       html += '<div class="branches"><div class="branch"><div class="afc-note afc-note--warn branch-note">' +
@@ -1112,6 +1130,9 @@
     if (byId("ovAdd")) { byId("ovAdd").onclick = openAddScreen; }
     if (byId("ovResume")) { byId("ovResume").onclick = function () { go("run"); }; }
     if (byId("ovRefresh")) { byId("ovRefresh").onclick = function () { S.overview.loaded = false; loadOverview(); }; }
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-settings]"), function (btn) {
+      btn.onclick = function () { openAgentSettings(btn.getAttribute("data-cap-settings")); };
+    });
     Array.prototype.forEach.call(document.querySelectorAll("[data-cap-toggle]"), function (btn) {
       btn.onclick = function () { confirmCapabilityToggle(btn.getAttribute("data-cap-toggle")); };
     });
@@ -1140,6 +1161,7 @@
       '<div class="node-actions">' +
       '<button class="afc-btn afc-btn--primary afc-btn--sm" data-cap-review="' + esc(key) + '"' +
       (runActive ? " disabled" : "") + lockTitle + '>Improve</button>' +
+      '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-settings="' + esc(key) + '">Settings</button>' +
       '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-toggle="' + esc(key) + '">' +
       (on ? "Disable" : "Enable") + '</button>' +
       '<button class="afc-btn afc-btn--danger afc-btn--sm" data-cap-remove="' + esc(key) + '"' +
@@ -1681,6 +1703,10 @@
         '<li>Ask the same questions again.</li>' +
         '<li>Still not right? Come back and click <b>Improve</b> again.</li></ol></div>' +
         (applied.routing ? reloadBlock("Reload the orchestrator") : "") +
+        '<div class="nextstep"><p class="afc-mlabel">Same lesson for the agent prompt?</p>' +
+        '<p class="afc-field-help">This improvement changed how the data is described for the SQL. ' +
+        'The agent\'s own business prompt (how it understands questions) is separate: you can update it with the same feedback.</p>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="rvToPrompt">Update the business prompt too</button></div></div>' +
         '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdHome">Back to the overview</button></div>' +
         '</section>';
     }
@@ -1820,13 +1846,78 @@
    * for a business person: no technical vocabulary. */
 
   var REVIEW_ACTION = { added: "New", changed: "Changed", removed: "Removed" };
+  var REVIEW_AREA = { entity: "row description", column: "column meaning", search: "value recognition",
+    metric: "calculation", filter: "ready-made filter", term: "word list", example: "example question",
+    rules: "general rules", routing: "routing text" };
+
+  /* Word-level diff (LCS) as safe HTML: removed words struck, added words highlighted.
+   * Returns null when the texts are too long to diff cheaply (caller shows both sides). */
+  function wordDiff(before, after) {
+    var a = String(before || "").split(/(\s+)/).filter(function (t) { return t !== ""; });
+    var b = String(after || "").split(/(\s+)/).filter(function (t) { return t !== ""; });
+    if (a.length > 1600 || b.length > 1600) { return null; }
+    var n = a.length, m = b.length, i, j;
+    var dp = [];
+    for (i = 0; i <= n; i++) { dp.push(new Array(m + 1).fill(0)); }
+    for (i = n - 1; i >= 0; i--) {
+      for (j = m - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    var out = [];
+    i = 0; j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { out.push(esc(a[i])); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push('<del class="df-del">' + esc(a[i]) + '</del>'); i++; }
+      else { out.push('<ins class="df-add">' + esc(b[j]) + '</ins>'); j++; }
+    }
+    while (i < n) { out.push('<del class="df-del">' + esc(a[i++]) + '</del>'); }
+    while (j < m) { out.push('<ins class="df-add">' + esc(b[j++]) + '</ins>'); }
+    return out.join("").replace(/<\/(del|ins)>(\s+)<(del|ins) class="df-(del|add)">/g, function (all, c1, sp, c2, k) {
+      return (c1 === c2) ? sp : all;
+    });
+  }
+
+  /* The text shown on the "after" side, following the operator's own rewrite. */
+  function reviewAfterText(c, r) {
+    var v = r.edits[c.id];
+    if (v === undefined) { return c.after; }
+    if (c.area === "metric" || c.area === "filter") {
+      var k = String(c.after || "").indexOf("\nComputed as:");
+      return v + (k >= 0 ? String(c.after).slice(k) : "");
+    }
+    return v;
+  }
+
+  function reviewDiffBlock(c, r) {
+    var after = reviewAfterText(c, r);
+    if (c.action === "added") {
+      return '<div class="rv-diff"><ins class="df-add">' + esc(after) + '</ins></div>';
+    }
+    if (c.action === "removed") {
+      return '<div class="rv-diff"><del class="df-del">' + esc(c.before) + '</del></div>';
+    }
+    var html = wordDiff(c.before, after);
+    if (html === null) {
+      return '<div class="rv-compare">' + reviewTextBlock("Today", c.before) + reviewTextBlock("After", after) + '</div>';
+    }
+    return '<div class="rv-diff">' + html + '</div>';
+  }
+
+  function reviewSummary(changes) {
+    var counts = {};
+    changes.forEach(function (c) { counts[c.area] = (counts[c.area] || 0) + 1; });
+    return Object.keys(counts).map(function (a) {
+      return counts[a] + " " + (REVIEW_AREA[a] || a) + (counts[a] > 1 && a !== "rules" ? "s" : "");
+    }).join(", ");
+  }
 
   function syncReviewUi(run) {
     var info = run.state.review || {};
     var r = S.guided.review;
     var proposalId = info.proposal ? JSON.stringify(info.changes || []).length + ":" + (info.changes || []).length : "";
     if (!r) {
-      r = S.guided.review = { wrong: "", know: "", answers: {}, keep: {}, proposalId: "",
+      r = S.guided.review = { wrong: "", know: "", answers: {}, keep: {}, edits: {}, editOpen: {}, proposalId: "",
                               editing: false, running: false, saving: false, error: null, reqId: 0 };
       r.wrong = (info.feedback && info.feedback.wrong) || "";
       r.know = (info.feedback && info.feedback.know) || "";
@@ -1835,6 +1926,8 @@
       // A new proposal: every change starts kept, the questions start on their suggestion.
       r.proposalId = proposalId;
       r.keep = {};
+      r.edits = {};
+      r.editOpen = {};
       (info.keep || []).forEach(function (id) { r.keep[id] = true; });
       r.answers = {};
       (info.questions || []).forEach(function (q) { r.answers[q.id] = q["default"] || ""; });
@@ -1897,7 +1990,9 @@
         'give the exact question you asked and the answer you expected.</div>';
     } else {
       html += '<div class="stage-block"><p class="stage-sentence">The AI proposes <b>' + esc(changes.length) + ' change' +
-        (changes.length > 1 ? "s" : "") + '</b>. They are all ticked. <b>Untick the ones that are wrong</b>, then save.</p></div>';
+        (changes.length > 1 ? "s" : "") + '</b>: ' + esc(reviewSummary(changes)) + '. ' +
+        '<b>Struck words</b> are removed, <b>highlighted words</b> are added. Untick what is wrong, ' +
+        '<b>edit any text you want to word differently</b>, then save. You have the last word.</p></div>';
     }
     if (questions.length) {
       html += '<div class="rv-questions"><p class="afc-mlabel">The AI has a question' + (questions.length > 1 ? "s" : "") + ' for you</p>';
@@ -1913,16 +2008,26 @@
     if (changes.length) {
       html += '<ul class="rv-changes">' + changes.map(function (c) {
         var on = !!r.keep[c.id];
+        var canEdit = c.edit !== null && c.edit !== undefined && c.action !== "removed";
+        var changedByMe = r.edits[c.id] !== undefined && r.edits[c.id] !== c.edit;
+        var editing = !!r.editOpen[c.id];
         return '<li class="rv-change' + (on ? "" : " rv-change--off") + '">' +
           '<button class="check-box" data-keep="' + esc(c.id) + '" aria-pressed="' + (on ? "true" : "false") +
           '" title="' + (on ? "Kept: click to ignore" : "Ignored: click to keep") + '">' + I.check + '</button>' +
           '<div class="rv-body"><div class="rv-head"><p class="rv-title">' + esc(c.label) + '</p>' +
-          '<span class="afc-chip">' + esc(REVIEW_ACTION[c.action] || c.action) + '</span></div>' +
+          '<span>' + (changedByMe ? '<span class="afc-chip afc-chip--manual">Edited by you</span> ' : "") +
+          '<span class="afc-chip">' + esc(REVIEW_ACTION[c.action] || c.action) + '</span></span></div>' +
           (c.why ? '<p class="rv-why">' + esc(c.why) + '</p>' : "") +
-          '<div class="rv-compare">' +
-          (c.action === "added" ? "" : reviewTextBlock("Today", c.before)) +
-          (c.action === "removed" ? "" : reviewTextBlock(c.action === "added" ? "Added" : "After", c.after)) +
-          '</div></div></li>';
+          reviewDiffBlock(c, r) +
+          (editing
+            ? '<label class="rv-field"><span class="rv-help">Your wording replaces the AI text when you save.</span>' +
+              '<textarea class="afc-textarea rv-edit" data-edit="' + esc(c.id) + '">' +
+              esc(r.edits[c.id] !== undefined ? r.edits[c.id] : c.edit) + '</textarea></label>' +
+              '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" data-edit-done="' + esc(c.id) + '">Done</button>' +
+              '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-edit-reset="' + esc(c.id) + '">Back to the AI text</button></div>'
+            : (canEdit ? '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" data-edit-open="' + esc(c.id) + '">Edit the text</button></div>'
+                       : '<p class="afc-field-help">Keep or ignore only.</p>')) +
+          '</div></li>';
       }).join("") + '</ul>';
     }
     html += '<div class="stage-cta">' +
@@ -1959,6 +2064,22 @@
     Array.prototype.forEach.call(document.querySelectorAll(".rv-answer"), function (elm) {
       elm.oninput = function () { r.answers[elm.getAttribute("data-qid")] = elm.value; };
     });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-edit-open]"), function (b) {
+      b.onclick = function () { r.editOpen[b.getAttribute("data-edit-open")] = true; renderRun(); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-edit-done]"), function (b) {
+      b.onclick = function () { r.editOpen[b.getAttribute("data-edit-done")] = false; renderRun(); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-edit-reset]"), function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute("data-edit-reset");
+        delete r.edits[id]; r.editOpen[id] = false; renderRun();
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-edit]"), function (t) {
+      t.oninput = function () { r.edits[t.getAttribute("data-edit")] = t.value; };
+    });
+    if (byId("rvToPrompt")) { byId("rvToPrompt").onclick = reviewToBusinessPrompt; }
     Array.prototype.forEach.call(document.querySelectorAll("[data-keep]"), function (b) {
       b.onclick = function () {
         var id = b.getAttribute("data-keep");
@@ -1966,6 +2087,20 @@
         renderRun();
       };
     });
+  }
+
+  /* After an Improve: open the agent Settings with the same feedback as AI instructions. */
+  function reviewToBusinessPrompt() {
+    var run = S.guided.run || {};
+    var info = (run.state && run.state.review) || {};
+    var fb = info.feedback || {};
+    var text = [];
+    if (fb.wrong) { text.push("What the agent got wrong:\n" + fb.wrong); }
+    if (fb.know) { text.push("What it must know about this data:\n" + fb.know); }
+    var key = info.capability_key;
+    if (!key) { return; }
+    openAgentSettings(key);
+    S.agent.ai.instr = text.join("\n\n");
   }
 
   function proposeReview(withAnswers) {
@@ -2032,7 +2167,11 @@
     r.saving = true;
     r.error = null;
     renderRun();
-    callApi("POST", "review/keep", { confirm: true, run_id: run.run_id, keep: keep }).then(function (res) {
+    var edits = {};
+    (info.changes || []).forEach(function (c) {
+      if (r.keep[c.id] && r.edits[c.id] !== undefined && r.edits[c.id] !== c.edit) { edits[c.id] = r.edits[c.id]; }
+    });
+    callApi("POST", "review/keep", { confirm: true, run_id: run.run_id, keep: keep, edits: edits }).then(function (res) {
       r.saving = false;
       if (!res.data || res.data.status !== "ok" || !res.data.run) {
         r.error = "Not saved: " + guidedErrorText(res.data);
@@ -2376,6 +2515,7 @@
         renderSettings();
       });
     }
+    if (!S.models.loaded && !S.models.loading && !S.models.error) { loadModels(renderSettings); }
     if (!S.prompts.loaded && !S.prompts.loading && !S.prompts.loadError) { loadPrompt(); return; }
 
     var pr = S.prompts;
@@ -2386,11 +2526,11 @@
     }).join("");
 
     setHeader({
-      back: true, eyebrow: "Settings", title: "Personality prompt",
-      sub: "The text that gives the orchestrator its tone and rules of conduct. It lives in the project library and is read when the orchestrator starts."
+      back: true, eyebrow: "Settings", title: "Models and prompts",
+      sub: "The LLM of every mode for all agents, then the prompt files of the hub. Each agent also has its own Settings button on the overview."
     });
     var html = backendBanner() +
-      '<div class="layout"><div class="layout-main">' +
+      '<div class="layout"><div class="layout-main">' + modelsCard() +
       '<section class="card">' +
       '<div class="afc-field"><span class="afc-field-label">File</span>' +
       '<select class="afc-select" id="prPath">' + options + '</select></div>';
@@ -2421,6 +2561,7 @@
       '</section></aside></div>';
     setMain(html);
     wireBack();
+    wireModelsCard();
     wireSettings();
   }
 
@@ -2482,6 +2623,384 @@
     });
   }
 
+  /* ============================ models + agent settings ============================ */
+
+  /* One central map (models.json in the hub) decides which LLM each mode uses; an
+   * agent can override a mode for itself. Resolution: own setting > central > built-in. */
+  var MODE_LABELS = { smart: "Smart", pro: "Pro", claude: "Claude" };
+  var MODES = ["smart", "pro", "claude"];
+  var ORCH_KEY = "orchestrator";
+  var SOURCE_CHIP = {
+    agent: '<span class="afc-chip afc-chip--manual">Own setting</span>',
+    mode: '<span class="afc-chip afc-chip--on">Central</span>',
+    embedded: '<span class="afc-chip afc-chip--off">Built-in</span>'
+  };
+
+  function llmDatalist(list) {
+    return '<datalist id="afcLlmList">' + (list || []).map(function (m) {
+      return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>';
+    }).join("") + '</datalist>';
+  }
+
+  function loadModels(cb) {
+    var m = S.models;
+    if (m.loading) { return; }
+    m.loading = true; m.error = null;
+    callApi("GET", "models").then(function (r) {
+      m.loading = false;
+      if (r.data && r.data.status === "ok") {
+        m.loaded = true; m.data = r.data;
+        m.draft = JSON.parse(JSON.stringify(r.data.models));
+      } else {
+        m.error = guidedErrorText(r.data);
+      }
+      if (cb) { cb(); }
+    });
+  }
+
+  function saveModels(models, done) {
+    callApi("POST", "models", { confirm: true, models: models }).then(function (r) {
+      if (r.data && r.data.status === "ok") {
+        toast("Models saved.");
+        S.models.loaded = false;
+        S.agent.loadedKey = null;
+        done(true);
+      } else {
+        var probs = (r.data && r.data.problems) ? " " + r.data.problems.join("; ") : "";
+        toast("Save refused: " + guidedErrorText(r.data) + probs);
+        done(false);
+      }
+    });
+  }
+
+  /* ---- central models card (Settings screen) ---- */
+
+  function modelsCard() {
+    var m = S.models;
+    if (m.error) { return '<section class="card"><div class="afc-note afc-note--error">Cannot read the models: ' + esc(m.error) + '</div></section>'; }
+    if (!m.loaded) { return '<section class="card"><p class="afc-muted">Loading the models...</p></section>'; }
+    var d = m.draft;
+    var html = '<section class="card"><p class="afc-mlabel">LLM per mode (all agents)</p>' +
+      '<p class="afc-field-help">The model every agent uses in each mode. An agent can override a mode in its own Settings. ' +
+      'Takes effect when an agent restarts.' +
+      (m.data.from_file ? "" : ' <b>models.json is not in the hub yet: the values below are the ids built into the agents. Saving creates the file.</b>') +
+      '</p>' + llmDatalist(m.data.available_llms);
+    MODES.forEach(function (mode) {
+      html += field(MODE_LABELS[mode],
+        '<input class="afc-input mono" list="afcLlmList" id="mdMode_' + mode + '" value="' + esc(d.modes[mode]) + '">');
+    });
+    html += '<p class="afc-mlabel tracker-sub">Agent factory</p>' +
+      field("Factory default model", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryDefault" value="' +
+        esc((d.factory || {}).default || "") + '">', "Used by the factory wizard, the Improve review and the prompt doctor.") +
+      field("Wizard model (optional)", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryWizard" value="' +
+        esc((d.factory || {}).wizard || "") + '">', "Empty = use the factory default model.");
+    var overrides = Object.keys(d.agents || {}).filter(function (k) { return Object.keys(d.agents[k] || {}).length; });
+    if (overrides.length) {
+      html += '<p class="afc-mlabel tracker-sub">Agents with their own setting</p><dl class="afc-kv">';
+      overrides.forEach(function (k) {
+        html += '<dt>' + esc(k) + '</dt><dd>' + Object.keys(d.agents[k]).map(function (mode) {
+          return esc(MODE_LABELS[mode]) + ': ' + esc(d.agents[k][mode]);
+        }).join("<br>") + '</dd>';
+      });
+      html += '</dl>';
+    }
+    html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="mdSave">' + I.save + 'Save the models</button></div></section>';
+    return html;
+  }
+
+  function wireModelsCard() {
+    var m = S.models;
+    if (!m.loaded || !byId("mdSave")) { return; }
+    MODES.forEach(function (mode) {
+      bindInput("mdMode_" + mode, function (v) { m.draft.modes[mode] = v.trim(); });
+    });
+    bindInput("mdFactoryDefault", function (v) { m.draft.factory.default = v.trim(); });
+    bindInput("mdFactoryWizard", function (v) { m.draft.factory.wizard = v.trim(); });
+    byId("mdSave").onclick = function () {
+      openConfirm({
+        title: "Save the central models?",
+        bodyHtml: "<p>models.json is written to the hub (the previous file is backed up). Each agent reads it when it starts: " +
+          "re-save the agent in DSS to apply it right away.</p>",
+        confirmLabel: "Save",
+        onConfirm: function () { saveModels(m.draft, function () { loadModels(renderSettings); }); }
+      });
+    };
+  }
+
+  /* ---- per-agent Settings screen ---- */
+
+  function openAgentSettings(key) {
+    S.agent.key = key;
+    S.agent.loadedKey = null;
+    S.agent.data = null;
+    S.agent.error = null;
+    S.agent.draft = {};
+    S.agent.ai = { running: false, error: null, instr: "", drafted: false };
+    go("agent");
+  }
+
+  function loadAgent() {
+    var a = S.agent;
+    if (a.loading || a.loadedKey === a.key) { return; }
+    a.loading = true; a.error = null;
+    var pending = 2;
+    function oneDone() { pending -= 1; if (pending === 0) { a.loading = false; renderAgent(); } }
+    callApi("GET", "agent/settings?key=" + encodeURIComponent(a.key)).then(function (r) {
+      if (r.data && r.data.status === "ok") {
+        a.data = r.data.settings; a.loadedKey = a.key;
+        a.draft = { models: {}, prompts: {}, description: null };
+        MODES.forEach(function (mode) { a.draft.models[mode] = (a.data.own_overrides || {})[mode] || ""; });
+        a.data.prompts.forEach(function (p) { a.draft.prompts[p.id] = p.content; });
+        a.draft.description = a.data.routing_description;
+      } else {
+        a.error = guidedErrorText(r.data);
+      }
+      oneDone();
+    });
+    S.models.loaded = false;
+    S.models.loading = false;
+    loadModels(oneDone);
+  }
+
+  function agentModelsSection(a) {
+    var d = a.data;
+    var html = '<section class="card"><p class="afc-mlabel">LLM used by this agent</p>' +
+      '<p class="afc-field-help">One model per mode. Leave a field empty to follow the central model of that mode ' +
+      '(Settings screen); fill it to give this agent its own.</p>' + llmDatalist(d.available_llms);
+    MODES.forEach(function (mode) {
+      var eff = d.models[mode] || {};
+      html += '<div class="afc-field"><span class="afc-field-label">' + esc(MODE_LABELS[mode]) + ' ' +
+        (SOURCE_CHIP[eff.source] || "") + '</span>' +
+        '<input class="afc-input mono" list="afcLlmList" id="agMode_' + mode + '" value="' + esc(a.draft.models[mode]) +
+        '" placeholder="' + esc((d.central_models || {})[mode] || eff.llm || "") + '">' +
+        '<p class="afc-field-help">Currently resolves to <span class="mono">' + esc(eff.llm || "-") + '</span></p></div>';
+    });
+    html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="agModelsSave">' + I.save + 'Save the LLMs</button></div></section>';
+    return html;
+  }
+
+  function agentPromptSection(a, p) {
+    var text = a.draft.prompts[p.id];
+    var tooShort = p.min && text.trim().length < p.min;
+    var ai = "";
+    if (p.ai) {
+      var has = text.trim().length > 0;
+      ai = '<div class="afc-field"><span class="afc-field-label">Ask the AI</span>' +
+        '<textarea class="afc-textarea" id="agAiInstr" spellcheck="false" placeholder="' +
+        (has ? "What to fix or add (e.g. the agent confuses X with Y; add the meaning of these acronyms...)"
+             : "Optional: what the AI must know (business definitions, terms users use, rules, traps...)") +
+        '"' + (a.ai.running ? " disabled" : "") + '>' + esc(a.ai.instr) + '</textarea>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="agAiGo"' + (a.ai.running ? " disabled" : "") + '>' +
+        I.play + (a.ai.running ? "Writing... (up to 2 minutes)" : (has ? "Improve with AI" : "Write with AI")) + '</button></div>' +
+        (a.ai.error ? '<div class="afc-note afc-note--error">' + esc(a.ai.error) + '</div>' : "") +
+        (a.ai.drafted ? '<div class="afc-note afc-note--warn">AI draft: read it, correct it, then click Save. Nothing is saved yet.</div>' : "") +
+        '<p class="afc-field-help">The AI sees the dataset profile, the semantic model, the column descriptions and a few masked sample rows. ' +
+        'It is told not to invent anything: unknown points are marked TO CONFIRM for you to fill in.</p></div>';
+    }
+    return '<section class="card"><p class="afc-mlabel">' + esc(p.label) + '</p>' +
+      '<p class="afc-field-help">' + esc(p.help) + '</p>' + ai +
+      (p.exists ? "" : '<div class="afc-note afc-note--warn">This file is not in the hub: the agent uses its built-in text. ' +
+        'Saving creates the file and it then replaces the built-in text.</div>') +
+      '<textarea class="afc-textarea code" id="agPrompt_' + esc(p.id) + '" spellcheck="false">' + esc(text) + '</textarea>' +
+      (p.ai && a.ai.drafted && p.content && p.content !== text
+        ? detailsBlock("agdiff_" + p.id, "What changed compared with the saved version",
+            (function () {
+              var d = wordDiff(p.content, text);
+              return d === null ? '<p class="afc-muted">Too long to compare word by word.</p>'
+                                : '<p class="afc-field-help">Struck words are removed, highlighted words are added. Edit the text above to change anything.</p><div class="rv-diff">' + d + '</div>';
+            })(), true)
+        : "") +
+      '<p class="afc-field-help mono">' + esc(p.path) + ' &middot; <span id="agCount_' + esc(p.id) + '">' + text.length + '</span> / ' + p.max + ' characters' +
+      (p.min ? ' (min ' + p.min + ')' : "") + '</p>' +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" data-ag-prompt="' + esc(p.id) + '"' +
+      (tooShort ? " disabled" : "") + '>' + I.save + 'Save this prompt</button></div></section>';
+  }
+
+  function agentDescriptionSection(a) {
+    var lim = a.data.description_limits;
+    return '<section class="card"><p class="afc-mlabel">Routing description</p>' +
+      '<p class="afc-field-help">What the orchestrator reads to decide when to send a question to this sub-agent. ' +
+      'Describe the domain precisely: it is the routing rule.</p>' +
+      '<textarea class="afc-textarea" id="agDescription" spellcheck="false">' + esc(a.draft.description || "") + '</textarea>' +
+      '<p class="afc-field-help">' + lim.min + ' to ' + lim.max + ' characters.</p>' +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="agDescSave">' + I.save + 'Save the description</button></div></section>';
+  }
+
+  function agentToolsSection(a) {
+    var html = '<section class="card"><p class="afc-mlabel">Tools</p><dl class="afc-kv">';
+    a.data.tools.forEach(function (t) {
+      var extra = "";
+      if (t.kind === "semantic tool") {
+        extra = '<br>LLM of this tool: <span class="mono">' + esc(t.llm || "not readable here, see the tool in DSS") + '</span>' +
+          (t.id ? ' (tool ' + esc(t.id) + ')' : "");
+      } else if (t.kind === "sub-agent") {
+        extra = '<br>' + (t.enabled ? "Enabled" : "Disabled") + ' (capability ' + esc(t.capability) + ')';
+      }
+      var role = t.kind === "sub-agent" ? (String(t.role).length > 160 ? String(t.role).slice(0, 160) + "..." : t.role) : t.role;
+      html += '<dt>' + esc(t.name) + '</dt><dd>' + esc(t.kind) + ' - ' + esc(role) + extra + '</dd>';
+    });
+    return html + '</dl><p class="afc-field-help">Read-only. The tools are part of the agent code; the LLM of a Semantic Model Query tool is set on the tool in DSS.</p></section>';
+  }
+
+  function renderAgent() {
+    if (S.view !== "agent") { return; }
+    var a = S.agent;
+    if (!a.loadedKey && !a.loading && !a.error) { loadAgent(); }
+    setHeader({ back: true, eyebrow: "Agent settings", title: (a.data && a.data.label) || "Loading...",
+      sub: a.data ? 'Code Agent ' + mono(a.data.agent_id || "-") + ' &middot; everything this agent is configured with, in one place.' : "" });
+    if (a.error) {
+      setMain(backendBanner() + '<div class="afc-note afc-note--error">Cannot read the settings (' + esc(a.error) + ').</div>');
+      return;
+    }
+    if (!a.data || !S.models.loaded) { setMain(backendBanner() + '<p class="afc-muted afc-pad">Loading...</p>'); return; }
+    var html = backendBanner();
+    if (a.notice) {
+      html += '<div class="nextstep nextstep--top"><p class="afc-mlabel">' + esc(a.notice) + ' Last step: restart the agent</p>' +
+        '<ol class="howto howto--strong"><li>In DSS, open <b>Agents &amp; GenAI Models</b> &gt; <b>Agents</b> &gt; ' +
+        copyable(a.key === ORCH_KEY ? ORCHESTRATOR_NAME : (a.data.label || a.key)) + '.</li>' +
+        '<li>Click <b>Save</b> (no edit needed): the agent restarts and reads the new settings.</li>' +
+        '<li>Start a <b>new conversation</b> in the OWIsMind webapp.</li></ol></div>';
+      a.notice = null;
+    }
+    html += agentModelsSection(a);
+    a.data.prompts.forEach(function (p) { html += agentPromptSection(a, p); });
+    if (a.data.routing_description != null) { html += agentDescriptionSection(a); }
+    html += agentToolsSection(a);
+    setMain(html);
+    wireAgent();
+  }
+
+  function wireAgent() {
+    var a = S.agent;
+    MODES.forEach(function (mode) {
+      bindInput("agMode_" + mode, function (v) { a.draft.models[mode] = v.trim(); });
+    });
+    if (byId("agModelsSave")) { byId("agModelsSave").onclick = confirmAgentModels; }
+    Array.prototype.forEach.call(document.querySelectorAll("[data-ag-prompt]"), function (btn) {
+      var id = btn.getAttribute("data-ag-prompt");
+      bindInput("agPrompt_" + id, function (v) {
+        a.draft.prompts[id] = v;
+        var spec = a.data.prompts.filter(function (p) { return p.id === id; })[0];
+        if (byId("agCount_" + id)) { byId("agCount_" + id).textContent = v.length; }
+        btn.disabled = !!(spec && spec.min && v.trim().length < spec.min);
+      });
+      btn.onclick = function () { confirmAgentPrompt(id); };
+    });
+    bindInput("agAiInstr", function (v) { a.ai.instr = v; });
+    if (byId("agAiGo")) { byId("agAiGo").onclick = confirmAgentAi; }
+    bindInput("agDescription", function (v) { a.draft.description = v; });
+    if (byId("agDescSave")) { byId("agDescSave").onclick = confirmAgentDescription; }
+  }
+
+  function confirmAgentAi() {
+    var a = S.agent;
+    openConfirm({
+      title: "Write the business prompt with the AI?",
+      bodyHtml: "<p>The factory AI reads the dataset profile, the semantic model, the column descriptions and a few " +
+        "<b>masked sample rows</b>, then writes the prompt. It takes up to 2 minutes. " +
+        "The result is only a <b>draft in the box below</b>: nothing is saved until you click Save.</p>",
+      confirmLabel: "Write it",
+      onConfirm: runAgentAi
+    });
+  }
+
+  function runAgentAi() {
+    var a = S.agent;
+    var current = a.draft.prompts.business_prompt || "";
+    a.ai.running = true; a.ai.error = null;
+    renderAgent();
+    callApi("POST", "agent/prompt-draft", {
+      confirm: true, capability_key: a.key, current: current, instructions: a.ai.instr
+    }).then(function (r) {
+      if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
+        a.ai.running = false; a.ai.error = guidedErrorText(r.data);
+        renderAgent();
+        return;
+      }
+      pollJob(r.data.job_id, null, function (result) {
+        a.ai.running = false;
+        if (result && result.prompt) {
+          a.draft.prompts.business_prompt = result.prompt;
+          a.ai.drafted = true;
+        } else {
+          a.ai.error = (result && result.error) || "The AI returned nothing.";
+        }
+        renderAgent();
+      }, function (code) {
+        a.ai.running = false; a.ai.error = "The AI job failed (" + code + ").";
+        renderAgent();
+      });
+    });
+  }
+
+  function confirmAgentModels() {
+    var a = S.agent;
+    openConfirm({
+      title: "Save the LLMs of this agent?",
+      bodyHtml: "<p>Only the filled fields become this agent's own setting; empty fields follow the central model. " +
+        "models.json is written to the hub (previous file backed up).</p>",
+      confirmLabel: "Save",
+      onConfirm: function () {
+        // Start from the stored file so other agents' overrides are never lost.
+        var models = JSON.parse(JSON.stringify(S.models.data.models));
+        models.agents = models.agents || {};
+        var own = {};
+        MODES.forEach(function (mode) { if (a.draft.models[mode]) { own[mode] = a.draft.models[mode]; } });
+        if (Object.keys(own).length) { models.agents[a.data.model_key] = own; }
+        else { delete models.agents[a.data.model_key]; }
+        saveModels(models, function (ok) {
+          if (ok) { a.notice = "LLMs saved."; }
+          renderAgent();
+        });
+      }
+    });
+  }
+
+  function confirmAgentPrompt(id) {
+    var a = S.agent;
+    var spec = a.data.prompts.filter(function (p) { return p.id === id; })[0];
+    openConfirm({
+      title: "Save this prompt?",
+      bodyHtml: "<p>The file <span class=\"mono\">" + esc(spec.path) + "</span> is written to the project library " +
+        "(the previous version is backed up).</p>",
+      confirmLabel: "Save",
+      onConfirm: function () {
+        callApi("POST", "hub/prompt", { confirm: true, path: spec.path, content: a.draft.prompts[id] }).then(function (r) {
+          if (r.data && r.data.status === "ok") {
+            toast("Prompt saved.");
+            a.notice = "Prompt saved.";
+            a.ai.drafted = false;
+            a.loadedKey = null;
+            renderAgent();
+          } else {
+            toast("Save refused: " + guidedErrorText(r.data));
+          }
+        });
+      }
+    });
+  }
+
+  function confirmAgentDescription() {
+    var a = S.agent;
+    openConfirm({
+      title: "Save the routing description?",
+      bodyHtml: "<p>capabilities.json is updated (the previous file is backed up). The orchestrator reads it when it starts.</p>",
+      confirmLabel: "Save",
+      onConfirm: function () {
+        callApi("POST", "capability/description", { confirm: true, capability_key: a.key, description: a.draft.description }).then(function (r) {
+          if (r.data && r.data.status === "ok") {
+            a.notice = "Description saved.";
+            a.loadedKey = null;
+            S.overview.loaded = false;
+            renderAgent();
+          } else {
+            toast("Save refused: " + guidedErrorText(r.data));
+          }
+        });
+      }
+    });
+  }
+
   /* ============================ small builders ============================ */
 
   function inputEl(id, value, ph) {
@@ -2515,6 +3034,8 @@
       renderRun();
     } else if (view === "settings") {
       renderSettings();
+    } else if (view === "agent") {
+      renderAgent();
     }
     window.scrollTo(0, 0);
   }

@@ -46,12 +46,11 @@ def _has_module_level_dataiku_import(path):
     return False
 
 
-def _load_default_settings(hub_module_path):
-    """Load DEFAULT_SETTINGS directly, or use AST if Dataiku is imported."""
+def _load_default_settings(hub_module_path, name="DEFAULT_SETTINGS"):
+    """Load a hub.py constant (DEFAULT_SETTINGS / DEFAULT_MODELS) directly, or
+    use AST if Dataiku is imported."""
     if _has_module_level_dataiku_import(hub_module_path):
-        return _extract_constants(hub_module_path, {"DEFAULT_SETTINGS"})[
-            "DEFAULT_SETTINGS"
-        ]
+        return _extract_constants(hub_module_path, {name})[name]
 
     module_name = "_owismind_factory_hub_seed_%s" % abs(hash(hub_module_path))
     spec = importlib.util.spec_from_file_location(module_name, hub_module_path)
@@ -61,7 +60,7 @@ def _load_default_settings(hub_module_path):
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
-        return module.DEFAULT_SETTINGS
+        return getattr(module, name)
     finally:
         sys.modules.pop(module_name, None)
 
@@ -125,6 +124,9 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
             constants["PERSONA_DEFAULT"].encode("utf-8"),
         os.path.join(hub_dir, "factory_settings.json"): _json_bytes(
             _load_default_settings(hub_module_path)
+        ),
+        os.path.join(hub_dir, "models.json"): _json_bytes(
+            _load_default_settings(hub_module_path, "DEFAULT_MODELS")
         ),
         os.path.join(hub_dir, "run_settings.json"): _json_bytes(
             constants["RUN_SETTINGS_DEFAULT"]

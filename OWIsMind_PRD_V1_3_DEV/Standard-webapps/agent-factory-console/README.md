@@ -77,9 +77,9 @@ guided run screen is reached from the overview.
   for a manual stage, the button with its guarantee line, and the technical journal in a collapsed
   block (opened automatically on failure; open state survives the 1.5s job polling). "Toutes les
   etapes" is a collapsed list; "Abandonner ce parcours" sits at the bottom (marks the run, deletes
-  nothing). Creation = 13 stages (preflight, plan, infra, first build, profile review, semantic
+  nothing). Creation = 14 stages (preflight, plan, infra, first build, profile review, semantic
   wizard with AI draft + answers + re-draft, model + tool, template, code generation, Code Agent,
-  capability, smoke test, enable); removal = 12 stages (inventory, disable, tool, Code Agent,
+  capability, business prompt, smoke test, enable); removal = 12 stages (inventory, disable, tool, Code Agent,
   semantic model, scenario, recipes, knowledge datasets, zone if empty, shared catalog rows, hub
   files + capability, final check). Each deletion stage repeats its exact deletion list in a danger
   confirm modal. The start form (domain, source dataset picker, FR / EN labels, optional lookup
@@ -103,6 +103,8 @@ guided run screen is reached from the overview.
   the factory are refused (`review_not_supported`). Engine: `owismind_factory/review.py` + the
   review stages of `guided.py`; route `/api/guided/start-review`. Wording rule: every text is for a
   business person who knows nothing about AI agents (no technical vocabulary on this screen).
+- **Agent Settings** (button "Settings" on the orchestrator node and on every sub-agent node, 2026-10-14): one screen per agent with its LLM per mode (own setting > central > built-in, written to `models.json`), its editable hub prompt layers (orchestrator: persona + workflow prompts; sub-agent: extra understanding rules), the routing description (sub-agent, written to `capabilities.json`) and its tools (read-only, incl. the LLM of the Semantic Model Query tool when DSS exposes it). Routes `GET/POST /api/models`, `GET /api/agent/settings`, `POST /api/capability/description`; engine `owismind_factory/agent_settings.py`. The **Settings** nav screen holds the central LLM per mode for all agents + the factory models.
+- **Improve review is editable (2026-10-14)**: each proposed change shows a word-level diff (struck = removed, highlighted = added) instead of two long blocks, a one-line summary by area, and an **Edit the text** button on every text change (row description, column meaning, calculation / filter description, word lists, general rules, routing text). The operator's wording replaces the AI text server-side (`review.apply_edits`, sent as `edits` to `/api/review/keep`, kept ids only, dashes normalized, size-checked). Example questions and value-recognition flags stay keep / ignore. After the save, **Update the business prompt too** opens the agent Settings with the same feedback as AI instructions (the review only changes the semantic model side, never the agent prompt).
 - **Compatibility probe** (no screen any more): the first creation stage explains it. When its
   journal shows that `probe_results.json` is absent from the hub (notebook 00 never recorded), a
   block says it is not blocking (tool + Code Agent stages fall back to guided manual steps), how to

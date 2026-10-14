@@ -69,6 +69,7 @@ SETTINGS_PATH = HUB_ROOT + "/factory_settings.json"
 CAPABILITIES_PATH = HUB_ROOT + "/capabilities.json"
 PERSONA_PATH = HUB_ROOT + "/prompts/orchestrator_persona.md"
 TEMPLATE_AGENT_PATH = HUB_ROOT + "/templates/dataset_expert.py"
+MODELS_PATH = HUB_ROOT + "/models.json"
 
 # Default instance knobs. factory_settings.json overrides them; keeping the
 # defaults here means a fresh hub works on the OWIsMind instance out of the box.
@@ -177,7 +178,163 @@ def get_settings(project):
         for key, value in override.items():
             if key in DEFAULT_SETTINGS:
                 merged[key] = value
+    # models.json is the central home of the LLM choices: its "factory" section
+    # wins over the legacy llm_sonnet / llm_wizard keys of factory_settings.json.
+    models = read_models(project)
+    if models:
+        factory = models.get("factory") or {}
+        if valid_llm_id(factory.get("default")):
+            merged["llm_sonnet"] = factory["default"]
+        if valid_llm_id(factory.get("wizard")):
+            merged["llm_wizard"] = factory["wizard"]
     return merged
+
+
+# ---------------------------------------------------------------------- models
+# ONE central file decides which LLM Mesh model each agent uses in each mode
+# (smart / pro / claude), plus the models the factory itself uses. Agents read it
+# once at start (standalone loader, same contract as capabilities.json) and fall
+# back to their embedded ids on ANY problem, so the file can never break a run.
+#
+# Resolution order for agent A in mode M:  agents[A][M]  >  modes[M]  >  embedded.
+
+MODEL_MODES = ("smart", "pro", "claude")
+# The orchestrator's key in "agents"; a sub-agent's key is its domain.
+ORCHESTRATOR_KEY = "orchestrator"
+# Mirror of the ids embedded in the three Code Agents (anti-drift test:
+# tests/test_models_hub.py). They are the fallback when models.json is absent.
+DEFAULT_MODELS = {
+    "version": 1,
+    "modes": {
+        "smart": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite",
+        "pro": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash",
+        "claude": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
+    },
+    # Optional per-agent, per-mode overrides: {"revenue": {"claude": "<llm id>"}}.
+    "agents": {},
+    # Models used by the factory itself ("" = inherit "default").
+    "factory": {
+        "default": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
+        "wizard": "",
+    },
+}
+_LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
+_AGENT_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
+MODELS_MAX_AGENTS = 50
+
+
+def valid_llm_id(value):
+    return isinstance(value, str) and bool(_LLM_ID_RE.match(value))
+
+
+def validate_models(obj):
+    """Validate a full models mapping. Returns a list of problems (empty = valid).
+
+    The agents' standalone loader applies the same shape rules per entry (an
+    invalid entry is skipped there instead of rejecting the file).
+    """
+    problems = []
+    if not isinstance(obj, dict):
+        return ["models must be an object"]
+    modes = obj.get("modes")
+    if not isinstance(modes, dict):
+        problems.append("modes must be an object")
+    else:
+        for mode in MODEL_MODES:
+            if not valid_llm_id(modes.get(mode)):
+                problems.append("modes.%s must be a valid LLM id" % mode)
+        for mode in modes:
+            if mode not in MODEL_MODES:
+                problems.append("modes.%s is not a known mode" % mode)
+    agents = obj.get("agents", {})
+    if not isinstance(agents, dict):
+        problems.append("agents must be an object")
+    else:
+        if len(agents) > MODELS_MAX_AGENTS:
+            problems.append("too many agents (max %d)" % MODELS_MAX_AGENTS)
+        for key, per_mode in agents.items():
+            if key != ORCHESTRATOR_KEY and not _AGENT_KEY_RE.match(str(key)):
+                problems.append("agents key %r is not a valid agent key" % (key,))
+                continue
+            if not isinstance(per_mode, dict):
+                problems.append("agents.%s must be an object" % key)
+                continue
+            for mode, llm in per_mode.items():
+                if mode not in MODEL_MODES:
+                    problems.append("agents.%s.%s is not a known mode" % (key, mode))
+                elif not valid_llm_id(llm):
+                    problems.append("agents.%s.%s must be a valid LLM id" % (key, mode))
+    factory = obj.get("factory", {})
+    if not isinstance(factory, dict):
+        problems.append("factory must be an object")
+    else:
+        for name in ("default", "wizard"):
+            value = factory.get(name, "")
+            if value not in ("", None) and not valid_llm_id(value):
+                problems.append("factory.%s must be empty or a valid LLM id" % name)
+        if not valid_llm_id(factory.get("default")):
+            problems.append("factory.default must be a valid LLM id")
+    return problems
+
+
+def read_models(project):
+    """The stored models.json, or None when absent / unreadable / invalid."""
+    obj = read_json(project, MODELS_PATH)
+    if obj is None or validate_models(obj):
+        return None
+    return obj
+
+
+def write_models(project, models):
+    """Validate then write models.json (previous version backed up first)."""
+    problems = validate_models(models)
+    if problems:
+        raise ValueError("invalid models: " + "; ".join(problems))
+    payload = json.dumps(models, indent=2, ensure_ascii=False, sort_keys=False)
+    with _CAPABILITIES_WRITE_LOCK:
+        current = read_text(project, MODELS_PATH)
+        if current is not None:
+            pattern = HUB_ROOT + "/backups/models-%d.json"
+            write_text(project, pattern % _next_free_index(project, pattern), current)
+        return write_text(project, MODELS_PATH, payload)
+
+
+def effective_models(models, agent_key):
+    """Per-mode view for one agent: {mode: {"llm": id, "source": ...}}.
+
+    ``models`` is the stored mapping or None (embedded defaults). source is one
+    of "agent" (per-agent override), "mode" (central mode model), "embedded".
+    """
+    stored = models if isinstance(models, dict) else None
+    out = {}
+    for mode in MODEL_MODES:
+        override = ((stored or {}).get("agents") or {}).get(agent_key, {}).get(mode)
+        central = ((stored or {}).get("modes") or {}).get(mode)
+        if valid_llm_id(override):
+            out[mode] = {"llm": override, "source": "agent"}
+        elif valid_llm_id(central):
+            out[mode] = {"llm": central, "source": "mode"}
+        else:
+            out[mode] = {"llm": DEFAULT_MODELS["modes"][mode], "source": "embedded"}
+    return out
+
+
+def list_available_llms(project):
+    """LLM Mesh models of the project, for the pickers ([] on any failure)."""
+    try:
+        rows = project.list_llms()
+    except Exception:
+        return []
+    out = []
+    for row in rows or []:
+        llm_id = row.get("id") if isinstance(row, dict) else getattr(row, "id", None)
+        if not valid_llm_id(llm_id):
+            continue
+        name = (row.get("friendlyName") if isinstance(row, dict)
+                else getattr(row, "friendly_name", None)) or llm_id
+        kind = (row.get("type") if isinstance(row, dict) else getattr(row, "type", "")) or ""
+        out.append({"id": llm_id, "name": str(name), "type": str(kind)})
+    return out
 
 
 # ------------------------------------------------------------------ capabilities

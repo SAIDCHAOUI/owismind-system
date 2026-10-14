@@ -460,6 +460,100 @@ def diff_configs(base, proposed, base_routing="", notes=None):
     return changes
 
 
+# ------------------------------------------------------------ human edits
+# The AI proposes, the human has the last word: a change whose text is editable
+# carries "edit" (the current proposed text); the operator may rewrite it and the
+# rewrite REPLACES the AI's value in the proposal before anything is applied.
+# Areas not listed (example questions, 'recognize values' flags) stay keep/ignore.
+
+_DASH_RE = re.compile("[\\u2013\\u2014]")
+_TEXT_AREAS = {"entity": "entity_description", "rules": "instructions",
+               "routing": "planner_description"}
+MAX_EDIT_CHARS = 20000
+
+
+def editable_value(change, proposal):
+    """The text the operator may rewrite for ``change`` (None = keep/ignore only)."""
+    proposal = proposal or {}
+    area = change.get("area")
+    cid = str(change.get("id") or "")
+    name = cid.split(":", 1)[1] if ":" in cid else ""
+    if change.get("action") == "removed":
+        return None
+    if area in _TEXT_AREAS:
+        return str(proposal.get(_TEXT_AREAS[area]) or "")
+    if area == "column":
+        att = _index(proposal.get("attributes"), "column").get(_key(name)) or {}
+        return str(att.get("description") or "")
+    if area in ("metric", "filter"):
+        key = "metrics" if area == "metric" else "filters"
+        item = _index(proposal.get(key), "name").get(_key(name)) or {}
+        return str(item.get("description") or "")
+    if area == "term":
+        item = _index(proposal.get("glossary"), "term").get(_key(name)) or {}
+        return ", ".join(_norm(x) for x in item.get("synonyms") or [] if _norm(x))
+    return None
+
+
+def apply_edits(proposal, changes, edits):
+    """PURE: fold the operator's rewrites into a copy of the proposal.
+
+    Returns (new_proposal, new_changes). Raises ValueError (readable) on an edit
+    for an unknown / non editable change, a too long text or an empty value
+    where text is required. Dashes are normalized (project rule).
+    """
+    new = copy.deepcopy(normalize_proposal(proposal))
+    by_id = dict((c.get("id"), c) for c in changes or [])
+    for cid, raw in (edits or {}).items():
+        change = by_id.get(cid)
+        if change is None or change.get("edit") is None:
+            raise ValueError("this change cannot be edited: %s" % str(cid)[:80])
+        text = _DASH_RE.sub("-", str(raw or "")).strip()
+        if len(text) > MAX_EDIT_CHARS:
+            raise ValueError("the text of '%s' is too long" % change.get("label"))
+        area = change.get("area")
+        name = cid.split(":", 1)[1] if ":" in cid else ""
+        if area in _TEXT_AREAS:
+            if area == "routing" and not (20 <= len(text) <= MAX_ROUTING_CHARS):
+                raise ValueError("the routing text must be 20 to %d characters" % MAX_ROUTING_CHARS)
+            new[_TEXT_AREAS[area]] = text
+        elif area == "column":
+            for att in new.get("attributes") or []:
+                if _key(att.get("column")) == _key(name):
+                    att["description"] = text
+        elif area in ("metric", "filter"):
+            for item in new.get("metrics" if area == "metric" else "filters") or []:
+                if _key(item.get("name")) == _key(name):
+                    item["description"] = text
+        elif area == "term":
+            for item in new.get("glossary") or []:
+                if _key(item.get("term")) == _key(name):
+                    item["synonyms"] = [w.strip() for w in text.split(",") if w.strip()]
+    out = []
+    for change in changes or []:
+        change = dict(change)
+        if change.get("id") in (edits or {}):
+            change["edit"] = editable_value(change, new)
+            change["after"] = _after_text(change, new)
+            change["edited"] = True
+        out.append(change)
+    return new, out
+
+
+def _after_text(change, proposal):
+    """Display text of a change's 'after' side, recomputed from the proposal."""
+    area = change.get("area")
+    cid = str(change.get("id") or "")
+    name = cid.split(":", 1)[1] if ":" in cid else ""
+    if area in ("metric", "filter"):
+        key = "metrics" if area == "metric" else "filters"
+        item = _index(proposal.get(key), "name").get(_key(name)) or {}
+        return _metric_text(item)
+    if area == "term":
+        return editable_value(change, proposal) or ""
+    return editable_value(change, proposal) or change.get("after") or ""
+
+
 def _replace_or_drop(items, field, name, new_item):
     """Replace (new_item) or drop (None) the element whose ``field`` matches."""
     out = []

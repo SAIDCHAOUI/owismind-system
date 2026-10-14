@@ -1489,6 +1489,51 @@ if _hub_capabilities is not None:
     logger.info("CAPABILITIES loaded from the config hub (%d entries)", len(CAPABILITIES))
 
 
+# --- Central model map (hub models.json, loaded once at agent start) -----------
+# /python/owismind_hub/models.json is the ONE place that decides which LLM Mesh
+# model each mode (smart / pro / claude) uses, centrally and per agent. Resolution:
+# agents[<this agent>][mode] > modes[mode] > the embedded ids above. Every entry is
+# validated on its own (an invalid one is skipped), any failure -> embedded ids, so
+# the file can never break the agent. Edited from the Agent Factory Console
+# (agent Settings); takes effect on the next agent process start.
+_HUB_MODELS_PATH = "/python/owismind_hub/models.json"
+_HUB_MODEL_MODES = ("smart", "pro", "claude")
+_HUB_LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
+
+
+def _hub_models_overrides(agent_key):
+    """{mode: llm id} from the hub for this agent; {} on ANY problem."""
+    try:
+        library = dataiku.api_client().get_default_project().get_library()
+        f = library.get_file(_HUB_MODELS_PATH)
+        raw = f.read() if f is not None else None
+        obj = json.loads(raw) if raw else None
+    except Exception:
+        return {}
+    if not isinstance(obj, dict):
+        return {}
+    central = obj.get("modes") if isinstance(obj.get("modes"), dict) else {}
+    own = (obj.get("agents") or {}).get(agent_key)
+    own = own if isinstance(own, dict) else {}
+    out = {}
+    for mode in _HUB_MODEL_MODES:
+        for source in (own, central):
+            value = source.get(mode)
+            if isinstance(value, str) and _HUB_LLM_ID_RE.match(value):
+                out[mode] = value
+                break
+    return out
+
+
+try:
+    _hub_models = _hub_models_overrides("orchestrator")
+except Exception:
+    _hub_models = {}
+if _hub_models:
+    LOOP_LLM_BY_MODE.update(_hub_models)
+    logger.info("LLM per mode from the config hub: %s", LOOP_LLM_BY_MODE)
+
+
 # =============================================================================
 # 7c. WORKFLOW COMMAND PROTOCOL (v1.3, durable runs)
 # -----------------------------------------------------------------------------

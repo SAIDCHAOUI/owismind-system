@@ -37,7 +37,8 @@ import dataiku
 # modules below (pipeline / probes / wizard) are authored against FROZEN signatures; this backend
 # codes against them exactly. If a module is missing at import time the whole webapp fails loudly,
 # which is the desired signal that the library was not pushed.
-from owismind_factory import fctx, guided, guided_store, hub, pipeline, probes, wizard
+from owismind_factory import agent_settings, fctx, guided, guided_store, hub, pipeline, probes
+from owismind_factory import prompt_writer, review, wizard
 from owismind_factory.spec import DomainSpec, SpecError
 
 logger = logging.getLogger(__name__)
@@ -451,6 +452,16 @@ def api_hub_prompt_post():
     if len(content) > _PROMPT_MAX_CHARS:
         return _err("content_too_large", 400,
                     {"limit": _PROMPT_MAX_CHARS, "got": len(content)})
+    # Same bounds the agents enforce when they load the file (an out-of-bounds file
+    # would be silently ignored at agent start, so refuse it here, readably).
+    if path == hub.PERSONA_PATH and len(content.strip()) < agent_settings.PERSONA_MIN_CHARS:
+        return _err("persona_too_short", 400, {"min": agent_settings.PERSONA_MIN_CHARS})
+    if path.endswith("/business_prompt.md") and len(content) > prompt_writer.PROMPT_MAX_CHARS:
+        return _err("business_prompt_too_long", 400, {"limit": prompt_writer.PROMPT_MAX_CHARS,
+                                                      "got": len(content)})
+    if path.endswith("/understand_extra.md") and len(content) > agent_settings.EXTRA_MAX_CHARS:
+        return _err("extra_too_long", 400, {"limit": agent_settings.EXTRA_MAX_CHARS,
+                                            "got": len(content)})
     hub.write_prompt(_project(), path, content)
     return jsonify({"status": "ok", "path": path})
 
@@ -509,6 +520,109 @@ def api_capability_enable():
     except ValueError as exc:
         return _err("invalid_capabilities", 400, {"problems": [str(exc)]})
     return jsonify({"status": "ok", "capabilities": caps})
+
+
+# ----------------------------------------------------------------- central models + agent settings
+# models.json is the ONE place that maps smart / pro / claude to an LLM Mesh model,
+# centrally and per agent (see owismind_factory.hub "models"). Agents read it at start.
+
+@app.route("/api/models", methods=["GET"])
+@_safe
+def api_models_get():
+    """Central model map: stored file (or embedded defaults), plus the project's LLM list."""
+    project = _project()
+    stored = hub.read_models(project)
+    return jsonify({
+        "status": "ok",
+        "models": stored or hub.DEFAULT_MODELS,
+        "from_file": stored is not None,
+        "defaults": hub.DEFAULT_MODELS,
+        "available_llms": hub.list_available_llms(project),
+    })
+
+
+@app.route("/api/models", methods=["POST"])
+@_safe
+def api_models_post():
+    """Validate then write models.json (previous file backed up). Requires confirm."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    models = body.get("models")
+    if not isinstance(models, dict):
+        return _err("models_required", 400)
+    problems = hub.validate_models(models)
+    if problems:
+        return _err("invalid_models", 400, {"problems": problems})
+    hub.write_models(_project(), models)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/agent/settings", methods=["GET"])
+@_safe
+def api_agent_settings():
+    """The Settings view of one agent: LLM per mode, prompts, routing text, tools (read-only)."""
+    key = str(request.args.get("key") or "").strip()
+    if not key:
+        return _err("key_required", 400)
+    project = _project()
+    caps = hub.read_capabilities(project) or {}
+    try:
+        bundle = agent_settings.agent_bundle(project, key, caps, hub.get_settings(project))
+    except KeyError:
+        return _err("unknown_agent", 404)
+    bundle["available_llms"] = hub.list_available_llms(project)
+    bundle["central_models"] = (hub.read_models(project) or hub.DEFAULT_MODELS).get("modes")
+    return jsonify({"status": "ok", "settings": bundle})
+
+
+@app.route("/api/agent/prompt-draft", methods=["POST"])
+@_safe
+def api_agent_prompt_draft():
+    """Write or improve a sub-agent's business prompt with the factory AI, in a background job
+    (30-120s). Returns the text only: NOTHING is saved here, the operator reviews it first.
+    Requires confirm. Sends aggregated profile metadata and a few masked sample rows."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    key = str(body.get("capability_key") or "").strip()
+    project = _project()
+    entry = (hub.read_capabilities(project) or {}).get(key)
+    if not isinstance(entry, dict):
+        return _err("unknown_capability", 404)
+    current = body.get("current")
+    instructions = body.get("instructions")
+    if not isinstance(current, str):
+        current = ""
+    if not isinstance(instructions, str):
+        instructions = ""
+    if len(current) > prompt_writer.MAX_CURRENT_CHARS:
+        return _err("current_too_large", 400, {"limit": prompt_writer.MAX_CURRENT_CHARS})
+    _, rec = _new_job("prompt")
+    if rec is None:
+        return _err("too_many_jobs", 429)
+    _run_job(rec, lambda: prompt_writer.draft(project, entry, current=current,
+                                              instructions=instructions))
+    return jsonify({"status": "ok", "job_id": rec["id"]})
+
+
+@app.route("/api/capability/description", methods=["POST"])
+@_safe
+def api_capability_description():
+    """Edit the routing description the orchestrator reads for one sub-agent. Requires confirm."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    key = str(body.get("capability_key") or "").strip()
+    if not key:
+        return _err("capability_key_required", 400)
+    try:
+        agent_settings.set_planner_description(_project(), key, body.get("description"))
+    except KeyError:
+        return _err("unknown_capability", 404)
+    except ValueError as exc:
+        return _err("invalid_description", 400, {"problems": [str(exc)]})
+    return jsonify({"status": "ok"})
 
 
 # ----------------------------------------------------------------- guided assistant
@@ -818,7 +932,19 @@ def api_review_keep():
     if not _review_waiting(run):
         return _err("stage_not_verifiable", 400)
     keep = body.get("keep") if isinstance(body.get("keep"), list) else []
-    run["state"]["review"]["keep"] = [str(k)[:300] for k in keep[:500]]
+    info = run["state"]["review"]
+    # The human has the last word: rewrites replace the AI's text BEFORE anything
+    # is applied (only for changes the proposal marks editable; kept ids only).
+    edits = body.get("edits") if isinstance(body.get("edits"), dict) else {}
+    edits = dict((str(k)[:300], v) for k, v in list(edits.items())[:500]
+                 if isinstance(v, str) and str(k) in set(str(x) for x in keep))
+    if edits:
+        try:
+            info["proposal"], info["changes"] = review.apply_edits(
+                info.get("proposal"), info.get("changes"), edits)
+        except ValueError as exc:
+            return _err("invalid_edit", 400, {"problems": [str(exc)]})
+    info["keep"] = [str(k)[:300] for k in keep[:500]]
     try:
         run = guided.verify_current_stage(project, run, settings=settings)
         store.save(run)

@@ -6,6 +6,7 @@
 #
 # Seeds (only what is ABSENT unless FORCE=True):
 # - factory_settings.json   instance knobs (VERIFY code_env_311 after seeding!)
+# - models.json             central LLM per mode (smart/pro/claude) + per-agent overrides
 # - capabilities.json       runtime CAPABILITIES (byte-equivalent to the
 #                           orchestrator's embedded defaults at generation time)
 # - prompts/orchestrator_persona.md   the persona override (same equivalence)
@@ -178,6 +179,9 @@ def seed(path, content, is_json=False):
 seed(hub.SETTINGS_PATH, _SEEDS["settings"], is_json=True)
 seed(hub.CAPABILITIES_PATH, _SEEDS["capabilities"], is_json=True)
 seed(hub.PERSONA_PATH, _SEEDS["persona"])
+# Central LLM map (smart / pro / claude + per-agent overrides). Seed = the ids
+# embedded in the agents, so seeding changes nothing until it is edited.
+seed(hub.MODELS_PATH, hub.DEFAULT_MODELS, is_json=True)
 
 # --- engine template: pull the code of the LIVE revenue agent when possible ---
 existing = hub.read_text(project, hub.TEMPLATE_AGENT_PATH)

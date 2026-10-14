@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "modes": {
+    "smart": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite",
+    "pro": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash",
+    "claude": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"
+  },
+  "agents": {},
+  "factory": {
+    "default": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
+    "wizard": ""
+  }
+}

@@ -250,7 +250,7 @@ class TestStateShape(_GuidedBase):
     def test_stage_order_and_initial_statuses(self):
         state = guided.new_state(_spec())
         self.assertEqual(state["stage_order"], guided.STAGE_ORDER)
-        self.assertEqual(len(state["stages"]), 13)
+        self.assertEqual(len(state["stages"]), 14)
         self.assertEqual(state["stages"]["preflight"]["status"], guided.READY)
         for key in guided.STAGE_ORDER[1:]:
             self.assertEqual(state["stages"][key]["status"], guided.PENDING)
@@ -608,14 +608,48 @@ class TestCapabilityAndEnable(_GuidedBase):
         self.assertIs(entry["enabled"], False)
         self.assertEqual(entry["planner_description"],
                          _GOOD_WIZARD_CONFIG["planner_description"])
+        self.assertEqual(run["current_stage"], "business_prompt")
+
+    def _through_business_prompt(self, run):
+        self.capabilities = {"opportunities_expert": dict(self.appended["opportunities_expert"])}
+        return self.run_stage(run)
+
+    def test_business_prompt_first_draft_is_written_when_absent(self):
+        from owismind_factory import prompt_writer
+        run = self.run_stage(self._to_capability())              # capability
+        self.p.set(prompt_writer, "draft",
+                   lambda project, entry, **kw: {"prompt": "# Domain\nbusiness text"})
+        written = {}
+        self.p.set(hub, "write_text", lambda project, path, content: written.update({path: content}))
+        run = self._through_business_prompt(run)
+        self.assertEqual(written, {prompt_writer.business_prompt_path("opportunities"):
+                                   "# Domain\nbusiness text"})
         self.assertEqual(run["current_stage"], "smoke")
         self.assertEqual(run["state"]["stages"]["smoke"]["status"], guided.WAITING)
+
+    def test_business_prompt_never_overwrites_existing_work(self):
+        from owismind_factory import prompt_writer
+        run = self.run_stage(self._to_capability())
+        self.hub_files[prompt_writer.business_prompt_path("opportunities")] = "human written"
+        self.p.set(prompt_writer, "draft",
+                   lambda project, entry, **kw: self.fail("must not call the AI"))
+        run = self._through_business_prompt(run)
+        self.assertEqual(run["current_stage"], "smoke")
+
+    def test_business_prompt_ai_failure_is_not_blocking(self):
+        from owismind_factory import prompt_writer
+        run = self.run_stage(self._to_capability())
+        self.p.set(prompt_writer, "draft", lambda project, entry, **kw: {"error": "mesh down"})
+        run = self._through_business_prompt(run)
+        self.assertEqual(run["current_stage"], "smoke")
+        self.assertEqual(run["state"]["stages"]["business_prompt"]["status"], guided.DONE)
 
     def test_enable_flips_the_flag_and_finishes_the_run(self):
         run = self._to_capability()
         run = self.run_stage(run)                       # capability
-        self.capabilities = {"opportunities_expert":
-                             dict(self.appended["opportunities_expert"])}
+        self.hub_files[__import__("owismind_factory.prompt_writer", fromlist=["x"])
+                       .business_prompt_path("opportunities")] = "kept"
+        run = self._through_business_prompt(run)        # business_prompt
         run = self.verify(run)                          # smoke (human confirm)
         self.assertEqual(run["current_stage"], "enable")
         run = self.run_stage(run)                       # enable
@@ -627,8 +661,9 @@ class TestCapabilityAndEnable(_GuidedBase):
             raise ValueError("one enabled capability per domain")
         run = self._to_capability()
         run = self.run_stage(run)
-        self.capabilities = {"opportunities_expert":
-                             dict(self.appended["opportunities_expert"])}
+        self.hub_files[__import__("owismind_factory.prompt_writer", fromlist=["x"])
+                       .business_prompt_path("opportunities")] = "kept"
+        run = self._through_business_prompt(run)
         run = self.verify(run)
         self.p.set(hub, "write_capabilities", raising_write)
         run = self.run_stage(run)

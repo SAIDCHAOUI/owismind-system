@@ -579,3 +579,13 @@
 }
 #afc .afc-note .afc-details { margin-top: 10px; border-top-color: var(--border-strong); }
 #afc .srv { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
+
+/* ---------------- diff view (Improve review + AI drafts) ---------------- */
+#afc .rv-diff {
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); background: var(--surface);
+  font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  max-height: 260px; overflow-y: auto;
+}
+#afc .df-del { background: var(--danger-soft); color: var(--danger); text-decoration: line-through; }
+#afc .df-add { background: var(--success-soft); color: var(--success); text-decoration: none; font-weight: var(--fw-semibold); }
+#afc .rv-edit { width: 100%; min-height: 110px; }

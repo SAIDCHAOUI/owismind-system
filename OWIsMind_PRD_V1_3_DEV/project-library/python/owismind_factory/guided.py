@@ -26,7 +26,8 @@ done / failed (kind is only a display hint).
 
 import uuid
 
-from . import agent_builder, flow_builder, hub, pipeline, registry, removal, review, semantic_builder
+from . import agent_builder, flow_builder, hub, pipeline, prompt_writer, registry, removal, review
+from . import semantic_builder
 from . import tool_builder, wizard as wizard_module
 from . import guided_store
 from .fctx import BLOCKED, FAILED, FactoryContext
@@ -58,8 +59,8 @@ _DETAIL_MAX = 600
 
 STAGE_ORDER = [
     "preflight", "plan", "infra", "first_build", "profile_review", "wizard",
-    "brain", "template", "agent_code", "code_agent", "capability", "smoke",
-    "enable",
+    "brain", "template", "agent_code", "code_agent", "capability",
+    "business_prompt", "smoke", "enable",
 ]
 
 _STAGE_META = {
@@ -86,6 +87,9 @@ _STAGE_META = {
                    "Toi : créer le Code Agent (env 3.11) et coller le code généré."),
     "capability": ("auto", "Enregistrement de la capability",
                    "Ajoute le nouvel expert au registre du hub (désactivé)."),
+    "business_prompt": ("auto", "Prompt métier du sous-agent",
+                        "L'IA rédige un premier prompt métier (vocabulaire, règles, exemples), "
+                        "à relire et enrichir ensuite dans les réglages de l'agent."),
     "smoke": ("manual", "Test de bout en bout",
               "Toi : poser les questions de test dans la webapp principale."),
     "enable": ("auto", "Activation dans l'orchestrateur",
@@ -662,6 +666,38 @@ def _run_capability(env, state, ctx):
     return _OUT_DONE, []
 
 
+def _run_business_prompt(env, state, ctx):
+    """First draft of the business prompt by the factory AI, written ONLY when the
+    hub has none yet (never overwrites human work). NON-BLOCKING: an AI failure
+    is reported and the run continues, the prompt can be written later from the
+    agent Settings screen (the agent works without it)."""
+    spec = _spec(state)
+    path = prompt_writer.business_prompt_path(spec.domain)
+    if hub.read_text(env.project, path):
+        ctx.skip("business_prompt", "a business prompt already exists (%s): kept" % path)
+        return _OUT_DONE, []
+    caps = hub.read_capabilities(env.project) or {}
+    entry = caps.get(spec.capability_key)
+    if not isinstance(entry, dict):
+        return _OUT_FAILED, ["Capability %s introuvable : refais l'étape précédente."
+                             % spec.capability_key]
+    try:
+        result = prompt_writer.draft(env.project, entry)
+    except Exception as exc:
+        result = {"error": str(exc)[:200]}
+    if result.get("error"):
+        ctx.manual("business_prompt", "no first draft (%s): write it from the agent Settings "
+                                      "screen, 'Write with AI'" % result["error"])
+        return _OUT_DONE, []
+
+    def _write():
+        hub.write_text(env.project, path, result["prompt"])
+        return True
+
+    ctx.act("business_prompt", "write the first business prompt draft (%s)" % path, _write)
+    return _OUT_DONE, []
+
+
 def _check_smoke(env, state):
     spec = _spec(state)
     caps = hub.read_capabilities(env.project) or {}
@@ -1201,6 +1237,7 @@ _RUNNERS = {
     "template": _run_template,
     "agent_code": _run_agent_code,
     "capability": _run_capability,
+    "business_prompt": _run_business_prompt,
     "enable": _run_enable,
 }
 
@@ -1390,6 +1427,8 @@ def record_review_proposal(run, result, feedback, answers):
     info["questions"] = result.get("questions") or []
     info["changes"] = review.diff_configs(info.get("base"), info["proposal"],
                                           info.get("routing"), info["notes"])
+    for change in info["changes"]:
+        change["edit"] = review.editable_value(change, info["proposal"])
     info["keep"] = [c["id"] for c in info["changes"]]
     info["used_samples"] = bool(result.get("used_samples"))
     return run

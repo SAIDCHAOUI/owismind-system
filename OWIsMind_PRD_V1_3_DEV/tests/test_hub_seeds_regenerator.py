@@ -37,6 +37,7 @@ def _copy_fixture_repo(destination_root):
         os.path.join("project-library", "python", "owismind_factory", "hub.py"),
         os.path.join("project-library", "python", "owismind_hub", "capabilities.json"),
         os.path.join("project-library", "python", "owismind_hub", "factory_settings.json"),
+        os.path.join("project-library", "python", "owismind_hub", "models.json"),
         os.path.join("project-library", "python", "owismind_hub", "run_settings.json"),
         os.path.join("project-library", "python", "owismind_hub", "prompts", "orchestrator_persona.md"),
         os.path.join("project-library", "python", "owismind_hub", "prompts", "orchestrator_workflow.md"),
@@ -61,7 +62,7 @@ class TestHubSeedsRegenerator(unittest.TestCase):
         expected_count = len(_regenerator.build_canonical_files(_REPO_ROOT))
         self.assertIn("OK: all %d hub seed files are up to date." % expected_count,
                       result.stdout)
-        self.assertEqual(expected_count, 5)
+        self.assertEqual(expected_count, 6)
 
     def test_canonical_bytes_are_deterministic(self):
         first = _regenerator.build_canonical_files(_REPO_ROOT)
