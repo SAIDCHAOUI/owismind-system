@@ -36,8 +36,8 @@ _FENCE_SPOOF_RE = re.compile(r"</?\s*%s" % FENCE_TAG, re.I)
 
 _HIGH = [
     ("override_order",
-     r"\b(ignore|disregard|forget|override|bypass)\b.{0,80}\b(previous|prior|above|earlier|all|any|your|the)\b"
-     r".{0,60}\b(instruction|rule|prompt|guideline|constraint|context|polic)",
+     r"\b(ignore|disregard|forget|override|bypass)\b.{0,200}\b(previous|prior|above|earlier|all|any|your|the)\b"
+     r".{0,120}\b(instruction|rule|prompt|guideline|constraint|context|polic)",
      "Order to ignore or override the existing instructions"),
     ("override_order_fr",
      r"\b(ignore[rz]?|oublie[rz]?|contourne[rz]?)\b.{0,80}\b(instruction|r[eè]gle|consigne|prompt|contrainte)",
@@ -53,6 +53,17 @@ _HIGH = [
      r"\b(system prompt|hidden (prompt|instruction)|initial (prompt|instruction)|your (instructions|prompt)|"
      r"prompt syst[eè]me|tes instructions)",
      "Ask to reveal the system prompt or hidden instructions"),
+    ("persona_swap",
+     r"\b(act as|pretend (to be|you are)|behave as|play the role of|roleplay as|simulate being)\b",
+     "Asks the model to play another role"),
+    ("persona_swap_fr",
+     r"\b(tu dois (maintenant|d[eé]sormais)|[aà] partir de maintenant|fais (comme si|semblant)|agis comme|comporte[- ]toi comme)\b",
+     "Asks the model to change behaviour (French)"),
+    ("prompt_copy",
+     r"\b(repeat|recopie[rz]?|copy|translate|summari[sz]e|traduis|r[eé]sume[rz]?|restate|paraphrase)\b.{0,60}"
+     r"\b(your|the) (system |initial |hidden )?(instructions|prompt)\b|"
+     r"\b(tes|vos|ton|votre) (instructions|prompt)\b",
+     "Asks to copy, translate or summarize the instructions"),
     ("jailbreak",
      r"\b(jailbreak|DAN mode|developer mode|do anything now)\b",
      "Known jailbreak wording"),
@@ -63,10 +74,10 @@ _HIGH = [
      r"</?\s*%s" % FENCE_TAG,
      "Tries to close or forge the untrusted-data fence"),
     ("destructive_sql",
-     r"\b(drop|truncate|alter)\s+(table|database|schema)\b|\b(delete\s+from|insert\s+into|update\s+\w+\s+set)\b",
+     r"\b(drop|alter)\s+(table|database|schema)\b|\btruncate\b\s+\w+|\bgrant\s+\w+.{0,40}\bto\b|\b(delete\s+from|insert\s+into|update\s+\w+\s+set)\b",
      "Write / destructive SQL in a read-only context"),
     ("data_leak_link",
-     r"!\[[^\]]*\]\(\s*https?://",
+     r"!\[[^\]]*\]\(\s*(https?://|data:)|<\s*(img|iframe|script|object|embed)\b",
      "Markdown image with an external URL (can leak data)"),
     ("exfiltrate_to_url",
      r"\b(send|post|upload|forward|exfiltrate|envoie[rz]?)\b.{0,100}\bhttps?://",
@@ -117,13 +128,16 @@ def normalize(text):
         text = html.unescape(text)
     text = unicodedata.normalize("NFKC", text)
     text = _INVISIBLE_RE.sub("", text).translate(_HOMOGLYPHS)
+    text = re.sub(r"(?<=\w)[\u00a0\u2000-\u200a\u202f\u205f\u3000]+(?=\w)", "", text)  # no-break space inside a word
+    text = re.sub(r"(?<=\w)<[^>\s]{1,12}>(?=\w)", "", text)  # tag splitting a word: ig<b>nore
     text = _SPELLED_RE.sub(lambda m: re.sub(r"[.\-_*|/ ]", "", m.group(0)), text)
     return re.sub(r"\s+", " ", text).strip()
 
 
 def defang(text, max_chars=None):
     """Clean untrusted text before it reaches a model (never the other way)."""
-    text = _INVISIBLE_RE.sub("", str(text if text is not None else ""))
+    text = unicodedata.normalize("NFKC", str(text if text is not None else ""))
+    text = _INVISIBLE_RE.sub("", text)
     text = _CONTROL_RE.sub(" ", text)
     text = _FENCE_SPOOF_RE.sub("<fence-removed", text)
     if max_chars is not None and len(text) > max_chars:
@@ -159,8 +173,8 @@ def _scan(text, max_findings=20):
                 findings.append({"severity": sev, "rule": name, "why": why, "line": line,
                                  "excerpt": match.group(0).strip()[:120]})
                 seen.add(name)
-                if len(findings) >= max_findings * 5:
-                    return findings
+                if len(findings) >= max_findings * 5 and sev != "high":
+                    break  # only MEDIUM volume is capped: every HIGH rule always runs on both passes
     return findings
 
 
@@ -191,14 +205,17 @@ def scan_config(config):
     """Scan every free-text field of a semantic-model config / proposal."""
     texts = []
     config = config if isinstance(config, dict) else {}
-    for key in ("entity_description", "instructions", "planner_description"):
+    for key in ("entity_name", "entity_description", "instructions", "planner_description",
+                "tool_name", "label_en", "label_fr", "domain"):
         texts.append(config.get(key))
     for att in config.get("attributes") or []:
-        texts.append(att.get("description")) if isinstance(att, dict) else None
+        if isinstance(att, dict):
+            texts += [att.get("description"), att.get("name"), att.get("column")]
     for key in ("metrics", "filters"):
         for item in config.get(key) or []:
             if isinstance(item, dict):
-                texts += [item.get("description"), item.get("pseudo_sql"), item.get("llm_instructions")]
+                texts += [item.get("name"), item.get("description"), item.get("pseudo_sql"),
+                          item.get("llm_instructions")]
     for item in config.get("glossary") or []:
         if isinstance(item, dict):
             texts += [item.get("term")] + list(item.get("synonyms") or [])
@@ -210,5 +227,6 @@ def scan_config(config):
             texts += [item.get("key"), item.get("field"), item.get("value")]
     for item in config.get("questions") or config.get("clarifying_questions") or []:
         if isinstance(item, dict):
-            texts += [item.get("question"), item.get("why"), item.get("default")]
+            texts += [item.get("id"), item.get("question"), item.get("why"), item.get("default"),
+                      item.get("answer")]
     return scan("\n".join(str(t) for t in texts if t))

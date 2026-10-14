@@ -299,6 +299,17 @@ def _wizard_config_fallback(project, body, spec):
     return None
 
 
+def _config_gate(body, wizard_config):
+    """suspicious_content error when a wizard config carries injection-shaped text
+    (high findings) and the operator did not acknowledge it; None when it may pass."""
+    if not isinstance(wizard_config, dict):
+        return None
+    findings = guardrails.scan_config(wizard_config)
+    if guardrails.has_high(findings) and (body or {}).get("acknowledge_risks") is not True:
+        return _err("suspicious_content", 400, {"findings": findings})
+    return None
+
+
 @app.route("/api/plan", methods=["POST"])
 @_safe
 def api_plan():
@@ -311,6 +322,9 @@ def api_plan():
     project = _project()
     discovery, schema_hints = _gates_from_hub(project, body)
     wizard_config = _wizard_config_fallback(project, body, spec)
+    gate = _config_gate(body, wizard_config)
+    if gate:
+        return gate
     # Non-blocking preflight warnings (collisions, weak routing, name headroom)
     # against what is already registered in the hub.
     caps = hub.read_capabilities(project) or {}
@@ -345,6 +359,9 @@ def api_execute():
     project = _project()
     discovery, schema_hints = _gates_from_hub(project, body)
     wizard_config = _wizard_config_fallback(project, body, spec)
+    gate = _config_gate(body, wizard_config)
+    if gate:
+        return gate
     ctx = fctx.FactoryContext(project=project, dry_run=False, abort_on_failure=False)
     _, rec = _new_job("execute", ctx=ctx)
     if rec is None:

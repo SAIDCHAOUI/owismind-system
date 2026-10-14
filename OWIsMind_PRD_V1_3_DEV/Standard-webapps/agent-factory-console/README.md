@@ -194,3 +194,10 @@ LAB launcher webapp.
 - The backend codes against the FROZEN signatures of `pipeline.create_domain`, `probes.run_read_probes`
   / `probes.format_probe_report`, and `wizard.draft_model_config` / `wizard.merge_answers`. Those
   modules are authored in parallel; integration is verified once they land.
+
+
+## Access control (security review)
+
+The console backend does not check the caller's identity: anyone who can open the webapp can rewrite
+prompts, models and capabilities. In DSS, restrict the webapp (Standard webapp > Settings > Security,
+"Who can view") to project administrators only.

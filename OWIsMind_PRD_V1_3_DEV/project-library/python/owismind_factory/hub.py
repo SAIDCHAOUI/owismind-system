@@ -221,6 +221,8 @@ DEFAULT_MODELS = {
 _LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
 _AGENT_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 MODELS_MAX_AGENTS = 50
+MODELS_MAX_BYTES = 20000
+MODELS_TOP_KEYS = ("version", "modes", "agents", "factory")
 
 
 def valid_llm_id(value):
@@ -236,6 +238,11 @@ def validate_models(obj):
     problems = []
     if not isinstance(obj, dict):
         return ["models must be an object"]
+    for key in obj:
+        if key not in MODELS_TOP_KEYS:
+            problems.append("unknown key %r (allowed: %s)" % (key, ", ".join(sorted(MODELS_TOP_KEYS))))
+    if len(json.dumps(obj, ensure_ascii=False)) > MODELS_MAX_BYTES:
+        problems.append("models file too large (max %d characters)" % MODELS_MAX_BYTES)
     modes = obj.get("modes")
     if not isinstance(modes, dict):
         problems.append("modes must be an object")
@@ -511,6 +518,12 @@ def append_capability(project, key, entry):
     The read-modify-write cycle holds the same lock as write_capabilities so two
     concurrent in-process appends (console jobs) cannot drop each other's entry.
     """
+    from . import guardrails  # local import: guardrails is stdlib-only, avoids any cycle
+    if guardrails.has_high(guardrails.scan(json.dumps(entry, ensure_ascii=False))) \
+            and not (isinstance(entry, dict) and entry.get("_risks_acknowledged")):
+        raise ValueError("suspicious_content: the capability text looks like an injection attempt")
+    if isinstance(entry, dict):
+        entry = {k: v for k, v in entry.items() if k != "_risks_acknowledged"}
     with _CAPABILITIES_WRITE_LOCK:
         capabilities = read_capabilities(project) or {}
         capabilities[key] = entry
