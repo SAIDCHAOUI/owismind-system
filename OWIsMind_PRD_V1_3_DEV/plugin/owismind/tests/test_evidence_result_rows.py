@@ -51,7 +51,7 @@ class RerunGateTests(unittest.TestCase):
         self.assertEqual([t["table"] for t in g["tables"]], ["t1"])
 
     def test_cte_names_helper(self):
-        toks, _ = tokenize('WITH RECURSIVE x AS (SELECT 1), "Y" AS NOT MATERIALIZED (SELECT 2) SELECT 1')
+        toks, _ = tokenize('WITH x AS (SELECT 1), "Y" AS NOT MATERIALIZED (SELECT 2) SELECT 1')
         self.assertEqual(cte_names(toks), {"x", "y"})
 
     def test_rejects_writes_and_side_effects(self):
@@ -73,6 +73,58 @@ class RerunGateTests(unittest.TestCase):
     def test_rejects_non_select_and_garbage(self):
         for sql in (None, "", "   ", "EXPLAIN SELECT 1", "SELECT (1", "SELECT 1"):
             self.assertFalse(check_rerunnable_select(sql)["ok"], repr(sql))
+
+    def test_hidden_subqueries_are_table_checked(self):
+        # Sub-queries inside function args / double parens must still expose their
+        # relations (the best-effort scope scanner treats those groups as opaque).
+        for sql, hidden in (
+            ("SELECT COALESCE((SELECT x FROM secret), 0) FROM t", "secret"),
+            ("SELECT * FROM t WHERE a IN ((SELECT a FROM secret))", "secret"),
+            ("SELECT a FROM t, s.secret", "secret"),
+            ("SELECT a FROM t JOIN u ON t.k = u.k, secret", "secret"),
+        ):
+            g = check_rerunnable_select(sql)
+            self.assertTrue(g["ok"], sql)
+            self.assertIn(hidden, [x["table"] for x in g["tables"]], sql)
+
+    def test_cte_cannot_shadow_a_real_table_in_its_own_or_earlier_body(self):
+        g = check_rerunnable_select("WITH secret AS (SELECT * FROM secret) SELECT * FROM secret")
+        self.assertTrue(g["ok"])
+        self.assertEqual([x["table"] for x in g["tables"]], ["secret"])
+        g = check_rerunnable_select(
+            "WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x FROM t) SELECT * FROM a")
+        self.assertEqual(sorted(x["table"] for x in g["tables"]), ["b", "t"])
+
+    def test_nested_with_and_recursive_refused(self):
+        for sql in (
+            "SELECT * FROM (WITH x AS (SELECT 1 FROM t) SELECT * FROM x) q",
+            "WITH RECURSIVE x AS (SELECT 1 FROM t) SELECT * FROM x",
+        ):
+            self.assertFalse(check_rerunnable_select(sql)["ok"], sql)
+
+    def test_only_allowlisted_functions(self):
+        for sql in (
+            "SELECT table_to_xml('secret', true, false, '') FROM t",
+            "SELECT ts_stat('select v from secret') FROM t",
+            "SELECT my_udf(a) FROM t",
+            "SELECT public.f(a) FROM t",
+            'SELECT "Weird"(a) FROM t',
+            "SELECT * FROM t WHERE a IN (TABLE secret)",
+            "SELECT current_setting('x') FROM t",
+        ):
+            self.assertFalse(check_rerunnable_select(sql)["ok"], sql)
+
+    def test_typical_analytics_select_passes(self):
+        g = check_rerunnable_select(
+            'SELECT "Account_name", EXTRACT(YEAR FROM "Snapshot_date") AS y, '
+            'ROUND(CAST(SUM("Revenues") AS numeric(18,2)), 2) AS rev, '
+            'RANK() OVER (PARTITION BY "Country" ORDER BY SUM("Revenues") DESC) AS r, '
+            "COUNT(DISTINCT id) FILTER (WHERE \"Phase\" = 'ACTUALS') AS n "
+            'FROM "public"."P_drive" WHERE "Year" IN (2025, 2026) '
+            "AND TRIM(BOTH ' ' FROM \"Country\") <> '' GROUP BY 1, 2, \"Country\" "
+            "HAVING SUM(\"Revenues\") > 0 ORDER BY rev DESC LIMIT 100")
+        self.assertTrue(g["ok"], g["reason"])
+        self.assertEqual(g["tables"], [{"schema": "public", "table": "P_drive"}])
 
     def test_string_literal_with_banned_word_passes(self):
         g = check_rerunnable_select("SELECT a FROM t WHERE status = 'delete'")

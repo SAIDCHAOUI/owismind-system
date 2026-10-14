@@ -657,51 +657,174 @@ def predicates_for_table(predicates, table):
 # The Evidence "result" tables page through the agent's OWN final SELECT, re-run
 # server-side wrapped in a bounded outer SELECT (COUNT / LIMIT-OFFSET). The statement
 # was authored by the agent and already executed once; this gate is the defensive
-# layer on top of the read-only transaction + statement timeout: one plain SELECT/WITH
-# statement, no write/DDL/execution keyword, no server-side function family that can
-# touch files, other databases or session settings, no set operation (only the first
-# arm would be table-checked), and every FROM/JOIN relation is either a CTE of the
-# statement itself or a discovered project dataset (checked by the service).
+# layer on top of the read-only transaction + statement timeout. It is a SECURITY
+# gate, so unlike the best-effort ``_scan_scopes`` it never treats anything as
+# opaque: every FROM / JOIN / comma-join site at EVERY nesting depth (function
+# arguments and doubly-parenthesized sub-queries included) yields a relation, and
+# the service requires each of them to be a discovered project dataset. CTEs are
+# accepted only as ONE top-level WITH list (no RECURSIVE, no nested WITH), and a
+# CTE name only shadows a relation where PostgreSQL scoping makes it visible: in
+# the main query, or in the body of a LATER CTE - never inside its own body or an
+# earlier one (``WITH t AS (SELECT * FROM t)`` reads the real table t).
 _BANNED_RERUN_WORDS = frozenset((
     "insert", "update", "delete", "merge", "upsert", "drop", "alter", "grant",
     "revoke", "copy", "create", "truncate", "execute", "exec", "call", "do", "into",
     "returning", "lock", "vacuum", "analyze", "refresh", "listen", "notify",
-    "union", "intersect", "except", "set_config", "dblink", "query_to_xml",
+    "union", "intersect", "except", "recursive", "set_config", "ts_stat",
+    "ts_rewrite",
 ))
-_BANNED_RERUN_PREFIXES = ("pg_", "lo_", "dblink")
+# Function families that touch files / other databases / session state, or run a
+# query given as TEXT (query_to_xml, table_to_xml, ... read relations the table
+# check below cannot see).
+_BANNED_RERUN_PREFIXES = ("pg_", "lo_", "dblink", "query_to_", "table_to_",
+                          "schema_to_", "database_to_", "cursor_to_")
+# Bare words banned only as KEYWORDS (a quoted identifier of that name is a column):
+# ``(TABLE x)`` is a sub-query reading relation x without any FROM.
+_BANNED_RERUN_KEYWORDS = frozenset(("table",))
+# SQL-standard functions whose argument list uses FROM as a separator, not a table site.
+_FROM_ARG_FUNCTIONS = frozenset(("EXTRACT", "SUBSTRING", "SUBSTR", "TRIM", "OVERLAY",
+                                 "POSITION"))
+# Words that end a FROM list at the current depth (a later ',' is a select/group list).
+_FROM_LIST_ENDERS = _CLAUSE_ENDERS | {"WHERE", "SELECT"}
+
+
+# ALLOWLIST of callable names (a word or quoted identifier directly followed by '(').
+# A deny-list of dangerous functions can never be complete (server-side file or
+# network access, functions running a query given as text, user-defined functions),
+# so the re-run gate only accepts plain read-only built-ins an analytics SELECT uses;
+# anything else - including any schema-qualified call - refuses the re-run (the table
+# then keeps the captured excerpt with an honest caveat).
+_SAFE_FUNCTIONS = frozenset((
+    # aggregates
+    "sum", "count", "avg", "min", "max", "stddev", "stddev_pop", "stddev_samp",
+    "variance", "var_pop", "var_samp", "string_agg", "array_agg", "bool_and",
+    "bool_or", "every", "percentile_cont", "percentile_disc", "mode", "corr",
+    "covar_pop", "covar_samp", "regr_slope", "regr_intercept", "json_agg", "jsonb_agg",
+    # window
+    "row_number", "rank", "dense_rank", "percent_rank", "cume_dist", "ntile", "lag",
+    "lead", "first_value", "last_value", "nth_value",
+    # conditional / casts / types
+    "coalesce", "nullif", "greatest", "least", "cast", "numeric", "decimal", "varchar",
+    "char", "character", "int", "integer", "bigint", "smallint", "float", "real",
+    "timestamp", "timestamptz", "time", "interval", "date", "text", "boolean",
+    # math
+    "round", "trunc", "floor", "ceil", "ceiling", "abs", "sign", "mod", "power", "sqrt",
+    "exp", "ln", "log", "div", "width_bucket",
+    # strings
+    "lower", "upper", "initcap", "length", "char_length", "character_length",
+    "octet_length", "trim", "btrim", "ltrim", "rtrim", "lpad", "rpad", "substring",
+    "substr", "left", "right", "replace", "concat", "concat_ws", "split_part", "strpos",
+    "position", "overlay", "repeat", "reverse", "translate", "to_char", "to_number",
+    "to_date", "to_timestamp", "regexp_replace", "unaccent",
+    # dates
+    "date_trunc", "date_part", "extract", "age", "make_date", "make_timestamp",
+    "make_interval", "justify_days", "justify_hours", "date_bin",
+    # arrays / json read-only
+    "array_length", "cardinality", "array_to_string", "string_to_array",
+    "json_build_object", "jsonb_build_object",
+))
+# Keywords that legitimately precede '(' (sub-queries, lists, window clauses, ...).
+_PAREN_KEYWORDS = frozenset((
+    "IN", "EXISTS", "AS", "VALUES", "OVER", "FILTER", "GROUP", "ANY", "ALL", "SOME",
+    "ARRAY", "ROW", "AND", "OR", "NOT", "ON", "USING", "WHERE", "FROM", "JOIN",
+    "SELECT", "BY", "HAVING", "WHEN", "THEN", "ELSE", "DISTINCT", "BETWEEN", "LIKE",
+    "ILIKE", "IS", "LATERAL", "MATERIALIZED", "CASE", "END", "WITHIN",
+))
+
+
+def _parse_top_level_ctes(tokens):
+    """``(ctes, main_start)`` for a statement starting with WITH, else ``([], 0)``.
+
+    ``ctes`` = [(lower_name, body_lo, body_hi)] in declaration order (body bounds
+    are token indexes inside the CTE's parentheses). Returns ``(None, None)`` when
+    the WITH list is not the simple ``name [ (cols) ] AS [ [NOT] MATERIALIZED ] (...)``
+    shape - the gate then refuses rather than guesses.
+    """
+    if not tokens or not _is_word(tokens[0], "WITH"):
+        return [], 0
+    n = len(tokens)
+    ctes = []
+    i = 1
+    while True:
+        if i >= n or tokens[i].kind not in ("word", "qident"):
+            return None, None
+        tok = tokens[i]
+        name = tok.text if tok.kind == "word" else tok.text[1:-1].replace('""', '"')
+        i += 1
+        if i < n and tokens[i].text == "(":
+            close = _match_paren(tokens, i, n)
+            if close is None:
+                return None, None
+            i = close + 1
+        if not (i < n and _is_word(tokens[i], "AS")):
+            return None, None
+        i += 1
+        if i < n and _is_word(tokens[i], "NOT"):
+            i += 1
+        if i < n and _is_word(tokens[i], "MATERIALIZED"):
+            i += 1
+        if not (i < n and tokens[i].text == "("):
+            return None, None
+        close = _match_paren(tokens, i, n)
+        if close is None:
+            return None, None
+        ctes.append((name.lower(), i + 1, close))
+        i = close + 1
+        if i < n and tokens[i].text == ",":
+            i += 1
+            continue
+        return ctes, i
 
 
 def cte_names(tokens):
-    """Lower-cased names of the CTEs a token list declares (any nesting level).
+    """Lower-cased names of the top-level CTEs of a token list (empty when none)."""
+    ctes, _main = _parse_top_level_ctes(tokens)
+    return {c[0] for c in ctes or []}
 
-    A CTE is ``name [ (cols) ] AS [ [NOT] MATERIALIZED ] (`` introduced by WITH,
-    RECURSIVE or a comma. Pure; tolerant of anything it does not recognise.
+
+def _relation_sites(tokens):
+    """Every relation reference ``(ref, token_index)`` at ANY depth. Pure.
+
+    A site is the token after FROM / JOIN, or after a comma that sits in a FROM list
+    of the same parenthesis depth. Each '(' opens a fresh state (so commas of a
+    function's argument list are never mistaken for comma joins); the FROM of
+    EXTRACT/SUBSTRING/TRIM/OVERLAY/POSITION argument lists and of IS DISTINCT FROM
+    is not a site. A site that is not an identifier (a sub-query paren) yields
+    nothing: the sub-query's own sites are reached by the same flat scan.
     """
-    names = set()
+    sites = []
+    stack = [{"in_from": False, "func_from": False}]
     n = len(tokens)
-    for i, tok in enumerate(tokens):
-        if tok.kind not in ("word", "qident") or i == 0:
+    for i, t in enumerate(tokens):
+        top = stack[-1]
+        if t.text == "(":
+            prev = tokens[i - 1] if i > 0 else None
+            func = bool(prev is not None and prev.kind == "word"
+                        and prev.text.upper() in _FROM_ARG_FUNCTIONS)
+            stack.append({"in_from": False, "func_from": func})
             continue
-        prev = tokens[i - 1]
-        if not (prev.text == "," or _is_word(prev, "WITH") or _is_word(prev, "RECURSIVE")):
+        if t.text == ")":
+            if len(stack) > 1:
+                stack.pop()
             continue
-        j = i + 1
-        if j < n and tokens[j].text == "(":
-            close = _match_paren(tokens, j, n)
-            if close is None:
-                continue
-            j = close + 1
-        if not (j < n and _is_word(tokens[j], "AS")):
-            continue
-        j += 1
-        if j < n and _is_word(tokens[j], "NOT"):
-            j += 1
-        if j < n and _is_word(tokens[j], "MATERIALIZED"):
-            j += 1
-        if j < n and tokens[j].text == "(":
-            name = tok.text if tok.kind == "word" else tok.text[1:-1].replace('""', '"')
-            names.add(name.lower())
-    return names
+        site = False
+        if t.kind == "word":
+            u = t.text.upper()
+            if u in ("FROM", "JOIN"):
+                if u == "FROM" and (top["func_from"]
+                                    or (i > 0 and _is_word(tokens[i - 1], "DISTINCT"))):
+                    continue
+                top["in_from"] = True
+                site = True
+            elif u in _FROM_LIST_ENDERS:
+                top["in_from"] = False
+        elif t.text == "," and top["in_from"]:
+            site = True
+        if site and i + 1 < n:
+            ref, _j = _read_table_ref(tokens, i + 1, n)
+            if ref is not None:
+                sites.append((ref, i + 1))
+    return sites
 
 
 def check_rerunnable_select(sql):
@@ -709,8 +832,8 @@ def check_rerunnable_select(sql):
 
     Returns ``{"ok", "reason", "sql", "tables"}``: ``sql`` is the statement without
     its optional trailing semicolon (ready to be wrapped as a sub-query) and
-    ``tables`` lists every FROM/JOIN relation that is NOT one of the statement's own
-    CTEs (``{"schema", "table"}``) - the service requires each of them to resolve to a
+    ``tables`` lists every relation the statement reads that is NOT a visible CTE
+    (``{"schema", "table"}``) - the service requires each of them to resolve to a
     discovered project dataset.
     """
     def fail(reason):
@@ -732,7 +855,7 @@ def check_rerunnable_select(sql):
     if not tokens or not (_is_word(tokens[0], "SELECT") or _is_word(tokens[0], "WITH")):
         return fail("not_select")
     depth = 0
-    for t in tokens:
+    for idx, t in enumerate(tokens):
         if t.text == ";":
             return fail("multi_statement")
         if t.text == "(":
@@ -746,20 +869,46 @@ def check_rerunnable_select(sql):
             low = name.lower()
             if low in _BANNED_RERUN_WORDS or low.startswith(_BANNED_RERUN_PREFIXES):
                 return fail("unsafe_sql")
+            if t.kind == "word" and low in _BANNED_RERUN_KEYWORDS:
+                return fail("unsafe_sql")
+            if t.kind == "word" and low == "with" and idx != 0:
+                return fail("nested_with_unsupported")
     if depth != 0:
         return fail("unbalanced_parens")
-    scopes = []
-    _scan_scopes(tokens, 0, len(tokens), scopes)
-    ctes = cte_names(tokens)
+    ctes, main_start = _parse_top_level_ctes(tokens)
+    if ctes is None:
+        return fail("cte_unsupported")
+    # Callable allowlist: every name followed by '(' is a known keyword, an allowed
+    # built-in, or a CTE header ``name (cols) AS``; a qualified call (x.f(...)) never is.
+    cte_set = {c[0] for c in ctes}
+    for idx in range(len(tokens) - 1):
+        t = tokens[idx]
+        if tokens[idx + 1].text != "(" or t.kind not in ("word", "qident"):
+            continue
+        if idx > 0 and tokens[idx - 1].text == ".":
+            return fail("unsafe_function")
+        if t.kind == "word" and t.text.upper() in _PAREN_KEYWORDS:
+            continue
+        name = (t.text if t.kind == "word" else t.text[1:-1].replace('""', '"')).lower()
+        if name in _SAFE_FUNCTIONS:
+            continue
+        if name in cte_set and idx < main_start:
+            continue
+        return fail("unsafe_function")
     tables, seen = [], set()
-    for scope in scopes:
-        for ref in scope["refs"]:
-            if ref["schema"] is None and ref["table"].lower() in ctes:
+    for ref, pos in _relation_sites(tokens):
+        if ref["schema"] is None:
+            visible = [c[0] for c in ctes] if pos >= main_start else []
+            for k, (_name, lo, hi) in enumerate(ctes):
+                if lo <= pos < hi:
+                    visible = [c[0] for c in ctes[:k]]  # only EARLIER CTEs
+                    break
+            if ref["table"].lower() in visible:
                 continue
-            key = ((ref["schema"] or "").lower(), ref["table"].lower())
-            if key not in seen:
-                seen.add(key)
-                tables.append({"schema": ref["schema"], "table": ref["table"]})
+        key = ((ref["schema"] or "").lower(), ref["table"].lower())
+        if key not in seen:
+            seen.add(key)
+            tables.append({"schema": ref["schema"], "table": ref["table"]})
     if not tables:
         return fail("no_source_table")
     return {"ok": True, "reason": None, "sql": sql[:body_end].strip(), "tables": tables}
