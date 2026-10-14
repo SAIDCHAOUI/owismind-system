@@ -232,6 +232,25 @@ class TestReviewRun(unittest.TestCase):
         self.assertEqual(config["attributes"], [{"column": "Amount", "resolvable": True}])
         self.assertEqual(self.calls[1], ("index", "M1"))
 
+    def test_dangerous_expression_is_refused_before_any_write(self):
+        run = self._to_apply(["metric:Deals"])
+        run["state"]["review"]["proposal"]["metrics"][-1]["pseudo_sql"] = "COUNT(*)); DROP TABLE x; --"
+        run = guided.run_current_stage(object(), run, settings={})
+        self.assertEqual(run["state"]["stages"]["review_apply"]["status"], guided.STAGE_FAILED)
+        self.assertEqual(self.calls, [])
+
+    def test_config_issues(self):
+        self.assertEqual(review.config_issues({"metrics": [{"name": "a", "pseudo_sql": "SUM(x)"}]}), [])
+        self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "1=1; DELETE"}]}))
+        self.assertTrue(review.config_issues({"instructions": "x" * 30000}))
+        self.assertEqual(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = 'drop; me'"}]}), [])
+
+    def test_personal_values_masked_in_any_column(self):
+        text = review.format_sample_rows(["Comment"], [["call john at +33 6 12 34 56 78 or j.doe@corp.com"]])
+        self.assertNotIn("j.doe@corp.com", text)
+        self.assertNotIn("12 34 56", text)
+        self.assertIn("call john", text)
+
     def test_oversized_routing_is_never_proposed(self):
         base = review.config_from_model_raw(RAW)
         p = dict(base, planner_description="x" * 2500)

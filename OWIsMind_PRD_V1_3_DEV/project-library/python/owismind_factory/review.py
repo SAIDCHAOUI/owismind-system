@@ -50,6 +50,16 @@ PERSONAL_COLUMN_RE = re.compile(
 
 HIDDEN = "[hidden]"
 
+# Values that look personal whatever their column name (free-text columns can
+# carry them): e-mail addresses and phone-like digit runs are masked in place.
+_EMAIL_VALUE_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
+_PHONE_VALUE_RE = re.compile(r"\+?\d[\d .()-]{7,}\d")
+
+# Size bounds of any text the AI writes into the live model (descriptions,
+# rules): a runaway answer can never bloat the model or the prompts it feeds.
+MAX_TEXT_CHARS = 2000
+MAX_RULES_CHARS = 20000
+
 # JSON schema forced on the review completion. Same content keys as the wizard
 # draft (so semantic_builder.apply_config consumes it unchanged), plus the
 # plain-words reasons and at most a few follow-up questions.
@@ -171,7 +181,7 @@ def format_sample_rows(columns, rows, limit=SAMPLE_ROWS):
             elif value is None:
                 out[column] = None
             else:
-                text = str(value)
+                text = _PHONE_VALUE_RE.sub(HIDDEN, _EMAIL_VALUE_RE.sub(HIDDEN, str(value)))
                 out[column] = text if len(text) <= SAMPLE_CELL_CHARS else text[:SAMPLE_CELL_CHARS] + "..."
         lines.append(json.dumps(out, ensure_ascii=False))
     return "\n".join(lines)
@@ -556,3 +566,44 @@ def new_examples(base, final):
     are carried over untouched)."""
     seen = set(_example_key(g) for g in (base or {}).get("golden_queries") or [])
     return [g for g in (final or {}).get("golden_queries") or [] if _example_key(g) not in seen]
+
+
+def _expression_issues(expr):
+    """Issues of a metric / filter expression fragment: it is pasted INTO the SQL
+    the semantic model writes, so it must stay a pure read-only expression (no
+    statement keyword, no statement separator, no comment that could hide one)."""
+    text = str(expr or "")
+    issues = []
+    stripped = wizard._strip_literals(text)
+    if ";" in stripped or "--" in stripped or "/*" in stripped:
+        issues.append("statement separator or comment")
+    upper = stripped.upper()
+    for kw in wizard._FORBIDDEN_STATEMENTS:
+        if re.search(r"\b%s\b" % kw, upper):
+            issues.append("forbidden keyword %s" % kw)
+    return issues
+
+
+def config_issues(config):
+    """PURE: every reason to refuse a minimal config BEFORE any write (empty =
+    clean). Covers the AI-written text sinks other than example questions
+    (validated separately): expression fragments and text sizes."""
+    issues = []
+    for key in ("metrics", "filters"):
+        for item in (config or {}).get(key) or []:
+            for issue in _expression_issues(item.get("pseudo_sql")):
+                issues.append("%s: %s" % (item.get("name") or "?", issue))
+            for field in ("description", "llm_instructions"):
+                if len(str(item.get(field) or "")) > MAX_TEXT_CHARS:
+                    issues.append("%s: %s too long" % (item.get("name") or "?", field))
+    for att in (config or {}).get("attributes") or []:
+        if len(str(att.get("description") or "")) > MAX_TEXT_CHARS:
+            issues.append("%s: description too long" % att.get("column"))
+    if len(str((config or {}).get("entity_description") or "")) > MAX_TEXT_CHARS:
+        issues.append("row description too long")
+    if len(str((config or {}).get("instructions") or "")) > MAX_RULES_CHARS:
+        issues.append("general rules too long")
+    for term in (config or {}).get("glossary") or []:
+        if len(" ".join(str(x) for x in term.get("synonyms") or [])) > MAX_TEXT_CHARS:
+            issues.append("%s: too many words" % term.get("term"))
+    return issues

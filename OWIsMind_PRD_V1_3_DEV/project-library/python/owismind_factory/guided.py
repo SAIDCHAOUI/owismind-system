@@ -1124,6 +1124,11 @@ def _run_review_apply(env, state, ctx):
                              "rien n'a été modifié, recommence la review."
                              % (spec.semantic_model_name, model_id, info.get("model_id"))]
 
+    refused = review.config_issues(config)
+    if refused:
+        return _OUT_FAILED, ["Changement refusé avant écriture : %s : rien n'a été modifié, "
+                             "ignore ce changement." % issue for issue in refused]
+
     if "golden_queries" in config:
         known = [a.get("column") for a in info["base"].get("attributes") or [] if a.get("column")]
         verdict = wizard_module.validate_golden_queries(
