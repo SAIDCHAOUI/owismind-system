@@ -315,7 +315,7 @@ def propose(project, spec, base_config, routing, feedback, answers=None, llm_id=
             notes[str(note["target"]).strip()] = str(note.get("why") or "")[:400]
     questions = [q for q in (data.pop("questions", None) or [])
                  if isinstance(q, dict) and q.get("id") and q.get("question")][:MAX_QUESTIONS]
-    return {"proposed": data, "notes": notes, "questions": questions,
+    return {"proposed": normalize_proposal(data), "notes": notes, "questions": questions,
             "used_samples": bool(samples), "used_comments": len(comments)}
 
 
@@ -482,7 +482,7 @@ def apply_selection(base, proposed, changes, keep_ids):
     """
     keep = set(keep_ids or [])
     final = copy.deepcopy(base or {})
-    proposed = proposed or {}
+    proposed = normalize_proposal(proposed)
     routing = None
     reindex = False
     list_areas = {"metric": ("metrics", "name"), "filter": ("filters", "name"),
@@ -623,3 +623,42 @@ def config_issues(config):
         if len(" ".join(str(x) for x in term.get("synonyms") or [])) > MAX_TEXT_CHARS:
             issues.append("%s: too many words" % term.get("term"))
     return issues
+
+
+# The ONLY fields a proposal may carry per list item. Anything else (for
+# instance generatedSql or pseudoSQLExpression, which the model writer reads as
+# alternatives) is dropped, so the validators and the writer always read the
+# very same text (no field-level validator differential).
+_ITEM_FIELDS = {
+    "attributes": (("column", str), ("description", str), ("resolvable", bool)),
+    "metrics": (("name", str), ("description", str), ("pseudo_sql", str), ("llm_instructions", str)),
+    "filters": (("name", str), ("description", str), ("pseudo_sql", str)),
+    "golden_queries": (("name", str), ("question", str), ("sql", str)),
+}
+
+
+def normalize_proposal(data):
+    """PURE: a proposal reduced to the schema fields, values coerced to their type."""
+    data = data if isinstance(data, dict) else {}
+    out = {}
+    for key in ("entity_description", "instructions", "planner_description"):
+        if key in data:
+            out[key] = str(data.get(key) or "")
+    for key, fields in _ITEM_FIELDS.items():
+        if key not in data:
+            continue
+        items = []
+        for item in data.get(key) or []:
+            if not isinstance(item, dict):
+                continue
+            clean = {}
+            for name, kind in fields:
+                if name in item and item[name] is not None:
+                    clean[name] = bool(item[name]) if kind is bool else str(item[name])
+            items.append(clean)
+        out[key] = items
+    if "glossary" in data:
+        out["glossary"] = [{"term": str(t.get("term") or ""),
+                            "synonyms": [str(x) for x in (t.get("synonyms") or []) if x is not None]}
+                           for t in data.get("glossary") or [] if isinstance(t, dict)]
+    return out

@@ -249,6 +249,24 @@ class TestReviewRun(unittest.TestCase):
         self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = E'\\x27'"}]}))
         self.assertEqual(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = 'Won'"}]}), [])
 
+    def test_alternate_sql_fields_never_reach_the_writer(self):
+        run = self._to_apply(["example:Deals won in 2025", "metric:Deals"])
+        proposal = run["state"]["review"]["proposal"]
+        proposal["golden_queries"][-1]["generatedSql"] = "DELETE FROM __TABLE__"
+        proposal["metrics"][-1]["pseudoSQLExpression"] = "1); DROP TABLE t; --"
+        run = guided.run_current_stage(object(), run, settings={})
+        self.assertEqual(run["status"], guided.RUN_DONE)
+        config = self.calls[0][2]
+        self.assertNotIn("DELETE", str(config))
+        self.assertNotIn("DROP", str(config))
+        self.assertNotIn("pseudoSQLExpression", str(config))
+
+    def test_normalize_proposal(self):
+        out = review.normalize_proposal({"golden_queries": [{"question": "q", "generatedSql": "x", "sql": "SELECT 1"}],
+                                         "metrics": [{"name": "m", "pseudoSQLExpression": "x"}], "evil": 1})
+        self.assertEqual(out, {"golden_queries": [{"question": "q", "sql": "SELECT 1"}],
+                               "metrics": [{"name": "m"}]})
+
     def test_new_example_raw_check(self):
         run = self._to_apply(["example:Deals won in 2025"])
         run["state"]["review"]["proposal"]["golden_queries"][-1]["sql"] = "SELECT 'a'' ; drop' FROM __TABLE__"

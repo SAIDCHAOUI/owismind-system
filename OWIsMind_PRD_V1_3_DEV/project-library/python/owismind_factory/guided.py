@@ -1132,8 +1132,11 @@ def _run_review_apply(env, state, ctx):
     if "golden_queries" in config:
         known = [a.get("column") for a in info["base"].get("attributes") or [] if a.get("column")]
         fresh = review.new_examples(info["base"], final)
+        # Same field expression as every reader downstream (validator, table
+        # substitution, model writer): the checked text IS the written text.
         raw_refused = [(g.get("question") or "?", review.raw_sql_issues(
-            g.get("sql") or "", allow_trailing_semicolon=True)) for g in fresh]
+            g.get("sql") or g.get("generatedSql") or "", allow_trailing_semicolon=True))
+            for g in fresh]
         raw_refused = [(q, i) for q, i in raw_refused if i]
         if raw_refused:
             return _OUT_FAILED, ["Question d'exemple refusée : %s -> %s : rien n'a été modifié, "
@@ -1382,7 +1385,7 @@ def record_review_proposal(run, result, feedback, answers):
     info["feedback"] = {"wrong": str((feedback or {}).get("wrong") or "")[:review.MAX_FEEDBACK_CHARS],
                         "know": str((feedback or {}).get("know") or "")[:review.MAX_FEEDBACK_CHARS]}
     info["answers"] = dict(answers or {})
-    info["proposal"] = result.get("proposed") or {}
+    info["proposal"] = review.normalize_proposal(result.get("proposed"))
     info["notes"] = result.get("notes") or {}
     info["questions"] = result.get("questions") or []
     info["changes"] = review.diff_configs(info.get("base"), info["proposal"],
