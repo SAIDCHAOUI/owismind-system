@@ -1131,8 +1131,15 @@ def _run_review_apply(env, state, ctx):
 
     if "golden_queries" in config:
         known = [a.get("column") for a in info["base"].get("attributes") or [] if a.get("column")]
-        verdict = wizard_module.validate_golden_queries(
-            {"golden_queries": review.new_examples(info["base"], final)}, known)
+        fresh = review.new_examples(info["base"], final)
+        raw_refused = [(g.get("question") or "?", review.raw_sql_issues(
+            g.get("sql") or "", allow_trailing_semicolon=True)) for g in fresh]
+        raw_refused = [(q, i) for q, i in raw_refused if i]
+        if raw_refused:
+            return _OUT_FAILED, ["Question d'exemple refusée : %s -> %s : rien n'a été modifié, "
+                                 "ignore ce changement." % (q[:80], "; ".join(i))
+                                 for q, i in raw_refused]
+        verdict = wizard_module.validate_golden_queries({"golden_queries": fresh}, known)
         if verdict["problems"]:
             return _OUT_FAILED, ["Question d'exemple refusée (lecture seule / colonnes connues) : "
                                  "%s -> %s : rien n'a été modifié, ignore ce changement."

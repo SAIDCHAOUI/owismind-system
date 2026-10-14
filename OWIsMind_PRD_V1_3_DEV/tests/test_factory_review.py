@@ -243,7 +243,18 @@ class TestReviewRun(unittest.TestCase):
         self.assertEqual(review.config_issues({"metrics": [{"name": "a", "pseudo_sql": "SUM(x)"}]}), [])
         self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "1=1; DELETE"}]}))
         self.assertTrue(review.config_issues({"instructions": "x" * 30000}))
-        self.assertEqual(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = 'drop; me'"}]}), [])
+        # checked on the RAW text: a literal can never hide a separator or a keyword
+        self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = 'x'; DROP TABLE t"}]}))
+        self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = $$a$$"}]}))
+        self.assertTrue(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = E'\\x27'"}]}))
+        self.assertEqual(review.config_issues({"filters": [{"name": "f", "pseudo_sql": "Stage = 'Won'"}]}), [])
+
+    def test_new_example_raw_check(self):
+        run = self._to_apply(["example:Deals won in 2025"])
+        run["state"]["review"]["proposal"]["golden_queries"][-1]["sql"] = "SELECT 'a'' ; drop' FROM __TABLE__"
+        run = guided.run_current_stage(object(), run, settings={})
+        self.assertEqual(run["state"]["stages"]["review_apply"]["status"], guided.STAGE_FAILED)
+        self.assertEqual(self.calls, [])
 
     def test_personal_values_masked_in_any_column(self):
         text = review.format_sample_rows(["Comment"], [["call john at +33 6 12 34 56 78 or j.doe@corp.com"]])

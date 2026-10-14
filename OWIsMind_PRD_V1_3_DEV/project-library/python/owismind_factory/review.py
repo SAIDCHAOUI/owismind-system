@@ -568,20 +568,33 @@ def new_examples(base, final):
     return [g for g in (final or {}).get("golden_queries") or [] if _example_key(g) not in seen]
 
 
-def _expression_issues(expr):
-    """Issues of a metric / filter expression fragment: it is pasted INTO the SQL
-    the semantic model writes, so it must stay a pure read-only expression (no
-    statement keyword, no statement separator, no comment that could hide one)."""
-    text = str(expr or "")
-    issues = []
-    stripped = wizard._strip_literals(text)
-    if ";" in stripped or "--" in stripped or "/*" in stripped:
-        issues.append("statement separator or comment")
-    upper = stripped.upper()
+# Characters that can open a quoting or escaping form a naive literal stripper
+# misreads (PostgreSQL dollar quotes, backslash escapes, comments, separators).
+_RAW_FORBIDDEN = (";", "--", "/*", "*/", "$", "\\")
+
+
+def raw_sql_issues(text, allow_trailing_semicolon=False):
+    """Issues of AI-written SQL checked on the RAW text, never on a stripped copy:
+    no validator differential is possible (a string literal cannot hide a
+    keyword or a separator from this check). False positives (a literal that
+    contains the word DROP) are refusals, which is the safe direction."""
+    raw = str(text or "")
+    if allow_trailing_semicolon:
+        raw = raw.rstrip().rstrip(";")
+    issues = ["forbidden character %r" % tok for tok in _RAW_FORBIDDEN if tok in raw]
+    if re.search(r"(?i)\bE'", raw):
+        issues.append("escape string literal")
+    upper = raw.upper()
     for kw in wizard._FORBIDDEN_STATEMENTS:
         if re.search(r"\b%s\b" % kw, upper):
             issues.append("forbidden keyword %s" % kw)
     return issues
+
+
+def _expression_issues(expr):
+    """A metric / filter expression is pasted INTO the SQL the semantic model
+    writes: it must stay a pure read-only expression."""
+    return raw_sql_issues(expr)
 
 
 def config_issues(config):
@@ -601,6 +614,9 @@ def config_issues(config):
             issues.append("%s: description too long" % att.get("column"))
     if len(str((config or {}).get("entity_description") or "")) > MAX_TEXT_CHARS:
         issues.append("row description too long")
+    for gq in (config or {}).get("golden_queries") or []:
+        if len(str(gq.get("question") or "")) > MAX_TEXT_CHARS:
+            issues.append("example question too long")
     if len(str((config or {}).get("instructions") or "")) > MAX_RULES_CHARS:
         issues.append("general rules too long")
     for term in (config or {}).get("glossary") or []:
