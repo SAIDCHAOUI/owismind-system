@@ -19,27 +19,17 @@
   expert / Analyser l'instance" incomprehensibles pour l'user ; le probleme etait la DISPOSITION, pas
   le nombre d'etapes. git bloque par la licence Xcode (`sudo xcodebuild -license`).
 
-**2026-08-13 run 3 (soir) : la vague UX EST DEPLOYEE EN DSS (1er zip DEV v1.3, teste par l'user :
-la webapp tourne, l'agent repond), puis 4 correctifs UX post-terrain.** Detail `sessions/2026-08-13.md`.
-- **Zip DEV** : `build_dev_plugin.py --version 1.3` -> `ready-for-dataiku/owismind_v1_3-upload.zip`
-  (id `owismind_v1_3`, coexiste avec la prod, invariants 10/10). Regenere APRES les correctifs (18h52),
-  donc **a re-uploader**.
-- **Moteur natif (etat des lieux, aucune modif)** : present + cable (routes -> start_run -> worker),
-  27 + 23 tests verts, doc `OWIsMind_PRD_V1_3_DEV/docs/NATIVE_ENGINE.md` (corrigee : 27 tests, pas 29),
-  **jamais execute contre un vrai Mesh**, OFF par defaut. Activation = flag `profile.native_engine`
-  par API admin (GET puis re-POST de toute la whitelist) car AUCUNE case dans l'UI ; piege L187 :
-  la modale de profil efface `native_engine` ET `durable_workflow`.
-- **4 correctifs UX (demande user apres test DSS)** : (1) texte "Certified source" reecrit fr+en
-  (l'ancien ne voulait rien dire) ; (2) **actions de cellule dans la vue ANALYZE** des deux hotes
-  (dock + Evidence) - `SourceTable` prend `surface`/`sourceLabel`, regle de fusion pure
-  `pickCellFilterChip`, popover ferme au scroll de tout ancetre (L188) ; (3) **mesure par defaut =
-  SOMME de la 1re colonne numerique de quantite** au lieu du nombre de lignes
-  (`defaultWorkspaceMeasures` + drapeau pristine, L189) ; (4) lien "Check this number" SUPPRIME
-  (doublon d'Evidence).
-Gates : 450/450 node:test (12 neufs), 1016 plugin + 765 miroir, builds Vite propres, parcours
-harness Playwright verts (0 erreur console) sur les 3 points visibles.
+**2026-10-14 run 1 : tableaux de resultat agent = resultat COMPLET pagine + compteur honnete.**
+Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande user).
+- Cause : agents capent la capture a 50 lignes ET comptent apres la coupe ("50 lignes" pour 1000).
+- Fix plugin seul : route `/evidence/result-rows` (relit le SELECT stocke de l'agent, LIMIT/OFFSET,
+  COUNT exact 1re fenetre, lecture seule, garde `check_rerunnable_select`) ; front `useResultRows`
+  dans `ArtifactTable` + `EvidenceResult` : "100 lignes affichees sur T", +20 au scroll, max 500.
+- Zip DEV regenere 14/10 18h42 (`owismind_v1_3-upload.zip`) : A UPLOADER + redemarrer le backend.
+- Non valide : rendu visuel (pas de Chromium local) et DSS.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-14 Run 1 : resultat agent complet pagine + "N sur T lignes" (route /evidence/result-rows), zip DEV, commit 84a1cde pousse. L190. Voir `sessions/2026-10-14.md`.
 - 2026-10-13/14 : demo locale v1.3 + zip DEV + rangement archives + simulateur console + refonte console (Fable brief + Opus impl) REJETEE ; prompt de reprise ecrit. Pas de log de session (git bloque Xcode).
 - 2026-08-13 Run 3 (soir) : etat des lieux moteur natif + 1er zip DEV v1.3 (deploye, teste par l'user) + 4 correctifs UX. L187-L189. Voir `sessions/2026-08-13.md` run 3.
 - 2026-08-12/13 Runs 1-2 : vague UX complete (harness "yeux" + premium partout + Analyze v3 + fusion Evidence + finitions). L183-L186. Voir `sessions/2026-08-13.md`.
@@ -65,6 +55,8 @@ harness Playwright verts (0 erreur console) sur les 3 points visibles.
 - Gotchas techniques : `.claude/rules/{frontend,backend,agents,lab,memory}.md` (path-scoped, chargees auto).
 
 ## Prochaines etapes (items encore actifs seulement)
+- **RESULTAT COMPLET (14/10)** : upload zip + test DSS du compteur/scroll ; propose : vrai `row_count`
+  dans les 3 agents (recoll DSS) ; chart encore sur 50 lignes. Voir `sessions/2026-10-14.md`.
 - **RE-UPLOAD + REVALIDATION DSS** : le zip `owismind_v1_3-upload.zip` du 13/08 18h52 porte les
   4 correctifs UX (non revalides en DSS) ; verifier clair ET sombre. Arbitrages user encore ouverts :
   bloc contexte analyze mono-mesure (toutes les mesures = evolution backend) ; micro-labels 0.08em

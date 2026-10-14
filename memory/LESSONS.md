@@ -3637,6 +3637,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve-verification** : 5 tests neufs (defaut applique a l'arrivee des colonnes, identifiants ignores, repli count, choix user preserve apres changement de scope, rearmement) ; harness : "Sum of Revenues" a l'ouverture, KPI 117 680 595,07.
 - **Source** : session 2026-08-13 run 3 (`aggregateSurface.js`, `sourceModel.js`).
 
+## L190 - Un extrait capture n'est jamais un total : compter APRES la coupe ment a l'utilisateur (2026-10-14)
+- **Contexte** : tableaux de resultat agent (Evidence Preuves + onglet Tableau). Retour terrain : 1000+ lignes affichees "50 ligne(s)".
+- **Ce qui a echoue** : les 3 Code Agents capent la capture a 50 lignes ET calculent `row_count` sur les lignes deja coupees (`len(found["rows"])`, fetch `max_rows + 1` en moteur direct). Le flag `truncated` seul ("premieres lignes seulement") ne dit pas COMBIEN il en manque : un utilisateur metier prend l'extrait pour le tout.
+- **Solution qui marche** : ne jamais afficher un total qu'on ne connait pas. Le backend relit le SELECT STOCKE de l'agent (`/evidence/result-rows`, sous-requete LIMIT/OFFSET + COUNT exact sur la 1re fenetre, lecture seule, timeout 30 s, garde `check_rerunnable_select` + relations = datasets du projet) ; le front affiche "N lignes affichees sur T" et charge au scroll. Une capture de taille egale au cap (50) est SUSPECTE meme sans flag. Echec de relance -> phrase explicite "seules les N premieres lignes".
+- **Preuve** : 1032 tests plugin + 451 front verts ; route mock verifiee (100 lignes, total 320). Rendu DSS non encore verifie.
+- **Source** : session 2026-10-14 run 1 (`sessions/2026-10-14.md`).
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 
