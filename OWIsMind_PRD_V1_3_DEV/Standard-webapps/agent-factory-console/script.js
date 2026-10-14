@@ -648,10 +648,10 @@
       sentence: function (c) {
         return "The factory AI writes a first business prompt for " + mono(c.names.capability) +
           " (vocabulary, rules, worked examples) from the dataset profile and the semantic model. " +
-          "If a prompt already exists it is kept. You review and improve it later in the agent Settings.";
+          "It is saved as an UNREVIEWED draft that the agent does not use: you read it in the agent Settings and click Save to make it live. A live prompt is never touched.";
       },
       objects: function (c) {
-        return [obj("Business prompt", "business_prompt.md", "hub: prompts/" + c.domain + "/ (only if absent)")];
+        return [obj("Business prompt", "business_prompt.md", "hub: prompts/" + c.domain + "/business_prompt.draft.md (not read by the agent)")];
       },
       primary: "Write the prompt"
     },
@@ -2799,7 +2799,8 @@
     }
     return '<section class="card"><p class="afc-mlabel">' + esc(p.label) + '</p>' +
       '<p class="afc-field-help">' + esc(p.help) + '</p>' + ai +
-      (p.exists ? "" : '<div class="afc-note afc-note--warn">This file is not in the hub: the agent uses its built-in text. ' +
+      (p.is_draft ? '<div class="afc-note afc-note--warn"><b>Unreviewed AI draft, NOT active yet.</b> The factory AI wrote it at creation from the dataset. Read it, correct it, then click Save to make it live.</div>' : "") +
+      (p.exists || p.is_draft ? "" : '<div class="afc-note afc-note--warn">This file is not in the hub: the agent uses its built-in text. ' +
         'Saving creates the file and it then replaces the built-in text.</div>') +
       '<textarea class="afc-textarea code" id="agPrompt_' + esc(p.id) + '" spellcheck="false">' + esc(text) + '</textarea>' +
       (p.ai && a.ai.drafted && p.content && p.content !== text

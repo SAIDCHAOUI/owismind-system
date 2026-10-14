@@ -667,14 +667,16 @@ def _run_capability(env, state, ctx):
 
 
 def _run_business_prompt(env, state, ctx):
-    """First draft of the business prompt by the factory AI, written ONLY when the
-    hub has none yet (never overwrites human work). NON-BLOCKING: an AI failure
-    is reported and the run continues, the prompt can be written later from the
-    agent Settings screen (the agent works without it)."""
+    """First draft of the business prompt by the factory AI, parked in a DRAFT file
+    the agents never read (the AI reads dataset-derived text, so its output must be
+    reviewed by a human before it reaches a system prompt: the operator promotes it
+    with Save in the agent Settings). Never overwrites human work. NON-BLOCKING: an
+    AI failure is reported and the run continues (the agent works without it)."""
     spec = _spec(state)
-    path = prompt_writer.business_prompt_path(spec.domain)
-    if hub.read_text(env.project, path):
-        ctx.skip("business_prompt", "a business prompt already exists (%s): kept" % path)
+    live = prompt_writer.business_prompt_path(spec.domain)
+    path = prompt_writer.draft_path(spec.domain)
+    if hub.read_text(env.project, live):
+        ctx.skip("business_prompt", "a business prompt already exists (%s): kept" % live)
         return _OUT_DONE, []
     caps = hub.read_capabilities(env.project) or {}
     entry = caps.get(spec.capability_key)
@@ -694,7 +696,8 @@ def _run_business_prompt(env, state, ctx):
         hub.write_text(env.project, path, result["prompt"])
         return True
 
-    ctx.act("business_prompt", "write the first business prompt draft (%s)" % path, _write)
+    ctx.act("business_prompt", "write the UNREVIEWED draft (%s): review it in the agent "
+                               "Settings, Save makes it live" % path, _write)
     return _OUT_DONE, []
 
 

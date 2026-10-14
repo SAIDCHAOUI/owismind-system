@@ -147,7 +147,13 @@ def agent_bundle(project, agent_key, capabilities, settings):
     prompts = []
     for spec in prompt_specs(agent_key, entry):
         text = hub.read_text(project, spec["path"])
-        prompts.append(dict(spec, exists=text is not None, content=text or ""))
+        is_draft = False
+        if text is None and spec["id"] == "business_prompt":
+            # An unreviewed AI draft from a creation run: shown for review, NOT live.
+            text = hub.read_text(project, prompt_writer.draft_path(model_key))
+            is_draft = text is not None
+        prompts.append(dict(spec, exists=text is not None and not is_draft,
+                            is_draft=is_draft, content=text or ""))
 
     return {
         "key": agent_key,

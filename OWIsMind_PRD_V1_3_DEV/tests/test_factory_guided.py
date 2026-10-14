@@ -622,8 +622,10 @@ class TestCapabilityAndEnable(_GuidedBase):
         written = {}
         self.p.set(hub, "write_text", lambda project, path, content: written.update({path: content}))
         run = self._through_business_prompt(run)
-        self.assertEqual(written, {prompt_writer.business_prompt_path("opportunities"):
+        # Parked as an UNREVIEWED draft: the live path (read by the agent) stays untouched.
+        self.assertEqual(written, {prompt_writer.draft_path("opportunities"):
                                    "# Domain\nbusiness text"})
+        self.assertNotIn(prompt_writer.business_prompt_path("opportunities"), written)
         self.assertEqual(run["current_stage"], "smoke")
         self.assertEqual(run["state"]["stages"]["smoke"]["status"], guided.WAITING)
 
