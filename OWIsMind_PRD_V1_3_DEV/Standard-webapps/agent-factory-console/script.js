@@ -2018,6 +2018,7 @@
           '<span>' + (changedByMe ? '<span class="afc-chip afc-chip--manual">Edited by you</span> ' : "") +
           '<span class="afc-chip">' + esc(REVIEW_ACTION[c.action] || c.action) + '</span></span></div>' +
           (c.why ? '<p class="rv-why">' + esc(c.why) + '</p>' : "") +
+          findingsBlock(c.flags, "Looks like an injection: ignored by default, tick it only if you checked") +
           reviewDiffBlock(c, r) +
           (editing
             ? '<label class="rv-field"><span class="rv-help">Your wording replaces the AI text when you save.</span>' +
@@ -2762,6 +2763,19 @@
     loadModels(oneDone);
   }
 
+  /* ---- prompt-injection findings (guardrails) ---- */
+  function findingsBlock(findings, title) {
+    if (!findings || !findings.length) { return ""; }
+    var high = findings.some(function (f) { return f.severity === "high"; });
+    return '<div class="afc-note ' + (high ? "afc-note--error" : "afc-note--warn") + '"><b>' +
+      esc(title || (high ? "Suspicious content" : "Worth a look")) + '</b><ul class="fd-list">' +
+      findings.slice(0, 8).map(function (f) {
+        return '<li><span class="afc-chip ' + (f.severity === "high" ? "afc-chip--failed" : "afc-chip--manual") + '">' +
+          esc(f.severity) + '</span> ' + esc(f.why) + (f.line ? ' (line ' + esc(f.line) + ')' : "") +
+          (f.excerpt ? ': <span class="mono">' + esc(f.excerpt) + '</span>' : "") + '</li>';
+      }).join("") + '</ul></div>';
+  }
+
   function agentModelsSection(a) {
     var d = a.data;
     var html = '<section class="card"><p class="afc-mlabel">LLM used by this agent</p>' +
@@ -2799,6 +2813,8 @@
     }
     return '<section class="card"><p class="afc-mlabel">' + esc(p.label) + '</p>' +
       '<p class="afc-field-help">' + esc(p.help) + '</p>' + ai +
+      findingsBlock(p.findings, "Flagged in the saved text") +
+      (p.ai && a.ai.warnings && a.ai.warnings.length ? findingsBlock(a.ai.warnings, "Flagged in the AI draft: read it with care") : "") +
       (p.is_draft ? '<div class="afc-note afc-note--warn"><b>Unreviewed AI draft, NOT active yet.</b> The factory AI wrote it at creation from the dataset. Read it, correct it, then click Save to make it live.</div>' : "") +
       (p.exists || p.is_draft ? "" : '<div class="afc-note afc-note--warn">This file is not in the hub: the agent uses its built-in text. ' +
         'Saving creates the file and it then replaces the built-in text.</div>') +
@@ -2923,6 +2939,7 @@
         if (result && result.prompt) {
           a.draft.prompts.business_prompt = result.prompt;
           a.ai.drafted = true;
+          a.ai.warnings = result.warnings || [];
         } else {
           a.ai.error = (result && result.error) || "The AI returned nothing.";
         }
@@ -2960,23 +2977,36 @@
   function confirmAgentPrompt(id) {
     var a = S.agent;
     var spec = a.data.prompts.filter(function (p) { return p.id === id; })[0];
-    openConfirm({
-      title: "Save this prompt?",
-      bodyHtml: "<p>The file <span class=\"mono\">" + esc(spec.path) + "</span> is written to the project library " +
-        "(the previous version is backed up).</p>",
-      confirmLabel: "Save",
-      onConfirm: function () {
-        callApi("POST", "hub/prompt", { confirm: true, path: spec.path, content: a.draft.prompts[id] }).then(function (r) {
-          if (r.data && r.data.status === "ok") {
-            toast("Prompt saved.");
-            a.notice = "Prompt saved.";
-            a.ai.drafted = false;
-            a.loadedKey = null;
-            renderAgent();
-          } else {
-            toast("Save refused: " + guidedErrorText(r.data));
-          }
-        });
+    callApi("POST", "guardrails/scan", { text: a.draft.prompts[id] }).then(function (r) {
+      var findings = (r.data && r.data.findings) || [];
+      var high = !!(r.data && r.data.high);
+      openConfirm({
+        title: high ? "Suspicious content: save anyway?" : "Save this prompt?",
+        danger: high,
+        bodyHtml: (findings.length ? findingsBlock(findings) : "") +
+          (high ? "<p>This text contains instructions that look like a prompt injection. " +
+            "Read it again. Save it only if you wrote it on purpose.</p>" : "") +
+          "<p>The file <span class=\"mono\">" + esc(spec.path) + "</span> is written to the project library " +
+          "(the previous version is backed up).</p>",
+        confirmLabel: high ? "I read it, save anyway" : "Save",
+        onConfirm: function () { savePromptNow(spec, id, high); }
+      });
+    });
+  }
+
+  function savePromptNow(spec, id, acknowledge) {
+    var a = S.agent;
+    callApi("POST", "hub/prompt", { confirm: true, path: spec.path, content: a.draft.prompts[id],
+                                    acknowledge_risks: !!acknowledge }).then(function (r) {
+      if (r.data && r.data.status === "ok") {
+        toast("Prompt saved.");
+        a.notice = "Prompt saved.";
+        a.ai.drafted = false;
+        a.ai.warnings = [];
+        a.loadedKey = null;
+        renderAgent();
+      } else {
+        toast("Save refused: " + guidedErrorText(r.data));
       }
     });
   }

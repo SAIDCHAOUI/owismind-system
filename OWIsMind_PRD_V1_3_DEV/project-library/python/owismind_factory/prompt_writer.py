@@ -22,7 +22,7 @@ Same discipline as ``wizard`` / ``review``:
 import json
 import re
 
-from . import hub, removal, review, wizard
+from . import guardrails, hub, removal, review, wizard
 
 PROMPT_MAX_CHARS = 16000   # = the agents' loader cap (HUB_BUSINESS_PROMPT_MAX)
 MAX_INSTRUCTIONS_CHARS = 6000
@@ -45,8 +45,9 @@ def draft_path(domain):
 
 
 def _untrusted(title, body):
-    """Fence dataset-derived text so the model treats it as data, never as orders."""
-    return ("<untrusted_data name=\"%s\">\n%s\n</untrusted_data>" % (title, body))
+    """Fence dataset-derived text so the model treats it as data, never as orders
+    (guardrails.fence defangs it first: invisible chars, forged fence tags)."""
+    return guardrails.fence(title, body)
 
 
 def sanitize(text):
@@ -162,4 +163,6 @@ def draft(project, entry, current="", instructions="", llm_id=None):
     if len(text) > PROMPT_MAX_CHARS:
         return {"error": "the AI wrote %d characters (max %d): ask it to be more concise"
                          % (len(text), PROMPT_MAX_CHARS)}
-    return {"prompt": text, "used_samples": bool(samples), "llm_id": llm_id}
+    findings = guardrails.scan(text)
+    return {"prompt": text, "used_samples": bool(samples), "llm_id": llm_id,
+            "warnings": findings, "blocked": guardrails.has_high(findings)}

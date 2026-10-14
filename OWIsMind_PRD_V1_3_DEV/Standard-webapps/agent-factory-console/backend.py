@@ -38,7 +38,7 @@ import dataiku
 # codes against them exactly. If a module is missing at import time the whole webapp fails loudly,
 # which is the desired signal that the library was not pushed.
 from owismind_factory import agent_settings, fctx, guided, guided_store, hub, pipeline, probes
-from owismind_factory import prompt_writer, review, wizard
+from owismind_factory import guardrails, prompt_writer, review, wizard
 from owismind_factory.spec import DomainSpec, SpecError
 
 logger = logging.getLogger(__name__)
@@ -462,8 +462,14 @@ def api_hub_prompt_post():
     if path.endswith("/understand_extra.md") and len(content) > agent_settings.EXTRA_MAX_CHARS:
         return _err("extra_too_long", 400, {"limit": agent_settings.EXTRA_MAX_CHARS,
                                             "got": len(content)})
+    # Prompt-injection gate: a text with high-severity findings (override orders,
+    # prompt-exfiltration asks, role spoofing, destructive SQL...) is refused unless
+    # the operator explicitly acknowledges the findings after reading them.
+    findings = guardrails.scan(content)
+    if guardrails.has_high(findings) and body.get("acknowledge_risks") is not True:
+        return _err("suspicious_content", 400, {"findings": findings})
     hub.write_prompt(_project(), path, content)
-    return jsonify({"status": "ok", "path": path})
+    return jsonify({"status": "ok", "path": path, "findings": findings})
 
 
 # ----------------------------------------------------------------- hub: capabilities
@@ -604,6 +610,19 @@ def api_agent_prompt_draft():
     _run_job(rec, lambda: prompt_writer.draft(project, entry, current=current,
                                               instructions=instructions))
     return jsonify({"status": "ok", "job_id": rec["id"]})
+
+
+@app.route("/api/guardrails/scan", methods=["POST"])
+@_safe
+def api_guardrails_scan():
+    """Scan a text for prompt-injection shapes (pure, writes nothing). The console calls it
+    before a Save to show the operator what looks suspicious."""
+    body = request.get_json(silent=True) or {}
+    text = body.get("text")
+    if not isinstance(text, str) or len(text) > 100000:
+        return _err("text_required", 400)
+    findings = guardrails.scan(text)
+    return jsonify({"status": "ok", "findings": findings, "high": guardrails.has_high(findings)})
 
 
 @app.route("/api/capability/description", methods=["POST"])

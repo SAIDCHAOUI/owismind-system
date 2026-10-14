@@ -16,7 +16,7 @@ stdlib only, defensive: every best-effort lookup degrades to ``None`` instead of
 raising, so the screen always renders.
 """
 
-from . import hub, prompt_writer
+from . import guardrails, hub, prompt_writer
 
 # Orchestrator prompt layers (hub files). Bounds mirror the agent loaders.
 WORKFLOW_PATH = hub.HUB_ROOT + "/prompts/orchestrator_workflow.md"
@@ -153,7 +153,8 @@ def agent_bundle(project, agent_key, capabilities, settings):
             text = hub.read_text(project, prompt_writer.draft_path(model_key))
             is_draft = text is not None
         prompts.append(dict(spec, exists=text is not None and not is_draft,
-                            is_draft=is_draft, content=text or ""))
+                            is_draft=is_draft, content=text or "",
+                            findings=guardrails.scan(text or "")))
 
     return {
         "key": agent_key,

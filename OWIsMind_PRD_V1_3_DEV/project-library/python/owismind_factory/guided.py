@@ -26,7 +26,7 @@ done / failed (kind is only a display hint).
 
 import uuid
 
-from . import agent_builder, flow_builder, hub, pipeline, prompt_writer, registry, removal, review
+from . import agent_builder, flow_builder, guardrails, hub, pipeline, prompt_writer, registry, removal, review
 from . import semantic_builder
 from . import tool_builder, wizard as wizard_module
 from . import guided_store
@@ -692,6 +692,13 @@ def _run_business_prompt(env, state, ctx):
                                       "screen, 'Write with AI'" % result["error"])
         return _OUT_DONE, []
 
+    if result.get("blocked"):
+        # Injection-shaped content in the AI output: nothing is written at all.
+        ctx.manual("business_prompt",
+                   "AI draft REFUSED (suspicious content: %s). Write it from the agent Settings "
+                   "screen and read it carefully." % guardrails.summarize(result.get("warnings")))
+        return _OUT_DONE, []
+
     def _write():
         hub.write_text(env.project, path, result["prompt"])
         return True
@@ -804,6 +811,11 @@ def _check_wizard(env, state):
     if not (config.get("planner_description") or "").strip():
         problems.append("Le brouillon n'a pas de planner_description : re-rédige avec tes "
                         "réponses (c'est le texte de routage de l'orchestrateur).")
+    suspicious = guardrails.scan_config(config)
+    if guardrails.has_high(suspicious):
+        problems.append("Le brouillon contient un texte suspect (injection possible) : %s. "
+                        "Re-rédige le brouillon ; si le texte vient de tes données, nettoie-les."
+                        % guardrails.summarize([f for f in suspicious if f["severity"] == "high"]))
     if not config.get("attributes"):
         problems.append("Le brouillon n'a aucun attribut de colonne : le profil est-il "
                         "buildé et relu ? Re-rédige le brouillon.")
@@ -1432,7 +1444,10 @@ def record_review_proposal(run, result, feedback, answers):
                                           info.get("routing"), info["notes"])
     for change in info["changes"]:
         change["edit"] = review.editable_value(change, info["proposal"])
-    info["keep"] = [c["id"] for c in info["changes"]]
+        flags = guardrails.scan("%s\n%s" % (change.get("after") or "", change.get("why") or ""))
+        change["flags"] = flags
+    # A change carrying injection-shaped text starts IGNORED: the human opts in.
+    info["keep"] = [c["id"] for c in info["changes"] if not guardrails.has_high(c.get("flags"))]
     info["used_samples"] = bool(result.get("used_samples"))
     return run
 
