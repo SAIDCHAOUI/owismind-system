@@ -25,7 +25,7 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
 - Fix plugin seul : route `/evidence/result-rows` (relit le SELECT stocke de l'agent, LIMIT/OFFSET,
   COUNT exact 1re fenetre, lecture seule, garde `check_rerunnable_select`) ; front `useResultRows`
   dans `ArtifactTable` + `EvidenceResult` : "100 lignes affichees sur T", +20 au scroll, max 500.
-- Zip DEV regenere 14/10 18h42 (`owismind_v1_3-upload.zip`) : A UPLOADER + redemarrer le backend.
+- Zip DEV FINAL 14/10 19h44 (`owismind_v1_3-upload.zip`, inclut le run 2) : A UPLOADER + redemarrer le backend.
 - Non valide : rendu visuel (pas de Chromium local) et DSS.
 - Run 2 : regle user "SQL = creer + lire" ; audit ALTER/DELETE/UPDATE ; WORKFLOW DURABLE RETIRE
   (superviseur, 2 DELETE, 3 tables, routes, UI) ; ZERO ALTER ; seul DELETE restant = quota admin.
