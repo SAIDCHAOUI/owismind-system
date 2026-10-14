@@ -26,7 +26,9 @@ Bounded cost: ONE completion per draft call, aggregated metadata only.
 import json
 import re
 
-MAX_DIGEST_CHARS = 12000
+MAX_DIGEST_CHARS = 30000
+MAX_COLUMN_CHARS = 1500
+MIN_COLUMN_CHARS = 160
 MAX_PROFILE_ROWS = 400
 
 # JSON schema forced on the completion (with_json_output). Keep it permissive
@@ -177,15 +179,23 @@ def read_profile(profile_dataset, project_key=None):
 
 
 def build_profile_digest(profile, base_dataset):
-    """Compact, size-capped text digest of the profile for the LLM."""
+    """Compact, size-capped text digest of the profile for the LLM.
+
+    EVERY column gets a line: the per-column budget shrinks with the column
+    count (between MIN_COLUMN_CHARS and MAX_COLUMN_CHARS) instead of letting the
+    last columns fall off the end of the digest (field report 2026-10-14: on a
+    wide dataset the wizard asked about columns it had never been shown).
+    """
     lines = ["DATASET: %s" % base_dataset]
     dataset_level = profile.get("__dataset__") or {}
     if dataset_level:
         lines.append("DATASET PROFILE: %s" % json.dumps(dataset_level, ensure_ascii=False)[:2500])
-    for key, payload in profile.items():
-        if key == "__dataset__":
-            continue
-        lines.append("COLUMN %s: %s" % (key, json.dumps(payload, ensure_ascii=False)[:900]))
+    columns = [k for k in profile if k != "__dataset__"]
+    fixed = sum(len(line) + 1 for line in lines) + sum(len("COLUMN %s: " % k) + 1 for k in columns)
+    budget = (MAX_DIGEST_CHARS - fixed) // max(1, len(columns))
+    per_column = max(MIN_COLUMN_CHARS, min(MAX_COLUMN_CHARS, budget))
+    for key in columns:
+        lines.append("COLUMN %s: %s" % (key, json.dumps(profile[key], ensure_ascii=False)[:per_column]))
     digest = "\n".join(lines)
     if len(digest) > MAX_DIGEST_CHARS:
         digest = digest[:MAX_DIGEST_CHARS] + "\n[digest truncated]"

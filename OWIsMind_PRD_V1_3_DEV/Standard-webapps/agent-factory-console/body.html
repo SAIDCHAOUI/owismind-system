@@ -1,37 +1,40 @@
 <!-- OWIsMind - Agent Factory Console: BODY content only (no html/head).
      Paste into the DSS Standard webapp HTML pane. script.js clones the
      <template id="afc-shell"> below into #afc once, then renders each screen
-     (Assistant / Vue d'ensemble / Sonde / Nouveau domaine / Prompts) into #afcMain.
-     French-only UI (internal admin tool). Orange charter styling lives in style.css. -->
+     (Overview / Add or remove run / Settings) into #afcMain.
+     English-only UI (internal admin tool). Orange charter styling lives in style.css. -->
 <div id="afc" data-theme="light">
-  <p class="afc-boot">Chargement de la console...</p>
+  <p class="afc-boot">Loading the console...</p>
 </div>
 <noscript>
-  <p style="padding:24px;">Cette console requiert l'activation de JavaScript.</p>
+  <p style="padding:24px;">This console needs JavaScript.</p>
 </noscript>
 
-<!-- ===== Shell: header, tabs, main container, toast, modal (built once) ===== -->
+<!-- ===== Shell: header + nav, main container, toast, modal (built once) ===== -->
 <template id="afc-shell">
   <header class="afc-header">
-    <div class="afc-brand">
-      <p class="afc-eyebrow">OWIsMind - Usine à agents</p>
-      <h1 class="afc-h1">Console d'usine à agents</h1>
-      <div class="afc-titlebar"></div>
+    <div class="afc-head-left">
+      <button class="afc-back" id="afcBack" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg>Overview
+      </button>
+      <div class="afc-brand">
+        <p class="afc-eyebrow" id="afcEyebrow">OWIsMind agent factory</p>
+        <h1 class="afc-h1" id="afcTitle">Orchestrator and sub-agents</h1>
+        <div class="afc-titlebar"></div>
+        <p class="afc-head-sub" id="afcSub"></p>
+      </div>
     </div>
     <div class="afc-controls">
-      <button class="afc-theme" id="afcTheme" title="Basculer le thème" aria-label="Basculer le thème">
+      <span id="afcHeaderAction"></span>
+      <nav class="afc-nav" id="afcNav">
+        <button class="afc-nav-item on" data-view="overview">Overview</button>
+        <button class="afc-nav-item" data-view="settings">Settings</button>
+      </nav>
+      <button class="afc-theme" id="afcTheme" title="Light / dark" aria-label="Toggle light / dark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>
       </button>
     </div>
   </header>
-
-  <nav class="afc-tabs" id="afcTabs">
-    <button class="afc-tab afc-tab--on" data-tab="guided">Assistant</button>
-    <button class="afc-tab" data-tab="overview">Vue d'ensemble</button>
-    <button class="afc-tab" data-tab="probe">Sonde</button>
-    <button class="afc-tab" data-tab="domain">Nouveau domaine</button>
-    <button class="afc-tab" data-tab="prompts">Prompts</button>
-  </nav>
 
   <main class="afc-main" id="afcMain"></main>
 

@@ -26,7 +26,7 @@ done / failed (kind is only a display hint).
 
 import uuid
 
-from . import agent_builder, flow_builder, hub, pipeline, registry, removal, semantic_builder
+from . import agent_builder, flow_builder, hub, pipeline, registry, removal, review, semantic_builder
 from . import tool_builder, wizard as wizard_module
 from . import guided_store
 from .fctx import BLOCKED, FAILED, FactoryContext
@@ -138,8 +138,29 @@ _REMOVAL_STAGE_META = {
                     "l'orchestrateur."),
 }
 
+# ------------------------------------------------------------ REVIEW run type
+# A review run improves an EXISTING sub-agent's data understanding from business
+# feedback (2026-10-14): read the live semantic model, let the business expert
+# say what is wrong, show the AI's proposed changes one by one, apply the kept
+# ones through the guarded apply path (ownership marker + version backup). The
+# marker lives in state["review"]; nothing is created, nothing is deleted.
+
+REVIEW_STAGE_ORDER = ["review_load", "review_feedback", "review_apply"]
+
+_REVIEW_STAGE_META = {
+    "review_load": ("auto", "Lecture de la configuration actuelle",
+                    "Lit le modèle sémantique en place (lecture seule)."),
+    "review_feedback": ("review", "Retours métier et changements proposés",
+                        "Toi : expliquer ce qui ne va pas, puis garder ou ignorer "
+                        "chaque changement proposé par l'IA."),
+    "review_apply": ("auto", "Enregistrement des changements",
+                     "Sauvegarde la version actuelle du modèle, applique les "
+                     "changements gardés, réindexe si nécessaire."),
+}
+
 _ALL_STAGE_META = dict(_STAGE_META)
 _ALL_STAGE_META.update(_REMOVAL_STAGE_META)
+_ALL_STAGE_META.update(_REVIEW_STAGE_META)
 
 class _Env(object):
     """Bundles what stage handlers need (no persistence, no HTTP)."""
@@ -1019,6 +1040,141 @@ def _run_removal_final(env, state, ctx):
     return _OUT_DONE, []
 
 
+# ------------------------------------------------------------- review stages
+
+class ReviewUnsupported(Exception):
+    """The capability cannot be reviewed here (message is operator-facing)."""
+
+
+def _review_info(state):
+    return state.get("review") or {}
+
+
+def _review_spec(state):
+    return removal.conventional_spec(_review_info(state).get("entry") or {})
+
+
+def _run_review_load(env, state, ctx):
+    info = _review_info(state)
+    spec = _review_spec(state)
+    if spec is None:
+        info["unsupported"] = "spec"
+        return _OUT_FAILED, ["Capability sans dataset source exploitable : review impossible."]
+    model_id, _name = removal.resolve_model(env.project, spec, None)
+    if not model_id:
+        info["unsupported"] = "no_model"
+        return _OUT_FAILED, ["Modèle sémantique %s introuvable." % spec.semantic_model_name]
+    try:
+        raw = semantic_builder.read_model_raw(env.project, model_id)
+    except Exception as exc:  # noqa: BLE001 - surfaced to the operator
+        return _OUT_FAILED, ["Lecture du modèle %s impossible : %s" % (model_id, exc)]
+    if not review.is_factory_model(raw):
+        info["unsupported"] = "not_factory"
+        return _OUT_FAILED, ["Le modèle %s n'a pas été créé par l'usine : review refusée."
+                             % model_id]
+    info["model_id"] = model_id
+    info["base"] = review.config_from_model_raw(raw)
+    info["routing"] = str((info.get("entry") or {}).get("planner_description") or "")
+    ctx.done("review_load", "model %s read (%d columns, %d calculations, %d examples)"
+             % (model_id, len(info["base"]["attributes"]), len(info["base"]["metrics"]),
+                len(info["base"]["golden_queries"])))
+    return _OUT_DONE, []
+
+
+def _instr_review_feedback(env, state):
+    return ("1. Teste le sous-agent dans OWIsMind.\n"
+            "2. Écris ce qui ne va pas et ce qu'il doit savoir sur ses données.\n"
+            "3. Clique sur Préparer les changements, garde ou ignore chacun, puis enregistre.")
+
+
+def _check_review_feedback(env, state):
+    info = _review_info(state)
+    if not info.get("proposal"):
+        return False, ["Aucune proposition : écris tes retours puis prépare les changements."]
+    known = set(c.get("id") for c in info.get("changes") or [])
+    kept = [k for k in info.get("keep") or [] if k in known]
+    if not kept:
+        return False, ["Aucun changement gardé."]
+    info["keep"] = kept
+    return True, []
+
+
+def _run_review_apply(env, state, ctx):
+    """Apply ONLY the kept changes to the live model, through the guarded path.
+
+    No pipeline call here on purpose: the creation chain's semantic_model step
+    would CREATE a model if the reviewed one had vanished. Instead: the model
+    must still exist under its conventional name with the id read at the start,
+    new example questions must pass the offline read-only validator BEFORE any
+    write, then semantic_builder.apply_config re-checks the factory marker and
+    backs up the active version before mutating it.
+    """
+    info = _review_info(state)
+    spec = _review_spec(state)
+    if spec is None or not info.get("base") or not info.get("proposal"):
+        return _OUT_FAILED, ["État de review incomplet : recommence la review."]
+    final, routing, reindex = review.apply_selection(
+        info["base"], info["proposal"], info.get("changes"), info.get("keep"))
+    config = review.minimal_config(final, info.get("changes"), info.get("keep"))
+
+    model = semantic_builder.find_model_by_name(env.project, spec.semantic_model_name)
+    model_id = getattr(model, "id", None) if model is not None else None
+    if not model_id or model_id != info.get("model_id"):
+        return _OUT_FAILED, ["Le modèle %s n'est plus celui lu au début (id %s, attendu %s) : "
+                             "rien n'a été modifié, recommence la review."
+                             % (spec.semantic_model_name, model_id, info.get("model_id"))]
+
+    if "golden_queries" in config:
+        known = [a.get("column") for a in info["base"].get("attributes") or [] if a.get("column")]
+        verdict = wizard_module.validate_golden_queries(
+            {"golden_queries": review.new_examples(info["base"], final)}, known)
+        if verdict["problems"]:
+            return _OUT_FAILED, ["Question d'exemple refusée (lecture seule / colonnes connues) : "
+                                 "%s -> %s : rien n'a été modifié, ignore ce changement."
+                                 % ((p["question"] or "?")[:80], "; ".join(p["issues"]))
+                                 for p in verdict["problems"]]
+        physical = wizard_module.get_physical_table(env.project, spec.base_dataset)
+        ready, todo = wizard_module.substitute_golden_tables(config, physical)
+        if todo:
+            return _OUT_FAILED, ["Table physique de %s introuvable pour les questions d'exemple : "
+                                 "rien n'a été modifié." % spec.base_dataset]
+        config["golden_queries"] = ready
+
+    start = len(ctx.actions)
+    if config:
+        semantic_builder.apply_config(ctx, model_id, config, created_this_run=False)
+    if reindex:
+        semantic_builder.start_indexing(ctx, model_id, wait=True)
+    bad = _subset_failed(ctx.actions[start:])
+    manual = [a for a in ctx.actions[start:] if a.get("status") == "MANUAL"]
+    if bad or manual:
+        return _OUT_FAILED, ["%s : %s" % (a["step"], a["detail"][:300]) for a in bad + manual]
+    # Keep the hub copy of the config aligned with the live model.
+    try:
+        hub.write_json(env.project, wizard_config_path(spec.domain), final)
+    except Exception as exc:  # noqa: BLE001 - the model is already updated
+        ctx.manual("review_hub", "hub copy of the config not updated (%s)" % exc)
+    if routing is not None:
+        key = info.get("capability_key")
+        caps = hub.read_capabilities(env.project) or {}
+        if key not in caps:
+            return _OUT_FAILED, ["Capability %s introuvable dans le hub." % key]
+        caps[key]["planner_description"] = routing
+
+        def _write():
+            hub.write_capabilities(env.project, caps)
+            return True
+
+        try:
+            if not ctx.act("review_routing", "update the routing text of %s" % key, _write):
+                return _OUT_FAILED, ["Mise à jour du texte de routage impossible (voir le journal)."]
+        except ValueError as exc:
+            return _OUT_FAILED, [str(exc)]
+    info["applied"] = {"count": len(info.get("keep") or []),
+                       "routing": routing is not None, "reindexed": reindex}
+    return _OUT_DONE, []
+
+
 # ------------------------------------------------------------- stage registry
 
 _RUNNERS = {
@@ -1083,6 +1239,12 @@ _INSTRUCTIONS.update({
     "inventory": _instr_removal_inventory,
     "hub_cleanup": _make_instr_removal_manual("hub_cleanup"),
 })
+_RUNNERS.update({
+    "review_load": _run_review_load,
+    "review_apply": _run_review_apply,
+})
+_CHECKERS["review_feedback"] = _check_review_feedback
+_INSTRUCTIONS["review_feedback"] = _instr_review_feedback
 for _delete_key in removal.DELETE_STAGE_KEYS:
     _RUNNERS[_delete_key] = _make_removal_delete_runner(_delete_key)
     _CHECKERS[_delete_key] = _make_removal_absent_checker(_delete_key)
@@ -1152,6 +1314,70 @@ def start_removal_run(project, capability_key, settings=None,
     ctx = ctx or FactoryContext(project=project, dry_run=False,
                                 abort_on_failure=False)
     return _execute_current(env, run, ctx)
+
+
+def new_review_state(capability_key, entry):
+    return {
+        "version": STATE_VERSION,
+        "review": {"capability_key": capability_key, "entry": entry,
+                   "model_id": None, "base": None, "routing": "",
+                   "feedback": {"wrong": "", "know": ""}, "answers": {},
+                   "proposal": None, "notes": {}, "questions": [],
+                   "changes": [], "keep": [], "applied": None},
+        "stage_order": list(REVIEW_STAGE_ORDER),
+        "stages": _new_stage_table(REVIEW_STAGE_ORDER, _REVIEW_STAGE_META),
+        "captured": {},
+    }
+
+
+def is_review(run):
+    return bool((run.get("state") or {}).get("review"))
+
+
+def start_review_run(project, capability_key, settings=None,
+                     executor_factory=None, run_id=None, ctx=None):
+    """Create a review run and read the live model synchronously (read-only).
+    Caller persists. Raises ValueError on an unknown capability and
+    ReviewUnsupported when the sub-agent cannot be reviewed here."""
+    settings = settings if settings is not None else hub.get_settings(project)
+    caps = hub.read_capabilities(project) or {}
+    entry = caps.get(capability_key)
+    if not isinstance(entry, dict):
+        raise ValueError("unknown capability: %s" % capability_key)
+    env = _Env(project, settings, executor_factory)
+    run = {
+        "run_id": run_id or uuid.uuid4().hex,
+        "domain": str(entry.get("domain") or capability_key),
+        "status": RUN_ACTIVE,
+        "current_stage": REVIEW_STAGE_ORDER[0],
+        "state": new_review_state(capability_key, entry),
+    }
+    ctx = ctx or FactoryContext(project=project, dry_run=False, abort_on_failure=False)
+    run = _execute_current(env, run, ctx)
+    reason = run["state"]["review"].get("unsupported")
+    if reason:
+        raise ReviewUnsupported(reason)
+    if run["state"]["stages"]["review_load"]["status"] != DONE:
+        problems = run["state"]["stages"]["review_load"].get("problems") or []
+        raise ReviewUnsupported("read_failed: " + "; ".join(problems))
+    return run
+
+
+def record_review_proposal(run, result, feedback, answers):
+    """Store an AI proposal (review.propose output) on the run and compute its
+    change cards. Every change starts KEPT (the human unticks what is wrong)."""
+    info = run["state"]["review"]
+    info["feedback"] = {"wrong": str((feedback or {}).get("wrong") or "")[:review.MAX_FEEDBACK_CHARS],
+                        "know": str((feedback or {}).get("know") or "")[:review.MAX_FEEDBACK_CHARS]}
+    info["answers"] = dict(answers or {})
+    info["proposal"] = result.get("proposed") or {}
+    info["notes"] = result.get("notes") or {}
+    info["questions"] = result.get("questions") or []
+    info["changes"] = review.diff_configs(info.get("base"), info["proposal"],
+                                          info.get("routing"), info["notes"])
+    info["keep"] = [c["id"] for c in info["changes"]]
+    info["used_samples"] = bool(result.get("used_samples"))
+    return run
 
 
 def can_run(run):

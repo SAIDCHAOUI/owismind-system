@@ -607,6 +607,39 @@ def api_guided_start_removal():
     return jsonify({"status": "ok", "run": run})
 
 
+@app.route("/api/guided/start-review", methods=["POST"])
+@_safe
+def api_guided_start_review():
+    """Create a guided REVIEW run for an existing sub-agent: its first stage
+    reads the live semantic model synchronously (read-only). Requires confirm.
+    One active run at a time. A sub-agent whose model was not created by the
+    factory answers 409 review_not_supported (nothing is saved)."""
+    body = request.get_json(silent=True) or {}
+    if not _confirmed(body):
+        return _err("confirmation_required", 400)
+    key = str(body.get("capability_key") or "").strip()
+    if not key:
+        return _err("capability_key_required", 400)
+    project = _project()
+    caps = hub.read_capabilities(project) or {}
+    if not isinstance(caps.get(key), dict):
+        return _err("unknown_capability", 404)
+    settings = hub.get_settings(project)
+    try:
+        store = _guided_store_for(project, settings)
+        active = store.load_active()
+        if active is not None:
+            return _err("active_run_exists", 409, {"run_id": active.get("run_id")})
+        try:
+            run = guided.start_review_run(project, key, settings=settings)
+        except guided.ReviewUnsupported as exc:
+            return _err("review_not_supported", 409, {"reason": str(exc)})
+        store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
 def _guided_run_id(body):
     """Shared confirm + run_id prefix of the /api/guided/* run routes.
     Returns (run_id, err) where err is a ready error response."""
@@ -700,6 +733,92 @@ def api_guided_verify():
         return err
     if not guided.can_verify(run):
         return _err("stage_not_verifiable", 400)
+    try:
+        run = guided.verify_current_stage(project, run, settings=settings)
+        store.save(run)
+    except guided_store.GuidedStoreError as exc:
+        return _err("storage_not_configured", 500, {"messages": [str(exc)]})
+    return jsonify({"status": "ok", "run": run})
+
+
+# ----------------------------------------------------------------- review of a sub-agent
+
+def _review_feedback_body(body):
+    feedback = body.get("feedback") if isinstance(body.get("feedback"), dict) else {}
+    answers = body.get("answers") if isinstance(body.get("answers"), dict) else {}
+    clean_answers = {}
+    for qid, value in list(answers.items())[:10]:
+        clean_answers[str(qid)[:60]] = str(value or "")[:1000]
+    return ({"wrong": str(feedback.get("wrong") or ""), "know": str(feedback.get("know") or "")},
+            clean_answers)
+
+
+def _review_waiting(run):
+    return (guided.is_review(run) and run.get("current_stage") == "review_feedback"
+            and guided.can_verify(run))
+
+
+@app.route("/api/review/propose", methods=["POST"])
+@_safe
+def api_review_propose():
+    """Ask the AI for changes from the business feedback (one LLM call, background
+    job, 30-90s). Reads the live model config stored on the run, the profile, the
+    owner column descriptions and a bounded masked sample of rows. Writes nothing
+    in DSS: the proposal is stored on the run. Requires confirm."""
+    body = request.get_json(silent=True) or {}
+    run_id, err = _guided_run_id(body)
+    if err is not None:
+        return err
+    project, settings, store, run, err = _guided_load(run_id, require_active=True)
+    if err is not None:
+        return err
+    if not _review_waiting(run):
+        return _err("stage_not_verifiable", 400)
+    feedback, answers = _review_feedback_body(body)
+    if not (feedback["wrong"].strip() or feedback["know"].strip()):
+        return _err("feedback_required", 400)
+    _, rec = _new_job("wizard")
+    if rec is None:
+        return _err("too_many_jobs", 429)
+    info = run["state"]["review"]
+    spec = guided._review_spec(run["state"])
+
+    def work():
+        from owismind_factory import review
+        result = review.propose(project, spec, info.get("base"), info.get("routing"),
+                                feedback, answers=answers)
+        if "error" in result:
+            return {"error": result["error"]}
+        fresh = store.load(run_id)
+        if fresh is None or not _review_waiting(fresh):
+            return {"error": "the review moved on while the AI was working"}
+        guided.record_review_proposal(fresh, result, feedback, answers)
+        store.save(fresh)
+        return {"run": fresh}
+
+    _run_job(rec, work)
+    return jsonify({"status": "ok", "job_id": rec["id"]})
+
+
+@app.route("/api/review/keep", methods=["POST"])
+@_safe
+def api_review_keep():
+    """Record which proposed changes the expert keeps, then verify the stage
+    (advances to the apply stage when at least one known change is kept).
+    Requires confirm. Writes nothing in DSS."""
+    body = request.get_json(silent=True) or {}
+    run_id, err = _guided_run_id(body)
+    if err is not None:
+        return err
+    if _guided_job_running():
+        return _err("busy", 409)
+    project, settings, store, run, err = _guided_load(run_id, require_active=True)
+    if err is not None:
+        return err
+    if not _review_waiting(run):
+        return _err("stage_not_verifiable", 400)
+    keep = body.get("keep") if isinstance(body.get("keep"), list) else []
+    run["state"]["review"]["keep"] = [str(k)[:300] for k in keep[:500]]
     try:
         run = guided.verify_current_stage(project, run, settings=settings)
         store.save(run)

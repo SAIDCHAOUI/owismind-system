@@ -7,6 +7,18 @@
 
 ## Focus courant
 
+**2026-10-14 : refonte de l'Agent Factory Console REJETEE par l'user, a refaire en session neuve.**
+- Prompt pret : `dev-harness/rejected-console-redesign-2026-10-14/NEXT_SESSION_PROMPT.md` (cible :
+  3 ecrans = schema orchestrateur -> sous-agents avec actions dessus, ajout, retrait ; garder le
+  vocabulaire DSS ; une seule session, sans sous-agent).
+- Working tree : console MODIFIEE par la refonte rejetee (non commitee, copie dans ce meme dossier) ;
+  reference fonctionnelle = git HEAD. Backend + owismind_factory INTACTS.
+- Nouveau : simulateur console `dev-harness/console_sim.py` (port 5198, vrai backend.py sur faux projet).
+- Zip DEV regenere 13/10 : `ready-for-dataiku/owismind_v1_3-upload.zip` ; anciens zips dans `archives/`.
+- Lecon : la "Sonde" ne lit QUE le projet courant (lecture seule) ; libelles "Avance / Sonde / Mode
+  expert / Analyser l'instance" incomprehensibles pour l'user ; le probleme etait la DISPOSITION, pas
+  le nombre d'etapes. git bloque par la licence Xcode (`sudo xcodebuild -license`).
+
 **2026-08-13 run 3 (soir) : la vague UX EST DEPLOYEE EN DSS (1er zip DEV v1.3, teste par l'user :
 la webapp tourne, l'agent repond), puis 4 correctifs UX post-terrain.** Detail `sessions/2026-08-13.md`.
 - **Zip DEV** : `build_dev_plugin.py --version 1.3` -> `ready-for-dataiku/owismind_v1_3-upload.zip`
@@ -28,6 +40,7 @@ Gates : 450/450 node:test (12 neufs), 1016 plugin + 765 miroir, builds Vite prop
 harness Playwright verts (0 erreur console) sur les 3 points visibles.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-13/14 : demo locale v1.3 + zip DEV + rangement archives + simulateur console + refonte console (Fable brief + Opus impl) REJETEE ; prompt de reprise ecrit. Pas de log de session (git bloque Xcode).
 - 2026-08-13 Run 3 (soir) : etat des lieux moteur natif + 1er zip DEV v1.3 (deploye, teste par l'user) + 4 correctifs UX. L187-L189. Voir `sessions/2026-08-13.md` run 3.
 - 2026-08-12/13 Runs 1-2 : vague UX complete (harness "yeux" + premium partout + Analyze v3 + fusion Evidence + finitions). L183-L186. Voir `sessions/2026-08-13.md`.
 - 2026-08-07 Run 1 (nuit) : passe UX attention premium (legendes artefacts + tableaux chat + KPI charte + PromptBar + mise au carre + fix dark canvas). 2 revues, 380/380. L181-L182. Voir `sessions/2026-08-07.md`.

@@ -178,7 +178,9 @@ stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
    (deterministic extraction) and NEVER on the orchestrator (it disables
    reasoning in DSS 14).
 7. **Dataiku safety**: read-only SQL, statement timeout, bounded parallelism,
-   no raw-row data sent to the LLM. Ask before any deletion of a feature/dataset
+   no raw-row data sent to the LLM at runtime (single design-time exception: the
+   factory Improve review sends 20 bounded, masked sample rows to the wizard LLM, user
+   decision 2026-10-14). Ask before any deletion of a feature/dataset
    (lesson L087) or anything risky for the instance.
 8. **Code + comments in English**; no em dash (U+2014) or en dash (U+2013)
    anywhere (project rule #9).

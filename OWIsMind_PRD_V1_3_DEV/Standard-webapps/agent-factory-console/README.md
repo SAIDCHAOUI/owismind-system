@@ -32,8 +32,8 @@ tree pushed:
    `python/` folder is on the import path of webapp backends, so `from owismind_factory import ...`
    resolves without any extra wiring.
 2. The hub tree under the project library at `/python/owismind_hub/` (at least `capabilities.json` and
-   `prompts/orchestrator_persona.md`). It is optional for the console to start (the Overview screen
-   simply shows "HUB ABSENT" until it is pushed), but the Prompts screen needs it to read/write.
+   `prompts/orchestrator_persona.md`). It is optional for the console to start (the Vue d'ensemble
+   explains that the hub is absent until it is pushed), but the Reglages screen needs it to read/write.
 
 If the library is not pushed, the webapp backend fails to start loudly, which is the intended signal.
 
@@ -51,59 +51,87 @@ If the library is not pushed, the webapp backend fails to start loudly, which is
 The frontend reaches the backend through `getWebAppBackendUrl('api/...')` (DSS wires this
 automatically inside the webapp iframe).
 
-## Screens
+## Screens (layout rebuilt 2026-10-14: 3 screens, one idea each)
 
-- **Assistant** (first tab, default): the guided, step-by-step creation of a new specialist,
-  from dataset selection to the enabled orchestrator capability. 13 stages (preflight with a
-  PARTITIONED-dataset gate, dry-run plan, Flow infra, first knowledge build, profile review,
-  semantic wizard, model + tool, agent template, code generation, Code Agent paste, capability,
-  smoke test, enable). AUTO stages run server-side with a live journal; MANUAL stages show exact
-  French instructions, the operator clicks "C'est fait" and the backend VERIFIES against DSS
-  before advancing (an unverified claim never advances the run). The first knowledge build is
-  an AUTO stage: the backend runs the STEP-BASED refresh scenario (one visual build step per
-  knowledge dataset), waits for the outcome (bounded, journalled, re-attaches to a run already
-  in progress), surfaces the DSS error with the fix path on failure, and proves the datasets
-  hold rows before advancing. The remaining manual actions are the human-judgment ones
-  (profile review, wizard answers, Code Agent paste when the probe is unconfirmed, smoke test). The whole run state is
-  persisted in ONE direct-SQL row (`{PROJECT_KEY}_owismind_factory_guided_v1` on the hub's
-  `sql_connection`, plugin storage pattern: parameterized values, COMMIT on write), so a page
-  reload or a backend restart resumes exactly where the operator was (a stage left RUNNING by a
-  restart is self-healed to a retryable state). One active run at a time; "Abandonner" only
-  marks the row (nothing is ever deleted in DSS). Engine: `owismind_factory/guided.py` +
-  `guided_store.py`; routes `/api/guided/{current,start,run,verify,abandon}`.
-- **Vue d'ensemble**: project key, hub status (ready / absent), factory settings, and the existing
-  capabilities as square cards (domain, agent id, enabled state). Each card carries two actions
-  (2026-07-22): **Desactiver / Activer** flips the capability's `enabled` flag immediately
-  (validated, backed-up hub write; the confirm modal reminds the operator to re-save the
-  orchestrator then open a new conversation, lesson L168), and **Supprimer...** starts a guided
-  REMOVAL run after the operator TYPES the domain name (server-side check). The removal run
-  reuses the Assistant screen: 12 stages (inventory, disable, then one CONFIRMED deletion stage
-  per object family: tool, Code Agent, semantic model, scenario, recipes, knowledge datasets,
-  zone if empty, shared-catalog rows, hub files + capability entry, final re-probe). Each
-  deletion card lists exactly what the click will delete (kind, name, id, location) BEFORE
-  launching, every deletion is verified ABSENT by read-back, an API refusal flips the stage to
-  manual instructions, and the SOURCE dataset is NEVER deletable. Engine:
-  `owismind_factory/removal.py` + the removal stages of `guided.py`; routes
-  `/api/capability/enable` and `/api/guided/start-removal`.
-- **Sonde (Phase 0)**: one button runs the read-only probes in a background job, then shows the
-  markdown report (copy button). The probes inspect the instance (Code Agent API shape, Semantic
-  Model Query tool schema, `create_agent` availability) and create / modify / delete nothing. The
-  gate flags that unlock the tool/agent steps are always read from the hub probe results (never
-  taken from the request body).
-- **Nouveau domaine**: a form (domain key, base dataset or SQL source table, FR/EN labels, lookup
-  search columns) -> "Planifier (dry-run)" renders the action plan as a table -> "Exécuter"
-  (confirm modal) runs the pipeline in a background job with a live journal. Each action shows its
-  status as a chip, including BLOQUÉ (a step not attempted because a prerequisite failed) next to
-  PLANIFIÉ / FAIT / IGNORÉ / ÉCHEC / MANUEL. The plan response also carries non-blocking preflight
-  warnings and an ordered operator runbook (`runbook_markdown`), rendered after both plan and
-  execute; MANUAL steps are listed as a checklist at the end. Any form edit, or drafting a new
-  wizard config, invalidates a stale plan (you must re-plan before executing). A "Wizard sémantique"
-  section drafts the semantic model config from a profile dataset (LLM call), asks clarifying
-  questions, and re-drafts with the answers; the draft is persisted to
-  `/python/owismind_hub/wizard/<domain>-config.json` (same path as notebook 04) and auto-attached to
-  plan/execute when the request body carries none.
-- **Prompts**: edit a hub prompt file (path constrained to `/python/owismind_hub/prompts/`) and the
-  `capabilities.json` registry (server-side validated, previous version backed up).
+The engine, the routes and every creation / removal function are unchanged; only the layout and
+the wording changed. The shell header carries two nav entries (Vue d'ensemble, Reglages); the
+guided run screen is reached from the overview.
+
+- **Vue d'ensemble** (default): a SCHEMA of the orchestrator OWIsMind (root node: Code Agent id,
+  number of sub-agents) linked by a trunk to each of its sub-agents (one node per capability of
+  `capabilities.json`, read through `GET /api/state`). Each node shows the label, the domain, the
+  source dataset, the capability key, the Code Agent id and the active / inactive state, with its
+  actions on the node: **Activer / Desactiver** (`/api/capability/enable`, validated + backed-up
+  hub write; the confirm modal and a notice after the change remind the operator to re-save the
+  orchestrator then open a new conversation, lesson L168) and **Retirer** (the operator TYPES the
+  domain name, server-side check, then a removal run is created through
+  `/api/guided/start-removal`). One primary button **Ajouter un sous-agent**. When a guided run is
+  active, a **Reprendre** banner names it (kind, sub-agent, stage n of N) and Ajouter / Retirer are
+  disabled (one active run at a time).
+- **Parcours** (add or remove a sub-agent): the server-persisted guided run in ONE readable column:
+  the run head (kind, sub-agent, domain + source dataset, "Etape n sur N" + a segmented progress
+  bar), the result of the stage that just finished (with any MANUAL leftovers), then the current
+  stage card: "Ce qui va se passer" (one plain sentence + the exact objects the click will create,
+  fill, check or delete; for the removal the server inventory, plus "Ce qui ne sera JAMAIS touche"
+  = the source dataset and any dataset shared with another capability), the operator instructions
+  for a manual stage, the button with its guarantee line, and the technical journal in a collapsed
+  block (opened automatically on failure; open state survives the 1.5s job polling). "Toutes les
+  etapes" is a collapsed list; "Abandonner ce parcours" sits at the bottom (marks the run, deletes
+  nothing). Creation = 13 stages (preflight, plan, infra, first build, profile review, semantic
+  wizard with AI draft + answers + re-draft, model + tool, template, code generation, Code Agent,
+  capability, smoke test, enable); removal = 12 stages (inventory, disable, tool, Code Agent,
+  semantic model, scenario, recipes, knowledge datasets, zone if empty, shared catalog rows, hub
+  files + capability, final check). Each deletion stage repeats its exact deletion list in a danger
+  confirm modal. The start form (domain, source dataset picker, FR / EN labels, optional lookup
+  columns) shows a live preview of the 12 objects the run will create (names derived exactly like
+  `spec.py`). Per-stage wording lives in `STAGE_UX` (front only; an unknown future stage falls back
+  on the server title / detail). Routes `/api/guided/{current,start,start-removal,run,verify,abandon}`
+  and `/api/wizard/draft`.
+- **Improve** (button on every sub-agent node, added 2026-10-14): a guided REVIEW run that improves
+  an existing sub-agent's understanding of its data from BUSINESS feedback, without rebuilding
+  anything. 3 stages: (1) read the live semantic model back into the wizard config shape
+  (read-only, synchronous at start); (2) the business expert writes, in their own words, the
+  questions it got wrong and what it must know; one AI call (`/api/review/propose`, background job)
+  reads the current setup, the profile digest, the column descriptions written in DSS by the data
+  owners and 20 sample rows (first 300 rows, cells cut at 60 chars, columns whose NAME looks
+  personal masked), and returns change cards (column meaning, recognize values, calculations,
+  ready-made filters, other words, example questions, general rules, routing text), each with a
+  plain-words reason, all kept by default; the expert unticks what is wrong (`/api/review/keep`);
+  (3) save: the guarded apply path (factory ownership marker + model version backup), a value
+  re-index only when a "recognize values" flag changed, the hub config copy updated, and the
+  capability routing text when kept (then the orchestrator reload block). Models not created by
+  the factory are refused (`review_not_supported`). Engine: `owismind_factory/review.py` + the
+  review stages of `guided.py`; route `/api/guided/start-review`. Wording rule: every text is for a
+  business person who knows nothing about AI agents (no technical vocabulary on this screen).
+- **Compatibility probe** (no screen any more): the first creation stage explains it. When its
+  journal shows that `probe_results.json` is absent from the hub (notebook 00 never recorded), a
+  block says it is not blocking (tool + Code Agent stages fall back to guided manual steps), how to
+  unlock them (run notebook 00 in DSS, then relaunch the check), and offers a read-only report
+  (`/api/probe`, which writes nothing; only notebook 00 records the gates).
+- **Reglages**: the orchestrator persona prompt `prompts/orchestrator_persona.md` (editable, plus
+  each sub-agent's `prompts/<domain>/understand_extra.md` in the file picker; path allowlist
+  unchanged) and the factory settings in read-only (`factory_settings.json`).
+
+**UX rules (user field test 2026-10-14):** the whole UI is in ENGLISH. Manual stages show a
+numbered checklist written front-side (`STAGE_UX[key].steps`, exact DSS clicks, copy buttons on
+every name to type): "Done, check it" stays disabled until every step is ticked, then the backend
+verifies in DSS; a failed check says in plain English what is missing (`NOT_DONE`), the engine's
+French message goes to a collapsed "Server message (technical)" block. The engine's French
+instruction text is never shown. The semantic wizard is a strict sequence: 1. Draft with AI (only
+enabled action), 2. answer the AI's questions (changing an answer locks the check until
+"Redraft"), 3. Done, check it. The dry-run plan's MANUAL lines (steps later automated by the run)
+are no longer surfaced as "to do by hand". One "Label" field (sent as both label_en and label_fr; the engine only warns, non-blocking, in the log). A compact shell header carries the page identity (back link, eyebrow, title, one subtitle line with "Step n of N: <step>" during a run, and the page action such as "Add a sub-agent"); each stage card repeats "Step n of N". The plan stage is worded "Verify the plan (dry run)" and live runs say "Running..." only. "Reload the orchestrator" is spelled out as 3 steps
+(open OWIsMind_orchestrator, Save without edit, start a new conversation) after enable / disable,
+at the end of a run and after saving a prompt.
+
+Removed from the UI (backend routes kept, still usable from notebooks / API): the one-shot domain
+creation ("Nouveau domaine": `/api/plan` + `/api/execute`, a pre-assistant dev tool duplicating
+notebook 03), its standalone semantic wizard, and the raw `capabilities.json` JSON editor
+(`/api/hub/capabilities` POST); Activer / Desactiver / Retirer cover the registry.
+
+Local simulator (no DSS, no install): `python3 dev-harness/console_sim.py` then
+http://127.0.0.1:5198/ (real console files re-read on each load + the real `backend.py` on a fake
+project whose world tracks what a creation builds and a removal deletes).
 
 ## Safety model
 
@@ -141,7 +169,7 @@ the viewer. Give that identity the rights the console needs on this project:
 - Read access to the source SQL connection used by the base + knowledge datasets.
 - Write access on the hub's `sql_connection` (default `SQL_owi`), used ONLY for the guided-run
   state table `{PROJECT_KEY}_owismind_factory_guided_v1` (CREATE TABLE IF NOT EXISTS + upserts,
-  parameterized, committed). Without it the Assistant screen reports `storage_not_configured`
+  parameterized, committed). Without it the guided run screen reports `storage_not_configured`
   and the other screens keep working.
 
 Because the actions run as the run-as user (not the viewer), treat this webapp as an **admin tool**
@@ -154,7 +182,7 @@ LAB launcher webapp.
 
 ## Notes / assumptions
 
-- French-only UI (internal admin tool); code and comments in English. No em dash or en dash anywhere.
+- English-only UI (internal admin tool, user decision 2026-10-14); code and comments in English. No em dash or en dash anywhere.
 - No external network calls, no CDN fonts/scripts: everything is self-contained (inline SVG icons,
   local CSS tokens).
 - The theme attribute lives on the `#afc` root element (not `document.body`) so the panes never

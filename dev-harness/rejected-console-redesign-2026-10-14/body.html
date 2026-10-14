@@ -1,0 +1,57 @@
+<!-- OWIsMind - Agent Factory Console: BODY content only (no html/head).
+     Paste into the DSS Standard webapp HTML pane. script.js clones the
+     <template id="afc-shell"> below into #afc once, then renders each screen into #afcMain:
+       - Mes agents (home): agent list, enable/disable, remove, resume banner, technical details
+       - Parcours en cours (run, shown only while a run is active): guided creation / removal
+         journey (start form, phase rail + stage card, success screen)
+       - Avance: Sonde (probe) / Mode expert (one-shot plan + execute) / Fichiers du hub
+     French-only UI (internal admin tool). Orange charter styling lives in style.css. -->
+<div id="afc" data-theme="light">
+  <p class="afc-boot">Chargement de la console...</p>
+</div>
+<noscript>
+  <p style="padding:24px;">Cette console requiert l'activation de JavaScript.</p>
+</noscript>
+
+<!-- ===== Shell: header, nav, main container, toast, modal (built once) ===== -->
+<template id="afc-shell">
+  <header class="afc-header">
+    <div class="afc-brand">
+      <p class="afc-eyebrow" id="afcEyebrow">OWIsMind · Usine à agents</p>
+      <h1 class="afc-h1" id="afcTitle">Mes agents</h1>
+      <div class="afc-titlebar"></div>
+    </div>
+    <div class="afc-controls">
+      <div class="afc-header-action" id="afcHeaderAction"></div>
+      <button class="afc-theme" id="afcTheme" title="Basculer le thème" aria-label="Basculer le thème">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="afc-tabs" id="afcTabs" aria-label="Navigation principale">
+    <button class="afc-tab afc-tab--on" data-tab="home" data-nav="home">Mes agents</button>
+    <button class="afc-tab" data-tab="run" data-nav="run" id="afcTabRun" hidden>Parcours en cours<span class="afc-nav-dot" aria-hidden="true"></span></button>
+    <button class="afc-tab" data-tab="advanced" data-nav="advanced">Avancé</button>
+  </nav>
+  <nav class="afc-subtabs" id="afcSubtabs" aria-label="Outils avancés" hidden>
+    <button class="afc-subtab" data-tab="probe">Sonde</button>
+    <button class="afc-subtab" data-tab="expert">Mode expert</button>
+    <button class="afc-subtab" data-tab="hub">Fichiers du hub</button>
+  </nav>
+
+  <main class="afc-main" id="afcMain"></main>
+
+  <div class="afc-toast" id="afcToast" role="status" aria-live="polite">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>
+    <span id="afcToastMsg"></span>
+  </div>
+
+  <div class="afc-modal-scrim" id="afcModalScrim" aria-hidden="true">
+    <div class="afc-modal" role="dialog" aria-modal="true" aria-labelledby="afcModalTitle">
+      <div class="afc-modal-head"><h2 class="afc-modal-title" id="afcModalTitle"></h2></div>
+      <div class="afc-modal-body" id="afcModalBody"></div>
+      <div class="afc-modal-foot" id="afcModalFoot"></div>
+    </div>
+  </div>
+</template>

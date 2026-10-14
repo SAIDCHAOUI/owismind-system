@@ -1,21 +1,34 @@
 /* OWIsMind - Agent Factory Console (framework-free vanilla JS, no build, no CDN).
  *
- * Admin design-time webapp that drives the "agent factory": it plans and runs the
- * creation of a new dataset-specialist sub-agent chain in the DSS project, and edits
- * the Config & Prompt Hub. It is SEPARATE from the public OWIsMind Vue plugin webapp.
+ * Admin design-time webapp that adds and removes the orchestrator's sub-agents
+ * (one capability per business domain) in the DSS project, and edits the
+ * orchestrator persona of the Config & Prompt Hub. It is SEPARATE from the public
+ * OWIsMind Vue plugin webapp. English-only UI.
  *
- * Safety model (mirrors the backend contract):
- *   - Read screens (state / datasets / capabilities / prompt) are plain GETs.
- *   - Every mutating call carries {confirm: true} and is gated behind a confirm modal.
- *   - "Planifier" is a dry-run (nothing touches DSS); "Executer" runs for real.
- *   - Creation flows have no deletion step. The ONLY deletion path is the guided
- *     capability-removal run: server-side typed-domain confirmation, safe_delete
- *     identity gate, protected source dataset, one confirmed stage at a time.
+ * Three screens, one idea each:
+ *   - Overview : an org chart (orchestrator -> sub-agents) with Enable / Disable /
+ *     Remove on each node, the "Add a sub-agent" button and a "Resume" banner.
+ *   - Run : the server-persisted guided run, creation (13 stages) or removal
+ *     (12 stages). Left column = the stage to act on (what the click does, the
+ *     objects it creates / deletes, the button); right column = the sticky tracker.
+ *   - Settings : the orchestrator persona prompt (editable) and the factory
+ *     settings (read-only).
  *
- * Long backend actions (probe / execute / wizard draft) run as background JOBS: the
- * POST returns a job_id, then we poll GET api/job/<id> until status is done or error.
- * The shell in body.html (<template id="afc-shell">) is cloned once into #afc; each
- * screen renders into #afcMain. French-only UI. Orange charter styling in style.css. */
+ * Manual stages (the operator acts in DSS): the steps are written here, front-side,
+ * as a numbered checklist; the "Done, check it" button stays disabled until every
+ * step is ticked, then the backend VERIFIES in DSS before the run advances.
+ * The engine's own French instruction text is never shown (it is replaced by the
+ * STAGE_UX steps); server problem messages are shown verbatim, labelled as such.
+ *
+ * Safety model (mirrors the backend contract, unchanged): read calls are plain
+ * GETs; every mutating call carries {confirm: true} behind a confirm modal; the
+ * ONLY deletion path is the guided removal run (typed domain name, one confirmed
+ * stage at a time, source dataset never touched).
+ *
+ * Long backend actions (stage runs / wizard draft / probe) run as background JOBS:
+ * the POST returns a job_id, then we poll GET api/job/<id> until done or error.
+ * The shell in body.html (<template id="afc-shell">) is cloned once into #afc;
+ * each screen renders into #afcMain. Orange charter in style.css. */
 
 (function () {
   "use strict";
@@ -28,45 +41,39 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11"/><path d="M5 15V5h10"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v6h6M20 20v-6h-6"/><path d="M20 10a8 8 0 0 0-14-4M4 14a8 8 0 0 0 14 4"/></svg>',
     save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg>',
-    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>',
+    hub: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/></svg>'
   };
 
   /* ============================ state ============================ */
 
   var S = {
-    tab: "guided",
+    view: "overview",          // overview | run | settings
     theme: "light",
-    // Guided assistant screen (server-persisted run)
+    overview: { loaded: false, loading: false, error: null, data: null, flash: null, notice: null },
     guided: {
       loaded: false, loading: false, error: null, run: null,
       starting: false, startError: null, startErrorCode: null, running: false, verifying: false,
-      abandoning: false, actionError: null, liveActions: [],
+      abandoning: false, actionError: null, verifyFailed: false, liveActions: [], lastDone: null,
       form: { domain: "", base_dataset: "", label_fr: "", label_en: "", lookup: "" },
-      wizard: { running: false, jobId: null, config: null, answers: {}, error: null, reqId: 0 }
+      wizard: { running: false, jobId: null, config: null, answers: {}, drafted: null, error: null, reqId: 0 },
+      probe: { running: false, report: null, error: null },
+      review: null,            // see resetReviewUi()
+      ticks: {}                // "<run_id>:<stage>" -> {stepIndex: true}
     },
-    // Overview screen ("Vue d'ensemble")
-    overview: { loaded: false, loading: false, error: null, data: null },
-    // shared: datasets list (fed to the pickers)
     datasets: { loaded: false, loading: false, error: null, list: [] },
-    // Probe screen ("Sonde", Phase 0)
-    probe: { running: false, jobId: null, report: null, error: null },
-    // New-domain screen ("Nouveau domaine")
-    domain: {
-      form: { domain: "", sourceMode: "existing", base_dataset: "",
-              connection: "SQL_owi", schema: "", table: "", catalog: "",
-              label_fr: "", label_en: "", lookup: "" },
-      planning: false, plan: null, planError: null,
-      executing: false, execJobId: null, execActions: [], execResult: null, execError: null,
-      wizard: { profileDataset: "", running: false, jobId: null, config: null,
-                answers: {}, error: null, regenerating: false }
-    },
-    // Prompts screen (hub editor)
     prompts: {
       path: "/python/owismind_hub/prompts/orchestrator_persona.md",
-      loading: false, loaded: false, content: "", saving: false, loadError: null,
-      caps: { loading: false, loaded: false, text: "", saving: false, problems: [], loadError: null }
-    }
+      loading: false, loaded: false, content: "", saving: false, loadError: null
+    },
+    // Open state of the collapsible blocks (survives the 1.5s job-polling re-renders).
+    ui: { details: {} }
   };
+
+  var PERSONA_PATH = "/python/owismind_hub/prompts/orchestrator_persona.md";
+  var ORCHESTRATOR_NAME = "OWIsMind_orchestrator";
 
   /* ============================ dom helpers ============================ */
 
@@ -76,7 +83,16 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
     });
   }
-  function setMain(html) { var m = byId("afcMain"); if (m) { m.innerHTML = html; } }
+  function mono(text) { return '<span class="mono">' + esc(text) + '</span>'; }
+  /* A name the operator must type or paste in DSS: mono + a copy button. */
+  function copyable(text) {
+    return '<span class="mono copyable">' + esc(text) + '</span>' +
+      '<button class="afc-copy" data-copy="' + esc(text) + '" title="Copy">' + I.copy + '</button>';
+  }
+  function setMain(html) {
+    var m = byId("afcMain");
+    if (m) { m.innerHTML = html; wireDetails(); wireCopyButtons(); }
+  }
 
   /* ============================ API ============================ */
 
@@ -114,7 +130,7 @@
         // hiccup, NOT a job failure.
         var st = (r.http === 200) ? d.status : null;
         if (st === "running" || st === "done" || st === "error") {
-          transientFails = 0; // a real answer clears the transient streak
+          transientFails = 0;
           if (st === "running") {
             if (onTick) { onTick(d.actions || []); }
             setTimeout(tick, 1500);
@@ -127,9 +143,8 @@
           }
           return;
         }
-        // Transient transport failure: retry a few times with growing backoff
-        // (2s, 4s, 8s, capped) before declaring the job lost, so one flaky poll
-        // does not abort a job that is still running for real.
+        // Transient transport failure: retry with growing backoff (2s, 4s, 8s,
+        // capped) before declaring the job lost.
         transientFails += 1;
         if (transientFails > MAX_TRANSIENT) {
           stopped = true;
@@ -161,13 +176,13 @@
   /* opts: {title, bodyHtml, confirmLabel, danger, onConfirm} */
   function openConfirm(opts) {
     var scrim = byId("afcModalScrim");
-    byId("afcModalTitle").textContent = opts.title || "Confirmer";
+    byId("afcModalTitle").textContent = opts.title || "Confirm";
     byId("afcModalBody").innerHTML = opts.bodyHtml || "";
     var foot = byId("afcModalFoot");
-    var confirmCls = opts.danger ? "afc-btn afc-btn--danger" : "afc-btn afc-btn--primary";
+    var confirmCls = opts.danger ? "afc-btn afc-btn--danger-solid" : "afc-btn afc-btn--primary";
     foot.innerHTML =
-      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="afcModalCancel">Annuler</button>' +
-      '<button class="' + confirmCls + '" id="afcModalOk">' + esc(opts.confirmLabel || "Confirmer") + '</button>';
+      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="afcModalCancel">Cancel</button>' +
+      '<button class="' + confirmCls + '" id="afcModalOk">' + esc(opts.confirmLabel || "Confirm") + '</button>';
     scrim.classList.add("on");
     scrim.setAttribute("aria-hidden", "false");
     byId("afcModalCancel").onclick = closeModal;
@@ -175,6 +190,8 @@
       closeModal();
       if (opts.onConfirm) { opts.onConfirm(); }
     };
+    var first = byId("afcModalBody").querySelector("input");
+    if (first) { first.focus(); }
   }
   function closeModal() {
     var scrim = byId("afcModalScrim");
@@ -182,16 +199,51 @@
     scrim.setAttribute("aria-hidden", "true");
   }
 
+  /* ============================ engine strings -> English ============================ */
+
+  /* The frozen engine labels inventory items in French. Known labels are mapped
+   * to English; anything unknown is shown as-is. */
+  var EN = {
+    "Tool Semantic Model Query": "Semantic Model Query tool",
+    "Code Agent": "Code Agent",
+    "Modèle sémantique": "Semantic model",
+    "Scénario": "Scenario",
+    "Recette Python": "Python recipe",
+    "Dataset de connaissance": "Knowledge dataset",
+    "Zone du Flow": "Flow zone",
+    "Fichier du hub": "Hub file",
+    "Dataset SOURCE (protégé)": "Source dataset (protected)",
+    "Dataset PROTÉGÉ (autre capability)": "Protected dataset (used by another capability)",
+    "project library": "project library",
+    "Scenarios": "Scenarios",
+    "Agents & GenAI Models > Tools": "Agents & GenAI Models > Tools",
+    "Agents & GenAI Models > Agents": "Agents & GenAI Models > Agents",
+    "Agents & GenAI Models > Semantic models": "Agents & GenAI Models > Semantic models",
+    "sa table SQL dérivée sera supprimée (reconstructible)": "its derived SQL table is deleted too (can be rebuilt)",
+    "supprimée SEULEMENT si vide (le dataset source, jamais touché, peut la garder en vie)":
+      "deleted ONLY if empty (the source dataset, never touched, may keep it alive)",
+    "JAMAIS supprimé par ce run": "NEVER deleted by this run",
+    "appartient aussi à une autre capability du registre : JAMAIS supprimé par ce run":
+      "also belongs to another capability: NEVER deleted by this run"
+  };
+  function en(s) {
+    var t = String(s == null ? "" : s);
+    if (EN[t]) { return EN[t]; }
+    var m = t.match(/^Flow, zone (.+)$/);
+    if (m) { return "Flow, zone " + m[1]; }
+    return t;
+  }
+
   /* ============================ shared render bits ============================ */
 
   function statusChip(status) {
     var map = {
-      PLANNED: { cls: "planned", txt: "PLANIFIÉ" },
-      DONE: { cls: "done", txt: "FAIT" },
-      SKIPPED: { cls: "skipped", txt: "IGNORÉ" },
-      FAILED: { cls: "failed", txt: "ÉCHEC" },
-      MANUAL: { cls: "manual", txt: "MANUEL" },
-      BLOCKED: { cls: "blocked", txt: "BLOQUÉ" }
+      PLANNED: { cls: "planned", txt: "PLANNED" },
+      DONE: { cls: "done", txt: "DONE" },
+      SKIPPED: { cls: "skipped", txt: "SKIPPED" },
+      FAILED: { cls: "failed", txt: "FAILED" },
+      MANUAL: { cls: "planned", txt: "LATER STEP" },
+      BLOCKED: { cls: "blocked", txt: "BLOCKED" }
     };
     var m = map[status] || { cls: "planned", txt: String(status || "") };
     return '<span class="afc-chip afc-chip--' + m.cls + '">' + esc(m.txt) + '</span>';
@@ -199,7 +251,7 @@
 
   function actionsTable(actions) {
     if (!actions || !actions.length) {
-      return '<p class="afc-loading">Aucune action pour le moment.</p>';
+      return '<p class="afc-muted">No action yet.</p>';
     }
     var rows = actions.map(function (a) {
       return '<tr>' +
@@ -209,46 +261,85 @@
         '</tr>';
     }).join("");
     return '<div class="afc-table-wrap"><table class="afc-table">' +
-      '<thead><tr><th class="col-status">Statut</th><th class="col-step">Étape</th><th>Détail</th></tr></thead>' +
+      '<thead><tr><th class="col-status">Status</th><th class="col-step">Action</th><th>Detail</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>';
   }
 
-  function manualChecklist(actions) {
-    var manuals = (actions || []).filter(function (a) { return a.status === "MANUAL"; });
-    if (!manuals.length) { return ""; }
-    var items = manuals.map(function (a) {
-      return '<li><span class="step">' + esc(a.step) + '</span> : ' + esc(a.detail || "") + '</li>';
-    }).join("");
-    return '<div class="afc-manual"><h4>Étapes manuelles restantes (' + manuals.length + ')</h4>' +
-      '<ol>' + items + '</ol></div>';
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { toast("Copied to the clipboard."); },
+        function () { toast("Copy blocked by the browser: select the text instead."); }
+      );
+    } else {
+      toast("Copy not supported by the browser: select the text instead.");
+    }
   }
-
   function copyButton(id, label) {
-    return '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="' + id + '">' + I.copy + (label || "Copier") + '</button>';
+    return '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="' + id + '">' + I.copy + (label || "Copy") + '</button>';
   }
   function wireCopy(id, getText) {
     var b = byId(id);
-    if (!b) { return; }
-    b.onclick = function () {
-      var text = getText();
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(
-          function () { toast("Copié dans le presse-papiers."); },
-          function () { toast("Copie impossible."); }
-        );
-      } else {
-        toast("Copie non supportée par le navigateur.");
-      }
-    };
+    if (b) { b.onclick = function () { copyText(getText()); }; }
+  }
+  function wireCopyButtons() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (b) {
+      b.onclick = function () { copyText(b.getAttribute("data-copy")); };
+    });
   }
 
   function backendBanner() {
     if (hasBackend()) { return ""; }
-    return '<div class="afc-note afc-note--warn">Backend indisponible : cette page est ouverte hors du contexte DSS. ' +
-      'Les appels au moteur d\'usine ne fonctionneront qu\'une fois la webapp déployée dans DSS.</div>';
+    return '<div class="afc-note afc-note--warn">Backend unavailable: this page is open outside DSS. ' +
+      'Factory calls only work once the webapp runs inside DSS.</div>';
   }
 
-  /* ============================ datasets (shared picker source) ============================ */
+  /* A collapsible block whose open state survives re-renders (S.ui.details). */
+  function detailsBlock(key, summary, innerHtml, defaultOpen) {
+    var stored = S.ui.details[key];
+    var open = (stored === undefined) ? !!defaultOpen : !!stored;
+    return '<details class="afc-details" data-details-key="' + esc(key) + '"' + (open ? " open" : "") + '>' +
+      '<summary><span class="afc-details-chev">' + I.chevron + '</span>' +
+      '<span>' + esc(summary) + '</span></summary>' +
+      '<div class="afc-details-body">' + innerHtml + '</div></details>';
+  }
+  function wireDetails() {
+    Array.prototype.forEach.call(document.querySelectorAll("#afcMain details[data-details-key]"), function (d) {
+      d.addEventListener("toggle", function () {
+        S.ui.details[d.getAttribute("data-details-key")] = d.open;
+      });
+    });
+  }
+
+  /* The compact shell header carries the page identity: back link (every screen
+   * but the overview), eyebrow, title, one subtitle line and an optional action. */
+  function setHeader(o) {
+    o = o || {};
+    var back = byId("afcBack");
+    if (back) { back.style.display = o.back ? "" : "none"; }
+    if (byId("afcEyebrow")) { byId("afcEyebrow").textContent = o.eyebrow || "OWIsMind agent factory"; }
+    if (byId("afcTitle")) { byId("afcTitle").textContent = o.title || ""; }
+    if (byId("afcSub")) { byId("afcSub").innerHTML = o.sub || ""; }
+    if (byId("afcHeaderAction")) { byId("afcHeaderAction").innerHTML = o.action || ""; }
+  }
+  function backLink() { return ""; }
+  function wireBack() {}
+
+  /* "Reload the orchestrator" explained step by step: the registry of sub-agents
+   * is read when the orchestrator process starts (lesson L168). */
+  function reloadSteps() {
+    return '<ol class="howto howto--strong">' +
+      '<li>In DSS, open <b>Agents &amp; GenAI Models</b> &gt; <b>Agents</b> &gt; ' + copyable(ORCHESTRATOR_NAME) + '.</li>' +
+      '<li>Click <b>Save</b> (no edit needed). Saving restarts the orchestrator, which then re-reads its list of sub-agents.</li>' +
+      '<li>In the OWIsMind webapp, start a <b>new conversation</b> (an existing conversation keeps the old list).</li>' +
+      '</ol>';
+  }
+  function reloadBlock(title) {
+    return '<div class="nextstep"><p class="afc-mlabel">' + esc(title || "Last step: reload the orchestrator") + '</p>' +
+      reloadSteps() + '</div>';
+  }
+
+  /* ============================ datasets (picker source) ============================ */
 
   function loadDatasets(cb, force) {
     if (force && !S.datasets.loading) {
@@ -271,7 +362,7 @@
   }
 
   function datasetOptions(selected) {
-    var opts = ['<option value="">- Choisir un dataset -</option>'];
+    var opts = ['<option value="">Choose a dataset</option>'];
     S.datasets.list.forEach(function (d) {
       var sel = d.name === selected ? " selected" : "";
       opts.push('<option value="' + esc(d.name) + '"' + sel + '>' + esc(d.name) + '</option>');
@@ -279,172 +370,941 @@
     return opts.join("");
   }
 
-  /* ============================ screen: Assistant ============================ */
+  /* ============================ derived names (mirror of spec.py DomainSpec) ============================ */
+
+  /* Mirror of Python str.title().replace("_", ""): a letter is upper-cased when it
+   * starts the string or follows a non-letter; every other letter is lower-cased.
+   * Example: "sales_ops" -> "SalesOps". */
+  function titleNoUnderscore(domain) {
+    var s = String(domain || "").toLowerCase();
+    var out = "";
+    var prevLetter = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      var isLetter = ch.toLowerCase() !== ch.toUpperCase();
+      out += (isLetter && !prevLetter) ? ch.toUpperCase() : ch;
+      prevLetter = isLetter;
+    }
+    return out.replace(/_/g, "");
+  }
+
+  /* Every DSS / hub name the factory derives from a spec. Pure function:
+   * placeholders stand in for empty fields so the live preview always reads. */
+  function derivedNames(spec) {
+    spec = spec || {};
+    var domain = String(spec.domain || "").trim();
+    var base = String(spec.base_dataset || "").trim();
+    var title = titleNoUnderscore(domain);
+    var d = domain || "<domain>";
+    var b = base || "<dataset>";
+    var t = title || "<Domain>";
+    return {
+      domain: d, base: b, title: t,
+      zone: (spec.zone_name && String(spec.zone_name).trim()) || (t + "_Expert"),
+      profile: b + "_profile",
+      valueIndex: b + "_value_index",
+      valueCatalog: b + "_value_catalog",
+      scenario: "Refresh_" + t,
+      model: b + "_Semantic_Model",
+      tool: d + "_semantic_query",
+      agent: t + "_expert",
+      capability: d + "_expert",
+      orchestratorTool: "ask_" + d + "_expert",
+      wizardConfig: "wizard/" + d + "-config.json",
+      generated: "/python/owismind_hub/generated/" + t + "_expert.py"
+    };
+  }
+
+  function obj(kind, name, where, id, note) {
+    return { kind: kind, name: name, where: where || "", id: id || "", note: note || "" };
+  }
+
+  /* The 12 objects a creation run produces, in Flow order. `captured` (optional)
+   * adds the ids the server recorded (model, tool, agent). */
+  function createdObjects(n, captured) {
+    var c = captured || {};
+    return [
+      obj("Flow zone", n.zone, "Flow"),
+      obj("Dataset", n.profile, "Flow, in the zone"),
+      obj("Dataset", n.valueIndex, "Flow, in the zone"),
+      obj("Dataset", n.valueCatalog, "Flow, in the zone"),
+      obj("Recipe", "compute_" + n.profile, "Flow, in the zone"),
+      obj("Recipe", "compute_" + n.valueIndex, "Flow, in the zone"),
+      obj("Recipe", "compute_" + n.valueCatalog, "Flow, in the zone"),
+      obj("Scenario", n.scenario, "Scenarios"),
+      obj("Semantic model", n.model, "Agents & GenAI", c.model_id),
+      obj("Semantic Model Query tool", n.tool, "Agents & GenAI", c.tool_id),
+      obj("Code Agent", n.agent, "Agents & GenAI", c.agent_id),
+      obj("Capability", n.capability, "capabilities.json (hub)")
+    ];
+  }
+
+  function objectsList(items, removalStyle, protectedItems) {
+    var rows = items.map(function (o) {
+      return '<li class="obj">' +
+        '<span class="obj-mark' + (removalStyle ? " obj-mark--remove" : "") + '"></span>' +
+        '<span class="obj-kind">' + esc(o.kind) + '</span>' +
+        '<span class="obj-name"><span class="mono">' + esc(o.name) + '</span>' +
+        (o.id ? ' <span class="obj-id mono">' + esc(o.id) + '</span>' : "") +
+        (o.note ? '<span class="obj-note">' + esc(o.note) + '</span>' : "") + '</span>' +
+        '<span class="obj-where">' + esc(o.where) + '</span></li>';
+    }).join("");
+    return '<ul class="objects">' + rows + '</ul>' + protectedList(protectedItems);
+  }
+
+  /* "Never touched" list (removal): the source dataset and any dataset shared
+   * with another capability. */
+  function protectedList(items) {
+    if (!items || !items.length) { return ""; }
+    return '<div class="protected"><p class="afc-mlabel">Never touched</p><ul class="objects">' +
+      items.map(function (p) {
+        return '<li class="obj obj--protected"><span class="obj-mark obj-mark--keep"></span>' +
+          '<span class="obj-kind">' + esc(en(p.kind_fr || "Dataset")) + '</span>' +
+          '<span class="obj-name"><span class="mono">' + esc(p.name || "") + '</span>' +
+          (p.note_fr ? '<span class="obj-note">' + esc(en(p.note_fr)) + '</span>' : "") + '</span>' +
+          '<span class="obj-where">' + esc(en(p.where_fr || "Flow")) + '</span></li>';
+      }).join("") + '</ul></div>';
+  }
+
+  /* ============================ stage microcopy (front-only) ============================ */
+
+  var GUARANTEE = {
+    create: "Nothing is deleted. Running this step again is safe.",
+    read: "Read-only: nothing is created or deleted in DSS.",
+    verify: "I only read DSS to confirm it is done. I change nothing.",
+    detach: "Nothing is deleted at this step."
+  };
+
+  function codeEnvName() {
+    var s = ((S.overview.data || {}).settings || {}).code_env_311;
+    return s || "DSS Agentic Python 3.11";
+  }
+
+  /* One entry per server stage key. ctx = {spec, names, captured, removal,
+   * inventory, key, label, stage}. sentence() returns HTML (values escaped);
+   * objects() returns obj() rows; removalItems=true reads the server inventory;
+   * steps(ctx) returns the numbered checklist (HTML strings) of a MANUAL stage.
+   * A key missing here falls back on the server title / detail (future stages). */
+  var STAGE_UX = {
+    /* ---- creation ---- */
+    preflight: {
+      title: "Check the project is compatible", guarantee: "read",
+      sentence: function (c) {
+        return "I check the hub, the source dataset " + mono(c.names.base) +
+          " (must not be partitioned), name collisions and the orchestrator version. Read-only, nothing is created.";
+      },
+      primary: "Check", retry: "Check again"
+    },
+    plan: {
+      title: "Verify the plan (dry run)", guarantee: "read",
+      sentence: function () {
+        return "A dry run: I go through the whole creation WITHOUT changing anything in DSS, to confirm it can " +
+          "succeed and to list exactly what will be created. Every later step is then done for you, one click at a time.";
+      },
+      objectsLabel: "What will be created during the run",
+      objects: function (c) { return createdObjects(c.names, c.captured); },
+      primary: "Verify the plan"
+    },
+    infra: {
+      title: "Create the zone, datasets and recipes", guarantee: "create",
+      sentence: function (c) {
+        return "I create the Flow zone " + mono(c.names.zone) +
+          ", 3 knowledge datasets, their 3 recipes and the refresh scenario.";
+      },
+      objects: function (c) { return createdObjects(c.names).slice(0, 8); },
+      primary: "Create these 8 objects",
+      wait: "About one minute."
+    },
+    first_build: {
+      title: "Build the knowledge datasets", guarantee: "create",
+      sentence: function (c) {
+        return "I run the scenario " + mono(c.names.scenario) +
+          " for you and wait for its result: profile, value index, value catalog.";
+      },
+      objectsLabel: "What will be filled",
+      objects: function (c) {
+        return [obj("Dataset", c.names.profile, "Flow"),
+                obj("Dataset", c.names.valueIndex, "Flow"),
+                obj("Dataset", c.names.valueCatalog, "Flow")];
+      },
+      primary: "Run the build",
+      wait: "Usually 2 to 10 minutes. You can close the page: the run resumes where it is."
+    },
+    profile_review: {
+      title: "Review the profile", guarantee: "verify",
+      sentence: function () {
+        return "The profile describes the data to the sub-agent. Have a quick look before going on.";
+      },
+      steps: function (c) {
+        return [
+          "In the Flow, open the dataset " + copyable(c.names.profile) + " (tab <b>Explore</b>).",
+          "Read the column descriptions, synonyms and listed values (statuses, types, categories).",
+          "If something is wrong, fix it in the overrides dataset (it always wins), then rebuild the profile. " +
+            "If everything looks right, there is nothing to change."
+        ];
+      }
+    },
+    wizard: {
+      title: "Describe the semantic model (AI)", guarantee: "verify",
+      sentence: function () {
+        return "The AI writes a draft of the semantic model from the profile (aggregated metadata only, " +
+          "no data rows) and may ask you a few questions.";
+      }
+    },
+    brain: {
+      title: "Create the semantic model and its tool", guarantee: "create",
+      sentence: function (c) {
+        return "I create the semantic model " + mono(c.names.model) +
+          ", apply the draft, index it and create the tool " + mono(c.names.tool) + ".";
+      },
+      objects: function (c) { return createdObjects(c.names, c.captured).slice(8, 10); },
+      primary: "Create the model and the tool",
+      wait: "1 to 3 minutes (indexing).",
+      // Manual fallback (the instance did not allow the automatic tool creation).
+      steps: function (c, stage) {
+        var desc = "";
+        var m = String((stage && stage.instructions_fr) || "").match(/Description for LLM :\n([\s\S]*?)\n5\./);
+        if (m) { desc = m[1]; }
+        var list = [
+          "In DSS, open <b>Agents &amp; GenAI Models</b> &gt; <b>Tools</b> &gt; <b>+ New tool</b>, type <b>Semantic Model Query</b>, name " + copyable(c.names.tool) + ".",
+          "Link it to the semantic model " + copyable(c.names.model) + ".",
+          "Set <b>Agent mode</b> to OFF, LLM " + mono("vertex_ai/claude-sonnet-5") + ", dataset access <b>as the calling user</b>."
+        ];
+        if (desc) {
+          list.push("Paste this text into <b>Description for LLM</b>:<pre class=\"afc-pre\">" + esc(desc) + "</pre>" +
+            '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-copy="' + esc(desc) + '">' + I.copy + 'Copy the description</button>');
+        }
+        list.push("Click <b>Save</b>.");
+        return list;
+      }
+    },
+    template: {
+      title: "Check the sub-agent engine", guarantee: "read",
+      sentence: function () {
+        return "I check that the shared sub-agent engine (template file) is present in the hub.";
+      },
+      primary: "Check",
+      steps: function () {
+        return [
+          "Open <b>&lt;/&gt; Code</b> &gt; <b>Libraries</b> in this project.",
+          "Under " + mono("python/owismind_hub") + ", create the folder " + copyable("templates") +
+            " and in it the file " + copyable("dataset_expert.py") + ".",
+          "Paste into it the code of the Code Agent " + copyable("SalesDrive_revenue_expert") +
+            " (open it, tab <b>Code</b>, select all, copy). Click <b>Save</b>."
+        ];
+      }
+    },
+    agent_code: {
+      title: "Generate the sub-agent code", guarantee: "create",
+      sentence: function (c) {
+        return "I generate the code of the sub-agent " + mono(c.names.agent) +
+          " with the right ids. If the instance allows it I also create the Code Agent; otherwise the next step tells you exactly how.";
+      },
+      objects: function (c) {
+        return [obj("Code Agent", c.names.agent, "Agents & GenAI (if the instance allows it)"),
+                obj("File", c.names.generated, "project library")];
+      },
+      primary: "Generate the code"
+    },
+    code_agent: {
+      title: "Create the Code Agent", guarantee: "verify",
+      sentence: function () {
+        return "This is the only copy-paste of the run. Follow the steps in order.";
+      },
+      steps: function (c) {
+        var tool = c.captured.tool_id;
+        return [
+          "In DSS, open <b>Agents &amp; GenAI Models</b> &gt; <b>Agents</b> and click <b>+ New agent</b> &gt; <b>Code Agent</b>.",
+          "Name it exactly " + copyable(c.names.agent) + ".",
+          "In <b>Select code template</b>, choose <b>LangGraph routing agent</b>, then click <b>Create</b>.",
+          "Open the agent's <b>Settings</b> tab &gt; <b>Code</b> section &gt; <b>Code environment</b>: select " +
+            copyable(codeEnvName()) + ". Click <b>Save</b>.",
+          "In another tab, open <b>&lt;/&gt; Code</b> &gt; <b>Libraries</b>, then the file " + copyable(c.names.generated) +
+            ". Select all its content and copy it.",
+          "Back in the agent, open the <b>Code</b> tab, delete all the existing code and paste the copied code." +
+            (tool ? " Check that the line " + mono("SEMANTIC_TOOL_ID") + " says " + mono(tool) + "." : ""),
+          "Click <b>Save</b>."
+        ];
+      }
+    },
+    capability: {
+      title: "Register the capability", guarantee: "create",
+      sentence: function (c) {
+        return "I add the capability " + mono(c.names.capability) +
+          " to the orchestrator registry, DISABLED for now.";
+      },
+      objects: function (c) {
+        return [obj("Capability", c.names.capability, "capabilities.json (previous file backed up)")];
+      },
+      primary: "Register"
+    },
+    smoke: {
+      title: "Test the sub-agent", guarantee: "verify",
+      sentence: function () {
+        return "The sub-agent is not enabled in the orchestrator yet: test it on its own, in DSS.";
+      },
+      steps: function (c) {
+        return [
+          "Open <b>Agents &amp; GenAI Models</b> &gt; <b>Agents</b> &gt; " + copyable(c.names.agent) + " and open its test chat.",
+          "Ask " + mono("What does this data contain?") + ": you should get a description of " + mono(c.names.base) + ".",
+          "Ask a simple figure, for example " + mono("How many rows per category?") + ": you should get a table."
+        ];
+      }
+    },
+    enable: {
+      title: "Enable the sub-agent", guarantee: "create",
+      sentence: function (c) {
+        return "I enable the capability: the orchestrator gains the tool " +
+          mono(c.names.orchestratorTool) + ".";
+      },
+      objectsLabel: "What changes",
+      objects: function (c) {
+        return [obj("Capability", c.names.capability, "enabled: true"),
+                obj("Orchestrator tool", c.names.orchestratorTool, "orchestrator")];
+      },
+      primary: "Enable"
+    },
+
+    /* ---- removal ---- */
+    inventory: {
+      title: "Take the inventory", guarantee: "read",
+      sentence: function () {
+        return "I list what really exists for this sub-agent in the project. Nothing is deleted.";
+      },
+      primary: "Take the inventory",
+      steps: function (c) {
+        var conflicts = (c.inventory && c.inventory.template_conflicts) || [];
+        return [
+          "Some objects of this domain are used as TEMPLATES by the factory: " +
+            conflicts.map(function (x) { return mono(x); }).join(", ") + ".",
+          "I understand that until they are re-pointed in " + mono("factory_settings.json") +
+            ", the factory cannot create new sub-agents. The removal can still go on."
+        ];
+      }
+    },
+    disable: {
+      title: "Disable the capability", guarantee: "detach",
+      sentence: function () {
+        return "I disable the capability: the orchestrator stops sending questions to this sub-agent.";
+      },
+      objectsLabel: "What changes",
+      objects: function (c) { return [obj("Capability", c.key, "enabled: false")]; },
+      primary: "Disable"
+    },
+    delete_tool: {
+      title: "Delete the Semantic Model Query tool", removalItems: true,
+      sentence: function () { return "I delete the Semantic Model Query tool of this domain."; },
+      primary: "Delete the tool"
+    },
+    delete_agent: {
+      title: "Delete the Code Agent", removalItems: true,
+      sentence: function () { return "I delete the Code Agent of this domain."; },
+      primary: "Delete the Code Agent"
+    },
+    delete_model: {
+      title: "Delete the semantic model", removalItems: true,
+      sentence: function () { return "I delete the semantic model of this domain."; },
+      primary: "Delete the model"
+    },
+    delete_scenario: {
+      title: "Delete the scenario", removalItems: true,
+      sentence: function () { return "I delete the refresh scenario of this domain."; },
+      primary: "Delete the scenario"
+    },
+    delete_recipes: {
+      title: "Delete the recipes", removalItems: true,
+      sentence: function () { return "I delete the knowledge recipes of this domain."; },
+      primary: "Delete the recipes"
+    },
+    delete_datasets: {
+      title: "Delete the knowledge datasets", removalItems: true,
+      sentence: function () {
+        return "I delete the derived datasets and their SQL tables (they can be rebuilt).";
+      },
+      primary: "Delete the datasets"
+    },
+    delete_zone: {
+      title: "Delete the Flow zone", removalItems: true,
+      sentence: function () { return "I delete the domain's Flow zone if it is empty, otherwise I keep it."; },
+      primary: "Delete the zone"
+    },
+    catalog_cleanup: {
+      title: "Clean the shared catalog",
+      sentence: function () {
+        return "I delete this sub-agent's rows in the shared value catalog (parameterized SQL).";
+      },
+      objects: function (c) { return [obj("Rows", "capability_key = " + c.key, "shared catalog")]; },
+      primary: "Clean the catalog"
+    },
+    hub_cleanup: {
+      title: "Clean the hub",
+      sentence: function () {
+        return "I delete this domain's wizard config, prompts and generated code, then its capability " +
+          "(capabilities.json is backed up first).";
+      },
+      objects: function (c) {
+        var paths = (c.inventory && c.inventory.hub_paths) || [];
+        var rows = paths.map(function (p) { return obj("File", p, "hub"); });
+        rows.push(obj("Capability", c.key, "capabilities.json"));
+        return rows;
+      },
+      primary: "Clean the hub"
+    },
+    final_check: {
+      title: "Check everything is gone", guarantee: "read",
+      sentence: function () { return "I check that every inventoried object is really gone."; },
+      primary: "Check"
+    },
+
+    /* ---- review (improve an existing sub-agent) ---- */
+    review_load: {
+      title: "Read what it knows today", guarantee: "read",
+      sentence: function () { return "I read what the expert knows about its data today. Nothing is changed."; },
+      primary: "Read", retry: "Read again"
+    },
+    review_feedback: {
+      title: "Explain what to fix",
+      sentence: function () { return "You explain what went wrong, the AI proposes changes, you choose which ones to keep."; }
+    },
+    review_apply: {
+      title: "Save the changes",
+      sentence: function () {
+        return "I save the changes you kept. The current version is kept as a backup, so it can always be restored.";
+      },
+      primary: "Save the changes", retry: "Try again",
+      wait: "About one minute."
+    }
+  };
+
+  /* Removal stages whose launch actually deletes DSS objects (danger style, the
+   * confirm modal repeats the exact deletion list). */
+  var REMOVAL_DANGER_STAGES = {
+    delete_tool: 1, delete_agent: 1, delete_model: 1, delete_scenario: 1,
+    delete_recipes: 1, delete_datasets: 1, delete_zone: 1,
+    catalog_cleanup: 1, hub_cleanup: 1
+  };
+
+  function isRemovalRun(run) { return !!(run && run.state && run.state.removal); }
+  function isReviewRun(run) { return !!(run && run.state && run.state.review); }
+
+  /* Everything the stage renderers need, for a creation OR a removal run. */
+  function stageCtx(run) {
+    var state = (run && run.state) || {};
+    var removal = state.removal || null;
+    var spec = state.spec || {};
+    var label;
+    if (removal || state.review) {
+      var entry = (removal || state.review).entry || {};
+      spec = { domain: entry.domain || run.domain || "", base_dataset: entry.lookup_dataset || "" };
+      label = entry.label_en || entry.label_fr || spec.domain;
+    } else {
+      label = spec.label_en || spec.label_fr || spec.domain || run.domain || "";
+    }
+    var names = derivedNames(spec);
+    return {
+      run: run, spec: spec, names: names, captured: state.captured || {},
+      removal: removal, inventory: (removal && removal.inventory) || null,
+      key: removal ? (removal.capability_key || names.capability) : names.capability,
+      label: label || names.domain
+    };
+  }
+
+  function stageTitle(key, stage) {
+    var ux = STAGE_UX[key];
+    return (ux && ux.title) || (stage && stage.title_fr) || key;
+  }
+
+  function stageObjects(key, ctx) {
+    var ux = STAGE_UX[key];
+    if (!ux) { return []; }
+    if (ux.removalItems) {
+      var items = ((ctx.inventory && ctx.inventory.stages) || {})[key] || [];
+      return items.map(function (it) {
+        return obj(en(it.kind_fr), it.name || "", en(it.where_fr), it.id || "", en(it.note_fr));
+      });
+    }
+    return ux.objects ? (ux.objects(ctx) || []) : [];
+  }
+
+  /* The numbered checklist of a manual (waiting_user) stage. Removal deletion
+   * stages refused by the API list the objects to delete by hand. */
+  function manualSteps(key, ctx, stage) {
+    var ux = STAGE_UX[key] || {};
+    if (ctx.removal && REMOVAL_DANGER_STAGES[key] === 1) {
+      var manual = ((ctx.removal.manual || {})[key]) || [];
+      var list = manual.map(function (it) {
+        return "Delete by hand in DSS: " + esc(en(it.kind_fr || "object")) + " " + copyable(it.name || "?") +
+          " (" + esc(en(it.where_fr || "DSS")) + ").";
+      });
+      if (!list.length) { list.push("Delete by hand in DSS the objects listed above."); }
+      return list;
+    }
+    if (ux.steps) { return ux.steps(ctx, stage) || []; }
+    return null;
+  }
+
+  /* "What will happen": the sentence, then the object list (created / deleted /
+   * checked), then the never-touched list for the removal. */
+  function stageWhatBlock(key, ctx, stage) {
+    var ux = STAGE_UX[key];
+    var html = '<p class="stage-sentence">' +
+      ((ux && ux.sentence) ? ux.sentence(ctx) : esc((stage && stage.detail_fr) || "").replace(/\n/g, "<br>")) +
+      '</p>';
+    if (!ux) { return html; }
+    var items = stageObjects(key, ctx);
+    var prot = (ctx.removal && key === "delete_datasets" && ctx.inventory) ? (ctx.inventory.protected || []) : [];
+    if (ux.removalItems && ctx.inventory && !items.length) {
+      html += '<p class="afc-muted">Nothing to delete: already gone. The step will simply be validated.</p>' +
+        protectedList(prot);
+    } else if (items.length) {
+      var removalStyle = !!(ctx.removal && REMOVAL_DANGER_STAGES[key] === 1);
+      var label = ux.objectsLabel || (ctx.removal ? "What will be deleted" : "What will be created");
+      html += '<p class="afc-mlabel">' + esc(label) + ' (' + items.length + ')</p>' +
+        objectsList(items, removalStyle, prot);
+    }
+    return html;
+  }
+
+  function guaranteeLine(key, ctx) {
+    var ux = STAGE_UX[key] || {};
+    if (ctx.removal && REMOVAL_DANGER_STAGES[key] === 1) {
+      return "Irreversible. The source dataset " + ctx.names.base + " is never touched.";
+    }
+    return GUARANTEE[ux.guarantee] || "";
+  }
+
+  function isSkippedStage(stage) {
+    var j = (stage && stage.journal) || [];
+    var last = j[j.length - 1];
+    return !!(last && last.status === "SKIPPED" && /déjà satisfait/.test(last.detail || ""));
+  }
+  function stageDisplayStatus(run, key) {
+    var stage = ((run.state || {}).stages || {})[key] || {};
+    if (key === run.current_stage && S.guided.running) { return "running"; }
+    if (stage.status === "done" && isSkippedStage(stage)) { return "skipped"; }
+    return stage.status || "pending";
+  }
+
+  function stageChip(status) {
+    var map = {
+      pending: { cls: "pending", txt: "To come" },
+      ready: { cls: "ready", txt: "To run" },
+      running: { cls: "running", txt: "Running" },
+      waiting_user: { cls: "waiting", txt: "Your turn" },
+      done: { cls: "done", txt: "Done" },
+      skipped: { cls: "done", txt: "Already done" },
+      failed: { cls: "failed", txt: "Failed" }
+    };
+    var m = map[status] || map.pending;
+    return '<span class="afc-chip st st--' + m.cls + '">' + esc(m.txt) + '</span>';
+  }
+
+  /* The preflight journal says whether the compatibility probe (notebook 00)
+   * ever ran: a SKIPPED preflight_probe action means probe_results.json is absent. */
+  function probeMissing(run) {
+    var pre = ((run.state || {}).stages || {}).preflight;
+    var j = (pre && pre.journal) || [];
+    for (var i = 0; i < j.length; i++) {
+      if (j[i].step === "preflight_probe" && j[i].status === "SKIPPED") { return true; }
+    }
+    return false;
+  }
+
+  /* ============================ guided run: load / apply ============================ */
 
   function guidedErrorText(data) {
     var map = {
-      confirmation_required: "La confirmation est requise.",
-      invalid_spec: "Les informations du domaine sont invalides.",
-      active_run_exists: "Un assistant est déjà en cours.",
-      busy: "Une opération de l'usine est déjà en cours. Réessayez dans un instant.",
-      server_error: "Le serveur n'a pas pu terminer l'opération.",
-      unknown_run: "Ce run est introuvable.",
-      run_not_active: "Ce run n'est plus actif.",
-      stage_not_runnable: "Cette étape ne peut pas être lancée dans son état actuel.",
-      stage_not_verifiable: "Cette étape ne peut pas être vérifiée dans son état actuel.",
-      too_many_jobs: "Trop de tâches sont enregistrées côté serveur. Réessayez plus tard.",
-      storage_not_configured: "Le stockage SQL de l'assistant n'est pas configuré.",
-      network_error: "La connexion au backend a échoué.",
-      no_backend: "Le backend DSS est indisponible.",
-      poll_failed: "Le suivi de la tâche a échoué après plusieurs tentatives.",
-      job_error: "La tâche serveur a échoué."
+      confirmation_required: "Confirmation is required.",
+      invalid_spec: "The sub-agent information is invalid.",
+      active_run_exists: "A run is already in progress: finish it or abandon it first.",
+      busy: "Another factory operation is running. Try again in a moment.",
+      server_error: "The server could not finish the operation.",
+      unknown_run: "This run cannot be found.",
+      run_not_active: "This run is no longer active.",
+      stage_not_runnable: "This step cannot be run in its current state.",
+      stage_not_verifiable: "This step cannot be checked in its current state.",
+      too_many_jobs: "Too many jobs are registered on the server. Try again later.",
+      storage_not_configured: "The SQL storage of the runs is not configured.",
+      domain_mismatch: "The typed name does not match the domain: nothing was created.",
+      unknown_capability: "This capability no longer exists in the registry.",
+      review_not_supported: "This sub-agent was set up by hand, before this console existed: it cannot be improved here yet. Ask the technical team.",
+      feedback_required: "Write at least one sentence first.",
+      invalid_path: "Invalid prompt path.",
+      network_error: "The connection to the backend failed.",
+      no_backend: "The DSS backend is unavailable.",
+      poll_failed: "Following the job failed after several attempts.",
+      job_error: "The server job failed."
     };
     if (data && data.messages && data.messages.length) { return data.messages.join(" ; "); }
-    return map[data && data.error] || (data && data.error) || "erreur inconnue";
+    return map[data && data.error] || (data && data.error) || "unknown error";
   }
 
   function resetGuidedWizard() {
     S.guided.wizard = { running: false, jobId: null, config: null,
-                        answers: {}, error: null, reqId: 0 };
+                        answers: {}, drafted: null, redrafted: false, error: null, reqId: 0 };
   }
 
   function applyGuidedRun(run) {
-    var previousId = S.guided.run && S.guided.run.run_id;
-    S.guided.run = run || null;
-    S.guided.liveActions = [];
-    S.guided.actionError = null;
-    if (!run || run.run_id !== previousId) { resetGuidedWizard(); }
+    var g = S.guided;
+    var previous = g.run;
+    var previousId = previous && previous.run_id;
+    // Remember which stage just finished, to show it above the next one.
+    g.lastDone = null;
+    if (run && previous && run.run_id === previousId && previous.current_stage &&
+        previous.current_stage !== run.current_stage) {
+      var st = ((run.state || {}).stages || {})[previous.current_stage];
+      if (st && st.status === "done") { g.lastDone = previous.current_stage; }
+    }
+    g.run = run || null;
+    g.liveActions = [];
+    g.actionError = null;
+    g.verifyFailed = false;
+    if (!run || run.run_id !== previousId) {
+      resetGuidedWizard();
+      g.probe = { running: false, report: null, error: null };
+      g.review = null;
+    }
+    if (isReviewRun(run)) { syncReviewUi(run); }
   }
 
-  function loadGuidedCurrent() {
+  /* Callers arriving while a load is in flight are queued, so a screen switch
+   * during the overview's load still gets its render callback. */
+  var _guidedLoadCbs = [];
+  function loadGuidedCurrent(cb) {
     var g = S.guided;
+    if (cb) { _guidedLoadCbs.push(cb); }
     if (g.loading) { return; }
     g.loading = true;
     g.error = null;
-    renderGuided();
     callApi("GET", "guided/current").then(function (r) {
       g.loading = false;
+      var cbs = _guidedLoadCbs;
+      _guidedLoadCbs = [];
       if (r.data && r.data.status === "ok") {
         g.loaded = true;
-        g.startError = null;
-        g.startErrorCode = null;
-        applyGuidedRun(r.data.run && r.data.run.status !== "abandoned" ? r.data.run : null);
+        var run = r.data.run && r.data.run.status !== "abandoned" ? r.data.run : null;
+        // A finished run stays on screen (success card) until the user leaves it.
+        if (!run && g.run && g.run.status === "done") { run = g.run; }
+        applyGuidedRun(run);
       } else {
         g.error = guidedErrorText(r.data);
       }
-      renderGuided();
+      cbs.forEach(function (fn) { fn(); });
     });
   }
 
-  function refreshGuidedCurrent() {
+  /* A run's first stage executes synchronously at creation (preflight / inventory):
+   * surface it as "Step done" above the next stage. */
+  function markFirstStageDone(run) {
+    var order = (run && run.state && run.state.stage_order) || [];
+    var first = order[0];
+    var st = first && run.state.stages && run.state.stages[first];
+    if (st && st.status === "done" && run.current_stage !== first) { S.guided.lastDone = first; }
+  }
+
+  function hasActiveRun() {
+    return !!(S.guided.run && S.guided.run.status === "active");
+  }
+
+  /* ============================ screen: Overview ============================ */
+
+  function loadOverview() {
+    var o = S.overview;
+    if (o.loading) { return; }
+    o.loading = true;
+    o.error = null;
+    renderOverview();
+    var pending = 2;
+    function oneDone() { pending -= 1; if (pending === 0) { renderOverview(); } }
+    callApi("GET", "state").then(function (r) {
+      o.loading = false;
+      if (r.data && r.data.status === "ok") {
+        o.loaded = true;
+        o.data = r.data;
+      } else {
+        o.error = (r.data && r.data.error) || "load_error";
+      }
+      oneDone();
+    });
     S.guided.loaded = false;
-    loadGuidedCurrent();
+    loadGuidedCurrent(oneDone);
   }
 
-  function guidedStageChip(status) {
-    var map = {
-      pending: { cls: "pending", txt: "A venir" },
-      ready: { cls: "ready", txt: "Prête" },
-      running: { cls: "running", txt: "En cours" },
-      waiting_user: { cls: "waiting", txt: "Action requise" },
-      done: { cls: "done", txt: "Faite" },
-      failed: { cls: "failed", txt: "Échec" }
-    };
-    var m = map[status] || map.pending;
-    return '<span class="afc-chip gd-status gd-status--' + m.cls + '">' + esc(m.txt) + '</span>';
+  function renderOverview() {
+    if (S.view !== "overview") { return; }
+    var o = S.overview;
+    var html = backendBanner();
+
+    if (o.loading && !o.loaded) {
+      setHeader({ title: "Orchestrator and sub-agents", sub: "Loading the project..." });
+      setMain(html + '<p class="afc-muted afc-pad">Loading the project...</p>');
+      return;
+    }
+    if (o.error && !o.loaded) {
+      html += '<div class="afc-note afc-note--error">Cannot read the project (' + esc(o.error) + ').</div>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRetry">' +
+        I.refresh + 'Retry</button></div>';
+      setMain(html);
+      if (byId("ovRetry")) { byId("ovRetry").onclick = loadOverview; }
+      return;
+    }
+
+    var d = o.data || {};
+    var settings = d.settings || {};
+    var caps = d.capabilities || {};
+    var keys = Object.keys(caps);
+    var active = keys.filter(function (k) { return caps[k] && caps[k].enabled; }).length;
+    var runActive = hasActiveRun();
+
+    setHeader({
+      title: "Orchestrator and sub-agents",
+      sub: "Each sub-agent is the expert of one domain (one source dataset). When enabled, the orchestrator sends it the questions of that domain.",
+      action: '<button class="afc-btn afc-btn--primary" id="ovAdd"' + (runActive ? " disabled" : "") + '>' +
+        I.plus + 'Add a sub-agent</button>'
+    });
+
+    html += resumeBanner();
+
+    if (o.flash) {
+      html += '<div class="afc-note afc-note--error">' + esc(o.flash) + '</div>';
+      o.flash = null;
+    }
+    if (o.notice) {
+      html += '<div class="nextstep nextstep--top"><p class="afc-mlabel">' + esc(o.notice) +
+        ' Last step: reload the orchestrator</p>' + reloadSteps() + '</div>';
+      o.notice = null;
+    }
+
+    // Org chart (root on top, sub-agents side by side) up to 4 sub-agents; beyond,
+    // a vertical trunk keeps every node readable.
+    var org = d.hub_ready && keys.length > 0 && keys.length <= 4;
+    html += '<div class="tree' + (org ? " tree--org" : "") + '"' +
+      (org ? ' style="--cols:' + keys.length + '"' : "") + '>';
+    html += '<div class="node node--root">' +
+      '<span class="node-icon">' + I.hub + '</span>' +
+      '<div class="node-main"><p class="node-eyebrow">Orchestrator</p>' +
+      '<p class="node-title">OWIsMind</p>' +
+      '<p class="node-meta">' +
+      (settings.orchestrator_agent_id ? 'Code Agent ' + mono(settings.orchestrator_agent_id) + ' · ' : "") +
+      esc(keys.length) + ' sub-agent' + (keys.length > 1 ? "s" : "") + ', ' +
+      esc(active) + ' enabled</p></div></div>';
+
+    if (!d.hub_ready) {
+      html += '<div class="branches"><div class="branch"><div class="afc-note afc-note--warn branch-note">' +
+        'The hub (capabilities.json) is missing from the project library: the orchestrator uses its ' +
+        'built-in list of sub-agents. Push the hub (notebook 01) to manage the sub-agents here.' +
+        '</div></div></div>';
+    } else if (!keys.length) {
+      html += '<div class="branches"><div class="branch"><div class="afc-note afc-note--info branch-note">' +
+        'No sub-agent registered yet.</div></div></div>';
+    } else {
+      html += (org ? '<span class="stem"></span>' : "") + '<div class="branches">';
+      keys.forEach(function (k) { html += subAgentNode(k, caps[k] || {}, runActive); });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="afc-actions ov-foot"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRefresh">' +
+      I.refresh + 'Refresh</button>' +
+      '<span class="afc-muted">Project ' + mono(d.project_key || "-") + '</span></div>';
+
+    setMain(html);
+    if (byId("ovAdd")) { byId("ovAdd").onclick = openAddScreen; }
+    if (byId("ovResume")) { byId("ovResume").onclick = function () { go("run"); }; }
+    if (byId("ovRefresh")) { byId("ovRefresh").onclick = function () { S.overview.loaded = false; loadOverview(); }; }
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-toggle]"), function (btn) {
+      btn.onclick = function () { confirmCapabilityToggle(btn.getAttribute("data-cap-toggle")); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-remove]"), function (btn) {
+      btn.onclick = function () { openCapabilityRemoval(btn.getAttribute("data-cap-remove")); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-review]"), function (btn) {
+      btn.onclick = function () { startReview(btn.getAttribute("data-cap-review")); };
+    });
   }
 
-  function renderGuided() {
-    if (S.tab !== "guided") { return; }
+  function subAgentNode(key, c, runActive) {
+    var on = !!c.enabled;
+    var lockTitle = runActive ? ' title="A run is in progress: finish it or abandon it first."' : "";
+    return '<div class="branch"><div class="node' + (on ? "" : " node--off") + '">' +
+      '<div class="node-main">' +
+      '<div class="node-titleline"><p class="node-title">' + esc(c.label_en || c.label_fr || c.domain || key) + '</p>' +
+      (on ? '<span class="afc-chip afc-chip--on">Enabled</span>' : '<span class="afc-chip afc-chip--off">Disabled</span>') +
+      '</div>' +
+      '<dl class="node-facts">' +
+      '<div><dt>Domain</dt><dd class="mono">' + esc(c.domain || "-") + '</dd></div>' +
+      '<div><dt>Source dataset</dt><dd class="mono">' + esc(c.lookup_dataset || "-") + '</dd></div>' +
+      '<div><dt>Capability</dt><dd class="mono">' + esc(key) + '</dd></div>' +
+      '<div><dt>Code Agent</dt><dd class="mono">' + esc(c.agent_id || "-") + '</dd></div>' +
+      '</dl></div>' +
+      '<div class="node-actions">' +
+      '<button class="afc-btn afc-btn--primary afc-btn--sm" data-cap-review="' + esc(key) + '"' +
+      (runActive ? " disabled" : "") + lockTitle + '>Improve</button>' +
+      '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-toggle="' + esc(key) + '">' +
+      (on ? "Disable" : "Enable") + '</button>' +
+      '<button class="afc-btn afc-btn--danger afc-btn--sm" data-cap-remove="' + esc(key) + '"' +
+      (runActive ? " disabled" : "") + lockTitle + '>Remove</button>' +
+      '</div></div></div>';
+  }
+
+  function resumeBanner() {
+    if (!hasActiveRun()) {
+      if (S.guided.error) {
+        return '<div class="afc-note afc-note--error">Cannot read the run in progress: ' +
+          esc(S.guided.error) + '</div>';
+      }
+      return "";
+    }
+    var run = S.guided.run;
+    var ctx = stageCtx(run);
+    var order = (run.state && run.state.stage_order) || [];
+    var stage = ((run.state || {}).stages || {})[run.current_stage];
+    var kind = isRemovalRun(run) ? "Removal" : (isReviewRun(run) ? "Improvement" : "Addition");
+    return '<div class="resume">' +
+      '<div><p class="afc-mlabel">Run in progress</p>' +
+      '<p class="resume-text">' + esc(kind) + ' of the sub-agent <b>' + esc(ctx.label) + '</b>: step ' +
+      esc(order.indexOf(run.current_stage) + 1) + ' of ' + esc(order.length) + ', ' +
+      esc(stageTitle(run.current_stage, stage)) + '.</p></div>' +
+      '<button class="afc-btn afc-btn--primary" id="ovResume">Resume</button></div>';
+  }
+
+  function confirmCapabilityToggle(key) {
+    var caps = (S.overview.data || {}).capabilities || {};
+    var c = caps[key] || {};
+    var next = !c.enabled;
+    openConfirm({
+      title: next ? "Enable this sub-agent?" : "Disable this sub-agent?",
+      bodyHtml: "<p>The capability <b class=\"mono\">" + esc(key) + "</b> becomes <b>" +
+        (next ? "ENABLED" : "DISABLED") + "</b> in capabilities.json (the previous file is backed up). " +
+        "Nothing else changes: the Code Agent, the semantic model and the datasets stay in place.</p>" +
+        "<p>Afterwards, reload the orchestrator so it sees the change:</p>" + reloadSteps(),
+      confirmLabel: next ? "Enable" : "Disable",
+      onConfirm: function () {
+        callApi("POST", "capability/enable", {
+          confirm: true, capability_key: key, enabled: next
+        }).then(function (r) {
+          if (!r.data || r.data.status !== "ok") {
+            S.overview.flash = "Change refused (" + guidedErrorText(r.data) + ").";
+            renderOverview();
+            return;
+          }
+          S.overview.notice = next ? "Sub-agent enabled." : "Sub-agent disabled.";
+          S.overview.loaded = false;
+          loadOverview();
+        });
+      }
+    });
+  }
+
+  function openCapabilityRemoval(key) {
+    var caps = (S.overview.data || {}).capabilities || {};
+    var c = caps[key] || {};
+    var domain = c.domain || key;
+    openConfirm({
+      title: "Remove the sub-agent " + (c.label_en || c.label_fr || domain) + "?",
+      danger: true,
+      bodyHtml: "<p>Nothing is deleted now. A removal run is created: it first takes the inventory, " +
+        "then shows you each deletion and asks you to confirm it, ONE AT A TIME.</p>" +
+        "<p>The source dataset <b class=\"mono\">" + esc(c.lookup_dataset || "-") + "</b> is NEVER touched.</p>" +
+        "<p>To confirm, type the exact domain name (<b class=\"mono\">" + esc(domain) + "</b>):</p>" +
+        "<input class=\"afc-input mono afc-modal-input\" type=\"text\" id=\"capRemoveTyped\" autocomplete=\"off\">",
+      confirmLabel: "Create the removal run",
+      onConfirm: function () {
+        var field = byId("capRemoveTyped");
+        var typed = (field ? field.value : "").trim();
+        callApi("POST", "guided/start-removal", {
+          confirm: true, capability_key: key, domain_typed: typed
+        }).then(function (r) {
+          if (!r.data || r.data.status !== "ok") {
+            S.overview.flash = guidedErrorText(r.data);
+            renderOverview();
+            return;
+          }
+          applyGuidedRun(r.data.run || null);
+          markFirstStageDone(r.data.run);
+          S.guided.loaded = !!r.data.run;
+          go("run");
+        });
+      }
+    });
+  }
+
+  /* Improve: starting a review only READS the expert's current setup (nothing is
+   * changed in DSS), so it opens directly, without a confirm modal. */
+  function startReview(key) {
+    callApi("POST", "guided/start-review", { confirm: true, capability_key: key }).then(function (r) {
+      if (!r.data || r.data.status !== "ok") {
+        S.overview.flash = guidedErrorText(r.data);
+        renderOverview();
+        return;
+      }
+      applyGuidedRun(r.data.run || null);
+      markFirstStageDone(r.data.run);
+      S.guided.loaded = !!r.data.run;
+      go("run");
+    });
+  }
+
+  /* ============================ screen: Run ============================ */
+
+  function openAddScreen() {
+    if (S.guided.run && S.guided.run.status === "done") { applyGuidedRun(null); }
+    go("run");
+  }
+
+  function renderRun() {
+    if (S.view !== "run") { return; }
     var g = S.guided;
-    var html = '<div class="afc-panel gd-panel">' + backendBanner() +
-      '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Création guidée</p>' +
-      '<h2 class="afc-sec-title">Assistant de nouveau domaine</h2>' +
-      '<p class="afc-sec-note">Suivez chaque étape jusqu\'à l\'activation du nouvel expert dans l\'orchestrateur. ' +
-      'L\'avancement est conservé côté serveur et reprend après un rechargement de la page.</p></div>';
+    var html = '<div>' + backendBanner();
+    setHeader({ back: true, eyebrow: "Add a sub-agent", title: "Run", sub: "" });
 
     if (g.loading && !g.loaded) {
-      html += '<p class="afc-loading">Recherche d\'un run en cours...</p></div>';
-      setMain(html);
+      setMain(html + '<p class="afc-muted afc-pad">Looking for a run in progress...</p></div>');
+      wireBack();
       return;
     }
     if (g.error && !g.loaded) {
-      html += '<div class="afc-note afc-note--error">Impossible de charger l\'assistant : ' + esc(g.error) + '</div>' +
+      html += '<div class="afc-note afc-note--error">Cannot read the run: ' + esc(g.error) + '</div>' +
         '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRetry">' +
-        I.refresh + 'Réessayer</button></div></div>';
+        I.refresh + 'Retry</button></div></div>';
       setMain(html);
-      if (byId("gdRetry")) { byId("gdRetry").onclick = refreshGuidedCurrent; }
+      wireBack();
+      if (byId("gdRetry")) { byId("gdRetry").onclick = function () { loadGuidedCurrent(renderRun); }; }
       return;
     }
 
     if (!g.run) {
       if (!S.datasets.loaded && !S.datasets.loading) {
-        loadDatasets(function () { if (S.tab === "guided") { renderGuided(); } });
+        loadDatasets(function () { if (S.view === "run" && !S.guided.run) { renderRun(); } });
       }
-      html += renderGuidedStartForm();
-      html += '</div>';
+      html += renderStartForm() + '</div>';
       setMain(html);
-      wireGuidedStartForm();
+      wireBack();
+      wireStartForm();
       return;
     }
 
     if (g.run.status === "done") {
-      html += renderGuidedSuccess(g.run) + '</div>';
+      headerForRun(g.run);
+      html += '<div class="layout"><div class="layout-main">' + renderRunDone(g.run) +
+        '</div><aside class="layout-aside">' + renderTracker(g.run) + '</aside></div></div>';
       setMain(html);
-      if (byId("gdNew")) { byId("gdNew").onclick = newGuidedDomain; }
+      wireBack();
+      if (byId("gdHome")) { byId("gdHome").onclick = function () { applyGuidedRun(null); go("overview"); }; }
       return;
     }
 
-    html += renderGuidedStepper(g.run);
-    html += renderGuidedStage(g.run);
-    var currentStage = g.run.state && g.run.state.stages && g.run.state.stages[g.run.current_stage];
-    var abandonDisabled = g.abandoning || g.running || g.verifying || g.wizard.running ||
-      (currentStage && currentStage.status === "running");
-    html += '<div class="gd-abandon"><button class="afc-btn afc-btn--danger afc-btn--sm" id="gdAbandon"' +
-      (abandonDisabled ? " disabled" : "") + '>Abandonner ce run</button></div>';
+    // Two columns: the stage to act on (left) and the always-visible tracker (right).
+    html += '<div class="layout"><div class="layout-main">' +
+      headerForRun(g.run) + renderLastDone(g.run) + renderCurrentStage(g.run) + renderAbandon(g.run) +
+      '</div><aside class="layout-aside">' + renderTracker(g.run) + '</aside></div>';
     html += '</div>';
     setMain(html);
-    wireGuidedRun();
+    wireBack();
+    wireRun();
   }
 
-  function renderGuidedStartForm() {
-    var g = S.guided;
-    var f = g.form;
-    var picker = S.datasets.loading
-      ? '<p class="afc-loading gd-dataset-loading">Chargement des datasets...</p>'
-      : '<select class="afc-select" id="gdBaseDataset">' + datasetOptions(f.base_dataset) + '</select>';
-    var html = '<div class="afc-card gd-start">' +
-      field("Clé de domaine (snake_case)", inputEl("gdDomain", f.domain, "ex. opportunities"),
-        "Minuscules, chiffres et underscores.") +
-      '<div class="gd-dataset-row"><div class="gd-dataset-field">' +
-      field("Dataset de base", picker, "Le dataset dont le nouvel expert sera spécialiste.") +
-      '</div><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshDatasets"' +
-      (S.datasets.loading ? " disabled" : "") + '>' + I.refresh + 'Rafraîchir la liste</button></div>' +
-      '<div class="afc-grid-2">' +
-      fieldRaw("Libellé FR", inputEl("gdLabelFr", f.label_fr, "ex. Opportunités commerciales")) +
-      fieldRaw("Libellé EN", inputEl("gdLabelEn", f.label_en, "ex. Sales opportunities")) +
-      '</div>' +
-      field("Colonnes lookup (séparées par des virgules)",
-        inputEl("gdLookup", f.lookup, "ex. Account_name, Opportunity_name"),
-        "Laissez vide pour utiliser toutes les colonnes texte autorisées.") +
-      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdStart"' +
-      (g.starting ? " disabled" : "") + '>' + I.play +
-      (g.starting ? "Démarrage..." : "Démarrer l'assistant") + '</button></div>';
-
-    if (S.datasets.error) {
-      html += '<div class="afc-note afc-note--error">Liste des datasets indisponible : ' + esc(S.datasets.error) + '</div>';
-    }
-    if (g.startError) {
-      html += '<div class="afc-note afc-note--error">Démarrage impossible : ' + esc(g.startError) + '</div>';
-      if (g.startErrorCode === "active_run_exists") {
-        html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdResume">' +
-          I.refresh + 'Reprendre le run en cours</button></div>';
-      }
-    }
-    html += '</div>';
-    return html;
-  }
+  /* ---------- start form (creation) ---------- */
 
   function guidedStartSpec() {
     var f = S.guided.form;
@@ -459,31 +1319,84 @@
     };
   }
 
-  function wireGuidedStartForm() {
+  function renderStartForm() {
+    var g = S.guided;
+    var f = g.form;
+    var picker = S.datasets.loading
+      ? '<p class="afc-muted">Loading the datasets...</p>'
+      : '<select class="afc-select" id="gdBaseDataset">' + datasetOptions(f.base_dataset) + '</select>';
+    setHeader({
+      back: true, eyebrow: "Add a sub-agent", title: "New sub-agent",
+      sub: "13 steps, one at a time: each step shows what it will create before doing it. Nothing is deleted, and the run resumes if you close the page."
+    });
+    var html = "";
+
+    html += '<section class="card">' +
+      field("Domain", inputEl("gdDomain", f.domain, "e.g. opportunities"),
+        "Short key in lower case (letters, digits, underscores). It names every object created.") +
+      '<div class="afc-field"><span class="afc-field-label">Source dataset</span>' +
+      '<div class="picker-row">' + picker +
+      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshDatasets"' +
+      (S.datasets.loading ? " disabled" : "") + '>' + I.refresh + 'Refresh</button></div>' +
+      '<p class="afc-field-help">The project dataset the sub-agent will be the expert of. It is never modified.</p></div>' +
+      field("Label", inputEl("gdLabel", f.label_en, "e.g. Sales opportunities"),
+        "The name shown for this sub-agent (same label in every language).") +
+      field("Search columns (optional)",
+        inputEl("gdLookup", f.lookup, "e.g. Account_name, Opportunity_name"),
+        "Text columns where the orchestrator looks up exact names, separated by commas. Empty = every text column.");
+    if (S.datasets.error) {
+      html += '<div class="afc-note afc-note--error">Dataset list unavailable: ' + esc(S.datasets.error) + '</div>';
+    }
+    html += '</section>';
+
+    if (g.startError) {
+      html += '<div class="afc-note afc-note--error">Cannot start: ' + esc(g.startError) + '</div>';
+    }
+    html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdStart"' +
+      (g.starting ? " disabled" : "") + '>' + I.play +
+      (g.starting ? "Starting..." : "Start the run") + '</button>' +
+      '<span class="afc-muted">Step 1 checks the project is compatible, read-only.</span></div>';
+    var aside = '<section class="card tracker"><p class="afc-mlabel">What will be created during the run (12)</p>' +
+      '<div id="gdPreview">' + objectsList(createdObjects(derivedNames(guidedStartSpec()))) + '</div>' +
+      '<p class="afc-mlabel tracker-sub">How it goes</p><ol class="howto">' +
+      '<li>Check the project is compatible (read-only).</li>' +
+      '<li>Create the zone, the knowledge datasets, their recipes and the scenario, then build them.</li>' +
+      '<li>Describe the semantic model with the AI, then create the model and its tool.</li>' +
+      '<li>Create the sub-agent\'s Code Agent (one copy-paste, guided), register it, test it, enable it.</li></ol></section>';
+    return '<div class="layout"><div class="layout-main">' + html + '</div>' +
+      '<aside class="layout-aside">' + aside + '</aside></div>';
+  }
+
+  function refreshPreview() {
+    var p = byId("gdPreview");
+    if (p) { p.innerHTML = objectsList(createdObjects(derivedNames(guidedStartSpec()))); }
+  }
+
+  function wireStartForm() {
     var f = S.guided.form;
-    bindInput("gdDomain", function (v) { f.domain = v; });
-    bindInput("gdBaseDataset", function (v) { f.base_dataset = v; }, true);
-    bindInput("gdLabelFr", function (v) { f.label_fr = v; });
-    bindInput("gdLabelEn", function (v) { f.label_en = v; });
+    bindInput("gdDomain", function (v) { f.domain = v; refreshPreview(); });
+    bindInput("gdBaseDataset", function (v) { f.base_dataset = v; refreshPreview(); }, true);
+    // One technical label, sent as both label_en and label_fr (the engine keeps two keys).
+    bindInput("gdLabel", function (v) { f.label_en = v; f.label_fr = v; });
     bindInput("gdLookup", function (v) { f.lookup = v; });
     if (byId("gdRefreshDatasets")) {
       byId("gdRefreshDatasets").onclick = function () {
-        loadDatasets(function () { renderGuided(); }, true);
-        renderGuided();
+        loadDatasets(function () { renderRun(); }, true);
+        renderRun();
       };
     }
     if (byId("gdStart")) { byId("gdStart").onclick = confirmGuidedStart; }
-    if (byId("gdResume")) { byId("gdResume").onclick = refreshGuidedCurrent; }
   }
 
   function confirmGuidedStart() {
     var spec = guidedStartSpec();
     openConfirm({
-      title: "Démarrer l'assistant ?",
-      bodyHtml: "Un run guidé persistant sera créé pour le domaine <b class=\"mono\">" +
-        esc(spec.domain || "(sans nom)") + "</b> et le dataset <b class=\"mono\">" +
-        esc(spec.base_dataset || "(non choisi)") + "</b>.",
-      confirmLabel: "Démarrer",
+      title: "Start the run?",
+      bodyHtml: "<p>A run is saved for the domain <b class=\"mono\">" +
+        esc(spec.domain || "(no name)") + "</b> on the source dataset <b class=\"mono\">" +
+        esc(spec.base_dataset || "(not chosen)") + "</b>.</p><p>Step 1 (compatibility check, " +
+        "read-only) runs right away. Nothing else is created without your click.</p>",
+      confirmLabel: "Start",
       onConfirm: startGuided
     });
   }
@@ -493,150 +1406,676 @@
     g.starting = true;
     g.startError = null;
     g.startErrorCode = null;
-    renderGuided();
+    renderRun();
     callApi("POST", "guided/start", { confirm: true, spec: guidedStartSpec() }).then(function (r) {
       g.starting = false;
       if (r.data && r.data.status === "ok" && r.data.run) {
         applyGuidedRun(r.data.run);
-        toast("Assistant démarré.");
+        markFirstStageDone(r.data.run);
+        toast("Run started.");
       } else {
         g.startErrorCode = r.data && r.data.error;
         g.startError = guidedErrorText(r.data);
       }
-      renderGuided();
+      renderRun();
     });
   }
 
-  function renderGuidedStepper(run) {
-    var state = run.state || {};
-    var stages = state.stages || {};
-    var order = state.stage_order || [];
-    var rows = order.map(function (key, index) {
-      var stage = stages[key] || {};
-      var status = key === run.current_stage && S.guided.running ? "running" : stage.status;
-      var current = key === run.current_stage ? " gd-step--current" : "";
-      return '<li class="gd-step' + current + '">' +
-        '<span class="gd-step-number">' + esc(index + 1) + '</span>' +
-        '<span class="gd-step-title">' + esc(stage.title_fr || key) + '</span>' +
-        guidedStageChip(status) + '</li>';
+  /* ---------- run head + tracker ---------- */
+
+  /* Header of a run: which sub-agent, and which step is being done right now. */
+  function headerForRun(run) {
+    var ctx = stageCtx(run);
+    var order = (run.state && run.state.stage_order) || [];
+    var stages = (run.state && run.state.stages) || {};
+    var idx = order.indexOf(run.current_stage);
+    var where = run.status === "done" ? "All " + order.length + " steps done"
+      : "Step " + (idx + 1) + " of " + order.length + ": " + stageTitle(run.current_stage, stages[run.current_stage]);
+    setHeader({
+      back: true,
+      eyebrow: isRemovalRun(run) ? "Remove a sub-agent" : (isReviewRun(run) ? "Improve a sub-agent" : "Add a sub-agent"),
+      title: ctx.label,
+      sub: '<b>' + esc(where) + '</b> · domain ' + mono(ctx.names.domain) + ' · source dataset ' + mono(ctx.names.base)
+    });
+    return "";
+  }
+
+  /* Right column of the run screen: progress + every stage with its status,
+   * always visible (sticky), so nobody scrolls to know where the run is. */
+  function renderTracker(run) {
+    var order = (run.state && run.state.stage_order) || [];
+    var stages = (run.state && run.state.stages) || {};
+    var idx = order.indexOf(run.current_stage);
+    var done = run.status === "done";
+    var cells = order.map(function (key, i) {
+      var st = stageDisplayStatus(run, key);
+      var cls = (done || st === "done" || st === "skipped") ? " seg--done" : (i === idx ? " seg--current" : "");
+      return '<span class="seg' + cls + '"></span>';
     }).join("");
-    return '<div class="afc-sec gd-run-head"><div>' +
-      '<p class="afc-mlabel">Run actif</p><p class="gd-run-domain mono">' + esc(run.domain || "-") + '</p>' +
-      '</div><span class="gd-run-id mono">' + esc(run.run_id || "") + '</span></div>' +
-      '<ol class="gd-stepper">' + rows + '</ol>';
+    var rows = order.map(function (key, i) {
+      var cur = !done && key === run.current_stage;
+      return '<li class="step' + (cur ? " step--current" : "") + '">' +
+        '<span class="step-n mono">' + esc(i + 1) + '</span>' +
+        '<span class="step-title">' + esc(stageTitle(key, stages[key])) + '</span>' +
+        stageChip(done ? "done" : stageDisplayStatus(run, key)) + '</li>';
+    }).join("");
+    return '<section class="card tracker"><p class="afc-mlabel">Progress</p>' +
+      '<p class="afc-progress-label">' + (done ? "All " + esc(order.length) + " steps done"
+        : "Step " + esc(idx + 1) + " of " + esc(order.length)) + '</p>' +
+      '<div class="segs">' + cells + '</div>' +
+      '<ol class="steps">' + rows + '</ol></section>';
   }
 
-  function renderGuidedProblems(problems) {
-    if (!problems || !problems.length) { return ""; }
-    return '<div class="afc-note afc-note--error gd-problems"><b>Points à corriger :</b><ul>' +
-      problems.map(function (problem) { return '<li>' + esc(problem) + '</li>'; }).join("") + '</ul></div>';
+  function renderLastDone(run) {
+    var key = S.guided.lastDone;
+    if (!key) { return ""; }
+    var stage = ((run.state || {}).stages || {})[key];
+    if (!stage) { return ""; }
+    return '<div class="lastdone"><span class="lastdone-mark">' + I.check + '</span>' +
+      '<p>Step done: <b>' + esc(stageTitle(key, stage)) + '</b></p></div>';
   }
 
-  function renderGuidedStage(run) {
+  /* ---------- current stage ---------- */
+
+  function tickKey(run) { return run.run_id + ":" + run.current_stage; }
+  function ticksOf(run) {
+    var k = tickKey(run);
+    if (!S.guided.ticks[k]) { S.guided.ticks[k] = {}; }
+    return S.guided.ticks[k];
+  }
+
+  function renderChecklist(run, steps) {
+    var ticks = ticksOf(run);
+    return '<ol class="checklist">' + steps.map(function (html, i) {
+      var on = !!ticks[i];
+      return '<li class="check' + (on ? " check--on" : "") + '">' +
+        '<button class="check-box" data-tick="' + i + '" aria-pressed="' + (on ? "true" : "false") +
+        '" title="Mark this step as done">' + I.check + '</button>' +
+        '<span class="check-n mono">' + (i + 1) + '</span>' +
+        '<div class="check-text">' + html + '</div></li>';
+    }).join("") + '</ol>';
+  }
+
+  function allTicked(run, count) {
+    var ticks = ticksOf(run);
+    for (var i = 0; i < count; i++) { if (!ticks[i]) { return false; } }
+    return true;
+  }
+
+  function renderCurrentStage(run) {
     var g = S.guided;
-    var state = run.state || {};
-    var stages = state.stages || {};
-    var stage = stages[run.current_stage] || null;
+    var key = run.current_stage;
+    var stage = ((run.state || {}).stages || {})[key] || null;
     if (!stage) {
-      return '<div class="afc-note afc-note--error">L\'étape courante est absente du run.</div>';
+      return '<div class="afc-note afc-note--error">The current step is missing from the run.</div>';
     }
+    var ctx = stageCtx(run);
+    var ux = STAGE_UX[key] || {};
     var status = g.running ? "running" : stage.status;
-    var html = '<section class="afc-card gd-current"><p class="afc-sec-eyebrow">Étape courante</p>' +
-      '<div class="gd-current-title"><h3>' + esc(stage.title_fr || run.current_stage) + '</h3>' +
-      guidedStageChip(status) + '</div>';
-    if (stage.detail_fr) { html += '<p class="gd-detail">' + esc(stage.detail_fr).replace(/\n/g, "<br>") + '</p>'; }
+    var dangerous = !!(ctx.removal && REMOVAL_DANGER_STAGES[key] === 1);
+    var manual = status === "waiting_user";
+
+    var html = '<section class="card stage' + (dangerous && !manual ? " stage--danger" : "") + '">' +
+      '<p class="stage-eyebrow">Step ' + esc(((run.state && run.state.stage_order) || []).indexOf(key) + 1) +
+      ' of ' + esc(((run.state && run.state.stage_order) || []).length) + '</p>' +
+      '<div class="stage-head"><h3>' + esc(stageTitle(key, stage)) + '</h3>' + stageChip(status) + '</div>';
+
+    if (manual && key === "review_feedback") {
+      html += renderReview(run, stage);
+    } else if (manual && key === "wizard") {
+      html += '<div class="stage-block"><p class="stage-sentence">' + ux.sentence(ctx) + '</p></div>';
+      html += renderWizard(run, stage);
+    } else if (manual) {
+      // A manual stage: numbered checklist, button locked until every step is ticked.
+      var steps = manualSteps(key, ctx, stage);
+      html += '<div class="stage-block"><p class="afc-mlabel">Your turn: do these steps in DSS</p>' +
+        (ux.sentence && !dangerous ? '<p class="stage-sentence">' + ux.sentence(ctx) + '</p>' : "");
+      if (steps && steps.length) {
+        html += renderChecklist(run, steps) + '</div>';
+        var ready = allTicked(run, steps.length);
+        html += verifyFailedNote(stage);
+        html += '<div class="stage-cta"><button class="afc-btn afc-btn--primary" id="gdVerify"' +
+          (!ready || g.verifying ? " disabled" : "") + '>' + I.check +
+          (g.verifying ? "Checking..." : "Done, check it") + '</button>' +
+          '<p class="afc-muted" id="gdVerifyHint">' + (ready ? esc(GUARANTEE.verify)
+            : "Tick every step once it is done to unlock the check.") + '</p></div>';
+      } else {
+        // Unknown future manual stage: the server text is the only source.
+        html += '<div class="instructions">' + esc(stage.instructions_fr || stage.detail_fr || "").replace(/\n/g, "<br>") +
+          '</div></div>' + verifyFailedNote(stage) +
+          '<div class="stage-cta"><button class="afc-btn afc-btn--primary" id="gdVerify"' +
+          (g.verifying ? " disabled" : "") + '>' + I.check + (g.verifying ? "Checking..." : "Done, check it") + '</button></div>';
+      }
+    } else {
+      // 1. What will happen (and what gets created / deleted / checked)
+      html += '<div class="stage-block"><p class="afc-mlabel">What will happen</p>' +
+        stageWhatBlock(key, ctx, stage) + '</div>';
+      if (stage.problems && stage.problems.length) {
+        html += '<div class="afc-note afc-note--error"><b>This step reported a problem.</b> Fix it in DSS, then run the step again.' +
+          detailsBlock("srv:" + run.run_id + ":" + key, "Server message (technical)",
+            '<ul class="srv">' + stage.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul>',
+            true) + '</div>';
+      }
+      // 2. The button and its guarantee line
+      var guarantee = guaranteeLine(key, ctx);
+      if (status === "ready" || status === "failed") {
+        var label = status === "failed" ? (ux.retry || "Run again") : (ux.primary || "Run this step");
+        html += '<div class="stage-cta"><button class="afc-btn ' + (dangerous ? "afc-btn--danger-solid" : "afc-btn--primary") +
+          '" id="gdRunStage"' + (g.running ? " disabled" : "") + '>' + I.play + esc(label) + '</button>' +
+          (guarantee ? '<p class="afc-muted">' + esc(guarantee) + '</p>' : "") + '</div>';
+      } else if (status === "running") {
+        var last = g.liveActions.length ? g.liveActions[g.liveActions.length - 1] : null;
+        html += '<div class="running"><span class="running-dot"></span><div>' +
+          '<p><b>Running...</b>' + (ux.wait ? " " + esc(ux.wait) : "") + '</p>' +
+          (last ? '<p class="afc-muted mono">' + esc(last.step) + ': ' + esc(last.detail || "") + '</p>' : "") +
+          '</div></div>';
+        if (!g.running) {
+          html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshRun">' +
+            I.refresh + 'Refresh</button></div>';
+        }
+      } else if (status === "pending") {
+        html += '<div class="afc-note afc-note--info">This step waits for the previous one.</div>';
+      }
+      if (key === "enable" && (status === "ready" || status === "failed")) {
+        html += '<p class="afc-muted stage-after">After this step you will reload the orchestrator (explained on the next screen).</p>';
+      }
+    }
+
     if (g.actionError) {
-      html += '<div class="afc-note afc-note--error">Opération impossible : ' + esc(g.actionError) + '</div>';
+      html += '<div class="afc-note afc-note--error">Operation refused: ' + esc(g.actionError) + '</div>';
     }
 
-    if (status === "ready" || status === "failed") {
-      html += renderGuidedProblems(stage.problems) + '<div class="afc-actions">' +
-        '<button class="afc-btn afc-btn--primary" id="gdRunStage"' + (g.running ? " disabled" : "") + '>' +
-        I.play + (status === "failed" ? "Relancer" : "Lancer cette étape") + '</button></div>';
-    } else if (status === "waiting_user") {
-      if (stage.instructions_fr) {
-        html += '<div class="gd-instructions">' + esc(stage.instructions_fr).replace(/\n/g, "<br>") + '</div>';
-      }
-      html += renderGuidedProblems(stage.problems);
-      if (run.current_stage === "wizard") { html += renderGuidedWizard(run); }
-      html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdVerify"' +
-        (g.verifying || g.wizard.running ? " disabled" : "") + '>' + I.check +
-        (g.verifying ? "Vérification..." : "C'est fait, vérifier") + '</button></div>';
-    } else if (status === "running") {
-      html += '<div class="afc-note afc-note--info">Étape en cours d\'exécution côté serveur...</div>';
-      if (!g.running) {
-        html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdRefreshRun">' +
-          I.refresh + 'Rafraîchir</button></div>';
-      }
-    } else if (status === "pending") {
-      html += '<div class="afc-note afc-note--info">Cette étape attend la fin de l\'étape courante.</div>';
-    }
+    // Compatibility probe never recorded: explained in the first steps.
+    if (key === "preflight" || key === "plan") { html += renderProbeHint(run); }
 
+    // Technical journal, collapsed unless the stage failed.
     var journal = (g.running && g.liveActions.length) ? g.liveActions : (stage.journal || []);
     if (journal.length) {
-      html += '<div class="gd-journal"><p class="afc-mlabel">Journal de l\'étape</p>' + actionsTable(journal) + '</div>';
+      html += detailsBlock("journal:" + run.run_id + ":" + key,
+        "Technical details (server log, " + journal.length + " lines)",
+        actionsTable(journal), status === "failed");
     }
     html += '</section>';
     return html;
   }
 
-  function renderGuidedWizard(run) {
+  /* What a failed check means, per manual stage, in plain English (the frozen
+   * engine words its problems in French: they go to a collapsed technical block). */
+  var NOT_DONE = {
+    profile_review: function (c) { return "The dataset " + mono(c.names.profile) + " was not found in the Flow."; },
+    wizard: function () { return "The draft saved in the hub is missing or incomplete. Click 'Draft again from scratch' (step 1)."; },
+    brain: function (c) { return "No tool named " + mono(c.names.tool) + " was found. Check the exact name and that you clicked Save."; },
+    template: function () { return "The file " + mono("python/owismind_hub/templates/dataset_expert.py") + " is missing or does not contain the engine code."; },
+    code_agent: function (c) { return "No Code Agent named " + mono(c.names.agent) + " was found. Check the exact name (use the copy button) and that you clicked Save."; },
+    smoke: function (c) { return "The capability " + mono(c.names.capability) + " is no longer in the registry."; }
+  };
+
+  /* After a failed "Done, check it": what is missing, in plain words. */
+  function verifyFailedNote(stage) {
+    if (!S.guided.verifyFailed && !(stage.problems && stage.problems.length)) { return ""; }
+    var run = S.guided.run;
+    var ctx = stageCtx(run);
+    var key = run.current_stage;
+    var why = NOT_DONE[key] ? NOT_DONE[key](ctx)
+      : (ctx.removal ? "Some objects are still in DSS: delete them, then check again." : "");
+    var probs = stage.problems || [];
+    return '<div class="afc-note afc-note--error"><b>Not done yet.</b> ' + why +
+      ' Go through the steps again, then click "Done, check it" once more.' +
+      (probs.length ? detailsBlock("srv:" + run.run_id + ":" + key, "Server message (technical)",
+        '<ul class="srv">' + probs.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul>', false) : "") +
+      '</div>';
+  }
+
+  function renderProbeHint(run) {
+    if (!probeMissing(run)) { return ""; }
+    var p = S.guided.probe;
+    var html = '<div class="probe"><p class="afc-mlabel">Project compatibility never recorded</p>' +
+      '<p>The compatibility result (notebook ' + mono("00_probe_capabilities") + ') is missing from the hub. ' +
+      'This does not block you: the "tool" and "Code Agent" steps will then be guided manual steps. ' +
+      'To automate them, run that notebook in DSS, then run step 1 again.</p>';
+    if (p.running) {
+      html += '<p class="afc-muted">Reading the project (read-only)...</p>';
+    } else {
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdProbe">' +
+        'See what the project allows (read-only)</button></div>';
+    }
+    if (p.error) { html += '<div class="afc-note afc-note--error">Cannot read: ' + esc(p.error) + '</div>'; }
+    if (p.report) {
+      html += detailsBlock("probe:" + run.run_id, "Compatibility report",
+        '<div class="afc-actions afc-actions--tight">' + copyButton("gdProbeCopy", "Copy the report") + '</div>' +
+        '<pre class="afc-pre">' + esc(p.report) + '</pre>', true);
+    }
+    return html + '</div>';
+  }
+
+  function renderAbandon(run) {
+    var g = S.guided;
+    var stage = ((run.state || {}).stages || {})[run.current_stage];
+    var disabled = g.abandoning || g.running || g.verifying || g.wizard.running ||
+      (stage && stage.status === "running");
+    disabled = disabled || !!(g.review && (g.review.running || g.review.saving));
+    if (isReviewRun(run)) {
+      return '<div class="abandon"><p class="afc-muted">Stopping here changes nothing: the expert keeps what it knows today.</p>' +
+        '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdAbandon"' +
+        (disabled ? " disabled" : "") + '>Stop without saving</button></div>';
+    }
+    return '<div class="abandon"><p class="afc-muted">Abandoning stops the run without deleting anything: ' +
+      (isRemovalRun(run) ? "what was already deleted stays deleted, the rest stays in place." : "what was already created stays in place.") +
+      '</p><button class="afc-btn afc-btn--danger afc-btn--sm" id="gdAbandon"' +
+      (disabled ? " disabled" : "") + '>Abandon this run</button></div>';
+  }
+
+  function renderRunDone(run) {
+    var ctx = stageCtx(run);
+    if (isReviewRun(run)) {
+      var applied = (run.state.review && run.state.review.applied) || {};
+      var n = applied.count || 0;
+      return '<section class="card done">' +
+        '<p class="afc-eyebrow">Improvement saved</p>' +
+        '<h2 class="afc-h2">' + esc(ctx.label) + ' knows more about its data</h2>' +
+        '<p class="afc-lead">' + esc(n) + ' change' + (n > 1 ? "s" : "") + ' saved. ' +
+        'The previous version is kept as a backup.</p>' +
+        '<div class="nextstep"><p class="afc-mlabel">Now check it</p><ol class="steps-plain">' +
+        (applied.routing ? '<li>Reload the orchestrator (steps below): you changed which questions it sends to this expert.</li>' : "") +
+        '<li>Open OWIsMind and start a <b>new conversation</b>.</li>' +
+        '<li>Ask the same questions again.</li>' +
+        '<li>Still not right? Come back and click <b>Improve</b> again.</li></ol></div>' +
+        (applied.routing ? reloadBlock("Reload the orchestrator") : "") +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdHome">Back to the overview</button></div>' +
+        '</section>';
+    }
+    if (isRemovalRun(run)) {
+      return '<section class="card done">' +
+        '<p class="afc-eyebrow">Removal finished</p>' +
+        '<h2 class="afc-h2">The sub-agent ' + esc(ctx.label) + ' is removed</h2>' +
+        '<p class="afc-lead">Its objects were deleted one by one. The source dataset ' +
+        mono(ctx.names.base) + ' is intact.</p>' +
+        reloadBlock() +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdHome">Back to the overview</button></div>' +
+        '</section>';
+    }
+    var captured = (run.state && run.state.captured) || {};
+    return '<section class="card done">' +
+      '<p class="afc-eyebrow">Addition finished</p>' +
+      '<h2 class="afc-h2">The sub-agent ' + esc(ctx.label) + ' is enabled</h2>' +
+      '<dl class="afc-kv">' +
+      '<dt>Domain</dt><dd>' + esc(run.domain || "-") + '</dd>' +
+      '<dt>Code Agent</dt><dd>' + esc(captured.agent_id || "-") + '</dd>' +
+      '<dt>Tool</dt><dd>' + esc(captured.tool_id || "-") + '</dd></dl>' +
+      reloadBlock("Last step: reload the orchestrator to use the new sub-agent") +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdHome">Back to the overview</button></div>' +
+      '</section>';
+  }
+
+  /* ---------- semantic wizard (stage "wizard"): a strict 3-step sequence ----------
+   * 1. Draft with AI (the only enabled action). 2. Answer the AI's questions;
+   * changing an answer requires "Redraft" (the check stays locked while answers
+   * differ from the last draft). 3. "Done, check it". */
+
+  /* True when an answer ON SCREEN differs from the answers the current draft was
+   * built with. Only the CURRENT questions count: a redraft may return brand new
+   * questions (new ids), and answers to questions that are gone must never keep
+   * the check locked (field bug 2026-10-14). */
+  function answersDirty() {
     var w = S.guided.wizard;
+    if (!w.config || !w.drafted) { return false; }
+    var questions = w.config.questions || [];
+    for (var i = 0; i < questions.length; i++) {
+      var qid = String(questions[i].id || "");
+      var shown = w.answers[qid] == null ? "" : String(w.answers[qid]);
+      var drafted = w.drafted[qid] == null ? "" : String(w.drafted[qid]);
+      if (shown !== drafted) { return true; }
+    }
+    return false;
+  }
+
+  function renderWizard(run, stage) {
+    var g = S.guided;
+    var w = g.wizard;
     var spec = (run.state && run.state.spec) || {};
     var profile = (spec.base_dataset || "") + "_profile";
-    var html = '<div class="gd-wizard"><p class="afc-mlabel">Wizard sémantique</p>' +
-      '<p class="gd-detail">Le brouillon utilise le profil <span class="mono">' + esc(profile) + '</span>. ' +
-      'Il est enregistré automatiquement dans le hub.</p>';
+    var hasDraft = !!w.config;
+    var dirty = answersDirty();
+    var questions = (w.config && w.config.questions) || [];
+
+    var html = '<ol class="seq">';
+    // Step 1: draft
+    html += '<li class="seq-item' + (hasDraft ? " seq-item--done" : " seq-item--current") + '">' +
+      '<p class="seq-title"><span class="seq-n mono">1</span>Draft the model with the AI</p>' +
+      '<p class="afc-muted">The AI reads the profile ' + mono(profile) + ' and writes the draft (about 30 s to 1 min). It is saved in the hub automatically.</p>';
     if (w.running) {
-      html += '<div class="afc-note afc-note--info">Rédaction du brouillon en cours...</div>';
-    } else if (!w.config) {
-      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdWizardDraft">' +
-        'Rédiger le brouillon (IA)</button></div>';
+      html += '<div class="running running--inline"><span class="running-dot"></span><p>Writing the draft...</p></div>';
+    } else if (!hasDraft) {
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdWizardDraft">' +
+        I.play + 'Draft with AI</button></div>';
+    } else {
+      // Always offer a clean restart: a draft the check refuses must never strand the user.
+      html += '<p class="seq-ok">' + I.check + 'Draft saved.</p>' +
+        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdWizardRestart">' +
+        I.refresh + 'Draft again from scratch</button></div>';
     }
     if (w.error) {
-      html += '<div class="afc-note afc-note--error">Brouillon impossible : ' + esc(w.error) + '</div>';
+      html += '<div class="afc-note afc-note--error">Draft failed: ' + esc(w.error) + '</div>';
     }
-    if (w.config) {
-      var questions = w.config.questions || [];
-      if (questions.length) {
-        html += '<div class="gd-questions"><p class="afc-mlabel">Questions de clarification</p>';
-        questions.forEach(function (q) {
-          var qid = String(q.id || "");
-          var answer = w.answers[qid] != null ? w.answers[qid] : (q.default != null ? q.default : "");
-          html += '<div class="afc-q gd-question"><p class="afc-q-title">' + esc(q.question_fr || qid) + '</p>' +
-            (q.why ? '<p class="afc-q-why">' + esc(q.why) + '</p>' : "") +
-            (q.options && q.options.length ? '<p class="gd-options">Options suggérées : ' + esc(q.options.join(", ")) + '</p>' : "") +
-            '<input class="afc-input gd-wizard-answer" data-qid="' + esc(qid) + '" value="' + esc(answer) + '"></div>';
-        });
-        html += '</div>';
+    html += '</li>';
+
+    // Step 2: answer the questions
+    html += '<li class="seq-item' + (!hasDraft ? " seq-item--todo" : (dirty ? " seq-item--current" : " seq-item--done")) + '">' +
+      '<p class="seq-title"><span class="seq-n mono">2</span>Answer the AI\'s questions</p>';
+    if (!hasDraft) {
+      html += '<p class="afc-muted">Available after the draft.</p>';
+    } else if (!questions.length) {
+      html += '<p class="seq-ok">' + I.check + (w.redrafted ? "Your answers were applied. The AI has no further question."
+        : "The AI has no question.") + '</p>';
+    } else {
+      html += '<p class="afc-muted">' + (w.redrafted ? "Your answers were applied. The AI has a few follow-up questions: " : "") +
+        'The suggested answers are already applied to the draft. Change one only if it is wrong, then click "Redraft". ' +
+        'If they are fine, go straight to step 3.</p>';
+      questions.forEach(function (q) {
+        var qid = String(q.id || "");
+        var answer = w.answers[qid] != null ? w.answers[qid] : (q.default != null ? q.default : "");
+        html += '<div class="question"><p class="question-title">' + esc(q.question_en || q.question_fr || qid) + '</p>' +
+          (q.why ? '<p class="question-why">' + esc(q.why) + '</p>' : "") +
+          (q.options && q.options.length ? '<p class="question-why">Suggestions: ' + esc(q.options.join(", ")) + '</p>' : "") +
+          '<input class="afc-input gd-wizard-answer" data-qid="' + esc(qid) + '" value="' + esc(answer) + '"></div>';
+      });
+      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdWizardRedraft"' +
+        (dirty && !w.running ? "" : " disabled") + '>' + I.refresh + 'Redraft with my answers</button>' +
+        '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="gdWizardDiscard"' + (dirty && !w.running ? "" : " disabled") +
+        '>Discard my changes</button>' +
+        '<span class="afc-muted" id="gdWizardHint">' + (dirty ? "You changed an answer: click Redraft to apply it."
+          : "Answers applied.") + '</span></div>';
+    }
+    html += '</li>';
+
+    // Step 3: check
+    var ready = hasDraft && !dirty && !w.running;
+    html += '<li class="seq-item' + (ready ? " seq-item--current" : " seq-item--todo") + '">' +
+      '<p class="seq-title"><span class="seq-n mono">3</span>Check and continue</p>' +
+      verifyFailedNote(stage) +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdVerify"' +
+      (ready && !g.verifying ? "" : " disabled") + '>' + I.check +
+      (g.verifying ? "Checking..." : "Done, check it") + '</button>' +
+      '<span class="afc-muted">' + (ready ? "I check that the draft is saved in the hub."
+        : (dirty ? "Redraft first." : "Draft with AI first.")) + '</span></div></li>';
+    return html + '</ol>';
+  }
+
+  /* Live answer edits: refresh only the two buttons (no re-render, keeps focus). */
+  function updateWizardButtons() {
+    var dirty = answersDirty();
+    var re = byId("gdWizardRedraft");
+    var ver = byId("gdVerify");
+    var hint = byId("gdWizardHint");
+    if (re) { re.disabled = !dirty; }
+    if (byId("gdWizardDiscard")) { byId("gdWizardDiscard").disabled = !dirty; }
+    if (ver) { ver.disabled = dirty; }
+    if (hint) { hint.textContent = dirty ? "You changed an answer: click Redraft to apply it." : "Answers applied."; }
+  }
+
+  /* ---------- review (stage "review_feedback"): explain, then choose ----------
+   * Phase 1: the expert writes, in their own words, what went wrong and what the
+   * agent must know. Phase 2: the AI's proposed changes, one card each, all kept
+   * by default; untick what is wrong, then save (one confirm). Every word here is
+   * for a business person: no technical vocabulary. */
+
+  var REVIEW_ACTION = { added: "New", changed: "Changed", removed: "Removed" };
+
+  function syncReviewUi(run) {
+    var info = run.state.review || {};
+    var r = S.guided.review;
+    var proposalId = info.proposal ? JSON.stringify(info.changes || []).length + ":" + (info.changes || []).length : "";
+    if (!r) {
+      r = S.guided.review = { wrong: "", know: "", answers: {}, keep: {}, proposalId: "",
+                              editing: false, running: false, saving: false, error: null, reqId: 0 };
+      r.wrong = (info.feedback && info.feedback.wrong) || "";
+      r.know = (info.feedback && info.feedback.know) || "";
+    }
+    if (proposalId && proposalId !== r.proposalId) {
+      // A new proposal: every change starts kept, the questions start on their suggestion.
+      r.proposalId = proposalId;
+      r.keep = {};
+      (info.keep || []).forEach(function (id) { r.keep[id] = true; });
+      r.answers = {};
+      (info.questions || []).forEach(function (q) { r.answers[q.id] = q["default"] || ""; });
+      r.editing = false;
+    }
+  }
+
+  function keptCount() {
+    var r = S.guided.review;
+    var info = (S.guided.run && S.guided.run.state.review) || {};
+    return (info.changes || []).filter(function (c) { return r && r.keep[c.id]; }).length;
+  }
+
+  function reviewTextBlock(title, text) {
+    return '<div class="rv-side"><p class="rv-side-label">' + esc(title) + '</p>' +
+      (text ? '<p class="rv-text">' + esc(text) + '</p>' : '<p class="rv-text rv-text--empty">Nothing</p>') + '</div>';
+  }
+
+  function renderReview(run, stage) {
+    var r = S.guided.review;
+    var info = run.state.review || {};
+    var ctx = stageCtx(run);
+    var hasProposal = !!info.proposal && !r.editing;
+    var html = "";
+
+    if (!hasProposal) {
+      // Phase 1: explain.
+      html += '<div class="stage-block">' +
+        '<p class="stage-sentence">First test <b>' + esc(ctx.label) + '</b> in OWIsMind. Then write here, in your own words, ' +
+        'what went wrong and what it should know. Write as if you were explaining your data to a new colleague. Any language is fine.</p>' +
+        '<label class="rv-field"><span class="rv-label">Questions it got wrong</span>' +
+        '<span class="rv-help">Copy the question you asked, then say what was wrong in the answer.</span>' +
+        '<textarea class="afc-textarea" id="rvWrong" placeholder="I asked: total amount for Orange Belgium in 2025. The figure was twice too high.">' +
+        esc(r.wrong) + '</textarea></label>' +
+        '<label class="rv-field"><span class="rv-label">What it should know about this data</span>' +
+        '<span class="rv-help">What words mean for your team, how to count, which column to use, what to leave out.</span>' +
+        '<textarea class="afc-textarea" id="rvKnow" placeholder="Closed means the stage is Won. Each deal appears once per month: count each deal only once.">' +
+        esc(r.know) + '</textarea></label></div>';
+      if (r.running) {
+        html += '<div class="running"><span class="running-dot"></span><div><p><b>The AI is preparing the changes...</b> About one minute.</p></div></div>';
       } else {
-        html += '<div class="afc-note afc-note--info">Le brouillon ne demande aucune précision supplémentaire.</div>';
+        var empty = !(r.wrong.trim() || r.know.trim());
+        html += '<div class="stage-cta"><button class="afc-btn afc-btn--primary" id="rvPropose"' + (empty ? " disabled" : "") + '>' +
+          I.play + 'Prepare the changes</button>' +
+          (info.proposal ? '<button class="afc-btn afc-btn--ghost" id="rvBackToChanges">Back to the proposed changes</button>' : "") +
+          '<p class="afc-muted" id="rvHint">' + (empty ? "Write at least one sentence to continue."
+            : "The AI reads what the expert knows today, the description of the data and 20 example rows. Nothing is changed yet.") +
+          '</p></div>';
       }
-      html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost" id="gdWizardRedraft">' +
-        'Re-rédiger avec mes réponses</button></div>';
+      if (r.error) { html += '<div class="afc-note afc-note--error">The AI could not prepare the changes: ' + esc(r.error) + '</div>'; }
+      return html;
     }
-    html += '</div>';
+
+    // Phase 2: choose.
+    var changes = info.changes || [];
+    var questions = info.questions || [];
+    var kept = keptCount();
+    if (!changes.length) {
+      html += '<div class="afc-note afc-note--info"><b>The AI found nothing to change.</b> Try to be more precise: ' +
+        'give the exact question you asked and the answer you expected.</div>';
+    } else {
+      html += '<div class="stage-block"><p class="stage-sentence">The AI proposes <b>' + esc(changes.length) + ' change' +
+        (changes.length > 1 ? "s" : "") + '</b>. They are all ticked. <b>Untick the ones that are wrong</b>, then save.</p></div>';
+    }
+    if (questions.length) {
+      html += '<div class="rv-questions"><p class="afc-mlabel">The AI has a question' + (questions.length > 1 ? "s" : "") + ' for you</p>';
+      questions.forEach(function (q) {
+        html += '<label class="rv-field"><span class="rv-label">' + esc(q.question) + '</span>' +
+          '<input class="afc-input rv-answer" data-qid="' + esc(q.id) + '" value="' + esc(r.answers[q.id] || "") + '"></label>';
+      });
+      html += '<div class="afc-actions">' + (r.running
+        ? '<div class="running running--inline"><span class="running-dot"></span><p>The AI is preparing the changes again...</p></div>'
+        : '<button class="afc-btn afc-btn--ghost" id="rvReprepare">' + I.refresh + 'Prepare again with my answers</button>' +
+          '<span class="afc-muted">Or keep the changes below as they are.</span>') + '</div></div>';
+    }
+    if (changes.length) {
+      html += '<ul class="rv-changes">' + changes.map(function (c) {
+        var on = !!r.keep[c.id];
+        return '<li class="rv-change' + (on ? "" : " rv-change--off") + '">' +
+          '<button class="check-box" data-keep="' + esc(c.id) + '" aria-pressed="' + (on ? "true" : "false") +
+          '" title="' + (on ? "Kept: click to ignore" : "Ignored: click to keep") + '">' + I.check + '</button>' +
+          '<div class="rv-body"><div class="rv-head"><p class="rv-title">' + esc(c.label) + '</p>' +
+          '<span class="afc-chip">' + esc(REVIEW_ACTION[c.action] || c.action) + '</span></div>' +
+          (c.why ? '<p class="rv-why">' + esc(c.why) + '</p>' : "") +
+          '<div class="rv-compare">' +
+          (c.action === "added" ? "" : reviewTextBlock("Today", c.before)) +
+          (c.action === "removed" ? "" : reviewTextBlock(c.action === "added" ? "Added" : "After", c.after)) +
+          '</div></div></li>';
+      }).join("") + '</ul>';
+    }
+    html += '<div class="stage-cta">' +
+      (changes.length ? '<button class="afc-btn afc-btn--primary" id="rvSave"' + (!kept || r.saving || r.running ? " disabled" : "") + '>' +
+        I.save + (r.saving ? "Saving..." : 'Save ' + kept + ' change' + (kept > 1 ? "s" : "")) + '</button>' : "") +
+      '<button class="afc-btn afc-btn--ghost" id="rvEdit"' + (r.saving || r.running ? " disabled" : "") + '>Change my explanation</button>' +
+      '<p class="afc-muted">' + (changes.length && !kept ? "Tick at least one change to save." : "The current version is kept as a backup, so it can always be restored.") + '</p></div>';
+    if (r.error) { html += '<div class="afc-note afc-note--error">' + esc(r.error) + '</div>'; }
     return html;
   }
 
-  function renderGuidedSuccess(run) {
-    var captured = (run.state && run.state.captured) || {};
-    return '<div class="afc-card gd-success"><p class="afc-sec-eyebrow">Assistant terminé</p>' +
-      '<h3>Le nouvel expert est actif</h3><dl class="afc-kv">' +
-      '<dt>Domaine</dt><dd>' + esc(run.domain || "-") + '</dd>' +
-      '<dt>Agent</dt><dd>' + esc(captured.agent_id || "-") + '</dd>' +
-      '<dt>Outil</dt><dd>' + esc(captured.tool_id || "-") + '</dd></dl>' +
-      '<div class="afc-note afc-note--info">Ouvrez une NOUVELLE conversation dans la webapp principale pour voir le nouvel expert.</div>' +
-      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="gdNew">Nouveau domaine guidé</button></div></div>';
+  function updateReviewButtons() {
+    var r = S.guided.review;
+    var btn = byId("rvPropose");
+    var hint = byId("rvHint");
+    var empty = !(r.wrong.trim() || r.know.trim());
+    if (btn) { btn.disabled = empty; }
+    if (hint) {
+      hint.textContent = empty ? "Write at least one sentence to continue."
+        : "The AI reads what the expert knows today, the description of the data and 20 example rows. Nothing is changed yet.";
+    }
   }
 
-  function wireGuidedRun() {
+  function wireReview() {
+    var r = S.guided.review;
+    if (!r) { return; }
+    if (byId("rvWrong")) { byId("rvWrong").oninput = function () { r.wrong = this.value; updateReviewButtons(); }; }
+    if (byId("rvKnow")) { byId("rvKnow").oninput = function () { r.know = this.value; updateReviewButtons(); }; }
+    if (byId("rvPropose")) { byId("rvPropose").onclick = function () { proposeReview(false); }; }
+    if (byId("rvReprepare")) { byId("rvReprepare").onclick = function () { proposeReview(true); }; }
+    if (byId("rvBackToChanges")) { byId("rvBackToChanges").onclick = function () { r.editing = false; renderRun(); }; }
+    if (byId("rvEdit")) { byId("rvEdit").onclick = function () { r.editing = true; r.error = null; renderRun(); }; }
+    if (byId("rvSave")) { byId("rvSave").onclick = confirmReviewSave; }
+    Array.prototype.forEach.call(document.querySelectorAll(".rv-answer"), function (elm) {
+      elm.oninput = function () { r.answers[elm.getAttribute("data-qid")] = elm.value; };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-keep]"), function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute("data-keep");
+        r.keep[id] = !r.keep[id];
+        renderRun();
+      };
+    });
+  }
+
+  function proposeReview(withAnswers) {
+    var g = S.guided;
+    var r = g.review;
+    var run = g.run || {};
+    r.running = true;
+    r.error = null;
+    r.reqId += 1;
+    var reqId = r.reqId;
+    renderRun();
+    callApi("POST", "review/propose", {
+      confirm: true, run_id: run.run_id,
+      feedback: { wrong: r.wrong, know: r.know },
+      answers: withAnswers ? r.answers : {}
+    }).then(function (res) {
+      if (reqId !== r.reqId) { return; }
+      if (!res.data || res.data.status !== "ok" || !res.data.job_id) {
+        r.running = false;
+        r.error = guidedErrorText(res.data);
+        renderRun();
+        return;
+      }
+      pollJob(res.data.job_id, null, function (result) {
+        if (reqId !== r.reqId) { return; }
+        r.running = false;
+        if (!result || result.error || !result.run) {
+          r.error = String((result && result.error) || "no answer");
+        } else {
+          r.editing = false;
+          applyGuidedRun(result.run);
+        }
+        renderRun();
+      }, function (err) {
+        if (reqId !== r.reqId) { return; }
+        r.running = false;
+        r.error = guidedErrorText({ error: err });
+        renderRun();
+      });
+    });
+  }
+
+  function confirmReviewSave() {
+    var n = keptCount();
+    var info = S.guided.run.state.review || {};
+    var routing = (info.changes || []).some(function (c) { return c.area === "routing" && S.guided.review.keep[c.id]; });
+    openConfirm({
+      title: "Save " + n + " change" + (n > 1 ? "s" : "") + "?",
+      bodyHtml: "<p>The expert will use these changes from its next answer. The current version is kept as a backup, " +
+        "so it can always be restored. It takes about one minute.</p>" +
+        (routing ? "<p>You changed which questions OWIsMind sends to this expert: you will reload the orchestrator at the end.</p>" : ""),
+      confirmLabel: "Save",
+      onConfirm: saveReview
+    });
+  }
+
+  /* Keep the ticked changes (the server checks them), then save right away. */
+  function saveReview() {
+    var g = S.guided;
+    var r = g.review;
+    var run = g.run || {};
+    var info = run.state.review || {};
+    var keep = (info.changes || []).filter(function (c) { return r.keep[c.id]; }).map(function (c) { return c.id; });
+    r.saving = true;
+    r.error = null;
+    renderRun();
+    callApi("POST", "review/keep", { confirm: true, run_id: run.run_id, keep: keep }).then(function (res) {
+      r.saving = false;
+      if (!res.data || res.data.status !== "ok" || !res.data.run) {
+        r.error = "Not saved: " + guidedErrorText(res.data);
+        renderRun();
+        return;
+      }
+      applyGuidedRun(res.data.run);
+      if (res.data.run.current_stage === "review_apply" && reviewCanRun(res.data.run)) {
+        runGuidedStage();
+      } else {
+        r.error = "Not saved: no change was kept.";
+        renderRun();
+      }
+    });
+  }
+
+  function reviewCanRun(run) {
+    var st = ((run.state || {}).stages || {})[run.current_stage] || {};
+    return st.status === "ready" || st.status === "failed";
+  }
+
+  /* ---------- run wiring + actions ---------- */
+
+  function wireRun() {
+    wireReview();
     if (byId("gdRunStage")) { byId("gdRunStage").onclick = confirmGuidedStageRun; }
-    if (byId("gdVerify")) { byId("gdVerify").onclick = confirmGuidedVerify; }
-    if (byId("gdRefreshRun")) { byId("gdRefreshRun").onclick = refreshGuidedCurrent; }
+    if (byId("gdVerify")) { byId("gdVerify").onclick = verifyGuidedStage; }
+    if (byId("gdRefreshRun")) { byId("gdRefreshRun").onclick = function () { S.guided.loaded = false; loadGuidedCurrent(renderRun); }; }
     if (byId("gdAbandon")) { byId("gdAbandon").onclick = confirmGuidedAbandon; }
+    if (byId("gdProbe")) { byId("gdProbe").onclick = confirmProbe; }
+    if (S.guided.probe.report) { wireCopy("gdProbeCopy", function () { return S.guided.probe.report; }); }
     if (byId("gdWizardDraft")) {
       byId("gdWizardDraft").onclick = function () { confirmGuidedWizardDraft(false); };
+    }
+    if (byId("gdWizardRestart")) {
+      byId("gdWizardRestart").onclick = function () { confirmGuidedWizardDraft(false); };
+    }
+    if (byId("gdWizardDiscard")) {
+      byId("gdWizardDiscard").onclick = function () {
+        var w = S.guided.wizard;
+        w.answers = JSON.parse(JSON.stringify(w.drafted || {}));
+        renderRun();
+      };
     }
     if (byId("gdWizardRedraft")) {
       byId("gdWizardRedraft").onclick = function () {
@@ -644,42 +2083,48 @@
         confirmGuidedWizardDraft(true);
       };
     }
-    document.querySelectorAll(".gd-wizard-answer").forEach(function (elm) {
+    Array.prototype.forEach.call(document.querySelectorAll(".gd-wizard-answer"), function (elm) {
       elm.oninput = function () {
         S.guided.wizard.answers[elm.getAttribute("data-qid")] = elm.value;
+        updateWizardButtons();
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-tick]"), function (b) {
+      b.onclick = function () {
+        var run = S.guided.run;
+        if (!run) { return; }
+        var t = ticksOf(run);
+        var i = b.getAttribute("data-tick");
+        t[i] = !t[i];
+        renderRun();
       };
     });
   }
 
-  /* Removal stages whose launch actually deletes DSS objects: their confirm
-     modal repeats the exact deletion list and uses the danger style, so the
-     operator validates WHAT will be deleted, not just "run the stage". */
-  var REMOVAL_DANGER_STAGES = {
-    delete_tool: 1, delete_agent: 1, delete_model: 1, delete_scenario: 1,
-    delete_recipes: 1, delete_datasets: 1, delete_zone: 1,
-    catalog_cleanup: 1, hub_cleanup: 1
-  };
-
   function confirmGuidedStageRun() {
     var run = S.guided.run || {};
-    var stage = run.state && run.state.stages && run.state.stages[run.current_stage];
-    var isRemoval = !!(run.state && run.state.removal);
-    var dangerous = isRemoval && REMOVAL_DANGER_STAGES[run.current_stage] === 1;
-    var body = "L'étape <b>" + esc((stage && stage.title_fr) || run.current_stage || "") +
-      "</b> sera exécutée côté serveur. Son journal sera affiché en direct.";
+    var key = run.current_stage;
+    var stage = run.state && run.state.stages && run.state.stages[key];
+    var ctx = stageCtx(run);
+    var ux = STAGE_UX[key] || {};
+    var dangerous = !!(ctx.removal && REMOVAL_DANGER_STAGES[key] === 1);
+    var body;
     if (dangerous) {
-      body = "Cette étape va <b>SUPPRIMER dans DSS</b> les éléments listés ci-dessous. " +
-        "Cette action est irréversible (le dataset source n'est jamais touché)." +
-        '<div class="gd-detail mono">' +
-        esc((stage && stage.detail_fr) || "").replace(/\n/g, "<br>") + '</div>';
+      var items = stageObjects(key, ctx);
+      body = "<p>This step will <b>DELETE in DSS</b>:</p>" +
+        (items.length ? objectsList(items, true) : "<p>Nothing listed: already gone.</p>") +
+        "<p>Irreversible. The source dataset <b class=\"mono\">" + esc(ctx.names.base) +
+        "</b> is never touched.</p>";
+    } else {
+      body = '<p>' + ((ux.sentence) ? ux.sentence(ctx) : esc((stage && stage.detail_fr) || "")) + '</p>' +
+        '<p>' + esc(guaranteeLine(key, ctx) || "Its log is shown live.") + '</p>';
     }
     openConfirm({
-      title: stage && stage.status === "failed" ? "Relancer cette étape ?"
-        : (dangerous ? "Confirmer cette suppression ?" : "Lancer cette étape ?"),
+      title: stage && stage.status === "failed" ? "Run again: " + stageTitle(key, stage) + "?"
+        : (dangerous ? "Confirm the deletion?" : stageTitle(key, stage) + "?"),
       bodyHtml: body,
       danger: dangerous,
-      confirmLabel: stage && stage.status === "failed" ? "Relancer"
-        : (dangerous ? "Supprimer" : "Lancer"),
+      confirmLabel: stage && stage.status === "failed" ? "Run again" : (dangerous ? "Delete" : (ux.primary || "Run")),
       onConfirm: runGuidedStage
     });
   }
@@ -691,17 +2136,17 @@
     g.running = true;
     g.actionError = null;
     g.liveActions = [];
-    renderGuided();
+    renderRun();
     callApi("POST", "guided/run", { confirm: true, run_id: run.run_id }).then(function (r) {
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
         g.running = false;
         g.actionError = guidedErrorText(r.data);
-        renderGuided();
+        renderRun();
         return;
       }
       pollJob(r.data.job_id, function (actions) {
         g.liveActions = actions || [];
-        renderGuided();
+        renderRun();
       }, function (result, actions) {
         g.running = false;
         g.liveActions = actions || [];
@@ -709,15 +2154,14 @@
           applyGuidedRun(result.run);
           refreshDatasetsAfterInfra(stageKey, result.run);
         } else {
-          g.actionError = "Le résultat serveur ne contient pas le run mis à jour.";
+          g.actionError = "The server result does not contain the updated run.";
         }
-        renderGuided();
-      }, function (err, actions) {
+        renderRun();
+      }, function () {
         g.running = false;
-        g.liveActions = actions || [];
-        toast("L'étape a échoué. Rechargement de son état...");
+        toast("The step failed. Reloading its state...");
         g.loaded = false;
-        loadGuidedCurrent();
+        loadGuidedCurrent(renderRun);
       });
     });
   }
@@ -729,46 +2173,43 @@
     }
   }
 
-  function confirmGuidedVerify() {
-    var run = S.guided.run || {};
-    var stage = run.state && run.state.stages && run.state.stages[run.current_stage];
-    openConfirm({
-      title: "Vérifier cette étape ?",
-      bodyHtml: "Le serveur va contrôler dans DSS que l'étape <b>" +
-        esc((stage && stage.title_fr) || run.current_stage || "") + "</b> est réellement terminée.",
-      confirmLabel: "Vérifier",
-      onConfirm: verifyGuidedStage
-    });
-  }
-
+  /* "Done, check it": the operator already confirmed each step by ticking it, so
+   * the check runs directly (read-only on the server). */
   function verifyGuidedStage() {
     var g = S.guided;
     var run = g.run || {};
+    var before = run.current_stage;
     g.verifying = true;
     g.actionError = null;
-    renderGuided();
+    g.verifyFailed = false;
+    renderRun();
     callApi("POST", "guided/verify", { confirm: true, run_id: run.run_id }).then(function (r) {
       g.verifying = false;
       if (r.data && r.data.status === "ok" && r.data.run) {
         applyGuidedRun(r.data.run);
+        if (r.data.run.current_stage === before && r.data.run.status === "active") {
+          g.verifyFailed = true;
+        } else {
+          toast("Checked: done.");
+        }
       } else {
         g.actionError = guidedErrorText(r.data);
       }
-      renderGuided();
+      renderRun();
     });
   }
 
   function gatherGuidedWizardAnswers() {
-    document.querySelectorAll(".gd-wizard-answer").forEach(function (elm) {
+    Array.prototype.forEach.call(document.querySelectorAll(".gd-wizard-answer"), function (elm) {
       S.guided.wizard.answers[elm.getAttribute("data-qid")] = elm.value;
     });
   }
 
   function confirmGuidedWizardDraft(withAnswers) {
     openConfirm({
-      title: withAnswers ? "Re-rédiger le brouillon ?" : "Rédiger le brouillon ?",
-      bodyHtml: "Le wizard IA va analyser les métadonnées agrégées du profil. Aucune ligne brute ne sera envoyée au modèle.",
-      confirmLabel: withAnswers ? "Re-rédiger" : "Rédiger",
+      title: withAnswers ? "Redraft with your answers?" : "Draft with AI?",
+      bodyHtml: "<p>The AI reads the aggregated metadata of the profile. No data row is sent to the model.</p>",
+      confirmLabel: withAnswers ? "Redraft" : "Draft",
       onConfirm: function () { startGuidedWizard(withAnswers); }
     });
   }
@@ -780,22 +2221,23 @@
     var spec = (run.state && run.state.spec) || {};
     w.running = true;
     w.error = null;
-    if (!withAnswers) { w.config = null; w.answers = {}; }
+    if (!withAnswers) { w.config = null; w.answers = {}; w.drafted = null; }
+    var sent = withAnswers ? JSON.parse(JSON.stringify(w.answers)) : null;
     w.reqId += 1;
     var reqId = w.reqId;
-    renderGuided();
+    renderRun();
     callApi("POST", "wizard/draft", {
       confirm: true,
       profile_dataset: (spec.base_dataset || "") + "_profile",
       base_dataset: spec.base_dataset || "",
       domain: run.domain || spec.domain || "",
-      answers: withAnswers ? w.answers : null
+      answers: sent
     }).then(function (r) {
       if (reqId !== w.reqId) { return; }
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
         w.running = false;
         w.error = guidedErrorText(r.data);
-        renderGuided();
+        renderRun();
         return;
       }
       w.jobId = r.data.job_id;
@@ -803,27 +2245,51 @@
         if (reqId !== w.reqId) { return; }
         w.running = false;
         if (result && result.error) {
-          w.config = null;
           w.error = String(result.error);
+          if (!withAnswers) { w.config = null; }
         } else {
           w.config = result || {};
+          w.config.questions = w.config.questions || [];
+          // The new draft already integrates the answers sent: start clean from ITS
+          // questions (new ids on a redraft), each pre-filled with its suggestion,
+          // so nothing stale can keep the check locked.
+          var drafted = {};
+          w.config.questions.forEach(function (q) {
+            var qid = String(q.id || "");
+            drafted[qid] = (sent && sent[qid] != null) ? sent[qid] : (q.default != null ? q.default : "");
+          });
+          w.drafted = drafted;
+          w.answers = JSON.parse(JSON.stringify(drafted));
+          w.redrafted = !!withAnswers;
+          toast(withAnswers ? "Draft rewritten with your answers." : "Semantic draft saved.");
         }
-        renderGuided();
-        if (w.config) { toast("Brouillon sémantique enregistré."); }
+        renderRun();
       }, function (err) {
         if (reqId !== w.reqId) { return; }
         w.running = false;
         w.error = guidedErrorText({ error: err });
-        renderGuided();
+        renderRun();
       });
     });
   }
 
   function confirmGuidedAbandon() {
+    var removal = isRemovalRun(S.guided.run);
+    if (isReviewRun(S.guided.run)) {
+      openConfirm({
+        title: "Stop without saving?",
+        bodyHtml: "<p>Nothing is changed: the expert keeps what it knows today. Your explanation is not kept.</p>",
+        confirmLabel: "Stop",
+        onConfirm: abandonGuidedRun
+      });
+      return;
+    }
     openConfirm({
-      title: "Abandonner ce run ?",
-      bodyHtml: "Le run sera marqué comme abandonné. Rien ne sera supprimé dans DSS et les éléments déjà créés resteront en place.",
-      confirmLabel: "Abandonner",
+      title: "Abandon this run?",
+      bodyHtml: "<p>The run stops. Nothing is deleted in DSS: " +
+        (removal ? "what was already deleted stays deleted, everything else stays in place."
+          : "the objects already created stay in place.") + "</p>",
+      confirmLabel: "Abandon",
       danger: true,
       onConfirm: abandonGuidedRun
     });
@@ -834,846 +2300,168 @@
     var runId = g.run && g.run.run_id;
     g.abandoning = true;
     g.actionError = null;
-    renderGuided();
+    renderRun();
     callApi("POST", "guided/abandon", { confirm: true, run_id: runId }).then(function (r) {
       g.abandoning = false;
       if (r.data && r.data.status === "ok") {
         applyGuidedRun(null);
-        toast("Run abandonné. Rien n'a été supprimé dans DSS.");
-      } else {
-        g.actionError = guidedErrorText(r.data);
+        toast("Run abandoned. Nothing was deleted in DSS.");
+        go("overview");
+        return;
       }
-      renderGuided();
+      g.actionError = guidedErrorText(r.data);
+      renderRun();
     });
   }
 
-  function newGuidedDomain() {
-    S.guided.form = { domain: "", base_dataset: "", label_fr: "", label_en: "", lookup: "" };
-    S.guided.startError = null;
-    S.guided.startErrorCode = null;
-    applyGuidedRun(null);
-    renderGuided();
-  }
+  /* ---------- compatibility probe (read-only, report only) ---------- */
 
-  /* ============================ screen: Vue d'ensemble ============================ */
-
-  function loadOverview() {
-    if (S.overview.loading) { return; }
-    S.overview.loading = true;
-    S.overview.error = null;
-    renderOverview();
-    callApi("GET", "state").then(function (r) {
-      S.overview.loading = false;
-      if (r.data && r.data.status === "ok") {
-        S.overview.loaded = true;
-        S.overview.data = r.data;
-      } else {
-        S.overview.error = (r.data && r.data.error) || "load_error";
-      }
-      renderOverview();
-    });
-  }
-
-  function renderOverview() {
-    if (S.tab !== "overview") { return; }
-    var html = '<div class="afc-panel">' + backendBanner();
-
-    if (S.overview.loading && !S.overview.loaded) {
-      html += '<p class="afc-loading">Chargement de l\'état du projet...</p></div>';
-      setMain(html); return;
-    }
-    if (S.overview.error && !S.overview.loaded) {
-      html += '<div class="afc-note afc-note--error">Impossible de charger l\'état du projet (' + esc(S.overview.error) + ').</div>' +
-        '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRetry">' + I.refresh + 'Réessayer</button></div></div>';
-      setMain(html);
-      if (byId("ovRetry")) { byId("ovRetry").onclick = loadOverview; }
-      return;
-    }
-
-    var d = S.overview.data || {};
-    var settings = d.settings || {};
-    var caps = d.capabilities || {};
-    var hubChip = d.hub_ready
-      ? '<span class="afc-chip afc-chip--on">HUB PRÊT</span>'
-      : '<span class="afc-chip afc-chip--off">HUB ABSENT</span>';
-
-    // Project + hub status
-    html += '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Projet</p>' +
-      '<h2 class="afc-sec-title">Vue d\'ensemble</h2>' +
-      '<p class="afc-sec-note">État du projet DSS et du Config &amp; Prompt Hub (/python/owismind_hub). ' +
-      'C\'est le tableau de bord de l\'usine à agents : rien n\'est modifié ici.</p>' +
-      '<div class="afc-card"><dl class="afc-kv">' +
-      '<dt>Clé de projet</dt><dd>' + esc(d.project_key || "-") + '</dd>' +
-      '<dt>Hub</dt><dd>' + hubChip + '</dd>' +
-      '</dl></div></div>';
-
-    // Settings summary
-    html += '<div class="afc-sec"><p class="afc-mlabel">Réglages de l\'usine (factory_settings.json)</p>' +
-      '<div class="afc-card"><dl class="afc-kv">' +
-      '<dt>Connexion SQL</dt><dd>' + esc(settings.sql_connection || "-") + '</dd>' +
-      '<dt>Code env 3.11</dt><dd>' + esc(settings.code_env_311 || "(défaut projet)") + '</dd>' +
-      '<dt>LLM sonnet</dt><dd>' + esc(settings.llm_sonnet || "-") + '</dd>' +
-      '<dt>Modèle sémantique modèle</dt><dd>' + esc(settings.template_semantic_model_id || "-") + '</dd>' +
-      '<dt>Outil sémantique modèle</dt><dd>' + esc(settings.template_semantic_tool_id || "-") + '</dd>' +
-      '<dt>Orchestrateur</dt><dd>' + esc(settings.orchestrator_agent_id || "-") + '</dd>' +
-      '</dl></div></div>';
-
-    // Capabilities cards
-    var capKeys = Object.keys(caps);
-    html += '<div class="afc-sec"><p class="afc-mlabel">Capacités enregistrées (' + capKeys.length + ')</p>';
-    if (S.overview.flash) {
-      html += '<div class="afc-note afc-note--error">' + esc(S.overview.flash) + '</div>';
-      S.overview.flash = null;
-    }
-    if (!capKeys.length) {
-      html += '<div class="afc-note afc-note--info">Aucune capacité dans le hub. ' +
-        'Soit le hub n\'est pas encore poussé dans la project library, soit l\'orchestrateur utilise ses CAPABILITIES embarquées par défaut.</div>';
-    } else {
-      html += '<div class="afc-cap-grid">';
-      capKeys.forEach(function (k) {
-        var c = caps[k] || {};
-        var enChip = c.enabled
-          ? '<span class="afc-chip afc-chip--on">ACTIF</span>'
-          : '<span class="afc-chip afc-chip--off">INACTIF</span>';
-        html += '<div class="afc-cap-card">' +
-          '<span class="afc-cap-domain">' + esc(c.domain || k) + '</span>' +
-          '<span class="afc-cap-label">' + esc(c.label_fr || "") + '</span>' +
-          '<span class="afc-cap-id">' + esc(c.agent_id || "-") + '</span>' +
-          '<div class="afc-cap-foot">' + enChip +
-          '<span class="afc-cap-label mono">' + esc(c.tool_name || "") + '</span></div>' +
-          '<div class="afc-cap-actions">' +
-          '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-toggle="' + esc(k) + '">' +
-          (c.enabled ? "Désactiver" : "Activer") + '</button>' +
-          '<button class="afc-btn afc-btn--ghost afc-btn--sm" data-cap-remove="' + esc(k) + '">' +
-          'Supprimer...</button>' +
-          '</div></div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-
-    html += '<div class="afc-actions"><button class="afc-btn afc-btn--ghost afc-btn--sm" id="ovRefresh">' + I.refresh + 'Actualiser</button></div>';
-    html += '</div>';
-    setMain(html);
-    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-toggle]"), function (btn) {
-      btn.onclick = function () { confirmCapabilityToggle(btn.getAttribute("data-cap-toggle")); };
-    });
-    Array.prototype.forEach.call(document.querySelectorAll("[data-cap-remove]"), function (btn) {
-      btn.onclick = function () { openCapabilityRemoval(btn.getAttribute("data-cap-remove")); };
-    });
-    if (byId("ovRefresh")) {
-      byId("ovRefresh").onclick = function () { S.overview.loaded = false; loadOverview(); };
-    }
-  }
-
-  function confirmCapabilityToggle(key) {
-    var caps = (S.overview.data || {}).capabilities || {};
-    var c = caps[key] || {};
-    var next = !c.enabled;
+  function confirmProbe() {
     openConfirm({
-      title: next ? "Activer cette capacité ?" : "Désactiver cette capacité ?",
-      bodyHtml: "La capacité <b class=\"mono\">" + esc(key) + "</b> passera à <b>" +
-        (next ? "ACTIF" : "INACTIF") + "</b> dans capabilities.json (sauvegarde " +
-        "automatique du fichier précédent). L'architecture du domaine n'est pas modifiée." +
-        "<br><br>RAPPEL : re-sauvegarde l'orchestrateur dans DSS puis ouvre une " +
-        "NOUVELLE conversation pour que le registre soit rechargé (il est lu au " +
-        "démarrage du process).",
-      confirmLabel: next ? "Activer" : "Désactiver",
-      onConfirm: function () {
-        callApi("POST", "capability/enable", {
-          confirm: true, capability_key: key, enabled: next
-        }).then(function (r) {
-          if (!r.data || r.data.status !== "ok") {
-            S.overview.flash = "Bascule impossible (" +
-              ((r.data && r.data.error) || "erreur") + ").";
-            renderOverview();
-            return;
-          }
-          S.overview.loaded = false;
-          loadOverview();
-        });
-      }
+      title: "Read what the project allows?",
+      bodyHtml: "<p>Read-only look at the current project (Code Agent API, template Semantic Model Query tool, " +
+        "semantic models). Nothing is created, changed or deleted.</p><p>The report is shown here; it is not saved " +
+        "in the hub (only notebook 00 saves it).</p>",
+      confirmLabel: "Read the project",
+      onConfirm: startProbe
     });
-  }
-
-  function openCapabilityRemoval(key) {
-    var caps = (S.overview.data || {}).capabilities || {};
-    var c = caps[key] || {};
-    var domain = c.domain || key;
-    openConfirm({
-      title: "Supprimer le domaine " + domain + " ?",
-      danger: true,
-      bodyHtml: "Un run guidé de SUPPRESSION sera créé pour <b class=\"mono\">" +
-        esc(key) + "</b>. Rien n'est supprimé maintenant : l'assistant fait " +
-        "d'abord l'inventaire, puis chaque suppression est affichée et confirmée " +
-        "UNE PAR UNE. Le dataset source n'est JAMAIS touché." +
-        "<br><br>Pour confirmer, tape le nom exact du domaine " +
-        "(<b class=\"mono\">" + esc(domain) + "</b>) :" +
-        "<br><input class=\"afc-input\" type=\"text\" id=\"capRemoveTyped\" autocomplete=\"off\">",
-      confirmLabel: "Créer le run de suppression",
-      onConfirm: function () {
-        var field = byId("capRemoveTyped");
-        var typed = (field ? field.value : "").trim();
-        callApi("POST", "guided/start-removal", {
-          confirm: true, capability_key: key, domain_typed: typed
-        }).then(function (r) {
-          if (!r.data || r.data.status !== "ok") {
-            var code = (r.data && r.data.error) || "erreur";
-            S.overview.flash = code === "domain_mismatch"
-              ? "Le nom tapé ne correspond pas au domaine : run NON créé."
-              : (code === "active_run_exists"
-                ? "Un run guidé est déjà actif : termine-le ou abandonne-le d'abord."
-                : "Création impossible (" + code + ").");
-            renderOverview();
-            return;
-          }
-          S.guided.loaded = false;
-          selectTab("guided");
-        });
-      }
-    });
-  }
-
-  /* ============================ screen: Sonde (Phase 0) ============================ */
-
-  function renderProbe() {
-    if (S.tab !== "probe") { return; }
-    var p = S.probe;
-    var html = '<div class="afc-panel">' + backendBanner() +
-      '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Phase 0</p>' +
-      '<h2 class="afc-sec-title">Sonde de l\'instance</h2>' +
-      '<p class="afc-sec-note">Les sondes lecture seule inspectent l\'instance DSS (API des Code Agents, ' +
-      'schéma des outils Semantic Model Query, disponibilité de create_agent) pour savoir ce que l\'usine ' +
-      'peut automatiser en toute sécurité. Elles ne créent, ne modifient et ne suppriment rien. Lancez-les ' +
-      'une fois, puis collez le rapport dans le repo.</p>';
-
-    if (p.running) {
-      html += '<div class="afc-note afc-note--info">Sondes en cours... (lecture seule)</div>';
-    } else {
-      html += '<div class="afc-actions">' +
-        '<button class="afc-btn afc-btn--primary" id="probeRun">' + I.play + 'Lancer les sondes lecture seule</button>' +
-        '</div>';
-    }
-
-    if (p.error) {
-      html += '<div class="afc-note afc-note--error">Échec de la sonde : ' + esc(p.error) + '</div>';
-    }
-    if (p.report) {
-      html += '<div class="afc-sec" style="margin-top:24px;">' +
-        '<div class="afc-actions" style="margin-top:0;">' + copyButton("probeCopy", "Copier le rapport") + '</div>' +
-        '<pre class="afc-pre" id="probeReport">' + esc(p.report) + '</pre></div>';
-    }
-    html += '</div></div>';
-    setMain(html);
-
-    if (byId("probeRun")) {
-      byId("probeRun").onclick = function () {
-        openConfirm({
-          title: "Lancer les sondes ?",
-          bodyHtml: "Les sondes sont en <b>lecture seule</b> : elles inspectent l\'instance et ne modifient rien. " +
-            "Le rapport apparaîtra ci-dessous une fois terminé.",
-          confirmLabel: "Lancer",
-          onConfirm: startProbe
-        });
-      };
-    }
-    if (p.report) { wireCopy("probeCopy", function () { return p.report; }); }
   }
 
   function startProbe() {
-    var p = S.probe;
+    var p = S.guided.probe;
     p.running = true; p.error = null; p.report = null;
-    renderProbe();
+    renderRun();
     callApi("POST", "probe", { confirm: true }).then(function (r) {
       if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
         p.running = false;
-        p.error = (r.data && r.data.error) || "start_failed";
-        renderProbe();
+        p.error = guidedErrorText(r.data);
+        renderRun();
         return;
       }
-      p.jobId = r.data.job_id;
-      pollJob(p.jobId, null, function (result) {
+      pollJob(r.data.job_id, null, function (result) {
         p.running = false;
-        p.report = (result && (result.report || result.markdown)) || "(rapport vide)";
-        renderProbe();
-        toast("Sondes terminées.");
+        p.report = (result && (result.report || result.markdown)) || "(empty report)";
+        renderRun();
       }, function (err) {
         p.running = false;
-        p.error = err;
-        renderProbe();
+        p.error = guidedErrorText({ error: err });
+        renderRun();
       });
     });
   }
 
-  /* ============================ screen: Nouveau domaine ============================ */
+  /* ============================ screen: Settings ============================ */
 
-  function renderDomain() {
-    if (S.tab !== "domain") { return; }
-    loadDatasets(function () { if (S.tab === "domain") { renderDomainNow(); } });
-    renderDomainNow();
-  }
-
-  function renderDomainNow() {
-    if (S.tab !== "domain") { return; }
-    var f = S.domain.form;
-    var html = '<div class="afc-panel">' + backendBanner();
-
-    // --- creation form ---
-    html += '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Usine</p>' +
-      '<h2 class="afc-sec-title">Nouveau domaine spécialiste</h2>' +
-      '<p class="afc-sec-note">Décrivez le domaine, planifiez en dry-run (aucune écriture DSS), vérifiez le plan, ' +
-      'puis exécutez. Les étapes que l\'usine ne peut pas automatiser en sécurité apparaissent en MANUEL avec la marche à suivre.</p>' +
-      '<div class="afc-card">';
-
-    html += field("Clé de domaine (snake_case)", inputEl("dmDomain", f.domain, "ex. satisfaction"),
-      "Minuscules, chiffres et underscores. Sert à nommer la capacité, l\'outil et le scénario.");
-
-    // source mode segmented
-    html += '<div class="afc-field"><span class="afc-field-label">Source des données</span>' +
-      '<div class="afc-seg" id="dmSeg">' +
-      '<button data-mode="existing"' + (f.sourceMode === "existing" ? ' class="on"' : "") + '>Dataset existant</button>' +
-      '<button data-mode="source"' + (f.sourceMode === "source" ? ' class="on"' : "") + '>Table SQL à importer</button>' +
-      '</div></div>';
-
-    if (f.sourceMode === "existing") {
-      var dsField = S.datasets.loading
-        ? '<p class="afc-loading">Chargement des datasets...</p>'
-        : '<select class="afc-select" id="dmBaseSelect">' + datasetOptions(f.base_dataset) + '</select>';
-      html += field("Dataset de base", dsField,
-        "Le dataset déjà présent dans le projet dont ce spécialiste sera l\'expert.");
-    } else {
-      html += '<div class="afc-grid-2">' +
-        fieldRaw("Nom du dataset de base à créer", inputEl("dmBaseName", f.base_dataset, "ex. Satisfaction")) +
-        fieldRaw("Connexion SQL", inputEl("dmConn", f.connection, "SQL_owi")) +
-        fieldRaw("Schéma (optionnel)", inputEl("dmSchema", f.schema, "public")) +
-        fieldRaw("Table source", inputEl("dmTable", f.table, "ex. Satisfaction")) +
-        '</div>' +
-        field("Catalogue (optionnel)", inputEl("dmCatalog", f.catalog, ""), "");
-    }
-
-    html += '<div class="afc-grid-2">' +
-      fieldRaw("Libellé FR", inputEl("dmLabelFr", f.label_fr, "ex. Satisfaction client")) +
-      fieldRaw("Libellé EN", inputEl("dmLabelEn", f.label_en, "ex. Customer satisfaction")) +
-      '</div>';
-
-    html += field("Colonnes de recherche du lookup (une par ligne, optionnel)",
-      '<textarea class="afc-textarea mono" id="dmLookup" placeholder="Account_name&#10;carrier_code">' + esc(f.lookup) + '</textarea>',
-      "Liste blanche des colonnes texte utilisées par attribute_lookup. Vide = toutes les colonnes texte.");
-
-    html += '<div class="afc-actions">' +
-      '<button class="afc-btn afc-btn--ghost" id="dmPlan"' + (S.domain.planning ? " disabled" : "") + '>' +
-      (S.domain.planning ? "Planification..." : "Planifier (dry-run)") + '</button>';
-    if (S.domain.plan) {
-      html += '<button class="afc-btn afc-btn--primary" id="dmExec"' + (S.domain.executing ? " disabled" : "") + '>' + I.play +
-        (S.domain.executing ? "Exécution..." : "Exécuter") + '</button>';
-    }
-    html += '</div>';
-
-    // Status of the semantic wizard draft: tells the user whether Plan/Execute will
-    // carry a semantic-model config, or leave the model to configure by hand later.
-    var wizardReady = wizardConfigForSend() !== undefined;
-    html += '<p class="afc-field-help">' + (wizardReady
-      ? 'Config du wizard : prête (sera appliquée)'
-      : 'Config du wizard : absente (le modèle sémantique restera à configurer)') + '</p>';
-
-    if (S.domain.planError) {
-      html += '<div class="afc-note afc-note--error">Plan impossible : ' + esc(S.domain.planError) + '</div>';
-    }
-    html += '</div>'; // card
-
-    // --- plan result ---
-    if (S.domain.plan) {
-      var pl = S.domain.plan;
-      var counts = pl.counts || {};
-      html += '<div class="afc-sec"><p class="afc-mlabel">Plan (dry-run) - ' +
-        (pl.actions ? pl.actions.length : 0) + ' étapes</p>' +
-        '<p class="afc-count">' + countsLine(counts) + '</p>';
-      // Non-blocking preflight warnings returned by the backend (collisions,
-      // weak routing signal, name headroom): shown BEFORE the actions table.
-      if (pl.warnings && pl.warnings.length) {
-        html += '<div class="afc-note afc-note--info"><b>Avertissements (non bloquants) :</b><ul>' +
-          pl.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join("") +
-          '</ul></div>';
-      }
-      html += actionsTable(pl.actions) + '</div>';
-    }
-
-    // --- execution journal ---
-    if (S.domain.executing || S.domain.execResult || S.domain.execError) {
-      html += '<div class="afc-sec"><p class="afc-mlabel">Journal d\'exécution</p>';
-      if (S.domain.executing) {
-        html += '<div class="afc-note afc-note--info">Exécution en cours...</div>';
-      }
-      if (S.domain.execError) {
-        html += '<div class="afc-note afc-note--error">Échec de l\'exécution : ' + esc(S.domain.execError) + '</div>';
-      }
-      // Honest completion: FAILED/BLOCKED steps mean the creation is incomplete.
-      if (S.domain.execResult) {
-        var xc = S.domain.execResult.counts || {};
-        var xbad = (xc.FAILED || 0) + (xc.BLOCKED || 0);
-        if (xbad) {
-          html += '<div class="afc-note afc-note--error">' + xbad +
-            ' étape(s) en échec ou bloquée(s) : la création n\'est pas complète, lisez le runbook ci-dessous.</div>';
-        }
-      }
-      var execActions = (S.domain.execResult && S.domain.execResult.actions) || S.domain.execActions || [];
-      html += actionsTable(execActions);
-      html += manualChecklist(execActions);
-      // Copy-pastable ordered runbook rendered by the backend after a real run.
-      if (S.domain.execResult && S.domain.execResult.runbook) {
-        html += '<p class="afc-mlabel">Runbook opérateur (copiable)</p>' +
-          '<pre class="afc-pre">' + esc(S.domain.execResult.runbook) + '</pre>';
-      }
-      html += '</div>';
-    }
-
-    // --- semantic wizard ---
-    html += renderWizardSection();
-
-    html += '</div>';
-    setMain(html);
-    wireDomain();
-  }
-
-  function renderWizardSection() {
-    var w = S.domain.wizard;
-    var html = '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Assistant</p>' +
-      '<h2 class="afc-sec-title">Wizard sémantique</h2>' +
-      '<p class="afc-sec-note">Génère un brouillon de configuration du modèle sémantique (entités, attributs, ' +
-      'métriques, filtres, glossaire, instructions SQL, requêtes golden) à partir du dataset de profil. ' +
-      'Seules des métadonnées agrégées sont envoyées au LLM, jamais des lignes brutes.</p>' +
-      '<div class="afc-card">';
-
-    var dsField = S.datasets.loading
-      ? '<p class="afc-loading">Chargement des datasets...</p>'
-      : '<select class="afc-select" id="wzProfile">' + datasetOptions(w.profileDataset) + '</select>';
-    html += field("Dataset de profil", dsField,
-      "En général <base>_profile. Sa métadonnée agrégée alimente le brouillon.");
-
-    html += '<div class="afc-actions">' +
-      '<button class="afc-btn afc-btn--ghost" id="wzDraft"' + (w.running ? " disabled" : "") + '>' +
-      (w.running ? "Génération..." : "Générer le brouillon") + '</button></div>';
-
-    if (w.error) {
-      html += '<div class="afc-note afc-note--error">Wizard impossible : ' + esc(w.error) + '</div>';
-    }
-    html += '</div>'; // card
-
-    if (w.config) {
-      var cfg = w.config;
-      var questions = cfg.questions || [];
-      if (questions.length) {
-        html += '<div class="afc-sec" style="margin-top:20px;"><p class="afc-mlabel">Questions de clarification</p>';
-        questions.forEach(function (q) {
-          var qid = q.id;
-          var val = (w.answers[qid] != null) ? w.answers[qid] : (q.default != null ? q.default : "");
-          var control;
-          if (q.options && q.options.length) {
-            var opts = q.options.map(function (o) {
-              return '<option value="' + esc(o) + '"' + (String(o) === String(val) ? " selected" : "") + '>' + esc(o) + '</option>';
-            }).join("");
-            control = '<select class="afc-select wz-answer" data-qid="' + esc(qid) + '">' + opts + '</select>';
-          } else {
-            control = '<input class="afc-input wz-answer" data-qid="' + esc(qid) + '" value="' + esc(val) + '">';
-          }
-          html += '<div class="afc-q"><p class="afc-q-title">' + esc(q.question_fr || q.id) + '</p>' +
-            (q.why ? '<p class="afc-q-why">' + esc(q.why) + '</p>' : "") + control + '</div>';
-        });
-        html += '<div class="afc-actions">' +
-          '<button class="afc-btn afc-btn--ghost" id="wzRegen"' + (w.regenerating ? " disabled" : "") + '>' +
-          (w.regenerating ? "Régénération..." : "Régénérer avec mes réponses") + '</button></div></div>';
-      }
-
-      html += '<div class="afc-sec" style="margin-top:20px;"><p class="afc-mlabel">Configuration du modèle (brouillon)</p>' +
-        '<div class="afc-actions" style="margin-top:0;">' + copyButton("wzCopy", "Copier le JSON") + '</div>' +
-        '<pre class="afc-pre" id="wzJson">' + esc(JSON.stringify(cfg, null, 2)) + '</pre></div>';
-    }
-
-    html += '</div>';
-    return html;
-  }
-
-  /* Any domain-form edit makes a previously computed plan (and its execution
-   * result) stale, because Execute rebuilds the spec from the LIVE form. Drop the
-   * plan so the Execute button disappears and the user must re-plan. Returns true
-   * when something was actually cleared (so the caller knows a re-render is due). */
-  function invalidateDomainPlan() {
-    var d = S.domain;
-    if (!d.plan && !d.planError && !d.planning && !d.execResult && !d.execError &&
-        !(d.execActions && d.execActions.length)) {
-      return false;
-    }
-    d.plan = null; d.planError = null;
-    // An edit also cancels interest in any in-flight plan request: its response
-    // will be dropped by the fingerprint guard, so stop the spinner here.
-    d.planning = false;
-    d.execResult = null; d.execError = null; d.execActions = [];
-    return true;
-  }
-
-  /* Identity of the spec a plan or wizard draft was computed FOR. A response
-   * coming back for a different fingerprint than the current form is stale and
-   * must be dropped (in-flight race: plan for A, edit to B, response A arrives). */
-  function specFingerprint() {
-    var f = S.domain.form;
-    return [f.domain || "", f.base_dataset || "", f.sourceMode || "",
-            f.connection || "", f.schema || "", f.table || "", f.catalog || "",
-            f.label_fr || "", f.label_en || "", f.lookup || ""].join("");
-  }
-
-  /* Identity fields a wizard draft is bound to (narrower than the full form:
-   * label edits do not orphan a draft, but domain/dataset changes do). */
-  function wizardFingerprint() {
-    var f = S.domain.form;
-    return [(f.domain || "").trim(), (f.base_dataset || "").trim(),
-            S.domain.wizard.profileDataset || ""].join("");
-  }
-
-  /* Drop the wizard draft when the domain identity changes: a draft for Sales
-   * must never be applied to Tickets. Bumping reqId also makes any in-flight
-   * draft job completion stale (it is ignored on arrival). */
-  function invalidateWizardDraft() {
-    var w = S.domain.wizard;
-    w.reqId = (w.reqId || 0) + 1;
-    if (w.config === null && !w.running && !w.regenerating) { return false; }
-    w.config = null; w.answers = {}; w.running = false; w.regenerating = false;
-    return true;
-  }
-
-  /* bindInput for a domain-form field: update the form, then invalidate any stale
-   * plan. Re-render only when the plan was actually cleared, restoring focus to the
-   * field being edited so typing is never interrupted. */
-  function domainField(id, cb, isChange, isIdentity) {
-    bindInput(id, function (v) {
-      cb(v);
-      var cleared = invalidateDomainPlan();
-      // Identity fields (domain / base dataset) also orphan the wizard draft.
-      if (isIdentity) { cleared = invalidateWizardDraft() || cleared; }
-      if (cleared) {
-        renderDomainNow();
-        var e = byId(id);
-        if (e) {
-          e.focus();
-          if (e.setSelectionRange && typeof e.value === "string") {
-            try { e.setSelectionRange(e.value.length, e.value.length); } catch (err) { /* ignore */ }
-          }
-        }
-      }
-    }, isChange);
-  }
-
-  function wireDomain() {
-    var f = S.domain.form;
-
-    var seg = byId("dmSeg");
-    if (seg) {
-      seg.querySelectorAll("button").forEach(function (b) {
-        b.onclick = function () {
-          f.sourceMode = this.getAttribute("data-mode");
-          invalidateDomainPlan(); // changing the source shape invalidates the plan too
-          renderDomainNow();
-        };
-      });
-    }
-    domainField("dmDomain", function (v) { f.domain = v; }, false, true);
-    domainField("dmBaseSelect", function (v) { f.base_dataset = v; }, true, true);
-    domainField("dmBaseName", function (v) { f.base_dataset = v; }, false, true);
-    domainField("dmConn", function (v) { f.connection = v; });
-    domainField("dmSchema", function (v) { f.schema = v; });
-    domainField("dmTable", function (v) { f.table = v; });
-    domainField("dmCatalog", function (v) { f.catalog = v; });
-    domainField("dmLabelFr", function (v) { f.label_fr = v; });
-    domainField("dmLabelEn", function (v) { f.label_en = v; });
-    domainField("dmLookup", function (v) { f.lookup = v; });
-
-    if (byId("dmPlan")) { byId("dmPlan").onclick = planDomain; }
-    if (byId("dmExec")) { byId("dmExec").onclick = confirmExecute; }
-
-    // wizard
-    var w = S.domain.wizard;
-    bindInput("wzProfile", function (v) {
-      if (v !== w.profileDataset) {
-        w.profileDataset = v;
-        // A draft is bound to its profile dataset: switching it orphans the draft.
-        if (invalidateWizardDraft()) { invalidateDomainPlan(); renderDomainNow(); }
-      }
-    }, true);
-    if (byId("wzDraft")) { byId("wzDraft").onclick = function () { startWizard(false); }; }
-    if (byId("wzRegen")) {
-      byId("wzRegen").onclick = function () {
-        // gather answers first
-        document.querySelectorAll(".wz-answer").forEach(function (elm) {
-          w.answers[elm.getAttribute("data-qid")] = elm.value;
-        });
-        startWizard(true);
-      };
-    }
-    if (w.config) { wireCopy("wzCopy", function () { return JSON.stringify(w.config, null, 2); }); }
-  }
-
-  /* The wizard draft config to attach to a plan/execute call, or undefined. Only a
-   * non-null object without an .error key is a usable draft; anything else means the
-   * semantic model stays unconfigured and we send nothing. */
-  function wizardConfigForSend() {
-    var c = S.domain.wizard.config;
-    if (c && typeof c === "object" && !c.error) { return c; }
-    return undefined;
-  }
-
-  function buildSpec() {
-    var f = S.domain.form;
-    var lookup = (f.lookup || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-    var spec = {
-      domain: (f.domain || "").trim(),
-      base_dataset: (f.base_dataset || "").trim(),
-      label_fr: (f.label_fr || "").trim(),
-      label_en: (f.label_en || "").trim(),
-      lookup_search_columns: lookup
-    };
-    if (f.sourceMode === "source") {
-      spec.source = { connection: (f.connection || "").trim(), table: (f.table || "").trim() };
-      if (f.schema) { spec.source.schema = f.schema.trim(); }
-      if (f.catalog) { spec.source.catalog = f.catalog.trim(); }
-    }
-    return spec;
-  }
-
-  function planDomain() {
-    S.domain.planning = true; S.domain.planError = null; S.domain.plan = null;
-    // reset any prior execution when re-planning
-    S.domain.execResult = null; S.domain.execError = null; S.domain.execActions = [];
-    renderDomainNow();
-    // Capture what this plan is FOR: if the form changed while the request was in
-    // flight, the response is stale and must not resurrect an Execute button for
-    // a spec the user never planned.
-    var sentFor = specFingerprint();
-    callApi("POST", "plan", { spec: buildSpec(), wizard_config: wizardConfigForSend() }).then(function (r) {
-      if (sentFor !== specFingerprint()) { return; } // stale response: drop it
-      S.domain.planning = false;
-      if (r.data && r.data.status === "ok") {
-        S.domain.plan = { counts: r.data.counts || {}, actions: r.data.actions || [],
-                          dry_run: r.data.dry_run, warnings: r.data.warnings || [] };
-      } else {
-        S.domain.planError = errorText(r.data);
-      }
-      renderDomainNow();
-    });
-  }
-
-  function confirmExecute() {
-    var spec = buildSpec();
-    var pl = S.domain.plan || {};
-    var willCreate = (pl.actions || [])
-      .filter(function (a) { return a.status === "PLANNED"; })
-      .map(function (a) { return '<li><span class="mono">' + esc(a.step) + '</span> : ' + esc(a.detail || "") + '</li>'; })
-      .join("");
-    var body = '<p>Vous allez exécuter la création du domaine <b class="mono">' + esc(spec.domain || "(sans nom)") + '</b> ' +
-      'réellement sur le projet DSS. Les étapes marquées MANUEL ne seront pas automatisées.</p>';
-    if (willCreate) {
-      body += '<p style="margin-top:10px;">Étapes planifiées :</p><ul>' + willCreate + '</ul>';
-    }
-    body += '<p style="margin-top:10px;">Aucune suppression n\'est effectuée. Vous pourrez revoir le journal étape par étape.</p>';
-    openConfirm({
-      title: "Exécuter la création ?",
-      bodyHtml: body,
-      confirmLabel: "Exécuter",
-      onConfirm: executeDomain
-    });
-  }
-
-  function executeDomain() {
-    S.domain.executing = true; S.domain.execError = null; S.domain.execResult = null; S.domain.execActions = [];
-    renderDomainNow();
-    callApi("POST", "execute", { spec: buildSpec(), wizard_config: wizardConfigForSend(), confirm: true }).then(function (r) {
-      if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
-        S.domain.executing = false;
-        S.domain.execError = errorText(r.data);
-        renderDomainNow();
-        return;
-      }
-      S.domain.execJobId = r.data.job_id;
-      pollJob(S.domain.execJobId, function (actions) {
-        S.domain.execActions = actions;
-        renderDomainNow();
-      }, function (result, actions) {
-        S.domain.executing = false;
-        S.domain.execResult = result || { actions: actions };
-        renderDomainNow();
-        // A job that finished is not a job that succeeded: FAILED/BLOCKED steps
-        // mean the creation is incomplete and the journal must be read.
-        var c = (S.domain.execResult && S.domain.execResult.counts) || {};
-        var bad = (c.FAILED || 0) + (c.BLOCKED || 0);
-        if (bad) {
-          toast("Exécution terminée avec " + bad + " étape(s) en échec ou bloquée(s) : lisez le journal.");
-        } else {
-          toast("Exécution terminée.");
-        }
-      }, function (err, actions) {
-        S.domain.executing = false;
-        S.domain.execError = err;
-        S.domain.execActions = actions;
-        renderDomainNow();
+  function promptChoices() {
+    var caps = (S.overview.data || {}).capabilities || {};
+    var list = [{ path: PERSONA_PATH, label: "Orchestrator personality (orchestrator_persona.md)" }];
+    Object.keys(caps).forEach(function (k) {
+      var c = caps[k] || {};
+      if (!c.domain) { return; }
+      list.push({
+        path: "/python/owismind_hub/prompts/" + c.domain + "/understand_extra.md",
+        label: "Extra understanding rules of the sub-agent " + (c.label_en || c.label_fr || c.domain) + " (understand_extra.md)"
       });
     });
+    return list;
   }
 
-  function startWizard(withAnswers) {
-    var w = S.domain.wizard;
-    if (!w.profileDataset) { toast("Choisissez d\'abord un dataset de profil."); return; }
-    if (withAnswers) { w.regenerating = true; } else { w.running = true; w.config = null; w.answers = {}; }
-    w.error = null;
-    renderDomainNow();
-    // Bind this draft to the current identity + request id: if the user changes
-    // domain/dataset (or launches another draft) while the job runs, the late
-    // completion is stale and must be ignored, never re-applied.
-    w.reqId = (w.reqId || 0) + 1;
-    var myReq = w.reqId;
-    var draftFor = wizardFingerprint();
-    var payload = { confirm: true, profile_dataset: w.profileDataset,
-                    base_dataset: S.domain.form.base_dataset || "",
-                    domain: (S.domain.form.domain || "").trim() };
-    if (withAnswers) { payload.answers = w.answers; }
-    callApi("POST", "wizard/draft", payload).then(function (r) {
-      if (myReq !== w.reqId) { return; } // superseded while the POST was in flight
-      if (!r.data || r.data.status !== "ok" || !r.data.job_id) {
-        w.running = false; w.regenerating = false;
-        w.error = errorText(r.data);
-        renderDomainNow();
-        return;
-      }
-      w.jobId = r.data.job_id;
-      pollJob(w.jobId, null, function (result) {
-        if (myReq !== w.reqId || draftFor !== wizardFingerprint()) { return; } // stale draft
-        w.running = false; w.regenerating = false;
-        w.config = result || {};
-        // A usable new draft changes what Execute would apply, so any plan computed
-        // before it is now stale: drop it (the Execute button hides until re-planned).
-        // An error draft sends nothing, so it leaves an existing plan valid.
-        if (wizardConfigForSend() !== undefined) { invalidateDomainPlan(); }
-        renderDomainNow();
-        toast("Brouillon généré.");
-      }, function (err) {
-        if (myReq !== w.reqId) { return; }
-        w.running = false; w.regenerating = false;
-        w.error = err;
-        renderDomainNow();
+  function renderSettings() {
+    if (S.view !== "settings") { return; }
+    if (!S.overview.loaded && !S.overview.loading) {
+      S.overview.loading = true;
+      callApi("GET", "state").then(function (r) {
+        S.overview.loading = false;
+        if (r.data && r.data.status === "ok") { S.overview.loaded = true; S.overview.data = r.data; }
+        renderSettings();
       });
-    });
-  }
+    }
+    if (!S.prompts.loaded && !S.prompts.loading && !S.prompts.loadError) { loadPrompt(); return; }
 
-  /* ============================ screen: Prompts ============================ */
-
-  function renderPrompts() {
-    if (S.tab !== "prompts") { return; }
     var pr = S.prompts;
-    var html = '<div class="afc-panel">' + backendBanner();
+    var d = S.overview.data || {};
+    var settings = d.settings || {};
+    var options = promptChoices().map(function (c) {
+      return '<option value="' + esc(c.path) + '"' + (c.path === pr.path ? " selected" : "") + '>' + esc(c.label) + '</option>';
+    }).join("");
 
-    // --- persona / prompt editor ---
-    html += '<div class="afc-sec">' +
-      '<p class="afc-sec-eyebrow">Hub</p>' +
-      '<h2 class="afc-sec-title">Prompts de persona</h2>' +
-      '<p class="afc-sec-note">Éditez un fichier de prompt du hub (/python/owismind_hub/prompts/...). ' +
-      'L\'orchestrateur charge sa persona depuis orchestrator_persona.md ; les sous-agents peuvent charger ' +
-      'un ajout prompts/&lt;domaine&gt;/understand_extra.md. Le chemin doit commencer par /python/owismind_hub/prompts/.</p>' +
-      '<div class="afc-card">';
-
-    html += '<div class="afc-field"><span class="afc-field-label">Chemin du fichier</span>' +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
-      '<input class="afc-input mono" id="prPath" value="' + esc(pr.path) + '" style="flex:1 1 320px;">' +
-      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="prLoad"' + (pr.loading ? " disabled" : "") + '>' + I.refresh +
-      (pr.loading ? "Chargement..." : "Charger") + '</button></div></div>';
-
+    setHeader({
+      back: true, eyebrow: "Settings", title: "Personality prompt",
+      sub: "The text that gives the orchestrator its tone and rules of conduct. It lives in the project library and is read when the orchestrator starts."
+    });
+    var html = backendBanner() +
+      '<div class="layout"><div class="layout-main">' +
+      '<section class="card">' +
+      '<div class="afc-field"><span class="afc-field-label">File</span>' +
+      '<select class="afc-select" id="prPath">' + options + '</select></div>';
     if (pr.loadError) {
-      html += '<div class="afc-note afc-note--error">Chargement impossible : ' + esc(pr.loadError) + '</div>';
+      html += '<div class="afc-note afc-note--error">Cannot read: ' + esc(pr.loadError) + '</div>';
     }
+    html += '<div class="afc-field"><span class="afc-field-label">Content</span>' +
+      '<textarea class="afc-textarea code" id="prContent"' + (pr.loading ? " disabled" : "") + '>' +
+      esc(pr.loading ? "Loading..." : pr.content) + '</textarea>' +
+      '<p class="afc-field-help mono">' + esc(pr.path) + '</p></div>' +
+      '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="prSave"' +
+      (pr.saving || !pr.loaded ? " disabled" : "") + '>' + I.save + 'Save</button>' +
+      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="prLoad"' + (pr.loading ? " disabled" : "") + '>' +
+      I.refresh + 'Reload</button></div></section></div>';
 
-    html += '<div class="afc-field"><span class="afc-field-label">Contenu</span>' +
-      '<textarea class="afc-textarea code" id="prContent" placeholder="' +
-      (pr.loaded ? "" : "Cliquez sur Charger pour récupérer le contenu du fichier.") + '">' + esc(pr.content) + '</textarea></div>';
-
-    html += '<div class="afc-actions">' +
-      '<button class="afc-btn afc-btn--primary" id="prSave"' + (pr.saving || !pr.loaded ? " disabled" : "") + '>' + I.save +
-      'Enregistrer</button></div>';
-    html += '</div></div>';
-
-    // --- capabilities editor ---
-    var caps = pr.caps;
-    html += '<div class="afc-sec"><p class="afc-sec-eyebrow">Hub</p>' +
-      '<h2 class="afc-sec-title">Capacités (capabilities.json)</h2>' +
-      '<p class="afc-sec-note">Le registre runtime des capacités de l\'orchestrateur. Il est validé côté serveur ' +
-      '(clés requises, dictionnaires de libellés, une seule capacité active par domaine) avant écriture ; ' +
-      'une sauvegarde du fichier précédent est faite automatiquement.</p>' +
-      '<div class="afc-card">';
-
-    html += '<div class="afc-actions" style="margin-top:0;">' +
-      '<button class="afc-btn afc-btn--ghost afc-btn--sm" id="capLoad"' + (caps.loading ? " disabled" : "") + '>' + I.refresh +
-      (caps.loading ? "Chargement..." : "Charger") + '</button></div>';
-
-    if (caps.loadError) {
-      html += '<div class="afc-note afc-note--error">Chargement impossible : ' + esc(caps.loadError) + '</div>';
-    }
-
-    html += '<div class="afc-field" style="margin-top:16px;"><span class="afc-field-label">capabilities.json</span>' +
-      '<textarea class="afc-textarea code" id="capContent" placeholder="' +
-      (caps.loaded ? "" : "Cliquez sur Charger pour récupérer le JSON.") + '">' + esc(caps.text) + '</textarea></div>';
-
-    if (caps.problems && caps.problems.length) {
-      html += '<div class="afc-note afc-note--error"><b>Validation refusée :</b><ul>' +
-        caps.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul></div>';
-    }
-
-    html += '<div class="afc-actions">' +
-      '<button class="afc-btn afc-btn--primary" id="capSave"' + (caps.saving || !caps.loaded ? " disabled" : "") + '>' + I.save +
-      'Valider et enregistrer</button></div>';
-    html += '</div></div></div>';
-
+    html += '<aside class="layout-aside"><section class="card tracker">' +
+      '<p class="afc-mlabel">Technical settings (read-only)</p><dl class="afc-kv afc-kv--stack">' +
+      '<dt>Project</dt><dd>' + esc(d.project_key || "-") + '</dd>' +
+      '<dt>Hub</dt><dd>' + (d.hub_ready ? "present (/python/owismind_hub)" : "missing") + '</dd>' +
+      '<dt>Orchestrator (Code Agent)</dt><dd>' + esc(settings.orchestrator_agent_id || "-") + '</dd>' +
+      '<dt>SQL connection</dt><dd>' + esc(settings.sql_connection || "-") + '</dd>' +
+      '<dt>Code env 3.11</dt><dd>' + esc(settings.code_env_311 || "(project default)") + '</dd>' +
+      '<dt>LLM of the semantic tools</dt><dd>' + esc(settings.llm_sonnet || "-") + '</dd>' +
+      '<dt>Template semantic model</dt><dd>' + esc(settings.template_semantic_model_id || "-") + '</dd>' +
+      '<dt>Template Semantic Model Query tool</dt><dd>' + esc(settings.template_semantic_tool_id || "-") + '</dd>' +
+      '</dl><p class="afc-field-help">Source: factory_settings.json in the hub. Edit it from the project library.</p>' +
+      '<p class="afc-mlabel tracker-sub">After saving a prompt</p>' + reloadSteps() +
+      '</section></aside></div>';
     setMain(html);
-    wirePrompts();
+    wireBack();
+    wireSettings();
   }
 
-  function wirePrompts() {
+  function wireSettings() {
     var pr = S.prompts;
-    bindInput("prPath", function (v) { pr.path = v; });
+    bindInput("prPath", function (v) {
+      pr.path = v; pr.loaded = false; pr.loadError = null; pr.content = "";
+      loadPrompt();
+    }, true);
     bindInput("prContent", function (v) { pr.content = v; });
-    if (byId("prLoad")) { byId("prLoad").onclick = loadPrompt; }
+    if (byId("prLoad")) { byId("prLoad").onclick = function () { pr.loadError = null; loadPrompt(); }; }
     if (byId("prSave")) { byId("prSave").onclick = confirmSavePrompt; }
-
-    bindInput("capContent", function (v) { pr.caps.text = v; });
-    if (byId("capLoad")) { byId("capLoad").onclick = loadCaps; }
-    if (byId("capSave")) { byId("capSave").onclick = confirmSaveCaps; }
   }
 
   function loadPrompt() {
     var pr = S.prompts;
     if (!/^\/python\/owismind_hub\/prompts\//.test(pr.path)) {
-      pr.loadError = "Le chemin doit commencer par /python/owismind_hub/prompts/";
-      renderPrompts(); return;
+      pr.loadError = "The path must start with /python/owismind_hub/prompts/";
+      renderSettings(); return;
     }
     pr.loading = true; pr.loadError = null;
-    renderPrompts();
+    renderSettings();
     callApi("GET", "hub/prompt?path=" + encodeURIComponent(pr.path)).then(function (r) {
       pr.loading = false;
       if (r.data && r.data.status === "ok") {
         pr.loaded = true;
         pr.content = r.data.content || "";
       } else {
-        pr.loadError = errorText(r.data);
+        pr.loadError = guidedErrorText(r.data);
       }
-      renderPrompts();
+      renderSettings();
     });
   }
 
   function confirmSavePrompt() {
     var pr = S.prompts;
     openConfirm({
-      title: "Enregistrer le prompt ?",
-      bodyHtml: "Le fichier <span class=\"mono\">" + esc(pr.path) + "</span> sera écrit dans la project library du projet. " +
-        "Les agents rechargeront ce prompt à leur prochain démarrage.",
-      confirmLabel: "Enregistrer",
+      title: "Save the prompt?",
+      bodyHtml: "<p>The file <span class=\"mono\">" + esc(pr.path) + "</span> is written to the project library " +
+        "(the previous version is backed up). Reload the orchestrator afterwards so it reads it.</p>",
+      confirmLabel: "Save",
       onConfirm: savePrompt
     });
   }
@@ -1681,69 +2469,16 @@
   function savePrompt() {
     var pr = S.prompts;
     pr.saving = true;
-    renderPrompts();
+    renderSettings();
     callApi("POST", "hub/prompt", { confirm: true, path: pr.path, content: pr.content }).then(function (r) {
       pr.saving = false;
       if (r.data && r.data.status === "ok") {
-        toast("Prompt enregistré.");
+        toast("Prompt saved.");
       } else {
-        toast("Enregistrement impossible.");
-        pr.loadError = errorText(r.data);
+        toast("Save failed.");
+        pr.loadError = guidedErrorText(r.data);
       }
-      renderPrompts();
-    });
-  }
-
-  function loadCaps() {
-    var caps = S.prompts.caps;
-    caps.loading = true; caps.loadError = null; caps.problems = [];
-    renderPrompts();
-    callApi("GET", "hub/capabilities").then(function (r) {
-      caps.loading = false;
-      if (r.data && r.data.status === "ok") {
-        caps.loaded = true;
-        caps.text = JSON.stringify(r.data.capabilities || {}, null, 2);
-      } else {
-        caps.loadError = errorText(r.data);
-      }
-      renderPrompts();
-    });
-  }
-
-  function confirmSaveCaps() {
-    var caps = S.prompts.caps;
-    var parsed;
-    try {
-      parsed = JSON.parse(caps.text);
-    } catch (e) {
-      caps.problems = ["JSON invalide : " + e.message];
-      renderPrompts();
-      return;
-    }
-    caps._parsed = parsed;
-    openConfirm({
-      title: "Enregistrer les capacités ?",
-      bodyHtml: "Le fichier <span class=\"mono\">capabilities.json</span> sera validé puis écrit (avec sauvegarde du précédent). " +
-        "Une validation refusée n\'écrit rien et affiche les problèmes.",
-      confirmLabel: "Valider et enregistrer",
-      onConfirm: saveCaps
-    });
-  }
-
-  function saveCaps() {
-    var caps = S.prompts.caps;
-    caps.saving = true; caps.problems = [];
-    renderPrompts();
-    callApi("POST", "hub/capabilities", { confirm: true, capabilities: caps._parsed }).then(function (r) {
-      caps.saving = false;
-      if (r.data && r.data.status === "ok") {
-        toast("Capacités enregistrées.");
-      } else if (r.data && r.data.problems) {
-        caps.problems = r.data.problems;
-      } else {
-        caps.problems = [errorText(r.data)];
-      }
-      renderPrompts();
+      renderSettings();
     });
   }
 
@@ -1756,46 +2491,32 @@
     return '<div class="afc-field"><span class="afc-field-label">' + esc(label) + '</span>' + controlHtml +
       (help ? '<p class="afc-field-help">' + esc(help) + '</p>' : "") + '</div>';
   }
-  function fieldRaw(label, controlHtml) {
-    return '<div class="afc-field"><span class="afc-field-label">' + esc(label) + '</span>' + controlHtml + '</div>';
-  }
   function bindInput(id, cb, isChange) {
     var e = byId(id);
     if (!e) { return; }
     if (isChange) { e.onchange = function () { cb(this.value); }; }
     else { e.oninput = function () { cb(this.value); }; }
   }
-  function countsLine(counts) {
-    var order = ["PLANNED", "DONE", "SKIPPED", "MANUAL", "FAILED"];
-    var parts = [];
-    order.forEach(function (k) { if (counts[k]) { parts.push(counts[k] + " " + k); } });
-    return parts.join("  -  ") || "aucune action";
-  }
-  function errorText(data) {
-    if (!data) { return "erreur inconnue"; }
-    if (data.messages && data.messages.length) { return data.messages.join(" ; "); }
-    return data.error || "erreur inconnue";
-  }
 
-  /* ============================ tabs + theme + boot ============================ */
+  /* ============================ navigation + theme + boot ============================ */
 
-  function renderActive() {
-    if (S.tab === "guided") { if (!S.guided.loaded) { loadGuidedCurrent(); } else { renderGuided(); } }
-    else if (S.tab === "overview") { if (!S.overview.loaded) { loadOverview(); } else { renderOverview(); } }
-    else if (S.tab === "probe") { renderProbe(); }
-    else if (S.tab === "domain") { renderDomain(); }
-    else if (S.tab === "prompts") { renderPrompts(); }
-  }
-
-  function selectTab(tab) {
-    S.tab = tab;
-    var tabs = byId("afcTabs");
-    if (tabs) {
-      tabs.querySelectorAll(".afc-tab").forEach(function (b) {
-        b.classList.toggle("afc-tab--on", b.getAttribute("data-tab") === tab);
+  function go(view) {
+    S.view = view;
+    var nav = byId("afcNav");
+    if (nav) {
+      Array.prototype.forEach.call(nav.querySelectorAll("[data-view]"), function (b) {
+        b.classList.toggle("on", b.getAttribute("data-view") === view);
       });
     }
-    renderActive();
+    if (view === "overview") {
+      loadOverview();
+    } else if (view === "run") {
+      if (!S.guided.loaded) { loadGuidedCurrent(renderRun); }
+      renderRun();
+    } else if (view === "settings") {
+      renderSettings();
+    }
+    window.scrollTo(0, 0);
   }
 
   function applyTheme() {
@@ -1822,17 +2543,17 @@
     applyTheme();
 
     byId("afcTheme").onclick = toggleTheme;
-    byId("afcTabs").querySelectorAll(".afc-tab").forEach(function (b) {
-      b.onclick = function () { selectTab(b.getAttribute("data-tab")); };
+    byId("afcBack").onclick = function () { go("overview"); };
+    Array.prototype.forEach.call(byId("afcNav").querySelectorAll("[data-view]"), function (b) {
+      b.onclick = function () { go(b.getAttribute("data-view")); };
     });
-    // close modal on scrim click (outside the card)
     var scrim = byId("afcModalScrim");
     if (scrim) { scrim.onclick = function (ev) { if (ev.target === scrim) { closeModal(); } }; }
     document.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape") { closeModal(); }
     });
 
-    selectTab("guided");
+    go("overview");
   }
 
   if (document.readyState === "loading") {
