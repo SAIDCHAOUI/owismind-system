@@ -528,6 +528,11 @@ class TestBuildSql(unittest.TestCase):
 # ==========================================================================
 class TestGuardCustomSql(unittest.TestCase):
 
+    def test_same_table_name_in_another_schema_rejected(self):
+        sql, reason = dx.guard_custom_sql('SELECT 1 FROM "other_schema"."SALES_DEMO"', TABLE)
+        self.assertIsNone(sql)
+        self.assertTrue(reason.startswith("table_not_allowed"), reason)
+
     def test_apostrophe_inside_quoted_identifier_cannot_hide_a_table(self):
         for bad in ('SELECT "a\'b" FROM other_table WHERE "c\'d" = 1',
                     'SELECT "a\'b", (SELECT 1 FROM other_table) AS z, "c\'d" FROM %s' % TABLE):

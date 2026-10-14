@@ -54,6 +54,11 @@ class GuardTests(unittest.TestCase):
         self.assertTrue(str(problem).startswith(expected_prefix),
                         "%r !~ %r" % (problem, expected_prefix))
 
+    def test_quoted_function_and_dotted_relations_rejected(self):
+        self._ko('SELECT "query_to_xml"(\'select 1\', true, false, \'\') FROM d1', "forbidden_function")
+        self._ko("SELECT 1 FROM d1.secret_table", "table_not_allowed")
+        self._ko('SELECT 1 FROM "d1.secret"', "table_not_allowed")
+
     def test_apostrophe_in_quoted_identifier_cannot_hide_a_table(self):
         self._ko('SELECT "a\'b" FROM secret_table WHERE "c\'d" = 1', "table_not_allowed")
 

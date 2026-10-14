@@ -1508,7 +1508,8 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
                 continue
             norm = token.replace('"', "").lower()
             short = norm.split(".")[-1]
-            if norm in allowed or short in allowed or norm in cte_names or short in cte_names:
+            # Full name only: `otherschema.<same table name>` is ANOTHER relation.
+            if norm in allowed or norm in cte_names:
                 continue
             return (None, "table_not_allowed:%s" % token[:60])
 

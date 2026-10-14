@@ -1728,7 +1728,8 @@ def _corr_guard_model_sql(sql, aliases):
         return None, "comment_in_sql"
     if _CORR_FORBIDDEN_RE.search(blanked):
         return None, "forbidden_keyword"
-    if _CORR_FORBIDDEN_FUNC_RE.search(blanked):
+    # A quoted name is the same function ("query_to_xml"(...) == query_to_xml(...)).
+    if _CORR_FORBIDDEN_FUNC_RE.search(blanked.replace('"', "")):
         return None, "forbidden_function"
     if _CORR_SYSTEM_TABLE_RE.search(blanked):
         return None, "system_table"
@@ -1737,7 +1738,11 @@ def _corr_guard_model_sql(sql, aliases):
         # each comma-separated entry is a distinct table reference: a comma-join
         # (`FROM d1, secret`) must not let the 2nd table slip past the allowlist.
         for ref in ref_list.split(","):
-            base = ref.strip().split(".")[0].strip('"').lower()
+            # A relation here is a bare alias: any dotted / spaced form (schema.table,
+            # "d1.secret") is another relation that merely STARTS like an alias.
+            if "." in ref or " " in ref.strip():
+                return None, "table_not_allowed:%s" % ref.strip()[:40]
+            base = ref.strip().strip('"').lower()
             if not base or base == "select":   # `from (select ...` derived table
                 continue
             if base not in allowed:
