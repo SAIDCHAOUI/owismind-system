@@ -1399,6 +1399,11 @@ _FORBIDDEN_FUNCTIONS_RE = re.compile(
     r"xpath\w*|copy_\w+)\s*\(", re.IGNORECASE)
 
 
+# Escaped / prefixed / dollar-quoted strings (see guard_custom_sql).
+_AMBIGUOUS_STRING_SYNTAX_RE = re.compile(
+    r"\\|\$[A-Za-z_0-9]*\$|(?<![A-Za-z0-9_])[eEuU]&?'", re.IGNORECASE)
+
+
 def _strip_sql_noise(sql):
     s = re.sub(r"^```(?:sql)?\s*|\s*```$", "", str(sql or "").strip(),
                flags=re.MULTILINE).strip()
@@ -1430,6 +1435,12 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
     head = s.lstrip().lower()
     if not (head.startswith("select") or head.startswith("with")):
         return (None, "not_a_select")
+    # String syntaxes whose end the literal regex below cannot find the way PostgreSQL
+    # does (backslash escapes, E'..' / U&'..' strings, $$ dollar quoting) would let a
+    # table name or function hide inside what the guard takes for a literal. A plain
+    # analytics query never needs them: reject (the repair loop then retries).
+    if _AMBIGUOUS_STRING_SYNTAX_RE.search(s):
+        return (None, "ambiguous_string_syntax")
     # Scan keywords/tables on a copy with string LITERALS blanked, so a word inside
     # a literal ('a set of') is never mistaken for a keyword/table.
     scan = _STRING_LITERAL_RE.sub("''", s)

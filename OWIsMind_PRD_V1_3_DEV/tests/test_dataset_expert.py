@@ -528,6 +528,20 @@ class TestBuildSql(unittest.TestCase):
 # ==========================================================================
 class TestGuardCustomSql(unittest.TestCase):
 
+    def test_escaped_string_syntax_cannot_hide_a_table(self):
+        bad = ("SELECT E'\\'' || (SELECT 1 FROM other_table) || E'\\'' AS a FROM %s" % TABLE)
+        sql, reason = dx.guard_custom_sql(bad, TABLE)
+        self.assertIsNone(sql)
+        self.assertEqual(reason, "ambiguous_string_syntax")
+        for payload in ("SELECT $$x$$ FROM %s" % TABLE, "SELECT U&'d' FROM %s" % TABLE,
+                        "SELECT 'a\\b' FROM %s" % TABLE):
+            self.assertIsNone(dx.guard_custom_sql(payload, TABLE)[0], payload)
+
+    def test_plain_literals_still_allowed(self):
+        sql, reason = dx.guard_custom_sql(
+            "SELECT 'it''s fine' AS a, \"Name\" FROM %s WHERE \"Name\" = 'Acme' " % TABLE, TABLE)
+        self.assertIsNone(reason)
+
     def test_string_executing_functions_rejected(self):
         for expr in ("query_to_xml('select * from other_table', true, false, '')",
                      "table_to_xml('other', true, false, '')",
