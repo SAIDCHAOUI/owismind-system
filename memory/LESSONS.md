@@ -3660,3 +3660,23 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Solution qui marche** : (1) ne JAMAIS se fier au seul statut declare : verifier la vivacite du process (`ps -p <pid>` sur le `pid` du JSON de statut) ; (2) annuler l'entree fantome et relancer un job frais RESSERRE (pas de re-run de suite de tests, recherches web bornees) pour reduire la fenetre de risque ; (3) cote session principale, poser sa PROPRE sonde background (boucle status+PID toutes les 30 s, `run_in_background`) qui reveille a l'etat terminal, sans dependre de l'agent de surveillance ; (4) recuperer le resultat directement via `codex-companion.mjs result <job-id>` sans attendre la remontee de l'agent.
 - **Preuve** : job 1 `cancelled` apres detection PID mort ; job 2 (`task-mrnsb8uh`, prompt resserre) termine en ~10 min ; rapport recupere par `result` et la sonde background a detecte la fin au premier tick.
 - **Source** : session 2026-07-16 (audit securite factory).
+
+
+## L192 - Garde-fous prompt-injection : un plafond de volume ne doit jamais couper les regles HIGH (2026-10-14)
+- **Contexte** : `guardrails.scan` de la console factory (texte du dataset/IA vers prompts d'agents).
+- **Ce qui a echoue** : le scanner retournait des qu'il avait 100 findings, avant la passe normalisee : 120 URL (medium) + "IGNORE all previous instructions" en pleine chasse donnaient has_high=False. Aussi : plafonner d'abord, trier ensuite, cache les highs.
+- **Solution qui marche** : ne plafonner que les MEDIUM, executer toutes les regles HIGH sur les deux passes (brut + normalise), scan fail-closed en cas d'erreur, tests de regression adversariaux (fullwidth, homoglyphes, entites HTML, mots epeles, nbsp/balises dans un mot).
+- **Preuve** : `tests/test_models_hub.py` TestSecurityReviewFixes ; revue Fable (scripts de preuve en scratchpad).
+- **Source** : session 2026-10-14 run 3.
+
+## L193 - Modele central `models.json` + prompt metier IA non actif (2026-10-14)
+- **Contexte** : changer le LLM d'un mode ne doit plus demander de toucher 6 agents.
+- **Solution qui marche** : fichier hub `owismind_hub/models.json` valide strictement (cles `version/modes/agents/factory`, 20 ko max, ids LLM valides), resolution agent > mode > id embarque, loader standalone avec repli silencieux dans chaque Code Agent. L'IA ecrit seulement un BROUILLON (`business_prompt.draft.md`) ; le fichier live n'est ecrit que par un Save humain.
+- **Preuve** : tests models_hub (loaders agents, bundle, prompt_writer).
+- **Source** : session 2026-10-14 run 3.
+
+## L194 - Ne jamais jeter des changements non commites (2026-10-14)
+- **Contexte** : `git checkout -- .` lance par erreur avant commit.
+- **Ce qui a echoue** : modifs du correctif fail-open effacees, refaites a la main.
+- **Solution** : jamais de commande destructive git sans `git status`/`git diff` avant ; commiter souvent.
+- **Source** : session 2026-10-14 run 3.

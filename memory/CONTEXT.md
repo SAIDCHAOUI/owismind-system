@@ -7,6 +7,12 @@
 
 ## Focus courant
 
+**2026-10-14 run 3 : Agent Factory (modeles centraux, Settings, prompt metier IA, garde-fous injection).**
+Detail `sessions/2026-10-14.md` run 3, lecons L192-L194. Commits ccd8b35..0a3ce0e POUSSES (demande user).
+- `owismind_hub/models.json` central ; Settings par agent ; brouillon IA non actif ; Improve editable ; scanner anti-injection fail-closed ; revue securite Fable faite et corrigee (834 tests OK).
+- NON deploye dans DSS : l'user n'a rien recolle depuis le debut de la session. Pas a pas donne dans le chat.
+- Non valide : UI jamais vue dans un navigateur, rien teste sur vrai Mesh/DSS. Restreindre la webapp console aux admins (F2).
+
 **2026-10-14 : refonte de l'Agent Factory Console REJETEE par l'user, a refaire en session neuve.**
 - Prompt pret : `dev-harness/rejected-console-redesign-2026-10-14/NEXT_SESSION_PROMPT.md` (cible :
   3 ecrans = schema orchestrateur -> sous-agents avec actions dessus, ajout, retrait ; garder le
@@ -31,6 +37,7 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
   (superviseur, 2 DELETE, 3 tables, routes, UI) ; ZERO ALTER ; seul DELETE restant = quota admin.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-14 Run 3 : factory models.json + Settings + prompt metier IA + garde-fous injection + revue Fable, pousse. L192-L194. Voir `sessions/2026-10-14.md` run 3.
 - 2026-10-14 Run 2 : audit SQL + retrait workflow durable + zero ALTER. L191. Voir `sessions/2026-10-14.md` run 2.
 - 2026-10-14 Run 1 : resultat agent complet pagine + "N sur T lignes" (route /evidence/result-rows), zip DEV, commit 84a1cde pousse. L190. Voir `sessions/2026-10-14.md`.
 - 2026-10-13/14 : demo locale v1.3 + zip DEV + rangement archives + simulateur console + refonte console (Fable brief + Opus impl) REJETEE ; prompt de reprise ecrit. Pas de log de session (git bloque Xcode).
