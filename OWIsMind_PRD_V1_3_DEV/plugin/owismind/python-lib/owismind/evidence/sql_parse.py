@@ -694,7 +694,7 @@ _FROM_LIST_ENDERS = _CLAUSE_ENDERS | {"WHERE", "SELECT"}
 # so the re-run gate only accepts plain read-only built-ins an analytics SELECT uses;
 # anything else - including any schema-qualified call - refuses the re-run (the table
 # then keeps the captured excerpt with an honest caveat).
-_SAFE_FUNCTIONS = frozenset((
+SAFE_FUNCTIONS = frozenset((
     # aggregates
     "sum", "count", "avg", "min", "max", "stddev", "stddev_pop", "stddev_samp",
     "variance", "var_pop", "var_samp", "string_agg", "array_agg", "bool_and",
@@ -890,7 +890,7 @@ def check_rerunnable_select(sql):
         if t.kind == "word" and t.text.upper() in _PAREN_KEYWORDS:
             continue
         name = (t.text if t.kind == "word" else t.text[1:-1].replace('""', '"')).lower()
-        if name in _SAFE_FUNCTIONS:
+        if name in SAFE_FUNCTIONS:
             continue
         if name in cte_set and idx < main_start:
             continue

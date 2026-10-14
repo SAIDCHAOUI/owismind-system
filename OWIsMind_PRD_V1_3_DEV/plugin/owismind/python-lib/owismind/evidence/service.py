@@ -35,7 +35,7 @@ import time
 import dataiku
 from dataiku import SQLExecutor2
 
-from owismind.evidence import sql_parse
+from owismind.evidence import plan_guard, sql_parse
 from owismind.evidence.aggregate_core import build_aggregate_plan
 from owismind.evidence.query_builders import (
     EvidenceError,
@@ -1195,6 +1195,34 @@ def pick_result_item(items, active_item, sql_id):
     return active_item
 
 
+def _assert_plan_safe(dataset, query, candidates, exchange_id):
+    """Plan (never execute) ``query`` and refuse it unless PostgreSQL itself shows it
+    reads only project datasets through allowlisted built-ins (evidence.plan_guard).
+
+    The token gate cannot be exhaustive against PostgreSQL's grammar; the plan is the
+    authoritative view of what the statement touches. Fails CLOSED: an unreadable
+    plan or any violation raises 'result_not_rerunnable'.
+    """
+    try:
+        df = _evidence_executor(dataset).query_to_df(
+            "EXPLAIN (FORMAT JSON, VERBOSE) " + query,
+            pre_queries=list(_EVIDENCE_TIMEOUT_PRE_QUERIES),
+        )
+        plan = plan_guard.decode_plan(df.iloc[0, 0])
+    except Exception:
+        logger.exception("evidence_result_rows - explain failed (dataset=%s)", dataset)
+        raise EvidenceError("result_not_rerunnable")
+    violations = plan_guard.plan_violations(
+        plan,
+        plan_guard.strict_relation_matcher(candidates),
+        lambda name: name in sql_parse.SAFE_FUNCTIONS,
+    )
+    if violations:
+        logger.info("evidence_result_rows - plan refused exchange_id=%s: %s",
+                    exchange_id, violations[:10])
+        raise EvidenceError("result_not_rerunnable")
+
+
 def evidence_result_rows(user_id, exchange_id, sql_id, limit, offset):
     """One bounded window of the agent's FULL result, plus its exact total. Read-only.
 
@@ -1231,10 +1259,12 @@ def evidence_result_rows(user_id, exchange_id, sql_id, limit, offset):
         if dataset is None:
             dataset = match["name"]
 
+    page_query = build_result_page_query(gate["sql"], limit + 1, offset)
+    _assert_plan_safe(dataset, page_query, candidates, exchange_id)
     executor = _evidence_executor(dataset)
     try:
         df = executor.query_to_df(
-            build_result_page_query(gate["sql"], limit + 1, offset),
+            page_query,
             pre_queries=list(_EVIDENCE_TIMEOUT_PRE_QUERIES),
         )
     except Exception:
