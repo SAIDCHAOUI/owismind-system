@@ -54,6 +54,18 @@ class GuardTests(unittest.TestCase):
         self.assertTrue(str(problem).startswith(expected_prefix),
                         "%r !~ %r" % (problem, expected_prefix))
 
+    def test_apostrophe_in_quoted_identifier_cannot_hide_a_table(self):
+        self._ko('SELECT "a\'b" FROM secret_table WHERE "c\'d" = 1', "table_not_allowed")
+
+    def test_escaped_and_dollar_strings_rejected(self):
+        self._ko("SELECT E'\\'' || (SELECT 1 FROM secret_table) || E'\\'' FROM d1",
+                 "ambiguous_string_syntax")
+        self._ko("SELECT $$x$$ FROM d1", "ambiguous_string_syntax")
+        self._ko("SELECT 'abc FROM d1", "unterminated_quote")
+
+    def test_mixed_quotes_still_accepted(self):
+        self._ok('SELECT d1."x", \'k\' AS k FROM d1 WHERE d1."x" = \'a"b\'')
+
     def test_valid_join_is_accepted_and_limit_appended(self):
         clean = self._ok('SELECT d1."customer", d2."tickets" '
                          'FROM d1 JOIN d2 ON d1."customer" = d2."customer"')

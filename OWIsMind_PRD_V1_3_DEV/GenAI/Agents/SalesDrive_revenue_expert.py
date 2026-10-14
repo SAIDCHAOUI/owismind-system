@@ -1423,6 +1423,34 @@ _AMBIGUOUS_STRING_SYNTAX_RE = re.compile(
     r"\\|\$[A-Za-z_0-9]*\$|(?<![A-Za-z0-9_])[eEuU]&?'", re.IGNORECASE)
 
 
+def _blank_string_literals(s):
+    """Copy of ``s`` with the CONTENT of every single-quoted literal emptied, found by a
+    left-to-right scan that understands BOTH quote kinds like PostgreSQL does: an
+    apostrophe inside a "quoted identifier" never opens a literal (a regex pass over
+    the raw text got this wrong and could hide a table name). Quoted identifiers are
+    kept verbatim (the table check needs them). None when a quote is never closed."""
+    out, i, n = [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == "'" or c == '"':
+            j = i + 1
+            while j < n:
+                if s[j] == c:
+                    if j + 1 < n and s[j + 1] == c:
+                        j += 2                 # doubled quote = escaped quote
+                        continue
+                    break
+                j += 1
+            else:
+                return None                    # unterminated
+            out.append("''" if c == "'" else s[i:j + 1])
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def _strip_sql_noise(sql):
     s = re.sub(r"^```(?:sql)?\s*|\s*```$", "", str(sql or "").strip(),
                flags=re.MULTILINE).strip()
@@ -1462,7 +1490,9 @@ def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
         return (None, "ambiguous_string_syntax")
     # Scan keywords/tables on a copy with string LITERALS blanked, so a word inside
     # a literal ('a set of') is never mistaken for a keyword/table.
-    scan = _STRING_LITERAL_RE.sub("''", s)
+    scan = _blank_string_literals(s)
+    if scan is None:
+        return (None, "unterminated_quote")
     if _FORBIDDEN_SQL.search(scan):
         return (None, "forbidden_keyword")
     if _SYSTEM_TABLE_RE.search(scan):

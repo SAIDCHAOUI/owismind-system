@@ -1666,6 +1666,37 @@ def _corr_quote_ident(name):
     return '"' + str(name).replace('"', '""') + '"'
 
 
+_CORR_AMBIGUOUS_STRING_RE = re.compile(
+    r"\\|\$[A-Za-z_0-9]*\$|(?<![A-Za-z0-9_])[eEuU]&?'", re.IGNORECASE)
+
+
+def _corr_blank_literals(s):
+    """``s`` with the CONTENT of every single-quoted literal emptied, found by a
+    left-to-right scan that understands both quote kinds like PostgreSQL (an
+    apostrophe inside a "quoted identifier" never opens a literal). Quoted
+    identifiers are kept verbatim. None when a quote is never closed."""
+    out, i, n = [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == "'" or c == '"':
+            j = i + 1
+            while j < n:
+                if s[j] == c:
+                    if j + 1 < n and s[j + 1] == c:
+                        j += 2
+                        continue
+                    break
+                j += 1
+            else:
+                return None
+            out.append("''" if c == "'" else s[i:j + 1])
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def _corr_guard_model_sql(sql, aliases):
     """The model's alias-only SELECT, validated; returns (clean_sql, problem).
 
@@ -1682,7 +1713,13 @@ def _corr_guard_model_sql(sql, aliases):
         return None, "control_token_in_sql"
     if not re.match(r"^select\b", sql, re.IGNORECASE):
         return None, "not_a_select"
-    blanked = _CORR_STRING_LITERAL_RE.sub("''", sql)
+    # Syntaxes whose end a literal scan cannot find the way PostgreSQL does (backslash
+    # escapes, E'..' / U&'..' strings, $$ quoting) could hide a table in a "literal".
+    if _CORR_AMBIGUOUS_STRING_RE.search(sql):
+        return None, "ambiguous_string_syntax"
+    blanked = _corr_blank_literals(sql)
+    if blanked is None:
+        return None, "unterminated_quote"
     # SQL comments are banned outright: PostgreSQL treats `/**/` as whitespace, so
     # a comment between FROM and a table name (`FROM/**/webapp_users`) would slip a
     # physical table past the FROM/JOIN allowlist scan below. The prompt already

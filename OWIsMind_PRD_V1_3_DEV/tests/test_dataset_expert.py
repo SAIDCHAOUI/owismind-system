@@ -528,6 +528,20 @@ class TestBuildSql(unittest.TestCase):
 # ==========================================================================
 class TestGuardCustomSql(unittest.TestCase):
 
+    def test_apostrophe_inside_quoted_identifier_cannot_hide_a_table(self):
+        for bad in ('SELECT "a\'b" FROM other_table WHERE "c\'d" = 1',
+                    'SELECT "a\'b", (SELECT 1 FROM other_table) AS z, "c\'d" FROM %s' % TABLE):
+            sql, reason = dx.guard_custom_sql(bad, TABLE)
+            self.assertIsNone(sql, bad)
+            self.assertTrue(reason.startswith("table_not_allowed") or reason == "unterminated_quote", reason)
+
+    def test_unterminated_quote_rejected_and_mixed_quotes_allowed(self):
+        self.assertEqual(dx.guard_custom_sql("SELECT 'abc FROM %s" % TABLE, TABLE)[1],
+                         "unterminated_quote")
+        sql, reason = dx.guard_custom_sql(
+            'SELECT "x", \'k\' AS k, "y" FROM %s WHERE "x" = \'a"b\'' % TABLE, TABLE)
+        self.assertIsNone(reason)
+
     def test_escaped_string_syntax_cannot_hide_a_table(self):
         bad = ("SELECT E'\\'' || (SELECT 1 FROM other_table) || E'\\'' AS a FROM %s" % TABLE)
         sql, reason = dx.guard_custom_sql(bad, TABLE)
