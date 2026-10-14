@@ -3644,6 +3644,13 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : 1032 tests plugin + 451 front verts ; route mock verifiee (100 lignes, total 320). Rendu DSS non encore verifie.
 - **Source** : session 2026-10-14 run 1 (`sessions/2026-10-14.md`).
 
+## L191 - Un module "OFF par flag" peut quand meme parler a la base : verifier ce qui demarre, pas seulement ce qui est active (2026-10-14)
+- **Contexte** : audit des ecritures SQL du plugin demande par l'user (regle : la connexion ne sert qu'a creer et lire).
+- **Ce qui a echoue** : le workflow durable etait "desactive" (flag `durable_workflow` OFF partout), mais son superviseur demarrait sans condition au boot du backend : SELECT toutes les 10 s, creation de 3 tables, DELETE de purge toutes les heures. Personne ne l'avait vu car le flag faisait croire a l'inactivite.
+- **Solution qui marche** : auditer par grep des verbes SQL (`INSERT/UPDATE/DELETE/ALTER/DROP/TRUNCATE/ON CONFLICT`) PUIS remonter chaque appel jusqu'a son declencheur (route, thread de demarrage, timer). Code mort = supprime (git garde l'historique). ALTER remplace par "colonnes dans le CREATE" une fois verifie que la prod les a deja.
+- **Preuve** : grep final : 0 ALTER, 1 seul DELETE (quota admin) ; 931 + 445 tests verts.
+- **Source** : session 2026-10-14 run 2.
+
 <!-- Nouvelles leçons : ajouter au-dessus de cette ligne, format L0xx. -->
 
 

@@ -67,13 +67,6 @@ export const extraMessages = {
     // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
     // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
     // of deadline_reached (runs started before the rename).
-    'runplan.title': "Plan d'analyse",
-    'runplan.pending': 'En attente',
-    'runplan.running': 'En cours',
-    'runplan.retrying': 'Nouvel essai',
-    'runplan.completed': 'Terminé',
-    'runplan.failed': 'Échec',
-    'runplan.superseded': 'Remplacé',
     'runError.quota_blocked':
       "Le quota LLM empêche de poursuivre cette analyse.",
     'runError.rate_limited':
@@ -224,9 +217,6 @@ export const extraMessages = {
     'admin.tables.role.events': 'Événements d’usage du produit (navigation, chat, interactions).',
     'admin.tables.role.feedback': 'Retours généraux envoyés depuis le hub Aide et support.',
     'admin.tables.role.agent_requests': 'Demandes de nouvel agent envoyées depuis le hub Aide et support.',
-    'admin.tables.role.agent_runs': 'Registre des exécutions durables (une ligne par run, reprise après redémarrage).',
-    'admin.tables.role.agent_run_steps': 'Étapes du plan de chaque exécution durable.',
-    'admin.tables.role.agent_run_events': 'Fil d’événements d’une exécution durable (purgé 14 jours après la fin).',
     'admin.agents.title': 'Agents exposés',
     'admin.agents.desc':
       'Choisissez un projet, cochez les agents à mettre à disposition, puis enregistrez. Les utilisateurs ne verront que les agents activés ici.',
@@ -1032,13 +1022,6 @@ export const extraMessages = {
     // a short machine code (deadline_reached, run_abandoned, agent_unavailable...);
     // the UI maps it here and NEVER shows the raw code. run_timeout = legacy alias
     // of deadline_reached (runs started before the rename).
-    'runplan.title': 'Analysis plan',
-    'runplan.pending': 'Pending',
-    'runplan.running': 'Running',
-    'runplan.retrying': 'Retrying',
-    'runplan.completed': 'Done',
-    'runplan.failed': 'Failed',
-    'runplan.superseded': 'Superseded',
     'runError.quota_blocked':
       'The LLM quota prevents this analysis from continuing.',
     'runError.rate_limited':
@@ -1189,9 +1172,6 @@ export const extraMessages = {
     'admin.tables.role.events': 'Product usage events (navigation, chat, interactions).',
     'admin.tables.role.feedback': 'General feedback sent from the Help and support hub.',
     'admin.tables.role.agent_requests': 'New-agent requests sent from the Help and support hub.',
-    'admin.tables.role.agent_runs': 'Durable run ledger (one row per run, resumable after a restart).',
-    'admin.tables.role.agent_run_steps': 'Plan steps of each durable run.',
-    'admin.tables.role.agent_run_events': 'Event feed of a durable run (purged 14 days after it ends).',
     'admin.agents.title': 'Exposed agents',
     'admin.agents.desc':
       'Pick a project, tick the agents to expose, then save. Users only see the agents enabled here.',

@@ -50,20 +50,16 @@ from owismind.storage.migrations import CHAT_V5_LOGICAL       # noqa: E402
 
 
 class ScreenCtxDDLTests(unittest.TestCase):
-    """The screen_ctx column ships in the CREATE DDL AND as an additive idempotent ALTER."""
+    """The screen_ctx column ships in the CREATE DDL (no ALTER path)."""
 
     def test_create_ddl_has_screen_ctx_column(self):
         ddl = migrations._CHAT_V5_DDL
         self.assertIn("screen_ctx", ddl)
         self.assertIn("screen_ctx         TEXT", ddl)
 
-    def test_chat_v5_has_additive_alter_for_screen_ctx(self):
-        alters = migrations._ALTERS_BY_LOGICAL.get(CHAT_V5_LOGICAL) or []
-        self.assertIn("ADD COLUMN IF NOT EXISTS screen_ctx TEXT", alters)
-
-    def test_alter_is_idempotent_shape(self):
-        for clause in migrations._ALTERS_BY_LOGICAL[CHAT_V5_LOGICAL]:
-            self.assertIn("IF NOT EXISTS", clause)
+    def test_no_alter_clause_exists(self):
+        # NO ALTER, ever (user decision 2026-10-14): the column comes from the DDL only.
+        self.assertFalse(hasattr(migrations, "_ALTERS_BY_LOGICAL"))
 
 
 class EnsureChatTableAlterTests(unittest.TestCase):
@@ -103,7 +99,7 @@ class EnsureChatTableAlterTests(unittest.TestCase):
         migrations.safe_index_name = self._orig["safe_index_name"]
         migrations._ensured_tables = self._orig["ensured"]
 
-    def test_ensure_emits_create_and_screen_ctx_alter(self):
+    def test_ensure_emits_create_without_alter(self):
         migrations.ensure_chat_table()
         self.assertEqual(len(self.calls), 1)                 # one committed transaction
         call = self.calls[0]
@@ -111,11 +107,8 @@ class EnsureChatTableAlterTests(unittest.TestCase):
         create = call["pre"][0]
         self.assertIn("CREATE TABLE IF NOT EXISTS", create)
         self.assertIn("screen_ctx", create)
-        # The additive ALTER is issued in the SAME transaction, after the CREATE.
-        self.assertTrue(
-            any("ADD COLUMN IF NOT EXISTS screen_ctx TEXT" in q for q in call["pre"]),
-            "screen_ctx ALTER not found in pre_queries",
-        )
+        # NO ALTER is ever issued (user decision 2026-10-14): CREATE + indexes only.
+        self.assertFalse(any("ALTER" in q.upper() for q in call["pre"]))
 
 
 class _FakeExec:

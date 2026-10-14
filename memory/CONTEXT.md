@@ -27,8 +27,11 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
   dans `ArtifactTable` + `EvidenceResult` : "100 lignes affichees sur T", +20 au scroll, max 500.
 - Zip DEV regenere 14/10 18h42 (`owismind_v1_3-upload.zip`) : A UPLOADER + redemarrer le backend.
 - Non valide : rendu visuel (pas de Chromium local) et DSS.
+- Run 2 : regle user "SQL = creer + lire" ; audit ALTER/DELETE/UPDATE ; WORKFLOW DURABLE RETIRE
+  (superviseur, 2 DELETE, 3 tables, routes, UI) ; ZERO ALTER ; seul DELETE restant = quota admin.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-14 Run 2 : audit SQL + retrait workflow durable + zero ALTER. L191. Voir `sessions/2026-10-14.md` run 2.
 - 2026-10-14 Run 1 : resultat agent complet pagine + "N sur T lignes" (route /evidence/result-rows), zip DEV, commit 84a1cde pousse. L190. Voir `sessions/2026-10-14.md`.
 - 2026-10-13/14 : demo locale v1.3 + zip DEV + rangement archives + simulateur console + refonte console (Fable brief + Opus impl) REJETEE ; prompt de reprise ecrit. Pas de log de session (git bloque Xcode).
 - 2026-08-13 Run 3 (soir) : etat des lieux moteur natif + 1er zip DEV v1.3 (deploye, teste par l'user) + 4 correctifs UX. L187-L189. Voir `sessions/2026-08-13.md` run 3.
@@ -61,8 +64,8 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
   4 correctifs UX (non revalides en DSS) ; verifier clair ET sombre. Arbitrages user encore ouverts :
   bloc contexte analyze mono-mesure (toutes les mesures = evolution backend) ; micro-labels 0.08em
   a enteriner dans la charte. Voir `sessions/2026-08-13.md` run 3.
-- **Case admin "moteur natif" (propose, non fait)** : exposer `native_engine` + `durable_workflow`
-  dans l'editeur de profil ET corriger `applyEditor` qui les efface (L187).
+- **Case admin "moteur natif" (propose, non fait)** : exposer `native_engine` dans l'editeur de
+  profil ET corriger `applyEditor` qui l'efface (L187 ; `durable_workflow` RETIRE le 14/10).
 - **Nettoyage differe front** : API calc*/analyze* de aggregateSurface sans consommateur UI (la
   memoire de vue persiste calcColumn/calcFns) ; dead CSS .pf-lab (AdminView) ; tirets em/en dans
   test/agentPick + evidenceProof (pre-existants). Voir `sessions/2026-08-13.md`.
@@ -80,7 +83,6 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
 - **ASSISTANT GUIDE** : confirmer 1er build AUTO au prochain domaine (recoller factory ENSEMBLE,
   L169) ; smoke delivery_snapshot.
 - **Repo/DSS divers** : notebook 01 vs sonde MANUAL ; re-pointer 2 tools Semantic Model Query (L162) ;
-  Durable Step Shell phase H (`DEPLOY_V1_3_DEV.md`) + 16 scenarios + smoke claim/complete ;
   gates securite phase 0 ; TroubleTickets repoint (ACTION="repoint") + smoke tickets ;
   promotion Source Data v3 prod ; recolls LAB accumules (`OWIsMind_LAB/README.md`) ;
   residuel L118 ; 2e agent TICKETS -> fiche client 360 (L097-L098).

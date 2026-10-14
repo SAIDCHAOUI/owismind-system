@@ -1,11 +1,8 @@
 # OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests/test_streaming_workflow_control.py
-"""T5: normalisation of the OWI_WORKFLOW_CONTROL machine channel in streaming.py.
+"""The OWI_WORKFLOW_CONTROL machine channel is DROPPED by streaming.py.
 
-The orchestrator's workflow path emits its machine result as ONE custom event
-chunk; streaming must normalise it to the dedicated internal type
-``workflow_control`` (consumed by the durable runner) and NEVER let it surface
-as a public ``agent_event`` - run_state.append_events denylists the raw kind,
-and the legacy worker drops the normalised type as defense in depth.
+The durable workflow that consumed it was removed (2026-10-14). Should the
+orchestrator ever emit it, it must never surface on the public timeline.
 """
 import os
 import sys
@@ -66,8 +63,8 @@ def _run(chunks):
         streaming.dataiku = original
 
 
-class WorkflowControlNormalisationTests(unittest.TestCase):
-    def test_control_chunk_normalises_to_internal_type(self):
+class WorkflowControlDroppedTests(unittest.TestCase):
+    def test_control_chunk_is_dropped(self):
         events = _run([
             _Chunk({"type": "event", "eventKind": "OWI_WORKFLOW_CONTROL",
                     "eventData": {"command": "plan",
@@ -75,24 +72,10 @@ class WorkflowControlNormalisationTests(unittest.TestCase):
             _Chunk({"type": "event", "eventKind": "AGENT_TURN_START",
                     "eventData": {}}),
         ])
-        controls = [e for e in events if e.get("type") == "workflow_control"]
-        self.assertEqual(len(controls), 1)
-        self.assertEqual(controls[0]["command"], "plan")
-        self.assertEqual(controls[0]["payload"], {"plan": {"goal": "g"}})
-        # NEVER surfaced as a public agent_event, under any name
         for e in events:
+            self.assertNotEqual(e.get("type"), "workflow_control")
             if e.get("type") == "agent_event":
                 self.assertNotEqual(e.get("eventKind"), "OWI_WORKFLOW_CONTROL")
-
-    def test_malformed_payload_falls_back_to_event_data(self):
-        events = _run([
-            _Chunk({"type": "event", "eventKind": "OWI_WORKFLOW_CONTROL",
-                    "eventData": {"command": "execute", "payload": "oops"}}),
-        ])
-        controls = [e for e in events if e.get("type") == "workflow_control"]
-        self.assertEqual(len(controls), 1)
-        # non-dict payload -> the whole eventData is kept (runner classifies)
-        self.assertEqual(controls[0]["payload"]["command"], "execute")
 
     def test_other_events_untouched(self):
         events = _run([
@@ -102,7 +85,6 @@ class WorkflowControlNormalisationTests(unittest.TestCase):
         ])
         kinds = [e.get("type") for e in events]
         self.assertIn("agent_event", kinds)
-        self.assertNotIn("workflow_control", kinds)
 
 
 if __name__ == "__main__":

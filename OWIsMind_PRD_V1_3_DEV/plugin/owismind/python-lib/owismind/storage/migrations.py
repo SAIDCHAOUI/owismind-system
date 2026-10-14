@@ -86,33 +86,6 @@ FEEDBACK_V1_LOGICAL = "webapp_feedback_v1"
 # "my requests" read.
 AGENT_REQUESTS_V1_LOGICAL = "webapp_agent_requests_v1"
 
-# Durable agentic runtime ledger (Durable Step Shell, design spec 2026-07-17 section 10):
-# one row per DURABLE agent run. The run's truth lives here (never only in RAM), so a
-# backend kill/restart can resume it: ``lease_owner``/``lease_until`` implement SQL lease
-# claiming (a run is worked on by at most one worker; an expired lease is reclaimable),
-# ``worker_heartbeat_at``/``last_progress_at`` distinguish a dead process from a slow
-# upstream, ``next_event_seq`` allocates the monotonic per-run event sequence, and
-# ``usage_accounted`` guards the idempotent finalization (usage is accounted exactly
-# once). ``exchange_id`` is UNIQUE: one durable run per chat exchange. By design this
-# table carries NO agent_id, NO physical table name and NO SQL text (whitelist rule:
-# only the opaque ``agent_key``). Brand new _v1 table per the no-ALTER rule.
-AGENT_RUNS_V1_LOGICAL = "webapp_agent_runs_v1"
-# One row per plan step of a durable run, PK (run_id, step_id). ``attempt_id`` is the
-# FENCING token: every (re)start stamps a fresh attempt_id, and completion/failure is a
-# compare-and-set on it - a zombie worker's late result can never overwrite a newer
-# attempt. ``ordinal`` orders the plan; a replan replaces the non-completed rows and
-# bumps ``plan_revision`` (completed steps are never replayed). The *_json payload
-# columns are capped at the storage layer (task 8000c, result_summary 2000c,
-# model_view 24000c, artifacts 8 specs) - never raw data rows.
-AGENT_RUN_STEPS_V1_LOGICAL = "webapp_agent_run_steps_v1"
-# Append-only public event feed of a durable run, PK (run_id, seq) with ``seq``
-# allocated from ``runs.next_event_seq`` (monotonic, gap-free per run). Writes are
-# BATCHED (single multi-row INSERT per flush, the events.py:282 pattern). ``payload``
-# is capped at 8000 chars with a truncation marker; raw result rows and the internal
-# OWI_WORKFLOW_CONTROL channel are NEVER persisted here. Retention: purged (bounded)
-# 14 days after run termination, never on the hot path.
-AGENT_RUN_EVENTS_V1_LOGICAL = "webapp_agent_run_events_v1"
-
 # One chat exchange per row, written in two phases (user message, then reply).
 # Versioned _v5: over the abandoned _v4 (which added ``parent_exchange_id`` over _v3's
 # per-message feedback columns, over _v2's ``generated_sql``), it adds the per-exchange
@@ -131,17 +104,16 @@ AGENT_RUN_EVENTS_V1_LOGICAL = "webapp_agent_run_events_v1"
 # stay NULL when no footer arrived (e.g. an early-stopped run). They are the AUTHORITATIVE
 # per-exchange usage record - the users + monthly aggregates are reconstructible from them.
 # ``mode`` (nullable VARCHAR(16), values 'smart'/'pro'/'claude'/NULL) records the EFFECTIVE
-# response mode of the run, stamped at phase-one write next to the usage line. It is listed
-# both here (fresh instances) AND in _ALTERS_BY_LOGICAL (existing instances get it via an
-# additive ADD COLUMN IF NOT EXISTS) - the SAME documented, explicit relaxation of the
-# no-ALTER rule already used for the users usage counters (see _ALTERS_BY_LOGICAL). Bumping
-# to _v6 for one nullable column would hide every existing conversation, which is why the
-# additive ALTER is preferred here; old rows read back with mode NULL (shown as nothing).
+# response mode of the run, stamped at phase-one write next to the usage line; old rows
+# read back with mode NULL (shown as nothing).
 # ``screen_ctx`` (nullable TEXT) is the durable, consented record of WHAT the user chose to
 # share with the agent for THIS turn (the sanitized source_state, JSON-encoded verbatim at
 # phase-one write) - so the UI can later show exactly what was given to the agent, hiding
-# nothing. It follows the same both-here-AND-additive-ALTER relaxation as ``mode``; old rows
-# read back with screen_ctx NULL (nothing was shared, or the row predates the feature).
+# nothing. Old rows read back with screen_ctx NULL (nothing was shared, or the row predates
+# the feature).
+# NO ALTER (user decision 2026-10-14): ``mode`` and ``screen_ctx`` were once added to
+# existing tables by ADD COLUMN IF NOT EXISTS; every deployed table already has them (prod
+# v1.2 applied it) and a fresh table gets them from this DDL, so that path was removed.
 _CHAT_V5_DDL = """
 CREATE TABLE IF NOT EXISTS {full_table} (
     exchange_id        TEXT       PRIMARY KEY,
@@ -173,11 +145,8 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 # them by their exact user_id). The first ever user is bootstrapped as admin.
 # The LIFETIME usage counters (total_input_tokens/total_output_tokens/total_cost +
 # last_usage_at) are denormalised running totals incremented once per agent response
-# (storage/usage.record_usage) - a cheap per-user lifetime view. They are listed both
-# here (fresh instances) AND in _ALTERS_BY_LOGICAL (existing instances get them via
-# ADD COLUMN IF NOT EXISTS) - the ONE place the no-ALTER rule is intentionally relaxed
-# (explicit user authorization, 2026-06-11), because additive counters on the existing
-# registry must not lose the rows it already carries (admin flags, first_seen).
+# (storage/usage.record_usage) - a cheap per-user lifetime view. Part of the DDL (the
+# former ADD COLUMN IF NOT EXISTS path was removed 2026-10-14: no ALTER, ever).
 _USERS_V1_DDL = """
 CREATE TABLE IF NOT EXISTS {full_table} (
     user_id              TEXT             PRIMARY KEY,
@@ -356,104 +325,6 @@ CREATE TABLE IF NOT EXISTS {full_table} (
 )
 """
 
-# Durable run ledger (spec section 10). Column notes:
-#   - status: queued/planning/executing/replanning/synthesizing then a terminal state
-#     (completed/stopped/partial/failed/deadline_reached/quota_blocked); ``phase`` is a
-#     finer display hint. The backend only advances status after COMMIT.
-#   - lease_until/worker_heartbeat_at: the lease is renewed while the worker lives;
-#     ONLY an expired lease (process death) makes the run reclaimable - idle upstream
-#     is never treated as death.
-#   - next_event_seq: the per-run event sequence allocator (bumped by the batched
-#     event append, in the same transaction as the INSERT).
-#   - usage_accounted: false until finalization; the finalize guard flips it in the
-#     SAME transaction as the users/usage_monthly increments (zero double counting).
-#   - answer_text/usage_json: the final synthesized answer + summed usage, so the
-#     legacy chat_v5 phase-two write can be replayed idempotently after a crash.
-_AGENT_RUNS_V1_DDL = """
-CREATE TABLE IF NOT EXISTS {full_table} (
-    run_id              TEXT         PRIMARY KEY,
-    exchange_id         TEXT         UNIQUE,
-    session_id          TEXT,
-    user_id             TEXT,
-    agent_key           TEXT,
-    mode                VARCHAR(16),
-    status              TEXT         NOT NULL DEFAULT 'queued',
-    phase               TEXT,
-    plan_revision       INTEGER      NOT NULL DEFAULT 0,
-    replan_count        INTEGER      NOT NULL DEFAULT 0,
-    step_cursor         INTEGER      NOT NULL DEFAULT 0,
-    next_event_seq      BIGINT       NOT NULL DEFAULT 0,
-    prompt_lang         VARCHAR(8),
-    stop_requested      BOOLEAN      NOT NULL DEFAULT false,
-    lease_owner         TEXT,
-    lease_until         TIMESTAMPTZ,
-    worker_heartbeat_at TIMESTAMPTZ,
-    last_progress_at    TIMESTAMPTZ,
-    deadline_at         TIMESTAMPTZ,
-    retry_at            TIMESTAMPTZ,
-    error_code          TEXT,
-    answer_text         TEXT,
-    usage_json          TEXT,
-    usage_accounted     BOOLEAN      NOT NULL DEFAULT false,
-    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    finished_at         TIMESTAMPTZ
-)
-"""
-
-# Plan steps of a durable run (spec section 10). ``attempt_id`` + ``attempt_no`` are
-# the fencing pair: start_step stamps a fresh attempt_id and increments attempt_no
-# (capped by ``max_attempts``); complete/fail are compare-and-set on attempt_id, so a
-# late zombie write from a superseded attempt matches zero rows. ``next_retry_at``
-# schedules the step-level backoff retry (run-level retries do not exist by design).
-_AGENT_RUN_STEPS_V1_DDL = """
-CREATE TABLE IF NOT EXISTS {full_table} (
-    run_id             TEXT         NOT NULL,
-    step_id            TEXT         NOT NULL,
-    ordinal            INTEGER      NOT NULL DEFAULT 0,
-    plan_revision      INTEGER      NOT NULL DEFAULT 0,
-    kind               TEXT,
-    title              TEXT,
-    task_json          TEXT,
-    depends_on_json    TEXT,
-    output_ref         TEXT,
-    checks_json        TEXT,
-    status             TEXT         NOT NULL DEFAULT 'pending',
-    attempt_no         INTEGER      NOT NULL DEFAULT 0,
-    attempt_id         TEXT,
-    max_attempts       INTEGER      NOT NULL DEFAULT 3,
-    next_retry_at      TIMESTAMPTZ,
-    result_status      TEXT,
-    result_summary     TEXT,
-    result_schema_json TEXT,
-    model_view_json    TEXT,
-    generated_sql_json TEXT,
-    artifacts_json     TEXT,
-    usage_json         TEXT,
-    error_code         TEXT,
-    started_at         TIMESTAMPTZ,
-    finished_at        TIMESTAMPTZ,
-    updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    PRIMARY KEY (run_id, step_id)
-)
-"""
-
-# Public event feed of a durable run (spec section 10). ``seq`` comes from
-# ``runs.next_event_seq`` (allocated in the same transaction as the batched INSERT),
-# so PK (run_id, seq) makes the feed strictly ordered and the poll cursor trivial.
-# ``payload`` is capped (8000 chars + truncation marker) at the storage layer.
-_AGENT_RUN_EVENTS_V1_DDL = """
-CREATE TABLE IF NOT EXISTS {full_table} (
-    run_id      TEXT         NOT NULL,
-    seq         BIGINT       NOT NULL,
-    attempt_id  TEXT,
-    event_type  VARCHAR(64)  NOT NULL,
-    payload     TEXT,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    PRIMARY KEY (run_id, seq)
-)
-"""
-
 # Map each logical table to its DDL so a single generic helper can ensure any of
 # them. Adding a table = one entry here plus a thin wrapper below.
 _DDL_BY_LOGICAL = {
@@ -467,35 +338,6 @@ _DDL_BY_LOGICAL = {
     EVENTS_V1_LOGICAL: _EVENTS_V1_DDL,
     FEEDBACK_V1_LOGICAL: _FEEDBACK_V1_DDL,
     AGENT_REQUESTS_V1_LOGICAL: _AGENT_REQUESTS_V1_DDL,
-    AGENT_RUNS_V1_LOGICAL: _AGENT_RUNS_V1_DDL,
-    AGENT_RUN_STEPS_V1_LOGICAL: _AGENT_RUN_STEPS_V1_DDL,
-    AGENT_RUN_EVENTS_V1_LOGICAL: _AGENT_RUN_EVENTS_V1_DDL,
-}
-
-# Idempotent ADD COLUMN clauses applied (in the same ensure transaction, after the
-# CREATE) to tables that gained a NULLABLE/defaulted column AFTER first release - the
-# ONLY relaxation of the no-ALTER rule, kept intentionally narrow (additive columns whose
-# absence would otherwise force a data-hiding _vN bump). ``ADD COLUMN IF NOT EXISTS`` makes
-# each clause a no-op once applied, so it is safe on every process start AND on a fresh
-# table that already has the column from its CREATE DDL. Each entry is a bare clause
-# (the "ALTER TABLE <t> " prefix is added by _ensure_table).
-#   - users_v1: additive lifetime counters whose rows (admin flags, first_seen) must be
-#     preserved (explicit user authorization, 2026-06-11).
-#   - chat_v5: the nullable ``mode`` column (effective response mode per exchange) AND the
-#     nullable ``screen_ctx`` column (consented shared screen-context JSON per exchange) - a
-#     _v6 bump for one nullable column would hide every existing conversation, so the same
-#     additive-ALTER relaxation applies; pre-existing rows get mode / screen_ctx NULL.
-_ALTERS_BY_LOGICAL = {
-    USERS_V1_LOGICAL: [
-        "ADD COLUMN IF NOT EXISTS total_input_tokens  BIGINT NOT NULL DEFAULT 0",
-        "ADD COLUMN IF NOT EXISTS total_output_tokens BIGINT NOT NULL DEFAULT 0",
-        "ADD COLUMN IF NOT EXISTS total_cost          DOUBLE PRECISION NOT NULL DEFAULT 0",
-        "ADD COLUMN IF NOT EXISTS last_usage_at       TIMESTAMP",
-    ],
-    CHAT_V5_LOGICAL: [
-        "ADD COLUMN IF NOT EXISTS mode VARCHAR(16)",
-        "ADD COLUMN IF NOT EXISTS screen_ctx TEXT",
-    ],
 }
 
 # Secondary indexes per logical table. CREATE INDEX IF NOT EXISTS is additive and
@@ -535,25 +377,6 @@ _INDEXES_BY_LOGICAL = {
         # "My requests" read = WHERE user_id ORDER BY created_at DESC.
         ("uc_idx", "(user_id, created_at DESC)"),
     ],
-    AGENT_RUNS_V1_LOGICAL: [
-        # "My active/recent runs" read (per-user run list, freshest first).
-        ("usu_idx", "(user_id, status, updated_at DESC)"),
-        # Supervisor recovery scan = WHERE status active AND lease_until expired.
-        ("slu_idx", "(status, lease_until)"),
-        # Per-conversation run lookup (session view, freshest first).
-        ("su_idx", "(session_id, updated_at DESC)"),
-        # The spec's (exchange_id) index is provided by the UNIQUE constraint on
-        # exchange_id in the DDL (PostgreSQL backs it with an index) - a second
-        # explicit index here would be a pure duplicate.
-    ],
-    AGENT_RUN_STEPS_V1_LOGICAL: [
-        # Ledger read = WHERE run_id ORDER BY ordinal (resume at first unfinished).
-        ("ro_idx", "(run_id, ordinal)"),
-        # Retry scheduling = WHERE status = 'failed' AND next_retry_at <= now().
-        ("sr_idx", "(status, next_retry_at)"),
-    ],
-    # AGENT_RUN_EVENTS_V1: the composite PRIMARY KEY (run_id, seq) already serves the
-    # only read pattern (poll cursor: WHERE run_id AND seq >= ? ORDER BY seq).
 }
 
 # Per-process idempotency guard: run each table's DDL at most once per backend
@@ -579,11 +402,6 @@ def _ensure_table(logical):
         # Side-effecting DDL goes in pre_queries; COMMIT is mandatory. Any secondary
         # indexes are created in the same transaction (also idempotent).
         pre = [ddl]
-        # Additive ADD COLUMN IF NOT EXISTS clauses (existing tables that gained
-        # columns post-release) - same transaction, idempotent, no-op once applied.
-        for clause in _ALTERS_BY_LOGICAL.get(logical, []):
-            pre.append("ALTER TABLE {tbl} {clause}".format(tbl=table, clause=clause))
-            logger.info("ensure_table - ALTER TABLE %s %s", table, clause)
         for suffix, columns in _INDEXES_BY_LOGICAL.get(logical, []):
             index_name = safe_index_name(physical_table(logical), suffix)
             pre.append(
@@ -616,9 +434,6 @@ _ROLE_BY_LOGICAL = {
     EVENTS_V1_LOGICAL: "events",
     FEEDBACK_V1_LOGICAL: "feedback",
     AGENT_REQUESTS_V1_LOGICAL: "agent_requests",
-    AGENT_RUNS_V1_LOGICAL: "agent_runs",
-    AGENT_RUN_STEPS_V1_LOGICAL: "agent_run_steps",
-    AGENT_RUN_EVENTS_V1_LOGICAL: "agent_run_events",
 }
 
 
@@ -651,12 +466,7 @@ def ensure_chat_table():
 
 
 def ensure_users_table():
-    """Ensure the users/admin registry exists + carries the usage counters, once per process.
-
-    The same call applies the additive ADD COLUMN IF NOT EXISTS usage clauses, so an
-    instance whose users table predates the usage feature gains the counters on the
-    first post-deploy backend start (the registry rows are preserved).
-    """
+    """Ensure the users/admin registry exists (create-if-missing), once per process."""
     _ensure_table(USERS_V1_LOGICAL)
 
 
@@ -698,18 +508,3 @@ def ensure_feedback_table():
 def ensure_agent_requests_table():
     """Ensure the agent-request table (Help & Support hub) exists, once per process."""
     _ensure_table(AGENT_REQUESTS_V1_LOGICAL)
-
-
-def ensure_agent_runs_table():
-    """Ensure the durable agent-run ledger exists (create-if-missing), once per process."""
-    _ensure_table(AGENT_RUNS_V1_LOGICAL)
-
-
-def ensure_agent_run_steps_table():
-    """Ensure the durable run-steps table exists (create-if-missing), once per process."""
-    _ensure_table(AGENT_RUN_STEPS_V1_LOGICAL)
-
-
-def ensure_agent_run_events_table():
-    """Ensure the durable run-events table exists (create-if-missing), once per process."""
-    _ensure_table(AGENT_RUN_EVENTS_V1_LOGICAL)

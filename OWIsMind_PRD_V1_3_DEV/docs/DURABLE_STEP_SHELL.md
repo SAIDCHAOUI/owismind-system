@@ -1,3 +1,7 @@
+> **RETIRE DU PLUGIN le 2026-10-14 (decision user).** Jamais active sur aucun agent ; supprime pour ne plus
+> generer aucune activite SQL inutile (superviseur toutes les 10 s, purge DELETE horaire, 3 tables `agent_run*`).
+> Ce document est conserve pour l'historique ; le code est recuperable dans git (avant le commit de retrait).
+
 # Durable Step Shell (couche agentique v1.3) - comprendre et deployer
 
 > Le guide unique et complet de la nouvelle architecture agentique d'OWIsMind : d'abord ce qui a

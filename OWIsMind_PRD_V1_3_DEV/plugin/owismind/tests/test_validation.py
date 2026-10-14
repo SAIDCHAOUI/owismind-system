@@ -127,41 +127,14 @@ class TestAgentMeta(unittest.TestCase):
             self.assertEqual(meta["tools"], [])
             self.assertEqual(meta["icon"], DEFAULT_AGENT_ICON)
             self.assertEqual(meta["badge"], "")
-            # v1.3 durable workflow: OFF by default (validated legacy path)
-            self.assertFalse(meta["durable_workflow"])
-            self.assertEqual(meta["domain_keywords"], {})
 
-    def test_durable_workflow_flag_and_keyword_map(self):
-        # The flag must SURVIVE validation (else the durable path is unreachable
-        # from the admin UI); it coerces to a strict bool.
-        self.assertTrue(validate_agent_meta({"durable_workflow": True})
-                        ["durable_workflow"])
-        self.assertTrue(validate_agent_meta({"durable_workflow": 1})
-                        ["durable_workflow"])
-        # absent / falsy defaults OFF (plain bool coercion, like the modes dial)
-        self.assertFalse(validate_agent_meta({})["durable_workflow"])
-        self.assertFalse(validate_agent_meta({"durable_workflow": 0})
-                         ["durable_workflow"])
-        # domain_keywords is a bounded {domain -> lowercased keyword list}
-        meta = validate_agent_meta({"domain_keywords": {
-            "revenue": ["Revenus", "Revenue", 1, ""],
-            "tickets": ["Ticket"],
-            "  ": ["dropped"],          # blank domain dropped
-        }})
-        self.assertEqual(meta["domain_keywords"]["revenue"], ["revenus", "revenue"])
-        self.assertEqual(meta["domain_keywords"]["tickets"], ["ticket"])
-        self.assertNotIn("  ", meta["domain_keywords"])
-        # bounds: domains capped, keywords per domain capped and length-clamped
-        big = {("d%d" % i): ["k"] for i in range(30)}
-        self.assertLessEqual(
-            len(validate_agent_meta({"domain_keywords": big})["domain_keywords"]),
-            12)
-        long_kw = validate_agent_meta(
-            {"domain_keywords": {"d": ["x" * 100]}})["domain_keywords"]["d"][0]
-        self.assertLessEqual(len(long_kw), 40)
-        # malformed value -> {} (never raises)
-        self.assertEqual(validate_agent_meta({"domain_keywords": "oops"})
-                         ["domain_keywords"], {})
+    def test_removed_durable_keys_are_dropped(self):
+        # The durable workflow was removed (2026-10-14): a stored profile still
+        # carrying its keys validates to a profile WITHOUT them.
+        meta = validate_agent_meta({"durable_workflow": True,
+                                    "domain_keywords": {"d": ["k"]}})
+        self.assertNotIn("durable_workflow", meta)
+        self.assertNotIn("domain_keywords", meta)
 
     def test_strings_are_stripped_and_clamped(self):
         meta = validate_agent_meta(

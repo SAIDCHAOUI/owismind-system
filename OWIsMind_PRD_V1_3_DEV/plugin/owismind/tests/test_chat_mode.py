@@ -57,22 +57,16 @@ class ResolveEffectiveModeTests(unittest.TestCase):
 
 
 class ChatV5ModeDDLTests(unittest.TestCase):
-    """The mode column ships in the CREATE DDL AND as an additive idempotent ALTER."""
+    """The mode column ships in the CREATE DDL (no ALTER path)."""
 
     def test_create_ddl_has_mode_column(self):
         ddl = migrations._CHAT_V5_DDL
         self.assertIn("mode", ddl)
         self.assertIn("VARCHAR(16)", ddl)
 
-    def test_chat_v5_has_additive_alter_for_mode(self):
-        alters = migrations._ALTERS_BY_LOGICAL.get(CHAT_V5_LOGICAL) or []
-        self.assertIn("ADD COLUMN IF NOT EXISTS mode VARCHAR(16)", alters)
-
-    def test_alter_is_idempotent_shape(self):
-        # IF NOT EXISTS is what makes the ALTER a no-op on every process start and on a
-        # fresh table that already has the column from its CREATE DDL.
-        for clause in migrations._ALTERS_BY_LOGICAL[CHAT_V5_LOGICAL]:
-            self.assertIn("IF NOT EXISTS", clause)
+    def test_no_alter_clause_exists(self):
+        # NO ALTER, ever (user decision 2026-10-14): the column comes from the DDL only.
+        self.assertFalse(hasattr(migrations, "_ALTERS_BY_LOGICAL"))
 
 
 class EnsureChatTableAlterTests(unittest.TestCase):
@@ -112,7 +106,7 @@ class EnsureChatTableAlterTests(unittest.TestCase):
         migrations.safe_index_name = self._orig["safe_index_name"]
         migrations._ensured_tables = self._orig["ensured"]
 
-    def test_ensure_emits_create_and_mode_alter(self):
+    def test_ensure_emits_create_without_alter(self):
         migrations.ensure_chat_table()
         self.assertEqual(len(self.calls), 1)                 # one committed transaction
         call = self.calls[0]
@@ -121,11 +115,8 @@ class EnsureChatTableAlterTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS", create)
         self.assertIn("mode", create)
         self.assertIn("VARCHAR(16)", create)
-        # The additive ALTER is issued in the SAME transaction, after the CREATE.
-        self.assertTrue(
-            any("ADD COLUMN IF NOT EXISTS mode VARCHAR(16)" in q for q in call["pre"]),
-            "mode ALTER not found in pre_queries",
-        )
+        # NO ALTER is ever issued (user decision 2026-10-14): CREATE + indexes only.
+        self.assertFalse(any("ALTER" in q.upper() for q in call["pre"]))
 
     def test_ensure_runs_at_most_once_per_process(self):
         migrations.ensure_chat_table()

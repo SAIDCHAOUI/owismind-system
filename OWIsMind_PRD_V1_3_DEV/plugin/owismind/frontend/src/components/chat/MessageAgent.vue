@@ -31,7 +31,6 @@ import { track } from '../../services/track.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { Icon, Menu } from '../ui'
 import FeedbackModal from './FeedbackModal.vue'
-import RunPlan from './RunPlan.vue'
 
 const props = defineProps({
   turn: { type: Object, required: true },
@@ -364,10 +363,6 @@ function nextVersion() {
       <span class="ico"><Icon name="sparkle" /></span>
       <span class="author">{{ t('msg.author') }}</span>
     </div>
-
-    <!-- Durable analysis plan (v1.3): visible as soon as PLAN_READY arrives, steps
-         tick live; rebuilt on demand from /chat/activity for reloaded exchanges. -->
-    <RunPlan v-if="v.plan" :plan="v.plan" />
 
     <!-- ONE persistent .stream wrapper for both phases (swapping two sibling divs
          would replay its slide-up on the FULL answer at end of run).
