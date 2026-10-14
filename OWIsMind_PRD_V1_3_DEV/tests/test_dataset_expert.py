@@ -388,278 +388,9 @@ class TestSqlPrimitives(unittest.TestCase):
                                          "column": "customer_id"}),
                          'COUNT(DISTINCT "customer_id")')
 
-    def test_period_predicate_per_format(self):
-        f = dx.period_predicate
-        self.assertEqual(
-            f({"column": "d", "format": "date"}, "2025-01-01", "2025-12-31"),
-            "(\"d\" >= DATE '2025-01-01' AND \"d\" < (DATE '2025-12-31' + INTERVAL '1 day'))")
-        self.assertEqual(
-            f({"column": "ym", "format": "yyyy_mm_dd_str"}, "2025-01-01", "2025-12-31"),
-            "(LEFT(CAST(\"ym\" AS text), 10) >= '2025-01-01'"
-            " AND LEFT(CAST(\"ym\" AS text), 10) <= '2025-12-31')")
-        self.assertEqual(
-            f({"column": "ym", "format": "yyyy_mm_str"}, "2025-01-01", "2025-12-31"),
-            "(LEFT(CAST(\"ym\" AS text), 7) >= '2025-01'"
-            " AND LEFT(CAST(\"ym\" AS text), 7) <= '2025-12')")
-        self.assertEqual(
-            f({"column": "ym", "format": "yyyymm_int"}, "2025-01-01", "2025-12-31"),
-            '("ym" >= 202501 AND "ym" <= 202512)')
-        self.assertEqual(
-            f({"column": "y", "format": "year_int"}, "2025-01-01", "2026-12-31"),
-            '("y" >= 2025 AND "y" <= 2026)')
-        with self.assertRaises(ValueError):
-            f({"column": "x", "format": "alien"}, "2025-01-01", "2025-12-31")
-
-    def test_month_bucket_expr(self):
-        self.assertEqual(dx.month_bucket_expr({"column": "d", "format": "date"}),
-                         "TO_CHAR(\"d\", 'YYYY-MM')")
-        self.assertEqual(dx.month_bucket_expr({"column": "ym",
-                                               "format": "yyyy_mm_dd_str"}),
-                         'LEFT(CAST("ym" AS text), 7)')
-        self.assertEqual(dx.month_bucket_expr({"column": "ym",
-                                               "format": "yyyymm_int"}), '"ym"')
-
-
-class TestBuildSql(unittest.TestCase):
-
-    def test_total_applies_default_scenario(self):
-        sql, meta = dx.build_sql(make_u(), P, [], TABLE)
-        self.assertEqual(sql,
-                         'SELECT SUM("amount_eur") AS "revenue" FROM %s'
-                         ' WHERE "Phase" IN (\'ACTUALS\') LIMIT 500' % TABLE)
-        self.assertEqual(meta["format_map"]["revenue"], "amount")
-        self.assertEqual(meta["unit"], "EUR")
-
-    def test_total_with_period_and_filters(self):
-        u = make_u(period={"mode": "explicit", "start": "2025-01-01",
-                           "end": "2025-12-31", "label": "2025"})
-        sql, _ = dx.build_sql(u, P, [{"column": "customer_name",
-                                      "value": "HALYS"}], TABLE)
-        self.assertIn('"Phase" IN (\'ACTUALS\')', sql)
-        self.assertIn("LEFT(CAST(\"year_month\" AS text), 10) >= '2025-01-01'", sql)
-        self.assertIn('"customer_name" = \'HALYS\'', sql)
-
-    def test_literal_escaping(self):
-        u = make_u()
-        sql, _ = dx.build_sql(u, P, [{"column": "customer_name",
-                                      "value": "L'Operateur"}], TABLE)
-        self.assertIn("'L''Operateur'", sql)
-
-    def test_top_n_with_display_pair(self):
-        u = make_u(intent="top_n", group_by="customer_id", top_n=5)
-        sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('SELECT "customer_id", MAX("customer_name") AS "customer_name"', sql)
-        self.assertIn('GROUP BY "customer_id"', sql)
-        self.assertIn('ORDER BY "revenue" DESC LIMIT 5', sql)
-
-    def test_bottom_ranking_asc(self):
-        u = make_u(intent="top_n", group_by="Product", top_n=3, order="asc")
-        sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('ORDER BY "revenue" ASC LIMIT 3', sql)
-
-    def test_share_of_total(self):
-        u = make_u(intent="share_of_total", group_by="Product", top_n=20)
-        sql, meta = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('SUM(SUM("amount_eur")) OVER ()', sql)
-        self.assertIn('AS "share_pct"', sql)
-        self.assertEqual(meta["format_map"]["share_pct"], "percent")
-
-    def test_compare_scenarios_pivot_with_delta(self):
-        u = make_u(intent="compare_scenarios", scenarios=["ACTUALS", "BUDGET"])
-        sql, meta = dx.build_sql(u, P, [], TABLE)
-        self.assertIn("SUM(CASE WHEN \"Phase\" = 'ACTUALS' THEN \"amount_eur\" ELSE 0 END) AS \"ACTUALS\"", sql)
-        self.assertIn('AS "delta"', sql)
-        self.assertIn('AS "delta_pct"', sql)
-        self.assertIn("\"Phase\" IN ('ACTUALS', 'BUDGET')", sql)
-        self.assertEqual(meta["format_map"]["delta_pct"], "percent")
-        self.assertEqual(meta["format_map"]["ACTUALS"], "amount")
-
-    def test_compare_scenarios_grouped(self):
-        u = make_u(intent="compare_scenarios", scenarios=["ACTUALS", "BUDGET"],
-                   group_by="customer_id", top_n=10)
-        sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('GROUP BY "customer_id"', sql)
-        self.assertIn('ORDER BY "ACTUALS" DESC LIMIT 10', sql)
-
-    def test_compare_periods_pivot(self):
-        u = make_u(intent="compare_periods",
-                   periods=[{"start": "2025-01-01", "end": "2025-12-31",
-                             "label": "2025"},
-                            {"start": "2026-01-01", "end": "2026-12-31",
-                             "label": "2026"}])
-        sql, meta = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('AS "2025"', sql)
-        self.assertIn('AS "2026"', sql)
-        self.assertIn('AS "delta"', sql)
-        self.assertIn(" OR ", sql)
-        self.assertIn("\"Phase\" IN ('ACTUALS')", sql)
-
-    def test_trend_monthly(self):
-        u = make_u(intent="trend")
-        sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('SELECT LEFT(CAST("year_month" AS text), 7) AS "month"', sql)
-        self.assertIn("GROUP BY 1 ORDER BY 1", sql)
-
-    def test_list_values_ignores_scenario(self):
-        u = make_u(intent="list_values", list_column="Product")
-        sql, _ = dx.build_sql(u, P, [], TABLE)
-        self.assertEqual(sql, 'SELECT DISTINCT "Product" FROM %s'
-                              ' ORDER BY 1 LIMIT 200' % TABLE)
-
-    def test_count_distinct(self):
-        u = make_u(intent="count_distinct", list_column="customer_id")
-        sql, meta = dx.build_sql(u, P, [], TABLE)
-        self.assertIn('COUNT(DISTINCT "customer_id") AS "count"', sql)
-        self.assertEqual(meta["format_map"]["count"], "count")
-
-    def test_compare_scenarios_without_scenario_column_raises(self):
-        no_scen = dx.Profile(dict(P.raw, scenario=None), P.columns)
-        u = make_u(intent="compare_scenarios", scenarios=["A", "B"])
-        with self.assertRaises(ValueError):
-            dx.build_sql(u, no_scen, [], TABLE)
-
-    def test_custom_intent_has_no_builder(self):
-        with self.assertRaises(ValueError):
-            dx.build_sql(make_u(intent="custom"), P, [], TABLE)
-
-
 # ==========================================================================
 # Custom SQL guard
 # ==========================================================================
-class TestGuardCustomSql(unittest.TestCase):
-
-    def test_same_table_name_in_another_schema_rejected(self):
-        sql, reason = dx.guard_custom_sql('SELECT 1 FROM "other_schema"."SALES_DEMO"', TABLE)
-        self.assertIsNone(sql)
-        self.assertTrue(reason.startswith("table_not_allowed"), reason)
-
-    def test_apostrophe_inside_quoted_identifier_cannot_hide_a_table(self):
-        for bad in ('SELECT "a\'b" FROM other_table WHERE "c\'d" = 1',
-                    'SELECT "a\'b", (SELECT 1 FROM other_table) AS z, "c\'d" FROM %s' % TABLE):
-            sql, reason = dx.guard_custom_sql(bad, TABLE)
-            self.assertIsNone(sql, bad)
-            self.assertTrue(reason.startswith("table_not_allowed") or reason == "unterminated_quote", reason)
-
-    def test_unterminated_quote_rejected_and_mixed_quotes_allowed(self):
-        self.assertEqual(dx.guard_custom_sql("SELECT 'abc FROM %s" % TABLE, TABLE)[1],
-                         "unterminated_quote")
-        sql, reason = dx.guard_custom_sql(
-            'SELECT "x", \'k\' AS k, "y" FROM %s WHERE "x" = \'a"b\'' % TABLE, TABLE)
-        self.assertIsNone(reason)
-
-    def test_escaped_string_syntax_cannot_hide_a_table(self):
-        bad = ("SELECT E'\\'' || (SELECT 1 FROM other_table) || E'\\'' AS a FROM %s" % TABLE)
-        sql, reason = dx.guard_custom_sql(bad, TABLE)
-        self.assertIsNone(sql)
-        self.assertEqual(reason, "ambiguous_string_syntax")
-        for payload in ("SELECT $$x$$ FROM %s" % TABLE, "SELECT U&'d' FROM %s" % TABLE,
-                        "SELECT 'a\\b' FROM %s" % TABLE):
-            self.assertIsNone(dx.guard_custom_sql(payload, TABLE)[0], payload)
-
-    def test_plain_literals_still_allowed(self):
-        sql, reason = dx.guard_custom_sql(
-            "SELECT 'it''s fine' AS a, \"Name\" FROM %s WHERE \"Name\" = 'Acme' " % TABLE, TABLE)
-        self.assertIsNone(reason)
-
-    def test_string_executing_functions_rejected(self):
-        for expr in ("query_to_xml('select * from other_table', true, false, '')",
-                     "table_to_xml('other', true, false, '')",
-                     "dblink('host=x', 'select 1')",
-                     "lo_import('/etc/passwd')",
-                     "pg_read_file('/etc/passwd')",
-                     '"query_to_xml"(\'select 1\', true, false, \'\')'):
-            sql, reason = dx.guard_custom_sql("SELECT %s FROM %s" % (expr, TABLE), TABLE)
-            self.assertIsNone(sql, expr)
-            self.assertIn(reason, ("forbidden_function", "system_table"), expr)
-
-    def test_legit_column_names_not_mistaken_for_functions(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT "lo_amount", "dblink_flag" FROM %s' % TABLE, TABLE)
-        self.assertIsNone(reason)
-
-    def test_valid_select_gets_limit(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT "Product", SUM("amount_eur") FROM %s GROUP BY 1' % TABLE,
-            TABLE)
-        self.assertIsNone(reason)
-        self.assertTrue(sql.endswith("LIMIT 500"))
-
-    def test_fences_and_comments_stripped(self):
-        sql, reason = dx.guard_custom_sql(
-            "```sql\nSELECT 1 FROM %s -- comment\n```" % TABLE, TABLE)
-        self.assertIsNone(reason)
-        self.assertNotIn("```", sql)
-        self.assertNotIn("--", sql)
-
-    def test_limit_capped(self):
-        sql, reason = dx.guard_custom_sql(
-            "SELECT 1 FROM %s LIMIT 99999" % TABLE, TABLE)
-        self.assertIsNone(reason)
-        self.assertTrue(sql.endswith("LIMIT 500"))
-
-    def test_existing_small_limit_kept(self):
-        sql, reason = dx.guard_custom_sql(
-            "SELECT 1 FROM %s LIMIT 7" % TABLE, TABLE)
-        self.assertIsNone(reason)
-        self.assertTrue(sql.endswith("LIMIT 7"))
-
-    def test_limit_offset_small_kept(self):
-        # A trailing OFFSET must not defeat the LIMIT detection (no double LIMIT).
-        sql, reason = dx.guard_custom_sql(
-            "SELECT 1 FROM %s LIMIT 7 OFFSET 20" % TABLE, TABLE)
-        self.assertIsNone(reason)
-        self.assertTrue(sql.endswith("LIMIT 7 OFFSET 20"))
-        self.assertEqual(sql.lower().count("limit"), 1)
-
-    def test_limit_offset_capped_preserves_offset(self):
-        sql, reason = dx.guard_custom_sql(
-            "SELECT 1 FROM %s LIMIT 99999 OFFSET 20" % TABLE, TABLE)
-        self.assertIsNone(reason)
-        self.assertTrue(sql.endswith("LIMIT 500 OFFSET 20"))
-        self.assertEqual(sql.lower().count("limit"), 1)
-
-    def test_rejects_dml_and_ddl(self):
-        for bad in ("DELETE FROM %s" % TABLE,
-                    "DROP TABLE %s" % TABLE,
-                    "SELECT 1 FROM %s; DELETE FROM x" % TABLE,
-                    "UPDATE %s SET a=1" % TABLE,
-                    "SELECT * INTO copy FROM %s" % TABLE,
-                    "set lock_timeout='1s'"):
-            sql, reason = dx.guard_custom_sql(bad, TABLE)
-            self.assertIsNone(sql, msg=bad)
-
-    def test_rejects_other_table(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT * FROM "public"."OTHER_TABLE"', TABLE)
-        self.assertIsNone(sql)
-        self.assertTrue(reason.startswith("table_not_allowed"))
-        sql, reason = dx.guard_custom_sql(
-            'SELECT * FROM %s JOIN "secrets" USING (id)' % TABLE, TABLE)
-        self.assertIsNone(sql)
-
-    def test_accepts_table_spelling_variants(self):
-        for spelling in (TABLE, '"SALES_DEMO"', "SALES_DEMO", "sales_demo",
-                         "public.SALES_DEMO"):
-            sql, reason = dx.guard_custom_sql(
-                "SELECT 1 FROM %s" % spelling, TABLE)
-            self.assertIsNotNone(sql, msg=spelling)
-
-    def test_accepts_cte_and_self_join_and_subquery(self):
-        q = ('WITH base AS (SELECT * FROM %s) '
-             "SELECT a.* FROM base a JOIN base b ON a.x = b.x" % TABLE)
-        sql, reason = dx.guard_custom_sql(q, TABLE)
-        self.assertIsNone(reason)
-        q2 = "SELECT * FROM (SELECT 1 FROM %s) sub" % TABLE
-        sql2, reason2 = dx.guard_custom_sql(q2, TABLE)
-        self.assertIsNone(reason2)
-
-    def test_rejects_non_select(self):
-        sql, reason = dx.guard_custom_sql("EXPLAIN SELECT 1", TABLE)
-        self.assertIsNone(sql)
-        sql, reason = dx.guard_custom_sql("", TABLE)
-        self.assertEqual(reason, "empty")
-
-
 # ==========================================================================
 # Result shaping + rendering
 # ==========================================================================
@@ -760,23 +491,20 @@ class TestKnowledgeSurfaces(unittest.TestCase):
                          ["ACTUALS", "BUDGET", "FORECAST"])
         self.assertIn("custom", schema["properties"]["intent"]["enum"])
 
-    def test_dataset_card_contains_columns_and_metrics(self):
-        card = dx.build_dataset_card(P, TABLE)
-        self.assertIn(TABLE, card)
-        self.assertIn('"Phase"', card)
-        self.assertIn("'ACTUALS'", card)
-        self.assertIn('revenue = SUM("amount_eur")', card)
-        self.assertIn("yyyy_mm_dd_str", card)
-
-
 # ==========================================================================
 # Semantic-tool engine: question composer + tool-output extraction
 # ==========================================================================
 class TestSemanticEngine(unittest.TestCase):
 
-    def test_default_engine_is_semantic_tool(self):
-        self.assertEqual(dx.SQL_ENGINE, "semantic_tool")
-        self.assertTrue(dx.FALLBACK_TO_DIRECT)
+    def test_only_the_semantic_tool_writes_sql(self):
+        """The agent carries NO SQL engine of its own: no templates, no LLM SQL
+        generation, no guard (user decision 2026-10-14: the semantic model
+        holds the business knowledge the SQL needs; the agent code does not)."""
+        for name in ("build_sql", "guard_custom_sql", "build_dataset_card",
+                     "SQLGEN_PROMPT", "SQL_ENGINE", "FALLBACK_TO_DIRECT",
+                     "period_predicate", "month_bucket_expr"):
+            self.assertFalse(hasattr(dx, name), name)
+        self.assertIn("semantic-model-query", open(_AGENT_PATH, encoding="utf8").read())
 
     def test_total_question_grounded_and_contextualized(self):
         u = make_u(instruction="CA de HALYS en 2025 ?",
@@ -1006,61 +734,6 @@ class TestModePropagation(unittest.TestCase):
         # All modes share the one tool id until a Sonnet-backed tool exists for claude.
         self.assertEqual(dx.pick_semantic_tool_id("smart"), dx.SEMANTIC_TOOL_ID)
         self.assertEqual(dx.pick_semantic_tool_id("claude"), dx.SEMANTIC_TOOL_ID)
-
-
-class TestGuardSubqueryAndCommaJoin(unittest.TestCase):
-    """The SQL guard must validate EVERY table source, not just the first."""
-
-    def test_comma_join_unknown_table_rejected(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT * FROM "SALES_DEMO", secret_table', TABLE)
-        self.assertIsNone(sql)
-        self.assertIn("table_not_allowed", reason)
-
-    def test_subquery_inner_unknown_table_rejected(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT * FROM (SELECT x FROM secret_t) s', TABLE)
-        self.assertIsNone(sql)
-        self.assertIn("table_not_allowed", reason)
-
-    def test_legit_subquery_on_allowed_table_ok(self):
-        sql, reason = dx.guard_custom_sql(
-            'SELECT * FROM (SELECT * FROM "SALES_DEMO") s', TABLE)
-        self.assertIsNotNone(sql)
-        self.assertIsNone(reason)
-
-    def test_spaceless_quoted_table_cannot_bypass(self):
-        # `FROM"x"` (valid Postgres, no space) must NOT escape the table scan.
-        sql, reason = dx.guard_custom_sql('SELECT * FROM"other_t"', TABLE)
-        self.assertIsNone(sql)
-        sql2, reason2 = dx.guard_custom_sql('SELECT * FROM"pg_user"', TABLE)
-        self.assertIsNone(sql2)
-
-    def test_system_catalogs_rejected(self):
-        for q in ('SELECT * FROM information_schema.columns',
-                  'SELECT * FROM pg_catalog.pg_tables',
-                  'SELECT * FROM pg_user'):
-            sql, reason = dx.guard_custom_sql(q, TABLE)
-            self.assertIsNone(sql, q)
-
-    def test_keyword_inside_string_literal_not_rejected(self):
-        # 'a set of' contains the word "set" only INSIDE a literal -> must be allowed.
-        sql, reason = dx.guard_custom_sql(
-            "SELECT * FROM \"SALES_DEMO\" WHERE comment = 'a set of items'", TABLE)
-        self.assertIsNotNone(sql)
-        self.assertIsNone(reason)
-
-    def test_with_recursive_cte_not_falsely_rejected(self):
-        # `WITH RECURSIVE t AS (...)` must register `t` as a CTE so `FROM t` passes.
-        sql, reason = dx.guard_custom_sql(
-            'WITH RECURSIVE t AS (SELECT 1 AS n) SELECT * FROM t', TABLE)
-        self.assertIsNotNone(sql, reason)
-        self.assertIsNone(reason)
-
-    def test_plain_cte_still_ok(self):
-        sql, reason = dx.guard_custom_sql(
-            'WITH t AS (SELECT * FROM "SALES_DEMO") SELECT * FROM t', TABLE)
-        self.assertIsNotNone(sql, reason)
 
 
 class TestAmbiguityColumnPriority(unittest.TestCase):

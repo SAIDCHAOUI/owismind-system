@@ -25,10 +25,10 @@ sub-agent SalesDrive_revenue_expert
    PostgreSQL  →  OWISMIND_PRD_V1_2.DRIVE_Revenues   (read as the calling user)
 ```
 
-The sub-agent never writes the final SQL when `SQL_ENGINE="semantic_tool"` (the
-default): it hands a maximally grounded question to the tool and the **semantic
-model writes the SQL**. The sub-agent's own direct-SQL templates are only the
-technical fallback (`FALLBACK_TO_DIRECT=True`).
+The sub-agent NEVER writes the final SQL: it hands a maximally grounded question
+to the tool and the **semantic model writes the SQL**. There is no direct-SQL
+engine in the agent anymore (removed 2026-10-14, user decision: the business
+knowledge the SQL needs lives in the semantic model, not in the agent code).
 
 ## The `revenue_semantic_query` tool config (live in DSS)
 

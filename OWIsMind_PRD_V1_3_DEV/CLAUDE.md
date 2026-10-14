@@ -54,7 +54,7 @@ attribute_lookup                revenue / tickets sub-agent  (LangGraph Code Age
                                        read-only SQL on value_index (exact->fuzzy)  │
                                     3. QUERY     : hand a grounded question to the   │
                                        semantic-query tool -> it writes+runs SQL    │
-                                       (technical failure -> own direct-SQL fallback)│
+                                       (the agent NEVER writes the final SQL itself)│
                                     4. RENDER    : table + figures by code, "[Scope]"│
                                        line; about_data answered from profile (0 SQL)│
                                           │                                          │

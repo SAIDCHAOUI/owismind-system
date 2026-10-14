@@ -18,10 +18,10 @@
 #   UNDERSTAND  1 LLM call, strict JSON, prompt GENERATED from the profile.
 #   RESOLVE     ground user terms against the value index by INLINE read-only SQL
 #               (exact -> normalized -> fuzzy); ambiguity policy is code, not a tool.
-#   QUERY       SQL_ENGINE "semantic_tool": compose a grounded question for the DSS
-#               Semantic Model Query tool, which WRITES AND RUNS the SQL. A TECHNICAL
-#               failure (not an empty result) falls back to the deterministic
-#               "direct" engine (templates per intent + a guarded LLM for the tail).
+#   QUERY       compose a grounded question for the DSS Semantic Model Query tool,
+#               which holds the business semantic model and WRITES AND RUNS the
+#               SQL. The agent NEVER writes the final SQL itself; a technical
+#               failure of the tool is reported as an error.
 #   RENDER      figures formatted BY CODE, every cited number verified, "[Scope]"
 #               line, about_data answered from the profile with 0 SQL. Read-only.
 #
@@ -67,8 +67,8 @@ VALUE_INDEX_DATASET = "TroubleTickets_year_value_index"
 TARGET_DATASET = ""
 
 # LLM Mesh ids. UNDERSTAND runs on every question and forces native JSON output, so
-# a fast, cheap model parses it reliably; SQLGEN runs only on the long-tail "custom"
-# intent. These mirror the orchestrator (same connection) - each id must match an id
+# a fast, cheap model parses it reliably. These mirror the orchestrator (same
+# connection) - each id must match an id
 # exposed by the LLM Mesh connection.
 GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
 GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
@@ -81,12 +81,11 @@ LLM_BY_MODE = {"smart": GEMINI_FLASH_LITE_ID, "pro": GEMINI_FLASH_ID, "claude": 
 DEFAULT_MODE = "smart"
 # Fallback ids when no mode is injected (batch / stand-alone use).
 UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
-SQLGEN_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
 HEADLINE_LLM_ID = None             # None -> the run's mode-resolved model
 
 
 def pick_subagent_llm(mode):
-    """The sub-agent's own LLM (UNDERSTAND / SQLGEN / headline) for this mode."""
+    """The sub-agent's own LLM (UNDERSTAND / headline) for this mode."""
     return LLM_BY_MODE.get(mode, LLM_BY_MODE[DEFAULT_MODE])
 # The orchestrator now writes the user-facing analysis, so the sub-agent's own
 # LLM headline is redundant overhead (a slow extra reasoning call per query).
@@ -95,22 +94,11 @@ def pick_subagent_llm(mode):
 SUBAGENT_LLM_HEADLINE = False
 
 # --- SQL engine --------------------------------------------------------------
-# "semantic_tool" (default): the agent does UNDERSTAND + RESOLVE + COMPOSE, then
-#   delegates SQL generation and execution to the DSS Semantic Model Query tool,
-#   feeding it a maximally grounded question (exact catalog values, explicit
-#   scenarios and periods, axis rules, destination context). The semantic model
-#   owns the SQL; every upstream layer exists to hand it the best context.
-# "direct": the agent builds and runs its own read-only SQL (deterministic
-#   templates + guarded LLM for the long tail).
-# On a technical semantic-tool failure the agent falls back to "direct" when
-# FALLBACK_TO_DIRECT is True (an empty result is a valid answer, not a failure).
-SQL_ENGINE = "semantic_tool"
-FALLBACK_TO_DIRECT = True
-# Fill SEMANTIC_TOOL_ID with the TICKETS Semantic Model Query tool id once you
-# create it in DSS (a NEW tool bound to the tickets semantic model). Until it is
-# set to a real id, the agent falls back to its own read-only direct-SQL engine
-# (FALLBACK_TO_DIRECT=True), which already works from the profile alone - so the
-# tickets expert is useful from day one and gets stronger once the model is wired.
+# The DSS Semantic Model Query tool is the ONLY writer of the final SQL: the agent
+# does UNDERSTAND + RESOLVE + COMPOSE, then hands the tool a maximally grounded
+# question (exact catalog values, explicit scenarios and periods, axis rules,
+# destination context). The semantic model owns the business knowledge the SQL
+# needs; the agent code never queries the business table itself.
 SEMANTIC_TOOL_ID = "nEirlso"   # Semantic Model Query tool id (instance)
 SEMANTIC_TOOL_NAME = "tickets_semantic_query"
 SEMANTIC_QUESTION_KEY = "question"  # first candidate; auto-detected at runtime
@@ -126,11 +114,9 @@ def pick_semantic_tool_id(mode):
 
 PROFILE_TTL_SECONDS = 600          # in-process profile cache
 MAX_TERMS = 8                      # grounded terms per question
-SQL_MAX_ROWS = 500                 # hard LIMIT on every query
 LIST_VALUES_LIMIT = 200
 TABLE_MAX_ROWS = 12                # rows displayed in the answer table
 HEADLINE_MAX_CHARS = 400
-MAX_CUSTOM_SQL_ATTEMPTS = 3        # 1 generation + up to 2 repairs
 FUZZY_CANDIDATES_LIMIT = 40
 FUZZY_MIN_RATIO = 0.62             # below -> unresolved (no best candidate)
 LAST_CHANCE_SCAN_LIMIT = 5000      # bounded value-index slice for heavy-typo terms
@@ -707,7 +693,6 @@ except Exception:
 if _hub_models:
     LLM_BY_MODE.update(_hub_models)
     UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
-    SQLGEN_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
     logger.info("LLM per mode from the config hub: %s", LLM_BY_MODE)
 
 
@@ -1058,7 +1043,8 @@ def resolved_filters_summary(resolutions):
 
 
 # =============================================================================
-# 7. SQL BUILDER - deterministic templates (the LLM never writes these)
+# 7. SQL VOCABULARY - identifiers and metric expressions (hints handed to the
+#    semantic tool and used for display units; never executed by the agent)
 # =============================================================================
 
 def qident(name):
@@ -1082,13 +1068,6 @@ def metric_expr(metric):
     return "SUM(%s)" % col
 
 
-def _metric_inner(metric):
-    """The per-row expression used inside CASE pivots (scenario / period)."""
-    if metric["agg"] == "COUNT" or not metric.get("column"):
-        return "1"
-    return qident(metric["column"])
-
-
 # Currency derived from the amount column name (e.g. amount_eur -> €). The
 # column name carries the currency, so no profile configuration is required.
 _CURRENCY_BY_CODE = {"eur": "€", "usd": "$", "gbp": "£", "jpy": "¥", "chf": "CHF"}
@@ -1110,420 +1089,8 @@ def metric_unit(metric):
     return None
 
 
-def period_predicate(time_info, start, end):
-    """Time-format-aware period predicate (start/end = YYYY-MM-DD strings).
-
-    String-format predicates compare on LEFT(CAST(col AS text), n): ISO text
-    sorts lexicographically, and the CAST makes the SQL valid whether the
-    physical column is text, date or timestamp - profile format detection can
-    be wrong about the PHYSICAL type (seen in DSS: a real PostgreSQL `date`
-    profiled as yyyy_mm_dd_str -> LEFT(date, 10) does not exist)."""
-    col = qident(time_info["column"])
-    fmt = time_info["format"]
-    if fmt in ("date",):
-        return ("(%s >= DATE %s AND %s < (DATE %s + INTERVAL '1 day'))"
-                % (col, _sql_quote_literal(start), col, _sql_quote_literal(end)))
-    if fmt == "yyyy_mm_dd_str":
-        expr = "LEFT(CAST(%s AS text), 10)" % col
-        return ("(%s >= %s AND %s <= %s)"
-                % (expr, _sql_quote_literal(start), expr, _sql_quote_literal(end)))
-    if fmt == "yyyy_mm_str":
-        expr = "LEFT(CAST(%s AS text), 7)" % col
-        return ("(%s >= %s AND %s <= %s)"
-                % (expr, _sql_quote_literal(start[:7]), expr,
-                   _sql_quote_literal(end[:7])))
-    if fmt == "yyyymm_int":
-        return ("(%s >= %d AND %s <= %d)"
-                % (col, int(start[:4]) * 100 + int(start[5:7]),
-                   col, int(end[:4]) * 100 + int(end[5:7])))
-    if fmt == "year_int":
-        return "(%s >= %d AND %s <= %d)" % (col, int(start[:4]), col, int(end[:4]))
-    raise ValueError("unknown time format: %r" % fmt)
-
-
-def month_bucket_expr(time_info):
-    """Monthly bucket expression, cast-safe like period_predicate."""
-    col = qident(time_info["column"])
-    fmt = time_info["format"]
-    if fmt == "date":
-        return "TO_CHAR(%s, 'YYYY-MM')" % col
-    if fmt in ("yyyy_mm_dd_str", "yyyy_mm_str"):
-        return "LEFT(CAST(%s AS text), 7)" % col
-    if fmt in ("yyyymm_int", "year_int"):
-        return col
-    raise ValueError("unknown time format: %r" % fmt)
-
-
-def _where_sql(parts):
-    parts = [p for p in parts if p]
-    return (" WHERE " + " AND ".join(parts)) if parts else ""
-
-
-def _filters_sql(filters):
-    return ["%s = %s" % (qident(f["column"]), _sql_quote_literal(f["value"]))
-            for f in filters or []]
-
-
-def _scenario_clause(profile, scenarios):
-    scen = profile.scenario
-    if not scen:
-        return "", []
-    values = scenarios or scen.get("default_values") or scen["values"][:1]
-    clause = "%s IN (%s)" % (qident(scen["column"]),
-                             ", ".join(_sql_quote_literal(v) for v in values))
-    return clause, values
-
-
-def _axis_select(profile, axis):
-    """-> (select_cols, group_by_cols, display_alias|None) honoring the
-    profile display pair (id column shown with its human label twin)."""
-    a = qident(axis)
-    col = profile.column(axis) or {}
-    display = col.get("display_column")
-    if display and profile.column(display) is not None and display != axis:
-        return ("%s, MAX(%s) AS %s" % (a, qident(display), qident(display)),
-                a, display)
-    return (a, a, None)
-
-
-def build_sql(u, profile, filters, table):
-    """Deterministic SQL for every structured intent. Returns (sql, meta) -
-    meta = {"format_map": {alias: format}, "unit": str|None} for rendering.
-    Raises ValueError for unbuildable combinations (caller degrades)."""
-    intent = u["intent"]
-    metric = profile.metric(u["metric"] or "") or profile.default_metric
-    if metric is None and intent not in ("list_values", "count_distinct"):
-        raise ValueError("no metric available")
-    scen_clause, scen_values = _scenario_clause(profile, u["scenarios"])
-    fmt_map, unit = {}, metric_unit(metric)
-    if metric:
-        fmt_map[metric["name"]] = metric.get("format", "number")
-
-    period_part = ""
-    tm = profile.time
-    if tm and u["period"]["mode"] == "explicit":
-        period_part = period_predicate(tm, u["period"]["start"], u["period"]["end"])
-    where = _where_sql([scen_clause, period_part] + _filters_sql(filters))
-
-    if intent == "total":
-        sql = "SELECT %s AS %s FROM %s%s" % (
-            metric_expr(metric), qident(metric["name"]), table, where)
-        return sql + " LIMIT %d" % SQL_MAX_ROWS, {"format_map": fmt_map, "unit": unit}
-
-    if intent in ("breakdown", "top_n"):
-        select_cols, group_col, display = _axis_select(profile, u["group_by"])
-        limit = u["top_n"] if intent == "top_n" else SQL_MAX_ROWS
-        sql = ("SELECT %s, %s AS %s FROM %s%s GROUP BY %s ORDER BY %s %s LIMIT %d"
-               % (select_cols, metric_expr(metric), qident(metric["name"]),
-                  table, where, group_col, qident(metric["name"]),
-                  "ASC" if u["order"] == "asc" else "DESC", limit))
-        return sql, {"format_map": fmt_map, "unit": unit}
-
-    if intent == "share_of_total":
-        select_cols, group_col, display = _axis_select(profile, u["group_by"])
-        m = metric_expr(metric)
-        limit = u["top_n"] or SQL_MAX_ROWS
-        sql = ("SELECT %s, %s AS %s, "
-               "ROUND(CAST(100.0 * %s / NULLIF(SUM(%s) OVER (), 0) AS numeric), 1) "
-               "AS \"share_pct\" FROM %s%s GROUP BY %s ORDER BY %s DESC LIMIT %d"
-               % (select_cols, m, qident(metric["name"]), m, m,
-                  table, where, group_col, qident(metric["name"]), limit))
-        fmt_map["share_pct"] = "percent"
-        return sql, {"format_map": fmt_map, "unit": unit}
-
-    if intent == "compare_scenarios":
-        scen = profile.scenario
-        if not scen or len(u["scenarios"]) < 2:
-            raise ValueError("compare_scenarios needs a scenario column + 2 values")
-        scol, inner = qident(scen["column"]), _metric_inner(metric)
-        pivots, exprs = [], []
-        for v in u["scenarios"]:
-            expr = ("SUM(CASE WHEN %s = %s THEN %s ELSE 0 END)"
-                    % (scol, _sql_quote_literal(v), inner))
-            exprs.append(expr)
-            pivots.append("%s AS %s" % (expr, qident(v)))
-            fmt_map[v] = metric.get("format", "number")
-        scen_in = "%s IN (%s)" % (scol, ", ".join(_sql_quote_literal(v)
-                                                  for v in u["scenarios"]))
-        where2 = _where_sql([scen_in, period_part] + _filters_sql(filters))
-        cols, tail = "", ""
-        if len(u["scenarios"]) == 2:
-            a, b = exprs[0], exprs[1]
-            pivots.append("%s - %s AS \"delta\"" % (a, b))
-            pivots.append("ROUND(CAST(100.0 * (%s - %s) / NULLIF(%s, 0) AS numeric), 1)"
-                          " AS \"delta_pct\"" % (a, b, b))
-            fmt_map["delta"] = metric.get("format", "number")
-            fmt_map["delta_pct"] = "percent"
-        if u["group_by"]:
-            select_cols, group_col, display = _axis_select(profile, u["group_by"])
-            cols = select_cols + ", "
-            tail = (" GROUP BY %s ORDER BY %s DESC LIMIT %d"
-                    % (group_col, qident(u["scenarios"][0]),
-                       u["top_n"] or SQL_MAX_ROWS))
-        sql = "SELECT %s%s FROM %s%s%s" % (cols, ", ".join(pivots), table,
-                                           where2, tail)
-        if not tail:
-            sql += " LIMIT %d" % SQL_MAX_ROWS
-        return sql, {"format_map": fmt_map, "unit": unit}
-
-    if intent == "compare_periods":
-        if not tm or len(u["periods"]) < 2:
-            raise ValueError("compare_periods needs a time column + 2 periods")
-        inner = _metric_inner(metric)
-        pivots, exprs, preds = [], [], []
-        for p in u["periods"]:
-            pred = period_predicate(tm, p["start"], p["end"])
-            preds.append(pred)
-            expr = "SUM(CASE WHEN %s THEN %s ELSE 0 END)" % (pred, inner)
-            exprs.append(expr)
-            alias = (p.get("label") or ("%s..%s" % (p["start"], p["end"])))[:40]
-            pivots.append('%s AS "%s"' % (expr, alias.replace('"', "")))
-            fmt_map[alias] = metric.get("format", "number")
-        if len(u["periods"]) == 2:
-            # delta = second period minus first, in the order the user gave.
-            pivots.append("%s - %s AS \"delta\"" % (exprs[1], exprs[0]))
-            pivots.append("ROUND(CAST(100.0 * (%s - %s) / NULLIF(%s, 0) AS numeric), 1)"
-                          " AS \"delta_pct\"" % (exprs[1], exprs[0], exprs[0]))
-            fmt_map["delta"] = metric.get("format", "number")
-            fmt_map["delta_pct"] = "percent"
-        where2 = _where_sql([scen_clause, "(" + " OR ".join(preds) + ")"]
-                            + _filters_sql(filters))
-        sql = "SELECT %s FROM %s%s LIMIT %d" % (", ".join(pivots), table,
-                                                where2, SQL_MAX_ROWS)
-        return sql, {"format_map": fmt_map, "unit": unit}
-
-    if intent == "trend":
-        if not tm:
-            raise ValueError("trend needs a time column")
-        bucket = month_bucket_expr(tm)
-        sql = ("SELECT %s AS \"month\", %s AS %s FROM %s%s "
-               "GROUP BY 1 ORDER BY 1 LIMIT %d"
-               % (bucket, metric_expr(metric), qident(metric["name"]),
-                  table, where, SQL_MAX_ROWS))
-        return sql, {"format_map": fmt_map, "unit": unit}
-
-    if intent == "list_values":
-        col = qident(u["list_column"])
-        where3 = _where_sql(_filters_sql(filters))
-        sql = ("SELECT DISTINCT %s FROM %s%s ORDER BY 1 LIMIT %d"
-               % (col, table, where3, LIST_VALUES_LIMIT))
-        return sql, {"format_map": {}, "unit": None}
-
-    if intent == "count_distinct":
-        col = qident(u["list_column"])
-        sql = ("SELECT COUNT(DISTINCT %s) AS \"count\" FROM %s%s LIMIT %d"
-               % (col, table, where, SQL_MAX_ROWS))
-        return sql, {"format_map": {"count": "count"}, "unit": None}
-
-    raise ValueError("no deterministic builder for intent %r" % intent)
-
-
 # =============================================================================
-# 8. CUSTOM SQL - LLM generation contract + GUARD
-# =============================================================================
-
-SQLGEN_PROMPT = (
-    "You write ONE PostgreSQL SELECT query answering the user's question on "
-    "the single table described below. Output ONLY the SQL - no markdown "
-    "fences, no commentary, no explanation.\n"
-    "HARD RULES:\n"
-    "- ONE statement, starting with SELECT or WITH. Read-only.\n"
-    "- Query ONLY the table {table} - no other table, no DML/DDL.\n"
-    "- Use the EXACT column names and the EXACT filter values given "
-    "(case-sensitive). Never invent a column or a value.\n"
-    "- {scenario_rule}\n"
-    "- Always end with LIMIT {max_rows} or less.\n"
-    "- Prefer clear aliases; round percentages to 1 decimal.\n"
-)
-
-SQLGEN_REPAIR_PROMPT = (
-    "The SQL you produced failed. Fix it and output ONLY the corrected SQL "
-    "(one read-only SELECT on the same single table, same rules).\n"
-    "DATABASE ERROR:\n{error}\n\nFAILED SQL:\n{sql}\n"
-)
-
-
-def build_dataset_card(profile, table):
-    """Compact dataset card injected into the SQL-generation prompt."""
-    lines = ["TABLE: %s" % table,
-             "DATASET: %s - %s" % (profile.dataset_name,
-                                   profile.description("en")[:300]),
-             "GRAIN: %s" % (profile.raw.get("grain") or "one record"),
-             "COLUMNS:"]
-    for name, c in profile.columns.items():
-        line = '- "%s" %s (%s)' % (name, c.get("dss_type", ""), c.get("role", ""))
-        desc = c.get("description_en") or c.get("description_fr")
-        if desc:
-            line += ": %s" % desc[:120]
-        if c.get("is_enum") and c.get("values"):
-            line += " | values: %s" % ", ".join(
-                "'%s'" % v["v"] for v in c["values"][:ENUM_VALUES_IN_CARD])
-        lines.append(line)
-    if profile.metrics:
-        lines.append("METRICS:")
-        for m in profile.metrics:
-            lines.append("- %s = %s" % (m["name"], metric_expr(m)))
-    tm = profile.time
-    if tm:
-        lines.append("TIME COLUMN: \"%s\" format=%s coverage %s -> %s"
-                     % (tm["column"], tm["format"], tm.get("min"), tm.get("max")))
-    return "\n".join(lines)
-
-
-ENUM_VALUES_IN_CARD = 30
-
-# DML/DDL/write verbs. NOTE: words that are ALSO common column identifiers
-# (set, comment, lock) are deliberately NOT here - they can't be a leading
-# statement (the head must be SELECT/WITH, single-statement), writes are blocked
-# by the read-only transaction, and blacklisting them rejected legitimate columns
-# (e.g. a "comment" column). Literals are blanked before this scan (see caller).
-_FORBIDDEN_SQL = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|"
-    r"vacuum|call|do|execute|reset|listen|notify|refresh|merge|into)\b",
-    re.IGNORECASE)
-_LIMIT_RE = re.compile(r"\blimit\s+(\d+)\s*;?\s*$", re.IGNORECASE)
-# Single-quoted string literals ('' = escaped quote). Blanked before keyword/table
-# scanning so a literal like 'a set of products' never triggers a false rejection
-# and never hides a table-name scan.
-_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
-# System catalogs an analytics query never legitimately touches (defense in depth).
-_SYSTEM_TABLE_RE = re.compile(r"\b(information_schema|pg_catalog|pg_[a-z_]+)\b",
-                              re.IGNORECASE)
-
-
-# Functions that execute SQL passed as text, reach other databases / the server file
-# system or change settings: never legitimate in an analytics query.
-_FORBIDDEN_FUNCTIONS_RE = re.compile(
-    r"\b(?:query_to_xml\w*|table_to_xml\w*|cursor_to_xml\w*|schema_to_xml\w*|"
-    r"database_to_xml\w*|dblink\w*|lo_\w+|pg_\w+|set_config|current_setting|"
-    r"xpath\w*|copy_\w+)\s*\(", re.IGNORECASE)
-
-
-# Escaped / prefixed / dollar-quoted strings (see guard_custom_sql).
-_AMBIGUOUS_STRING_SYNTAX_RE = re.compile(
-    r"\\|\$[A-Za-z_0-9]*\$|(?<![A-Za-z0-9_])[eEuU]&?'", re.IGNORECASE)
-
-
-def _blank_string_literals(s):
-    """Copy of ``s`` with the CONTENT of every single-quoted literal emptied, found by a
-    left-to-right scan that understands BOTH quote kinds like PostgreSQL does: an
-    apostrophe inside a "quoted identifier" never opens a literal (a regex pass over
-    the raw text got this wrong and could hide a table name). Quoted identifiers are
-    kept verbatim (the table check needs them). None when a quote is never closed."""
-    out, i, n = [], 0, len(s)
-    while i < n:
-        c = s[i]
-        if c == "'" or c == '"':
-            j = i + 1
-            while j < n:
-                if s[j] == c:
-                    if j + 1 < n and s[j + 1] == c:
-                        j += 2                 # doubled quote = escaped quote
-                        continue
-                    break
-                j += 1
-            else:
-                return None                    # unterminated
-            out.append("''" if c == "'" else s[i:j + 1])
-            i = j + 1
-        else:
-            out.append(c)
-            i += 1
-    return "".join(out)
-
-
-def _strip_sql_noise(sql):
-    s = re.sub(r"^```(?:sql)?\s*|\s*```$", "", str(sql or "").strip(),
-               flags=re.MULTILINE).strip()
-    s = re.sub(r"--[^\n]*", " ", s)
-    s = re.sub(r"/\*.*?\*/", " ", s, flags=re.DOTALL)
-    return s.strip().rstrip(";").strip()
-
-
-def _allowed_table_names(table):
-    """Set of normalized spellings under which the target table may appear."""
-    raw = str(table)
-    no_quotes = raw.replace('"', "")
-    names = {raw.lower(), no_quotes.lower()}
-    if "." in no_quotes:
-        names.add(no_quotes.split(".")[-1].lower())
-    return names
-
-
-def guard_custom_sql(sql, table, max_rows=SQL_MAX_ROWS):
-    """Validate + normalize an LLM-written SQL. Returns (sql, None) on
-    success, (None, reason) on rejection. Defense in depth on top of the
-    read-only transaction: single SELECT, one whitelisted table, no DML/DDL
-    keywords, LIMIT enforced and capped."""
-    s = _strip_sql_noise(sql)
-    if not s:
-        return (None, "empty")
-    if ";" in s:
-        return (None, "multiple_statements")
-    head = s.lstrip().lower()
-    if not (head.startswith("select") or head.startswith("with")):
-        return (None, "not_a_select")
-    # String syntaxes whose end the literal regex below cannot find the way PostgreSQL
-    # does (backslash escapes, E'..' / U&'..' strings, $$ dollar quoting) would let a
-    # table name or function hide inside what the guard takes for a literal. A plain
-    # analytics query never needs them: reject (the repair loop then retries).
-    if _AMBIGUOUS_STRING_SYNTAX_RE.search(s):
-        return (None, "ambiguous_string_syntax")
-    # Scan keywords/tables on a copy with string LITERALS blanked, so a word inside
-    # a literal ('a set of') is never mistaken for a keyword/table.
-    scan = _blank_string_literals(s)
-    if scan is None:
-        return (None, "unterminated_quote")
-    if _FORBIDDEN_SQL.search(scan):
-        return (None, "forbidden_keyword")
-    if _SYSTEM_TABLE_RE.search(scan):
-        return (None, "system_table")
-    # Functions that run a SQL text passed as a STRING (query_to_xml...), reach other
-    # databases or the file system. They are checked on the UNBLANKED text because the
-    # payload they run sits inside a string literal that the scan above blanks out.
-    if _FORBIDDEN_FUNCTIONS_RE.search(s.replace('"', "")):
-        return (None, "forbidden_function")
-
-    allowed = _allowed_table_names(table)
-    cte_names = set()
-    # `WITH [RECURSIVE] name AS (`, and chained `, name AS (`. The optional
-    # RECURSIVE keyword must be tolerated or the CTE name is missed and its own
-    # `FROM name` is then wrongly rejected as a non-whitelisted table.
-    for m in re.finditer(
-            r"(?:\bwith\b(?:\s+recursive)?|,)\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\s+as\s*\(",
-            scan, re.IGNORECASE):
-        cte_names.add(m.group(1).lower())
-    # Validate EVERY table source: each identifier after FROM/JOIN, AND each table
-    # in a comma-separated list (old-style joins `FROM a, b`). `\s*` (not `\s+`) so a
-    # space-less quoted name `FROM"x"` (valid Postgres) can't escape the scan.
-    # Subqueries `FROM (` are skipped here but their inner FROM/JOIN tables are
-    # matched by this same whole-string scan, so nested sources are validated too.
-    for m in re.finditer(r"\b(?:from|join)\s*(\(|[\"A-Za-z0-9_.]+(?:\s*,\s*[\"A-Za-z0-9_.]+)*)",
-                         scan, re.IGNORECASE):
-        if m.group(1) == "(":
-            continue                     # subquery start; its inner FROM/JOIN is scanned too
-        for raw_tok in m.group(1).split(","):
-            token = raw_tok.strip()
-            if not token:
-                continue
-            norm = token.replace('"', "").lower()
-            short = norm.split(".")[-1]
-            # Full name only: `otherschema.<same table name>` is ANOTHER relation.
-            if norm in allowed or norm in cte_names:
-                continue
-            return (None, "table_not_allowed:%s" % token[:60])
-
-    lm = _LIMIT_RE.search(s)
-    if lm:
-        if int(lm.group(1)) > max_rows:
-            s = _LIMIT_RE.sub("LIMIT %d" % max_rows, s)
-    else:
-        s = s + " LIMIT %d" % max_rows
-    return (s, None)
-
-
-# =============================================================================
-# 8b. SEMANTIC MODEL QUERY ENGINE - composer + tool-output extraction
+# 8. SEMANTIC MODEL QUERY ENGINE - composer + tool-output extraction
 # -----------------------------------------------------------------------------
 # The semantic question is 100% deterministic (frozen templates per intent):
 # the LLM never writes it. It carries everything the upstream layers earned -
@@ -2282,7 +1849,6 @@ class MyLLM(BaseLLM):
         # semantic tool id) travel through the graph STATE, not through self.
         self._profile = None
         self._profile_loaded_at = 0.0
-        self._tables = {}            # dataset_name -> quoted SQL table (stable)
         self._tools = {}             # tool_id -> tool handle (stable)
         self._semantic_keys = {}     # tool_id -> detected input key (stable)
 
@@ -2327,27 +1893,10 @@ class MyLLM(BaseLLM):
         self._profile_loaded_at = now
         return profile
 
-    def _get_table(self, dataset_name):
-        """Fully-qualified quoted table name of the target dataset. Cached by
-        dataset name (stable) - never reset by another request's profile reload."""
-        cached = self._tables.get(dataset_name)
-        if cached:
-            return cached
-        info = dataiku.Dataset(dataset_name).get_location_info().get("info", {})
-        table = info.get("quotedResolvedTableName")
-        if not table:
-            schema_name, table_name = info.get("schema"), info.get("table")
-            if not table_name:
-                raise RuntimeError("cannot resolve SQL table for %s" % dataset_name)
-            table = ('"%s"."%s"' % (schema_name, table_name) if schema_name
-                     else '"%s"' % table_name)
-        self._tables[dataset_name] = table
-        return table
-
     # ------------------------------------------------------------------ SQL
     def _run_sql(self, dataset_name, sql, max_rows=MAX_RESULT_ROWS):
-        """Read-only execution -> (columns, row_tuples). Raises on SQL error
-        (callers decide whether to repair). Tries the streaming reader first
+        """Read-only execution of CODE-written SQL on the value index (the agent
+        never runs SQL against the business table). Tries the streaming reader first
         to avoid a pandas dependency, falls back to query_to_df. max_rows
         bounds the FETCH (answer queries keep the Evidence cap; the value
         resolver raises it to read its candidate slices)."""
@@ -2370,10 +1919,6 @@ class MyLLM(BaseLLM):
         rows = [tuple(r) for r in df.head(max_rows + 1).itertuples(index=False,
                                                                    name=None)]
         return columns, rows
-
-    def _explain(self, dataset_name, sql):
-        executor = dataiku.SQLExecutor2(dataset=dataiku.Dataset(dataset_name))
-        executor.query_to_df("EXPLAIN " + sql, pre_queries=list(SQL_PRE_QUERIES))
 
     def _resolve_terms(self, profile, base_terms, trace):
         """Ground terms on the value index (exact-norm pass + per-term fuzzy
@@ -2733,182 +2278,81 @@ class MyLLM(BaseLLM):
 
         def n_query(state):
             writer = get_stream_writer()
-            # Work on a COPY of the understanding: this node demotes the intent
-            # (structured -> custom) on several fallback paths. Mutating a copy and
-            # returning it via state (rather than the shared dict) keeps the "nodes
-            # communicate by returned state" contract honest and future-proof.
             u, lang = dict(state["u"]), state["lang"]
             filters = state.get("filters") or []
             resolved_filters = state.get("resolved_filters") or []
-            instruction = state["instruction"]
-            table = sa._get_table(profile.dataset_name)
             executed = []
             result, fmt_map, unit = None, {}, None
             tool_answer = None
             tool_row_count = None
-            det_failed = None
-            engine = SQL_ENGINE
 
             writer(_block("run_sql"))
             writer(_tool_start("dataset_sql_query"))
 
-            if engine == "semantic_tool":
-                payload = None
-                semantic_question = build_semantic_question(u, profile, filters)
-                with trace.subspan("dataset-expert:semantic-tool") as sp:
-                    sp.inputs["semantic_question"] = semantic_question
-                    try:
-                        tool_id = state.get("semantic_tool_id") or SEMANTIC_TOOL_ID
-                        tool = sa._get_tool(project, tool_id, SEMANTIC_TOOL_NAME)
-                        # Input key cached PER TOOL ID (a per-mode tool may differ).
-                        sem_key = sa._semantic_keys.get(tool_id)
-                        if sem_key is None:
-                            try:
-                                sem_key = pick_semantic_input_key(tool.get_descriptor())
-                            except Exception:
-                                sem_key = SEMANTIC_QUESTION_KEY
-                            sa._semantic_keys[tool_id] = sem_key
-                        sp.attributes["input_key"] = sem_key
-                        raw = tool.run({sem_key: semantic_question})
-                        payload = extract_semantic_payload(raw)
-                        sp.outputs["shape_keys"] = payload["shape_keys"]
-                        sp.outputs["sql_count"] = len(payload["sqls"])
-                        sp.outputs["row_count"] = payload["row_count"]
-                        result = payload["result"]
-                        tool_answer = payload["answer"]
-                        tool_row_count = payload["row_count"]
-                        unit = metric_unit(profile.metric(u["metric"] or "")
-                                           or profile.default_metric)
-                    except Exception as e:
-                        logger.exception(
-                            "Semantic tool failed%s",
-                            " -> direct engine fallback" if FALLBACK_TO_DIRECT else "")
-                        sp.attributes["error"] = str(e)[:500]
-                        if not FALLBACK_TO_DIRECT:
-                            writer({"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}})
-                            writer(_agent_result("error", u,
-                                   resolved_filters=resolved_filters))
-                            return {"done": True}
-                        engine = "direct"
-                if engine == "semantic_tool":
-                    sqls = (payload or {}).get("sqls") or []
-                    # The tool's RESULT belongs to the FINAL query it ran (when it
-                    # generates several - e.g. a query then a repaired variant). The
-                    # webapp's Evidence/chart pick the LAST successful SQL, so the
-                    # captured rows/columns MUST ride the LAST span, not the first -
-                    # otherwise the active item carries no result ("not kept") and
-                    # the chart cannot render (fix for the multi-SQL case).
-                    last_i = len(sqls) - 1
-                    for i, sql in enumerate(sqls):
-                        with trace.subspan("semantic-model-query") as qsp:
-                            qsp.outputs["sql"] = sql
-                            qsp.outputs["success"] = True
-                            qsp.outputs["row_count"] = tool_row_count
-                            if i == last_i and result is not None:
-                                qsp.outputs["columns"] = result["columns"]
-                                qsp.outputs["rows"] = result["rows"]
-                        executed.append({"sql": sql, "success": True,
-                                         "row_count": tool_row_count})
-
-            if engine == "direct" and u["intent"] != "custom":
+            # The Semantic Model Query tool OWNS the SQL: it holds the business
+            # semantic model (entities, metrics, glossary, golden queries) that the
+            # agent code does not. The agent hands it a grounded question and reads
+            # its result; a technical failure of the tool is reported as an error
+            # (the agent never writes SQL of its own against the business table).
+            payload = None
+            semantic_question = build_semantic_question(u, profile, filters)
+            with trace.subspan("dataset-expert:semantic-tool") as sp:
+                sp.inputs["semantic_question"] = semantic_question
                 try:
-                    sql, meta = build_sql(u, profile, filters, table)
-                    fmt_map, unit = meta["format_map"], meta.get("unit")
-                except ValueError as e:
-                    logger.info("No deterministic SQL (%s) -> custom path", e)
-                    u["intent"] = "custom"
-                else:
-                    with trace.subspan("semantic-model-query") as sp:
-                        sp.outputs["sql"] = sql
+                    tool_id = state.get("semantic_tool_id") or SEMANTIC_TOOL_ID
+                    tool = sa._get_tool(project, tool_id, SEMANTIC_TOOL_NAME)
+                    # Input key cached PER TOOL ID (a per-mode tool may differ).
+                    sem_key = sa._semantic_keys.get(tool_id)
+                    if sem_key is None:
                         try:
-                            columns, rows = sa._run_sql(profile.dataset_name, sql)
-                            result = shape_result(columns, rows)
-                            sp.outputs["success"] = True
-                            sp.outputs["row_count"] = len(result["rows"])
-                            sp.outputs["columns"] = result["columns"]
-                            sp.outputs["rows"] = result["rows"]
-                            executed.append({"sql": sql, "success": True,
-                                             "row_count": len(result["rows"])})
-                        except Exception as e:
-                            logger.exception("Deterministic SQL failed -> "
-                                             "falling back to custom path")
-                            sp.outputs["success"] = False
-                            sp.attributes["error"] = str(e)[:500]
-                            executed.append({"sql": sql, "success": False,
-                                             "error": str(e)[:200]})
-                            det_failed = (sql, str(e)[:500])
-                            fmt_map, unit = {}, None
-                            u["intent"] = "custom"
-
-            if engine == "direct" and u["intent"] == "custom":
-                card = build_dataset_card(profile, table)
-                scen = profile.scenario
-                scenario_rule = ("No scenario column." if not scen else
-                                 ('The column "%s" holds scenario values (%s): '
-                                  "NEVER aggregate across several of them "
-                                  "unless the question asks a comparison. "
-                                  "Default filter: %s."
-                                  % (scen["column"], ", ".join(scen["values"]),
-                                     ", ".join(scen.get("default_values") or []))))
-                system = SQLGEN_PROMPT.format(table=table,
-                                              scenario_rule=scenario_rule,
-                                              max_rows=SQL_MAX_ROWS)
-                filt_text = ("RESOLVED FILTER VALUES (use verbatim): " +
-                             "; ".join("%s = '%s'" % (f["column"], f["value"])
-                                       for f in filters)) if filters else ""
-                user_block = "%s\n\n%s\nQUESTION: %s" % (card, filt_text, instruction)
-                if det_failed:
-                    user_block += ("\n\nA PREVIOUS ATTEMPT FAILED - avoid this "
-                                   "mistake.\nFAILED SQL:\n%s\nDATABASE ERROR:\n%s"
-                                   % det_failed)
-                sql, last_error = None, None
-                sqlgen_llm = state.get("llm_id") or SQLGEN_LLM_ID or UNDERSTAND_LLM_ID
-                for attempt in range(1, MAX_CUSTOM_SQL_ATTEMPTS + 1):
-                    with trace.subspan("dataset-expert:sqlgen") as sp:
-                        sp.attributes["attempt"] = attempt
-                        if attempt == 1:
-                            raw_sql = sa._llm_text(project, sqlgen_llm,
-                                                   system, user_block, sp, 4000)
-                        else:
-                            raw_sql = sa._llm_text(
-                                project, sqlgen_llm,
-                                system,
-                                user_block + "\n\n" + SQLGEN_REPAIR_PROMPT.format(
-                                    error=last_error or "", sql=sql or ""), sp, 4000)
-                    guarded, reason = guard_custom_sql(raw_sql, table)
-                    if guarded is None:
-                        last_error = "guard rejected: %s" % reason
-                        executed.append({"sql": (raw_sql or "")[:2000],
-                                         "success": False, "error": last_error})
-                        continue
-                    sql = guarded
-                    with trace.subspan("semantic-model-query") as sp:
-                        sp.outputs["sql"] = sql
-                        sp.attributes["attempt"] = attempt
-                        try:
-                            sa._explain(profile.dataset_name, sql)
-                            columns, rows = sa._run_sql(profile.dataset_name, sql)
-                            result = shape_result(columns, rows)
-                            sp.outputs["success"] = True
-                            sp.outputs["row_count"] = len(result["rows"])
-                            sp.outputs["columns"] = result["columns"]
-                            sp.outputs["rows"] = result["rows"]
-                            executed.append({"sql": sql, "success": True,
-                                             "row_count": len(result["rows"])})
-                            break
-                        except Exception as e:
-                            last_error = str(e)[:500]
-                            sp.outputs["success"] = False
-                            sp.attributes["error"] = last_error
-                            executed.append({"sql": sql, "success": False,
-                                             "error": last_error[:200]})
-                            result = None
-                if result is None:
+                            sem_key = pick_semantic_input_key(tool.get_descriptor())
+                        except Exception:
+                            sem_key = SEMANTIC_QUESTION_KEY
+                        sa._semantic_keys[tool_id] = sem_key
+                    sp.attributes["input_key"] = sem_key
+                    raw = tool.run({sem_key: semantic_question})
+                    payload = extract_semantic_payload(raw)
+                    sp.outputs["shape_keys"] = payload["shape_keys"]
+                    sp.outputs["sql_count"] = len(payload["sqls"])
+                    sp.outputs["row_count"] = payload["row_count"]
+                    result = payload["result"]
+                    tool_answer = payload["answer"]
+                    tool_row_count = payload["row_count"]
+                    unit = metric_unit(profile.metric(u["metric"] or "")
+                                       or profile.default_metric)
+                except Exception as e:
+                    logger.exception("Semantic tool failed")
+                    sp.attributes["error"] = str(e)[:500]
                     writer({"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}})
                     writer(_agent_result("error", u,
-                           resolved_filters=resolved_filters,
-                           sql_count=len(executed), attempts=len(executed)))
+                           resolved_filters=resolved_filters))
                     return {"done": True}
+            sqls = (payload or {}).get("sqls") or []
+            # The tool's RESULT belongs to the FINAL query it ran (when it
+            # generates several - e.g. a query then a repaired variant). The
+            # webapp's Evidence/chart pick the LAST successful SQL, so the
+            # captured rows/columns MUST ride the LAST span, not the first -
+            # otherwise the active item carries no result ("not kept") and
+            # the chart cannot render (fix for the multi-SQL case).
+            last_i = len(sqls) - 1
+            for i, sql in enumerate(sqls):
+                is_last = (i == last_i)
+                with trace.subspan("semantic-model-query") as qsp:
+                    qsp.outputs["sql"] = sql
+                    qsp.outputs["success"] = True
+                    # The tool reports ONE row_count, for its FINAL query.
+                    # Only the last span carries it; the intermediate
+                    # probe/repair spans have none (stamping them all with
+                    # the final count is dishonest).
+                    if is_last:
+                        qsp.outputs["row_count"] = tool_row_count
+                        if result is not None:
+                            qsp.outputs["columns"] = result["columns"]
+                            qsp.outputs["rows"] = result["rows"]
+                item = {"sql": sql, "success": True}
+                if is_last:
+                    item["row_count"] = tool_row_count
+                executed.append(item)
 
             return {"u": u, "result": result, "fmt_map": fmt_map, "unit": unit,
                     "tool_answer": tool_answer, "tool_row_count": tool_row_count,

@@ -131,7 +131,6 @@ class TestAgentLoaders(unittest.TestCase):
         self.assertEqual(rev.pick_subagent_llm("smart"), CENTRAL["smart"])
         # Stand-alone fallbacks follow the default (smart) mode.
         self.assertEqual(rev.UNDERSTAND_LLM_ID, CENTRAL["smart"])
-        self.assertEqual(rev.SQLGEN_LLM_ID, CENTRAL["smart"])
 
     def test_bad_file_or_entry_falls_back_to_embedded(self):
         orch = _load_agent("OWIsMind_orchestrator.py", {hub.MODELS_PATH: "{bad"})

@@ -34,8 +34,8 @@ remaining **repoint + curation**, not a from-scratch build.
 
 - `../GenAI/Agents/CSSO_Trouble_Tickets_Expert.py` - the tickets sub-agent (same engine as
   revenue, CONFIG header pointed at the tickets datasets; `SEMANTIC_TOOL_ID` already
-  set to `nEirlso`; `FALLBACK_TO_DIRECT=True` so it works from the profile even
-  before the model is fully wired).
+  set to `nEirlso`). The semantic tool is the ONLY writer of the SQL (no direct
+  engine since 2026-10-14): the model must be wired before the agent can answer.
 - `../GenAI/Agents/OWIsMind_orchestrator.py` - the `tickets_expert` CAPABILITIES entry
   (routing, timeline labels, lookup dataset + search allowlist), with `agent_id`
   already set to `agent:NcE9LD2i`.
@@ -111,7 +111,7 @@ over-counts updated tickets, so the count must be `COUNT(DISTINCT id)`:
 - `key=__dataset__`, `field=default_metric`, `value=ticket_count`.
 
 `agg=COUNT_DISTINCT` makes `metric_expr` emit `COUNT(DISTINCT "id")` in the
-sub-agent's compose hint and direct-SQL fallback. Do NOT give any tickets metric
+sub-agent's compose hint (handed to the semantic tool). Do NOT give any tickets metric
 `format:"amount"` and do NOT name a column `*_eur/_usd` (that would make the engine
 infer a phantom currency). `Duration_ticket_total` is in MINUTES - keep it in the
 label.
