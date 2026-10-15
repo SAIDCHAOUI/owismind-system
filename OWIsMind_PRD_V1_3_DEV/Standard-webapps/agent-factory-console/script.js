@@ -2645,10 +2645,39 @@
     missing: '<span class="afc-chip afc-chip--failed">Missing</span>'
   };
 
-  function llmDatalist(list) {
-    return '<datalist id="afcLlmList">' + (list || []).map(function (m) {
-      return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>';
-    }).join("") + '</datalist>';
+  /* LLM picker: a full-width <select> listing every model of the project with its
+   * complete id (a datalist truncated long ids), plus the chosen id written in full
+   * under it so nothing is ever cut. The current value is kept as an option even
+   * when it is no longer in the project's list. With no list (API failure), a plain
+   * text input takes over. */
+  function llmPicker(id, value, list, emptyLabel) {
+    value = value || "";
+    if (!(list && list.length)) {
+      return '<input class="afc-input mono" id="' + id + '" value="' + esc(value) + '" placeholder="' + esc(emptyLabel || "") + '">';
+    }
+    var known = false;
+    var options = '<option value=""' + (value ? "" : " selected") + '>' + esc(emptyLabel || "Choose a model") + '</option>';
+    list.forEach(function (m) {
+      var selected = m.id === value;
+      known = known || selected;
+      var label = m.id + (m.name && m.name !== m.id ? "   (" + m.name + ")" : "");
+      options += '<option value="' + esc(m.id) + '"' + (selected ? " selected" : "") + '>' + esc(label) + '</option>';
+    });
+    if (value && !known) {
+      options += '<option value="' + esc(value) + '" selected>' + esc(value) + '   (not in the project list)</option>';
+    }
+    return '<select class="afc-select mono afc-llm-select" id="' + id + '">' + options + '</select>' +
+      '<p class="afc-field-help mono afc-llm-full" id="' + id + '_full">' + (value ? esc(value) : "") + '</p>';
+  }
+
+  function bindLlmPicker(id, cb) {
+    bindInput(id, function (v) {
+      v = v.trim();
+      var full = byId(id + "_full");
+      if (full) { full.textContent = v; }
+      cb(v);
+    }, true);
+    bindInput(id, function (v) { cb(v.trim()); });
   }
 
   function loadModels(cb) {
@@ -2695,18 +2724,18 @@
       'and apply a change within about 30 seconds without a restart.</p>' +
       (m.data.from_file ? "" : '<div class="afc-note afc-note--error"><b>models.json is missing or invalid: every agent refuses to run until it is saved.</b>' +
         ((m.data.problems || []).length ? '<ul class="fd-list">' + m.data.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul>' : "") + '</div>') +
-      llmDatalist(m.data.available_llms);
+      "";
+    var llms = m.data.available_llms;
     MODES.forEach(function (mode) {
-      html += field(MODE_LABELS[mode],
-        '<input class="afc-input mono" list="afcLlmList" id="mdMode_' + mode + '" value="' + esc(d.modes[mode]) + '">');
+      html += field(MODE_LABELS[mode], llmPicker("mdMode_" + mode, d.modes[mode], llms, "Choose a model (required)"));
     });
     html += '<p class="afc-mlabel tracker-sub">Agent factory</p>' +
-      field("Factory default model", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryDefault" value="' +
-        esc((d.factory || {}).default || "") + '">', "Used by the factory wizard, the Improve review and the prompt doctor.") +
-      field("Wizard model (optional)", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryWizard" value="' +
-        esc((d.factory || {}).wizard || "") + '">', "Empty = use the factory default model.") +
-      field("Profile enrichment model", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryEnrich" value="' +
-        esc((d.factory || {}).profile_enrich || "") + '">', "LLM pass of the profile recipes (column descriptions). Empty = skip that pass.");
+      field("Factory default model", llmPicker("mdFactoryDefault", (d.factory || {}).default, llms, "Choose a model (required)"),
+        "Used by the factory wizard, the Improve review and the prompt doctor.") +
+      field("Wizard model (optional)", llmPicker("mdFactoryWizard", (d.factory || {}).wizard, llms, "Same as the factory default model"),
+        "Empty = use the factory default model.") +
+      field("Profile enrichment model", llmPicker("mdFactoryEnrich", (d.factory || {}).profile_enrich, llms, "Skip the LLM pass"),
+        "LLM pass of the profile recipes (column descriptions). Empty = skip that pass.");
     var overrides = Object.keys(d.agents || {}).filter(function (k) { return Object.keys(d.agents[k] || {}).length; });
     if (overrides.length) {
       html += '<p class="afc-mlabel tracker-sub">Agents with their own setting</p><dl class="afc-kv">';
@@ -2724,12 +2753,13 @@
   function wireModelsCard() {
     var m = S.models;
     if (!m.loaded || !byId("mdSave")) { return; }
+    m.draft.factory = m.draft.factory || {};
     MODES.forEach(function (mode) {
-      bindInput("mdMode_" + mode, function (v) { m.draft.modes[mode] = v.trim(); });
+      bindLlmPicker("mdMode_" + mode, function (v) { m.draft.modes[mode] = v; });
     });
-    bindInput("mdFactoryDefault", function (v) { m.draft.factory.default = v.trim(); });
-    bindInput("mdFactoryWizard", function (v) { m.draft.factory.wizard = v.trim(); });
-    bindInput("mdFactoryEnrich", function (v) { m.draft.factory.profile_enrich = v.trim(); });
+    bindLlmPicker("mdFactoryDefault", function (v) { m.draft.factory.default = v; });
+    bindLlmPicker("mdFactoryWizard", function (v) { m.draft.factory.wizard = v; });
+    bindLlmPicker("mdFactoryEnrich", function (v) { m.draft.factory.profile_enrich = v; });
     byId("mdSave").onclick = function () {
       openConfirm({
         title: "Save the central models?",
@@ -2792,15 +2822,20 @@
   function agentModelsSection(a) {
     var d = a.data;
     var html = '<section class="card"><p class="afc-mlabel">LLM used by this agent</p>' +
-      '<p class="afc-field-help">One model per mode. Leave a field empty to follow the central model of that mode ' +
-      '(Settings screen); fill it to give this agent its own.</p>' + llmDatalist(d.available_llms);
+      '<p class="afc-field-help">One model per mode. Leave a field on the central model of that mode ' +
+      '(Settings screen); pick one to give this agent its own.</p>';
+    if ((d.models_problems || []).length) {
+      html += '<div class="afc-note afc-note--error"><b>models.json is missing or invalid: this agent refuses to run until it is fixed in Settings.</b><ul class="fd-list">' +
+        d.models_problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul></div>';
+    }
     MODES.forEach(function (mode) {
       var eff = d.models[mode] || {};
+      var central = (d.central_models || {})[mode] || "";
       html += '<div class="afc-field"><span class="afc-field-label">' + esc(MODE_LABELS[mode]) + ' ' +
         (SOURCE_CHIP[eff.source] || "") + '</span>' +
-        '<input class="afc-input mono" list="afcLlmList" id="agMode_' + mode + '" value="' + esc(a.draft.models[mode]) +
-        '" placeholder="' + esc((d.central_models || {})[mode] || eff.llm || "") + '">' +
-        '<p class="afc-field-help">Currently resolves to <span class="mono">' + esc(eff.llm || "-") + '</span></p></div>';
+        llmPicker("agMode_" + mode, a.draft.models[mode], d.available_llms,
+                  central ? "Central model: " + central : "Central model (none set yet)") +
+        '<p class="afc-field-help">Currently resolves to <span class="mono">' + esc(eff.llm || "nothing: the agent refuses this mode") + '</span></p></div>';
     });
     html += '<div class="afc-actions"><button class="afc-btn afc-btn--primary" id="agModelsSave">' + I.save + 'Save the LLMs</button></div></section>';
     return html;
@@ -2903,7 +2938,7 @@
   function wireAgent() {
     var a = S.agent;
     MODES.forEach(function (mode) {
-      bindInput("agMode_" + mode, function (v) { a.draft.models[mode] = v.trim(); });
+      bindLlmPicker("agMode_" + mode, function (v) { a.draft.models[mode] = v; });
     });
     if (byId("agModelsSave")) { byId("agModelsSave").onclick = confirmAgentModels; }
     Array.prototype.forEach.call(document.querySelectorAll("[data-ag-prompt]"), function (btn) {

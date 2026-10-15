@@ -176,6 +176,9 @@
 #afc .afc-textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
 #afc .afc-textarea.code { font-family: var(--font-mono); font-size: 12.5px; min-height: 320px; }
 #afc .afc-select { cursor: pointer; }
+#afc .afc-llm-select { width: 100%; max-width: 100%; }
+#afc .afc-llm-select option { font-family: var(--font-mono); font-size: 13px; white-space: normal; }
+#afc .afc-llm-full { word-break: break-all; overflow-wrap: anywhere; margin-top: 4px; min-height: 1em; }
 #afc .afc-field-help { font-size: 12.5px; color: var(--text-2); margin: 0; line-height: 1.5; }
 #afc .afc-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; margin-bottom: 18px; }
 #afc .afc-grid-2 .afc-field { margin-bottom: 0; }

@@ -601,6 +601,7 @@ def api_agent_settings():
         return _err("unknown_agent", 404)
     bundle["available_llms"] = hub.list_available_llms(project)
     bundle["central_models"] = (hub.read_models(project) or {}).get("modes") or {}
+    bundle["models_problems"] = hub.models_problems(project)
     return jsonify({"status": "ok", "settings": bundle})
 
 
