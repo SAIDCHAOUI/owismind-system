@@ -3689,3 +3689,11 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Preuve** : 804 tests OWIsMind_PRD_V1_3_DEV + 935 tests plugin OK ; grep des ids = 0 occurrence hors models.json.
 - **A deployer** : recoller les 5 Code Agents + le package `owismind_factory` + la console + les 2 recettes de profil ; verifier `models.json` dans la library (ajouter `factory.profile_enrich`) ; zip DEV a regenerer pour le moteur natif (flag, non urgent).
 - **Source** : session 2026-10-15 (demande user : "centralisation absolue, nada, zero").
+
+## L196 - "Source Data n'affiche pas mes datasets" : verifier d'abord l'agent ET le projet selectionnes (2026-10-15)
+- **Contexte** : l'user ajoute 5 sources a un agent dans l'admin ; Source Data n'en montre que 2.
+- **Ce qui a echoue** : diagnostic parti directement sur le code (deux vrais defauts de rafraichissement front trouves et corriges), alors que la cause etait un agent homonyme d'un AUTRE projet DSS selectionne.
+- **Solution qui marche** : premiere question = quel agent (cle logique + projet) est edite et lequel est selectionne dans le chat. Defauts corriges au passage : `saveAgents` recharge `session.loadAgents()` ; `sources.ensureAgent` relit la liste du meme agent (garde la source active si meme id ET meme dataset).
+- **Preuve** : constat user en DSS (bon agent = 5 datasets) ; 445/445 tests front, compile-check OK.
+- **Source** : session 2026-10-15 run 2.
+

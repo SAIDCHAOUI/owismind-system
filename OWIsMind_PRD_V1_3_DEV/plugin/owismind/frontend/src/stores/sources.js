@@ -228,11 +228,22 @@ export const useSourcesStore = defineStore('sources', () => {
       agentKey.value = key
       sourceList.value = _agentSources(key)
       activeSourceId.value = sourceList.value.length ? sourceList.value[0].id : null
-    } else if (!sourceList.value.length) {
-      // Same agent but the list was empty (agents loaded after the first call).
-      sourceList.value = _agentSources(key)
-      if (activeSourceId.value == null && sourceList.value.length) {
-        activeSourceId.value = sourceList.value[0].id
+    } else {
+      // Same agent: re-read its list from the session (agents may have loaded after the
+      // first call, or an admin may have edited the sources since). Keep the browsed
+      // source when it still points at the SAME dataset (ids are list indexes, so a
+      // reorder can move a dataset to another id); otherwise fall back to the first one.
+      const fresh = _agentSources(key)
+      if (JSON.stringify(fresh) !== JSON.stringify(sourceList.value)) {
+        const prev = sourceList.value.find((s) => s.id === activeSourceId.value)
+        sourceList.value = fresh
+        const still = prev && fresh.find((s) => s.id === prev.id && s.dataset === prev.dataset)
+        if (!still) {
+          seq += 1 // invalidate any in-flight request for the outgoing source
+          _resetView()
+          loadedSourceId = null
+          activeSourceId.value = fresh.length ? fresh[0].id : null
+        }
       }
     }
     if (activeSourceId.value != null && loadedSourceId !== activeSourceId.value) {

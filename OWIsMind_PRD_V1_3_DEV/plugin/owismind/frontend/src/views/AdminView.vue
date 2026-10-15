@@ -580,6 +580,9 @@ async function saveAgents() {
     }))
     profilesDirty.value = false
     agentsMsg.value = t('admin.agents.saved', [res.count])
+    // Refresh the session's agent list so the chat surfaces (Source Data, picker,
+    // profile cards) reflect the saved profiles without a page reload.
+    await session.loadAgents()
   } catch (e) {
     agentsMsg.value = t('admin.load_error')
   } finally {

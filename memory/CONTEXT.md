@@ -7,6 +7,12 @@
 
 ## Focus courant
 
+**2026-10-15 run 2 : Source Data "2 datasets sur 5" = mauvais agent selectionne (autre projet), pas un bug.**
+Lecon L196. Au passage, 2 defauts front reels corriges (liste perimee apres sauvegarde admin sans F5) :
+`AdminView.saveAgents` -> `session.loadAgents()` ; `sources.ensureAgent` relit la liste du meme agent.
+445/445 tests front. Zip DEV `owismind-v1_3-dev-upload.zip` regenere, A UPLOADER (non valide DSS).
+Prochaine session : nouvelle version du plugin webapp (preparee par l'user).
+
 **2026-10-15 : models.json = SEULE source des modeles (zero id en dur, zero repli, TTL 30 s).**
 Lecon L195. Cause du bug user : ids embarques en repli + lecture unique au demarrage.
 - Fait : 5 agents, moteur natif, hub.py (`factory_llm`), usine, 2 recettes de profil, notebooks 01/06,
@@ -34,18 +40,8 @@ Detail `sessions/2026-10-14.md` run 3, lecons L192-L194. Commits ccd8b35..0a3ce0
   expert / Analyser l'instance" incomprehensibles pour l'user ; le probleme etait la DISPOSITION, pas
   le nombre d'etapes. git bloque par la licence Xcode (`sudo xcodebuild -license`).
 
-**2026-10-14 run 1 : tableaux de resultat agent = resultat COMPLET pagine + compteur honnete.**
-Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande user).
-- Cause : agents capent la capture a 50 lignes ET comptent apres la coupe ("50 lignes" pour 1000).
-- Fix plugin seul : route `/evidence/result-rows` (relit le SELECT stocke de l'agent, LIMIT/OFFSET,
-  COUNT exact 1re fenetre, lecture seule, garde `check_rerunnable_select`) ; front `useResultRows`
-  dans `ArtifactTable` + `EvidenceResult` : "100 lignes affichees sur T", +20 au scroll, max 500.
-- Zip DEV FINAL 14/10 19h44 (`owismind_v1_3-upload.zip`, inclut le run 2) : A UPLOADER + redemarrer le backend.
-- Non valide : rendu visuel (pas de Chromium local) et DSS.
-- Run 2 : regle user "SQL = creer + lire" ; audit ALTER/DELETE/UPDATE ; WORKFLOW DURABLE RETIRE
-  (superviseur, 2 DELETE, 3 tables, routes, UI) ; ZERO ALTER ; seul DELETE restant = quota admin.
-
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-15 Run 2 : Source Data 2/5 = mauvais agent (autre projet) ; fix rafraichissement front apres save admin, zip DEV. L196. Voir `sessions/2026-10-15.md`.
 - 2026-10-15 : models.json seule source des modeles, zero id en dur, zero repli, TTL 30 s, test gardien. L195.
 - 2026-10-14 Run 3 : factory models.json + Settings + prompt metier IA + garde-fous injection + revue Fable, pousse. L192-L194. Voir `sessions/2026-10-14.md` run 3.
 - 2026-10-14 Run 2 : audit SQL + retrait workflow durable + zero ALTER. L191. Voir `sessions/2026-10-14.md` run 2.
