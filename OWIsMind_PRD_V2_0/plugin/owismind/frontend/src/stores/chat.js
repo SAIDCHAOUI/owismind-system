@@ -30,7 +30,6 @@ import { useEvidenceStore } from './evidence.js'
 import { useSourcesStore } from './sources.js'
 import { useScreenContextStore } from './screenContext.js'
 import { useWorkspaceStore } from './workspace.js'
-import { lastEvidenceExchangeId } from '../composables/evidenceModel.js'
 import { track } from '../services/track.js'
 
 // One session id per conversation (the backend stores it; history is scoped by user).
@@ -165,6 +164,7 @@ export const useChatStore = defineStore('chat', () => {
     cancelActive()
     evidence.close()
     workspace.close()
+    workspace.planEvent('restore')
     // The Source Data dock is NOT closed here: the arrival screen wants it open
     // (AppLayout auto-docks it anyway), and closing would drop the fetched view
     // just to refetch it one tick later. Agent-change follow-up (or a source-less
@@ -187,27 +187,16 @@ export const useChatStore = defineStore('chat', () => {
   // view - never degraded, never an error surface. Fire-and-forget: a rapid
   // switch is safe (openSession→evidence.close() bumps the store's seq, which
   // invalidates an in-flight auto commit).
+  // Conversation entry (V2 Studio): nothing is imposed on the right. When the last
+  // answer of the branch stored a workspace, its document is loaded silently so the
+  // plan card (above the prompt, collapsed) and the beacon can offer it; the user
+  // opens the Studio from there.
   function _autoOpenEvidence(sessionId) {
     if (activeSessionId.value !== sessionId) return
-    // V2: when the LAST answer of the branch stored a workspace, the right column
-    // restores that workspace (dashboard first) instead of the V1.3 proof panel.
+    workspace.planEvent('restore')
     const last = turns.value[turns.value.length - 1]
-    if (last && last.exchange.id && (last.exchange.hasWorkspace || workspace.hasContent(last.exchange.id))) {
-      const id = last.exchange.id
-      Promise.resolve(workspace.openForExchange(id, { auto: true }))
-        .then((shown) => {
-          if (!shown && activeSessionId.value === sessionId) _openEvidenceFallback(sessionId)
-        })
-        .catch(() => {})
-      return
-    }
-    _openEvidenceFallback(sessionId)
-  }
-  function _openEvidenceFallback(sessionId) {
-    if (activeSessionId.value !== sessionId) return
-    const evidenceId = lastEvidenceExchangeId(turns.value)
-    if (evidenceId) {
-      Promise.resolve(evidence.openForExchange(evidenceId, { auto: true })).catch(() => {})
+    if (last && last.exchange.id && last.exchange.hasWorkspace) {
+      Promise.resolve(workspace.loadForExchange(last.exchange.id)).catch(() => {})
     }
   }
 

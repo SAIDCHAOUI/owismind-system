@@ -81,18 +81,21 @@ class TestRegistryAndTools(unittest.TestCase):
         specs, t2c = orch.build_tool_specs(orch.get_capabilities())
         names = {s["function"]["name"] for s in specs}
         self.assertIn("ask_revenue_expert", names)
-        self.assertIn("show_chart", names)
-        self.assertIn("show_table", names)
         self.assertIn("current_date", names)
         self.assertEqual(t2c["ask_revenue_expert"], "revenue_expert")
-        chart = next(s for s in specs if s["function"]["name"] == "show_chart")
-        req = chart["function"]["parameters"]["required"]
-        self.assertIn("chart_type", req)
-        self.assertIn("x", req)
-        self.assertIn("y", req)
-        # Presentation metadata is exposed but OPTIONAL (additive contract).
-        props = chart["function"]["parameters"]["properties"]
-        for key in ("x_label", "y_label", "unit", "description"):
+        # V2.0: the workspace tools replace show_chart / show_table / show_kpi,
+        # which are no longer exposed to the model (internal aliases only).
+        for tool in ("write_plan", "update_plan", "write_note", "publish_widget"):
+            self.assertIn(tool, names)
+        for legacy in ("show_chart", "show_table", "show_kpi"):
+            self.assertNotIn(legacy, names)
+        widget = next(s for s in specs if s["function"]["name"] == "publish_widget")
+        req = widget["function"]["parameters"]["required"]
+        self.assertEqual(sorted(req), ["kind", "title"])
+        # Presentation metadata is exposed but OPTIONAL.
+        props = widget["function"]["parameters"]["properties"]
+        for key in ("result_id", "chart_type", "x", "y", "x_label", "y_label",
+                    "unit", "comment"):
             self.assertIn(key, props)
             self.assertNotIn(key, req)
 
@@ -746,7 +749,7 @@ class TestNativeArtifactFormatting(unittest.TestCase):
         self.assertNotIn("|", out.split("DATA")[0])   # headline carries no table
         self.assertIn("DATA", out)
         self.assertIn("DISPLAY", out)                 # light render nudge
-        self.assertIn("show_chart", out)
+        self.assertIn("publish_widget", out)
         self.assertIn("Client, Revenue", out)         # exact columns offered
         # NON-prescriptive: it does NOT force a specific chart type / hint.
         self.assertNotIn("RENDERING HINT", out)
@@ -1176,10 +1179,10 @@ class TestKpiArtifact(unittest.TestCase):
         art, _msg = llm._record_artifact("show_kpi", {"value": "nope"}, state)
         self.assertIsNone(art)
 
-    def test_show_kpi_tool_in_specs(self):
+    def test_kpi_is_a_publish_widget_kind(self):
         specs, _t2c = orch.build_tool_specs(orch.get_capabilities())
-        names = {s["function"]["name"] for s in specs}
-        self.assertIn("show_kpi", names)
+        widget = next(s for s in specs if s["function"]["name"] == "publish_widget")
+        self.assertIn("kpi", widget["function"]["parameters"]["properties"]["kind"]["enum"])
 
 
 if __name__ == "__main__":

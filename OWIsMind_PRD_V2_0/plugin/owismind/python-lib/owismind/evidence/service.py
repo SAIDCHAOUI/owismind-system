@@ -460,7 +460,7 @@ def with_source_urls(matched_sources, url):
     return matched_sources
 
 
-def summarize_queries(items, matched_flags):
+def summarize_queries(items, matched_flags, active_index=None):
     """The ``queries`` block of /evidence/meta: one summary per stored item. Pure.
 
     1-based ``index`` (display ordinal), coerced ``success``, the agent-declared
@@ -489,6 +489,13 @@ def summarize_queries(items, matched_flags):
         agent_key = item.get("agent_key")
         if isinstance(agent_key, str) and agent_key:
             entry["agent_key"] = agent_key[:64]
+        # V2.0 multi-SQL Evidence: the id the client passes back as ``sql_id`` to
+        # view THIS query, and whether it is the one the response describes.
+        sql_id = item.get("sql_id")
+        if isinstance(sql_id, str) and sql_id:
+            entry["sql_id"] = sql_id[:64]
+        if active_index is not None:
+            entry["active"] = i == active_index
         out.append(entry)
     return out
 
@@ -578,7 +585,7 @@ def build_drill_conditions(drill, allowed_columns, colmap, quote_ident, quote_va
 # ============================================================================
 
 
-def _load_sql_item(user_id, exchange_id):
+def _load_sql_item(user_id, exchange_id, sql_id=None):
     """``(active_item_or_None, all_items, active_index_or_None)`` for the exchange.
 
     Owner-scoped read on the chat table. The ACTIVE item is the LAST successful
@@ -588,6 +595,10 @@ def _load_sql_item(user_id, exchange_id):
     ``step_index`` / ``agent_key``) persisted by the stream manager.
     Raises 404 when the exchange does not exist OR belongs to another user
     (without revealing which); 'no_sql' (409) when it stored no SQL at all.
+
+    With ``sql_id`` (V2.0 multi-SQL Evidence) the ACTIVE item is the UNIQUE stored
+    item carrying that id; an unknown or ambiguous id raises 'sql_id_not_found'
+    (404) - never a fallback to the latest SQL.
     """
     query = build_exchange_sql_query(
         table_ref=full_table(CHAT_V5_LOGICAL),
@@ -600,6 +611,11 @@ def _load_sql_item(user_id, exchange_id):
         raise EvidenceError("exchange_not_found", 404)
     items = [it for it in parse_json_list(rows[0].get("generated_sql"))
              if isinstance(it, dict) and it.get("sql")]
+    if sql_id:
+        hits = [i for i, it in enumerate(items) if it.get("sql_id") == sql_id]
+        if len(hits) != 1:
+            raise EvidenceError("sql_id_not_found", 404)
+        return items[hits[0]], items, hits[0]
     if not items:
         raise EvidenceError("no_sql")
     # The ACTIVE item is the agent's final refined query. Prefer the LAST
@@ -812,7 +828,7 @@ def _evidence_executor(dataset_name):
     return SQLExecutor2(dataset=dataiku.Dataset(dataset_name))
 
 
-def _context(user_id, exchange_id, preferred_table=None):
+def _context(user_id, exchange_id, preferred_table=None, sql_id=None):
     """Everything the interactive view needs; raises EvidenceError otherwise.
 
     Best-effort mapping (user decision): a parsed source table that matches a
@@ -828,8 +844,8 @@ def _context(user_id, exchange_id, preferred_table=None):
     one is used; otherwise (None / unknown) the FIRST matched table wins - so the
     single-table path is byte-identical to before.
     """
-    item, items, active_index = _load_sql_item(user_id, exchange_id)
-    if item is None:
+    item, items, active_index = _load_sql_item(user_id, exchange_id, sql_id)
+    if item is None or (sql_id and not item.get("success")):
         raise EvidenceError("no_successful_sql")
     parsed = sql_parse.parse_select(item["sql"])
     if not parsed["ok"]:
@@ -915,14 +931,24 @@ def _context(user_id, exchange_id, preferred_table=None):
     }
 
 
-def _degraded_sql(user_id, exchange_id):
-    """Best-effort raw SQL for the degraded panel (never raises 409)."""
+def _sql_id_kwargs(sql_id):
+    """``{"sql_id": ...}`` only when one was requested: the legacy call shape of
+    ``_context`` stays byte-identical when no sql_id is given."""
+    return {"sql_id": sql_id} if sql_id else {}
+
+
+def _degraded_sql(user_id, exchange_id, sql_id=None):
+    """Best-effort ``(raw SQL, queries summary, active sql_id)`` for the degraded
+    panel (never raises 409)."""
     try:
-        item, items, _active_index = _load_sql_item(user_id, exchange_id)
+        item, items, active_index = _load_sql_item(user_id, exchange_id, sql_id)
         chosen = item or items[-1]
-        return chosen.get("sql")
+        if item is None:
+            active_index = len(items) - 1
+        return (chosen.get("sql"), summarize_queries(items, [], active_index),
+                chosen.get("sql_id"))
     except EvidenceError:
-        return None
+        return None, [], None
 
 
 # --- shared condition builders (meta/rows/distinct light refactor) -----------
@@ -1037,7 +1063,7 @@ def _run_evidence_query(ctx, query, op_name):
 # --- public service entry points ----------------------------------------------
 
 
-def evidence_meta(user_id, exchange_id):
+def evidence_meta(user_id, exchange_id, sql_id=None):
     """The interactive descriptor for one exchange, or an HONEST degraded shape.
 
     'exchange_not_found' (404) propagates; every other EvidenceError degrades to
@@ -1047,14 +1073,20 @@ def evidence_meta(user_id, exchange_id):
     all computed by the pure helpers above - deterministic, no LLM involved.
     """
     try:
-        ctx = _context(user_id, exchange_id)
+        ctx = _context(user_id, exchange_id, **_sql_id_kwargs(sql_id))
     except EvidenceError as exc:
-        if exc.code == "exchange_not_found":
+        # 404s propagate: unknown / foreign exchange, unknown sql_id.
+        if exc.status == 404:
             raise
+        degraded_sql, queries, active_sql_id = _degraded_sql(user_id, exchange_id, sql_id)
         return {
             "available": False,
             "reason": exc.code,
-            "sql": _degraded_sql(user_id, exchange_id),
+            "sql": degraded_sql,
+            # Every stored query, so the client can switch to another sql_id
+            # even when this one cannot be explored (V2.0, additive).
+            "queries": queries,
+            "sql_id": active_sql_id,
             # Degraded panel: the agent's number is a CLAIM - nothing was
             # re-verified and no captured result is surfaced here (§2).
             "verification": {"level": "declared", "result_captured": False},
@@ -1107,7 +1139,10 @@ def evidence_meta(user_id, exchange_id):
         # renders a selector ONLY when this list has more than one entry.
         "sources": with_source_urls(
             ctx["matched_sources"], source_url_for_run(ctx["item"], ctx["items"])),
-        "queries": summarize_queries(ctx["items"], matched_flags),
+        "queries": summarize_queries(ctx["items"], matched_flags, ctx["active_index"]),
+        # The sql_id the whole response describes (V2.0 multi-SQL; None on
+        # legacy items without correlation tags).
+        "sql_id": ctx["item"].get("sql_id"),
         "verification": verification,
         "explanation": build_explanation(explain),
         "result": result_block,
@@ -1123,7 +1158,7 @@ def evidence_meta(user_id, exchange_id):
 
 
 def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
-                  limit, offset, sort, drill=None, table=None, q=""):
+                  limit, offset, sort, drill=None, table=None, q="", sql_id=None):
     """One bounded window of the (re-)filtered evidence table. Read-only.
 
     ``limit``/``offset`` (validated + clamped upstream) define the row window: a
@@ -1140,7 +1175,7 @@ def evidence_rows(user_id, exchange_id, filters, kept_ids, include_advanced,
     re-query; it is matched server-side against the SQL's own set (the client
     never picks an arbitrary table). Unknown / None -> the first matched table.
     """
-    ctx = _context(user_id, exchange_id, preferred_table=table)
+    ctx = _context(user_id, exchange_id, preferred_table=table, **_sql_id_kwargs(sql_id))
     conditions = _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill)
 
     if sort:
@@ -1241,6 +1276,10 @@ def evidence_result_rows(user_id, exchange_id, sql_id, limit, offset):
     """
     item, items, _active_index = _load_sql_item(user_id, exchange_id)
     item = pick_result_item(items, item, sql_id)
+    if item is None and sql_id:
+        # An explicit id that matches no (or several) stored queries: a clear
+        # 404, never another query's rows (V2.0 multi-SQL Evidence).
+        raise EvidenceError("sql_id_not_found", 404)
     if item is None or not item.get("success"):
         raise EvidenceError("result_not_found")
     gate = sql_parse.check_rerunnable_select(item.get("sql"))
@@ -1298,7 +1337,8 @@ def evidence_result_rows(user_id, exchange_id, sql_id, limit, offset):
 
 
 def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None,
-                      filters=None, drill=None, scope_q=None, kept_ids=None):
+                      filters=None, drill=None, scope_q=None, kept_ids=None,
+                      sql_id=None):
     """Bounded distinct values of one column (the CASCADING filter-chip picker).
 
     The picker shows values WITHIN the agent's remaining scope: the locked (non-editable)
@@ -1325,9 +1365,10 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None,
     THAT column matching the term (one accent-folded ILIKE over the single resolved column;
     empty / too-short -> no column search). With none of the new fields present this is
     byte-identical to the previous picker. Raises 'invalid_filter_column' (400) when the
-    picked column (or any filter column) is not on the live schema.
+    picked column (or any filter column) is not on the live schema. ``sql_id`` (V2.0)
+    scopes the picker to that query of the exchange (404 when unknown).
     """
-    ctx = _context(user_id, exchange_id)
+    ctx = _context(user_id, exchange_id, **_sql_id_kwargs(sql_id))
     resolved_col = ctx["colmap"].get(column.lower())
     if resolved_col is None:
         raise EvidenceError("invalid_filter_column", 400)
@@ -1394,7 +1435,8 @@ def evidence_distinct(user_id, exchange_id, column, exclude_id=None, q=None,
 
 
 def evidence_aggregate(user_id, exchange_id, filters, kept_ids, include_advanced,
-                       q, drill=None, table=None, group=None, measures=None, limit=50):
+                       q, drill=None, table=None, group=None, measures=None, limit=50,
+                       sql_id=None):
     """Database-EXACT aggregates over the exchange's (re-)filtered evidence scope. Read-only.
 
     The interactive table is only a paginated window; this computes the exact totals the
@@ -1422,7 +1464,7 @@ def evidence_aggregate(user_id, exchange_id, filters, kept_ids, include_advanced
     bounded queries and a grouped result is always capped, so no unbounded scan or result
     set can pin the dataset connection. Returns ``{"rows", "totals", "truncated"}`` (JSON-safe).
     """
-    ctx = _context(user_id, exchange_id, preferred_table=table)
+    ctx = _context(user_id, exchange_id, preferred_table=table, **_sql_id_kwargs(sql_id))
     conditions = _evidence_conditions(ctx, filters, kept_ids, include_advanced, q, drill)
     # The engine renders the same measure/group/bucket SQL fragments the Source Data
     # explorer uses (one implementation, identical type gates).

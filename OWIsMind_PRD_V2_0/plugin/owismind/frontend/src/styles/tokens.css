@@ -157,6 +157,8 @@ body[data-theme="light"] {
   --aura-orange: 0 0 22px rgba(255, 121, 0, 0.09), 0 12px 40px rgba(255, 121, 0, 0.10);
   --aura-orange-strong: 0 0 26px rgba(255, 121, 0, 0.13), 0 14px 48px rgba(255, 121, 0, 0.14);
   --canvas: #f5f5f5;
+  /* Studio V2: the floating cards (Studio, beacon, prompt) sit on the gray canvas. */
+  --paper: #ffffff;
   --panel-bg: #f5f5f5;
   --veil: rgba(255, 255, 255, 0.72);
 
@@ -203,6 +205,8 @@ body[data-theme="dark"] {
   --aura-orange: 0 0 24px rgba(255, 121, 0, 0.08), 0 12px 44px rgba(255, 121, 0, 0.09);
   --aura-orange-strong: 0 0 28px rgba(255, 121, 0, 0.12), 0 16px 52px rgba(255, 121, 0, 0.13);
   --canvas: #000000;
+  /* Dark: the floating cards are a step LIGHTER than the black canvas. */
+  --paper: #0f0f0f;
   --panel-bg: #0a0a0a;
   --veil: rgba(255, 255, 255, 0.04);
 

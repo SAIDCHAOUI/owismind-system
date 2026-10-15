@@ -21,8 +21,11 @@ import {
   hasWorkspaceContent,
 } from '../composables/workspaceModel.js'
 import { capturedResult, widgetRenderData } from '../composables/widgetData.js'
+import { nextPlanOpen } from '../composables/teaserModel.js'
 
-export const WORKSPACE_TABS = Object.freeze(['plan', 'journal', 'board', 'data'])
+// The Studio has two tabs: the dashboard (ALWAYS first, the default) and the data.
+// The plan lives above the prompt (PlanCard), its notes under each step.
+export const WORKSPACE_TABS = Object.freeze(['board', 'data'])
 // Restored documents kept in memory (re-opening one is instant); live entries are
 // never evicted while their run is in flight.
 const MAX_RESTORED = 20
@@ -58,12 +61,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const restoredOrder = [] // LRU of restored keys (eviction only)
   const shownKey = ref(null)
   const open = ref(false)
-  const activeTab = ref('plan')
+  const activeTab = ref('board')
+  // Plan card above the prompt: unfolded while a run builds it, collapsed otherwise.
+  const planOpen = ref(false)
+  function planEvent(event) {
+    planOpen.value = nextPlanOpen(planOpen.value, event)
+  }
   // Provenance drawer: the sql_id it explains (null = closed) + the widget it opened from.
   const drawerSqlId = ref(null)
   const drawerWidgetId = ref(null)
   // "New" markers on the tabs that received content while another tab was shown.
-  const fresh = reactive({ plan: false, journal: false, board: false })
+  const fresh = reactive({ board: false })
+  // Data tab focus: the ONE result (sql_id) the Data tab shows when opened from a
+  // widget or the provenance drawer (null = the whole exchange's Evidence view).
+  const dataSqlId = ref(null)
+  const dataWidgetId = ref(null)
+  // Exchange whose workspace finished while the panel was not showing it: the teaser
+  // carries the orange "new" signal until the user opens it.
+  const unseenExchangeId = ref(null)
   let seq = 0
 
   const shown = computed(() => (shownKey.value ? entries[shownKey.value] || null : null))
@@ -88,20 +103,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   function markFresh(op) {
-    const tab = op === 'note.add' ? 'journal' : op === 'widget.add' ? 'board' : op && op.indexOf('plan.') === 0 ? 'plan' : null
-    if (tab && !(open.value && activeTab.value === tab)) fresh[tab] = true
+    if (op === 'widget.add' && !(open.value && activeTab.value === 'board')) fresh.board = true
   }
 
   function show(key, tab) {
     if (shownKey.value !== key) {
       drawerSqlId.value = null
       drawerWidgetId.value = null
-      fresh.plan = false
-      fresh.journal = false
+      dataSqlId.value = null
+      dataWidgetId.value = null
       fresh.board = false
     }
     shownKey.value = key
     open.value = true
+    const shownEntry = entries[key]
+    if (shownEntry && shownEntry.exchangeId && shownEntry.exchangeId === unseenExchangeId.value) unseenExchangeId.value = null
     if (tab) setTab(tab)
   }
 
@@ -148,12 +164,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return
     }
     // The reducer drops a replayed seq (re-delivered poll page) on its own.
+    const hadWidgets = e.state.widgets.length > 0
     const hadPlan = !!e.state.plan
     if (!applyWorkspaceEvent(e.state, evt)) return
     markFresh(evt.op)
-    if (!hadPlan && e.state.plan && !e.dismissed && !(open.value && shownKey.value === e.key)) {
-      // Auto-open (like the Source Data dock's auto mode): no analytics event.
-      show(e.key, 'plan')
+    // A plan appears: the plan card above the prompt unfolds.
+    if (!hadPlan && e.state.plan) planEvent('run_start')
+    // The agent starts building the dashboard: the Studio opens by itself, on the
+    // dashboard (once per run, unless the user closed it during this run).
+    if (!hadWidgets && e.state.widgets.length && !e.dismissed && !(open.value && shownKey.value === e.key)) {
+      show(e.key, 'board')
     }
   }
 
@@ -167,12 +187,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const e = entries[liveKey(uid)]
     if (!e || !e.running) return
     e.running = false
+    planEvent('run_end')
     // null status = a cancelled poll loop (the user left): the status stays unknown.
     if (status) finalizeWorkspace(e.state, status === 'running' ? 'done' : status)
     if (!hasWorkspaceContent(e.state)) return
-    if (status && open.value && shownKey.value === e.key && e.state.widgets.length && activeTab.value !== 'data') {
+    const onScreen = open.value && shownKey.value === e.key
+    if (status && onScreen && e.state.widgets.length && activeTab.value !== 'data') {
       setTab('board')
     }
+    if (status && !onScreen && e.exchangeId) unseenExchangeId.value = e.exchangeId
     if (e.exchangeId) await refresh(e)
   }
 
@@ -238,7 +261,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (existing && (existing.live || hasWorkspaceContent(existing.state))) {
       ++seq
       if (existing.live && existing.exchangeId == null) bindExchange(uid, id)
-      show(existing.key, tab || (existing.state.widgets.length ? 'board' : 'plan'))
+      show(existing.key, tab || 'board')
       return true
     }
     const key = 'ex:' + id
@@ -254,7 +277,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const doc = await fetchWorkspace(id)
       if (my !== seq) return false
       applyDocument(e, doc || {})
-      if (!tab && !e.state.widgets.length) setTab('plan')
       return true
     } catch (err) {
       if (my !== seq) return false
@@ -267,6 +289,31 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return true
     } finally {
       if (my === seq) e.loading = false
+    }
+  }
+
+  /**
+   * Load the stored workspace of an exchange WITHOUT opening the Studio (conversation
+   * entry: the plan card and the beacon need it, the panel is never imposed).
+   */
+  async function loadForExchange(id) {
+    if (!id) return false
+    const existing = entryFor(id)
+    if (existing && hasWorkspaceContent(existing.state)) return true
+    const key = 'ex:' + id
+    const e = entries[key] || newEntry(key, id, false)
+    entries[key] = e
+    keyByExchange[id] = key
+    rememberRestored(key)
+    e.loading = true
+    try {
+      applyDocument(e, (await fetchWorkspace(id)) || {})
+      return hasWorkspaceContent(e.state)
+    } catch (err) {
+      e.error = (err && err.message) || 'workspace_unavailable'
+      return false
+    } finally {
+      e.loading = false
     }
   }
 
@@ -285,6 +332,20 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     open.value = false
     drawerSqlId.value = null
     drawerWidgetId.value = null
+  }
+
+  /** Open the Data tab focused on ONE result (a widget's sql_id). */
+  function openData(sqlId, widgetId) {
+    dataSqlId.value = sqlId || null
+    dataWidgetId.value = sqlId ? widgetId || null : null
+    drawerSqlId.value = null
+    drawerWidgetId.value = null
+    setTab('data')
+  }
+  /** Leave the focused result: the Data tab shows the exchange's whole Evidence view. */
+  function clearDataFocus() {
+    dataSqlId.value = null
+    dataWidgetId.value = null
   }
 
   function openProvenance(sqlId, widgetId) {
@@ -354,6 +415,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fresh,
     drawerSqlId,
     drawerWidgetId,
+    dataSqlId,
+    dataWidgetId,
+    unseenExchangeId,
+    openData,
+    clearDataFocus,
     shown,
     state,
     exchangeId,
@@ -364,6 +430,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     onLiveEvent,
     endLive,
     openForExchange,
+    loadForExchange,
+    planOpen,
+    planEvent,
     setTab,
     close,
     openProvenance,

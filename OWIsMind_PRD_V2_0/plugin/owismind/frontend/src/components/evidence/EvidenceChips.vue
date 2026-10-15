@@ -24,6 +24,7 @@ import {
   looksLikeIsoDateValues,
   yearOfValue,
 } from '../../composables/sourceModel.js'
+import { humanizeColumn } from '../../composables/evidenceProof.js'
 import RangePopoverFields from '../sources/RangePopoverFields.vue'
 import { Icon } from '../ui'
 
@@ -152,7 +153,8 @@ function exitRangeMode() {
 const filteredColumns = computed(() => {
   const needle = fold(colSearch.value.trim())
   if (!needle) return columns.value
-  return columns.value.filter((c) => fold(c.name).includes(needle))
+  // Match the business wording shown AND the technical name (a power user may type it).
+  return columns.value.filter((c) => fold(humanizeColumn(c.name)).includes(needle) || fold(c.name).includes(needle))
 })
 const filteredValues = computed(() => {
   const needle = fold(valSearch.value.trim())
@@ -435,7 +437,7 @@ watch(
       <span v-for="chip in evidence.chips" :key="chip.key" class="ev-chip"
             :class="{ user: chip.source === 'user' }">
         <button class="chip-main" @click="openChipPicker(chip)">
-          <span class="col">{{ chip.column }}</span>
+          <span class="col">{{ humanizeColumn(chip.column) }}</span>
           <template v-if="isBetween(chip)">
             <span class="val">{{ rangeText(chip) }}</span>
           </template>
@@ -533,8 +535,7 @@ watch(
             />
             <div class="pop-list">
               <button v-for="c in filteredColumns" :key="c.name" class="pop-col" @click="pickColumn(c.name)">
-                <span class="pop-col-name">{{ c.name }}</span>
-                <span v-if="c.type" class="pop-col-type mono">{{ c.type }}</span>
+                <span class="pop-col-name">{{ humanizeColumn(c.name) }}</span>
               </button>
               <div v-if="!filteredColumns.length" class="pop-state">{{ t('src.picker.noColMatch') }}</div>
             </div>
@@ -545,7 +546,7 @@ watch(
               <button class="pop-back" @click="backToColumns">
                 <Icon name="chevronLeft" /><span>{{ t('src.picker.back') }}</span>
               </button>
-              <span class="pop-head-col">{{ pickerColumn }}</span>
+              <span class="pop-head-col">{{ humanizeColumn(pickerColumn) }}</span>
             </div>
             <!-- RANGE mode: From / To months + a one-click full-year fill + a link back to
                  the exact-values list. -->
@@ -767,9 +768,7 @@ watch(
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .pop-col:hover { background: var(--surface-hover); }
-.pop-col:hover .pop-col-type { color: var(--text-2); }
 .pop-col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pop-col-type { color: var(--text-3); font-size: 11px; flex: none; transition: color var(--dur) var(--ease); }
 .pop-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
   border-radius: var(--r-sm); font-size: var(--fs-sm); cursor: pointer;
@@ -777,7 +776,7 @@ watch(
 }
 .pop-item:hover { background: var(--surface-hover); }
 @media (prefers-reduced-motion: reduce) {
-  .pop-col, .pop-col-type, .pop-item, .pop-search { transition: none; }
+  .pop-col, .pop-item, .pop-search { transition: none; }
 }
 .pop-item input { accent-color: var(--orange); flex: none; }
 .pop-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

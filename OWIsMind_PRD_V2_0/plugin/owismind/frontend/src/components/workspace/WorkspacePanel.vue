@@ -1,19 +1,17 @@
 <script setup>
-// Workspace panel (V2) - the RIGHT column of an answer that built a workspace: header
-// (run status + plan progress), four tabs (Plan, Journal, Dashboard, Data) and the
-// provenance drawer. All state lives in the workspace store; the Data tab hosts the
-// V1.3 Evidence panel in its embedded mode (chips, rows, calculation, sources: all
-// kept) and loads it for THIS exchange on first visit.
+// Studio (V2) - the floating right-hand card of an answer that built a workspace:
+// header (name + run status), TWO tabs (Dashboard, always first, and Data) and the
+// "where does this data come from" drawer. The plan lives above the prompt
+// (PlanCard). All state lives in the workspace store; the Data tab hosts the V1.3
+// Evidence panel in its embedded mode and loads it for THIS exchange on first visit.
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceStore } from '../../stores/workspace.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
-import { planProgress } from '../../composables/workspaceModel.js'
 import { Icon } from '../ui'
-import PlanList from './PlanList.vue'
-import JournalList from './JournalList.vue'
 import BoardGrid from './BoardGrid.vue'
 import ProvenanceDrawer from './ProvenanceDrawer.vue'
+import DataFocus from './DataFocus.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
 
 const { t } = useI18n()
@@ -22,7 +20,6 @@ const evidence = useEvidenceStore()
 
 const entry = computed(() => ws.shown)
 const state = computed(() => ws.state)
-const progress = computed(() => planProgress(state.value))
 const running = computed(() => !!(entry.value && entry.value.running))
 
 const statusLabel = computed(() => {
@@ -34,8 +31,6 @@ const statusLabel = computed(() => {
 const tabs = computed(() => {
   const s = state.value
   return [
-    { key: 'plan', label: t('ws.tab.plan'), count: progress.value.total ? progress.value.done + '/' + progress.value.total : null },
-    { key: 'journal', label: t('ws.tab.journal'), count: s && s.notes.length ? s.notes.length : null },
     { key: 'board', label: t('ws.tab.board'), count: s && s.widgets.length ? s.widgets.length : null },
     { key: 'data', label: t('ws.tab.data'), count: null },
   ]
@@ -44,14 +39,39 @@ const tabs = computed(() => {
 // The Data tab shows the Evidence panel of THIS exchange: (re)load it when the tab is
 // entered or when the shown workspace changes while the tab is active. A live run has
 // no exchange id until /chat/start answers, and nothing is stored before the run ends.
+// With a sql_id focus (a widget's "See the data"), the Evidence view is scoped to
+// THAT query (multi-SQL Evidence, /evidence/meta?sql_id=).
 function syncEvidence() {
   if (ws.activeTab !== 'data' || !ws.open) return
   const id = ws.exchangeId
   if (!id || running.value) return
-  if (evidence.open && evidence.exchangeId === id) return
-  evidence.openForExchange(id)
+  const want = ws.dataSqlId || null
+  if (evidence.open && evidence.exchangeId === id && (!want || evidence.requestedSqlId === want)) return
+  evidence.openForExchange(id, want ? { sqlId: want } : undefined)
 }
-watch(() => [ws.activeTab, ws.exchangeId, ws.open, running.value], syncEvidence, { immediate: true })
+watch(() => [ws.activeTab, ws.exchangeId, ws.open, running.value, ws.dataSqlId], syncEvidence, { immediate: true })
+// Leaving the focus ("all the answer's data") returns to the default view.
+watch(() => ws.dataSqlId, (now, before) => {
+  if (!now && before && evidence.open && evidence.exchangeId === ws.exchangeId && evidence.requestedSqlId) {
+    evidence.openForExchange(ws.exchangeId)
+  }
+})
+// The selector inside the Data tab moves the focus along (no reload loop: the store
+// already holds the picked query).
+watch(() => evidence.requestedSqlId, (sid) => {
+  if (sid && ws.dataSqlId && sid !== ws.dataSqlId && evidence.exchangeId === ws.exchangeId) ws.openData(sid)
+})
+// The server did not scope the view to the focused query (older backend: no
+// meta.sql_id): the exact rows of THAT query are shown instead (never another one's).
+const unscopedFocus = computed(() =>
+  !!ws.dataSqlId && !!evidence.meta && !evidence.loading && evidence.activeSqlId !== ws.dataSqlId,
+)
+
+// Clicking the Data tab itself shows the whole answer's data (no sql_id focus).
+function onTab(key) {
+  if (key === 'data') ws.clearDataFocus()
+  ws.setTab(key)
+}
 
 function onTabKey(e, i) {
   const keys = tabs.value.map((x) => x.key)
@@ -75,16 +95,12 @@ function onTabKey(e, i) {
           <span class="ws-title">{{ t('ws.title') }}</span>
           <span class="ws-sub">
             <span v-if="running" class="ws-live" aria-hidden="true" />
-            {{ statusLabel }}<template v-if="progress.total"> · {{ t('ws.plan.count', [progress.done, progress.total]) }}</template>
+            {{ statusLabel }}
           </span>
         </div>
         <button type="button" class="ws-icon-btn" :title="t('ws.close')" :aria-label="t('ws.close')" @click="ws.close()">
           <Icon name="x" />
         </button>
-      </div>
-      <!-- Plan progress: a thin orange rule under the header (signal, not decoration). -->
-      <div v-if="progress.total" class="ws-progress" aria-hidden="true">
-        <span class="ws-progress-fill" :style="{ width: progress.pct + '%' }" />
       </div>
       <div class="ws-tabs" role="tablist">
         <button
@@ -96,7 +112,7 @@ function onTabKey(e, i) {
           :class="{ active: ws.activeTab === tab.key }"
           :aria-selected="ws.activeTab === tab.key"
           :tabindex="ws.activeTab === tab.key ? 0 : -1"
-          @click="ws.setTab(tab.key)"
+          @click="onTab(tab.key)"
           @keydown="onTabKey($event, i)"
         >
           <span class="ws-tab-label">{{ tab.label }}</span>
@@ -116,9 +132,10 @@ function onTabKey(e, i) {
       </div>
       <div v-else-if="entry && entry.error" class="ws-state">{{ t('ws.error') }}</div>
       <template v-else-if="state">
-        <PlanList v-if="ws.activeTab === 'plan'" :state="state" :running="running" />
-        <JournalList v-else-if="ws.activeTab === 'journal'" :state="state" :running="running" />
-        <BoardGrid v-else-if="ws.activeTab === 'board'" :state="state" :running="running" />
+        <BoardGrid v-if="ws.activeTab === 'board'" :state="state" :running="running" />
+        <!-- Data tab: ONE result when opened from a widget (sql_id focus), else the
+             exchange-level Evidence view. -->
+        <DataFocus v-else-if="ws.activeTab === 'data' && unscopedFocus" />
         <EvidencePanel v-else-if="ws.activeTab === 'data'" embedded />
       </template>
     </div>
@@ -206,17 +223,6 @@ function onTabKey(e, i) {
 }
 .ws-icon-btn:hover { background: var(--surface-hover); color: var(--text); }
 .ws-icon-btn :deep(.ui-icon) { width: 16px; height: 16px; }
-.ws-progress {
-  height: 2px;
-  margin: 0 var(--s-5);
-  background: var(--surface-2);
-}
-.ws-progress-fill {
-  display: block;
-  height: 100%;
-  background: var(--orange);
-  transition: width var(--dur-slow) var(--ease-out);
-}
 .ws-tabs {
   display: flex;
   gap: 6px;

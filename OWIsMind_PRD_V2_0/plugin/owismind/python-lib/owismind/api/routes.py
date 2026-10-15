@@ -91,6 +91,7 @@ from owismind.storage import agent_requests as agent_requests_storage
 from owismind.storage import feedback as feedback_storage
 from owismind.storage import suggestions as suggestions_storage
 from owismind.storage import workspaces as workspaces_storage
+from owismind.workspace import protocol as workspace_protocol
 from owismind.workspace import resolve as workspace_resolve
 from owismind.storage.migrations import ensure_chat_table
 from owismind.benchmark_view import aggregate as bench_aggregate
@@ -984,6 +985,55 @@ def agents_available():
 # resolved identity as its first argument.
 
 
+def _evidence_sql_id(body=None):
+    """The optional ``sql_id`` of an Evidence request (V2.0 multi-SQL Evidence).
+
+    Read from the query string, else from the JSON body (POST routes). Returns
+    ``(sql_id_or_None, error_response_or_None)``: absent -> (None, None), the legacy
+    "active SQL" behavior; present but not a frozen-format id -> a 400. Whether the id
+    exists in the exchange is decided by the service (unknown -> 404 sql_id_not_found,
+    never a fallback to the latest SQL).
+    """
+    raw = request.args.get("sql_id")
+    if raw in (None, "") and isinstance(body, dict):
+        raw = body.get("sql_id")
+    if raw in (None, ""):
+        return None, None
+    sql_id = workspace_protocol.sql_id(raw)
+    if sql_id is None:
+        return None, (jsonify({"status": "error", "error": "invalid_sql_id"}), 400)
+    return sql_id, None
+
+
+def _attach_query_widgets(meta, user_id, exchange_id, artifacts):
+    """Add ``widgets: [{id, kind, title, source}]`` to every ``queries[]`` entry.
+
+    The widgets bound to each sql_id come from the exchange's V2.0 workspace (one
+    owner-scoped primary-key read) or, for an exchange without workspace, from its
+    legacy artifact specs (already read). Best-effort: a failure leaves the queries
+    without widgets, never a 500.
+    """
+    try:
+        by_sql = {}
+        workspace_doc = workspaces_storage.read_workspace(user_id, exchange_id)
+        if workspace_doc:
+            for w in workspace_doc.get("widgets") or []:
+                if w.get("sql_id"):
+                    by_sql.setdefault(w["sql_id"], []).append({
+                        "id": w["id"], "kind": w["kind"], "title": w.get("title", ""),
+                        "source": "workspace"})
+        else:
+            for i, a in enumerate(artifacts or []):
+                if a.get("sql_id"):
+                    by_sql.setdefault(a["sql_id"], []).append({
+                        "id": "a%d" % (i + 1), "kind": a.get("kind"),
+                        "title": a.get("title", ""), "source": "artifact"})
+        for query in meta.get("queries") or []:
+            query["widgets"] = by_sql.get(query.get("sql_id"), [])
+    except Exception:
+        logger.exception("/evidence/meta - query widgets failed (non-fatal)")
+
+
 @api.route("/evidence/meta", methods=["GET"])
 @evidence_guard
 def evidence_meta(identity):
@@ -998,8 +1048,11 @@ def evidence_meta(identity):
     except ValidationError as exc:
         logger.warning("/evidence/meta - invalid exchange_id")
         return jsonify({"status": "error", "error": exc.code}), 400
+    sql_id, error = _evidence_sql_id()
+    if error is not None:
+        return error
     try:
-        meta = evidence_service.evidence_meta(identity["user_id"], exchange_id)
+        meta = evidence_service.evidence_meta(identity["user_id"], exchange_id, sql_id)
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
     except Exception:
@@ -1015,6 +1068,7 @@ def evidence_meta(identity):
     # Server-internal per-SQL result blocks (never sent to the client): popped
     # unconditionally so the response payload stays unchanged even on failure.
     results_by_sql = meta.pop("results_by_sql", None) or {}
+    arts = []
     try:
         arts = artifacts_storage.read_artifacts(identity["user_id"], exchange_id)
         # Server-side chart shaping: build the Chart.js-ready {labels, datasets}
@@ -1047,6 +1101,7 @@ def evidence_meta(identity):
     except Exception:
         logger.exception("/evidence/meta - artifacts read failed (non-fatal)")
         meta["artifacts"] = []
+    _attach_query_widgets(meta, identity["user_id"], exchange_id, arts)
     logger.info(
         "/evidence/meta - user_id=%s exchange_id=%s available=%s reason=%s "
         "level=%s result_captured=%s drill_available=%s artifacts=%d",
@@ -1067,16 +1122,20 @@ def evidence_rows(identity):
     the optional ``drill`` labels are matched server-side against group keys
     re-derived from the stored SQL (the client never picks a drill column set).
     """
+    body = request.get_json(silent=True)
     try:
         (exchange_id, filters, kept_ids, include_advanced, limit, offset, sort,
-         drill, table, q) = validate_evidence_rows_request(request.get_json(silent=True))
+         drill, table, q) = validate_evidence_rows_request(body)
     except ValidationError as exc:
         logger.warning("/evidence/rows - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
+    sql_id, error = _evidence_sql_id(body)
+    if error is not None:
+        return error
     try:
         result = evidence_service.evidence_rows(
             identity["user_id"], exchange_id, filters, kept_ids,
-            include_advanced, limit, offset, sort, drill, table, q,
+            include_advanced, limit, offset, sort, drill, table, q, sql_id=sql_id,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
@@ -1101,6 +1160,11 @@ def evidence_result_rows(identity):
     except ValidationError as exc:
         logger.warning("/evidence/result-rows - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
+    if not sql_id:
+        # V2.0: the sql_id may also travel as a query parameter.
+        sql_id, error = _evidence_sql_id()
+        if error is not None:
+            return error
     try:
         result = evidence_service.evidence_result_rows(
             identity["user_id"], exchange_id, sql_id, limit, offset)
@@ -1132,16 +1196,20 @@ def evidence_distinct(identity):
     like it widens the row window. The advanced fragment always applies; ``include_advanced``
     is accepted for scope-object parity but the picker never drops it (validated only).
     """
+    body = request.get_json(silent=True)
     try:
         (exchange_id, column, exclude_id, q, filters, kept_ids, _include_advanced,
-         drill, scope_q) = validate_evidence_distinct_request(request.get_json(silent=True))
+         drill, scope_q) = validate_evidence_distinct_request(body)
     except ValidationError as exc:
         logger.warning("/evidence/distinct - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
+    sql_id, error = _evidence_sql_id(body)
+    if error is not None:
+        return error
     try:
         result = evidence_service.evidence_distinct(
             identity["user_id"], exchange_id, column, exclude_id, q,
-            filters, drill, scope_q, kept_ids=kept_ids,
+            filters, drill, scope_q, kept_ids=kept_ids, sql_id=sql_id,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status
@@ -1165,17 +1233,20 @@ def evidence_aggregate(identity):
     that the scope is pre-filtered by the answer's stored SQL. Returns
     ``{rows, totals, truncated}``.
     """
+    body = request.get_json(silent=True)
     try:
         (exchange_id, filters, kept_ids, include_advanced, q, drill, table,
-         group, measures, limit) = validate_evidence_aggregate_request(
-            request.get_json(silent=True))
+         group, measures, limit) = validate_evidence_aggregate_request(body)
     except ValidationError as exc:
         logger.warning("/evidence/aggregate - invalid payload: %s", exc.code)
         return jsonify({"status": "error", "error": exc.code}), 400
+    sql_id, error = _evidence_sql_id(body)
+    if error is not None:
+        return error
     try:
         result = evidence_service.evidence_aggregate(
             identity["user_id"], exchange_id, filters, kept_ids, include_advanced,
-            q, drill, table, group, measures, limit,
+            q, drill, table, group, measures, limit, sql_id=sql_id,
         )
     except evidence_service.EvidenceError as exc:
         return jsonify({"status": "error", "error": exc.code}), exc.status

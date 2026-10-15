@@ -22,6 +22,7 @@ concurrency cap + TTL eviction of finished/orphaned runs above. The agent_id is 
 server-side from the whitelist BEFORE this is ever called - never a raw id from the frontend.
 """
 
+import json
 import logging
 import threading
 import time
@@ -66,6 +67,13 @@ MAX_ANSWER_CHARS = 1_000_000
 # A turn renders at most a handful of artifacts (chart/table specs); bound the
 # accumulator so a buggy agent cannot grow it without limit.
 MAX_ARTIFACTS_ACCUM = 8
+# Live relay of the captured result rows on /chat/poll (V2.0): the workspace renders
+# a widget's data as soon as its SQL lands, before the run is persisted. Each item
+# is already capped at capture time (50 rows x 50 columns, 64 KB, see
+# evidence.capture); these two bounds keep the POLLED payload bounded too. Past
+# them the live copy drops ``result`` (the front reads it back from /workspace).
+MAX_LIVE_RESULT_CHARS = 64_000
+MAX_LIVE_RESULTS_CHARS_PER_RUN = 400_000
 # Workspace operations accepted per run (contract cap). Past it, further ``workspace``
 # events are neither reduced nor relayed live (each one also counts in MAX_LIVE_EVENTS).
 MAX_WORKSPACE_EVENTS = workspace_protocol.MAX_WORKSPACE_EVENTS_PER_RUN
@@ -307,6 +315,14 @@ def _build_screen_block(user_id, history, screen_context):
         return ""
 
 
+def _json_size(value):
+    """Serialized size of a JSON-safe value, or None when it cannot be serialized."""
+    try:
+        return len(json.dumps(value, ensure_ascii=False, default=str))
+    except Exception:
+        return None
+
+
 def _persist_workspace(run_id, exchange_id, user_id, ws_state, status, sql_list):
     """Write the run's reduced workspace ONCE (best-effort, never raises).
 
@@ -364,6 +380,8 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     # live AND persisted once at the end of the run (normal end, stop or error).
     ws_state = workspace_reducer.empty_state()
     ws_events = 0
+    # Characters of captured rows relayed live this run (MAX_LIVE_RESULTS_CHARS_PER_RUN).
+    live_result_chars = 0
     # The run's footer token/cost totals, captured for persistence (chat_v5 columns +
     # the users/monthly aggregates). Stays None on an early-stopped run (no footer).
     usage_totals = None
@@ -477,9 +495,18 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                 if index is not None:
                     sql_pos_by_index[index] = len(sql_list)
                 sql_list.append(item)
-                # The live, polled copy stays LIGHT: captured result rows are
-                # persistence-only (read back via /evidence/meta, never /chat/poll).
-                event = {k: v for k, v in event.items() if k != "result"}
+                # V2.0: the live, polled copy carries the captured rows (keys
+                # ``sqlId`` + ``result``) so the workspace renders a widget's data
+                # live - but only within a per-event AND per-run character budget;
+                # beyond it the rows stay persistence-only (read via /workspace).
+                live_result = event.get("result")
+                if live_result is not None:
+                    size = _json_size(live_result)
+                    if (size is None or size > MAX_LIVE_RESULT_CHARS
+                            or live_result_chars + size > MAX_LIVE_RESULTS_CHARS_PER_RUN):
+                        event = {k: v for k, v in event.items() if k != "result"}
+                    else:
+                        live_result_chars += size
             elif etype == "usage_summary":
                 # Capture the run's token/cost totals for persistence. Does NOT
                 # continue: the event still falls through to the live timeline so the

@@ -273,8 +273,11 @@ export function fetchWorkspace(exchangeId) {
 // Interactive descriptor of one exchange's evidence: columns, filter chips
 // (decomposed from the agent's stored SQL), advanced fragment and raw SQL.
 // `available: false` + `reason` = degraded (raw SQL only).
-export function fetchEvidenceMeta(exchangeId) {
-  return get('/owismind-api/evidence/meta', { exchange_id: exchangeId });
+// V2.0 multi-SQL Evidence: `sqlId` (optional) scopes the descriptor to ONE stored
+// query of the exchange (meta.sql_id echoes the active one; meta.queries[] lists them
+// all). Absent = the legacy "latest successful SQL" view.
+export function fetchEvidenceMeta(exchangeId, sqlId) {
+  return get('/owismind-api/evidence/meta', { exchange_id: exchangeId, sql_id: sqlId || null });
 }
 
 // One bounded window of the evidence table. The payload NEVER carries SQL - see
@@ -325,6 +328,7 @@ export function fetchEvidenceDistinct(exchangeId, column, excludeId, search, ext
   if (e.include_advanced != null) body.include_advanced = e.include_advanced;
   if (e.drill) body.drill = e.drill;
   if (e.scope_q) body.scope_q = e.scope_q;
+  if (e.sql_id) body.sql_id = e.sql_id;
   return postJson('/owismind-api/evidence/distinct', body);
 }
 

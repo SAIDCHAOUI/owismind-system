@@ -12,6 +12,7 @@ import { formatMoney, formatShortDate } from '../composables/budgetModel.js'
 import ChatThread from '../components/chat/ChatThread.vue'
 import ChatEmpty from '../components/chat/ChatEmpty.vue'
 import PromptBar from '../components/chat/PromptBar.vue'
+import PlanCard from '../components/chat/PlanCard.vue'
 import { Icon } from '../components/ui'
 import { captureFirstSend, playFirstSend, playStageExit } from '../composables/useFirstSendMorph.js'
 
@@ -202,6 +203,8 @@ function onStageLeave(el, done) {
              visible here too (sends are blocked by canSend until a clean reload). -->
         <p v-if="chat.threadError" class="chat-error">{{ t('chat.loadThreadError') }}</p>
         <p v-else-if="chat.errorMsg" class="chat-error">{{ friendlyError }}</p>
+        <!-- V2: the agent's plan for the last answer, folded above the prompt. -->
+        <PlanCard v-if="chat.hasMessages" />
         <PromptBar ref="promptBar" />
       </div>
 
@@ -223,6 +226,9 @@ function onStageLeave(el, done) {
 
 <style scoped>
 .chat { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; position: relative; }
+/* The chat column is a size container: beside the Studio it can shrink to 30% of the
+   width (~330-420px), so its children adapt to THIS width, not the viewport's. */
+.chat { container: chat / inline-size; }
 
 /* Upper half of the arrival screen: the heading sits at its BOTTOM edge, right above
    the prompt, and `.empty-tail` balances it below - the pair reads as one centred
@@ -354,4 +360,11 @@ function onStageLeave(el, done) {
   text-align: center;
 }
 .chat-config__title { font-weight: 600; color: var(--text); margin: 0 0 var(--s-3); }
+/* Narrow chat column (Studio open beside it): full-width measure, tighter gutters. */
+@container chat (max-width: 560px) {
+  .prompt-wrap { width: 100%; padding: 0 var(--s-3) var(--s-3); }
+  .prompt-wrap.in-empty { padding-bottom: var(--s-5); }
+  .prompt-wrap.in-empty :deep(.prompt) { padding: var(--s-4) var(--s-4) var(--s-3); }
+  .budget-banner, .imp-note { padding: 8px 10px; }
+}
 </style>

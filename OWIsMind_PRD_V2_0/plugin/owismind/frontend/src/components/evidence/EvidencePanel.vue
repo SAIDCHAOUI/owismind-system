@@ -2,7 +2,7 @@
 // Evidence Studio panel - the RIGHT column that opens after a generation: the
 // trust surface (trust badge + sources + filter chips + calculation steps +
 // captured agent result + live rows of the matched source table + the agent's
-// raw SQL). All data lives in the evidence store; this component only renders
+// raw SQL, behind a closed "Technical details" disclosure). All data lives in the evidence store; this component only renders
 // its states (loading / error / degraded / interactive).
 //
 // TABS: a tab bar is shown at the top of the body when the interactive view is
@@ -23,6 +23,9 @@ import EvidenceCalc from './EvidenceCalc.vue'
 import EvidenceResult from './EvidenceResult.vue'
 import EvidenceSourcesTab from './EvidenceSourcesTab.vue'
 import EvidenceSql from './EvidenceSql.vue'
+import EvidenceSqlPicker from './EvidenceSqlPicker.vue'
+import { useWorkspaceStore } from '../../stores/workspace.js'
+import { sqlChoices } from '../../composables/sqlChoices.js'
 // Async on purpose: ArtifactChart pulls in the whole chart.js library (~40% of the
 // entry bundle), and its render is already gated behind the Chart tab v-else-if, so
 // Vite splits it into a lazy chunk fetched on the first chart instead of at boot.
@@ -42,7 +45,16 @@ const { t } = useI18n()
 const evidence = useEvidenceStore()
 const chat = useChatStore()
 const session = useSessionStore()
+const workspace = useWorkspaceStore()
 const meta = computed(() => evidence.meta)
+
+// V2.0 multi-SQL: every stored query of the answer, enriched by its workspace (step,
+// widgets) when the workspace shown is this exchange's. Two or more = a selector that
+// switches the whole view to the picked query.
+const choices = computed(() => {
+  const wsState = workspace.exchangeId && workspace.exchangeId === evidence.exchangeId ? workspace.state : null
+  return sqlChoices(meta.value, wsState, evidence.activeSqlId || evidence.requestedSqlId)
+})
 
 // The interactive view (rows table + chips + drill) is available: this gates both
 // the "Sources" tab entry and its body, exactly like the pre-tab explore block.
@@ -151,6 +163,13 @@ watch([tabItems, activeTab], ([items, tab]) => {
       </div>
     </header>
 
+    <EvidenceSqlPicker
+      v-if="choices.length > 1 && !evidence.error"
+      :choices="choices"
+      :busy="evidence.loading"
+      @select="evidence.selectSql"
+    />
+
     <!-- Tab bar - shown only when the backend returned chart / table artifacts.
          Switching tabs MUST NOT change `evidence.open` (F13 scroll gate):
          v-model is wired to evidence.activeTab via the computed setter above. -->
@@ -251,7 +270,7 @@ watch([tabItems, activeTab], ([items, tab]) => {
       </template>
     </div>
 
-    <EvidenceSql v-if="meta && meta.sql" :sql="meta.sql" />
+    <EvidenceSql v-if="meta && meta.sql" :sql="meta.sql" :sql-id="evidence.activeSqlId || ''" />
   </aside>
 </template>
 

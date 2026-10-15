@@ -205,7 +205,7 @@ function onUser(key) {
 
     <!-- PRIMARY: New conversation + Agents (neutral nav items) -->
     <nav class="sidebar-primary">
-      <button class="side-item" :title="t('rail.new')" @click="newConversation">
+      <button class="side-item side-new" :title="t('rail.new')" @click="newConversation">
         <Icon name="plus" /><span class="side-label">{{ t('sb.new_conversation') }}</span>
       </button>
       <RouterLink class="side-item" :class="{ active: isAgents }" to="/agents" :title="t('rail.agents')">
@@ -280,7 +280,8 @@ function onUser(key) {
 <style scoped>
 /* =========================================================================
    Sidebar - Orange brand, flat/sharp surfaces.
-   Light rail bg = var(--bg) (#fff), dark = var(--bg) (#0a0a0a).
+   Surface = --paper with a 1px --border right edge, distinct from the --canvas
+   behind the chat (AppLayout sets it), so the column is found at a glance.
    Orange is used ONLY as the logo mark background and the active-item accent.
    ========================================================================= */
 .sidebar {
@@ -420,15 +421,31 @@ function onUser(key) {
 .side-item.open :deep(.ui-icon) { color: var(--text-2); }
 .side-item.active :deep(.ui-icon) { color: var(--text); }
 .side-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+/* "New conversation" = the column's main action: a framed 40px button in ink, set
+   apart from the plain nav rows below it (the plus glyph alone takes the orange). */
+.sidebar-primary .side-new {
+  height: 40px;
+  padding: 0 12px;
+  margin-bottom: var(--s-2);
+  border: 1px solid var(--text);
+  font-weight: var(--fw-bold);
+}
+.sidebar-primary .side-new:hover { background: var(--surface-hover); }
+.sidebar-primary .side-new :deep(.ui-icon) { color: var(--orange-text); }
+.sidebar.rail .sidebar-primary .side-new { height: 38px; margin-bottom: 0; border-color: var(--border-strong); }
 
 /* --- Conversations ------------------------------------------------------ */
-.sidebar-section { margin-top: var(--s-7); padding: 0 var(--s-5) var(--s-3); }
+/* The conversation list is what users come back for: a plain, readable heading in
+   ink (not a grey micro-label), set apart from the nav by a 1px rule. */
+.sidebar-section {
+  margin: var(--s-5) var(--s-3) 0;
+  padding: var(--s-4) var(--s-3) var(--s-2);
+  border-top: 1px solid var(--border);
+}
 .sidebar-section-title {
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  color: var(--text);
   font-family: var(--font-sans);
 }
 
@@ -438,63 +455,48 @@ function onUser(key) {
   overflow-x: hidden;
   padding: 0 var(--s-3) var(--s-3);
 }
-/* A conversation IS a title, so the selected one is signed the way every title in
-   this product is signed: with the brand's title-bar, at 1/3 scale (18x2 against
-   the 52x4 of a page H1 and the 40x3 of the arrival screen). The bar is DRAWN, not
-   dropped in - it wipes open from the left once the row has filled, which is the
-   whole flourish. Replaces the inset orange rail, which read as a generic accent
-   pasted onto a row that said nothing by itself. */
 .conv-item {
   position: relative;
   display: block;
   width: 100%;
+  min-height: 38px;
   text-align: left;
-  /* The bar's 2px live in the padding of EVERY row: selecting one never changes a
-     height, so the list cannot jump under the pointer. */
-  padding: 6px 12px 10px;
+  padding: 0 12px 0 14px;
+  line-height: 38px;
   border-radius: var(--r-sm);
-  font-size: 13px;
-  color: var(--text-2);
+  font-size: var(--fs-base);
+  color: var(--text);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-in), color var(--dur-fast) var(--ease-in),
-    transform var(--dur-fast) var(--ease-in);
+  transition: background var(--dur-fast) var(--ease-in), color var(--dur-fast) var(--ease-in);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-sans);
 }
-.conv-item::after {
+/* The selected row is marked by a 3px orange bar on its left edge (the rare accent:
+   exactly one in the column at any time), drawn once the fill has landed. */
+.conv-item::before {
   content: '';
   position: absolute;
-  left: 12px;
-  bottom: 4px;
-  width: 18px;
-  height: 2px;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
   background: var(--orange);
-  transform: scaleX(0);
-  transform-origin: left center;
+  transform: scaleY(0);
   transition: transform var(--dur-fast) var(--ease-in);
 }
-/* The hovered row nudges 2px into the reading direction - a transform, so nothing
-   re-measures and the truncated title never re-wraps mid-hover. No orange here:
-   exactly one bar exists in the column at any time. */
-.conv-item:hover { background: var(--surface-hover); color: var(--text); transform: translateX(2px); }
-/* --surface-press, not --surface: the resting selected row must read STRONGER than
-   a merely hovered one (--surface sits below --surface-hover in both themes, which
-   is what made the old state lean entirely on its orange rail). */
+.conv-item:hover { background: var(--surface-hover); }
+/* --surface-press reads stronger than a hovered row in both themes. */
 .conv-item.active {
   background: var(--surface-press);
-  color: var(--text);
+  font-weight: var(--fw-bold);
 }
-/* The fill lands first, then the mark is drawn on top of it: those 60ms are the
-   whole difference between "selected" and "signed". */
-.conv-item.active::after {
-  transform: scaleX(1);
+.conv-item.active::before {
+  transform: scaleY(1);
   transition: transform var(--dur) var(--ease-out) 60ms;
 }
-/* The active row is already "here": it keeps its fill and stays put (a shifting
-   selected row reads as a mis-click). */
-.conv-item.active:hover { background: var(--surface-press); transform: none; }
+.conv-item.active:hover { background: var(--surface-press); }
 .conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
 .conv-state {
   padding: 8px 12px;
@@ -633,9 +635,8 @@ function onUser(key) {
   .rail-logo,
   .icon-btn { transition: none; }
   /* The title-bar still marks the row, it just stops being drawn. */
-  .conv-item::after,
+  .conv-item::before,
   .side-item::after { transition: none; }
-  .conv-item:hover { transform: none; }
   .rail-logo:hover,
   .rail-logo:active { transform: none; }
 }

@@ -246,4 +246,9 @@ async function copy() {
   .u-actions button:active:not(:disabled),
   .edit-actions button:active:not(:disabled) { transform: none; }
 }
+/* Narrow chat column: the bubble may use more of the measure. */
+@container chat (max-width: 560px) {
+  .bubble-wrap { max-width: 90%; }
+  .bubble { padding: 8px 12px; }
+}
 </style>

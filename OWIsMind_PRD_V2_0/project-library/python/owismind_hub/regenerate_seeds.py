@@ -103,7 +103,10 @@ def _workflow_prompts_markdown(prompts):
 def build_canonical_files(repo_root) -> dict[str, bytes]:
     """Build canonical hub seed bytes keyed by absolute seed file path."""
     repo_root = os.path.abspath(repo_root)
-    mirror_dir = os.path.join(repo_root, "OWIsMind_PRD_V1_3_DEV")
+    # The mirror folder this file lives in (OWIsMind_PRD_V2_0 on the V2 branch):
+    # derived, never hard-coded, so a version copy never regenerates another
+    # version's seeds.
+    mirror_dir = os.path.join(repo_root, os.path.basename(_MIRROR_DIR))
     orchestrator_path = os.path.join(
         mirror_dir, "GenAI", "Agents", "OWIsMind_orchestrator.py"
     )

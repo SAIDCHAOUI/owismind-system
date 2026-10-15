@@ -1,17 +1,17 @@
 <script setup>
-// Provenance drawer - where ONE result (sql_id) comes from: the expert sub-agent and
-// tool that produced it, the task it was given, duration and status, the filters
-// read from its SQL (read-only chips), the SQL itself pretty-printed (sqlPretty, the
-// copy button copies the exact executed query) and an honest row count. "Open in
-// Data" moves to the Data tab (the Evidence panel of this exchange).
+// "Where does this data come from?" - the plain-language provenance of ONE result,
+// written for non-technical readers: who prepared it, the conditions applied (as
+// sentences), how many rows, and a "See the rows" action (Data tab on that result).
+// Everything technical (tool, task, duration, identifier, the SQL with its copy
+// button) stays behind a closed "Technical details" disclosure.
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceStore } from '../../stores/workspace.js'
-import { stepFor } from '../../composables/workspaceModel.js'
+import { filterParts, agentLabelKey } from '../../composables/workspaceModel.js'
 import { highlightSqlLines } from '../../composables/sqlPretty.js'
 import { resultCountLabel, needsFullResult } from '../../composables/resultRows.js'
 import { formatStatNumber } from '../../composables/sourceModel.js'
-import { calcStepArgs } from '../../composables/evidenceProof.js'
+import { businessStepArgs } from '../../composables/evidenceProof.js'
 import { useToasts } from '../../composables/useToasts.js'
 import { Icon } from '../ui'
 
@@ -27,10 +27,7 @@ const widget = computed(() => {
   const id = ws.drawerWidgetId
   return id && ws.state ? ws.state.widgets.find((w) => w.id === id) || null : null
 })
-const step = computed(() => {
-  const sid = (prov.value && prov.value.step_id) || (widget.value && widget.value.step_id)
-  return sid ? stepFor(ws.state, sid) : null
-})
+const preparedBy = computed(() => t('ws.prov.by', [t(agentLabelKey(prov.value && prov.value.agent_key))]))
 const lines = computed(() => (info.value && info.value.sql ? highlightSqlLines(info.value.sql) : []))
 
 const toolLabel = computed(() => {
@@ -43,20 +40,12 @@ const duration = computed(() => {
   return t('ws.prov.seconds', [(ms / 1000).toLocaleString(locale.value, { maximumFractionDigits: 1 })])
 })
 
-// One read-only chip per filter. /workspace sends the filter_* steps of the SQL
-// explainer ({kind, params}, rendered with the shared ev.exp.* labels); the chip
-// shape {column, op, values} and plain strings are still accepted.
+// One read-only chip per filter: /workspace sends the filter_* explainer steps of the
+// SQL, worded like the Evidence calculation steps (filterParts + businessStepArgs).
 function filterLabel(f) {
-  if (typeof f === 'string') return f
-  if (!f || typeof f !== 'object') return ''
-  if (typeof f.kind === 'string' && f.kind.startsWith('filter_')) {
-    // Same wording as the Evidence calculation steps; an unknown kind -> opaque label.
-    const s = calcStepArgs(f)
-    return t(s.key, s.args)
-  }
-  const values = Array.isArray(f.values) ? f.values : f.value != null ? [f.value] : []
-  const op = f.op && f.op !== '=' && f.op !== 'IN' ? ' ' + f.op + ' ' : ' : '
-  return String(f.column || '') + op + values.map(String).join(', ')
+  const part = filterParts(f, businessStepArgs)
+  if (!part) return ''
+  return part.key ? t(part.key, part.args) : part.text
 }
 const filters = computed(() => (info.value ? info.value.filters.map(filterLabel).filter(Boolean) : []))
 
@@ -84,9 +73,9 @@ async function copySql() {
     push(t('msg.copy_failed'), { icon: 'alert', tone: 'warn' })
   }
 }
+// The Data tab focused on THIS result (its full rows, filters and provenance).
 function openData() {
-  ws.closeProvenance()
-  ws.setTab('data')
+  ws.openData(sqlId.value, ws.drawerWidgetId)
 }
 function onKey(e) {
   if (e.key === 'Escape') ws.closeProvenance()
@@ -99,11 +88,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <div class="drawer" role="dialog" :aria-label="t('ws.prov.title')">
+  <div class="drawer" role="dialog" :aria-label="t('ws.prov.where')">
     <header class="d-head">
       <div class="d-titles">
-        <span class="d-title">{{ t('ws.prov.title') }}</span>
-        <span class="d-sub mono">{{ widget ? widget.title + ' · ' : '' }}{{ sqlId }}</span>
+        <span class="d-title">{{ t('ws.prov.where') }}</span>
+        <span v-if="widget" class="d-sub">{{ widget.title }}</span>
       </div>
       <button ref="closeBtn" type="button" class="d-close" :title="t('ws.prov.close')" :aria-label="t('ws.prov.close')" @click="ws.closeProvenance()">
         <Icon name="x" />
@@ -111,40 +100,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
     </header>
 
     <div class="d-body">
-      <p v-if="!prov" class="d-note">{{ t('ws.prov.unknown') }}</p>
-      <dl v-else class="facts">
-        <div class="fact">
-          <dt>{{ t('ws.prov.agent') }}</dt>
-          <dd>{{ String(prov.agent_key).replace(/_/g, ' ') }}</dd>
-        </div>
-        <div class="fact">
-          <dt>{{ t('ws.prov.tool') }}</dt>
-          <dd>{{ toolLabel }}</dd>
-        </div>
-        <div v-if="step" class="fact">
-          <dt>{{ t('ws.tab.plan') }}</dt>
-          <dd>{{ t('ws.step.label', [step.index]) }} : {{ step.label }}</dd>
-        </div>
-        <div v-if="duration" class="fact">
-          <dt>{{ t('ws.prov.duration') }}</dt>
-          <dd class="mono">{{ duration }}</dd>
-        </div>
-        <div class="fact">
-          <dt>{{ t('ws.prov.status') }}</dt>
-          <dd :class="prov.success ? 'ok' : 'ko'">{{ prov.success ? t('ws.prov.ok') : t('ws.prov.failed') }}</dd>
-        </div>
-        <div v-if="prov.task" class="fact block">
-          <dt>{{ t('ws.prov.task') }}</dt>
-          <dd class="task">{{ prov.task }}</dd>
-        </div>
-      </dl>
+      <p class="d-lead">{{ prov ? preparedBy : t('ws.prov.unknown') }}</p>
 
       <section class="d-sec">
-        <div class="d-label">{{ t('ws.prov.filters') }}</div>
-        <div v-if="filters.length" class="chips">
-          <span v-for="(f, i) in filters" :key="i" class="chip">{{ f }}</span>
-        </div>
-        <p v-else class="d-note">{{ t('ws.prov.no_filter') }}</p>
+        <div class="d-label">{{ t('ws.prov.conditions') }}</div>
+        <ul v-if="filters.length" class="d-conds">
+          <li v-for="(f, i) in filters" :key="i">{{ f }}</li>
+        </ul>
+        <p v-else class="d-note">{{ t('ws.prov.none') }}</p>
       </section>
 
       <section v-if="countLine" class="d-sec">
@@ -152,7 +115,19 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
         <p class="d-count">{{ countLine }}</p>
       </section>
 
-      <section class="d-sec">
+      <button type="button" class="d-primary" @click="openData">
+        <Icon name="database" />{{ t('ws.prov.see_rows') }}
+      </button>
+
+      <details class="d-tech">
+        <summary>{{ t('ws.prov.tech') }}</summary>
+        <dl v-if="prov" class="facts">
+          <div class="fact"><dt>{{ t('ws.prov.tool') }}</dt><dd>{{ toolLabel }}</dd></div>
+          <div v-if="duration" class="fact"><dt>{{ t('ws.prov.duration') }}</dt><dd class="mono">{{ duration }}</dd></div>
+          <div class="fact"><dt>{{ t('ws.prov.status') }}</dt><dd :class="prov.success ? 'ok' : 'ko'">{{ prov.success ? t('ws.prov.ok') : t('ws.prov.failed') }}</dd></div>
+          <div class="fact"><dt>{{ t('ws.prov.id') }}</dt><dd class="mono">{{ sqlId }}</dd></div>
+          <div v-if="prov.task" class="fact block"><dt>{{ t('ws.prov.task') }}</dt><dd class="task">{{ prov.task }}</dd></div>
+        </dl>
         <div class="d-label-row">
           <span class="d-label">{{ t('ws.prov.sql') }}</span>
           <button v-if="info && info.sql" type="button" class="d-copy" @click="copySql">
@@ -161,15 +136,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
         </div>
         <pre v-if="lines.length" class="sql mono"><code><template v-for="(line, li) in lines" :key="li"><span v-for="(tok, ti) in line" :key="ti" :class="'sqltok-' + tok.kind">{{ tok.text }}</span>{{ '\n' }}</template></code></pre>
         <p v-else class="d-note">{{ t('ws.prov.no_sql') }}</p>
-      </section>
+      </details>
     </div>
-
-    <footer class="d-foot">
-      <button type="button" class="d-primary" @click="openData">
-        <Icon name="database" />{{ t('ws.prov.open_data') }}
-      </button>
-      <a v-if="info && info.sourceUrl" class="d-link" :href="info.sourceUrl" target="_blank" rel="noopener noreferrer">{{ t('ws.prov.open_source') }}</a>
-    </footer>
   </div>
 </template>
 
@@ -247,21 +215,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .d-sec { border-top: 1px solid var(--border-strong); padding-top: var(--s-3); }
 .d-label { font-size: var(--fs-xs); font-weight: var(--fw-bold); color: var(--text-2); }
 .d-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: var(--s-2); }
-.chip {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-sm);
-  background: var(--bg);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .d-note { margin: var(--s-2) 0 0; font-size: var(--fs-sm); color: var(--text-3); }
 .d-count { margin: var(--s-2) 0 0; font-size: var(--fs-sm); }
 .d-copy {
@@ -295,16 +248,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .sqltok-kw { color: var(--orange-text); font-weight: var(--fw-bold); }
 .sqltok-str { color: var(--series-2); }
 .sqltok-num { color: var(--series-1); }
-.d-foot {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-3) var(--s-5);
-  border-top: 1px solid var(--border);
-}
+.d-lead { margin: 0; font-size: var(--fs-base); line-height: var(--lh-text); color: var(--text); }
+.d-conds { margin: var(--s-2) 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); line-height: var(--lh-text); }
+.d-tech { border-top: 1px solid var(--border); padding-top: var(--s-3); }
+.d-tech summary { cursor: pointer; font-size: var(--fs-xs); color: var(--text-3); }
+.d-tech summary:hover { color: var(--text); }
+.d-tech[open] summary { margin-bottom: var(--s-3); }
+.d-tech .facts { margin-bottom: var(--s-3); }
 /* Primary action = orange fill, black ink (V2 charter). */
 .d-primary {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -318,10 +271,4 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 }
 .d-primary:hover { background: var(--orange-deep); }
 .d-primary :deep(.ui-icon) { width: 15px; height: 15px; }
-.d-link {
-  font-size: var(--fs-sm);
-  color: var(--orange-text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
 </style>

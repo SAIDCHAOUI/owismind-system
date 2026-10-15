@@ -45,7 +45,7 @@ def _copy_fixture_repo(destination_root):
     for relative_path in relative_paths:
         _copy_file(
             os.path.join(_MIRROR_DIR, relative_path),
-            os.path.join(destination_root, "OWIsMind_PRD_V1_3_DEV", relative_path),
+            os.path.join(destination_root, os.path.basename(_MIRROR_DIR), relative_path),
         )
 
 
@@ -74,7 +74,7 @@ class TestHubSeedsRegenerator(unittest.TestCase):
             _copy_fixture_repo(temporary_root)
             seed_path = os.path.join(
                 temporary_root,
-                "OWIsMind_PRD_V1_3_DEV",
+                os.path.basename(_MIRROR_DIR),
                 "project-library",
                 "python", "owismind_hub",
                 "capabilities.json",
@@ -85,14 +85,14 @@ class TestHubSeedsRegenerator(unittest.TestCase):
             differences = _regenerator.diff_report(temporary_root)
             self.assertEqual(
                 differences,
-                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "python", "owismind_hub", "capabilities.json")],
+                [os.path.join(os.path.basename(_MIRROR_DIR), "project-library", "python", "owismind_hub", "capabilities.json")],
             )
 
             canonical = _regenerator.build_canonical_files(temporary_root)
             changed = _regenerator.write_canonical_files(temporary_root)
             self.assertEqual(
                 changed,
-                [os.path.join("OWIsMind_PRD_V1_3_DEV", "project-library", "python", "owismind_hub", "capabilities.json")],
+                [os.path.join(os.path.basename(_MIRROR_DIR), "project-library", "python", "owismind_hub", "capabilities.json")],
             )
             with open(seed_path, "rb") as seed_file:
                 self.assertEqual(seed_file.read(), canonical[seed_path])

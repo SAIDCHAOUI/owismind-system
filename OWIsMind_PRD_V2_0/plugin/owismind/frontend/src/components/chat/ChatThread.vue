@@ -103,4 +103,8 @@ onMounted(() => {
   flex-direction: column;
   gap: var(--s-7);
 }
+/* Narrow chat column (Studio open beside it): full-width measure, tighter gutters. */
+@container chat (max-width: 560px) {
+  .conv-inner { width: 100%; padding: var(--s-5) var(--s-3); gap: var(--s-6); }
+}
 </style>

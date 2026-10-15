@@ -49,7 +49,32 @@
   couleur seule : flèche + signe).
 - **Graphiques** : séries `--series-*` résolues sur `<body>` au dessin (F25), re-rendu au changement
   de thème et de langue.
+- **Balise de droite (beacon)** : colonne pleine hauteur de 320 px, soeur de la colonne du chat (l'en-tête
+  du chat n'est jamais recouvert), une grande carte cliquable fidèle au design (icône 44 px, eyebrow, titre,
+  sous-titre, jeux de données, aperçu estompé de vraies lignes, appel orange en bas, animation `bcnRise`).
+  Seule exception admise aux dégradés : le voile de l'aperçu (transparent vers `--veil`), repris du design.
+  Sous 900 px : un bouton flottant sous l'en-tête.
 - **Tiroir de provenance** : panneau flottant `--float-strong`, filet gauche, SQL en mono 12 sur
   `--surface`, mots-clés `--orange-text`.
 - **Mouvement** : entrées 180-280 ms (`--ease`), pulsation 1,15 s ; tout est coupé sous
   `prefers-reduced-motion`.
+
+## 4. Studio (refonte du 2026-10-15, retour utilisateur)
+
+- **Nom** : toute la surface de droite s'appelle « Studio » (fr et en).
+- **Toile** : `--canvas` derrière l'en-tête et le chat. La barre latérale s'en distingue : surface
+  `--paper` + filet 1 px `--border` à droite, titre « Conversations » 14/700 en `--text`, lignes 38 px en
+  `--text`, conversation active = `--surface-press` + gras + barre orange 3 px à gauche (retour user :
+  les conversations doivent sauter aux yeux). Les cartes flottent dessus en `--paper` (blanc ; en sombre, un cran plus clair que la toile noire) :
+  Studio, balise, carte de prompt, carte de plan. Studio = filet 1 px `--border`, rayon `--r-lg`,
+  ombre `--float-strong`, retrait de 12 px du haut, de la droite et du bas.
+- **Largeur** : le Studio s'ouvre à 70 % de la largeur disponible et ne peut jamais dépasser 70 % (le chat
+  garde au moins 30 %, y compris pendant le redimensionnement) ; le chat est un conteneur (`@container`)
+  qui se compacte en dessous de 560 px. Il s'ouvre seul
+  quand l'agent commence un tableau de bord, ou depuis la balise / « Ouvrir le Studio ».
+- **Plan** : carte repliable juste au-dessus du prompt (valeurs du design) ; les notes s'ouvrent sous
+  leur étape. Le Studio n'a que deux onglets : « Tableau de bord » (toujours premier) et « Données ».
+- **Rien de technique par défaut** : ni SQL, ni identifiant, ni clé d'agent, ni numéro d'étape. Un seul
+  lien par carte, « D'où viennent ces données ? », en phrases simples ; le SQL et les identifiants
+  restent derrière « Détails techniques ».
+- **Écran étroit** (< 900 px) : le Studio couvre tout l'écran ; la carte de plan reste au-dessus du prompt.

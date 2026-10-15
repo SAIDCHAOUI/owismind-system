@@ -285,6 +285,12 @@ def _find_generated_sql(obj, _depth=0):
                 result = capture.extract_result(outputs)
                 if result is not None:
                     entry["result"] = result
+                # V2.0: the orchestrator stamps its OWN spans (fast lookup, recall)
+                # with the sql_id it handed the model, so a workspace widget can
+                # bind to them. Kept only when it matches the frozen format.
+                span_sql_id = workspace_protocol.sql_id(outputs.get("sql_id"))
+                if span_sql_id is not None:
+                    entry["sql_id"] = span_sql_id
                 sql_queries.append(entry)
         for value in obj.values():
             sql_queries.extend(_find_generated_sql(value, _depth + 1))

@@ -10,6 +10,7 @@ import { ref } from 'vue'
 import { setLocale, currentLocale } from '../i18n'
 import { clampContextMessages, CONTEXT_MESSAGES_DEFAULT } from './prefs.js'
 import { track } from '../services/track.js'
+import { clampStudio } from '../composables/teaserModel.js'
 
 const THEME_KEY = 'owismind.theme'
 const COLLAPSE_KEY = 'owismind.sidebarCollapsed'
@@ -36,6 +37,8 @@ const EVIDENCE_MIN = 360
 // third" on a common laptop width.
 const SOURCES_DEFAULT = 430
 const SOURCES_MIN = 340
+// Collapsed sidebar rail width (mirror of the --rail-w token).
+const RAIL_W = 60
 
 function readNum(key, fallback) {
   try {
@@ -96,18 +99,18 @@ export const useUiStore = defineStore('ui', () => {
   function clampSidebar(px) {
     return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px))
   }
+  // Width of the left column (rail or expanded sidebar) the right panel shares with.
+  function leftWidth() {
+    return sidebarCollapsed.value ? RAIL_W : sidebarW.value
+  }
   function clampEvidence(px) {
-    // Never let the evidence panel swallow the conversation: keep at least
-    // ~520px for sidebar + chat so the thread (and the drag handle itself)
-    // always stays usable.
-    const max = Math.max(EVIDENCE_MIN, (window.innerWidth || 1280) - 520)
-    return Math.min(max, Math.max(EVIDENCE_MIN, px))
+    // V2 Studio rule (clampStudio): at most 70% of the width beside the left
+    // column, so the conversation always keeps at least 30%, whatever the drag.
+    return clampStudio(px, window.innerWidth || 1280, leftWidth(), EVIDENCE_MIN)
   }
   function clampSources(px) {
-    // Same guarantee for the Source Data dock: whatever the drag position, the
-    // conversation column (rail + prompt) keeps a usable minimum width.
-    const max = Math.max(SOURCES_MIN, (window.innerWidth || 1280) - 560)
-    return Math.min(max, Math.max(SOURCES_MIN, px))
+    // Same 70/30 guarantee for the Source Data dock.
+    return clampStudio(px, window.innerWidth || 1280, leftWidth(), SOURCES_MIN)
   }
   function persist(key, val) {
     try {

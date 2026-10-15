@@ -10,6 +10,8 @@
 // is returned untouched), never thrown - the run keeps going. Unknown keys are dropped
 // and every string is truncated to its cap, exactly like the backend's normalize_op.
 
+import { humanizeColumn } from './evidenceProof.js'
+
 // --- constants (mirror of the contract; parity-tested) -------------------------------
 
 export const PROTOCOL_VERSION = 1
@@ -563,9 +565,62 @@ export function provenanceFor(state, item) {
   return state.provenance[sid] || null
 }
 
+/**
+ * The Data tab focus for one sql_id: the widget it was opened from (or the first
+ * widget bound to that result), its step and provenance. null when the sql_id is
+ * unknown to the workspace (stale focus after a plan/workspace change).
+ */
+export function dataFocus(state, sqlId, widgetId) {
+  if (!state || !sqlId) return null
+  const widgets = state.widgets || []
+  const known = (state.summary && state.summary.sql_ids || []).includes(sqlId) || !!(state.provenance && state.provenance[sqlId])
+  if (!known) return null
+  const widget = widgets.find((w) => w.id === widgetId && w.sql_id === sqlId) || widgets.find((w) => w.sql_id === sqlId) || null
+  const prov = (state.provenance && state.provenance[sqlId]) || null
+  const stepId = (widget && widget.step_id) || (prov && prov.step_id) || null
+  return { sqlId, widget, provenance: prov, step: stepId ? stepFor(state, stepId) : null }
+}
+
+/**
+ * One filter of a resolved sql_id as display parts: the explainer step form
+ * ({kind:'filter_*', params}) maps to an i18n key + args (Evidence wording); the
+ * chip shape {column, op, values} and plain strings map to literal text (the column
+ * worded for the business user by humanizeColumn).
+ */
+export function filterParts(f, stepArgs) {
+  if (typeof f === 'string') return f ? { text: f } : null
+  if (!f || typeof f !== 'object') return null
+  if (typeof f.kind === 'string' && f.kind.startsWith('filter_')) return stepArgs(f)
+  if (!f.column) return null
+  const values = Array.isArray(f.values) ? f.values : f.value != null ? [f.value] : []
+  const op = f.op && f.op !== '=' && f.op !== 'IN' ? ' ' + f.op + ' ' : ' : '
+  return { text: humanizeColumn(f.column) + op + values.map(String).join(', ') }
+}
+
 /** The Chart.js spec the existing ArtifactChart expects (donut = pie + donut style). */
 export function chartSpecForArtifact(chart) {
   if (!chart) return null
   if (chart.type === 'donut') return { ...chart, type: 'pie', style: 'donut' }
   return chart
+}
+
+/**
+ * Plain-language i18n key for the expert that produced a result (the user never sees
+ * an agent key): revenue and incident experts are named, anything else is "an expert".
+ */
+export function agentLabelKey(agentKey) {
+  const k = String(agentKey || '').toLowerCase()
+  if (k.includes('revenu') || k.includes('sales')) return 'ws.agent.revenue'
+  if (k.includes('ticket') || k.includes('incident')) return 'ws.agent.tickets'
+  return 'ws.agent.generic'
+}
+
+/**
+ * Plain label of one result for the Data selector: the first widget title using it,
+ * else its plan step label, else null (the caller numbers it "Result n").
+ */
+export function resultLabel(choice) {
+  if (!choice) return null
+  if (Array.isArray(choice.widgets) && choice.widgets.length) return choice.widgets[0]
+  return choice.stepLabel || null
 }

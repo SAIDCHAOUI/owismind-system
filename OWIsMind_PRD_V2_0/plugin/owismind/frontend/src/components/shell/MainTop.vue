@@ -93,6 +93,8 @@ const langShort = computed(() => {
   height: 56px;
   gap: 16px;
   flex-shrink: 0;
+  /* Size container: beside the Studio the top bar can shrink to ~330px. */
+  container: maintop / inline-size;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
@@ -144,5 +146,14 @@ const langShort = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .top-action { transition: none; }
   .top-action:active { transform: none; }
+}
+/* Narrow top bar (chat column beside the Studio): the title ellipsizes (above), the
+   controls compact to icon-only targets. */
+@container maintop (max-width: 520px) {
+  .main-top-left { gap: 6px; }
+  .main-top-right { gap: 2px; }
+  .top-action { width: 30px; height: 30px; }
+  .top-action--lang { width: 30px; padding: 0; }
+  .lang-short { display: none; }
 }
 </style>

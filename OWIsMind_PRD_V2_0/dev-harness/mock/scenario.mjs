@@ -576,10 +576,30 @@ export function buildWorkspaceScenario(exchangeId) {
   }
   push(t + 100, { type: 'usage_summary', promptTokens: 11240, completionTokens: 1420, totalTokens: 12660, estimatedCost: 0.0312 })
 
+  // Per-query Evidence descriptors (multi-SQL Evidence: /evidence/meta?sql_id=).
+  const block = (r, n) => ({ captured: true, columns: r.columns, rows: r.rows, row_count: n, truncated: false })
+  const revChips = [
+    { id: 1, column: 'Year', op: '=', values: ['2026'], editable: true },
+    { id: 2, column: 'Phase', op: 'IN', values: ['ACTUALS', 'BUDGET'], editable: true },
+  ]
+  const revSteps = [
+    { kind: 'source', params: ['DRIVE_Revenues'] },
+    { kind: 'filter_eq', params: ['Year', '2026'] },
+    { kind: 'filter_in', params: ['Phase', 2, 'ACTUALS, BUDGET'] },
+  ]
   const sqlItems = [
-    { sql: WS_REVENUE_SQL, success: true, row_count: agg.rows.length, sql_id: 's1q1', step_index: 1, agent_key: 'revenue', result: revResult },
-    { sql: WS_TOTAL_SQL, success: true, row_count: 1, sql_id: 's1q2', step_index: 1, agent_key: 'revenue', result: totalResult },
-    { sql: WS_TICKETS_SQL, success: true, row_count: tickets.length, sql_id: 's2q1', step_index: 2, agent_key: 'tickets', result: ticketResult },
+    { sql: WS_REVENUE_SQL, success: true, row_count: agg.rows.length, sql_id: 's1q1', step_index: 1, agent_key: 'revenue', result: revResult,
+      evidence: { base: 'revenues', dataset: 'DRIVE_Revenues', chips: revChips, advanced: { present: false, display: '' }, sql: WS_REVENUE_SQL,
+        explanationSteps: [...revSteps, { kind: 'group', params: ['Solution'] }, { kind: 'agg_sum', params: ['Revenues'] }], drillColumns: ['Solution'], resultBlock: block(revResult, agg.rows.length) } },
+    { sql: WS_TOTAL_SQL, success: true, row_count: 1, sql_id: 's1q2', step_index: 1, agent_key: 'revenue', result: totalResult,
+      evidence: { base: 'revenues', dataset: 'DRIVE_Revenues', chips: revChips, advanced: { present: false, display: '' }, sql: WS_TOTAL_SQL,
+        explanationSteps: [...revSteps, { kind: 'agg_sum', params: ['Revenues'] }], drillColumns: [], resultBlock: block(totalResult, 1) } },
+    { sql: WS_TICKETS_SQL, success: true, row_count: tickets.length, sql_id: 's2q1', step_index: 2, agent_key: 'tickets', result: ticketResult,
+      evidence: { base: 'tickets', dataset: 'TroubleTickets_year',
+        chips: [{ id: 1, column: 'Status', op: 'IN', values: ['Open', 'In Progress'], editable: true }],
+        advanced: { present: true, display: '"creationDate" >= \'2026-01-01\'' }, sql: WS_TICKETS_SQL,
+        explanationSteps: [{ kind: 'source', params: ['TroubleTickets_year'] }, { kind: 'filter_gte', params: ['creationDate', '2026-01-01'] }, { kind: 'filter_in', params: ['Status', 2, 'Open, In Progress'] }, { kind: 'group', params: ['Severity'] }],
+        drillColumns: ['Severity'], resultBlock: block(ticketResult, tickets.length) } },
   ]
   // Filters as GET /workspace serves them: the filter_* explainer steps of each SQL.
   const filtersBySql = {
@@ -601,13 +621,18 @@ export function buildWorkspaceScenario(exchangeId) {
   }
 }
 
-// Route a user message to a scenario (the mock's tiny "orchestrator"). V2: the
-// multi-facet workspace run is the default; "v1" / "legacy" replays the V1.3 run.
+// Route a user message to a scenario (the mock's tiny "orchestrator"). V2: EVERY
+// business question plays the multi-facet workspace run - the V1.3 keyword routes
+// ("total", "liste", "lignes", "détail" are words of ordinary questions) used to
+// send natural questions to legacy runs WITHOUT any workspace, so the panel never
+// showed up. The V1.3 runs now need an explicit "v1" prefix; greetings stay chatter.
 export function pickScenario(message, exchangeId) {
-  const m = String(message || '').toLowerCase()
-  if (/\b(bonjour|hello|salut|merci|aide|help|qui es[- ]tu)\b/.test(m)) return buildChatterScenario(exchangeId)
-  if (m.includes('kpi') || m.includes('total')) return buildKpiScenario(exchangeId)
-  if (/(détail|detail|liste|lignes)/.test(m)) return buildDetailScenario(exchangeId)
-  if (/\b(v1|legacy)\b/.test(m)) return buildRevenueScenario(exchangeId)
+  const m = String(message || '').toLowerCase().trim()
+  if (/^(bonjour|hello|salut|merci|aide|help|qui es[- ]tu)\b[\s!?.]*$/.test(m)) return buildChatterScenario(exchangeId)
+  if (/^v1\b/.test(m)) {
+    if (m.includes('kpi') || m.includes('total')) return buildKpiScenario(exchangeId)
+    if (/(détail|detail|liste|lignes)/.test(m)) return buildDetailScenario(exchangeId)
+    return buildRevenueScenario(exchangeId)
+  }
   return buildWorkspaceScenario(exchangeId)
 }

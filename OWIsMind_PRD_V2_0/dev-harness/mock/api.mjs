@@ -305,10 +305,68 @@ function workspaceFor(exchangeId) {
 
 // --- evidence meta assembly (mirrors evidence_meta + the route enrichment) -------
 
-function evidenceMetaFor(exchangeId) {
+// V2.0 multi-SQL Evidence (mirror of evidence/service._load_sql_item): the ACTIVE
+// stored query = the one named by sql_id (unknown -> 404 sql_id_not_found), else the
+// latest successful one. A query carrying its own `evidence` block (the multi-facet
+// scenario) brings its dataset, chips and base rows; otherwise the exchange's.
+function activeEvidence(entry, sqlId) {
+  const items = entry.sqlItems || []
+  let item = null
+  if (sqlId) {
+    item = items.find((it) => it.sql_id === sqlId)
+    if (!item) return { missing: true }
+  } else {
+    item = [...items].reverse().find((it) => it.success && it.evidence) || null
+  }
+  const ev = (item && item.evidence) || entry.evidence
+  const tickets = !!(ev && ev.base === 'tickets')
+  return {
+    item,
+    ev,
+    baseRows: tickets ? TICKETS : REVENUES,
+    baseColumns: tickets ? TICKET_COLUMNS : REVENUE_COLUMNS,
+    table: tickets ? 'OWISMIND_LOCAL_troubletickets_year' : 'OWISMIND_LOCAL_drive_revenues',
+  }
+}
+
+// queries[] of /evidence/meta (mirror of summarize_queries + _attach_query_widgets).
+function queriesFor(entry, activeItem) {
+  const widgetsBySql = {}
+  for (const w of (entry.workspace && entry.workspace.widgets) || []) {
+    if (!w.sql_id) continue
+    if (!widgetsBySql[w.sql_id]) widgetsBySql[w.sql_id] = []
+    widgetsBySql[w.sql_id].push({ id: w.id, kind: w.kind, title: w.title, source: 'workspace' })
+  }
+  return (entry.sqlItems || []).map((item, i) => ({
+    index: i + 1,
+    success: !!item.success,
+    row_count: item.row_count,
+    matched: true,
+    result_captured: !!item.result,
+    step_index: item.step_index,
+    agent_key: item.agent_key,
+    ...(item.sql_id ? { sql_id: item.sql_id, widgets: widgetsBySql[item.sql_id] || [] } : {}),
+    active: item === activeItem,
+  }))
+}
+
+const SQL_ID_RE = /^s[0-9]+(q|lk|qc)[0-9]+$/
+
+function evidenceMetaFor(exchangeId, sqlId) {
   const entry = EXCHANGES.get(exchangeId)
   if (!entry) return null
-  const ev = entry.evidence
+  const scope = activeEvidence(entry, sqlId)
+  if (scope.missing) return { missing: true }
+  const ev = scope.ev
+  // The picked query failed: honest degraded meta that still lists every query.
+  if (scope.item && !scope.item.success) {
+    return {
+      status: 'ok', exchange_id: exchangeId, available: false, reason: 'no_successful_sql',
+      sql: scope.item.sql || null, sql_id: scope.item.sql_id || null,
+      queries: queriesFor(entry, scope.item),
+      verification: { level: 'declared', result_captured: false }, artifacts: [],
+    }
+  }
   // No SQL stored for this exchange (conversational answer): the real backend
   // degrades to an honest declared-level meta (evidence_meta, reason 'no_sql').
   if (!ev) {
@@ -346,29 +404,22 @@ function evidenceMetaFor(exchangeId) {
   return {
     status: 'ok',
     available: true,
+    sql_id: scope.item ? scope.item.sql_id || null : null,
     dataset: ev.dataset,
-    columns: REVENUE_COLUMNS.map((c) => ({ name: c.name, type: c.type })),
+    columns: scope.baseColumns.map((c) => ({ name: c.name, type: c.type })),
     chips: ev.chips,
     advanced: ev.advanced,
     sql: ev.sql,
     source: {
       dataset: ev.dataset,
       schema: 'public',
-      table: 'OWISMIND_LOCAL_drive_revenues',
+      table: scope.table,
       url: '',
     },
     sources: [
-      { dataset: ev.dataset, schema: 'public', table: 'OWISMIND_LOCAL_drive_revenues', label: ev.dataset },
+      { dataset: ev.dataset, schema: 'public', table: scope.table, label: ev.dataset },
     ],
-    queries: entry.sqlItems.map((item, i) => ({
-      index: i + 1,
-      success: !!item.success,
-      row_count: item.row_count,
-      matched: true,
-      result_captured: !!item.result,
-      step_index: item.step_index,
-      agent_key: item.agent_key,
-    })),
+    queries: queriesFor(entry, scope.item),
     verification: {
       level: 'calc_decomposed',
       result_captured: !!(resultBlock && resultBlock.captured),
@@ -391,8 +442,10 @@ function evidenceMetaFor(exchangeId) {
 // server-side rebuilt WHERE): chips whose id is NOT in kept_ids are dropped,
 // then the user's editable filters / search / drill apply on top.
 function evidenceBaseRows(entry, body) {
+  const scope = activeEvidence(entry, body.sql_id)
+  const ev = scope.ev || entry.evidence
   const keptIds = Array.isArray(body.kept_ids) ? body.kept_ids : null
-  const chips = entry.evidence.chips.filter(
+  const chips = ev.chips.filter(
     (c) => keptIds == null || keptIds.includes(c.id)
   )
   // The frontend re-sends edited chips inside `filters`; a chip edited there
@@ -400,7 +453,7 @@ function evidenceBaseRows(entry, body) {
   // active set, so locked chips only apply when filters does not carry them.
   const filterCols = new Set((body.filters || []).map((f) => f.column))
   const effectiveChips = chips.filter((c) => !filterCols.has(c.column))
-  let rows = applyFilters(REVENUES, effectiveChips)
+  let rows = applyFilters(scope.baseRows || REVENUES, effectiveChips)
   rows = applyFilters(rows, body.filters || [])
   rows = applySearch(rows, body.q)
   rows = applyDrill(rows, body.drill)
@@ -534,9 +587,20 @@ function handleSourceRoute(pathname, body, query) {
   return { status: 'ok', ...distinct }
 }
 
-function handleEvidenceRoute(pathname, body) {
+function handleEvidenceRoute(pathname, body, query) {
   const entry = EXCHANGES.get(body.exchange_id)
   if (!entry) return { httpStatus: 404, payload: { status: 'error', error: 'exchange_not_found' } }
+  // V2.0 multi-SQL: sql_id as body field or query param; malformed 400, unknown 404,
+  // failed query 409 (never a silent fallback to the latest query).
+  if (body.sql_id == null && query && query.sql_id) body.sql_id = query.sql_id
+  if (body.sql_id != null) {
+    if (!SQL_ID_RE.test(String(body.sql_id))) return { httpStatus: 400, payload: { status: 'error', error: 'invalid_sql_id' } }
+    const sc = activeEvidence(entry, body.sql_id)
+    if (sc.missing) return { httpStatus: 404, payload: { status: 'error', error: 'sql_id_not_found' } }
+    if (!pathname.endsWith('/result-rows') && sc.item && !sc.item.success) {
+      return { httpStatus: 409, payload: { status: 'error', error: 'no_successful_sql' } }
+    }
+  }
   if (pathname.endsWith('/result-rows')) {
     // Mirror of evidence_result_rows: page the FULL result of the stored item (the
     // real backend re-runs the agent's SELECT); total only on offset 0.
@@ -572,11 +636,12 @@ function handleEvidenceRoute(pathname, body) {
   // distinct (cascading picker): the OTHER chips + scope search, minus exclude_id.
   const excludeId = body.exclude_id
   const keptIds = Array.isArray(body.kept_ids) ? body.kept_ids : null
-  const chips = entry.evidence.chips.filter(
+  const dscope = activeEvidence(entry, body.sql_id)
+  const chips = (dscope.ev || entry.evidence).chips.filter(
     (c) => c.id !== excludeId && (keptIds == null || keptIds.includes(c.id))
   )
   const filterCols = new Set((body.filters || []).map((f) => f.column))
-  let rows = applyFilters(REVENUES, chips.filter((c) => !filterCols.has(c.column)))
+  let rows = applyFilters(dscope.baseRows || REVENUES, chips.filter((c) => !filterCols.has(c.column)))
   rows = applyFilters(rows, body.filters || [])
   rows = applySearch(rows, body.scope_q)
   rows = applyDrill(rows, body.drill)
@@ -676,12 +741,14 @@ export function createMockApi() {
         return sendJson(res, 200, doc)
       }
       case route === '/evidence/meta': {
-        const meta = evidenceMetaFor(query.exchange_id)
+        if (query.sql_id && !SQL_ID_RE.test(query.sql_id)) return sendJson(res, 400, { status: 'error', error: 'invalid_sql_id' })
+        const meta = evidenceMetaFor(query.exchange_id, query.sql_id)
         if (!meta) return sendJson(res, 404, { status: 'error', error: 'exchange_not_found' })
+        if (meta.missing) return sendJson(res, 404, { status: 'error', error: 'sql_id_not_found' })
         return sendJson(res, 200, meta)
       }
       case route.startsWith('/evidence/'): {
-        const out = handleEvidenceRoute(route, body)
+        const out = handleEvidenceRoute(route, body, query)
         return sendJson(res, out.httpStatus, out.payload)
       }
       case route.startsWith('/source/'):

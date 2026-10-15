@@ -880,4 +880,12 @@ function nextVersion() {
   .msg-foot button:hover:not(:disabled),
   .msg-foot button:active:not(:disabled) { transform: none; }
 }
+/* Narrow chat column: tables keep scrolling inside themselves (display:block +
+   max-width above), with tighter cells so more columns fit; code blocks too. */
+@container chat (max-width: 560px) {
+  .body :deep(thead th) { padding: 6px 8px; }
+  .body :deep(tbody td) { padding: 6px 8px; }
+  .body :deep(pre) { max-width: 100%; }
+  .msg-foot { gap: var(--s-1); }
+}
 </style>

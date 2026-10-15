@@ -114,7 +114,7 @@ def _seed_run(run_id, session_id="sess-1"):
         }
 
 
-class WorkerWorkspaceTests(_StreamingBase):
+class _WorkerBase(_StreamingBase):
     def setUp(self):
         super().setUp()
         self.saved = []
@@ -162,6 +162,8 @@ class WorkerWorkspaceTests(_StreamingBase):
         with stream_manager._LOCK:
             return list(stream_manager._RUNS[run_id]["events"])
 
+
+class WorkerWorkspaceTests(_WorkerBase):
     def test_multi_facet_relayed_live_and_persisted_once(self):
         fx = _load("workspace_run_multi_facet.json")
         live = self._run("r-multi", fx["raw_chunks"], fx["exchange_id"])
@@ -217,6 +219,58 @@ class WorkerWorkspaceTests(_StreamingBase):
         state = self.saved[0][3]
         self.assertEqual(state["last_seq"], stream_manager.MAX_WORKSPACE_EVENTS)
         self.assertEqual(len(state["notes"]), 30)
+
+
+class LiveResultRelayTests(_WorkerBase):
+    """V2.0: captured rows reach /chat/poll live (sqlId + result), bounded."""
+
+    def _sql_events(self, live):
+        return [e for e in live if e["type"] == "generated_sql"]
+
+    def test_rows_relayed_live_with_sql_id(self):
+        fx = _load("workspace_run_multi_facet.json")
+        live = self._run("r-live", fx["raw_chunks"], fx["exchange_id"])
+        events = self._sql_events(live)
+        self.assertEqual([e["sqlId"] for e in events], ["s1q1", "s1q2", "s2q1"])
+        self.assertEqual(events[0]["result"]["rows"][0], ["Nord", 1200])
+        # Persistence still gets the full item.
+        self.assertEqual(self.sql_saved[0][0]["result"]["columns"], ["region", "revenue"])
+
+    def _agent_done(self, n, cells):
+        rows = [["x" * cells] for _ in range(50)]
+        return {"type": "event", "eventKind": "AGENT_DONE", "eventData": {
+            "generatedSql": [{"sql": "SELECT %d" % n, "success": True, "row_count": 50,
+                              "sql_id": "s%dq1" % n,
+                              "result": {"columns": ["c"], "rows": rows,
+                                         "truncated": False}}]}}
+
+    def test_oversize_result_stripped_from_live_copy_only(self):
+        live = self._run("r-big", [self._agent_done(1, 2000)], "ex-big")
+        event = self._sql_events(live)[0]
+        self.assertEqual(event["sqlId"], "s1q1")
+        self.assertNotIn("result", event)
+        self.assertIn("result", self.sql_saved[0][0])
+
+    def test_per_run_live_budget(self):
+        # ~50 KB each: under the per-event cap, the run budget (400 KB) stops at 7.
+        chunks = [self._agent_done(i, 1000) for i in range(1, 11)]
+        live = self._run("r-budget", chunks, "ex-budget")
+        with_rows = [e for e in self._sql_events(live) if "result" in e]
+        self.assertEqual(len(with_rows), 7)
+        self.assertEqual(len(self.sql_saved[0]), 10)
+
+
+class SpanSqlIdTests(unittest.TestCase):
+    def test_orchestrator_span_sql_id_captured(self):
+        trace = {"children": [
+            {"name": "semantic-model-query",
+             "outputs": {"sql": "SELECT a", "sql_id": "s2lk1", "columns": ["a"],
+                         "rows": [[1]]}},
+            {"name": "semantic-model-query",
+             "outputs": {"sql": "SELECT b", "sql_id": "latest"}},
+            {"name": "semantic-model-query", "outputs": {"sql": "SELECT c"}}]}
+        items = streaming._find_generated_sql(trace)
+        self.assertEqual([it.get("sql_id") for it in items], ["s2lk1", None, None])
 
 
 class StartRunSessionTests(unittest.TestCase):

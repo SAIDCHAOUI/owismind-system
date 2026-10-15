@@ -89,6 +89,64 @@ export function calcStepArgs(step) {
   return { key, args }
 }
 
+// Plain column reference: optional quotes and table qualifier, word characters only.
+// Anything else (an expression, a literal, an advanced fragment) stays verbatim.
+const COLUMN_REF_RE = /^"?[A-Za-z_][\w$]*"?(\."?[A-Za-z_][\w$]*"?)*$/
+
+/**
+ * Business-readable name of a column for users who never see the schema:
+ * the label from `labels` (a {column: label} map) when one exists, else a
+ * humanized name (qualifier and quotes dropped, underscores / camelCase to
+ * spaces, sentence case; 1-2 letter upper-case tokens such as "CA" or "ID" kept).
+ * A value that is not a plain column reference is returned unchanged.
+ */
+export function humanizeColumn(name, labels) {
+  const raw = name == null ? '' : String(name).trim()
+  if (!raw) return ''
+  const label = labels && typeof labels === 'object' ? labels[raw] : null
+  if (typeof label === 'string' && label.trim()) return label.trim()
+  if (!COLUMN_REF_RE.test(raw)) return raw
+  const bare = raw.replace(/"/g, '').split('.').pop()
+  const bareLabel = labels && typeof labels === 'object' ? labels[bare] : null
+  if (typeof bareLabel === 'string' && bareLabel.trim()) return bareLabel.trim()
+  const words = bare
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[_\s$]+/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 2 && w === w.toUpperCase() && /[A-Z]/.test(w) ? w : w.toLowerCase()))
+  if (!words.length) return raw
+  const text = words.join(' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+// Which params of a step name a column ('list' = a ", "-joined list of columns).
+const COLUMN_PARAMS = {
+  filter_eq: [0], filter_neq: [0], filter_gt: [0], filter_gte: [0], filter_lt: [0],
+  filter_lte: [0], filter_in: [0], filter_notin: [0], filter_between: [0],
+  filter_null: [0], filter_notnull: [0], filter_like: [0],
+  agg_sum: [0], agg_avg: [0], agg_min: [0], agg_max: [0], agg_count: [0],
+  agg_count_distinct: [0], calc_ratio: [0, 1], calc_diff: [0, 1], calc_share: [0],
+  group: 'list',
+}
+
+/**
+ * calcStepArgs with every column param worded for the business user
+ * (humanizeColumn). Literals, values and advanced fragments stay verbatim.
+ */
+export function businessStepArgs(step, labels) {
+  const kind = step && typeof step.kind === 'string' ? step.kind : ''
+  const which = COLUMN_PARAMS[kind]
+  if (!which || !Array.isArray(step.params)) return calcStepArgs(step)
+  const params = step.params.map((p, i) => {
+    if (p == null) return p
+    if (which === 'list') {
+      return i === 0 ? String(p).split(/\s*,\s*/).map((c) => humanizeColumn(c, labels)).join(', ') : p
+    }
+    return which.includes(i) ? humanizeColumn(p, labels) : p
+  })
+  return calcStepArgs({ ...step, params })
+}
+
 /**
  * Number of agent conditions NOT reproduced by the interactive view (0 when
  * the verification block is absent or clean). Honesty rule §9: dropped

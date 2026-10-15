@@ -44,6 +44,15 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // Computed from the artifacts on each exchange load; switching tabs MUST NOT
   // toggle `open` (the ChatThread scroll gate gates only on `open`, not this ref).
   const activeTab = ref('evidence')
+  // V2.0 multi-SQL Evidence: the stored query the user asked to view (null = the
+  // server's default, the latest successful SQL). The query the view ACTUALLY
+  // describes is meta.sql_id (echoed by the server); every follow-up request (rows,
+  // aggregate, distinct) is scoped to it. An older backend echoes nothing: no scope.
+  const requestedSqlId = ref(null)
+  const activeSqlId = computed(() => (meta.value && typeof meta.value.sql_id === 'string' && meta.value.sql_id) || null)
+  function _scoped(payload) {
+    return activeSqlId.value ? { ...payload, sql_id: activeSqlId.value } : payload
+  }
   const chips = ref([]) // local editable working state (evidenceModel shape)
   const includeAdvanced = ref(false)
   // Lazily ACCUMULATED rows: page 0 resets this array, every "load more" appends
@@ -148,11 +157,11 @@ export const useEvidenceStore = defineStore('evidence', () => {
     getEpoch: () => seq,
     fetchAggregate: (group, measures, limit) =>
       fetchEvidenceAggregate(
-        buildEvidenceAggregatePayload(
+        _scoped(buildEvidenceAggregatePayload(
           exchangeId.value, chips.value, includeAdvanced.value,
           drill.value ? drill.value.labels : null, selectedTable.value, q.value,
           group, measures, limit,
-        ),
+        )),
       ),
     refreshRows: () => refreshRows(),
     errorCode: 'evidence_unavailable',
@@ -192,7 +201,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       exchangeId.value, chips.value, includeAdvanced.value, PREVIEW_LIMIT, 0, null,
       drill.value ? drill.value.labels : null, selectedTable.value, q.value,
     )
-    return fetchEvidenceRows(payload)
+    return fetchEvidenceRows(_scoped(payload))
       .then((data) => {
         if (my !== previewSeq || epoch !== seq) return
         previewRows.value = (data.rows || []).slice(0, PREVIEW_LIMIT)
@@ -252,10 +261,25 @@ export const useEvidenceStore = defineStore('evidence', () => {
   // immediately, degraded view included. `opts.tab` (manual only) lands the panel
   // on a specific tab after meta loads (e.g. the "check this number" link opens
   // straight on 'sources'); it overrides the artifact-derived default tab.
+  // Meta for one exchange, scoped to `sqlId` when given. An unknown / rejected id
+  // (sql_id_not_found, invalid_sql_id) falls back to the default view: the panel never
+  // ends up empty because a stale id was requested.
+  async function _fetchMeta(id, sqlId) {
+    if (!sqlId) return fetchEvidenceMeta(id)
+    try {
+      return await fetchEvidenceMeta(id, sqlId)
+    } catch (e) {
+      const code = (e && e.message) || ''
+      if (code === 'sql_id_not_found' || code === 'invalid_sql_id') return fetchEvidenceMeta(id)
+      throw e
+    }
+  }
+
   async function openForExchange(id, opts) {
     if (!id) return
     const auto = !!(opts && opts.auto)
     const wantTab = opts && opts.tab ? opts.tab : null
+    const wantSql = (opts && opts.sqlId) || null
     if (auto) {
       // Staged auto-reveal: fetch meta WITHOUT touching the current panel
       // state; commit only when the interactive view is confirmed available
@@ -264,7 +288,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       const seqAtStart = seq
       let m
       try {
-        m = await fetchEvidenceMeta(id)
+        m = await _fetchMeta(id, wantSql)
       } catch (e) {
         return
       }
@@ -272,6 +296,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       const mySeq = ++seq
       exchangeId.value = id
       _resetData()
+      requestedSqlId.value = wantSql
       meta.value = m
       chips.value = chipsFromMeta(m)
       includeAdvanced.value = !!(m.advanced && m.advanced.present)
@@ -285,11 +310,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
     const mySeq = ++seq
     exchangeId.value = id
     _resetData()
+    requestedSqlId.value = wantSql
     open.value = true
     track('evidence_panel_opened', { auto: false })
     loading.value = true
     try {
-      const m = await fetchEvidenceMeta(id)
+      const m = await _fetchMeta(id, wantSql)
       if (mySeq !== seq) return
       meta.value = m
       chips.value = chipsFromMeta(m)
@@ -329,7 +355,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
         exchangeId.value, chips.value, includeAdvanced.value, targetLimit, targetOffset, sort.value,
         drill.value ? drill.value.labels : null, selectedTable.value, q.value,
       )
-      const data = await fetchEvidenceRows(payload)
+      const data = await fetchEvidenceRows(_scoped(payload))
       if (mySeq !== seq || myRows !== rowsSeq) return null
       const newRows = data.rows || []
       // Adopt the server-echoed offset: the backend silently CLAMPS an out-of-range
@@ -406,6 +432,12 @@ export const useEvidenceStore = defineStore('evidence', () => {
     refreshRows()
   }
 
+  /** Switch the whole Evidence view to another stored query of the SAME exchange. */
+  function selectSql(sqlId) {
+    if (!exchangeId.value || !sqlId || sqlId === activeSqlId.value) return
+    return openForExchange(exchangeId.value, { sqlId, tab: activeTab.value })
+  }
+
   function close() {
     // Only a real open->closed transition is a user action worth recording (close() is
     // also called idempotently on new-exchange / open-session, when nothing was open).
@@ -414,6 +446,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
     open.value = false
     exchangeId.value = null
     _resetData()
+    requestedSqlId.value = null
   }
 
   // --- filter editing (picker = / IN + removal + add + reset) -----------------
@@ -597,7 +630,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
       chips.value, includeAdvanced.value,
       drill.value ? drill.value.labels : null, q.value, excludeChipKey,
     )
-    return fetchEvidenceDistinct(exchangeId.value, column, excludeId, search, scope)
+    return fetchEvidenceDistinct(exchangeId.value, column, excludeId, search, _scoped(scope))
   }
 
   // Map each real tab key to a FIRST-CLASS analytics event, so dashboards read
@@ -638,7 +671,7 @@ export const useEvidenceStore = defineStore('evidence', () => {
   } = surface
 
   return {
-    open, exchangeId, meta, chips, includeAdvanced, rows, offset, hasMore, sort, drill, q,
+    open, exchangeId, meta, chips, requestedSqlId, activeSqlId, selectSql, includeAdvanced, rows, offset, hasMore, sort, drill, q,
     loading, rowsLoading, error, rowsError, available, modified,
     sources, hasMultipleSources, selectedTable, sourceTabKey,
     previewRows, previewLoading, previewError, refreshPreviewRows,

@@ -184,3 +184,51 @@ test('constants: frozen enum carries 41 kinds including opaque; step cap is 15',
   assert.equal(new Set(EXPLANATION_KINDS).size, EXPLANATION_KINDS.length) // no dupes
   assert.equal(MAX_CALC_STEPS, 15)
 })
+
+// ---------------------------------------------------------------------------
+// humanizeColumn / businessStepArgs - business wording of column names
+// ---------------------------------------------------------------------------
+import { humanizeColumn, businessStepArgs } from '../src/composables/evidenceProof.js'
+
+test('humanizeColumn: underscores, qualifiers, quotes and camelCase become sentence case', () => {
+  assert.equal(humanizeColumn('REVENUE_MONTH'), 'Revenue month')
+  assert.equal(humanizeColumn('customer_name'), 'Customer name')
+  assert.equal(humanizeColumn('t."Account_name"'), 'Account name')
+  assert.equal(humanizeColumn('creationDate'), 'Creation date')
+  assert.equal(humanizeColumn('CA_HT'), 'CA HT')
+  assert.equal(humanizeColumn('customer_ID'), 'Customer ID')
+})
+
+test('humanizeColumn: a business label wins over the humanized name', () => {
+  const labels = { Phase: 'Type de chiffre', Account_name: 'Client' }
+  assert.equal(humanizeColumn('Phase', labels), 'Type de chiffre')
+  assert.equal(humanizeColumn('r.Account_name', labels), 'Client')
+  assert.equal(humanizeColumn('Other_col', labels), 'Other col')
+})
+
+test('humanizeColumn: expressions, literals and empty input are left alone', () => {
+  assert.equal(humanizeColumn('amount * qty'), 'amount * qty')
+  assert.equal(humanizeColumn("'2026-01'"), "'2026-01'")
+  assert.equal(humanizeColumn(''), '')
+  assert.equal(humanizeColumn(null), '')
+})
+
+test('businessStepArgs: filter sentences name the column in business words, values verbatim', () => {
+  assert.deepEqual(businessStepArgs({ kind: 'filter_eq', params: ['revenue_month', '2026-01'] }), {
+    key: 'ev.exp.filter_eq', args: ['Revenue month', '2026-01'],
+  })
+  assert.deepEqual(businessStepArgs({ kind: 'filter_in', params: ['PHASE', 2, 'ACTUALS, BUDGET'] }), {
+    key: 'ev.exp.filter_in', args: ['Phase', '2', 'ACTUALS, BUDGET'],
+  })
+  assert.deepEqual(businessStepArgs({ kind: 'group', params: ['account_name, carrier_code'] }), {
+    key: 'ev.exp.group', args: ['Account name, Carrier code'],
+  })
+  assert.deepEqual(businessStepArgs({ kind: 'filter_eq', params: ['Phase', 'A'] }, { Phase: 'Type' }).args, ['Type', 'A'])
+})
+
+test('businessStepArgs: non-column steps and unknown kinds fall back to calcStepArgs', () => {
+  const adv = { kind: 'filter_advanced', params: ['a_b > 3 OR c_d IS NULL'] }
+  assert.deepEqual(businessStepArgs(adv), calcStepArgs(adv))
+  assert.deepEqual(businessStepArgs({ kind: 'nope' }), { key: 'ev.exp.opaque', args: [] })
+  assert.deepEqual(businessStepArgs(null), calcStepArgs(null))
+})

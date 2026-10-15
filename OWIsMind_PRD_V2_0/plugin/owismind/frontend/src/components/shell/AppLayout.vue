@@ -5,17 +5,19 @@
 // fixed draggable width) - the proof panel docks on the right of the chat.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUiStore } from '../../stores/ui.js'
 import { useEvidenceStore } from '../../stores/evidence.js'
 import { useSourcesStore } from '../../stores/sources.js'
 import { useSessionStore } from '../../stores/session.js'
 import { useChatStore } from '../../stores/chat.js'
-import { shouldAutoDock } from '../../composables/sourceModel.js'
+import { teaserState, isNarrow, studioWidth } from '../../composables/teaserModel.js'
 import Sidebar from './Sidebar.vue'
 import MainTop from './MainTop.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
 import SourcePanel from '../sources/SourcePanel.vue'
 import WorkspacePanel from '../workspace/WorkspacePanel.vue'
+import WorkspaceTeaser from '../workspace/WorkspaceTeaser.vue'
 import { useWorkspaceStore } from '../../stores/workspace.js'
 // BEGIN impersonation (temporary) - top banner shown while an admin views as a user.
 // Removable: delete this import + the <ImpersonateBanner> in the template + the
@@ -23,6 +25,7 @@ import { useWorkspaceStore } from '../../stores/workspace.js'
 import ImpersonateBanner from '../../features/admin-impersonate/ImpersonateBanner.vue'
 // END impersonation (temporary)
 
+const { t } = useI18n()
 const ui = useUiStore()
 const evidence = useEvidenceStore()
 const sources = useSourcesStore()
@@ -47,47 +50,74 @@ const draggingSrc = ref(false)
 // size differently: Evidence keeps its pixel width + drag handle, Source Data uses
 // the fraction-based docked layout (compact third / expanded two-thirds) with no drag.
 
-// Arrival-screen auto-dock: the Source Data view is ON SCREEN by default - the user
-// never has to discover a CTA and click it. Docked whenever the chat route shows an
-// EMPTY conversation and the selected agent exposes sources, unless the user
-// explicitly dismissed it (sticky per app session) or Evidence owns the column.
-// Once a conversation starts the panel simply stays until Evidence takes over; it
-// re-docks on the next new conversation.
-//
-// The bare-route guard (no :sessionId param) closes a boot race: deep-linking into
-// an EXISTING conversation fetches /agents and /conversation concurrently, and if
-// the agent list wins, `exchanges` is still empty - without the guard the dock
-// would flash open (and fire meta+rows fetches) over a conversation being loaded.
-// A conversation STARTED here gets its id stamped into the URL at the first
-// exchange (ChatView), by which point exchanges > 0 blocks the dock anyway.
-const autoDockKey = computed(() => {
+// V2 (user feedback 2026-10-15, design "beacon"): the arrival screen no longer
+// auto-docks the Source Data panel. The right column shows a small clickable TEASER
+// instead (composables/teaserModel.js): it opens the agent's data, or the last
+// answer's workspace, on click. A workspace still opens on its own when a run
+// builds its plan (design behavior); the teaser signals one built while closed.
+const viewportW = ref(window.innerWidth || 1280)
+const narrow = computed(() => isNarrow(viewportW.value))
+const rightOpen = computed(() => proofColumn.value || sources.open)
+const agentSources = computed(() => {
   const a = session.selectedAgent
-  return a && Array.isArray(a.sources) && a.sources.length ? a.key : ''
+  return a && Array.isArray(a.sources) ? a.sources : []
 })
-watch(
-  [
-    () => route.name,
-    () => route.params.sessionId,
-    autoDockKey,
-    () => chat.exchanges.length,
-    () => evidence.open,
-    () => sources.dismissed,
-    () => workspace.open,
-  ],
-  ([name, sid, key, exchanges, evOpen, dismissed, wsIsOpen]) => {
-    const dock = shouldAutoDock({
-      routeName: name,
-      sessionParam: sid,
-      agentKey: key,
-      exchangeCount: exchanges,
-      evidenceOpen: evOpen || wsIsOpen,
-      dismissed,
-      open: sources.open,
-    })
-    if (dock) sources.openPanel(key, { auto: true })
-  },
-  { immediate: true },
+// The last answer of the active branch, when it built a workspace.
+const lastWsExchange = computed(() => {
+  const turns = chat.turns
+  const last = turns.length ? turns[turns.length - 1].exchange : null
+  if (!last) return null
+  return last.hasWorkspace || workspace.hasContent(last.id, last.uid) ? last : null
+})
+const lastWsEntry = computed(() => {
+  const ex = lastWsExchange.value
+  return ex ? workspace.entryFor(ex.id, ex.uid) : null
+})
+const teaser = computed(() =>
+  teaserState({
+    routeName: route.name,
+    rightPanelOpen: rightOpen.value,
+    agentHasSources: agentSources.value.length > 0,
+    workspaceReady: !!lastWsExchange.value,
+    running: !!(lastWsEntry.value && lastWsEntry.value.running),
+    unseen: !!lastWsExchange.value && lastWsExchange.value.id != null && workspace.unseenExchangeId === lastWsExchange.value.id,
+    viewportWidth: viewportW.value,
+  }),
 )
+const teaserColumn = computed(() => teaser.value.visible && !teaser.value.compact && !narrow.value)
+const teaserAgentKey = computed(() => (session.selectedAgent ? session.selectedAgent.key : ''))
+function openFromTeaser() {
+  const ex = lastWsExchange.value
+  if (teaser.value.mode === 'workspace' && ex) {
+    if (ex.id) {
+      Promise.resolve(workspace.openForExchange(ex.id, { uid: ex.uid })).catch(() => {})
+    }
+    return
+  }
+  const a = session.selectedAgent
+  if (a) {
+    openAtStudioShare(ui.setSourcesWidth)
+    sources.openPanel(a.key)
+  }
+}
+// The Studio opens at 70% of the width beside the collapsed rail and the chat keeps
+// the other 30% (hard minimum): on its own when the agent starts a dashboard, from the
+// beacon or from "Open the Studio". The rail is collapsed FIRST so the 70/30 clamp
+// measures the final layout. The resize handle can only narrow it afterwards.
+function openAtStudioShare(setWidth) {
+  ui.setSidebarCollapsed(true, false)
+  setWidth(studioWidth(viewportW.value, RAIL_PX))
+}
+const RAIL_PX = 60
+watch(() => workspace.open, (open) => {
+  if (open && !narrow.value) openAtStudioShare(ui.setEvidenceWidth)
+})
+// Bottom sheet (narrow screens): one tap outside closes the open right panel.
+function closeRight() {
+  workspace.close()
+  evidence.close()
+  sources.closePanel()
+}
 
 // The X opt-out only holds for the CURRENT empty screen (user decision 2026-08-13,
 // "always show the teased data"): once a conversation starts or the user leaves the
@@ -158,10 +188,11 @@ const srcHungry = computed(
     && (sources.wide || ui.sourcesW > (window.innerWidth || 1280) * 0.45),
 )
 watch(
-  [proofColumn, srcHungry],
-  ([proofOpen, hungrySrc]) => {
-    if (proofOpen || hungrySrc) ui.setSidebarCollapsed(true, false)
+  [proofColumn, srcHungry, narrow],
+  ([proofOpen, hungrySrc, isNarrowNow]) => {
+    if (proofOpen || hungrySrc || isNarrowNow) ui.setSidebarCollapsed(true, false)
   },
+  { immediate: true },
 )
 
 // Expand/compact toggle <-> pixel width: the toggle drives PRESETS of the freely
@@ -176,10 +207,17 @@ watch(() => sources.wide, (wideNow) => {
 // window shrunk WHILE a panel is open can never leave a stale wide panel
 // swallowing the chat column (and pushing the drag handle off-screen).
 function onWindowResize() {
+  viewportW.value = window.innerWidth || viewportW.value
   if (proofColumn.value) ui.setEvidenceWidth(ui.evidenceW)
   if (sources.open) ui.setSourcesWidth(ui.sourcesW)
 }
 window.addEventListener('resize', onWindowResize)
+// Expanding / resizing the left sidebar eats into the same width: re-clamp the right
+// panel so the chat never drops under its 30% share.
+watch([() => ui.sidebarCollapsed, () => ui.sidebarW], () => {
+  if (proofColumn.value) ui.setEvidenceWidth(ui.evidenceW)
+  if (sources.open) ui.setSourcesWidth(ui.sourcesW)
+})
 
 const appStyle = computed(() => ({
   '--sidebar-w': ui.sidebarCollapsed ? '0px' : ui.sidebarW + 'px',
@@ -261,8 +299,10 @@ onBeforeUnmount(() => {
       class="app"
       :class="{
         'sidebar-collapsed': ui.sidebarCollapsed,
-        'with-evidence': proofColumn,
-        'with-sources': !proofColumn && sources.open,
+        'with-evidence': !narrow && proofColumn,
+        'with-sources': !narrow && !proofColumn && sources.open,
+        'with-teaser': teaserColumn,
+        narrow,
         resizing: dragging || draggingEv || draggingSrc,
       }"
       :style="appStyle"
@@ -278,20 +318,31 @@ onBeforeUnmount(() => {
         <RouterView />
       </main>
       <div
-        v-if="proofColumn"
+        v-if="proofColumn && !narrow"
         class="resize-handle ev"
         :class="{ active: draggingEv }"
         @pointerdown.prevent="startEvResize"
       />
       <div
-        v-if="!proofColumn && sources.open"
+        v-if="!proofColumn && sources.open && !narrow"
         class="resize-handle ev src"
         :class="{ active: draggingSrc }"
         @pointerdown.prevent="startSrcResize"
       />
-      <WorkspacePanel v-if="wsOpen" />
-      <EvidencePanel v-else-if="evStandalone" />
-      <SourcePanel v-else-if="sources.open" />
+      <!-- Right column (wide) or bottom sheet (narrow): ONE panel at a time. -->
+      <div v-if="narrow && rightOpen" class="sheet-backdrop" :aria-label="t('ws.sheet.close')" @click="closeRight" />
+      <div v-if="rightOpen" class="right-host" :class="{ sheet: narrow }">
+        <WorkspacePanel v-if="wsOpen" />
+        <EvidencePanel v-else-if="evStandalone" />
+        <SourcePanel v-else-if="sources.open" />
+      </div>
+      <WorkspaceTeaser
+        v-else-if="teaser.visible"
+        :teaser="{ ...teaser, compact: teaser.compact || narrow }"
+        :agent-key="teaserAgentKey"
+        :sources="agentSources"
+        @open="openFromTeaser"
+      />
     </div>
   </div>
 </template>
@@ -310,6 +361,9 @@ onBeforeUnmount(() => {
 /* END impersonation (temporary) */
 .app {
   --sidebar-w: 260px;
+  /* V2 Studio: ONE gray canvas behind sidebar, header and chat; the Studio, the
+     beacon and the prompt float on it as cards. */
+  background: var(--canvas);
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   grid-template-rows: 1fr;
@@ -374,9 +428,18 @@ onBeforeUnmount(() => {
 .app.sidebar-collapsed.with-evidence {
   grid-template-columns: var(--rail-w) 1fr var(--evidence-w);
 }
-.app.with-evidence .main {
-  border-right: 1px solid var(--border);
+/* The sidebar is a distinct PAPER column with a 1px right edge against the canvas
+   (light: white on grey; dark: the paper step above the black canvas), so users find
+   their conversations at a glance. The chat column keeps the canvas; the prompt card
+   goes back to paper. */
+.app :deep(.sidebar) {
+  --bg: var(--paper);
+  background: var(--paper);
+  border-right-color: var(--border);
 }
+.main { --bg: var(--canvas); background: var(--canvas); }
+.main :deep(.main-top) { border-bottom-color: transparent; }
+.main :deep(.prompt) { --bg: var(--paper); }
 
 /* Source Data DOCKED (arrival screen and beyond): a freely resizable pixel column
    (user ask 2026-08-13), same geometry as Evidence. The expand/compact toggle now
@@ -395,4 +458,55 @@ onBeforeUnmount(() => {
   margin-right: -5px;
 }
 .resize-handle.src { right: var(--sources-w); }
+
+/* Teaser column (no right panel open, wide screens): a narrow beacon on the right. */
+.app.with-teaser {
+  grid-template-columns: var(--sidebar-w) 1fr var(--teaser-w, 320px);
+}
+.app.sidebar-collapsed.with-teaser {
+  grid-template-columns: var(--rail-w) 1fr var(--teaser-w, 320px);
+}
+/* The right panel host fills its grid cell; the panel inside owns the layout. */
+.right-host {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* The Studio floats: a paper card inset 12px from the viewport edges. */
+  margin: 12px 12px 12px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  box-shadow: var(--float-strong);
+  --bg: var(--paper);
+}
+.right-host > * { flex: 1 1 auto; min-width: 0; }
+.right-host > :deep(.src-panel) { background: var(--paper); border-left: 0; }
+/* Narrow screens: no right column at all (no horizontal scroll); the open panel
+   becomes a bottom sheet over the chat, closed by tapping outside. */
+.app.narrow,
+.app.narrow.sidebar-collapsed {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+.right-host.sheet {
+  /* Narrow screens: the Studio covers the whole screen (its header closes it). */
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  z-index: var(--z-overlay);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: sheet-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } }
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--veil);
+}
+@media (prefers-reduced-motion: reduce) {
+  .right-host.sheet { animation: none; }
+}
 </style>

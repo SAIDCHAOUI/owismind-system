@@ -134,4 +134,10 @@ function openSources() { sources.openPanel(session.selectedAgentKey) }
   .empty-reopen:hover,
   .empty-reopen:active { transform: none; box-shadow: none; }
 }
+/* Narrow chat column: full-width measure, smaller greeting. */
+@container chat (max-width: 560px) {
+  .empty { width: 100%; padding: 0 var(--s-4); gap: var(--s-4); }
+  .empty-title { font-size: var(--fs-lg); }
+  .empty-sub { font-size: var(--fs-sm); }
+}
 </style>

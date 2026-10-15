@@ -1,7 +1,7 @@
 <script setup>
 // Calculation section - HOW the number was computed, as a numbered list of
 // business-language steps (no SQL jargon: the i18n ev.exp.* wording carries
-// the translation; column names stay verbatim). Steps come straight from the
+// the translation; column names are humanized by businessStepArgs). Steps come straight from the
 // backend's deterministic explanation; an unknown kind degrades to the
 // ev.exp.opaque fallback (calcStepArgs). Entirely hidden when the backend
 // produced no steps (v1 meta included) - an empty "how" section would only
@@ -9,7 +9,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEvidenceStore } from '../../stores/evidence.js'
-import { calcStepArgs, MAX_CALC_STEPS } from '../../composables/evidenceProof.js'
+import { businessStepArgs, MAX_CALC_STEPS } from '../../composables/evidenceProof.js'
 
 const { t } = useI18n()
 const evidence = useEvidenceStore()
@@ -18,7 +18,7 @@ const evidence = useEvidenceStore()
 const steps = computed(() => {
   const e = evidence.meta && evidence.meta.explanation
   const raw = e && Array.isArray(e.steps) ? e.steps : []
-  return raw.slice(0, MAX_CALC_STEPS).map((s) => calcStepArgs(s))
+  return raw.slice(0, MAX_CALC_STEPS).map((s) => businessStepArgs(s))
 })
 </script>
 

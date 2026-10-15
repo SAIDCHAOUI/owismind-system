@@ -174,3 +174,51 @@ test('a data widget without sql_id never enters the state (decision D2)', () => 
   assert.equal(s.widgets.length, 0)
   assert.equal(s.last_seq, 0)
 })
+
+// --- Data tab focus (sql_id) ------------------------------------------------------------
+
+import { dataFocus, filterParts } from '../src/composables/workspaceModel.js'
+
+test('dataFocus: the widget opened from, else the first widget on that sql_id', () => {
+  const s = reduceWorkspace([
+    PLAN,
+    ev(2, 'widget.add', { id: 'w1', step_id: 'p2', kind: 'table', title: 'T1', sql_id: 's2q1' }),
+    ev(3, 'widget.add', { id: 'w2', step_id: 'p1', kind: 'chart', title: 'C', sql_id: 's2q1', chart: { type: 'bar', x: 'a', y: ['b'] } }),
+    ev(4, 'prov.set', { sql_id: 's2q1', agent_key: 'tickets', tool: 'semantic-model-query', success: true, step_id: 'p2' }),
+  ])
+  const f = dataFocus(s, 's2q1', 'w2')
+  assert.equal(f.widget.id, 'w2')
+  assert.equal(f.step.index, 1)
+  assert.equal(f.provenance.agent_key, 'tickets')
+  assert.equal(dataFocus(s, 's2q1', 'nope').widget.id, 'w1')
+  assert.equal(dataFocus(s, 's2q1', 'w1').step.index, 2)
+  // Unknown result or missing input: no focus (stale focus never shows other rows).
+  assert.equal(dataFocus(s, 's9q9', 'w1'), null)
+  assert.equal(dataFocus(s, null), null)
+  assert.equal(dataFocus(null, 's2q1'), null)
+})
+
+test('filterParts: explainer steps go through the step wording, chips get a business column name, strings stay literal', () => {
+  const stepArgs = (f) => ({ key: 'ev.exp.' + f.kind, args: f.params.map(String) })
+  assert.deepEqual(filterParts({ kind: 'filter_eq', params: ['Year', 2026] }, stepArgs), { key: 'ev.exp.filter_eq', args: ['Year', '2026'] })
+  assert.deepEqual(filterParts({ column: 'Phase', op: 'IN', values: ['A', 'B'] }, stepArgs), { text: 'Phase : A, B' })
+  assert.deepEqual(filterParts({ column: 'x', op: '>=', values: [3] }, stepArgs), { text: 'X >= 3' })
+  assert.deepEqual(filterParts({ column: 'revenue_month', op: '=', values: ['2026-01'] }, stepArgs), { text: 'Revenue month : 2026-01' })
+  assert.deepEqual(filterParts('Year = 2026', stepArgs), { text: 'Year = 2026' })
+  assert.equal(filterParts({ kind: 'group', params: ['a'] }, stepArgs), null)
+  assert.equal(filterParts(null, stepArgs), null)
+  assert.equal(filterParts('', stepArgs), null)
+})
+
+import { agentLabelKey, resultLabel } from '../src/composables/workspaceModel.js'
+
+test('plain labels: expert names and result names, never an id', () => {
+  assert.equal(agentLabelKey('revenue'), 'ws.agent.revenue')
+  assert.equal(agentLabelKey('SalesDrive_revenue_expert'), 'ws.agent.revenue')
+  assert.equal(agentLabelKey('CSSO_Trouble_Tickets_Expert'), 'ws.agent.tickets')
+  assert.equal(agentLabelKey(''), 'ws.agent.generic')
+  assert.equal(resultLabel({ widgets: ['Revenus par pays'], stepLabel: 'Step' }), 'Revenus par pays')
+  assert.equal(resultLabel({ widgets: [], stepLabel: 'Incidents ouverts' }), 'Incidents ouverts')
+  assert.equal(resultLabel({ widgets: [] }), null)
+  assert.equal(resultLabel(null), null)
+})

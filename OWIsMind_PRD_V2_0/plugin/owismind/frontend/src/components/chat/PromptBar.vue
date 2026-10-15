@@ -465,4 +465,25 @@ const placeholder = () =>
 }
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .prompt-foot { text-align: center; font-size: var(--fs-xs); color: var(--text-3); padding-top: var(--s-3); }
+/* Narrow chat column (Studio open beside it, down to ~330px): the agent and mode
+   pickers shrink (the agent name ellipsizes) while mic + send stay on the same line,
+   never pushed out of the card. */
+@container chat (max-width: 560px) {
+  .prompt { padding: var(--s-3) var(--s-3) var(--s-2); }
+  .prompt-row { gap: var(--s-2); }
+  .prompt-left { flex: 1 1 auto; min-width: 0; gap: var(--s-1); }
+  .prompt-left :deep(.ui-menu-wrap) { flex: 0 1 auto; min-width: 0; }
+  .prompt-left :deep(.agent-pick) { max-width: 100%; min-width: 0; padding: 0 8px; gap: 5px; }
+  .prompt-left :deep(.mode-wrap) { flex: none; }
+  .prompt-left :deep(.mode-trigger) { padding: 5px 8px; }
+  .prompt-right { flex: none; gap: var(--s-1); }
+  .send-hint { display: none; }
+  .prompt-ctx-chip { max-width: 100%; }
+  .prompt-ctx-chip-text { max-width: 180px; }
+  .prompt-foot { padding-top: var(--s-2); }
+}
+@container chat (max-width: 360px) {
+  .prompt-left :deep(.agent-pick__caret) { display: none; }
+  .p-icon { width: 32px; height: 32px; }
+}
 </style>
