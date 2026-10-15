@@ -712,16 +712,16 @@ class TestWizardLlmCall(unittest.TestCase):
     def test_llm_wizard_override_wins_and_no_sampling_override(self):
         captured = {}
         project = self._fake_llm_project(captured)
-        saved_settings = hub.get_settings
+        saved_settings = hub.factory_llm
         saved_profile = wizard.read_profile
-        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": "mesh:custom"}
+        hub.factory_llm = lambda p, purpose="default": {"wizard": "mesh:custom"}.get(purpose, "mesh:sonnet")
         wizard.read_profile = lambda dataset, project_key=None: {"__dataset__": {"row_count": 1}}
         try:
             config = wizard.draft_model_config(project, "Delivery_Snapshot_profile",
                                                base_dataset="Delivery_Snapshot",
                                                domain="delivery")
         finally:
-            hub.get_settings = saved_settings
+            hub.factory_llm = saved_settings
             wizard.read_profile = saved_profile
         self.assertEqual(captured["llm_id"], "mesh:custom")
         self.assertNotIn("temperature", captured["completion"].settings,
@@ -730,18 +730,18 @@ class TestWizardLlmCall(unittest.TestCase):
         self.assertEqual(config["base_dataset"], "Delivery_Snapshot")
         self.assertEqual(config["domain"], "delivery")
 
-    def test_llm_wizard_empty_falls_back_to_llm_sonnet(self):
+    def test_llm_wizard_empty_falls_back_to_factory_default(self):
         captured = {}
         project = self._fake_llm_project(captured)
-        saved_settings = hub.get_settings
+        saved_settings = hub.factory_llm
         saved_profile = wizard.read_profile
-        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": ""}
+        hub.factory_llm = lambda p, purpose="default": "mesh:sonnet"
         wizard.read_profile = lambda dataset, project_key=None: {"__dataset__": {"row_count": 1}}
         try:
             wizard.draft_model_config(project, "Delivery_Snapshot_profile",
                                       base_dataset="Delivery_Snapshot", domain="delivery")
         finally:
-            hub.get_settings = saved_settings
+            hub.factory_llm = saved_settings
             wizard.read_profile = saved_profile
         self.assertEqual(captured["llm_id"], "mesh:sonnet")
 
@@ -822,9 +822,9 @@ class TestReadProfile(unittest.TestCase):
                 captured["llm_called"] = True
                 raise AssertionError("the LLM must not be called on a degenerate profile")
 
-        saved_settings = hub.get_settings
+        saved_settings = hub.factory_llm
         saved_profile = wizard.read_profile
-        hub.get_settings = lambda p: {"llm_sonnet": "mesh:sonnet", "llm_wizard": ""}
+        hub.factory_llm = lambda p, purpose="default": "mesh:sonnet"
         # The exact degenerate shape the iter_rows bug produced on the field.
         wizard.read_profile = lambda dataset, project_key=None: {"key": {"raw": "payload"}}
         try:
@@ -832,7 +832,7 @@ class TestReadProfile(unittest.TestCase):
                                                base_dataset="Delivery_Snapshot",
                                                domain="delivery")
         finally:
-            hub.get_settings = saved_settings
+            hub.factory_llm = saved_settings
             wizard.read_profile = saved_profile
         self.assertIn("error", config)
         self.assertIn("degenerate", config["error"])

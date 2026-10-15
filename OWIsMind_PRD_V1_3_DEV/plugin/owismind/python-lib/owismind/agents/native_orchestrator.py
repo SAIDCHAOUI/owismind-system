@@ -43,17 +43,15 @@ from owismind.agents import streaming
 
 logger = logging.getLogger(__name__)
 
-# --- LLM Mesh model ids (mirror of the Code Agent CONFIG - L172/L173: the
-# mode -> model mapping is COPIED in every engine; change them in lockstep). ---
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"
+# --- Models: every LLM Mesh id comes from the hub file models.json in the project
+# library (the same file the Code Agents read). No embedded id, no fallback: a
+# missing or invalid file fails the run with an explicit error. ---
+MODES = ("smart", "pro", "claude")
 DEFAULT_MODE = "smart"
-LLM_BY_MODE = {
-    "smart": GEMINI_FLASH_LITE_ID,
-    "pro": GEMINI_FLASH_ID,
-    "claude": SONNET_ID,
-}
+HUB_MODELS_PATH = "/python/owismind_hub/models.json"
+_MODELS_CACHE_TTL_SECONDS = 30
+_models_cache = None  # ({mode: llm id}, monotonic_ts)
+_LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
 
 # --- Hub capabilities (single source of truth, read from the project library) --
 HUB_CAPABILITIES_PATH = "/python/owismind_hub/capabilities.json"
@@ -214,6 +212,56 @@ def invalidate_capabilities_cache():
     _caps_cache = None
 
 
+class ModelConfigError(RuntimeError):
+    """models.json is missing, invalid or has no model for a mode."""
+
+
+def _read_hub_models(project):
+    """{mode: llm id} for the orchestrator key, from models.json only (raises)."""
+    try:
+        handle = project.get_library().get_file(HUB_MODELS_PATH)
+        raw = handle.read() if handle is not None else None
+    except Exception as exc:
+        raise ModelConfigError("cannot read %s: %s" % (HUB_MODELS_PATH, exc))
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    if not raw:
+        raise ModelConfigError("%s is missing: save the models from the Agent "
+                               "Factory Console (Settings)" % HUB_MODELS_PATH)
+    try:
+        obj = json.loads(raw)
+    except ValueError as exc:
+        raise ModelConfigError("%s is not valid JSON: %s" % (HUB_MODELS_PATH, exc))
+    if not isinstance(obj, dict):
+        raise ModelConfigError("%s must be a JSON object" % HUB_MODELS_PATH)
+    central = obj.get("modes") if isinstance(obj.get("modes"), dict) else {}
+    agents = obj.get("agents") if isinstance(obj.get("agents"), dict) else {}
+    own = agents.get("orchestrator") if isinstance(agents.get("orchestrator"), dict) else {}
+    out = {}
+    for mode in MODES:
+        value = own.get(mode) or central.get(mode)
+        if not (isinstance(value, str) and _LLM_ID_RE.match(value)):
+            raise ModelConfigError("%s has no valid model for mode %r (orchestrator): "
+                                   "set it in the console (Settings)" % (HUB_MODELS_PATH, mode))
+        out[mode] = value
+    return out
+
+
+def get_llm_id(project, mode):
+    """The LLM Mesh id of ``mode`` (TTL cached, re-read every few seconds)."""
+    global _models_cache
+    now = time.monotonic()
+    if _models_cache is None or (now - _models_cache[1]) >= _MODELS_CACHE_TTL_SECONDS:
+        _models_cache = (_read_hub_models(project), now)
+    return _models_cache[0][mode if mode in MODES else DEFAULT_MODE]
+
+
+def invalidate_models_cache():
+    """Test/maintenance hook: drop the TTL cache."""
+    global _models_cache
+    _models_cache = None
+
+
 # =============================================================================
 # Tool specs
 # =============================================================================
@@ -329,7 +377,7 @@ def resolve_mode(explicit_mode):
     found in the text of a modes-OFF agent could only be user-forged (a free
     upgrade to the most expensive tier). Tokens are still stripped before every
     LLM call by ``strip_control_tokens``."""
-    return explicit_mode if explicit_mode in LLM_BY_MODE else DEFAULT_MODE
+    return explicit_mode if explicit_mode in MODES else DEFAULT_MODE
 
 
 def parse_lang(messages):
@@ -476,11 +524,11 @@ def run_native_streamed(project_key, agent_id, messages, mode=None):
     t0 = time.perf_counter()
     mode = resolve_mode(mode)
     lang = parse_lang(messages)
-    llm_id = LLM_BY_MODE.get(mode, LLM_BY_MODE[DEFAULT_MODE])
+    project = dataiku.api_client().get_project(project_key)
+    llm_id = get_llm_id(project, mode)
     logger.info("native engine - start project_key=%s mode=%s llm=%s turns=%d",
                 project_key, mode, llm_id, len(messages or []))
 
-    project = dataiku.api_client().get_project(project_key)
     caps = get_capabilities(project)
     tool_by_name = {cap["tool_name"]: (key, cap) for key, cap in caps.items()}
     specs = build_tool_specs(caps)

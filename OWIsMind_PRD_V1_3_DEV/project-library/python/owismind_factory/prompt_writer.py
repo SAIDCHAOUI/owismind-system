@@ -133,10 +133,10 @@ def draft(project, entry, current="", instructions="", llm_id=None):
     if spec is None:
         return {"error": "this capability has no usable source dataset: cannot write its prompt"}
     if llm_id is None:
-        settings = hub.get_settings(project)
-        llm_id = settings.get("llm_wizard") or settings.get("llm_sonnet")
-    if not llm_id:
-        return {"error": "no LLM configured (models.json > factory.default)"}
+        try:
+            llm_id = hub.factory_llm(project, "wizard")
+        except ValueError as exc:
+            return {"error": "no LLM configured: %s" % exc}
     project_key = getattr(project, "project_key", None)
     try:
         profile = wizard.read_profile(spec.profile_dataset, project_key=project_key)

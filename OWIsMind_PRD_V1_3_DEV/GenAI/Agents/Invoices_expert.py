@@ -59,27 +59,11 @@ VALUE_INDEX_DATASET = "RS_Invoice_Report_latest_value_index"
 # Optional override of the queried dataset (default: profile's dataset_name).
 TARGET_DATASET = ""
 
-# LLM Mesh ids. UNDERSTAND runs on every question and forces native JSON output, so
-# a fast, cheap model parses it reliably. These mirror the orchestrator (same
-# connection) - each id must match an id
-# exposed by the LLM Mesh connection.
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.7-flash"  # smart
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-2.5-pro"             # pro
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"                  # claude
-# Model tier per mode, propagated by the orchestrator through the injected context.
-# In claude mode the whole stack is Sonnet. The Semantic Model Query tool that writes
-# the SQL runs on its own DSS-configured model (Sonnet) in every mode, so offer and
-# column resolution stay strong regardless of the orchestration tier.
-LLM_BY_MODE = {"smart": GEMINI_FLASH_LITE_ID, "pro": GEMINI_FLASH_ID, "claude": SONNET_ID}
+# Models: every LLM Mesh id comes from the hub file models.json (see the "Models"
+# section below). Nothing is embedded here. The mode is propagated by the
+# orchestrator through the injected context (MODE: smart | pro | claude).
+MODES = ("smart", "pro", "claude")
 DEFAULT_MODE = "smart"
-# Fallback ids when no mode is injected (batch / stand-alone use).
-UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
-HEADLINE_LLM_ID = None             # None -> the run's mode-resolved model
-
-
-def pick_subagent_llm(mode):
-    """The sub-agent's own LLM (UNDERSTAND / headline) for this mode."""
-    return LLM_BY_MODE.get(mode, LLM_BY_MODE[DEFAULT_MODE])
 # The orchestrator now writes the user-facing analysis, so the sub-agent's own
 # LLM headline is redundant overhead (a slow extra reasoning call per query).
 # Default OFF: return the deterministic fallback headline + data, and let the
@@ -176,6 +160,12 @@ PROFILE_MISSING_TEXT = {
            "profilage doit être exécutée."),
     "en": ("⚠️ My dataset knowledge base is missing (profile not generated?). "
            "Please tell the administrator: the profiling recipe must be run."),
+}
+MODEL_CONFIG_TEXT = {
+    "fr": ("⚠️ Configuration des modèles invalide (models.json dans la project "
+           "library) : %s. Corrigez-la dans la console Agent Factory, écran Settings."),
+    "en": ("⚠️ Invalid model configuration (models.json in the project library): "
+           "%s. Fix it in the Agent Factory Console, Settings screen."),
 }
 CLARIFY_AMBIGUOUS_HEADER = {
     "fr": "Votre question mentionne « {raw} », qui peut correspondre à plusieurs valeurs :",
@@ -671,50 +661,64 @@ def _hub_business_prompt():
 HUB_BUSINESS_PROMPT = _hub_business_prompt()
 
 
-# --- Central model map (hub models.json, loaded once at agent start) -----------
-# /python/owismind_hub/models.json is the ONE place that decides which LLM Mesh
-# model each mode (smart / pro / claude) uses, centrally and per agent. Resolution:
-# agents[<this agent>][mode] > modes[mode] > the embedded ids above. Every entry is
-# validated on its own (an invalid one is skipped), any failure -> embedded ids, so
-# the file can never break the agent. Edited from the Agent Factory Console
-# (agent Settings); takes effect on the next agent process start.
+# --- Models (hub models.json, the only source of the LLM ids) ------------------
+# /python/owismind_hub/models.json, edited from the Agent Factory Console, maps each
+# mode to an LLM Mesh model (agents[<this agent>][mode] wins over modes[mode]).
+# No embedded id, no fallback: a missing or invalid file stops the turn with an
+# explicit message. Re-read every _HUB_MODELS_TTL_S seconds, so an edit applies
+# without restarting the agent.
 _HUB_MODELS_PATH = "/python/owismind_hub/models.json"
-_HUB_MODEL_MODES = ("smart", "pro", "claude")
+_HUB_MODELS_TTL_S = 30
 _HUB_LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
+_hub_models_cache = {"at": 0.0, "map": None}
 
 
-def _hub_models_overrides(agent_key):
-    """{mode: llm id} from the hub for this agent; {} on ANY problem."""
+class ModelConfigError(RuntimeError):
+    """models.json is missing, invalid or has no model for a mode."""
+
+
+def _hub_models(agent_key):
+    """{mode: llm id} for this agent, from models.json only (TTL cached)."""
+    now = time.monotonic()
+    if _hub_models_cache["map"] is not None \
+            and now - _hub_models_cache["at"] < _HUB_MODELS_TTL_S:
+        return _hub_models_cache["map"]
     try:
         library = dataiku.api_client().get_default_project().get_library()
-        f = library.get_file(_HUB_MODELS_PATH)
-        raw = f.read() if f is not None else None
-        obj = json.loads(raw) if raw else None
-    except Exception:
-        return {}
+        handle = library.get_file(_HUB_MODELS_PATH)
+        raw = handle.read() if handle is not None else None
+    except Exception as exc:
+        raise ModelConfigError("cannot read %s: %s" % (_HUB_MODELS_PATH, exc))
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    if not raw:
+        raise ModelConfigError("%s is missing: save the models from the Agent "
+                               "Factory Console (Settings)" % _HUB_MODELS_PATH)
+    try:
+        obj = json.loads(raw)
+    except ValueError as exc:
+        raise ModelConfigError("%s is not valid JSON: %s" % (_HUB_MODELS_PATH, exc))
     if not isinstance(obj, dict):
-        return {}
+        raise ModelConfigError("%s must be a JSON object" % _HUB_MODELS_PATH)
     central = obj.get("modes") if isinstance(obj.get("modes"), dict) else {}
-    own = (obj.get("agents") or {}).get(agent_key)
-    own = own if isinstance(own, dict) else {}
+    agents = obj.get("agents") if isinstance(obj.get("agents"), dict) else {}
+    own = agents.get(agent_key) if isinstance(agents.get(agent_key), dict) else {}
     out = {}
-    for mode in _HUB_MODEL_MODES:
-        for source in (own, central):
-            value = source.get(mode)
-            if isinstance(value, str) and _HUB_LLM_ID_RE.match(value):
-                out[mode] = value
-                break
+    for mode in MODES:
+        value = own.get(mode) or central.get(mode)
+        if not (isinstance(value, str) and _HUB_LLM_ID_RE.match(value)):
+            raise ModelConfigError("%s has no valid model for mode %r (agent %r): set "
+                                   "modes.%s or agents.%s.%s in the console (Settings)"
+                                   % (_HUB_MODELS_PATH, mode, agent_key, mode,
+                                      agent_key, mode))
+        out[mode] = value
+    _hub_models_cache["at"], _hub_models_cache["map"] = now, out
     return out
 
 
-try:
-    _hub_models = _hub_models_overrides(HUB_DOMAIN)
-except Exception:
-    _hub_models = {}
-if _hub_models:
-    LLM_BY_MODE.update(_hub_models)
-    UNDERSTAND_LLM_ID = LLM_BY_MODE[DEFAULT_MODE]
-    logger.info("LLM per mode from the config hub: %s", LLM_BY_MODE)
+def pick_subagent_llm(mode):
+    """The sub-agent's own LLM (UNDERSTAND / headline) for this mode."""
+    return _hub_models(HUB_DOMAIN)[mode if mode in MODES else DEFAULT_MODE]
 
 
 def build_understand_prompt(profile, current_date, lang_hint="fr"):
@@ -2121,7 +2125,7 @@ class MyLLM(BaseLLM):
         the parser cannot read. Reasoning stays on where it helps (the orchestrator's
         routing, the verified headline). If the model or connection rejects JSON mode,
         attempt 1 still runs as a plain completion and attempt 2 is prompt-only."""
-        llm = project.get_llm(llm_id or UNDERSTAND_LLM_ID)
+        llm = project.get_llm(llm_id or pick_subagent_llm(DEFAULT_MODE))
         for attempt, use_json_mode in ((1, True), (2, False)):
             try:
                 completion = llm.new_completion()
@@ -2199,10 +2203,9 @@ class MyLLM(BaseLLM):
                 yield {"chunk": {"text": PROFILE_MISSING_TEXT[lang]}}
                 yield _agent_result("error", None)
                 return
-            # Model tier for THIS run, propagated by the orchestrator
-            # (smart=Gemini Flash-Lite, pro=Gemini Flash, claude=Sonnet). Threaded
-            # through the graph state so node closures never read per-request state
-            # off `self` (concurrency-safe).
+            # Model tier for THIS run, propagated by the orchestrator; threaded
+            # through the graph state so node closures never read per-request
+            # state off `self` (concurrency-safe).
             mode = forced_mode(conversation_context) or DEFAULT_MODE
             graph = self._build_graph(project, profile, trace)
             initial = {"instruction": instruction,
@@ -2212,6 +2215,10 @@ class MyLLM(BaseLLM):
             for chunk in graph.stream(initial, stream_mode="custom",
                                       config={"recursion_limit": 12}):
                 yield chunk
+        except ModelConfigError as exc:
+            logger.error("Model configuration error: %s", exc)
+            yield {"chunk": {"text": MODEL_CONFIG_TEXT[lang] % exc}}
+            yield _agent_result("error", None)
         except Exception:
             logger.exception("Dataset expert failure")
             yield {"chunk": {"text": INTERNAL_ERROR_TEXT[lang]}}
@@ -2502,7 +2509,7 @@ class MyLLM(BaseLLM):
                 with trace.subspan("dataset-expert:headline") as sp:
                     candidate = sa._llm_text(
                         project,
-                        HEADLINE_LLM_ID or state.get("llm_id") or UNDERSTAND_LLM_ID,
+                        state.get("llm_id") or pick_subagent_llm(DEFAULT_MODE),
                         HEADLINE_PROMPT.replace("{language}", lang),
                         "USER QUESTION: %s\n\nRESULT TABLE:\n%s" % (instruction,
                                                                     table_md),

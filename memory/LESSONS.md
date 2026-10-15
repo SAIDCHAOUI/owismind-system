@@ -3670,6 +3670,7 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Source** : session 2026-10-14 run 3.
 
 ## L193 - Modele central `models.json` + prompt metier IA non actif (2026-10-14)
+> SUPPLANTEE le 2026-10-15 par L195 : le repli sur les ids embarques est retire (zero id en dur, zero repli, TTL 30 s).
 - **Contexte** : changer le LLM d'un mode ne doit plus demander de toucher 6 agents.
 - **Solution qui marche** : fichier hub `owismind_hub/models.json` valide strictement (cles `version/modes/agents/factory`, 20 ko max, ids LLM valides), resolution agent > mode > id embarque, loader standalone avec repli silencieux dans chaque Code Agent. L'IA ecrit seulement un BROUILLON (`business_prompt.draft.md`) ; le fichier live n'est ecrit que par un Save humain.
 - **Preuve** : tests models_hub (loaders agents, bundle, prompt_writer).
@@ -3680,3 +3681,11 @@ adversariale 26 agents : 17 findings confirmés, TOUS corrigés. Les patterns à
 - **Ce qui a echoue** : modifs du correctif fail-open effacees, refaites a la main.
 - **Solution** : jamais de commande destructive git sans `git status`/`git diff` avant ; commiter souvent.
 - **Source** : session 2026-10-14 run 3.
+
+## L195 - models.json = SEULE source des modeles, zero id en dur, zero repli (2026-10-15)
+- **Contexte** : l'user change les modeles dans `models.json` (library) ; les 6 agents continuent d'appeler `gemini-3.1-flash-lite` retire de la connexion Mesh.
+- **Ce qui a echoue** : L193 gardait des ids EMBARQUES dans chaque agent comme repli, lus UNE fois au demarrage du process (piege hub chaud L168) et avales par `except Exception -> {}`. Resultat : le fichier central semblait ignore, et il fallait re-editer 6 fichiers a chaque changement de modele.
+- **Solution qui marche** : (1) aucun id de modele dans AUCUN fichier de code (5 agents, moteur natif plugin, hub.py, factory, 2 recettes de profil, notebooks, console) : tout vient de `/python/owismind_hub/models.json` ; (2) aucun repli : fichier absent/invalide/mode manquant = `ModelConfigError` explicite montre a l'user (texte MODEL_CONFIG_TEXT) ; (3) relecture TTL 30 s a chaque tour (plus besoin de re-sauver l'agent) ; (4) usine : `hub.factory_llm(project, purpose)` (`factory.default|wizard|profile_enrich`), `llm_sonnet/llm_wizard` retires de factory_settings ; (5) `models.json` n'est plus genere ni seme (notebook 01 ne fait que verifier), la console l'ecrit (Settings) ; (6) test gardien `test_no_model_id_is_hard_coded_anywhere` (regex vertex_ai|LLM-7064|gemini|sonnet|...) sur agents, factory, recettes, notebooks, console, moteur natif.
+- **Preuve** : 804 tests OWIsMind_PRD_V1_3_DEV + 935 tests plugin OK ; grep des ids = 0 occurrence hors models.json.
+- **A deployer** : recoller les 5 Code Agents + le package `owismind_factory` + la console + les 2 recettes de profil ; verifier `models.json` dans la library (ajouter `factory.profile_enrich`) ; zip DEV a regenerer pour le moteur natif (flag, non urgent).
+- **Source** : session 2026-10-15 (demande user : "centralisation absolue, nada, zero").

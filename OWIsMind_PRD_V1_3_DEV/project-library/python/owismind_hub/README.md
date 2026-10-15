@@ -4,7 +4,11 @@ Le hub est le panneau de reglages des agents : un dossier `/python/owismind_hub/
 project library DSS, que chaque agent lit a son demarrage. Il permet de changer les
 prompts et de declarer des agents SANS recoller le code des agents. Si un fichier du
 hub est absent ou invalide, l'agent retombe sur ses defauts embarques : le hub ne
-peut pas casser la prod.
+peut pas casser la prod. **Exception : `models.json`** (decision user 2026-10-15) : c'est
+la SEULE source des ids de modeles LLM, sans aucun id embarque ni repli ; absent ou
+invalide, les agents refusent de tourner avec un message explicite. Il n'est jamais
+genere ni seme automatiquement : on l'ecrit depuis la console (Settings), le fichier
+repo est une graine lisible a coller a la main si besoin.
 
 ## Dans Dataiku
 
@@ -16,7 +20,7 @@ qui embarque le contenu de ce dossier. Ce dossier repo est le miroir lisible des
 
 | Fichier | Pousse vers | Lu par |
 |---|---|---|
-| `models.json` | `/python/owismind_hub/models.json` | les 3 Code Agents (loader au demarrage) + factory (`get_settings`) : LLM par mode smart/pro/claude, central + surcharge par agent |
+| `models.json` | `/python/owismind_hub/models.json` | TOUS les Code Agents (relu toutes les 30 s), moteur natif du plugin, factory (`hub.factory_llm`), recettes de profil (`factory.profile_enrich`) : LLM par mode smart/pro/claude, surcharge par agent, modeles de l'usine. Seule source, zero repli |
 | `capabilities.json` | `/python/owismind_hub/capabilities.json` | orchestrator (section 7b loader) |
 | `prompts/orchestrator_persona.md` | `/python/owismind_hub/prompts/orchestrator_persona.md` | orchestrator (PERSONA override) |
 | `factory_settings.json` | `/python/owismind_hub/factory_settings.json` | owismind_factory (reglages d'instance) |

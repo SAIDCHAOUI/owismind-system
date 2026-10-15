@@ -726,9 +726,9 @@ class TestModePropagation(unittest.TestCase):
         self.assertIsNone(dx.forced_mode(""))
 
     def test_pick_subagent_llm_per_mode(self):
-        self.assertEqual(dx.pick_subagent_llm("smart"), dx.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(dx.pick_subagent_llm("pro"), dx.GEMINI_FLASH_ID)
-        self.assertEqual(dx.pick_subagent_llm("claude"), dx.SONNET_ID)
+        _agent_stubs.pin_models(dx)
+        for mode in dx.MODES:
+            self.assertEqual(dx.pick_subagent_llm(mode), _agent_stubs.TEST_MODELS["modes"][mode])
 
     def test_semantic_tool_id_per_mode_defaults_shared(self):
         # All modes share the one tool id until a Sonnet-backed tool exists for claude.

@@ -18,7 +18,7 @@
 #     force with_json_output on the orchestrator: in DSS 14 it silently disables
 #     reasoning. Reasoning effort is set ON the Mesh model.
 #   - Model-agnostic: each mode (smart/pro/claude) picks ONE model for the WHOLE
-#     turn, no mid-turn switch, no escalation (LOOP_LLM_BY_MODE).
+#     turn, no mid-turn switch, no escalation (models.json).
 #
 # FROZEN CONTRACTS (webapp / Evidence depend on these - never rename, only add):
 #   - Event kinds: START, PLANNING, CALLING_AGENT, AGENT_DONE, RUNNING_TOOL,
@@ -63,36 +63,15 @@ except Exception:                               # pragma: no cover
 # 1. CONFIGURATION
 # =============================================================================
 
-# --- LLM Mesh model ids -------------------------------------------------------
-# Model-agnostic: one model drives the whole turn, chosen by the mode. Each id
-# matches an id exposed by the LLM Mesh connection, in the form
-# "<connection-prefix>:<provider>/<model>".
-GEMINI_FLASH_LITE_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite"  # smart
-GEMINI_FLASH_ID = "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash"             # pro
-SONNET_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5"                  # claude
-
-# Model MODES (selected by the user in the web app, relayed as an ⟦owi:mode=…⟧
-# token on the current turn; default "smart" when absent). Each mode picks ONE
-# model that drives the ENTIRE turn - no escalation, no mid-turn switching. The
-# quality difference between modes is purely the model tier; the orchestration
-# logic is identical for all of them.
-#   smart  : Gemini 3.1 Flash-Lite everywhere - the DEFAULT (cheap, fast, good).
-#            Its lead-in narration is kept OFF (smallest tier; the deterministic
-#            ticker covers the wait) - see narration_enabled.
-#   pro    : Gemini 3.5 Flash everywhere (stronger; narrates alongside tool calls).
-#   claude : Sonnet everywhere - orchestrator AND sub-agent AND (when configured)
-#            the semantic model. Max quality; the most expensive.
-# The SAME mode is propagated to the sub-agent (see context_msg -> pick_subagent_llm).
-# The DSS-configured Semantic Model Query tool (which actually writes the SQL) stays
-# on its own strong model (Sonnet) in EVERY mode, so offer/column resolution is
-# consistent regardless of the orchestration tier.
+# --- Models --------------------------------------------------------------------
+# Every LLM Mesh id comes from the hub file models.json (section 7c below); nothing
+# is embedded here. The MODE (smart / pro / claude) is chosen by the user in the web
+# app and relayed as an ⟦owi:mode=…⟧ token on the current turn (default smart).
+# One mode = one model for the ENTIRE turn (no escalation, no mid-turn switch), and
+# the same mode is propagated to the sub-agent. The Semantic Model Query tool that
+# writes the SQL keeps its own DSS-configured model in every mode.
 ORCH_MODES = ("smart", "pro", "claude")
 DEFAULT_MODE = "smart"
-LOOP_LLM_BY_MODE = {
-    "smart": GEMINI_FLASH_LITE_ID,
-    "pro": GEMINI_FLASH_ID,
-    "claude": SONNET_ID,
-}
 
 # Whether the model writes a one-sentence lead-in alongside its tool call (live
 # narration). On for pro/claude; off for smart, which stays strictly act-first so
@@ -1219,11 +1198,6 @@ def _looks_like_premature_stop(text):
     return bool(_LEADIN_RE.search(t))
 
 
-def pick_loop_llm(mode):
-    """The single model that drives the WHOLE turn for this mode. No escalation,
-    no mid-turn switching - the chosen model handles routing, tool calls and the
-    final answer end to end (see LOOP_LLM_BY_MODE)."""
-    return LOOP_LLM_BY_MODE.get(mode, LOOP_LLM_BY_MODE[DEFAULT_MODE])
 
 
 # =============================================================================
@@ -1489,49 +1463,72 @@ if _hub_capabilities is not None:
     logger.info("CAPABILITIES loaded from the config hub (%d entries)", len(CAPABILITIES))
 
 
-# --- Central model map (hub models.json, loaded once at agent start) -----------
-# /python/owismind_hub/models.json is the ONE place that decides which LLM Mesh
-# model each mode (smart / pro / claude) uses, centrally and per agent. Resolution:
-# agents[<this agent>][mode] > modes[mode] > the embedded ids above. Every entry is
-# validated on its own (an invalid one is skipped), any failure -> embedded ids, so
-# the file can never break the agent. Edited from the Agent Factory Console
-# (agent Settings); takes effect on the next agent process start.
+# --- Models (hub models.json, the only source of the LLM ids) ------------------
+# /python/owismind_hub/models.json, edited from the Agent Factory Console, maps each
+# mode to an LLM Mesh model (agents[<this agent>][mode] wins over modes[mode]).
+# No embedded id, no fallback: a missing or invalid file stops the turn with an
+# explicit message. Re-read every _HUB_MODELS_TTL_S seconds, so an edit applies
+# without restarting the agent.
 _HUB_MODELS_PATH = "/python/owismind_hub/models.json"
-_HUB_MODEL_MODES = ("smart", "pro", "claude")
+_HUB_MODELS_TTL_S = 30
 _HUB_LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
+_hub_models_cache = {"at": 0.0, "map": None}
 
 
-def _hub_models_overrides(agent_key):
-    """{mode: llm id} from the hub for this agent; {} on ANY problem."""
+class ModelConfigError(RuntimeError):
+    """models.json is missing, invalid or has no model for a mode."""
+
+
+def _hub_models(agent_key):
+    """{mode: llm id} for this agent, from models.json only (TTL cached)."""
+    now = time.monotonic()
+    if _hub_models_cache["map"] is not None \
+            and now - _hub_models_cache["at"] < _HUB_MODELS_TTL_S:
+        return _hub_models_cache["map"]
     try:
         library = dataiku.api_client().get_default_project().get_library()
-        f = library.get_file(_HUB_MODELS_PATH)
-        raw = f.read() if f is not None else None
-        obj = json.loads(raw) if raw else None
-    except Exception:
-        return {}
+        handle = library.get_file(_HUB_MODELS_PATH)
+        raw = handle.read() if handle is not None else None
+    except Exception as exc:
+        raise ModelConfigError("cannot read %s: %s" % (_HUB_MODELS_PATH, exc))
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    if not raw:
+        raise ModelConfigError("%s is missing: save the models from the Agent "
+                               "Factory Console (Settings)" % _HUB_MODELS_PATH)
+    try:
+        obj = json.loads(raw)
+    except ValueError as exc:
+        raise ModelConfigError("%s is not valid JSON: %s" % (_HUB_MODELS_PATH, exc))
     if not isinstance(obj, dict):
-        return {}
+        raise ModelConfigError("%s must be a JSON object" % _HUB_MODELS_PATH)
     central = obj.get("modes") if isinstance(obj.get("modes"), dict) else {}
-    own = (obj.get("agents") or {}).get(agent_key)
-    own = own if isinstance(own, dict) else {}
+    agents = obj.get("agents") if isinstance(obj.get("agents"), dict) else {}
+    own = agents.get(agent_key) if isinstance(agents.get(agent_key), dict) else {}
     out = {}
-    for mode in _HUB_MODEL_MODES:
-        for source in (own, central):
-            value = source.get(mode)
-            if isinstance(value, str) and _HUB_LLM_ID_RE.match(value):
-                out[mode] = value
-                break
+    for mode in ORCH_MODES:
+        value = own.get(mode) or central.get(mode)
+        if not (isinstance(value, str) and _HUB_LLM_ID_RE.match(value)):
+            raise ModelConfigError("%s has no valid model for mode %r (agent %r): set "
+                                   "modes.%s or agents.%s.%s in the console (Settings)"
+                                   % (_HUB_MODELS_PATH, mode, agent_key, mode,
+                                      agent_key, mode))
+        out[mode] = value
+    _hub_models_cache["at"], _hub_models_cache["map"] = now, out
     return out
 
 
-try:
-    _hub_models = _hub_models_overrides("orchestrator")
-except Exception:
-    _hub_models = {}
-if _hub_models:
-    LOOP_LLM_BY_MODE.update(_hub_models)
-    logger.info("LLM per mode from the config hub: %s", LOOP_LLM_BY_MODE)
+def pick_loop_llm(mode):
+    """The single model that drives the WHOLE turn for this mode."""
+    return _hub_models("orchestrator")[mode if mode in ORCH_MODES else DEFAULT_MODE]
+
+
+MODEL_CONFIG_TEXT = {
+    "fr": ("⚠️ Configuration des modèles invalide (models.json dans la project "
+           "library) : %s. Corrigez-la dans la console Agent Factory, écran Settings."),
+    "en": ("⚠️ Invalid model configuration (models.json in the project library): "
+           "%s. Fix it in the Agent Factory Console, Settings screen."),
+}
 
 
 # =============================================================================
@@ -1586,8 +1583,7 @@ CORRELATE_PREVIEW_ROWS = 10
 CORRELATE_MODEL_ROWS = 15
 CORRELATE_MAX_FIXES = 2
 CORRELATE_MAX_CATALOG_COLS = 12
-# SQL generation NEVER degrades with the response mode (same principle as the
-# semantic-query tools, pinned to the Sonnet tier in every mode).
+# SQL generation never degrades with the response mode: always the claude tier.
 CORRELATE_LLM_MODE = "claude"
 _CORRELATE_PRE_QUERIES = ("SET LOCAL statement_timeout TO '30000'",
                           "SET LOCAL transaction_read_only TO on")
@@ -3780,7 +3776,7 @@ class MyLLM(BaseLLM):
         """Real read-only SQL JOIN against logical aliases (spec section 7.2).
 
         Pipeline order is STRICT: catalog schemas -> model SQL against aliases
-        (strict JSON, Sonnet tier in every mode) -> guard -> server-side CTE
+        (strict JSON, claude tier in every mode) -> guard -> server-side CTE
         substitution -> EXPLAIN -> preview -> sanity -> bounded execution, with
         at most CORRELATE_MAX_FIXES corrections fed the CLEANED db error."""
         sid = step_spec["id"]
@@ -3996,6 +3992,7 @@ class MyLLM(BaseLLM):
                 yield chunk
             return
         loop_llm = None    # in scope for the except (which model failed, if any)
+        lang = "fr"
         try:
             self._ensure_specs()
             project = dataiku.api_client().get_default_project()
@@ -4019,10 +4016,9 @@ class MyLLM(BaseLLM):
                 yield _ev("DONE", {"totalUsage": {}})
                 return
             lang = token_lang or _detect_lang(last_user)
-            # One model drives the whole turn - the mode picks it (smart=Gemini
-            # Flash-Lite, pro=Gemini Flash, claude=Sonnet). The same model routes,
-            # calls tools and writes the final answer; narration alongside tool calls
-            # is enabled for pro/claude only.
+            # One model drives the whole turn (models.json, picked by the mode): it
+            # routes, calls tools and writes the final answer; narration alongside
+            # tool calls is enabled for pro/claude only.
             loop_llm = pick_loop_llm(mode)
             system_prompt = build_system_prompt(self._caps, lang,
                                                 narrate=narration_enabled(mode))
@@ -4040,8 +4036,7 @@ class MyLLM(BaseLLM):
             # no-data / out-of-scope message in the user's language (it no longer
             # self-guesses). Plus conversational continuity (the specialist is stateless,
             # so we hand it the previous turn too for disambiguation).
-            # MODE is propagated so the sub-agent uses the SAME tier (smart=Gemini
-            # Flash-Lite, pro=Gemini Flash, claude=Sonnet) for its own LLM calls.
+            # MODE is propagated so the sub-agent uses the SAME tier for its own LLM calls.
             context_msg = (
                 "MODE: %s\n"
                 "USER LANGUAGE: %s - write any message addressed to the user "
@@ -4067,6 +4062,12 @@ class MyLLM(BaseLLM):
             for chunk in graph.stream(initial, stream_mode="custom",
                                       config={"recursion_limit": MAX_TOOL_LOOPS * 3 + 8}):
                 yield chunk
+        except ModelConfigError as exc:
+            logger.error("Model configuration error: %s", exc)
+            yield _ev("ERROR", {"stage": "orchestrator", "message": "model_config",
+                                "detail": str(exc)})
+            yield _txt(MODEL_CONFIG_TEXT.get(lang, MODEL_CONFIG_TEXT["en"]) % exc)
+            yield _ev("DONE", {"totalUsage": {}})
         except Exception:
             # Name the model in the logs and the ERROR event: a wrong or
             # unconfigured LLM Mesh id otherwise surfaces as an opaque mid-loop crash.

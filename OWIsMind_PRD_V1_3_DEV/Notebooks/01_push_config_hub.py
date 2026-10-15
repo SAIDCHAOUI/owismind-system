@@ -6,7 +6,9 @@
 #
 # Seeds (only what is ABSENT unless FORCE=True):
 # - factory_settings.json   instance knobs (VERIFY code_env_311 after seeding!)
-# - models.json             central LLM per mode (smart/pro/claude) + per-agent overrides
+# - models.json             NOT seeded here: it is the only source of every LLM id and
+#                           is written from the Agent Factory Console (Settings). This
+#                           notebook only checks that it exists.
 # - capabilities.json       runtime CAPABILITIES (byte-equivalent to the
 #                           orchestrator's embedded defaults at generation time)
 # - prompts/orchestrator_persona.md   the persona override (same equivalence)
@@ -146,8 +148,6 @@ _SEEDS = json.loads(r'''
  "settings": {
   "sql_connection": "SQL_owi",
   "code_env_311": "",
-  "llm_sonnet": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
-  "llm_wizard": "",
   "template_semantic_model_id": "AHUh9hb",
   "template_semantic_tool_id": "v4oqA6R",
   "template_zone_recipes": {
@@ -179,9 +179,14 @@ def seed(path, content, is_json=False):
 seed(hub.SETTINGS_PATH, _SEEDS["settings"], is_json=True)
 seed(hub.CAPABILITIES_PATH, _SEEDS["capabilities"], is_json=True)
 seed(hub.PERSONA_PATH, _SEEDS["persona"])
-# Central LLM map (smart / pro / claude + per-agent overrides). Seed = the ids
-# embedded in the agents, so seeding changes nothing until it is edited.
-seed(hub.MODELS_PATH, hub.DEFAULT_MODELS, is_json=True)
+# models.json is never seeded with embedded ids: report its state instead.
+_models_problems = hub.models_problems(project)
+if _models_problems:
+    print("ACTION models.json: " + "; ".join(_models_problems))
+    print("   -> open the Agent Factory Console, Settings screen, and save the models "
+          "(or paste the repo seed project-library/python/owismind_hub/models.json).")
+else:
+    print("OK    %s (valid)" % hub.MODELS_PATH)
 
 # --- engine template: pull the code of the LIVE revenue agent when possible ---
 existing = hub.read_text(project, hub.TEMPLATE_AGENT_PATH)

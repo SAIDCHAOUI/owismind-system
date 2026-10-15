@@ -15,7 +15,26 @@ Not collected by unittest discovery (the filename does not match ``test*.py``).
 
 import importlib.util
 import sys
+import time
 import types
+
+# The models.json the agents under test resolve against (no id is embedded in the
+# agents any more; models.json is the only source). Fixture ids, never real ones.
+TEST_MODELS = {
+    "version": 1,
+    "modes": {"smart": "openai:TEST:smart-model", "pro": "openai:TEST:pro-model",
+              "claude": "openai:TEST:claude-model"},
+    "agents": {},
+    "factory": {"default": "openai:TEST:factory-model", "wizard": "",
+                "profile_enrich": ""},
+}
+
+
+def pin_models(module, modes=None):
+    """Pre-fill an agent module's models cache (as if models.json had just been
+    read) for tests that replace dataiku.api_client with a fake without a library."""
+    module._hub_models_cache["map"] = dict(modes or TEST_MODELS["modes"])
+    module._hub_models_cache["at"] = time.monotonic() + 10 ** 9
 
 
 class _Sentinel(str):

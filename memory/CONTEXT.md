@@ -7,6 +7,15 @@
 
 ## Focus courant
 
+**2026-10-15 : models.json = SEULE source des modeles (zero id en dur, zero repli, TTL 30 s).**
+Lecon L195. Cause du bug user : ids embarques en repli + lecture unique au demarrage.
+- Fait : 5 agents, moteur natif, hub.py (`factory_llm`), usine, 2 recettes de profil, notebooks 01/06,
+  console (champ `profile_enrich`, bandeau fichier manquant), test gardien anti-id en dur. 804 + 935 tests OK.
+- A DEPLOYER (user) : recoller 5 Code Agents + `owismind_factory` + console + 2 recettes ; completer
+  `models.json` dans la library (`factory.profile_enrich`) ; zip DEV a regenerer pour le moteur natif.
+- Non valide en DSS. Nettoyage general des commentaires des agents demande par l'user : fait sur les
+  zones modeles seulement, reste a planifier.
+
 **2026-10-14 run 3 : Agent Factory (modeles centraux, Settings, prompt metier IA, garde-fous injection).**
 Detail `sessions/2026-10-14.md` run 3, lecons L192-L194. Commits ccd8b35..0a3ce0e POUSSES (demande user).
 - `owismind_hub/models.json` central ; Settings par agent ; brouillon IA non actif ; Improve editable ; scanner anti-injection fail-closed ; revue securite Fable faite et corrigee (834 tests OK).
@@ -37,6 +46,7 @@ Detail `sessions/2026-10-14.md`, lecon L190. Commit `84a1cde` POUSSE (demande us
   (superviseur, 2 DELETE, 3 tables, routes, UI) ; ZERO ALTER ; seul DELETE restant = quota admin.
 
 ## Chaine des sessions (une ligne par run, detail dans sessions/<date>.md)
+- 2026-10-15 : models.json seule source des modeles, zero id en dur, zero repli, TTL 30 s, test gardien. L195.
 - 2026-10-14 Run 3 : factory models.json + Settings + prompt metier IA + garde-fous injection + revue Fable, pousse. L192-L194. Voir `sessions/2026-10-14.md` run 3.
 - 2026-10-14 Run 2 : audit SQL + retrait workflow durable + zero ALTER. L191. Voir `sessions/2026-10-14.md` run 2.
 - 2026-10-14 Run 1 : resultat agent complet pagine + "N sur T lignes" (route /evidence/result-rows), zip DEV, commit 84a1cde pousse. L190. Voir `sessions/2026-10-14.md`.

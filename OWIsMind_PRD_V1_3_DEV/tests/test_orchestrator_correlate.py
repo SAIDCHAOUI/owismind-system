@@ -316,6 +316,7 @@ class CorrelateFlowTests(unittest.TestCase):
         self.events = []
         self.writer = lambda ev: self.events.append(ev)
         self.trace = _FakeTrace()
+        _agent_stubs.pin_models(wf)   # the fake dataiku has no library
 
     def tearDown(self):
         wf.dataiku = self._orig_dataiku
@@ -349,7 +350,7 @@ class CorrelateFlowTests(unittest.TestCase):
         self.assertGreaterEqual(usage.get("promptTokens", 0), 5)
         # SQL generation NEVER degrades: pinned to the claude tier even in smart
         self.assertEqual(self.json_calls[0]["llm_id"],
-                         wf.LOOP_LLM_BY_MODE["claude"])
+                         _agent_stubs.TEST_MODELS["modes"]["claude"])
 
     def test_model_never_sees_physical_tables(self):
         self._run()

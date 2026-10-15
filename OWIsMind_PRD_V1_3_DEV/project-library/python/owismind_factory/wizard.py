@@ -2,8 +2,8 @@
 
 The wizard reads the domain's PROFILE dataset (the aggregated business brain the
 Flow recipes already build: schema, stats, enum values, synonyms; NEVER raw
-rows), then asks a strong LLM (Sonnet through the LLM Mesh, native completion
-API with a forced JSON schema) to draft:
+rows), then asks a strong LLM (factory.default of models.json, LLM Mesh native
+completion API with a forced JSON schema) to draft:
 
 - entity + attribute descriptions and which columns are resolvable (groundable),
 - candidate metrics / filters / glossary terms with synonyms,
@@ -308,10 +308,8 @@ def draft_model_config(project, profile_dataset, answers=None, llm_id=None,
     """
     from . import hub
     if llm_id is None:
-        settings = hub.get_settings(project)
-        # llm_wizard (hub factory_settings.json) lets the operator pick the
-        # wizard's model explicitly; empty = the shared llm_sonnet id.
-        llm_id = settings.get("llm_wizard") or settings.get("llm_sonnet")
+        # models.json > factory.wizard, else factory.default (no embedded id).
+        llm_id = hub.factory_llm(project, "wizard")
     base_dataset = base_dataset or (profile_dataset or "").replace("_profile", "")
     domain = domain or base_dataset
 

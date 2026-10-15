@@ -60,7 +60,7 @@ else:
     interactions = doctor.collect_interactions(project, LOGGING_DATASET, limit=N_INTERACTIONS)
     print("Collected %d interactions from %s." % (len(interactions), LOGGING_DATASET))
 
-    result = doctor.run_doctor(project, settings.get("llm_sonnet"), persona,
+    result = doctor.run_doctor(project, hub.factory_llm(project), persona,
                                interactions, complaint=(COMPLAINT or None))
     # Notebook output only: evidence excerpts are real conversation data.
     print("\n" + doctor.format_proposal_markdown(result, agent_label,

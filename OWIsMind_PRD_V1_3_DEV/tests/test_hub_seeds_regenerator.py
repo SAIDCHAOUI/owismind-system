@@ -62,7 +62,7 @@ class TestHubSeedsRegenerator(unittest.TestCase):
         expected_count = len(_regenerator.build_canonical_files(_REPO_ROOT))
         self.assertIn("OK: all %d hub seed files are up to date." % expected_count,
                       result.stdout)
-        self.assertEqual(expected_count, 6)
+        self.assertEqual(expected_count, 5)   # models.json is hand-maintained, never generated
 
     def test_canonical_bytes_are_deterministic(self):
         first = _regenerator.build_canonical_files(_REPO_ROOT)

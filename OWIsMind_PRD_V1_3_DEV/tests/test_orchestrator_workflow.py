@@ -219,6 +219,7 @@ class WorkflowTestCase(unittest.TestCase):
         self._saved_graph = wf.StateGraph
         self._saved_writer = wf.get_stream_writer
         wf.StateGraph = FakeStateGraph
+        _agent_stubs.pin_models(wf)   # the fake client has no library
 
     def tearDown(self):
         wf.dataiku.api_client = self._saved_api_client

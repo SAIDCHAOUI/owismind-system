@@ -81,12 +81,7 @@ DEFAULT_SETTINGS = {
     # knowledge recipes. Instance-specific: CONFIRM IT in DSS before first run
     # (Administration > Code Envs). Empty string = inherit project default.
     "code_env_311": "",
-    # LLM Mesh ids (mirror the agents' CONFIG). Used by the wizard and doctor.
-    "llm_sonnet": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
-    # Optional dedicated model for the semantic wizard drafting; empty string =
-    # fall back to llm_sonnet. Set it here (Library editor) to pick the model
-    # yourself; sampling/thinking knobs stay on the admin-tuned connection.
-    "llm_wizard": "",
+    # LLM ids live in models.json ONLY (see the "models" section below).
     # Existing objects used as living templates (duplicate-and-modify strategy).
     "template_semantic_model_id": "AHUh9hb",
     "template_semantic_tool_id": "v4oqA6R",
@@ -178,46 +173,27 @@ def get_settings(project):
         for key, value in override.items():
             if key in DEFAULT_SETTINGS:
                 merged[key] = value
-    # models.json is the central home of the LLM choices: its "factory" section
-    # wins over the legacy llm_sonnet / llm_wizard keys of factory_settings.json.
-    models = read_models(project)
-    if models:
-        factory = models.get("factory") or {}
-        if valid_llm_id(factory.get("default")):
-            merged["llm_sonnet"] = factory["default"]
-        if valid_llm_id(factory.get("wizard")):
-            merged["llm_wizard"] = factory["wizard"]
     return merged
 
 
 # ---------------------------------------------------------------------- models
-# ONE central file decides which LLM Mesh model each agent uses in each mode
-# (smart / pro / claude), plus the models the factory itself uses. Agents read it
-# once at start (standalone loader, same contract as capabilities.json) and fall
-# back to their embedded ids on ANY problem, so the file can never break a run.
+# ONE file, /python/owismind_hub/models.json, is the ONLY source of every LLM Mesh
+# id used by OWIsMind: the model of each mode (smart / pro / claude) for the agents,
+# optional per-agent overrides, and the models the factory itself uses. Nothing is
+# embedded anywhere else and nothing falls back: agents, the native engine, the
+# factory and the Flow recipes all read this file and stop with an explicit error
+# when it is missing or invalid (user decision 2026-10-15). Agents re-read it
+# every few seconds, so a save from the console applies without a restart.
 #
-# Resolution order for agent A in mode M:  agents[A][M]  >  modes[M]  >  embedded.
+# Resolution order for agent A in mode M:  agents[A][M]  >  modes[M]  >  error.
 
 MODEL_MODES = ("smart", "pro", "claude")
 # The orchestrator's key in "agents"; a sub-agent's key is its domain.
 ORCHESTRATOR_KEY = "orchestrator"
-# Mirror of the ids embedded in the three Code Agents (anti-drift test:
-# tests/test_models_hub.py). They are the fallback when models.json is absent.
-DEFAULT_MODELS = {
-    "version": 1,
-    "modes": {
-        "smart": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.1-flash-lite",
-        "pro": "openai:LLM-7064-revforecast:vertex_ai/gemini-3.5-flash",
-        "claude": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
-    },
-    # Optional per-agent, per-mode overrides: {"revenue": {"claude": "<llm id>"}}.
-    "agents": {},
-    # Models used by the factory itself ("" = inherit "default").
-    "factory": {
-        "default": "openai:LLM-7064-revforecast:vertex_ai/claude-sonnet-5",
-        "wizard": "",
-    },
-}
+# factory.default: wizard, Improve review, prompt writer, doctor.
+# factory.wizard: optional dedicated model for the wizard ("" = default).
+# factory.profile_enrich: LLM pass of the profile recipes ("" = skip that pass).
+FACTORY_PURPOSES = ("default", "wizard", "profile_enrich")
 _LLM_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@+\-]{3,200}$")
 _AGENT_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 MODELS_MAX_AGENTS = 50
@@ -275,7 +251,10 @@ def validate_models(obj):
     if not isinstance(factory, dict):
         problems.append("factory must be an object")
     else:
-        for name in ("default", "wizard"):
+        for name in factory:
+            if name not in FACTORY_PURPOSES:
+                problems.append("factory.%s is not a known purpose" % name)
+        for name in FACTORY_PURPOSES:
             value = factory.get(name, "")
             if value not in ("", None) and not valid_llm_id(value):
                 problems.append("factory.%s must be empty or a valid LLM id" % name)
@@ -290,6 +269,48 @@ def read_models(project):
     if obj is None or validate_models(obj):
         return None
     return obj
+
+
+def models_problems(project):
+    """Why models.json is unusable: [] when valid, else a list of readable problems."""
+    raw = read_text(project, MODELS_PATH)
+    if raw is None:
+        return ["%s is missing: save the models from the console (Settings)" % MODELS_PATH]
+    try:
+        obj = json.loads(raw)
+    except Exception as exc:
+        return ["%s is not valid JSON: %s" % (MODELS_PATH, exc)]
+    return validate_models(obj)
+
+
+def empty_models():
+    """A blank mapping for the console form when models.json does not exist yet."""
+    return {"version": 1, "modes": dict((m, "") for m in MODEL_MODES), "agents": {},
+            "factory": dict((p, "") for p in FACTORY_PURPOSES)}
+
+
+def factory_llm(project, purpose="default"):
+    """The factory's own LLM id: factory.<purpose>, else factory.default.
+
+    Raises ValueError when models.json is unusable or has no id for the purpose
+    (no embedded fallback). ``purpose`` "profile_enrich" may legitimately be ""
+    (skip the LLM pass): callers that accept that use ``factory_llm_or_empty``.
+    """
+    llm_id = factory_llm_or_empty(project, purpose)
+    if not llm_id:
+        raise ValueError("%s has no LLM for factory.%s: set it from the console (Settings)"
+                         % (MODELS_PATH, purpose))
+    return llm_id
+
+
+def factory_llm_or_empty(project, purpose="default"):
+    """factory.<purpose> if set, else factory.default; raises ValueError when the
+    file itself is missing or invalid."""
+    problems = models_problems(project)
+    if problems:
+        raise ValueError("; ".join(problems))
+    factory = read_models(project).get("factory") or {}
+    return factory.get(purpose) or factory.get("default") or ""
 
 
 def write_models(project, models):
@@ -307,10 +328,11 @@ def write_models(project, models):
 
 
 def effective_models(models, agent_key):
-    """Per-mode view for one agent: {mode: {"llm": id, "source": ...}}.
+    """Per-mode view for one agent: {mode: {"llm": id or None, "source": ...}}.
 
-    ``models`` is the stored mapping or None (embedded defaults). source is one
-    of "agent" (per-agent override), "mode" (central mode model), "embedded".
+    ``models`` is the stored mapping or None. source is "agent" (per-agent
+    override), "mode" (central mode model) or "missing" (the agent refuses to run
+    in that mode until models.json provides an id).
     """
     stored = models if isinstance(models, dict) else None
     out = {}
@@ -322,7 +344,7 @@ def effective_models(models, agent_key):
         elif valid_llm_id(central):
             out[mode] = {"llm": central, "source": "mode"}
         else:
-            out[mode] = {"llm": DEFAULT_MODELS["modes"][mode], "source": "embedded"}
+            out[mode] = {"llm": None, "source": "missing"}
     return out
 
 

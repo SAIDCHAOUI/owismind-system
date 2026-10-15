@@ -133,11 +133,17 @@ analytics) and `beta-owismind_webapp_traces_v2` (agent traces).
 
 ### Modes (model per turn)
 
-`smart` (default) = `vertex_ai/gemini-3.1-flash-lite`; `pro` =
-`vertex_ai/gemini-3.5-flash`; `claude` = `vertex_ai/claude-sonnet-5` (all with the
-connection prefix `openai:LLM-7064-revforecast:`). One model drives the whole
-turn (no escalation); the mode is propagated to the sub-agent; each semantic tool
-stays on Sonnet in every mode (`v4oqA6R` revenue, `nEirlso` tickets).
+Three modes: `smart` (default), `pro`, `claude`. **Which LLM Mesh model each mode
+uses is written in ONE place only: `/python/owismind_hub/models.json`** (project
+library, edited from the Agent Factory Console > Settings; repo seed
+`project-library/python/owismind_hub/models.json`). No model id is embedded in any
+code file (agents, native engine, factory, recipes, console) and there is no
+fallback: a missing or invalid file stops the turn with an explicit message. Agents
+re-read the file every 30 s, so a change applies without re-saving them. One model
+drives the whole turn (no escalation); the mode is propagated to the sub-agent;
+each Semantic Model Query tool keeps its own DSS-configured model in every mode
+(`v4oqA6R` revenue, `nEirlso` tickets). Guard test: `tests/test_models_hub.py`
+(`test_no_model_id_is_hard_coded_anywhere`).
 
 ## Folder map
 

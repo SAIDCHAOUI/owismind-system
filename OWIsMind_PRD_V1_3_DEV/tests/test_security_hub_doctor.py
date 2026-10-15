@@ -93,11 +93,11 @@ class TestGetSettingsStrictOverlay(unittest.TestCase):
     def test_overlay_of_known_keys_is_kept(self):
         project = _MemHubProject({hub.SETTINGS_PATH: json.dumps({
             "code_env_311": "py311_agents",
-            "llm_sonnet": "openai:CONN:model-x",
+            "llm_sonnet": "openai:CONN:model-x",   # legacy key: LLM ids live in models.json
         })})
         settings = hub.get_settings(project)
         self.assertEqual(settings["code_env_311"], "py311_agents")
-        self.assertEqual(settings["llm_sonnet"], "openai:CONN:model-x")
+        self.assertNotIn("llm_sonnet", settings)
 
     def test_missing_file_returns_pure_defaults(self):
         settings = hub.get_settings(_MemHubProject())

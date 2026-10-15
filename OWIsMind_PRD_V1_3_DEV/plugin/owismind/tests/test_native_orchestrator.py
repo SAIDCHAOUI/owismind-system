@@ -8,6 +8,7 @@
 import json
 import os
 import sys
+import time
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +94,68 @@ class FakeClient(object):
         return self._project
 
 
+TEST_MODES = {"smart": "openai:TEST:smart-model", "pro": "openai:TEST:pro-model",
+              "claude": "openai:TEST:claude-model"}
+
+
+class _LibProject(object):
+    """A project whose library serves one models.json (or none)."""
+
+    def __init__(self, raw):
+        self.raw = raw
+
+    def get_library(self):
+        project = self
+
+        class _File(object):
+            def read(self_inner):
+                return project.raw
+
+        class _Lib(object):
+            def get_file(self_inner, path):
+                return _File() if project.raw is not None else None
+        return _Lib()
+
+
+class TestModelsFromHub(unittest.TestCase):
+    """models.json is the ONLY source of the LLM ids: no embedded id, no fallback."""
+
+    def setUp(self):
+        native.invalidate_models_cache()
+
+    def tearDown(self):
+        native.invalidate_models_cache()
+
+    def test_no_embedded_id(self):
+        for gone in ("LLM_BY_MODE", "GEMINI_FLASH_LITE_ID", "GEMINI_FLASH_ID", "SONNET_ID"):
+            self.assertFalse(hasattr(native, gone), gone)
+
+    def test_central_then_orchestrator_override(self):
+        models = {"version": 1, "modes": dict(TEST_MODES),
+                  "agents": {"orchestrator": {"claude": "openai:TEST:own"}}, "factory": {}}
+        project = _LibProject(json.dumps(models))
+        self.assertEqual(native.get_llm_id(project, "smart"), TEST_MODES["smart"])
+        self.assertEqual(native.get_llm_id(project, "claude"), "openai:TEST:own")
+        self.assertEqual(native.get_llm_id(project, "turbo"), TEST_MODES["smart"])
+
+    def test_missing_or_invalid_file_fails_loudly(self):
+        for raw in (None, "", "{bad", "[]", json.dumps({"modes": {"smart": "x y"}})):
+            native.invalidate_models_cache()
+            with self.assertRaises(native.ModelConfigError):
+                native.get_llm_id(_LibProject(raw), "smart")
+
+    def test_edit_applies_after_ttl(self):
+        models = {"version": 1, "modes": dict(TEST_MODES), "agents": {}, "factory": {}}
+        project = _LibProject(json.dumps(models))
+        self.assertEqual(native.get_llm_id(project, "pro"), TEST_MODES["pro"])
+        models["modes"]["pro"] = "openai:TEST:new-pro"
+        project.raw = json.dumps(models)
+        self.assertEqual(native.get_llm_id(project, "pro"), TEST_MODES["pro"])   # cached
+        native._models_cache = (native._models_cache[0],
+                                native._models_cache[1] - native._MODELS_CACHE_TTL_SECONDS - 1)
+        self.assertEqual(native.get_llm_id(project, "pro"), "openai:TEST:new-pro")
+
+
 def _tool_call(name, args, call_id="call_1"):
     return {"type": "function", "id": call_id,
             "function": {"name": name, "arguments": json.dumps(args)}}
@@ -139,6 +202,9 @@ class NativeEngineBase(unittest.TestCase):
 
     def setUp(self):
         native.invalidate_capabilities_cache()
+        # models.json is the only source of the LLM ids; the fake project has no
+        # library, so pre-fill the TTL cache as if it had just been read.
+        native._models_cache = (dict(TEST_MODES), time.monotonic() + 10 ** 9)
         self._orig_api_client = dataiku.api_client
         self._orig_get_caps = native.get_capabilities
         self._orig_run_sub = streaming.run_agent_streamed
@@ -158,6 +224,7 @@ class NativeEngineBase(unittest.TestCase):
         native.get_capabilities = self._orig_get_caps
         streaming.run_agent_streamed = self._orig_run_sub
         native.invalidate_capabilities_cache()
+        native.invalidate_models_cache()
 
     def _install(self, completion):
         project = FakeProject(completion)

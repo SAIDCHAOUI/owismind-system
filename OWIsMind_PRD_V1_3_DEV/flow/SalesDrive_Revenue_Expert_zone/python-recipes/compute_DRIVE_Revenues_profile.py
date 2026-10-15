@@ -39,10 +39,27 @@ logger = logging.getLogger("owismind.profiler")
 # 1. CONFIGURATION
 # =============================================================================
 
-# LLM Mesh id for the enrichment pass (PASS B). Use the strongest model: it runs
-# once per dataset and the cost is amortized over every future question. Set to
-# "" to skip the LLM pass (deterministic profile only, descriptions left empty).
-ENRICH_LLM_ID = "openai:LLM-7064-revforecast:vertex_ai/claude-opus-4-7"
+# LLM Mesh id for the enrichment pass (PASS B): factory.profile_enrich in the hub
+# file /python/owismind_hub/models.json (project library), the only source of the
+# model ids. "" there = skip the LLM pass (deterministic profile only). A missing
+# or invalid file fails the recipe with an explicit error (no embedded id).
+HUB_MODELS_PATH = "/python/owismind_hub/models.json"
+
+
+def enrich_llm_id(project):
+    """factory.profile_enrich from models.json ("" = skip); raises when unusable."""
+    handle = project.get_library().get_file(HUB_MODELS_PATH)
+    raw = handle.read() if handle is not None else None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    if not raw:
+        raise RuntimeError("%s is missing: save the models from the Agent Factory "
+                           "Console (Settings)" % HUB_MODELS_PATH)
+    factory = (json.loads(raw).get("factory") or {})
+    if "profile_enrich" not in factory:
+        raise RuntimeError("%s has no factory.profile_enrich: set it in the console "
+                           "(Settings), or \"\" to skip the LLM pass" % HUB_MODELS_PATH)
+    return factory.get("profile_enrich") or ""
 
 ENUM_MAX_VALUES = 50        # <= N distincts: keep the full verbatim value list
 SAMPLES_N = 12              # sample values kept per non-enum column
@@ -524,11 +541,12 @@ def build_enrichment_input(dataset_name, dataset_payload, columns):
 def run_enrichment(project, dataset_name, dataset_payload, columns):
     """Call the Mesh model (2 attempts) and merge the validated output in place.
     Failure is non-fatal: the deterministic profile survives. Returns success."""
-    if not ENRICH_LLM_ID:
-        logger.info("ENRICH_LLM_ID empty -> skipping the LLM pass")
+    llm_id = enrich_llm_id(project)
+    if not llm_id:
+        logger.info("factory.profile_enrich empty -> skipping the LLM pass")
         return False
     user_block = build_enrichment_input(dataset_name, dataset_payload, columns)
-    llm = project.get_llm(ENRICH_LLM_ID)
+    llm = project.get_llm(llm_id)
     parsed = None
     for attempt in (1, 2):
         try:

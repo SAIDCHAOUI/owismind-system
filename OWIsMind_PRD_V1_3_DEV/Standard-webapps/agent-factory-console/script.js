@@ -573,7 +573,7 @@
         var list = [
           "In DSS, open <b>Agents &amp; GenAI Models</b> &gt; <b>Tools</b> &gt; <b>+ New tool</b>, type <b>Semantic Model Query</b>, name " + copyable(c.names.tool) + ".",
           "Link it to the semantic model " + copyable(c.names.model) + ".",
-          "Set <b>Agent mode</b> to OFF, LLM " + mono("vertex_ai/claude-sonnet-5") + ", dataset access <b>as the calling user</b>."
+          "Set <b>Agent mode</b> to OFF, LLM = the factory default model (Settings &gt; models), dataset access <b>as the calling user</b>."
         ];
         if (desc) {
           list.push("Paste this text into <b>Description for LLM</b>:<pre class=\"afc-pre\">" + esc(desc) + "</pre>" +
@@ -2562,7 +2562,6 @@
       '<dt>Orchestrator (Code Agent)</dt><dd>' + esc(settings.orchestrator_agent_id || "-") + '</dd>' +
       '<dt>SQL connection</dt><dd>' + esc(settings.sql_connection || "-") + '</dd>' +
       '<dt>Code env 3.11</dt><dd>' + esc(settings.code_env_311 || "(project default)") + '</dd>' +
-      '<dt>LLM of the semantic tools</dt><dd>' + esc(settings.llm_sonnet || "-") + '</dd>' +
       '<dt>Template semantic model</dt><dd>' + esc(settings.template_semantic_model_id || "-") + '</dd>' +
       '<dt>Template Semantic Model Query tool</dt><dd>' + esc(settings.template_semantic_tool_id || "-") + '</dd>' +
       '</dl><p class="afc-field-help">Source: factory_settings.json in the hub. Edit it from the project library.</p>' +
@@ -2634,15 +2633,16 @@
 
   /* ============================ models + agent settings ============================ */
 
-  /* One central map (models.json in the hub) decides which LLM each mode uses; an
-   * agent can override a mode for itself. Resolution: own setting > central > built-in. */
+  /* One central map (models.json in the hub) is the ONLY source of every LLM id; an
+   * agent can override a mode for itself. Resolution: own setting > central > the agent
+   * refuses to run (no built-in id). */
   var MODE_LABELS = { smart: "Smart", pro: "Pro", claude: "Claude" };
   var MODES = ["smart", "pro", "claude"];
   var ORCH_KEY = "orchestrator";
   var SOURCE_CHIP = {
     agent: '<span class="afc-chip afc-chip--manual">Own setting</span>',
     mode: '<span class="afc-chip afc-chip--on">Central</span>',
-    embedded: '<span class="afc-chip afc-chip--off">Built-in</span>'
+    missing: '<span class="afc-chip afc-chip--failed">Missing</span>'
   };
 
   function llmDatalist(list) {
@@ -2691,9 +2691,11 @@
     var d = m.draft;
     var html = '<section class="card"><p class="afc-mlabel">LLM per mode (all agents)</p>' +
       '<p class="afc-field-help">The model every agent uses in each mode. An agent can override a mode in its own Settings. ' +
-      'Takes effect when an agent restarts.' +
-      (m.data.from_file ? "" : ' <b>models.json is not in the hub yet: the values below are the ids built into the agents. Saving creates the file.</b>') +
-      '</p>' + llmDatalist(m.data.available_llms);
+      'This file is the only source of the model ids: agents, native engine, factory and recipes all read it, ' +
+      'and apply a change within about 30 seconds without a restart.</p>' +
+      (m.data.from_file ? "" : '<div class="afc-note afc-note--error"><b>models.json is missing or invalid: every agent refuses to run until it is saved.</b>' +
+        ((m.data.problems || []).length ? '<ul class="fd-list">' + m.data.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join("") + '</ul>' : "") + '</div>') +
+      llmDatalist(m.data.available_llms);
     MODES.forEach(function (mode) {
       html += field(MODE_LABELS[mode],
         '<input class="afc-input mono" list="afcLlmList" id="mdMode_' + mode + '" value="' + esc(d.modes[mode]) + '">');
@@ -2702,7 +2704,9 @@
       field("Factory default model", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryDefault" value="' +
         esc((d.factory || {}).default || "") + '">', "Used by the factory wizard, the Improve review and the prompt doctor.") +
       field("Wizard model (optional)", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryWizard" value="' +
-        esc((d.factory || {}).wizard || "") + '">', "Empty = use the factory default model.");
+        esc((d.factory || {}).wizard || "") + '">', "Empty = use the factory default model.") +
+      field("Profile enrichment model", '<input class="afc-input mono" list="afcLlmList" id="mdFactoryEnrich" value="' +
+        esc((d.factory || {}).profile_enrich || "") + '">', "LLM pass of the profile recipes (column descriptions). Empty = skip that pass.");
     var overrides = Object.keys(d.agents || {}).filter(function (k) { return Object.keys(d.agents[k] || {}).length; });
     if (overrides.length) {
       html += '<p class="afc-mlabel tracker-sub">Agents with their own setting</p><dl class="afc-kv">';
@@ -2725,11 +2729,12 @@
     });
     bindInput("mdFactoryDefault", function (v) { m.draft.factory.default = v.trim(); });
     bindInput("mdFactoryWizard", function (v) { m.draft.factory.wizard = v.trim(); });
+    bindInput("mdFactoryEnrich", function (v) { m.draft.factory.profile_enrich = v.trim(); });
     byId("mdSave").onclick = function () {
       openConfirm({
         title: "Save the central models?",
-        bodyHtml: "<p>models.json is written to the hub (the previous file is backed up). Each agent reads it when it starts: " +
-          "re-save the agent in DSS to apply it right away.</p>",
+        bodyHtml: "<p>models.json is written to the hub (the previous file is backed up). " +
+          "Agents, native engine, factory and recipes apply it within about 30 seconds.</p>",
         confirmLabel: "Save",
         onConfirm: function () { saveModels(m.draft, function () { loadModels(renderSettings); }); }
       });

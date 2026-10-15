@@ -1,11 +1,11 @@
 """Central LLM map (hub models.json): engine, agents' standalone loaders, Settings bundle.
 
-Locks the contract that lets the operator change the LLM of any mode / agent from
-the console without touching agent code:
-- hub.validate_models / effective_models / read+write (backup) / get_settings overlay;
-- the three Code Agents resolve LLM_BY_MODE from the hub (own setting > central >
-  embedded) and fall back to the embedded ids on ANY problem;
-- the embedded ids and hub.DEFAULT_MODELS never drift;
+Locks the contract that makes models.json the ONLY source of every LLM id (user
+decision 2026-10-15: no embedded id, no fallback, anywhere):
+- hub.validate_models / effective_models / read+write (backup) / factory_llm;
+- the Code Agents resolve their model from the hub (own setting > central) and REFUSE
+  to run with an explicit ModelConfigError on any problem; edits apply through a TTL;
+- no code file carries a model id (guard test over agents, engine, factory, recipes);
 - agent_settings.agent_bundle (orchestrator + sub-agent) and the description writer.
 
 DSS-free (fakes only). Run from the repo root:
@@ -15,6 +15,7 @@ DSS-free (fakes only). Run from the repo root:
 import importlib.util
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -34,11 +35,12 @@ _AGENTS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "GenAI",
 OWN = "openai:CONN:own-model"
 CENTRAL = {"smart": "openai:CONN:smart-x", "pro": "openai:CONN:pro-x",
            "claude": "openai:CONN:claude-x"}
+FACTORY = "openai:CONN:factory-x"
 
 
-def _models(agents=None):
+def _models(agents=None, factory=None):
     return {"version": 1, "modes": dict(CENTRAL), "agents": agents or {},
-            "factory": {"default": "openai:CONN:factory-x", "wizard": ""}}
+            "factory": factory or {"default": FACTORY, "wizard": ""}}
 
 
 class _FakeClient(object):
@@ -65,9 +67,19 @@ def _load_agent(filename, files):
         dataiku_mod.api_client = saved
 
 
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
 class TestModelsEngine(unittest.TestCase):
-    def test_defaults_are_valid(self):
-        self.assertEqual(hub.validate_models(hub.DEFAULT_MODELS), [])
+    def test_repo_seed_is_valid_and_engine_has_no_embedded_ids(self):
+        with open(os.path.join(_REPO, "project-library", "python", "owismind_hub",
+                               "models.json"), encoding="utf-8") as fh:
+            self.assertEqual(hub.validate_models(json.load(fh)), [])
+        self.assertFalse(hasattr(hub, "DEFAULT_MODELS"))
+        self.assertNotIn("llm_sonnet", hub.DEFAULT_SETTINGS)
+        self.assertNotIn("llm_wizard", hub.DEFAULT_SETTINGS)
+        self.assertEqual(hub.validate_models(hub.empty_models())[:1],
+                         ["modes.smart must be a valid LLM id"])
 
     def test_validation_rejects_bad_shapes(self):
         bad = _models()
@@ -84,9 +96,8 @@ class TestModelsEngine(unittest.TestCase):
         eff = hub.effective_models(stored, "revenue")
         self.assertEqual(eff["claude"], {"llm": OWN, "source": "agent"})
         self.assertEqual(eff["smart"], {"llm": CENTRAL["smart"], "source": "mode"})
-        emb = hub.effective_models(None, "revenue")
-        self.assertEqual(emb["pro"]["source"], "embedded")
-        self.assertEqual(emb["pro"]["llm"], hub.DEFAULT_MODELS["modes"]["pro"])
+        missing = hub.effective_models(None, "revenue")
+        self.assertEqual(missing["pro"], {"llm": None, "source": "missing"})
 
     def test_write_validates_and_backs_up(self):
         project = _MemHubProject({})
@@ -99,48 +110,117 @@ class TestModelsEngine(unittest.TestCase):
             hub.write_models(project, {"modes": {}})
         self.assertIsNone(hub.read_models(_MemHubProject({hub.MODELS_PATH: "{bad json"})))
 
-    def test_factory_section_overrides_settings(self):
+    def test_factory_llm_resolution_and_strictness(self):
         project = _MemHubProject({hub.MODELS_PATH: json.dumps(_models())})
-        settings = hub.get_settings(project)
-        self.assertEqual(settings["llm_sonnet"], "openai:CONN:factory-x")
-        self.assertEqual(settings["llm_wizard"], hub.DEFAULT_SETTINGS["llm_wizard"])
+        self.assertEqual(hub.factory_llm(project), FACTORY)
+        self.assertEqual(hub.factory_llm(project, "wizard"), FACTORY)   # "" -> default
+        self.assertEqual(hub.factory_llm_or_empty(project, "profile_enrich"), FACTORY)
+        wiz = _models(factory={"default": FACTORY, "wizard": OWN, "profile_enrich": ""})
+        project = _MemHubProject({hub.MODELS_PATH: json.dumps(wiz)})
+        self.assertEqual(hub.factory_llm(project, "wizard"), OWN)
+        # profile_enrich "" means "skip the pass": the recipes read that key
+        # themselves (enrich_llm_id), so the generic default rule does not apply.
+        with self.assertRaises(ValueError):
+            hub.factory_llm(_MemHubProject({}))
+        with self.assertRaises(ValueError):
+            hub.factory_llm(_MemHubProject({hub.MODELS_PATH: "{bad json"}))
+        self.assertTrue(hub.models_problems(_MemHubProject({})))
+        self.assertEqual(hub.models_problems(
+            _MemHubProject({hub.MODELS_PATH: json.dumps(_models())})), [])
+        bad = _models(factory={"default": FACTORY, "turbo": OWN})
+        self.assertTrue(any("factory.turbo" in p for p in hub.validate_models(bad)))
 
-    def test_embedded_defaults_never_drift(self):
-        orch = _load_agent("OWIsMind_orchestrator.py", {})
-        dx = _load_agent("SalesDrive_revenue_expert.py", {})
-        for mode in hub.MODEL_MODES:
-            self.assertEqual(orch.LOOP_LLM_BY_MODE[mode], hub.DEFAULT_MODELS["modes"][mode])
-            self.assertEqual(dx.LLM_BY_MODE[mode], hub.DEFAULT_MODELS["modes"][mode])
-        self.assertEqual(hub.DEFAULT_MODELS["factory"]["default"], hub.DEFAULT_SETTINGS["llm_sonnet"])
+    def test_no_model_id_is_hard_coded_anywhere(self):
+        """models.json is the ONLY file allowed to name an LLM Mesh model."""
+        import glob
+        pattern = re.compile(r"vertex_ai/|LLM-7064|gemini|sonnet|claude-opus|flash-lite",
+                             re.IGNORECASE)
+        files = (glob.glob(os.path.join(_REPO, "GenAI", "Agents", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "GenAI", "agents-tools", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "flow", "*", "python-recipes", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "project-library", "python", "owismind_factory", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "project-library", "python", "owismind_hub", "*.json"))
+                 + glob.glob(os.path.join(_REPO, "Notebooks", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "Standard-webapps", "agent-factory-console", "*.py"))
+                 + glob.glob(os.path.join(_REPO, "Standard-webapps", "agent-factory-console", "*.js"))
+                 + glob.glob(os.path.join(_REPO, "plugin", "owismind", "python-lib", "owismind", "agents", "*.py")))
+        offenders = []
+        for path in files:
+            if path.endswith("models.json"):
+                continue
+            with open(path, encoding="utf-8") as fh:
+                for number, line in enumerate(fh, 1):
+                    if pattern.search(line):
+                        offenders.append("%s:%d: %s" % (os.path.relpath(path, _REPO), number, line.strip()))
+        self.assertEqual(offenders, [], "model ids belong in models.json only:\n" + "\n".join(offenders))
+
+
+def _run_agent(filename, files):
+    """Load an agent AND keep dataiku.api_client on the in-memory hub while the
+    returned module is used (the loaders now read models.json at call time)."""
+    _agent_stubs.install()
+    dataiku_mod = sys.modules["dataiku"]
+    project = _MemHubProject(files)
+    dataiku_mod.api_client = lambda: _FakeClient(project)
+    return _load_agent(filename, files), project
 
 
 class TestAgentLoaders(unittest.TestCase):
     def test_orchestrator_follows_central_and_own(self):
         files = {hub.MODELS_PATH: json.dumps(_models({"orchestrator": {"claude": OWN}}))}
-        orch = _load_agent("OWIsMind_orchestrator.py", files)
+        orch, _ = _run_agent("OWIsMind_orchestrator.py", files)
         self.assertEqual(orch.pick_loop_llm("smart"), CENTRAL["smart"])
         self.assertEqual(orch.pick_loop_llm("pro"), CENTRAL["pro"])
         self.assertEqual(orch.pick_loop_llm("claude"), OWN)
+        self.assertEqual(orch.pick_loop_llm("turbo"), CENTRAL["smart"])
 
     def test_subagents_use_their_own_domain_key(self):
         files = {hub.MODELS_PATH: json.dumps(_models({"revenue": {"pro": OWN}}))}
-        rev = _load_agent("SalesDrive_revenue_expert.py", files)
-        tix = _load_agent("CSSO_Trouble_Tickets_Expert.py", files)
+        rev, _ = _run_agent("SalesDrive_revenue_expert.py", files)
         self.assertEqual(rev.pick_subagent_llm("pro"), OWN)
-        self.assertEqual(tix.pick_subagent_llm("pro"), CENTRAL["pro"])
         self.assertEqual(rev.pick_subagent_llm("smart"), CENTRAL["smart"])
-        # Stand-alone fallbacks follow the default (smart) mode.
-        self.assertEqual(rev.UNDERSTAND_LLM_ID, CENTRAL["smart"])
+        tix, _ = _run_agent("CSSO_Trouble_Tickets_Expert.py", files)
+        self.assertEqual(tix.pick_subagent_llm("pro"), CENTRAL["pro"])
 
-    def test_bad_file_or_entry_falls_back_to_embedded(self):
-        orch = _load_agent("OWIsMind_orchestrator.py", {hub.MODELS_PATH: "{bad"})
-        self.assertEqual(orch.pick_loop_llm("pro"), hub.DEFAULT_MODELS["modes"]["pro"])
+    def test_missing_or_bad_file_refuses_to_run(self):
+        for files in ({}, {hub.MODELS_PATH: "{bad"}, {hub.MODELS_PATH: "[]"}):
+            orch, _ = _run_agent("OWIsMind_orchestrator.py", files)
+            with self.assertRaises(orch.ModelConfigError):
+                orch.pick_loop_llm("pro")
         bad = _models()
         bad["modes"]["pro"] = "has spaces and ; injection"
-        files = {hub.MODELS_PATH: json.dumps(bad)}
-        dx = _load_agent("SalesDrive_revenue_expert.py", files)
-        self.assertEqual(dx.pick_subagent_llm("pro"), hub.DEFAULT_MODELS["modes"]["pro"])
-        self.assertEqual(dx.pick_subagent_llm("claude"), CENTRAL["claude"])
+        dx, _ = _run_agent("SalesDrive_revenue_expert.py", {hub.MODELS_PATH: json.dumps(bad)})
+        with self.assertRaises(dx.ModelConfigError) as ctx:
+            dx.pick_subagent_llm("claude")   # one bad mode taints the whole file
+        self.assertIn("mode 'pro'", str(ctx.exception))
+        # No library at all (api_client broken) -> explicit error, never a silent id.
+        sys.modules["dataiku"].api_client = lambda: None
+        with self.assertRaises(dx.ModelConfigError):
+            dx._hub_models_cache["at"] = 0.0
+            dx.pick_subagent_llm("smart")
+
+    def test_edit_applies_after_ttl_without_restart(self):
+        files = {hub.MODELS_PATH: json.dumps(_models())}
+        orch, project = _run_agent("OWIsMind_orchestrator.py", files)
+        self.assertEqual(orch.pick_loop_llm("smart"), CENTRAL["smart"])
+        changed = _models()
+        changed["modes"]["smart"] = OWN
+        project.library.files[hub.MODELS_PATH] = json.dumps(changed)
+        self.assertEqual(orch.pick_loop_llm("smart"), CENTRAL["smart"])   # cached
+        orch._hub_models_cache["at"] -= orch._HUB_MODELS_TTL_S + 1        # TTL expired
+        self.assertEqual(orch.pick_loop_llm("smart"), OWN)
+
+    def test_model_config_error_reaches_the_user(self):
+        dx, _ = _run_agent("SalesDrive_revenue_expert.py", {})
+        dx._get_profile = lambda *a, **k: {"__dataset__": {}}
+        agent = dx.MyLLM() if hasattr(dx, "MyLLM") else None
+        if agent is None:
+            self.skipTest("agent class not exposed")
+        agent._get_profile = lambda: {"__dataset__": {}}
+        query = {"messages": [{"role": "user", "content": "CA 2025 ?\nMODE: smart"}]}
+        chunks = list(agent.process_stream(query, {}, None))
+        texts = [c["chunk"]["text"] for c in chunks if (c.get("chunk") or {}).get("text")]
+        self.assertTrue(texts and "models.json" in texts[0], texts)
 
 
 class _Tool(object):
@@ -285,7 +365,7 @@ class TestBusinessPrompt(unittest.TestCase):
             def get_llm(self_inner, llm_id):
                 calls["llm"] = llm_id
                 return _L()
-        return _P({}), calls
+        return _P({hub.MODELS_PATH: json.dumps(_models())}), calls
 
     def test_draft_returns_clean_prompt_and_uses_wizard_llm(self):
         entry = {"domain": "revenue", "lookup_dataset": "DRIVE_Revenues",
@@ -301,7 +381,7 @@ class TestBusinessPrompt(unittest.TestCase):
             wizard.read_profile, review.read_sample_rows, review.read_column_comments = saved
         self.assertNotIn("error", out)
         self.assertNotIn("\u2014", out["prompt"])
-        self.assertEqual(calls["llm"], hub.DEFAULT_SETTINGS["llm_sonnet"])
+        self.assertEqual(calls["llm"], FACTORY)
         self.assertIn("focus on acronyms", calls["prompt"])
 
     def test_draft_rejects_too_short_or_unusable_entry(self):
@@ -521,7 +601,7 @@ class TestSecurityReviewFixes(unittest.TestCase):
         self.assertTrue(guardrails.has_high(guardrails.scan(text)))
 
     def test_models_reject_unknown_keys_and_oversize(self):
-        good = json.loads(json.dumps(hub.DEFAULT_MODELS))
+        good = _models()
         self.assertEqual(hub.validate_models(good), [])
         self.assertTrue(hub.validate_models(dict(good, junk="x")))
         self.assertTrue(hub.validate_models(dict(good, version="x" * 30000)))

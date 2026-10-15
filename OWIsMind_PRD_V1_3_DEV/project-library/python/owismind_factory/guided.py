@@ -295,7 +295,7 @@ def _instr_tool_manual(env, state):
         "1. Agents & GenAI Models puis Tools puis New tool : type Semantic Model "
         "Query, nom EXACT %s.\n"
         "2. Lie-le au modèle sémantique %s.\n"
-        "3. Agent mode OFF (pipeline linéaire), LLM vertex_ai/claude-sonnet-5, "
+        "3. Agent mode OFF (pipeline linéaire), LLM = le modèle par défaut de l'usine (models.json), "
         "accès aux datasets en tant qu'utilisateur appelant.\n"
         "4. Colle cette Description for LLM :\n%s\n"
         "5. Clique sur C'est fait : je retrouve le tool par son nom et je note son id."

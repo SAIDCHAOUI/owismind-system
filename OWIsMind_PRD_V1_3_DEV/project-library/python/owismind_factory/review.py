@@ -295,8 +295,7 @@ def propose(project, spec, base_config, routing, feedback, answers=None, llm_id=
     """One bounded LLM call -> {"proposed", "notes", "questions"} or {"error"}."""
     from . import hub
     if llm_id is None:
-        settings = hub.get_settings(project)
-        llm_id = settings.get("llm_wizard") or settings.get("llm_sonnet")
+        llm_id = hub.factory_llm(project, "wizard")
     project_key = getattr(project, "project_key", None)
     profile = wizard.read_profile(spec.profile_dataset, project_key=project_key)
     digest = wizard.build_profile_digest(profile, spec.base_dataset) if profile else ""

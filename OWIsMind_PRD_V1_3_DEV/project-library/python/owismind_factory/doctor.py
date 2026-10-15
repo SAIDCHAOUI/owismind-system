@@ -237,7 +237,7 @@ def run_doctor(project, llm_id, persona_text, interactions, complaint=None):
     llm id, LLM error, unparseable response). Bounded single completion.
     """
     if not llm_id:
-        return {"error": "no llm_id provided (hub factory_settings['llm_sonnet'] is empty)"}
+        return {"error": "no llm_id provided (models.json > factory.default is empty)"}
     prompt = build_doctor_prompt(persona_text, interactions, complaint=complaint)
     try:
         llm = project.get_llm(llm_id)

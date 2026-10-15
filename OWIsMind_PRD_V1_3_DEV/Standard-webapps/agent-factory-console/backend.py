@@ -550,20 +550,21 @@ def api_capability_enable():
 
 
 # ----------------------------------------------------------------- central models + agent settings
-# models.json is the ONE place that maps smart / pro / claude to an LLM Mesh model,
-# centrally and per agent (see owismind_factory.hub "models"). Agents read it at start.
+# models.json is the ONLY source of every LLM Mesh id (agents, native engine, factory,
+# recipes): no embedded id anywhere, no fallback (see owismind_factory.hub "models").
 
 @app.route("/api/models", methods=["GET"])
 @_safe
 def api_models_get():
-    """Central model map: stored file (or embedded defaults), plus the project's LLM list."""
+    """Central model map: the stored file (or a blank form), why it is unusable if so,
+    plus the project's LLM list."""
     project = _project()
     stored = hub.read_models(project)
     return jsonify({
         "status": "ok",
-        "models": stored or hub.DEFAULT_MODELS,
+        "models": stored or hub.empty_models(),
         "from_file": stored is not None,
-        "defaults": hub.DEFAULT_MODELS,
+        "problems": hub.models_problems(project),
         "available_llms": hub.list_available_llms(project),
     })
 
@@ -599,7 +600,7 @@ def api_agent_settings():
     except KeyError:
         return _err("unknown_agent", 404)
     bundle["available_llms"] = hub.list_available_llms(project)
-    bundle["central_models"] = (hub.read_models(project) or hub.DEFAULT_MODELS).get("modes")
+    bundle["central_models"] = (hub.read_models(project) or {}).get("modes") or {}
     return jsonify({"status": "ok", "settings": bundle})
 
 

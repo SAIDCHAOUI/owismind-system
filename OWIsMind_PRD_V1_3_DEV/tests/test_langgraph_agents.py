@@ -39,28 +39,25 @@ def _load(mod_name, filename):
 orch = _load("orchestrator_under_test", "OWIsMind_orchestrator.py")
 dx = _load("dataset_expert_lg_under_test", "SalesDrive_revenue_expert.py")
 tx = _load("tickets_expert_under_test", "CSSO_Trouble_Tickets_Expert.py")
+for _mod in (orch, dx, tx):
+    _agent_stubs.pin_models(_mod)
+MODELS = _agent_stubs.TEST_MODELS["modes"]
 
 
 class TestModelIds(unittest.TestCase):
     def test_orchestrator_model_per_mode(self):
-        # One model per mode for the whole turn (no escalation): smart=Gemini 3.1
-        # Flash-Lite (default), pro=Gemini 3.5 Flash, claude=Sonnet.
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["smart"], orch.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["pro"], orch.GEMINI_FLASH_ID)
-        self.assertEqual(orch.LOOP_LLM_BY_MODE["claude"], orch.SONNET_ID)
+        # One model per mode for the whole turn (no escalation), from models.json.
+        for mode in orch.ORCH_MODES:
+            self.assertEqual(orch.pick_loop_llm(mode), MODELS[mode])
         self.assertEqual(orch.DEFAULT_MODE, "smart")
 
     def test_subagent_model_per_mode_mirrors_orchestrator(self):
         # The sub-agent follows the SAME tier as the orchestrator for this mode.
-        self.assertEqual(dx.LLM_BY_MODE["smart"], dx.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(dx.LLM_BY_MODE["pro"], dx.GEMINI_FLASH_ID)
-        self.assertEqual(dx.LLM_BY_MODE["claude"], dx.SONNET_ID)
-        self.assertEqual(dx.pick_subagent_llm("claude"), dx.SONNET_ID)
-        self.assertEqual(dx.pick_subagent_llm("turbo"), dx.LLM_BY_MODE[dx.DEFAULT_MODE])
+        for mode in dx.MODES:
+            self.assertEqual(dx.pick_subagent_llm(mode), orch.pick_loop_llm(mode))
+        self.assertEqual(dx.pick_subagent_llm("turbo"), MODELS[dx.DEFAULT_MODE])
         self.assertEqual(dx.DEFAULT_MODE, "smart")
-        # Both files agree on the smart/pro/claude ids (same Mesh connection).
-        self.assertEqual(dx.GEMINI_FLASH_LITE_ID, orch.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(dx.GEMINI_FLASH_ID, orch.GEMINI_FLASH_ID)
+        self.assertEqual(dx.MODES, orch.ORCH_MODES)
 
     def test_subagent_understand_forces_json(self):
         # UNDERSTAND is a deterministic extraction -> forces native JSON for a
@@ -301,8 +298,8 @@ class TestTicketsExpert(unittest.TestCase):
         self.assertEqual(tx.PROFILE_DATASET, "TroubleTickets_year_profile")
         self.assertEqual(tx.VALUE_INDEX_DATASET, "TroubleTickets_year_value_index")
         self.assertEqual(tx.SEMANTIC_TOOL_NAME, "tickets_semantic_query")
-        # Same model tier mapping as revenue (shared Mesh connection).
-        self.assertEqual(tx.LLM_BY_MODE, dx.LLM_BY_MODE)
+        # Same model tiers as revenue (both resolve models.json).
+        self.assertEqual(tx.MODES, dx.MODES)
 
     def test_orchestrator_labels_match_tickets_engine_known(self):
         cap = orch.CAPABILITIES["tickets_expert"]
@@ -815,12 +812,11 @@ class TestModelMode(unittest.TestCase):
 
     def test_pick_loop_llm_policy(self):
         # Each mode picks ONE model for the whole turn (no escalation).
-        self.assertEqual(orch.pick_loop_llm("smart"), orch.GEMINI_FLASH_LITE_ID)
-        self.assertEqual(orch.pick_loop_llm("pro"), orch.GEMINI_FLASH_ID)
-        self.assertEqual(orch.pick_loop_llm("claude"), orch.SONNET_ID)
+        self.assertEqual(orch.pick_loop_llm("smart"), MODELS["smart"])
+        self.assertEqual(orch.pick_loop_llm("pro"), MODELS["pro"])
+        self.assertEqual(orch.pick_loop_llm("claude"), MODELS["claude"])
         # Unknown mode falls back to the default mode's model (never crashes).
-        self.assertEqual(orch.pick_loop_llm("turbo"),
-                         orch.LOOP_LLM_BY_MODE[orch.DEFAULT_MODE])
+        self.assertEqual(orch.pick_loop_llm("turbo"), MODELS[orch.DEFAULT_MODE])
 
     def test_narration_enabled_only_for_capable_models(self):
         # smart stays act-first (no lead-in narration); pro/claude narrate.
@@ -1129,12 +1125,11 @@ class TestNoEscalation(unittest.TestCase):
 
 class TestLoopChat(unittest.TestCase):
     def _chat(self):
-        return orch.LoopChat(_FakeProject(), "SYSTEM",
-                             orch.LOOP_LLM_BY_MODE["pro"], ["spec"])
+        return orch.LoopChat(_FakeProject(), "SYSTEM", MODELS["pro"], ["spec"])
 
     def test_initial_transcript_has_system_first(self):
         c = self._chat()
-        self.assertEqual(c.llm_id, orch.LOOP_LLM_BY_MODE["pro"])
+        self.assertEqual(c.llm_id, MODELS["pro"])
         self.assertEqual(c._completion.ops[0], ("msg", "SYSTEM", "system"))
         self.assertEqual(c._completion.settings["tools"], ["spec"])
 

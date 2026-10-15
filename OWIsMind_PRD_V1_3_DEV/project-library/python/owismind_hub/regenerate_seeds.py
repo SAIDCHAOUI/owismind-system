@@ -47,8 +47,8 @@ def _has_module_level_dataiku_import(path):
 
 
 def _load_default_settings(hub_module_path, name="DEFAULT_SETTINGS"):
-    """Load a hub.py constant (DEFAULT_SETTINGS / DEFAULT_MODELS) directly, or
-    use AST if Dataiku is imported."""
+    """Load a hub.py constant (DEFAULT_SETTINGS) directly, or use AST if Dataiku
+    is imported."""
     if _has_module_level_dataiku_import(hub_module_path):
         return _extract_constants(hub_module_path, {name})[name]
 
@@ -124,9 +124,6 @@ def build_canonical_files(repo_root) -> dict[str, bytes]:
             constants["PERSONA_DEFAULT"].encode("utf-8"),
         os.path.join(hub_dir, "factory_settings.json"): _json_bytes(
             _load_default_settings(hub_module_path)
-        ),
-        os.path.join(hub_dir, "models.json"): _json_bytes(
-            _load_default_settings(hub_module_path, "DEFAULT_MODELS")
         ),
         os.path.join(hub_dir, "run_settings.json"): _json_bytes(
             constants["RUN_SETTINGS_DEFAULT"]
