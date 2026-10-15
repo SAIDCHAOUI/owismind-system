@@ -1,0 +1,64 @@
+/* OWIsMind design source (Claude Design project, reference only, not imported by the app).
+   Rules: 80% primary colors (black, white, orange, grays); secondary colors only for accents,
+   categories and chart series; two font weights (400, 700); radius 2 to 8 px, no pills;
+   no decorative gradients; limited shadows; visible keyboard focus. */
+:root{
+  --orange:#ff7900; --black:#000000; --white:#ffffff;
+  --gray-dark:#595959; --gray-medium:#8f8f8f; --gray-light:#d6d6d6;
+  --orange-deep:#cc6100; --orange-soft:rgba(255,121,0,.08); --orange-line:rgba(255,121,0,.35);
+  --blue-dark:#085ebd; --blue:#4bb4e6; --blue-light:#b5e8f7;
+  --green-dark:#0a6e31; --green:#50be87; --green-light:#b8ebd6;
+  --pink-dark:#ff8ad4; --pink:#ffb4e6; --pink-light:#ffe8f7;
+  --purple-dark:#492191; --purple:#a885d8; --purple-light:#d9c2f0;
+  --yellow-dark:#ffb400; --yellow:#ffd200; --yellow-light:#fff6b6;
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px; --s-6:24px;
+  --s-7:32px; --s-8:40px; --s-9:56px; --s-10:72px; --s-11:96px; --s-12:128px;
+  --font-sans:"Helvetica Neue","SF Pro Text","Segoe UI",Roboto,Arial,system-ui,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,"Roboto Mono",monospace;
+  --fs-xs:12px; --fs-sm:13px; --fs-base:14px; --fs-md:15px;
+  --fs-lg:17px; --fs-xl:22px; --fs-2xl:28px; --fs-3xl:36px;
+  --lh-xs:14px; --lh-sm:15px; --lh-base:16px; --lh-md:17px;
+  --lh-lg:20px; --lh-xl:24px; --lh-2xl:30px; --lh-3xl:38px; --lh-text:1.5;
+  --fw-regular:400; --fw-body:400; --fw-medium:400;
+  --fw-semibold:700; --fw-bold:700; --fw-heavy:700; --fw-title:700;
+  --tracking-tight:-0.02em; --tracking-eyebrow:0;
+  --r-xs:2px; --r-sm:4px; --r:4px; --r-lg:8px; --r-xl:8px; --r-btn:4px; --r-pill:4px;
+  --chat-col:90%; --chat-col-max:1200px;
+  --ease:cubic-bezier(.2,0,.2,1); --ease-out:cubic-bezier(.2,0,.2,1); --ease-in:cubic-bezier(.4,0,.7,.2);
+  --dur-fast:120ms; --dur:180ms; --dur-slow:280ms;
+  --z-menu:60; --z-overlay:200; --z-modal:201; --z-toast:2100;
+}
+body, body[data-theme="light"]{
+  --bg:#ffffff; --surface:#fafafa; --surface-2:#f5f5f5; --surface-hover:#f0f0f0; --surface-press:#e6e6e6;
+  --border:#e6e6e6; --border-strong:#d6d6d6;
+  --text:#000000; --text-2:#595959; --text-3:#8f8f8f;
+  --shadow:0 1px 2px rgba(0,0,0,.06); --elev-1:0 1px 2px rgba(0,0,0,.06);
+  --elev-2:0 2px 4px rgba(0,0,0,.07),0 10px 24px rgba(0,0,0,.09);
+  --aura-orange:0 1px 2px rgba(0,0,0,.06); --aura-orange-strong:0 2px 4px rgba(0,0,0,.08);
+  --canvas:#f5f5f5; --glass:rgba(255,255,255,.92);
+  --float:0 1px 2px rgba(0,0,0,.06),0 8px 20px rgba(0,0,0,.08);
+  --float-strong:0 2px 4px rgba(0,0,0,.08),0 16px 36px rgba(0,0,0,.12);
+  --orange-soft-dark:var(--orange-soft); --orange-on-dark:var(--orange-deep);
+  --orange-text:#b85700; --panel-bg:#f5f5f5; --veil:rgba(255,255,255,.72);
+  --success:#0a6e31; --danger:#cd3c14; --warn:#8a5300; --info:#085ebd;
+  --success-soft:rgba(10,110,49,.08); --danger-soft:rgba(205,60,20,.08); --warn-soft:rgba(255,180,0,.14);
+}
+body[data-theme="dark"]{
+  --bg:#000000; --surface:#141414; --surface-2:#1c1c1c; --surface-hover:#242424; --surface-press:#2e2e2e;
+  --border:#2e2e2e; --border-strong:#454545;
+  --text:#ffffff; --text-2:#d6d6d6; --text-3:#8f8f8f;
+  --shadow:0 1px 2px rgba(0,0,0,.6); --elev-1:0 1px 2px rgba(0,0,0,.6);
+  --elev-2:0 2px 6px rgba(0,0,0,.7),0 12px 28px rgba(0,0,0,.6);
+  --aura-orange:0 1px 2px rgba(0,0,0,.6); --aura-orange-strong:0 2px 6px rgba(0,0,0,.7);
+  --canvas:#000000; --glass:rgba(10,10,10,.88);
+  --float:0 1px 2px rgba(0,0,0,.6),0 10px 24px rgba(0,0,0,.55);
+  --float-strong:0 2px 6px rgba(0,0,0,.7),0 20px 44px rgba(0,0,0,.65);
+  --orange-soft-dark:rgba(255,121,0,.14); --orange-on-dark:var(--orange); --orange-text:var(--orange);
+  --panel-bg:#0a0a0a; --veil:rgba(255,255,255,.04);
+  --success:#50be87; --danger:#ff8a6b; --warn:#ffd200; --info:#4bb4e6;
+  --success-soft:rgba(80,190,135,.14); --danger-soft:rgba(255,138,107,.14); --warn-soft:rgba(255,210,0,.14);
+}
+:focus-visible{outline:3px solid var(--orange);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}

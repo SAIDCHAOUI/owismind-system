@@ -1,0 +1,149 @@
+{
+  "live": {
+    "v": 1,
+    "status": "running",
+    "last_seq": 5,
+    "plan": {
+      "version": 1,
+      "origin": "auto",
+      "mission": "Comparer le CA 2024 et 2025",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "CA 2024 et 2025",
+          "status": "running"
+        },
+        {
+          "id": "p2",
+          "label": "Ecart par offre",
+          "status": "todo"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 7.4,
+        "id": "n1",
+        "step_id": "p1",
+        "kind": "find",
+        "title": "CA en hausse",
+        "text": "2025 depasse 2024 de 8 %.",
+        "sql_id": "s1q1"
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 7.9,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "CA 2024 et 2025",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "line",
+          "x": "year",
+          "y": [
+            "revenue"
+          ],
+          "style": "smooth"
+        },
+        "binding": "explicit"
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "CA 2024 et 2025",
+        "step_id": "p1",
+        "duration_ms": 6400,
+        "row_count": 2,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1"
+        ]
+      },
+      "sql_ids": [
+        "s1q1"
+      ]
+    }
+  },
+  "final": {
+    "v": 1,
+    "status": "stopped",
+    "last_seq": 5,
+    "plan": {
+      "version": 1,
+      "origin": "auto",
+      "mission": "Comparer le CA 2024 et 2025",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "CA 2024 et 2025",
+          "status": "running"
+        },
+        {
+          "id": "p2",
+          "label": "Ecart par offre",
+          "status": "todo"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 7.4,
+        "id": "n1",
+        "step_id": "p1",
+        "kind": "find",
+        "title": "CA en hausse",
+        "text": "2025 depasse 2024 de 8 %.",
+        "sql_id": "s1q1"
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 7.9,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "CA 2024 et 2025",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "line",
+          "x": "year",
+          "y": [
+            "revenue"
+          ],
+          "style": "smooth"
+        },
+        "binding": "explicit"
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "CA 2024 et 2025",
+        "step_id": "p1",
+        "duration_ms": 6400,
+        "row_count": 2,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1"
+        ]
+      },
+      "sql_ids": [
+        "s1q1"
+      ]
+    },
+    "exchange_id": "ex-fixture-stopped"
+  }
+}

@@ -1,0 +1,642 @@
+<script setup>
+// Sidebar - brand, primary nav, lazy conversation list, and the foot account/help
+// menus. Two layouts, ONE mounted component (so the conversation list is never
+// re-fetched on collapse/expand): the full sidebar, and a thin ICON RAIL when
+// collapsed (an orange brand square that expands, New conversation, Agents, then Help and the
+// account avatar pinned to the bottom). Navigation via vue-router; conversations come
+// from the session store; menus reuse the <Menu> primitive.
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { useSessionStore } from '../../stores/session.js'
+import { useUiStore } from '../../stores/ui.js'
+import { useChatStore } from '../../stores/chat.js'
+import { Icon, Menu } from '../ui'
+import logoUrl from '../../assets/orange-logo.png'
+
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
+const session = useSessionStore()
+const ui = useUiStore()
+const chat = useChatStore()
+
+const collapsed = computed(() => ui.sidebarCollapsed)
+
+// Hover flyout (user ask 2026-08-13): resting the pointer on the rail opens the FULL
+// sidebar as a temporary overlay - no click on the logo needed. It floats ABOVE the
+// content (position:fixed) so the chat/grid never reflows, and retracts when the
+// pointer leaves. Clicking the logo still PINS it open (the existing toggle). Small
+// enter/leave delays keep a pointer merely crossing the rail from flashing it.
+const hoverOpen = ref(false)
+let hoverTimer = null
+const railMode = computed(() => collapsed.value && !hoverOpen.value)
+function _clearHoverTimer() {
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = null
+  }
+}
+function onRailEnter() {
+  if (!collapsed.value) return
+  _clearHoverTimer()
+  hoverTimer = setTimeout(() => {
+    hoverOpen.value = true
+  }, 140)
+}
+function onRailLeave() {
+  _clearHoverTimer()
+  hoverTimer = setTimeout(() => {
+    hoverOpen.value = false
+  }, 220)
+}
+// Pinning (or any expand) while flown out: drop the hover state so the flyout class
+// never lingers on a genuinely expanded sidebar.
+watch(collapsed, (isCollapsed) => {
+  if (!isCollapsed) {
+    _clearHoverTimer()
+    hoverOpen.value = false
+  }
+})
+const activeSession = computed(() => route.params.sessionId || '')
+const isAgents = computed(() => route.name === 'agents')
+const isBenchmark = computed(() => route.name === 'benchmark')
+
+function newConversation() {
+  router.push('/chat')
+}
+function openConversation(c) {
+  // Re-clicking the conversation already in the URL is a duplicated navigation
+  // vue-router short-circuits (no param change, no watcher) - go through the
+  // store directly so a previously FAILED open gets its retry (ensureSession
+  // refetches on threadError; on a healthy thread it is a cheap no-op).
+  if (route.params.sessionId === c.id) chat.ensureSession(c.id)
+  else router.push('/chat/' + encodeURIComponent(c.id))
+}
+
+// --- Lazy conversation list: fill ~120% of the viewport, then infinite-scroll. -----
+const listEl = ref(null)
+const sentinel = ref(null)
+let observer = null
+const ITEM_PX = 40 // approx height of one .conv-item
+const FILL_RATIO = 1.2 // load enough to fill ~120% of the viewport
+
+// Top up until the list overflows (so the scrollbar/sentinel is reachable). Guarded
+// on a REAL layout box: when the sidebar mounts collapsed (rail), the list is
+// display:none -> clientHeight 0; without this guard `scrollHeight <= clientHeight`
+// would be `0 <= 0` = true and fire up to 20 needless /conversations queries against
+// the instance for a list nobody can see. We top up on first expand instead.
+async function topUp() {
+  const el = listEl.value
+  if (!el || el.clientHeight === 0) return
+  let guard = 0
+  while (
+    session.convHasMore &&
+    !session.convLoading &&
+    el.scrollHeight <= el.clientHeight * FILL_RATIO &&
+    guard < 20
+  ) {
+    guard += 1
+    await session.loadMoreConversations()
+    await nextTick()
+  }
+}
+
+async function fillViewport() {
+  const el = listEl.value
+  if (!el) return
+  const h = el.clientHeight // 0 when the sidebar mounts collapsed (list display:none)
+  // Visible: size the first page to ~120% of the list height. Collapsed: just a small
+  // first page so the list is ready (and not empty) the moment the rail is expanded.
+  const target = h > 0 ? Math.min(60, Math.max(10, Math.ceil((h * FILL_RATIO) / ITEM_PX))) : 12
+  await session.loadFirstConversations(target)
+  await nextTick()
+  await topUp()
+}
+
+onMounted(async () => {
+  await fillViewport()
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) session.loadMoreConversations()
+    },
+    { root: listEl.value, rootMargin: '120px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
+})
+
+// The list is hidden in the rail (v-show), so it cannot be filled to the viewport
+// until the sidebar is expanded for the first time - top it up then (the already
+// loaded first page is kept; no refetch).
+let _filledOnExpand = false
+// railMode (not collapsed): the hover flyout shows the list too, so it must top up
+// the very first time the full layout becomes visible, however it was opened.
+watch(railMode, async (isRail) => {
+  if (!isRail && !_filledOnExpand) {
+    _filledOnExpand = true
+    await nextTick()
+    await topUp()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
+})
+
+// Foot menus (open upward). Help targets map 1:1 to routes.
+const helpItems = computed(() => [
+  { key: 'faq', label: t('help.faq'), icon: 'help' },
+  { key: 'support', label: t('help.support'), icon: 'messageCircle' },
+  { key: 'releases', label: t('help.releases'), icon: 'document' },
+  { key: 'accessibility', label: t('help.accessibility'), icon: 'accessibility' },
+  { key: 'cgu', label: t('help.cgu'), icon: 'document' },
+  { key: 'privacy', label: t('help.privacy'), icon: 'shield' },
+  { key: 'about', label: t('help.about'), icon: 'info' },
+])
+function onHelp(key) {
+  router.push(key === 'faq' ? '/faq' : '/' + key)
+}
+
+const userItems = computed(() => {
+  const items = [
+    { key: 'settings', label: t('sb.settings'), icon: 'user' },
+    { key: 'faq', label: t('sb.faq'), icon: 'help' },
+  ]
+  if (session.isAdmin) items.push({ key: 'admin', label: 'Admin', icon: 'shield' })
+  return items
+})
+function onUser(key) {
+  if (key === 'admin') router.push('/admin')
+  else if (key === 'settings') router.push('/settings')
+  else if (key === 'faq') router.push('/faq')
+}
+</script>
+
+<template>
+  <aside
+    class="sidebar"
+    :class="{ rail: railMode, flyout: collapsed && hoverOpen }"
+    :style="collapsed && hoverOpen ? { width: ui.sidebarW + 'px' } : null"
+    @mouseenter="onRailEnter"
+    @mouseleave="onRailLeave"
+  >
+    <!-- HEAD: brand (full) / expand control (rail) -->
+    <div class="sidebar-head">
+      <RouterLink v-if="!railMode" to="/chat" class="brand">
+        <!-- Official Orange brand logo (square) -->
+        <img class="brand-mark" :src="logoUrl" alt="" width="30" height="30" />
+        <span class="brand-name">{{ t('sb.brand') }}</span>
+      </RouterLink>
+      <!-- Flown out by hover: the button PINS the sidebar open. Genuinely expanded:
+           it collapses back to the rail. Same toggle, honest title. -->
+      <button
+        v-if="!railMode"
+        class="icon-btn"
+        :title="collapsed ? t('sb.expand') : t('sb.collapse')"
+        @click="ui.toggleSidebar()"
+      >
+        <Icon name="sidebar" />
+      </button>
+      <!-- Rail: the Orange logo doubles as the expand button -->
+      <button v-else class="rail-logo" :title="t('sb.expand')" @click="ui.toggleSidebar()">
+        <img class="brand-mark" :src="logoUrl" alt="OWIsMind" width="30" height="30" />
+      </button>
+    </div>
+
+    <!-- PRIMARY: New conversation + Agents (neutral nav items) -->
+    <nav class="sidebar-primary">
+      <button class="side-item" :title="t('rail.new')" @click="newConversation">
+        <Icon name="plus" /><span class="side-label">{{ t('sb.new_conversation') }}</span>
+      </button>
+      <RouterLink class="side-item" :class="{ active: isAgents }" to="/agents" :title="t('rail.agents')">
+        <Icon name="agents" /><span class="side-label">{{ t('sb.agents') }}</span>
+      </RouterLink>
+      <RouterLink class="side-item" :class="{ active: isBenchmark }" to="/benchmark" :title="t('rail.benchmark')">
+        <Icon name="bookOpen" /><span class="side-label">{{ t('sb.benchmark') }}</span>
+      </RouterLink>
+    </nav>
+
+    <!-- Section title + conversation list (hidden in the rail, kept mounted) -->
+    <div class="sidebar-section" v-show="!railMode">
+      <span class="sidebar-section-title">{{ t('sb.conversations') }}</span>
+    </div>
+
+    <div class="conv-list" ref="listEl" v-show="!railMode">
+      <p v-if="session.convLoading && !session.conversations.length" class="conv-state">
+        {{ t('sb.conv_loading') }}
+      </p>
+      <p
+        v-else-if="session.convError && !session.conversations.length"
+        class="conv-state conv-state--error"
+      >
+        {{ t('sb.conv_error') }}
+      </p>
+      <p v-else-if="!session.conversations.length" class="conv-state">
+        {{ t('sb.conv_empty') }}
+      </p>
+      <template v-else>
+        <button
+          v-for="c in session.conversations"
+          :key="c.id"
+          class="conv-item"
+          :class="{ active: c.id === activeSession }"
+          :aria-current="c.id === activeSession ? 'true' : undefined"
+          :title="c.title"
+          @click="openConversation(c)"
+        >
+          {{ c.title }}
+        </button>
+        <p v-if="session.convLoading && session.conversations.length" class="conv-state">
+          {{ t('sb.loadingMore') }}
+        </p>
+      </template>
+      <div ref="sentinel" class="conv-sentinel" aria-hidden="true"></div>
+    </div>
+
+    <!-- In the rail there is no list; this filler pushes the foot to the bottom. -->
+    <div class="rail-fill" v-show="railMode" aria-hidden="true"></div>
+
+    <!-- FOOT: Help (above) then the account avatar (bottom) -->
+    <div class="sidebar-foot">
+      <Menu placement="top" align="left" :items="helpItems" @select="onHelp">
+        <template #trigger="{ toggle, open }">
+          <button class="side-item" :class="{ open }" :title="t('rail.help')" @click="toggle">
+            <Icon name="help" /><span class="side-label">{{ t('sb.help') }}</span>
+          </button>
+        </template>
+      </Menu>
+      <Menu placement="top" align="left" :items="userItems" @select="onUser">
+        <template #trigger="{ toggle, open }">
+          <button class="user-chip" :class="{ open }" :title="t('rail.account')" @click="toggle">
+            <span class="avatar">{{ session.initials }}</span>
+            <span class="user-name side-label">{{ session.displayName || '-' }}</span>
+          </button>
+        </template>
+      </Menu>
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+/* =========================================================================
+   Sidebar - Orange brand, flat/sharp surfaces.
+   Light rail bg = var(--bg) (#fff), dark = var(--bg) (#0a0a0a).
+   Orange is used ONLY as the logo mark background and the active-item accent.
+   ========================================================================= */
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* --- Brand mark: the official Orange logo image (sharp square, no radius) --- */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* --- Head --------------------------------------------------------------- */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-5) var(--s-5) var(--s-6);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-heavy, 800);
+  letter-spacing: -0.015em;
+  color: var(--text);
+  text-decoration: none;
+}
+.brand-name {
+  font-family: var(--font-sans);
+}
+
+/* Collapse toggle (icon button) inside the expanded sidebar: round target that
+   fills on hover, so the click zone is visible before the click. */
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  border-radius: var(--r-pill);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--text); background: var(--surface-hover); }
+.icon-btn :deep(.ui-icon) { width: 18px; height: 18px; }
+
+/* Rail: the Orange logo image is the expand button - it answers the pointer with a
+   whisper of scale (the mark itself is never restyled). */
+.rail-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto;
+  transition: transform var(--dur) var(--ease);
+}
+.rail-logo:hover { transform: scale(1.06); }
+.rail-logo:active { transform: scale(0.98); }
+/* The expanded brand answers too - the whole lockup, logo and word together. */
+.brand { transition: opacity var(--dur) var(--ease); }
+.brand:hover { opacity: 0.78; }
+
+/* --- Primary nav -------------------------------------------------------- */
+.sidebar-primary { padding: 0 var(--s-3); display: flex; flex-direction: column; gap: 2px; }
+
+.side-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Same reserved 2px as .conv-item: the selected-state bar never changes a height. */
+  padding: 8px 12px 12px;
+  /* Interactive row: softly rounded (premium direction), structural surfaces around
+     it stay square. */
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  text-decoration: none;
+  width: 100%;
+  text-align: left;
+}
+/* Hover one step STRONGER than the resting active bg (--surface): the pointer
+   answer must be perceivable on a white canvas (guide: visible hover states). */
+.side-item:hover,
+.side-item.open { background: var(--surface-hover); }
+/* Active: the SAME grammar as a selected conversation (one language of selection
+   per column) - a stronger resting surface than hover, signed by the brand's
+   title-bar at 1/3 scale, drawn from the left once the fill has landed. */
+.side-item.active {
+  background: var(--surface-press);
+  font-weight: 700;
+}
+.side-item::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  bottom: 5px;
+  width: 18px;
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-in);
+}
+.side-item.active::after {
+  transform: scaleX(1);
+  transition: transform var(--dur) var(--ease-out) 60ms;
+}
+/* The ACTIVE item keeps its stronger resting fill on hover: --surface-hover sits
+   BELOW --surface-press in both themes, so answering the pointer with it would make
+   the selected row look weaker the moment it is pointed at. */
+.side-item.active:hover { background: var(--surface-press); }
+.side-item :deep(.ui-icon) {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: color var(--dur) var(--ease);
+}
+/* The glyph joins the hover: a row that lights up around a still-grey icon looks
+   half-awake. */
+.side-item:hover :deep(.ui-icon),
+.side-item.open :deep(.ui-icon) { color: var(--text-2); }
+.side-item.active :deep(.ui-icon) { color: var(--text); }
+.side-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+
+/* --- Conversations ------------------------------------------------------ */
+.sidebar-section { margin-top: var(--s-7); padding: 0 var(--s-5) var(--s-3); }
+.sidebar-section-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--s-3) var(--s-3);
+}
+/* A conversation IS a title, so the selected one is signed the way every title in
+   this product is signed: with the brand's title-bar, at 1/3 scale (18x2 against
+   the 52x4 of a page H1 and the 40x3 of the arrival screen). The bar is DRAWN, not
+   dropped in - it wipes open from the left once the row has filled, which is the
+   whole flourish. Replaces the inset orange rail, which read as a generic accent
+   pasted onto a row that said nothing by itself. */
+.conv-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  /* The bar's 2px live in the padding of EVERY row: selecting one never changes a
+     height, so the list cannot jump under the pointer. */
+  padding: 6px 12px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-in), color var(--dur-fast) var(--ease-in),
+    transform var(--dur-fast) var(--ease-in);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans);
+}
+.conv-item::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  bottom: 4px;
+  width: 18px;
+  height: 2px;
+  background: var(--orange);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-fast) var(--ease-in);
+}
+/* The hovered row nudges 2px into the reading direction - a transform, so nothing
+   re-measures and the truncated title never re-wraps mid-hover. No orange here:
+   exactly one bar exists in the column at any time. */
+.conv-item:hover { background: var(--surface-hover); color: var(--text); transform: translateX(2px); }
+/* --surface-press, not --surface: the resting selected row must read STRONGER than
+   a merely hovered one (--surface sits below --surface-hover in both themes, which
+   is what made the old state lean entirely on its orange rail). */
+.conv-item.active {
+  background: var(--surface-press);
+  color: var(--text);
+}
+/* The fill lands first, then the mark is drawn on top of it: those 60ms are the
+   whole difference between "selected" and "signed". */
+.conv-item.active::after {
+  transform: scaleX(1);
+  transition: transform var(--dur) var(--ease-out) 60ms;
+}
+/* The active row is already "here": it keeps its fill and stays put (a shifting
+   selected row reads as a mis-click). */
+.conv-item.active:hover { background: var(--surface-press); transform: none; }
+.conv-item:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+.conv-state {
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+.conv-state--error { color: var(--danger); }
+.conv-sentinel { height: 1px; }
+.rail-fill { flex: 1; }
+
+/* --- Foot --------------------------------------------------------------- */
+.sidebar-foot {
+  padding: var(--s-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-foot .ui-menu-wrap { display: block; }
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+  width: 100%;
+  text-align: left;
+}
+.user-chip:hover,
+.user-chip.open { background: var(--surface-hover); }
+.user-chip:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+/* Avatar: 32px circle, var(--surface-2) background, bold initial */
+.user-chip .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+  transition: background var(--dur) var(--ease);
+}
+.user-chip:hover .avatar,
+.user-chip.open .avatar { background: var(--surface-press); }
+.user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* =========================================================================
+   RAIL (collapsed): 56px icon-only column.
+   bg=var(--bg), right border, 14px top padding,
+   items centered, labels hidden.
+   ========================================================================= */
+/* Foot menus are 220px wide and NOT teleported; overflow must be visible so
+   the popover escapes the narrow rail column. */
+.sidebar.rail { overflow: visible; width: 56px; }
+
+/* HOVER FLYOUT: the full sidebar floating OVER the content while the pointer rests on
+   the rail (width bound inline to the stored sidebar width). It STAYS a grid item and
+   simply OVERFLOWS its rail track (never position:fixed - out of flow, the following
+   grid items would each shift one column left): the grid keeps its rail column, nothing
+   reflows, and the opaque --bg + elevation detach it from the page it covers.
+   Retracts on mouseleave; the logo click still pins it. */
+.sidebar.flyout {
+  position: relative; z-index: var(--z-menu);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: var(--elev-2);
+  animation: sidebar-flyout-in var(--dur) var(--ease-out) both;
+}
+@keyframes sidebar-flyout-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar.flyout { animation: none; } }
+.sidebar.rail .sidebar-head {
+  padding: 14px 0 14px;
+  justify-content: center;
+}
+.sidebar.rail .sidebar-primary { padding: 0 9px; gap: 4px; }
+.sidebar.rail .sidebar-foot { padding: 8px 9px; gap: 4px; }
+
+/* Labels hidden; items become 38px round icon targets (icon buttons take --r-pill). */
+.sidebar.rail .side-label { display: none; }
+.sidebar.rail .side-item {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  margin: 0 auto;
+  border-radius: var(--r-pill);
+}
+/* No room for the title-bar on a 38px round target: in the rail the ACTIVE state is
+   carried by the orange glyph below. */
+.sidebar.rail .side-item::after { display: none; }
+.sidebar.rail .side-item :deep(.ui-icon) { color: var(--text-3); }
+.sidebar.rail .side-item:hover :deep(.ui-icon) { color: var(--text); }
+.sidebar.rail .side-item.active :deep(.ui-icon) { color: var(--orange); }
+
+/* User chip: round icon target, avatar fills it */
+.sidebar.rail .user-chip {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  gap: 0;
+  margin: 0 auto;
+  border-radius: var(--r-pill);
+}
+.sidebar.rail .user-chip .avatar {
+  width: 32px;
+  height: 32px;
+}
+.sidebar.rail .user-name { display: none; }
+
+/* No focus ring shift in rail */
+.sidebar.rail .side-item:focus-visible,
+.sidebar.rail .user-chip:focus-visible {
+  outline-offset: 0;
+}
+
+/* Reduced-motion: keep the colour answers, drop every position/scale change. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .side-item,
+  .conv-item,
+  .user-chip,
+  .brand,
+  .rail-logo,
+  .icon-btn { transition: none; }
+  /* The title-bar still marks the row, it just stops being drawn. */
+  .conv-item::after,
+  .side-item::after { transition: none; }
+  .conv-item:hover { transform: none; }
+  .rail-logo:hover,
+  .rail-logo:active { transform: none; }
+}
+</style>

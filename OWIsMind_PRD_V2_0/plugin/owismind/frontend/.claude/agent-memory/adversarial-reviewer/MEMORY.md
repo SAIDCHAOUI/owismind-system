@@ -1,0 +1,6 @@
+- [Persona lives in 3 copies](persona-three-copies-notebook-drift.md) - Notebooks/01_push_config_hub.py holds an UNGUARDED third copy; a persona edit reverts at deploy
+- [Parallel workstreams, red tests](parallel-workstream-red-tests.md) - one dirty tree, several agents; re-check git status + attribute failures by path
+- [Boot race on exchanges.length](boot-race-exchanges-length.md) - /agents vs /conversation start together; exchanges=0 != empty conversation. Replay watchers with node_modules/vue
+- [Automating an action breaks its analytics](automating-an-action-breaks-its-analytics.md) - intent-named track() events change meaning silently; audit every call site
+- [A FLIP that animates width/height lies](flip-with-animated-size-lies.md) - invert from the ANCHORED edges, not top/left; + the rAF harness probe that proves first-frame jumps
+- Older notes (12 entries) live in `/Users/saidchaoui/projects/owismind/.claude/agent-memory/adversarial-reviewer/` - read that dir too at the start of a run

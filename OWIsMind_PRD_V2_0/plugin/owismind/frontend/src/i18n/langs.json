@@ -1,0 +1,16 @@
+[
+  {
+    "id": "fr",
+    "label": "Français",
+    "short": "FR",
+    "flag": "🇫🇷",
+    "htmlLang": "fr"
+  },
+  {
+    "id": "en",
+    "label": "English",
+    "short": "EN",
+    "flag": "🇬🇧",
+    "htmlLang": "en"
+  }
+]

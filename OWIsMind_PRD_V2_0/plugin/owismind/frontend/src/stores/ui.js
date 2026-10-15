@@ -1,0 +1,209 @@
+// UI store - the SINGLE source of truth for user preferences (theme, language,
+// sidebar state, history window). Both the
+// header (MainTop) and the Settings page read/write this store, so a change in one
+// place is instantly reflected in the other. Every preference is persisted to
+// localStorage with ONE key (no competing persistence systems): the language is
+// applied + persisted through the i18n module (setLocale), and this store keeps a
+// reactive mirror of it so the rest of the app has a uniform preferences API.
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { setLocale, currentLocale } from '../i18n'
+import { clampContextMessages, CONTEXT_MESSAGES_DEFAULT } from './prefs.js'
+import { track } from '../services/track.js'
+
+const THEME_KEY = 'owismind.theme'
+const COLLAPSE_KEY = 'owismind.sidebarCollapsed'
+const SIDEBAR_W_KEY = 'owi.sidebarW' // maquette key
+const EVIDENCE_W_KEY = 'owi.evidenceW'
+const SOURCES_W_KEY = 'owi.sourcesW'
+const CTXMSG_KEY = 'owismind.contextMessages'
+const MODELMODE_KEY = 'owismind.modelMode'
+
+// Model mode the chat sends with each turn. One model per mode (no escalation):
+// smart = Gemini 3.1 Flash-Lite (the cheap, fast DEFAULT), pro = Gemini 3.5 Flash,
+// claude = Claude Sonnet. The strong model is opt-in. The backend also defaults to smart.
+export const MODEL_MODES = ['smart', 'pro', 'claude']
+const MODELMODE_DEFAULT = 'smart'
+
+// Sidebar width clamp (maquette default 260; keep a sane drag range).
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 420
+const SIDEBAR_DEFAULT = 260
+const EVIDENCE_DEFAULT = 480
+const EVIDENCE_MIN = 360
+// Source Data dock: freely resizable (user ask 2026-08-13). The clamp guarantees a
+// usable chat column at every drag position; the default is the former "ambient
+// third" on a common laptop width.
+const SOURCES_DEFAULT = 430
+const SOURCES_MIN = 340
+
+function readNum(key, fallback) {
+  try {
+    const v = parseInt(localStorage.getItem(key), 10)
+    return Number.isFinite(v) ? v : fallback
+  } catch (e) {
+    return fallback
+  }
+}
+function readTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY)
+    if (v === 'light' || v === 'dark') return v
+  } catch (e) {
+    /* ignore */
+  }
+  return 'light' // faithful to the validated maquette default
+}
+
+export const useUiStore = defineStore('ui', () => {
+  const theme = ref(readTheme())
+  const sidebarCollapsed = ref((() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === '1'
+    } catch (e) {
+      return false
+    }
+  })())
+  const sidebarW = ref(clampSidebar(readNum(SIDEBAR_W_KEY, SIDEBAR_DEFAULT)))
+  // Width of the Evidence Studio panel (the RIGHTMOST column when open).
+  // Clamped on read too: a stale persisted width (e.g. saved on a wider
+  // screen) must not brick the evidence layout on a smaller one.
+  const evidenceW = ref(clampEvidence(readNum(EVIDENCE_W_KEY, EVIDENCE_DEFAULT)))
+  // Width of the Source Data dock (rightmost column when open, freely resizable).
+  const sourcesW = ref(clampSources(readNum(SOURCES_W_KEY, SOURCES_DEFAULT)))
+  // Language mirrors the active i18n locale (already detected from localStorage at
+  // i18n setup). setLang below keeps the two in sync - this store never persists the
+  // language itself (setLocale owns the 'owismind.lang' key) to avoid a second system.
+  const lang = ref(currentLocale())
+  // Agent-context window (count of most-recent MESSAGES sent to the agent), clamped
+  // to [10, 50]. New localStorage key (CTXMSG_KEY); the previous conversation-count
+  // key is orphaned and harmless (a fresh default is used on first read).
+  const contextMessages = ref(
+    clampContextMessages(readNum(CTXMSG_KEY, CONTEXT_MESSAGES_DEFAULT)),
+  )
+  // Model mode (smart / pro / claude) for the NEXT chat turn. EPHEMERAL by design: it
+  // always boots to smart and is NEVER persisted. Picking pro/claude applies to the next
+  // sent question only; the chat store calls resetModelMode() right after each dispatch,
+  // so every new question starts from the recommended default again. Purge any value the
+  // old persisted behavior may have left behind (one-time cleanup, harmless if absent).
+  try {
+    localStorage.removeItem(MODELMODE_KEY)
+  } catch (e) {
+    /* ignore */
+  }
+  const modelMode = ref(MODELMODE_DEFAULT)
+
+  function clampSidebar(px) {
+    return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px))
+  }
+  function clampEvidence(px) {
+    // Never let the evidence panel swallow the conversation: keep at least
+    // ~520px for sidebar + chat so the thread (and the drag handle itself)
+    // always stays usable.
+    const max = Math.max(EVIDENCE_MIN, (window.innerWidth || 1280) - 520)
+    return Math.min(max, Math.max(EVIDENCE_MIN, px))
+  }
+  function clampSources(px) {
+    // Same guarantee for the Source Data dock: whatever the drag position, the
+    // conversation column (rail + prompt) keeps a usable minimum width.
+    const max = Math.max(SOURCES_MIN, (window.innerWidth || 1280) - 560)
+    return Math.min(max, Math.max(SOURCES_MIN, px))
+  }
+  function persist(key, val) {
+    try {
+      localStorage.setItem(key, String(val))
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  function applyTheme(t) {
+    document.body.dataset.theme = t
+  }
+
+  // Apply the persisted theme immediately (idempotent with main.js pre-mount set).
+  applyTheme(theme.value)
+
+  function setTheme(t) {
+    if (t !== 'light' && t !== 'dark') return
+    theme.value = t
+    persist(THEME_KEY, t)
+    applyTheme(t)
+  }
+  function toggleTheme() {
+    const next = theme.value === 'light' ? 'dark' : 'light'
+    track('theme_changed', { to: next })
+    setTheme(next)
+  }
+  // Language: setLocale validates the id, applies it to vue-i18n (so the whole UI
+  // re-renders), persists it ('owismind.lang') and sets <html lang>. We then mirror the
+  // resolved locale here as the reactive source of truth read by the header + Settings.
+  function setLang(id) {
+    setLocale(id)
+    lang.value = currentLocale()
+  }
+  function setContextMessages(value) {
+    const n = clampContextMessages(value)
+    contextMessages.value = n
+    persist(CTXMSG_KEY, n)
+  }
+  function setModelMode(m) {
+    if (!MODEL_MODES.includes(m)) return
+    track('mode_changed', { from: modelMode.value, to: m })
+    modelMode.value = m
+  }
+  // Ephemeral reset back to the default (smart) after a turn is dispatched. NOT a user
+  // action: no mode_changed event, nothing persisted - it simply returns the picker to the
+  // recommended default so the mode never carries over to the following question.
+  function resetModelMode() {
+    modelMode.value = MODELMODE_DEFAULT
+  }
+  // `persistChoice: false` = an AUTOMATIC collapse (e.g. Evidence opening):
+  // it must never overwrite the USER's stored preference - only an explicit
+  // toggle decides what the next session starts with.
+  function setSidebarCollapsed(v, persistChoice = true) {
+    sidebarCollapsed.value = !!v
+    if (persistChoice) {
+      persist(COLLAPSE_KEY, v ? '1' : '0')
+      // Track only EXPLICIT toggles (persistChoice): an automatic collapse (e.g. Evidence
+      // opening, persistChoice:false) is not a user intent and would just add noise.
+      track('sidebar_toggled', { collapsed: !!v })
+    }
+  }
+  function toggleSidebar() {
+    setSidebarCollapsed(!sidebarCollapsed.value)
+  }
+  function setSidebarWidth(px) {
+    sidebarW.value = clampSidebar(px)
+    persist(SIDEBAR_W_KEY, sidebarW.value)
+  }
+  function setEvidenceWidth(px) {
+    evidenceW.value = clampEvidence(px)
+    persist(EVIDENCE_W_KEY, evidenceW.value)
+  }
+  function setSourcesWidth(px) {
+    sourcesW.value = clampSources(px)
+    persist(SOURCES_W_KEY, sourcesW.value)
+  }
+
+  return {
+    theme,
+    lang,
+    contextMessages,
+    modelMode,
+    sidebarCollapsed,
+    sidebarW,
+    evidenceW,
+    sourcesW,
+    setTheme,
+    toggleTheme,
+    setLang,
+    setContextMessages,
+    setModelMode,
+    resetModelMode,
+    setSidebarCollapsed,
+    toggleSidebar,
+    setSidebarWidth,
+    setEvidenceWidth,
+    setSourcesWidth,
+  }
+})

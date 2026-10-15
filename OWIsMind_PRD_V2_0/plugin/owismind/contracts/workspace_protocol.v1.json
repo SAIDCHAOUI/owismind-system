@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owismind/workspace_protocol/v1",
+  "title": "OWIsMind workspace event protocol v1",
+  "description": "Shared contract between the orchestrator Code Agent (eventKind WORKSPACE), the Flask backend (owismind.workspace) and the Vue frontend (composables/workspaceModel.js). Backend and frontend both read this file (parity tests). Additive changes only; a breaking change is a new file v2.",
+  "version": 1,
+  "caps": {
+    "max_plan_steps": 10,
+    "max_notes": 30,
+    "max_widgets": 12,
+    "max_provenance": 24,
+    "max_workspace_events_per_run": 80,
+    "max_workspace_json_chars": 200000,
+    "mission_chars": 240,
+    "step_label_chars": 140,
+    "note_title_chars": 140,
+    "note_text_chars": 1200,
+    "widget_title_chars": 200,
+    "widget_comment_chars": 280,
+    "widget_text_chars": 4000,
+    "task_chars": 800,
+    "max_y_series": 8
+  },
+  "enums": {
+    "ops": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set"],
+    "plan_origins": ["model", "auto"],
+    "step_statuses": ["todo", "running", "done", "error"],
+    "note_kinds": ["plan", "find", "check", "note", "done"],
+    "widget_kinds": ["chart", "table", "kpi", "text"],
+    "chart_types": ["bar", "line", "pie", "donut"],
+    "chart_styles": ["grouped", "stacked", "horizontal", "area", "smooth", "stepped", "donut"],
+    "bindings": ["explicit", "orphan"],
+    "run_statuses": ["running", "done", "stopped", "error"],
+    "tools": ["semantic-model-query", "attribute_lookup", "correlate"]
+  },
+  "patterns": {
+    "sql_id": "^s[0-9]+(q|lk|qc)[0-9]+$",
+    "slug": "^[a-z0-9_-]{1,32}$"
+  },
+  "$defs": {
+    "slug": {"type": "string", "pattern": "^[a-z0-9_-]{1,32}$"},
+    "sqlId": {"type": "string", "pattern": "^s[0-9]+(q|lk|qc)[0-9]+$"},
+    "envelope": {
+      "type": "object",
+      "required": ["v", "op", "seq"],
+      "properties": {
+        "v": {"const": 1},
+        "op": {"enum": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set"]},
+        "seq": {"type": "integer", "minimum": 1},
+        "ts": {"type": "number", "minimum": 0, "description": "Seconds since run start; stamped by the backend when absent."}
+      }
+    },
+    "planStep": {
+      "type": "object",
+      "required": ["id", "label"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "label": {"type": "string", "maxLength": 140},
+        "total": {"type": "integer", "minimum": 1},
+        "unit": {"type": "string", "maxLength": 40}
+      }
+    },
+    "chartSpec": {
+      "type": "object",
+      "required": ["type", "x", "y"],
+      "properties": {
+        "type": {"enum": ["bar", "line", "pie", "donut"]},
+        "x": {"type": "string", "maxLength": 128},
+        "y": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string", "maxLength": 128}},
+        "style": {"enum": ["grouped", "stacked", "horizontal", "area", "smooth", "stepped", "donut"]},
+        "x_label": {"type": "string", "maxLength": 80},
+        "y_label": {"type": "string", "maxLength": 80},
+        "unit": {"type": "string", "maxLength": 16}
+      }
+    },
+    "kpiSpec": {
+      "type": "object",
+      "required": ["label", "value"],
+      "properties": {
+        "label": {"type": "string", "maxLength": 120},
+        "value": {"type": "string", "maxLength": 128, "description": "Exact column name of the bound result."},
+        "delta": {"type": "string", "maxLength": 128},
+        "delta_pct": {"type": "string", "maxLength": 128},
+        "unit": {"type": "string", "maxLength": 16}
+      }
+    }
+  },
+  "events": {
+    "plan.set": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["mission", "steps", "origin"],
+      "properties": {
+        "mission": {"type": "string", "maxLength": 240},
+        "origin": {"enum": ["model", "auto"]},
+        "steps": {"type": "array", "minItems": 1, "maxItems": 10, "items": {"$ref": "#/$defs/planStep"}}
+      }
+    },
+    "plan.step": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["step_id"],
+      "properties": {
+        "step_id": {"$ref": "#/$defs/slug"},
+        "status": {"enum": ["todo", "running", "done", "error"]},
+        "done": {"type": "integer", "minimum": 0},
+        "add_step": {"$ref": "#/$defs/planStep"}
+      }
+    },
+    "note.add": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["id", "kind", "title"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "step_id": {"$ref": "#/$defs/slug"},
+        "kind": {"enum": ["plan", "find", "check", "note", "done"]},
+        "title": {"type": "string", "maxLength": 140},
+        "text": {"type": "string", "maxLength": 1200},
+        "sql_id": {"$ref": "#/$defs/sqlId"}
+      }
+    },
+    "widget.add": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["id", "kind", "title"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "step_id": {"$ref": "#/$defs/slug"},
+        "kind": {"enum": ["chart", "table", "kpi", "text"]},
+        "title": {"type": "string", "maxLength": 200},
+        "comment": {"type": "string", "maxLength": 280},
+        "sql_id": {"$ref": "#/$defs/sqlId", "description": "REQUIRED when kind is chart, table or kpi. Never a fallback to the latest result."},
+        "chart": {"$ref": "#/$defs/chartSpec"},
+        "kpi": {"$ref": "#/$defs/kpiSpec"},
+        "text": {"type": "string", "maxLength": 4000, "description": "REQUIRED when kind is text. Markdown, rendered through the sanitized markdown pipeline."},
+        "binding": {"enum": ["explicit", "orphan"], "description": "Set by the backend at persistence: orphan when sql_id matches no captured SQL of the run."}
+      }
+    },
+    "prov.set": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["sql_id", "agent_key", "tool", "success"],
+      "properties": {
+        "sql_id": {"$ref": "#/$defs/sqlId"},
+        "agent_key": {"type": "string", "maxLength": 64},
+        "tool": {"enum": ["semantic-model-query", "attribute_lookup", "correlate"]},
+        "task": {"type": "string", "maxLength": 800},
+        "step_id": {"$ref": "#/$defs/slug"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "row_count": {"type": "integer", "minimum": 0},
+        "success": {"type": "boolean"}
+      }
+    }
+  },
+  "reduced_state": {
+    "description": "Shape stored in webapp_workspaces_v1.workspace and served by GET /workspace. Rows are never stored here; they are joined by sql_id at read time.",
+    "type": "object",
+    "required": ["v", "status", "plan", "notes", "widgets", "provenance"],
+    "properties": {
+      "v": {"const": 1},
+      "status": {"enum": ["running", "done", "stopped", "error"]},
+      "exchange_id": {"type": "string"},
+      "plan": {
+        "type": ["object", "null"],
+        "properties": {
+          "version": {"type": "integer", "minimum": 1},
+          "origin": {"enum": ["model", "auto"]},
+          "mission": {"type": "string"},
+          "steps": {"type": "array", "items": {
+            "type": "object",
+            "required": ["id", "label", "status"],
+            "properties": {
+              "id": {"type": "string"}, "label": {"type": "string"},
+              "status": {"enum": ["todo", "running", "done", "error"]},
+              "done": {"type": "integer"}, "total": {"type": "integer"}, "unit": {"type": "string"}
+            }
+          }}
+        }
+      },
+      "notes": {"type": "array", "items": {"type": "object"}},
+      "widgets": {"type": "array", "items": {"type": "object"}},
+      "provenance": {"type": "object", "additionalProperties": {"type": "object"}},
+      "summary": {"type": "object"}
+    }
+  }
+}

@@ -1,0 +1,716 @@
+{
+  "description": "Multi-facet run: 2 sub-agents (revenue, tickets), 3 captured SQL (s1q1, s1q2, s2q1), a 3-step plan, 4 notes, 5 widgets (bar chart, kpi, table, donut chart, text). raw_chunks = the orchestrator stream chunk payloads (chunk.data); expected_events = the normalized workspace events streaming.py yields, in order (the frontend reducer input, live and restored); reduced/<name>.json = {live: state after expected_events, final: state persisted at run end (finalize with terminal_status, exchange_id, known_sql_ids)}.",
+  "name": "workspace_run_multi_facet",
+  "exchange_id": "ex-fixture-multi",
+  "terminal_status": "done",
+  "known_sql_ids": [
+    "s1q1",
+    "s1q2",
+    "s2q1"
+  ],
+  "raw_chunks": [
+    {
+      "type": "event",
+      "eventKind": "START",
+      "eventData": {}
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.set",
+        "seq": 1,
+        "ts": 0.8,
+        "mission": "Analyser le chiffre d'affaires 2025 et les tickets ouverts par region",
+        "origin": "model",
+        "steps": [
+          {
+            "id": "p1",
+            "label": "Chiffre d'affaires 2025 par region",
+            "total": 3,
+            "unit": "regions"
+          },
+          {
+            "id": "p2",
+            "label": "Tickets ouverts par region"
+          },
+          {
+            "id": "p3",
+            "label": "Synthese et croisement"
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 2,
+        "ts": 1.0,
+        "step_id": "p1",
+        "status": "running"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "CALLING_AGENT",
+      "eventData": {
+        "agentKey": "revenue",
+        "label": "Expert chiffre d'affaires"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "AGENT_DONE",
+      "eventData": {
+        "agentKey": "revenue",
+        "generatedSql": [
+          {
+            "sql": "SELECT region, SUM(revenue) AS revenue FROM sales WHERE year = 2025 GROUP BY region ORDER BY revenue DESC",
+            "success": true,
+            "row_count": 3,
+            "sql_id": "s1q1",
+            "step_index": 1,
+            "agent_key": "revenue",
+            "result": {
+              "columns": [
+                "region",
+                "revenue"
+              ],
+              "rows": [
+                [
+                  "Nord",
+                  1200
+                ],
+                [
+                  "Sud",
+                  950
+                ],
+                [
+                  "Ouest",
+                  700
+                ]
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "sql": "SELECT SUM(revenue) AS total_revenue FROM sales WHERE year = 2025",
+            "success": true,
+            "row_count": 1,
+            "sql_id": "s1q2",
+            "step_index": 1,
+            "agent_key": "revenue",
+            "result": {
+              "columns": [
+                "total_revenue"
+              ],
+              "rows": [
+                [
+                  2850
+                ]
+              ],
+              "truncated": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "prov.set",
+        "seq": 3,
+        "ts": 8.2,
+        "sql_id": "s1q1",
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 7900,
+        "row_count": 3,
+        "success": true
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "prov.set",
+        "seq": 4,
+        "ts": 8.2,
+        "sql_id": "s1q2",
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 1200,
+        "row_count": 1,
+        "success": true
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 5,
+        "ts": 8.3,
+        "step_id": "p1",
+        "status": "done",
+        "done": 3
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "note.add",
+        "seq": 6,
+        "ts": 8.9,
+        "id": "n1",
+        "step_id": "p1",
+        "kind": "find",
+        "title": "Le Nord mene en 2025",
+        "text": "Nord 1 200 kEUR, devant Sud (950) et Ouest (700).",
+        "sql_id": "s1q1"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 7,
+        "ts": 9.8,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "Chiffre d'affaires 2025 par region",
+        "comment": "Le Nord represente 42 % du total.",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "region",
+          "y": [
+            "revenue"
+          ],
+          "x_label": "Region",
+          "y_label": "Chiffre d'affaires",
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 8,
+        "ts": 10.1,
+        "id": "w2",
+        "step_id": "p1",
+        "kind": "kpi",
+        "title": "Chiffre d'affaires total 2025",
+        "sql_id": "s1q2",
+        "kpi": {
+          "label": "CA total 2025",
+          "value": "total_revenue",
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 9,
+        "ts": 10.4,
+        "step_id": "p2",
+        "status": "running"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "CALLING_AGENT",
+      "eventData": {
+        "agentKey": "tickets",
+        "label": "Expert tickets"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "AGENT_DONE",
+      "eventData": {
+        "agentKey": "tickets",
+        "generatedSql": [
+          {
+            "sql": "SELECT region, COUNT(DISTINCT id) AS open_tickets FROM tickets WHERE status = 'open' GROUP BY region",
+            "success": true,
+            "row_count": 3,
+            "sql_id": "s2q1",
+            "step_index": 2,
+            "agent_key": "tickets",
+            "result": {
+              "columns": [
+                "region",
+                "open_tickets"
+              ],
+              "rows": [
+                [
+                  "Nord",
+                  41
+                ],
+                [
+                  "Sud",
+                  30
+                ],
+                [
+                  "Ouest",
+                  16
+                ]
+              ],
+              "truncated": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "prov.set",
+        "seq": 10,
+        "ts": 16.5,
+        "sql_id": "s2q1",
+        "agent_key": "tickets",
+        "tool": "semantic-model-query",
+        "task": "Nombre de tickets ouverts par region",
+        "step_id": "p2",
+        "duration_ms": 6100,
+        "row_count": 3,
+        "success": true
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "note.add",
+        "seq": 11,
+        "ts": 16.9,
+        "id": "n2",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Tickets ouverts coherents",
+        "text": "Total 87 tickets, 3 regions.",
+        "sql_id": "s2q1"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 12,
+        "ts": 17.2,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Tickets ouverts par region",
+        "comment": "Liste complete.",
+        "sql_id": "s2q1"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 13,
+        "ts": 17.5,
+        "id": "w4",
+        "step_id": "p2",
+        "kind": "chart",
+        "title": "Repartition des tickets ouverts",
+        "sql_id": "s2q1",
+        "chart": {
+          "type": "donut",
+          "x": "region",
+          "y": [
+            "open_tickets"
+          ]
+        }
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 14,
+        "ts": 17.6,
+        "step_id": "p2",
+        "status": "done"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 15,
+        "ts": 17.7,
+        "step_id": "p3",
+        "status": "running"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "note.add",
+        "seq": 16,
+        "ts": 18.4,
+        "id": "n3",
+        "step_id": "p3",
+        "kind": "note",
+        "title": "Croisement CA et tickets",
+        "text": "Le Nord a le plus de CA et le plus de tickets ouverts."
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 17,
+        "ts": 19.0,
+        "id": "w5",
+        "step_id": "p3",
+        "kind": "text",
+        "title": "Synthese",
+        "text": "**Nord** : premier en CA (1 200 kEUR) et en tickets ouverts (41)."
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "note.add",
+        "seq": 18,
+        "ts": 19.3,
+        "id": "n4",
+        "step_id": "p3",
+        "kind": "done",
+        "title": "Bilan pret",
+        "text": "Trois etapes terminees."
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 19,
+        "ts": 19.4,
+        "step_id": "p3",
+        "status": "done"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WRITING_ANSWER",
+      "eventData": {}
+    },
+    {
+      "type": "text",
+      "text": "Bilan : le Nord mene en chiffre d'affaires et en tickets ouverts."
+    }
+  ],
+  "expected_events": [
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.set",
+      "seq": 1,
+      "ts": 0.8,
+      "mission": "Analyser le chiffre d'affaires 2025 et les tickets ouverts par region",
+      "origin": "model",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "Chiffre d'affaires 2025 par region",
+          "total": 3,
+          "unit": "regions"
+        },
+        {
+          "id": "p2",
+          "label": "Tickets ouverts par region"
+        },
+        {
+          "id": "p3",
+          "label": "Synthese et croisement"
+        }
+      ]
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 2,
+      "ts": 1.0,
+      "step_id": "p1",
+      "status": "running"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "prov.set",
+      "seq": 3,
+      "ts": 8.2,
+      "sql_id": "s1q1",
+      "agent_key": "revenue",
+      "tool": "semantic-model-query",
+      "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+      "step_id": "p1",
+      "duration_ms": 7900,
+      "row_count": 3,
+      "success": true
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "prov.set",
+      "seq": 4,
+      "ts": 8.2,
+      "sql_id": "s1q2",
+      "agent_key": "revenue",
+      "tool": "semantic-model-query",
+      "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+      "step_id": "p1",
+      "duration_ms": 1200,
+      "row_count": 1,
+      "success": true
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 5,
+      "ts": 8.3,
+      "step_id": "p1",
+      "status": "done",
+      "done": 3
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "note.add",
+      "seq": 6,
+      "ts": 8.9,
+      "id": "n1",
+      "step_id": "p1",
+      "kind": "find",
+      "title": "Le Nord mene en 2025",
+      "text": "Nord 1 200 kEUR, devant Sud (950) et Ouest (700).",
+      "sql_id": "s1q1"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 7,
+      "ts": 9.8,
+      "id": "w1",
+      "step_id": "p1",
+      "kind": "chart",
+      "title": "Chiffre d'affaires 2025 par region",
+      "comment": "Le Nord represente 42 % du total.",
+      "sql_id": "s1q1",
+      "chart": {
+        "type": "bar",
+        "x": "region",
+        "y": [
+          "revenue"
+        ],
+        "x_label": "Region",
+        "y_label": "Chiffre d'affaires",
+        "unit": "EUR"
+      }
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 8,
+      "ts": 10.1,
+      "id": "w2",
+      "step_id": "p1",
+      "kind": "kpi",
+      "title": "Chiffre d'affaires total 2025",
+      "sql_id": "s1q2",
+      "kpi": {
+        "label": "CA total 2025",
+        "value": "total_revenue",
+        "unit": "EUR"
+      }
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 9,
+      "ts": 10.4,
+      "step_id": "p2",
+      "status": "running"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "prov.set",
+      "seq": 10,
+      "ts": 16.5,
+      "sql_id": "s2q1",
+      "agent_key": "tickets",
+      "tool": "semantic-model-query",
+      "task": "Nombre de tickets ouverts par region",
+      "step_id": "p2",
+      "duration_ms": 6100,
+      "row_count": 3,
+      "success": true
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "note.add",
+      "seq": 11,
+      "ts": 16.9,
+      "id": "n2",
+      "step_id": "p2",
+      "kind": "check",
+      "title": "Tickets ouverts coherents",
+      "text": "Total 87 tickets, 3 regions.",
+      "sql_id": "s2q1"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 12,
+      "ts": 17.2,
+      "id": "w3",
+      "step_id": "p2",
+      "kind": "table",
+      "title": "Tickets ouverts par region",
+      "comment": "Liste complete.",
+      "sql_id": "s2q1"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 13,
+      "ts": 17.5,
+      "id": "w4",
+      "step_id": "p2",
+      "kind": "chart",
+      "title": "Repartition des tickets ouverts",
+      "sql_id": "s2q1",
+      "chart": {
+        "type": "donut",
+        "x": "region",
+        "y": [
+          "open_tickets"
+        ]
+      }
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 14,
+      "ts": 17.6,
+      "step_id": "p2",
+      "status": "done"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 15,
+      "ts": 17.7,
+      "step_id": "p3",
+      "status": "running"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "note.add",
+      "seq": 16,
+      "ts": 18.4,
+      "id": "n3",
+      "step_id": "p3",
+      "kind": "note",
+      "title": "Croisement CA et tickets",
+      "text": "Le Nord a le plus de CA et le plus de tickets ouverts."
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 17,
+      "ts": 19.0,
+      "id": "w5",
+      "step_id": "p3",
+      "kind": "text",
+      "title": "Synthese",
+      "text": "**Nord** : premier en CA (1 200 kEUR) et en tickets ouverts (41)."
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "note.add",
+      "seq": 18,
+      "ts": 19.3,
+      "id": "n4",
+      "step_id": "p3",
+      "kind": "done",
+      "title": "Bilan pret",
+      "text": "Trois etapes terminees."
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 19,
+      "ts": 19.4,
+      "step_id": "p3",
+      "status": "done"
+    }
+  ],
+  "expected_reduced": "reduced/workspace_run_multi_facet.json"
+}

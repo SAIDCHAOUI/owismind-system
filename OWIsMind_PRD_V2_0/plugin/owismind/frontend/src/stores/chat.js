@@ -1,0 +1,553 @@
+// Chat store - the active conversation as a TREE of exchanges, sending state, and the
+// prompt draft. Wraps the validated transport (useChatStream) and the session store
+// (selected agent, history).
+//
+// A conversation is a tree: each exchange stores its parent (parentId). The store keeps a
+// flat `exchanges` list and derives the ACTIVE PATH (`turns`) via the pure tree walk
+// (conversationTree.js): at each node it follows the override child if one is pinned, else
+// the LATEST child by createdAt. Editing a prompt or regenerating creates a NEW SIBLING
+// exchange (nothing is deleted) - the new sibling is the latest child, so it becomes the
+// active branch automatically. Turn-level version arrows navigate siblings and re-walk the
+// path below them (handled by setTurnVersion + buildActivePath).
+//
+// Shapes:
+//   exchange: reactive({ id, parentId, userText, version, createdAt })
+//             id is null while the run is live, reconciled to the backend exchange id on
+//             /chat/start (onExchangeId). createdAt is a monotonic client stamp for live
+//             ordering (history rows carry the server created_at).
+//   version:  reactive(createAnswerState()) - the ordered display timeline + SQL/usage +
+//             persisted feedback (see composables/timelineModel.js).
+//   turn:     { exchange, siblings, versionIdx } - one row of the active path (turns).
+import { defineStore } from 'pinia'
+import { ref, reactive, computed } from 'vue'
+import { useSessionStore } from './session.js'
+import { useUiStore } from './ui.js'
+import { runChatStream } from '../composables/useChatStream.js'
+import { createAnswerState, usageFromRow, modeFromRow, screenCtxFromRow } from '../composables/timelineModel.js'
+import { fetchConversation, stopChat } from '../services/backend.js'
+import { buildActivePath } from './conversationTree.js'
+import { useEvidenceStore } from './evidence.js'
+import { useSourcesStore } from './sources.js'
+import { useScreenContextStore } from './screenContext.js'
+import { useWorkspaceStore } from './workspace.js'
+import { lastEvidenceExchangeId } from '../composables/evidenceModel.js'
+import { track } from '../services/track.js'
+
+// One session id per conversation (the backend stores it; history is scoped by user).
+function newSessionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID()
+  }
+  return 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+}
+
+// A reactive answer-version: the timeline reducer mutates it in place during a run.
+function newVersion(over) {
+  return reactive(createAnswerState(over))
+}
+
+export const useChatStore = defineStore('chat', () => {
+  const session = useSessionStore()
+  const ui = useUiStore()
+  const evidence = useEvidenceStore()
+  const sources = useSourcesStore()
+  const workspace = useWorkspaceStore()
+
+  const activeSessionId = ref(newSessionId())
+  const exchanges = ref([]) // [reactive({ id, parentId, userText, version, createdAt })]
+  const overrides = ref({}) // parentKey -> chosen child exchange id (version navigation)
+  const draft = ref('')
+  const sending = ref(false)
+  const errorMsg = ref('')
+  // Lazy thread load (a conversation's messages are fetched only when it is opened).
+  const threadLoading = ref(false)
+  const threadError = ref('')
+
+  // The active path through the tree (latest branch by default; overrides win per node).
+  const turns = computed(() => buildActivePath(exchanges.value, overrides.value))
+
+  // A monotonic client clock so freshly created exchanges sort AFTER prior ones (and after
+  // history rows, whose createdAt is a server timestamp) - keeps the newest branch active.
+  let _clock = 0
+  function nextStamp() {
+    return new Date().toISOString() + '#' + (++_clock)
+  }
+
+  // Cancellation token for the in-flight poll loop. Switching conversation or starting a
+  // newer run cancels the previous loop so it stops polling a run nobody is watching.
+  let activeToken = null
+  // The in-flight run's server id, for an explicit USER stop (POST /chat/stop).
+  // `stopPending` covers the race where the user hits stop before /chat/start has
+  // returned the run id (onRunId then fires the stop as soon as the id arrives).
+  let activeRunId = null
+  let stopPending = false
+  // The in-flight answer version, so an explicit stop can finalize the partial on
+  // screen IMMEDIATELY (optimistic) instead of waiting ~one LLM round-trip for the
+  // backend's terminal `stopped` event.
+  let activeVersion = null
+  function cancelActive() {
+    if (activeToken) activeToken.cancelled = true
+    activeToken = null
+    activeRunId = null
+    activeVersion = null
+    stopPending = false
+  }
+
+  const hasMessages = computed(() => turns.value.length > 0)
+  // threadLoading/threadError matter here: after a failed or in-flight conversation
+  // switch, `exchanges` still holds the PREVIOUS thread - a send would persist under
+  // the NEW session id with a parent exchange from the OLD one (cross-conversation
+  // corruption). No sends until the thread on screen is the active session's.
+  const canSend = computed(
+    () =>
+      !sending.value &&
+      !threadLoading.value &&
+      !threadError.value &&
+      !session.needsConfig &&
+      // Monthly budget exhausted (enforcement on): sends are paused until the reset.
+      // The server-side gate stays authoritative; this just disables the UI proactively.
+      !session.budgetBlocked &&
+      // BEGIN impersonation (temporary) - an admin viewing as a user is read-only.
+      // The server also 403s write routes while impersonating; this is the proactive
+      // UI gate (disables the prompt). Removable: delete this one line.
+      !session.impersonating &&
+      // END impersonation (temporary)
+      session.hasAgents &&
+      !!session.selectedAgentKey,
+  )
+
+  // /conversation rows -> exchange list (one per row). Each row's stored answer becomes a
+  // done single-text-block version carrying its feedback (L031) and tree links. The live
+  // timeline is NOT persisted, so the answer is rebuilt as a single text block.
+  function rowToExchange(r) {
+    const version = newVersion({
+      timeline: r.assistant_text
+        ? [{ id: 'txt-0', seq: 0, kind: 'text', text: r.assistant_text, open: false }]
+        : [],
+      sql: Array.isArray(r.generated_sql) ? r.generated_sql : [],
+      // Persisted token/cost usage (null when none was stored) - so a reloaded
+      // conversation shows the same per-message usage line as the live run.
+      usage: usageFromRow(r),
+      // Persisted response mode ('smart'|'pro'|'claude', null for a non-supporting agent
+      // or a legacy row) - shown in the usage line, same path as usage.
+      mode: modeFromRow(r),
+      // Persisted on-screen SOURCE-DATA context shared with this message (parsed from the
+      // stored JSON string, null when none) - so a reloaded conversation shows the same
+      // full-transparency line under the user bubble as the live send. Same path as mode.
+      screenCtx: screenCtxFromRow(r),
+      status: 'done',
+      exchangeId: r.exchange_id || null,
+      feedbackRating: r.feedback_rating === 0 || r.feedback_rating === 1 ? r.feedback_rating : null,
+      feedbackReasons: Array.isArray(r.feedback_reasons) ? r.feedback_reasons : [],
+      feedbackComment: r.feedback_comment || '',
+    })
+    return reactive({
+      // Stable render key, fixed at load. Loaded rows have a unique exchange_id; the
+      // fallback covers the rare null (never used as the tree id, which stays exchange_id).
+      uid: r.exchange_id || nextStamp(),
+      id: r.exchange_id,
+      parentId: r.parent_exchange_id || null,
+      userText: r.user_text || '',
+      // The agent that produced this exchange (top-level column, distinct from the
+      // per-SQL-item agent_key used for fan-out attribution). Retained so the Evidence
+      // "Source data" tab can resolve the exchange's configured source datasets.
+      agentKey: r.agent_key || null,
+      // V2: the backend stored a workspace (plan / journal / dashboard) for this answer
+      // (/conversation `has_workspace`) - the "open the workspace" card is offered
+      // without fetching N documents.
+      hasWorkspace: !!r.has_workspace,
+      version,
+      createdAt: r.created_at || '',
+    })
+  }
+
+  function newConversation() {
+    cancelActive()
+    evidence.close()
+    workspace.close()
+    // The Source Data dock is NOT closed here: the arrival screen wants it open
+    // (AppLayout auto-docks it anyway), and closing would drop the fetched view
+    // just to refetch it one tick later. Agent-change follow-up (or a source-less
+    // default agent) is handled by SourcePanel's selectedAgentKey watch.
+    activeSessionId.value = newSessionId()
+    track('conversation_created', {}, { conversation_id: activeSessionId.value })
+    exchanges.value = []
+    overrides.value = {}
+    errorMsg.value = ''
+    threadLoading.value = false // clear any spinner left over from an interrupted openSession fetch
+    threadError.value = ''
+    // Phase C - last-used agent for a fresh conversation. Guarded so Phase B runs without
+    // Phase C (the session store doesn't define this method yet).
+    if (typeof session.useDefaultAgent === 'function') session.useDefaultAgent()
+  }
+
+  // Evidence continuity: entering a conversation re-opens its proof panel on the
+  // LAST sql-bearing exchange of the active branch. Same auto contract as the
+  // end-of-run reveal: opens only when /evidence/meta confirms the interactive
+  // view - never degraded, never an error surface. Fire-and-forget: a rapid
+  // switch is safe (openSession→evidence.close() bumps the store's seq, which
+  // invalidates an in-flight auto commit).
+  function _autoOpenEvidence(sessionId) {
+    if (activeSessionId.value !== sessionId) return
+    // V2: when the LAST answer of the branch stored a workspace, the right column
+    // restores that workspace (dashboard first) instead of the V1.3 proof panel.
+    const last = turns.value[turns.value.length - 1]
+    if (last && last.exchange.id && (last.exchange.hasWorkspace || workspace.hasContent(last.exchange.id))) {
+      const id = last.exchange.id
+      Promise.resolve(workspace.openForExchange(id, { auto: true }))
+        .then((shown) => {
+          if (!shown && activeSessionId.value === sessionId) _openEvidenceFallback(sessionId)
+        })
+        .catch(() => {})
+      return
+    }
+    _openEvidenceFallback(sessionId)
+  }
+  function _openEvidenceFallback(sessionId) {
+    if (activeSessionId.value !== sessionId) return
+    const evidenceId = lastEvidenceExchangeId(turns.value)
+    if (evidenceId) {
+      Promise.resolve(evidence.openForExchange(evidenceId, { auto: true })).catch(() => {})
+    }
+  }
+
+  // Route → store sync (ChatView's param watcher). Re-entering the conversation that
+  // is ALREADY active with its thread in memory (e.g. coming back from Settings, or
+  // the URL stamp of a started-as-new conversation) skips the refetch but re-runs
+  // the evidence continuity (the panel closes on route leave). The loading/error
+  // guards matter: after a FAILED or still-in-flight open, `exchanges` still holds
+  // the PREVIOUS conversation's rows - skipping there would show the wrong thread,
+  // so anything not cleanly in memory goes through a genuine openSession (which is
+  // also the retry path). Bonus over the old always-refetch: a live run now
+  // SURVIVES a Settings round-trip (no cancelActive on the way back).
+  function ensureSession(sessionId) {
+    if (
+      sessionId === activeSessionId.value &&
+      exchanges.value.length &&
+      !threadLoading.value &&
+      !threadError.value
+    ) {
+      // Not while a run is in flight: the end-of-run reveal owns the panel then -
+      // racing it could commit the PREVIOUS exchange's proof over the new one.
+      if (!sending.value) _autoOpenEvidence(sessionId)
+      return
+    }
+    return openSession(sessionId)
+  }
+
+  // Open an existing conversation: lazily fetch ITS rows (on click / deep-link) and rebuild
+  // the tree. A fetch failure surfaces via threadError (never throws).
+  //
+  // We deliberately DO NOT clear `exchanges` here: the current thread stays on screen
+  // (under a centered loading overlay, ChatView) during the fetch and is replaced only when
+  // the target conversation's rows arrive - no "new conversation" flash (mirror L031).
+  async function openSession(sessionId) {
+    cancelActive()
+    evidence.close()
+    workspace.close()
+    sources.closePanel()
+    activeSessionId.value = sessionId
+    track('conversation_opened', {}, { conversation_id: sessionId })
+    overrides.value = {}
+    errorMsg.value = ''
+    threadError.value = ''
+    threadLoading.value = true
+    try {
+      const data = await fetchConversation(sessionId)
+      if (activeSessionId.value !== sessionId) return // superseded by a newer open
+      exchanges.value = (data.rows || []).map(rowToExchange)
+      _autoOpenEvidence(sessionId)
+      // Phase C - adopt this conversation's agent only AFTER the agent list is loaded (it
+      // loads via init()/loadAgents on a separate, slower path: /me then /agents - 2 round
+      // trips - while /conversation is a single one that can win the cold-path race, leaving
+      // session.agents empty when adopt runs). ensureLoaded() is memoized + already in flight
+      // from App mount, so .then runs adopt on the next microtask (warm path still adopts).
+      // Re-guard the active session in case the user switched conversations meanwhile.
+      const rows = data.rows || []
+      const adopt = () => {
+        if (activeSessionId.value === sessionId && typeof session.adoptAgentFromExchanges === 'function') {
+          session.adoptAgentFromExchanges(rows)
+        }
+      }
+      if (typeof session.ensureLoaded === 'function') session.ensureLoaded().then(adopt)
+      else adopt()
+    } catch (e) {
+      if (activeSessionId.value !== sessionId) return
+      threadError.value = (e && e.message) || 'history_unavailable'
+    } finally {
+      if (activeSessionId.value === sessionId) threadLoading.value = false
+    }
+  }
+
+  // The response mode ACTUALLY sent this turn: the picker's value for an agent that
+  // supports modes, else null (the backend stores NULL for a non-supporting agent, so the
+  // stamp + analytics stay consistent with a later /conversation reload). ui.modelMode is
+  // always a valid mode. Read BEFORE the ephemeral reset in _runExchange.
+  function sentMode() {
+    return session.selectedAgentSupportsModes ? ui.modelMode : null
+  }
+
+  // Create a new exchange under `parentId`, run the agent into its version, and reconcile
+  // its real backend id (assigned by /chat/start). The new exchange is the latest child of
+  // its parent -> active by default (we also clear any override at that parent so the fresh
+  // branch stays selected). This is the single place an exchange is created + run.
+  async function _runExchange(userText, parentId) {
+    cancelActive()
+    // Capture the mode BEFORE the ephemeral reset below. `rawMode` is what we relay to the
+    // backend (which gates on the agent profile); `runMode` is what gets STAMPED on the
+    // version and reported to analytics (null for a non-supporting agent, matching the
+    // backend's stored NULL). Nothing past the reset may read ui.modelMode for this run.
+    const rawMode = ui.modelMode
+    const runMode = sentMode()
+    const version = newVersion({ mode: runMode })
+    // `uid` is the stable render key, assigned once and NEVER changed. `id` starts null and
+    // is reconciled to the backend exchange id (onExchangeId) - keying the v-for on `uid`
+    // (not `id`) avoids a mid-stream remount/flicker when that reconciliation happens.
+    const exch = reactive({ uid: nextStamp(), id: null, parentId: parentId || null, userText, agentKey: session.selectedAgentKey, version, createdAt: nextStamp() })
+    exchanges.value.push(exch)
+    // V2 workspace: the run's live entry (plan / journal / dashboard), fed from onEvent.
+    workspace.beginLive(exch.uid)
+    // Keep the freshly created branch active: drop any override pinned at this parent.
+    const parentKey = parentId || '__root__'
+    if (overrides.value[parentKey] != null) {
+      const next = { ...overrides.value }
+      delete next[parentKey]
+      overrides.value = next
+    }
+    // Ephemeral mode: the picker snaps back to smart the instant a turn is dispatched.
+    // Done AFTER the version.mode stamp above (the usage line reads the stamp once the
+    // run completes) and BEFORE the await (so the reset is not tied to the run finishing).
+    // Everything below reads the captured rawMode/runMode, never ui.modelMode.
+    ui.resetModelMode()
+    // Sidebar bump data captured at RUN ENTRY: the finally below can run up to a
+    // poll cycle AFTER a cancellation, when the store may already hold ANOTHER
+    // conversation - reading store state there created phantom/retitled sidebar
+    // entries. The run's own conversation is the right one to promote either way:
+    // the backend worker persists its answer even when polling was cancelled.
+    const runSessionId = activeSessionId.value
+    const firstTurn = turns.value[0]
+    const runTitle = (firstTurn && firstTurn.exchange.userText) || userText
+    // Usage analytics: stamp the run start so the terminal event can report duration_ms.
+    const runStartedAt = Date.now()
+    const token = { cancelled: false }
+    activeToken = token
+    activeVersion = version
+    errorMsg.value = ''
+    sending.value = true
+    // Screen awareness: tell the backend which exchange + tab the user is currently
+    // viewing in the Evidence panel, so the agent knows what's on screen ("explain
+    // this chart", "add the forecast"). Only when the panel is actually open.
+    //
+    // Also attach the SOURCE-DATA VIEW the user shaped (filters / search / DB-computed
+    // figures) - included BY DEFAULT (opt-out chip in the prompt bar, 2026-08-06) - read
+    // LIVE from the screen-context store (fresh numbers). It
+    // rides ALONGSIDE the open-panel pointer, or as { open: false, source_state } when the
+    // Evidence panel is closed (the standalone Source explorer case). Never concatenated to
+    // the visible message text (the cell-to-agent flow stays separate).
+    const screenCtx = useScreenContextStore()
+    const sourceState = screenCtx.snapshotForSend()
+    // Stamp the SAME source_state object onto the version (null when none) - mirrors the
+    // mode stamp above (newVersion({ mode })). The user bubble renders it verbatim as the
+    // full-transparency "context shared with this message" detail; the backend persists it
+    // (chat_v5.screen_ctx) so a reload rebuilds the same line via screenCtxFromRow.
+    version.screenCtx = sourceState || null
+    const screenContext = (evidence.open && evidence.exchangeId)
+      ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab, ...(sourceState ? { source_state: sourceState } : {}) }
+      : (sourceState ? { open: false, source_state: sourceState } : undefined)
+    if (sourceState) {
+      // Analytics only: never the content, never the q text (privacy).
+      track('screen_context_included', {
+        surface: sourceState.surface,
+        filters: Array.isArray(sourceState.filters) ? sourceState.filters.length : 0,
+        has_calc: !!sourceState.calc,
+        has_analyze: !!sourceState.analyze,
+      }, { conversation_id: runSessionId, agent_key: exch.agentKey })
+    }
+    try {
+      await runChatStream({
+        sessionId: activeSessionId.value,
+        message: userText,
+        agentKey: session.selectedAgentKey,
+        historyLimit: ui.contextMessages,
+        mode: rawMode,
+        webappLang: ui.lang,
+        screenContext,
+        parentExchangeId: parentId || null,
+        target: version,
+        token,
+        onExchangeId: (id) => {
+          exch.id = id // reconcile temp (null) key -> real backend id
+          workspace.bindExchange(exch.uid, id)
+        },
+        // V2: workspace operations + SQL captures go to the workspace store (live board).
+        onEvent: (evt) => workspace.onLiveEvent(exch.uid, evt),
+        onRunId: (runId) => {
+          activeRunId = runId
+          // Honour a stop the user pressed before /chat/start returned the run id (race).
+          if (stopPending) { stopPending = false; stopChat(runId).catch(() => {}) }
+        },
+      })
+      // Evidence Studio auto-open (premium reveal): a CLEANLY finished answer
+      // that produced at least one successful SQL gets its proof panel opened
+      // automatically. openForExchange({auto:true}) only opens when
+      // /evidence/meta confirms the interactive view (whitelisted table +
+      // parsed filters) - never a degraded auto-open. Not on stopped/error.
+      // V2: a run that built a workspace keeps the right column on it (the workspace
+      // store switches to the dashboard and loads the stored document) - no proof-panel
+      // reveal on top of it. Not on a cancelled run (another conversation owns the screen).
+      const builtWorkspace = workspace.hasContent(exch.id, exch.uid)
+      if (builtWorkspace) exch.hasWorkspace = true
+      if (!token.cancelled && !builtWorkspace && version.status === 'done' && version.sql.some((q) => q && q.success)) {
+        // Fire-and-forget: the reveal must never affect the send flow. The
+        // store catches its own fetch errors; this guards the commit path too.
+        Promise.resolve(evidence.openForExchange(exch.id, { auto: true })).catch(() => {})
+      }
+      // Usage analytics: a cleanly finished run (the terminal `done` state) - report the
+      // wall-clock duration. Covers send / edit / regenerate (all funnel through here).
+      if (!token.cancelled && version.status === 'done') {
+        track('answer_received', { duration_ms: Date.now() - runStartedAt }, {
+          conversation_id: runSessionId,
+          agent_key: exch.agentKey,
+          // The mode actually sent (from the stamp), NOT ui.modelMode - which was reset
+          // to smart the moment this turn was dispatched.
+          mode: runMode,
+        })
+      }
+    } catch (e) {
+      if (!token.cancelled) {
+        const code = (e && e.message) || 'inconnue'
+        if (code === 'monthly_quota_exceeded') {
+          // Lost the monthly-budget race (the gate flipped on between send and start):
+          // no run actually started, so drop the optimistic exchange and let the budget
+          // banner (refreshed in the finally) explain - no empty error bubble in the thread.
+          exchanges.value = exchanges.value.filter((x) => x !== exch)
+        } else {
+          version.status = 'error'
+          version.error = code
+          errorMsg.value = code
+        }
+      }
+    } finally {
+      // Seal the run's workspace entry (status, dashboard switch, stored document).
+      // A cancelled run only stops being "live": another screen owns the panel now.
+      workspace.endLive(exch.uid, token.cancelled ? null : version.status)
+      if (activeToken === token) {
+        activeToken = null
+        activeRunId = null
+        activeVersion = null
+        stopPending = false
+      }
+      sending.value = false
+      // Promote/insert the RUN's conversation at the top (data captured at entry -
+      // never the store's CURRENT session, which may have changed since).
+      session.bumpCurrentConversation({
+        id: runSessionId,
+        title: runTitle,
+        lastAt: new Date().toISOString(),
+      })
+      // Refresh the monthly budget after every run (the spend was recorded server-side),
+      // so the profile + chat banner reflect the new remaining and the gate flips on as
+      // soon as the user crosses their limit. Fire-and-forget: never blocks the UI.
+      if (typeof session.loadUsage === 'function') session.loadUsage()
+    }
+  }
+
+  // The agent key of one exchange (pure scan of the flat exchange list). Used by the
+  // Evidence "Source data" tab to resolve that exchange's configured source datasets.
+  // Returns null when the exchange is unknown or carries no agent key.
+  function agentKeyForExchange(exchangeId) {
+    if (exchangeId == null) return null
+    const ex = exchanges.value.find((e) => e.id === exchangeId)
+    return (ex && ex.agentKey) || null
+  }
+
+  // Send a follow-up: a child of the last turn (the bottom of the active path).
+  function send(text) {
+    const t = (text || '').trim()
+    if (!t || !canSend.value) return
+    const last = turns.value[turns.value.length - 1]
+    track('question_sent', { length: t.length }, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: sentMode(),
+    })
+    return _runExchange(t, last ? last.exchange.id : null)
+  }
+
+  // Edit a prompt: a NEW SIBLING of the edited turn (same parent, new text). Nothing is
+  // deleted - the old version stays reachable via the turn's version arrows.
+  function editTurn(turn, newText) {
+    const t = (newText || '').trim()
+    if (!t || !canSend.value || !turn) return
+    track('question_edited', { length: t.length }, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: sentMode(),
+    })
+    return _runExchange(t, turn.exchange.parentId)
+  }
+
+  // Regenerate a turn: a NEW SIBLING with the SAME prompt (a fresh branch / new version).
+  function regenerateTurn(turn) {
+    if (!canSend.value || !turn) return
+    track('answer_regenerated', {}, {
+      conversation_id: activeSessionId.value,
+      agent_key: session.selectedAgentKey,
+      mode: sentMode(),
+    })
+    return _runExchange(turn.exchange.userText, turn.exchange.parentId)
+  }
+
+  // Pin a specific sibling (version) at a turn's parent, then re-walk the path below it.
+  // Ignore a still-live sibling (id === null): a null override is ambiguous and the live
+  // run is already the latest/active child anyway.
+  function setTurnVersion(turn, idx) {
+    if (!turn) return
+    const sib = turn.siblings[idx]
+    if (!sib || !sib.id) return
+    overrides.value = { ...overrides.value, [turn.exchange.parentId || '__root__']: sib.id }
+    track('answer_version_switched', { idx }, { conversation_id: activeSessionId.value })
+  }
+
+  // Explicit user stop of the in-flight run (the ■ button). The backend stop is
+  // cooperative - the LLM Mesh stream has NO cancel API, so the worker can only cut
+  // BETWEEN streamed chunks (an in-flight LLM call / SQL keeps it busy a few seconds).
+  // Rather than fake an instant stop, we KEEP polling and show a clear "Stopping…"
+  // indicator until the backend's terminal `stopped` event arrives and finalizes the
+  // partial. If the run id isn't known yet (stop pressed before /chat/start resolved),
+  // defer the backend stop via `stopPending` (onRunId fires it once the id arrives).
+  function stopGeneration() {
+    if (!sending.value) return
+    track('answer_stopped', {}, { conversation_id: activeSessionId.value })
+    // Ask the backend to cut the run (it persists the partial + frees the worker).
+    if (activeRunId) stopChat(activeRunId).catch(() => {})
+    else stopPending = true
+    // Show the "Stopping…" state on the live version (spinner + blinking label). We do
+    // NOT cancel polling and do NOT finalize here - the terminal `stopped` event will.
+    if (activeVersion && activeVersion.status === 'running') {
+      activeVersion.stopping = true
+    }
+  }
+
+  return {
+    activeSessionId,
+    exchanges,
+    turns,
+    draft,
+    sending,
+    errorMsg,
+    threadLoading,
+    threadError,
+    hasMessages,
+    canSend,
+    newConversation,
+    ensureSession,
+    openSession,
+    agentKeyForExchange,
+    send,
+    editTurn,
+    regenerateTurn,
+    setTurnVersion,
+    stopGeneration,
+  }
+})

@@ -1,0 +1,317 @@
+{
+  "name": "workspace_run_orphan_widget",
+  "description": "Widgets bound to sql_ids the run never captured (s9q9, s2q1): live they are 'explicit' (the frontend cannot know yet), at persistence they become 'orphan' (honest empty state, never another query's rows). w1 on s1q1 stays explicit. Same file layout as workspace_run_multi_facet.json.",
+  "exchange_id": "ex-fixture-orphan",
+  "terminal_status": "done",
+  "known_sql_ids": [
+    "s1q1"
+  ],
+  "raw_chunks": [
+    {
+      "type": "event",
+      "eventKind": "START",
+      "eventData": {}
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.set",
+        "seq": 1,
+        "ts": 0.4,
+        "mission": "CA et marge par offre",
+        "origin": "model",
+        "steps": [
+          {
+            "id": "p1",
+            "label": "CA par offre"
+          },
+          {
+            "id": "p2",
+            "label": "Marge par offre"
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "AGENT_DONE",
+      "eventData": {
+        "agentKey": "revenue",
+        "generatedSql": [
+          {
+            "sql": "SELECT offer, SUM(revenue) AS revenue FROM sales GROUP BY offer",
+            "success": true,
+            "row_count": 4,
+            "sql_id": "s1q1",
+            "step_index": 1,
+            "agent_key": "revenue",
+            "result": {
+              "columns": [
+                "offer",
+                "revenue"
+              ],
+              "rows": [
+                [
+                  "Voice",
+                  900
+                ],
+                [
+                  "Data",
+                  1100
+                ],
+                [
+                  "Cloud",
+                  500
+                ],
+                [
+                  "IoT",
+                  350
+                ]
+              ],
+              "truncated": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "prov.set",
+        "seq": 2,
+        "ts": 6.0,
+        "sql_id": "s1q1",
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "CA par offre",
+        "step_id": "p1",
+        "duration_ms": 5500,
+        "row_count": 4,
+        "success": true
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 3,
+        "ts": 6.3,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "CA par offre",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "offer",
+          "y": [
+            "revenue"
+          ],
+          "style": "horizontal"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 4,
+        "ts": 6.5,
+        "id": "w2",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Marge par offre",
+        "sql_id": "s9q9"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "widget.add",
+        "seq": 5,
+        "ts": 6.6,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "kpi",
+        "title": "Marge totale",
+        "sql_id": "s2q1",
+        "kpi": {
+          "label": "Marge totale",
+          "value": "margin",
+          "delta_pct": "margin_delta_pct"
+        }
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "note.add",
+        "seq": 6,
+        "ts": 6.8,
+        "id": "n1",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Marge non disponible",
+        "text": "Aucun resultat capture pour la marge.",
+        "sql_id": "s2q1"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 7,
+        "ts": 6.9,
+        "step_id": "p1",
+        "status": "done"
+      }
+    },
+    {
+      "type": "event",
+      "eventKind": "WORKSPACE",
+      "eventData": {
+        "v": 1,
+        "op": "plan.step",
+        "seq": 8,
+        "ts": 7.0,
+        "step_id": "p2",
+        "status": "error"
+      }
+    },
+    {
+      "type": "text",
+      "text": "Le CA par offre est disponible ; la marge ne l'est pas."
+    }
+  ],
+  "expected_events": [
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.set",
+      "seq": 1,
+      "ts": 0.4,
+      "mission": "CA et marge par offre",
+      "origin": "model",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "CA par offre"
+        },
+        {
+          "id": "p2",
+          "label": "Marge par offre"
+        }
+      ]
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "prov.set",
+      "seq": 2,
+      "ts": 6.0,
+      "sql_id": "s1q1",
+      "agent_key": "revenue",
+      "tool": "semantic-model-query",
+      "task": "CA par offre",
+      "step_id": "p1",
+      "duration_ms": 5500,
+      "row_count": 4,
+      "success": true
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 3,
+      "ts": 6.3,
+      "id": "w1",
+      "step_id": "p1",
+      "kind": "chart",
+      "title": "CA par offre",
+      "sql_id": "s1q1",
+      "chart": {
+        "type": "bar",
+        "x": "offer",
+        "y": [
+          "revenue"
+        ],
+        "style": "horizontal"
+      }
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 4,
+      "ts": 6.5,
+      "id": "w2",
+      "step_id": "p2",
+      "kind": "table",
+      "title": "Marge par offre",
+      "sql_id": "s9q9"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "widget.add",
+      "seq": 5,
+      "ts": 6.6,
+      "id": "w3",
+      "step_id": "p2",
+      "kind": "kpi",
+      "title": "Marge totale",
+      "sql_id": "s2q1",
+      "kpi": {
+        "label": "Marge totale",
+        "value": "margin",
+        "delta_pct": "margin_delta_pct"
+      }
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "note.add",
+      "seq": 6,
+      "ts": 6.8,
+      "id": "n1",
+      "step_id": "p2",
+      "kind": "check",
+      "title": "Marge non disponible",
+      "text": "Aucun resultat capture pour la marge.",
+      "sql_id": "s2q1"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 7,
+      "ts": 6.9,
+      "step_id": "p1",
+      "status": "done"
+    },
+    {
+      "type": "workspace",
+      "v": 1,
+      "op": "plan.step",
+      "seq": 8,
+      "ts": 7.0,
+      "step_id": "p2",
+      "status": "error"
+    }
+  ],
+  "expected_reduced": "reduced/workspace_run_orphan_widget.json"
+}

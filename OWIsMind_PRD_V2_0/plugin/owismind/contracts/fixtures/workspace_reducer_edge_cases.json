@@ -1,0 +1,1567 @@
+{
+  "name": "workspace_reducer_edge_cases",
+  "description": "Reducer semantics shared by backend (workspace/reducer.py) and frontend (composables/workspaceModel.js): fold 'events' from the empty state and compare with 'expected' (deep equality).",
+  "cases": [
+    {
+      "name": "empty",
+      "description": "No event: the empty state.",
+      "events": [],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 0,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      }
+    },
+    {
+      "name": "plan_step_before_plan_ignored_and_replay_dropped",
+      "description": "plan.step without plan = no-op but seq advances; seq <= last_seq = replay ignored; unknown step_id = no-op.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 1,
+          "step_id": "p1",
+          "status": "running"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 2,
+          "ts": 1.0,
+          "mission": "M",
+          "origin": "model",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "A"
+            }
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 2,
+          "step_id": "p1",
+          "status": "done"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 1,
+          "step_id": "p1",
+          "status": "error"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 3,
+          "step_id": "zz",
+          "status": "done"
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 3,
+        "plan": {
+          "version": 1,
+          "origin": "model",
+          "mission": "M",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "A",
+              "status": "todo"
+            }
+          ]
+        },
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      }
+    },
+    {
+      "name": "plan_replacement_bumps_version_keeps_widgets",
+      "description": "A second plan.set replaces the plan (version 2); widgets keep their (now removed) step_id.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 1,
+          "mission": "M1",
+          "origin": "auto",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "A"
+            }
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 2,
+          "ts": 2.0,
+          "id": "w1",
+          "step_id": "p1",
+          "kind": "text",
+          "title": "T",
+          "text": "x"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 3,
+          "step_id": "p1",
+          "status": "done"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 4,
+          "mission": "M2",
+          "origin": "model",
+          "steps": [
+            {
+              "id": "q1",
+              "label": "B",
+              "total": 2
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 4,
+        "plan": {
+          "version": 2,
+          "origin": "model",
+          "mission": "M2",
+          "steps": [
+            {
+              "id": "q1",
+              "label": "B",
+              "status": "todo",
+              "total": 2,
+              "done": 0
+            }
+          ]
+        },
+        "notes": [],
+        "widgets": [
+          {
+            "id": "w1",
+            "step_id": "p1",
+            "kind": "text",
+            "title": "T",
+            "text": "x",
+            "ts": 2.0
+          }
+        ],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {
+            "p1": [
+              "w1"
+            ]
+          },
+          "sql_ids": []
+        }
+      }
+    },
+    {
+      "name": "add_step_then_status_and_cap",
+      "description": "add_step appends then status applies to it; an 11th step is refused (cap 10) so its status is a no-op; add_step with an existing id is ignored but done still applies.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 1,
+          "mission": "M",
+          "origin": "model",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "S1"
+            },
+            {
+              "id": "p2",
+              "label": "S2"
+            },
+            {
+              "id": "p3",
+              "label": "S3"
+            },
+            {
+              "id": "p4",
+              "label": "S4"
+            },
+            {
+              "id": "p5",
+              "label": "S5"
+            },
+            {
+              "id": "p6",
+              "label": "S6"
+            },
+            {
+              "id": "p7",
+              "label": "S7"
+            },
+            {
+              "id": "p8",
+              "label": "S8"
+            },
+            {
+              "id": "p9",
+              "label": "S9"
+            }
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 2,
+          "step_id": "p10",
+          "status": "running",
+          "add_step": {
+            "id": "p10",
+            "label": "S10"
+          }
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 3,
+          "step_id": "p11",
+          "status": "running",
+          "add_step": {
+            "id": "p11",
+            "label": "S11"
+          }
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.step",
+          "seq": 4,
+          "step_id": "p1",
+          "done": 4,
+          "add_step": {
+            "id": "p2",
+            "label": "dup"
+          }
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 4,
+        "plan": {
+          "version": 1,
+          "origin": "model",
+          "mission": "M",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "S1",
+              "status": "todo",
+              "done": 4
+            },
+            {
+              "id": "p2",
+              "label": "S2",
+              "status": "todo"
+            },
+            {
+              "id": "p3",
+              "label": "S3",
+              "status": "todo"
+            },
+            {
+              "id": "p4",
+              "label": "S4",
+              "status": "todo"
+            },
+            {
+              "id": "p5",
+              "label": "S5",
+              "status": "todo"
+            },
+            {
+              "id": "p6",
+              "label": "S6",
+              "status": "todo"
+            },
+            {
+              "id": "p7",
+              "label": "S7",
+              "status": "todo"
+            },
+            {
+              "id": "p8",
+              "label": "S8",
+              "status": "todo"
+            },
+            {
+              "id": "p9",
+              "label": "S9",
+              "status": "todo"
+            },
+            {
+              "id": "p10",
+              "label": "S10",
+              "status": "running"
+            }
+          ]
+        },
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      }
+    },
+    {
+      "name": "duplicate_ids_first_wins_and_prov_overwrite",
+      "description": "Duplicate note/widget id: first wins. prov.set on a known sql_id replaces the entry entirely and keeps its position. sql_ids order = provenance keys, then widgets, then notes.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 1,
+          "ts": 1.0,
+          "id": "n1",
+          "kind": "note",
+          "title": "first"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 2,
+          "ts": 2.0,
+          "id": "n1",
+          "kind": "note",
+          "title": "second"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 3,
+          "ts": 3.0,
+          "id": "w1",
+          "kind": "table",
+          "title": "first",
+          "sql_id": "s1q1"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 4,
+          "ts": 4.0,
+          "id": "w1",
+          "kind": "table",
+          "title": "second",
+          "sql_id": "s2q1"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 5,
+          "sql_id": "s1q1",
+          "agent_key": "revenue",
+          "tool": "semantic-model-query",
+          "success": false,
+          "duration_ms": 10
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 6,
+          "sql_id": "s0q1",
+          "agent_key": "tickets",
+          "tool": "attribute_lookup",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 7,
+          "sql_id": "s1q1",
+          "agent_key": "revenue",
+          "tool": "semantic-model-query",
+          "success": true,
+          "row_count": 5
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 7,
+        "plan": null,
+        "notes": [
+          {
+            "id": "n1",
+            "kind": "note",
+            "title": "first",
+            "ts": 1.0
+          }
+        ],
+        "widgets": [
+          {
+            "id": "w1",
+            "kind": "table",
+            "title": "first",
+            "sql_id": "s1q1",
+            "binding": "explicit",
+            "ts": 3.0
+          }
+        ],
+        "provenance": {
+          "s1q1": {
+            "agent_key": "revenue",
+            "tool": "semantic-model-query",
+            "row_count": 5,
+            "success": true
+          },
+          "s0q1": {
+            "agent_key": "tickets",
+            "tool": "attribute_lookup",
+            "success": true
+          }
+        },
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": [
+            "s1q1",
+            "s0q1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "caps_widgets_12_notes_30_provenance_24",
+      "description": "13 widgets -> 12 kept, 31 notes -> 30 kept, 25 provenances -> 24 kept (first arrivals).",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 1,
+          "id": "w1",
+          "kind": "text",
+          "title": "W1",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 2,
+          "id": "w2",
+          "kind": "text",
+          "title": "W2",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 3,
+          "id": "w3",
+          "kind": "text",
+          "title": "W3",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 4,
+          "id": "w4",
+          "kind": "text",
+          "title": "W4",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 5,
+          "id": "w5",
+          "kind": "text",
+          "title": "W5",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 6,
+          "id": "w6",
+          "kind": "text",
+          "title": "W6",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 7,
+          "id": "w7",
+          "kind": "text",
+          "title": "W7",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 8,
+          "id": "w8",
+          "kind": "text",
+          "title": "W8",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 9,
+          "id": "w9",
+          "kind": "text",
+          "title": "W9",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 10,
+          "id": "w10",
+          "kind": "text",
+          "title": "W10",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 11,
+          "id": "w11",
+          "kind": "text",
+          "title": "W11",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 12,
+          "id": "w12",
+          "kind": "text",
+          "title": "W12",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 13,
+          "id": "w13",
+          "kind": "text",
+          "title": "W13",
+          "text": "t"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 14,
+          "id": "n1",
+          "kind": "note",
+          "title": "N1"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 15,
+          "id": "n2",
+          "kind": "note",
+          "title": "N2"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 16,
+          "id": "n3",
+          "kind": "note",
+          "title": "N3"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 17,
+          "id": "n4",
+          "kind": "note",
+          "title": "N4"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 18,
+          "id": "n5",
+          "kind": "note",
+          "title": "N5"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 19,
+          "id": "n6",
+          "kind": "note",
+          "title": "N6"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 20,
+          "id": "n7",
+          "kind": "note",
+          "title": "N7"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 21,
+          "id": "n8",
+          "kind": "note",
+          "title": "N8"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 22,
+          "id": "n9",
+          "kind": "note",
+          "title": "N9"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 23,
+          "id": "n10",
+          "kind": "note",
+          "title": "N10"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 24,
+          "id": "n11",
+          "kind": "note",
+          "title": "N11"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 25,
+          "id": "n12",
+          "kind": "note",
+          "title": "N12"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 26,
+          "id": "n13",
+          "kind": "note",
+          "title": "N13"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 27,
+          "id": "n14",
+          "kind": "note",
+          "title": "N14"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 28,
+          "id": "n15",
+          "kind": "note",
+          "title": "N15"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 29,
+          "id": "n16",
+          "kind": "note",
+          "title": "N16"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 30,
+          "id": "n17",
+          "kind": "note",
+          "title": "N17"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 31,
+          "id": "n18",
+          "kind": "note",
+          "title": "N18"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 32,
+          "id": "n19",
+          "kind": "note",
+          "title": "N19"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 33,
+          "id": "n20",
+          "kind": "note",
+          "title": "N20"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 34,
+          "id": "n21",
+          "kind": "note",
+          "title": "N21"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 35,
+          "id": "n22",
+          "kind": "note",
+          "title": "N22"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 36,
+          "id": "n23",
+          "kind": "note",
+          "title": "N23"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 37,
+          "id": "n24",
+          "kind": "note",
+          "title": "N24"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 38,
+          "id": "n25",
+          "kind": "note",
+          "title": "N25"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 39,
+          "id": "n26",
+          "kind": "note",
+          "title": "N26"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 40,
+          "id": "n27",
+          "kind": "note",
+          "title": "N27"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 41,
+          "id": "n28",
+          "kind": "note",
+          "title": "N28"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 42,
+          "id": "n29",
+          "kind": "note",
+          "title": "N29"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 43,
+          "id": "n30",
+          "kind": "note",
+          "title": "N30"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "note.add",
+          "seq": 44,
+          "id": "n31",
+          "kind": "note",
+          "title": "N31"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 45,
+          "sql_id": "s1q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 46,
+          "sql_id": "s2q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 47,
+          "sql_id": "s3q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 48,
+          "sql_id": "s4q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 49,
+          "sql_id": "s5q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 50,
+          "sql_id": "s6q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 51,
+          "sql_id": "s7q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 52,
+          "sql_id": "s8q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 53,
+          "sql_id": "s9q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 54,
+          "sql_id": "s10q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 55,
+          "sql_id": "s11q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 56,
+          "sql_id": "s12q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 57,
+          "sql_id": "s13q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 58,
+          "sql_id": "s14q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 59,
+          "sql_id": "s15q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 60,
+          "sql_id": "s16q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 61,
+          "sql_id": "s17q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 62,
+          "sql_id": "s18q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 63,
+          "sql_id": "s19q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 64,
+          "sql_id": "s20q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 65,
+          "sql_id": "s21q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 66,
+          "sql_id": "s22q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 67,
+          "sql_id": "s23q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 68,
+          "sql_id": "s24q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "prov.set",
+          "seq": 69,
+          "sql_id": "s25q1",
+          "agent_key": "a",
+          "tool": "semantic-model-query",
+          "success": true
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 69,
+        "plan": null,
+        "notes": [
+          {
+            "id": "n1",
+            "kind": "note",
+            "title": "N1"
+          },
+          {
+            "id": "n2",
+            "kind": "note",
+            "title": "N2"
+          },
+          {
+            "id": "n3",
+            "kind": "note",
+            "title": "N3"
+          },
+          {
+            "id": "n4",
+            "kind": "note",
+            "title": "N4"
+          },
+          {
+            "id": "n5",
+            "kind": "note",
+            "title": "N5"
+          },
+          {
+            "id": "n6",
+            "kind": "note",
+            "title": "N6"
+          },
+          {
+            "id": "n7",
+            "kind": "note",
+            "title": "N7"
+          },
+          {
+            "id": "n8",
+            "kind": "note",
+            "title": "N8"
+          },
+          {
+            "id": "n9",
+            "kind": "note",
+            "title": "N9"
+          },
+          {
+            "id": "n10",
+            "kind": "note",
+            "title": "N10"
+          },
+          {
+            "id": "n11",
+            "kind": "note",
+            "title": "N11"
+          },
+          {
+            "id": "n12",
+            "kind": "note",
+            "title": "N12"
+          },
+          {
+            "id": "n13",
+            "kind": "note",
+            "title": "N13"
+          },
+          {
+            "id": "n14",
+            "kind": "note",
+            "title": "N14"
+          },
+          {
+            "id": "n15",
+            "kind": "note",
+            "title": "N15"
+          },
+          {
+            "id": "n16",
+            "kind": "note",
+            "title": "N16"
+          },
+          {
+            "id": "n17",
+            "kind": "note",
+            "title": "N17"
+          },
+          {
+            "id": "n18",
+            "kind": "note",
+            "title": "N18"
+          },
+          {
+            "id": "n19",
+            "kind": "note",
+            "title": "N19"
+          },
+          {
+            "id": "n20",
+            "kind": "note",
+            "title": "N20"
+          },
+          {
+            "id": "n21",
+            "kind": "note",
+            "title": "N21"
+          },
+          {
+            "id": "n22",
+            "kind": "note",
+            "title": "N22"
+          },
+          {
+            "id": "n23",
+            "kind": "note",
+            "title": "N23"
+          },
+          {
+            "id": "n24",
+            "kind": "note",
+            "title": "N24"
+          },
+          {
+            "id": "n25",
+            "kind": "note",
+            "title": "N25"
+          },
+          {
+            "id": "n26",
+            "kind": "note",
+            "title": "N26"
+          },
+          {
+            "id": "n27",
+            "kind": "note",
+            "title": "N27"
+          },
+          {
+            "id": "n28",
+            "kind": "note",
+            "title": "N28"
+          },
+          {
+            "id": "n29",
+            "kind": "note",
+            "title": "N29"
+          },
+          {
+            "id": "n30",
+            "kind": "note",
+            "title": "N30"
+          }
+        ],
+        "widgets": [
+          {
+            "id": "w1",
+            "kind": "text",
+            "title": "W1",
+            "text": "t"
+          },
+          {
+            "id": "w2",
+            "kind": "text",
+            "title": "W2",
+            "text": "t"
+          },
+          {
+            "id": "w3",
+            "kind": "text",
+            "title": "W3",
+            "text": "t"
+          },
+          {
+            "id": "w4",
+            "kind": "text",
+            "title": "W4",
+            "text": "t"
+          },
+          {
+            "id": "w5",
+            "kind": "text",
+            "title": "W5",
+            "text": "t"
+          },
+          {
+            "id": "w6",
+            "kind": "text",
+            "title": "W6",
+            "text": "t"
+          },
+          {
+            "id": "w7",
+            "kind": "text",
+            "title": "W7",
+            "text": "t"
+          },
+          {
+            "id": "w8",
+            "kind": "text",
+            "title": "W8",
+            "text": "t"
+          },
+          {
+            "id": "w9",
+            "kind": "text",
+            "title": "W9",
+            "text": "t"
+          },
+          {
+            "id": "w10",
+            "kind": "text",
+            "title": "W10",
+            "text": "t"
+          },
+          {
+            "id": "w11",
+            "kind": "text",
+            "title": "W11",
+            "text": "t"
+          },
+          {
+            "id": "w12",
+            "kind": "text",
+            "title": "W12",
+            "text": "t"
+          }
+        ],
+        "provenance": {
+          "s1q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s2q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s3q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s4q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s5q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s6q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s7q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s8q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s9q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s10q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s11q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s12q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s13q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s14q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s15q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s16q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s17q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s18q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s19q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s20q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s21q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s22q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s23q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          },
+          "s24q1": {
+            "agent_key": "a",
+            "tool": "semantic-model-query",
+            "success": true
+          }
+        },
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": [
+            "s1q1",
+            "s2q1",
+            "s3q1",
+            "s4q1",
+            "s5q1",
+            "s6q1",
+            "s7q1",
+            "s8q1",
+            "s9q1",
+            "s10q1",
+            "s11q1",
+            "s12q1",
+            "s13q1",
+            "s14q1",
+            "s15q1",
+            "s16q1",
+            "s17q1",
+            "s18q1",
+            "s19q1",
+            "s20q1",
+            "s21q1",
+            "s22q1",
+            "s23q1",
+            "s24q1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "invalid_event_ignored_seq_unchanged",
+      "description": "An event that fails validation is ignored entirely and does not advance last_seq.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 1,
+          "id": "w1",
+          "kind": "chart",
+          "title": "no sql",
+          "chart": {
+            "type": "bar",
+            "x": "a",
+            "y": [
+              "b"
+            ]
+          }
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "nope",
+          "seq": 2
+        },
+        "garbage"
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 0,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,373 @@
+{
+  "live": {
+    "v": 1,
+    "status": "running",
+    "last_seq": 19,
+    "plan": {
+      "version": 1,
+      "origin": "model",
+      "mission": "Analyser le chiffre d'affaires 2025 et les tickets ouverts par region",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "Chiffre d'affaires 2025 par region",
+          "status": "done",
+          "total": 3,
+          "done": 3,
+          "unit": "regions"
+        },
+        {
+          "id": "p2",
+          "label": "Tickets ouverts par region",
+          "status": "done"
+        },
+        {
+          "id": "p3",
+          "label": "Synthese et croisement",
+          "status": "done"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 8.9,
+        "id": "n1",
+        "step_id": "p1",
+        "kind": "find",
+        "title": "Le Nord mene en 2025",
+        "text": "Nord 1 200 kEUR, devant Sud (950) et Ouest (700).",
+        "sql_id": "s1q1"
+      },
+      {
+        "ts": 16.9,
+        "id": "n2",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Tickets ouverts coherents",
+        "text": "Total 87 tickets, 3 regions.",
+        "sql_id": "s2q1"
+      },
+      {
+        "ts": 18.4,
+        "id": "n3",
+        "step_id": "p3",
+        "kind": "note",
+        "title": "Croisement CA et tickets",
+        "text": "Le Nord a le plus de CA et le plus de tickets ouverts."
+      },
+      {
+        "ts": 19.3,
+        "id": "n4",
+        "step_id": "p3",
+        "kind": "done",
+        "title": "Bilan pret",
+        "text": "Trois etapes terminees."
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 9.8,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "Chiffre d'affaires 2025 par region",
+        "comment": "Le Nord represente 42 % du total.",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "region",
+          "y": [
+            "revenue"
+          ],
+          "x_label": "Region",
+          "y_label": "Chiffre d'affaires",
+          "unit": "EUR"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 10.1,
+        "id": "w2",
+        "step_id": "p1",
+        "kind": "kpi",
+        "title": "Chiffre d'affaires total 2025",
+        "sql_id": "s1q2",
+        "kpi": {
+          "label": "CA total 2025",
+          "value": "total_revenue",
+          "unit": "EUR"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 17.2,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Tickets ouverts par region",
+        "comment": "Liste complete.",
+        "sql_id": "s2q1",
+        "binding": "explicit"
+      },
+      {
+        "ts": 17.5,
+        "id": "w4",
+        "step_id": "p2",
+        "kind": "chart",
+        "title": "Repartition des tickets ouverts",
+        "sql_id": "s2q1",
+        "chart": {
+          "type": "donut",
+          "x": "region",
+          "y": [
+            "open_tickets"
+          ]
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 19.0,
+        "id": "w5",
+        "step_id": "p3",
+        "kind": "text",
+        "title": "Synthese",
+        "text": "**Nord** : premier en CA (1 200 kEUR) et en tickets ouverts (41)."
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 7900,
+        "row_count": 3,
+        "success": true
+      },
+      "s1q2": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 1200,
+        "row_count": 1,
+        "success": true
+      },
+      "s2q1": {
+        "agent_key": "tickets",
+        "tool": "semantic-model-query",
+        "task": "Nombre de tickets ouverts par region",
+        "step_id": "p2",
+        "duration_ms": 6100,
+        "row_count": 3,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1",
+          "w2"
+        ],
+        "p2": [
+          "w3",
+          "w4"
+        ],
+        "p3": [
+          "w5"
+        ]
+      },
+      "sql_ids": [
+        "s1q1",
+        "s1q2",
+        "s2q1"
+      ]
+    }
+  },
+  "final": {
+    "v": 1,
+    "status": "done",
+    "last_seq": 19,
+    "plan": {
+      "version": 1,
+      "origin": "model",
+      "mission": "Analyser le chiffre d'affaires 2025 et les tickets ouverts par region",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "Chiffre d'affaires 2025 par region",
+          "status": "done",
+          "total": 3,
+          "done": 3,
+          "unit": "regions"
+        },
+        {
+          "id": "p2",
+          "label": "Tickets ouverts par region",
+          "status": "done"
+        },
+        {
+          "id": "p3",
+          "label": "Synthese et croisement",
+          "status": "done"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 8.9,
+        "id": "n1",
+        "step_id": "p1",
+        "kind": "find",
+        "title": "Le Nord mene en 2025",
+        "text": "Nord 1 200 kEUR, devant Sud (950) et Ouest (700).",
+        "sql_id": "s1q1"
+      },
+      {
+        "ts": 16.9,
+        "id": "n2",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Tickets ouverts coherents",
+        "text": "Total 87 tickets, 3 regions.",
+        "sql_id": "s2q1"
+      },
+      {
+        "ts": 18.4,
+        "id": "n3",
+        "step_id": "p3",
+        "kind": "note",
+        "title": "Croisement CA et tickets",
+        "text": "Le Nord a le plus de CA et le plus de tickets ouverts."
+      },
+      {
+        "ts": 19.3,
+        "id": "n4",
+        "step_id": "p3",
+        "kind": "done",
+        "title": "Bilan pret",
+        "text": "Trois etapes terminees."
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 9.8,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "Chiffre d'affaires 2025 par region",
+        "comment": "Le Nord represente 42 % du total.",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "region",
+          "y": [
+            "revenue"
+          ],
+          "x_label": "Region",
+          "y_label": "Chiffre d'affaires",
+          "unit": "EUR"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 10.1,
+        "id": "w2",
+        "step_id": "p1",
+        "kind": "kpi",
+        "title": "Chiffre d'affaires total 2025",
+        "sql_id": "s1q2",
+        "kpi": {
+          "label": "CA total 2025",
+          "value": "total_revenue",
+          "unit": "EUR"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 17.2,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Tickets ouverts par region",
+        "comment": "Liste complete.",
+        "sql_id": "s2q1",
+        "binding": "explicit"
+      },
+      {
+        "ts": 17.5,
+        "id": "w4",
+        "step_id": "p2",
+        "kind": "chart",
+        "title": "Repartition des tickets ouverts",
+        "sql_id": "s2q1",
+        "chart": {
+          "type": "donut",
+          "x": "region",
+          "y": [
+            "open_tickets"
+          ]
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 19.0,
+        "id": "w5",
+        "step_id": "p3",
+        "kind": "text",
+        "title": "Synthese",
+        "text": "**Nord** : premier en CA (1 200 kEUR) et en tickets ouverts (41)."
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 7900,
+        "row_count": 3,
+        "success": true
+      },
+      "s1q2": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "Chiffre d'affaires 2025 par region, et le total 2025",
+        "step_id": "p1",
+        "duration_ms": 1200,
+        "row_count": 1,
+        "success": true
+      },
+      "s2q1": {
+        "agent_key": "tickets",
+        "tool": "semantic-model-query",
+        "task": "Nombre de tickets ouverts par region",
+        "step_id": "p2",
+        "duration_ms": 6100,
+        "row_count": 3,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1",
+          "w2"
+        ],
+        "p2": [
+          "w3",
+          "w4"
+        ],
+        "p3": [
+          "w5"
+        ]
+      },
+      "sql_ids": [
+        "s1q1",
+        "s1q2",
+        "s2q1"
+      ]
+    },
+    "exchange_id": "ex-fixture-multi"
+  }
+}

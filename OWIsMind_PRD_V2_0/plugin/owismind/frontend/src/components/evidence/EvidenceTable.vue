@@ -1,0 +1,578 @@
+<script setup>
+// Evidence rows table - live rows of the matched source table under the agent's
+// (or user-modified) filters. Sticky header, click-to-sort, BOTH vertical and
+// horizontal scroll, and LAZY / INFINITE loading: the store loads the first window,
+// then appends the next when the bottom sentinel scrolls into view (never the whole
+// table at once). The matched-source selector now lives in the unified Evidence
+// "Source data" tab selector (this table no longer draws its own).
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useEvidenceStore } from '../../stores/evidence.js'
+import { usePromptContextStore } from '../../stores/promptContext.js'
+import { useToasts } from '../../composables/useToasts.js'
+import { MAX_CONTEXT_VALUES, MAX_CONTEXT_VALUE_CHARS } from '../../composables/promptContextModel.js'
+import { isNumericColType, formatStatNumber, chipOp } from '../../composables/sourceModel.js'
+import { isIdentifierColumn, formatCell } from '../../composables/cellFormat.js'
+import { useScrollHints } from '../../composables/useScrollHints.js'
+import { track } from '../../services/track.js'
+import CellActionPopover from '../sources/CellActionPopover.vue'
+import ColumnMenu from '../sources/ColumnMenu.vue'
+import ScrollHints from '../sources/ScrollHints.vue'
+import { DataLoader, Icon } from '../ui'
+
+// Column windowing (client-side only): render the first COLS_INITIAL columns, then
+// reveal COLS_MORE more each time the horizontal sentinel scrolls into view. The
+// server keeps returning ALL columns; search still spans every column server-side.
+const COLS_INITIAL = 30
+const COLS_MORE = 20
+
+// Mirror of the backend per-request filter cap (EvidenceChips MAX_FILTERS, counted over
+// editable + user chips only): at the cap the add picker cannot render, so the column
+// menu's Filter item disables instead.
+const MAX_FILTERS = 20
+// Mirror of the picker's per-chip value cap (EvidenceChips MAX_FILTER_VALUES / backend
+// MAX_EVIDENCE_IN_VALUES): a single equality/membership chip never accumulates more.
+const MAX_FILTER_VALUES = 50
+
+const { t, locale } = useI18n()
+const evidence = useEvidenceStore()
+const promptContext = usePromptContextStore()
+const { push } = useToasts()
+const allColumns = computed(() => (evidence.meta && evidence.meta.columns) || [])
+
+// The DB-computed row count over the FULL filtered set, formatted locale-aware exact.
+function fmtStat(v) {
+  return formatStatNumber(v, locale.value)
+}
+
+// Provenance of a picked cell: the source table currently shown by the "Source data"
+// selector (the chosen table, else the first matched source, else empty).
+const activeTableName = computed(() => {
+  if (evidence.selectedTable) return evidence.selectedTable
+  const first = evidence.sources && evidence.sources[0]
+  return (first && first.dataset) || ''
+})
+const colCount = ref(COLS_INITIAL)
+const columns = computed(() => allColumns.value.slice(0, colCount.value))
+const colsWindowed = computed(() => allColumns.value.length > columns.value.length)
+
+// Reset the visible window whenever the table's columns change (new exchange). A
+// column change also means a new source/exchange, so drop any open popover then.
+watch(allColumns, () => { colCount.value = COLS_INITIAL; closePopover(); closeColMenu() })
+
+function sortDir(name) {
+  const s = evidence.sort
+  return s && s.column === name ? s.dir : ''
+}
+// Numeric QUANTITY columns by name (DSS storage type says numeric, name does not
+// mark an identifier): their cells are locale-formatted and right-aligned. The
+// popover / filter flows keep reading the RAW row value - display only.
+const numericByName = computed(() => {
+  const map = {}
+  for (const c of allColumns.value) {
+    if (c && c.name) map[c.name] = isNumericColType(c.type) && !isIdentifierColumn(c.name)
+  }
+  return map
+})
+function cell(row, name) {
+  return formatCell(row[name], numericByName.value[name], locale.value)
+}
+
+// Cell selection: click a non-null DATA cell to queue its value as context for the
+// next question. Only the data cells are wired (no thead/sort buttons), so the popover
+// never interferes with existing table controls. One popover at a time; it closes on
+// scroll and whenever the table columns change (new exchange or source table).
+const popover = ref(null) // { x, y, column, value, source, canUse } | null
+
+function closePopover() {
+  popover.value = null
+}
+// A cell is pickable when it holds a REAL value: null and whitespace-only cells
+// would normalize to nothing (a silent no-op), so they are not clickable at all.
+function pickable(row, name) {
+  const raw = row[name]
+  return raw != null && String(raw).trim() !== ''
+}
+function onCellClick(event, row, name) {
+  if (!pickable(row, name)) return
+  const value = String(row[name])
+  popover.value = {
+    x: event.clientX,
+    y: event.clientY,
+    column: name,
+    value,
+    source: activeTableName.value,
+    canUse: value.length <= MAX_CONTEXT_VALUE_CHARS,
+  }
+  track('source_cell_clicked', { column: name })
+}
+function usePopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const status = promptContext.add({ source: p.source, column: p.column, value: p.value })
+  if (status === 'added') push(t('src.cell.added'), { tone: 'ok', icon: 'check' })
+  else if (status === 'exists') push(t('src.cell.exists'), { icon: 'info' })
+  else if (status === 'full') push(t('src.cell.full', [MAX_CONTEXT_VALUES]), { tone: 'warn', icon: 'info' })
+  closePopover()
+}
+
+// Filter the table on the clicked cell's exact value, against the EVIDENCE store chips.
+// Merge target = an existing =/IN chip ON that column that we may edit: a user chip, or an
+// editable agent chip - prefer a user chip when both exist. A LOCKED agent chip (non-
+// editable) or a BETWEEN range chip is NEVER touched: if the column carries only those,
+// a fresh user chip is added via addFilter. Every outcome is acknowledged with a toast
+// (like the "use for agent" action): a no-op is never a silent close. The store's
+// setChipValues / addFilter already refetch rows + aggregates and fire their own tracking.
+function filterPopoverValue() {
+  const p = popover.value
+  if (!p) return
+  const raw = p.value
+  const candidates = evidence.chips.filter(
+    (c) => c.column === p.column && chipOp(c) !== 'BETWEEN' && (c.source === 'user' || c.editable),
+  )
+  const chip = candidates.find((c) => c.source === 'user') || candidates[0]
+  if (chip) {
+    const values = chip.values || []
+    if (values.some((v) => String(v) === raw)) {
+      push(t('src.cell.filterExists'), { icon: 'info' })
+    } else if (values.length >= MAX_FILTER_VALUES) {
+      push(t('src.cell.filterFull', [MAX_FILTER_VALUES]), { tone: 'warn', icon: 'info' })
+    } else {
+      evidence.setChipValues(chip.key, values.concat([raw]))
+      push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
+    }
+  } else {
+    evidence.addFilter(p.column, [raw])
+    push(t('src.cell.filtered'), { tone: 'ok', icon: 'check' })
+  }
+  closePopover()
+}
+
+// Filtered-column indicator + header column menu. `filteredColumns` is the set of every
+// column carrying a chip - agent-locked chips included, since they ALL constrain the view
+// (drives the orange header cue + the menu checkmark). The menu is a fixed-position card.
+const filteredColumns = computed(() => {
+  const set = new Set()
+  for (const c of evidence.chips) {
+    if (c && c.column) set.add(c.column)
+  }
+  return set
+})
+function isFiltered(name) {
+  return filteredColumns.value.has(name)
+}
+
+const colMenu = ref(null) // { x, y, column } | null
+function openColMenu(event, column) {
+  const r = event.currentTarget.getBoundingClientRect()
+  colMenu.value = { x: r.left, y: r.bottom + 4, column }
+}
+function closeColMenu() {
+  colMenu.value = null
+}
+const menuSortDir = computed(() => (colMenu.value ? sortDir(colMenu.value.column) || null : null))
+const menuFiltered = computed(() => (colMenu.value ? isFiltered(colMenu.value.column) : false))
+const menuCanFilter = computed(
+  () => evidence.chips.filter((c) => c.editable || c.source === 'user').length < MAX_FILTERS,
+)
+function onMenuSort(dir) {
+  if (colMenu.value) evidence.setSort(colMenu.value.column, dir)
+  closeColMenu()
+}
+function onMenuFilter() {
+  if (colMenu.value) evidence.requestColumnFilter(colMenu.value.column)
+  closeColMenu()
+}
+
+// ── Infinite scroll ───────────────────────────────────────────────────────────
+// An IntersectionObserver watches a sentinel just below the last row inside the
+// table's OWN scroll container. When it enters the viewport the store appends
+// the next page (bounded by hasMore + MAX_ROWS). The observer's root is the
+// scroll container, so it never reacts to the outer panel's scroll.
+const scrollEl = ref(null)
+const sentinelEl = ref(null)
+let observer = null
+
+function teardownObserver() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+}
+
+function setupObserver() {
+  teardownObserver()
+  if (typeof IntersectionObserver !== 'function') return
+  if (!scrollEl.value || !sentinelEl.value) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          evidence.loadMoreRows()
+        }
+      }
+    },
+    // `rootMargin` pre-fetches one viewport early so the next page is loading
+    // before the user reaches the very bottom (smoother infinite scroll).
+    { root: scrollEl.value, rootMargin: '200px 0px', threshold: 0 },
+  )
+  observer.observe(sentinelEl.value)
+}
+
+// (Re)bind the observer whenever the sentinel mounts/unmounts (it only exists
+// while there are rows AND more to load). watch on the ref handles v-if churn.
+watch(sentinelEl, (el) => {
+  if (el) setupObserver()
+  else teardownObserver()
+})
+
+// Horizontal column sentinel: a thin cell at the right edge of the header inside the
+// SAME scroll container. When it enters the viewport (scrolled right) reveal the next
+// batch of columns - the horizontal mirror of the vertical rows sentinel.
+const colSentinelEl = ref(null)
+let colObserver = null
+
+function teardownColObserver() {
+  if (colObserver) {
+    colObserver.disconnect()
+    colObserver = null
+  }
+}
+function setupColObserver() {
+  teardownColObserver()
+  if (typeof IntersectionObserver !== 'function') return
+  if (!scrollEl.value || !colSentinelEl.value) return
+  colObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          colCount.value = Math.min(allColumns.value.length, colCount.value + COLS_MORE)
+        }
+      }
+    },
+    { root: scrollEl.value, rootMargin: '0px 200px', threshold: 0 },
+  )
+  colObserver.observe(colSentinelEl.value)
+}
+watch(colSentinelEl, (el) => {
+  if (el) setupColObserver()
+  else teardownColObserver()
+})
+
+// Close the popover + header menu when the table scrolls (anchor coordinates go stale).
+function onScroll() {
+  if (popover.value) closePopover()
+  if (colMenu.value) closeColMenu()
+}
+watch(scrollEl, (el, old) => {
+  if (old) old.removeEventListener('scroll', onScroll)
+  if (el) el.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  teardownObserver()
+  teardownColObserver()
+  if (scrollEl.value) scrollEl.value.removeEventListener('scroll', onScroll)
+})
+
+// Scroll affordances: how much of the table is still out of sight (columns left/right,
+// rows below) and the scroll steps the pills trigger. The column sentinel is excluded
+// from the count - it is a 1px observer target, not a column.
+const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown } =
+  useScrollHints(scrollEl, { headerSelector: 'thead th:not(.col-sentinel)' })
+</script>
+
+<template>
+  <!-- `busy` (55% dim) only applies to refreshes with REAL rows on screen: the
+       first-load skeleton must keep full opacity or its shimmer washes out. The
+       DataLoader overlay rides the same condition (delayed fade-in inside it keeps
+       fast refreshes flicker-free). -->
+  <div class="ev-table" :class="{ busy: evidence.rowsLoading && evidence.rows.length > 0 }">
+    <DataLoader v-if="evidence.rowsLoading && evidence.rows.length > 0" :label="t('src.crunch')" />
+    <!-- The scroll viewport and its affordance overlay share ONE positioning context, so
+         the pills sit on the data edges and not on the footer bar below. -->
+    <div class="ev-table-view">
+    <div ref="scrollEl" class="ev-table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th v-for="c in columns" :key="c.name" :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name] }">
+              <div class="th-inner">
+                <button type="button" class="th-btn" @click="evidence.setSort(c.name)">
+                  <span class="th-label">{{ c.name }}</span>
+                  <span v-if="sortDir(c.name)" class="th-sort">
+                    <Icon :name="sortDir(c.name) === 'asc' ? 'chevronUp' : 'chevronDown'" />
+                  </span>
+                </button>
+                <!-- Sigma: send this numeric column to the Calculate zone (its key
+                     figures over the current filter). Same affordance as the Source table. -->
+                <button
+                  v-if="isNumericColType(c.type)"
+                  type="button"
+                  class="th-sigma"
+                  :class="{ active: evidence.calcColumn === c.name }"
+                  :title="t('src.stats.toggle')"
+                  :aria-label="t('src.stats.toggle')"
+                  :aria-pressed="evidence.calcColumn === c.name"
+                  @click.stop="evidence.setCalcColumn(c.name)"
+                >&#931;</button>
+                <!-- Column menu trigger: 3-state sort + "Filter values...". Revealed on
+                     hover/focus, and pinned visible when the column is sorted or filtered. -->
+                <button
+                  type="button"
+                  class="th-menu"
+                  :class="{ pinned: sortDir(c.name) || isFiltered(c.name) }"
+                  :title="t('src.col.menu')"
+                  :aria-label="t('src.col.menu')"
+                  @click.stop="openColMenu($event, c.name)"
+                >
+                  <Icon name="chevronDown" />
+                </button>
+              </div>
+            </th>
+            <!-- Horizontal column sentinel: reveals the next batch of columns when
+                 scrolled into view (client-side column windowing). -->
+            <th v-if="colsWindowed" ref="colSentinelEl" class="col-sentinel" aria-hidden="true"></th>
+          </tr>
+        </thead>
+        <!-- First load (no rows yet): shimmer skeleton rows instead of a blank area.
+             Refreshes with rows on screen keep the lighter `.busy` opacity dim. -->
+        <tbody v-if="evidence.rowsLoading && !evidence.rows.length" aria-hidden="true">
+          <tr v-for="n in 12" :key="'sk-' + n" class="sk-row">
+            <td v-for="c in columns" :key="c.name"><span class="sk-cell" /></td>
+          </tr>
+        </tbody>
+        <tbody v-else>
+          <!-- Stable key on the accumulated index: rows only ever APPEND, so an
+               index key never re-keys an already-rendered row. -->
+          <tr v-for="(row, i) in evidence.rows" :key="i">
+            <td
+              v-for="c in columns"
+              :key="c.name"
+              :class="{ 'cell-click': pickable(row, c.name), num: numericByName[c.name] }"
+              @click="onCellClick($event, row, c.name)"
+            >{{ cell(row, c.name) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <!-- Infinite-scroll sentinel: when it enters the scroll viewport the store
+           appends the next page. Only present while there ARE rows and the
+           server still has more (and the client cap is not hit). -->
+      <div
+        v-if="evidence.rows.length && evidence.hasMore"
+        ref="sentinelEl"
+        class="ev-table-sentinel"
+        aria-hidden="true"
+      >
+        <span v-if="evidence.rowsLoading" class="ev-more-spin">{{ t('ev.table.loadingMore') }}</span>
+      </div>
+      <div v-if="!evidence.rows.length && !evidence.rowsLoading" class="ev-table-empty">
+        {{ t('ev.table.empty') }}
+      </div>
+    </div>
+      <ScrollHints
+        :can-left="canLeft"
+        :can-right="canRight"
+        :can-down="canDown"
+        :hidden-right="hiddenRight"
+        @left="stepLeft"
+        @right="stepRight"
+        @down="stepDown"
+      />
+    </div>
+    <!-- Recoverable rows-level error: the chips above stay mounted and usable. -->
+    <div v-if="evidence.rowsError" class="ev-table-error">
+      <span>{{ t('ev.error') }}</span>
+      <button @click="evidence.refreshRows()">{{ t('ev.retry') }}</button>
+    </div>
+    <!-- Footer: how many rows are loaded, the DB-EXACT row count over the current filter,
+         how many columns are shown, and whether more rows remain (lazy). -->
+    <div class="ev-table-foot">
+      <span class="mono page">{{ t('ev.table.loaded', [evidence.rows.length]) }}</span>
+      <span v-if="evidence.totalLoading && evidence.totalCount == null" class="db-count mono">
+        <span class="dots" aria-hidden="true"><i /><i /><i /></span>
+      </span>
+      <span v-else-if="evidence.totalCount != null" class="db-count mono">
+        {{ t('src.stats.rows', [fmtStat(evidence.totalCount)]) }}
+      </span>
+      <span class="foot-spacer" />
+      <span v-if="colsWindowed" class="cols-hint">{{ t('ev.table.cols', [columns.length, allColumns.length]) }}</span>
+      <span v-if="evidence.hasMore" class="more-hint">{{ t('ev.table.more') }}</span>
+    </div>
+  </div>
+  <CellActionPopover
+    v-if="popover"
+    :x="popover.x"
+    :y="popover.y"
+    :column="popover.column"
+    :value="popover.value"
+    :source="popover.source"
+    :can-use="popover.canUse"
+    @use="usePopoverValue"
+    @filter="filterPopoverValue"
+    @close="closePopover"
+  />
+  <ColumnMenu
+    v-if="colMenu"
+    :x="colMenu.x"
+    :y="colMenu.y"
+    :column="colMenu.column"
+    :sort-dir="menuSortDir"
+    :filtered="menuFiltered"
+    :can-filter="menuCanFilter"
+    @sort="onMenuSort"
+    @filter="onMenuFilter"
+    @close="closeColMenu"
+  />
+</template>
+
+<style scoped>
+/* The table OWNS a bounded height so it can never visually collapse to ~2 rows
+   when many proof sections stack above it (the "only 2 rows" bug): inside the
+   flex `.ev-body` the previous `flex: 1` height could be squeezed to near-zero.
+   A fixed max-height container with its own scroll guarantees ~20 rows visible
+   and both axes scroll. flex:none keeps it out of the squeeze. */
+/* position: relative anchors the DataLoader overlay; the busy dim lives on the
+   CHILDREN so the overlay itself stays at full opacity. */
+.ev-table {
+  position: relative;
+  display: flex; flex-direction: column; flex: none;
+  border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden;
+}
+.ev-table-scroll, .ev-table-foot { transition: opacity var(--dur) var(--ease); }
+.ev-table.busy .ev-table-scroll, .ev-table.busy .ev-table-foot { opacity: 0.55; }
+/* Block stale row interactions while loading; the foot buttons are :disabled-gated. */
+.ev-table.busy tbody { pointer-events: none; }
+/* Scroll viewport + its affordance overlay: ONE positioning context, hugging the data
+   only (the footer bar sits outside it, so the pills stay centered on the rows). */
+.ev-table-view { position: relative; display: flex; flex-direction: column; min-height: 0; }
+/* BOTH axes scroll: vertical for rows (bounded height ≈ ~20 rows), horizontal
+   for ALL columns (no column is hidden / elided away). ~60vh, capped so a tall
+   viewport does not make the panel one giant table. */
+.ev-table-scroll {
+  overflow: auto;
+  max-height: min(60vh, 480px);
+  min-height: 220px; /* ≈ header + ~7 rows even before the first page lands */
+}
+/* separate + spacing 0: with `collapse`, the th border scrolls away from a
+   sticky header - paint the line as an inset shadow so it sticks with it. */
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+/* Header keeps the REAL column names' case (sort buttons on data identifiers -
+   uppercasing would distort them) but its rule matches the strengthened frame. */
+thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  text-align: left; box-shadow: inset 0 -1px 0 var(--border-strong);
+  color: var(--text-2); font-weight: 500; white-space: nowrap;
+  user-select: none;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+/* Sortable affordance: the whole header cell lights up under the pointer (twin of
+   the standalone SourceTable). */
+thead th:hover { color: var(--text); background: var(--surface-hover); }
+/* Sorted column: same AA-safe orange-text token as .filtered (small text). */
+thead th.sorted { color: var(--orange-text); }
+/* Filtered column: orange text cue (charte: orange text only, no background fill). */
+thead th.filtered { color: var(--orange-text); }
+.th-inner { display: flex; align-items: center; }
+/* Numeric columns: header hugs the right edge, matching its right-aligned cells
+   (the th content is a flex row, so text-align alone would not move it). */
+thead th.num .th-inner { justify-content: flex-end; }
+thead th.num .th-btn { flex: 0 1 auto; text-align: right; }
+.th-btn {
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+  padding: 8px 12px; color: inherit; text-align: left; cursor: pointer;
+}
+.th-sort :deep(.ui-icon) { width: 12px; height: 12px; vertical-align: -2px; }
+/* Sigma affordance in NUMERIC headers only: sends the column to the Calculate zone.
+   Subtle by default, orange text when active. Rounded icon button (premium
+   2026-08-13), no layout shift. */
+.th-sigma {
+  flex: none; padding: 4px 8px; margin-right: 2px; border-radius: var(--r-pill);
+  font-size: 13px; line-height: 1; color: var(--text-3);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.th-sigma:hover { color: var(--text); background: var(--surface-2); }
+.th-sigma.active { color: var(--orange-text); }
+/* Column-menu trigger: hidden until the header is hovered/focused, pinned visible when
+   the column is sorted or filtered. Rounded icon button, no layout shift. */
+.th-menu {
+  flex: none; padding: 4px 6px; margin-right: 2px; border-radius: var(--r-pill);
+  color: var(--text-3); opacity: 0;
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.th-menu:hover { background: var(--surface-2); }
+.th-menu :deep(.ui-icon) { width: 14px; height: 14px; display: block; }
+.th-menu:hover { color: var(--text); }
+thead th:hover .th-menu, thead th:focus-within .th-menu, .th-menu.pinned { opacity: 1; }
+/* Filtered column: the trigger is orange too (mirrors the header text cue). */
+thead th.filtered .th-menu { color: var(--orange-text); opacity: 1; }
+tbody td {
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  color: var(--text); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 260px;
+  transition: background var(--dur) var(--ease);
+}
+tbody tr:last-child td { border-bottom: none; }
+/* Row-level hover, then the hovered CELL one step further (that is what a click
+   picks). Same two-level grammar as the standalone SourceTable. */
+tbody tr:hover td { background: var(--surface); }
+/* Non-null cells are pickable: subtle hover cue, no layout shift. */
+tbody td.cell-click { cursor: pointer; }
+tbody tr:hover td.cell-click:hover, tbody td.cell-click:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) {
+  tbody td { transition: none; }
+}
+/* Numeric columns: right-aligned, tabular digits (values locale-formatted). */
+tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* First-load skeleton rows - flat surface with an opacity pulse (no gradient),
+   aligned with SourceTable's charte-compliant twin. */
+.sk-cell {
+  display: block; height: 12px; width: 70%; border-radius: 0;
+  background: var(--surface-2);
+  animation: ev-pulse 1.4s ease-in-out infinite;
+}
+.sk-row:nth-child(even) .sk-cell { width: 45%; }
+@keyframes ev-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-cell { animation: none; }
+}
+/* Infinite-scroll sentinel - a thin band below the rows that triggers the next
+   page when it scrolls into the container's viewport. */
+.ev-table-sentinel {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 24px; padding: 4px;
+}
+.ev-more-spin { font-size: 11px; color: var(--text-3); }
+.ev-table-empty { padding: var(--s-5); color: var(--text-3); font-size: var(--fs-sm); }
+.ev-table-error {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 6px 12px; border-top: 1px solid var(--border);
+  color: var(--danger); font-size: var(--fs-sm);
+}
+.ev-table-error button {
+  padding: 2px 10px; border-radius: var(--r-pill); color: var(--text-2);
+  transition: all var(--dur) var(--ease);
+}
+.ev-table-error button:hover { background: var(--surface-hover); color: var(--text); }
+/* 1px column sentinel: no border, minimal footprint - just an observable target
+   at the right edge of the header content. */
+.col-sentinel { width: 1px; min-width: 1px; padding: 0; box-shadow: none; background: var(--surface); }
+.ev-table-foot {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 6px 12px; border-top: 1px solid var(--border); background: var(--surface);
+}
+.ev-table-foot .page { font-size: 11px; color: var(--text-3); }
+.ev-table-foot .foot-spacer { flex: 1; }
+.ev-table-foot .cols-hint { font-size: 11px; color: var(--text-3); }
+.ev-table-foot .more-hint { font-size: 11px; color: var(--text-3); }
+/* DB-exact row count over the current filter (from the shared aggregate surface). */
+.ev-table-foot .db-count { font-size: 11px; color: var(--text); font-weight: var(--fw-semibold); }
+/* Loading dots - three flat squares pulsing (no gradient, charter-safe). */
+.dots { display: inline-flex; align-items: center; gap: 3px; }
+.dots i { width: 4px; height: 4px; background: var(--text-3); border-radius: 0; animation: ev-dot-pulse 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.2s; }
+.dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ev-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .dots i { animation: none; } }
+</style>

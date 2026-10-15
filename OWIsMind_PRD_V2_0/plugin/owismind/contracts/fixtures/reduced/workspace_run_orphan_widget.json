@@ -1,0 +1,207 @@
+{
+  "live": {
+    "v": 1,
+    "status": "running",
+    "last_seq": 8,
+    "plan": {
+      "version": 1,
+      "origin": "model",
+      "mission": "CA et marge par offre",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "CA par offre",
+          "status": "done"
+        },
+        {
+          "id": "p2",
+          "label": "Marge par offre",
+          "status": "error"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 6.8,
+        "id": "n1",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Marge non disponible",
+        "text": "Aucun resultat capture pour la marge.",
+        "sql_id": "s2q1"
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 6.3,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "CA par offre",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "offer",
+          "y": [
+            "revenue"
+          ],
+          "style": "horizontal"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 6.5,
+        "id": "w2",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Marge par offre",
+        "sql_id": "s9q9",
+        "binding": "explicit"
+      },
+      {
+        "ts": 6.6,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "kpi",
+        "title": "Marge totale",
+        "sql_id": "s2q1",
+        "kpi": {
+          "label": "Marge totale",
+          "value": "margin",
+          "delta_pct": "margin_delta_pct"
+        },
+        "binding": "explicit"
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "CA par offre",
+        "step_id": "p1",
+        "duration_ms": 5500,
+        "row_count": 4,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1"
+        ],
+        "p2": [
+          "w2",
+          "w3"
+        ]
+      },
+      "sql_ids": [
+        "s1q1",
+        "s9q9",
+        "s2q1"
+      ]
+    }
+  },
+  "final": {
+    "v": 1,
+    "status": "done",
+    "last_seq": 8,
+    "plan": {
+      "version": 1,
+      "origin": "model",
+      "mission": "CA et marge par offre",
+      "steps": [
+        {
+          "id": "p1",
+          "label": "CA par offre",
+          "status": "done"
+        },
+        {
+          "id": "p2",
+          "label": "Marge par offre",
+          "status": "error"
+        }
+      ]
+    },
+    "notes": [
+      {
+        "ts": 6.8,
+        "id": "n1",
+        "step_id": "p2",
+        "kind": "check",
+        "title": "Marge non disponible",
+        "text": "Aucun resultat capture pour la marge.",
+        "sql_id": "s2q1"
+      }
+    ],
+    "widgets": [
+      {
+        "ts": 6.3,
+        "id": "w1",
+        "step_id": "p1",
+        "kind": "chart",
+        "title": "CA par offre",
+        "sql_id": "s1q1",
+        "chart": {
+          "type": "bar",
+          "x": "offer",
+          "y": [
+            "revenue"
+          ],
+          "style": "horizontal"
+        },
+        "binding": "explicit"
+      },
+      {
+        "ts": 6.5,
+        "id": "w2",
+        "step_id": "p2",
+        "kind": "table",
+        "title": "Marge par offre",
+        "sql_id": "s9q9",
+        "binding": "orphan"
+      },
+      {
+        "ts": 6.6,
+        "id": "w3",
+        "step_id": "p2",
+        "kind": "kpi",
+        "title": "Marge totale",
+        "sql_id": "s2q1",
+        "kpi": {
+          "label": "Marge totale",
+          "value": "margin",
+          "delta_pct": "margin_delta_pct"
+        },
+        "binding": "orphan"
+      }
+    ],
+    "provenance": {
+      "s1q1": {
+        "agent_key": "revenue",
+        "tool": "semantic-model-query",
+        "task": "CA par offre",
+        "step_id": "p1",
+        "duration_ms": 5500,
+        "row_count": 4,
+        "success": true
+      }
+    },
+    "summary": {
+      "widget_ids_by_step": {
+        "p1": [
+          "w1"
+        ],
+        "p2": [
+          "w2",
+          "w3"
+        ]
+      },
+      "sql_ids": [
+        "s1q1",
+        "s9q9",
+        "s2q1"
+      ]
+    },
+    "exchange_id": "ex-fixture-orphan"
+  }
+}
