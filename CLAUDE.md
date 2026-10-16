@@ -18,42 +18,36 @@ convertie, a été supprimée du repo le 2026-06-11).
   pointeurs, tenu LEAN (< 120 lignes). Lire `memory/LESSONS.md` et `memory/PROJECT_STATE.md` **à la demande**
   pour le détail. Vérifier qu'un fichier/flag cité existe encore avant de t'y fier.
 - **Gotchas techniques = `.claude/rules/*.md`** (path-scoped, frontmatter `paths:`) : chargées
-  **automatiquement** selon les fichiers touchés (frontend / backend / agents / lab / memory), plus dans CONTEXT.md.
+  **automatiquement** selon les fichiers touchés (frontend / backend / agents / memory), plus dans CONTEXT.md.
 - **Source de vérité** : `memory/PROJECT_STATE.md` + `memory/LESSONS.md` **priment sur les guides** de
   `docs/cadrage/` (ceux-ci sont des points de départ). Les noms réels et les solutions qui marchent vivent en mémoire.
 - **Apprentissage continu** : dès qu'une solution diverge des guides, ou qu'un truc échoue puis marche →
   **appende** une entrée dans `memory/LESSONS.md` (contexte / échec / solution / preuve / source / date). Un
   changement de gotcha va dans le bon fichier `.claude/rules/`, pas dans CONTEXT.md.
-- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + `memory/sessions/` + graphe + commit).
+- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + graphe + commit).
 
 ## Identifiants canoniques (détail → `memory/PROJECT_STATE.md`)
 - Plugin id `owismind` · WebApp `webapp-owismind-ai-agents` · package `python-lib/owismind` · resource `owismind-app`
 - **Arborescence (2026-07-20)** : un dossier racine par projet DSS, même structure interne (`flow/<zone>_zone/python-recipes/`, `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`, `project-library/`, `Standard-webapps/`, `docs/`, `tests/`). Le plugin vit DANS le dossier du projet principal (`plugin/`) et suit sa version.
-- Racine plugin sur disque : `OWIsMind_PRD_V1_3_DEV/plugin/owismind/` · zips d'upload : `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/` (git-ignorés, régénérés par les skills ; DEV courant `owismind-v1_3-dev-upload.zip`, plugin id `owismind_dev`, coexiste avec la prod 1.2)
+- Racine plugin sur disque : `OWIsMind_PRD_V2_0/plugin/owismind/` (version `2.0.0`) · zips d'upload : `OWIsMind_PRD_V2_0/plugin/ready-for-dataiku/` (git-ignorés, régénérés par les skills ; zip courant `owismind_v2_0-upload.zip`, coexiste avec les versions précédentes)
 - Vite `base` `/plugins/owismind/resource/owismind-app/` → `outDir ../resource/owismind-app`
 - SQL : connexion `SQL_owi` (PostgreSQL, `public`) · project key **PROD `OWISMIND_PRD_V1_2`**, **DEV `OWISMIND_DEV`** (résolu au runtime via `dataiku.default_project_key()`)
-- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) : le projet DSS
-  PROD **`OWISMIND_PRD_V1_2` = CLONE du projet DEV `OWISMIND_DEV`** (ids DEV conservés), miroité dans le repo
-  sous **`OWIsMind_PRD_V1_3_DEV/`** (= le projet DSS DEV v1.3, clone de la prod), organisé en miroir de
-  l'UI DSS (`flow/` zones, `GenAI/` = `Agents/` + `agents-tools/` + `semantic-models/`, `project-library/`,
-  `Notebooks/`, `Standard-webapps/`, `plugin/`, `docs/`, `tests/`). Carte des IDs :
-  **`OWIsMind_PRD_V1_3_DEV/README.md`** + `OWIsMind_PRD_V1_3_DEV/registry.json`. Orchestrateur **OWIsMind_orchestrator**
-  (`038G7mlF`) → sous-agents **SalesDrive_revenue_expert** (`agent:bHrWLyOL`) et **CSSO_Trouble_Tickets_Expert**
-  (`agent:NcE9LD2i`) - mêmes ids en DEV et dans le clone.
-- Git : **une branche par version**, nommée comme le projet DSS prod (`OWIsMind_PRD_V1_2` = prod courante,
-  `OWIsMind_PRD_V1_3-dev` = dev en cours, suffixe `-dev` retiré à la validation ; `main` dépréciée).
+- Agents (Code Agents LangGraph, env 3.11, repo = source de vérité, à recoller dans DSS) : miroités sous
+  **`OWIsMind_PRD_V2_0/`** (= le projet DSS V2.0, duplication du projet v1.3, ids conservés), organisé en
+  miroir de l'UI DSS. Carte des IDs : **`OWIsMind_PRD_V2_0/README.md`** + `OWIsMind_PRD_V2_0/registry.json`.
+  Orchestrateur **OWIsMind_orchestrator** (`038G7mlF`) -> sous-agents **SalesDrive_revenue_expert**
+  (`agent:bHrWLyOL`) et **CSSO_Trouble_Tickets_Expert** (`agent:NcE9LD2i`).
+- Git : **une branche par version**, nommée comme le projet DSS (`OWIsMind_PRD_V1_2` = prod,
+  `OWIsMind_PRD_V1_3-dev` = v1.3, `OWIsMind_PRD_V2_0` = V2 en cours ; `main` dépréciée). Cette branche ne
+  contient QUE la V2 : les anciennes versions et `OWIsMind_LAB` vivent sur leurs branches.
 - API `/owismind-api/*` (santé `/owismind-api/ping`)
-- **Benchmark / éval des agents = projet DSS SÉPARÉ `OWIsMind_LAB`** (≠ le plugin), miroir repo
-  **`OWIsMind_LAB/`** : `project-library/python/{benchmark, benchmark_webapp}` (recollés en project-library,
-  packages importés `from benchmark ...` / `from benchmark_webapp ...`), `Standard-webapps/{benchmark_launcher,
-  benchmark_results}` (2 webapps Standard), `local-variables.example.json` (la variable `benchmark`),
-  scénario `Run_Benchmark` (3 steps = `benchmark/dss_steps/step_*.py`). **Carte repo↔DSS : `OWIsMind_LAB/README.md`.**
-  Tests : `python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python`.
+- **Benchmark** : produit par le projet DSS séparé `OWIsMind_LAB` (code hors de cette branche, voir la
+  branche `OWIsMind_PRD_V1_3-dev`) ; le plugin V2 en AFFICHE les résultats (`benchmark_view`, vue Benchmark).
 - ⚠️ Les guides de `docs/cadrage/` utilisent des **noms d'exemple** (`owismind-vue`, `owismindvue`, …) - **ne pas les recopier**.
 
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
 - `/build-plugin` : `npm run build` (frontend) → `resource/owismind-app/`, puis `index.html` → `body.html`.
-- `/package-plugin` : stage runtime → zip versionné `ready-for-dataiku/owismind-v1_2-upload.zip` (sans frontend/node_modules).
+- `/package-plugin` : stage runtime → zip versionné dans `ready-for-dataiku/` (sans frontend/node_modules).
 - `/log-session` : log de fin de session + refresh mémoire courte + `/graphify --update` + commit de session.
 
 ## Graphe de connaissances (`graphify-out/`, git-ignoré)
@@ -74,7 +68,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 4. **Whitelist agents côté serveur** : le front envoie une clé logique, le backend résout l'`agent_id`
    (jamais d'`agent_id` brut depuis le front).
 5. **Frontend jamais dans le zip** : `frontend/` et `node_modules/` ne sont jamais packagés.
-6. **Ne pas éditer à la main** `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/` ni `OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/`
+6. **Ne pas éditer à la main** `OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/` ni `OWIsMind_PRD_V2_0/plugin/ready-for-dataiku/`
    (générés par build/package - éditer `frontend/src` / `python-lib` / `webapps` puis rebuild).
 7. **Code en anglais** (code + commentaires), optimisé, standard pro, bien commenté. La communication avec
    l'utilisateur reste en **français**.
@@ -111,8 +105,6 @@ convertie, a été supprimée du repo le 2026-06-11).
 - `docs/cadrage/owismind_webapp_v3_cahier_des_charges_fonctionnel.md` - cahier des charges fonctionnel (produit ; Evidence Studio = intention future différée).
 - `docs/cadrage/GUIDE_DATAIKU_DSS_PLUGIN_REFERENCE.md` - référence d'ingénierie unique : build/package/zip, SQL direct, agents LLM Mesh + streaming, gotchas Dataiku.
 - `docs/cadrage/code_samples_dataiku.md` - snippets notebook validés (appel agent streamé + extraction SQL/usage, table SQL directe).
-- `OWIsMind_LAB/README.md` - **carte du projet benchmark** (projet DSS séparé `OWIsMind_LAB`) : layout repo↔DSS, mapping fichier→objet DSS, comment ça se connecte au plugin + aux agents, et les 2 guides de déploiement (`benchmark/SETUP_GUIDE.md` moteur, `benchmark_webapp/DEPLOY_GUIDE.md` complet). À lire pour tout travail sur le benchmark.
-- `docs/` - référence d'ingénierie (architecture, API, frontend, data model, sécurité, build/deploy) ; `docs/superpowers/specs/` = specs de conception gelées.
-- `docs/project-documentation/` - doc d'ingénierie EN ultra-complète (arbre 00-09 + site HTML + pitch). **À lire UNIQUEMENT à la demande explicite** : exclue du graphe de connaissances (`.graphifyignore`) pour ne jamais entrer en contexte auto, et **potentiellement périmée** (à mettre à jour dans une future session). Source de vérité = `memory/` + `docs/cadrage/`, pas ce dossier. (Décision user 2026-06-26.)
+- `OWIsMind_PRD_V2_0/docs/` - spec V2 (`V2_ARCHITECTURE.md`), notes de phase, charte V2, Agent Factory.
 
 > À lire **à la demande** (ne pas recopier leur contenu ici). En cas de conflit guides ↔ mémoire : la mémoire fait foi.

@@ -7,38 +7,33 @@ the **LLM Mesh** and stores conversations, messages, runs and events with **dire
 are enforced server-side.
 
 The agents themselves are **LangGraph Code Agents** (an orchestrator plus specialized sub-experts),
-versioned in this repo as the source of truth and pasted into DSS. Agent evaluation lives in a
-**separate DSS project, `OWIsMind_LAB`**, mirrored under `OWIsMind_LAB/`.
+versioned in this repo as the source of truth and pasted into DSS.
 
 ## Repository layout
 
-One folder per DSS project, each with the same internal structure (mirroring the DSS UI):
+This branch holds ONE DSS project, mirrored with the DSS UI structure:
 `flow/<zone>_zone/python-recipes/`, `GenAI/{Agents, agents-tools, semantic-models}`, `Notebooks/`,
-`project-library/`, `Standard-webapps/`, `docs/`, `tests/`. The plugin lives INSIDE the main
-project folder and follows its version.
+`project-library/`, `Standard-webapps/`, `docs/`, `tests/`. The plugin lives INSIDE the project folder
+and follows its version. Older versions live on their own git branches.
 
 | Path | Purpose |
 | --- | --- |
-| `OWIsMind_PRD_V1_3_DEV/` | Repo mirror of the DSS project `OWIsMind_PRD_V1_3_DEV` (v1.3 dev clone of prod, ids preserved). Map: `OWIsMind_PRD_V1_3_DEV/README.md`. |
-| `OWIsMind_PRD_V1_3_DEV/plugin/` | The DSS plugin: source (`owismind/`), upload zips (`ready-for-dataiku/`, git-ignored), local build tooling (`tools/`). See `plugin/read.md`. |
-| `OWIsMind_LAB/` | The separate benchmark/evaluation DSS project (repo mirror, same structure). Map: `OWIsMind_LAB/README.md`. |
-| `docs/` | Engineering reference (architecture, API, data model, security, build/deploy), framing guides (`docs/cadrage/`), full documentation site (`docs/project-documentation/`, read on demand). See `docs/README.md`. |
-| `memory/` | Persistent project memory: current context, lessons, durable state, session logs. |
+| `OWIsMind_PRD_V2_0/` | Repo mirror of the DSS project of V2.0. Map: `OWIsMind_PRD_V2_0/README.md`. |
+| `OWIsMind_PRD_V2_0/plugin/` | The DSS plugin: source (`owismind/`), upload zips (`ready-for-dataiku/`, git-ignored), local build tooling (`tools/`). See `plugin/read.md`. |
+| `docs/cadrage/` | Framing guides: Orange UI charter, DSS plugin engineering reference, Dataiku code samples, functional spec. |
+| `memory/` | Persistent project memory: current context, lessons, durable state. |
 
 ## Running the tests
 
 ```sh
 # Backend (Flask, python-lib)
-python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests
+python3 -m unittest discover -s OWIsMind_PRD_V2_0/plugin/owismind/tests
 
 # Agents (LangGraph orchestrator + experts)
-python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests
-
-# Benchmark LAB project
-python3 -m unittest discover -s OWIsMind_LAB/project-library/python -t OWIsMind_LAB/project-library/python
+python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests
 
 # Frontend (pure Node tests, no browser)
-cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && node --test test/*.test.js
+cd OWIsMind_PRD_V2_0/plugin/owismind/frontend && node --test test/*.test.js
 ```
 
 ## AI-assisted workflow

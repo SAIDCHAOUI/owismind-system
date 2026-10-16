@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a coexisting copy of the OWIsMind DSS plugin from the single source.
 
-There is ONE source of truth: ``OWIsMind_PRD_V1_3_DEV/plugin/owismind/``. The PROD build/package
+There is ONE source of truth: ``OWIsMind_PRD_V2_0/plugin/owismind/``. The PROD build/package
 (``/build-plugin`` + ``/package-plugin``) is untouched, always. This tool emits
 ONE independent, coexisting plugin per run - the default DEV copy (id
 ``owismind_dev``), a fixed third slot (``--v2``, id ``owismind_dev_v2``), or a
@@ -23,12 +23,12 @@ What MUST NOT change (so a coexisting copy behaves like PROD, just isolated):
     ``/plugins/<id>/`` segment of the asset base carries the plugin id).
 
 The transform is deterministic and reviewed; it never edits the canonical source
-nor ``OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/``. It builds the frontend into a
+nor ``OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/``. It builds the frontend into a
 scratch outDir with ``OWI_PLUGIN_ID=owismind_dev`` (no install: relies on the
 existing ``node_modules``) and stages + zips everything under
-``OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/``.
+``OWIsMind_PRD_V2_0/plugin/ready-for-dataiku/``.
 
-Artifact names are VERSION-DERIVED from ``OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json`` (``major_minor``
+Artifact names are VERSION-DERIVED from ``OWIsMind_PRD_V2_0/plugin/owismind/plugin.json`` (``major_minor``
 with underscores, e.g. ``1.2.0`` -> ``1_2``), matching the one-branch-per-version model:
   - DEV:     ``owismind-v{VER}-dev-upload`` / ``owismind-v{VER}-dev-upload.zip``
   - DEV v2:  ``owismind-v{VER}-dev-v2-upload`` / ``owismind-v{VER}-dev-v2-upload.zip``
@@ -36,21 +36,21 @@ Older ``owismind-v*-dev-*upload*`` artifacts and the legacy fixed ``owismind_dev
 names are removed before a build (only the current version's artifacts remain).
 
 Usage:
-  python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py            # full DEV build + stage + zip
-  python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --v2       # same pipeline, THIRD coexisting
+  python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py            # full DEV build + stage + zip
+  python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py --v2       # same pipeline, THIRD coexisting
                                                # plugin (id owismind_dev_v2) so a
                                                # stable DEV install stays untouched
-  python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --version 1.3
+  python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py --version 1.3
                                                # same pipeline, a VERSION-NAMED
                                                # coexisting plugin (id owismind_v1_3,
                                                # zip owismind_v1_3-upload.zip) so a
                                                # given release can be tested side by
                                                # side with prod and DEV; --version 1.4,
                                                # 1.5, ... need no new code
-  python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --check    # validate the rewrite logic only,
+  python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py --check    # validate the rewrite logic only,
                                                # on a /tmp copy of python-lib,
                                                # WITHOUT building or zipping
-  python3 OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py --check --version 1.3
+  python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py --check --version 1.3
                                                # same dry validation, for the
                                                # owismind_v1_3 identity only
 
@@ -75,7 +75,7 @@ import tempfile
 import zipfile
 
 # --- Layout (resolved from this file, so cwd does not matter) ----------------
-# This file lives at <repo>/OWIsMind_PRD_V1_3_DEV/plugin/tools/; the plugin source
+# This file lives at <repo>/OWIsMind_PRD_V2_0/plugin/tools/; the plugin source
 # and the staging area are its siblings inside the same plugin/ folder.
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_DIR = os.path.dirname(TOOLS_DIR)
@@ -99,7 +99,7 @@ _RE_PLUGIN_VERSION = re.compile(r'"version"\s*:\s*"(\d+)\.(\d+)')
 def read_plugin_version_ver():
     """Return the ``major_minor`` version tag with underscores, e.g. ``1_2`` for 1.2.0.
 
-    Reads ``"version"`` from ``OWIsMind_PRD_V1_3_DEV/plugin/owismind/plugin.json`` (JSONC, // comments) and
+    Reads ``"version"`` from ``OWIsMind_PRD_V2_0/plugin/owismind/plugin.json`` (JSONC, // comments) and
     reduces it to ``major_minor`` (dots -> underscores) - the tag baked into every DEV
     artifact name so a new version's zip never collides with the previous one's.
     """
@@ -406,7 +406,7 @@ def _build_frontend(scratch_out):
     if not os.path.isdir(NODE_MODULES):
         raise SystemExit(
             "ERROR: {} is missing. Install deps yourself first "
-            "(cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm install) - this tool never installs.".format(NODE_MODULES)
+            "(cd OWIsMind_PRD_V2_0/plugin/owismind/frontend && npm install) - this tool never installs.".format(NODE_MODULES)
         )
     if not os.path.isfile(VITE_BIN):
         raise SystemExit("ERROR: vite binary not found at {} (run npm install first).".format(VITE_BIN))

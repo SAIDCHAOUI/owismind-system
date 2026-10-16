@@ -5,8 +5,8 @@
 
 # Generated / vendored (never knowledge)
 node_modules/
-OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/
-OWIsMind_PRD_V1_3_DEV/plugin/ready-for-dataiku/
+OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/
+OWIsMind_PRD_V2_0/plugin/ready-for-dataiku/
 graphify-out/
 
 # Harness meta-config (not project knowledge)

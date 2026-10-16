@@ -1,4 +1,4 @@
-# CLAUDE.md - OWIsMind_PRD_V1_3_DEV/
+# CLAUDE.md - OWIsMind_PRD_V2_0/
 
 > Orientation for any Claude session touching the agent system, written to be
 > self-sufficient: read this and you understand how the OWIsMind agents work
@@ -12,8 +12,7 @@
 OWIsMind is the internal data assistant of Orange Wholesale International, running
 as agents inside Dataiku DSS and used through a Vue web app. This folder is the
 **repo mirror and source of truth** for the DSS project of the current version
-(`OWIsMind_PRD_V1_3_DEV` on this branch, the v1.3 dev clone of the production
-project `OWIsMind_PRD_V1_2`): an **orchestrator** that
+(`OWIsMind_PRD_V2_0` on this branch, the V2.0 duplicate of the v1.3 project): an **orchestrator** that
 chats and routes, a **revenue sub-agent** expert of `DRIVE_Revenues`, a **tickets
 sub-agent** expert of `TroubleTickets_year`, the **Flow recipes** that fabricate the
 sub-agents' knowledge, and the **semantic models** that write the SQL. You edit
@@ -32,7 +31,7 @@ twin with different ids" anymore; prod IS the clone. Versions advance by git bra
 Vue web app
    │  user message + a logical agent key (never a raw agent id)
    ▼
-python-lib Flask backend  (OWIsMind_PRD_V1_3_DEV/plugin/owismind/python-lib/, not this folder)
+python-lib Flask backend  (OWIsMind_PRD_V2_0/plugin/owismind/python-lib/, not this folder)
    │  resolves the key against a server-side whitelist -> the orchestrator Code Agent
    │  invokes it over LLM Mesh, streams timeline events back (polling-via-thread)
    ▼
@@ -155,13 +154,13 @@ each Semantic Model Query tool keeps its own DSS-configured model in every mode
 | `flow/` | The Flow recipes per zone (`SalesDrive_Revenue_Expert_zone/python-recipes/`, `CSC_ticket_AI_Agent_zone/python-recipes/`, `Webapp_Zone/`) + `README.md` + `DATASETS.md`. Dataset IO comes from the DSS Flow wiring, not code constants. |
 | `GenAI/semantic-models/` | ONE folder per model holding ONE maintenance file `<Model>.py` (ACTION = dump / update / repoint) + the `.v1.json` snapshot; plus `MODEL.md` (readable live model) + `TOOL_DESCRIPTIONS.md`. The old scripts/ folder is consolidated into the per-model files (2026-07-20). |
 | `registry.json` | The single manifest: ids, file paths, dataset names, model + tool binding, lookup config, guardrails. NOT imported at runtime. |
-| `docs/PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the v1.3 **agent factory**: `docs/AGENT_FACTORY.md` (deploy: `docs/DEPLOY_V1_3_DEV.md`). |
+| `docs/PLAYBOOK_ADD_AGENT.md` | Ordered runbook to add a specialist (worked for tickets). Mostly automated by the **agent factory**: `docs/AGENT_FACTORY.md`. |
 | `project-library/python/owismind_factory/` | The v1.3 agent factory engine package (pasted into the DSS project library). |
 | `project-library/python/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/python/owismind_hub/` in the DSS project library, everything lives under `python/` by user decision 2026-07-20): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
 | `Notebooks/` | Factory runner notebooks 00-06 (probe, push hub, align clone, create domain, wizard, logging, doctor). |
 | `Standard-webapps/agent-factory-console/` | The factory console (Standard webapp, optional; everything is also doable via notebooks). |
-| `docs/` | Sub-project docs: `DEPLOY_V1_3_DEV.md` (deployment guide, phase 0 = security gates), `AGENT_FACTORY.md` (factory architecture), `CAPABILITY_MATRIX.md` (probe report), `PLAYBOOK_ADD_AGENT.md` (manual playbook), `SECURITY_AUDIT_2026-07-16.md` (dual-audit synthesis). |
-| `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests`. |
+| `docs/` | `V2_ARCHITECTURE.md` (V2 spec), `V2_HANDOFF.md` / `V2_STUDIO_HANDOFF.md` (phase notes), `CHARTE_V2_UI.md`, `design-v2/` (mock), `AGENT_FACTORY.md`, `NATIVE_ENGINE.md`, `PLAYBOOK_ADD_AGENT.md`. |
+| `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests`. |
 
 ## Rules you must not break
 

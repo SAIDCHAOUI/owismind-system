@@ -25,7 +25,7 @@ racine) execute les taches bornees.
 Suivi : `/codex:status`, `/codex:result [id]`, `/codex:cancel [id]`. Transfert de session :
 `/codex:transfer`. Subagent utilisable par Claude directement : `codex:codex-rescue`.
 NB : ce repo n'a pas de branche de base `main` active ; la base de review = la branche de
-version courante (ex. `OWIsMind_PRD_V1_2` pour la branche `OWIsMind_PRD_V1_3-dev`).
+version courante (ex. `OWIsMind_PRD_V1_3-dev` pour la branche `OWIsMind_PRD_V2_0`).
 
 ## Regles non negociables
 

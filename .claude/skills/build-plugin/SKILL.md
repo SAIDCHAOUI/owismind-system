@@ -5,34 +5,34 @@ description: Build the OWIsMind Vue 3 + Vite frontend into the DSS plugin (resou
 
 # /build-plugin - Build the Vue frontend into the DSS plugin
 
-Builds `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/` with Vite and wires the result into the DSS webapp.
+Builds `OWIsMind_PRD_V2_0/plugin/owismind/frontend/` with Vite and wires the result into the DSS webapp.
 **This skill never installs anything.** If `node_modules/` is missing, STOP and ask the user to install.
 
 ## Canonical paths (do not invent - see memory/PROJECT_STATE.md)
-- Plugin root:   `OWIsMind_PRD_V1_3_DEV/plugin/owismind`
-- Frontend:      `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend`
-- Build output:  `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app` (Vite `outDir`, `emptyOutDir: true`)
-- DSS entry:     `OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
+- Plugin root:   `OWIsMind_PRD_V2_0/plugin/owismind`
+- Frontend:      `OWIsMind_PRD_V2_0/plugin/owismind/frontend`
+- Build output:  `OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app` (Vite `outDir`, `emptyOutDir: true`)
+- DSS entry:     `OWIsMind_PRD_V2_0/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html`
 - Asset base:    `/plugins/owismind/resource/owismind-app/`
 
 ## Steps
 
 1. **Preflight - never install.** Verify dependencies exist:
    ```bash
-   test -d OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/node_modules && echo "node_modules OK" || echo "MISSING"
+   test -d OWIsMind_PRD_V2_0/plugin/owismind/frontend/node_modules && echo "node_modules OK" || echo "MISSING"
    ```
-   If `MISSING`: STOP. Tell the user to run `npm install` themselves (e.g. `! cd OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend && npm install`). Do **not** attempt any install - it is denied by policy.
+   If `MISSING`: STOP. Tell the user to run `npm install` themselves (e.g. `! cd OWIsMind_PRD_V2_0/plugin/owismind/frontend && npm install`). Do **not** attempt any install - it is denied by policy.
 
 2. **Build** from the frontend directory:
    ```bash
-   npm --prefix OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend run build
+   npm --prefix OWIsMind_PRD_V2_0/plugin/owismind/frontend run build
    ```
-   Confirm the output landed in `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/` (hashed `assets/index-*.js` / `*.css`).
+   Confirm the output landed in `OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/` (hashed `assets/index-*.js` / `*.css`).
 
 3. **Wire body.html** - copy the built entry point:
    ```bash
-   cp OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/index.html \
-      OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html
+   cp OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/index.html \
+      OWIsMind_PRD_V2_0/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html
    ```
    If the `cp` is denied by permissions (observed L033 and again 2026-08-06, gotcha F10): read the
    built `index.html` and rewrite `body.html` with the **Write tool** instead - same content,
@@ -42,7 +42,7 @@ Builds `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/` with Vite and wires the
 4. **Verify** the asset paths are correct:
    ```bash
    grep -q '/plugins/owismind/resource/owismind-app/' \
-      OWIsMind_PRD_V1_3_DEV/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html \
+      OWIsMind_PRD_V2_0/plugin/owismind/webapps/webapp-owismind-ai-agents/body.html \
       && echo "body.html OK" || echo "ERROR: asset base missing in body.html"
    ```
 
@@ -50,7 +50,7 @@ Builds `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend/` with Vite and wires the
    Remind that packaging is a separate step (`/package-plugin`) and that nothing is uploaded.
 
 ## Notes
-- The Vite `base` is now env-driven: `base = '/plugins/' + (process.env.OWI_PLUGIN_ID || 'owismind') + '/resource/owismind-app/'`. The default is `owismind`, so this prod build is unchanged (`/plugins/owismind/resource/owismind-app/`). The DEV plugin sets `OWI_PLUGIN_ID=owismind_dev` (handled entirely by `OWIsMind_PRD_V1_3_DEV/plugin/tools/build_dev_plugin.py` / the `package-plugin-dev` skill); do not set it for this prod build.
+- The Vite `base` is now env-driven: `base = '/plugins/' + (process.env.OWI_PLUGIN_ID || 'owismind') + '/resource/owismind-app/'`. The default is `owismind`, so this prod build is unchanged (`/plugins/owismind/resource/owismind-app/`). The DEV plugin sets `OWI_PLUGIN_ID=owismind_dev` (handled entirely by `OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py` / the `package-plugin-dev` skill); do not set it for this prod build.
 - If `vite.config.js` `base` ever changes, the build + body.html copy must be redone.
 - `frontend/` and `node_modules/` must never enter the zip - that is handled by `/package-plugin`.
 - Do not edit files under `resource/owismind-app/` by hand; always regenerate via this skill.
