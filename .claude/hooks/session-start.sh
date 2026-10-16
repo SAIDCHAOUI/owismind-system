@@ -10,11 +10,7 @@ cat <<'EOF'
   - memory/PROJECT_STATE.md read ON DEMAND: architecture, canonical ids, validation matrix (section 11 = what is deployed)
 
 Technical gotchas live in .claude/rules/*.md (path-scoped via frontmatter) and load AUTOMATICALLY when you touch
-matching files: frontend / backend / agents / lab / memory. Do not expect them in CONTEXT.md.
-
-Knowledge graph (graphify-out/, git-ignored, saves ~18x tokens on navigation):
-  - For "where is X handled / what touches Y", QUERY THE GRAPH FIRST:  graphify query "<question>"  (--dfs to trace a path).
-  - Point codebase-exploring subagents at the graph first too. Stale vs working tree? Run /graphify --update.
+matching files: frontend / backend / agents / memory. Do not expect them in CONTEXT.md.
 
 Active non-negotiables (full list in CLAUDE.md):
   - NO INSTALL: never run npm/pip/brew/yarn/pnpm/npx installs. Ask the user (safety first).

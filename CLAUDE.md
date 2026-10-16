@@ -24,7 +24,7 @@ convertie, a été supprimée du repo le 2026-06-11).
 - **Apprentissage continu** : dès qu'une solution diverge des guides, ou qu'un truc échoue puis marche →
   **appende** une entrée dans `memory/LESSONS.md` (contexte / échec / solution / preuve / source / date). Un
   changement de gotcha va dans le bon fichier `.claude/rules/`, pas dans CONTEXT.md.
-- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + graphe + commit).
+- **Fin de session** : exécuter `/log-session` (met à jour `CONTEXT.md` + commit).
 
 ## Identifiants canoniques (détail → `memory/PROJECT_STATE.md`)
 - Plugin id `owismind` · WebApp `webapp-owismind-ai-agents` · package `python-lib/owismind` · resource `owismind-app`
@@ -48,14 +48,10 @@ convertie, a été supprimée du repo le 2026-06-11).
 ## Commandes clés (→ skills, ne pas recopier les commandes ici)
 - `/build-plugin` : `npm run build` (frontend) → `resource/owismind-app/`, puis `index.html` → `body.html`.
 - `/package-plugin` : stage runtime → zip versionné dans `ready-for-dataiku/` (sans frontend/node_modules).
-- `/log-session` : log de fin de session + refresh mémoire courte + `/graphify --update` + commit de session.
+- `/log-session` : log de fin de session + refresh mémoire courte + commit de session.
 
-## Graphe de connaissances (`graphify-out/`, git-ignoré)
-- Pour naviguer (« où est géré X ? », « qu'est-ce qui touche Y ? ») : **interroger le graphe d'abord**
-  (`graphify query "…"`) au lieu de relire les docs - ~18× moins de tokens. Visualisation : `graphify-out/graph.html`.
-- Fraîcheur : hook git **post-commit** (rebuild AST auto, sans LLM) + `/log-session` (refresh sémantique
-  incrémental + commit). Graphe périmé vs working tree → `/graphify --update`.
-- Git : commit de session via `/log-session` (autorisation user 2026-06-11) ; **jamais de push** (l'user pushe).
+## Git
+- Commit de session via `/log-session` (autorisation user 2026-06-11) ; **jamais de push** (l'user pushe).
 
 ## Règles NON NÉGOCIABLES
 1. **NO INSTALL** - l'agent n'installe **jamais** de dépendances (`npm install`, `pip install`, `brew`,

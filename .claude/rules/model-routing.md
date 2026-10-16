@@ -15,7 +15,7 @@ racine) execute les taches bornees.
 |---|---|---|
 | Orchestration, specs, architecture, integration | Fable/Opus (session principale) | direct |
 | Implementation bien specifiee, fan-out, revues internes | Opus | subagents du projet (adversarial-reviewer, charte-orange-reviewer, dss-deployer, memory-curator) avec `model: opus` (jamais Fable en fan-out, decision user) |
-| Recherche/exploration repo | Sonnet ou graphe | subagent Explore en sonnet, ou `graphify query` d'abord (18x moins de tokens) |
+| Recherche/exploration repo | Sonnet | subagent Explore en sonnet, ou Grep/Glob/LSP en direct |
 | 2e chantier en parallele | GPT-5.6 Terra (defaut) | `/codex:rescue --background "..."` |
 | Debug coriace, refactor long, second avis | GPT-5.6 Sol | `/codex:rescue --model gpt-5.6-sol --effort high` |
 | Mecanique en volume (renommages, boilerplate) | GPT-5.6 Luna | `/codex:rescue --model gpt-5.6-luna` |

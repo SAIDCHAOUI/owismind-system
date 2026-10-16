@@ -16,4 +16,4 @@ Ordre de lecture : `CONTEXT.md` (focus + pointeurs) -> `LESSONS.md` (au besoin) 
 - **sessions/** : un fichier par jour (append d'une section `## run N` si le fichier existe). Ne pas supprimer une session citee par chemin ailleurs ; avant toute suppression, verifier que son contenu est condense dans PROJECT_STATE / LESSONS et qu'aucune reference par chemin ne subsiste.
 - **Zero tiret cadratin/demi-cadratin** dans tout `memory/` (regle non negociable #9).
 
-Fin de session = skill `/log-session` (refresh CONTEXT + append LESSONS + `/graphify --update` + commit ; jamais de push).
+Fin de session = skill `/log-session` (refresh CONTEXT + append LESSONS + commit ; jamais de push).
