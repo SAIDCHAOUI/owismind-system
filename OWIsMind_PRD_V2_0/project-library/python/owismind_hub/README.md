@@ -66,4 +66,4 @@ Pousser le hub ne change donc RIEN au comportement, tant qu'un humain n'edite pa
 
 1. Editer ici (ou regenerer via `regenerate_seeds.py`), puis relancer la suite de tests.
 2. Pousser en DSS en executant le notebook [`../../Notebooks/01_push_config_hub.py`](../../Notebooks/01_push_config_hub.py).
-3. Guide complet (phases, gates) : [`../../docs/DEPLOY_V1_3_DEV.md`](../../docs/DEPLOY_V1_3_DEV.md).
+3. Deploiement : [`../../../README.md`](../../../README.md), section Deploiement.

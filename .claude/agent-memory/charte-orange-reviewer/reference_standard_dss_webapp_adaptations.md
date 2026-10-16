@@ -6,9 +6,8 @@ metadata:
 ---
 
 The repo has "Standard" DSS webapps (plain body.html + script.js + style.css, no Vue build)
-under `OWIsMind_LAB/Standard-webapps/benchmark_launcher/` and
-`OWIsMind_PRD_V1_3_DEV/Standard-webapps/agent-factory-console/`. They follow the Orange charter but
-adapt it three ways that are ACCEPTED (both files reviewed clean) - do not report these as
+under `OWIsMind_PRD_V2_0/Standard-webapps/agent-factory-console/`. They follow the Orange charter but
+adapt it three ways that are ACCEPTED (reviewed clean) - do not report these as
 violations:
 
 1. **Theme scope is the app root, not `body`.** The charter says dark via `body[data-theme]`,

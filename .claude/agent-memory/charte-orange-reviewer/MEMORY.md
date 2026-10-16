@@ -2,3 +2,4 @@
 - [Standard DSS webapp adaptations](reference_standard_dss_webapp_adaptations.md) - vanilla-JS webapps scope theme to app-root not body, eyebrow-only header (no logo), ASCII-only FR strings; don't false-flag these.
 - [Dark override blind spot](reference_dark_theme_override_blind_spot.md) - styling passes fix the light rule and miss the `:global(body[data-theme="dark"] ...)` override; grep data-theme in every changed file.
 - [Recurring charter leftovers](reference_recurring_charter_leftovers.md) - 4 greps to run first: orange field-focus, pill-ified gauges, edited Tabs.vue, hex in dark override.
+- [Pieges de charte recurrents](recurring-charter-traps.md) - orange AA petit texte, hover inverse en dark, jumeaux SourceTable/EvidenceTable, th en flex, .active:hover oublie sur --surface-press, doc premium qui derive du code

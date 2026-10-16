@@ -7,7 +7,7 @@ Lightweight test harness for the plugin backend. This directory is **outside
 
 ```bash
 # from the repo root
-python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/plugin/owismind/tests -v
+python3 -m unittest discover -s OWIsMind_PRD_V2_0/plugin/owismind/tests -v
 ```
 
 No installs required: the runnable tests cover **pure-logic** modules only

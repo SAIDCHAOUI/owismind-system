@@ -50,7 +50,7 @@ remaining **repoint + curation**, not a from-scratch build.
   tickets model `dM4jA4G` to the clone dataset; READY, simulated 4/4, NOT YET
   LAUNCHED on the clone).
 - `registry.json` + `../flow/DATASETS.md` - the spec + column inventory.
-- Tests are green: `python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests`.
+- Tests are green: `python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests`.
 
 ---
 

@@ -20,7 +20,7 @@
 # (previous versions are backed up under /python/owismind_hub/backups/).
 #
 # OUTPUT: a markdown report. Paste it back to Claude (or commit it as
-# OWIsMind_PRD_V1_3_DEV/docs/CAPABILITY_MATRIX.md) so the gated factory
+# docs/CAPABILITY_MATRIX.md) so the gated factory
 # steps (code agent creation, tool creation) can be unlocked.
 # =============================================================================
 

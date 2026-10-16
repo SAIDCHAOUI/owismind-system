@@ -6,7 +6,7 @@
 > (LLM-assisted authoring) -> Semantic Model Query tool -> Code Agent ->
 > orchestrator registration. Design spec:
 > `docs/superpowers/specs/2026-07-10-agent-factory-v1_3-design.md`.
-> Deployment: [`DEPLOY_V1_3_DEV.md`](DEPLOY_V1_3_DEV.md).
+> Deployment: [`../README.md`](../README.md), section Deploiement.
 
 ## The three pillars
 
@@ -163,7 +163,7 @@ Safety model:
 
 DSS-free suite (with the rest of the mirror tests):
 
-    python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests
+    python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests
 
 Anti-drift guarantees: hub seeds byte-equivalent to the orchestrator's embedded
 defaults; validators (factory vs orchestrator) in sync; generation tested

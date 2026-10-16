@@ -159,7 +159,7 @@ each Semantic Model Query tool keeps its own DSS-configured model in every mode
 | `project-library/python/owismind_hub/` | Repo seeds of the Config & Prompt Hub (`/python/owismind_hub/` in the DSS project library, everything lives under `python/` by user decision 2026-07-20): capabilities registry, orchestrator persona, factory settings; agents load them at start with embedded fallback. `regenerate_seeds.py` (repo-only) keeps them equivalent to the orchestrator defaults. |
 | `Notebooks/` | Factory runner notebooks 00-06 (probe, push hub, align clone, create domain, wizard, logging, doctor). |
 | `Standard-webapps/agent-factory-console/` | The factory console (Standard webapp, optional; everything is also doable via notebooks). |
-| `docs/` | `V2_ARCHITECTURE.md` (V2 spec), `V2_HANDOFF.md` / `V2_STUDIO_HANDOFF.md` (phase notes), `CHARTE_V2_UI.md`, `design-v2/` (mock), `AGENT_FACTORY.md`, `NATIVE_ENGINE.md`, `PLAYBOOK_ADD_AGENT.md`. |
+| `docs/` | `V2_ARCHITECTURE.md` (V2 spec), `V2_STUDIO_HANDOFF.md` (phase notes), `CHARTE_V2_UI.md`, `design-v2/` (mock), `AGENT_FACTORY.md`, `NATIVE_ENGINE.md`, `PLAYBOOK_ADD_AGENT.md`. |
 | `tests/` | DSS-free unit tests: `python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests`. |
 
 ## Rules you must not break

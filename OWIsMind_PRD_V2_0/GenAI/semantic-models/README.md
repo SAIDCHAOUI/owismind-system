@@ -2,7 +2,7 @@
 
 Un modele semantique est l'objet Dataiku qui traduit une question en langage
 naturel en requete SQL. Chaque sous-agent a le sien et l'interroge via son tool
-"Semantic Model Query" (voir [`../agent-tools/README.md`](../agent-tools/README.md)).
+"Semantic Model Query" (voir [`../../README.md`](../../README.md)).
 Les modeles vivent dans DSS (source de verite) ; ce dossier en garde le miroir :
 UN dossier par modele avec UN SEUL fichier Python de maintenance + le snapshot
 `.v1.json` (decision user 2026-07-20 : un fichier Python par modele, ni plus ni moins).
@@ -69,4 +69,4 @@ depuis [`TOOL_DESCRIPTIONS.md`](TOOL_DESCRIPTIONS.md). Une modif de modele seul
 ne demande aucun re-collage d'agent (les agents referencent le tool par id).
 
 Runbook pour ajouter un domaine : [`../../docs/PLAYBOOK_ADD_AGENT.md`](../../docs/PLAYBOOK_ADD_AGENT.md).
-Deploiement de la v1.3 (agent factory) : [`../../docs/DEPLOY_V1_3_DEV.md`](../../docs/DEPLOY_V1_3_DEV.md).
+Deploiement : [`../../README.md`](../../README.md), section Deploiement.

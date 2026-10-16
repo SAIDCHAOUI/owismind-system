@@ -7,11 +7,11 @@ metadata:
 
 Any edit to the orchestrator persona must land in THREE places, but only TWO are guarded:
 
-1. `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` -> `PERSONA_DEFAULT`
-2. `OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/prompts/orchestrator_persona.md`
+1. `OWIsMind_PRD_V2_0/GenAI/Agents/OWIsMind_orchestrator.py` -> `PERSONA_DEFAULT`
+2. `OWIsMind_PRD_V2_0/project-library/python/owismind_hub/prompts/orchestrator_persona.md`
    (guarded: `tests/test_factory_registry.py::test_hub_persona_seed_equals_embedded_default`
    asserts 1 == 2, and `owismind_hub/regenerate_seeds.py --check` regenerates 2 from 1)
-3. `OWIsMind_PRD_V1_3_DEV/Notebooks/01_push_config_hub.py` -> the `_SEEDS` JSON literal
+3. `OWIsMind_PRD_V2_0/Notebooks/01_push_config_hub.py` -> the `_SEEDS` JSON literal
    (**guarded by NOTHING**: no test, and `regenerate_seeds.py` only covers the 5 hub seed
    files, so `--check` reports OK while the notebook is stale)
 
@@ -25,9 +25,9 @@ with a green test suite and a green `--check`.
 the notebook copy too:
 
 ```
-python3 -c "import json,re; nb=open('OWIsMind_PRD_V1_3_DEV/Notebooks/01_push_config_hub.py').read(); \
+python3 -c "import json,re; nb=open('OWIsMind_PRD_V2_0/Notebooks/01_push_config_hub.py').read(); \
 print(json.loads(re.search(r\"_SEEDS = json.loads\(r'''(.*?)'''\)\", nb, 16).group(1))['persona'] \
-== open('OWIsMind_PRD_V1_3_DEV/project-library/python/owismind_hub/prompts/orchestrator_persona.md').read())"
+== open('OWIsMind_PRD_V2_0/project-library/python/owismind_hub/prompts/orchestrator_persona.md').read())"
 ```
 
 Compare against HEAD first: if the notebook was in sync before the diff and is out of sync after,

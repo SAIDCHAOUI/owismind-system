@@ -8,7 +8,7 @@
 This mirror holds the recipe code of the two data-preparation Flow zones of the
 production project **OWISMIND_PRD_V1_2**. Column inventories:
 [`DATASETS.md`](DATASETS.md). The runtime datasets written by the webapp (not built
-by any recipe) are documented in [`Webapp_Zone/README.md`](Webapp_Zone/README.md).
+by any recipe) are written at runtime by the plugin backend (direct SQL, no recipe): never rebuild them.
 
 ## The two zones (exact DSS names)
 
@@ -31,7 +31,7 @@ IC_DATA.TroubleTickets_year ──sync──► TroubleTickets_year ──► co
 Who reads what: `*_profile` + `*_value_index` are read by the domain **sub-agent**
 (`SalesDrive_revenue_expert` / `CSSO_Trouble_Tickets_Expert`); the `*_Value_Catalog`
 / `*_value_catalogue` is read by the **`attribute_lookup`** tool (an orchestrator
-built-in, [`../GenAI/agents-tools/`](../GenAI/agents-tools/README.md)) as its alias / suggestions fallback.
+built-in, [`../GenAI/agents-tools/`](../GenAI/agents-tools/)) as its alias / suggestions fallback.
 Each source base (`DRIVE_Revenues`, `TroubleTickets_year`) is also read directly by
 its semantic model (SQL) and by `attribute_lookup` (fact search).
 
@@ -119,4 +119,4 @@ with no code edit. Worked example: [`../docs/PLAYBOOK_ADD_AGENT.md`](../docs/PLA
 The profile and value-index templates have pure helpers unit-tested in
 [`../tests/test_profiler.py`](../tests/test_profiler.py) (norm, time-format
 detection, enrichment validation, column selection). Run:
-`python3 -m unittest discover -s OWIsMind_PRD_V1_3_DEV/tests`.
+`python3 -m unittest discover -s OWIsMind_PRD_V2_0/tests`.

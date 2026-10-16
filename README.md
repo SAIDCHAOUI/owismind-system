@@ -19,7 +19,7 @@ and follows its version. Older versions live on their own git branches.
 | Path | Purpose |
 | --- | --- |
 | `OWIsMind_PRD_V2_0/` | Repo mirror of the DSS project of V2.0. Map: `OWIsMind_PRD_V2_0/README.md`. |
-| `OWIsMind_PRD_V2_0/plugin/` | The DSS plugin: source (`owismind/`), upload zips (`ready-for-dataiku/`, git-ignored), local build tooling (`tools/`). See `plugin/read.md`. |
+| `OWIsMind_PRD_V2_0/plugin/` | The DSS plugin: source (`owismind/`), upload zips (`ready-for-dataiku/`, git-ignored), local build tooling (`tools/`). See `OWIsMind_PRD_V2_0/README.md`. |
 | `docs/cadrage/` | Framing guides: Orange UI charter, DSS plugin engineering reference, Dataiku code samples, functional spec. |
 | `memory/` | Persistent project memory: current context, lessons, durable state. |
 

@@ -16,18 +16,18 @@ order, fresh list per call). Sites: evidence/service, evidence/source_service (v
 converted site previously held EXACTLY those two strings in order.
 
 **Prod = clone of DEV (no promotion script).** As of 2026-07-10 the DSS prod project `OWISMIND_PRD_V1_2`
-is a CLONE of DEV (ids preserved, tickets expert INCLUDED), mirrored under `OWIsMind_PRD_V1_3_DEV/`. The old
+is a CLONE of DEV (ids preserved, tickets expert INCLUDED), mirrored under `OWIsMind_PRD_V2_0/`. The old
 `tools/promote_agents_to_prod.py` script and the separate `OWISMIND_PROD_V1` twin are LEGACY, DELETED:
 there is no longer a DEV->PROD id substitution / tickets-block removal pass to verify. Map of real DSS
-ids: `OWIsMind_PRD_V1_3_DEV/README.md` + `OWIsMind_PRD_V1_3_DEV/registry.json`.
+ids: `OWIsMind_PRD_V2_0/README.md` + `OWIsMind_PRD_V2_0/registry.json`.
 
 **Agent Code Agent files.** Module docstrings and `#` comments are NOT sent to the LLM (the prompt is a
-separate string variable). Comment/docstring edits in `OWIsMind_PRD_V1_3_DEV/GenAI/Agents/OWIsMind_orchestrator.py` /
+separate string variable). Comment/docstring edits in `OWIsMind_PRD_V2_0/GenAI/Agents/OWIsMind_orchestrator.py` /
 `SalesDrive_revenue_expert.py` / `CSSO_Trouble_Tickets_Expert.py` / `tools/` / `flow/` recipe files are
-behavior-neutral. `OWIsMind_PRD_V1_3_DEV/registry.json` has a `not_runtime` field: it is NOT imported at
+behavior-neutral. `OWIsMind_PRD_V2_0/registry.json` has a `not_runtime` field: it is NOT imported at
 runtime (CAPABILITIES is inlined in the orchestrator), so `last_reviewed` date bumps are harmless.
 
-**Generated frontend assets.** `OWIsMind_PRD_V1_3_DEV/plugin/owismind/resource/owismind-app/` is build output (skip line-level
+**Generated frontend assets.** `OWIsMind_PRD_V2_0/plugin/owismind/resource/owismind-app/` is build output (skip line-level
 review). Sanity-check: body.html and index.html are byte-identical and reference exactly the hashed
 asset files present in `resource/owismind-app/assets/`. Comment-only source changes still change the
 bundle hashes (Vite strips comments) but not behavior.
@@ -37,8 +37,7 @@ lines with Python (test `chr(0x2014) in line` and `chr(0x2013) in line`), NOT BS
 silently on this Mac). Right-arrow U+2192
 is allowed.
 
-**Baseline test counts (2026-07-06, snapshot):** backend 790, node 352, agents
-316 (2 skipped), LAB 343. Commands: backend `python3 -m unittest discover -s tests` from
-`OWIsMind_PRD_V1_3_DEV/plugin/owismind`; agents `... -s OWIsMind_PRD_V1_3_DEV/tests`; LAB `... -s OWIsMind_LAB/project-library/python
--t OWIsMind_LAB/project-library/python`; node `node --test test/*.test.js` from `OWIsMind_PRD_V1_3_DEV/plugin/owismind/frontend`.
-Current prod branch: `OWIsMind_PRD_V1_2` (one branch per DSS prod version; `main` deprecated).
+**Baseline test counts (2026-10-16, V2):** backend 1008, agents 822 (2 skipped), node 492.
+Commands: backend `python3 -m unittest discover -s OWIsMind_PRD_V2_0/plugin/owismind/tests`;
+agents `... -s OWIsMind_PRD_V2_0/tests`; node `node --test test/*.test.js` from `OWIsMind_PRD_V2_0/plugin/owismind/frontend`.
+Current branch: `OWIsMind_PRD_V2_0` (one branch per DSS version; `main` deprecated).

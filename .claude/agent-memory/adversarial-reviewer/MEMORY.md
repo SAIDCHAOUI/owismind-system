@@ -1,16 +1,18 @@
-- [Memory/setup layout](repo-memory-layout.md) - where OWIsMind memory + gotchas live, how to verify slimming didn't lose info
 - [Frontend review patterns](owismind-frontend-review-patterns.md) - always verify scope claims via git status yourself; this repo's frontend sessions tend to be genuinely clean/well-tested
 - [Frontend CSS review facts](frontend-css-review-facts.md) - DOMPurify keeps `style`; scoped CSS keeps foreign keyframes; cssVar reads html not body (dark blind spot); check flex anchoring before claiming a click-swallow
 - [Repo review pitfalls](repo-review-pitfalls.md) - recurring verification points (read-only SQL guard, prod=clone, agent comment-neutrality, generated assets, dash scan, baseline test counts)
 - [Verifying zero-behavior cleanup](verifying-zero-behavior-cleanup.md) - AST-diff method to prove comment/doc-only Python changes and byte-identical consolidations
 - [Security invariants](security-invariants.md) - read-only pre-queries, agent whitelist, hooks; how to prove a diff didn't weaken them
-- [Mirror layout at repo root + version-derived artifacts](mirror-layout-and-versioned-artifacts.md) - OWIsMind_PRD_V1_3_DEV/ at root (not dataiku-agents/); zips derive name from plugin.json major_minor
 - [Factory + hub-loader review](factory-hub-loader-review.md) - the two capability validators diverge (orchestrator loader crashes on non-dict labels, not swallowed); factory dry-run/act safety verified clean; AST-exec method for the standalone agent
 - [Factory existence-check split](factory-existence-checks-split.md) - FIVE exist helpers across 3 modules; tool_exists/agent_exists still swallow API errors and create-on-error (flow_builder three were hardened 2026-07-12)
 - [Guided first_build AUTO review](guided-first-build-auto-review.md) - first_build MANUAL->AUTO (step_based scenario + run_scenario_and_wait + heal migration): verified sound, no defects
 - [get_physical_table vs quote_table mismatch](get-physical-table-quote-mismatch.md) - get_physical_table returns a double-quoted literal that quote_table REJECTS; removal catalog_cleanup fails in prod, unit tests mask it by mocking
-- [Durable Step Shell review](durable-step-shell-review.md) - correlate guard misses SQL comments (FROM/**/x bypass); reservation reap defeats per-user cap; token-forgery/parameterization/control-channel verified clean
 - [routes.py guard decorator review](routes-guard-decorator-review.md) - guard() order contract, the 6 routes keeping an INLINE impersonation fence, and the two-module differential harness that proves neutrality
 - [Captured result shape contract](captured-result-shape-contract.md) - streamed/stored result = columns/rows/truncated ONLY; `captured` lives on the /evidence/meta block; gating on it is always-False dead code
 - [Native engine review map](native-engine-review.md) - contracts the in-backend orchestrator (profile.native_engine) must mirror: last-token rule, prior-recall block, pass_context, SUB_AGENT_ prefix, durable precedence, worker try/finally
 - [Analyze workspace + screen context](analyze-workspace-and-screen-context.md) - screenContextModel reads calc*/analyze* off the SOURCES store (removing SourceCalc/SourceAnalyze from a host kills the agent hand-off); useClickOutside toggle rule; dev-harness proof recipes
+- [Persona lives in 3 copies](persona-three-copies-notebook-drift.md) - Notebooks/01_push_config_hub.py holds an UNGUARDED third copy; a persona edit reverts at deploy
+- [Parallel workstreams, red tests](parallel-workstream-red-tests.md) - one dirty tree, several agents; re-check git status + attribute failures by path
+- [Boot race on exchanges.length](boot-race-exchanges-length.md) - /agents vs /conversation start together; exchanges=0 != empty conversation. Replay watchers with node_modules/vue
+- [Automating an action breaks its analytics](automating-an-action-breaks-its-analytics.md) - intent-named track() events change meaning silently; audit every call site
+- [A FLIP that animates width/height lies](flip-with-animated-size-lies.md) - invert from the ANCHORED edges, not top/left; + the rAF harness probe that proves first-frame jumps

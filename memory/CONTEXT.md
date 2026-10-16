@@ -10,6 +10,8 @@
 - Retires de la branche : `OWIsMind_PRD_V1_3_DEV/`, `OWIsMind_LAB/`, `dev-harness/` racine, `docs/`
   racine (sauf `docs/cadrage/`), docs V1.3 de `OWIsMind_PRD_V2_0/docs/` (deploy v1.3, audits juillet,
   durable, capability matrix), `memory/sessions/` (historique dans git + branche `OWIsMind_PRD_V1_3-dev`).
+- Puis : graphify retire ; LESSONS condense (1 ligne par lecon valable) ; memoires reviewers fusionnees ;
+  10 petits README fondus dans `OWIsMind_PRD_V2_0/README.md` ; handoffs V2 fusionnes.
 - Garde : le Benchmark AFFICHE dans le plugin (decision user : le benchmark continue d'exister).
 - Ouvert : Agent Factory (console + `owismind_factory` + notebooks 00-06) a garder ou non, a trancher.
 

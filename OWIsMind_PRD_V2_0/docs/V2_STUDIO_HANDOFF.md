@@ -1,4 +1,10 @@
-# Passation WP-B : refonte Studio (2026-10-15)
+# Passation V2.0 : phase 1 + phase 2 (Studio)
+
+Phase 1 (commit 7ab674e) : protocole workspace + backend + front, validée par l'user sur le simulateur.
+Phase 2 (commit 91bdbef) : outils workspace de l'orchestrateur (WP-A) + refonte Studio (WP-B, ci-dessous).
+Règle de budget de l'user : au plus 2 sous-agents Opus + 1 conseiller Fable ; prévenir avant 45 % de contexte.
+
+## WP-B : refonte Studio (2026-10-15)
 
 Etat : le brief en 7 points du lead est implémenté, rien n'est à moitié édité. Tests 486/486,
 build Vite OK (scratchpad), zéro tiret cadratin. NON vu dans un navigateur (aucun navigateur sur la
